@@ -217,7 +217,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 	scenarios := []scenario{
 		{name: "BasicLifecycle", run: func(t *testing.T) {
 			base := t.TempDir()
-			bs := NewBlobStore(nil, nil)
+			bs := NewBlobStore("", nil, nil)
 			id1, id2 := sop.NewUUID(), sop.NewUUID()
 			payload := []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: base, Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: id1, Value: []byte("v1")}, {Key: id2, Value: []byte("v2")}}}}
 			if err := bs.Add(ctx, payload); err != nil {
@@ -245,7 +245,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 		}},
 		{name: "OverwriteAndRemoveMissing", run: func(t *testing.T) {
 			base := t.TempDir()
-			bs := NewBlobStore(nil, nil)
+			bs := NewBlobStore("", nil, nil)
 			id := sop.NewUUID()
 			pay := []sop.BlobsPayload[sop.KeyValuePair[sop.UUID, []byte]]{{BlobTable: base, Blobs: []sop.KeyValuePair[sop.UUID, []byte]{{Key: id, Value: []byte("one")}}}}
 			if err := bs.Add(ctx, pay); err != nil {
@@ -280,7 +280,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 				return bs.Remove(ctx, []sop.BlobsPayload[sop.UUID]{{BlobTable: table, Blobs: []sop.UUID{id}}})
 			}, "remove failure"}}
 			for _, tc := range tests {
-				bs := NewBlobStore(nil, tc.fio)
+				bs := NewBlobStore("", nil, tc.fio)
 				if err := tc.op(bs); err == nil || err.Error() != tc.want {
 					t.Fatalf("%s want %q got %v", tc.name, tc.want, err)
 				}
@@ -517,7 +517,7 @@ func TestBlobStore_AllScenarios(t *testing.T) {
 			}
 		}},
 		{name: "Plain_AddEmptyInputNoOp", run: func(t *testing.T) {
-			bs := NewBlobStore(nil, nil)
+			bs := NewBlobStore("", nil, nil)
 			if err := bs.Add(ctx, nil); err != nil {
 				t.Fatalf("expected nil add no-op")
 			}

@@ -37,7 +37,7 @@ def main():
         
     t.commit(ctx)
     
-    print("Done. You can now browse this data using 'sop-browser'.")
+    print("Done. You can now browse this data using 'sop-httpserver'.")
     print(f"Registry Path: {os.path.abspath(db_path)}")
 
 if __name__ == "__main__":

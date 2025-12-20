@@ -321,6 +321,7 @@ const (
 	RemoveModelStore
 	RemoveVectorStore
 	RemoveSearch
+	SetupDatabase
 )
 
 //export manageDatabase
@@ -338,6 +339,21 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		var opts sop.DatabaseOptions
 		if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &opts); err != nil {
 			return C.CString(fmt.Sprintf("invalid options: %v", err))
+		}
+
+		// If StoresFolders is provided, try to load options from the first folder
+		// and merge them with the provided options.
+		if len(opts.StoresFolders) > 0 {
+			loadedOpts, err := sopdb.GetOptions(ctx, opts.StoresFolders[0])
+			if err == nil {
+				// Merge loaded options into opts
+				// We prioritize loaded options for StoresFolders and ErasureConfig
+				// but keep other options from the provided opts (like CacheType, RedisConfig, etc.)
+				opts.StoresFolders = loadedOpts.StoresFolders
+				opts.ErasureConfig = loadedOpts.ErasureConfig
+			}
+			// If loading fails, we assume it's a new database or options are not persisted yet,
+			// so we use the provided opts as is.
 		}
 
 		var db *database.Database
@@ -383,6 +399,16 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 
 		id := transRegistry.Add(tx)
 		return C.CString(id.String())
+
+	case SetupDatabase:
+		var opts sop.DatabaseOptions
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &opts); err != nil {
+			return C.CString(fmt.Sprintf("invalid options: %v", err))
+		}
+		if _, err := sopdb.Setup(ctx, opts); err != nil {
+			return C.CString(err.Error())
+		}
+		return nil
 
 	case NewBtree:
 		var b3o BtreeOptions

@@ -2,7 +2,6 @@ package database_test
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -13,9 +12,7 @@ import (
 )
 
 func TestAIDatabase_Standalone_ModelStore(t *testing.T) {
-	storagePath := "/tmp/sop_test_ai_model"
-	_ = os.RemoveAll(storagePath)
-	defer os.RemoveAll(storagePath)
+	storagePath := t.TempDir()
 
 	db := database.NewDatabase(core.DatabaseOptions{
 		StoresFolders: []string{storagePath},
@@ -42,9 +39,7 @@ func TestAIDatabase_Standalone_ModelStore(t *testing.T) {
 }
 
 func TestAIDatabase_Standalone_VectorStore(t *testing.T) {
-	storagePath := "/tmp/sop_test_ai_vector"
-	_ = os.RemoveAll(storagePath)
-	defer os.RemoveAll(storagePath)
+	storagePath := t.TempDir()
 
 	db := database.NewDatabase(core.DatabaseOptions{
 		StoresFolders: []string{storagePath},
@@ -74,9 +69,7 @@ func TestAIDatabase_Standalone_VectorStore(t *testing.T) {
 }
 
 func TestAIDatabase_Standalone_Search(t *testing.T) {
-	storagePath := "/tmp/sop_test_ai_search"
-	_ = os.RemoveAll(storagePath)
-	defer os.RemoveAll(storagePath)
+	storagePath := t.TempDir()
 
 	db := database.NewDatabase(core.DatabaseOptions{
 		StoresFolders: []string{storagePath},

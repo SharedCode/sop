@@ -56,7 +56,7 @@ func NewTwoPhaseCommitTransaction(ctx context.Context, config sop.TransactionOpt
 
 	tl := fs.NewTransactionLog(cache, replicationTracker)
 	t, err := common.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime,
-		fs.NewBlobStore(fs.DefaultToFilePath, nil), sr, fs.NewRegistry(config.Mode == sop.ForWriting,
+		fs.NewBlobStore(folder, nil, nil), sr, fs.NewRegistry(config.Mode == sop.ForWriting,
 			config.RegistryHashModValue, replicationTracker, cache), cache, tl)
 
 	// Tell Replication Tracker to use transaction ID as ID when locking registry handle record's file sector during writes.
@@ -84,25 +84,6 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, config sop
 	if len(config.StoresFolders) == 0 {
 		return nil, fmt.Errorf("config.StoresFolders can't be empty")
 	}
-	if config.ErasureConfig == nil {
-		config.ErasureConfig = fs.GetGlobalErasureConfig()
-		if config.ErasureConfig == nil {
-			return nil, fmt.Errorf("config.ErasureConfig can't be nil")
-		}
-	}
-
-	// If BaseFolderPathsAcrossDrives is not set, use the StoresFolders.
-	// This is a convenience fallback for simple setups where the user wants to use the same folders for both
-	// Registry replication and Blob Store erasure coding.
-	// However, conceptually they are distinct:
-	// - StoresFolders: Active/Passive Registry replication
-	// - BaseFolderPathsAcrossDrives: Erasure Coding shards for Blob Store
-	for k, v := range config.ErasureConfig {
-		if len(v.BaseFolderPathsAcrossDrives) == 0 {
-			v.BaseFolderPathsAcrossDrives = config.StoresFolders
-			config.ErasureConfig[k] = v
-		}
-	}
 
 	fio := fs.NewFileIO()
 	cache := sop.GetL2Cache(config)
@@ -118,13 +99,6 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, config sop
 		return nil, err
 	}
 
-
-	log.Debug(fmt.Sprintf("erasure config: %v", config.ErasureConfig))
-
-	bs, err := fs.NewBlobStoreWithEC(fs.DefaultToFilePath, nil, config.ErasureConfig)
-	if err != nil {
-		return nil, err
-	}
 	mbsf := fs.NewManageStoreFolder(fio)
 	sr, err := fs.NewStoreRepository(ctx, replicationTracker, mbsf, cache, config.RegistryHashModValue)
 	if err != nil {
@@ -139,6 +113,11 @@ func NewTwoPhaseCommitTransactionWithReplication(ctx context.Context, config sop
 	}
 
 	tl := fs.NewTransactionLog(cache, replicationTracker)
+
+	bs, err := fs.NewBlobStoreWithEC(nil, fio, config.ErasureConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	t, err := common.NewTwoPhaseCommitTransaction(config.Mode, config.MaxTime, bs, sr,
 		fs.NewRegistry(config.Mode == sop.ForWriting, config.RegistryHashModValue, replicationTracker, cache), cache, tl)

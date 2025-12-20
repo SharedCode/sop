@@ -66,3 +66,32 @@ Backing up a hybrid system requires coordination.
 3.  Restore the Filesystem data.
 4.  Start the application.
 5.  **Run Integrity Check**: Use SOP's internal tools to verify that all Registry entries point to valid blobs.
+
+## Data Management Suite (SOP Web UI)
+
+SOP includes a powerful HTTP Server and Web UI that functions as a full database management suite. It allows you to:
+*   **Perform Full CRUD**: Create, Read, Update, and Delete records in any B-Tree.
+*   **Manage Any Database**: Works with any SOP store, regardless of the language or data type used.
+*   **Leverage Rich Indexing**: Utilize `IndexSpecification` to define and search on compound indexes with multiple fields and custom sort orders, giving you RDBMS-like power.
+*   **Debug & Inspect**: Visually verify data integrity and structure.
+
+> **Note on Architecture**: This tool is **not** a central database server. In SOP's masterless architecture, this UI is simply another client node. You can run it locally on your laptop to manage a remote production cluster, or deploy it as a sidecar. It connects directly to the storage layer, respecting all ACID guarantees without introducing a central bottleneck. Each user managing data via this app participates in **"swarm" computing**, where changes are efficiently merged or rejected (if conflicting) with full ACID guarantees.
+
+### Running the Management Suite
+
+You can run the tool directly from the source:
+
+```bash
+# Point to your SOP registry folder
+go run tools/httpserver/main.go -registry /path/to/your/sop/data
+```
+
+Access the UI at `http://localhost:8080`.
+
+### Key Features
+*   **Store Listing**: See all B-Trees in your registry.
+*   **Rich Search**: Search by key prefix or complex multi-field queries (if using `IndexSpecification`).
+*   **JSON Editor**: View and edit complex value objects as formatted JSON.
+*   **Bulk Friendly**: Pagination and efficient loading for large datasets.
+
+For more details, see the [SOP Data Management Suite Documentation](tools/httpserver/README.md).

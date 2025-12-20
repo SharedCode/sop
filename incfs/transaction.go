@@ -3,7 +3,6 @@ package incfs
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	"github.com/sharedcode/sop"
 	cas "github.com/sharedcode/sop/adapters/cassandra"
@@ -14,13 +13,11 @@ import (
 // NewTransaction is a convenience function to create an end-user facing transaction object that wraps the two-phase commit transaction.
 func NewTransaction(ctx context.Context, config sop.TransactionOptions) (sop.Transaction, error) {
 	fio := fs.NewFileIO()
-	toFilePath := fs.DefaultToFilePath
+	var folder string
 	if len(config.StoresFolders) > 0 {
-		toFilePath = func(basePath string, id sop.UUID) string {
-			return fs.DefaultToFilePath(filepath.Join(config.StoresFolders[0], basePath), id)
-		}
+		folder = config.StoresFolders[0]
 	}
-	bs := fs.NewBlobStore(toFilePath, fio)
+	bs := fs.NewBlobStore(folder, nil, fio)
 	mbsf := fs.NewManageStoreFolder(fio)
 
 	var conn *cas.Connection

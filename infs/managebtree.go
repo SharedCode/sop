@@ -24,6 +24,7 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions
 		}
 	}
 	so.DisableRegistryStoreFormatting = true
+	so.DisableBlobStoreFormatting = true
 	trans, _ := t.GetPhasedTransaction().(*common.Transaction)
 	if sr, ok := trans.GetStoreRepository().(*fs.StoreRepository); ok {
 		so.BlobStoreBaseFolderPath = sr.GetStoresBaseFolder()
@@ -164,7 +165,6 @@ func areFoldersInEC(name string, folders []string, erasureConfig map[string]sop.
 	}
 	return true
 }
-
 
 // ReinstateFailedDrives asks the replication tracker to reinstate failed passive targets.
 // storesFolders must contain the active and passive stores' base folder paths.

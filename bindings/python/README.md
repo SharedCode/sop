@@ -14,7 +14,7 @@
 *   **ACID Compliance**: Full transaction support (Begin, Commit, Rollback) with isolation.
 *   **High Performance**: Written in Go with a lightweight Python wrapper (ctypes).
 *   **Caching**: Integrated Redis-backed L1/L2 caching for speed.
-*   **Replication**: Optional Erasure Coding (EC) for fault-tolerant storage across drives.
+*   **Replication & Fault Tolerance**: Supports **Erasure Coding** for Blob Store (managing B-Tree nodes & large data files) to distribute data across drives with configurable parity. Also features **Active/Passive Replication** for the Registry to ensure high availability.
 *   **Multi-Tenancy**: Native support for Cassandra Keyspaces or Directory-based isolation.
 *   **Flexible Deployment**: Supports both **Standalone** (local) and **Clustered** (distributed) modes.
 
@@ -39,9 +39,9 @@ Install directly from PyPI:
 pip install sop4py
 ```
 
-## Data Browser & Full Data Management
+## SOP Data Management Suite
 
-SOP includes a powerful **Data Browser** that provides **full data management** capabilities for your B-Tree stores. It goes beyond simple viewing, offering a complete GUI for inspecting, searching, and manage your data at scale.
+SOP includes a powerful **Data Management Suite** that provides **full CRUD** capabilities for your B-Tree stores. It goes beyond simple viewing, offering a complete GUI for inspecting, searching, and managing your data at scale.
 
 To launch it, simply run:
 
@@ -63,7 +63,7 @@ sop-httpserver
 
 ## Generating Sample Data
 
-To see the Data Browser in action, you can generate a sample database with complex keys using the included example script:
+To see the Data Management Suite in action, you can generate a sample database with complex keys using the included example script:
 
 1.  **Run the generator**:
     ```bash

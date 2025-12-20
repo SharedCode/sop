@@ -2,7 +2,9 @@ package database_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -13,9 +15,7 @@ import (
 )
 
 func TestDatabase_Standalone_Simple(t *testing.T) {
-	storagePath := "/tmp/sop_test_standalone_simple"
-	_ = os.RemoveAll(storagePath)
-	defer os.RemoveAll(storagePath)
+	storagePath := t.TempDir()
 
 	db, _ := database.ValidateOptions(sop.DatabaseOptions{
 		StoresFolders: []string{storagePath},
@@ -44,9 +44,7 @@ func TestDatabase_Standalone_Simple(t *testing.T) {
 
 func TestDatabase_Standalone_Replication(t *testing.T) {
 	// Setup folders for replication
-	basePath := "/tmp/sop_test_standalone_repl"
-	_ = os.RemoveAll(basePath)
-	defer os.RemoveAll(basePath)
+	basePath := t.TempDir()
 
 	folders := []string{
 		basePath + "/node1",
@@ -58,8 +56,9 @@ func TestDatabase_Standalone_Replication(t *testing.T) {
 
 	ecConfig := map[string]sop.ErasureCodingConfig{
 		"test_store": {
-			DataShardsCount:   1,
-			ParityShardsCount: 1,
+			DataShardsCount:             1,
+			ParityShardsCount:           1,
+			BaseFolderPathsAcrossDrives: folders,
 		},
 	}
 
@@ -97,7 +96,7 @@ func TestDatabase_Clustered_Construction(t *testing.T) {
 
 	db, err := database.ValidateOptions(sop.DatabaseOptions{
 		CacheType:     sop.Redis,
-		StoresFolders: []string{"/tmp/sop_test_clustered"},
+		StoresFolders: []string{t.TempDir()},
 	})
 
 	if err != nil {
@@ -120,7 +119,7 @@ func TestDatabase_Clustered_Construction(t *testing.T) {
 func TestDatabase_Cassandra_Construction(t *testing.T) {
 	_, err := database.ValidateCassandraOptions(sop.DatabaseOptions{
 		Keyspace:      "test_keyspace",
-		StoresFolders: []string{"/tmp/sop_test_cassandra"},
+		StoresFolders: []string{t.TempDir()},
 	})
 
 	if err != nil {
@@ -131,7 +130,7 @@ func TestDatabase_Cassandra_Construction(t *testing.T) {
 func TestDatabase_Cassandra_Transaction_Simple(t *testing.T) {
 	db, _ := database.ValidateCassandraOptions(sop.DatabaseOptions{
 		Keyspace:      "test_keyspace",
-		StoresFolders: []string{"/tmp/sop_test_cassandra_simple"},
+		StoresFolders: []string{t.TempDir()},
 	})
 
 	ctx := context.Background()
@@ -145,9 +144,7 @@ func TestDatabase_Cassandra_Transaction_Simple(t *testing.T) {
 
 func TestDatabase_Cassandra_Transaction_Replication(t *testing.T) {
 	// Setup folders
-	basePath := "/tmp/sop_test_cassandra_repl"
-	_ = os.RemoveAll(basePath)
-	defer os.RemoveAll(basePath)
+	basePath := t.TempDir()
 
 	folders := []string{
 		basePath + "/node1",
@@ -176,4 +173,108 @@ func TestDatabase_Cassandra_Transaction_Replication(t *testing.T) {
 		t.Fatal("Expected error connecting to Cassandra, got nil")
 	}
 	t.Logf("Got expected error: %v", err)
+}
+
+func TestDatabase_Setup_GetOptions(t *testing.T) {
+	ctx := context.Background()
+	path := t.TempDir()
+
+	opts := sop.DatabaseOptions{
+		StoresFolders: []string{path},
+		Type:          sop.Standalone,
+	}
+
+	// 1. Test Setup (First run)
+	savedOpts, err := database.Setup(ctx, opts)
+	if err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+	if len(savedOpts.StoresFolders) != 1 {
+		t.Errorf("Expected 1 store folder, got %d", len(savedOpts.StoresFolders))
+	}
+
+	// 2. Test GetOptions
+	loadedOpts, err := database.GetOptions(ctx, path)
+	if err != nil {
+		t.Fatalf("GetOptions failed: %v", err)
+	}
+	if loadedOpts.Type != opts.Type {
+		t.Errorf("Expected Type %v, got %v", opts.Type, loadedOpts.Type)
+	}
+
+	// 3. Test Setup (Second run - should return error because it's already in memory)
+	opts2 := sop.DatabaseOptions{
+		StoresFolders: []string{path},
+		Type:          sop.Clustered,
+	}
+	_, err = database.Setup(ctx, opts2)
+	if err == nil {
+		t.Error("Expected Setup (2nd run) to fail with 'already setup', got nil")
+	}
+}
+
+func TestDatabase_Setup_ExistingOnDisk(t *testing.T) {
+	ctx := context.Background()
+	path := t.TempDir()
+
+	// Manually write dboptions.json
+	opts := sop.DatabaseOptions{
+		StoresFolders: []string{path},
+		Type:          sop.Clustered,
+	}
+	b, _ := json.Marshal(opts)
+	if err := os.WriteFile(filepath.Join(path, "dboptions.json"), b, 0644); err != nil {
+		t.Fatalf("Failed to write options file: %v", err)
+	}
+
+	// Call Setup - should detect existing file and return it
+	// Note: We pass different options (Standalone) to verify it returns the one from disk (Clustered)
+	inputOpts := sop.DatabaseOptions{
+		StoresFolders: []string{path},
+		Type:          sop.Standalone,
+	}
+
+	loadedOpts, err := database.Setup(ctx, inputOpts)
+	if err != nil {
+		t.Fatalf("Setup failed on existing file: %v", err)
+	}
+	if loadedOpts.Type != sop.Clustered {
+		t.Errorf("Expected Setup to return existing options (Clustered), got %v", loadedOpts.Type)
+	}
+}
+
+func TestDatabase_Setup_MultipleFolders(t *testing.T) {
+	ctx := context.Background()
+	path1 := t.TempDir()
+	path2 := t.TempDir()
+
+	opts := sop.DatabaseOptions{
+		StoresFolders: []string{path1, path2},
+		Type:          sop.Standalone,
+	}
+
+	_, err := database.Setup(ctx, opts)
+	if err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
+
+	// Verify file exists in both folders
+	for _, p := range []string{path1, path2} {
+		if _, err := database.GetOptions(ctx, p); err != nil {
+			t.Errorf("GetOptions failed for path %s: %v", p, err)
+		}
+	}
+}
+
+func TestDatabase_Setup_Errors(t *testing.T) {
+	ctx := context.Background()
+
+	// Empty StoresFolders
+	opts := sop.DatabaseOptions{
+		StoresFolders: []string{},
+	}
+	_, err := database.Setup(ctx, opts)
+	if err == nil {
+		t.Error("Expected error for empty StoresFolders, got nil")
+	}
 }

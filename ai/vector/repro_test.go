@@ -14,7 +14,7 @@ func TestRepro(t *testing.T) {
 	fmt.Printf("Redis: %d\n", sop.Redis)
 
 	db, _ := database.ValidateOptions(sop.DatabaseOptions{
-		StoresFolders: []string{"/tmp/test"},
+		StoresFolders: []string{t.TempDir()},
 	})
 
 	cache := sop.GetL2Cache(sop.TransactionOptions{CacheType: db.CacheType})

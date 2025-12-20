@@ -107,11 +107,10 @@ func TestManageVectorDB_ErrorPaths_Extended(t *testing.T) {
 func TestVectorDB_More_Coverage(t *testing.T) {
 	ctxID := CreateContextForTest()
 	defer RemoveContextForTest(ctxID)
+	dir := t.TempDir()
 
 	// 1. Create Database
-	dbName := "test_vec_more"
-	dbPath := fmt.Sprintf("/tmp/%s", dbName)
-	dbPayload := fmt.Sprintf(`{"stores_folders": ["%s"]}`, dbPath)
+	dbPayload := fmt.Sprintf(`{"stores_folders": ["%s"]}`, dir)
 	dbID := ManageDatabaseForTest(ctxID, NewDatabase, "", dbPayload)
 	t.Logf("DbID: %s", dbID)
 
@@ -163,11 +162,10 @@ func TestVectorDB_More_Coverage(t *testing.T) {
 func TestModelStore_More_Coverage(t *testing.T) {
 	ctxID := CreateContextForTest()
 	defer RemoveContextForTest(ctxID)
+	dir := t.TempDir()
 
 	// 1. Create Database
-	dbName := "test_model_more"
-	dbPath := fmt.Sprintf("/tmp/%s", dbName)
-	dbPayload := fmt.Sprintf(`{"stores_folders": ["%s"]}`, dbPath)
+	dbPayload := fmt.Sprintf(`{"stores_folders": ["%s"]}`, dir)
 	dbID := ManageDatabaseForTest(ctxID, NewDatabase, "", dbPayload)
 	t.Logf("DbID: %s", dbID)
 

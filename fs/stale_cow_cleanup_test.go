@@ -16,10 +16,7 @@ import (
 func Test_StaleCowCleanup_OnUpdate_RollbackRestoresOriginal(t *testing.T) {
 	// 1. Setup
 	ctx := context.Background()
-	path := "/tmp/test_cow_cleanup"
-	_ = os.RemoveAll(path)
-	_ = os.MkdirAll(path, 0755)
-	defer os.RemoveAll(path)
+	path := t.TempDir()
 
 	rt, err := NewReplicationTracker(ctx, []string{path}, false, mocks.NewMockClient())
 	if err != nil {

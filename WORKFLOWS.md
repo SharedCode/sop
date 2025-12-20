@@ -6,7 +6,7 @@ Here are the common implementation patterns.
 
 ## 1. The `infs` Path: File System Simplicity
 
-The `infs` package uses the file system (local disk, NAS, or S3-mounted drive) as the storage backend. This is the most common and versatile path.
+The `infs` package uses the file system as the storage backend. While it works perfectly on a **local disk** for development, its true power is unlocked when using **Network Attached Storage (NAS)**, **S3-mounted drives**, or **Cloud Volumes**. This allows your data to scale far beyond the limits of a single machine's local disk.
 
 ### Scenario A: The Seamless Scale-Up
 **Ideal for:** Startups, internal tools, and applications that need to start simple but grow big.
@@ -15,6 +15,7 @@ The `infs` package uses the file system (local disk, NAS, or S3-mounted drive) a
     *   Configure SOP to use **Standalone Mode**.
     *   Target a local folder or a mounted network drive.
     *   **Benefit**: Zero dependencies. No Redis to install. You can code, test, and debug on a plane without internet.
+    *   **Tip**: Use the **SOP Data Management Suite** (`go run tools/httpserver/main.go`) to visually inspect and manage your local data as you build.
 
 2.  **Release to Production (Clustered Mode)**
     *   Mount that same network drive (or share the S3 bucket) to your production servers.

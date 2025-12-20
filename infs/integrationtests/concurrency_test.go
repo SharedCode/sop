@@ -56,7 +56,7 @@ func Test_ConcurrentTransactions(t *testing.T) {
 	// Helper to create a transaction with its own logger.
 	createTx := func(mode sop.TransactionMode) (sop.Transaction, error) {
 		reg := fs.NewRegistry(mode == sop.ForWriting, 10, replicationTracker, cache)
-		blobStore := fs.NewBlobStore(fs.DefaultToFilePath, nil)
+		blobStore := fs.NewBlobStore("", fs.DefaultToFilePath, nil)
 		// IMPORTANT: Create a NEW TransactionLog for each transaction instance.
 		transLog := fs.NewTransactionLog(cache, replicationTracker)
 

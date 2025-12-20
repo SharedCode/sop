@@ -57,7 +57,7 @@ class ErasureCodingConfig:
     data_shards_count: int
     parity_shards_count: int
     base_folder_paths_across_drives: List[str]
-    repair_corrupted_shards: bool
+    repair_corrupted_shards: bool = False
 
     def __eq__(self, other):
         return (

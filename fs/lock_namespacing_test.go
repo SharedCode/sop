@@ -32,8 +32,8 @@ func TestLockKeyNamespacing(t *testing.T) {
 	ctx := context.Background()
 
 	// 2. Setup Two Replication Trackers with different base paths
-	path1 := "/tmp/app1"
-	path2 := "/tmp/app2"
+	path1 := t.TempDir()
+	path2 := t.TempDir()
 
 	rt1, err := NewReplicationTracker(ctx, []string{path1}, false, capturingCache)
 	if err != nil {

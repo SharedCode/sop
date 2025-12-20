@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sop4py"
-version = "2.0.38"
+version = "2.0.43"
 authors = [
     { name="Gerardo Recinto", email="gerardorecinto@yahoo.com" },
 ]
@@ -19,7 +19,7 @@ classifiers = [
 dependencies = []
 
 [project.scripts]
-sop-browser = "sop.browser:main"
+sop-httpserver = "sop.httpserver:main"
 sop-demo = "sop.demo:main"
 
 # activate venv: sop$ source .venv/bin/activate

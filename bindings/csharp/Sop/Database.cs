@@ -126,7 +126,8 @@ internal enum DatabaseAction
     RemoveBtree = 8,
     RemoveModelStore = 9,
     RemoveVectorStore = 10,
-    RemoveSearch = 11
+    RemoveSearch = 11,
+    SetupDatabase = 12
 }
 
 /// <summary>
@@ -147,6 +148,24 @@ public class Database
     public Database(DatabaseOptions options)
     {
         _options = options;
+    }
+
+    /// <summary>
+    /// Setup persists the database options to the stores folders.
+    /// This is a one-time setup operation for the database.
+    /// </summary>
+    /// <param name="ctx">The context.</param>
+    /// <param name="options">Configuration options.</param>
+    /// <exception cref="SopException">Thrown if setup fails.</exception>
+    public static void Setup(Context ctx, DatabaseOptions options)
+    {
+        var payload = JsonSerializer.SerializeToUtf8Bytes(options);
+        var resPtr = NativeMethods.ManageDatabase(ctx.Id, (int)DatabaseAction.SetupDatabase, null, payload);
+        var res = Interop.FromPtr(resPtr);
+        if (res != null)
+        {
+            throw new SopException(res);
+        }
     }
 
     /// <summary>

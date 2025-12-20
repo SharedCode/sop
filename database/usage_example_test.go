@@ -16,8 +16,8 @@ import (
 // This mode uses an in-memory cache and local filesystem storage.
 func Example_standalone() {
 	// 1. Define storage path.
-	storagePath := "/tmp/sop_standalone_example"
-	_ = os.RemoveAll(storagePath) // Clean up previous run
+	storagePath, _ := os.MkdirTemp("", "sop_standalone_example")
+	defer os.RemoveAll(storagePath) // Clean up previous run
 
 	// 1. Initialize Database (Standalone or Clustered)
 	// Standalone uses in-memory caching; Clustered uses Redis.
@@ -79,8 +79,8 @@ func Example_standalone() {
 // This gives you full control over the transaction options and cache.
 func Example_infs_direct() {
 	// 1. Define storage path.
-	storagePath := "/tmp/sop_infs_direct_example"
-	_ = os.RemoveAll(storagePath)
+	storagePath, _ := os.MkdirTemp("", "sop_infs_direct_example")
+	defer os.RemoveAll(storagePath)
 
 	// 2. Create Transaction Options.
 	// Here we explicitly choose InMemory cache.
@@ -154,9 +154,8 @@ func Example_clustered() {
 	defer redis.CloseConnection()
 
 	// 2. Define storage path.
-	storagePath := "/tmp/sop_clustered_example"
-	_ = os.RemoveAll(storagePath)
-	_ = os.MkdirAll(storagePath, 0755)
+	storagePath, _ := os.MkdirTemp("", "sop_clustered_example")
+	defer os.RemoveAll(storagePath)
 
 	// 3. Initialize Database in Clustered mode.
 	// This will use the registered Redis cache.

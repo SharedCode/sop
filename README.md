@@ -41,7 +41,7 @@ See the [API Cookbook](COOKBOOK.md#interoperability-note-go-vs-other-languages) 
 - [SOP for C# (sop4cs)](bindings/csharp/README.md)
 - [SOP for Rust (sop4rs)](bindings/rust/README.md)
 - [SOP AI Kit](ai/README.md)
-- [SOP HTTP Server (Data Browser)](tools/httpserver/README.md) - **Updated!** Now with full data management (bulk mgmt friendly), rich search and navigation.
+- [SOP Data Management Suite](tools/httpserver/README.md) - **Updated!** A full-featured Web UI for CRUD operations, rich compound index search, and universal database management.
 - [Changelog](CHANGELOG.md)
 - [Community & support](#community--support)
 - [Contributing & license](#contributing--license)
@@ -133,7 +133,7 @@ For detailed architectural patterns, deployment lifecycles, and configuration ex
     *   **Scalability**: Infinite metadata scaling via Sharded Registry (FileSystem) or Cassandra tables.
     *   **Resilience**: Registry replication (Active/Passive or Quorum) and Erasure Coding for data blobs ensure zero data loss.
     *   **Operational Flexibility**: Choose the backend that fits your ops stack:
-        *   **FileSystem (`infs`)**: Requires only a shared drive (NAS/S3) and Redis. Ideal for lean ops teams.
+        *   **FileSystem (`infs`)**: The most versatile option. Run on **Local Disk** for embedded/dev use, or mount a **Network Drive (NAS/S3)** for infinite cluster scalability. Requires only a shared mount and Redis.
         *   **Cassandra (`incfs`)**: **"Power up"** your existing Cassandra cluster with SOP. Adds full **ACID Transactions**, **B-Tree Indexing** (ordered data, range queries), and efficient large item management to Cassandra's eventual consistency model.
 
 ### 3. AI Vector Database

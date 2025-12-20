@@ -67,7 +67,7 @@ func Test_CrashReboot(t *testing.T) {
 	// Helper to create a transaction.
 	createTx := func(mode sop.TransactionMode) (sop.Transaction, error) {
 		reg := fs.NewRegistry(mode == sop.ForWriting, 10, replicationTracker, cache)
-		blobStore := fs.NewBlobStore(fs.DefaultToFilePath, nil)
+		blobStore := fs.NewBlobStore("", fs.DefaultToFilePath, nil)
 
 		twoPC, err := common.NewTwoPhaseCommitTransaction(mode, time.Minute*15, true, blobStore, sr, reg, cache, realLog)
 		if err != nil {

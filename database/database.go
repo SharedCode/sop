@@ -2,7 +2,11 @@ package database
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/sharedcode/sop"
@@ -16,6 +20,126 @@ import (
 // DatabaseOptions holds the configuration for the database.
 // Deprecated: Use sop.DatabaseOptions instead.
 type DatabaseOptions = sop.DatabaseOptions
+
+var databaseOptionsLookup = make(map[string]*DatabaseOptions)
+
+const databaseOptionsFilename = "dboptions.json"
+
+var locker = sync.Mutex{}
+
+func setOptionToLookup(filename string, dbOptions *DatabaseOptions) {
+	locker.Lock()
+	defer locker.Unlock()
+	databaseOptionsLookup[filename] = dbOptions
+}
+func getOptionFromLookup(filename string) *DatabaseOptions {
+	locker.Lock()
+	defer locker.Unlock()
+	if v, ok := databaseOptionsLookup[filename]; ok {
+		return v
+	}
+	return nil
+}
+func isOptionInLookup(filename string) bool {
+	opts := getOptionFromLookup(filename)
+	return opts != nil && !opts.IsEmpty()
+}
+
+// Setup persists the database options to the stores folders.
+// This is a one-time setup operation for the database.
+// It ensures the options are saved to all StoresFolders.
+func Setup(ctx context.Context, opts sop.DatabaseOptions) (DatabaseOptions, error) {
+	if len(opts.StoresFolders) == 0 {
+		return opts, fmt.Errorf("StoresFolders must be provided")
+	}
+
+	// Allow to interpret some basic fields.
+	opts, _ = ValidateOptions(opts)
+	// Convert to absolute paths
+	for i, folder := range opts.StoresFolders {
+		absPath, err := filepath.Abs(folder)
+		if err != nil {
+			return opts, err
+		}
+		opts.StoresFolders[i] = absPath
+	}
+	if opts.ErasureConfig != nil {
+		for k, v := range opts.ErasureConfig {
+			for i, folder := range v.BaseFolderPathsAcrossDrives {
+				absPath, err := filepath.Abs(folder)
+				if err != nil {
+					return opts, err
+				}
+				v.BaseFolderPathsAcrossDrives[i] = absPath
+			}
+			opts.ErasureConfig[k] = v
+		}
+	}
+
+	folder := opts.StoresFolders[0]
+	fileName := filepath.Join(folder, databaseOptionsFilename)
+
+	if isOptionInLookup(fileName) {
+		return DatabaseOptions{}, fmt.Errorf("database %s already setup", fileName)
+	}
+
+	// Check if exists in the first folder
+	if _, err := os.Stat(fileName); err == nil {
+		// Read
+		b, err := os.ReadFile(fileName)
+		if err != nil {
+			return opts, err
+		}
+		var loadedOpts sop.DatabaseOptions
+		if err := json.Unmarshal(b, &loadedOpts); err != nil {
+			return opts, err
+		}
+		setOptionToLookup(fileName, &loadedOpts)
+		return loadedOpts, nil
+	}
+
+	// Use provided options
+	ba, err := json.Marshal(opts)
+	if err != nil {
+		return opts, err
+	}
+
+	// Persist to all folders
+	for _, folder := range opts.StoresFolders {
+		if err := os.MkdirAll(folder, 0755); err != nil {
+			return opts, err
+		}
+		fname := filepath.Join(folder, databaseOptionsFilename)
+		if err := os.WriteFile(fname, ba, 0644); err != nil {
+			return opts, err
+		}
+	}
+
+	setOptionToLookup(fileName, &opts)
+	return opts, nil
+}
+
+// GetOptions reads the database options from the specified folder.
+func GetOptions(ctx context.Context, folderPath string) (sop.DatabaseOptions, error) {
+	fileName := filepath.Join(folderPath, databaseOptionsFilename)
+
+	// If already loaded in memory, 'just return that copy.
+	dbOpts := getOptionFromLookup(fileName)
+	if dbOpts != nil && !dbOpts.IsEmpty(){
+		return *dbOpts, nil
+	}
+
+	ba, err := os.ReadFile(fileName)
+	if err != nil {
+		return sop.DatabaseOptions{}, err
+	}
+	var opts sop.DatabaseOptions
+	if err := json.Unmarshal(ba, &opts); err != nil {
+		return sop.DatabaseOptions{}, err
+	}
+	setOptionToLookup(fileName, &opts)
+	return opts, nil
+}
 
 // ValidateOptions validates and prepares the database options.
 // It infers CacheType if not set.
@@ -70,6 +194,7 @@ func ValidateCassandraOptions(config sop.DatabaseOptions) (sop.DatabaseOptions, 
 // BeginTransaction starts a new transaction.
 func BeginTransaction(ctx context.Context, config sop.DatabaseOptions, mode sop.TransactionMode, maxTime ...time.Duration) (sop.Transaction, error) {
 	config, _ = ValidateOptions(config)
+
 	var mt time.Duration
 	if len(maxTime) > 0 {
 		mt = maxTime[0]

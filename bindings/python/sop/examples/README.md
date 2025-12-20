@@ -59,3 +59,27 @@ It showcases:
 ```bash
 python3 examples/modelstore_demo.py
 ```
+
+## Erasure Coding Config Demo (`erasure_coding_config_demo.py`)
+
+This script demonstrates how to configure a Clustered Database with Erasure Coding on Blob store(manages the Btree nodes & large data files). It sets up a database with Blob store files distributed across multiple folders (simulating drives) with specified data and parity shards.
+
+### Running the Demo
+
+**Prerequisite**: A Redis instance running on `localhost:6379`.
+
+```bash
+python3 examples/erasure_coding_config_demo.py
+```
+
+## Full Replication Config Demo (`full_replication_config_demo.py`)
+
+This script demonstrates how to configure a Clustered Database with Full Replication. Similar to the Erasure Coding demo, it distributes data across multiple folders, but also configures the Registry's Active/Passive parameters to achieve full replication.
+
+### Running the Demo
+
+**Prerequisite**: A Redis instance running on `localhost:6379`.
+
+```bash
+python3 examples/full_replication_config_demo.py
+```

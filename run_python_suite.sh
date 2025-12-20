@@ -118,4 +118,10 @@ python3 -m sop.examples.vector_replication_demo || echo "Warning: vector_replica
 echo "Running sop.examples.langchain_demo..."
 python3 -m sop.examples.langchain_demo || echo "Warning: langchain_demo failed (possibly missing dependencies)"
 
+echo "Running sop.examples.erasure_coding_config_demo..."
+python3 -m sop.examples.erasure_coding_config_demo
+
+echo "Running sop.examples.full_replication_config_demo..."
+python3 -m sop.examples.full_replication_config_demo
+
 echo "All Python tests and examples completed."

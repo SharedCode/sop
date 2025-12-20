@@ -90,7 +90,7 @@ def main():
         print("Committing transaction...")
     
     print("Done! Database created.")
-    print(f"You can now browse '{db_path}' using sop-browser.")
+    print(f"You can now browse '{db_path}' using sop-httpserver.")
 
 if __name__ == "__main__":
     main()

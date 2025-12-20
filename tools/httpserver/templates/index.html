@@ -3,46 +3,122 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SOP Data Browser</title>
+    <title>SOP Data Manager</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; height: 100vh; }
-        #sidebar { width: 250px; min-width: 150px; max-width: 50%; background: #f4f4f4; border-right: 1px solid #ddd; padding: 20px; overflow-y: auto; flex-shrink: 0; box-sizing: border-box; }
-        #resizer { width: 5px; background: #ddd; cursor: col-resize; user-select: none; transition: background 0.2s; flex-shrink: 0; }
-        #resizer:hover, #resizer.resizing { background: #007bff; }
-        #detail-resizer { width: 5px; background: #ddd; cursor: col-resize; user-select: none; transition: background 0.2s; flex-shrink: 0; display: none; }
-        #detail-resizer:hover, #detail-resizer.resizing { background: #007bff; }
-        #main { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
-        h1, h2 { margin-top: 0; }
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #000000;
+            --sidebar-bg: #f4f4f4;
+            --border-color: #ddd;
+            --hover-bg: #e0e0e0;
+            --active-bg: #007bff;
+            --active-text: #ffffff;
+            --table-header-bg: #f2f2f2;
+            --table-row-even: #f9f9f9;
+            --table-row-hover: #e6e6e6;
+            --table-row-selected: #cce5ff;
+            --pre-bg: #f8f8f8;
+            --input-bg: #ffffff;
+            --input-border: #ddd;
+            --button-bg: #007bff;
+            --button-text: #ffffff;
+            --button-hover: #0056b3;
+            --success-bg: #28a745;
+            --danger-bg: #dc3545;
+            --key-color: #155724;
+            --text-muted: #555;
+            --detail-panel-bg: #fff;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #1e1e1e;
+                --text-color: #d4d4d4;
+                --sidebar-bg: #252526;
+                --border-color: #3e3e42;
+                --hover-bg: #37373d;
+                --active-bg: #007bff;
+                --active-text: #ffffff;
+                --table-header-bg: #2d2d2d;
+                --table-row-even: #252526;
+                --table-row-hover: #2a2d2e;
+                --table-row-selected: #094771;
+                --pre-bg: #1e1e1e;
+                --input-bg: #3c3c3c;
+                --input-border: #3e3e42;
+                --button-bg: #0e639c;
+                --button-text: #ffffff;
+                --button-hover: #1177bb;
+                --success-bg: #4caf50;
+                --danger-bg: #f14c4c;
+                --key-color: #9cdcfe;
+                --text-muted: #aaa;
+                --detail-panel-bg: #1e1e1e;
+            }
+        }
+
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; height: 100vh; background-color: var(--bg-color); color: var(--text-color); }
+        #sidebar { width: 250px; min-width: 150px; max-width: 50%; background: var(--sidebar-bg); border-right: 1px solid var(--border-color); padding: 6px 7px; overflow-y: auto; flex-shrink: 0; box-sizing: border-box; }
+        #resizer { width: 5px; background: var(--border-color); cursor: col-resize; user-select: none; transition: background 0.2s; flex-shrink: 0; }
+        #resizer:hover, #resizer.resizing { background: var(--active-bg); }
+        #detail-resizer { width: 5px; background: var(--border-color); cursor: col-resize; user-select: none; transition: background 0.2s; flex-shrink: 0; display: none; }
+        #detail-resizer:hover, #detail-resizer.resizing { background: var(--active-bg); }
+        #main { flex: 1; padding: 6px 7px; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
+        h1, h2 { margin-top: 0; margin-bottom: 10px; }
+        h3 { margin-top: 0; margin-bottom: 10px; }
         ul { list-style: none; padding: 0; }
         li { padding: 8px 12px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
-        li:hover { background: #e0e0e0; }
-        li.active { background: #007bff; color: white; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; border: 1px solid #ccc; }
-        th, td { text-align: left; padding: 6px 12px; border: 1px solid #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        th { position: relative; background-color: #f2f2f2; }
-        th.th-key { color: #155724; font-weight: bold; }
+        li:hover { background: var(--hover-bg); }
+        li.active { background: var(--active-bg); color: var(--active-text); }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; border: 1px solid var(--border-color); }
+        th, td { text-align: left; padding: 6px 12px; border: 1px solid var(--border-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        th { position: relative; background-color: var(--table-header-bg); text-transform: capitalize; }
+        th.th-key { color: var(--key-color); font-weight: bold; }
         th.th-val { }
         .col-resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 5px; cursor: col-resize; user-select: none; }
-        .col-resizer:hover { background: #007bff; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        tr:hover { background-color: #e6e6e6; cursor: pointer; }
-        tr.selected-row { background-color: #cce5ff !important; }
-        #detail-panel { width: 400px; border-left: 1px solid #ddd; padding: 20px; background: #fff; display: none; overflow-y: auto; box-sizing: border-box; flex-shrink: 0; }
-        pre { background: #f8f8f8; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .col-resizer:hover { background: var(--active-bg); }
+        tr:nth-child(even) { background-color: var(--table-row-even); }
+        tr:hover { background-color: var(--table-row-hover); cursor: pointer; }
+        tr.selected-row { background-color: var(--table-row-selected) !important; }
+        #detail-panel { width: 400px; border-left: 1px solid var(--border-color); padding: 6px 7px; background: var(--detail-panel-bg); display: none; overflow-y: auto; box-sizing: border-box; flex-shrink: 0; }
+        pre { background: var(--pre-bg); padding: 10px; border-radius: 4px; overflow-x: auto; color: var(--text-color); }
         .toolbar { display: flex; gap: 10px; margin-bottom: 20px; }
-        input[type="text"] { padding: 8px; border: 1px solid #ddd; border-radius: 4px; flex: 1; }
-        button { padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
+        input[type="text"], textarea { padding: 8px; border: 1px solid var(--input-border); border-radius: 4px; flex: 1; background-color: var(--input-bg); color: var(--text-color); }
+        button { padding: 8px 16px; background: var(--button-bg); color: var(--button-text); border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: var(--button-hover); }
+        button:disabled { background: var(--border-color); cursor: not-allowed; }
+        
+        /* Utility Classes */
+        .btn-success { background-color: var(--success-bg) !important; color: white; }
+        .btn-danger { background-color: var(--danger-bg) !important; color: white; }
+        .error-text { color: var(--danger-bg); }
+        .form-label { font-weight: bold; font-size: 12px; color: var(--text-muted); }
+        .form-input { padding: 5px; border: 1px solid var(--input-border); border-radius: 3px; background-color: var(--input-bg); color: var(--text-color); }
+        .pre-block { margin-top: 5px; background: var(--pre-bg); padding: 5px; color: var(--text-color); }
     </style>
 </head>
 <body>
 
 <div id="sidebar">
-    <h2>Stores</h2>
-    <ul id="store-list">
-        <li>Loading...</li>
+    <div id="database-section" style="display: none; margin-bottom: 12px;">
+        <h2 style="margin-bottom: 7px;">Databases</h2>
+        <select id="database-select" onchange="selectDatabase(this.value)" style="width: 100%; padding: 5px;">
+            <option>Loading...</option>
+        </select>
+    </div>
+    <h2 style="margin-bottom: 2px;">Stores</h2>
+    <ul id="store-list" style="margin-bottom: 12px; max-height: 60vh; overflow-y: auto;">
+        <li>Select a database...</li>
     </ul>
+    
+    <hr style="margin: 12px 0; border: 0; border-top: 1px solid var(--border-color);">
+    
+    <div id="db-options-section" style="display: none;">
+        <h3 style="margin-bottom: 7px;">Database Options</h3>
+        <div id="db-options-content" style="font-size: 12px; color: var(--text-muted); overflow-x: auto;">
+            Loading...
+        </div>
+    </div>
 </div>
 
 <div id="resizer"></div>
@@ -52,24 +128,24 @@
     
     <div class="toolbar" id="toolbar" style="display:none;">
         <input type="text" id="search-input" placeholder="Search keys...">
-        <button onclick="loadItems('search')">Search</button>
-        <button onclick="showAdd()" style="background: #28a745;">Add Item</button>
+        <button onclick="loadItems('search')" title="Search for items in the store based on the key or index fields.">Search</button>
+        <button onclick="showAdd()" class="btn-success" title="Add a new item to the store.">Add Item</button>
     </div>
 
-    <div id="pagination-top" style="display:none; margin-bottom: 10px; gap: 10px; justify-content: center;">
-        <button onclick="firstPage()">First</button>
-        <button onclick="prevPage()">Previous</button>
-        <button onclick="nextPage()">Next</button>
-        <button onclick="lastPage()">Last</button>
+    <div id="pagination-top" style="display:none; margin-bottom: 2px; gap: 10px; justify-content: center;">
+        <button onclick="firstPage()" tabindex="0" title="Go to the first page of items.">First</button>
+        <button onclick="prevPage()" tabindex="0" title="Go to the previous page of items.">Previous</button>
+        <button onclick="nextPage()" tabindex="0" title="Go to the next page of items.">Next</button>
+        <button onclick="lastPage()" tabindex="0" title="Go to the last page of items.">Last</button>
     </div>
 
     <div id="data-grid"></div>
     
     <div id="pagination" style="display:none; margin-top: 10px; gap: 10px; justify-content: center;">
-        <button onclick="firstPage()">First</button>
-        <button onclick="prevPage()">Previous</button>
-        <button onclick="nextPage()">Next</button>
-        <button onclick="lastPage()">Last</button>
+        <button onclick="firstPage()" tabindex="0" title="Go to the first page of items.">First</button>
+        <button onclick="prevPage()" tabindex="0" title="Go to the previous page of items.">Previous</button>
+        <button onclick="nextPage()" tabindex="0" title="Go to the next page of items.">Next</button>
+        <button onclick="lastPage()" tabindex="0" title="Go to the last page of items.">Last</button>
     </div>
 </div>
 
@@ -81,6 +157,7 @@
 </div>
 
 <script>
+    let currentDatabase = null;
     let currentStore = null;
     let firstKey = null;
     let lastKey = null;
@@ -88,39 +165,155 @@
     let currentItemKey = null;
     let currentItems = [];
     let currentKeyColumnWidth = '45%';
+    let columnWidths = [];
 
-    // Load Stores on Start
-    fetch('/api/stores')
+    // Load Databases on Start
+    fetch('/api/databases')
         .then(res => res.json())
-        .then(stores => {
-            const list = document.getElementById('store-list');
-            list.innerHTML = '';
-            stores.forEach(store => {
-                const li = document.createElement('li');
-                li.textContent = store;
-                li.onclick = () => selectStore(store, li);
-                list.appendChild(li);
+        .then(databases => {
+            const select = document.getElementById('database-select');
+            select.innerHTML = '';
+            if (!databases || databases.length === 0) {
+                const opt = document.createElement('option');
+                opt.textContent = "No databases found";
+                select.appendChild(opt);
+                return;
+            }
+            
+            // Show database switcher only if we have multiple databases
+            if (databases.length > 1) {
+                document.getElementById('database-section').style.display = 'block';
+            }
+
+            databases.forEach(db => {
+                const opt = document.createElement('option');
+                opt.value = db.name;
+                opt.textContent = db.name + (db.mode === 'clustered' ? ' (Clustered)' : '');
+                select.appendChild(opt);
             });
+            // Select first by default
+            if (databases.length > 0) {
+                selectDatabase(databases[0].name);
+            }
         })
         .catch(err => {
-            const list = document.getElementById('store-list');
-            list.innerHTML = `<li style="color: red;">Error: ${err.message}</li>`;
+            console.error(err);
+            document.getElementById('database-select').innerHTML = '<option>Error loading databases</option>';
         });
 
+    function selectDatabase(name) {
+        if (currentDatabase === name) return;
+
+        // Check for unsaved changes
+        if (!closeDetail()) {
+            // Revert selection
+            const select = document.getElementById('database-select');
+            if (select && currentDatabase) {
+                select.value = currentDatabase;
+            }
+            return;
+        }
+
+        currentDatabase = name;
+        currentStore = null;
+        document.getElementById('store-list').innerHTML = '<li>Loading...</li>';
+        document.getElementById('current-store-title').textContent = 'Select a Store';
+        document.getElementById('data-grid').innerHTML = '';
+        document.getElementById('toolbar').style.display = 'none';
+        document.getElementById('pagination').style.display = 'none';
+        document.getElementById('pagination-top').style.display = 'none';
+        
+        // Reset DB Options
+        document.getElementById('db-options-section').style.display = 'none';
+        document.getElementById('db-options-content').innerHTML = 'Loading...';
+        
+        fetch(`/api/stores?database=${encodeURIComponent(name)}`)
+            .then(res => res.json())
+            .then(stores => {
+                const list = document.getElementById('store-list');
+                list.innerHTML = '';
+                if (!stores || stores.length === 0) {
+                    list.innerHTML = '<li>No stores found</li>';
+                    return;
+                }
+                stores.forEach(store => {
+                    const li = document.createElement('li');
+                    li.textContent = store.charAt(0).toUpperCase() + store.slice(1);
+                    li.onclick = () => selectStore(store, li);
+                    list.appendChild(li);
+                });
+            })
+            .catch(err => {
+                const list = document.getElementById('store-list');
+                list.innerHTML = `<li class="error-text">Error: ${err.message}</li>`;
+            });
+
+        // Fetch DB Options
+        fetch(`/api/db/options?database=${encodeURIComponent(name)}`)
+            .then(res => res.json())
+            .then(opts => {
+                const section = document.getElementById('db-options-section');
+                const content = document.getElementById('db-options-content');
+                section.style.display = 'block';
+                
+                let html = '';
+                
+                // Display Mode (Type)
+                // L2CacheType: 2=Redis (Clustered), others (0=NoCache, 1=InMemory) = Standalone
+                const typeStr = (opts.cache_type === 2) ? "Clustered" : "Standalone";
+                html += `<div style="margin-bottom: 5px;"><strong>Type:</strong> ${typeStr}</div>`;
+
+                if (opts.stores_folders && opts.stores_folders.length > 0) {
+                    html += '<strong>Stores Folders:</strong><ul style="margin: 5px 0; padding-left: 20px; list-style-type: disc;">';
+                    opts.stores_folders.forEach(f => {
+                        html += `<li style="cursor: default; padding: 2px 0;">${f}</li>`;
+                    });
+                    html += '</ul>';
+                }
+                
+                if (opts.erasure_config && Object.keys(opts.erasure_config).length > 0) {
+                    html += '<details><summary style="cursor: pointer; font-weight: bold; margin-bottom: 5px;">Erasure Config</summary><pre style="margin: 0; font-size: 10px; overflow-x: visible;">' + JSON.stringify(opts.erasure_config, null, 2) + '</pre></details>';
+                }
+
+                if (opts.redis_config) {
+                    html += '<details><summary style="cursor: pointer; font-weight: bold; margin-bottom: 5px;">Redis Config</summary><pre style="margin: 0; font-size: 10px; overflow-x: visible;">' + JSON.stringify(opts.redis_config, null, 2) + '</pre></details>';
+                }
+                
+                if (!html) {
+                    html = 'No specific options found.';
+                }
+                content.innerHTML = html;
+            })
+            .catch(err => {
+                console.error("Failed to fetch DB options", err);
+                document.getElementById('db-options-content').innerHTML = '<span class="error-text">Failed to load options</span>';
+                document.getElementById('db-options-section').style.display = 'block';
+            });
+    }
+
     function selectStore(name, element) {
+        if (currentStore === name) return;
+
+        // Close detail panel as it may be showing data from previous store
+        if (!closeDetail()) return;
+
         currentStore = name;
+        columnWidths = []; // Reset column widths
         
         // Highlight active
         document.querySelectorAll('#sidebar li').forEach(el => el.classList.remove('active'));
         element.classList.add('active');
 
         // Fetch Store Info
-        fetch(`/api/store/info?name=${encodeURIComponent(name)}`)
+        fetch(`/api/store/info?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`)
             .then(res => res.json())
             .then(info => {
                 currentStoreInfo = info;
                 // Use description if available, otherwise name
-                const displayTitle = info.description ? info.description : info.name;
+                let displayTitle = info.description ? info.description : info.name;
+                if (!info.description && displayTitle) {
+                    displayTitle = displayTitle.charAt(0).toUpperCase() + displayTitle.slice(1);
+                }
                 document.getElementById('current-store-title').textContent = displayTitle;
 
                 buildSearchUI(info);
@@ -134,6 +327,19 @@
         toolbar.style.display = 'flex';
         toolbar.style.flexWrap = 'wrap';
 
+        // Helper to trigger search
+        const triggerSearch = () => {
+            loadItems('search').then(items => {
+                if (items && items.length > 0) {
+                    const firstRow = document.querySelector('#items-table tbody tr');
+                    if (firstRow) {
+                        showDetail(firstRow, items[0], false);
+                        firstRow.scrollIntoView({ block: 'nearest' });
+                    }
+                }
+            });
+        };
+
         if (info.indexSpec && info.indexSpec.index_fields) {
             // Complex Key with Index Spec
             info.indexSpec.index_fields.forEach(field => {
@@ -143,6 +349,10 @@
                 input.placeholder = `${field.field_name} (${field.ascending_sort_order ? 'Asc' : 'Desc'})`;
                 input.style.marginRight = '5px';
                 input.style.flex = '1 1 150px'; // Allow wrapping
+                input.tabIndex = 0;
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') triggerSearch();
+                });
                 toolbar.appendChild(input);
             });
         } else {
@@ -152,26 +362,61 @@
             input.id = 'search-input';
             input.placeholder = 'Search keys...';
             input.style.flex = '1';
+            input.tabIndex = 0;
             toolbar.appendChild(input);
         }
 
         const btn = document.createElement('button');
         btn.textContent = 'Search';
-        btn.onclick = () => loadItems('search');
+        btn.title = "Search for items in the store based on the key or index fields.";
+        btn.onclick = triggerSearch;
+        btn.tabIndex = 0;
         toolbar.appendChild(btn);
+
+        // Add Enter key support for simple search input
+        const simpleInput = document.getElementById('search-input');
+        if (simpleInput) {
+            simpleInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') btn.click();
+            });
+        }
+
+        const refreshBtn = document.createElement('button');
+        refreshBtn.textContent = 'Refresh';
+        refreshBtn.title = "Refreshes the selected store's currently displayed data. Useful when wanting to fetch latest data from the database";
+        refreshBtn.onclick = () => loadItems('current', firstKey);
+        refreshBtn.style.marginLeft = '10px';
+        refreshBtn.tabIndex = 0;
+        toolbar.appendChild(refreshBtn);
 
         const addBtn = document.createElement('button');
         addBtn.textContent = 'Add Item';
+        addBtn.title = "Add a new item to the store.";
         addBtn.onclick = () => showAdd();
-        addBtn.style.background = '#28a745';
+        addBtn.classList.add('btn-success');
         addBtn.style.marginLeft = '10px';
+        addBtn.tabIndex = 0;
         toolbar.appendChild(addBtn);
     }
 
-    function loadItems(action = 'first', refKey = null) {
-        if (!currentStore) return;
+    function loadItems(action = 'first', refKey = null, keepPanel = false) {
+        if (!currentStore || !currentDatabase) return;
+
+        const btn = document.getElementById('btn-save');
+        if (btn && !btn.disabled) {
+             if (!confirm("You have unsaved changes. Loading new items will discard them. Continue?")) {
+                 return Promise.reject("Cancelled by user");
+             }
+             // User confirmed discard. Force close to reset state.
+             closeDetail(true);
+             keepPanel = false;
+        }
+
+        if (!keepPanel) {
+            closeDetail(true);
+        }
         
-        let url = `/api/store/items?name=${encodeURIComponent(currentStore)}`;
+        let url = `/api/store/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(currentStore)}`;
         
         if (action === 'search') {
              let query = "";
@@ -213,19 +458,33 @@
         return fetch(url)
             .then(res => res.json())
             .then(items => {
-                currentItems = items || [];
+                // Save current column widths before rebuilding
+                const existingTable = document.getElementById('items-table');
+                if (existingTable) {
+                    const ths = existingTable.querySelectorAll('th');
+                    if (ths.length > 0) {
+                        columnWidths = Array.from(ths).map(th => th.style.width);
+                    }
+                }
+
                 const grid = document.getElementById('data-grid');
                 const pagination = document.getElementById('pagination');
                 const paginationTop = document.getElementById('pagination-top');
                 
                 if (!items || items.length === 0) {
-                    grid.innerHTML = '<p>No items found. <button onclick="loadItems(\'first\')">Go to First</button></p>';
+                    if (action === 'next') {
+                        return items;
+                    }
+                    currentItems = [];
+                    grid.innerHTML = '<p>No items found. <button onclick="loadItems(\'first\')" title="Go to the first page of items.">Go to First</button></p>';
                     pagination.style.display = 'none';
                     paginationTop.style.display = 'none';
                     firstKey = null;
                     lastKey = null;
                     return items;
                 }
+
+                currentItems = items;
 
                 // Update keys
                 firstKey = items[0].key;
@@ -239,36 +498,63 @@
                 let keyCols = [];
                 let valCols = [];
                 
-                if (items.length > 0) {
-                    const sampleKey = items[0].key;
-                    const sampleVal = items[0].value;
+                // Determine Key Columns
+                if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+                    // Priority 1: Use Index Spec for order
+                    keyCols = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
                     
+                    // If we have data, append any extra fields not in index spec
+                    if (items.length > 0) {
+                        const sampleKey = items[0].key;
+                        if (typeof sampleKey === 'object' && sampleKey !== null) {
+                            const dataKeys = Object.keys(sampleKey);
+                            dataKeys.forEach(k => {
+                                if (!keyCols.includes(k)) {
+                                    keyCols.push(k);
+                                }
+                            });
+                        }
+                    }
+                } else if (items.length > 0) {
+                    // Priority 2: Infer from data
+                    const sampleKey = items[0].key;
                     if (typeof sampleKey === 'object' && sampleKey !== null) {
                         keyCols = Object.keys(sampleKey);
                     } else {
                         keyCols = ['Key'];
                     }
-                    
+                } else {
+                    // Fallback
+                    keyCols = ['Key'];
+                }
+
+                // Determine Value Columns
+                if (items.length > 0) {
+                    const sampleVal = items[0].value;
                     if (typeof sampleVal === 'object' && sampleVal !== null) {
                         valCols = Object.keys(sampleVal);
                     } else {
                         valCols = ['Value'];
                     }
                 } else {
-                    keyCols = ['Key'];
                     valCols = ['Value'];
                 }
 
                 let html = '<table id="items-table"><thead><tr>';
                 
                 // Key Headers
-                keyCols.forEach(col => {
-                     html += `<th class="th-key">${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
+                keyCols.forEach((col, index) => {
+                     let style = '';
+                     if (columnWidths[index]) style = `style="width: ${columnWidths[index]}"`;
+                     html += `<th class="th-key" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
                 });
                 
                 // Value Headers
-                valCols.forEach(col => {
-                     html += `<th class="th-val">${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
+                let valOffset = keyCols.length;
+                valCols.forEach((col, index) => {
+                     let style = '';
+                     if (columnWidths[valOffset + index]) style = `style="width: ${columnWidths[valOffset + index]}"`;
+                     html += `<th class="th-val" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
                 });
                 
                 html += '</tr></thead><tbody>';
@@ -315,35 +601,80 @@
     function nextPage() { loadItems('next', lastKey); }
     function prevPage() { loadItems('prev', firstKey); }
 
-    function showDetail(row, item) {
+    let currentItemValue = null;
+
+    function showDetail(row, item, autoOpen = true) {
+        // Check for unsaved changes if panel is open
+        const panel = document.getElementById('detail-panel');
+        if (panel.style.display === 'block') {
+             if (!closeDetail()) return;
+        }
+
         // Highlight selected row
         if (row) {
             document.querySelectorAll('#items-table tr').forEach(tr => tr.classList.remove('selected-row'));
             row.classList.add('selected-row');
         }
 
-        const panel = document.getElementById('detail-panel');
-        const viewer = document.getElementById('json-viewer');
         currentItemKey = item.key;
+        currentItemValue = item.value;
+        
+        // If panel is closed and autoOpen is false, just return (after setting currentItemKey and highlight)
+        if (panel.style.display !== 'block' && !autoOpen) {
+            return;
+        }
+
+        const viewer = document.getElementById('json-viewer');
         
         const keyStr = typeof item.key === 'object' ? JSON.stringify(item.key, null, 2) : item.key;
-        const valStr = JSON.stringify(item.value, null, 2);
+        
+        let valueHtml = '';
+        if (typeof item.value === 'object' && item.value !== null) {
+            // Form View
+            valueHtml = '<div id="value-form" style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; padding-right: 2px;">';
+            const keys = Object.keys(item.value);
+            if (keys.length === 0) {
+                 valueHtml += '<em>Empty Object</em>';
+            }
+            keys.forEach(key => {
+                let val = item.value[key];
+                let displayVal = val;
+                if (typeof val === 'object') {
+                    displayVal = JSON.stringify(val);
+                }
+                // Escape quotes for attribute
+                const safeVal = String(displayVal).replace(/"/g, '&quot;');
+                
+                valueHtml += `
+                    <div class="form-group" style="display: flex; flex-direction: column;">
+                        <label class="form-label">${key}</label>
+                        <input type="text" class="value-input form-input" data-key="${key}" value="${safeVal}" 
+                            oninput="document.getElementById('btn-save').disabled = false;">
+                    </div>
+                `;
+            });
+            valueHtml += '</div>';
+        } else {
+            // Primitive View (Textarea)
+            const valStr = JSON.stringify(item.value, null, 2);
+            valueHtml = `<textarea id="edit-value" oninput="document.getElementById('btn-save').disabled = false;" style="width: 100%; height: 300px; font-family: monospace; margin-top: 5px;" class="form-input">${valStr}</textarea>`;
+        }
 
         viewer.innerHTML = `
             <div style="margin-bottom: 10px;">
                 <strong>Key:</strong>
-                <pre style="margin-top: 5px; background: #eee; padding: 5px;">${keyStr}</pre>
+                <pre class="pre-block">${keyStr}</pre>
             </div>
             <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                 <strong>Value:</strong>
-                <button onclick="closeDetail()" style="padding: 2px 8px; font-size: 12px;">Close</button>
+                <button onclick="closeDetail()" style="padding: 2px 8px; font-size: 12px;" title="Close the item details panel.">Close</button>
             </div>
             <div style="margin-bottom: 10px;">
-                <textarea id="edit-value" oninput="document.getElementById('btn-save').disabled = false;" style="width: 100%; height: 300px; font-family: monospace; margin-top: 5px; padding: 5px; border: 1px solid #ddd;">${valStr}</textarea>
+                ${valueHtml}
             </div>
             <div style="display: flex; gap: 10px;">
-                <button id="btn-save" onclick="saveItem()" disabled>Save</button>
-                <button onclick="deleteItem()" style="background: #dc3545;">Delete</button>
+                <button id="btn-save" onclick="saveItem()" disabled title="Save changes to the item.">Save</button>
+                <button onclick="deleteItem()" class="btn-danger" title="Delete this item from the store.">Delete</button>
             </div>
         `;
         document.getElementById('detail-resizer').style.display = 'block';
@@ -353,16 +684,48 @@
     function saveItem() {
         if (!currentStore || currentItemKey === null) return;
 
-        const valText = document.getElementById('edit-value').value;
         let newVal;
-        try {
-            newVal = JSON.parse(valText);
-        } catch (e) {
-            alert("Invalid JSON in Value field");
-            return;
+        const form = document.getElementById('value-form');
+        
+        if (form) {
+            // Reconstruct object from form
+            newVal = Array.isArray(currentItemValue) ? [] : {};
+            const inputs = form.querySelectorAll('.value-input');
+            
+            inputs.forEach(input => {
+                const key = input.getAttribute('data-key');
+                const rawVal = input.value;
+                const originalVal = currentItemValue[key];
+                
+                // Type conversion
+                let finalVal = rawVal;
+                if (typeof originalVal === 'number') {
+                    finalVal = Number(rawVal);
+                } else if (typeof originalVal === 'boolean') {
+                    finalVal = (rawVal.toLowerCase() === 'true');
+                } else if (typeof originalVal === 'object' && originalVal !== null) {
+                    try {
+                        finalVal = JSON.parse(rawVal);
+                    } catch {
+                        // Fallback to string if parse fails
+                        finalVal = rawVal;
+                    }
+                }
+                
+                newVal[key] = finalVal;
+            });
+        } else {
+            const valText = document.getElementById('edit-value').value;
+            try {
+                newVal = JSON.parse(valText);
+            } catch (e) {
+                alert("Invalid JSON in Value field");
+                return;
+            }
         }
 
         const payload = {
+            database: currentDatabase,
             store: currentStore,
             key: currentItemKey,
             value: newVal
@@ -388,10 +751,28 @@
             btn.disabled = true;
             
             // Refresh the grid in background to show updated values
-            loadItems('current', firstKey);
+            loadItems('current', firstKey, true).then(newItems => {
+                // Re-highlight the saved item
+                if (newItems && newItems.length > 0) {
+                    const savedKeyStr = JSON.stringify(currentItemKey);
+                    const targetIndex = newItems.findIndex(item => JSON.stringify(item.key) === savedKeyStr);
+                    
+                    if (targetIndex >= 0) {
+                        const rows = document.querySelectorAll('#items-table tbody tr');
+                        if (rows && rows[targetIndex]) {
+                            // Just highlight, don't re-open detail as it's already open
+                            document.querySelectorAll('#items-table tr').forEach(tr => tr.classList.remove('selected-row'));
+                            rows[targetIndex].classList.add('selected-row');
+                        }
+                    }
+                }
+            });
         })
         .catch(err => {
-            alert("Update failed: " + err.message);
+            const msg = "Update failed: " + err.message + "\n\n" +
+                        "Another user may have modified this record (Swarm conflict).\n" +
+                        "Please refresh the data to see the latest changes.";
+            alert(msg);
             btn.textContent = "Save";
             btn.disabled = false; // Re-enable so user can try again
         });
@@ -399,9 +780,14 @@
 
     function deleteItem() {
         if (!currentStore || currentItemKey === null) return;
-        if (!confirm("Are you sure you want to delete this item?")) return;
+        showConfirm("Are you sure you want to delete this item?", () => {
+            performDelete();
+        });
+    }
 
+    function performDelete() {
         const payload = {
+            database: currentDatabase,
             store: currentStore,
             key: currentItemKey
         };
@@ -435,10 +821,22 @@
                     if (targetIndex >= newItems.length) {
                         targetIndex = newItems.length - 1;
                     }
-                    showDetail(newItems[targetIndex]);
+                    // We need to find the row element to pass to showDetail for highlighting
+                    // Since we just reloaded, we can find it by index in the table
+                    const rows = document.querySelectorAll('#items-table tbody tr');
+                    if (rows && rows[targetIndex]) {
+                        showDetail(rows[targetIndex], newItems[targetIndex], false);
+                    } else {
+                        showDetail(null, newItems[targetIndex], false);
+                    }
                 } else {
                     // Fallback to first item if we couldn't track index
-                    showDetail(newItems[0]);
+                    const rows = document.querySelectorAll('#items-table tbody tr');
+                    if (rows && rows[0]) {
+                        showDetail(rows[0], newItems[0], false);
+                    } else {
+                        showDetail(null, newItems[0], false);
+                    }
                 }
             });
         })
@@ -447,10 +845,278 @@
         });
     }
 
+    let currentConfirmHandler = null;
+
+    function closeConfirmModal() {
+        document.getElementById('confirm-modal').style.display = 'none';
+        if (currentConfirmHandler) {
+            document.removeEventListener('keydown', currentConfirmHandler, true);
+            currentConfirmHandler = null;
+        }
+    }
+
+    function showConfirm(message, onConfirm) {
+        const modal = document.getElementById('confirm-modal');
+        const msgEl = document.getElementById('confirm-message');
+        const okBtn = document.getElementById('confirm-ok');
+        const cancelBtn = document.getElementById('confirm-cancel');
+
+        msgEl.textContent = message;
+        modal.style.display = 'flex';
+
+        // Setup click handlers
+        okBtn.onclick = () => {
+            closeConfirmModal();
+            onConfirm();
+        };
+        cancelBtn.onclick = () => {
+            closeConfirmModal();
+        };
+
+        // Remove existing handler if any (safety)
+        if (currentConfirmHandler) {
+            document.removeEventListener('keydown', currentConfirmHandler, true);
+        }
+
+        // Define new handler
+        currentConfirmHandler = function(e) {
+            const isTab = e.key === 'Tab';
+            const isEscape = e.key === 'Escape';
+            const isLeft = e.key === 'ArrowLeft';
+            const isRight = e.key === 'ArrowRight';
+            const isEnter = e.key === 'Enter';
+
+            if (isEscape) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                closeConfirmModal();
+                return;
+            }
+
+            if (isTab || isLeft || isRight) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                
+                const activeEl = document.activeElement;
+                
+                // Toggle logic:
+                // If on Cancel -> Go to OK
+                // If on OK -> Go to Cancel
+                // If anywhere else -> Go to Cancel (Safe default)
+                if (activeEl === cancelBtn) {
+                    okBtn.focus();
+                } else {
+                    cancelBtn.focus();
+                }
+            }
+            
+            if (isEnter) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                // Trigger click on the focused element if it's one of our buttons
+                if (document.activeElement === okBtn || document.activeElement === cancelBtn) {
+                    document.activeElement.click();
+                }
+            }
+        };
+
+        // Add key handler
+        document.addEventListener('keydown', currentConfirmHandler, true);
+
+        // Force focus to Cancel button
+        requestAnimationFrame(() => {
+            cancelBtn.focus();
+        });
+    }
+
     function showAdd() {
-        document.getElementById('add-modal').style.display = 'flex';
-        document.getElementById('add-key').value = '';
-        document.getElementById('add-value').value = '';
+        const modal = document.getElementById('add-modal');
+        const keyContainer = document.getElementById('add-key-container');
+        const valContainer = document.getElementById('add-value-container');
+        const keyModeToggle = document.getElementById('add-key-mode-toggle');
+        const valModeToggle = document.getElementById('add-value-mode-toggle');
+        
+        keyContainer.innerHTML = '';
+        valContainer.innerHTML = '';
+        keyModeToggle.checked = false;
+        valModeToggle.checked = false;
+
+        // --- Build Key UI ---
+        let keySchema = [];
+        // 1. Infer from data first (most accurate for full struct)
+        if (currentItems && currentItems.length > 0 && typeof currentItems[0].key === 'object' && currentItems[0].key !== null) {
+            keySchema = Object.keys(currentItems[0].key);
+        } 
+        // 2. Fallback to IndexSpec
+        else if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+            keySchema = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
+        }
+
+        if (keySchema.length > 0) {
+            // Complex Key Form
+            keySchema.forEach(fieldName => {
+                const div = document.createElement('div');
+                div.style.marginBottom = '5px';
+                div.innerHTML = `
+                    <label style="display:block; font-size:12px; font-weight:bold;">${fieldName}</label>
+                    <input type="text" class="add-key-field" data-name="${fieldName}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
+                `;
+                keyContainer.appendChild(div);
+            });
+        } else {
+            // Simple Key or Unknown Schema -> JSON Mode
+            keyModeToggle.checked = true;
+            renderAddKeyJson();
+        }
+
+        // --- Build Value UI ---
+        // Try to infer schema from first item
+        let useForm = false;
+        if (currentItems && currentItems.length > 0) {
+            const sampleVal = currentItems[0].value;
+            if (typeof sampleVal === 'object' && sampleVal !== null) {
+                useForm = true;
+                const keys = Object.keys(sampleVal);
+                keys.forEach(k => {
+                    const div = document.createElement('div');
+                    div.style.marginBottom = '5px';
+                    div.innerHTML = `
+                        <label style="display:block; font-size:12px; font-weight:bold;">${k}</label>
+                        <input type="text" class="add-value-field" data-name="${k}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
+                    `;
+                    valContainer.appendChild(div);
+                });
+            }
+        }
+
+        if (!useForm) {
+            // Fallback to JSON
+            valModeToggle.checked = true;
+            renderAddValueJson();
+        }
+
+        modal.style.display = 'flex';
+    }
+
+    function toggleAddKeyMode() {
+        const isJson = document.getElementById('add-key-mode-toggle').checked;
+        const container = document.getElementById('add-key-container');
+        
+        if (isJson) {
+            // Switch to JSON
+            let currentObj = {};
+            const inputs = container.querySelectorAll('.add-key-field');
+            if (inputs.length > 0) {
+                inputs.forEach(inp => {
+                    const k = inp.getAttribute('data-name');
+                    currentObj[k] = parseInputVal(inp.value);
+                });
+                renderAddKeyJson(JSON.stringify(currentObj, null, 2));
+            } else {
+                renderAddKeyJson();
+            }
+        } else {
+            // Switch to Form
+            const textarea = document.getElementById('add-key-json');
+            let obj = {};
+            if (textarea) {
+                try {
+                    obj = JSON.parse(textarea.value);
+                } catch {
+                    alert("Invalid JSON or Primitive value, cannot switch to Form view.");
+                    document.getElementById('add-key-mode-toggle').checked = true;
+                    return;
+                }
+            }
+            
+            if (typeof obj === 'object' && obj !== null) {
+                container.innerHTML = '';
+                Object.keys(obj).forEach(k => {
+                    const div = document.createElement('div');
+                    div.style.marginBottom = '5px';
+                    div.innerHTML = `
+                        <label style="display:block; font-size:12px; font-weight:bold;">${k}</label>
+                        <input type="text" class="add-key-field" data-name="${k}" value="${String(obj[k]).replace(/"/g, '&quot;')}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
+                    `;
+                    container.appendChild(div);
+                });
+            } else {
+                alert("Value is not an object, cannot use Form view.");
+                document.getElementById('add-key-mode-toggle').checked = true;
+            }
+        }
+    }
+
+    function renderAddKeyJson(content = '') {
+        const container = document.getElementById('add-key-container');
+        container.innerHTML = `<textarea id="add-key-json" placeholder="Key (JSON or String)" style="width:100%; height:60px; padding:5px; font-family:monospace; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">${content}</textarea>`;
+    }
+
+    function toggleAddValueMode() {
+        const isJson = document.getElementById('add-value-mode-toggle').checked;
+        const container = document.getElementById('add-value-container');
+        
+        if (isJson) {
+            // Switch to JSON
+            // Try to harvest current values from form if they exist
+            let currentObj = {};
+            const inputs = container.querySelectorAll('.add-value-field');
+            if (inputs.length > 0) {
+                inputs.forEach(inp => {
+                    const k = inp.getAttribute('data-name');
+                    currentObj[k] = parseInputVal(inp.value);
+                });
+                renderAddValueJson(JSON.stringify(currentObj, null, 2));
+            } else {
+                renderAddValueJson();
+            }
+        } else {
+            // Switch to Form
+            // Try to parse JSON
+            const textarea = document.getElementById('add-value-json');
+            let obj = {};
+            if (textarea) {
+                try {
+                    obj = JSON.parse(textarea.value);
+                } catch {
+                    alert("Invalid JSON, cannot switch to Form view.");
+                    document.getElementById('add-value-mode-toggle').checked = true;
+                    return;
+                }
+            }
+            
+            // Render Form
+            container.innerHTML = '';
+            if (typeof obj === 'object' && obj !== null) {
+                Object.keys(obj).forEach(k => {
+                    const div = document.createElement('div');
+                    div.style.marginBottom = '5px';
+                    div.innerHTML = `
+                        <label style="display:block; font-size:12px; font-weight:bold;">${k}</label>
+                        <input type="text" class="add-value-field" data-name="${k}" value="${String(obj[k]).replace(/"/g, '&quot;')}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
+                    `;
+                    container.appendChild(div);
+                });
+            } else {
+                // Primitive value?
+                alert("Value is not an object, cannot use Form view.");
+                document.getElementById('add-value-mode-toggle').checked = true;
+                renderAddValueJson(textarea ? textarea.value : '');
+            }
+        }
+    }
+
+    function renderAddValueJson(content = '') {
+        const container = document.getElementById('add-value-container');
+        container.innerHTML = `<textarea id="add-value-json" style="width:100%; height:200px; padding:5px; font-family:monospace; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">${content}</textarea>`;
+    }
+
+    function parseInputVal(val) {
+        if (val === '') return val;
+        if (!isNaN(Number(val))) return Number(val);
+        if (val.toLowerCase() === 'true') return true;
+        if (val.toLowerCase() === 'false') return false;
+        return val;
     }
 
     function closeAdd() {
@@ -460,24 +1126,110 @@
     function addItem() {
         if (!currentStore) return;
 
-        const keyText = document.getElementById('add-key').value;
-        const valText = document.getElementById('add-value').value;
-        
         let key, val;
-        try {
-            // Try to parse key as JSON, if it fails use as string
-            try {
-                key = JSON.parse(keyText);
-            } catch {
-                key = keyText;
+
+        // --- Construct Key ---
+        const keyFields = document.querySelectorAll('.add-key-field');
+        if (keyFields.length > 0) {
+            // Complex Key Form
+            key = {};
+            keyFields.forEach(inp => {
+                key[inp.getAttribute('data-name')] = parseInputVal(inp.value);
+            });
+        } else {
+            // JSON/Simple Mode
+            let keyText = "";
+            const keyJsonInput = document.getElementById('add-key-json');
+            const keySimpleInput = document.getElementById('add-key-simple');
+            
+            if (keyJsonInput) keyText = keyJsonInput.value;
+            else if (keySimpleInput) keyText = keySimpleInput.value;
+
+            keyText = keyText.trim();
+            if (keyText.startsWith('{') || keyText.startsWith('[')) {
+                try {
+                    key = JSON.parse(keyText);
+                } catch (e) {
+                    alert("Invalid JSON in Key field: " + e.message);
+                    return;
+                }
+            } else {
+                // Try to parse as number if it looks like one
+                if (keyText !== "" && !isNaN(Number(keyText))) {
+                    key = Number(keyText);
+                } else {
+                    key = keyText;
+                }
             }
-            val = JSON.parse(valText);
-        } catch (e) {
-            alert("Invalid JSON in Value field");
-            return;
+        }
+
+        // --- Construct Value ---
+        const valFields = document.querySelectorAll('.add-value-field');
+        if (valFields.length > 0) {
+            // Form Mode
+            val = {};
+            valFields.forEach(inp => {
+                val[inp.getAttribute('data-name')] = parseInputVal(inp.value);
+            });
+        } else {
+            // JSON Mode
+            const valText = document.getElementById('add-value-json').value;
+            try {
+                val = JSON.parse(valText);
+            } catch (e) {
+                alert("Invalid JSON in Value field: " + e.message);
+                return;
+            }
+        }
+
+        // --- Validation ---
+
+        // 1. Check IndexSpecification Requirements (Critical)
+        if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+            if (typeof key !== 'object' || key === null) {
+                alert("Error: This store requires a structured key (JSON object) to match its Index Specification.");
+                return;
+            }
+            
+            const missingIndexFields = [];
+            currentStoreInfo.indexSpec.index_fields.forEach(field => {
+                if (key[field.field_name] === undefined) {
+                    missingIndexFields.push(field.field_name);
+                }
+            });
+
+            if (missingIndexFields.length > 0) {
+                alert(`Error: The key is missing required index fields:\n${missingIndexFields.join(', ')}\n\nThese fields are required for the database comparer to function.`);
+                return;
+            }
+        }
+
+        // 2. Check for missing fields in Key based on sample (Warning)
+        if (currentItems && currentItems.length > 0) {
+            const sampleKey = currentItems[0].key;
+            if (typeof sampleKey === 'object' && sampleKey !== null && typeof key === 'object' && key !== null) {
+                const sampleFields = Object.keys(sampleKey);
+                const newFields = Object.keys(key);
+                const missing = sampleFields.filter(k => !newFields.includes(k));
+                
+                if (missing.length > 0) {
+                    if (!confirm(`Warning: The key is missing the following fields found in other items:\n${missing.join(', ')}\n\nThis might cause sorting or retrieval issues.\nDo you want to proceed?`)) {
+                        return;
+                    }
+                }
+            }
+            // Check for type mismatch (Primitive vs Object)
+            const sampleType = typeof sampleKey;
+            const newType = typeof key;
+            if (sampleType !== newType) {
+                 if (!confirm(`Warning: Key type mismatch.\nExpected: ${sampleType}\nGot: ${newType}\n\nDo you want to proceed?`)) {
+                    return;
+                }
+            }
         }
 
         const payload = {
+            database: currentDatabase,
             store: currentStore,
             key: key,
             value: val
@@ -494,7 +1246,11 @@
         })
         .then(() => {
             closeAdd();
-            loadItems('current', firstKey);
+            if (!currentItems || currentItems.length <= 1) {
+                loadItems('first');
+            } else {
+                loadItems('current', firstKey);
+            }
         })
         .catch(err => {
             alert("Add failed: " + err.message);
@@ -502,8 +1258,21 @@
     }
     document.getElementById('detail-resizer').style.display = 'none';
     
-    function closeDetail() {
+    function closeDetail(force = false) {
+        const btn = document.getElementById('btn-save');
+        if (!force && btn && !btn.disabled) {
+            if (!confirm("You have unsaved changes. Are you sure you want to discard them?")) {
+                return false;
+            }
+        }
+        // Reset state
+        if (btn) btn.disabled = true;
+        currentItemKey = null;
+        currentItemValue = null;
+
         document.getElementById('detail-panel').style.display = 'none';
+        document.getElementById('detail-resizer').style.display = 'none';
+        return true;
     }
 
     // Resizer Logic
@@ -585,7 +1354,7 @@
         e.stopPropagation();
         colResizingTh = e.target.parentElement;
         colStartX = e.clientX;
-        colStartWidth = colResizingTh.offsetWidth;
+        colStartWidth = parseFloat(window.getComputedStyle(colResizingTh).width);
         document.addEventListener('mousemove', doColResize, false);
         document.addEventListener('mouseup', stopColResize, false);
     }
@@ -602,25 +1371,124 @@
         document.removeEventListener('mousemove', doColResize, false);
         document.removeEventListener('mouseup', stopColResize, false);
     }
+
+    // Keyboard Navigation
+    document.addEventListener('keydown', function(e) {
+        // Handle Escape for Add Modal
+        if (e.key === 'Escape') {
+            const addModal = document.getElementById('add-modal');
+            if (addModal && addModal.style.display === 'flex') {
+                closeAdd();
+                e.preventDefault();
+                return;
+            }
+        }
+
+        // Only handle if not typing in an input or textarea
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        // If modal is open, do not handle grid navigation
+        if (document.getElementById('confirm-modal').style.display === 'flex') return;
+        if (document.getElementById('add-modal').style.display === 'flex') return;
+
+        const selectedRow = document.querySelector('#items-table tr.selected-row');
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (selectedRow) {
+                const nextRow = selectedRow.nextElementSibling;
+                if (nextRow) {
+                    const index = nextRow.sectionRowIndex;
+                    if (currentItems[index]) {
+                        showDetail(nextRow, currentItems[index], false);
+                    }
+                    nextRow.scrollIntoView({ block: 'nearest' });
+                }
+            } else {
+                // Select first row if none selected
+                const firstRow = document.querySelector('#items-table tbody tr');
+                if (firstRow) {
+                    const index = firstRow.sectionRowIndex;
+                    if (currentItems[index]) {
+                        showDetail(firstRow, currentItems[index], false);
+                    }
+                    firstRow.scrollIntoView({ block: 'nearest' });
+                }
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (selectedRow) {
+                const prevRow = selectedRow.previousElementSibling;
+                if (prevRow) {
+                    const index = prevRow.sectionRowIndex;
+                    if (currentItems[index]) {
+                        showDetail(prevRow, currentItems[index], false);
+                    }
+                    prevRow.scrollIntoView({ block: 'nearest' });
+                }
+            }
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (selectedRow && currentItemKey !== null) {
+                deleteItem();
+            }
+        } else if (e.key === 'Enter') {
+            if (selectedRow) {
+                e.preventDefault();
+                const index = selectedRow.sectionRowIndex;
+                if (currentItems[index]) {
+                    showDetail(selectedRow, currentItems[index], true);
+                }
+            }
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            closeDetail();
+        }
+    });
 </script>
 
 <div id="add-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:1000;">
-    <div style="background:white; padding:20px; border-radius:5px; width:500px; max-width:90%;">
+    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:600px; max-width:90%; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid var(--border-color);">
         <h3>Add New Item</h3>
-        <div style="margin-bottom:10px;">
-            <label>Key (JSON or String):</label>
-            <input type="text" id="add-key" style="width:100%; padding:5px; margin-top:5px;">
+        
+        <div style="overflow-y: auto; flex: 1; padding-right: 0;">
+            <h4 style="margin-bottom: 5px; margin-top: 0;">Key</h4>
+            <div style="margin-bottom: 5px; font-size: 12px; color: var(--text-muted);">
+                <label><input type="checkbox" id="add-key-mode-toggle" onchange="toggleAddKeyMode()"> Edit as JSON</label>
+            </div>
+            <div id="add-key-container" style="margin-bottom:15px;"></div>
+
+            <h4 style="margin-bottom: 5px;">Value</h4>
+            <div style="margin-bottom: 5px; font-size: 12px; color: var(--text-muted);">
+                <label><input type="checkbox" id="add-value-mode-toggle" onchange="toggleAddValueMode()"> Edit as JSON</label>
+            </div>
+            <div id="add-value-container"></div>
         </div>
-        <div style="margin-bottom:10px;">
-            <label>Value (JSON):</label>
-            <textarea id="add-value" style="width:100%; height:200px; padding:5px; margin-top:5px; font-family:monospace;"></textarea>
-        </div>
-        <div style="display:flex; justify-content:flex-end; gap:10px;">
-            <button onclick="closeAdd()">Cancel</button>
-            <button onclick="addItem()" style="background:#28a745; color:white;">Add</button>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top: 20px;">
+            <button onclick="closeAdd()" title="Cancel adding a new item.">Cancel</button>
+            <button onclick="addItem()" style="background:#28a745; color:white;" title="Add the new item to the store.">Add</button>
         </div>
     </div>
 </div>
 
+<div id="confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:2000;">
+    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:400px; max-width:90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color);">
+        <h3 style="margin-top:0;">Confirm Action</h3>
+        <p id="confirm-message" style="margin: 20px 0;">Are you sure?</p>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button id="confirm-cancel" style="padding: 5px 15px; background: var(--button-bg); color: var(--button-text);" title="Cancel the action.">Cancel</button>
+            <button id="confirm-ok" style="background:var(--danger-bg); color:white; padding: 5px 15px;" title="Confirm deletion.">Delete</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    window.onbeforeunload = function() {
+        const btn = document.getElementById('btn-save');
+        if (btn && !btn.disabled) {
+            return "You have unsaved changes.";
+        }
+    };
+</script>
 </body>
 </html>

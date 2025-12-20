@@ -35,13 +35,18 @@ namespace Sop.CLI
                 };
 
                 Console.WriteLine($"Creating Clustered Database at {dbPath}...");
-                var db = new Database(new DatabaseOptions
+                var dbOpts = new DatabaseOptions
                 {
                     StoresFolders = storesFolders,
                     Type = (int)DatabaseType.Clustered,
                     RedisConfig = new RedisConfig { Address = "localhost:6379" },
                     ErasureConfig = ec,
-                });
+                };
+
+                // Setup the database so the config can be persisted and read/used by other tools like SOP httpService.
+                Database.Setup(ctx, dbOpts);
+
+                var db = new Database(dbOpts);
 
                 Console.WriteLine("Starting Transaction...");
                 using (var trans = db.BeginTransaction(ctx))
@@ -57,8 +62,6 @@ namespace Sop.CLI
                 }
                 
                 Console.WriteLine("Clustered operation successful.");
-                // Remote the Btree store to cleanup getting ready for next run.
-                db.RemoveBtree(ctx, "cluster_btree");
             }
             catch (Exception e)
             {

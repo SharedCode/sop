@@ -355,8 +355,16 @@ SOP can be used in a wide, diverse storage usability scenarios. Ranging from gen
   * C. Streaming Data application domain enabling very large data storage - search and management, supporting multi-GBs record or item, limited only by your storage drive/sub-system. See sop/infs/NewStreamingDataStore or OpenStreamingDataStore for code & sample usage in test
   * D. High Performance Search Engine, alternative to ElasticSearch/SOLR but also has attributes of a real database engine, with ACID/two phase commit transactions
   * E. Standalone Embedded Database: Run SOP without any external dependencies (no Redis, no Cassandra). Ideal for desktop applications, CLI tools, or local AI models where you need the power of a B-Tree on the local filesystem.
+  * F. Full Data Management Suite: Use the built-in HTTP Server to perform full CRUD operations, manage any B-Tree, and leverage RDBMS-like compound indexing (`IndexSpecification`) via a rich Web UI.
 
-Above list already covers most data storage scenarios one can think of. Traditionally, (R)DBMS systems including NoSqls can't support storage - search & management of these three different data size use-cases. It is typically one of them and up to two, e.g. - A and/or B(SQL server) or just C(AWS S3 & a DBMS like Postgres for indexing). But SOP supports all five of them out of the box.
+**The Anti-Monolith Philosophy**:
+SOP breaks the traditional database monolith. It is designed as a **flat, masterless architecture** where every application node is a "master" capable of direct storage I/O.
+- **No Central Server**: There is no single "SOP Server" process to install or manage.
+- **Decentralized**: The "Data Management Suite" (Item F above) is just another client in the swarm. You can run it locally or deploy it as a sidecar, and it interacts with the storage layer directly, just like your application code.
+- **Scalability**: This allows you to scale your "database" simply by adding more application nodes, without being bottlenecked by a central coordinator.
+- **Swarm Computing**: Each user managing data via the SOP management app (REST and WebUI) actively participates in the "swarm". Their changes are efficiently merged or rejected (if conflicting) by SOP's engine, ensuring data integrity with full **ACID transaction guarantees**.
+
+Above list already covers most data storage scenarios one can think of. Traditionally, (R)DBMS systems including NoSqls can't support storage - search & management of these three different data size use-cases. It is typically one of them and up to two, e.g. - A and/or B(SQL server) or just C(AWS S3 & a DBMS like Postgres for indexing). But SOP supports all six of them out of the box.
 
 In all of these, ACID transactions, high speed, scalable searches and management comes built-in. As SOP turned the B-tree (an M-ary, multiway search tree) into a commodity available in all of its usage scenarios. Horizontally scalable in the cluster, meaning, there is no single point of failure. SOP offers a decentralized approach in searching & management of your data. It works with optimal efficiency in the cluster. It fully parallelize I/O in the cluster, not needing any communication for "orchestration"(see new "communication free" OOA algorithm section below) to detect conflict and auto-merging of changes across transactions occuring simultaneously or in time.
 
@@ -397,7 +405,7 @@ B-tree–based object persistence (balanced M-ary, multiway search tree), File S
 SOP has all the bits required to be used like a golang map but which, has the features of a B-tree, which is, manage & fetch data in your desired sort order (as driven by your item key type & its Comparer implementation), and do other nifty features such as "range query" & "range updates", turning "go" into a very powerful data management language, imagine the power of "go channels" & "go routines" mixed in to your (otherwise) DML scripts, but instead, write it in "go", the same language you write your application. No need to have impedance mismatch.
 
 Requirements:
-  * Storage Drive(s) or sub-system (paths) for Blobs
+  * Storage Drive(s) or sub-system (paths) for Blobs. Can be **Local Disk** (for standalone/dev) or **Network Mounts** (NAS/S3/Cloud) for distributed clusters.
   * User that you will use for the process which has Read/Write permissions(e.g. - 0777) to the drive(s)/storage path(s)
   * Golang that supports generics, SOP package (go.mod) currently is set to use 1.24.3 and higher
   * (Optional) Redis - required only for distributed/cluster mode or if using Redis-backed caching.

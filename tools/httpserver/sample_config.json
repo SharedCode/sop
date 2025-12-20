@@ -1,0 +1,22 @@
+{
+    "port": 8080,
+    "pageSize": 40,
+    "databases": [
+        {
+            "name": "Python Complex DB",
+            "path": "/Users/grecinto/sop/bindings/python/sop/examples/large_complex_key_db",
+            "mode": "standalone"
+        },
+        {
+            "name": "Go Interop Indexes",
+            "path": "/Users/grecinto/sop/examples/interop_secondary_indexes/data/interop_indexes",
+            "mode": "standalone"
+        },
+        {
+            "name": "c# Full Replication Demo",
+            "path": "/Users/grecinto/sop/bindings/csharp/Sop.CLI/data/full_repl_demo/d1",
+            "mode": "clustered",
+			"redis":"localhost:6379"
+        }		
+    ]
+}

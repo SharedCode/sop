@@ -67,7 +67,7 @@ public static class LargeComplexDemo
                     }
                 };
                 var bo = new BtreeOptions("people") 
-                { 
+                {
                     IsUnique = true,
                     IsPrimitiveKey = false,
                     // ValueDataSize = (int)ValueDataSize.Small, // Not exposed in C# binding yet, defaults to true (Small)

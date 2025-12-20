@@ -31,12 +31,13 @@ type RedisCacheConfig struct {
 // DatabaseOptions holds the configuration for the database.
 type DatabaseOptions struct {
 	// StoresFolders specifies the folders for replication.
-	// If provided, replication is enabled.
+	// If more than one folder, i.e. - one for Active drive/folder,
+	// & another for Passive drive/folder, Registry replication is enabled.
 	StoresFolders []string `json:"stores_folders,omitempty"`
+	// ErasureConfig specifies the erasure coding configuration for Blob store replication.
+	ErasureConfig map[string]ErasureCodingConfig `json:"erasure_config,omitempty"`
 	// Keyspace to be used for the transaction (Cassandra).
 	Keyspace string `json:"keyspace,omitempty"`
-	// ErasureConfig specifies the erasure coding configuration for replication.
-	ErasureConfig map[string]ErasureCodingConfig `json:"erasure_config,omitempty"`
 	// CacheType specifies the type of cache to use (e.g. InMemory, Redis).
 	CacheType L2CacheType `json:"cache_type"`
 	// RedisConfig specifies the Redis configuration when CacheType is Redis.
@@ -54,10 +55,10 @@ type DatabaseOptions struct {
 type TransactionOptions struct {
 	// StoresFolders specifies the folders for replication.
 	StoresFolders []string `json:"stores_folders,omitempty"`
-	// Keyspace to be used for the transaction (Cassandra).
-	Keyspace string `json:"keyspace,omitempty"`
 	// ErasureConfig specifies the erasure coding configuration for replication.
 	ErasureConfig map[string]ErasureCodingConfig `json:"erasure_config,omitempty"`
+	// Keyspace to be used for the transaction (Cassandra).
+	Keyspace string `json:"keyspace,omitempty"`
 	// CacheType specifies the type of cache to use (e.g. InMemory, Redis).
 	CacheType L2CacheType `json:"cache_type"`
 	// RedisConfig specifies the Redis configuration when CacheType is Redis.
@@ -79,6 +80,12 @@ func (do DatabaseOptions) CopyTo(transOptions *TransactionOptions) {
 	transOptions.CacheType = do.CacheType
 	transOptions.RedisConfig = do.RedisConfig
 	transOptions.RegistryHashModValue = do.RegistryHashModValue
+}
+
+// IsEmpty returns true if database config is considered empty, i.e. - missing folder is primary.
+// A Database should always have folder(s) where Registry data files are/will be stored.
+func (do DatabaseOptions) IsEmpty() bool {
+	return len(do.StoresFolders) == 0
 }
 
 // GetDatabaseOptions returns the DatabaseOptions subset from TransactionOptions.

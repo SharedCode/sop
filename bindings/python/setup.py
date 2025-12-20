@@ -68,7 +68,7 @@ setup(
     python_requires=">=3.7",
     entry_points={
         "console_scripts": [
-            "sop-httpserver=sop.browser:main",
+            "sop-httpserver=sop.httpserver:main",
             "sop-demo=sop.demo:main",
         ],
     },

@@ -204,7 +204,7 @@ To see the Management Console in action, you can generate a sample database with
 ## Prerequisites
 
 *   **Redis**: Required for caching and transaction coordination (especially in Clustered mode). **Note**: Redis is NOT used for data storage, just for coordination & to offer built-in caching.
-*   **Storage**: Local disk space (supports multiple drives/folders).
+*   **Storage**: Local disk or shared network drive space (supports multiple drives/folders).
 *   **OS**: macOS, Linux, or Windows.
     *   **Architectures**: x64 (AMD64/Intel64) and ARM64 (Apple Silicon/Linux aarch64).
 *   **.NET SDK**: .NET 10.0 or later.

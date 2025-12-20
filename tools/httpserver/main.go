@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/sharedcode/sop"
@@ -21,18 +20,32 @@ import (
 	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/encoding"
-	"github.com/sharedcode/sop/infs"
 	"github.com/sharedcode/sop/jsondb"
 )
 
+// DatabaseConfig holds configuration for a single SOP database
+type DatabaseConfig struct {
+	Name     string `json:"name"`
+	Path     string `json:"path"`
+	Mode     string `json:"mode"`  // "standalone" or "clustered"
+	RedisURL string `json:"redis"` // Optional, for clustered
+
+	// // DetectedRoot is the inferred root directory for relative paths in this database.
+	// // It is calculated at startup and not read from JSON.
+	// DetectedRoot string `json:"-"`
+}
+
 // Config holds the server configuration
 type Config struct {
-	Port         int
-	RegistryPath string
+	Port      int              `json:"port"`
+	Databases []DatabaseConfig `json:"databases"`
+	PageSize  int              `json:"pageSize"`
+
+	// Legacy/CLI fields
+	DatabasePath string
 	Mode         string
 	ConfigFile   string
 	RedisURL     string
-	PageSize     int
 }
 
 //go:embed templates/*
@@ -47,15 +60,15 @@ func main() {
 	var showVersion bool
 	flag.BoolVar(&showVersion, "version", false, "Show version and exit")
 	flag.IntVar(&config.Port, "port", 8080, "Port to run the server on")
-	flag.StringVar(&config.RegistryPath, "registry", "/tmp/sop_data", "Path to the SOP registry/data directory")
+	flag.StringVar(&config.DatabasePath, "database", "/tmp/sop_data", "Path to the SOP database/data directory")
 	flag.StringVar(&config.Mode, "mode", "standalone", "SOP mode: 'standalone' or 'clustered'")
 	flag.StringVar(&config.ConfigFile, "config", "", "Path to configuration file (optional)")
 	flag.StringVar(&config.RedisURL, "redis", "localhost:6379", "Redis URL for clustered mode (e.g. localhost:6379)")
-	flag.IntVar(&config.PageSize, "pageSize", 70, "Number of items to display per page")
+	flag.IntVar(&config.PageSize, "pageSize", 40, "Number of items to display per page")
 	flag.Parse()
 
 	if showVersion {
-		fmt.Printf("SOP Data Browser v%s\n", Version)
+		fmt.Printf("SOP Data Manager v%s\n", Version)
 		os.Exit(0)
 	}
 
@@ -66,31 +79,42 @@ func main() {
 		}
 	}
 
-	// Resolve RegistryPath to absolute
-	if abs, err := filepath.Abs(config.RegistryPath); err == nil {
-		config.RegistryPath = abs
+	// If no databases loaded (e.g. no config file or empty), use CLI flags as default
+	if len(config.Databases) == 0 {
+		config.Databases = []DatabaseConfig{
+			{
+				Name:     "Default",
+				Path:     config.DatabasePath,
+				Mode:     config.Mode,
+				RedisURL: config.RedisURL,
+			},
+		}
 	}
 
-	// Ensure registry path exists (basic check)
-	if _, err := os.Stat(config.RegistryPath); os.IsNotExist(err) {
-		log.Printf("Warning: Registry path %s does not exist. Please ensure it is correct.", config.RegistryPath)
-	} else {
-		// Attempt to auto-detect the correct CWD based on stored paths
-		if err := autoAdjustCWD(); err != nil {
-			log.Printf("Auto-adjust CWD failed: %v", err)
-			// Fallback to parent directory
-			parentDir := filepath.Dir(config.RegistryPath)
-			if err := os.Chdir(parentDir); err != nil {
-				log.Printf("Warning: Failed to change directory to %s: %v", parentDir, err)
-			} else {
-				log.Printf("Working directory set to %s (fallback)", parentDir)
-			}
+	// Resolve Database Paths to absolute and detect roots
+	for i := range config.Databases {
+		if abs, err := filepath.Abs(config.Databases[i].Path); err == nil {
+			config.Databases[i].Path = abs
 		}
+		// Ensure database path exists (basic check)
+		if _, err := os.Stat(config.Databases[i].Path); os.IsNotExist(err) {
+			log.Printf("Warning: Database path '%s' for '%s' does not exist.", config.Databases[i].Path, config.Databases[i].Name)
+		}
+
+		// // Detect Root for this database
+		// if root, err := detectDatabaseRoot(config.Databases[i]); err == nil && root != "" {
+		// 	config.Databases[i].DetectedRoot = root
+		// 	log.Printf("Database '%s': Detected Root Directory: %s", config.Databases[i].Name, root)
+		// } else if err != nil {
+		// 	log.Printf("Database '%s': Root detection warning: %v", config.Databases[i].Name, err)
+		// }
 	}
 
 	// Setup Routes
 	http.HandleFunc("/", handleIndex)
+	http.HandleFunc("/api/databases", handleListDatabases)
 	http.HandleFunc("/api/stores", handleListStores)
+	http.HandleFunc("/api/db/options", handleGetDBOptions)
 	http.HandleFunc("/api/store/info", handleGetStoreInfo)
 	http.HandleFunc("/api/store/items", handleListItems)
 	http.HandleFunc("/api/store/item/update", handleUpdateItem)
@@ -99,97 +123,84 @@ func main() {
 
 	// Start Server
 	addr := fmt.Sprintf(":%d", config.Port)
-	log.Printf("SOP Data Browser v%s (%s) running at http://localhost%s", Version, config.Mode, addr)
-	log.Printf("Target Registry: %s", config.RegistryPath)
-	if config.Mode == "clustered" {
-		log.Printf("Redis: %s", config.RedisURL)
-	} else {
-		log.Printf("Warning: Running in Standalone mode. If the target registry is managed by a cluster, updates may corrupt the database.")
+	log.Printf("SOP Data Manager v%s running at http://localhost%s", Version, addr)
+	for _, db := range config.Databases {
+		log.Printf("Database '%s': %s (%s)", db.Name, db.Path, db.Mode)
 	}
+
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func autoAdjustCWD() error {
-	ctx := context.Background()
-	dbOpts := getDBOptions()
+// func detectDatabaseRoot(db DatabaseConfig) (string, error) {
+// 	ctx := context.Background()
 
-	// Open a read-only transaction to fetch stores
-	// Note: This might fail if CWD is already wrong and GetStores relies on it?
-	// Usually GetStores relies on RegistryPath which is absolute in dbOpts.
-	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %v", err)
-	}
-	defer trans.Rollback(ctx)
+// 	// Use basic options to open database metadata
+// 	dbOpts := sop.DatabaseOptions{
+// 		Type:          sop.Standalone,
+// 		StoresFolders: []string{db.Path},
+// 	}
+// 	if db.Mode == "clustered" {
+// 		dbOpts.Type = sop.Clustered
+// 		dbOpts.RedisConfig = &sop.RedisCacheConfig{
+// 			Address: db.RedisURL,
+// 		}
+// 	}
 
-	stores, err := trans.GetStores(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to list stores: %v", err)
-	}
-	if len(stores) == 0 {
-		return fmt.Errorf("no stores found")
-	}
+// 	// Open a read-only transaction to fetch stores
+// 	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to begin transaction: %v", err)
+// 	}
+// 	defer trans.Rollback(ctx)
 
-	// Pick the first store to check its path
-	storeName := stores[0]
+// 	stores, err := trans.GetStores(ctx)
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to list stores: %v", err)
+// 	}
+// 	if len(stores) == 0 {
+// 		return "", fmt.Errorf("no stores found")
+// 	}
 
-	// We need to access the StoreRepository directly to get StoreInfo without opening the B-Tree
-	t2, ok := trans.GetPhasedTransaction().(*common.Transaction)
-	if !ok {
-		return fmt.Errorf("failed to cast transaction")
-	}
+// 	// We need to access the StoreRepository directly to get StoreInfo without opening the B-Tree
+// 	t2, ok := trans.GetPhasedTransaction().(*common.Transaction)
+// 	if !ok {
+// 		return "", fmt.Errorf("failed to cast transaction")
+// 	}
 
-	storeInfos, err := t2.StoreRepository.Get(ctx, storeName)
-	if err != nil || len(storeInfos) == 0 {
-		return fmt.Errorf("failed to get store info for %s: %v", storeName, err)
-	}
+// 	// Iterate through stores to find a relative path we can use to deduce Root
+// 	for _, storeName := range stores {
+// 		storeInfos, err := t2.StoreRepository.Get(ctx, storeName)
+// 		if err != nil || len(storeInfos) == 0 {
+// 			continue
+// 		}
 
-	si := storeInfos[0]
-	blobTable := si.BlobTable
+// 		si := storeInfos[0]
+// 		blobTable := si.BlobTable
 
-	// blobTable is the relative path stored in DB, e.g., "data/large_complex_db/people"
-	// config.RegistryPath is absolute, e.g., "/.../examples/data/large_complex_db"
-	// The physical path of the store should be filepath.Join(config.RegistryPath, storeName) if standard structure?
-	// Or simply, the blobTable path must be a suffix of the physical path.
+// 		// If BlobTable is absolute, we can't use it to deduce Root (and don't need to for this store).
+// 		if filepath.IsAbs(blobTable) {
+// 			continue
+// 		}
 
-	// Let's assume the physical file exists at <RegistryPath>/<StoreName> (standard SOP structure for B-Tree nodes?)
-	// Actually, SOP creates a folder with the store name inside the registry folder.
-	// So physical location is config.RegistryPath + "/" + storeName.
+// 		targetPath := filepath.Join(db.Path, storeName)
 
-	// However, if the user created the store with a path "data/large_complex_db",
-	// and the store name is "people", the internal path is "data/large_complex_db/people".
+// 		// Normalize separators
+// 		blobTable = filepath.Clean(blobTable)
 
-	// We want to find a RootDir such that filepath.Join(RootDir, blobTable) exists.
-	// And we know that the file actually exists at filepath.Join(config.RegistryPath, storeName).
+// 		if strings.HasSuffix(targetPath, blobTable) {
+// 			// Found the overlap!
+// 			// The root dir is the part of targetPath BEFORE blobTable.
+// 			rootDir := targetPath[:len(targetPath)-len(blobTable)]
+// 			// Clean up trailing separator
+// 			rootDir = filepath.Clean(rootDir)
+// 			return rootDir, nil
+// 		}
+// 	}
 
-	// So: RootDir + blobTable = config.RegistryPath + storeName
-	// RootDir = config.RegistryPath + storeName - blobTable
-
-	// We need to strip the components of blobTable from the end of (config.RegistryPath + storeName).
-
-	targetPath := filepath.Join(config.RegistryPath, storeName)
-
-	// Normalize separators
-	blobTable = filepath.Clean(blobTable)
-
-	if strings.HasSuffix(targetPath, blobTable) {
-		// Found the overlap!
-		// The root dir is the part of targetPath BEFORE blobTable.
-		rootDir := targetPath[:len(targetPath)-len(blobTable)]
-		// Clean up trailing separator
-		rootDir = filepath.Clean(rootDir)
-
-		log.Printf("Auto-detected Root Directory: %s (based on store '%s' path '%s')", rootDir, storeName, blobTable)
-		if err := os.Chdir(rootDir); err != nil {
-			return fmt.Errorf("failed to chdir to %s: %v", rootDir, err)
-		}
-		return nil
-	}
-
-	return fmt.Errorf("path mismatch: target='%s', blob='%s'", targetPath, blobTable)
-}
+// 	return "", nil
+// }
 
 func loadConfig(path string) error {
 	f, err := os.Open(path)
@@ -200,24 +211,54 @@ func loadConfig(path string) error {
 	return json.NewDecoder(f).Decode(&config)
 }
 
-func getDBType() sop.DatabaseType {
-	if config.Mode == "clustered" {
-		return sop.Clustered
-	}
-	return sop.Standalone
-}
-
-func getDBOptions() sop.DatabaseOptions {
-	opts := sop.DatabaseOptions{
-		Type:          getDBType(),
-		StoresFolders: []string{config.RegistryPath},
-	}
-	if opts.Type == sop.Clustered {
-		opts.RedisConfig = &sop.RedisCacheConfig{
-			Address: config.RedisURL,
+func getDBOptions(dbName string) (sop.DatabaseOptions, error) {
+	var db *DatabaseConfig
+	if dbName == "" {
+		if len(config.Databases) > 0 {
+			db = &config.Databases[0]
+		}
+	} else {
+		for i := range config.Databases {
+			if config.Databases[i].Name == dbName {
+				db = &config.Databases[i]
+				break
+			}
 		}
 	}
-	return opts
+
+	if db == nil {
+		return sop.DatabaseOptions{}, fmt.Errorf("database '%s' not found", dbName)
+	}
+
+	// Try to load from disk first
+	if loadedOpts, err := database.GetOptions(context.Background(), db.Path); err == nil {
+		// Override with runtime config if necessary (e.g. Redis address from flags)
+		if db.Mode == "clustered" {
+			loadedOpts.Type = sop.Clustered
+			loadedOpts.RedisConfig = &sop.RedisCacheConfig{
+				Address: db.RedisURL,
+			}
+		}
+		// Ensure we use the loaded options' StoresFolders if available, as they might contain the full list of folders
+		// including those for erasure coding, which are critical for finding the data.
+		return loadedOpts, nil
+	}
+
+	opts := sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{db.Path},
+	}
+	// We rely on SOP to handle path resolution.
+	// If the store uses Erasure Coding, the config in StoreInfo should guide SOP to the correct files.
+	// If we override StoresFolders here, we risk breaking Database discovery.
+
+	if db.Mode == "clustered" {
+		opts.Type = sop.Clustered
+		opts.RedisConfig = &sop.RedisCacheConfig{
+			Address: db.RedisURL,
+		}
+	}
+	return opts, nil
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -233,9 +274,19 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	tmpl.Execute(w, data)
 }
 
+func handleListDatabases(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(config.Databases)
+}
+
 func handleListStores(w http.ResponseWriter, r *http.Request) {
+	dbName := r.URL.Query().Get("database")
 	ctx := r.Context()
-	dbOpts := getDBOptions()
+	dbOpts, err := getDBOptions(dbName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Open a read-only transaction to fetch stores
 	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
@@ -254,15 +305,31 @@ func handleListStores(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(stores)
 }
 
+func handleGetDBOptions(w http.ResponseWriter, r *http.Request) {
+	dbName := r.URL.Query().Get("database")
+	dbOpts, err := getDBOptions(dbName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(dbOpts)
+}
+
 func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 	storeName := r.URL.Query().Get("name")
+	dbName := r.URL.Query().Get("database")
 	if storeName == "" {
 		http.Error(w, "Store name is required", http.StatusBadRequest)
 		return
 	}
 
 	ctx := r.Context()
-	dbOpts := getDBOptions()
+	dbOpts, err := getDBOptions(dbName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
 	if err != nil {
@@ -274,7 +341,7 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 	// We need to open the store to get its info.
 	// We can use a dummy comparer since we are not doing any operations.
 	comparer := func(a, b any) int { return 0 }
-	store, err := infs.OpenBtree[any, any](ctx, storeName, trans, comparer)
+	store, err := database.OpenBtree[any, any](ctx, dbOpts, storeName, trans, comparer)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v", storeName, err), http.StatusInternalServerError)
 		return
@@ -303,13 +370,18 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 func handleListItems(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	storeName := r.URL.Query().Get("name")
+	dbName := r.URL.Query().Get("database")
 	if storeName == "" {
 		http.Error(w, "Store name is required", http.StatusBadRequest)
 		return
 	}
 
 	ctx := r.Context()
-	dbOpts := getDBOptions()
+	dbOpts, err := getDBOptions(dbName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
 	if err != nil {
@@ -327,6 +399,12 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 		stores, err := t2.StoreRepository.Get(ctx, storeName)
 		if err == nil && len(stores) > 0 {
 			isPrimitiveKey = stores[0].IsPrimitiveKey
+			if !isPrimitiveKey && stores[0].MapKeyIndexSpecification != "" {
+				var is jsondb.IndexSpecification
+				if err := encoding.DefaultMarshaler.Unmarshal([]byte(stores[0].MapKeyIndexSpecification), &is); err == nil {
+					indexSpec = &is
+				}
+			}
 		}
 	}
 
@@ -388,7 +466,7 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Open the B-Tree using 'any' for Key and Value to support generic browsing.
-	store, err := infs.OpenBtree[any, any](ctx, storeName, trans, comparer)
+	store, err := database.OpenBtree[any, any](ctx, dbOpts, storeName, trans, comparer)
 	if err != nil {
 		// If opening fails, it might be because the store was created with a specific path structure
 		// that the generic OpenBtree doesn't know about if it's not in the registry correctly.
@@ -625,6 +703,7 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
+		Database  string `json:"database"`
 		StoreName string `json:"store"`
 		Key       any    `json:"key"`
 		Value     any    `json:"value"`
@@ -636,7 +715,11 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	dbOpts := getDBOptions()
+	dbOpts, err := getDBOptions(req.Database)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Open transaction for writing
 	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
@@ -647,11 +730,6 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	// Ensure rollback in case of error, but we will Commit on success
 	defer trans.Rollback(ctx)
 
-	// Warn if standalone mode
-	if config.Mode == "standalone" {
-		log.Printf("Warning: Performing update in Standalone mode. If this database is managed by a cluster, this operation may corrupt the database.")
-	}
-
 	// We need to open the store to perform update
 	// We need to determine if it's a primitive key store to set up the comparer correctly
 	// and to cast the key from JSON (float64) to the correct type (int, etc).
@@ -659,10 +737,18 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	// Peek at store info first (requires a read transaction or just checking repository)
 	// But we are already in a write transaction. We can access the store repository directly via the transaction.
 	var isPrimitiveKey bool
+	var indexSpec *jsondb.IndexSpecification
+
 	if t2, ok := trans.GetPhasedTransaction().(*common.Transaction); ok {
 		stores, err := t2.StoreRepository.Get(ctx, req.StoreName)
 		if err == nil && len(stores) > 0 {
 			isPrimitiveKey = stores[0].IsPrimitiveKey
+			if !isPrimitiveKey && stores[0].MapKeyIndexSpecification != "" {
+				var is jsondb.IndexSpecification
+				if err := encoding.DefaultMarshaler.Unmarshal([]byte(stores[0].MapKeyIndexSpecification), &is); err == nil {
+					indexSpec = &is
+				}
+			}
 		}
 	}
 
@@ -670,51 +756,19 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	// If not primitive, we need a map comparer.
 	// For update, we need to find the EXACT key.
 	if !isPrimitiveKey {
-		// Use the same dynamic map comparer as in handleListItems
-		comparer = func(a, b any) int {
-			mapA, okA := a.(map[string]any)
-			mapB, okB := b.(map[string]any)
-			if !okA || !okB {
-				return btree.Compare(a, b)
+		if indexSpec != nil {
+			comparer = func(a, b any) int {
+				return indexSpec.Comparer(a.(map[string]any), b.(map[string]any))
 			}
-			// Simple dynamic comparison
-			keys := make([]string, 0, len(mapA)+len(mapB))
-			seen := make(map[string]struct{})
-			for k := range mapA {
-				if _, exists := seen[k]; !exists {
-					keys = append(keys, k)
-					seen[k] = struct{}{}
-				}
-			}
-			for k := range mapB {
-				if _, exists := seen[k]; !exists {
-					keys = append(keys, k)
-					seen[k] = struct{}{}
-				}
-			}
-			sort.Strings(keys)
-			for _, k := range keys {
-				valA, existsA := mapA[k]
-				valB, existsB := mapB[k]
-				if !existsA && !existsB {
-					continue
-				}
-				if !existsA {
-					return -1
-				}
-				if !existsB {
-					return 1
-				}
-				res := btree.Compare(valA, valB)
-				if res != 0 {
-					return res
-				}
-			}
-			return 0
+		} else {
+			// Dangerous: No IndexSpec found for non-primitive key.
+			// We cannot safely update because we don't know the comparison logic.
+			http.Error(w, "Update failed: Store has non-primitive key but no IndexSpecification. Write operations are disabled for safety.", http.StatusForbidden)
+			return
 		}
 	}
 
-	store, err := infs.OpenBtree[any, any](ctx, req.StoreName, trans, comparer)
+	store, err := database.OpenBtree[any, any](ctx, dbOpts, req.StoreName, trans, comparer)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v", req.StoreName, err), http.StatusInternalServerError)
 		return
@@ -807,6 +861,7 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 	}
 
 	var req struct {
+		Database  string `json:"database"`
 		StoreName string `json:"store"`
 		Key       any    `json:"key"`
 		Value     any    `json:"value"`
@@ -818,7 +873,11 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 	}
 
 	ctx := r.Context()
-	dbOpts := getDBOptions()
+	dbOpts, err := getDBOptions(req.Database)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	// Open transaction for writing
 	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
@@ -828,66 +887,37 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 	}
 	defer trans.Rollback(ctx)
 
-	// Warn if standalone mode
-	if config.Mode == "standalone" {
-		log.Printf("Warning: Performing %s in Standalone mode. If this database is managed by a cluster, this operation may corrupt the database.", op)
-	}
-
 	// Determine if primitive key
 	var isPrimitiveKey bool
+	var indexSpec *jsondb.IndexSpecification
+
 	if t2, ok := trans.GetPhasedTransaction().(*common.Transaction); ok {
 		stores, err := t2.StoreRepository.Get(ctx, req.StoreName)
 		if err == nil && len(stores) > 0 {
 			isPrimitiveKey = stores[0].IsPrimitiveKey
+			if !isPrimitiveKey && stores[0].MapKeyIndexSpecification != "" {
+				var is jsondb.IndexSpecification
+				if err := encoding.DefaultMarshaler.Unmarshal([]byte(stores[0].MapKeyIndexSpecification), &is); err == nil {
+					indexSpec = &is
+				}
+			}
 		}
 	}
 
 	var comparer btree.ComparerFunc[any]
 	if !isPrimitiveKey {
-		// Use the same dynamic map comparer
-		comparer = func(a, b any) int {
-			mapA, okA := a.(map[string]any)
-			mapB, okB := b.(map[string]any)
-			if !okA || !okB {
-				return btree.Compare(a, b)
+		if indexSpec != nil {
+			comparer = func(a, b any) int {
+				return indexSpec.Comparer(a.(map[string]any), b.(map[string]any))
 			}
-			keys := make([]string, 0, len(mapA)+len(mapB))
-			seen := make(map[string]struct{})
-			for k := range mapA {
-				if _, exists := seen[k]; !exists {
-					keys = append(keys, k)
-					seen[k] = struct{}{}
-				}
-			}
-			for k := range mapB {
-				if _, exists := seen[k]; !exists {
-					keys = append(keys, k)
-					seen[k] = struct{}{}
-				}
-			}
-			sort.Strings(keys)
-			for _, k := range keys {
-				valA, existsA := mapA[k]
-				valB, existsB := mapB[k]
-				if !existsA && !existsB {
-					continue
-				}
-				if !existsA {
-					return -1
-				}
-				if !existsB {
-					return 1
-				}
-				res := btree.Compare(valA, valB)
-				if res != 0 {
-					return res
-				}
-			}
-			return 0
+		} else {
+			// Dangerous: No IndexSpec found for non-primitive key.
+			http.Error(w, "Operation failed: Store has non-primitive key but no IndexSpecification. Write operations are disabled for safety.", http.StatusForbidden)
+			return
 		}
 	}
 
-	store, err := infs.OpenBtree[any, any](ctx, req.StoreName, trans, comparer)
+	store, err := database.OpenBtree[any, any](ctx, dbOpts, req.StoreName, trans, comparer)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v", req.StoreName, err), http.StatusInternalServerError)
 		return
@@ -967,7 +997,11 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 		if store.Count() <= 1 {
 			opErr = fmt.Errorf("cannot delete the last item; store must contain at least one item")
 		} else {
-			_, opErr = store.Remove(ctx, finalKey)
+			var removed bool
+			removed, opErr = store.Remove(ctx, finalKey)
+			if opErr == nil && !removed {
+				opErr = fmt.Errorf("key not found")
+			}
 		}
 	}
 
