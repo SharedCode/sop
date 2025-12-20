@@ -64,7 +64,7 @@ func main() {
 
 	// Verify
 	verify(ctx, int(targetCount))
-	database.RemoveBtree(ctx, databaseOptions, storeName)
+	//database.RemoveBtree(ctx, databaseOptions, storeName)
 }
 
 func seed(ctx context.Context) {

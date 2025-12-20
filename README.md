@@ -41,7 +41,7 @@ See the [API Cookbook](COOKBOOK.md#interoperability-note-go-vs-other-languages) 
 - [SOP for C# (sop4cs)](bindings/csharp/README.md)
 - [SOP for Rust (sop4rs)](bindings/rust/README.md)
 - [SOP AI Kit](ai/README.md)
-- [SOP Data Management Suite](tools/httpserver/README.md) - **Updated!** A full-featured Web UI for CRUD operations, rich compound index search, and universal database management.
+- [SOP Data Management Suite](tools/httpserver/README.md) - **Updated!** A powerful Web UI that scales from a local embedded viewer to a clustered enterprise management console on Kubernetes.
 - [Changelog](CHANGELOG.md)
 - [Community & support](#community--support)
 - [Contributing & license](#contributing--license)

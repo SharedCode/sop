@@ -30,6 +30,9 @@ func main() {
 		StoresFolders: []string{"./data/interop_indexes"},
 	}
 
+	// Setup the database folder.
+	database.Setup(ctx, dbOpts)
+
 	// 2. Define Index Specification
 	// We want to index by "category" (Ascending) and then "price" (Descending).
 	// This means products will be grouped by category, and within each category, expensive ones come first.

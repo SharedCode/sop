@@ -13,6 +13,24 @@ A powerful, web-based management suite for SOP B-Tree repositories. This tool tr
 - **Navigation**: Seamlessly navigate between data pages (Next/Previous) to explore large datasets.
 - **Advanced Search**: Perform complex queries on multi-field keys to jump directly to specific records.
 - **JSON Inspection**: View and edit complex value structures as formatted JSON.
+- **Database Configuration View**: Inspect critical database settings directly from the UI, including Erasure Coding parameters, Redis configuration, and Cache types.
+
+## The Power of the Web UI: From Embedded to Enterprise
+
+The SOP Web UI is not just a simple admin tool; it is a demonstration of the SOP architecture's flexibility. Because SOP is a library that turns your application into the database engine, this Web UI is effectively a **universal database server** that can adapt to any scale.
+
+### 1. Embedded & Single-Node
+For local development, IoT devices, or single-user desktop applications, the Web UI acts as a standalone database server.
+- **Zero Setup**: Just point it to a folder.
+- **Instant Access**: Serve one or many databases from a single lightweight process.
+- **Use Case**: A developer inspecting their local data, or an embedded device exposing a management interface.
+
+### 2. Enterprise Swarm (Clustered)
+In a large-scale enterprise environment, the Web UI shines as a stateless management node within your storage swarm.
+- **Scalable Hosting**: Deploy the Web UI on **Kubernetes**, **AWS EC2 Auto Scaling Groups**, or **Linux Bare Metal** farms.
+- **Dynamic Scaling**: Spin up as many instances of the Web UI as needed to serve different teams or departments.
+- **Cluster-Aware**: When configured with the same Redis endpoint as your production applications, the Web UI participates in the same distributed transaction protocols.
+- **Safe Production Access**: You can view, edit, and manage live production data safely. The Web UI respects all distributed locks, ensuring that manual admin actions never corrupt data or violate ACID properties, even while your high-throughput microservices are hammering the same data files.
 
 ## Usage
 

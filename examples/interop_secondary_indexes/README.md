@@ -27,7 +27,7 @@ go run examples/interop_secondary_indexes/main.go
 
 ## Recommended: Idiomatic Go Structs (Data Generator)
 
-We recommend using the struct-based approach for most Go applications. This example also serves as the **primary data generator** for testing the Data Browser, creating 500 records.
+We recommend using the struct-based approach for most Go applications. This example also serves as the **primary data generator** for testing the Data Management Suite, creating 500 records.
 
 This allows you to define your key as a struct:
 ```go
@@ -43,11 +43,11 @@ Run the struct-based example to populate the database:
 go run examples/interop_secondary_indexes/struct_key_example/main.go
 ```
 
-## Verifying with Data Browser
+## Verifying with Data Management Suite
 
-After running the struct-based example, you can use the **SOP Data Browser** to inspect the data.
+After running the struct-based example, you can use the **SOP Data Management Suite** to inspect the data.
 
-1.  Start the Data Browser:
+1.  Start the Data Management Suite:
     ```bash
     go run tools/httpserver/main.go -registry ./data/struct_key_demo
     ```
