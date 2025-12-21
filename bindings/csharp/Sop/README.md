@@ -137,8 +137,8 @@ await SopServer.RunAsync(args);
 **Usage**: By default, it opens on `http://localhost:8080`.
 **Arguments**: You can pass standard flags to configure the server.
 ```bash
-# Specify a custom registry path
-sop-cli httpserver -registry ./my_data
+# Specify a custom database path
+sop-cli httpserver -database ./my_data
 
 # Specify a custom port
 sop-cli httpserver -port 9090
@@ -146,28 +146,38 @@ sop-cli httpserver -port 9090
 # Enable clustered mode
 # In this mode, the httpserver will participate in clustered data management with other nodes in the cluster.
 sop-cli httpserver -clustered
-
-# Use a configuration file
-sop-cli httpserver -config ./config.json
 ```
 
-### Configuration File
+### Multiple Databases Configuration (Recommended)
 
-You can also configure the server using a JSON configuration file. This is useful for persisting settings across sessions.
+For managing multiple environments (e.g., Dev, Staging, Prod), create a `config.json`:
 
-**Example `config.json`:**
 ```json
 {
-  "Port": 9090,
-  "RegistryPath": "./my_data",
-  "Theme": "dark"
+  "port": 8080,
+  "databases": [
+    {
+      "name": "Local Development",
+      "path": "./data/dev_db",
+      "mode": "standalone"
+    },
+    {
+      "name": "Production Cluster",
+      "path": "/mnt/data/prod",
+      "mode": "clustered",
+      "redis": "redis-prod:6379"
+    }
+  ]
 }
 ```
 
-Pass the config file using the `-config` flag:
-```bash
-sop-cli httpserver -config ./config.json
-```
+Run with: `sop-cli httpserver -config config.json`
+
+### Important Note on Concurrency
+
+If database(s) are configured in **standalone mode**, ensure that the http server is the only process/app running to manage the database(s). Alternatively, you can add its HTTP REST endpoint to your embedded/standalone app so it can continue its function and serve HTTP pages at the same time.
+
+If **clustered**, no worries, as SOP takes care of Redis-based coordination with other apps and/or SOP HTTP Servers managing databases using SOP in clustered mode.
 
 ## Production Deployment
 
@@ -181,7 +191,7 @@ For production environments (e.g., Kubernetes, Docker, Linux Servers), you shoul
 FROM alpine:latest
 COPY sop-httpserver-linux-amd64 /app/sop-httpserver
 RUN chmod +x /app/sop-httpserver
-CMD ["/app/sop-httpserver", "-registry", "/data", "-port", "8080"]
+CMD ["/app/sop-httpserver", "-database", "/data", "-port", "8080"]
 ```
 
 This ensures a minimal footprint and removes the dependency on the .NET Runtime for the server process.
@@ -198,7 +208,7 @@ To see the Management Console in action, you can generate a sample database with
 
 2.  **Open in Console**:
     ```bash
-    sop-cli httpserver -registry data/large_complex_db
+    sop-cli httpserver -database data/large_complex_db
     ```
 
 ## Prerequisites

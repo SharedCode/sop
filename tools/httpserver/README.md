@@ -79,6 +79,12 @@ Run the server with the config file:
 go run tools/httpserver/main.go -config config.json
 ```
 
+### Important Note on Concurrency
+
+If database(s) are configured in **standalone mode**, ensure that the http server is the only process/app running to manage the database(s). Alternatively, you can add its HTTP REST endpoint to your embedded/standalone app so it can continue its function and serve HTTP pages at the same time.
+
+If **clustered**, no worries, as SOP takes care of Redis-based coordination with other apps and/or SOP HTTP Servers managing databases using SOP in clustered mode.
+
 ### Accessing
 Open your browser and navigate to:
 http://localhost:8080

@@ -58,7 +58,7 @@
         }
 
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; height: 100vh; background-color: var(--bg-color); color: var(--text-color); }
-        #sidebar { width: 250px; min-width: 150px; max-width: 50%; background: var(--sidebar-bg); border-right: 1px solid var(--border-color); padding: 6px 7px; overflow-y: auto; flex-shrink: 0; box-sizing: border-box; }
+        #sidebar { width: 250px; min-width: 150px; max-width: 50%; background: var(--sidebar-bg); border-right: 1px solid var(--border-color); padding: 6px 7px; display: flex; flex-direction: column; flex-shrink: 0; box-sizing: border-box; }
         #resizer { width: 5px; background: var(--border-color); cursor: col-resize; user-select: none; transition: background 0.2s; flex-shrink: 0; }
         #resizer:hover, #resizer.resizing { background: var(--active-bg); }
         #detail-resizer { width: 5px; background: var(--border-color); cursor: col-resize; user-select: none; transition: background 0.2s; flex-shrink: 0; display: none; }
@@ -66,8 +66,8 @@
         #main { flex: 1; padding: 6px 7px; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
         h1, h2 { margin-top: 0; margin-bottom: 10px; }
         h3 { margin-top: 0; margin-bottom: 10px; }
-        ul { list-style: none; padding: 0; }
-        li { padding: 8px 12px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
+        ul { list-style: none; padding: 9px 0 0 0; margin: 0; }
+        li { padding: 4px 12px; cursor: pointer; border-radius: 4px; margin-bottom: 4px; }
         li:hover { background: var(--hover-bg); }
         li.active { background: var(--active-bg); color: var(--active-text); }
         table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; border: 1px solid var(--border-color); }
@@ -100,23 +100,25 @@
 <body>
 
 <div id="sidebar">
-    <div id="database-section" style="display: none; margin-bottom: 12px;">
-        <h2 style="margin-bottom: 7px;">Databases</h2>
-        <select id="database-select" onchange="selectDatabase(this.value)" style="width: 100%; padding: 5px;">
-            <option>Loading...</option>
-        </select>
-    </div>
-    <h2 style="margin-bottom: 2px;">Stores</h2>
-    <ul id="store-list" style="margin-bottom: 12px; max-height: 60vh; overflow-y: auto;">
-        <li>Select a database...</li>
-    </ul>
-    
-    <hr style="margin: 12px 0; border: 0; border-top: 1px solid var(--border-color);">
-    
-    <div id="db-options-section" style="display: none;">
-        <h3 style="margin-bottom: 7px;">Database Options</h3>
-        <div id="db-options-content" style="font-size: 12px; color: var(--text-muted); overflow-x: auto;">
-            Loading...
+    <div style="flex: 1; overflow-y: auto; padding-right: 2px;">
+        <div id="database-section" style="display: none; margin-bottom: 12px;">
+            <h2 style="margin-bottom: 7px;">Databases</h2>
+            <select id="database-select" onchange="selectDatabase(this.value)" style="width: 100%; padding: 5px;">
+                <option>Loading...</option>
+            </select>
+        </div>
+        <h2 style="margin-bottom: 2px;">Stores</h2>
+        <ul id="store-list" style="margin-bottom: 12px;">
+            <li>Select a database...</li>
+        </ul>
+        
+        <hr style="margin: 12px 0; border: 0; border-top: 1px solid var(--border-color);">
+        
+        <div id="db-options-section" style="display: none;">
+            <h3 style="margin-bottom: 7px;">Database Options</h3>
+            <div id="db-options-content" style="font-size: 12px; color: var(--text-muted); overflow-x: auto;">
+                Loading...
+            </div>
         </div>
     </div>
 </div>
@@ -412,11 +414,25 @@
              keepPanel = false;
         }
 
-        if (!keepPanel) {
-            closeDetail(true);
-        }
+        // Check if panel is open to preserve it
+        const panel = document.getElementById('detail-panel');
+        const wasOpen = (panel.style.display === 'block');
         
-        let url = `/api/store/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(currentStore)}`;
+        // If keepPanel is explicitly true (e.g. from saveItem), we respect it.
+        // Otherwise, we default to closing it UNLESS it was already open (for navigation).
+        // However, for pagination (action != 'current'), we might want to keep it open 
+        // but we can't show the "same" item. 
+        // The user request is: "on Page navigation... it should not auto close so user can compare item details with preview of another record on the grid."
+        // This implies the detail pane should stay open showing the *old* item until the user selects a *new* one.
+        
+        // So we should NOT closeDetail() here if wasOpen is true.
+        // But we need to make sure we don't have a stale "selected-row" highlight that points to a row that no longer exists.
+        
+        // if (!keepPanel) {
+        //    closeDetail(true);
+        // }
+        
+        let url = `/api/store/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(currentStore)}&_=${new Date().getTime()}`;
         
         if (action === 'search') {
              let query = "";
@@ -606,8 +622,15 @@
     function showDetail(row, item, autoOpen = true) {
         // Check for unsaved changes if panel is open
         const panel = document.getElementById('detail-panel');
-        if (panel.style.display === 'block') {
-             if (!closeDetail()) return;
+        const wasOpen = (panel.style.display === 'block');
+
+        if (wasOpen) {
+             const btn = document.getElementById('btn-save');
+             if (btn && !btn.disabled) {
+                 if (!confirm("You have unsaved changes. Are you sure you want to discard them?")) {
+                     return;
+                 }
+             }
         }
 
         // Highlight selected row
@@ -619,8 +642,8 @@
         currentItemKey = item.key;
         currentItemValue = item.value;
         
-        // If panel is closed and autoOpen is false, just return (after setting currentItemKey and highlight)
-        if (panel.style.display !== 'block' && !autoOpen) {
+        // If panel was closed and autoOpen is false, just return (after setting currentItemKey and highlight)
+        if (!wasOpen && !autoOpen) {
             return;
         }
 
@@ -750,8 +773,11 @@
             btn.textContent = "Save";
             btn.disabled = true;
             
+            // Update local state so subsequent edits work correctly
+            currentItemValue = newVal;
+
             // Refresh the grid in background to show updated values
-            loadItems('current', firstKey, true).then(newItems => {
+            return loadItems('current', firstKey, true).then(newItems => {
                 // Re-highlight the saved item
                 if (newItems && newItems.length > 0) {
                     const savedKeyStr = JSON.stringify(currentItemKey);

@@ -51,6 +51,7 @@ sop-httpserver
 
 ### Key Capabilities
 
+*   **Universal Database Server**: Acts as a standalone server for local development or a stateless management node in a clustered enterprise swarm (Kubernetes/EC2).
 *   **Full Data Management**: Perform comprehensive CRUD (Create, Read, Update, Delete) operations on any record directly from the UI.
 *   **High-Performance Search**: Utilizes B-Tree positioning for instant lookups, even in datasets with millions of records. Supports both simple keys and complex composite keys (e.g., searching by `Country` + `City`).
 *   **Efficient Navigation**: Smart pagination and traversal controls (First, Previous, Next, Last) allow you to browse massive datasets without performance penalties.
@@ -59,7 +60,38 @@ sop-httpserver
 *   **Automatic Setup**: The tool automatically downloads the correct binary for your OS/Architecture upon first run.
 
 **Usage**: By default, it opens on `http://localhost:8080`.
-**Arguments**: You can pass standard flags, e.g., `sop-httpserver -port 9090 -registry ./my_data`.
+**Arguments**: You can pass standard flags, e.g., `sop-httpserver -port 9090 -database ./my_data`.
+
+### Multiple Databases Configuration (Recommended)
+
+For managing multiple environments (e.g., Dev, Staging, Prod), create a `config.json`:
+
+```json
+{
+  "port": 8080,
+  "databases": [
+    {
+      "name": "Local Development",
+      "path": "./data/dev_db",
+      "mode": "standalone"
+    },
+    {
+      "name": "Production Cluster",
+      "path": "/mnt/data/prod",
+      "mode": "clustered",
+      "redis": "redis-prod:6379"
+    }
+  ]
+}
+```
+
+Run with: `sop-httpserver -config config.json`
+
+### Important Note on Concurrency
+
+If database(s) are configured in **standalone mode**, ensure that the http server is the only process/app running to manage the database(s). Alternatively, you can add its HTTP REST endpoint to your embedded/standalone app so it can continue its function and serve HTTP pages at the same time.
+
+If **clustered**, no worries, as SOP takes care of Redis-based coordination with other apps and/or SOP HTTP Servers managing databases using SOP in clustered mode.
 
 ## Generating Sample Data
 
@@ -77,7 +109,7 @@ To see the Data Management Suite in action, you can generate a sample database w
 
 2.  **Open in Browser**:
     ```bash
-    sop-httpserver -registry data/large_complex_db
+    sop-httpserver -database data/large_complex_db
     ```
 
 ## Prerequisites

@@ -4,7 +4,7 @@ This directory contains examples of how to use the SOP Python wrapper.
 
 ## Large Complex Data Demo (`large_complex_demo.py`)
 
-This script generates a substantial dataset to demonstrate SOP's capability to handle complex, composite keys and large value payloads. It is the **perfect companion for testing the SOP Data Browser**.
+This script generates a substantial dataset to demonstrate SOP's capability to handle complex, composite keys and large value payloads. It is the **perfect companion for testing the SOP Data Management Suite**.
 
 It creates a database with two distinct stores:
 1.  **`people`**: Uses a composite key of `(Country, City, SSN)`. This demonstrates how SOP can efficiently index and search multi-part keys.
@@ -18,10 +18,10 @@ It creates a database with two distinct stores:
     ```
     This will create a database folder at `data/large_complex_db`.
 
-2.  **Explore with Data Browser**:
+2.  **Explore with Data Management Suite**:
     Now you can use the `sop-httpserver` to inspect, search, and modify this data.
     ```bash
-    sop-httpserver -registry data/large_complex_db
+    sop-httpserver -database data/large_complex_db
     ```
     *   Try searching for a specific Country (e.g., "US") to see B-Tree prefix matching in action.
     *   Edit a record to test the transactional update capabilities.

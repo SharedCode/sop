@@ -21,6 +21,10 @@ class DatabaseAction(Enum):
     OpenVectorStore = 6
     OpenSearch = 7
     RemoveBtree = 8
+    RemoveModelStore = 9
+    RemoveVectorStore = 10
+    RemoveSearch = 11
+    SetupDatabase = 12
 
 class Database:
     """
@@ -36,30 +40,49 @@ class Database:
         self.options = options
         self.id = None
 
+    @staticmethod
+    def setup(ctx: context.Context, options: DatabaseOptions):
+        """
+        Persists the database options to the stores folders.
+        This is a one-time setup operation for the database.
+
+        Args:
+            ctx (context.Context): The context.
+            options (DatabaseOptions): The options for the database.
+        """
+        opts = Database._serialize_options(options)
+        payload = json.dumps(opts)
+        
+        res = call_go.manage_database(ctx.id, DatabaseAction.SetupDatabase.value, None, payload)
+        if res:
+            raise Exception(res)
+
+    @staticmethod
+    def _serialize_options(options: DatabaseOptions) -> Dict:
+        opts = {
+            "type": options.type.value
+        }
+        
+        if options.erasure_config:
+            opts["erasure_config"] = {k: asdict(v) for k, v in options.erasure_config.items()}
+            
+        if options.stores_folders:
+            opts["stores_folders"] = options.stores_folders
+
+        if options.keyspace:
+            opts["keyspace"] = options.keyspace
+
+        if options.redis_config:
+            opts["redis_config"] = asdict(options.redis_config)
+            opts["cache_type"] = 2 # Redis enum value in Go
+            
+        return opts
+
     def _ensure_database_created(self, ctx: context.Context):
         if self.id:
             return
 
-        # We reuse ModelDBOptions structure on Go side which expects storage_path and type
-        opts = {
-            "type": self.options.type.value
-        }
-        
-        if self.options.erasure_config:
-            # Convert ErasureCodingConfig objects to dicts if needed, or rely on asdict/json serialization
-            opts["erasure_config"] = {k: asdict(v) for k, v in self.options.erasure_config.items()}
-            
-        if self.options.stores_folders:
-            opts["stores_folders"] = self.options.stores_folders
-
-        if self.options.keyspace:
-            opts["keyspace"] = self.options.keyspace
-
-        if self.options.redis_config:
-            opts["redis_config"] = asdict(self.options.redis_config)
-            # Ensure cache_type is set to Redis if config is present
-            opts["cache_type"] = 2 # Redis enum value in Go
-
+        opts = Database._serialize_options(self.options)
         payload = json.dumps(opts)
         
         # Action NewDatabase
