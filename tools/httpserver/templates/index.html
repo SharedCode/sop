@@ -80,14 +80,140 @@
         tr:nth-child(even) { background-color: var(--table-row-even); }
         tr:hover { background-color: var(--table-row-hover); cursor: pointer; }
         tr.selected-row { background-color: var(--table-row-selected) !important; }
-        #detail-panel { width: 400px; border-left: 1px solid var(--border-color); padding: 6px 7px; background: var(--detail-panel-bg); display: none; overflow-y: auto; box-sizing: border-box; flex-shrink: 0; }
-        pre { background: var(--pre-bg); padding: 10px; border-radius: 4px; overflow-x: auto; color: var(--text-color); }
+        #detail-panel { width: 400px; border-left: 1px solid var(--border-color); padding: 0; background: var(--detail-panel-bg); display: none; overflow-y: hidden; box-sizing: border-box; flex-shrink: 0; flex-direction: column; }
+        pre { background: var(--pre-bg); padding: 10px; border-radius: 4px; overflow-x: auto; color: var(--text-color); font-size: 12px; font-family: Consolas, "Courier New", monospace; }
         .toolbar { display: flex; gap: 10px; margin-bottom: 20px; }
         input[type="text"], textarea { padding: 8px; border: 1px solid var(--input-border); border-radius: 4px; flex: 1; background-color: var(--input-bg); color: var(--text-color); }
         button { padding: 8px 16px; background: var(--button-bg); color: var(--button-text); border: none; border-radius: 4px; cursor: pointer; }
         button:hover { background: var(--button-hover); }
         button:disabled { background: var(--border-color); cursor: not-allowed; }
         
+        /* Tabs */
+        .tabs { display: flex; border-bottom: 1px solid var(--border-color); background: var(--sidebar-bg); }
+        .tab { padding: 10px 15px; cursor: pointer; border-right: 1px solid var(--border-color); font-weight: bold; font-size: 13px; color: var(--text-muted); }
+        .tab:hover { background: var(--hover-bg); }
+        .tab.active { background: var(--detail-panel-bg); color: var(--active-bg); border-bottom: 2px solid var(--active-bg); margin-bottom: -1px; }
+        .tab-content { display: none; flex: 1; overflow-y: auto; padding: 10px; }
+        .tab-content.active { display: flex; flex-direction: column; }
+
+        /* Chat Interface */
+        .chat-widget {
+            position: fixed;
+            /* Initial position will be set by JS */
+            width: 400px;
+            height: 500px;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: none;
+            flex-direction: column;
+            z-index: 1000;
+            overflow: hidden;
+            min-width: 300px;
+            min-height: 300px;
+            box-sizing: border-box;
+        }
+        
+        .chat-widget * {
+            box-sizing: border-box;
+        }
+
+        .resize-handle {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 12px;
+            height: 12px;
+            cursor: nwse-resize;
+            z-index: 1002;
+            background: linear-gradient(135deg, transparent 50%, var(--text-muted) 50%);
+            border-bottom-right-radius: 8px;
+        }
+
+        .chat-widget.active {
+            display: flex;
+        }
+
+        .chat-header {
+            padding: 10px 15px;
+            background: var(--sidebar-bg);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: bold;
+            cursor: move;
+            user-select: none;
+        }
+
+        .chat-controls button {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            padding: 0 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .chat-controls button:hover {
+            color: var(--text-color);
+            background: none;
+        }
+
+        .chat-toggle-btn {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 25px;
+            background: var(--active-bg);
+            color: white;
+            border: none;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            transition: transform 0.2s;
+        }
+
+        .chat-toggle-btn:hover {
+            transform: scale(1.05);
+            background: var(--button-hover);
+        }
+
+        #chat-history { 
+            flex: 1; 
+            overflow-y: auto; 
+            overflow-x: hidden;
+            padding: 15px; 
+            background: var(--bg-color); 
+            scroll-behavior: smooth; 
+            display: flex; 
+            flex-direction: column; 
+        }
+        .chat-message { 
+            display: block; 
+            width: fit-content; 
+            margin-bottom: 10px; 
+            padding: 10px; 
+            border-radius: 4px; 
+            max-width: calc(100% - 7px); 
+            font-size: 13px; 
+            line-height: 1.5; 
+            flex-shrink: 0; 
+            word-wrap: break-word; 
+            overflow-wrap: anywhere; 
+        }
+        .chat-message.user { background-color: #007bff; color: white; align-self: flex-end; margin-left: auto; text-align: left; border: 1px solid #0056b3; }
+        .chat-message.ai { background: var(--pre-bg); color: var(--text-color); align-self: flex-start; margin-right: auto; border: 1px solid var(--border-color); }
+        .chat-input-area { display: flex; gap: 5px; flex-shrink: 0; padding: 10px; border-top: 1px solid var(--border-color); background: var(--sidebar-bg); }
+        #chat-input { height: 40px; resize: none; }
+        #tab-chat { overflow-y: hidden; height: auto; flex: 1; display: flex; flex-direction: column; }
+
         /* Utility Classes */
         .btn-success { background-color: var(--success-bg) !important; color: white; }
         .btn-danger { background-color: var(--danger-bg) !important; color: white; }
@@ -154,8 +280,12 @@
 <div id="detail-resizer"></div>
 
 <div id="detail-panel">
-    <h2>Item Details</h2>
-    <div id="json-viewer"></div>
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('details')" id="tab-btn-details">Item Details</div>
+    </div>
+    <div id="tab-details" class="tab-content active">
+        <div id="json-viewer"></div>
+    </div>
 </div>
 
 <script>
@@ -416,7 +546,7 @@
 
         // Check if panel is open to preserve it
         const panel = document.getElementById('detail-panel');
-        const wasOpen = (panel.style.display === 'block');
+        const wasOpen = (panel.style.display === 'block' || panel.style.display === 'flex');
         
         // If keepPanel is explicitly true (e.g. from saveItem), we respect it.
         // Otherwise, we default to closing it UNLESS it was already open (for navigation).
@@ -622,7 +752,7 @@
     function showDetail(row, item, autoOpen = true) {
         // Check for unsaved changes if panel is open
         const panel = document.getElementById('detail-panel');
-        const wasOpen = (panel.style.display === 'block');
+        const wasOpen = (panel.style.display === 'block' || panel.style.display === 'flex');
 
         if (wasOpen) {
              const btn = document.getElementById('btn-save');
@@ -701,7 +831,7 @@
             </div>
         `;
         document.getElementById('detail-resizer').style.display = 'block';
-        panel.style.display = 'block';
+        panel.style.display = 'flex';
     }
 
     function saveItem() {
@@ -1021,7 +1151,16 @@
             renderAddValueJson();
         }
 
-        modal.style.display = 'flex';
+        // Reset position to center
+        const modalContent = document.getElementById('add-modal-content');
+        if (modalContent) {
+            modalContent.style.top = '50%';
+            modalContent.style.left = '50%';
+            modalContent.style.transform = 'translate(-50%, -50%)';
+            modalContent.style.margin = '0';
+        }
+
+        modal.style.display = 'block';
     }
 
     function toggleAddKeyMode() {
@@ -1403,7 +1542,7 @@
         // Handle Escape for Add Modal
         if (e.key === 'Escape') {
             const addModal = document.getElementById('add-modal');
-            if (addModal && addModal.style.display === 'flex') {
+            if (addModal && addModal.style.display !== 'none') {
                 closeAdd();
                 e.preventDefault();
                 return;
@@ -1470,11 +1609,360 @@
             closeDetail();
         }
     });
+
+    // --- Chat & Tabs Logic ---
+
+    function toggleProviderSelect() {
+        const agent = document.getElementById('agent-select').value;
+        const providerSelect = document.getElementById('provider-select');
+        // Show provider select only for RAG agents (doctor, sql_admin)
+        if (agent === 'doctor' || agent === 'sql_admin') {
+            providerSelect.style.display = 'inline-block';
+        } else {
+            providerSelect.style.display = 'none';
+        }
+    }
+
+    function switchTab(tabName) {
+        // Update Tabs
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById(`tab-btn-${tabName}`).classList.add('active');
+
+        // Update Content
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+    }
+
+    function toggleChatWidget() {
+        const widget = document.getElementById('chat-widget');
+        const btn = document.getElementById('chat-toggle-btn');
+        
+        if (widget.classList.contains('active')) {
+            widget.classList.remove('active');
+            btn.style.display = 'flex';
+        } else {
+            // Initialize position if not set (first open)
+            if (!widget.style.top && !widget.style.left && !widget.style.right && !widget.style.bottom) {
+                // Default to bottom right, but using top/left for resize compatibility
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                const width = 400;
+                const height = 500;
+                
+                widget.style.left = (viewportWidth - width - 20) + 'px';
+                widget.style.top = (viewportHeight - height - 80) + 'px';
+            }
+            
+            widget.classList.add('active');
+            btn.style.display = 'none';
+            // Focus input when opening
+            setTimeout(() => document.getElementById('chat-input').focus(), 100);
+        }
+    }
+
+    // --- Draggable Chat Widget Logic ---
+    document.addEventListener('DOMContentLoaded', function() {
+        const widget = document.getElementById('chat-widget');
+        const header = widget.querySelector('.chat-header');
+        let isDragging = false;
+        let dragStartX, dragStartY;
+
+        header.addEventListener('mousedown', function(e) {
+            // Ignore if clicking controls or select
+            if (e.target.closest('.chat-controls') || e.target.closest('select')) return;
+            
+            isDragging = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            
+            // Change cursor style globally to indicate dragging
+            document.body.style.cursor = 'move';
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            
+            const deltaX = e.clientX - dragStartX;
+            const deltaY = e.clientY - dragStartY;
+            
+            // Use top/left for positioning
+            const rect = widget.getBoundingClientRect();
+            widget.style.left = (rect.left + deltaX) + 'px';
+            widget.style.top = (rect.top + deltaY) + 'px';
+            
+            // Clear right/bottom if they exist to avoid conflicts
+            widget.style.right = 'auto';
+            widget.style.bottom = 'auto';
+            
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (isDragging) {
+                isDragging = false;
+                document.body.style.cursor = 'default';
+            }
+        });
+
+        // --- Resize Logic ---
+        const resizeHandle = widget.querySelector('.resize-handle');
+        let isResizing = false;
+        let resizeStartX, resizeStartY, startWidth, startHeight;
+
+        if (resizeHandle) {
+            resizeHandle.addEventListener('mousedown', function(e) {
+                e.stopPropagation(); // Prevent drag
+                e.preventDefault(); // Prevent selection
+                isResizing = true;
+                resizeStartX = e.clientX;
+                resizeStartY = e.clientY;
+                startWidth = widget.offsetWidth;
+                startHeight = widget.offsetHeight;
+                document.body.style.cursor = 'nwse-resize';
+            });
+        }
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            e.preventDefault();
+            
+            const deltaX = e.clientX - resizeStartX;
+            const deltaY = e.clientY - resizeStartY;
+            
+            widget.style.width = Math.max(300, startWidth + deltaX) + 'px';
+            widget.style.height = Math.max(300, startHeight + deltaY) + 'px';
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = 'default';
+            }
+        });
+    });
+
+    // --- Draggable Add Modal Logic (Event Delegation) ---
+    (function() {
+        let isDragging = false;
+        let dragStartX, dragStartY;
+        let initialLeft, initialTop;
+        let activeModalContent = null;
+
+        document.addEventListener('mousedown', function(e) {
+            const header = e.target.closest('#add-modal-header');
+            if (!header) return;
+            
+            const modalContent = document.getElementById('add-modal-content');
+            if (!modalContent) return;
+
+            isDragging = true;
+            activeModalContent = modalContent;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            
+            // If we are centered via transform, we need to switch to explicit top/left
+            const rect = modalContent.getBoundingClientRect();
+            modalContent.style.transform = 'none';
+            modalContent.style.left = rect.left + 'px';
+            modalContent.style.top = rect.top + 'px';
+            modalContent.style.margin = '0';
+            
+            initialLeft = rect.left;
+            initialTop = rect.top;
+            
+            document.body.style.cursor = 'move';
+            e.preventDefault(); // Prevent text selection
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging || !activeModalContent) return;
+            e.preventDefault();
+            
+            const deltaX = e.clientX - dragStartX;
+            const deltaY = e.clientY - dragStartY;
+            
+            activeModalContent.style.left = (initialLeft + deltaX) + 'px';
+            activeModalContent.style.top = (initialTop + deltaY) + 'px';
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (isDragging) {
+                isDragging = false;
+                activeModalContent = null;
+                document.body.style.cursor = 'default';
+            }
+        });
+    })();
+
+    let chatAbortController = null;
+    let chatHistory = [];
+    let historyIndex = -1;
+
+    function sendChatMessage() {
+        const input = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('chat-send-btn');
+        
+        // Check if we are in "Stop" mode
+        if (chatAbortController) {
+            chatAbortController.abort();
+            chatAbortController = null;
+            if (sendBtn) sendBtn.textContent = 'Send';
+            appendChatMessage('ai', 'Request cancelled by user.');
+            return;
+        }
+
+        const message = input.value.trim();
+        const agentSelect = document.getElementById('agent-select');
+        const agent = agentSelect ? agentSelect.value : 'db_admin';
+        const providerSelect = document.getElementById('provider-select');
+        const provider = providerSelect ? providerSelect.value : '';
+
+        if (!message) return;
+
+        // Save to history
+        chatHistory.push(message);
+        historyIndex = -1; // Reset index
+
+        // Add User Message
+        appendChatMessage('user', message);
+        input.value = '';
+
+        // Use double requestAnimationFrame to ensure the browser paints the user message
+        // before we start the network operation. This is more reliable than setTimeout.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                // Show Loading
+                const loadingId = appendChatMessage('ai', 'Thinking...');
+                
+                // Setup AbortController
+                chatAbortController = new AbortController();
+                if (sendBtn) sendBtn.textContent = 'Stop';
+
+                fetch('/api/ai/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        message: message,
+                        database: currentDatabase,
+                        store: currentStore,
+                        agent: agent,
+                        provider: provider
+                    }),
+                    signal: chatAbortController.signal
+                })
+                .then(res => res.json())
+                .then(data => {
+                    // Remove Loading
+                    const loadingEl = document.getElementById(loadingId);
+                    if (loadingEl) loadingEl.remove();
+
+                    if (data.error) {
+                        appendChatMessage('ai', 'Error: ' + data.error);
+                    } else {
+                        appendChatMessage('ai', data.response);
+                        
+                        // If the AI performed an action (like search), we might want to refresh the grid
+                        if (data.action === 'refresh') {
+                            loadItems('current', firstKey);
+                        }
+                    }
+                })
+                .catch(err => {
+                    const loadingEl = document.getElementById(loadingId);
+                    if (loadingEl) loadingEl.remove();
+                    
+                    if (err.name === 'AbortError') {
+                        // Handled by the abort click logic mostly, but ensures cleanup
+                    } else {
+                        appendChatMessage('ai', 'Error: ' + err.message);
+                    }
+                })
+                .finally(() => {
+                    chatAbortController = null;
+                    if (sendBtn) sendBtn.textContent = 'Send';
+                });
+            });
+        });
+    }
+
+    function handleChatKeydown(e) {
+        const input = document.getElementById('chat-input');
+        
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendChatMessage();
+        } else if (e.key === 'ArrowUp') {
+            // Only navigate history if cursor is at start or single line
+            if (chatHistory.length > 0) {
+                e.preventDefault();
+                if (historyIndex === -1) {
+                    historyIndex = chatHistory.length - 1;
+                } else if (historyIndex > 0) {
+                    historyIndex--;
+                }
+                input.value = chatHistory[historyIndex];
+            }
+        } else if (e.key === 'ArrowDown') {
+            if (historyIndex !== -1) {
+                e.preventDefault();
+                if (historyIndex < chatHistory.length - 1) {
+                    historyIndex++;
+                    input.value = chatHistory[historyIndex];
+                } else {
+                    historyIndex = -1;
+                    input.value = '';
+                }
+            }
+        }
+    }
+
+    function appendChatMessage(role, text) {
+        console.log("Appending message:", role, text); // Debug Log
+        const history = document.getElementById('chat-history');
+        const div = document.createElement('div');
+        div.className = `chat-message ${role}`;
+        div.id = 'msg-' + new Date().getTime();
+        
+        // Simple markdown-like parsing for code blocks
+        if (text.includes('```')) {
+            text = text.replace(/```([\s\S]*?)```/g, '<pre>$1</pre>');
+        }
+        
+        div.innerHTML = text.replace(/\n/g, '<br>');
+        history.appendChild(div);
+        
+        console.log("Message appended to history. History child count:", history.children.length); // Debug Log
+
+        // Auto-scroll to bottom
+        requestAnimationFrame(() => {
+            history.scrollTop = history.scrollHeight;
+        });
+        
+        return div.id;
+    }
+
+    // Hook into showDetail to ensure we see the details tab
+    const originalShowDetail = showDetail;
+    showDetail = function(row, item, autoOpen) {
+        originalShowDetail(row, item, autoOpen);
+        
+        // Only switch to details tab if we are explicitly opening/selecting (e.g. click)
+        // If autoOpen is false (navigation), preserve the current tab (e.g. if user is in Chat)
+        if (autoOpen === undefined || autoOpen === true) {
+            switchTab('details');
+        }
+    };
+
+    function toggleProviderSelect() {
+        // No-op since we removed the agent select dropdown logic
+    }
 </script>
 
-<div id="add-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:1000;">
-    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:600px; max-width:90%; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid var(--border-color);">
-        <h3>Add New Item</h3>
+<div id="add-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1100;">
+    <div id="add-modal-content" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:600px; max-width:90%; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+        <h3 id="add-modal-header" style="margin-top:0; margin-bottom: 10px; cursor: move; user-select: none;">Add New Item</h3>
         
         <div style="overflow-y: auto; flex: 1; padding-right: 0;">
             <h4 style="margin-bottom: 5px; margin-top: 0;">Key</h4>
@@ -1516,5 +2004,40 @@
         }
     };
 </script>
+
+<!-- Floating Chat Widget -->
+<div id="chat-widget" class="chat-widget">
+    <div class="chat-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span>AI Assistant</span>
+            <select id="provider-select" style="padding: 2px; border-radius: 3px; border: 1px solid #ccc; font-size: 11px; font-weight: normal; color: #333;" onclick="event.stopPropagation()">
+                <option value="">Default (Local)</option>
+                <option value="ollama">Ollama (Local AI)</option>
+                <option value="gemini">Gemini (Cloud)</option>
+                <option value="chatgpt">ChatGPT (Cloud)</option>
+            </select>
+            <!-- Hidden Agent Select (Hardcoded to sql_admin) -->
+            <input type="hidden" id="agent-select" value="sql_admin">
+        </div>
+        <div class="chat-controls">
+            <button class="minimize-btn" onclick="toggleChatWidget()">_</button>
+        </div>
+    </div>
+    <div id="chat-history">
+        <div class="chat-message ai">Hello! I am your SOP Data Assistant. How can I help you today?</div>
+    </div>
+    <div class="chat-input-area">
+        <textarea id="chat-input" placeholder="Ask about your data (e.g., 'Find users in New York')..." onkeydown="handleChatKeydown(event)"></textarea>
+        <button id="chat-send-btn" onclick="sendChatMessage()">Send</button>
+    </div>
+    <div class="resize-handle"></div>
+</div>
+
+<button id="chat-toggle-btn" class="chat-toggle-btn" onclick="toggleChatWidget()">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+    </svg>
+</button>
+
 </body>
 </html>

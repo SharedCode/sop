@@ -211,6 +211,34 @@ type Agent[T any] interface {
 	Ask(ctx context.Context, query string) (string, error)
 }
 
+// ToolExecutor defines the interface for the application to expose capabilities to the Agent.
+// This allows the Agent to "act" on the application (e.g. query DB, send email).
+type ToolExecutor interface {
+	// Execute runs a named tool with the provided arguments.
+	Execute(ctx context.Context, toolName string, args map[string]any) (string, error)
+	// ListTools returns the list of available tools.
+	ListTools(ctx context.Context) ([]ToolDefinition, error)
+}
+
+// ToolDefinition describes a tool available to the agent.
+type ToolDefinition struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	// Schema is a JSON schema string describing the arguments.
+	Schema string `json:"schema"`
+}
+
+// AgentControl defines methods to manage the agent's lifecycle.
+// This allows the Application to control the Agent (e.g. Stop/Pause).
+type AgentControl interface {
+	// Stop aborts the current operation.
+	Stop() error
+	// Pause suspends the agent's activities (if supported).
+	Pause() error
+	// Resume resumes the agent's activities.
+	Resume() error
+}
+
 // TextIndex defines the interface for a text search index.
 type TextIndex interface {
 	// Add indexes a document.

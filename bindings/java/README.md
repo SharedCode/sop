@@ -30,7 +30,7 @@ SOP bindings for Java allow you to use the high-performance SOP storage engine d
 
 ## Quick Start
 
-### 1. Basic Usage (Standalone)
+### 1. Basic Usage (Standalone - Local disk or shared Network drive)
 
 ```java
 import com.sharedcode.sop.*;

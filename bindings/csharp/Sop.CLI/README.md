@@ -519,7 +519,7 @@ using System.Threading.Tasks;
 // 1. Setup & Pre-seed
 using var ctx = new Context();
 
-// Option A: Standalone (Local Disk, In-Memory Cache)
+// Option A: Standalone (Local disk or shared Network drive, In-Memory Cache)
 var db = new Database(new DatabaseOptions { 
     StoresFolders = new List<string> { "./sop_data" },
     Type = (int)DatabaseType.Standalone 

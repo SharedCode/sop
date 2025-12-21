@@ -13,6 +13,7 @@ import (
 	"github.com/sharedcode/sop/adapters/redis"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/cache"
+	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/incfs"
 	"github.com/sharedcode/sop/infs"
 )
@@ -123,9 +124,12 @@ func Setup(ctx context.Context, opts sop.DatabaseOptions) (DatabaseOptions, erro
 func GetOptions(ctx context.Context, folderPath string) (sop.DatabaseOptions, error) {
 	fileName := filepath.Join(folderPath, databaseOptionsFilename)
 
-	// If already loaded in memory, 'just return that copy.
+
+	fio := fs.NewFileIO()
+
+	// If already loaded in memory, & file exists, just return that copy.
 	dbOpts := getOptionFromLookup(fileName)
-	if dbOpts != nil && !dbOpts.IsEmpty(){
+	if dbOpts != nil && !dbOpts.IsEmpty() && fio.Exists(ctx, fileName){
 		return *dbOpts, nil
 	}
 

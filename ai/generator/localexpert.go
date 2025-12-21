@@ -34,6 +34,8 @@ func (g *LocalExpert) Generate(ctx context.Context, prompt string, opts ai.GenOp
 	separator := "Query:"
 	if strings.Contains(prompt, "Patient Symptoms:") {
 		separator = "Patient Symptoms:"
+	} else if strings.Contains(prompt, "User Query:") {
+		separator = "User Query:"
 	}
 
 	parts := strings.Split(prompt, separator)
@@ -58,6 +60,50 @@ func (g *LocalExpert) Generate(ctx context.Context, prompt string, opts ai.GenOp
 	// Analyze Query (Simple Keyword Matching)
 	query := strings.ToLower(queryPart)
 	queryWords := strings.Fields(query)
+
+	// Check for SQL intent
+	isSQL := false
+	sqlKeywords := []string{"select", "insert", "update", "delete", "create", "drop", "show", "list"}
+	for _, kw := range sqlKeywords {
+		if strings.Contains(query, kw) {
+			isSQL = true
+			break
+		}
+	}
+
+	if isSQL {
+		// Simple SQL Heuristic
+		if strings.Contains(query, "select") || strings.Contains(query, "show") || strings.Contains(query, "list") {
+			// Check for "select * from <table>" pattern
+			// Regex: select .* from (\w+)
+			// We'll use a simple split for now to avoid heavy regex import if not needed, but regex is cleaner.
+			// Let's just look for the word after "from"
+			words := strings.Fields(strings.ToLower(query))
+			var storeName string
+			var limit int = -1 // Default to -1 (Unlimited/All) if not specified
+
+			for i, w := range words {
+				if w == "from" && i+1 < len(words) {
+					storeName = words[i+1]
+					// Strip trailing punctuation
+					storeName = strings.TrimRight(storeName, ";.,")
+				}
+				if w == "limit" && i+1 < len(words) {
+					fmt.Sscanf(words[i+1], "%d", &limit)
+				}
+			}
+
+			if storeName != "" {
+				return ai.GenOutput{Text: fmt.Sprintf(`{"tool": "select", "args": {"store": "%s", "limit": %d}}`, storeName, limit)}, nil
+			}
+
+			// Fallback to list_stores if no table specified
+			return ai.GenOutput{Text: `{"tool": "list_stores", "args": {}}`}, nil
+		}
+		if strings.Contains(query, "delete") || strings.Contains(query, "remove") {
+			return ai.GenOutput{Text: "```sql\nDELETE FROM items WHERE id = '...';\n```\n\n(Local Expert: I detected a delete operation. Please specify the ID.)"}, nil
+		}
+	}
 
 	// Format user input for display
 	rawItems := strings.Split(queryPart, "|")

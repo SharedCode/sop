@@ -31,7 +31,7 @@ use sop::{Context, Database, DatabaseOptions, Item};
 fn main() {
     let ctx = Context::new();
     
-    // Open a database (embedded or clustered)
+    // Open a database (Standalone - Local disk or shared Network drive, or Clustered)
     let mut options = DatabaseOptions::default();
     options.stores_folders = Some(vec!["./data".to_string()]);
     let db = Database::new(&ctx, options).unwrap();

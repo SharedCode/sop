@@ -10,7 +10,17 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/search"
+)
+
+type contextKey string
+
+const (
+	// CtxKeyProvider is the context key for overriding the AI provider (generator).
+	CtxKeyProvider contextKey = "ai_provider"
+	// CtxKeyExecutor is the context key for passing the ToolExecutor.
+	CtxKeyExecutor contextKey = "ai_executor"
 )
 
 // Service is a generic agent service that operates on any Domain.
@@ -204,19 +214,64 @@ func (s *Service) Ask(ctx context.Context, query string) (string, error) {
 
 	fullPrompt := fmt.Sprintf("%s\n\nContext:\n%s\n\nUser Query: %s", systemPrompt, contextText, query)
 
-	// 3. Generate Answer
-	if s.generator == nil {
+	// 3. Determine Generator
+	gen := s.generator
+
+	// Check for override in context
+	if provider, ok := ctx.Value(CtxKeyProvider).(string); ok && provider != "" {
+		// Only override if the requested provider is different from the current one
+		// (We assume s.generator.Name() matches the provider string, e.g. "gemini", "ollama")
+		if gen == nil || gen.Name() != provider {
+			// Create a temporary generator instance
+			// We rely on the generator package to pick up API keys from Env Vars
+			overriddenGen, err := generator.New(provider, nil)
+			if err == nil {
+				gen = overriddenGen
+			} else {
+				// Log warning? For now, just fall back to default
+				fmt.Printf("Warning: Failed to initialize requested provider '%s': %v. Falling back to default.\n", provider, err)
+			}
+		}
+	}
+
+	// 4. Generate Answer
+	if gen == nil {
 		// Fallback: If no generator is configured, return the retrieved context directly.
 		// This allows agents to act as "Search Services" or "Translators" without an LLM.
 		return contextText, nil
 	}
 
-	output, err := s.generator.Generate(ctx, fullPrompt, ai.GenOptions{
+	output, err := gen.Generate(ctx, fullPrompt, ai.GenOptions{
 		MaxTokens:   1024,
 		Temperature: 0.7,
 	})
 	if err != nil {
 		return "", fmt.Errorf("generation failed: %w", err)
+	}
+
+	// 5. Check for Tool Execution (Agent -> App)
+	// If the generator returns a JSON tool call, and we have an executor, run it.
+	if executor, ok := ctx.Value(CtxKeyExecutor).(ai.ToolExecutor); ok && executor != nil {
+		// Simple heuristic: If output looks like a JSON tool call
+		text := strings.TrimSpace(output.Text)
+		if strings.HasPrefix(text, "{") && strings.Contains(text, "\"tool\"") {
+			// We return the raw JSON so the caller (httpserver) can parse and execute it.
+			// OR, we can execute it here if we want the Agent to be autonomous.
+			// Given the architecture, the httpserver is the one calling Ask(), so it expects a string response.
+			// If we execute it here, we can return the RESULT of the execution.
+
+			// Let's try to execute it here to make the agent truly autonomous.
+			// But we need to parse the JSON.
+			// Since we don't want to add heavy JSON parsing logic here if not needed,
+			// let's just return the text. The httpserver's loop (ReAct) handles the execution.
+			// Wait, the user wants the "Local Agent" to execute actions if trivial.
+			// If "Local Expert" returns a tool call, we should probably execute it if we can.
+
+			// However, the current httpserver implementation ALREADY has a ReAct loop that handles tool calls.
+			// So if we just return the JSON string, the httpserver will see it, parse it, and execute it.
+			// That seems consistent.
+			return output.Text, nil
+		}
 	}
 
 	return output.Text, nil

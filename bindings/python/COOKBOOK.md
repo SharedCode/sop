@@ -440,7 +440,7 @@ def worker(thread_id, db, ctx, items_per_thread):
 # Usage
 ctx = Context()
 
-# Option A: Standalone (Local Disk, In-Memory Cache) - Good for single-node concurrency
+# Option A: Standalone (Local disk or shared Network drive, In-Memory Cache) - Good for single-node concurrency
 db = Database(DatabaseOptions(stores_folders=["/tmp/sop_swarm"], type=DatabaseType.Standalone))
 
 # Option B: Clustered (Redis Cache) - Required for multi-process/distributed swarm

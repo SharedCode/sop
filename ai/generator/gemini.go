@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
 
 	"github.com/sharedcode/sop/ai"
 )
@@ -20,7 +22,13 @@ type gemini struct {
 func init() {
 	Register("gemini", func(cfg map[string]any) (ai.Generator, error) {
 		apiKey, _ := cfg["api_key"].(string)
+		if apiKey == "" {
+			apiKey = os.Getenv("GEMINI_API_KEY")
+		}
 		model, _ := cfg["model"].(string)
+		if model == "" {
+			model = os.Getenv("GEMINI_MODEL")
+		}
 		if model == "" {
 			model = "gemini-pro"
 		}
@@ -64,7 +72,9 @@ func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions
 		}, nil
 	}
 
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", g.model, g.apiKey)
+	// URL encode the API key to be safe
+	safeKey := url.QueryEscape(g.apiKey)
+	apiURL := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", g.model, safeKey)
 
 	reqBody := geminiRequest{
 		Contents: []geminiContent{
@@ -77,7 +87,7 @@ func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions
 		return ai.GenOutput{}, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(jsonBody))
 	if err != nil {
 		return ai.GenOutput{}, fmt.Errorf("failed to create request: %w", err)
 	}
