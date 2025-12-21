@@ -203,6 +203,9 @@ See more details here that describe further, the different qualities & attribute
 Before I go, I would like to say, SOP is a green field, totally new. What is being shipped in V2 is just the start of this new product. We are barely scratching the surface of what can be done that will help storage management at super scale. SOP is a super computing enabler. The way its architecture was laid out, independent features and together, they are meant to give us the best/most efficient performance & IO of a group of computers (cluster), network & their storage, that can possibly give us.
 
 ## High level features/usability articles about SOP
+- [**New!** AI Assistant: A "Local Expert" for your Data](AI_ASSISTANT.md) - How we built a secure, RAG-based agent into the SOP Data Manager.
+- [SOP: The Modern Database Library](SOP_MODERN_DB_ARTICLE.md) - Why "Database-as-a-Library" is the future of cloud-native storage.
+
 See the entire list & details here: https://github.com/sharedcode/sop/blob/master/README2.md#high-level-features-articles-about-sop
 
 ## The Database Abstraction
