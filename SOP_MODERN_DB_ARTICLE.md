@@ -15,7 +15,7 @@ At its heart, data management should be intuitive. Whether you are a developer d
 The new **SOP Data Manager** (web UI) is designed not as a cold administrative tool, but with the polish and responsiveness of a **custom modern website**.
 
 *   **Visual & Rapid**: It offers a rich, grid-based visualization of your B-Trees. You can scroll, paginate, and resize columns with the fluidity of a desktop app.
-*   **Bulk Management**: Need to fix a typo across 50 records? Or visualize a complex JSON object structure? The UI handles bulk data visualization and management effortlessly.
+*   **Bulk Management**: Need to fix a typo across 50 records? Or visualize a complex JSON object structure? The UI handles bulk data visualization and management effortlessly. Allows management of multi-databases all at once.
 *   **Zero Friction**: For personal use, it runs in "Standalone" mode. You fire it up, point it at a folder, and you have an instant, ACID-compliant database manager running locally. No background services, no heavy installation.
 
 ## The "Enterprisey" Power: The Swarm
@@ -33,14 +33,14 @@ With SOP, **there is no migration**. You simply change the topology.
 The true innovation of SOP lies in its architecture. It rejects the "Central Server" monolith in favor of a **Library-as-a-Database** model.
 
 1.  **Flat**: There is no hierarchy. The Data Manager UI is just another peer in the network. It doesn't "command" the database; it participates in it.
-2.  **Modular**: You pick the backend that fits. Filesystem for speed? Cassandra for hybrid cloud storage? In-memory for testing? SOP abstracts it all.
+2.  **Modular**: You pick the backend that fits. Filesystem for speed? Cassandra for hybrid cloud storage? In-memory for Standalone/Embedded apps or for testing? SOP abstracts it all.
 3.  **Serverless Form**: The database lives where your code lives. This reduces latency, simplifies deployment, and eliminates the single point of failure that plagues traditional RDBMS architectures.
 
 ## A New Standard for Data Management
 
 SOP is more than just a B-Tree library; it is a comprehensive data platform. By combining the raw performance of Go, the flexibility of a serverless architecture, and now the rich, visual management of the Data Suite, we are offering a solution that truly spans the gap.
 
-It is **Personalisey** enough to be your daily driver for local data.
+It is **Personalisey** enough to be your daily driver for standalone/embedded data.
 It is **Enterprisey** enough to be the backbone of your distributed cloud infrastructure.
 
 Welcome to the future of flat, modular data management.
