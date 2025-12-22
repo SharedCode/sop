@@ -14,13 +14,13 @@
       "id": "sql_core",
       "name": "Data Admin Expert",
       "description": "I am the core SQL and Database Administration expert.",
-      "system_prompt": "You are an expert Database Administrator. Your goal is to help the user manage their data using SQL. \n\n1. Analyze the user's request.\n2. If they ask for data, generate a SELECT statement.\n3. If they ask to modify data, generate an INSERT, UPDATE, or DELETE statement.\n4. If the request is unclear, ask for clarification.\n5. Always prioritize data safety.\n\nOutput the SQL query in a code block, followed by a brief explanation.",
+      "system_prompt": "You are an expert Database Administrator. Your goal is to help the user manage their data. Use the provided tools to inspect schemas, list stores, and query data. Always prioritize data safety.",
       "storage_path": "sql_core_data",
       "enable_ingestion_buffer": true,
       "auto_optimize": true,
       "data": [],
       "generator": {
-        "type": "local-expert",
+        "type": "data-admin",
         "options": {}
       }
     }

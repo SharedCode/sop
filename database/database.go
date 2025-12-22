@@ -124,12 +124,11 @@ func Setup(ctx context.Context, opts sop.DatabaseOptions) (DatabaseOptions, erro
 func GetOptions(ctx context.Context, folderPath string) (sop.DatabaseOptions, error) {
 	fileName := filepath.Join(folderPath, databaseOptionsFilename)
 
-
 	fio := fs.NewFileIO()
 
 	// If already loaded in memory, & file exists, just return that copy.
 	dbOpts := getOptionFromLookup(fileName)
-	if dbOpts != nil && !dbOpts.IsEmpty() && fio.Exists(ctx, fileName){
+	if dbOpts != nil && !dbOpts.IsEmpty() && fio.Exists(ctx, fileName) {
 		return *dbOpts, nil
 	}
 

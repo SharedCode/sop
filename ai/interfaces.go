@@ -8,6 +8,16 @@ import (
 	"github.com/sharedcode/sop/search"
 )
 
+// ContextKey is a type for context keys used in the AI package.
+type ContextKey string
+
+const (
+	// CtxKeyProvider is the context key for overriding the AI provider.
+	CtxKeyProvider ContextKey = "ai_provider"
+	// CtxKeyExecutor is the context key for passing the ToolExecutor.
+	CtxKeyExecutor ContextKey = "ai_executor"
+)
+
 // Embeddings defines the interface for generating vector embeddings from text.
 type Embeddings interface {
 	// Name returns the name of the embedding model.

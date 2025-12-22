@@ -14,15 +14,6 @@ import (
 	"github.com/sharedcode/sop/search"
 )
 
-type contextKey string
-
-const (
-	// CtxKeyProvider is the context key for overriding the AI provider (generator).
-	CtxKeyProvider contextKey = "ai_provider"
-	// CtxKeyExecutor is the context key for passing the ToolExecutor.
-	CtxKeyExecutor contextKey = "ai_executor"
-)
-
 // Service is a generic agent service that operates on any Domain.
 type Service struct {
 	domain    ai.Domain[map[string]any]
@@ -218,7 +209,7 @@ func (s *Service) Ask(ctx context.Context, query string) (string, error) {
 	gen := s.generator
 
 	// Check for override in context
-	if provider, ok := ctx.Value(CtxKeyProvider).(string); ok && provider != "" {
+	if provider, ok := ctx.Value(ai.CtxKeyProvider).(string); ok && provider != "" {
 		// Only override if the requested provider is different from the current one
 		// (We assume s.generator.Name() matches the provider string, e.g. "gemini", "ollama")
 		if gen == nil || gen.Name() != provider {
@@ -251,7 +242,7 @@ func (s *Service) Ask(ctx context.Context, query string) (string, error) {
 
 	// 5. Check for Tool Execution (Agent -> App)
 	// If the generator returns a JSON tool call, and we have an executor, run it.
-	if executor, ok := ctx.Value(CtxKeyExecutor).(ai.ToolExecutor); ok && executor != nil {
+	if executor, ok := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor); ok && executor != nil {
 		// Simple heuristic: If output looks like a JSON tool call
 		text := strings.TrimSpace(output.Text)
 		if strings.HasPrefix(text, "{") && strings.Contains(text, "\"tool\"") {
