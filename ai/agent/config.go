@@ -23,6 +23,7 @@ type Config struct {
 	SkipDeduplication     bool              `json:"skip_deduplication,omitempty"`      // Optional: Skip deduplication phase
 	EnableIngestionBuffer bool              `json:"enable_ingestion_buffer,omitempty"` // Optional: Enable Stage 0 buffering for faster ingestion
 	AutoOptimize          bool              `json:"auto_optimize,omitempty"`           // Optional: Automatically run Optimize() after ingestion
+	EnableObfuscation     bool              `json:"enable_obfuscation,omitempty"`      // Optional: Enable metadata obfuscation
 	Agents                []Config          `json:"agents,omitempty"`                  // Optional: Define agents locally to be referenced by ID
 	Pipeline              []PipelineStep    `json:"pipeline,omitempty"`                // Optional: Define a chain of agents
 }

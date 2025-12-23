@@ -7,7 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
-	"log"
+	log "log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -59,6 +59,12 @@ var loadedAgents = make(map[string]ai.Agent[map[string]any])
 var Version = "dev"
 
 func main() {
+
+	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
+		Level: log.LevelInfo,
+	}))
+	log.SetDefault(l) // configures log package to print with LevelInfo
+
 	var showVersion bool
 	flag.BoolVar(&showVersion, "version", false, "Show version and exit")
 	flag.IntVar(&config.Port, "port", 8080, "Port to run the server on")
@@ -77,7 +83,7 @@ func main() {
 	// Load config from file if provided
 	if config.ConfigFile != "" {
 		if err := loadConfig(config.ConfigFile); err != nil {
-			log.Fatalf("Failed to load config file: %v", err)
+			log.Error(fmt.Sprintf("Failed to load config file: %v", err))
 		}
 	}
 
@@ -100,7 +106,7 @@ func main() {
 		}
 		// Ensure database path exists (basic check)
 		if _, err := os.Stat(config.Databases[i].Path); os.IsNotExist(err) {
-			log.Printf("Warning: Database path '%s' for '%s' does not exist.", config.Databases[i].Path, config.Databases[i].Name)
+			log.Warn(fmt.Sprintf("Warning: Database path '%s' for '%s' does not exist.", config.Databases[i].Path, config.Databases[i].Name))
 		}
 
 		// // Detect Root for this database
@@ -129,13 +135,13 @@ func main() {
 
 	// Start Server
 	addr := fmt.Sprintf(":%d", config.Port)
-	log.Printf("SOP Data Manager v%s running at http://localhost%s", Version, addr)
+	log.Info(fmt.Sprintf("SOP Data Manager v%s running at http://localhost%s", Version, addr))
 	for _, db := range config.Databases {
-		log.Printf("Database '%s': %s (%s)", db.Name, db.Path, db.Mode)
+		log.Debug(fmt.Sprintf("Database '%s': %s (%s)", db.Name, db.Path, db.Mode))
 	}
 
 	if err := http.ListenAndServe(addr, nil); err != nil {
-		log.Fatal(err)
+		log.Error(err.Error())
 	}
 }
 
@@ -474,13 +480,8 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	// Open the B-Tree using 'any' for Key and Value to support generic browsing.
 	store, err := database.OpenBtree[any, any](ctx, dbOpts, storeName, trans, comparer)
 	if err != nil {
-		// If opening fails, it might be because the store was created with a specific path structure
-		// that the generic OpenBtree doesn't know about if it's not in the registry correctly.
-		// However, for Standalone mode, OpenBtree relies on the registry.
-		// The error "no such file or directory" suggests it's trying to open a file that doesn't exist.
-		// This can happen if the store name in the registry points to a path that is relative
-		// and the browser is running from a different CWD than the creator.
-		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v. Ensure you are running sop-browser from the correct directory relative to the data.", storeName, err), http.StatusInternalServerError)
+		log.Error(fmt.Sprintf("Failed to open store '%s': %v.", storeName, err))
+		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v.", storeName, err), http.StatusInternalServerError)
 		return
 	}
 
@@ -492,7 +493,7 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 			if err := encoding.DefaultMarshaler.Unmarshal([]byte(si.MapKeyIndexSpecification), &is); err == nil {
 				indexSpec = &is
 			} else {
-				log.Printf("Error unmarshaling index spec: %v", err)
+				log.Warn(fmt.Sprintf("Error unmarshaling index spec: %v", err))
 			}
 		}
 	}
@@ -681,7 +682,7 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 		kItem := store.GetCurrentKey()
 		v, err := store.GetCurrentValue(ctx)
 		if err != nil {
-			log.Printf("Error reading value for key %v: %v", kItem.Key, err)
+			log.Error(fmt.Sprintf("Error reading value for key %v: %v", kItem.Key, err))
 			// Continue to next item even if value fetch fails? Or break?
 			// Let's try to continue.
 		}
@@ -696,7 +697,7 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		log.Printf("Error during iteration: %v", err)
+		log.Error(fmt.Sprintf("Error during iteration: %v", err))
 	}
 
 	json.NewEncoder(w).Encode(items)

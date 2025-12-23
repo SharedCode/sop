@@ -8,14 +8,16 @@ import (
 	"strings"
 
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/obfuscation"
 )
 
 // DataAdmin is a hybrid generator that acts as a specialized Data Administrator agent.
 // It wraps an underlying LLM (Gemini, Ollama, etc.) and manages the ReAct loop
 // for tool execution, effectively making it an autonomous agent within a Generator interface.
 type DataAdmin struct {
-	name  string
-	brain ai.Generator
+	name              string
+	brain             ai.Generator
+	enableObfuscation bool
 }
 
 func init() {
@@ -81,9 +83,12 @@ func init() {
 			return nil, fmt.Errorf("failed to initialize DataAdmin brain: %w", err)
 		}
 
+		enableObfuscation, _ := cfg["enable_obfuscation"].(bool)
+
 		return &DataAdmin{
-			name:  "data-admin",
-			brain: gen,
+			name:              "data-admin",
+			brain:             gen,
+			enableObfuscation: enableObfuscation,
 		}, nil
 	})
 }
@@ -126,6 +131,11 @@ IMPORTANT:
 	// We prepend the tools definition to the prompt.
 	fullPrompt := toolsDef + "\n" + prompt
 
+	// Obfuscate Prompt if enabled
+	if g.enableObfuscation {
+		fullPrompt = obfuscation.GlobalObfuscator.ObfuscateText(fullPrompt)
+	}
+
 	// 2. ReAct Loop
 	maxTurns := 5
 	history := fullPrompt
@@ -166,6 +176,21 @@ IMPORTANT:
 					return resp, nil
 				}
 
+				// De-obfuscate Args if enabled
+				if g.enableObfuscation {
+					for k, v := range toolCall.Args {
+						if s, ok := v.(string); ok {
+							// Clean artifacts
+							s = strings.Trim(s, "*_`")
+							s = strings.ReplaceAll(s, "\u00a0", " ")
+							s = strings.TrimSpace(s)
+							// De-obfuscate
+							s = obfuscation.GlobalObfuscator.Deobfuscate(s)
+							toolCall.Args[k] = s
+						}
+					}
+				}
+
 				// Execute
 				result, err := executor.Execute(ctx, toolCall.Tool, toolCall.Args)
 				if err != nil {
@@ -182,6 +207,10 @@ IMPORTANT:
 		}
 
 		// If not a tool call, or we're done, return the response
+		// De-obfuscate Output Text if enabled
+		if g.enableObfuscation {
+			resp.Text = obfuscation.GlobalObfuscator.DeobfuscateText(resp.Text)
+		}
 		return resp, nil
 	}
 

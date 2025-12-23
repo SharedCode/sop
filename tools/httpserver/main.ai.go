@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	log "log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,6 +15,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent"
 	_ "github.com/sharedcode/sop/ai/generator"
+	"github.com/sharedcode/sop/ai/obfuscation"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/database"
@@ -78,6 +79,22 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Trim inputs to avoid mismatch issues
+	req.Database = strings.TrimSpace(req.Database)
+	req.StoreName = strings.TrimSpace(req.StoreName)
+
+	// Validate Database if provided
+	if req.Database != "" {
+		if _, err := getDBOptions(req.Database); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(map[string]string{
+				"error": fmt.Sprintf("Invalid database '%s': %v", req.Database, err),
+			})
+			return
+		}
+	}
+
 	// Default to the RAG Agent "sql_admin" if not specified
 	if req.Agent == "" {
 		req.Agent = "sql_admin"
@@ -103,6 +120,14 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	}
 	// Pass ToolExecutor via context
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &DefaultToolExecutor{})
+
+	// Register resources so the agent knows them for obfuscation
+	if req.Database != "" {
+		obfuscation.GlobalObfuscator.RegisterResource(req.Database, "DB")
+	}
+	if req.StoreName != "" {
+		obfuscation.GlobalObfuscator.RegisterResource(req.StoreName, "STORE")
+	}
 
 	// Prepend context information to the message
 	fullMessage := req.Message
@@ -144,12 +169,16 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal([]byte(cleanText), &toolCall); err == nil && toolCall.Tool != "" {
 		// If we get a raw tool call here, it means the Agent didn't execute it.
 		// We can execute it once and return the result.
-		log.Printf("Agent returned raw tool call: %s", toolCall.Tool)
+		log.Debug(fmt.Sprintf("Agent returned raw tool call: %s", toolCall.Tool))
 
 		// Inject default database if missing
 		if db, ok := toolCall.Args["database"].(string); !ok || db == "" {
 			toolCall.Args["database"] = req.Database
 		}
+
+		// Log the final database name being used for debugging
+		finalDB, _ := toolCall.Args["database"].(string)
+		log.Debug(fmt.Sprintf("Executing tool '%s' on database: '%s' (bytes: %v)", toolCall.Tool, finalDB, []byte(finalDB)))
 
 		result, err := executeTool(ctx, toolCall.Tool, toolCall.Args)
 		if err != nil {
@@ -174,6 +203,8 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 func executeTool(ctx context.Context, toolName string, args map[string]any) (string, error) {
 	dbName, _ := args["database"].(string)
+	dbName = strings.TrimSpace(dbName)
+
 	if dbName == "" {
 		return "", fmt.Errorf("database name is required")
 	}
@@ -457,13 +488,13 @@ func loadAgent(key, configPath string) {
 	}
 
 	if foundPath == "" {
-		log.Printf("Agent config not found at %s (searched parents), skipping.", configPath)
+		log.Debug(fmt.Sprintf("Agent config not found at %s (searched parents), skipping.", configPath))
 		return
 	}
 
 	cfg, err := agent.LoadConfigFromFile(foundPath)
 	if err != nil {
-		log.Printf("Failed to load agent config %s: %v", foundPath, err)
+		log.Debug(fmt.Sprintf("Failed to load agent config %s: %v", foundPath, err))
 		return
 	}
 
@@ -478,7 +509,7 @@ func loadAgent(key, configPath string) {
 		}
 	}
 
-	log.Printf("Initializing AI Agent: %s (%s)...", cfg.Name, cfg.ID)
+	log.Debug(fmt.Sprintf("Initializing AI Agent: %s (%s)...", cfg.Name, cfg.ID))
 
 	registry := make(map[string]ai.Agent[map[string]any])
 
@@ -525,16 +556,16 @@ func loadAgent(key, configPath string) {
 
 			provider := os.Getenv("AI_PROVIDER")
 			if provider != "" {
-				log.Printf("Overriding generator for agent %s to %s", localAgentCfg.ID, provider)
+				log.Debug(fmt.Sprintf("Overriding generator for agent %s to %s", localAgentCfg.ID, provider))
 				localAgentCfg.Generator.Type = provider
 				localAgentCfg.Generator.Options = make(map[string]any) // Clear options to rely on env vars
 			}
 		}
 
-		log.Printf("Initializing local agent: %s...", localAgentCfg.ID)
+		log.Debug(fmt.Sprintf("Initializing local agent: %s...", localAgentCfg.ID))
 		svc, err := initAgent(localAgentCfg)
 		if err != nil {
-			log.Printf("Failed to initialize local agent %s: %v", localAgentCfg.ID, err)
+			log.Debug(fmt.Sprintf("Failed to initialize local agent %s: %v", localAgentCfg.ID, err))
 			continue
 		}
 		registry[localAgentCfg.ID] = svc
@@ -545,10 +576,10 @@ func loadAgent(key, configPath string) {
 		AgentRegistry: registry,
 	})
 	if err != nil {
-		log.Printf("Failed to initialize main agent %s: %v", key, err)
+		log.Debug(fmt.Sprintf("Failed to initialize main agent %s: %v", key, err))
 		return
 	}
 
 	loadedAgents[key] = mainAgent
-	log.Printf("Agent '%s' initialized successfully.", key)
+	log.Debug(fmt.Sprintf("Agent '%s' initialized successfully.", key))
 }

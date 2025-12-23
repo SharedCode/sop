@@ -16,7 +16,14 @@ const (
 	CtxKeyProvider ContextKey = "ai_provider"
 	// CtxKeyExecutor is the context key for passing the ToolExecutor.
 	CtxKeyExecutor ContextKey = "ai_executor"
+	// CtxKeyDeobfuscator is the context key for passing the Deobfuscator.
+	CtxKeyDeobfuscator ContextKey = "ai_deobfuscator"
 )
+
+// Deobfuscator defines the interface for de-obfuscating text.
+type Deobfuscator interface {
+	Deobfuscate(text string) string
+}
 
 // Embeddings defines the interface for generating vector embeddings from text.
 type Embeddings interface {

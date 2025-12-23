@@ -2,6 +2,7 @@
   "id": "sql_admin_pipeline",
   "name": "SQL Admin Expert",
   "description": "I am a single-pass SQL and Database Administrator assistant.",
+  "enable_obfuscation": false,
   "policies": [
     {
       "id": "profanity_filter",
@@ -18,6 +19,7 @@
       "storage_path": "sql_core_data",
       "enable_ingestion_buffer": true,
       "auto_optimize": true,
+      "enable_obfuscation": true,
       "data": [],
       "generator": {
         "type": "data-admin",

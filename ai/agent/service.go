@@ -3,6 +3,7 @@ package agent
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -11,24 +12,27 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/generator"
+	"github.com/sharedcode/sop/ai/obfuscation"
 	"github.com/sharedcode/sop/search"
 )
 
 // Service is a generic agent service that operates on any Domain.
 type Service struct {
-	domain    ai.Domain[map[string]any]
-	generator ai.Generator // The LLM (Gemini, etc.)
-	pipeline  []PipelineStep
-	registry  map[string]ai.Agent[map[string]any]
+	domain            ai.Domain[map[string]any]
+	generator         ai.Generator // The LLM (Gemini, etc.)
+	pipeline          []PipelineStep
+	registry          map[string]ai.Agent[map[string]any]
+	EnableObfuscation bool
 }
 
 // NewService creates a new agent service for a specific domain.
-func NewService(domain ai.Domain[map[string]any], generator ai.Generator, pipeline []PipelineStep, registry map[string]ai.Agent[map[string]any]) *Service {
+func NewService(domain ai.Domain[map[string]any], generator ai.Generator, pipeline []PipelineStep, registry map[string]ai.Agent[map[string]any], enableObfuscation bool) *Service {
 	return &Service{
-		domain:    domain,
-		generator: generator,
-		pipeline:  pipeline,
-		registry:  registry,
+		domain:            domain,
+		generator:         generator,
+		pipeline:          pipeline,
+		registry:          registry,
+		EnableObfuscation: enableObfuscation,
 	}
 }
 
@@ -98,7 +102,7 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 	// Text Search
 	textIdx, err := s.domain.TextIndex(ctx, tx)
 	var textHits []search.TextSearchResult
-	if err == nil {
+	if err == nil && textIdx != nil {
 		textHits, err = textIdx.Search(ctx, query)
 		if err != nil {
 			// Log error but continue with vector results?
@@ -188,6 +192,18 @@ func (s *Service) RunPipeline(ctx context.Context, input string) (string, error)
 
 // Ask performs a RAG (Retrieval-Augmented Generation) request.
 func (s *Service) Ask(ctx context.Context, query string) (string, error) {
+	// Obfuscate Input
+	// We ONLY obfuscate known resource names (Database, Store) that have been registered.
+	// We do NOT obfuscate the entire text blindly, but ObfuscateText only replaces known keys.
+	// If the user says "select from Python Complex DB", and "Python Complex DB" is registered,
+	// it becomes "select from DB_123". This is correct.
+	// The LLM sees "select from DB_123".
+
+	// Obfuscate Query if enabled
+	if s.EnableObfuscation {
+		query = obfuscation.GlobalObfuscator.ObfuscateText(query)
+	}
+
 	// 0. Pipeline Execution (if configured)
 	if len(s.pipeline) > 0 {
 		return s.RunPipeline(ctx, query)
@@ -203,7 +219,15 @@ func (s *Service) Ask(ctx context.Context, query string) (string, error) {
 	contextText := s.formatContext(hits)
 	systemPrompt, _ := s.domain.Prompt(ctx, "system")
 
+	// If obfuscation is enabled, we should obfuscate the context too.
+	// This ensures that if the vector store returns real names, they are hidden from the LLM.
+	if s.EnableObfuscation {
+		contextText = obfuscation.GlobalObfuscator.ObfuscateText(contextText)
+	}
+
 	fullPrompt := fmt.Sprintf("%s\n\nContext:\n%s\n\nUser Query: %s", systemPrompt, contextText, query)
+	if s.EnableObfuscation {
+	}
 
 	// 3. Determine Generator
 	gen := s.generator
@@ -229,6 +253,9 @@ func (s *Service) Ask(ctx context.Context, query string) (string, error) {
 	if gen == nil {
 		// Fallback: If no generator is configured, return the retrieved context directly.
 		// This allows agents to act as "Search Services" or "Translators" without an LLM.
+		if s.EnableObfuscation {
+			return obfuscation.GlobalObfuscator.DeobfuscateText(contextText), nil
+		}
 		return contextText, nil
 	}
 
@@ -239,32 +266,64 @@ func (s *Service) Ask(ctx context.Context, query string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("generation failed: %w", err)
 	}
+	if s.EnableObfuscation {
+	}
 
 	// 5. Check for Tool Execution (Agent -> App)
 	// If the generator returns a JSON tool call, and we have an executor, run it.
 	if executor, ok := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor); ok && executor != nil {
 		// Simple heuristic: If output looks like a JSON tool call
 		text := strings.TrimSpace(output.Text)
+		// Remove markdown code blocks if present
+		text = strings.TrimPrefix(text, "```json")
+		text = strings.TrimPrefix(text, "```")
+		text = strings.TrimSuffix(text, "```")
+		text = strings.TrimSpace(text)
+
 		if strings.HasPrefix(text, "{") && strings.Contains(text, "\"tool\"") {
-			// We return the raw JSON so the caller (httpserver) can parse and execute it.
-			// OR, we can execute it here if we want the Agent to be autonomous.
-			// Given the architecture, the httpserver is the one calling Ask(), so it expects a string response.
-			// If we execute it here, we can return the RESULT of the execution.
+			// De-obfuscate Tool Arguments
+			// We need to parse, de-obfuscate, and re-serialize (or just return the de-obfuscated JSON)
+			// Since we return text, we should return the de-obfuscated JSON so the caller can execute it.
 
-			// Let's try to execute it here to make the agent truly autonomous.
-			// But we need to parse the JSON.
-			// Since we don't want to add heavy JSON parsing logic here if not needed,
-			// let's just return the text. The httpserver's loop (ReAct) handles the execution.
-			// Wait, the user wants the "Local Agent" to execute actions if trivial.
-			// If "Local Expert" returns a tool call, we should probably execute it if we can.
+			// 1. Parse JSON FIRST to get the exact values the LLM returned
+			var toolCall struct {
+				Tool string         `json:"tool"`
+				Args map[string]any `json:"args"`
+			}
 
-			// However, the current httpserver implementation ALREADY has a ReAct loop that handles tool calls.
-			// So if we just return the JSON string, the httpserver will see it, parse it, and execute it.
-			// That seems consistent.
-			return output.Text, nil
+			// We try to unmarshal the text directly.
+			// If the LLM returned valid JSON (even with obfuscated values), this will succeed.
+			if err := json.Unmarshal([]byte(text), &toolCall); err == nil {
+				// 2. Sanitize Args
+				for k, v := range toolCall.Args {
+					if val, ok := v.(string); ok {
+						// a. Remove Markdown bold/italics/code wrappers from the value itself
+						// LLM might return: "database": "**DB_123**" or "`DB_123`"
+						val = strings.Trim(val, "*_`")
+
+						// b. Replace NBSP with space and Trim whitespace
+						val = strings.ReplaceAll(val, "\u00a0", " ")
+						val = strings.TrimSpace(val)
+
+						toolCall.Args[k] = val
+					}
+				}
+				// Re-serialize
+				if b, err := json.Marshal(toolCall); err == nil {
+					cleanJSON := string(b)
+					return cleanJSON, nil
+				}
+			}
+
+			// Fallback: If JSON parsing failed (maybe invalid JSON), return as is
+			return text, nil
 		}
 	}
 
+	// De-obfuscate Output Text
+	if s.EnableObfuscation {
+		return obfuscation.GlobalObfuscator.DeobfuscateText(output.Text), nil
+	}
 	return output.Text, nil
 }
 

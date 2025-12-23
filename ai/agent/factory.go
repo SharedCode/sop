@@ -125,6 +125,13 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (*Service
 	var gen ai.Generator
 	if cfg.Generator.Type != "" {
 		var err error
+		// Pass global obfuscation setting to generator options
+		if cfg.EnableObfuscation {
+			if cfg.Generator.Options == nil {
+				cfg.Generator.Options = make(map[string]any)
+			}
+			cfg.Generator.Options["enable_obfuscation"] = true
+		}
 		gen, err = generator.New(cfg.Generator.Type, cfg.Generator.Options)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize generator: %w", err)
@@ -135,8 +142,19 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (*Service
 	var pol ai.PolicyEngine
 	var class ai.Classifier
 
-	// Create a local registry for policy agents
+	// Create a local registry for policy agents and sub-agents
 	policyRegistry := make(map[string]ai.Agent[map[string]any])
+
+	// Initialize Sub-Agents defined in Config
+	for _, subCfg := range cfg.Agents {
+		// Recursively create sub-agent
+		// We pass the current dependencies, but we might need to handle circular deps if any
+		subAgent, err := NewFromConfig(ctx, subCfg, deps)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize sub-agent '%s': %w", subCfg.ID, err)
+		}
+		policyRegistry[subCfg.ID] = subAgent
+	}
 
 	for _, pCfg := range cfg.Policies {
 		if pCfg.Type == "profanity" {
@@ -247,6 +265,13 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (*Service
 	}
 
 	// 4. Create Agent Service
-	svc := NewService(dom, gen, cfg.Pipeline, fullRegistry)
+	// If the generator is "data-admin" and obfuscation is enabled, the generator handles it internally.
+	// Therefore, we disable Service-level obfuscation to avoid double-obfuscation.
+	serviceObfuscation := cfg.EnableObfuscation
+	if cfg.Generator.Type == "data-admin" && cfg.EnableObfuscation {
+		serviceObfuscation = false
+	}
+
+	svc := NewService(dom, gen, cfg.Pipeline, fullRegistry, serviceObfuscation)
 	return svc, nil
 }
