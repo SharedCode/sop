@@ -101,6 +101,9 @@ func TestMacroExecution_SelectTwice(t *testing.T) {
 		brain:             mockGen,
 		enableObfuscation: false,
 	}
+	// Ensure registry is initialized and tools are registered
+	adminAgent.registry = NewRegistry()
+	adminAgent.registerTools()
 
 	registry := map[string]ai.Agent[map[string]any]{
 		"sql_admin": adminAgent,
@@ -392,7 +395,9 @@ func TestMacroRecording_SelectTwice(t *testing.T) {
 		Config:            agentCfg,
 		brain:             mockGen,
 		enableObfuscation: false,
+		registry:          NewRegistry(),
 	}
+	adminAgent.registerTools()
 
 	registry := map[string]ai.Agent[map[string]any]{
 		"sql_admin": adminAgent,
@@ -668,4 +673,3 @@ func TestMacroNestedAndUpdates(t *testing.T) {
 		t.Errorf("Step was not added correctly. Output: %s", resp)
 	}
 }
-

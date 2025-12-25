@@ -888,14 +888,6 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		})
 	}
 
-	// Always capture text response as last step if not a tool call
-	if !toolRecorded {
-		s.lastStep = &ai.MacroStep{
-			Type:    "say",
-			Message: finalText,
-		}
-	}
-
 	return finalText, nil
 }
 
@@ -941,7 +933,7 @@ func (s *Service) executeMacro(ctx context.Context, steps []ai.MacroStep, scope 
 
 		// Refresh DB from payload to ensure we use the current active database
 		// This handles cases where a previous step (e.g. a tool) switched the database.
-		if p := ai.GetSessionPayload(groupCtx); p != nil{
+		if p := ai.GetSessionPayload(groupCtx); p != nil {
 			d := p.GetDatabase()
 			if d != nil {
 				db = d.(*database.Database)

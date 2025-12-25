@@ -60,16 +60,25 @@ func (d *GenericDomain[T]) Embedder() ai.Embeddings {
 
 // Index returns the vector index used for retrieval.
 func (d *GenericDomain[T]) Index(ctx context.Context, tx sop.Transaction) (ai.VectorStore[T], error) {
+	if d.cfg.DB == nil {
+		return nil, fmt.Errorf("domain %s has no database configured", d.cfg.ID)
+	}
 	return vector.Open[T](ctx, tx, d.cfg.StoreName, d.cfg.StoreCfg)
 }
 
 // TextIndex returns the text index used for keyword search.
 func (d *GenericDomain[T]) TextIndex(ctx context.Context, tx sop.Transaction) (ai.TextIndex, error) {
+	if d.cfg.DB == nil {
+		return nil, fmt.Errorf("domain %s has no database configured", d.cfg.ID)
+	}
 	return search.NewIndex(ctx, tx, d.cfg.StoreName)
 }
 
 // BeginTransaction starts a new transaction for the domain's underlying storage.
 func (d *GenericDomain[T]) BeginTransaction(ctx context.Context, mode sop.TransactionMode) (sop.Transaction, error) {
+	if d.cfg.DB == nil {
+		return nil, fmt.Errorf("domain %s has no database configured", d.cfg.ID)
+	}
 	return sopdb.BeginTransaction(ctx, d.cfg.DB.Config(), mode)
 }
 

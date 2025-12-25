@@ -91,6 +91,18 @@ func PrepareData(ctx context.Context, url, out string, limit int) error {
 
 	fmt.Printf("Processed %d records.\n", count)
 
+	// Add manual entries for missing diseases
+	items = append(items, agent.DataItem{
+		ID:          "common_cold_001",
+		Text:        "Common Cold",
+		Description: "Symptoms: cough, runny nose, sneezing, sore throat, congestion, mild fever, body aches",
+	})
+	items = append(items, agent.DataItem{
+		ID:          "influenza_001",
+		Text:        "Influenza",
+		Description: "Symptoms: high fever, chills, muscle aches, cough, congestion, runny nose, headaches, fatigue",
+	})
+
 	// Write to JSON
 	f, err := os.Create(out)
 	if err != nil {

@@ -11,6 +11,9 @@ type Config struct {
 	Type                  string            `json:"type,omitempty"` // "standard" (default), "data-admin", "policy", etc.
 	Name                  string            `json:"name"`
 	Description           string            `json:"description"`
+	UserPrompt            string            `json:"user_prompt,omitempty"`    // Optional: Custom prompt for the interactive loop (e.g. "Patient> ")
+	AssistantName         string            `json:"assistant_name,omitempty"` // Optional: Custom name for the assistant (e.g. "AI Doctor")
+	Requirements          *Requirements     `json:"requirements,omitempty"`   // Optional: Explicitly state required components
 	Synonyms              map[string]string `json:"synonyms"`
 	SystemPrompt          string            `json:"system_prompt"`
 	Policies              []PolicyConfig    `json:"policies"`
@@ -29,6 +32,12 @@ type Config struct {
 	Agents            []Config       `json:"agents,omitempty"`             // Optional: Define agents locally to be referenced by ID
 	Pipeline          []PipelineStep `json:"pipeline,omitempty"`           // Optional: Define a chain of agents
 	Params            map[string]any `json:"params,omitempty"`             // Type-specific configuration parameters
+}
+
+type Requirements struct {
+	VectorStore bool `json:"vector_store"`
+	Search      bool `json:"search"`
+	ModelStore  bool `json:"model_store"`
 }
 
 type PipelineStep struct {

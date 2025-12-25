@@ -168,11 +168,15 @@ func main() {
 	}
 
 	// 3. Interactive Loop
-	fmt.Printf("\nAI Assistant:\n")
+	assistantName := cfg.AssistantName
+	if assistantName == "" {
+		assistantName = "AI Assistant"
+	}
+	fmt.Printf("\n%s:\n", assistantName)
 	fmt.Println(cfg.Description)
 	fmt.Println("Type 'exit' to quit.")
 
-	if err := agent.RunLoop(context.Background(), svc, os.Stdin, os.Stdout); err != nil {
+	if err := agent.RunLoop(context.Background(), svc, os.Stdin, os.Stdout, cfg.UserPrompt, cfg.AssistantName); err != nil {
 		fmt.Printf("Error during session: %v\n", err)
 	}
 }
