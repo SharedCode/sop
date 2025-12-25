@@ -93,6 +93,76 @@ If database(s) are configured in **standalone mode**, ensure that the http serve
 
 If **clustered**, no worries, as SOP takes care of Redis-based coordination with other apps and/or SOP HTTP Servers managing databases using SOP in clustered mode.
 
+## AI Assistant & Macros
+
+The SOP Data Manager includes a built-in **AI Assistant** that allows you to interact with your data using natural language and automate workflows using **Macros**.
+
+### 1. Launch the Assistant
+Start the server:
+```bash
+sop-httpserver
+```
+Open your browser to `http://localhost:8080` and click the **AI Assistant** floating widget.
+
+### 2. Natural Language Commands
+You can ask the assistant to perform tasks or query data:
+*   "Show me the schema for the 'users' store."
+*   "Find all records where age is greater than 30."
+*   "Explain the structure of the 'orders' B-Tree."
+
+### 3. Macros: Record & Replay
+Macros allow you to record a sequence of actions and replay them later. This is a "Natural Language Programming" system where the LLM compiles your intent into a high-performance script.
+
+**Step 1: Record**
+Type `/record my_workflow` in the chat.
+```
+/record daily_check
+```
+
+**Step 2: Perform Actions**
+Interact with the AI naturally.
+```
+Check the 'logs' store for errors.
+Count the number of active users.
+```
+
+**Step 3: Stop**
+Save the macro.
+```
+/stop
+```
+
+**Step 4: Replay**
+Execute the macro instantly. The system runs the compiled steps without invoking the LLM again.
+```
+/play daily_check
+```
+
+### 4. Passing Parameters
+You can make macros dynamic by using parameters.
+*   **Record**: When recording, use specific values (e.g., "user_123").
+*   **Edit**: You can edit the macro JSON to use templates like `{{.user_id}}`.
+*   **Play**: Pass values at runtime.
+    ```
+    /play user_audit user_id=456
+    ```
+
+### 5. Remote Execution
+You can trigger these macros from your Python code via the REST API:
+
+```python
+import requests
+
+response = requests.post(
+    "http://localhost:8080/api/ai/chat",
+    json={
+        "message": "/play user_audit user_id=999",
+        "agent": "sql_admin"
+    }
+)
+print(response.json())
+```
+
 ## Generating Sample Data
 
 To see the Data Management Suite in action, you can generate a sample database with complex keys using the included example script:

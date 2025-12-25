@@ -8,6 +8,7 @@ import (
 // Config defines the structure of the JSON configuration file for an agent.
 type Config struct {
 	ID                    string            `json:"id"`
+	Type                  string            `json:"type,omitempty"` // "standard" (default), "data-admin", "policy", etc.
 	Name                  string            `json:"name"`
 	Description           string            `json:"description"`
 	Synonyms              map[string]string `json:"synonyms"`
@@ -22,10 +23,12 @@ type Config struct {
 	ContentSize           string            `json:"content_size,omitempty"`            // Optional: "small", "medium", "big". Defaults to "medium".
 	SkipDeduplication     bool              `json:"skip_deduplication,omitempty"`      // Optional: Skip deduplication phase
 	EnableIngestionBuffer bool              `json:"enable_ingestion_buffer,omitempty"` // Optional: Enable Stage 0 buffering for faster ingestion
-	AutoOptimize          bool              `json:"auto_optimize,omitempty"`           // Optional: Automatically run Optimize() after ingestion
-	EnableObfuscation     bool              `json:"enable_obfuscation,omitempty"`      // Optional: Enable metadata obfuscation
-	Agents                []Config          `json:"agents,omitempty"`                  // Optional: Define agents locally to be referenced by ID
-	Pipeline              []PipelineStep    `json:"pipeline,omitempty"`                // Optional: Define a chain of agents
+	// AutoOptimize is deprecated. Use Params["auto_optimize"] instead.
+	AutoOptimize      bool           `json:"auto_optimize,omitempty"`      // Optional: Automatically run Optimize() after ingestion
+	EnableObfuscation bool           `json:"enable_obfuscation,omitempty"` // Optional: Enable metadata obfuscation
+	Agents            []Config       `json:"agents,omitempty"`             // Optional: Define agents locally to be referenced by ID
+	Pipeline          []PipelineStep `json:"pipeline,omitempty"`           // Optional: Define a chain of agents
+	Params            map[string]any `json:"params,omitempty"`             // Type-specific configuration parameters
 }
 
 type PipelineStep struct {

@@ -29,6 +29,12 @@ This architecture allows us to create a **fully controllable, customizable AI** 
 *   **For Developers**: You get a natural language interface to your raw data. "Show me the top 5 users created yesterday" translates automatically to a B-Tree range query.
 *   **For Operations**: Troubleshooting becomes conversational. "Why is this store empty?" prompts the AI to check schemas and transaction logs.
 
+## Natural Language Programming
+We've taken this a step further with our **Macro System**. You can now "program" the database using natural language.
+*   **Compile Intent**: Tell the AI "Send a report for every inactive user."
+*   **Execute Efficiently**: The system compiles this into a high-performance SOP Macro (loops, fetches, conditions) that runs on the bare-metal Go engine.
+*   **SystemDB**: These macros are stored in a dedicated B-Tree, effectively turning your database into a programmable application server.
+
 ## Next Steps
 We are expanding the toolset to include **Vector Search** capabilities, allowing you to perform semantic queries ("Find documents related to 'scalability'") right from the same floating window.
 

@@ -27,7 +27,7 @@ func NewPolicyAgent(id string, policy ai.PolicyEngine, classifier ai.Classifier)
 // Ask evaluates the input against the policy.
 // If the policy passes, it returns the input (or a transformed version).
 // If the policy fails, it returns an error.
-func (p *PolicyAgent) Ask(ctx context.Context, query string) (string, error) {
+func (p *PolicyAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
 	if p.classifier == nil || p.policy == nil {
 		return query, nil
 	}
@@ -58,4 +58,14 @@ func (p *PolicyAgent) ID() string {
 // Search is not supported for PolicyAgent, but implemented to satisfy the interface.
 func (p *PolicyAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
 	return nil, fmt.Errorf("PolicyAgent does not support Search")
+}
+
+// Open is a no-op for PolicyAgent.
+func (p *PolicyAgent) Open(ctx context.Context) error {
+	return nil
+}
+
+// Close is a no-op for PolicyAgent.
+func (p *PolicyAgent) Close(ctx context.Context) error {
+	return nil
 }

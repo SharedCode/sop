@@ -20,6 +20,7 @@ import (
 // Dependencies holds external dependencies required for agent creation.
 type Dependencies struct {
 	AgentRegistry map[string]ai.Agent[map[string]any]
+	SystemDB      *database.Database
 }
 
 // HashString generates a deterministic hash for the given string.
@@ -114,7 +115,19 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 
 // NewFromConfig creates and initializes a new Agent Service based on the provided configuration.
 // It handles infrastructure setup (Embedder, VectorDB).
-func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (*Service, error) {
+func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (ai.Agent[map[string]any], error) {
+	// Handle specialized agent types
+	switch cfg.Type {
+	case "data-admin":
+		return NewDataAdminAgent(cfg), nil
+	// Add other types here
+	case "standard", "":
+		// Fallthrough to standard service creation
+	default:
+		// For now, default to standard service if unknown, or could return error
+		// return nil, fmt.Errorf("unknown agent type: %s", cfg.Type)
+	}
+
 	// 1. Initialize Infrastructure
 	emb, db, storeName, vCfg, err := SetupInfrastructure(ctx, cfg, deps)
 	if err != nil {
@@ -272,6 +285,6 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (*Service
 		serviceObfuscation = false
 	}
 
-	svc := NewService(dom, gen, cfg.Pipeline, fullRegistry, serviceObfuscation)
+	svc := NewService(dom, deps.SystemDB, gen, cfg.Pipeline, fullRegistry, serviceObfuscation)
 	return svc, nil
 }

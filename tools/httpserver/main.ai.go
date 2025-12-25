@@ -14,9 +14,9 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent"
+	aidb "github.com/sharedcode/sop/ai/database"
 	_ "github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/obfuscation"
-	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/encoding"
@@ -56,6 +56,16 @@ func (e *DefaultToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinitio
 			Name:        "select",
 			Description: "Select items from a store.",
 			Schema:      `{"type": "object", "properties": {"database": {"type": "string"}, "store": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["database", "store"]}`,
+		},
+		{
+			Name:        "manage_transaction",
+			Description: "Manage transaction lifecycle (begin, commit, rollback).",
+			Schema:      `{"type": "object", "properties": {"action": {"type": "string", "enum": ["begin", "commit", "rollback"]}}, "required": ["action"]}`,
+		},
+		{
+			Name:        "delete",
+			Description: "Delete an item from a store.",
+			Schema:      `{"type": "object", "properties": {"database": {"type": "string"}, "store": {"type": "string"}, "key": {"oneOf": [{"type": "string"}, {"type": "object"}]}}, "required": ["database", "store", "key"]}`,
 		},
 	}, nil
 }
@@ -121,6 +131,42 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// Pass ToolExecutor via context
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &DefaultToolExecutor{})
 
+	var askOpts []ai.Option
+
+	// Pass Database via options if provided
+	var currentDB any
+	if req.Database != "" {
+		opts, _ := getDBOptions(req.Database)
+		// We create a lightweight database handle.
+		// Note: This doesn't open connections yet, just configures the handle.
+		db := aidb.NewDatabase(opts)
+		currentDB = db
+		askOpts = append(askOpts, ai.WithDatabase(db))
+	}
+
+	// Construct SessionPayload
+	// For now, we populate Databases with just the current one if available,
+	// or we could list all available DBs if we want to support cross-db queries.
+	// Let's populate all known DBs from config/env if possible, or just leave it empty
+	// and let the agent fail if it tries to access unknown DBs.
+	// Since getDBOptions is dynamic, we might not have a list of ALL DBs easily without scanning.
+	// For this iteration, we'll just put the current one in the map too.
+	databases := make(map[string]any)
+	if req.Database != "" {
+		databases[req.Database] = currentDB
+	}
+
+	// Also add "system" db if needed?
+
+	payload := &ai.SessionPayload{
+		CurrentDB: currentDB,
+		Databases: databases,
+		Variables: map[string]any{
+			"database": req.Database, // Store database name for fallback
+		},
+	}
+	askOpts = append(askOpts, ai.WithSessionPayload(payload))
+
 	// Register resources so the agent knows them for obfuscation
 	if req.Database != "" {
 		obfuscation.GlobalObfuscator.RegisterResource(req.Database, "DB")
@@ -131,11 +177,31 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	// Prepend context information to the message
 	fullMessage := req.Message
-	if req.Database != "" {
+	// Only prepend context if it's not a system command
+	if req.Database != "" && !strings.HasPrefix(req.Message, "/") {
 		fullMessage = fmt.Sprintf("Current Database: %s\n%s", req.Database, req.Message)
 	}
 
-	response, err := agentSvc.Ask(ctx, fullMessage)
+	// Inject payload into context for Open/Close
+	ctx = context.WithValue(ctx, "session_payload", payload)
+
+	// Initialize Agent Session (Transaction)
+	if err := agentSvc.Open(ctx); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": fmt.Sprintf("Agent '%s' failed to open session: %v", req.Agent, err),
+		})
+		return
+	}
+	defer func() {
+		if err := agentSvc.Close(ctx); err != nil {
+			log.Error(fmt.Sprintf("Agent '%s' failed to close session: %v", req.Agent, err))
+		}
+	}()
+
+	// agentSvc delegates to dataadmin agent as necessary for LLM ask.
+	response, err := agentSvc.Ask(ctx, fullMessage, askOpts...)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -145,17 +211,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The response from Ask() is now the final answer (or tool output if handled by DataAdmin).
-	// We don't need the ReAct loop here anymore because DataAdmin handles it.
-	// However, if we are using a "dumb" generator (like pure Gemini without DataAdmin wrapper),
-	// we might get a raw tool call string back.
-	// But the user explicitly wanted to move to DataAdmin.
-	// So we assume the response is the final text to show to the user.
-
-	// Check if response is a tool call (JSON) - Just in case the Agent returned a tool call that wasn't executed
-	// (e.g. if DataAdmin failed to execute it or if we are using a different generator).
-	// For robustness, we can keep a simple check, but we won't loop here.
-
+	// Process the response from LLM as returned by the agent.
 	text := strings.TrimSpace(response)
 	var toolCall struct {
 		Tool string         `json:"tool"`
@@ -183,6 +239,14 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		result, err := executeTool(ctx, toolCall.Tool, toolCall.Args)
 		if err != nil {
 			result = "Error: " + err.Error()
+
+			// Check if we should stop recording on error
+			if svc, ok := agentSvc.(*agent.Service); ok {
+				if svc.StopOnError() {
+					svc.StopRecording()
+					result += "\nRecording stopped due to error."
+				}
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -205,6 +269,31 @@ func executeTool(ctx context.Context, toolName string, args map[string]any) (str
 	dbName, _ := args["database"].(string)
 	dbName = strings.TrimSpace(dbName)
 
+	// Fallback to SessionPayload if database name is missing
+	if dbName == "" {
+		if p := ai.GetSessionPayload(ctx); p != nil {
+			// Try to find the name of the CurrentDB
+			// Since CurrentDB is `any`, we might need to check if it's a *database.Database and get its name?
+			// Or we can check if there's only one DB in Databases map?
+			// Or we can check if the payload has a "default_database" variable?
+			// For now, let's check if the payload has a database name in Variables or if we can infer it.
+			// Actually, main.ai.go puts req.Database in the payload!
+			// But payload.CurrentDB is the object.
+			// We need the NAME to call getDBOptions.
+			// Let's iterate p.Databases to find the one matching CurrentDB?
+			// Or better, let's assume the caller put the name in Variables?
+			// No, main.ai.go doesn't put name in Variables.
+
+			// Let's try to use the first available database if only one exists in config?
+			// No, that's dangerous.
+
+			// Let's check if the payload has a "database" variable.
+			if val, ok := p.Variables["database"].(string); ok && val != "" {
+				dbName = val
+			}
+		}
+	}
+
 	if dbName == "" {
 		return "", fmt.Errorf("database name is required")
 	}
@@ -215,6 +304,116 @@ func executeTool(ctx context.Context, toolName string, args map[string]any) (str
 	}
 
 	switch toolName {
+	case "manage_transaction":
+		action, _ := args["action"].(string)
+		if action == "" {
+			return "", fmt.Errorf("action is required")
+		}
+
+		p := ai.GetSessionPayload(ctx)
+		if p == nil {
+			return "", fmt.Errorf("no session payload found")
+		}
+
+		// Resolve Database Object for Transaction
+		// We need the actual *database.Database object to start a transaction.
+		// The payload might have it in CurrentDB or Databases map.
+		var db *aidb.Database
+		if d, ok := p.CurrentDB.(*aidb.Database); ok {
+			db = d
+		} else if d, ok := p.Databases[dbName].(*aidb.Database); ok {
+			db = d
+		} else {
+			// Fallback: Create a new handle using dbOpts
+			// This is safe because aidb.NewDatabase is lightweight.
+			db = aidb.NewDatabase(dbOpts)
+		}
+
+		switch action {
+		case "begin":
+			if p.Transaction != nil {
+				return "Transaction already active", nil
+			}
+			tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+			if err != nil {
+				return "", fmt.Errorf("failed to begin transaction: %w", err)
+			}
+			p.Transaction = tx
+			return "Transaction started", nil
+
+		case "commit":
+			if p.Transaction == nil {
+				return "No active transaction to commit", nil
+			}
+			if tx, ok := p.Transaction.(sop.Transaction); ok {
+				// Attempt commit
+				commitErr := tx.Commit(ctx)
+
+				// Always clear the old transaction
+				p.Transaction = nil
+
+				// Auto-Begin new transaction for continuity
+				newTx, beginErr := db.BeginTransaction(ctx, sop.ForWriting)
+				if beginErr != nil {
+					if commitErr != nil {
+						return "", fmt.Errorf("commit failed: %v. AND failed to auto-start new one: %v", commitErr, beginErr)
+					}
+					return "Transaction committed, but failed to auto-start new one: " + beginErr.Error(), nil
+				}
+				p.Transaction = newTx
+
+				// Record the implicit 'begin' step if recording
+				if recorder, ok := ctx.Value(ai.CtxKeyMacroRecorder).(ai.MacroRecorder); ok {
+					recorder.RecordStep(ai.MacroStep{
+						Type:    "command",
+						Command: "manage_transaction",
+						Args:    map[string]any{"action": "begin"},
+					})
+				}
+
+				if commitErr != nil {
+					// Return error but state that new transaction is ready
+					return fmt.Sprintf("New transaction started, but previous commit failed: %v", commitErr), commitErr
+				}
+
+				return "Transaction committed (and new one started)", nil
+			}
+			return "", fmt.Errorf("invalid transaction object")
+
+		case "rollback":
+			if p.Transaction == nil {
+				return "No active transaction to rollback", nil
+			}
+			if tx, ok := p.Transaction.(sop.Transaction); ok {
+				if err := tx.Rollback(ctx); err != nil {
+					return "", fmt.Errorf("rollback failed: %w", err)
+				}
+				p.Transaction = nil
+
+				// Auto-Begin new transaction for continuity
+				newTx, err := db.BeginTransaction(ctx, sop.ForWriting)
+				if err != nil {
+					return "Transaction rolled back, but failed to auto-start new one: " + err.Error(), nil
+				}
+				p.Transaction = newTx
+
+				// Record the implicit 'begin' step if recording
+				if recorder, ok := ctx.Value(ai.CtxKeyMacroRecorder).(ai.MacroRecorder); ok {
+					recorder.RecordStep(ai.MacroStep{
+						Type:    "command",
+						Command: "manage_transaction",
+						Args:    map[string]any{"action": "begin"},
+					})
+				}
+
+				return "Transaction rolled back (and new one started)", nil
+			}
+			return "", fmt.Errorf("invalid transaction object")
+
+		default:
+			return "", fmt.Errorf("unknown action: %s", action)
+		}
+
 	case "list_databases":
 		var names []string
 		for _, db := range config.Databases {
@@ -248,11 +447,22 @@ func executeTool(ctx context.Context, toolName string, args map[string]any) (str
 			return "", fmt.Errorf("store name is required")
 		}
 
-		trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
-		if err != nil {
-			return "", err
+		var trans sop.Transaction
+		p := ai.GetSessionPayload(ctx)
+		if p != nil && p.Transaction != nil {
+			if t, ok := p.Transaction.(sop.Transaction); ok {
+				trans = t
+			}
 		}
-		defer trans.Rollback(ctx)
+
+		if trans == nil {
+			var err error
+			trans, err = database.BeginTransaction(ctx, dbOpts, sop.ForReading)
+			if err != nil {
+				return "", err
+			}
+			defer trans.Rollback(ctx)
+		}
 
 		// Get Store Info to determine comparer
 		var isPrimitiveKey bool
@@ -271,25 +481,46 @@ func executeTool(ctx context.Context, toolName string, args map[string]any) (str
 			}
 		}
 
-		var comparer btree.ComparerFunc[any]
-		if !isPrimitiveKey && indexSpec != nil {
-			comparer = func(a, b any) int {
-				return indexSpec.Comparer(a.(map[string]any), b.(map[string]any))
+		var items []map[string]any
+
+		var store jsondb.StoreAccessor
+		cacheKey := fmt.Sprintf("_opened_store_%s", storeName)
+		if p != nil && p.Variables != nil {
+			if cached, ok := p.Variables[cacheKey]; ok {
+				if s, ok := cached.(jsondb.StoreAccessor); ok {
+					store = s
+				}
 			}
 		}
 
-		store, err := database.OpenBtree[any, any](ctx, dbOpts, storeName, trans, comparer)
-		if err != nil {
-			return "", fmt.Errorf("failed to open store: %v", err)
+		if store == nil {
+			var err error
+			store, err = jsondb.OpenStore(ctx, dbOpts, storeName, trans)
+			if err != nil {
+				return "", fmt.Errorf("failed to open store: %v", err)
+			}
+			// Cache the opened store
+			if p != nil {
+				if p.Variables == nil {
+					p.Variables = make(map[string]any)
+				}
+				p.Variables[cacheKey] = store
+			}
 		}
 
-		var items []map[string]any
 		ok, err := store.First(ctx)
 		count := 0
 		for ok && err == nil && count < limit {
-			k := store.GetCurrentKey()
-			v, _ := store.GetCurrentValue(ctx)
-			items = append(items, map[string]any{"key": k.Key, "value": v})
+			k, err := store.GetCurrentKey()
+			if err != nil {
+				return "", fmt.Errorf("failed to get key: %v", err)
+			}
+			v, err := store.GetCurrentValue(ctx)
+			if err != nil {
+				return "", fmt.Errorf("failed to get value: %v", err)
+			}
+
+			items = append(items, map[string]any{"key": k, "value": v})
 			ok, err = store.Next(ctx)
 			count++
 		}
@@ -333,10 +564,34 @@ func executeTool(ctx context.Context, toolName string, args map[string]any) (str
 
 		var kFields []string
 		if keyIsMap {
-			for k := range keyFieldSet {
-				kFields = append(kFields, k)
+			if indexSpec != nil {
+				// Priority 1: Use Index Spec for order
+				for _, f := range indexSpec.IndexFields {
+					kFields = append(kFields, f.FieldName)
+				}
+				// Append extra fields found in data but not in spec
+				var extra []string
+				for k := range keyFieldSet {
+					found := false
+					for _, f := range kFields {
+						if f == k {
+							found = true
+							break
+						}
+					}
+					if !found {
+						extra = append(extra, k)
+					}
+				}
+				sort.Strings(extra)
+				kFields = append(kFields, extra...)
+			} else {
+				// Priority 2: Alphabetical
+				for k := range keyFieldSet {
+					kFields = append(kFields, k)
+				}
+				sort.Strings(kFields)
 			}
-			sort.Strings(kFields)
 		}
 
 		var vFields []string
@@ -460,14 +715,170 @@ func executeTool(ctx context.Context, toolName string, args map[string]any) (str
 		// Let's just return a success message for now, and maybe in the future we update the UI to accept "search_params" from AI.
 
 		return fmt.Sprintf("Found items matching %v (Grid refresh triggered)", query), nil
+
+	case "delete":
+		storeName, _ := args["store"].(string)
+		// Key can be string or map (for complex keys)
+		var key any
+		if k, ok := args["key"]; ok {
+			key = k
+		}
+
+		if storeName == "" || key == nil {
+			return "", fmt.Errorf("store and key are required")
+		}
+
+		// Use existing transaction if available in payload
+		var tx sop.Transaction
+		p := ai.GetSessionPayload(ctx)
+		if p != nil && p.Transaction != nil {
+			if t, ok := p.Transaction.(sop.Transaction); ok {
+				tx = t
+			}
+		}
+
+		localTx := false
+		if tx == nil {
+			var err error
+			tx, err = database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+			if err != nil {
+				return "", err
+			}
+			localTx = true
+		}
+
+		if localTx {
+			defer func() {
+				if err != nil {
+					tx.Rollback(ctx)
+				} else {
+					tx.Commit(ctx)
+				}
+			}()
+		}
+
+		// Determine if store uses complex keys
+		var isPrimitiveKey bool
+		if t2, ok := tx.GetPhasedTransaction().(*common.Transaction); ok {
+			stores, err := t2.StoreRepository.Get(ctx, storeName)
+			if err == nil && len(stores) > 0 {
+				isPrimitiveKey = stores[0].IsPrimitiveKey
+			}
+		}
+
+		var found bool
+		if !isPrimitiveKey {
+			store, err := jsondb.OpenJsonBtreeMapKey(ctx, dbOpts, storeName, tx)
+			if err != nil {
+				return "", fmt.Errorf("failed to open store: %v", err)
+			}
+
+			if keyStr, ok := key.(string); ok {
+				var keyMap map[string]any
+				if err := json.Unmarshal([]byte(keyStr), &keyMap); err != nil {
+					return "", fmt.Errorf("failed to parse complex key JSON: %v", err)
+				}
+				key = keyMap
+			}
+
+			keyMap, ok := key.(map[string]any)
+			if !ok {
+				return "", fmt.Errorf("key must be a map or JSON string for complex key store")
+			}
+
+			found, err = store.Remove(ctx, []map[string]any{keyMap})
+			if err != nil {
+				return "", fmt.Errorf("failed to delete: %v", err)
+			}
+		} else {
+			store, err := database.OpenBtree[string, any](ctx, dbOpts, storeName, tx, nil)
+			if err != nil {
+				return "", fmt.Errorf("failed to open store: %v", err)
+			}
+
+			keyStr, ok := key.(string)
+			if !ok {
+				keyStr = fmt.Sprintf("%v", key)
+			}
+
+			found, err = store.Remove(ctx, keyStr)
+			if err != nil {
+				return "", fmt.Errorf("failed to delete: %v", err)
+			}
+		}
+
+		if !found {
+			return fmt.Sprintf("Item '%v' not found", key), nil
+		}
+
+		return fmt.Sprintf("Item '%v' deleted from store '%s'", key, storeName), nil
 	}
 
 	return "", fmt.Errorf("unknown tool: %s", toolName)
 }
 
 func initAgents() {
-	// loadAgent("doctor", "ai/data/doctor_pipeline.json") // Disabled per user request
 	loadAgent("sql_admin", "ai/data/sql_admin_pipeline.json")
+}
+
+func seedDefaultMacros(db *aidb.Database) {
+	ctx := context.Background()
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		log.Error(fmt.Sprintf("Failed to begin transaction for seeding macros: %v", err))
+		return
+	}
+	store, err := db.OpenModelStore(ctx, "macros", tx)
+	if err != nil {
+		tx.Rollback(ctx)
+		log.Error(fmt.Sprintf("Failed to open macro store: %v", err))
+		return
+	}
+
+	// Check if demo_loop exists
+	// We force update it to ensure latest schema is used during development
+	// var existing ai.Macro
+	// if err := store.Load(ctx, "macros", "demo_loop", &existing); err == nil {
+	// 	tx.Rollback(ctx)
+	// 	return // Already exists
+	// }
+
+	// Create demo_loop macro
+	demoLoop := ai.Macro{
+		Name:        "demo_loop",
+		Description: "Demonstrates loops and variables",
+		Steps: []ai.MacroStep{
+			{
+				Type:     "set",
+				Variable: "items",
+				Value:    "apple\nbanana\ncherry",
+			},
+			{
+				Type:     "loop",
+				List:     "items",
+				Iterator: "fruit",
+				Steps: []ai.MacroStep{
+					{
+						Type:    "say",
+						Message: "Processing {{.fruit}}...",
+					},
+					{
+						Type:   "ask",
+						Prompt: "What color is {{.fruit}}? (Answer in 1 word)",
+					},
+				},
+			},
+		},
+	}
+
+	if err := store.Save(ctx, "macros", "demo_loop", demoLoop); err != nil {
+		log.Error(fmt.Sprintf("Failed to save demo_loop macro: %v", err))
+		tx.Rollback(ctx)
+		return
+	}
+
+	tx.Commit(ctx)
+	log.Info("Seeded 'demo_loop' macro.")
 }
 
 func loadAgent(key, configPath string) {
@@ -511,6 +922,17 @@ func loadAgent(key, configPath string) {
 
 	log.Debug(fmt.Sprintf("Initializing AI Agent: %s (%s)...", cfg.Name, cfg.ID))
 
+	// Initialize System DB
+	sysOpts, err := getSystemDBOptions()
+	var sysDB *aidb.Database
+	if err == nil {
+		sysDB = aidb.NewDatabase(sysOpts)
+		// Seed default macros for testing
+		seedDefaultMacros(sysDB)
+	} else {
+		log.Debug(fmt.Sprintf("System DB not available for agent %s: %v", cfg.ID, err))
+	}
+
 	registry := make(map[string]ai.Agent[map[string]any])
 
 	// Helper to initialize an agent from a config
@@ -526,6 +948,7 @@ func loadAgent(key, configPath string) {
 		}
 		return agent.NewFromConfig(context.Background(), agentCfg, agent.Dependencies{
 			AgentRegistry: registry,
+			SystemDB:      sysDB,
 		})
 	}
 
@@ -574,6 +997,7 @@ func loadAgent(key, configPath string) {
 	// Initialize the main agent
 	mainAgent, err := agent.NewFromConfig(context.Background(), *cfg, agent.Dependencies{
 		AgentRegistry: registry,
+		SystemDB:      sysDB,
 	})
 	if err != nil {
 		log.Debug(fmt.Sprintf("Failed to initialize main agent %s: %v", key, err))

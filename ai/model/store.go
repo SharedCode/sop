@@ -54,7 +54,7 @@ func (s *btreeModelStore) openStore(ctx context.Context, trans sop.Transaction) 
 	}
 	// Prefix the store name with the domain name to allow multiple stores in the same folder.
 	storeName := fmt.Sprintf("%s_models", s.name)
-	so := sop.ConfigureStore(storeName, true, 100, "AI Models Registry", sop.MediumData, "")
+	so := sop.ConfigureStore(storeName, true, 500, "AI Models Registry", sop.MediumData, "")
 	comparer := func(a, b ModelKey) int {
 		if a.Category < b.Category {
 			return -1

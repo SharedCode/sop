@@ -265,7 +265,15 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 	}
 
 	// 4. Auto-Optimize (if enabled)
-	if cfg.AutoOptimize {
+	// Check both the deprecated field and the new Params map
+	autoOptimize := cfg.AutoOptimize
+	if val, ok := cfg.Params["auto_optimize"]; ok {
+		if b, ok := val.(bool); ok {
+			autoOptimize = b
+		}
+	}
+
+	if autoOptimize {
 		fmt.Println("Auto-Optimize enabled. Running optimization...")
 		// Optimization requires its own transaction management (it commits internally)
 		// We need to open the store again in a new transaction context just to call Optimize.
