@@ -1,11 +1,13 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
+	"text/template"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -21,10 +23,12 @@ type DataAdminAgent struct {
 	brain             ai.Generator
 	enableObfuscation bool
 	registry          *Registry
+	databases         map[string]sop.DatabaseOptions
+	systemDB          *database.Database
 }
 
 // NewDataAdminAgent creates a new instance of DataAdminAgent.
-func NewDataAdminAgent(cfg Config) *DataAdminAgent {
+func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, systemDB *database.Database) *DataAdminAgent {
 	// Initialize the "Brain" (Generator)
 	// Logic ported from ai/generator/dataadmin.go
 	provider := os.Getenv("AI_PROVIDER")
@@ -83,6 +87,8 @@ func NewDataAdminAgent(cfg Config) *DataAdminAgent {
 		Config:            cfg,
 		brain:             gen,
 		enableObfuscation: cfg.EnableObfuscation,
+		databases:         databases,
+		systemDB:          systemDB,
 	}
 	agent.registerTools()
 	return agent
@@ -94,16 +100,21 @@ func (a *DataAdminAgent) Open(ctx context.Context) error {
 	if p == nil {
 		return nil
 	}
-	// If CurrentDB is a *database.Database, start a transaction
-	if db, ok := p.CurrentDB.(*database.Database); ok {
-		// Only start a new transaction if one doesn't exist
-		if p.Transaction == nil {
-			// We use ForWriting to allow updates by default in a session
-			tx, err := db.BeginTransaction(ctx, sop.ForWriting)
-			if err != nil {
-				return fmt.Errorf("failed to begin transaction: %w", err)
+	// If CurrentDB is set, start a transaction
+	if p.CurrentDB != "" {
+		dbName := p.CurrentDB
+		// If CurrentDB is a string, look it up in the known databases
+		if dbOpts, ok := a.databases[dbName]; ok {
+			db := database.NewDatabase(dbOpts)
+			if p.Transaction == nil {
+				tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+				if err != nil {
+					return fmt.Errorf("failed to begin transaction on database '%s': %w", dbName, err)
+				}
+				p.Transaction = tx
 			}
-			p.Transaction = tx
+		} else {
+			return fmt.Errorf("database '%s' not found in agent configuration", dbName)
 		}
 	}
 	return nil
@@ -128,6 +139,8 @@ func (a *DataAdminAgent) Search(ctx context.Context, query string, limit int) ([
 
 // Ask processes a query and returns a response.
 func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+	// cfg := ai.NewAskConfig(opts...)
+
 	if a.brain == nil {
 		return "Error: No AI Provider configured. Set GEMINI_API_KEY or OPENAI_API_KEY.", nil
 	}
@@ -135,10 +148,39 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 	// 1. Construct System Prompt with Tools
 	toolsDef := a.registry.GeneratePrompt()
 
+	// Append Macros as Tools
+	if a.systemDB != nil {
+		// We need a transaction to read from system DB
+		tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
+		if err == nil {
+			store, err := a.systemDB.OpenModelStore(ctx, "macros", tx)
+			if err == nil {
+				names, err := store.List(ctx, "macros")
+				if err == nil {
+					for _, name := range names {
+						var macro ai.Macro
+						if err := store.Load(ctx, "macros", name, &macro); err == nil {
+							// Format args schema
+							argsSchema := "()"
+							if len(macro.Parameters) > 0 {
+								var params []string
+								for _, p := range macro.Parameters {
+									params = append(params, fmt.Sprintf("%s: string", p))
+								}
+								argsSchema = fmt.Sprintf("(%s)", strings.Join(params, ", "))
+							}
+							toolsDef += fmt.Sprintf("- %s: %s %s\n", macro.Name, macro.Description, argsSchema)
+						}
+					}
+				}
+			}
+			tx.Commit(ctx)
+		}
+	}
+
 	// Append instructions
 	toolsDef += `
 IMPORTANT:
-- If user asks for "JSON", you MUST set "format": "json".
 - The 'select' tool returns the raw data string. You MUST include this raw data in your final response.
 `
 	fullPrompt := toolsDef + "\n" + query
@@ -171,34 +213,57 @@ IMPORTANT:
 		}
 
 		if isToolCall {
-			var toolCall struct {
-				Tool string         `json:"tool"`
-				Args map[string]any `json:"args"`
-			}
 			cleanText := strings.TrimPrefix(text, "```json")
 			cleanText = strings.TrimPrefix(cleanText, "```")
 			cleanText = strings.TrimSuffix(cleanText, "```")
 			cleanText = strings.TrimSpace(cleanText)
 
-			if err := json.Unmarshal([]byte(cleanText), &toolCall); err == nil && toolCall.Tool != "" {
-				// Record the tool call if a recorder is present
-				if recorder, ok := ctx.Value(ai.CtxKeyMacroRecorder).(ai.MacroRecorder); ok {
-					recorder.RecordStep(ai.MacroStep{
-						Type:    "command",
-						Command: toolCall.Tool,
-						Args:    toolCall.Args,
-					})
+			type ToolCall struct {
+				Tool string         `json:"tool"`
+				Args map[string]any `json:"args"`
+			}
+			var toolCalls []ToolCall
+
+			// Try unmarshal as array
+			if err := json.Unmarshal([]byte(cleanText), &toolCalls); err != nil {
+				// Try unmarshal as single object
+				var single ToolCall
+				if err2 := json.Unmarshal([]byte(cleanText), &single); err2 == nil && single.Tool != "" {
+					toolCalls = []ToolCall{single}
+				}
+			}
+
+			if len(toolCalls) > 0 {
+				// Reset LastInteractionSteps
+				if p := ai.GetSessionPayload(ctx); p != nil {
+					p.LastInteractionSteps = 0
 				}
 
-				// Execute Tool
-				// We need to execute the tool against the session payload
-				result, err := a.executeTool(ctx, toolCall.Tool, toolCall.Args)
-				if err != nil {
-					result = "Error: " + err.Error()
+				var results []string
+				for _, tc := range toolCalls {
+					// Record the tool call if a recorder is present
+					if recorder, ok := ctx.Value(ai.CtxKeyMacroRecorder).(ai.MacroRecorder); ok {
+						recorder.RecordStep(ai.MacroStep{
+							Type:    "command",
+							Command: tc.Tool,
+							Args:    tc.Args,
+						})
+						if p := ai.GetSessionPayload(ctx); p != nil {
+							p.LastInteractionSteps++
+						}
+					}
+
+					// Execute Tool
+					// We need to execute the tool against the session payload
+					result, err := a.ExecuteTool(ctx, tc.Tool, tc.Args)
+					if err != nil {
+						result = "Error: " + err.Error()
+					}
+					results = append(results, result)
 				}
 
 				// Return tool output directly (Optimization)
-				return result, nil
+				return strings.Join(results, "\n"), nil
 			}
 		}
 
@@ -212,8 +277,8 @@ IMPORTANT:
 	return "Error: Maximum turns reached.", nil
 }
 
-// executeTool executes the requested tool against the session payload.
-func (a *DataAdminAgent) executeTool(ctx context.Context, toolName string, args map[string]any) (string, error) {
+// ExecuteTool executes the requested tool against the session payload.
+func (a *DataAdminAgent) ExecuteTool(ctx context.Context, toolName string, args map[string]any) (string, error) {
 	// De-obfuscate Args if enabled
 	if a.enableObfuscation {
 		for k, v := range args {
@@ -234,21 +299,19 @@ func (a *DataAdminAgent) executeTool(ctx context.Context, toolName string, args 
 	}
 
 	// Resolve Database
-	var db *database.Database
+	var dbFound bool
 	dbName, _ := args["database"].(string)
 	if dbName != "" {
-		if val, ok := p.Databases[dbName]; ok {
-			if d, ok := val.(*database.Database); ok {
-				db = d
-			}
+		if _, ok := a.databases[dbName]; ok {
+			dbFound = true
 		}
 	} else {
-		if d, ok := p.CurrentDB.(*database.Database); ok {
-			db = d
+		if p.CurrentDB != "" {
+			dbFound = true
 		}
 	}
 
-	if db == nil && toolName != "list_databases" {
+	if !dbFound && toolName != "list_databases" && toolName != "list_macros" && toolName != "get_macro_details" {
 		return "", fmt.Errorf("database not found or not selected")
 	}
 
@@ -257,5 +320,76 @@ func (a *DataAdminAgent) executeTool(ctx context.Context, toolName string, args 
 		return toolDef.Handler(ctx, args)
 	}
 
+	// Check if it's a macro
+	if a.systemDB != nil {
+		// Try to load macro
+		// We need a transaction to read from system DB
+		// But we might already be in a transaction on the user DB?
+		// System DB is separate.
+		tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
+		if err == nil {
+			defer tx.Rollback(ctx)
+			store, err := a.systemDB.OpenModelStore(ctx, "macros", tx)
+			if err == nil {
+				var macro ai.Macro
+				if err := store.Load(ctx, "macros", toolName, &macro); err == nil {
+					// Found macro! Execute it.
+					return a.runMacro(ctx, macro, args)
+				}
+			}
+		}
+	}
+
 	return "", fmt.Errorf("unknown tool: %s", toolName)
+}
+
+func (a *DataAdminAgent) runMacro(ctx context.Context, macro ai.Macro, args map[string]any) (string, error) {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("Running macro '%s'...\n", macro.Name))
+
+	// Scope for template resolution
+	scope := make(map[string]any)
+	for k, v := range args {
+		scope[k] = v
+	}
+
+	for i, step := range macro.Steps {
+		if step.Type == "command" {
+			// Resolve args
+			resolvedArgs := make(map[string]any)
+			for k, v := range step.Args {
+				if strVal, ok := v.(string); ok {
+					resolvedArgs[k] = resolveTemplate(strVal, scope)
+				} else {
+					resolvedArgs[k] = v
+				}
+			}
+
+			res, err := a.ExecuteTool(ctx, step.Command, resolvedArgs)
+			if err != nil {
+				if !step.ContinueOnError {
+					return "", fmt.Errorf("step %d (%s) failed: %w", i+1, step.Command, err)
+				}
+				sb.WriteString(fmt.Sprintf("Step %d failed: %v\n", i+1, err))
+			} else {
+				sb.WriteString(fmt.Sprintf("Step %d: %s\n", i+1, res))
+			}
+		} else {
+			sb.WriteString(fmt.Sprintf("Skipping step %d (type '%s' not supported in tool execution)\n", i+1, step.Type))
+		}
+	}
+	return sb.String(), nil
+}
+
+func resolveTemplate(tmplStr string, scope map[string]any) string {
+	if tmplStr == "" {
+		return ""
+	}
+	if tmpl, err := template.New("tmpl").Parse(tmplStr); err == nil {
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, scope); err == nil {
+			return buf.String()
+		}
+	}
+	return tmplStr
 }

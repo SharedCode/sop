@@ -40,7 +40,7 @@ func TestMacroAsyncExecution(t *testing.T) {
 	}
 	sysDB := database.NewDatabase(dbOpts)
 	mockGen := &MockScriptedGenerator{}
-	svc := NewService(&MockDomain{}, sysDB, mockGen, nil, nil, false)
+	svc := NewService(&MockDomain{}, sysDB, nil, mockGen, nil, nil, false)
 
 	executor := &AsyncMockToolExecutor{}
 	ctx := context.Background()
@@ -69,7 +69,7 @@ func TestMacroAsyncExecution(t *testing.T) {
 	var scopeMu sync.RWMutex
 
 	start := time.Now()
-	err := svc.executeMacro(ctx, macro.Steps, scope, &scopeMu, &sb, sysDB)
+	err := svc.runSteps(ctx, macro.Steps, scope, &scopeMu, &sb, sysDB)
 	duration := time.Since(start)
 
 	if err != nil {

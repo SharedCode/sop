@@ -4,15 +4,15 @@ import (
 	"context"
 	"testing"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
 )
 
 func TestDataAdminAgent_Registry(t *testing.T) {
 	cfg := Config{
 		EnableObfuscation: false,
 	}
-	agent := NewDataAdminAgent(cfg)
+	agent := NewDataAdminAgent(cfg, nil, nil)
 
 	// Test Registry Listing
 	tools := agent.registry.List()
@@ -36,23 +36,24 @@ func TestDataAdminAgent_ExecuteTool(t *testing.T) {
 	cfg := Config{
 		EnableObfuscation: false,
 	}
-	agent := NewDataAdminAgent(cfg)
+	dbs := map[string]sop.DatabaseOptions{
+		"test_db": {},
+	}
+	agent := NewDataAdminAgent(cfg, dbs, nil)
 
 	// Setup Context with Payload
 	payload := &ai.SessionPayload{
-		Databases: map[string]any{
-			"test_db": &database.Database{},
-		},
+		CurrentDB: "test_db",
 	}
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
 	// Test list_databases
-	resp, err := agent.executeTool(ctx, "list_databases", nil)
+	resp, err := agent.ExecuteTool(ctx, "list_databases", nil)
 	if err != nil {
-		t.Fatalf("executeTool failed: %v", err)
+		t.Fatalf("ExecuteTool failed: %v", err)
 	}
-	if resp != "Databases: [test_db]" {
-		t.Errorf("Expected 'Databases: [test_db]', got '%s'", resp)
+	if resp != "Databases: test_db" {
+		t.Errorf("Expected 'Databases: test_db', got '%s'", resp)
 	}
 }

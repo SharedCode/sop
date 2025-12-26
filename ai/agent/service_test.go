@@ -190,7 +190,7 @@ func TestService_Ask_Obfuscation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gen := &MockGenerator{Response: tt.llmResponse}
 			// Enable obfuscation for tests
-			svc := NewService(&MockDomain{}, nil, gen, nil, nil, true)
+			svc := NewService(&MockDomain{}, nil, nil, gen, nil, nil, true)
 			executor := &MockExecutor{}
 
 			ctx := context.WithValue(context.Background(), ai.CtxKeyExecutor, executor)
@@ -243,7 +243,7 @@ func TestService_Ask_NoObfuscation(t *testing.T) {
 	mockDomain := &MockDomain{}
 
 	// Create Service with Obfuscation DISABLED
-	svc := NewService(mockDomain, nil, mockGen, nil, nil, false)
+	svc := NewService(mockDomain, nil, nil, mockGen, nil, nil, false)
 
 	ctx := context.Background()
 

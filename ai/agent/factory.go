@@ -21,6 +21,7 @@ import (
 type Dependencies struct {
 	AgentRegistry map[string]ai.Agent[map[string]any]
 	SystemDB      *database.Database
+	Databases     map[string]sop.DatabaseOptions
 }
 
 // HashString generates a deterministic hash for the given string.
@@ -127,7 +128,7 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (ai.Agent
 	// Handle specialized agent types
 	switch cfg.Type {
 	case "data-admin":
-		return NewDataAdminAgent(cfg), nil
+		return NewDataAdminAgent(cfg, deps.Databases, deps.SystemDB), nil
 	// Add other types here
 	case "standard", "":
 		// Fallthrough to standard service creation
@@ -293,6 +294,6 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (ai.Agent
 		serviceObfuscation = false
 	}
 
-	svc := NewService(dom, deps.SystemDB, gen, cfg.Pipeline, fullRegistry, serviceObfuscation)
+	svc := NewService(dom, deps.SystemDB, deps.Databases, gen, cfg.Pipeline, fullRegistry, serviceObfuscation)
 	return svc, nil
 }

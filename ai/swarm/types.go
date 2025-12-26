@@ -23,6 +23,7 @@ type Job struct {
 	// If empty, any available worker can pick it up.
 	TargetFilter map[string]string `json:"target_filter"`
 	Status       JobStatus         `json:"status"`
+	CreatedAt    time.Time         `json:"created_at"` // Date/time job was created
 	CreatedBy    string            `json:"created_by"` // Agent ID or User ID
 }
 

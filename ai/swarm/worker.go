@@ -81,7 +81,7 @@ func (w *Worker) processNextJob(ctx context.Context) error {
 	}
 
 	for {
-		item, err := store.jobs.GetCurrentItem(ctx)
+		_, err := store.jobs.GetCurrentItem(ctx)
 		if err != nil {
 			return err
 		}

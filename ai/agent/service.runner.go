@@ -10,10 +10,54 @@ import (
 	"sync"
 	"text/template"
 
+	log "log/slog"
+
+	"golang.org/x/sync/errgroup"
+
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
 )
+
+type contextKey string
+
+const CtxKeyJSONStreamer contextKey = "json_streamer"
+
+type StepExecutionResult struct {
+	Type    string `json:"type"`
+	Command string `json:"command,omitempty"`
+	Prompt  string `json:"prompt,omitempty"`
+	Result  string `json:"result,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// JSONStreamer handles streaming JSON array elements
+type JSONStreamer struct {
+	w     io.Writer
+	mu    sync.Mutex
+	first bool
+}
+
+func NewJSONStreamer(w io.Writer) *JSONStreamer {
+	return &JSONStreamer{
+		w:     w,
+		first: true,
+	}
+}
+
+func (s *JSONStreamer) Write(step StepExecutionResult) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.first {
+		fmt.Fprint(s.w, ",\n")
+	}
+	s.first = false
+
+	// Marshal the step
+	bytes, _ := json.MarshalIndent(step, "  ", "  ")
+	fmt.Fprint(s.w, string(bytes))
+}
 
 func (s *Service) runStep(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
 	switch step.Type {
@@ -33,6 +77,19 @@ func (s *Service) runStep(ctx context.Context, step ai.MacroStep, scope map[stri
 		return s.runStepSay(ctx, step, scope, scopeMu, sb)
 	case "macro":
 		return s.runStepMacro(ctx, step, scope, scopeMu, sb, db)
+	case "block":
+		return s.runStepBlock(ctx, step, scope, scopeMu, sb, db)
+	}
+	return nil
+}
+
+func (s *Service) runStepBlock(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+	for _, subStep := range step.Steps {
+		if err := s.runStep(ctx, subStep, scope, scopeMu, sb, db); err != nil {
+			if !step.ContinueOnError {
+				return err
+			}
+		}
 	}
 	return nil
 }
@@ -43,15 +100,23 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.MacroStep, scope map[s
 	prompt := step.Prompt
 	prompt = s.resolveTemplate(prompt, scope, scopeMu)
 
-	msg := fmt.Sprintf("> %s\n", prompt)
-	sb.WriteString(msg)
-	if w != nil {
-		fmt.Fprint(w, msg)
+	// Only print prompt if NOT using streamer (legacy mode)
+	if ctx.Value(CtxKeyJSONStreamer) == nil {
+		msg := fmt.Sprintf("> %s\n", prompt)
+		sb.WriteString(msg)
+		if w != nil {
+			fmt.Fprint(w, msg)
+		}
 	}
 
 	var opts []ai.Option
 	if db != nil {
 		opts = append(opts, ai.WithDatabase(db))
+	}
+
+	// Check for compiled mode
+	if isCompiled, ok := ctx.Value("is_compiled").(bool); ok && isCompiled {
+		return nil
 	}
 
 	resp, err := s.Ask(ctx, prompt, opts...)
@@ -61,8 +126,7 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.MacroStep, scope map[s
 		if w != nil {
 			fmt.Fprint(w, msg)
 		}
-		// Don't fail the macro, just log error? Or should we fail?
-		// For now, let's continue but maybe set variable to empty/error?
+		// Continue on error, but log it.
 	} else {
 		// Check if resp is a tool call
 		var toolCall struct {
@@ -81,13 +145,21 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.MacroStep, scope map[s
 			}
 		}
 
-		msg := fmt.Sprintf("%s\n", resp)
-		sb.WriteString(msg)
-		if w != nil {
-			fmt.Fprint(w, msg)
+		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+			streamer.Write(StepExecutionResult{
+				Type:   "ask",
+				Prompt: prompt,
+				Result: resp,
+			})
+		} else {
+			msg := fmt.Sprintf("%s\n", resp)
+			sb.WriteString(msg)
+			if w != nil {
+				fmt.Fprint(w, msg)
+			}
 		}
 
-		// Support legacy "Variable" field
+		// Support "Variable" field for backward compatibility
 		outVar := step.OutputVariable
 		if outVar == "" {
 			outVar = step.Variable
@@ -118,22 +190,51 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.MacroStep, scope m
 	}
 
 	// Execute Tool
-	if executor, ok := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor); ok && executor != nil {
-		msg := fmt.Sprintf("Executing command '%s'...\n", step.Command)
-		sb.WriteString(msg)
-		if w != nil {
-			fmt.Fprint(w, msg)
+	val := ctx.Value(ai.CtxKeyExecutor)
+	if val == nil {
+		// If no executor, but command is empty, we can skip it.
+		if step.Command == "" {
+			return nil
 		}
+		return fmt.Errorf("no tool executor available (ctx value is nil)")
+	}
+
+	executor, ok := val.(ai.ToolExecutor)
+	if !ok {
+		return fmt.Errorf("no tool executor available (type assertion failed, type: %T)", val)
+	}
+
+	if executor != nil {
+		// Skip empty commands
+		if step.Command == "" {
+			return nil
+		}
+
+		// msg := fmt.Sprintf("Executing command '%s'...\n", step.Command)
+		// sb.WriteString(msg)
+		// if w != nil {
+		// 	fmt.Fprint(w, msg)
+		// }
 
 		resp, err := executor.Execute(ctx, step.Command, resolvedArgs)
 		if err != nil {
 			return fmt.Errorf("command execution failed: %w", err)
 		}
 
-		msg = fmt.Sprintf("%s\n", resp)
-		sb.WriteString(msg)
-		if w != nil {
-			fmt.Fprint(w, msg)
+		// Stream result if streamer is present
+		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+			streamer.Write(StepExecutionResult{
+				Type:    "command",
+				Command: step.Command,
+				Result:  resp,
+			})
+		} else {
+			// Fallback to string builder if no streamer (legacy mode)
+			msg := fmt.Sprintf("%s\n", resp)
+			sb.WriteString(msg)
+			if w != nil {
+				fmt.Fprint(w, msg)
+			}
 		}
 
 		// Output Variable
@@ -145,6 +246,7 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.MacroStep, scope m
 			scope[step.OutputVariable] = strings.TrimSpace(resp)
 		}
 	} else {
+		// Should be unreachable due to checks above
 		return fmt.Errorf("no tool executor available")
 	}
 	return nil
@@ -182,17 +284,19 @@ func (s *Service) runStepIf(ctx context.Context, step ai.MacroStep, scope map[st
 		if err := tmpl.Execute(&buf, scope); err == nil {
 			if buf.String() == "true" {
 				thenSteps := step.Then
-				return s.executeMacro(ctx, thenSteps, scope, scopeMu, sb, db)
+				return s.runSteps(ctx, thenSteps, scope, scopeMu, sb, db)
 			} else {
 				if len(step.Else) > 0 {
-					return s.executeMacro(ctx, step.Else, scope, scopeMu, sb, db)
+					return s.runSteps(ctx, step.Else, scope, scopeMu, sb, db)
 				}
 			}
 		} else {
-			msg := fmt.Sprintf("Error evaluating condition '%s': %v\n", cond, err)
-			sb.WriteString(msg)
-			if w != nil {
-				fmt.Fprint(w, msg)
+			if ctx.Value(CtxKeyJSONStreamer) == nil {
+				msg := fmt.Sprintf("Error evaluating condition '%s': %v\n", cond, err)
+				sb.WriteString(msg)
+				if w != nil {
+					fmt.Fprint(w, msg)
+				}
 			}
 		}
 	}
@@ -227,7 +331,7 @@ func (s *Service) runStepLoop(ctx context.Context, step ai.MacroStep, scope map[
 				if scopeMu != nil {
 					scopeMu.Unlock()
 				}
-				if err := s.executeMacro(ctx, body, scope, scopeMu, sb, db); err != nil {
+				if err := s.runSteps(ctx, body, scope, scopeMu, sb, db); err != nil {
 					return err
 				}
 			}
@@ -240,7 +344,7 @@ func (s *Service) runStepLoop(ctx context.Context, step ai.MacroStep, scope map[
 				if scopeMu != nil {
 					scopeMu.Unlock()
 				}
-				if err := s.executeMacro(ctx, body, scope, scopeMu, sb, db); err != nil {
+				if err := s.runSteps(ctx, body, scope, scopeMu, sb, db); err != nil {
 					return err
 				}
 			}
@@ -260,19 +364,11 @@ func (s *Service) runStepFetch(ctx context.Context, step ai.MacroStep, scope map
 
 		// 1. Resolve Database
 		if step.Database != "" {
-			// Use SessionPayload for resolution
-			if p := ai.GetSessionPayload(ctx); p != nil && p.Databases != nil {
-				if val, ok := p.Databases[step.Database]; ok {
-					if d, ok := val.(*database.Database); ok {
-						db = d
-					} else {
-						return fmt.Errorf("resolved database '%s' is not of type *database.Database", step.Database)
-					}
-				} else {
-					return fmt.Errorf("database '%s' not found in session payload", step.Database)
-				}
+			// Use Service configuration for resolution
+			if opts, ok := s.databases[step.Database]; ok {
+				db = database.NewDatabase(opts)
 			} else {
-				return fmt.Errorf("session payload or databases map not configured")
+				return fmt.Errorf("database '%s' not found in agent configuration", step.Database)
 			}
 		} else {
 			// Use current context database
@@ -280,10 +376,12 @@ func (s *Service) runStepFetch(ctx context.Context, step ai.MacroStep, scope map
 		}
 
 		if db == nil {
-			msg := "Error: No database configured for fetch operation.\n"
-			sb.WriteString(msg)
-			if w != nil {
-				fmt.Fprint(w, msg)
+			if ctx.Value(CtxKeyJSONStreamer) == nil {
+				msg := "Error: No database configured for fetch operation.\n"
+				sb.WriteString(msg)
+				if w != nil {
+					fmt.Fprint(w, msg)
+				}
 			}
 			return fmt.Errorf("no database provided")
 		}
@@ -351,10 +449,17 @@ func (s *Service) runStepSay(ctx context.Context, step ai.MacroStep, scope map[s
 	msgText := step.Message
 	msgText = s.resolveTemplate(msgText, scope, scopeMu)
 
-	msg := fmt.Sprintf("%s\n", msgText)
-	sb.WriteString(msg)
-	if w != nil {
-		fmt.Fprint(w, msg)
+	if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+		streamer.Write(StepExecutionResult{
+			Type:   "say",
+			Result: msgText,
+		})
+	} else {
+		msg := fmt.Sprintf("%s\n", msgText)
+		sb.WriteString(msg)
+		if w != nil {
+			fmt.Fprint(w, msg)
+		}
 	}
 	return nil
 }
@@ -414,54 +519,195 @@ func (s *Service) runStepMacro(ctx context.Context, step ai.MacroStep, scope map
 
 	// Handle Database Switching for Nested Macro
 	// Priority: step.Database > macro.Database > inherited db
-	targetDB := db
-	var macroTx sop.Transaction
-	var macroCtx context.Context = ctx
 
-	// Step-level override
-	dbOverride := step.Database
-	if dbOverride == "" {
-		dbOverride = macro.Database
+	// Handle Database Override from Step
+	if step.Database != "" {
+		macro.Database = step.Database
+		macro.Portable = false // Enforce the step's DB
 	}
-	if dbOverride != "" {
-		// Resolve Database from Payload
-		if p := ai.GetSessionPayload(ctx); p != nil && p.Databases != nil {
-			if val, ok := p.Databases[dbOverride]; ok {
-				if d, ok := val.(*database.Database); ok {
-					targetDB = d
-					// Start Transaction for this macro scope
-					var err error
-					macroTx, err = targetDB.BeginTransaction(ctx, sop.ForWriting)
-					if err != nil {
-						return fmt.Errorf("failed to begin transaction for macro '%s' on db '%s': %w", name, dbOverride, err)
-					}
-					// Update Payload in Context
-					newPayload := *p
-					newPayload.CurrentDB = targetDB
-					newPayload.Transaction = macroTx
-					macroCtx = context.WithValue(ctx, "session_payload", &newPayload)
-				} else {
-					return fmt.Errorf("resolved database '%s' is not of type *database.Database", dbOverride)
+
+	return s.executeMacro(ctx, &macro, nestedScope, &nestedMu, sb, db)
+}
+
+// ToolProvider interface for agents that can execute tools
+type ToolProvider interface {
+	ExecuteTool(ctx context.Context, toolName string, args map[string]any) (string, error)
+}
+
+// ServiceToolExecutor delegates tool execution to registered agents
+type ServiceToolExecutor struct {
+	s *Service
+}
+
+func (e *ServiceToolExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	for _, agent := range e.s.registry {
+		if provider, ok := agent.(ToolProvider); ok {
+			resp, err := provider.ExecuteTool(ctx, toolName, args)
+			if err == nil {
+				return resp, nil
+			}
+			// If error is "unknown tool", continue to next agent.
+			// Otherwise return error.
+			// Since we don't have a standard error type for "unknown tool", we check string.
+			// DataAdminAgent returns "unknown tool: %s".
+			if strings.Contains(err.Error(), "unknown tool") {
+				continue
+			}
+			return "", err
+		}
+	}
+	return "", fmt.Errorf("tool '%s' not found in any registered agent", toolName)
+}
+
+func (e *ServiceToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return nil, nil
+}
+
+func (s *Service) executeMacro(ctx context.Context, macro *ai.Macro, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+	// Ensure we have a tool executor
+	if ctx.Value(ai.CtxKeyExecutor) == nil {
+		executor := &ServiceToolExecutor{s: s}
+		ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
+	} else {
+		// Debug: Executor already present
+	}
+
+	// Detect compiled mode (if any step is a command)
+	isCompiled := false
+	for _, step := range macro.Steps {
+		if step.Type == "command" {
+			isCompiled = true
+			break
+		}
+	}
+	ctx = context.WithValue(ctx, "is_compiled", isCompiled)
+
+	return s.runSteps(ctx, macro.Steps, scope, scopeMu, sb, db)
+}
+
+// runSteps runs a sequence of macro steps with support for control flow and variables.
+func (s *Service) runSteps(ctx context.Context, steps []ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+	// Create cancellable context for this macro execution scope to support stopping on error
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Use errgroup for managing concurrency and error propagation
+	g, groupCtx := errgroup.WithContext(ctx)
+
+	var syncErr error
+
+	for _, step := range steps {
+		// Check if context is already cancelled (by errgroup or sync error)
+		if groupCtx.Err() != nil {
+			break
+		}
+
+		// Refresh DB from payload to ensure we use the current active database
+		// This handles cases where a previous step (e.g. a tool) switched the database.
+		if p := ai.GetSessionPayload(groupCtx); p != nil {
+			dbName := p.GetDatabase()
+			if dbName != "" {
+				if opts, ok := s.databases[dbName]; ok {
+					db = database.NewDatabase(opts)
 				}
+			}
+		}
+		log.Debug(fmt.Sprintf("DB from payload: %v", db))
+
+		// If async, run in errgroup
+		if step.IsAsync {
+			// Check if we are in a transaction.
+			// If so, we generally force sync execution to maintain integrity for simple steps.
+			// HOWEVER, if the step is a nested "macro", we allow it to run async (Swarm pattern),
+			// assuming it will manage its own transaction (e.g. on a different DB).
+			p := ai.GetSessionPayload(groupCtx)
+			if p != nil && p.Transaction != nil && step.Type != "macro" {
+				if ctx.Value(CtxKeyJSONStreamer) == nil {
+					msg := fmt.Sprintf("Info: Step '%s' marked async but active transaction exists. Running synchronously.\n", step.Type)
+					sb.WriteString(msg)
+					if w, ok := ctx.Value(ai.CtxKeyWriter).(io.Writer); ok && w != nil {
+						fmt.Fprint(w, msg)
+					}
+				}
+				// Fall through to sync execution
 			} else {
-				return fmt.Errorf("database '%s' not found in session payload", dbOverride)
+				// Detach transaction to enforce isolation (Swarm Computing model)
+				// Async steps must not share the parent transaction to avoid race conditions.
+				// They should start their own transaction if needed.
+				asyncCtx := groupCtx
+				if p != nil {
+					// Clone payload and remove transaction (though p.Transaction should be nil here based on check above,
+					// but good to be safe if logic changes)
+					newPayload := *p
+					newPayload.Transaction = nil
+					asyncCtx = context.WithValue(groupCtx, "session_payload", &newPayload)
+				}
+
+				// Capture step for closure
+				st := step
+				g.Go(func() error {
+					// Handle panic in async step
+					defer func() {
+						if r := recover(); r != nil {
+							// We can't easily return the panic as error here without named return,
+							// but errgroup expects an error return.
+							// We'll just log it (if we had a logger) and return a generic error.
+							// For now, let's assume runStep handles its own panics or we let it crash?
+							// Better to recover and return error to stop the group.
+						}
+					}()
+
+					if err := s.runStep(asyncCtx, st, scope, scopeMu, sb, db); err != nil {
+						if st.ContinueOnError {
+							// Log error but don't stop the group
+							// TODO: Add logging
+							return nil
+						}
+						return err // This cancels groupCtx
+					}
+					return nil
+				})
+				continue
 			}
-		} else {
-			return fmt.Errorf("session payload or databases map not configured, cannot switch to db '%s'", dbOverride)
+		}
+
+		// Sync step
+		if err := s.runStep(groupCtx, step, scope, scopeMu, sb, db); err != nil {
+			if step.ContinueOnError {
+				// Log error and continue
+				continue
+			}
+			// Stop everything
+			syncErr = err
+			cancel() // Cancel context for async tasks
+			break
 		}
 	}
 
-	err = s.executeMacro(macroCtx, macro.Steps, nestedScope, &nestedMu, sb, targetDB)
+	// Wait for all async tasks
+	asyncErr := g.Wait()
 
-	if macroTx != nil {
-		if err != nil {
-			macroTx.Rollback(ctx)
-		} else {
-			if commitErr := macroTx.Commit(ctx); commitErr != nil {
-				return fmt.Errorf("failed to commit transaction for macro '%s': %w", name, commitErr)
-			}
-		}
+	if syncErr != nil {
+		return syncErr
+	}
+	return asyncErr
+}
+
+func (s *Service) resolveTemplate(tmplStr string, scope map[string]any, scopeMu *sync.RWMutex) string {
+	if tmplStr == "" {
+		return ""
 	}
 
-	return err
+	if scopeMu != nil {
+		scopeMu.RLock()
+		defer scopeMu.RUnlock()
+	}
+
+	if tmpl, err := template.New("tmpl").Parse(tmplStr); err == nil {
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, scope); err == nil {
+			return buf.String()
+		}
+	}
+	return tmplStr
 }

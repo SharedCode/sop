@@ -1,20 +1,11 @@
 package agent
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"sort"
-	"strconv"
 	"strings"
-	"sync"
-	"text/template"
-
-	log "log/slog"
-
-	"golang.org/x/sync/errgroup"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -28,31 +19,27 @@ import (
 type Service struct {
 	domain            ai.Domain[map[string]any]
 	systemDB          *database.Database
+	databases         map[string]sop.DatabaseOptions
 	generator         ai.Generator // The LLM (Gemini, etc.)
 	pipeline          []PipelineStep
 	registry          map[string]ai.Agent[map[string]any]
 	EnableObfuscation bool
 
-	// Macro Support
-	recording     bool
-	recordingMode string // "standard" or "compiled"
-	stopOnError   bool
-	currentMacro  *ai.Macro
-	recordingTx   sop.Transaction
-	recordingVars map[string]any
-	lastStep      *ai.MacroStep
+	// Session State
+	session *RunnerSession
 }
 
 // NewService creates a new agent service for a specific domain.
-func NewService(domain ai.Domain[map[string]any], systemDB *database.Database, generator ai.Generator, pipeline []PipelineStep, registry map[string]ai.Agent[map[string]any], enableObfuscation bool) *Service {
+func NewService(domain ai.Domain[map[string]any], systemDB *database.Database, databases map[string]sop.DatabaseOptions, generator ai.Generator, pipeline []PipelineStep, registry map[string]ai.Agent[map[string]any], enableObfuscation bool) *Service {
 	return &Service{
 		domain:            domain,
 		systemDB:          systemDB,
+		databases:         databases,
 		generator:         generator,
 		pipeline:          pipeline,
 		registry:          registry,
 		EnableObfuscation: enableObfuscation,
-		recordingVars:     make(map[string]any),
+		session:           NewRunnerSession(),
 	}
 }
 
@@ -64,26 +51,51 @@ func (s *Service) Open(ctx context.Context) error {
 	}
 
 	// If we are recording and have an active recording transaction, use it.
-	if s.recording && s.recordingTx != nil {
-		p.Transaction = s.recordingTx
-		// Restore variables from recording session
-		if p.Variables == nil {
-			p.Variables = make(map[string]any)
-		}
-		for k, v := range s.recordingVars {
-			p.Variables[k] = v
-		}
+	if s.session.Recording && s.session.Transaction != nil {
+		// We do NOT use the recording transaction for the current request if we are just recording steps.
+		// The user wants to record "begin transaction", "commit", etc. as steps.
+		// If we inject the transaction here, the tool might try to use it.
+		// But wait, the tool checks for the recorder and skips execution.
+		// So it doesn't matter if we inject it or not?
+		// Actually, if we inject it, other tools (like select) might use it.
+		// But if we are recording, we might want to verify the steps work?
+		// The user said: "should NOT intervene with how we do transaction on the recording session."
+		// This implies the recording session (the one where we are saying "add item...") should be independent
+		// of the transaction state being recorded.
+		// So, we should NOT inject the transaction from the "macro state" into the "current session state".
+		// BUT, the user might want to run a select to see if the item was added?
+		// If we are in "Natural Mode", we are executing AND recording.
+		// If we are in "Compiled Mode", we are JUST recording (mostly).
+		// The user's request specifically mentions "explicit Begin Transaction and Commit".
+		// "We don't interpret these steps' commands! they are for run time interpretation."
+		// This suggests that when recording, "begin transaction" is just a string/step, not an action.
+
+		// However, for other commands (add, select), we might still want to execute them?
+		// If we are in "Natural Mode", yes.
+		// If we are in "Compiled Mode", maybe not?
+
+		// Let's assume for now we continue to inject it, but the tool handles the "manage_transaction" specifically.
+		p.Transaction = s.session.Transaction
+		p.Variables = s.session.Variables
 		return nil
 	}
 
-	// If CurrentDB is a *database.Database, start a transaction
-	if db, ok := p.CurrentDB.(*database.Database); ok {
-		// We use ForWriting to allow updates by default in a session
+	if p.CurrentDB == "" {
+		return nil
+	}
+
+	// Look up the database in the known databases
+	if dbOpts, ok := s.databases[p.CurrentDB]; ok {
+		db := database.NewDatabase(dbOpts)
+
+		// Start transaction
 		tx, err := db.BeginTransaction(ctx, sop.ForWriting)
 		if err != nil {
-			return fmt.Errorf("failed to begin transaction: %w", err)
+			return fmt.Errorf("failed to begin transaction on database '%s': %w", p.CurrentDB, err)
 		}
 		p.Transaction = tx
+	} else {
+		return fmt.Errorf("database '%s' not found in agent configuration", p.CurrentDB)
 	}
 	return nil
 }
@@ -93,9 +105,8 @@ func (s *Service) Close(ctx context.Context) error {
 	p := ai.GetSessionPayload(ctx)
 	if p == nil || p.Transaction == nil {
 		// If recording, and transaction is gone (e.g. rollback without restart), clear recordingTx
-		if s.recording {
-			s.recordingTx = nil
-			s.recordingVars = nil
+		if s.session.Recording {
+			s.session.Transaction = nil
 		}
 		return nil
 	}
@@ -103,15 +114,9 @@ func (s *Service) Close(ctx context.Context) error {
 		// If we are recording, we capture whatever transaction is currently active
 		// as the "recording transaction" for the next request.
 		// We do NOT commit it here.
-		if s.recording {
-			s.recordingTx = tx
-			// Persist variables to recording session
-			if s.recordingVars == nil {
-				s.recordingVars = make(map[string]any)
-			}
-			for k, v := range p.Variables {
-				s.recordingVars[k] = v
-			}
+		if s.session.Recording {
+			s.session.Transaction = tx
+			s.session.Variables = p.Variables
 			return nil
 		}
 
@@ -130,14 +135,15 @@ func (s *Service) Domain() ai.Domain[map[string]any] {
 
 // StopOnError returns true if the agent is configured to stop recording on error.
 func (s *Service) StopOnError() bool {
-	return s.stopOnError
+	return s.session.StopOnError
 }
 
 // StopRecording stops the current recording session.
 func (s *Service) StopRecording() {
-	s.recording = false
-	s.currentMacro = nil
-	s.recordingTx = nil
+	s.session.Recording = false
+	s.session.CurrentMacro = nil
+	s.session.Transaction = nil
+	s.session.Variables = nil
 }
 
 func (s *Service) getMacroDB() *database.Database {
@@ -297,20 +303,118 @@ func (s *Service) RunPipeline(ctx context.Context, input string) (string, error)
 // RecordStep implements the MacroRecorder interface
 func (s *Service) RecordStep(step ai.MacroStep) {
 	// Always capture the last step for potential manual addition
-	s.lastStep = &step
+	s.session.LastStep = &step
 
-	if s.recording && s.currentMacro != nil {
+	// Buffer tool calls for potential refactoring
+	if step.Type == "command" {
+		s.session.LastInteractionToolCalls = append(s.session.LastInteractionToolCalls, step)
+	}
+
+	if s.session.Recording && s.session.CurrentMacro != nil {
 		// In standard mode, we only record high-level "ask" steps (user intent).
 		// We ignore "command" steps (tool calls) because replaying the "ask" step
 		// will naturally trigger the tool call again.
-		if s.recordingMode == "standard" && step.Type == "command" {
+		if s.session.RecordingMode == "standard" && step.Type == "command" {
 			return
 		}
-		s.currentMacro.Steps = append(s.currentMacro.Steps, step)
+		s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, step)
 	}
 }
 
+// RefactorLastSteps refactors the last N steps into a new structure (macro or block).
+func (s *Service) RefactorLastSteps(count int, mode string, name string) error {
+	if !s.session.Recording || s.session.CurrentMacro == nil {
+		return fmt.Errorf("not recording")
+	}
+
+	var stepsToGroup []ai.MacroStep
+
+	if s.session.RecordingMode == "standard" {
+		// In standard mode, the last step in CurrentMacro is likely the "ask" step.
+		// We want to replace it with the buffered tool calls.
+		if len(s.session.CurrentMacro.Steps) > 0 {
+			lastIdx := len(s.session.CurrentMacro.Steps) - 1
+			if s.session.CurrentMacro.Steps[lastIdx].Type == "ask" {
+				s.session.CurrentMacro.Steps = s.session.CurrentMacro.Steps[:lastIdx]
+			}
+		}
+		stepsToGroup = s.session.LastInteractionToolCalls
+	} else {
+		// In compiled mode, the tool calls are already in CurrentMacro.Steps.
+		// Use count if provided, otherwise use the length of buffered tool calls.
+		if count <= 0 {
+			count = len(s.session.LastInteractionToolCalls)
+		}
+		if count <= 0 {
+			return fmt.Errorf("no steps to refactor")
+		}
+		if len(s.session.CurrentMacro.Steps) < count {
+			return fmt.Errorf("not enough steps to refactor")
+		}
+		startIdx := len(s.session.CurrentMacro.Steps) - count
+		stepsToGroup = s.session.CurrentMacro.Steps[startIdx:]
+		s.session.CurrentMacro.Steps = s.session.CurrentMacro.Steps[:startIdx]
+	}
+
+	if len(stepsToGroup) == 0 {
+		return fmt.Errorf("no steps to refactor")
+	}
+
+	if mode == "macro" {
+		if name == "" {
+			return fmt.Errorf("macro name required")
+		}
+		// Create new macro
+		newMacro := ai.Macro{
+			Name:            name,
+			Steps:           stepsToGroup,
+			TransactionMode: "single", // Default to single tx for extracted scripts
+		}
+		// Save it
+		if err := s.saveMacro(context.Background(), newMacro); err != nil {
+			return err
+		}
+		// Add macro step
+		s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, ai.MacroStep{
+			Type:      "macro",
+			MacroName: name,
+		})
+	} else if mode == "block" {
+		// Add block step
+		s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, ai.MacroStep{
+			Type:  "block",
+			Steps: stepsToGroup,
+		})
+	}
+
+	return nil
+}
+
+func (s *Service) saveMacro(ctx context.Context, macro ai.Macro) error {
+	macroDB := s.getMacroDB()
+	if macroDB == nil {
+		return fmt.Errorf("macro database not available")
+	}
+	tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return err
+	}
+	store, err := macroDB.OpenModelStore(ctx, "macros", tx)
+	if err != nil {
+		tx.Rollback(ctx)
+		return err
+	}
+	if err := store.Save(ctx, "macros", macro.Name, &macro); err != nil {
+		tx.Rollback(ctx)
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
 func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+	// Clear buffer at start of Ask
+	s.session.LastInteractionToolCalls = []ai.MacroStep{}
+
 	cfg := ai.NewAskConfig(opts...)
 	var db *database.Database
 	if val, ok := cfg.Values["database"]; ok {
@@ -324,9 +428,9 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		if p, ok := val.(*ai.SessionPayload); ok {
 			ctx = context.WithValue(ctx, "session_payload", p)
 			// Also set db from payload if not already set
-			if db == nil && p.CurrentDB != nil {
-				if d, ok := p.CurrentDB.(*database.Database); ok {
-					db = d
+			if db == nil && p.CurrentDB != "" {
+				if opts, ok := s.databases[p.CurrentDB]; ok {
+					db = database.NewDatabase(opts)
 				}
 			}
 		}
@@ -335,319 +439,32 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	// Inject MacroRecorder into context
 	ctx = context.WithValue(ctx, ai.CtxKeyMacroRecorder, s)
 
-	// Handle Macro Management Commands
-	if strings.HasPrefix(query, "/macro ") {
-		return s.handleMacroCommand(ctx, query)
-	}
-
 	// Capture "ask" step for potential manual addition
 	// We do this BEFORE handling /record or /play so those commands themselves aren't captured as "ask" steps
-	// Wait, /record and /play ARE commands.
-	// But we want to capture the LAST "ask" step that was a real interaction.
-	// If the user types "Select * from users", that's an "ask".
-	// If the user types "/macro step add ...", that's a command.
-	// We should only capture if it's NOT a slash command?
-	// Or maybe we capture everything, but the user is responsible for running the "ask" first.
 	if !strings.HasPrefix(query, "/") {
-		s.RecordStep(ai.MacroStep{
-			Type:   "ask",
-			Prompt: query,
-		})
-	}
-
-	// Handle Macro Commands
-	if strings.HasPrefix(query, "/record ") {
-		args := strings.Fields(strings.TrimPrefix(query, "/record "))
-		if len(args) == 0 {
-			return "Error: Macro name required", nil
-		}
-
-		mode := "standard"
-		stopOnError := false
-		force := false
-
-		// Parse arguments
-		// /record [compiled] <name> [--stop-on-error] [--force]
-		var cleanArgs []string
-		for _, arg := range args {
-			if arg == "--stop-on-error" {
-				stopOnError = true
-			} else if arg == "--force" {
-				force = true
-			} else {
-				cleanArgs = append(cleanArgs, arg)
-			}
-		}
-		args = cleanArgs
-
-		if len(args) == 0 {
-			return "Error: Macro name required", nil
-		}
-
-		name := args[0]
-
-		if args[0] == "compiled" {
-			if len(args) < 2 {
-				return "Error: Macro name required for compiled mode", nil
-			}
-			mode = "compiled"
-			name = args[1]
-		}
-
-		// Check if macro exists
-		macroDB := s.getMacroDB()
-		if macroDB != nil {
-			tx, err := macroDB.BeginTransaction(ctx, sop.ForReading)
-			if err == nil {
-				store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-				if err == nil {
-					var dummy ai.Macro
-					if err := store.Load(ctx, "macros", name, &dummy); err == nil {
-						// Found!
-						if !force {
-							tx.Rollback(ctx)
-							return fmt.Sprintf("Error: Macro '%s' already exists. Use '/record %s --force' to overwrite.", name, name), nil
-						}
-					}
-				}
-				tx.Commit(ctx)
-			}
-		}
-
-		s.recording = true
-		s.recordingMode = mode
-		s.stopOnError = stopOnError
-		// Set macro.Database to current DB if available, else leave empty for composability
-		var dbName string
-		if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != nil {
-			dbName = p.Variables["database"].(string)
-			// if d, ok := p.CurrentDB.(*database.Database); ok {
-			// 	dbName = d.Name
-			// }
-		}
-
-		log.Debug(fmt.Sprintf("database: %s", dbName))
-
-		s.currentMacro = &ai.Macro{
-			Name:     name,
-			Database: dbName,
-			Steps:    []ai.MacroStep{},
-		}
-
-		// Start a long-running transaction for the recording session
-		if db != nil {
-			tx, err := db.BeginTransaction(ctx, sop.ForWriting)
-			if err == nil {
-				s.recordingTx = tx
-			} else {
-				return fmt.Sprintf("Error starting recording transaction: %v", err), nil
-			}
-		}
-
-		msg := fmt.Sprintf("Recording macro '%s' (Mode: %s)", name, mode)
-		if stopOnError {
-			msg += " [Stop on Error]"
-		}
-		return msg + "...", nil
-	}
-
-	if query == "/pause" {
-		if s.currentMacro == nil {
-			return "Error: No active macro recording", nil
-		}
-		s.recording = false
-		return "Recording paused.", nil
-	}
-
-	if query == "/resume" {
-		if s.currentMacro == nil {
-			return "Error: No active macro recording", nil
-		}
-		s.recording = true
-		return "Recording resumed.", nil
-	}
-
-	if query == "/stop" {
-		if s.currentMacro == nil {
-			return "Error: Not recording", nil
-		}
-		s.recording = false
-		macroDB := s.getMacroDB()
-		if macroDB != nil {
-			tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
-			if err != nil {
-				return fmt.Sprintf("Error starting transaction: %v", err), nil
-			}
-			store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-			if err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error opening store: %v", err), nil
-			}
-
-			log.Debug(fmt.Sprintf("saving macro w/ db: %s", s.currentMacro.Database))
-
-			if err := store.Save(ctx, "macros", s.currentMacro.Name, s.currentMacro); err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error saving macro: %v", err), nil
-			}
-			if err := tx.Commit(ctx); err != nil {
-				return fmt.Sprintf("Error committing transaction: %v", err), nil
-			}
-			msg := fmt.Sprintf("Macro '%s' saved with %d steps.", s.currentMacro.Name, len(s.currentMacro.Steps))
-			s.currentMacro = nil
-			return msg, nil
-		}
-		s.currentMacro = nil
-		return "Warning: No database configured, macro lost.", nil
-	}
-
-	if strings.HasPrefix(query, "/play ") {
-		parts := strings.Fields(strings.TrimPrefix(query, "/play "))
-		if len(parts) == 0 {
-			return "Error: Macro name required", nil
-		}
-		name := parts[0]
-		args := make(map[string]string)
-		for _, arg := range parts[1:] {
-			kv := strings.SplitN(arg, "=", 2)
-			if len(kv) == 2 {
-				args[kv[0]] = kv[1]
-			}
-		}
-
-		macroDB := s.getMacroDB()
-		if macroDB == nil {
-			return "Error: No database configured", nil
-		}
-
-		tx, err := macroDB.BeginTransaction(ctx, sop.ForReading)
-		if err != nil {
-			return fmt.Sprintf("Error starting transaction: %v", err), nil
-		}
-
-		store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-		if err != nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error opening store: %v", err), nil
-		}
-
-		var macro ai.Macro
-		if err := store.Load(ctx, "macros", name, &macro); err != nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error loading macro: %v", err), nil
-		}
-		tx.Commit(ctx)
-
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("Playing macro '%s'...\n", name))
-
-		// Convert args to map[string]any
-		scope := make(map[string]any)
-		for k, v := range args {
-			scope[k] = v
-		}
-		var scopeMu sync.RWMutex
-
-		// Lifecycle Management for Macro Execution
-		if err := s.Open(ctx); err != nil {
-			return fmt.Sprintf("Error initializing session: %v", err), nil
-		}
-		// Ensure we close the session (commit transaction)
-		defer func() {
-			if err := s.Close(ctx); err != nil {
-				sb.WriteString(fmt.Sprintf("\nError closing session: %v", err))
-			}
-		}()
-
-		if err := s.executeMacro(ctx, macro.Steps, scope, &scopeMu, &sb, db); err != nil {
-			sb.WriteString(fmt.Sprintf("Error executing macro: %v\n", err))
-			// If error, we might want to rollback.
-			// Currently Close() commits.
-			// We should probably rollback here if we can access the transaction.
-			if p := ai.GetSessionPayload(ctx); p != nil && p.Transaction != nil {
-				if tx, ok := p.Transaction.(sop.Transaction); ok {
-					tx.Rollback(ctx)
-					p.Transaction = nil // Prevent Close from committing
-				}
-			}
-		}
-		return sb.String(), nil
-	}
-
-	if strings.HasPrefix(query, "/delete ") {
-		name := strings.TrimPrefix(query, "/delete ")
-		if name == "" {
-			return "Error: Macro name required", nil
-		}
-
-		macroDB := s.getMacroDB()
-		if macroDB == nil {
-			return "Error: No database configured", nil
-		}
-
-		tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
-		if err != nil {
-			return fmt.Sprintf("Error starting transaction: %v", err), nil
-		}
-
-		store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-		if err != nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error opening store: %v", err), nil
-		}
-
-		if err := store.Delete(ctx, "macros", name); err != nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error deleting macro: %v", err), nil
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Sprintf("Error committing transaction: %v", err), nil
-		}
-		return fmt.Sprintf("Macro '%s' deleted.", name), nil
-	}
-
-	if query == "/list" {
-		macroDB := s.getMacroDB()
-		if macroDB == nil {
-			return "Error: No database configured", nil
-		}
-
-		tx, err := macroDB.BeginTransaction(ctx, sop.ForReading)
-		if err != nil {
-			return fmt.Sprintf("Error starting transaction: %v", err), nil
-		}
-
-		store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-		if err != nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error opening store: %v", err), nil
-		}
-
-		names, err := store.List(ctx, "macros")
-		if err != nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error listing macros: %v", err), nil
-		}
-		tx.Commit(ctx)
-
-		var sb strings.Builder
-		sb.WriteString("Available Macros:\n")
-		for _, n := range names {
-			sb.WriteString(fmt.Sprintf("- %s\n", n))
-		}
-		return sb.String(), nil
-	}
-
-	// Record step if recording
-	if s.recording {
 		// Only record "ask" step if NOT in compiled mode
-		if s.recordingMode != "compiled" {
-			s.currentMacro.Steps = append(s.currentMacro.Steps, ai.MacroStep{
+		// If in compiled mode, we wait for the tool execution to record the command step
+		if !s.session.Recording || s.session.RecordingMode != "compiled" {
+			s.RecordStep(ai.MacroStep{
 				Type:   "ask",
 				Prompt: query,
 			})
 		}
 	}
+
+	// Handle Session Commands (Macros, Recording, etc.)
+	if resp, handled, err := s.handleSessionCommand(ctx, query, db); handled {
+		return resp, err
+	}
+
+	// If we are recording, we do NOT want to execute the query against the LLM if it's a transaction command
+	// that was handled by the tool but skipped execution.
+	// However, the tool execution happens inside the LLM loop (or via direct tool call if we supported that).
+	// Since we are using an LLM, we must let it run.
+	// But wait, if the user says "begin transaction", the LLM will call the tool.
+	// The tool will see the recorder and return "Recorded...".
+	// The LLM will then see that output and likely say "I have recorded the transaction start".
+	// This is fine.
 
 	// Obfuscate Input
 	// We ONLY obfuscate known resource names (Database, Store) that have been registered.
@@ -665,10 +482,10 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	if len(s.pipeline) > 0 {
 		resp, err := s.RunPipeline(ctx, query)
 		// Update recordingTx if the pipeline changed the transaction (e.g. via manage_transaction tool)
-		if s.recording {
+		if s.session.Recording {
 			if p := ai.GetSessionPayload(ctx); p != nil && p.Transaction != nil {
 				if tx, ok := p.Transaction.(sop.Transaction); ok {
-					s.recordingTx = tx
+					s.session.Transaction = tx
 				}
 			}
 		}
@@ -741,13 +558,10 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	// Check for Raw Tool Call (from DataAdmin or similar generators)
 	if output.Raw != nil {
 		if b, err := json.Marshal(output.Raw); err == nil {
-			if s.recording {
-				s.currentMacro.Steps = append(s.currentMacro.Steps, ai.MacroStep{
+			if s.session.Recording {
+				s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, ai.MacroStep{
 					Type:   "ask",
-					Prompt: string(b), // Store raw tool call as prompt for now? Or maybe a new "tool" type?
-					// For now, let's use "ask" but maybe we need a "tool" type in the schema?
-					// The user didn't specify "tool" in the new schema.
-					// Let's assume "ask" covers it or we just store it as prompt.
+					Prompt: string(b), // Store raw tool call as prompt
 				})
 			}
 			toolRecorded = true
@@ -767,9 +581,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 			text = strings.TrimSpace(text)
 
 			if strings.HasPrefix(text, "{") && strings.Contains(text, "\"tool\"") {
-				// De-obfuscate Tool Arguments
-				// We need to parse, de-obfuscate, and re-serialize (or just return the de-obfuscated JSON)
-				// Since we return text, we should return the de-obfuscated JSON so the caller can execute it.
+				// De-obfuscate Tool Arguments before returning to caller.
 
 				// 1. Parse JSON FIRST to get the exact values the LLM returned
 				var toolCall struct {
@@ -802,18 +614,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 
 					// Inject Database from Options if missing
 					if db != nil {
-						// We can't inject the *database.Database object into the JSON args directly
-						// because it's not serializable.
-						// However, the ToolExecutor might need it.
-						// The DefaultToolExecutor in main.ai.go doesn't use the DB object from args,
-						// it uses the DB name string to open it.
-						// But wait, we just refactored main.ai.go to NOT put DB in context.
-						// And DefaultToolExecutor executes tools.
-						// If the tool is "select", it needs a DB.
-						// The LLM returns the DB name (obfuscated or not).
-						// If we want to support "contextual DB", we might need to pass the DB object to the executor.
-						// But ToolExecutor.Execute takes map[string]any.
-						// We can put the DB object in there!
+						// Inject the database instance into args for the ToolExecutor.
 						toolCall.Args["_db_instance"] = db
 					}
 
@@ -822,47 +623,24 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 						cleanJSON := string(b)
 
 						// Always capture as last step (for manual addition)
-						s.lastStep = &ai.MacroStep{
+						s.session.LastStep = &ai.MacroStep{
 							Type:    "command",
 							Command: toolCall.Tool,
 							Args:    toolCall.Args,
 						}
 
 						// Record Tool Call if recording
-						if s.recording {
-							if s.recordingMode == "compiled" {
-								s.currentMacro.Steps = append(s.currentMacro.Steps, *s.lastStep)
-							} else {
-								s.currentMacro.Steps = append(s.currentMacro.Steps, ai.MacroStep{
-									Type:   "ask",
-									Prompt: cleanJSON,
-								})
+						if s.session.Recording {
+							if s.session.RecordingMode == "compiled" {
+								s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, *s.session.LastStep)
 							}
+							// In natural mode, we already recorded the prompt via s.RecordStep at the top.
+							// So we do NOT record the tool call here to avoid double execution.
 						}
 
 						// Update recordingTx if the tool changed the transaction (e.g. via manage_transaction tool)
-						// Note: This only works if the tool was executed by the generator/pipeline and updated the payload.
-						// If the tool is executed by the caller (main.ai.go), we can't see the update here.
-						// But wait, Service.Ask returns the JSON string, and main.ai.go executes it.
-						// So Service doesn't know if the transaction changed!
-						// However, main.ai.go calls executeTool.
-						// executeTool updates the payload in context.
-						// But context values are immutable?
-						// No, SessionPayload is a pointer!
-						// So if main.ai.go updates payload.Transaction, Service can see it if it holds the same payload pointer.
-						// Service.Ask gets the payload from context.
-						// So yes, we can check it here?
-						// No, Service.Ask returns BEFORE main.ai.go executes the tool.
-						// So Service cannot update recordingTx here.
-						// BUT, Service.Open is called at the START of the request.
-						// If main.ai.go executes the tool, the transaction changes for the NEXT request.
-						// So when the user sends the NEXT message, Service.Open will be called.
-						// Service.Open checks s.recordingTx.
-						// If s.recordingTx is stale (committed), we have a problem.
-						// But wait, if main.ai.go updates payload.Transaction to a NEW transaction (via auto-begin),
-						// then in the NEXT request, payload.Transaction will be... wait.
-						// SessionPayload is recreated per request in main.ai.go?
-						// Let's check main.ai.go.
+						// Note: Transaction updates resulting from tool execution are handled by the caller
+						// or the next request's Open() call.
 
 						return cleanJSON, nil
 					}
@@ -881,11 +659,15 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	}
 
 	// Record Chat Output if recording
-	if s.recording && !toolRecorded {
-		s.currentMacro.Steps = append(s.currentMacro.Steps, ai.MacroStep{
-			Type:    "say",
-			Message: finalText,
-		})
+	if s.session.Recording && !toolRecorded {
+		// Only record "say" step if NOT in compiled mode
+		// In compiled mode, we only care about the commands (tools)
+		if s.session.RecordingMode != "compiled" {
+			s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, ai.MacroStep{
+				Type:    "say",
+				Message: finalText,
+			})
+		}
 	}
 
 	return finalText, nil
@@ -912,490 +694,4 @@ func (s *Service) formatContext(hits []ai.Hit[map[string]any]) string {
 		sb.WriteString("\n")
 	}
 	return sb.String()
-}
-
-// executeMacro runs a sequence of macro steps with support for control flow and variables.
-func (s *Service) executeMacro(ctx context.Context, steps []ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
-	// Create cancellable context for this macro execution scope to support stopping on error
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	// Use errgroup for managing concurrency and error propagation
-	g, groupCtx := errgroup.WithContext(ctx)
-
-	var syncErr error
-
-	for _, step := range steps {
-		// Check if context is already cancelled (by errgroup or sync error)
-		if groupCtx.Err() != nil {
-			break
-		}
-
-		// Refresh DB from payload to ensure we use the current active database
-		// This handles cases where a previous step (e.g. a tool) switched the database.
-		if p := ai.GetSessionPayload(groupCtx); p != nil {
-			d := p.GetDatabase()
-			if d != nil {
-				db = d.(*database.Database)
-			}
-		}
-		log.Debug(fmt.Sprintf("DB from payload: %v", db))
-
-		// If async, run in errgroup
-		if step.IsAsync {
-			// Check if we are in a transaction.
-			// If so, we generally force sync execution to maintain integrity for simple steps.
-			// HOWEVER, if the step is a nested "macro", we allow it to run async (Swarm pattern),
-			// assuming it will manage its own transaction (e.g. on a different DB).
-			p := ai.GetSessionPayload(groupCtx)
-			if p != nil && p.Transaction != nil && step.Type != "macro" {
-				msg := fmt.Sprintf("Info: Step '%s' marked async but active transaction exists. Running synchronously.\n", step.Type)
-				sb.WriteString(msg)
-				if w, ok := ctx.Value(ai.CtxKeyWriter).(io.Writer); ok && w != nil {
-					fmt.Fprint(w, msg)
-				}
-				// Fall through to sync execution
-			} else {
-				// Detach transaction to enforce isolation (Swarm Computing model)
-				// Async steps must not share the parent transaction to avoid race conditions.
-				// They should start their own transaction if needed.
-				asyncCtx := groupCtx
-				if p != nil {
-					// Clone payload and remove transaction (though p.Transaction should be nil here based on check above,
-					// but good to be safe if logic changes)
-					newPayload := *p
-					newPayload.Transaction = nil
-					asyncCtx = context.WithValue(groupCtx, "session_payload", &newPayload)
-				}
-
-				// Capture step for closure
-				st := step
-				g.Go(func() error {
-					// Handle panic in async step
-					defer func() {
-						if r := recover(); r != nil {
-							// We can't easily return the panic as error here without named return,
-							// but errgroup expects an error return.
-							// We'll just log it (if we had a logger) and return a generic error.
-							// For now, let's assume runStep handles its own panics or we let it crash?
-							// Better to recover and return error to stop the group.
-						}
-					}()
-
-					if err := s.runStep(asyncCtx, st, scope, scopeMu, sb, db); err != nil {
-						if st.ContinueOnError {
-							// Log error but don't stop the group
-							// TODO: Add logging
-							return nil
-						}
-						return err // This cancels groupCtx
-					}
-					return nil
-				})
-				continue
-			}
-		}
-
-		// Sync step
-		if err := s.runStep(groupCtx, step, scope, scopeMu, sb, db); err != nil {
-			if step.ContinueOnError {
-				// Log error and continue
-				continue
-			}
-			// Stop everything
-			syncErr = err
-			cancel() // Cancel context for async tasks
-			break
-		}
-	}
-
-	// Wait for all async tasks
-	asyncErr := g.Wait()
-
-	if syncErr != nil {
-		return syncErr
-	}
-	return asyncErr
-}
-
-func (s *Service) resolveTemplate(tmplStr string, scope map[string]any, scopeMu *sync.RWMutex) string {
-	if tmplStr == "" {
-		return ""
-	}
-
-	if scopeMu != nil {
-		scopeMu.RLock()
-		defer scopeMu.RUnlock()
-	}
-
-	if tmpl, err := template.New("tmpl").Parse(tmplStr); err == nil {
-		var buf bytes.Buffer
-		if err := tmpl.Execute(&buf, scope); err == nil {
-			return buf.String()
-		}
-	}
-	return tmplStr
-}
-
-func (s *Service) handleMacroCommand(ctx context.Context, query string) (string, error) {
-	args := strings.Fields(strings.TrimPrefix(query, "/macro "))
-	if len(args) == 0 {
-		return "Usage: /macro <list|show|delete|step> ...", nil
-	}
-
-	cmd := args[0]
-	macroDB := s.getMacroDB()
-	if macroDB == nil {
-		return "Error: No database configured", nil
-	}
-
-	switch cmd {
-	case "list":
-		tx, err := macroDB.BeginTransaction(ctx, sop.ForReading)
-		if err != nil {
-			return fmt.Sprintf("Error starting transaction: %v", err), nil
-		}
-		store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-		if err != nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error opening store: %v", err), nil
-		}
-		names, err := store.List(ctx, "macros")
-		tx.Commit(ctx)
-		if err != nil {
-			return fmt.Sprintf("Error listing macros: %v", err), nil
-		}
-		if len(names) == 0 {
-			return "No macros found.", nil
-		}
-		return "Macros:\n- " + strings.Join(names, "\n- "), nil
-
-	case "show":
-		if len(args) < 2 {
-			return "Usage: /macro show <name> [--json]", nil
-		}
-		name := args[1]
-		showJSON := false
-		if len(args) > 2 && args[2] == "--json" {
-			showJSON = true
-		}
-
-		tx, err := macroDB.BeginTransaction(ctx, sop.ForReading)
-		if err != nil {
-			return fmt.Sprintf("Error starting transaction: %v", err), nil
-		}
-		store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-		if err != nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error opening store: %v", err), nil
-		}
-		var macro ai.Macro
-		err = store.Load(ctx, "macros", name, &macro)
-		tx.Commit(ctx)
-		if err != nil {
-			return fmt.Sprintf("Error loading macro: %v", err), nil
-		}
-
-		if showJSON {
-			b, err := json.MarshalIndent(macro, "", "  ")
-			if err != nil {
-				return fmt.Sprintf("Error marshaling macro: %v", err), nil
-			}
-			return fmt.Sprintf("```json\n%s\n```", string(b)), nil
-		}
-
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("Macro: %s\n", macro.Name))
-		for i, step := range macro.Steps {
-			desc := step.Message
-			if step.Type == "ask" {
-				desc = step.Prompt
-			} else if step.Type == "macro" {
-				desc = fmt.Sprintf("Run '%s'", step.MacroName)
-			} else if step.Type == "command" {
-				argsJSON, _ := json.Marshal(step.Args)
-				desc = fmt.Sprintf("Execute '%s' %s", step.Command, string(argsJSON))
-			}
-			sb.WriteString(fmt.Sprintf("%d. [%s] %s", i+1, step.Type, desc))
-			sb.WriteString("\n")
-		}
-		return sb.String(), nil
-
-	case "delete":
-		if len(args) < 2 {
-			return "Usage: /macro delete <name>", nil
-		}
-		name := args[1]
-		tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
-		if err != nil {
-			return fmt.Sprintf("Error starting transaction: %v", err), nil
-		}
-		store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-		if err != nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error opening store: %v", err), nil
-		}
-		err = store.Delete(ctx, "macros", name)
-		if err != nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error deleting macro: %v", err), nil
-		}
-		tx.Commit(ctx)
-		return fmt.Sprintf("Macro '%s' deleted.", name), nil
-
-	case "save_as":
-		if len(args) < 2 {
-			return "Usage: /macro save_as <name>", nil
-		}
-		name := args[1]
-		if s.lastStep == nil {
-			return "Error: No previous step available to save. Run a command first.", nil
-		}
-
-		tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
-		if err != nil {
-			return fmt.Sprintf("Error starting transaction: %v", err), nil
-		}
-		store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-		if err != nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error opening store: %v", err), nil
-		}
-
-		// Check if macro exists
-		var dummy ai.Macro
-		if err := store.Load(ctx, "macros", name, &dummy); err == nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error: Macro '%s' already exists. Use '/macro delete %s' first.", name, name), nil
-		}
-
-		newMacro := ai.Macro{
-			Name:  name,
-			Steps: []ai.MacroStep{*s.lastStep},
-		}
-
-		if err := store.Save(ctx, "macros", name, newMacro); err != nil {
-			tx.Rollback(ctx)
-			return fmt.Sprintf("Error saving macro: %v", err), nil
-		}
-		tx.Commit(ctx)
-		return fmt.Sprintf("Macro '%s' created from last step.", name), nil
-
-	case "step":
-		if len(args) < 3 {
-			return "Usage: /macro step <add|delete> <macro_name> ...", nil
-		}
-		subCmd := args[1]
-		name := args[2]
-
-		if subCmd == "add" {
-			if len(args) < 4 {
-				return "Usage: /macro step add <macro_name> <top|bottom>", nil
-			}
-			position := args[3]
-			if position != "top" && position != "bottom" {
-				return "Error: Position must be 'top' or 'bottom'", nil
-			}
-
-			if s.lastStep == nil {
-				return "Error: No previous step available to add. Run a command first.", nil
-			}
-
-			tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
-			if err != nil {
-				return fmt.Sprintf("Error starting transaction: %v", err), nil
-			}
-			store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-			if err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error opening store: %v", err), nil
-			}
-			var macro ai.Macro
-			if err := store.Load(ctx, "macros", name, &macro); err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error loading macro: %v", err), nil
-			}
-
-			if position == "top" {
-				macro.Steps = append([]ai.MacroStep{*s.lastStep}, macro.Steps...)
-			} else {
-				macro.Steps = append(macro.Steps, *s.lastStep)
-			}
-
-			if err := store.Save(ctx, "macros", name, macro); err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error saving macro: %v", err), nil
-			}
-			tx.Commit(ctx)
-			return fmt.Sprintf("Step added to %s of macro '%s'.", position, name), nil
-		}
-
-		if subCmd == "delete" {
-			if len(args) < 4 {
-				return "Usage: /macro step delete <macro_name> <step_index>", nil
-			}
-			idxStr := args[3]
-			idx, err := strconv.Atoi(idxStr)
-			if err != nil || idx < 1 {
-				return "Error: Invalid step index", nil
-			}
-			// Adjust to 0-based
-			idx--
-
-			tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
-			if err != nil {
-				return fmt.Sprintf("Error starting transaction: %v", err), nil
-			}
-			store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-			if err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error opening store: %v", err), nil
-			}
-			var macro ai.Macro
-			if err := store.Load(ctx, "macros", name, &macro); err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error loading macro: %v", err), nil
-			}
-
-			if idx >= len(macro.Steps) {
-				tx.Rollback(ctx)
-				return "Error: Step index out of range", nil
-			}
-
-			// Remove step
-			macro.Steps = append(macro.Steps[:idx], macro.Steps[idx+1:]...)
-
-			if err := store.Save(ctx, "macros", name, macro); err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error saving macro: %v", err), nil
-			}
-			tx.Commit(ctx)
-			return fmt.Sprintf("Step %d deleted from macro '%s'.", idx+1, name), nil
-		}
-
-		if subCmd == "update" {
-			// /macro step update <macro_name> <step_index>
-			if len(args) < 4 {
-				return "Usage: /macro step update <macro_name> <step_index>", nil
-			}
-			if s.lastStep == nil {
-				return "Error: No previous step available to update with. Run a command first.", nil
-			}
-
-			idxStr := args[3]
-			idx, err := strconv.Atoi(idxStr)
-			if err != nil || idx < 1 {
-				return "Error: Invalid step index", nil
-			}
-			idx-- // 0-based
-
-			tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
-			if err != nil {
-				return fmt.Sprintf("Error starting transaction: %v", err), nil
-			}
-			store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-			if err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error opening store: %v", err), nil
-			}
-			var macro ai.Macro
-			if err := store.Load(ctx, "macros", name, &macro); err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error loading macro: %v", err), nil
-			}
-
-			if idx >= len(macro.Steps) {
-				tx.Rollback(ctx)
-				return "Error: Step index out of range", nil
-			}
-
-			// Update step
-			macro.Steps[idx] = *s.lastStep
-
-			if err := store.Save(ctx, "macros", name, macro); err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error saving macro: %v", err), nil
-			}
-			tx.Commit(ctx)
-			return fmt.Sprintf("Step %d updated in macro '%s'.", idx+1, name), nil
-		}
-
-		if subCmd == "add" {
-			// /macro step add <macro_name> <position> [target_index]
-			// position: top, bottom, before, after
-			if len(args) < 4 {
-				return "Usage: /macro step add <macro_name> <position> [target_index]", nil
-			}
-			if s.lastStep == nil {
-				return "Error: No previous step available to add. Run a command first.", nil
-			}
-
-			position := args[3]
-			targetIdx := -1
-			if position == "before" || position == "after" {
-				if len(args) < 5 {
-					return "Usage: /macro step add <macro_name> <before|after> <target_index>", nil
-				}
-				var err error
-				targetIdx, err = strconv.Atoi(args[4])
-				if err != nil || targetIdx < 1 {
-					return "Error: Invalid target index", nil
-				}
-				targetIdx-- // 0-based
-			}
-
-			tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
-			if err != nil {
-				return fmt.Sprintf("Error starting transaction: %v", err), nil
-			}
-			store, err := macroDB.OpenModelStore(ctx, "macros", tx)
-			if err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error opening store: %v", err), nil
-			}
-			var macro ai.Macro
-			if err := store.Load(ctx, "macros", name, &macro); err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error loading macro: %v", err), nil
-			}
-
-			newStep := *s.lastStep
-
-			switch position {
-			case "top":
-				macro.Steps = append([]ai.MacroStep{newStep}, macro.Steps...)
-			case "bottom":
-				macro.Steps = append(macro.Steps, newStep)
-			case "before":
-				if targetIdx >= len(macro.Steps) {
-					tx.Rollback(ctx)
-					return "Error: Target index out of range", nil
-				}
-				macro.Steps = append(macro.Steps[:targetIdx], append([]ai.MacroStep{newStep}, macro.Steps[targetIdx:]...)...)
-			case "after":
-				if targetIdx >= len(macro.Steps) {
-					tx.Rollback(ctx)
-					return "Error: Target index out of range", nil
-				}
-				// Insert after targetIdx (so at targetIdx + 1)
-				targetIdx++
-				macro.Steps = append(macro.Steps[:targetIdx], append([]ai.MacroStep{newStep}, macro.Steps[targetIdx:]...)...)
-			default:
-				tx.Rollback(ctx)
-				return "Error: Invalid position. Use top, bottom, before, or after.", nil
-			}
-
-			if err := store.Save(ctx, "macros", name, macro); err != nil {
-				tx.Rollback(ctx)
-				return fmt.Sprintf("Error saving macro: %v", err), nil
-			}
-			tx.Commit(ctx)
-			return fmt.Sprintf("Step added to macro '%s' at %s.", name, position), nil
-		}
-
-		return "Unknown step command. Usage: /macro step <delete|add> ...", nil
-
-	default:
-		return "Unknown macro command. Usage: /macro <list|show|delete|step> ...", nil
-	}
 }

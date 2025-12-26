@@ -50,7 +50,7 @@ func TestMacroAsyncErrorPropagation(t *testing.T) {
 	}
 	sysDB := database.NewDatabase(dbOpts)
 	mockGen := &MockScriptedGenerator{}
-	svc := NewService(&MockDomain{}, sysDB, mockGen, nil, nil, false)
+	svc := NewService(&MockDomain{}, sysDB, nil, mockGen, nil, nil, false)
 
 	executor := &ErrorMockToolExecutor{}
 	ctx := context.Background()
@@ -75,7 +75,7 @@ func TestMacroAsyncErrorPropagation(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	err := svc.executeMacro(ctx, macro.Steps, make(map[string]any), nil, &sb, sysDB)
+	err := svc.runSteps(ctx, macro.Steps, make(map[string]any), nil, &sb, sysDB)
 
 	if err == nil {
 		t.Fatal("Expected error, got nil")
