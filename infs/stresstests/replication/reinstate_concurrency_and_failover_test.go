@@ -75,6 +75,9 @@ func Test_Reinstate_MultiTable_Concurrency_SecondFailover(t *testing.T) {
 	}
 
 	// Trigger failover on next registry write by making active registry path read-only.
+	// Ensure GlobalReplicationDetails is up to date with Redis before we decide which folder to make read-only.
+	_, _ = fs.NewReplicationTracker(ctx, stores, true, sop.GetL2Cache(to))
+
 	makeRegistryReadOnly(t, stores, tables[0])
 	tr0, _ := infs.NewTransactionWithReplication(ctx, to)
 	_ = tr0.Begin(ctx)

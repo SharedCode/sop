@@ -122,6 +122,8 @@ func TestDirectIOSetupNewFileFailure_WithReplication(t *testing.T) {
 	// Take from global EC config the data paths & EC config details.
 	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFolders, CacheType: sop.Redis}
 
+	_ = infs.RemoveBtree(ctx, "repltable", storesFolders, fs.GetGlobalErasureConfig(), sop.Redis)
+
 	trans, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		t.Error(err)

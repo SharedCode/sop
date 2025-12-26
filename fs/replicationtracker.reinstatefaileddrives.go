@@ -57,6 +57,9 @@ func (r *replicationTracker) ReinstateFailedDrives(ctx context.Context) error {
 // startLoggingCommitChanges enables logging of commit changes and persists the replication status
 // both on disk and in the L2 cache.
 func (r *replicationTracker) startLoggingCommitChanges(ctx context.Context) error {
+	globalReplicationDetailsLocker.Lock()
+	defer globalReplicationDetailsLocker.Unlock()
+
 	GlobalReplicationDetails.LogCommitChanges = true
 	r.LogCommitChanges = true
 
@@ -158,6 +161,9 @@ func (r *replicationTracker) fastForward(ctx context.Context) (bool, error) {
 
 // turnOnReplication finalizes reinstatement: clears failure flags, updates status on disk and in L2 cache.
 func (r *replicationTracker) turnOnReplication(ctx context.Context) error {
+	globalReplicationDetailsLocker.Lock()
+	defer globalReplicationDetailsLocker.Unlock()
+
 	GlobalReplicationDetails.FailedToReplicate = false
 	GlobalReplicationDetails.LogCommitChanges = false
 

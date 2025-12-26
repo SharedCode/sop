@@ -51,6 +51,10 @@ func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
+			if len(store) == 0 {
+				// Store might have been deleted concurrently, skip it.
+				continue
+			}
 			// Write the store info.
 			ba, err := encoding.Marshal(store[0])
 			if err != nil {
