@@ -30,6 +30,7 @@ type DatabaseConfig struct {
 	Path     string `json:"path"`
 	Mode     string `json:"mode"`  // "standalone" or "clustered"
 	RedisURL string `json:"redis"` // Optional, for clustered
+	IsSystem bool   `json:"is_system,omitempty"`
 
 	// // DetectedRoot is the inferred root directory for relative paths in this database.
 	// // It is calculated at startup and not read from JSON.
@@ -218,10 +219,23 @@ func getDBOptions(dbName string) (sop.DatabaseOptions, error) {
 			db = &config.Databases[0]
 		}
 	} else {
-		for i := range config.Databases {
-			if config.Databases[i].Name == dbName {
-				db = &config.Databases[i]
-				break
+		// Check System DB first
+		if config.SystemDB != nil {
+			sysName := config.SystemDB.Name
+			if sysName == "" {
+				sysName = "system"
+			}
+			if dbName == sysName {
+				db = config.SystemDB
+			}
+		}
+
+		if db == nil {
+			for i := range config.Databases {
+				if config.Databases[i].Name == dbName {
+					db = &config.Databases[i]
+					break
+				}
 			}
 		}
 	}
@@ -248,7 +262,20 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 
 func handleListDatabases(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config.Databases)
+
+	dbs := make([]DatabaseConfig, len(config.Databases))
+	copy(dbs, config.Databases)
+
+	if config.SystemDB != nil {
+		sysDB := *config.SystemDB
+		if sysDB.Name == "" {
+			sysDB.Name = "system"
+		}
+		sysDB.IsSystem = true
+		dbs = append(dbs, sysDB)
+	}
+
+	json.NewEncoder(w).Encode(dbs)
 }
 
 func handleListStores(w http.ResponseWriter, r *http.Request) {
@@ -329,10 +356,17 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 		"isPrimitiveKey": si.IsPrimitiveKey,
 	}
 
-	if !si.IsPrimitiveKey && si.MapKeyIndexSpecification != "" {
-		var is jsondb.IndexSpecification
-		if err := encoding.DefaultMarshaler.Unmarshal([]byte(si.MapKeyIndexSpecification), &is); err == nil {
-			response["indexSpec"] = is
+	if !si.IsPrimitiveKey {
+		if si.MapKeyIndexSpecification != "" {
+			var is jsondb.IndexSpecification
+			if err := encoding.DefaultMarshaler.Unmarshal([]byte(si.MapKeyIndexSpecification), &is); err == nil {
+				response["indexSpec"] = is
+			}
+		} else if si.Count > 0 {
+			// Fetch a sample key to infer structure for UI
+			if ok, _ := store.First(ctx); ok {
+				response["sampleKey"] = store.GetCurrentKey().Key
+			}
 		}
 	}
 
@@ -728,10 +762,51 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 				return indexSpec.Comparer(a.(map[string]any), b.(map[string]any))
 			}
 		} else {
-			// Dangerous: No IndexSpec found for non-primitive key.
-			// We cannot safely update because we don't know the comparison logic.
-			http.Error(w, "Update failed: Store has non-primitive key but no IndexSpecification. Write operations are disabled for safety.", http.StatusForbidden)
-			return
+			// Default Map Comparer (Dynamic) for generic maps (e.g. ModelStore)
+			comparer = func(a, b any) int {
+				mapA, okA := a.(map[string]any)
+				mapB, okB := b.(map[string]any)
+				if !okA || !okB {
+					return btree.Compare(a, b)
+				}
+
+				keys := make([]string, 0, len(mapA)+len(mapB))
+				seen := make(map[string]struct{})
+				for k := range mapA {
+					if _, exists := seen[k]; !exists {
+						keys = append(keys, k)
+						seen[k] = struct{}{}
+					}
+				}
+				for k := range mapB {
+					if _, exists := seen[k]; !exists {
+						keys = append(keys, k)
+						seen[k] = struct{}{}
+					}
+				}
+				sort.Strings(keys)
+
+				for _, k := range keys {
+					valA, existsA := mapA[k]
+					valB, existsB := mapB[k]
+
+					if !existsA && !existsB {
+						continue
+					}
+					if !existsA {
+						return -1
+					}
+					if !existsB {
+						return 1
+					}
+
+					res := btree.Compare(valA, valB)
+					if res != 0 {
+						return res
+					}
+				}
+				return 0
+			}
 		}
 	}
 
@@ -878,9 +953,51 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 				return indexSpec.Comparer(a.(map[string]any), b.(map[string]any))
 			}
 		} else {
-			// Dangerous: No IndexSpec found for non-primitive key.
-			http.Error(w, "Operation failed: Store has non-primitive key but no IndexSpecification. Write operations are disabled for safety.", http.StatusForbidden)
-			return
+			// Default Map Comparer (Dynamic) for generic maps
+			comparer = func(a, b any) int {
+				mapA, okA := a.(map[string]any)
+				mapB, okB := b.(map[string]any)
+				if !okA || !okB {
+					return btree.Compare(a, b)
+				}
+
+				keys := make([]string, 0, len(mapA)+len(mapB))
+				seen := make(map[string]struct{})
+				for k := range mapA {
+					if _, exists := seen[k]; !exists {
+						keys = append(keys, k)
+						seen[k] = struct{}{}
+					}
+				}
+				for k := range mapB {
+					if _, exists := seen[k]; !exists {
+						keys = append(keys, k)
+						seen[k] = struct{}{}
+					}
+				}
+				sort.Strings(keys)
+
+				for _, k := range keys {
+					valA, existsA := mapA[k]
+					valB, existsB := mapB[k]
+
+					if !existsA && !existsB {
+						continue
+					}
+					if !existsA {
+						return -1
+					}
+					if !existsB {
+						return 1
+					}
+
+					res := btree.Compare(valA, valB)
+					if res != 0 {
+						return res
+					}
+				}
+				return 0
+			}
 		}
 	}
 

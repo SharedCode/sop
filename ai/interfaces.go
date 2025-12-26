@@ -253,6 +253,13 @@ func WithDatabase(db any) Option {
 	}
 }
 
+// WithDefaultFormat sets the default output format (e.g., "csv", "json") for tools.
+func WithDefaultFormat(format string) Option {
+	return func(c *AskConfig) {
+		c.Values["default_format"] = format
+	}
+}
+
 // WithDatabaseResolver adds a database resolver to the configuration.
 // Deprecated: Use WithSessionPayload instead.
 func WithDatabaseResolver(resolver any) Option {
@@ -274,25 +281,19 @@ type Agent[T any] interface {
 // SessionPayload represents the context and state for an agent session.
 // It carries domain-specific artifacts like database connections.
 type SessionPayload struct {
-	// CurrentDB is the active database for the session.
-	CurrentDB any
-	// Databases is a map of available databases by name.
-	Databases map[string]any
-	// Variables holds session variables.
-	Variables map[string]any
+	// CurrentDB is the active database name for the session.
+	CurrentDB string
 	// Transaction holds the active transaction for the session.
 	Transaction any
+	// Variables holds session-scoped variables (e.g. cached store instances).
+	Variables map[string]any
+	// LastInteractionSteps tracks the number of steps added/executed in the last user interaction.
+	LastInteractionSteps int
 }
 
-// GetDatabase returns the effective current Database.
-func (s *SessionPayload) GetDatabase() any {
-	if s.CurrentDB != nil {
-		return s.CurrentDB
-	}
-	if v, ok := s.Variables["database"]; ok {
-		return s.Databases[v.(string)]
-	}
-	return nil
+// GetDatabase returns the effective current Database name.
+func (s *SessionPayload) GetDatabase() string {
+	return s.CurrentDB
 }
 
 // WithSessionPayload adds a session payload to the configuration.
@@ -368,18 +369,23 @@ type ModelStore interface {
 
 // Macro represents a recorded sequence of user interactions or a programmed script.
 type Macro struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	Parameters  []string    `json:"parameters"`         // Input parameters for the macro
-	Database    string      `json:"database,omitempty"` // Database to run the macro against
-	Steps       []MacroStep `json:"steps"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Category    string   `json:"category,omitempty"` // Category for organization (default: "General")
+	Parameters  []string `json:"parameters"`         // Input parameters for the macro
+	Database    string   `json:"database,omitempty"` // Database to run the macro against
+	Portable    bool     `json:"portable,omitempty"` // If true, allows running on any database
+	// TransactionMode specifies how transactions are handled for this macro.
+	// Values: "none" (default, manual), "single" (one tx for all steps), "per_step" (auto-commit each step)
+	TransactionMode string      `json:"transaction_mode,omitempty"`
+	Steps           []MacroStep `json:"steps"`
 }
 
 // MacroStep represents a single instruction in a macro.
 // It follows a stabilized schema for "Natural Language Programming".
 type MacroStep struct {
 	// Type of the step.
-	// Valid values: "ask", "set", "if", "loop", "fetch", "say"
+	// Valid values: "ask", "set", "if", "loop", "fetch", "say", "command", "macro", "block"
 	Type string `json:"type"`
 
 	// --- Fields for "ask" (LLM Interaction) ---
@@ -410,6 +416,7 @@ type MacroStep struct {
 	// Iterator is the variable name for the current item in the loop.
 	Iterator string `json:"iterator,omitempty"`
 	// Steps is the list of steps to execute for each item.
+	// Also used for "block" type to hold the sequence of steps.
 	Steps []MacroStep `json:"steps,omitempty"`
 
 	// --- Fields for "fetch" (Data Retrieval) ---
@@ -454,6 +461,11 @@ type MacroStep struct {
 // MacroRecorder is an interface for recording macro steps.
 type MacroRecorder interface {
 	RecordStep(step MacroStep)
+	// RefactorLastSteps refactors the last N steps into a new structure (macro or block).
+	// count: number of steps to refactor.
+	// mode: "macro" (extract to new named macro) or "block" (group into block step).
+	// name: name of the new macro (if mode is "macro").
+	RefactorLastSteps(count int, mode string, name string) error
 }
 
 const (

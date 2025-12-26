@@ -221,6 +221,11 @@
         .form-label { font-weight: bold; font-size: 12px; color: var(--text-muted); }
         .form-input { padding: 5px; border: 1px solid var(--input-border); border-radius: 3px; background-color: var(--input-bg); color: var(--text-color); }
         .pre-block { margin-top: 5px; background: var(--pre-bg); padding: 5px; color: var(--text-color); }
+        
+        .option-system {
+            color: var(--danger-bg);
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -317,15 +322,41 @@
                 document.getElementById('database-section').style.display = 'block';
             }
 
-            databases.forEach(db => {
+            const userDBs = databases.filter(db => !db.is_system);
+            const systemDBs = databases.filter(db => db.is_system);
+
+            userDBs.forEach(db => {
                 const opt = document.createElement('option');
                 opt.value = db.name;
                 opt.textContent = db.name + (db.mode === 'clustered' ? ' (Clustered)' : '');
                 select.appendChild(opt);
             });
-            // Select first by default
-            if (databases.length > 0) {
-                selectDatabase(databases[0].name);
+
+            if (systemDBs.length > 0) {
+                if (userDBs.length > 0) {
+                    const separator = document.createElement('option');
+                    separator.disabled = true;
+                    separator.textContent = "──────────";
+                    select.appendChild(separator);
+                }
+
+                systemDBs.forEach(db => {
+                    const opt = document.createElement('option');
+                    opt.value = db.name;
+                    opt.textContent = "⚠️ " + db.name + " (System)";
+                    opt.className = "option-system";
+                    // Inline style for better compatibility across browsers/OS
+                    opt.style.color = "var(--danger-bg)"; 
+                    opt.style.fontWeight = "bold";
+                    select.appendChild(opt);
+                });
+            }
+
+            // Select first user DB by default, or first system DB if no user DBs
+            if (userDBs.length > 0) {
+                selectDatabase(userDBs[0].name);
+            } else if (systemDBs.length > 0) {
+                selectDatabase(systemDBs[0].name);
             }
         })
         .catch(err => {
@@ -487,6 +518,23 @@
                 });
                 toolbar.appendChild(input);
             });
+        } else if (info.sampleKey && typeof info.sampleKey === 'object' && info.sampleKey !== null) {
+            // Inferred Complex Key from Sample
+            // Sort keys to be deterministic
+            const keys = Object.keys(info.sampleKey).sort();
+            keys.forEach(key => {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = `search-field-${key}`;
+                input.placeholder = key;
+                input.style.marginRight = '5px';
+                input.style.flex = '1 1 150px'; // Allow wrapping
+                input.tabIndex = 0;
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') triggerSearch();
+                });
+                toolbar.appendChild(input);
+            });
         } else {
             // Primitive Key or no spec
             const input = document.createElement('input');
@@ -521,14 +569,17 @@
         refreshBtn.tabIndex = 0;
         toolbar.appendChild(refreshBtn);
 
-        const addBtn = document.createElement('button');
-        addBtn.textContent = 'Add Item';
-        addBtn.title = "Add a new item to the store.";
-        addBtn.onclick = () => showAdd();
-        addBtn.classList.add('btn-success');
-        addBtn.style.marginLeft = '10px';
-        addBtn.tabIndex = 0;
-        toolbar.appendChild(addBtn);
+        // Only show Add Item for non-registry stores (Macros are too complex to add manually)
+        if (info.description !== "AI Models Registry") {
+            const addBtn = document.createElement('button');
+            addBtn.textContent = 'Add Item';
+            addBtn.title = "Add a new item to the store.";
+            addBtn.onclick = () => showAdd();
+            addBtn.classList.add('btn-success');
+            addBtn.style.marginLeft = '10px';
+            addBtn.tabIndex = 0;
+            toolbar.appendChild(addBtn);
+        }
     }
 
     function loadItems(action = 'first', refKey = null, keepPanel = false) {
@@ -577,6 +628,26 @@
                          const numVal = Number(val);
                          queryObj[field.field_name] = isNaN(numVal) ? val : numVal;
                          hasValue = true;
+                     }
+                 });
+                 if (hasValue) {
+                     query = JSON.stringify(queryObj);
+                 }
+             } else if (currentStoreInfo && currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
+                 // Construct JSON object from inferred fields
+                 const queryObj = {};
+                 let hasValue = false;
+                 const keys = Object.keys(currentStoreInfo.sampleKey).sort();
+                 keys.forEach(key => {
+                     const el = document.getElementById(`search-field-${key}`);
+                     if (el) {
+                         const val = el.value;
+                         if (val) {
+                             // Try to parse number if possible, else string
+                             const numVal = Number(val);
+                             queryObj[key] = isNaN(numVal) ? val : numVal;
+                             hasValue = true;
+                         }
                      }
                  });
                  if (hasValue) {
@@ -665,8 +736,20 @@
                     // Priority 2: Infer from data
                     const sampleKey = items[0].key;
                     if (typeof sampleKey === 'object' && sampleKey !== null) {
-                        keyCols = Object.keys(sampleKey);
-                    } else {
+                        keyCols = Object.keys(sampleKey).sort();
+                    }
+                    
+                    // Fallback: check if it's a JSON string
+                    if ((!keyCols || keyCols.length === 0) && typeof sampleKey === 'string' && sampleKey.trim().startsWith('{')) {
+                        try {
+                            const parsed = JSON.parse(sampleKey);
+                            if (typeof parsed === 'object' && parsed !== null) {
+                                keyCols = Object.keys(parsed).sort();
+                            }
+                        } catch(e) {}
+                    }
+
+                    if (!keyCols || keyCols.length === 0) {
                         keyCols = ['Key'];
                     }
                 } else {
@@ -716,7 +799,12 @@
                          html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
                     } else {
                         keyCols.forEach(col => {
-                            let val = item.key ? item.key[col] : '';
+                            let keyObj = item.key;
+                            if (typeof keyObj === 'string' && keyObj.trim().startsWith('{')) {
+                                try { keyObj = JSON.parse(keyObj); } catch(e){}
+                            }
+                            
+                            let val = (keyObj && typeof keyObj === 'object') ? keyObj[col] : '';
                             if (typeof val === 'object') val = JSON.stringify(val);
                             html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
                         });
@@ -1106,6 +1194,10 @@
         // 2. Fallback to IndexSpec
         else if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
             keySchema = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
+        }
+        // 3. Fallback to Sample Key
+        else if (currentStoreInfo && currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
+            keySchema = Object.keys(currentStoreInfo.sampleKey).sort();
         }
 
         if (keySchema.length > 0) {
@@ -1800,6 +1892,133 @@
     let chatHistory = [];
     let historyIndex = -1;
 
+    function jsonToCSV(input) {
+        try {
+            let items;
+            if (typeof input === 'string') {
+                items = JSON.parse(input);
+            } else {
+                items = input;
+            }
+
+            if (!Array.isArray(items) || items.length === 0) {
+                console.log("jsonToCSV: Input is not an array or empty");
+                return typeof input === 'string' ? input : JSON.stringify(input);
+            }
+
+            console.log("jsonToCSV: Parsed " + items.length + " items");
+            if (items.length > 0) {
+                console.log("First item structure:", JSON.stringify(items[0]));
+            }
+
+            // Determine headers
+            let keyIsMap = false;
+            let valueIsMap = false;
+            let keyFields = new Set();
+            let valueFields = new Set();
+
+            items.forEach(item => {
+                if (typeof item.key === 'object' && item.key !== null) {
+                    keyIsMap = true;
+                    Object.keys(item.key).forEach(k => keyFields.add(k));
+                }
+                if (typeof item.value === 'object' && item.value !== null) {
+                    valueIsMap = true;
+                    Object.keys(item.value).forEach(k => valueFields.add(k));
+                }
+            });
+
+            let headers = [];
+            let kFieldsArr = Array.from(keyFields).sort();
+            let vFieldsArr = Array.from(valueFields).sort();
+
+            if (keyIsMap) {
+                kFieldsArr.forEach(k => headers.push(k.charAt(0).toUpperCase() + k.slice(1)));
+            } else {
+                headers.push("Key");
+            }
+
+            if (valueIsMap) {
+                vFieldsArr.forEach(v => headers.push(v.charAt(0).toUpperCase() + v.slice(1)));
+            } else {
+                headers.push("Value");
+            }
+
+            let csv = headers.join(", ") + "\n";
+
+            items.forEach(item => {
+                let row = [];
+                if (keyIsMap) {
+                    kFieldsArr.forEach(k => {
+                        row.push(item.key[k] !== undefined ? item.key[k] : "");
+                    });
+                } else {
+                    row.push(item.key);
+                }
+
+                if (valueIsMap) {
+                    vFieldsArr.forEach(v => {
+                        row.push(item.value[v] !== undefined ? item.value[v] : "");
+                    });
+                } else {
+                    row.push(item.value);
+                }
+                csv += row.join(", ") + "\n";
+            });
+
+            return csv;
+        } catch (e) {
+            console.error("Failed to convert JSON to CSV", e);
+            return typeof input === 'string' ? input : JSON.stringify(input);
+        }
+    }
+
+    function processMacroTrace(trace, format) {
+        let output = "";
+        console.log("Processing Macro Trace. Steps:", trace.length);
+        
+        trace.forEach((step, index) => {
+            console.log(`Step ${index} type: ${step.type}`);
+            if (step.type === 'command') {
+                // Optionally show the command being executed
+                // output += `> ${step.command}\n`;
+                
+                if (step.result) {
+                    let resultDisplay = step.result;
+                    if (format === 'csv') {
+                        try {
+                            console.log(`Step ${index} result (first 50 chars):`, step.result.substring(0, 50));
+                            // The result might be a JSON string of an array
+                            const parsedResult = JSON.parse(step.result);
+                            console.log(`Step ${index} parsed result type:`, typeof parsedResult, "Is Array:", Array.isArray(parsedResult));
+                            
+                            if (Array.isArray(parsedResult)) {
+                                const csv = jsonToCSV(parsedResult);
+                                console.log(`Step ${index} CSV conversion result (first 50 chars):`, csv.substring(0, 50));
+                                // Only use CSV if it looks like CSV (has headers)
+                                if (csv.includes(',')) {
+                                    resultDisplay = csv;
+                                }
+                            }
+                        } catch (e) {
+                            console.error(`Step ${index} JSON parse error:`, e);
+                            // Keep original if not parseable
+                        }
+                    }
+                    output += resultDisplay + "\n";
+                }
+            } else if (step.type === 'say') {
+                output += step.result + "\n";
+            } else if (step.type === 'error') {
+                output += `Error: ${step.error}\n`;
+            } else if (step.type === 'ask') {
+                output += `${step.prompt}\n`;
+            }
+        });
+        
+        return output.trim();
+    }
+
     function sendChatMessage() {
         const input = document.getElementById('chat-input');
         const sendBtn = document.getElementById('chat-send-btn');
@@ -1818,6 +2037,8 @@
         const agent = agentSelect ? agentSelect.value : 'db_admin';
         const providerSelect = document.getElementById('provider-select');
         const provider = providerSelect ? providerSelect.value : '';
+        const formatSelect = document.getElementById('format-select');
+        const format = formatSelect ? formatSelect.value : 'csv';
 
         if (!message) return;
 
@@ -1848,7 +2069,8 @@
                         database: currentDatabase,
                         store: currentStore,
                         agent: agent,
-                        provider: provider
+                        provider: provider,
+                        format: format
                     }),
                     signal: chatAbortController.signal
                 })
@@ -1861,7 +2083,105 @@
                     if (data.error) {
                         appendChatMessage('ai', 'Error: ' + data.error);
                     } else {
-                        appendChatMessage('ai', data.response);
+                        let responseText = data.response;
+                        
+                        // Client-side formatting
+                        console.log("Format:", format);
+                        
+                        // Check if response is a Macro Trace (JSON Array of Steps)
+                        let isMacroTrace = false;
+                        try {
+                            // Try to parse the whole response as JSON
+                            const parsed = JSON.parse(responseText);
+                            // Heuristic: Array of objects with 'type' field
+                            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].type) {
+                                console.log("Detected Macro Trace");
+                                responseText = processMacroTrace(parsed, format);
+                                isMacroTrace = true;
+                            }
+                        } catch (e) {
+                            // Not a JSON trace
+                        }
+
+                        if (!isMacroTrace && format === 'csv') {
+                            let newResponse = "";
+                            let currentIndex = 0;
+                            const text = responseText;
+                            
+                            while (currentIndex < text.length) {
+                                // Find start of JSON array
+                                const start = text.indexOf('[', currentIndex);
+                                if (start === -1) {
+                                    newResponse += text.substring(currentIndex);
+                                    break;
+                                }
+                                
+                                // Find matching closing bracket
+                                let balance = 0;
+                                let end = -1;
+                                for (let i = start; i < text.length; i++) {
+                                    if (text[i] === '[') balance++;
+                                    else if (text[i] === ']') balance--;
+                                    
+                                    if (balance === 0) {
+                                        end = i;
+                                        break;
+                                    }
+                                }
+                                
+                                if (end !== -1) {
+                                    // We found a balanced block [ ... ]
+                                    const potentialJson = text.substring(start, end + 1);
+                                    let replacement = potentialJson;
+                                    let isJson = false;
+                                    
+                                    try {
+                                        // Heuristic: only parse if it looks like an array of objects or empty array
+                                        if (potentialJson.includes('{') || potentialJson.includes('[]')) {
+                                            const parsed = JSON.parse(potentialJson);
+                                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                                replacement = "\n" + jsonToCSV(parsed) + "\n";
+                                                isJson = true;
+                                            }
+                                        }
+                                    } catch (e) {
+                                        // Not JSON, ignore
+                                    }
+                                    
+                                    // Append text before this block
+                                    let preText = text.substring(currentIndex, start);
+                                    
+                                    if (isJson) {
+                                        // Clean up trailing markdown code block start from preText
+                                        // e.g. "Here is data:\n```json\n" -> "Here is data:\n"
+                                        preText = preText.replace(/```[a-z]*\s*$/, '');
+                                    }
+                                    
+                                    newResponse += preText + replacement;
+                                    
+                                    // Advance index
+                                    currentIndex = end + 1;
+                                    
+                                    if (isJson) {
+                                        // Check if the next characters are the closing markdown ```
+                                        // We need to peek ahead
+                                        const remaining = text.substring(currentIndex);
+                                        const match = remaining.match(/^\s*```/);
+                                        if (match) {
+                                            currentIndex += match[0].length;
+                                        }
+                                    }
+                                } else {
+                                    // Unbalanced, just append everything remaining
+                                    newResponse += text.substring(currentIndex);
+                                    break;
+                                }
+                            }
+                            responseText = newResponse;
+                        }
+
+
+                        appendChatMessage('ai', responseText);
                         
                         // If the AI performed an action (like search), we might want to refresh the grid
                         if (data.action === 'refresh') {
@@ -2010,11 +2330,15 @@
     <div class="chat-header">
         <div style="display: flex; align-items: center; gap: 8px;">
             <span>AI Assistant</span>
-            <select id="provider-select" style="padding: 2px; border-radius: 3px; border: 1px solid #ccc; font-size: 11px; font-weight: normal; color: #333;" onclick="event.stopPropagation()">
+            <select id="provider-select" style="padding: 2px; border-radius: 3px; border: 1px solid #ccc; font-size: 11px; font-weight: normal; color: #333;" onclick="event.stopPropagation()" title="Select AI Provider">
                 <option value="">Default (Local)</option>
                 <option value="ollama">Ollama (Local AI)</option>
                 <option value="gemini">Gemini (Cloud)</option>
                 <option value="chatgpt">ChatGPT (Cloud)</option>
+            </select>
+            <select id="format-select" style="padding: 2px; border-radius: 3px; border: 1px solid #ccc; font-size: 11px; font-weight: normal; color: #333;" onclick="event.stopPropagation()" title="Response Format">
+                <option value="csv">CSV</option>
+                <option value="json">JSON</option>
             </select>
             <!-- Hidden Agent Select (Hardcoded to sql_admin) -->
             <input type="hidden" id="agent-select" value="sql_admin">
