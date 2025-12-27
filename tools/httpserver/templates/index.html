@@ -1929,8 +1929,9 @@
             });
 
             let headers = [];
-            let kFieldsArr = Array.from(keyFields).sort();
-            let vFieldsArr = Array.from(valueFields).sort();
+            // Use Set insertion order (which matches server order), do NOT sort.
+            let kFieldsArr = Array.from(keyFields);
+            let vFieldsArr = Array.from(valueFields);
 
             if (keyIsMap) {
                 kFieldsArr.forEach(k => headers.push(k.charAt(0).toUpperCase() + k.slice(1)));
@@ -1950,18 +1951,26 @@
                 let row = [];
                 if (keyIsMap) {
                     kFieldsArr.forEach(k => {
-                        row.push(item.key[k] !== undefined ? item.key[k] : "");
+                        let val = "";
+                        if (item.key && typeof item.key === 'object') {
+                            val = item.key[k] !== undefined ? item.key[k] : "";
+                        }
+                        row.push(val);
                     });
                 } else {
-                    row.push(item.key);
+                    row.push(item.key !== null && item.key !== undefined ? item.key : "");
                 }
 
                 if (valueIsMap) {
                     vFieldsArr.forEach(v => {
-                        row.push(item.value[v] !== undefined ? item.value[v] : "");
+                        let val = "";
+                        if (item.value && typeof item.value === 'object') {
+                            val = item.value[v] !== undefined ? item.value[v] : "";
+                        }
+                        row.push(val);
                     });
                 } else {
-                    row.push(item.value);
+                    row.push(item.value !== null && item.value !== undefined ? item.value : "");
                 }
                 csv += row.join(", ") + "\n";
             });
@@ -1985,26 +1994,46 @@
                 
                 if (step.result) {
                     let resultDisplay = step.result;
+                    
+                    // Handle object/array results (from new streaming logic)
+                    let parsedResult = step.result;
+                    let isObject = typeof step.result === 'object' && step.result !== null;
+
+                    if (!isObject && typeof step.result === 'string') {
+                        try {
+                            // Try to parse if it's a string
+                            if (step.result.trim().startsWith('[') || step.result.trim().startsWith('{')) {
+                                parsedResult = JSON.parse(step.result);
+                                isObject = true;
+                            }
+                        } catch (e) {
+                            // Not JSON
+                        }
+                    }
+
                     if (format === 'csv') {
                         try {
-                            console.log(`Step ${index} result (first 50 chars):`, step.result.substring(0, 50));
-                            // The result might be a JSON string of an array
-                            const parsedResult = JSON.parse(step.result);
-                            console.log(`Step ${index} parsed result type:`, typeof parsedResult, "Is Array:", Array.isArray(parsedResult));
-                            
-                            if (Array.isArray(parsedResult)) {
+                            if (isObject && Array.isArray(parsedResult)) {
                                 const csv = jsonToCSV(parsedResult);
-                                console.log(`Step ${index} CSV conversion result (first 50 chars):`, csv.substring(0, 50));
-                                // Only use CSV if it looks like CSV (has headers)
                                 if (csv.includes(',')) {
                                     resultDisplay = csv;
                                 }
                             }
                         } catch (e) {
-                            console.error(`Step ${index} JSON parse error:`, e);
-                            // Keep original if not parseable
+                            console.error(`Step ${index} CSV conversion error:`, e);
+                        }
+                    } else {
+                        // JSON format
+                        if (isObject) {
+                            resultDisplay = JSON.stringify(parsedResult, null, 2);
                         }
                     }
+                    
+                    // Ensure we don't print [object Object]
+                    if (typeof resultDisplay === 'object') {
+                        resultDisplay = JSON.stringify(resultDisplay, null, 2);
+                    }
+
                     output += resultDisplay + "\n";
                 }
             } else if (step.type === 'say') {

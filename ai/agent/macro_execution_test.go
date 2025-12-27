@@ -75,9 +75,28 @@ func TestMacroExecution_SelectTwice(t *testing.T) {
 	b3.Add(ctx, "emp2", "Jane Doe")
 	b3.Add(ctx, "emp3", "Bob Smith")
 
+	// Fix IsPrimitiveKey in registry for the test store
+	// This is needed because we created it using core_database (which defaults IsPrimitiveKey=false)
+	// but we want jsondb.OpenStore (used by agent) to treat it as primitive.
+	// Note: We must commit the previous transaction first because OpenBtree might start a new one if not careful,
+	// or if we want to modify the registry which is a separate store.
+	// Actually, we can just do it in the same transaction if we are careful.
+	// But OpenBtree for registry might be tricky if it's already open implicitly.
+	// Let's commit first, then update registry in a new transaction.
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Failed to commit setup transaction: %v", err)
 	}
+
+	tx2, _ := core_database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	regStore, err := core_database.OpenBtree[string, sop.StoreInfo](ctx, dbOpts, "_registry", tx2, nil)
+	if err == nil {
+		if found, _ := regStore.Find(ctx, "employees", false); found {
+			si, _ := regStore.GetCurrentValue(ctx)
+			si.IsPrimitiveKey = true
+			regStore.Update(ctx, "employees", si)
+		}
+	}
+	tx2.Commit(ctx)
 
 	// 3. Setup Agent & Service
 	mockGen := &MockScriptedGenerator{

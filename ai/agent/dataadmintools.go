@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -22,7 +23,7 @@ func (a *DataAdminAgent) registerTools() {
 
 	a.registry.Register("list_databases", "Lists all available databases.", "()", a.toolListDatabases)
 	a.registry.Register("list_stores", "Lists all stores in the current or specified database.", "(database: string)", a.toolListStores)
-	a.registry.Register("select", "Retrieve data from a store.", "(database: string, store: string, limit: number)", a.toolSelect)
+	a.registry.Register("select", "Retrieve data from a store. Supports filtering by key subset.", "(database: string, store: string, limit: number, scan_limit: number, key_match: any)", a.toolSelect)
 	a.registry.Register("manage_transaction", "Manage database transactions (begin, commit, rollback).", "(action: string)", a.toolManageTransaction)
 	a.registry.Register("delete", "Delete an item from a store.", "(store: string, key: any)", a.toolDelete)
 	a.registry.Register("add", "Add an item to a store. You can pass the value as a single 'value' argument, or pass individual fields as arguments.", "(store: string, key: any, value: any, ...fields)", a.toolAdd)
@@ -35,7 +36,8 @@ func (a *DataAdminAgent) registerTools() {
 	a.registry.Register("macro_reorder_steps", "Move a step in a macro to a new position.", "(macro: string, from_index: number, to_index: number)", a.toolMacroReorderSteps)
 
 	// Navigation tools
-	a.registry.Register("find", "Find an item in a store.", "(store: string, key: any)", a.toolFind)
+	a.registry.Register("find", "Find an item in a store. Returns exact match only.", "(store: string, key: any)", a.toolFind)
+	a.registry.Register("find_nearest", "Find an item in a store. If no exact match, returns the nearest items (previous and next).", "(store: string, key: any)", a.toolFindNearest)
 	a.registry.Register("next", "Move to the next item in a store.", "(store: string)", a.toolNext)
 	a.registry.Register("previous", "Move to the previous item in a store.", "(store: string)", a.toolPrevious)
 	a.registry.Register("first", "Move to the first item in a store.", "(store: string)", a.toolFirst)
@@ -155,6 +157,16 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 	if limit == 0 {
 		limit = 10
 	}
+	scanLimit, _ := args["scan_limit"].(float64)
+	if scanLimit == 0 {
+		scanLimit = 1000
+	}
+	// Ensure we can at least scan enough to find 'limit' items if they are contiguous
+	if scanLimit < limit {
+		scanLimit = limit
+	}
+
+	keyMatch, hasKeyMatch := args["key_match"]
 
 	var tx sop.Transaction
 	var autoCommit bool
@@ -178,77 +190,122 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 	}
 
 	// Determine if store uses complex keys
-	var isPrimitiveKey bool
 	// var indexSpec *jsondb.IndexSpecification
-
-	if t2, ok := tx.GetPhasedTransaction().(*common.Transaction); ok {
-		stores, err := t2.StoreRepository.Get(ctx, storeName)
-		if err == nil && len(stores) > 0 {
-			isPrimitiveKey = stores[0].IsPrimitiveKey
-			if !isPrimitiveKey && stores[0].MapKeyIndexSpecification != "" {
-				// var is jsondb.IndexSpecification
-				// if err := encoding.DefaultMarshaler.Unmarshal([]byte(stores[0].MapKeyIndexSpecification), &is); err == nil {
-				// 	indexSpec = &is
-				// }
-			}
-		}
-	}
-
-	var resultItems []map[string]any
 
 	var store jsondb.StoreAccessor
 	var err error
 
-	// Check cache first
-	cacheKey := fmt.Sprintf("store_%s", storeName)
-	// fmt.Printf("DEBUG: toolSelect store='%s' cacheKey='%s' p.Variables=%v\n", storeName, cacheKey, p.Variables)
-	if p.Variables != nil {
-		if s, ok := p.Variables[cacheKey].(jsondb.StoreAccessor); ok {
+	// Try to get from cache
+	var cache map[string]jsondb.StoreAccessor
+	if p.Variables == nil {
+		p.Variables = make(map[string]any)
+	}
+	if c, found := p.Variables["opened_stores"]; found {
+		if typedCache, ok := c.(map[string]jsondb.StoreAccessor); ok {
+			cache = typedCache
+		}
+	}
+	if cache == nil {
+		cache = make(map[string]jsondb.StoreAccessor)
+		p.Variables["opened_stores"] = cache
+	}
+
+	// Only use cache if we are not in auto-commit mode (i.e. we are in a long-running transaction)
+	if !autoCommit {
+		if s, found := cache[storeName]; found {
 			store = s
-			// fmt.Printf("DEBUG: Cache HIT for %s\n", cacheKey)
 		}
 	}
 
 	if store == nil {
-		store, err = jsondb.OpenStore(ctx, db.Config(), storeName, tx)
+		var dbOpts sop.DatabaseOptions
+		if opts, ok := a.databases[dbName]; ok {
+			dbOpts = opts
+		}
+
+		store, err = jsondb.OpenStore(ctx, dbOpts, storeName, tx)
 		if err != nil {
-			// Debugging info for cache failure
-			hasCache := p.Variables != nil
-			var cachedType string
-			if hasCache {
-				if v, ok := p.Variables[cacheKey]; ok {
-					cachedType = fmt.Sprintf("%T", v)
-				} else {
-					cachedType = "missing"
-				}
-			}
 			if autoCommit {
 				tx.Rollback(ctx)
 			}
-			return "", fmt.Errorf("failed to open store '%s' (payload=%p, cache=%v, key='%s', cachedVal=%s): %w", storeName, p, hasCache, cacheKey, cachedType, err)
+			return "", fmt.Errorf("failed to open store: %w", err)
 		}
-		// Cache it only if we are in a long-running transaction (not auto-commit)
 		if !autoCommit {
-			if p.Variables == nil {
-				p.Variables = make(map[string]any)
-			}
-			p.Variables[cacheKey] = store
-			// fmt.Printf("DEBUG: Cached %s\n", cacheKey)
+			cache[storeName] = store
 		}
 	}
 
-	if ok, err := store.First(ctx); ok && err == nil {
+	// Determine if store uses complex keys
+	var indexSpec *jsondb.IndexSpecification
+	si := store.GetStoreInfo()
+	if si.MapKeyIndexSpecification != "" {
+		var is jsondb.IndexSpecification
+		if err := json.Unmarshal([]byte(si.MapKeyIndexSpecification), &is); err == nil {
+			indexSpec = &is
+		}
+	}
+
+	ok, err := store.First(ctx)
+
+	var sb strings.Builder
+	sb.WriteString("[\n")
+	itemsFound := false
+
+	if ok && err == nil {
 		count := 0
+		// Safety break to prevent infinite scanning if no matches found
+		scanned := 0
+
 		for {
+			if scanned >= int(scanLimit) {
+				break
+			}
+			scanned++
+
 			k, err := store.GetCurrentKey()
 			if err != nil {
 				break
 			}
+
+			// Apply filter if needed
+			if hasKeyMatch {
+				if !matchesKey(k, keyMatch) {
+					if ok, _ := store.Next(ctx); !ok {
+						break
+					}
+					continue
+				}
+			}
+
 			v, err := store.GetCurrentValue(ctx)
 			if err != nil {
 				break
 			}
-			resultItems = append(resultItems, map[string]any{"key": k, "value": v})
+
+			// Format key if it's a map and we have an index spec
+			var keyFormatted any = k
+			if indexSpec != nil {
+				if m, ok := k.(map[string]any); ok {
+					keyFormatted = OrderedKey{m: m, spec: indexSpec}
+				}
+			}
+
+			// Stream item to buffer
+			if itemsFound {
+				sb.WriteString(",\n")
+			}
+			itemsFound = true
+
+			itemMap := map[string]any{"key": keyFormatted, "value": v}
+			b, err := json.Marshal(itemMap)
+			if err != nil {
+				// Skip invalid items? Or fail?
+				// Let's skip for now to be safe
+			} else {
+				sb.WriteString("  ")
+				sb.Write(b)
+			}
+
 			count++
 			if count >= int(limit) {
 				break
@@ -259,27 +316,21 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 		}
 	}
 
-	if len(resultItems) == 0 {
+	sb.WriteString("\n]")
+
+	if !itemsFound {
 		if autoCommit {
 			tx.Commit(ctx)
 		}
 		return "No items found.", nil
 	}
 
-	// Always return JSON. The client/UI is responsible for formatting (e.g. to CSV).
-	b, err := json.MarshalIndent(resultItems, "", "  ")
-	if err != nil {
-		if autoCommit {
-			tx.Rollback(ctx)
-		}
-		return "", err
-	}
 	if autoCommit {
 		if err := tx.Commit(ctx); err != nil {
 			return "", fmt.Errorf("failed to commit transaction: %w", err)
 		}
 	}
-	return string(b), nil
+	return sb.String(), nil
 }
 
 func (a *DataAdminAgent) toolManageTransaction(ctx context.Context, args map[string]any) (string, error) {
@@ -1013,6 +1064,16 @@ func (a *DataAdminAgent) toolFind(ctx context.Context, args map[string]any) (str
 	})
 }
 
+func (a *DataAdminAgent) toolFindNearest(ctx context.Context, args map[string]any) (string, error) {
+	return a.runNavigation(ctx, args, func(ctx context.Context, store jsondb.StoreAccessor) (bool, error) {
+		key, ok := args["key"]
+		if !ok {
+			return false, fmt.Errorf("key is required")
+		}
+		return store.FindOne(ctx, key, true)
+	}, true)
+}
+
 func (a *DataAdminAgent) toolNext(ctx context.Context, args map[string]any) (string, error) {
 	return a.runNavigation(ctx, args, func(ctx context.Context, store jsondb.StoreAccessor) (bool, error) {
 		return store.Next(ctx)
@@ -1037,7 +1098,7 @@ func (a *DataAdminAgent) toolLast(ctx context.Context, args map[string]any) (str
 	})
 }
 
-func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any, op func(context.Context, jsondb.StoreAccessor) (bool, error)) (string, error) {
+func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any, op func(context.Context, jsondb.StoreAccessor) (bool, error), showNearest ...bool) (string, error) {
 	p := ai.GetSessionPayload(ctx)
 	if p == nil {
 		return "", fmt.Errorf("no session payload found")
@@ -1112,6 +1173,51 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 	}
 
 	if !found {
+		if len(showNearest) > 0 && showNearest[0] {
+			var neighbors []string
+
+			// 1. Check if we are at a valid item (this is the "Current" neighbor, usually >= key)
+			k, err := store.GetCurrentKey()
+			if err == nil && k != nil {
+				v, _ := store.GetCurrentValue(ctx)
+				b, _ := json.Marshal(map[string]any{"key": k, "value": v})
+				neighbors = append(neighbors, fmt.Sprintf("Current: %s", string(b)))
+			}
+
+			// 2. Check previous item
+			if k != nil {
+				// We are at some item. Try to peek previous.
+				if ok, _ := store.Previous(ctx); ok {
+					k2, _ := store.GetCurrentKey()
+					v2, _ := store.GetCurrentValue(ctx)
+					b, _ := json.Marshal(map[string]any{"key": k2, "value": v2})
+					neighbors = append(neighbors, fmt.Sprintf("Previous: %s", string(b)))
+
+					// Restore
+					store.Next(ctx)
+				}
+			} else {
+				// We are at End.
+				if ok, _ := store.Previous(ctx); ok {
+					// This is the Last item (Previous neighbor)
+					k2, _ := store.GetCurrentKey()
+					v2, _ := store.GetCurrentValue(ctx)
+					b, _ := json.Marshal(map[string]any{"key": k2, "value": v2})
+					neighbors = append(neighbors, fmt.Sprintf("Previous: %s", string(b)))
+
+					// We are now at Last. The original state was "End".
+					// Restore to "End"
+					store.Next(ctx)
+				}
+			}
+
+			if len(neighbors) > 0 {
+				// Sort neighbors? Or just join.
+				// Previous should come before Next logically, but we appended Next first.
+				// Let's reverse if needed or just label them clearly.
+				return fmt.Sprintf("No exact match found. Nearest items: %s", strings.Join(neighbors, ", ")), nil
+			}
+		}
 		return "No item found", nil
 	}
 
@@ -1360,4 +1466,81 @@ func (a *DataAdminAgent) updateMacro(ctx context.Context, name string, updateFun
 	}
 
 	return tx.Commit(ctx)
+}
+
+// matchesKey checks if itemKey contains all fields and values from filterKey.
+// Currently supports map[string]any for both.
+func matchesKey(itemKey, filterKey any) bool {
+	// If both are maps
+	if mItem, ok := itemKey.(map[string]any); ok {
+		if mFilter, ok := filterKey.(map[string]any); ok {
+			for k, v := range mFilter {
+				// Simple equality check. For nested objects, this might need recursion.
+				// But for now, we assume flat keys or strict equality on values.
+				if itemVal, exists := mItem[k]; !exists || itemVal != v {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	// If primitives, strict equality
+	return itemKey == filterKey
+}
+
+type OrderedKey struct {
+	m    map[string]any
+	spec *jsondb.IndexSpecification
+}
+
+// MarshalJSON implements json.Marshaler to enforce field order.
+func (o OrderedKey) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+
+	// 1. Write indexed fields in order
+	written := make(map[string]bool)
+	first := true
+
+	for _, field := range o.spec.IndexFields {
+		if val, ok := o.m[field.FieldName]; ok {
+			if !first {
+				buf.WriteByte(',')
+			}
+			first = false
+
+			kb, _ := json.Marshal(field.FieldName)
+			buf.Write(kb)
+			buf.WriteByte(':')
+			vb, _ := json.Marshal(val)
+			buf.Write(vb)
+
+			written[field.FieldName] = true
+		}
+	}
+
+	// 2. Write remaining fields sorted alphabetically
+	var remaining []string
+	for k := range o.m {
+		if !written[k] {
+			remaining = append(remaining, k)
+		}
+	}
+	sort.Strings(remaining)
+
+	for _, k := range remaining {
+		if !first {
+			buf.WriteByte(',')
+		}
+		first = false
+
+		kb, _ := json.Marshal(k)
+		buf.Write(kb)
+		buf.WriteByte(':')
+		vb, _ := json.Marshal(o.m[k])
+		buf.Write(vb)
+	}
+
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
 }

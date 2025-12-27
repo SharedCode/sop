@@ -22,6 +22,7 @@ type StoreAccessor interface {
 	Add(ctx context.Context, key any, value any) (bool, error)
 	Update(ctx context.Context, key any, value any) (bool, error)
 	Remove(ctx context.Context, key any) (bool, error)
+	GetStoreInfo() sop.StoreInfo
 }
 
 // OpenStore opens a B-Tree store, automatically detecting if it's a primitive or JSON store.
@@ -95,6 +96,9 @@ func (s *primitiveStore) Remove(ctx context.Context, key any) (bool, error) {
 	}
 	return s.btree.Remove(ctx, k)
 }
+func (s *primitiveStore) GetStoreInfo() sop.StoreInfo {
+	return s.btree.GetStoreInfo()
+}
 
 type jsonStore struct {
 	btree *JsonDBMapKey
@@ -139,4 +143,7 @@ func (s *jsonStore) Remove(ctx context.Context, key any) (bool, error) {
 		return false, fmt.Errorf("key must be a map[string]any for json store")
 	}
 	return s.btree.Remove(ctx, []map[string]any{k})
+}
+func (s *jsonStore) GetStoreInfo() sop.StoreInfo {
+	return s.btree.GetStoreInfo()
 }

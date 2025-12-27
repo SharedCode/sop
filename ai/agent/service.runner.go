@@ -27,7 +27,7 @@ type StepExecutionResult struct {
 	Type    string `json:"type"`
 	Command string `json:"command,omitempty"`
 	Prompt  string `json:"prompt,omitempty"`
-	Result  string `json:"result,omitempty"`
+	Result  any    `json:"result,omitempty"`
 	Error   string `json:"error,omitempty"`
 }
 
@@ -146,10 +146,18 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.MacroStep, scope map[s
 		}
 
 		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+			var resultAny any = resp
+			// Try to unmarshal if it looks like JSON
+			trimmed := strings.TrimSpace(resp)
+			if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+				// Optimization: Use RawMessage
+				resultAny = json.RawMessage(resp)
+			}
+
 			streamer.Write(StepExecutionResult{
 				Type:   "ask",
 				Prompt: prompt,
-				Result: resp,
+				Result: resultAny,
 			})
 		} else {
 			msg := fmt.Sprintf("%s\n", resp)
@@ -223,10 +231,19 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.MacroStep, scope m
 
 		// Stream result if streamer is present
 		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+			var resultAny any = resp
+			// Try to unmarshal if it looks like JSON
+			trimmed := strings.TrimSpace(resp)
+			if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+				// Optimization: Use RawMessage to avoid full unmarshal/marshal cycle
+				// This assumes the tool output is valid JSON.
+				resultAny = json.RawMessage(resp)
+			}
+
 			streamer.Write(StepExecutionResult{
 				Type:    "command",
 				Command: step.Command,
-				Result:  resp,
+				Result:  resultAny,
 			})
 		} else {
 			// Fallback to string builder if no streamer (legacy mode)
