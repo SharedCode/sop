@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	log "log/slog"
+
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
@@ -50,34 +52,37 @@ func (s *Service) Open(ctx context.Context) error {
 		return nil
 	}
 
-	// If we are recording and have an active recording transaction, use it.
-	if s.session.Recording && s.session.Transaction != nil {
-		// We do NOT use the recording transaction for the current request if we are just recording steps.
-		// The user wants to record "begin transaction", "commit", etc. as steps.
-		// If we inject the transaction here, the tool might try to use it.
-		// But wait, the tool checks for the recorder and skips execution.
-		// So it doesn't matter if we inject it or not?
-		// Actually, if we inject it, other tools (like select) might use it.
-		// But if we are recording, we might want to verify the steps work?
-		// The user said: "should NOT intervene with how we do transaction on the recording session."
-		// This implies the recording session (the one where we are saying "add item...") should be independent
-		// of the transaction state being recorded.
-		// So, we should NOT inject the transaction from the "macro state" into the "current session state".
-		// BUT, the user might want to run a select to see if the item was added?
-		// If we are in "Natural Mode", we are executing AND recording.
-		// If we are in "Compiled Mode", we are JUST recording (mostly).
-		// The user's request specifically mentions "explicit Begin Transaction and Commit".
-		// "We don't interpret these steps' commands! they are for run time interpretation."
-		// This suggests that when recording, "begin transaction" is just a string/step, not an action.
-
-		// However, for other commands (add, select), we might still want to execute them?
-		// If we are in "Natural Mode", yes.
-		// If we are in "Compiled Mode", maybe not?
-
-		// Let's assume for now we continue to inject it, but the tool handles the "manage_transaction" specifically.
-		p.Transaction = s.session.Transaction
-		p.Variables = s.session.Variables
-		return nil
+	// If we are recording, we do NOT use the session transaction.
+	// The user requirement is that during recording, each step is an isolated transaction (auto-commit).
+	// Explicit transaction commands (begin/commit) are recorded as steps but do not affect the recording session.
+	if s.session.Recording {
+		// Ensure we don't accidentally carry over any state
+		p.Transaction = nil
+	} else if s.session.Transaction != nil {
+		// If NOT recording, and we have an active session transaction (e.g. from a previous step in a stateful session), use it.
+		// BUT ONLY if it matches the requested database.
+		if s.session.CurrentDB == "" || s.session.CurrentDB == p.CurrentDB {
+			p.Transaction = s.session.Transaction
+			p.Variables = s.session.Variables
+			// Restore ExplicitTransaction flag if we are reusing a transaction
+			// We assume if s.session.Transaction is set, it was explicit (based on Close logic),
+			// but let's be safe. Actually, Close only saves it if it WAS explicit.
+			// So we can set it to true here.
+			p.ExplicitTransaction = true
+			return nil
+		}
+		// If DB mismatch, we commit the previous transaction as we are switching context.
+		if s.session.CurrentDB != "" && s.session.CurrentDB != p.CurrentDB {
+			if s.session.Transaction != nil {
+				// Commit the old transaction to persist changes
+				if err := s.session.Transaction.Commit(ctx); err != nil {
+					return fmt.Errorf("failed to commit previous transaction on database '%s' before switching to '%s': %w", s.session.CurrentDB, p.CurrentDB, err)
+				}
+			}
+			// Clear the session transaction as we've committed it
+			s.session.Transaction = nil
+			s.session.Variables = nil
+		}
 	}
 
 	if p.CurrentDB == "" {
@@ -111,19 +116,35 @@ func (s *Service) Close(ctx context.Context) error {
 		return nil
 	}
 	if tx, ok := p.Transaction.(sop.Transaction); ok {
-		// If we are recording, we capture whatever transaction is currently active
-		// as the "recording transaction" for the next request.
-		// We do NOT commit it here.
-		if s.session.Recording {
-			s.session.Transaction = tx
-			s.session.Variables = p.Variables
+		// If we are recording, we do NOT capture the transaction.
+		// We commit it immediately (auto-commit per step).
+		if !s.session.Recording {
+			// If the transaction was explicitly started by the user, we persist it.
+			if p.ExplicitTransaction {
+				s.session.Transaction = tx
+				s.session.CurrentDB = p.CurrentDB
+				s.session.Variables = p.Variables
+				return nil
+			}
+			// Otherwise, we commit it as it's an implicit transaction for this request/macro.
+			if tx.HasBegun() {
+				if err := tx.Commit(ctx); err != nil {
+					return fmt.Errorf("failed to commit implicit transaction: %w", err)
+				}
+			}
+			// Clear session state
+			s.session.Transaction = nil
+			s.session.Variables = nil
 			return nil
 		}
 
 		// We commit by default on Close.
 		// If an error occurred, the caller should have handled Rollback or we need a way to signal it.
 		// For now, we assume success if we reached Close without explicit rollback.
-		return tx.Commit(ctx)
+		if tx.HasBegun() {
+			return tx.Commit(ctx)
+		}
+		return nil
 	}
 	return nil
 }
@@ -183,7 +204,9 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 	// 2. Embed
 	emb := s.domain.Embedder()
 	if emb == nil {
-		return nil, fmt.Errorf("domain %s has no embedder configured", s.domain.ID())
+		// If no embedder is configured, we cannot perform vector search.
+		// Return empty results instead of error, allowing the agent to proceed without context.
+		return nil, nil
 	}
 	vecs, err := emb.EmbedTexts(ctx, []string{query})
 	if err != nil {
@@ -217,7 +240,7 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 			// Log error but continue with vector results?
 			// For now, let's treat it as non-fatal if text index is missing or fails,
 			// but maybe we should log it.
-			// fmt.Printf("Text search failed: %v\n", err)
+			log.Warn("Text search failed", "error", err)
 		}
 	}
 
@@ -404,7 +427,7 @@ func (s *Service) saveMacro(ctx context.Context, macro ai.Macro) error {
 		tx.Rollback(ctx)
 		return err
 	}
-	if err := store.Save(ctx, "macros", macro.Name, &macro); err != nil {
+	if err := store.Save(ctx, "general", macro.Name, &macro); err != nil {
 		tx.Rollback(ctx)
 		return err
 	}
@@ -527,7 +550,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 				gen = overriddenGen
 			} else {
 				// Log warning? For now, just fall back to default
-				fmt.Printf("Warning: Failed to initialize requested provider '%s': %v. Falling back to default.\n", provider, err)
+				log.Warn("Failed to initialize requested provider, falling back to default", "provider", provider, "error", err)
 			}
 		}
 	}
@@ -618,32 +641,29 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 						toolCall.Args["_db_instance"] = db
 					}
 
-					// Re-serialize
-					if b, err := json.Marshal(toolCall); err == nil {
-						cleanJSON := string(b)
-
-						// Always capture as last step (for manual addition)
-						s.session.LastStep = &ai.MacroStep{
-							Type:    "command",
-							Command: toolCall.Tool,
-							Args:    toolCall.Args,
-						}
-
-						// Record Tool Call if recording
-						if s.session.Recording {
-							if s.session.RecordingMode == "compiled" {
-								s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, *s.session.LastStep)
-							}
-							// In natural mode, we already recorded the prompt via s.RecordStep at the top.
-							// So we do NOT record the tool call here to avoid double execution.
-						}
-
-						// Update recordingTx if the tool changed the transaction (e.g. via manage_transaction tool)
-						// Note: Transaction updates resulting from tool execution are handled by the caller
-						// or the next request's Open() call.
-
-						return cleanJSON, nil
+					// Execute Tool
+					result, err := executor.Execute(ctx, toolCall.Tool, toolCall.Args)
+					if err != nil {
+						return "", fmt.Errorf("tool execution failed: %w", err)
 					}
+
+					// Always capture as last step (for manual addition)
+					s.session.LastStep = &ai.MacroStep{
+						Type:    "command",
+						Command: toolCall.Tool,
+						Args:    toolCall.Args,
+					}
+
+					// Record Tool Call if recording
+					if s.session.Recording {
+						if s.session.RecordingMode == "compiled" {
+							s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, *s.session.LastStep)
+						}
+						// In natural mode, we already recorded the prompt via s.RecordStep at the top.
+						// So we do NOT record the tool call here to avoid double execution.
+					}
+
+					return result, nil
 				}
 
 				// Fallback: If JSON parsing failed (maybe invalid JSON), return as is

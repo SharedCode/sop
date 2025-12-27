@@ -12,7 +12,15 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 )
 
-func (s *Service) macroList(ctx context.Context, macroDB *database.Database) (string, error) {
+func (s *Service) macroList(ctx context.Context, macroDB *database.Database, args []string) (string, error) {
+	category := "general"
+	for i := 1; i < len(args); i++ {
+		if args[i] == "--category" && i+1 < len(args) {
+			category = args[i+1]
+			i++
+		}
+	}
+
 	tx, err := macroDB.BeginTransaction(ctx, sop.ForReading)
 	if err != nil {
 		return fmt.Sprintf("Error starting transaction: %v", err), nil
@@ -22,25 +30,32 @@ func (s *Service) macroList(ctx context.Context, macroDB *database.Database) (st
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error opening store: %v", err), nil
 	}
-	names, err := store.List(ctx, "macros")
+	names, err := store.List(ctx, category)
 	tx.Commit(ctx)
 	if err != nil {
 		return fmt.Sprintf("Error listing macros: %v", err), nil
 	}
 	if len(names) == 0 {
-		return "No macros found.", nil
+		return fmt.Sprintf("No macros found in category '%s'.", category), nil
 	}
-	return "Macros:\n- " + strings.Join(names, "\n- "), nil
+	return fmt.Sprintf("Macros (Category: %s):\n- %s", category, strings.Join(names, "\n- ")), nil
 }
 
 func (s *Service) macroShow(ctx context.Context, macroDB *database.Database, args []string) (string, error) {
 	if len(args) < 2 {
-		return "Usage: /macro show <name> [--json]", nil
+		return "Usage: /macro show <name> [--json] [--category <cat>]", nil
 	}
 	name := args[1]
+	category := "general"
 	showJSON := false
-	if len(args) > 2 && args[2] == "--json" {
-		showJSON = true
+
+	for i := 2; i < len(args); i++ {
+		if args[i] == "--json" {
+			showJSON = true
+		} else if args[i] == "--category" && i+1 < len(args) {
+			category = args[i+1]
+			i++
+		}
 	}
 
 	tx, err := macroDB.BeginTransaction(ctx, sop.ForReading)
@@ -53,7 +68,7 @@ func (s *Service) macroShow(ctx context.Context, macroDB *database.Database, arg
 		return fmt.Sprintf("Error opening store: %v", err), nil
 	}
 	var macro ai.Macro
-	err = store.Load(ctx, "macros", name, &macro)
+	err = store.Load(ctx, category, name, &macro)
 	tx.Commit(ctx)
 	if err != nil {
 		return fmt.Sprintf("Error loading macro: %v", err), nil
@@ -87,9 +102,14 @@ func (s *Service) macroShow(ctx context.Context, macroDB *database.Database, arg
 
 func (s *Service) macroDelete(ctx context.Context, macroDB *database.Database, args []string) (string, error) {
 	if len(args) < 2 {
-		return "Usage: /macro delete <name>", nil
+		return "Usage: /macro delete <name> [--category <cat>]", nil
 	}
 	name := args[1]
+	category := "general"
+	if len(args) > 3 && args[2] == "--category" {
+		category = args[3]
+	}
+
 	tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		return fmt.Sprintf("Error starting transaction: %v", err), nil
@@ -99,20 +119,32 @@ func (s *Service) macroDelete(ctx context.Context, macroDB *database.Database, a
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error opening store: %v", err), nil
 	}
-	err = store.Delete(ctx, "macros", name)
+
+	var dummy ai.Macro
+	if err := store.Load(ctx, category, name, &dummy); err != nil {
+		tx.Rollback(ctx)
+		return fmt.Sprintf("Error: Macro '%s' (Category: %s) not found.", name, category), nil
+	}
+
+	err = store.Delete(ctx, category, name)
 	if err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error deleting macro: %v", err), nil
 	}
 	tx.Commit(ctx)
-	return fmt.Sprintf("Macro '%s' deleted.", name), nil
+	return fmt.Sprintf("Macro '%s' (Category: %s) deleted.", name, category), nil
 }
 
 func (s *Service) macroSaveAs(ctx context.Context, macroDB *database.Database, args []string) (string, error) {
 	if len(args) < 2 {
-		return "Usage: /macro save_as <name>", nil
+		return "Usage: /macro save_as <name> [--category <cat>]", nil
 	}
 	name := args[1]
+	category := "general"
+	if len(args) > 3 && args[2] == "--category" {
+		category = args[3]
+	}
+
 	if s.session.LastStep == nil {
 		return "Error: No previous step available to save. Run a command first.", nil
 	}
@@ -129,48 +161,59 @@ func (s *Service) macroSaveAs(ctx context.Context, macroDB *database.Database, a
 
 	// Check if macro exists
 	var dummy ai.Macro
-	if err := store.Load(ctx, "macros", name, &dummy); err == nil {
+	if err := store.Load(ctx, category, name, &dummy); err == nil {
 		tx.Rollback(ctx)
-		return fmt.Sprintf("Error: Macro '%s' already exists. Use '/macro delete %s' first.", name, name), nil
+		return fmt.Sprintf("Error: Macro '%s' (Category: %s) already exists. Use '/macro delete %s' first.", name, category, name), nil
 	}
 
 	newMacro := ai.Macro{
-		Name:     name,
-		Category: "General",
-		Steps:    []ai.MacroStep{*s.session.LastStep},
+		Name:  name,
+		Steps: []ai.MacroStep{*s.session.LastStep},
 	}
 
-	if err := store.Save(ctx, "macros", name, newMacro); err != nil {
+	if err := store.Save(ctx, category, name, newMacro); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error saving macro: %v", err), nil
 	}
 	tx.Commit(ctx)
-	return fmt.Sprintf("Macro '%s' created from last step.", name), nil
+	return fmt.Sprintf("Macro '%s' (Category: %s) created from last step.", name, category), nil
 }
 
 func (s *Service) macroStep(ctx context.Context, macroDB *database.Database, args []string) (string, error) {
 	if len(args) < 3 {
-		return "Usage: /macro step <add|delete|update> <macro_name> ...", nil
+		return "Usage: /macro step <add|delete|update> <macro_name> ... [--category <cat>]", nil
 	}
 	subCmd := args[1]
 	name := args[2]
 
+	category := "general"
+	var cleanArgs []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--category" && i+1 < len(args) {
+			category = args[i+1]
+			i++
+		} else {
+			cleanArgs = append(cleanArgs, args[i])
+		}
+	}
+	args = cleanArgs
+
 	if subCmd == "add" {
-		return s.macroStepAdd(ctx, macroDB, name, args)
+		return s.macroStepAdd(ctx, macroDB, name, category, args)
 	}
 
 	if subCmd == "delete" {
-		return s.macroStepDelete(ctx, macroDB, name, args)
+		return s.macroStepDelete(ctx, macroDB, name, category, args)
 	}
 
 	if subCmd == "update" {
-		return s.macroStepUpdate(ctx, macroDB, name, args)
+		return s.macroStepUpdate(ctx, macroDB, name, category, args)
 	}
 
 	return "Unknown step command. Usage: /macro step <delete|add|update> ...", nil
 }
 
-func (s *Service) macroStepAdd(ctx context.Context, macroDB *database.Database, name string, args []string) (string, error) {
+func (s *Service) macroStepAdd(ctx context.Context, macroDB *database.Database, name string, category string, args []string) (string, error) {
 	// /macro step add <macro_name> <position> [target_index]
 	if len(args) < 4 {
 		return "Usage: /macro step add <macro_name> <position> [target_index]", nil
@@ -203,7 +246,7 @@ func (s *Service) macroStepAdd(ctx context.Context, macroDB *database.Database, 
 		return fmt.Sprintf("Error opening store: %v", err), nil
 	}
 	var macro ai.Macro
-	if err := store.Load(ctx, "macros", name, &macro); err != nil {
+	if err := store.Load(ctx, category, name, &macro); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error loading macro: %v", err), nil
 	}
@@ -234,15 +277,15 @@ func (s *Service) macroStepAdd(ctx context.Context, macroDB *database.Database, 
 		return "Error: Invalid position. Use top, bottom, before, or after.", nil
 	}
 
-	if err := store.Save(ctx, "macros", name, macro); err != nil {
+	if err := store.Save(ctx, category, name, macro); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error saving macro: %v", err), nil
 	}
 	tx.Commit(ctx)
-	return fmt.Sprintf("Step added to macro '%s' at %s.", name, position), nil
+	return fmt.Sprintf("Step added to macro '%s' (Category: %s) at %s.", name, category, position), nil
 }
 
-func (s *Service) macroStepDelete(ctx context.Context, macroDB *database.Database, name string, args []string) (string, error) {
+func (s *Service) macroStepDelete(ctx context.Context, macroDB *database.Database, name string, category string, args []string) (string, error) {
 	if len(args) < 4 {
 		return "Usage: /macro step delete <macro_name> <step_index>", nil
 	}
@@ -264,7 +307,7 @@ func (s *Service) macroStepDelete(ctx context.Context, macroDB *database.Databas
 		return fmt.Sprintf("Error opening store: %v", err), nil
 	}
 	var macro ai.Macro
-	if err := store.Load(ctx, "macros", name, &macro); err != nil {
+	if err := store.Load(ctx, category, name, &macro); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error loading macro: %v", err), nil
 	}
@@ -277,15 +320,15 @@ func (s *Service) macroStepDelete(ctx context.Context, macroDB *database.Databas
 	// Remove step
 	macro.Steps = append(macro.Steps[:idx], macro.Steps[idx+1:]...)
 
-	if err := store.Save(ctx, "macros", name, macro); err != nil {
+	if err := store.Save(ctx, category, name, macro); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error saving macro: %v", err), nil
 	}
 	tx.Commit(ctx)
-	return fmt.Sprintf("Step %d deleted from macro '%s'.", idx+1, name), nil
+	return fmt.Sprintf("Step %d deleted from macro '%s' (Category: %s).", idx+1, name, category), nil
 }
 
-func (s *Service) macroStepUpdate(ctx context.Context, macroDB *database.Database, name string, args []string) (string, error) {
+func (s *Service) macroStepUpdate(ctx context.Context, macroDB *database.Database, name string, category string, args []string) (string, error) {
 	// /macro step update <macro_name> <step_index>
 	if len(args) < 4 {
 		return "Usage: /macro step update <macro_name> <step_index>", nil
@@ -311,7 +354,7 @@ func (s *Service) macroStepUpdate(ctx context.Context, macroDB *database.Databas
 		return fmt.Sprintf("Error opening store: %v", err), nil
 	}
 	var macro ai.Macro
-	if err := store.Load(ctx, "macros", name, &macro); err != nil {
+	if err := store.Load(ctx, category, name, &macro); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error loading macro: %v", err), nil
 	}
@@ -324,10 +367,10 @@ func (s *Service) macroStepUpdate(ctx context.Context, macroDB *database.Databas
 	// Update step
 	macro.Steps[idx] = *s.session.LastStep
 
-	if err := store.Save(ctx, "macros", name, macro); err != nil {
+	if err := store.Save(ctx, category, name, macro); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error saving macro: %v", err), nil
 	}
 	tx.Commit(ctx)
-	return fmt.Sprintf("Step %d updated in macro '%s'.", idx+1, name), nil
+	return fmt.Sprintf("Step %d updated in macro '%s' (Category: %s).", idx+1, name, category), nil
 }

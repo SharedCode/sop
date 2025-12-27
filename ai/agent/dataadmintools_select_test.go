@@ -139,8 +139,13 @@ func TestToolSelect_WithFilter(t *testing.T) {
 			}
 
 			if tt.expectedCount == 0 {
-				if result != "No items found." {
-					t.Errorf("expected 'No items found.', got %q", result)
+				// Expect empty JSON array
+				var items []map[string]any
+				if err := json.Unmarshal([]byte(result), &items); err != nil {
+					t.Fatalf("failed to unmarshal result (expected empty array): %v. Result: %s", err, result)
+				}
+				if len(items) != 0 {
+					t.Errorf("expected 0 items, got %d", len(items))
 				}
 			} else {
 				var items []map[string]any

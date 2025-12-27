@@ -9,6 +9,8 @@ import (
 	"strings"
 	"text/template"
 
+	log "log/slog"
+
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
@@ -25,6 +27,11 @@ type DataAdminAgent struct {
 	registry          *Registry
 	databases         map[string]sop.DatabaseOptions
 	systemDB          *database.Database
+}
+
+// SetGenerator sets the generator for the agent.
+func (a *DataAdminAgent) SetGenerator(gen ai.Generator) {
+	a.brain = gen
 }
 
 // NewDataAdminAgent creates a new instance of DataAdminAgent.
@@ -80,7 +87,7 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 	}
 
 	if err != nil {
-		fmt.Printf("Warning: Failed to initialize DataAdmin brain: %v\n", err)
+		log.Warn("Failed to initialize DataAdmin brain", "error", err)
 	}
 
 	agent := &DataAdminAgent{
@@ -155,11 +162,11 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 		if err == nil {
 			store, err := a.systemDB.OpenModelStore(ctx, "macros", tx)
 			if err == nil {
-				names, err := store.List(ctx, "macros")
+				names, err := store.List(ctx, "general")
 				if err == nil {
 					for _, name := range names {
 						var macro ai.Macro
-						if err := store.Load(ctx, "macros", name, &macro); err == nil {
+						if err := store.Load(ctx, "general", name, &macro); err == nil {
 							// Format args schema
 							argsSchema := "()"
 							if len(macro.Parameters) > 0 {
@@ -175,6 +182,29 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 				}
 			}
 			tx.Commit(ctx)
+		}
+	}
+
+	// Inject Current Database Schema/Stores
+	if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
+		var db *database.Database
+		if p.CurrentDB == "system" {
+			db = a.systemDB
+		} else if dbOpts, ok := a.databases[p.CurrentDB]; ok {
+			db = database.NewDatabase(dbOpts)
+		}
+
+		if db != nil {
+			// We use a read-only transaction for this metadata fetch
+			if tx, err := db.BeginTransaction(ctx, sop.ForReading); err == nil {
+				if stores, err := tx.GetStores(ctx); err == nil {
+					toolsDef += fmt.Sprintf("\nActive Database: %s\nAvailable Stores:\n", p.CurrentDB)
+					for _, s := range stores {
+						toolsDef += fmt.Sprintf("- %s\n", s)
+					}
+				}
+				tx.Rollback(ctx)
+			}
 		}
 	}
 
@@ -255,7 +285,7 @@ IMPORTANT:
 
 					// Execute Tool
 					// We need to execute the tool against the session payload
-					result, err := a.ExecuteTool(ctx, tc.Tool, tc.Args)
+					result, err := a.Execute(ctx, tc.Tool, tc.Args)
 					if err != nil {
 						result = "Error: " + err.Error()
 					}
@@ -277,8 +307,14 @@ IMPORTANT:
 	return "Error: Maximum turns reached.", nil
 }
 
-// ExecuteTool executes the requested tool against the session payload.
-func (a *DataAdminAgent) ExecuteTool(ctx context.Context, toolName string, args map[string]any) (string, error) {
+// ListTools returns the list of available tools.
+func (a *DataAdminAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	// TODO: Implement proper tool listing from registry
+	return []ai.ToolDefinition{}, nil
+}
+
+// Execute executes the requested tool against the session payload.
+func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
 	// De-obfuscate Args if enabled
 	if a.enableObfuscation {
 		for k, v := range args {
@@ -299,6 +335,9 @@ func (a *DataAdminAgent) ExecuteTool(ctx context.Context, toolName string, args 
 	}
 
 	// Resolve Database
+	// Priority:
+	// 1. Explicit 'database' argument in tool call
+	// 2. CurrentDB in SessionPayload
 	var dbFound bool
 	dbName, _ := args["database"].(string)
 	if dbName != "" {
@@ -309,6 +348,17 @@ func (a *DataAdminAgent) ExecuteTool(ctx context.Context, toolName string, args 
 		if p.CurrentDB != "" {
 			dbFound = true
 		}
+	}
+
+	// If explicit database is provided, we might need to update the context/payload for the tool execution
+	// so that tools that rely on p.CurrentDB (like toolSelect) see the correct DB.
+	if dbName != "" && dbName != p.CurrentDB {
+		// Clone payload
+		newPayload := *p
+		newPayload.CurrentDB = dbName
+		// If switching DB, we cannot use the existing transaction
+		newPayload.Transaction = nil
+		ctx = context.WithValue(ctx, "session_payload", &newPayload)
 	}
 
 	if !dbFound && toolName != "list_databases" && toolName != "list_macros" && toolName != "get_macro_details" {
@@ -332,7 +382,7 @@ func (a *DataAdminAgent) ExecuteTool(ctx context.Context, toolName string, args 
 			store, err := a.systemDB.OpenModelStore(ctx, "macros", tx)
 			if err == nil {
 				var macro ai.Macro
-				if err := store.Load(ctx, "macros", toolName, &macro); err == nil {
+				if err := store.Load(ctx, "general", toolName, &macro); err == nil {
 					// Found macro! Execute it.
 					return a.runMacro(ctx, macro, args)
 				}
@@ -365,7 +415,22 @@ func (a *DataAdminAgent) runMacro(ctx context.Context, macro ai.Macro, args map[
 				}
 			}
 
-			res, err := a.ExecuteTool(ctx, step.Command, resolvedArgs)
+			// Handle Database Override
+			stepCtx := ctx
+			if step.Database != "" {
+				if p := ai.GetSessionPayload(ctx); p != nil {
+					// Clone payload to update CurrentDB for this step only
+					newPayload := *p
+					newPayload.CurrentDB = step.Database
+					// Clear transaction if switching DB, as the existing transaction is bound to the old DB
+					if p.CurrentDB != step.Database {
+						newPayload.Transaction = nil
+					}
+					stepCtx = context.WithValue(ctx, "session_payload", &newPayload)
+				}
+			}
+
+			res, err := a.Execute(stepCtx, step.Command, resolvedArgs)
 			if err != nil {
 				if !step.ContinueOnError {
 					return "", fmt.Errorf("step %d (%s) failed: %w", i+1, step.Command, err)

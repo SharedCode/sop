@@ -50,7 +50,7 @@ func (s *btreeModelStore) openStore(ctx context.Context) (btree.BtreeInterface[M
 	}
 
 	// Prefix the store name with the domain name to allow multiple stores in the same folder.
-	storeName := fmt.Sprintf("%s_models", s.name)
+	storeName := s.name
 	slotLength := 500
 	if s.name == "macros" {
 		slotLength = 1000

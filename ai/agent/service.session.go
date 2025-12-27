@@ -16,13 +16,15 @@ import (
 // RunnerSession holds the state for the current agent execution session,
 // including macro recording and transaction management.
 type RunnerSession struct {
-	Recording     bool
-	RecordingMode string // "standard" or "compiled"
-	StopOnError   bool
-	CurrentMacro  *ai.Macro
-	Transaction   sop.Transaction
-	Variables     map[string]any // Session-scoped variables (e.g. cached stores)
-	LastStep      *ai.MacroStep
+	Recording            bool
+	RecordingMode        string // "standard" or "compiled"
+	StopOnError          bool
+	CurrentMacro         *ai.Macro
+	CurrentMacroCategory string // Category for the macro being recorded
+	Transaction          sop.Transaction
+	CurrentDB            string         // The database the transaction is bound to
+	Variables            map[string]any // Session-scoped variables (e.g. cached stores)
+	LastStep             *ai.MacroStep
 	// LastInteractionSteps tracks the number of steps added/executed in the last user interaction.
 	LastInteractionSteps int
 	// LastInteractionToolCalls buffers the tool calls from the last interaction for refactoring.
@@ -55,15 +57,22 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		mode := "standard"
 		stopOnError := false
 		force := false
+		category := "general"
 
 		// Parse arguments
-		// /record [compiled] <name> [--stop-on-error] [--force]
+		// /record [compiled] <name> [--stop-on-error] [--force] [--category <cat>]
 		var cleanArgs []string
-		for _, arg := range args {
+		for i := 0; i < len(args); i++ {
+			arg := args[i]
 			if arg == "--stop-on-error" {
 				stopOnError = true
 			} else if arg == "--force" {
 				force = true
+			} else if arg == "--category" {
+				if i+1 < len(args) {
+					category = args[i+1]
+					i++
+				}
 			} else {
 				cleanArgs = append(cleanArgs, arg)
 			}
@@ -82,6 +91,13 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 			}
 			mode = "compiled"
 			name = args[1]
+			if len(args) > 2 {
+				return fmt.Sprintf("Error: Too many arguments. Usage: /record compiled <name> [flags]. Found extra: %v", args[2:]), true, nil
+			}
+		} else {
+			if len(args) > 1 {
+				return fmt.Sprintf("Error: Too many arguments. Usage: /record <name> [flags]. Found extra: %v", args[1:]), true, nil
+			}
 		}
 
 		// Check if macro exists
@@ -92,11 +108,11 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 				store, err := macroDB.OpenModelStore(ctx, "macros", tx)
 				if err == nil {
 					var dummy ai.Macro
-					if err := store.Load(ctx, "macros", name, &dummy); err == nil {
+					if err := store.Load(ctx, category, name, &dummy); err == nil {
 						// Found!
 						if !force {
 							tx.Rollback(ctx)
-							return fmt.Sprintf("Error: Macro '%s' already exists. Use '/record %s --force' to overwrite.", name, name), true, nil
+							return fmt.Sprintf("Error: Macro '%s' (Category: %s) already exists. Use '/record %s --force' to overwrite.", name, category, name), true, nil
 						}
 					}
 				}
@@ -117,24 +133,21 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 
 		s.session.CurrentMacro = &ai.Macro{
 			Name:     name,
-			Category: "General",
 			Database: dbName,
 			Steps:    []ai.MacroStep{},
 		}
+		s.session.CurrentMacroCategory = category
 
-		// Start a long-running transaction for the recording session
-		if db != nil {
-			tx, err := db.BeginTransaction(ctx, sop.ForWriting)
-			if err == nil {
-				s.session.Transaction = tx
-			} else {
-				return fmt.Sprintf("Error starting recording transaction: %v", err), true, nil
-			}
-		}
+		// We do NOT start a transaction here.
+		// Recording mode uses "Auto-Commit per Step".
+		// Each step will start and commit its own transaction.
 
 		msg := fmt.Sprintf("Recording macro '%s' (Mode: %s)", name, mode)
 		if stopOnError {
 			msg += " [Stop on Error]"
+		}
+		if dbName == "System DB" {
+			msg += "\nWarning: You are recording in 'System DB'. This macro will switch to 'System DB' when played."
 		}
 		return msg + "...", true, nil
 	}
@@ -174,23 +187,19 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 
 			log.Debug(fmt.Sprintf("saving macro w/ db: %s", s.session.CurrentMacro.Database))
 
-			if err := store.Save(ctx, "macros", s.session.CurrentMacro.Name, s.session.CurrentMacro); err != nil {
+			if err := store.Save(ctx, s.session.CurrentMacroCategory, s.session.CurrentMacro.Name, s.session.CurrentMacro); err != nil {
 				tx.Rollback(ctx)
 				return fmt.Sprintf("Error saving macro: %v", err), true, nil
 			}
 			if err := tx.Commit(ctx); err != nil {
 				return fmt.Sprintf("Error committing transaction: %v", err), true, nil
 			}
-			msg := fmt.Sprintf("Macro '%s' (Category: %s) saved with %d steps.", s.session.CurrentMacro.Name, s.session.CurrentMacro.Category, len(s.session.CurrentMacro.Steps))
+			msg := fmt.Sprintf("Macro '%s' (Category: %s) saved with %d steps.", s.session.CurrentMacro.Name, s.session.CurrentMacroCategory, len(s.session.CurrentMacro.Steps))
 
-			// Commit the recording transaction if active
-			if s.session.Transaction != nil {
-				if err := s.session.Transaction.Commit(ctx); err != nil {
-					msg += fmt.Sprintf("\nWarning: Failed to commit recording transaction: %v", err)
-				}
-				s.session.Transaction = nil
-				s.session.Variables = nil
-			}
+			// We do NOT commit any recording transaction here because we are in "Auto-Commit per Step" mode.
+			// Any data changes were already committed during the step execution.
+			s.session.Transaction = nil
+			s.session.Variables = nil
 
 			s.session.CurrentMacro = nil
 			return msg, true, nil
@@ -205,8 +214,16 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 			return "Error: Macro name required", true, nil
 		}
 		name := parts[0]
+		category := "general"
 		args := make(map[string]string)
-		for _, arg := range parts[1:] {
+
+		for i := 1; i < len(parts); i++ {
+			arg := parts[i]
+			if arg == "--category" && i+1 < len(parts) {
+				category = parts[i+1]
+				i++
+				continue
+			}
 			kv := strings.SplitN(arg, "=", 2)
 			if len(kv) == 2 {
 				args[kv[0]] = kv[1]
@@ -230,7 +247,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		}
 
 		var macro ai.Macro
-		if err := store.Load(ctx, "macros", name, &macro); err != nil {
+		if err := store.Load(ctx, category, name, &macro); err != nil {
 			tx.Rollback(ctx)
 			return fmt.Sprintf("Error loading macro: %v", err), true, nil
 		}
@@ -310,9 +327,18 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 	}
 
 	if strings.HasPrefix(query, "/delete ") {
-		name := strings.TrimPrefix(query, "/delete ")
-		if name == "" {
+		parts := strings.Fields(strings.TrimPrefix(query, "/delete "))
+		if len(parts) == 0 {
 			return "Error: Macro name required", true, nil
+		}
+		name := parts[0]
+		category := "general"
+
+		for i := 1; i < len(parts); i++ {
+			if parts[i] == "--category" && i+1 < len(parts) {
+				category = parts[i+1]
+				i++
+			}
 		}
 
 		macroDB := s.getMacroDB()
@@ -331,17 +357,32 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 			return fmt.Sprintf("Error opening store: %v", err), true, nil
 		}
 
-		if err := store.Delete(ctx, "macros", name); err != nil {
+		var dummy ai.Macro
+		if err := store.Load(ctx, category, name, &dummy); err != nil {
+			tx.Rollback(ctx)
+			return fmt.Sprintf("Error: Macro '%s' (Category: %s) not found.", name, category), true, nil
+		}
+
+		if err := store.Delete(ctx, category, name); err != nil {
 			tx.Rollback(ctx)
 			return fmt.Sprintf("Error deleting macro: %v", err), true, nil
 		}
 		if err := tx.Commit(ctx); err != nil {
 			return fmt.Sprintf("Error committing transaction: %v", err), true, nil
 		}
-		return fmt.Sprintf("Macro '%s' deleted.", name), true, nil
+		return fmt.Sprintf("Macro '%s' (Category: %s) deleted.", name, category), true, nil
 	}
 
-	if query == "/list" {
+	if strings.HasPrefix(query, "/list") {
+		args := strings.Fields(query)
+		category := "general"
+		for i := 1; i < len(args); i++ {
+			if args[i] == "--category" && i+1 < len(args) {
+				category = args[i+1]
+				i++
+			}
+		}
+
 		macroDB := s.getMacroDB()
 		if macroDB == nil {
 			return "Error: No database configured", true, nil
@@ -358,7 +399,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 			return fmt.Sprintf("Error opening store: %v", err), true, nil
 		}
 
-		names, err := store.List(ctx, "macros")
+		names, err := store.List(ctx, category)
 		if err != nil {
 			tx.Rollback(ctx)
 			return fmt.Sprintf("Error listing macros: %v", err), true, nil
@@ -366,7 +407,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		tx.Commit(ctx)
 
 		var sb strings.Builder
-		sb.WriteString("Available Macros:\n")
+		sb.WriteString(fmt.Sprintf("Available Macros (Category: %s):\n", category))
 		for _, n := range names {
 			sb.WriteString(fmt.Sprintf("- %s\n", n))
 		}
@@ -390,7 +431,7 @@ func (s *Service) handleMacroCommand(ctx context.Context, query string) (string,
 
 	switch cmd {
 	case "list":
-		return s.macroList(ctx, macroDB)
+		return s.macroList(ctx, macroDB, args)
 
 	case "show":
 		return s.macroShow(ctx, macroDB, args)

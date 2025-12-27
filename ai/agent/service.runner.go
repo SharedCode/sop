@@ -59,6 +59,91 @@ func (s *JSONStreamer) Write(step StepExecutionResult) {
 	fmt.Fprint(s.w, string(bytes))
 }
 
+// StartStreamingStep starts a new step in the JSON stream and returns a StepStreamer.
+// Note: The header is written lazily when the first item is written.
+func (s *JSONStreamer) StartStreamingStep(stepType, command, prompt string) *StepStreamer {
+	return &StepStreamer{
+		parent:   s,
+		first:    true,
+		stepType: stepType,
+		command:  command,
+		prompt:   prompt,
+	}
+}
+
+// StepStreamer implements ai.ResultStreamer to stream result items.
+type StepStreamer struct {
+	parent   *JSONStreamer
+	first    bool
+	closed   bool
+	used     bool
+	stepType string
+	command  string
+	prompt   string
+}
+
+func (ss *StepStreamer) writeHeader() {
+	ss.parent.mu.Lock()
+	defer ss.parent.mu.Unlock()
+
+	if !ss.parent.first {
+		fmt.Fprint(ss.parent.w, ",\n")
+	}
+	ss.parent.first = false
+
+	fmt.Fprintf(ss.parent.w, `{"type":%q`, ss.stepType)
+	if ss.command != "" {
+		fmt.Fprintf(ss.parent.w, `,"command":%q`, ss.command)
+	}
+	if ss.prompt != "" {
+		fmt.Fprintf(ss.parent.w, `,"prompt":%q`, ss.prompt)
+	}
+	fmt.Fprint(ss.parent.w, `,"result":`)
+}
+
+func (ss *StepStreamer) BeginArray() {
+	if !ss.used {
+		ss.writeHeader()
+		ss.used = true
+	}
+	ss.parent.mu.Lock()
+	defer ss.parent.mu.Unlock()
+	fmt.Fprint(ss.parent.w, "[")
+}
+
+func (ss *StepStreamer) WriteItem(item any) {
+	if !ss.used {
+		ss.writeHeader()
+		ss.used = true
+	}
+	ss.parent.mu.Lock()
+	defer ss.parent.mu.Unlock()
+
+	if !ss.first {
+		fmt.Fprint(ss.parent.w, ",")
+	}
+	ss.first = false
+
+	b, _ := json.Marshal(item)
+	ss.parent.w.Write(b)
+}
+
+func (ss *StepStreamer) EndArray() {
+	ss.parent.mu.Lock()
+	defer ss.parent.mu.Unlock()
+	fmt.Fprint(ss.parent.w, "]")
+}
+
+func (ss *StepStreamer) Close() {
+	if ss.closed {
+		return
+	}
+	ss.parent.mu.Lock()
+	defer ss.parent.mu.Unlock()
+	fmt.Fprint(ss.parent.w, "}")
+	ss.closed = true
+}
+
 func (s *Service) runStep(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
 	switch step.Type {
 	case "ask":
@@ -84,14 +169,7 @@ func (s *Service) runStep(ctx context.Context, step ai.MacroStep, scope map[stri
 }
 
 func (s *Service) runStepBlock(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
-	for _, subStep := range step.Steps {
-		if err := s.runStep(ctx, subStep, scope, scopeMu, sb, db); err != nil {
-			if !step.ContinueOnError {
-				return err
-			}
-		}
-	}
-	return nil
+	return s.runSteps(ctx, step.Steps, scope, scopeMu, sb, db)
 }
 
 func (s *Service) runStepAsk(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
@@ -218,18 +296,30 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.MacroStep, scope m
 			return nil
 		}
 
-		// msg := fmt.Sprintf("Executing command '%s'...\n", step.Command)
-		// sb.WriteString(msg)
-		// if w != nil {
-		// 	fmt.Fprint(w, msg)
-		// }
+		// Prepare streamer if available
+		var stepStreamer *StepStreamer
+		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+			stepStreamer = streamer.StartStreamingStep("command", step.Command, "")
+			ctx = context.WithValue(ctx, ai.CtxKeyResultStreamer, stepStreamer)
+		}
 
 		resp, err := executor.Execute(ctx, step.Command, resolvedArgs)
+
+		// Check if tool streamed the result
+		if stepStreamer != nil && stepStreamer.used {
+			stepStreamer.Close()
+			if err != nil {
+				return fmt.Errorf("command execution failed (streamed): %w", err)
+			}
+			// If streamed, we don't capture output to variable currently
+			return nil
+		}
+
 		if err != nil {
 			return fmt.Errorf("command execution failed: %w", err)
 		}
 
-		// Stream result if streamer is present
+		// Stream result if streamer is present (and wasn't used by tool)
 		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
 			var resultAny any = resp
 			// Try to unmarshal if it looks like JSON
@@ -505,7 +595,7 @@ func (s *Service) runStepMacro(ctx context.Context, step ai.MacroStep, scope map
 	}
 
 	var macro ai.Macro
-	if err := store.Load(ctx, "macros", name, &macro); err != nil {
+	if err := store.Load(ctx, "general", name, &macro); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Errorf("error loading macro '%s': %v", name, err)
 	}
@@ -548,7 +638,7 @@ func (s *Service) runStepMacro(ctx context.Context, step ai.MacroStep, scope map
 
 // ToolProvider interface for agents that can execute tools
 type ToolProvider interface {
-	ExecuteTool(ctx context.Context, toolName string, args map[string]any) (string, error)
+	Execute(ctx context.Context, toolName string, args map[string]any) (string, error)
 }
 
 // ServiceToolExecutor delegates tool execution to registered agents
@@ -559,7 +649,7 @@ type ServiceToolExecutor struct {
 func (e *ServiceToolExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
 	for _, agent := range e.s.registry {
 		if provider, ok := agent.(ToolProvider); ok {
-			resp, err := provider.ExecuteTool(ctx, toolName, args)
+			resp, err := provider.Execute(ctx, toolName, args)
 			if err == nil {
 				return resp, nil
 			}
@@ -613,31 +703,79 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.MacroStep, scope map[
 
 	var syncErr error
 
+	// Initialize currentDBName from payload
+	var currentDBName string
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		currentDBName = p.CurrentDB
+	}
+
 	for _, step := range steps {
 		// Check if context is already cancelled (by errgroup or sync error)
 		if groupCtx.Err() != nil {
 			break
 		}
 
-		// Refresh DB from payload to ensure we use the current active database
-		// This handles cases where a previous step (e.g. a tool) switched the database.
-		if p := ai.GetSessionPayload(groupCtx); p != nil {
-			dbName := p.GetDatabase()
-			if dbName != "" {
-				if opts, ok := s.databases[dbName]; ok {
-					db = database.NewDatabase(opts)
+		// Determine effective database for this step
+		stepDBName := step.Database
+		if stepDBName != "" {
+			// Step specifies DB -> Update currentDBName (sticky)
+			currentDBName = stepDBName
+		} else {
+			// Step does not specify -> Fallback to currentDBName
+			stepDBName = currentDBName
+		}
+
+		log.Debug("Determined effective database for step", "step_type", step.Type, "db", stepDBName)
+
+		// Prepare Context and DB for this step
+		stepCtx := groupCtx
+		stepDB := db
+
+		// Check if we need to update context/DB based on stepDBName
+		p := ai.GetSessionPayload(groupCtx)
+		if p != nil {
+			// If the desired DB differs from the context, or if we just want to ensure we have the right DB object
+			if p.CurrentDB != stepDBName {
+				// Clone payload
+				newPayload := *p
+				newPayload.CurrentDB = stepDBName
+				// Clear transaction if switching DB
+				newPayload.Transaction = nil
+
+				stepCtx = context.WithValue(groupCtx, "session_payload", &newPayload)
+
+				// Update stepDB object
+				if opts, ok := s.databases[stepDBName]; ok {
+					stepDB = database.NewDatabase(opts)
+				}
+			} else {
+				// Even if payload matches, 'db' arg might be stale if we are in a loop and didn't update it?
+				// 'db' is passed to runSteps.
+				// If we are in the loop, 'stepDB' starts as 'db'.
+				// If 'currentDBName' changed, we updated 'stepDB'.
+				// If 'currentDBName' is same as 'p.CurrentDB', then 'db' *should* be correct.
+				// But let's be safe and update stepDB if we have the name.
+				if stepDBName != "" {
+					if opts, ok := s.databases[stepDBName]; ok {
+						stepDB = database.NewDatabase(opts)
+					}
 				}
 			}
 		}
-		log.Debug(fmt.Sprintf("DB from payload: %v", db))
 
 		// If async, run in errgroup
 		if step.IsAsync {
+			// Async Step Logic:
+			// We capture the 'currentDBName' at the moment of dispatch (via stepCtx/stepDB).
+			// The async step runs with a CLONED context containing that DB.
+			// It does NOT affect the 'currentDBName' for subsequent steps in the loop,
+			// nor does it affect other async steps. This ensures isolation.
+
 			// Check if we are in a transaction.
 			// If so, we generally force sync execution to maintain integrity for simple steps.
 			// HOWEVER, if the step is a nested "macro", we allow it to run async (Swarm pattern),
 			// assuming it will manage its own transaction (e.g. on a different DB).
-			p := ai.GetSessionPayload(groupCtx)
+			p := ai.GetSessionPayload(stepCtx) // Use stepCtx
 			if p != nil && p.Transaction != nil && step.Type != "macro" {
 				if ctx.Value(CtxKeyJSONStreamer) == nil {
 					msg := fmt.Sprintf("Info: Step '%s' marked async but active transaction exists. Running synchronously.\n", step.Type)
@@ -649,15 +787,14 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.MacroStep, scope map[
 				// Fall through to sync execution
 			} else {
 				// Detach transaction to enforce isolation (Swarm Computing model)
-				// Async steps must not share the parent transaction to avoid race conditions.
-				// They should start their own transaction if needed.
-				asyncCtx := groupCtx
+				asyncCtx := stepCtx
+				asyncDB := stepDB
+
 				if p != nil {
-					// Clone payload and remove transaction (though p.Transaction should be nil here based on check above,
-					// but good to be safe if logic changes)
+					// Clone payload and remove transaction
 					newPayload := *p
 					newPayload.Transaction = nil
-					asyncCtx = context.WithValue(groupCtx, "session_payload", &newPayload)
+					asyncCtx = context.WithValue(stepCtx, "session_payload", &newPayload)
 				}
 
 				// Capture step for closure
@@ -674,10 +811,10 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.MacroStep, scope map[
 						}
 					}()
 
-					if err := s.runStep(asyncCtx, st, scope, scopeMu, sb, db); err != nil {
+					if err := s.runStep(asyncCtx, st, scope, scopeMu, sb, asyncDB); err != nil {
 						if st.ContinueOnError {
 							// Log error but don't stop the group
-							// TODO: Add logging
+							log.Error("Async step failed (continuing)", "step_type", st.Type, "error", err)
 							return nil
 						}
 						return err // This cancels groupCtx
@@ -689,9 +826,10 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.MacroStep, scope map[
 		}
 
 		// Sync step
-		if err := s.runStep(groupCtx, step, scope, scopeMu, sb, db); err != nil {
+		if err := s.runStep(stepCtx, step, scope, scopeMu, sb, stepDB); err != nil {
 			if step.ContinueOnError {
 				// Log error and continue
+				log.Error("Step failed (continuing)", "step_type", step.Type, "error", err)
 				continue
 			}
 			// Stop everything

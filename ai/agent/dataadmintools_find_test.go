@@ -96,27 +96,27 @@ func TestToolFind_ClosestItem(t *testing.T) {
 			name:           "Exact Match (find)",
 			toolName:       "find",
 			searchKey:      "banana",
-			expectedSubstr: "{\"key\":\"banana\",\"value\":\"yellow\"}",
+			expectedSubstr: `[{"key":"banana","value":"yellow"}]`,
 		},
 		{
 			name:           "No Match (find)",
 			toolName:       "find",
 			searchKey:      "apricot",
-			expectedSubstr: "No item found",
+			expectedSubstr: "[]",
 		},
 		{
 			name:      "No Match - Middle (find_nearest)",
 			toolName:  "find_nearest",
 			searchKey: "apricot",
 			// apricot < banana. Current: banana. Previous: apple.
-			expectedSubstr: "Nearest items: Current: {\"key\":\"banana\",\"value\":\"yellow\"}, Previous: {\"key\":\"apple\",\"value\":\"red\"}",
+			expectedSubstr: `[{"key":"banana","relation":"next_or_equal","value":"yellow"},{"key":"apple","relation":"previous","value":"red"}]`,
 		},
 		{
 			name:      "No Match - End (find_nearest)",
 			toolName:  "find_nearest",
 			searchKey: "date",
 			// date > cherry. Current: cherry (last item). Previous: banana.
-			expectedSubstr: "Nearest items: Current: {\"key\":\"cherry\",\"value\":\"red\"}, Previous: {\"key\":\"banana\",\"value\":\"yellow\"}",
+			expectedSubstr: `[{"key":"cherry","relation":"next_or_equal","value":"red"},{"key":"banana","relation":"previous","value":"yellow"}]`,
 		},
 	}
 

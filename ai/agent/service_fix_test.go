@@ -32,7 +32,7 @@ func TestService_ExecuteMacro_StringDB(t *testing.T) {
 		Name:  "test_macro",
 		Steps: []ai.MacroStep{{Type: "say", Message: "Hello"}},
 	}
-	if err := store.Save(ctx, "macros", "test_macro", macro); err != nil {
+	if err := store.Save(ctx, "general", "test_macro", macro); err != nil {
 		t.Fatalf("Failed to save macro: %v", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

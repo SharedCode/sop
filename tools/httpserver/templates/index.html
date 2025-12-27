@@ -96,11 +96,34 @@
         .tab-content { display: none; flex: 1; overflow-y: auto; padding: 10px; }
         .tab-content.active { display: flex; flex-direction: column; }
 
+        /* Macro Tree View */
+        .macro-tree ul { list-style: none; padding-left: 20px; border-left: 1px solid var(--border-color); margin: 5px 0; }
+        .macro-tree li { margin: 5px 0; padding: 0; background: transparent; }
+        .step-card { border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); overflow: hidden; }
+        .step-header { padding: 5px 8px; display: flex; align-items: center; gap: 8px; background: var(--table-header-bg); cursor: pointer; user-select: none; }
+        .step-header:hover { background: var(--hover-bg); }
+        .step-type { font-size: 10px; font-weight: bold; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; color: #fff; min-width: 40px; text-align: center; }
+        .type-ask { background-color: #007bff; }
+        .type-set { background-color: #6c757d; }
+        .type-if { background-color: #ffc107; color: #000; }
+        .type-loop { background-color: #17a2b8; }
+        .type-fetch { background-color: #28a745; }
+        .type-say { background-color: #e83e8c; }
+        .type-command { background-color: #fd7e14; }
+        .type-macro { background-color: #6610f2; }
+        .step-summary { flex: 1; font-size: 12px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .step-details { padding: 8px; font-size: 12px; border-top: 1px solid var(--border-color); display: none; }
+        .step-details.open { display: block; }
+        .step-children { padding: 5px; display: none; }
+        .step-children.open { display: block; }
+        .step-toggle { width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: var(--text-muted); transition: transform 0.2s; }
+        .step-toggle.rotated { transform: rotate(90deg); }
+
         /* Chat Interface */
         .chat-widget {
             position: fixed;
             /* Initial position will be set by JS */
-            width: 400px;
+            width: 480px;
             height: 500px;
             background: var(--bg-color);
             border: 1px solid var(--border-color);
@@ -121,15 +144,16 @@
 
         .resize-handle {
             position: absolute;
-            bottom: 0;
-            right: 0;
-            width: 12px;
-            height: 12px;
-            cursor: nwse-resize;
             z-index: 1002;
-            background: linear-gradient(135deg, transparent 50%, var(--text-muted) 50%);
-            border-bottom-right-radius: 8px;
         }
+        .resize-handle-n { top: 0; left: 0; right: 0; height: 5px; cursor: ns-resize; }
+        .resize-handle-s { bottom: 0; left: 0; right: 0; height: 5px; cursor: ns-resize; }
+        .resize-handle-e { top: 0; bottom: 0; right: 0; width: 5px; cursor: ew-resize; }
+        .resize-handle-w { top: 0; bottom: 0; left: 0; width: 5px; cursor: ew-resize; }
+        .resize-handle-ne { top: 0; right: 0; width: 10px; height: 10px; cursor: nesw-resize; z-index: 1003; }
+        .resize-handle-nw { top: 0; left: 0; width: 10px; height: 10px; cursor: nwse-resize; z-index: 1003; }
+        .resize-handle-se { bottom: 0; right: 0; width: 10px; height: 10px; cursor: nwse-resize; z-index: 1003; }
+        .resize-handle-sw { bottom: 0; left: 0; width: 10px; height: 10px; cursor: nesw-resize; z-index: 1003; }
 
         .chat-widget.active {
             display: flex;
@@ -163,10 +187,10 @@
 
         .chat-toggle-btn {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
-            width: 50px;
-            height: 50px;
+            bottom: 5px;
+            left: 5px;
+            width: 48px;
+            height: 48px;
             border-radius: 25px;
             background: var(--active-bg);
             color: white;
@@ -189,7 +213,7 @@
             flex: 1; 
             overflow-y: auto; 
             overflow-x: hidden;
-            padding: 15px; 
+            padding: 15px 5px 15px 12px; 
             background: var(--bg-color); 
             scroll-behavior: smooth; 
             display: flex; 
@@ -208,7 +232,7 @@
             word-wrap: break-word; 
             overflow-wrap: anywhere; 
         }
-        .chat-message.user { background-color: #007bff; color: white; align-self: flex-end; margin-left: auto; text-align: left; border: 1px solid #0056b3; }
+        .chat-message.user { background-color: #007bff; color: white; align-self: flex-end; margin-left: auto; margin-right:7px; text-align: left; border: 1px solid #0056b3; }
         .chat-message.ai { background: var(--pre-bg); color: var(--text-color); align-self: flex-start; margin-right: auto; border: 1px solid var(--border-color); }
         .chat-input-area { display: flex; gap: 5px; flex-shrink: 0; padding: 10px; border-top: 1px solid var(--border-color); background: var(--sidebar-bg); }
         #chat-input { height: 40px; resize: none; }
@@ -263,6 +287,7 @@
         <input type="text" id="search-input" placeholder="Search keys...">
         <button onclick="loadItems('search')" title="Search for items in the store based on the key or index fields.">Search</button>
         <button onclick="showAdd()" class="btn-success" title="Add a new item to the store.">Add Item</button>
+        <button onclick="showColumnSelector()" title="Select columns to display.">Columns</button>
     </div>
 
     <div id="pagination-top" style="display:none; margin-bottom: 2px; gap: 10px; justify-content: center;">
@@ -303,11 +328,13 @@
     let currentItems = [];
     let currentKeyColumnWidth = '45%';
     let columnWidths = [];
+    let availableDatabases = [];
 
     // Load Databases on Start
     fetch('/api/databases')
         .then(res => res.json())
         .then(databases => {
+            availableDatabases = databases;
             const select = document.getElementById('database-select');
             select.innerHTML = '';
             if (!databases || databases.length === 0) {
@@ -582,6 +609,232 @@
         }
     }
 
+    let userSelectedColumns = null; // Set of strings, or null if show all
+    let allDetectedColumns = []; // List of all columns detected in currentItems
+
+    function renderGrid(items) {
+        const grid = document.getElementById('data-grid');
+        const pagination = document.getElementById('pagination');
+        const paginationTop = document.getElementById('pagination-top');
+        
+        if (!items || items.length === 0) {
+            grid.innerHTML = '<p>No items found. <button onclick="loadItems(\'first\')" title="Go to the first page of items.">Go to First</button></p>';
+            pagination.style.display = 'none';
+            paginationTop.style.display = 'none';
+            return;
+        }
+
+        // --- DYNAMIC TABLE GENERATION ---
+        let keyCols = [];
+        let valCols = [];
+        
+        // Determine Key Columns
+        if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+            // Priority 1: Use Index Spec for order
+            keyCols = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
+            
+            // If we have data, append any extra fields not in index spec
+            if (items.length > 0) {
+                const sampleKey = items[0].key;
+                if (typeof sampleKey === 'object' && sampleKey !== null) {
+                    const dataKeys = Object.keys(sampleKey);
+                    dataKeys.forEach(k => {
+                        if (!keyCols.includes(k)) {
+                            keyCols.push(k);
+                        }
+                    });
+                }
+            }
+        } else if (items.length > 0) {
+            // Priority 2: Infer from data
+            const sampleKey = items[0].key;
+            if (typeof sampleKey === 'object' && sampleKey !== null) {
+                keyCols = Object.keys(sampleKey).sort();
+            }
+            
+            // Fallback: check if it's a JSON string
+            if ((!keyCols || keyCols.length === 0) && typeof sampleKey === 'string' && sampleKey.trim().startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(sampleKey);
+                    if (typeof parsed === 'object' && parsed !== null) {
+                        keyCols = Object.keys(parsed).sort();
+                    }
+                } catch(e) {}
+            }
+
+            if (!keyCols || keyCols.length === 0) {
+                keyCols = ['Key'];
+            }
+        } else {
+            // Fallback
+            keyCols = ['Key'];
+        }
+
+        // Determine Value Columns
+        if (items.length > 0) {
+            let sampleVal = items[0].value;
+            
+            // Try to parse if string
+            if (typeof sampleVal === 'string') {
+                try {
+                    const parsed = JSON.parse(sampleVal);
+                    if (typeof parsed === 'object' && parsed !== null) {
+                        sampleVal = parsed;
+                    }
+                } catch(e) {}
+            }
+
+            if (typeof sampleVal === 'object' && sampleVal !== null) {
+                valCols = Object.keys(sampleVal);
+                
+                // Filter out columns that already exist in Key Columns (redundant)
+                const keyColsLower = new Set(keyCols.map(k => k.toLowerCase()));
+                valCols = valCols.filter(col => !keyColsLower.has(col.toLowerCase()));
+            } else {
+                valCols = ['Value'];
+            }
+        } else {
+            valCols = ['Value'];
+        }
+
+        // Store all detected columns for the selector
+        allDetectedColumns = [...keyCols, ...valCols];
+
+        // Filter based on user selection
+        if (userSelectedColumns) {
+            keyCols = keyCols.filter(c => userSelectedColumns.has(c));
+            valCols = valCols.filter(c => userSelectedColumns.has(c));
+        }
+
+        let html = '<table id="items-table"><thead><tr>';
+        
+        // Key Headers
+        keyCols.forEach((col, index) => {
+             let style = '';
+             if (columnWidths[index]) style = `style="width: ${columnWidths[index]}"`;
+             html += `<th class="th-key" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
+        });
+        
+        // Value Headers
+        let valOffset = keyCols.length;
+        valCols.forEach((col, index) => {
+             let style = '';
+             if (columnWidths[valOffset + index]) style = `style="width: ${columnWidths[valOffset + index]}"`;
+             html += `<th class="th-val" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
+        });
+        
+        html += '</tr></thead><tbody>';
+        
+        items.forEach(item => {
+            // Escape single quotes for the onclick attribute
+            const itemJson = JSON.stringify(item).replace(/'/g, "&#39;");
+            html += `<tr onclick='showDetail(this, ${itemJson})'>`;
+            
+            // Key Cells
+            if (keyCols.length === 1 && keyCols[0] === 'Key') {
+                 const val = typeof item.key === 'object' ? JSON.stringify(item.key) : item.key;
+                 html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+            } else {
+                keyCols.forEach(col => {
+                    let keyObj = item.key;
+                    if (typeof keyObj === 'string' && keyObj.trim().startsWith('{')) {
+                        try { keyObj = JSON.parse(keyObj); } catch(e){}
+                    }
+                    
+                    let val = (keyObj && typeof keyObj === 'object') ? keyObj[col] : '';
+                    if (col === 'Key') val = item.key;
+                    if (typeof val === 'object') val = JSON.stringify(val);
+                    html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+                });
+            }
+            
+            // Value Cells
+            if (valCols.length === 1 && valCols[0] === 'Value') {
+                 const val = typeof item.value === 'object' ? JSON.stringify(item.value) : item.value;
+                 html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+            } else {
+                valCols.forEach(col => {
+                    let valObj = item.value;
+                    // Try to parse if string
+                    if (typeof valObj === 'string') {
+                        try {
+                            const parsed = JSON.parse(valObj);
+                            if (typeof parsed === 'object' && parsed !== null) {
+                                valObj = parsed;
+                            }
+                        } catch(e) {}
+                    }
+
+                    let val = valObj ? valObj[col] : '';
+                    if (col === 'Value') val = item.value;
+                    if (typeof val === 'object') val = JSON.stringify(val);
+                    html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+                });
+            }
+            
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        grid.innerHTML = html;
+    }
+
+    function showColumnSelector() {
+        const modal = document.getElementById('column-modal');
+        const list = document.getElementById('column-list');
+        list.innerHTML = '';
+
+        if (allDetectedColumns.length === 0) {
+            list.innerHTML = '<p>No columns detected. Load data first.</p>';
+        } else {
+            const uniqueCols = [...new Set(allDetectedColumns)];
+            
+            const divAll = document.createElement('div');
+            divAll.innerHTML = `<label><input type="checkbox" id="col-select-all" onchange="toggleAllColumns(this)"> <strong>Select All</strong></label>`;
+            list.appendChild(divAll);
+
+            uniqueCols.forEach(col => {
+                const div = document.createElement('div');
+                const checked = !userSelectedColumns || userSelectedColumns.has(col) ? 'checked' : '';
+                div.innerHTML = `<label><input type="checkbox" class="col-checkbox" value="${col}" ${checked}> ${col}</label>`;
+                list.appendChild(div);
+            });
+        }
+        
+        modal.style.display = 'flex';
+    }
+
+    function toggleAllColumns(source) {
+        const checkboxes = document.querySelectorAll('.col-checkbox');
+        checkboxes.forEach(cb => cb.checked = source.checked);
+    }
+
+    function applyColumns() {
+        // Save current column widths before rebuilding
+        const existingTable = document.getElementById('items-table');
+        if (existingTable) {
+            const ths = existingTable.querySelectorAll('th');
+            if (ths.length > 0) {
+                columnWidths = Array.from(ths).map(th => th.style.width);
+            }
+        }
+
+        const checkboxes = document.querySelectorAll('.col-checkbox');
+        const selected = new Set();
+        checkboxes.forEach(cb => {
+            if (cb.checked) selected.add(cb.value);
+        });
+        
+        const allCheckboxes = document.querySelectorAll('.col-checkbox');
+        if (selected.size === allCheckboxes.length) {
+            userSelectedColumns = null;
+        } else {
+            userSelectedColumns = selected;
+        }
+        
+        renderGrid(currentItems);
+        document.getElementById('column-modal').style.display = 'none';
+    }
+
     function loadItems(action = 'first', refKey = null, keepPanel = false) {
         if (!currentStore || !currentDatabase) return;
 
@@ -711,121 +964,7 @@
                 pagination.style.display = 'flex';
                 paginationTop.style.display = 'flex';
 
-                // --- DYNAMIC TABLE GENERATION ---
-                let keyCols = [];
-                let valCols = [];
-                
-                // Determine Key Columns
-                if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
-                    // Priority 1: Use Index Spec for order
-                    keyCols = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
-                    
-                    // If we have data, append any extra fields not in index spec
-                    if (items.length > 0) {
-                        const sampleKey = items[0].key;
-                        if (typeof sampleKey === 'object' && sampleKey !== null) {
-                            const dataKeys = Object.keys(sampleKey);
-                            dataKeys.forEach(k => {
-                                if (!keyCols.includes(k)) {
-                                    keyCols.push(k);
-                                }
-                            });
-                        }
-                    }
-                } else if (items.length > 0) {
-                    // Priority 2: Infer from data
-                    const sampleKey = items[0].key;
-                    if (typeof sampleKey === 'object' && sampleKey !== null) {
-                        keyCols = Object.keys(sampleKey).sort();
-                    }
-                    
-                    // Fallback: check if it's a JSON string
-                    if ((!keyCols || keyCols.length === 0) && typeof sampleKey === 'string' && sampleKey.trim().startsWith('{')) {
-                        try {
-                            const parsed = JSON.parse(sampleKey);
-                            if (typeof parsed === 'object' && parsed !== null) {
-                                keyCols = Object.keys(parsed).sort();
-                            }
-                        } catch(e) {}
-                    }
-
-                    if (!keyCols || keyCols.length === 0) {
-                        keyCols = ['Key'];
-                    }
-                } else {
-                    // Fallback
-                    keyCols = ['Key'];
-                }
-
-                // Determine Value Columns
-                if (items.length > 0) {
-                    const sampleVal = items[0].value;
-                    if (typeof sampleVal === 'object' && sampleVal !== null) {
-                        valCols = Object.keys(sampleVal);
-                    } else {
-                        valCols = ['Value'];
-                    }
-                } else {
-                    valCols = ['Value'];
-                }
-
-                let html = '<table id="items-table"><thead><tr>';
-                
-                // Key Headers
-                keyCols.forEach((col, index) => {
-                     let style = '';
-                     if (columnWidths[index]) style = `style="width: ${columnWidths[index]}"`;
-                     html += `<th class="th-key" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
-                });
-                
-                // Value Headers
-                let valOffset = keyCols.length;
-                valCols.forEach((col, index) => {
-                     let style = '';
-                     if (columnWidths[valOffset + index]) style = `style="width: ${columnWidths[valOffset + index]}"`;
-                     html += `<th class="th-val" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
-                });
-                
-                html += '</tr></thead><tbody>';
-                
-                items.forEach(item => {
-                    // Escape single quotes for the onclick attribute
-                    const itemJson = JSON.stringify(item).replace(/'/g, "&#39;");
-                    html += `<tr onclick='showDetail(this, ${itemJson})'>`;
-                    
-                    // Key Cells
-                    if (keyCols.length === 1 && keyCols[0] === 'Key') {
-                         const val = typeof item.key === 'object' ? JSON.stringify(item.key) : item.key;
-                         html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
-                    } else {
-                        keyCols.forEach(col => {
-                            let keyObj = item.key;
-                            if (typeof keyObj === 'string' && keyObj.trim().startsWith('{')) {
-                                try { keyObj = JSON.parse(keyObj); } catch(e){}
-                            }
-                            
-                            let val = (keyObj && typeof keyObj === 'object') ? keyObj[col] : '';
-                            if (typeof val === 'object') val = JSON.stringify(val);
-                            html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
-                        });
-                    }
-                    
-                    // Value Cells
-                    if (valCols.length === 1 && valCols[0] === 'Value') {
-                         const val = typeof item.value === 'object' ? JSON.stringify(item.value) : item.value;
-                         html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
-                    } else {
-                        valCols.forEach(col => {
-                            let val = item.value ? item.value[col] : '';
-                            if (typeof val === 'object') val = JSON.stringify(val);
-                            html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
-                        });
-                    }
-                    
-                    html += '</tr>';
-                });
-                html += '</tbody></table>';
-                grid.innerHTML = html;
+                renderGrid(items);
                 return items;
             });
     }
@@ -838,6 +977,8 @@
     let currentItemValue = null;
 
     function showDetail(row, item, autoOpen = true) {
+        console.log("showDetail called. Store:", currentStore); // Debug
+        
         // Check for unsaved changes if panel is open
         const panel = document.getElementById('detail-panel');
         const wasOpen = (panel.style.display === 'block' || panel.style.display === 'flex');
@@ -860,6 +1001,20 @@
         currentItemKey = item.key;
         currentItemValue = item.value;
         
+        // Try to parse value if it's a string (e.g. stored as JSON string)
+        if (typeof currentItemValue === 'string') {
+            try {
+                const parsed = JSON.parse(currentItemValue);
+                if (typeof parsed === 'object' && parsed !== null) {
+                    currentItemValue = parsed;
+                    // Update item.value locally so the rest of the function uses the object
+                    item.value = parsed;
+                }
+            } catch (e) {
+                console.error("Failed to parse value as JSON:", e);
+            }
+        }
+
         // If panel was closed and autoOpen is false, just return (after setting currentItemKey and highlight)
         if (!wasOpen && !autoOpen) {
             return;
@@ -869,16 +1024,66 @@
         
         const keyStr = typeof item.key === 'object' ? JSON.stringify(item.key, null, 2) : item.key;
         
+        // Debug Info on UI
+        // (Removed debug message)
+
         let valueHtml = '';
-        if (typeof item.value === 'object' && item.value !== null) {
+        if (typeof currentItemValue === 'object' && currentItemValue !== null) {
             // Form View
             valueHtml = '<div id="value-form" style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; padding-right: 2px;">';
-            const keys = Object.keys(item.value);
+            const keys = Object.keys(currentItemValue);
             if (keys.length === 0) {
                  valueHtml += '<em>Empty Object</em>';
             }
             keys.forEach(key => {
-                let val = item.value[key];
+                let val = currentItemValue[key];
+                
+                // Check if this is a macro store
+                const isMacroStore = currentStore && currentStore.toLowerCase() === 'macros';
+
+                // Skip 'category' field for macros as it is redundant with the Key
+                if (isMacroStore && key.toLowerCase() === 'category') {
+                    return;
+                }
+
+                // Special handling for 'steps' in 'macros' store
+                if (isMacroStore && key === 'steps' && Array.isArray(val)) {
+                    // Hidden input to preserve value for save
+                    const safeVal = String(JSON.stringify(val)).replace(/"/g, '&quot;');
+                    valueHtml += `
+                        <div class="form-group" style="display: flex; flex-direction: column;">
+                            <label class="form-label">${key}</label>
+                            <input type="hidden" class="value-input" data-key="${key}" value="${safeVal}">
+                            <button onclick='openMacroModal()' style="width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                                <span>View ${val.length} Steps (Complex)</span>
+                                <span>&#x2197;</span>
+                            </button>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Special handling for 'database' in 'macros' store
+                if (isMacroStore && key === 'database') {
+                    let optionsHtml = '<option value="">(None / Portable)</option>';
+                    if (availableDatabases && availableDatabases.length > 0) {
+                        availableDatabases.forEach(db => {
+                            const selected = db.name === val ? 'selected' : '';
+                            optionsHtml += `<option value="${db.name}" ${selected}>${db.name}</option>`;
+                        });
+                    }
+                    
+                    valueHtml += `
+                        <div class="form-group" style="display: flex; flex-direction: column;">
+                            <label class="form-label">${key}</label>
+                            <select class="value-input form-input" data-key="${key}" onchange="document.getElementById('btn-save').disabled = false;">
+                                ${optionsHtml}
+                            </select>
+                        </div>
+                    `;
+                    return;
+                }
+
                 let displayVal = val;
                 if (typeof val === 'object') {
                     displayVal = JSON.stringify(val);
@@ -897,7 +1102,7 @@
             valueHtml += '</div>';
         } else {
             // Primitive View (Textarea)
-            const valStr = JSON.stringify(item.value, null, 2);
+            const valStr = JSON.stringify(currentItemValue, null, 2);
             valueHtml = `<textarea id="edit-value" oninput="document.getElementById('btn-save').disabled = false;" style="width: 100%; height: 300px; font-family: monospace; margin-top: 5px;" class="form-input">${valStr}</textarea>`;
         }
 
@@ -1639,6 +1844,12 @@
                 e.preventDefault();
                 return;
             }
+            const macroModal = document.getElementById('macro-modal');
+            if (macroModal && macroModal.style.display !== 'none') {
+                closeMacroModal();
+                e.preventDefault();
+                return;
+            }
         }
 
         // Only handle if not typing in an input or textarea
@@ -1725,28 +1936,35 @@
         document.getElementById(`tab-${tabName}`).classList.add('active');
     }
 
-    function toggleChatWidget() {
+    function resetChatPosition() {
+        const widget = document.getElementById('chat-widget');
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const width = 480;
+        const height = 500;
+        
+        widget.style.width = width + 'px';
+        widget.style.height = height + 'px';
+        // Position at bottom-left, above the toggle button (which is ~52px from bottom)
+        widget.style.left = '54px';
+        widget.style.top = (viewportHeight - height - 1) + 'px';
+        widget.style.right = 'auto';
+        widget.style.bottom = 'auto';
+    }
+
+    function toggleChatWidget(forceOpen) {
         const widget = document.getElementById('chat-widget');
         const btn = document.getElementById('chat-toggle-btn');
         
-        if (widget.classList.contains('active')) {
+        if (widget.classList.contains('active') && !forceOpen) {
             widget.classList.remove('active');
-            btn.style.display = 'flex';
         } else {
             // Initialize position if not set (first open)
             if (!widget.style.top && !widget.style.left && !widget.style.right && !widget.style.bottom) {
-                // Default to bottom right, but using top/left for resize compatibility
-                const viewportWidth = window.innerWidth;
-                const viewportHeight = window.innerHeight;
-                const width = 400;
-                const height = 500;
-                
-                widget.style.left = (viewportWidth - width - 20) + 'px';
-                widget.style.top = (viewportHeight - height - 80) + 'px';
+                resetChatPosition();
             }
             
             widget.classList.add('active');
-            btn.style.display = 'none';
             // Focus input when opening
             setTimeout(() => document.getElementById('chat-input').focus(), 100);
         }
@@ -1799,22 +2017,29 @@
         });
 
         // --- Resize Logic ---
-        const resizeHandle = widget.querySelector('.resize-handle');
         let isResizing = false;
-        let resizeStartX, resizeStartY, startWidth, startHeight;
+        let resizeDir = '';
+        let resizeStartX, resizeStartY, startWidth, startHeight, startLeft, startTop;
 
-        if (resizeHandle) {
-            resizeHandle.addEventListener('mousedown', function(e) {
+        const handles = widget.querySelectorAll('.resize-handle');
+        handles.forEach(handle => {
+            handle.addEventListener('mousedown', function(e) {
                 e.stopPropagation(); // Prevent drag
                 e.preventDefault(); // Prevent selection
                 isResizing = true;
+                resizeDir = handle.getAttribute('data-dir');
                 resizeStartX = e.clientX;
                 resizeStartY = e.clientY;
-                startWidth = widget.offsetWidth;
-                startHeight = widget.offsetHeight;
-                document.body.style.cursor = 'nwse-resize';
+                
+                const rect = widget.getBoundingClientRect();
+                startWidth = rect.width;
+                startHeight = rect.height;
+                startLeft = rect.left;
+                startTop = rect.top;
+                
+                document.body.style.cursor = window.getComputedStyle(handle).cursor;
             });
-        }
+        });
 
         document.addEventListener('mousemove', function(e) {
             if (!isResizing) return;
@@ -1822,9 +2047,35 @@
             
             const deltaX = e.clientX - resizeStartX;
             const deltaY = e.clientY - resizeStartY;
+            const minW = 300;
+            const minH = 300;
             
-            widget.style.width = Math.max(300, startWidth + deltaX) + 'px';
-            widget.style.height = Math.max(300, startHeight + deltaY) + 'px';
+            if (resizeDir.includes('e')) {
+                widget.style.width = Math.max(minW, startWidth + deltaX) + 'px';
+            }
+            if (resizeDir.includes('s')) {
+                widget.style.height = Math.max(minH, startHeight + deltaY) + 'px';
+            }
+            if (resizeDir.includes('w')) {
+                let newWidth = startWidth - deltaX;
+                if (newWidth < minW) {
+                    newWidth = minW;
+                    widget.style.left = (startLeft + startWidth - minW) + 'px';
+                } else {
+                    widget.style.left = (startLeft + deltaX) + 'px';
+                }
+                widget.style.width = newWidth + 'px';
+            }
+            if (resizeDir.includes('n')) {
+                let newHeight = startHeight - deltaY;
+                if (newHeight < minH) {
+                    newHeight = minH;
+                    widget.style.top = (startTop + startHeight - minH) + 'px';
+                } else {
+                    widget.style.top = (startTop + deltaY) + 'px';
+                }
+                widget.style.height = newHeight + 'px';
+            }
         });
 
         document.addEventListener('mouseup', function() {
@@ -2267,6 +2518,115 @@
         }
     }
 
+    // --- Macro Tree View Logic ---
+
+    function openMacroModal() {
+        const modal = document.getElementById('macro-modal');
+        const container = document.getElementById('macro-tree-container');
+        container.innerHTML = '';
+        
+        let steps = [];
+        if (currentItemValue && Array.isArray(currentItemValue.steps)) {
+            steps = currentItemValue.steps;
+        }
+        
+        if (!steps || steps.length === 0) {
+            container.innerHTML = '<em>No steps defined.</em>';
+        } else {
+            const ul = document.createElement('ul');
+            renderMacroSteps(steps, ul);
+            container.appendChild(ul);
+        }
+        
+        modal.style.display = 'block';
+    }
+
+    function closeMacroModal() {
+        document.getElementById('macro-modal').style.display = 'none';
+    }
+
+    function renderMacroSteps(steps, container) {
+        steps.forEach((step, index) => {
+            const li = document.createElement('li');
+            li.className = 'step-item';
+            
+            // Determine Type Class
+            const typeClass = 'type-' + (step.type || 'unknown');
+            
+            // Determine Summary
+            let summary = '';
+            if (step.type === 'ask') summary = `Ask: "${step.prompt}" -> ${step.output_variable || '(no var)'}`;
+            else if (step.type === 'set') summary = `Set: ${step.variable} = ${step.value}`;
+            else if (step.type === 'if') summary = `If: ${step.condition}`;
+            else if (step.type === 'loop') summary = `Loop: ${step.list} as ${step.iterator}`;
+            else if (step.type === 'fetch') summary = `Fetch: ${step.resource} -> ${step.variable}`;
+            else if (step.type === 'say') summary = `Say: "${step.message}"`;
+            else if (step.type === 'command') summary = `Cmd: ${step.command} ${JSON.stringify(step.args || {})}`;
+            else if (step.type === 'macro') summary = `Run Macro: ${step.macro_name}`;
+            else summary = JSON.stringify(step);
+
+            // Check for children (nested steps)
+            const hasChildren = step.steps && step.steps.length > 0;
+            const toggleHtml = hasChildren ? '<div class="step-toggle">&#9654;</div>' : '<div class="step-toggle"></div>';
+
+            const card = document.createElement('div');
+            card.className = 'step-card';
+            
+            // Header
+            const header = document.createElement('div');
+            header.className = 'step-header';
+            header.innerHTML = `
+                ${toggleHtml}
+                <span class="step-type ${typeClass}">${step.type || '?'}</span>
+                <span class="step-summary">${summary.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+            `;
+            
+            // Details (JSON view)
+            const details = document.createElement('div');
+            details.className = 'step-details';
+            details.innerHTML = `<pre>${JSON.stringify(step, (k, v) => k === 'steps' ? undefined : v, 2)}</pre>`; // Exclude nested steps from detail view to avoid duplication
+
+            // Event Listeners
+            header.onclick = (e) => {
+                // If clicking toggle area, toggle children
+                // If clicking elsewhere, toggle details? Or just toggle children if present?
+                // Let's make the whole header toggle children if present, else toggle details.
+                if (hasChildren) {
+                    toggleStepChildren(li);
+                } else {
+                    details.classList.toggle('open');
+                }
+            };
+
+            card.appendChild(header);
+            card.appendChild(details);
+            
+            // Children Container
+            if (hasChildren) {
+                const childrenContainer = document.createElement('div');
+                childrenContainer.className = 'step-children';
+                const childUl = document.createElement('ul');
+                renderMacroSteps(step.steps, childUl);
+                childrenContainer.appendChild(childUl);
+                card.appendChild(childrenContainer);
+            }
+
+            li.appendChild(card);
+            container.appendChild(li);
+        });
+    }
+
+    function toggleStepChildren(li) {
+        const toggle = li.querySelector('.step-toggle');
+        const children = li.querySelector('.step-children');
+        if (toggle && children) {
+            toggle.classList.toggle('rotated');
+            children.classList.toggle('open');
+        }
+    }
+
+    // --- End Macro Tree View Logic ---
+
     function appendChatMessage(role, text) {
         console.log("Appending message:", role, text); // Debug Log
         const history = document.getElementById('chat-history');
@@ -2334,6 +2694,19 @@
     </div>
 </div>
 
+<div id="column-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:2000;">
+    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:400px; max-width:90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); display: flex; flex-direction: column; max-height: 80vh;">
+        <h3 style="margin-top:0;">Select Columns</h3>
+        <div id="column-list" style="overflow-y: auto; flex: 1; margin: 10px 0; border: 1px solid var(--border-color); padding: 10px;">
+            <!-- Checkboxes will be injected here -->
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button onclick="document.getElementById('column-modal').style.display='none'" style="padding: 5px 15px; background: var(--button-bg); color: var(--button-text);">Cancel</button>
+            <button onclick="applyColumns()" style="background:var(--success-bg); color:white; padding: 5px 15px;">Apply</button>
+        </div>
+    </div>
+</div>
+
 <div id="confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:2000;">
     <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:400px; max-width:90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color);">
         <h3 style="margin-top:0;">Confirm Action</h3>
@@ -2352,7 +2725,90 @@
             return "You have unsaved changes.";
         }
     };
+
+    // --- Draggable Chat Toggle Button Logic ---
+    document.addEventListener('DOMContentLoaded', function() {
+        const btn = document.getElementById('chat-toggle-btn');
+        let isDraggingBtn = false;
+        let hasMoved = false;
+        let mouseOffsetX = 0;
+        let mouseOffsetY = 0;
+        let startX = 0;
+        let startY = 0;
+
+        // Prevent context menu on the button
+        btn.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+
+        btn.addEventListener('mousedown', function(e) {
+            // Only Right Click (button 2) for dragging
+            if (e.button !== 2) return;
+            
+            isDraggingBtn = true;
+            hasMoved = false;
+            startX = e.clientX;
+            startY = e.clientY;
+            
+            // Calculate offset
+            const rect = btn.getBoundingClientRect();
+            mouseOffsetX = e.clientX - rect.left;
+            mouseOffsetY = e.clientY - rect.top;
+            
+            // Switch to explicit positioning
+            btn.style.left = rect.left + 'px';
+            btn.style.top = rect.top + 'px';
+            btn.style.right = 'auto';
+            btn.style.bottom = 'auto';
+            
+            e.preventDefault(); // Prevent text selection
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDraggingBtn) return;
+            
+            if (!hasMoved) {
+                const dist = Math.sqrt(Math.pow(e.clientX - startX, 2) + Math.pow(e.clientY - startY, 2));
+                // Threshold of 5 pixels to distinguish Click vs Drag
+                if (dist > 5) {
+                    hasMoved = true;
+                    document.body.style.cursor = 'move';
+                } else {
+                    return; // Do not move yet
+                }
+            }
+
+            // Only move if we have passed the threshold
+            btn.style.left = (e.clientX - mouseOffsetX) + 'px';
+            btn.style.top = (e.clientY - mouseOffsetY) + 'px';
+        });
+
+        document.addEventListener('mouseup', function(e) {
+            if (isDraggingBtn) {
+                isDraggingBtn = false;
+                document.body.style.cursor = 'default';
+            }
+        });
+
+        // Left Click to Toggle
+        btn.addEventListener('click', function(e) {
+            toggleChatWidget(true);
+        });
+    });
 </script>
+
+<!-- Macro Steps Modal -->
+<div id="macro-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1200;">
+    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background:var(--bg-color); color:var(--text-color); padding:0; border-radius:5px; width:800px; max-width:95%; height: 80vh; display: flex; flex-direction: column; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+        <div style="padding: 15px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin:0;">Macro Steps Viewer</h3>
+            <button onclick="closeMacroModal()" style="padding: 4px 8px; font-size: 12px;">Close</button>
+        </div>
+        <div id="macro-tree-container" class="macro-tree" style="flex: 1; overflow-y: auto; padding: 15px; background: var(--sidebar-bg);">
+            <!-- Tree content goes here -->
+        </div>
+    </div>
+</div>
 
 <!-- Floating Chat Widget -->
 <div id="chat-widget" class="chat-widget">
@@ -2373,6 +2829,7 @@
             <input type="hidden" id="agent-select" value="sql_admin">
         </div>
         <div class="chat-controls">
+            <button class="reset-btn" onclick="resetChatPosition()" title="Reset Position" style="font-size: 14px;">&#x21ba;</button>
             <button class="minimize-btn" onclick="toggleChatWidget()">_</button>
         </div>
     </div>
@@ -2383,10 +2840,17 @@
         <textarea id="chat-input" placeholder="Ask about your data (e.g., 'Find users in New York')..." onkeydown="handleChatKeydown(event)"></textarea>
         <button id="chat-send-btn" onclick="sendChatMessage()">Send</button>
     </div>
-    <div class="resize-handle"></div>
+    <div class="resize-handle resize-handle-n" data-dir="n"></div>
+    <div class="resize-handle resize-handle-s" data-dir="s"></div>
+    <div class="resize-handle resize-handle-e" data-dir="e"></div>
+    <div class="resize-handle resize-handle-w" data-dir="w"></div>
+    <div class="resize-handle resize-handle-ne" data-dir="ne"></div>
+    <div class="resize-handle resize-handle-nw" data-dir="nw"></div>
+    <div class="resize-handle resize-handle-se" data-dir="se"></div>
+    <div class="resize-handle resize-handle-sw" data-dir="sw"></div>
 </div>
 
-<button id="chat-toggle-btn" class="chat-toggle-btn" onclick="toggleChatWidget()">
+<button id="chat-toggle-btn" class="chat-toggle-btn" title="Open AI Assistant (Left-click to Open, Right-click to Drag)">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
     </svg>

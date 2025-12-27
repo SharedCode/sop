@@ -24,7 +24,19 @@ const (
 	CtxKeyWriter ContextKey = "ai_writer"
 	// CtxKeyDatabase is the context key for passing the target database for macro execution.
 	CtxKeyDatabase ContextKey = "ai_database"
+	// CtxKeyResultStreamer is the context key for passing the ResultStreamer.
+	CtxKeyResultStreamer ContextKey = "ai_result_streamer"
 )
+
+// ResultStreamer defines the interface for streaming tool results.
+type ResultStreamer interface {
+	// BeginArray starts a JSON array output.
+	BeginArray()
+	// WriteItem writes a single item to the output (e.g. an element of an array).
+	WriteItem(item any)
+	// EndArray ends the JSON array output.
+	EndArray()
+}
 
 // Deobfuscator defines the interface for de-obfuscating text.
 type Deobfuscator interface {
@@ -287,6 +299,8 @@ type SessionPayload struct {
 	Transaction any
 	// Variables holds session-scoped variables (e.g. cached store instances).
 	Variables map[string]any
+	// ExplicitTransaction indicates if the transaction was explicitly started by the user.
+	ExplicitTransaction bool
 	// LastInteractionSteps tracks the number of steps added/executed in the last user interaction.
 	LastInteractionSteps int
 }
@@ -371,7 +385,6 @@ type ModelStore interface {
 type Macro struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
-	Category    string   `json:"category,omitempty"` // Category for organization (default: "General")
 	Parameters  []string `json:"parameters"`         // Input parameters for the macro
 	Database    string   `json:"database,omitempty"` // Database to run the macro against
 	Portable    bool     `json:"portable,omitempty"` // If true, allows running on any database

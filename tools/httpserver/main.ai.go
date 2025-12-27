@@ -257,7 +257,7 @@ func seedDefaultMacros(db *aidb.Database) {
 		},
 	}
 
-	if err := store.Save(ctx, "macros", "demo_loop", demoLoop); err != nil {
+	if err := store.Save(ctx, "general", "demo_loop", demoLoop); err != nil {
 		log.Error(fmt.Sprintf("Failed to save demo_loop macro: %v", err))
 		tx.Rollback(ctx)
 		return
@@ -321,6 +321,12 @@ func loadAgent(key, configPath string) {
 
 	// Prepare Databases map
 	databases := make(map[string]sop.DatabaseOptions)
+
+	// Add System DB if available
+	if sysDB != nil {
+		databases["System DB"] = sysOpts
+	}
+
 	for _, dbCfg := range config.Databases {
 		// We need to use a copy of dbCfg because getDBOptionsFromConfig takes a pointer
 		// and loop variable reuse might be an issue in older Go versions, though fixed in 1.22.
@@ -422,7 +428,7 @@ func (e *DefaultToolExecutor) Execute(ctx context.Context, tool string, args map
 	// Try sql_core first
 	if agentSvc, ok := e.Agents["sql_core"]; ok {
 		if da, ok := agentSvc.(*agent.DataAdminAgent); ok {
-			return da.ExecuteTool(ctx, tool, args)
+			return da.Execute(ctx, tool, args)
 		}
 	}
 

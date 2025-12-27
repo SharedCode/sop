@@ -281,7 +281,7 @@ func TestMacroShow(t *testing.T) {
 	// Save macro
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "macros", tx)
-	store.Save(ctx, "macros", "test_macro", macro)
+	store.Save(ctx, "general", "test_macro", macro)
 	tx.Commit(ctx)
 
 	// Test /macro show
@@ -343,7 +343,7 @@ func TestMacroSaveAs(t *testing.T) {
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForReading)
 	store, _ := sysDB.OpenModelStore(ctx, "macros", tx)
 	var macro ai.Macro
-	err = store.Load(ctx, "macros", "my_saved_macro", &macro)
+	err = store.Load(ctx, "general", "my_saved_macro", &macro)
 	tx.Commit(ctx)
 
 	if err != nil {
@@ -524,7 +524,7 @@ func TestMacroRecording_OverwriteProtection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to ask: %v", err)
 	}
-	if !strings.Contains(resp, "Error: Macro 'test_macro' already exists") {
+	if !strings.Contains(resp, "Error: Macro 'test_macro' (Category: general) already exists") {
 		t.Errorf("Expected overwrite error, got: %s", resp)
 	}
 

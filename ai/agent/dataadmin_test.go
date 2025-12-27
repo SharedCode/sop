@@ -32,7 +32,7 @@ func TestDataAdminAgent_Registry(t *testing.T) {
 	}
 }
 
-func TestDataAdminAgent_ExecuteTool(t *testing.T) {
+func TestDataAdminAgent_Execute(t *testing.T) {
 	cfg := Config{
 		EnableObfuscation: false,
 	}
@@ -49,9 +49,9 @@ func TestDataAdminAgent_ExecuteTool(t *testing.T) {
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
 	// Test list_databases
-	resp, err := agent.ExecuteTool(ctx, "list_databases", nil)
+	resp, err := agent.Execute(ctx, "list_databases", nil)
 	if err != nil {
-		t.Fatalf("ExecuteTool failed: %v", err)
+		t.Fatalf("Execute failed: %v", err)
 	}
 	if resp != "Databases: test_db" {
 		t.Errorf("Expected 'Databases: test_db', got '%s'", resp)

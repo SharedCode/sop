@@ -23,7 +23,7 @@ func (a *DataAdminAgent) registerTools() {
 
 	a.registry.Register("list_databases", "Lists all available databases.", "()", a.toolListDatabases)
 	a.registry.Register("list_stores", "Lists all stores in the current or specified database.", "(database: string)", a.toolListStores)
-	a.registry.Register("select", "Retrieve data from a store. Supports filtering by key subset.", "(database: string, store: string, limit: number, scan_limit: number, key_match: any)", a.toolSelect)
+	a.registry.Register("select", "Retrieve data from a store. Supports filtering by key subset. You can optionally specify a list of fields to return.", "(database: string, store: string, limit: number, scan_limit: number, key_match: any, fields: []string)", a.toolSelect)
 	a.registry.Register("manage_transaction", "Manage database transactions (begin, commit, rollback).", "(action: string)", a.toolManageTransaction)
 	a.registry.Register("delete", "Delete an item from a store.", "(store: string, key: any)", a.toolDelete)
 	a.registry.Register("add", "Add an item to a store. You can pass the value as a single 'value' argument, or pass individual fields as arguments.", "(store: string, key: any, value: any, ...fields)", a.toolAdd)
@@ -36,8 +36,8 @@ func (a *DataAdminAgent) registerTools() {
 	a.registry.Register("macro_reorder_steps", "Move a step in a macro to a new position.", "(macro: string, from_index: number, to_index: number)", a.toolMacroReorderSteps)
 
 	// Navigation tools
-	a.registry.Register("find", "Find an item in a store. Returns exact match only.", "(store: string, key: any)", a.toolFind)
-	a.registry.Register("find_nearest", "Find an item in a store. If no exact match, returns the nearest items (previous and next).", "(store: string, key: any)", a.toolFindNearest)
+	a.registry.Register("find", "Find an item in a store. Returns exact match only. You can optionally specify a list of fields to return.", "(store: string, key: any, fields: []string)", a.toolFind)
+	a.registry.Register("find_nearest", "Find an item in a store. If no exact match, returns the nearest items (previous and next). You can optionally specify a list of fields to return.", "(store: string, key: any, fields: []string)", a.toolFindNearest)
 	a.registry.Register("next", "Move to the next item in a store.", "(store: string)", a.toolNext)
 	a.registry.Register("previous", "Move to the previous item in a store.", "(store: string)", a.toolPrevious)
 	a.registry.Register("first", "Move to the first item in a store.", "(store: string)", a.toolFirst)
@@ -168,32 +168,31 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 
 	keyMatch, hasKeyMatch := args["key_match"]
 
-	var tx sop.Transaction
-	var autoCommit bool
-	if p.Transaction != nil {
-		if t, ok := p.Transaction.(sop.Transaction); ok {
-			tx = t
+	var fields []string
+	if f, ok := args["fields"]; ok {
+		if fSlice, ok := f.([]any); ok {
+			for _, v := range fSlice {
+				if s, ok := v.(string); ok {
+					fields = append(fields, s)
+				}
+			}
+		} else if fSlice, ok := f.([]string); ok {
+			fields = fSlice
 		}
 	}
-	if tx == nil {
-		// If no transaction in payload, try to start one on the DB
-		if db != nil {
-			var err error
-			tx, err = db.BeginTransaction(ctx, sop.ForReading)
-			if err != nil {
-				return "", fmt.Errorf("failed to begin transaction: %w", err)
-			}
-			autoCommit = true
-		} else {
-			return "", fmt.Errorf("no active transaction and no database to start one")
-		}
+
+	var tx sop.Transaction
+	var autoCommit bool
+
+	tx, autoCommit, err := a.resolveTransaction(ctx, db, dbName, sop.ForReading)
+	if err != nil {
+		return "", err
 	}
 
 	// Determine if store uses complex keys
 	// var indexSpec *jsondb.IndexSpecification
 
 	var store jsondb.StoreAccessor
-	var err error
 
 	// Try to get from cache
 	var cache map[string]jsondb.StoreAccessor
@@ -245,10 +244,21 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 		}
 	}
 
-	ok, err := store.First(ctx)
+	// Check for ResultStreamer
+	var streamer ai.ResultStreamer
+	if s, ok := ctx.Value(ai.CtxKeyResultStreamer).(ai.ResultStreamer); ok {
+		streamer = s
+	}
+
+	var ok bool
+	ok, err = store.First(ctx)
 
 	var sb strings.Builder
-	sb.WriteString("[\n")
+	if streamer == nil {
+		sb.WriteString("[\n")
+	} else {
+		streamer.BeginArray()
+	}
 	itemsFound := false
 
 	if ok && err == nil {
@@ -290,20 +300,27 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 				}
 			}
 
-			// Stream item to buffer
-			if itemsFound {
-				sb.WriteString(",\n")
-			}
-			itemsFound = true
-
 			itemMap := map[string]any{"key": keyFormatted, "value": v}
-			b, err := json.Marshal(itemMap)
-			if err != nil {
-				// Skip invalid items? Or fail?
-				// Let's skip for now to be safe
+			finalItem := filterFields(itemMap, fields)
+
+			if streamer != nil {
+				streamer.WriteItem(finalItem)
+				itemsFound = true
 			} else {
-				sb.WriteString("  ")
-				sb.Write(b)
+				// Stream item to buffer
+				if itemsFound {
+					sb.WriteString(",\n")
+				}
+				itemsFound = true
+
+				b, err := json.Marshal(finalItem)
+				if err != nil {
+					// Skip invalid items? Or fail?
+					// Let's skip for now to be safe
+				} else {
+					sb.WriteString("  ")
+					sb.Write(b)
+				}
 			}
 
 			count++
@@ -316,19 +333,29 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 		}
 	}
 
-	sb.WriteString("\n]")
+	if streamer != nil {
+		streamer.EndArray()
+	} else {
+		sb.WriteString("\n]")
+	}
 
 	if !itemsFound {
 		if autoCommit {
 			tx.Commit(ctx)
 		}
-		return "No items found.", nil
+		if streamer != nil {
+			return "", nil
+		}
+		return "[]", nil
 	}
 
 	if autoCommit {
 		if err := tx.Commit(ctx); err != nil {
 			return "", fmt.Errorf("failed to commit transaction: %w", err)
 		}
+	}
+	if streamer != nil {
+		return "", nil
 	}
 	return sb.String(), nil
 }
@@ -376,6 +403,7 @@ func (a *DataAdminAgent) toolManageTransaction(ctx context.Context, args map[str
 			return "", fmt.Errorf("failed to begin transaction: %w", err)
 		}
 		p.Transaction = tx
+		p.ExplicitTransaction = true
 		return "Transaction started", nil
 
 	case "commit":
@@ -385,6 +413,7 @@ func (a *DataAdminAgent) toolManageTransaction(ctx context.Context, args map[str
 		if tx, ok := p.Transaction.(sop.Transaction); ok {
 			commitErr := tx.Commit(ctx)
 			p.Transaction = nil
+			p.ExplicitTransaction = false
 
 			// Clear cached variables (stores) as they are bound to the transaction
 			p.Variables = nil
@@ -485,24 +514,11 @@ func (a *DataAdminAgent) toolDelete(ctx context.Context, args map[string]any) (s
 	}
 
 	var tx sop.Transaction
-	if p.Transaction != nil {
-		if t, ok := p.Transaction.(sop.Transaction); ok {
-			tx = t
-		}
-	}
+	var localTx bool
 
-	localTx := false
-	if tx == nil {
-		if db != nil {
-			var err error
-			tx, err = db.BeginTransaction(ctx, sop.ForWriting)
-			if err != nil {
-				return "", fmt.Errorf("failed to begin transaction: %w", err)
-			}
-			localTx = true
-		} else {
-			return "", fmt.Errorf("no active transaction and no database to start one")
-		}
+	tx, localTx, err := a.resolveTransaction(ctx, db, dbName, sop.ForWriting)
+	if err != nil {
+		return "", err
 	}
 
 	var isPrimitiveKey bool
@@ -538,7 +554,6 @@ func (a *DataAdminAgent) toolDelete(ctx context.Context, args map[string]any) (s
 	}
 
 	var store jsondb.StoreAccessor
-	var err error
 
 	// Check cache first
 	cacheKey := fmt.Sprintf("store_%s", storeName)
@@ -565,7 +580,8 @@ func (a *DataAdminAgent) toolDelete(ctx context.Context, args map[string]any) (s
 		}
 	}
 
-	found, err := store.Remove(ctx, key)
+	var found bool
+	found, err = store.Remove(ctx, key)
 	if err != nil {
 		if localTx {
 			tx.Rollback(ctx)
@@ -637,24 +653,11 @@ func (a *DataAdminAgent) toolAdd(ctx context.Context, args map[string]any) (stri
 	}
 
 	var tx sop.Transaction
-	if p.Transaction != nil {
-		if t, ok := p.Transaction.(sop.Transaction); ok {
-			tx = t
-		}
-	}
+	var localTx bool
 
-	localTx := false
-	if tx == nil {
-		if db != nil {
-			var err error
-			tx, err = db.BeginTransaction(ctx, sop.ForWriting)
-			if err != nil {
-				return "", fmt.Errorf("failed to begin transaction: %w", err)
-			}
-			localTx = true
-		} else {
-			return "", fmt.Errorf("no active transaction and no database to start one")
-		}
+	tx, localTx, err := a.resolveTransaction(ctx, db, dbName, sop.ForWriting)
+	if err != nil {
+		return "", err
 	}
 
 	var isPrimitiveKey bool
@@ -703,7 +706,6 @@ func (a *DataAdminAgent) toolAdd(ctx context.Context, args map[string]any) (stri
 	}
 
 	var store jsondb.StoreAccessor
-	var err error
 
 	// Check cache first
 	cacheKey := fmt.Sprintf("store_%s", storeName)
@@ -730,7 +732,8 @@ func (a *DataAdminAgent) toolAdd(ctx context.Context, args map[string]any) (stri
 		}
 	}
 
-	ok, err := store.Add(ctx, key, value)
+	var ok bool
+	ok, err = store.Add(ctx, key, value)
 	if err != nil {
 		if localTx {
 			tx.Rollback(ctx)
@@ -801,24 +804,11 @@ func (a *DataAdminAgent) toolUpdate(ctx context.Context, args map[string]any) (s
 	}
 
 	var tx sop.Transaction
-	if p.Transaction != nil {
-		if t, ok := p.Transaction.(sop.Transaction); ok {
-			tx = t
-		}
-	}
+	var localTx bool
 
-	localTx := false
-	if tx == nil {
-		if db != nil {
-			var err error
-			tx, err = db.BeginTransaction(ctx, sop.ForWriting)
-			if err != nil {
-				return "", fmt.Errorf("failed to begin transaction: %w", err)
-			}
-			localTx = true
-		} else {
-			return "", fmt.Errorf("no active transaction and no database to start one")
-		}
+	tx, localTx, err := a.resolveTransaction(ctx, db, dbName, sop.ForWriting)
+	if err != nil {
+		return "", err
 	}
 
 	var isPrimitiveKey bool
@@ -867,7 +857,6 @@ func (a *DataAdminAgent) toolUpdate(ctx context.Context, args map[string]any) (s
 	}
 
 	var store jsondb.StoreAccessor
-	var err error
 
 	// Check cache first
 	cacheKey := fmt.Sprintf("store_%s", storeName)
@@ -894,7 +883,8 @@ func (a *DataAdminAgent) toolUpdate(ctx context.Context, args map[string]any) (s
 		}
 	}
 
-	ok, err := store.Update(ctx, key, value)
+	var ok bool
+	ok, err = store.Update(ctx, key, value)
 	if err != nil {
 		if localTx {
 			tx.Rollback(ctx)
@@ -946,7 +936,7 @@ func (a *DataAdminAgent) toolListMacros(ctx context.Context, args map[string]any
 		return "", fmt.Errorf("failed to open macros store: %w", err)
 	}
 
-	names, err := store.List(ctx, "macros")
+	names, err := store.List(ctx, "general")
 	if err != nil {
 		return "", fmt.Errorf("failed to list macros: %w", err)
 	}
@@ -993,16 +983,13 @@ func (a *DataAdminAgent) toolGetMacroDetails(ctx context.Context, args map[strin
 	}
 
 	var macro ai.Macro
-	if err := store.Load(ctx, "macros", name, &macro); err != nil {
+	if err := store.Load(ctx, "general", name, &macro); err != nil {
 		return "", fmt.Errorf("failed to load macro '%s': %w", name, err)
 	}
 
 	// Format details
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Macro: %s\n", macro.Name))
-	if macro.Category != "" {
-		sb.WriteString(fmt.Sprintf("Category: %s\n", macro.Category))
-	}
 	if macro.Description != "" {
 		sb.WriteString(fmt.Sprintf("Description: %s\n", macro.Description))
 	}
@@ -1124,25 +1111,34 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 		return "", fmt.Errorf("store name is required")
 	}
 
-	var tx sop.Transaction
-	if p.Transaction != nil {
-		if t, ok := p.Transaction.(sop.Transaction); ok {
-			tx = t
+	var fields []string
+	if f, ok := args["fields"]; ok {
+		if fSlice, ok := f.([]any); ok {
+			for _, v := range fSlice {
+				if s, ok := v.(string); ok {
+					fields = append(fields, s)
+				}
+			}
+		} else if fSlice, ok := f.([]string); ok {
+			fields = fSlice
 		}
 	}
 
-	// Navigation requires a transaction (read-only is fine)
-	if tx == nil {
-		if db != nil {
-			var err error
-			tx, err = db.BeginTransaction(ctx, sop.ForReading)
-			if err != nil {
-				return "", fmt.Errorf("failed to begin transaction: %w", err)
-			}
-			// Auto-start transaction and persist it in session for stateful navigation
-			p.Transaction = tx
-		} else {
-			return "", fmt.Errorf("no active transaction and no database to start one")
+	var tx sop.Transaction
+	var localTx bool
+
+	tx, localTx, err := a.resolveTransaction(ctx, db, dbName, sop.ForReading)
+	if err != nil {
+		return "", err
+	}
+
+	// Navigation requires a persistent transaction for stateful cursors.
+	// If we started a new transaction, persist it in the session.
+	if localTx {
+		p.Transaction = tx
+		// Update CurrentDB to match the new transaction
+		if dbName != "" {
+			p.CurrentDB = dbName
 		}
 	}
 
@@ -1156,7 +1152,6 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 	}
 
 	if store == nil {
-		var err error
 		store, err = jsondb.OpenStore(ctx, db.Config(), storeName, tx)
 		if err != nil {
 			return "", fmt.Errorf("failed to open store '%s': %w", storeName, err)
@@ -1167,6 +1162,22 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 		p.Variables[cacheKey] = store
 	}
 
+	// Check for ResultStreamer
+	var streamer ai.ResultStreamer
+	if s, ok := ctx.Value(ai.CtxKeyResultStreamer).(ai.ResultStreamer); ok {
+		streamer = s
+	}
+
+	// Determine if store uses complex keys
+	var indexSpec *jsondb.IndexSpecification
+	si := store.GetStoreInfo()
+	if si.MapKeyIndexSpecification != "" {
+		var is jsondb.IndexSpecification
+		if err := json.Unmarshal([]byte(si.MapKeyIndexSpecification), &is); err == nil {
+			indexSpec = &is
+		}
+	}
+
 	found, err := op(ctx, store)
 	if err != nil {
 		return "", fmt.Errorf("navigation failed: %w", err)
@@ -1174,14 +1185,22 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 
 	if !found {
 		if len(showNearest) > 0 && showNearest[0] {
-			var neighbors []string
+			var neighbors []map[string]any
 
 			// 1. Check if we are at a valid item (this is the "Current" neighbor, usually >= key)
 			k, err := store.GetCurrentKey()
 			if err == nil && k != nil {
 				v, _ := store.GetCurrentValue(ctx)
-				b, _ := json.Marshal(map[string]any{"key": k, "value": v})
-				neighbors = append(neighbors, fmt.Sprintf("Current: %s", string(b)))
+
+				// Format key if it's a map and we have an index spec
+				var keyFormatted any = k
+				if indexSpec != nil {
+					if m, ok := k.(map[string]any); ok {
+						keyFormatted = OrderedKey{m: m, spec: indexSpec}
+					}
+				}
+
+				neighbors = append(neighbors, map[string]any{"key": keyFormatted, "value": v, "relation": "next_or_equal"})
 			}
 
 			// 2. Check previous item
@@ -1190,8 +1209,16 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 				if ok, _ := store.Previous(ctx); ok {
 					k2, _ := store.GetCurrentKey()
 					v2, _ := store.GetCurrentValue(ctx)
-					b, _ := json.Marshal(map[string]any{"key": k2, "value": v2})
-					neighbors = append(neighbors, fmt.Sprintf("Previous: %s", string(b)))
+
+					// Format key if it's a map and we have an index spec
+					var keyFormatted2 any = k2
+					if indexSpec != nil {
+						if m, ok := k2.(map[string]any); ok {
+							keyFormatted2 = OrderedKey{m: m, spec: indexSpec}
+						}
+					}
+
+					neighbors = append(neighbors, map[string]any{"key": keyFormatted2, "value": v2, "relation": "previous"})
 
 					// Restore
 					store.Next(ctx)
@@ -1202,8 +1229,16 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 					// This is the Last item (Previous neighbor)
 					k2, _ := store.GetCurrentKey()
 					v2, _ := store.GetCurrentValue(ctx)
-					b, _ := json.Marshal(map[string]any{"key": k2, "value": v2})
-					neighbors = append(neighbors, fmt.Sprintf("Previous: %s", string(b)))
+
+					// Format key if it's a map and we have an index spec
+					var keyFormatted2 any = k2
+					if indexSpec != nil {
+						if m, ok := k2.(map[string]any); ok {
+							keyFormatted2 = OrderedKey{m: m, spec: indexSpec}
+						}
+					}
+
+					neighbors = append(neighbors, map[string]any{"key": keyFormatted2, "value": v2, "relation": "previous"})
 
 					// We are now at Last. The original state was "End".
 					// Restore to "End"
@@ -1212,20 +1247,56 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 			}
 
 			if len(neighbors) > 0 {
-				// Sort neighbors? Or just join.
-				// Previous should come before Next logically, but we appended Next first.
-				// Let's reverse if needed or just label them clearly.
-				return fmt.Sprintf("No exact match found. Nearest items: %s", strings.Join(neighbors, ", ")), nil
+				if streamer != nil {
+					streamer.BeginArray()
+					for _, n := range neighbors {
+						streamer.WriteItem(filterFields(n, fields))
+					}
+					streamer.EndArray()
+					return "", nil
+				}
+
+				// Return JSON array string
+				var filteredNeighbors []map[string]any
+				for _, n := range neighbors {
+					filteredNeighbors = append(filteredNeighbors, filterFields(n, fields))
+				}
+				b, _ := json.Marshal(filteredNeighbors)
+				return string(b), nil
 			}
 		}
-		return "No item found", nil
+
+		if streamer != nil {
+			streamer.BeginArray()
+			streamer.EndArray()
+			return "", nil
+		}
+		return "[]", nil
 	}
 
 	k, _ := store.GetCurrentKey()
 	v, _ := store.GetCurrentValue(ctx)
 
+	// Format key if it's a map and we have an index spec
+	var keyFormatted any = k
+	if indexSpec != nil {
+		if m, ok := k.(map[string]any); ok {
+			keyFormatted = OrderedKey{m: m, spec: indexSpec}
+		}
+	}
+
+	item := map[string]any{"key": keyFormatted, "value": v}
+	finalItem := filterFields(item, fields)
+
+	if streamer != nil {
+		streamer.BeginArray()
+		streamer.WriteItem(finalItem)
+		streamer.EndArray()
+		return "", nil
+	}
+
 	// Return JSON representation
-	b, _ := json.Marshal(map[string]any{"key": k, "value": v})
+	b, _ := json.Marshal([]any{finalItem})
 	return string(b), nil
 }
 
@@ -1453,7 +1524,7 @@ func (a *DataAdminAgent) updateMacro(ctx context.Context, name string, updateFun
 	}
 
 	var macro ai.Macro
-	if err := store.Load(ctx, "macros", name, &macro); err != nil {
+	if err := store.Load(ctx, "general", name, &macro); err != nil {
 		return fmt.Errorf("failed to load macro '%s': %w", name, err)
 	}
 
@@ -1461,7 +1532,7 @@ func (a *DataAdminAgent) updateMacro(ctx context.Context, name string, updateFun
 		return err
 	}
 
-	if err := store.Save(ctx, "macros", name, &macro); err != nil {
+	if err := store.Save(ctx, "general", name, &macro); err != nil {
 		return fmt.Errorf("failed to save macro '%s': %w", name, err)
 	}
 
@@ -1543,4 +1614,110 @@ func (o OrderedKey) MarshalJSON() ([]byte, error) {
 
 	buf.WriteByte('}')
 	return buf.Bytes(), nil
+}
+
+func filterFields(item map[string]any, fields []string) map[string]any {
+	if len(fields) == 0 {
+		return item
+	}
+
+	var newKey any = nil
+	var newValue any = nil
+
+	// Helper to check if a field is requested
+	isRequested := func(f string) bool {
+		for _, field := range fields {
+			if field == f {
+				return true
+			}
+		}
+		return false
+	}
+
+	// 1. Handle Key
+	originalKey := item["key"]
+	if isRequested("key") || isRequested("Key") {
+		newKey = originalKey
+	} else {
+		// Check if originalKey is a map/struct we can filter
+		if keyMap, ok := originalKey.(map[string]any); ok {
+			filtered := make(map[string]any)
+			for k, v := range keyMap {
+				if isRequested(k) {
+					filtered[k] = v
+				}
+			}
+			if len(filtered) > 0 {
+				newKey = filtered
+			}
+		} else if orderedKey, ok := originalKey.(OrderedKey); ok {
+			keyMap := orderedKey.m
+			filtered := make(map[string]any)
+			for k, v := range keyMap {
+				if isRequested(k) {
+					filtered[k] = v
+				}
+			}
+			if len(filtered) > 0 {
+				newKey = filtered
+			}
+		}
+	}
+
+	// 2. Handle Value
+	originalValue := item["value"]
+	if isRequested("value") || isRequested("Value") {
+		newValue = originalValue
+	} else {
+		if valMap, ok := originalValue.(map[string]any); ok {
+			filtered := make(map[string]any)
+			for k, v := range valMap {
+				if isRequested(k) {
+					filtered[k] = v
+				}
+			}
+			if len(filtered) > 0 {
+				newValue = filtered
+			}
+		}
+	}
+
+	return map[string]any{
+		"key":   newKey,
+		"value": newValue,
+	}
+}
+
+// resolveTransaction resolves the transaction to use for the operation.
+// It prefers the session transaction if available and compatible with the target database.
+// Otherwise, it starts a new local transaction.
+func (a *DataAdminAgent) resolveTransaction(ctx context.Context, db *database.Database, dbName string, mode sop.TransactionMode) (sop.Transaction, bool, error) {
+	p := ai.GetSessionPayload(ctx)
+	var tx sop.Transaction
+	var localTx bool
+
+	if p != nil && p.Transaction != nil {
+		// Only use session transaction if it matches the target database
+		// Note: dbName is the resolved database name for the operation.
+		// p.CurrentDB is the database the session transaction is bound to.
+		if dbName == "" || dbName == p.CurrentDB {
+			if t, ok := p.Transaction.(sop.Transaction); ok {
+				tx = t
+			}
+		}
+	}
+
+	if tx == nil {
+		if db != nil {
+			var err error
+			tx, err = db.BeginTransaction(ctx, mode)
+			if err != nil {
+				return nil, false, fmt.Errorf("failed to begin transaction: %w", err)
+			}
+			localTx = true
+		} else {
+			return nil, false, fmt.Errorf("no active transaction and no database to start one")
+		}
+	}
+	return tx, localTx, nil
 }
