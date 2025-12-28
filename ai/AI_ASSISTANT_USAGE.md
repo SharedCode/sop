@@ -6,12 +6,12 @@ The SOP AI Assistant is a powerful, conversational interface for interacting wit
 
 To ensure system stability and prevent "dangling transactions," the Assistant operates in two distinct modes:
 
-1.  **Stateless (Default)**: Every prompt is an independent unit of work.
+1.  **Stateless (Interactive & Recording)**: Every prompt is an independent unit of work.
     *   If you ask "Select all users", the Assistant opens a transaction, reads the data, and **immediately closes** the transaction.
-    *   This is perfect for queries, quick checks, and single-step updates.
-2.  **Stateful (Recording)**: When you enter **Recording Mode** (via `/record`), the Assistant maintains a continuous session.
-    *   This allows you to build multi-step workflows (Macros) that are saved incrementally.
-    *   Transactions are managed carefully to ensure that your recorded steps are valid and persistable.
+    *   This applies even when **Recording**. Each step you record is executed and committed immediately.
+2.  **Stateful (Playback)**: When **Playing a Macro**, the Assistant can maintain a transaction across multiple steps.
+    *   This allows macros to perform complex, multi-step atomic operations (e.g., "Transfer funds: Debit A, Credit B").
+    *   If any step fails, the entire macro transaction can be rolled back.
 
 ---
 
@@ -63,6 +63,8 @@ Macros allow you to record a sequence of actions and replay them later. This is 
 
 ### Recording a Macro
 1.  **Start**: Type `/record my_new_macro`.
+    *   **Default (Compiled)**: Records the exact *actions* (tools) you perform. When played back, it executes these actions directly (fast, deterministic).
+    *   **Interactive Mode**: Type `/record my_new_macro --ask`. Records your *prompts*. When played back, it asks the AI again (slower, but adapts to new data/context).
 2.  **Teach**: Perform your actions step-by-step.
     *   "Select users where role is admin."
     *   "For each user, check their last login."

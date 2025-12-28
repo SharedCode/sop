@@ -109,10 +109,6 @@ func (s *Service) Open(ctx context.Context) error {
 func (s *Service) Close(ctx context.Context) error {
 	p := ai.GetSessionPayload(ctx)
 	if p == nil || p.Transaction == nil {
-		// If recording, and transaction is gone (e.g. rollback without restart), clear recordingTx
-		if s.session.Recording {
-			s.session.Transaction = nil
-		}
 		return nil
 	}
 	if tx, ok := p.Transaction.(sop.Transaction); ok {
@@ -496,9 +492,9 @@ func (s *Service) saveMacro(ctx context.Context, macro ai.Macro) error {
 }
 
 func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
-	// Ensure statelessness for non-recording sessions
+	// Ensure statelessness for non-playback sessions (Interactive & Recording)
 	defer func() {
-		if !s.session.Recording && s.session.Transaction != nil {
+		if s.GetSessionMode() != SessionModePlayback && s.session.Transaction != nil {
 			// Rollback if not committed (safety)
 			// If it was committed, it should have been cleared.
 			// If it's still here, it's a leak.
@@ -577,14 +573,6 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	// 0. Pipeline Execution (if configured)
 	if len(s.pipeline) > 0 {
 		resp, err := s.RunPipeline(ctx, query)
-		// Update recordingTx if the pipeline changed the transaction (e.g. via manage_transaction tool)
-		if s.session.Recording {
-			if p := ai.GetSessionPayload(ctx); p != nil && p.Transaction != nil {
-				if tx, ok := p.Transaction.(sop.Transaction); ok {
-					s.session.Transaction = tx
-				}
-			}
-		}
 		return resp, err
 	}
 

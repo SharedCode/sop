@@ -689,6 +689,13 @@ func (s *Service) executeMacro(ctx context.Context, macro *ai.Macro, scope map[s
 	}
 	ctx = context.WithValue(ctx, "is_compiled", isCompiled)
 
+	// Set Playback flag
+	wasPlayback := s.session.Playback
+	s.session.Playback = true
+	defer func() {
+		s.session.Playback = wasPlayback
+	}()
+
 	return s.runSteps(ctx, macro.Steps, scope, scopeMu, sb, db)
 }
 
@@ -731,8 +738,22 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.MacroStep, scope map[
 		stepCtx := groupCtx
 		stepDB := db
 
-		// Check if we need to update context/DB based on stepDBName
+		// Check for dead transaction (committed or rolled back)
+		// This prevents "running cmd on a dead transaction" errors if a previous step manually closed it.
 		p := ai.GetSessionPayload(groupCtx)
+		if p != nil && p.Transaction != nil {
+			if t, ok := p.Transaction.(sop.Transaction); ok && !t.HasBegun() {
+				// Transaction is dead. Clear it from the payload for this step.
+				// This forces the step to start a new local transaction (or session one if we could, but local is safer fallback).
+				newPayload := *p
+				newPayload.Transaction = nil
+				stepCtx = context.WithValue(stepCtx, "session_payload", &newPayload)
+				// Update p to point to newPayload so subsequent logic uses the clean state
+				p = &newPayload
+			}
+		}
+
+		// Check if we need to update context/DB based on stepDBName
 		if p != nil {
 			// If the desired DB differs from the context, or if we just want to ensure we have the right DB object
 			if p.CurrentDB != stepDBName {

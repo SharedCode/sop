@@ -17,6 +17,7 @@ import (
 // including macro recording and transaction management.
 type RunnerSession struct {
 	Recording            bool
+	Playback             bool   // True if a macro is currently being executed
 	RecordingMode        string // "standard" or "compiled"
 	StopOnError          bool
 	CurrentMacro         *ai.Macro
@@ -34,7 +35,7 @@ type RunnerSession struct {
 // NewRunnerSession creates a new runner session.
 func NewRunnerSession() *RunnerSession {
 	return &RunnerSession{
-		RecordingMode: "standard",
+		RecordingMode: "compiled",
 	}
 }
 
@@ -54,17 +55,19 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 			return "Error: Macro name required", true, nil
 		}
 
-		mode := "standard"
+		mode := "compiled"
 		stopOnError := false
 		force := false
 		category := "general"
 
 		// Parse arguments
-		// /record [compiled] <name> [--stop-on-error] [--force] [--category <cat>]
+		// /record <name> [--ask] [--stop-on-error] [--force] [--category <cat>]
 		var cleanArgs []string
 		for i := 0; i < len(args); i++ {
 			arg := args[i]
-			if arg == "--stop-on-error" {
+			if arg == "--ask" {
+				mode = "standard"
+			} else if arg == "--stop-on-error" {
 				stopOnError = true
 			} else if arg == "--force" {
 				force = true
@@ -84,20 +87,8 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		}
 
 		name := args[0]
-
-		if args[0] == "compiled" {
-			if len(args) < 2 {
-				return "Error: Macro name required for compiled mode", true, nil
-			}
-			mode = "compiled"
-			name = args[1]
-			if len(args) > 2 {
-				return fmt.Sprintf("Error: Too many arguments. Usage: /record compiled <name> [flags]. Found extra: %v", args[2:]), true, nil
-			}
-		} else {
-			if len(args) > 1 {
-				return fmt.Sprintf("Error: Too many arguments. Usage: /record <name> [flags]. Found extra: %v", args[1:]), true, nil
-			}
+		if len(args) > 1 {
+			return fmt.Sprintf("Error: Too many arguments. Usage: /record <name> [flags]. Found extra: %v", args[1:]), true, nil
 		}
 
 		// Check if macro exists
