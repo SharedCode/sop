@@ -13,34 +13,6 @@
   ],
   "agents": [
     {
-      "id": "nurse_local",
-      "name": "Nurse Joy (Pipeline)",
-      "description": "I am a local heuristic translator.",
-      "synonyms": {
-        "ache": "pain",
-        "belly": "abdomen",
-        "hot": "fever",
-        "hurt": "pain",
-        "puke": "vomiting",
-        "throbbing": "pulsating",
-        "throw up": "vomiting",
-        "tummy": "abdomen",
-        "gut": "stomach",
-        "sick": "nausea",
-        "spinning": "dizziness",
-        "poop": "stool",
-        "pee": "urine"
-      },
-      "system_prompt": "You are a search index. Return the matching canonical terms.",
-      "storage_path": "data/nurse_local",
-      "requirements": {
-        "vector_store": true,
-        "search": true,
-        "model_store": false
-      },
-      "data": []
-    },
-    {
       "id": "doctor_core",
       "name": "Dr. Core",
       "description": "I am the core medical knowledge base.",
