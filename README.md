@@ -40,7 +40,8 @@ See the [API Cookbook](COOKBOOK.md#interoperability-note-go-vs-other-languages) 
 - [SOP for Java (sop4j)](bindings/java/README.md)
 - [SOP for C# (sop4cs)](bindings/csharp/README.md)
 - [SOP for Rust (sop4rs)](bindings/rust/README.md)
-- [SOP AI Kit](ai/README.md)
+- [SOP AI Kit](ai/README.md) - **New!** Includes Vector Store, RAG Agents, and **Macros** (Record & Replay).
+  - [AI Macro Architecture](ai/AI_MACRO_ARCHITECTURE.md) - Deep dive into our scalable, functional AI runtime.
 - [SOP Data Management Suite](tools/httpserver/README.md) - **Updated!** A powerful Web UI that scales from a local embedded viewer to a clustered enterprise management console on Kubernetes.
 - [Changelog](CHANGELOG.md)
 - [Community & support](#community--support)

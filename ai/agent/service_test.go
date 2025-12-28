@@ -190,7 +190,7 @@ func TestService_Ask_Obfuscation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gen := &MockGenerator{Response: tt.llmResponse}
 			// Enable obfuscation for tests
-			svc := NewService(&MockDomain{}, gen, nil, nil, true)
+			svc := NewService(&MockDomain{}, nil, nil, gen, nil, nil, true)
 			executor := &MockExecutor{}
 
 			ctx := context.WithValue(context.Background(), ai.CtxKeyExecutor, executor)
@@ -219,14 +219,20 @@ func TestService_Ask_Obfuscation(t *testing.T) {
 				// If we want to verify the "robustness", we should check if the result contains the CLEAN name
 				// AND if it's free of artifacts if we implement that logic.
 
-				// For now, let's just check if the real name is present.
-				if !strings.Contains(result, tt.expectedDB) {
-					t.Errorf("Expected result to contain '%s', got '%s'", tt.expectedDB, result)
-				}
-
-				// Check for artifacts in the result string
-				if strings.Contains(result, "**"+tt.expectedDB+"**") {
-					t.Errorf("Result still contains markdown artifacts: %s", result)
+				// Check captured args
+				dbArg, ok := executor.LastArgs["database"].(string)
+				if !ok {
+					// Some tests might not have database arg, check if we expect it
+					if tt.expectedDB != "" {
+						t.Errorf("Expected 'database' arg to be string, got %T", executor.LastArgs["database"])
+					}
+				} else {
+					if dbArg != tt.expectedDB {
+						t.Errorf("Expected database arg '%s', got '%s'", tt.expectedDB, dbArg)
+					}
+					if strings.Contains(dbArg, "**") || strings.Contains(dbArg, "`") {
+						t.Errorf("Database arg still contains artifacts: %s", dbArg)
+					}
 				}
 			} else {
 				if result != tt.expectedResult {
@@ -243,7 +249,7 @@ func TestService_Ask_NoObfuscation(t *testing.T) {
 	mockDomain := &MockDomain{}
 
 	// Create Service with Obfuscation DISABLED
-	svc := NewService(mockDomain, mockGen, nil, nil, false)
+	svc := NewService(mockDomain, nil, nil, mockGen, nil, nil, false)
 
 	ctx := context.Background()
 

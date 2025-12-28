@@ -30,6 +30,7 @@ type DatabaseConfig struct {
 	Path     string `json:"path"`
 	Mode     string `json:"mode"`  // "standalone" or "clustered"
 	RedisURL string `json:"redis"` // Optional, for clustered
+	IsSystem bool   `json:"is_system,omitempty"`
 
 	// // DetectedRoot is the inferred root directory for relative paths in this database.
 	// // It is calculated at startup and not read from JSON.
@@ -41,6 +42,7 @@ type Config struct {
 	Port      int              `json:"port"`
 	Databases []DatabaseConfig `json:"databases"`
 	PageSize  int              `json:"pageSize"`
+	SystemDB  *DatabaseConfig  `json:"system_db,omitempty"`
 
 	// Legacy/CLI fields
 	DatabasePath string
@@ -61,7 +63,7 @@ var Version = "dev"
 func main() {
 
 	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
-		Level: log.LevelInfo,
+		Level: log.LevelDebug,
 	}))
 	log.SetDefault(l) // configures log package to print with LevelInfo
 
@@ -99,7 +101,7 @@ func main() {
 		}
 	}
 
-	// Resolve Database Paths to absolute and detect roots
+	// Resolve Database Paths to absolute
 	for i := range config.Databases {
 		if abs, err := filepath.Abs(config.Databases[i].Path); err == nil {
 			config.Databases[i].Path = abs
@@ -108,14 +110,6 @@ func main() {
 		if _, err := os.Stat(config.Databases[i].Path); os.IsNotExist(err) {
 			log.Warn(fmt.Sprintf("Warning: Database path '%s' for '%s' does not exist.", config.Databases[i].Path, config.Databases[i].Name))
 		}
-
-		// // Detect Root for this database
-		// if root, err := detectDatabaseRoot(config.Databases[i]); err == nil && root != "" {
-		// 	config.Databases[i].DetectedRoot = root
-		// 	log.Printf("Database '%s': Detected Root Directory: %s", config.Databases[i].Name, root)
-		// } else if err != nil {
-		// 	log.Printf("Database '%s': Root detection warning: %v", config.Databases[i].Name, err)
-		// }
 	}
 
 	// Setup Routes
@@ -145,103 +139,48 @@ func main() {
 	}
 }
 
-// func detectDatabaseRoot(db DatabaseConfig) (string, error) {
-// 	ctx := context.Background()
-
-// 	// Use basic options to open database metadata
-// 	dbOpts := sop.DatabaseOptions{
-// 		Type:          sop.Standalone,
-// 		StoresFolders: []string{db.Path},
-// 	}
-// 	if db.Mode == "clustered" {
-// 		dbOpts.Type = sop.Clustered
-// 		dbOpts.RedisConfig = &sop.RedisCacheConfig{
-// 			Address: db.RedisURL,
-// 		}
-// 	}
-
-// 	// Open a read-only transaction to fetch stores
-// 	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to begin transaction: %v", err)
-// 	}
-// 	defer trans.Rollback(ctx)
-
-// 	stores, err := trans.GetStores(ctx)
-// 	if err != nil {
-// 		return "", fmt.Errorf("failed to list stores: %v", err)
-// 	}
-// 	if len(stores) == 0 {
-// 		return "", fmt.Errorf("no stores found")
-// 	}
-
-// 	// We need to access the StoreRepository directly to get StoreInfo without opening the B-Tree
-// 	t2, ok := trans.GetPhasedTransaction().(*common.Transaction)
-// 	if !ok {
-// 		return "", fmt.Errorf("failed to cast transaction")
-// 	}
-
-// 	// Iterate through stores to find a relative path we can use to deduce Root
-// 	for _, storeName := range stores {
-// 		storeInfos, err := t2.StoreRepository.Get(ctx, storeName)
-// 		if err != nil || len(storeInfos) == 0 {
-// 			continue
-// 		}
-
-// 		si := storeInfos[0]
-// 		blobTable := si.BlobTable
-
-// 		// If BlobTable is absolute, we can't use it to deduce Root (and don't need to for this store).
-// 		if filepath.IsAbs(blobTable) {
-// 			continue
-// 		}
-
-// 		targetPath := filepath.Join(db.Path, storeName)
-
-// 		// Normalize separators
-// 		blobTable = filepath.Clean(blobTable)
-
-// 		if strings.HasSuffix(targetPath, blobTable) {
-// 			// Found the overlap!
-// 			// The root dir is the part of targetPath BEFORE blobTable.
-// 			rootDir := targetPath[:len(targetPath)-len(blobTable)]
-// 			// Clean up trailing separator
-// 			rootDir = filepath.Clean(rootDir)
-// 			return rootDir, nil
-// 		}
-// 	}
-
-// 	return "", nil
-// }
-
 func loadConfig(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	return json.NewDecoder(f).Decode(&config)
-}
+	if err := json.NewDecoder(f).Decode(&config); err != nil {
+		return err
+	}
 
-func getDBOptions(dbName string) (sop.DatabaseOptions, error) {
-	var db *DatabaseConfig
-	if dbName == "" {
-		if len(config.Databases) > 0 {
-			db = &config.Databases[0]
+	// Default System DB logic
+	configDir := filepath.Dir(path)
+	if config.SystemDB == nil {
+		config.SystemDB = &DatabaseConfig{
+			Name: "System",
+			Mode: "standalone",
+			Path: configDir,
 		}
 	} else {
-		for i := range config.Databases {
-			if config.Databases[i].Name == dbName {
-				db = &config.Databases[i]
-				break
-			}
+		if config.SystemDB.Path == "" {
+			config.SystemDB.Path = configDir
+		}
+		if config.SystemDB.Name == "" {
+			config.SystemDB.Name = "System"
 		}
 	}
+	return nil
+}
 
-	if db == nil {
-		return sop.DatabaseOptions{}, fmt.Errorf("database '%s' not found", dbName)
+func getSystemDBOptions() (sop.DatabaseOptions, error) {
+	if config.SystemDB == nil {
+		// Fallback if no config file was loaded
+		cwd, _ := os.Getwd()
+		return sop.DatabaseOptions{
+			Type:          sop.Standalone,
+			StoresFolders: []string{cwd},
+		}, nil
 	}
+	return getDBOptionsFromConfig(config.SystemDB)
+}
 
+func getDBOptionsFromConfig(db *DatabaseConfig) (sop.DatabaseOptions, error) {
 	// Try to load from disk first
 	if loadedOpts, err := database.GetOptions(context.Background(), db.Path); err == nil {
 		// Override with runtime config if necessary (e.g. Redis address from flags)
@@ -273,6 +212,41 @@ func getDBOptions(dbName string) (sop.DatabaseOptions, error) {
 	return opts, nil
 }
 
+func getDBOptions(dbName string) (sop.DatabaseOptions, error) {
+	var db *DatabaseConfig
+	if dbName == "" {
+		if len(config.Databases) > 0 {
+			db = &config.Databases[0]
+		}
+	} else {
+		// Check System DB first
+		if config.SystemDB != nil {
+			sysName := config.SystemDB.Name
+			if sysName == "" {
+				sysName = "system"
+			}
+			if dbName == sysName {
+				db = config.SystemDB
+			}
+		}
+
+		if db == nil {
+			for i := range config.Databases {
+				if config.Databases[i].Name == dbName {
+					db = &config.Databases[i]
+					break
+				}
+			}
+		}
+	}
+
+	if db == nil {
+		return sop.DatabaseOptions{}, fmt.Errorf("database '%s' not found", dbName)
+	}
+
+	return getDBOptionsFromConfig(db)
+}
+
 func handleIndex(w http.ResponseWriter, r *http.Request) {
 	tmpl, err := template.ParseFS(content, "templates/index.html")
 	if err != nil {
@@ -288,7 +262,20 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 
 func handleListDatabases(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(config.Databases)
+
+	dbs := make([]DatabaseConfig, len(config.Databases))
+	copy(dbs, config.Databases)
+
+	if config.SystemDB != nil {
+		sysDB := *config.SystemDB
+		if sysDB.Name == "" {
+			sysDB.Name = "system"
+		}
+		sysDB.IsSystem = true
+		dbs = append(dbs, sysDB)
+	}
+
+	json.NewEncoder(w).Encode(dbs)
 }
 
 func handleListStores(w http.ResponseWriter, r *http.Request) {
@@ -369,10 +356,17 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 		"isPrimitiveKey": si.IsPrimitiveKey,
 	}
 
-	if !si.IsPrimitiveKey && si.MapKeyIndexSpecification != "" {
-		var is jsondb.IndexSpecification
-		if err := encoding.DefaultMarshaler.Unmarshal([]byte(si.MapKeyIndexSpecification), &is); err == nil {
-			response["indexSpec"] = is
+	if !si.IsPrimitiveKey {
+		if si.MapKeyIndexSpecification != "" {
+			var is jsondb.IndexSpecification
+			if err := encoding.DefaultMarshaler.Unmarshal([]byte(si.MapKeyIndexSpecification), &is); err == nil {
+				response["indexSpec"] = is
+			}
+		} else if si.Count > 0 {
+			// Fetch a sample key to infer structure for UI
+			if ok, _ := store.First(ctx); ok {
+				response["sampleKey"] = store.GetCurrentKey().Key
+			}
 		}
 	}
 
@@ -768,10 +762,51 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 				return indexSpec.Comparer(a.(map[string]any), b.(map[string]any))
 			}
 		} else {
-			// Dangerous: No IndexSpec found for non-primitive key.
-			// We cannot safely update because we don't know the comparison logic.
-			http.Error(w, "Update failed: Store has non-primitive key but no IndexSpecification. Write operations are disabled for safety.", http.StatusForbidden)
-			return
+			// Default Map Comparer (Dynamic) for generic maps (e.g. ModelStore)
+			comparer = func(a, b any) int {
+				mapA, okA := a.(map[string]any)
+				mapB, okB := b.(map[string]any)
+				if !okA || !okB {
+					return btree.Compare(a, b)
+				}
+
+				keys := make([]string, 0, len(mapA)+len(mapB))
+				seen := make(map[string]struct{})
+				for k := range mapA {
+					if _, exists := seen[k]; !exists {
+						keys = append(keys, k)
+						seen[k] = struct{}{}
+					}
+				}
+				for k := range mapB {
+					if _, exists := seen[k]; !exists {
+						keys = append(keys, k)
+						seen[k] = struct{}{}
+					}
+				}
+				sort.Strings(keys)
+
+				for _, k := range keys {
+					valA, existsA := mapA[k]
+					valB, existsB := mapB[k]
+
+					if !existsA && !existsB {
+						continue
+					}
+					if !existsA {
+						return -1
+					}
+					if !existsB {
+						return 1
+					}
+
+					res := btree.Compare(valA, valB)
+					if res != 0 {
+						return res
+					}
+				}
+				return 0
+			}
 		}
 	}
 
@@ -918,9 +953,51 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 				return indexSpec.Comparer(a.(map[string]any), b.(map[string]any))
 			}
 		} else {
-			// Dangerous: No IndexSpec found for non-primitive key.
-			http.Error(w, "Operation failed: Store has non-primitive key but no IndexSpecification. Write operations are disabled for safety.", http.StatusForbidden)
-			return
+			// Default Map Comparer (Dynamic) for generic maps
+			comparer = func(a, b any) int {
+				mapA, okA := a.(map[string]any)
+				mapB, okB := b.(map[string]any)
+				if !okA || !okB {
+					return btree.Compare(a, b)
+				}
+
+				keys := make([]string, 0, len(mapA)+len(mapB))
+				seen := make(map[string]struct{})
+				for k := range mapA {
+					if _, exists := seen[k]; !exists {
+						keys = append(keys, k)
+						seen[k] = struct{}{}
+					}
+				}
+				for k := range mapB {
+					if _, exists := seen[k]; !exists {
+						keys = append(keys, k)
+						seen[k] = struct{}{}
+					}
+				}
+				sort.Strings(keys)
+
+				for _, k := range keys {
+					valA, existsA := mapA[k]
+					valB, existsB := mapB[k]
+
+					if !existsA && !existsB {
+						continue
+					}
+					if !existsA {
+						return -1
+					}
+					if !existsB {
+						return 1
+					}
+
+					res := btree.Compare(valA, valB)
+					if res != 0 {
+						return res
+					}
+				}
+				return 0
+			}
 		}
 	}
 

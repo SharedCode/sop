@@ -259,6 +259,8 @@ const (
 )
 
 type ModelStoreOptions struct {
+	Name string `json:"name"`
+	// Deprecated: Use Name instead.
 	Path          string `json:"path"`
 	TransactionID string `json:"transaction_id"`
 }

@@ -17,6 +17,13 @@
             "path": "/Users/grecinto/sop/bindings/csharp/Sop.CLI/data/full_repl_demo/d1",
             "mode": "clustered",
 			"redis":"localhost:6379"
-        }		
-    ]
+        }
+    ],
+    "system_db":
+    {
+        "name": "System DB",
+        "path": "/Users/grecinto/sop/tools/httpserver/system_db",
+        "mode": "clustered",
+        "redis":"localhost:6379"
+    }
 }

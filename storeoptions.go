@@ -34,6 +34,8 @@ type StoreOptions struct {
 
 	// CELexpression specifies the CEL expression used as comparer for keys.
 	CELexpression string
+	// MapKeyIndexSpecification contains a CEL or index specification used by the comparer.
+	MapKeyIndexSpecification string
 	// IsPrimitiveKey hints Python bindings which JSON B-Tree type to instantiate during Open.
 	IsPrimitiveKey bool
 }

@@ -43,10 +43,16 @@ type replicationTracker struct {
 
 const (
 	replicationStatusFilename         = "replstat.txt"
-	replicationStatusCacheKey         = "Rreplstat"
 	replicationStatusCacheTTLDuration = 5 * time.Minute
 	commitChangesLogFolder            = "commitlogs"
 )
+
+func (r *replicationTracker) getReplicationStatusCacheKey() string {
+	if len(r.storesBaseFolders) > 0 {
+		return fmt.Sprintf("Rreplstat:%s", r.storesBaseFolders[0])
+	}
+	return "Rreplstat"
+}
 
 var GlobalReplicationDetails *ReplicationTrackedDetails
 var globalReplicationDetailsLocker sync.Mutex = sync.Mutex{}
@@ -67,9 +73,11 @@ func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, repl
 	}
 	rt.ActiveFolderToggler = isFirstFolderActive
 	if replicate {
+		globalReplicationDetailsLocker.Lock()
 		if err := rt.syncWithL2Cache(ctx, false); err != nil {
 			log.Warn(fmt.Sprintf("error while updating global replication status & L2 cache, details: %v", err))
 		}
+		globalReplicationDetailsLocker.Unlock()
 		// Minimize reading the replication "status" if we have read it and is tracking it globally.
 		if GlobalReplicationDetails != nil {
 			globalReplicationDetailsLocker.Lock()
@@ -133,9 +141,11 @@ func (r *replicationTracker) handleFailedToReplicate(ctx context.Context) {
 		return
 	}
 
+	globalReplicationDetailsLocker.Lock()
 	if err := r.syncWithL2Cache(ctx, false); err != nil {
 		log.Warn(fmt.Sprintf("error while updating global replication status & L2 cache, details: %v", err))
 	}
+	globalReplicationDetailsLocker.Unlock()
 
 	// L2 cache "knows" of failure, just return.
 	if GlobalReplicationDetails.FailedToReplicate {
@@ -171,9 +181,11 @@ func (r *replicationTracker) failover(ctx context.Context) error {
 		return nil
 	}
 
+	globalReplicationDetailsLocker.Lock()
 	if err := r.syncWithL2Cache(ctx, false); err != nil {
 		log.Warn(fmt.Sprintf("error while updating global replication status & L2 cache, details: %v", err))
 	}
+	globalReplicationDetailsLocker.Unlock()
 
 	if GlobalReplicationDetails.ActiveFolderToggler == !r.ActiveFolderToggler {
 		// Do nothing if global tracker already knows that a failover already occurred.
@@ -327,13 +339,14 @@ func (r *replicationTracker) readReplicationStatus(ctx context.Context, filename
 func (r *replicationTracker) syncWithL2Cache(ctx context.Context, pushValue bool) error {
 
 	var rtd ReplicationTrackedDetails
+	key := r.getReplicationStatusCacheKey()
 	// Update L2 cache of new value in global status.
 	if pushValue {
 		// When stable, perhaps we just issue a SetStruct here to sync L2 cache.
-		if found, err := r.l2Cache.GetStructEx(ctx, replicationStatusCacheKey, &rtd, replicationStatusCacheTTLDuration); err != nil {
+		if found, err := r.l2Cache.GetStructEx(ctx, key, &rtd, replicationStatusCacheTTLDuration); err != nil {
 			return err
 		} else if !found {
-			if err := r.l2Cache.SetStruct(ctx, replicationStatusCacheKey, *GlobalReplicationDetails, replicationStatusCacheTTLDuration); err != nil {
+			if err := r.l2Cache.SetStruct(ctx, key, *GlobalReplicationDetails, replicationStatusCacheTTLDuration); err != nil {
 				return err
 			}
 			return nil
@@ -343,14 +356,14 @@ func (r *replicationTracker) syncWithL2Cache(ctx context.Context, pushValue bool
 			log.Debug("global replication details & l2 Cache copy is found to be in sync")
 			return nil
 		}
-		if err := r.l2Cache.SetStruct(ctx, replicationStatusCacheKey, *GlobalReplicationDetails, replicationStatusCacheTTLDuration); err != nil {
+		if err := r.l2Cache.SetStruct(ctx, key, *GlobalReplicationDetails, replicationStatusCacheTTLDuration); err != nil {
 			return err
 		}
 		log.Debug(fmt.Sprintf("l2 cache had been updated with global replication details value: %v", GlobalReplicationDetails))
 		return nil
 	}
 	// pull or update global replication details with l2 cache copy.
-	if found, err := r.l2Cache.GetStructEx(ctx, replicationStatusCacheKey, &rtd, replicationStatusCacheTTLDuration); err != nil {
+	if found, err := r.l2Cache.GetStructEx(ctx, key, &rtd, replicationStatusCacheTTLDuration); err != nil {
 		return err
 	} else if !found {
 		log.Debug("replication details not found in l2 cache")

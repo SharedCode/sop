@@ -33,7 +33,7 @@ require (
 require (
 	github.com/ncw/directio v1.0.5
 	github.com/sethvargo/go-retry v0.3.0
-	golang.org/x/sync v0.18.0
+	golang.org/x/sync v0.19.0
 )
 
 replace github.com/sharedcode/sop/adapters/cassandra => ./adapters/cassandra

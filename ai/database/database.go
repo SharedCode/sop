@@ -12,6 +12,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/model"
 	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/search"
 )
@@ -90,6 +91,16 @@ func (db *Database) OpenModelStore(ctx context.Context, name string, t sop.Trans
 		}
 	}
 	return model.New(name, t), nil
+}
+
+// OpenBtree opens a general purpose B-Tree store with string keys and any values.
+func (db *Database) OpenBtree(ctx context.Context, name string, t sop.Transaction) (btree.BtreeInterface[string, any], error) {
+	if db.StoragePath() != "" {
+		if err := os.MkdirAll(db.StoragePath(), 0755); err != nil {
+			return nil, err
+		}
+	}
+	return database.OpenBtree[string, any](ctx, db.config, name, t, nil)
 }
 
 // OpenVectorStore opens a vector store with map[string]any payload.

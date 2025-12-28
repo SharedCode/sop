@@ -20,6 +20,8 @@ import (
 // Dependencies holds external dependencies required for agent creation.
 type Dependencies struct {
 	AgentRegistry map[string]ai.Agent[map[string]any]
+	SystemDB      *database.Database
+	Databases     map[string]sop.DatabaseOptions
 }
 
 // HashString generates a deterministic hash for the given string.
@@ -55,19 +57,23 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 		emb = embed.NewSimple(cfg.ID+"-embed", 1024, cfg.Synonyms)
 	}
 
+	// Check requirements
+	req := cfg.Requirements
+	if req == nil {
+		// Default behavior: Disable all storage if not explicitly required
+		req = &Requirements{VectorStore: false, Search: false, ModelStore: false}
+	}
+
+	if !req.VectorStore && !req.ModelStore && !req.Search {
+		return emb, nil, cfg.ID, vector.Config{}, nil
+	}
+
 	// 2. Initialize Vector Database
 	storagePath := cfg.StoragePath
 	if storagePath != "" {
 		// Ensure absolute path to avoid duplication issues with relative paths
 		if absPath, err := filepath.Abs(storagePath); err == nil {
 			storagePath = absPath
-		}
-
-		// Fix for double domain in path:
-		// If the storage path ends with the Agent ID, assume the user meant "this is my folder"
-		// and point the DB to the parent, so DB.Open(ID) reconstructs it correctly.
-		if filepath.Base(storagePath) == cfg.ID {
-			storagePath = filepath.Dir(storagePath)
 		}
 	}
 
@@ -83,8 +89,12 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 	}
 
 	// Vector database does not support Replication disk structure, ignore error.
+	// We append a dummy segment because the underlying SOP library seems to treat the path
+	// as a base directory and creates folders alongside it if we don't nest it.
+	// By appending "db", we ensure the actual data folders are created inside 'storagePath'.
+	dbPath := filepath.Join(storagePath, "db")
 	db := database.NewDatabase(sop.DatabaseOptions{
-		StoresFolders: []string{storagePath},
+		StoresFolders: []string{dbPath},
 		Type:          dbType,
 	})
 
@@ -92,7 +102,7 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 		UsageMode:             ai.BuildOnceQueryMany, // Default
 		EnableIngestionBuffer: cfg.EnableIngestionBuffer,
 		TransactionOptions: sop.TransactionOptions{
-			StoresFolders: []string{storagePath},
+			StoresFolders: []string{dbPath},
 			CacheType:     db.CacheType(),
 		},
 		Cache: db.Cache(),
@@ -114,7 +124,19 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 
 // NewFromConfig creates and initializes a new Agent Service based on the provided configuration.
 // It handles infrastructure setup (Embedder, VectorDB).
-func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (*Service, error) {
+func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (ai.Agent[map[string]any], error) {
+	// Handle specialized agent types
+	switch cfg.Type {
+	case "data-admin":
+		return NewDataAdminAgent(cfg, deps.Databases, deps.SystemDB), nil
+	// Add other types here
+	case "standard", "":
+		// Fallthrough to standard service creation
+	default:
+		// For now, default to standard service if unknown, or could return error
+		// return nil, fmt.Errorf("unknown agent type: %s", cfg.Type)
+	}
+
 	// 1. Initialize Infrastructure
 	emb, db, storeName, vCfg, err := SetupInfrastructure(ctx, cfg, deps)
 	if err != nil {
@@ -272,6 +294,6 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (*Service
 		serviceObfuscation = false
 	}
 
-	svc := NewService(dom, gen, cfg.Pipeline, fullRegistry, serviceObfuscation)
+	svc := NewService(dom, deps.SystemDB, deps.Databases, gen, cfg.Pipeline, fullRegistry, serviceObfuscation)
 	return svc, nil
 }

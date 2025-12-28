@@ -18,7 +18,25 @@ const (
 	CtxKeyExecutor ContextKey = "ai_executor"
 	// CtxKeyDeobfuscator is the context key for passing the Deobfuscator.
 	CtxKeyDeobfuscator ContextKey = "ai_deobfuscator"
+	// CtxKeyHistory is the context key for passing conversation history.
+	CtxKeyHistory ContextKey = "ai_history"
+	// CtxKeyWriter is the context key for passing an io.Writer for streaming output.
+	CtxKeyWriter ContextKey = "ai_writer"
+	// CtxKeyDatabase is the context key for passing the target database for macro execution.
+	CtxKeyDatabase ContextKey = "ai_database"
+	// CtxKeyResultStreamer is the context key for passing the ResultStreamer.
+	CtxKeyResultStreamer ContextKey = "ai_result_streamer"
 )
+
+// ResultStreamer defines the interface for streaming tool results.
+type ResultStreamer interface {
+	// BeginArray starts a JSON array output.
+	BeginArray()
+	// WriteItem writes a single item to the output (e.g. an element of an array).
+	WriteItem(item any)
+	// EndArray ends the JSON array output.
+	EndArray()
+}
 
 // Deobfuscator defines the interface for de-obfuscating text.
 type Deobfuscator interface {
@@ -222,10 +240,91 @@ type Domain[T any] interface {
 	DataPath() string
 }
 
+// AskConfig holds configuration options for the Ask method.
+type AskConfig struct {
+	Values map[string]any
+}
+
+// Option defines a function that configures AskConfig.
+type Option func(*AskConfig)
+
+// NewAskConfig creates a new AskConfig with the applied options.
+func NewAskConfig(opts ...Option) *AskConfig {
+	cfg := &AskConfig{Values: make(map[string]any)}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+	return cfg
+}
+
+// WithDatabase adds a database instance to the configuration.
+// The db parameter should be of type *database.Database.
+func WithDatabase(db any) Option {
+	return func(c *AskConfig) {
+		c.Values["database"] = db
+	}
+}
+
+// WithDefaultFormat sets the default output format (e.g., "csv", "json") for tools.
+func WithDefaultFormat(format string) Option {
+	return func(c *AskConfig) {
+		c.Values["default_format"] = format
+	}
+}
+
+// WithDatabaseResolver adds a database resolver to the configuration.
+// Deprecated: Use WithSessionPayload instead.
+func WithDatabaseResolver(resolver any) Option {
+	return func(c *AskConfig) {
+		// No-op or legacy support if needed, but we are removing the interface.
+	}
+}
+
 // Agent defines the interface for an AI agent service.
 type Agent[T any] interface {
+	// Lifecycle methods
+	Open(ctx context.Context) error
+	Close(ctx context.Context) error
+
 	Search(ctx context.Context, query string, limit int) ([]Hit[T], error)
-	Ask(ctx context.Context, query string) (string, error)
+	Ask(ctx context.Context, query string, opts ...Option) (string, error)
+}
+
+// SessionPayload represents the context and state for an agent session.
+// It carries domain-specific artifacts like database connections.
+type SessionPayload struct {
+	// CurrentDB is the active database name for the session.
+	CurrentDB string
+	// Transaction holds the active transaction for the session.
+	Transaction any
+	// Variables holds session-scoped variables (e.g. cached store instances).
+	Variables map[string]any
+	// ExplicitTransaction indicates if the transaction was explicitly started by the user.
+	ExplicitTransaction bool
+	// LastInteractionSteps tracks the number of steps added/executed in the last user interaction.
+	LastInteractionSteps int
+}
+
+// GetDatabase returns the effective current Database name.
+func (s *SessionPayload) GetDatabase() string {
+	return s.CurrentDB
+}
+
+// WithSessionPayload adds a session payload to the configuration.
+func WithSessionPayload(payload *SessionPayload) Option {
+	return func(c *AskConfig) {
+		c.Values["payload"] = payload
+	}
+}
+
+// GetSessionPayload retrieves the session payload from the context.
+func GetSessionPayload(ctx context.Context) *SessionPayload {
+	if val := ctx.Value("session_payload"); val != nil {
+		if p, ok := val.(*SessionPayload); ok {
+			return p
+		}
+	}
+	return nil
 }
 
 // ToolExecutor defines the interface for the application to expose capabilities to the Agent.
@@ -281,3 +380,108 @@ type ModelStore interface {
 	// Delete removes a model from the store.
 	Delete(ctx context.Context, category string, name string) error
 }
+
+// Macro represents a recorded sequence of user interactions or a programmed script.
+type Macro struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Parameters  []string `json:"parameters"`         // Input parameters for the macro
+	Database    string   `json:"database,omitempty"` // Database to run the macro against
+	Portable    bool     `json:"portable,omitempty"` // If true, allows running on any database
+	// TransactionMode specifies how transactions are handled for this macro.
+	// Values: "none" (default, manual), "single" (one tx for all steps), "per_step" (auto-commit each step)
+	TransactionMode string      `json:"transaction_mode,omitempty"`
+	Steps           []MacroStep `json:"steps"`
+}
+
+// MacroStep represents a single instruction in a macro.
+// It follows a stabilized schema for "Natural Language Programming".
+type MacroStep struct {
+	// Type of the step.
+	// Valid values: "ask", "set", "if", "loop", "fetch", "say", "command", "macro", "block"
+	Type string `json:"type"`
+
+	// --- Fields for "ask" (LLM Interaction) ---
+	// Prompt is the question or command to send to the LLM. Supports templating.
+	Prompt string `json:"prompt,omitempty"`
+	// OutputVariable is where the LLM's response will be stored.
+	// If empty, the response is just printed.
+	OutputVariable string `json:"output_variable,omitempty"`
+
+	// --- Fields for "set" (Variable Assignment) ---
+	// Variable is the name of the variable to set.
+	Variable string `json:"variable,omitempty"`
+	// Value is the value to assign. Supports templating.
+	Value string `json:"value,omitempty"`
+
+	// --- Fields for "if" (Flow Branching) ---
+	// Condition is a Go template expression that must evaluate to "true".
+	// Example: "{{ gt .count 5 }}"
+	Condition string `json:"condition,omitempty"`
+	// Then is the list of steps to execute if the condition is true.
+	Then []MacroStep `json:"then,omitempty"`
+	// Else is the list of steps to execute if the condition is false.
+	Else []MacroStep `json:"else,omitempty"`
+
+	// --- Fields for "loop" (Iteration) ---
+	// List is the variable name or expression evaluating to a list/slice to iterate over.
+	List string `json:"list,omitempty"`
+	// Iterator is the variable name for the current item in the loop.
+	Iterator string `json:"iterator,omitempty"`
+	// Steps is the list of steps to execute for each item.
+	// Also used for "block" type to hold the sequence of steps.
+	Steps []MacroStep `json:"steps,omitempty"`
+
+	// --- Fields for "fetch" (Data Retrieval) ---
+	// Database specifies the database name (optional). If empty, uses the current context database.
+	Database string `json:"database,omitempty"`
+	// Source specifies the data source type (e.g., "btree", "vector_store").
+	Source string `json:"source,omitempty"`
+	// Resource specifies the name of the resource (e.g., table name).
+	Resource string `json:"resource,omitempty"`
+	// Filter is an optional filter expression (not yet fully implemented).
+	Filter string `json:"filter,omitempty"`
+	// (Uses Variable field to store the result)
+
+	// --- Fields for "say" (Output) ---
+	// Message is the text to output to the user. Supports templating.
+	Message string `json:"message,omitempty"`
+
+	// --- Fields for "command" (Direct Tool Execution) ---
+	// Command is the name of the tool/command to execute.
+	Command string `json:"command,omitempty"`
+	// Args are the arguments for the command.
+	Args map[string]any `json:"args,omitempty"`
+
+	// --- Fields for "macro" (Nested Macro Execution) ---
+	// MacroName is the name of the macro to execute.
+	MacroName string `json:"macro_name,omitempty"`
+	// MacroArgs are the arguments to pass to the macro.
+	MacroArgs map[string]string `json:"macro_args,omitempty"`
+
+	// --- Async Execution ---
+	// IsAsync specifies if the step should be executed asynchronously.
+	// If true, the step runs in a goroutine and the macro continues to the next step.
+	// All async steps are gathered (waited for) at the end of the macro execution.
+	IsAsync bool `json:"is_async,omitempty"`
+
+	// ContinueOnError specifies if the macro should continue executing if this step fails.
+	// If false (default), the macro stops and returns the error.
+	// For async steps, if this is false and the step fails, it cancels the execution of other steps.
+	ContinueOnError bool `json:"continue_on_error,omitempty"`
+}
+
+// MacroRecorder is an interface for recording macro steps.
+type MacroRecorder interface {
+	RecordStep(ctx context.Context, step MacroStep)
+	// RefactorLastSteps refactors the last N steps into a new structure (macro or block).
+	// count: number of steps to refactor.
+	// mode: "macro" (extract to new named macro) or "block" (group into block step).
+	// name: name of the new macro (if mode is "macro").
+	RefactorLastSteps(count int, mode string, name string) error
+}
+
+const (
+	// CtxKeyMacroRecorder is the context key for passing the MacroRecorder.
+	CtxKeyMacroRecorder ContextKey = "ai_macro_recorder"
+)

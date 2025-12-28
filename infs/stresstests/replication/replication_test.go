@@ -65,8 +65,9 @@ func initialize() {
 	sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
 }
 
-func TestMain(t *testing.T) {
+func TestReplicationFlow(t *testing.T) {
 	tableName := "repltable2"
+	_ = infs.RemoveBtree(context.Background(), tableName, storesFolders, fs.GetGlobalErasureConfig(), sop.Redis)
 	setupBtreeWithOneItem(tableName, rand.Intn(50)+1, t)
 
 	writeData(tableName, rand.Intn(50)+1, "foobar", t)
@@ -108,8 +109,9 @@ func TestMain(t *testing.T) {
 
 }
 
-func TestMain2(t *testing.T) {
+func TestReplicationFlow2(t *testing.T) {
 	tableName := "repltable3"
+	_ = infs.RemoveBtree(context.Background(), tableName, storesFolders, fs.GetGlobalErasureConfig(), sop.Redis)
 	setupBtreeWithOneItem(tableName, rand.Intn(50)+1, t)
 
 	writeData(tableName, rand.Intn(50)+1, "foobar", t)
@@ -228,12 +230,175 @@ func TestDirectIOCloseFileFailure(t *testing.T) {
 }
 
 func TestStoreRepositoryCreateStoreFailure(t *testing.T) {
+	ctx := context.Background()
+	base := activeBaseFolder()
+	// Make base folder read-only to prevent mkdir
+	if err := os.Chmod(base, 0o555); err != nil {
+		t.Fatalf("Failed to chmod base folder: %v", err)
+	}
+	defer os.Chmod(base, 0o755)
+
+	trans, err := infs.NewTransactionWithReplication(ctx, transOptions)
+	if err != nil {
+		t.Fatalf("NewTransactionWithReplication failed: %v", err)
+	}
+	if err := trans.Begin(ctx); err != nil {
+		t.Fatalf("Begin failed: %v", err)
+	}
+
+	so := sop.StoreOptions{
+		Name:                     "fail_create_store",
+		SlotLength:               8,
+		IsValueDataInNodeSegment: true,
+	}
+	_ = infs.RemoveBtree(ctx, so.Name, storesFolders, fs.GetGlobalErasureConfig(), sop.Redis)
+	_, err = infs.NewBtreeWithReplication[int, string](ctx, so, trans, nil)
+	if err == nil {
+		t.Error("Expected error when creating store in read-only directory, got nil")
+	} else {
+		t.Logf("Got expected error: %v", err)
+	}
+	_ = trans.Rollback(ctx)
 }
+
 func TestStoreRepositoryRemoveStoreFailure(t *testing.T) {
+	ctx := context.Background()
+	name := "fail_remove_store"
+	_ = infs.RemoveBtree(ctx, name, storesFolders, fs.GetGlobalErasureConfig(), sop.Redis)
+
+	// 1. Create store successfully
+	setupBtreeWithOneItem(name, 1, t)
+
+	// 2. Make base folder read-only so we can't remove the store directory
+	base := activeBaseFolder()
+	if err := os.Chmod(base, 0o555); err != nil {
+		t.Fatalf("Failed to chmod base folder: %v", err)
+	}
+	defer os.Chmod(base, 0o755)
+
+	// 3. Try to remove using StoreRepository directly
+	cache := sop.GetL2Cache(transOptions)
+	rt, err := fs.NewReplicationTracker(ctx, storesFolders, true, cache)
+	if err != nil {
+		t.Fatalf("NewReplicationTracker failed: %v", err)
+	}
+	sr, err := fs.NewStoreRepository(ctx, rt, nil, cache, 0)
+	if err != nil {
+		t.Fatalf("NewStoreRepository failed: %v", err)
+	}
+
+	err = sr.Remove(ctx, name)
+	if err == nil {
+		t.Error("Expected error when removing store with read-only parent, got nil")
+	} else {
+		t.Logf("Got expected error: %v", err)
+	}
 }
+
 func TestStoreRepositoryWriteFileFailure(t *testing.T) {
+	ctx := context.Background()
+	name := "fail_write_file"
+	_ = infs.RemoveBtree(ctx, name, storesFolders, fs.GetGlobalErasureConfig(), sop.Redis)
+	setupBtreeWithOneItem(name, 1, t)
+
+	// Use the file that exists in the active folder, or fallback to the other if active is empty (which would be a bug in test setup/understanding)
+	base := activeBaseFolder()
+	storeDir := filepath.Join(base, name)
+	infoFile := filepath.Join(storeDir, "storeinfo.txt")
+
+	// Check if file exists
+	if _, err := os.Stat(infoFile); os.IsNotExist(err) {
+		// Try other folder
+		if base == storesFolders[0] {
+			base = storesFolders[1]
+		} else {
+			base = storesFolders[0]
+		}
+		storeDir = filepath.Join(base, name)
+		infoFile = filepath.Join(storeDir, "storeinfo.txt")
+	}
+
+	// Use StoreRepository directly
+	cache := sop.GetL2Cache(transOptions)
+	rt, err := fs.NewReplicationTracker(ctx, storesFolders, true, cache)
+	if err != nil {
+		t.Fatalf("NewReplicationTracker failed: %v", err)
+	}
+	sr, err := fs.NewStoreRepository(ctx, rt, nil, cache, 0)
+	if err != nil {
+		t.Fatalf("NewStoreRepository failed: %v", err)
+	}
+
+	// Get store info to ensure it is in cache
+	stores, err := sr.Get(ctx, name)
+	if err != nil || len(stores) == 0 {
+		t.Fatalf("Failed to get store: %v", err)
+	}
+
+	// Rename file and make dir read-only in BOTH folders so write (create) fails
+	for _, base := range storesFolders {
+		storeDir := filepath.Join(base, name)
+		infoFile := filepath.Join(storeDir, "storeinfo.txt")
+		if _, err := os.Stat(infoFile); err == nil {
+			if err := os.Rename(infoFile, filepath.Join(storeDir, "storeinfo.bak")); err != nil {
+				t.Fatalf("Failed to rename info file: %v", err)
+			}
+		}
+		if err := os.Chmod(storeDir, 0o555); err != nil {
+			t.Fatalf("Failed to chmod store dir: %v", err)
+		}
+		defer os.Chmod(storeDir, 0o755)
+	}
+
+	// Update
+	stores[0].CountDelta = 1
+	_, err = sr.Update(ctx, stores)
+
+	if err == nil {
+		t.Error("Expected error when writing to read-only store directory, got nil")
+	} else {
+		t.Logf("Got expected error: %v", err)
+	}
 }
+
 func TestStoreRepositoryReadFileFailure(t *testing.T) {
+	ctx := context.Background()
+	name := "fail_read_file"
+	_ = infs.RemoveBtree(ctx, name, storesFolders, fs.GetGlobalErasureConfig(), sop.Redis)
+	setupBtreeWithOneItem(name, 1, t)
+
+	// Delete store info file in BOTH folders
+	for _, base := range storesFolders {
+		infoFile := filepath.Join(base, name, "storeinfo.txt")
+		if err := os.Remove(infoFile); err != nil && !os.IsNotExist(err) {
+			t.Fatalf("Failed to remove info file: %v", err)
+		}
+		if _, err := os.Stat(infoFile); !os.IsNotExist(err) {
+			t.Fatalf("File %s still exists after remove!", infoFile)
+		}
+	}
+
+	// Clear cache to force read from disk.
+	cache := sop.GetL2Cache(transOptions)
+	cache.Delete(ctx, []string{fmt.Sprintf("%s:%s", storesFolders[0], name)})
+	cache.Delete(ctx, []string{fmt.Sprintf("%s:%s", storesFolders[1], name)})
+
+	// Try to OpenBtree
+	trans, _ := infs.NewTransactionWithReplication(ctx, transOptions)
+	trans.Begin(ctx)
+	_, err := infs.OpenBtreeWithReplication[int, string](ctx, name, trans, nil)
+
+	if err == nil {
+		t.Error("Expected error when reading missing store info file, got nil")
+		// Debug why it succeeded
+		rt, _ := fs.NewReplicationTracker(ctx, storesFolders, true, cache)
+		sr, _ := fs.NewStoreRepository(ctx, rt, nil, cache, 0)
+		stores, _ := sr.Get(ctx, name)
+		t.Logf("Store found: %+v", stores)
+	} else {
+		t.Logf("Got expected error: %v", err)
+	}
+	trans.Rollback(ctx)
 }
 
 // Helpers to simulate IO failures by toggling permissions on registry segment files.

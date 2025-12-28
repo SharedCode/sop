@@ -70,3 +70,29 @@ See the "Concurrent Transactions" examples in our language bindings for practica
 To enable seamless concurrent merging on a newly created B-Tree, you **must pre-seed the B-Tree with at least one item** in a separate, initial transaction. This establishes the root node and structure, preventing race conditions that can occur when multiple transactions attempt to initialize an empty tree simultaneously.
 
 > **Note:** This requirement is simply to have at least one item in the tree. It can be a real application item or a dummy seed item.
+
+## Part 2: The Compute Swarm (Agents & Macros)
+
+While SOP provides the "Storage Swarm" (distributed, lock-free data persistence), our AI Framework introduces the **"Compute Swarm"**.
+
+We have built a powerful framework where programming logic itself is distributed, autonomous, and network-native.
+
+### 1. Macros as Distributed DNA
+In a traditional system, code is static and deployed to specific servers. In our Swarm, **Macros** act as the genetic code of the operation.
+*   **Portable Logic**: A Macro is a sequence of steps (Data Operations, LLM Calls, Logic) stored in the database itself.
+*   **Replicable**: Because Macros are data, they are instantly available to every node in the cluster via SOP.
+*   **Atomic Execution**: A Macro can define its own transaction scope (`Single` vs `PerStep`), allowing complex, multi-step distributed operations to be treated as a single unit of work.
+
+### 2. Agents as Autonomous Workers
+Agents in our framework are not just chatbots; they are autonomous compute units.
+*   **Network Native**: An Agent on Node A can execute a Macro that manipulates data on Node B, C, and D seamlessly, because the underlying SOP layer handles the distribution.
+*   **Tool Expansion**: Agents can dynamically discover and "learn" new tools (Macros) at runtime. If you add a new capability to the cluster, every Agent instantly has access to it.
+
+### 3. The Vision: Distributed Execution Helpers
+We are moving towards a model where users can simply "release" a task into the swarm.
+*   **"Fire and Forget"**: A user submits a high-level goal ("Analyze all logs from yesterday").
+*   **Swarm Distribution**: Helper tools will break this down into sub-tasks (Macros) and distribute them to available Agents across the cluster.
+*   **Clustered Native**: Because we are "clustered database native," we don't need complex separate message queues or coordination services. The database *is* the coordination layer (via Redis "pheromones" and SOP storage).
+
+This transforms the system from a passive data store into an active, living **Swarm Computer**.
+

@@ -8,57 +8,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent"
+	aidb "github.com/sharedcode/sop/ai/database"
 	_ "github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/obfuscation"
-	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/common"
-	"github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/encoding"
-	"github.com/sharedcode/sop/jsondb"
 )
-
-// DefaultToolExecutor implements ai.ToolExecutor
-type DefaultToolExecutor struct{}
-
-func (e *DefaultToolExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
-	return executeTool(ctx, toolName, args)
-}
-
-func (e *DefaultToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
-	return []ai.ToolDefinition{
-		{
-			Name:        "list_stores",
-			Description: "Lists all stores in the specified database.",
-			Schema:      `{"type": "object", "properties": {"database": {"type": "string"}}, "required": ["database"]}`,
-		},
-		{
-			Name:        "list_databases",
-			Description: "Lists all available databases.",
-			Schema:      `{"type": "object", "properties": {}}`,
-		},
-		{
-			Name:        "search",
-			Description: "Search for items in a store.",
-			Schema:      `{"type": "object", "properties": {"database": {"type": "string"}, "store": {"type": "string"}, "query": {"type": "object"}}, "required": ["database", "store", "query"]}`,
-		},
-		{
-			Name:        "get_schema",
-			Description: "Get the index specification and schema of a store.",
-			Schema:      `{"type": "object", "properties": {"database": {"type": "string"}, "store": {"type": "string"}}, "required": ["database", "store"]}`,
-		},
-		{
-			Name:        "select",
-			Description: "Select items from a store.",
-			Schema:      `{"type": "object", "properties": {"database": {"type": "string"}, "store": {"type": "string"}, "limit": {"type": "integer"}}, "required": ["database", "store"]}`,
-		},
-	}, nil
-}
 
 func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -72,6 +30,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		StoreName string `json:"store"`
 		Agent     string `json:"agent"`
 		Provider  string `json:"provider"`
+		Format    string `json:"format"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -119,7 +78,51 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		ctx = context.WithValue(ctx, ai.CtxKeyProvider, req.Provider)
 	}
 	// Pass ToolExecutor via context
-	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &DefaultToolExecutor{})
+	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &DefaultToolExecutor{Agents: loadedAgents})
+
+	var askOpts []ai.Option
+
+	// Pass Database via options if provided
+	if req.Database != "" {
+		// We pass the database name as string. The agent service will resolve it.
+		askOpts = append(askOpts, ai.WithDatabase(req.Database))
+	}
+
+	// Set Default Format (default to CSV if not specified)
+	format := req.Format
+	if format == "" {
+		format = "csv"
+	}
+	askOpts = append(askOpts, ai.WithDefaultFormat(format))
+
+	// Construct SessionPayload
+	// For now, we populate Databases with just the current one if available,
+	// or we could list all available DBs if we want to support cross-db queries.
+	// Populate all known DBs from config
+	databases := make(map[string]any)
+	for _, dbCfg := range config.Databases {
+		if opts, err := getDBOptions(dbCfg.Name); err == nil {
+			databases[dbCfg.Name] = opts
+		}
+	}
+	// Ensure the requested database is also there (it should be in config, but just in case)
+	if req.Database != "" {
+		// If we already have it as options, great. If not, we might need to add it?
+		// But getDBOptions(req.Database) should have covered it if it's valid.
+		// If it's not in config.Databases but getDBOptions works (e.g. dynamic?), add it.
+		if _, exists := databases[req.Database]; !exists {
+			if opts, err := getDBOptions(req.Database); err == nil {
+				databases[req.Database] = opts
+			}
+		}
+	}
+
+	// Also add "system" db if needed?
+
+	payload := &ai.SessionPayload{
+		CurrentDB: req.Database,
+	}
+	askOpts = append(askOpts, ai.WithSessionPayload(payload))
 
 	// Register resources so the agent knows them for obfuscation
 	if req.Database != "" {
@@ -131,11 +134,31 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	// Prepend context information to the message
 	fullMessage := req.Message
-	if req.Database != "" {
+	// Only prepend context if it's not a system command
+	if req.Database != "" && !strings.HasPrefix(req.Message, "/") {
 		fullMessage = fmt.Sprintf("Current Database: %s\n%s", req.Database, req.Message)
 	}
 
-	response, err := agentSvc.Ask(ctx, fullMessage)
+	// Inject payload into context for Open/Close
+	ctx = context.WithValue(ctx, "session_payload", payload)
+
+	// Initialize Agent Session (Transaction)
+	if err := agentSvc.Open(ctx); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": fmt.Sprintf("Agent '%s' failed to open session: %v", req.Agent, err),
+		})
+		return
+	}
+	defer func() {
+		if err := agentSvc.Close(ctx); err != nil {
+			log.Error(fmt.Sprintf("Agent '%s' failed to close session: %v", req.Agent, err))
+		}
+	}()
+
+	// agentSvc delegates to dataadmin agent as necessary for LLM ask.
+	response, err := agentSvc.Ask(ctx, fullMessage, askOpts...)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -145,17 +168,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// The response from Ask() is now the final answer (or tool output if handled by DataAdmin).
-	// We don't need the ReAct loop here anymore because DataAdmin handles it.
-	// However, if we are using a "dumb" generator (like pure Gemini without DataAdmin wrapper),
-	// we might get a raw tool call string back.
-	// But the user explicitly wanted to move to DataAdmin.
-	// So we assume the response is the final text to show to the user.
-
-	// Check if response is a tool call (JSON) - Just in case the Agent returned a tool call that wasn't executed
-	// (e.g. if DataAdmin failed to execute it or if we are using a different generator).
-	// For robustness, we can keep a simple check, but we won't loop here.
-
+	// Process the response from LLM as returned by the agent.
 	text := strings.TrimSpace(response)
 	var toolCall struct {
 		Tool string         `json:"tool"`
@@ -168,28 +181,17 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.Unmarshal([]byte(cleanText), &toolCall); err == nil && toolCall.Tool != "" {
 		// If we get a raw tool call here, it means the Agent didn't execute it.
-		// We can execute it once and return the result.
-		log.Debug(fmt.Sprintf("Agent returned raw tool call: %s", toolCall.Tool))
+		// This shouldn't happen with the new architecture where agents execute their own tools.
+		// But if it does (e.g. legacy agent or fallback), we log it.
+		log.Debug(fmt.Sprintf("Agent returned raw tool call (unexpected): %s", toolCall.Tool))
 
-		// Inject default database if missing
-		if db, ok := toolCall.Args["database"].(string); !ok || db == "" {
-			toolCall.Args["database"] = req.Database
-		}
-
-		// Log the final database name being used for debugging
-		finalDB, _ := toolCall.Args["database"].(string)
-		log.Debug(fmt.Sprintf("Executing tool '%s' on database: '%s' (bytes: %v)", toolCall.Tool, finalDB, []byte(finalDB)))
-
-		result, err := executeTool(ctx, toolCall.Tool, toolCall.Args)
-		if err != nil {
-			result = "Error: " + err.Error()
-		}
-
+		// We no longer execute tools here. We return the raw response.
+		// Or should we error?
+		// Let's return it as a response so the user sees what the agent tried to do.
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{
-			"response": result,
-			"action":   "refresh",
+			"response": fmt.Sprintf("Agent attempted to call tool '%s' but failed to execute it internally.", toolCall.Tool),
 		})
 		return
 	}
@@ -201,273 +203,68 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func executeTool(ctx context.Context, toolName string, args map[string]any) (string, error) {
-	dbName, _ := args["database"].(string)
-	dbName = strings.TrimSpace(dbName)
-
-	if dbName == "" {
-		return "", fmt.Errorf("database name is required")
-	}
-
-	dbOpts, err := getDBOptions(dbName)
-	if err != nil {
-		return "", err
-	}
-
-	switch toolName {
-	case "list_databases":
-		var names []string
-		for _, db := range config.Databases {
-			names = append(names, db.Name)
-		}
-		return fmt.Sprintf("Databases: %v", names), nil
-
-	case "list_stores":
-		trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
-		if err != nil {
-			return "", err
-		}
-		defer trans.Rollback(ctx)
-
-		stores, err := trans.GetStores(ctx)
-		if err != nil {
-			return "", err
-		}
-		return fmt.Sprintf("Stores: %v", stores), nil
-
-	case "select":
-		storeName, _ := args["store"].(string)
-		limitFloat, _ := args["limit"].(float64) // JSON numbers are floats
-		limit := int(limitFloat)
-		if limit < 0 {
-			limit = 1000000 // Treat negative as "unlimited" (capped)
-		} else if limit == 0 {
-			limit = 2 // Default if missing
-		}
-		if storeName == "" {
-			return "", fmt.Errorf("store name is required")
-		}
-
-		trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
-		if err != nil {
-			return "", err
-		}
-		defer trans.Rollback(ctx)
-
-		// Get Store Info to determine comparer
-		var isPrimitiveKey bool
-		var indexSpec *jsondb.IndexSpecification
-
-		if t2, ok := trans.GetPhasedTransaction().(*common.Transaction); ok {
-			stores, err := t2.StoreRepository.Get(ctx, storeName)
-			if err == nil && len(stores) > 0 {
-				isPrimitiveKey = stores[0].IsPrimitiveKey
-				if !isPrimitiveKey && stores[0].MapKeyIndexSpecification != "" {
-					var is jsondb.IndexSpecification
-					if err := encoding.DefaultMarshaler.Unmarshal([]byte(stores[0].MapKeyIndexSpecification), &is); err == nil {
-						indexSpec = &is
-					}
-				}
-			}
-		}
-
-		var comparer btree.ComparerFunc[any]
-		if !isPrimitiveKey && indexSpec != nil {
-			comparer = func(a, b any) int {
-				return indexSpec.Comparer(a.(map[string]any), b.(map[string]any))
-			}
-		}
-
-		store, err := database.OpenBtree[any, any](ctx, dbOpts, storeName, trans, comparer)
-		if err != nil {
-			return "", fmt.Errorf("failed to open store: %v", err)
-		}
-
-		var items []map[string]any
-		ok, err := store.First(ctx)
-		count := 0
-		for ok && err == nil && count < limit {
-			k := store.GetCurrentKey()
-			v, _ := store.GetCurrentValue(ctx)
-			items = append(items, map[string]any{"key": k.Key, "value": v})
-			ok, err = store.Next(ctx)
-			count++
-		}
-
-		if len(items) == 0 {
-			return "No items found.", nil
-		}
-
-		// Check for requested format (default to CSV for readability in Chat)
-		format, _ := args["format"].(string)
-		if strings.ToLower(format) == "json" {
-			b, err := json.MarshalIndent(items, "", "  ")
-			if err != nil {
-				return "", err
-			}
-			return string(b), nil
-		}
-
-		keyFieldSet := make(map[string]bool)
-		var keyIsMap bool
-		valueFieldSet := make(map[string]bool)
-		var valueIsMap bool
-
-		// Scan for fields
-		for _, item := range items {
-			// Check Key
-			if kMap, ok := item["key"].(map[string]any); ok {
-				keyIsMap = true
-				for k := range kMap {
-					keyFieldSet[k] = true
-				}
-			}
-			// Check Value
-			if vMap, ok := item["value"].(map[string]any); ok {
-				valueIsMap = true
-				for k := range vMap {
-					valueFieldSet[k] = true
-				}
-			}
-		}
-
-		var kFields []string
-		if keyIsMap {
-			for k := range keyFieldSet {
-				kFields = append(kFields, k)
-			}
-			sort.Strings(kFields)
-		}
-
-		var vFields []string
-		if valueIsMap {
-			for k := range valueFieldSet {
-				vFields = append(vFields, k)
-			}
-			sort.Strings(vFields)
-		}
-
-		// Default: CSV Format
-		var csvHeaders []string
-		if keyIsMap {
-			for _, k := range kFields {
-				if len(k) > 0 {
-					csvHeaders = append(csvHeaders, strings.ToUpper(k[:1])+k[1:])
-				} else {
-					csvHeaders = append(csvHeaders, k)
-				}
-			}
-		} else {
-			csvHeaders = append(csvHeaders, "Key")
-		}
-		if valueIsMap {
-			for _, v := range vFields {
-				if len(v) > 0 {
-					csvHeaders = append(csvHeaders, strings.ToUpper(v[:1])+v[1:])
-				} else {
-					csvHeaders = append(csvHeaders, v)
-				}
-			}
-		}
-		var sb strings.Builder
-		sb.WriteString(strings.Join(csvHeaders, ", "))
-		sb.WriteString("\n")
-
-		for _, item := range items {
-			var row []string
-			// Key
-			if keyIsMap {
-				kMap, _ := item["key"].(map[string]any)
-				for _, f := range kFields {
-					if v, ok := kMap[f]; ok {
-						row = append(row, fmt.Sprintf("%v", v))
-					} else {
-						row = append(row, "")
-					}
-				}
-			} else {
-				row = append(row, fmt.Sprintf("%v", item["key"]))
-			}
-			// Value
-			if valueIsMap {
-				vMap, _ := item["value"].(map[string]any)
-				for _, f := range vFields {
-					if v, ok := vMap[f]; ok {
-						row = append(row, fmt.Sprintf("%v", v))
-					} else {
-						row = append(row, "")
-					}
-				}
-			} else {
-				row = append(row, fmt.Sprintf("%v", item["value"]))
-			}
-			sb.WriteString(strings.Join(row, ", "))
-			sb.WriteString("\n")
-		}
-		return sb.String(), nil
-
-	case "get_schema":
-		storeName, _ := args["store"].(string)
-		if storeName == "" {
-			return "", fmt.Errorf("store name is required")
-		}
-		// Open read transaction to get store info
-		trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
-		if err != nil {
-			return "", err
-		}
-		defer trans.Rollback(ctx)
-
-		// We can't easily get store info without opening it or querying repo
-		// Let's query repo
-		if t2, ok := trans.GetPhasedTransaction().(*common.Transaction); ok {
-			stores, err := t2.StoreRepository.Get(ctx, storeName)
-			if err != nil {
-				return "", err
-			}
-			if len(stores) == 0 {
-				return "Store not found", nil
-			}
-			si := stores[0]
-			return fmt.Sprintf("Store: %s\nIndexes: %s", si.Name, si.MapKeyIndexSpecification), nil
-		}
-		return "Could not access store repository", nil
-
-	case "search":
-		storeName, _ := args["store"].(string)
-		query, _ := args["query"].(map[string]any)
-		if storeName == "" {
-			return "", fmt.Errorf("store name is required")
-		}
-
-		// For now, we don't have a generic "Search by JSON" function exposed easily in main.go
-		// But we can simulate it or just return a message saying "Search executed" if we implement the actual search logic.
-		// Since the user wants to see results in the grid, we can just return "Search parameters set. Refreshing grid."
-		// AND we need to actually set the search parameters for the *next* loadItems call?
-		// The current UI `loadItems` takes parameters from the UI inputs.
-		// The AI cannot easily "push" search params to the UI state unless we return them in the JSON response.
-
-		// Let's return the query as the "action" payload?
-		// For now, let's just do a simple Find to verify it exists, and return the count.
-
-		trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
-		if err != nil {
-			return "", err
-		}
-		defer trans.Rollback(ctx)
-
-		// We need to open the store... this is getting complicated to do generically in one function without duplicating main.go logic.
-		// Let's just return a success message for now, and maybe in the future we update the UI to accept "search_params" from AI.
-
-		return fmt.Sprintf("Found items matching %v (Grid refresh triggered)", query), nil
-	}
-
-	return "", fmt.Errorf("unknown tool: %s", toolName)
+func initAgents() {
+	loadAgent("sql_admin", "ai/data/sql_admin_pipeline.json")
 }
 
-func initAgents() {
-	// loadAgent("doctor", "ai/data/doctor_pipeline.json") // Disabled per user request
-	loadAgent("sql_admin", "ai/data/sql_admin_pipeline.json")
+func seedDefaultMacros(db *aidb.Database) {
+	ctx := context.Background()
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		log.Error(fmt.Sprintf("Failed to begin transaction for seeding macros: %v", err))
+		return
+	}
+	store, err := db.OpenModelStore(ctx, "macros", tx)
+	if err != nil {
+		tx.Rollback(ctx)
+		log.Error(fmt.Sprintf("Failed to open macro store: %v", err))
+		return
+	}
+
+	// Check if demo_loop exists
+	// We force update it to ensure latest schema is used during development
+	// var existing ai.Macro
+	// if err := store.Load(ctx, "macros", "demo_loop", &existing); err == nil {
+	// 	tx.Rollback(ctx)
+	// 	return // Already exists
+	// }
+
+	// Create demo_loop macro
+	demoLoop := ai.Macro{
+		Name:        "demo_loop",
+		Description: "Demonstrates loops and variables",
+		Steps: []ai.MacroStep{
+			{
+				Type:     "set",
+				Variable: "items",
+				Value:    "apple\nbanana\ncherry",
+			},
+			{
+				Type:     "loop",
+				List:     "items",
+				Iterator: "fruit",
+				Steps: []ai.MacroStep{
+					{
+						Type:    "say",
+						Message: "Processing {{.fruit}}...",
+					},
+					{
+						Type:   "ask",
+						Prompt: "What color is {{.fruit}}? (Answer in 1 word)",
+					},
+				},
+			},
+		},
+	}
+
+	if err := store.Save(ctx, "general", "demo_loop", demoLoop); err != nil {
+		log.Error(fmt.Sprintf("Failed to save demo_loop macro: %v", err))
+		tx.Rollback(ctx)
+		return
+	}
+
+	tx.Commit(ctx)
+	log.Info("Seeded 'demo_loop' macro.")
 }
 
 func loadAgent(key, configPath string) {
@@ -511,6 +308,36 @@ func loadAgent(key, configPath string) {
 
 	log.Debug(fmt.Sprintf("Initializing AI Agent: %s (%s)...", cfg.Name, cfg.ID))
 
+	// Initialize System DB
+	sysOpts, err := getSystemDBOptions()
+	var sysDB *aidb.Database
+	if err == nil {
+		sysDB = aidb.NewDatabase(sysOpts)
+		// Seed default macros for testing
+		seedDefaultMacros(sysDB)
+	} else {
+		log.Debug(fmt.Sprintf("System DB not available for agent %s: %v", cfg.ID, err))
+	}
+
+	// Prepare Databases map
+	databases := make(map[string]sop.DatabaseOptions)
+
+	// Add System DB if available
+	if sysDB != nil {
+		databases["System DB"] = sysOpts
+	}
+
+	for _, dbCfg := range config.Databases {
+		// We need to use a copy of dbCfg because getDBOptionsFromConfig takes a pointer
+		// and loop variable reuse might be an issue in older Go versions, though fixed in 1.22.
+		// Safe to just pass address.
+		d := dbCfg
+		opts, err := getDBOptionsFromConfig(&d)
+		if err == nil {
+			databases[d.Name] = opts
+		}
+	}
+
 	registry := make(map[string]ai.Agent[map[string]any])
 
 	// Helper to initialize an agent from a config
@@ -526,6 +353,8 @@ func loadAgent(key, configPath string) {
 		}
 		return agent.NewFromConfig(context.Background(), agentCfg, agent.Dependencies{
 			AgentRegistry: registry,
+			SystemDB:      sysDB,
+			Databases:     databases,
 		})
 	}
 
@@ -569,11 +398,14 @@ func loadAgent(key, configPath string) {
 			continue
 		}
 		registry[localAgentCfg.ID] = svc
+		loadedAgents[localAgentCfg.ID] = svc
 	}
 
 	// Initialize the main agent
 	mainAgent, err := agent.NewFromConfig(context.Background(), *cfg, agent.Dependencies{
 		AgentRegistry: registry,
+		SystemDB:      sysDB,
+		Databases:     databases,
 	})
 	if err != nil {
 		log.Debug(fmt.Sprintf("Failed to initialize main agent %s: %v", key, err))
@@ -582,4 +414,27 @@ func loadAgent(key, configPath string) {
 
 	loadedAgents[key] = mainAgent
 	log.Debug(fmt.Sprintf("Agent '%s' initialized successfully.", key))
+}
+
+// DefaultToolExecutor implements ai.ToolExecutor by delegating to registered agents.
+type DefaultToolExecutor struct {
+	Agents map[string]ai.Agent[map[string]any]
+}
+
+func (e *DefaultToolExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	// For now, we assume tools are handled by the "sql_core" agent (DataAdminAgent)
+	// In a real system, we might look up the tool in a global registry or iterate agents.
+
+	// Try sql_core first
+	if agentSvc, ok := e.Agents["sql_core"]; ok {
+		if da, ok := agentSvc.(*agent.DataAdminAgent); ok {
+			return da.Execute(ctx, tool, args)
+		}
+	}
+
+	return "", fmt.Errorf("tool '%s' not found or no executor available", tool)
+}
+
+func (e *DefaultToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return nil, nil
 }

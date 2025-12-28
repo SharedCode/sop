@@ -538,7 +538,11 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 			return C.CString("Transaction not found")
 		}
 
-		store, err := db.OpenModelStore(ctx, opts.Path, item.Transaction)
+		if opts.Name == "" && opts.Path != "" {
+			opts.Name = opts.Path
+		}
+
+		store, err := db.OpenModelStore(ctx, opts.Name, item.Transaction)
 		if err != nil {
 			return C.CString(err.Error())
 		}

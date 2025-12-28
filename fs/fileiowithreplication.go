@@ -72,7 +72,6 @@ func (fio *fileIO) read(ctx context.Context, sourceFilename string) ([]byte, err
 
 func (fio *fileIO) createStore(ctx context.Context, folderName string) error {
 	folderPath := fio.replicationTracker.formatActiveFolderEntity(folderName)
-	log.Info(fmt.Sprintf("createStore: folderName='%s', folderPath='%s'", folderName, folderPath))
 	err := fio.fio.MkdirAll(ctx, folderPath, permission)
 	if !fio.trackActions {
 		return err

@@ -2,7 +2,6 @@ package jsondb
 
 import (
 	"context"
-	"fmt"
 	"sort"
 
 	"github.com/sharedcode/sop"
@@ -90,7 +89,6 @@ func OpenJsonBtreeMapKey(ctx context.Context, config sop.DatabaseOptions, name s
 
 	// Resurrect the Key index specification originally provided when creating B-tree.
 	iss := b3.GetStoreInfo().MapKeyIndexSpecification
-	fmt.Printf("Resurrected IndexSpec: %s\n", iss)
 	if iss != "" {
 		// Create the comparer from the IndexSpecification JSON string that defines the fields list comprising the index (on key) & their sort order.
 		var is IndexSpecification

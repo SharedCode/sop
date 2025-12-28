@@ -35,6 +35,10 @@ A flexible framework for defining AI agents with:
 *   **Personality**: System prompts and policies.
 *   **Memory**: Long-term knowledge retrieval from the Vector DB.
 *   **Tools**: Capability to use other agents (e.g., for translation or embedding).
+*   **Macros**: "Natural Language Programming" for defining complex, multi-step workflows.
+*   **Swarm Computing**: Async execution of steps for high-performance parallel processing.
+
+See [ai/agent/README.md](ai/agent/README.md) for full documentation on Macros, Swarm Computing, and the Tool Registry.
 
 ### 3. Generators & Embedders (`ai/generator`, `ai/embed`)
 Interfaces for connecting to AI models:
@@ -53,6 +57,13 @@ A transactional, embedded text search engine.
 *   **BM25 Scoring**: Uses industry-standard ranking for relevance.
 *   **Architecture**: Stores Inverted Indices in SOP B-Trees.
 *   **Usage**: Ideal for "Search this wiki" or "Filter by text" features alongside Vector Search.
+
+### 6. Macro System (`ai/MACROS.md`)
+A "Natural Language Programming" engine.
+*   **Compiled Instructions**: Turns natural language intent into deterministic, high-performance SOP programs.
+*   **Mini-SDK**: A stable JSON schema (`ask`, `set`, `if`, `loop`, `fetch`) for scripting complex logic.
+*   **Bare Metal Performance**: Executes loops and data fetches directly in Go, using the LLM only for reasoning.
+*   [Read the full documentation](MACROS.md).
 
 ## Standards & Compatibility
 

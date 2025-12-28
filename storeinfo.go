@@ -43,6 +43,9 @@ type StoreInfo struct {
 	// MapKeyIndexSpecification contains a CEL or index specification used by the comparer.
 	MapKeyIndexSpecification string `json:"mapkey_index_spec"`
 
+	// LegacyCELexpression is used for backward compatibility to retrieve index spec from old stores.
+	LegacyCELexpression string `json:"cel_expression,omitempty"`
+
 	// IsPrimitiveKey hints the Python binding which JSON B-Tree to instantiate on open.
 	IsPrimitiveKey bool `json:"is_primitive_key"`
 }
@@ -191,6 +194,11 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 		si.IsValueDataGloballyCached = false
 	}
 
+	spec := si.MapKeyIndexSpecification
+	if spec == "" {
+		spec = si.CELexpression
+	}
+
 	return &StoreInfo{
 		Name:                         si.Name,
 		SlotLength:                   si.SlotLength,
@@ -203,7 +211,7 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 		IsValueDataGloballyCached:    si.IsValueDataGloballyCached,
 		LeafLoadBalancing:            si.LeafLoadBalancing,
 		CacheConfig:                  *si.CacheConfig,
-		MapKeyIndexSpecification:     si.CELexpression,
+		MapKeyIndexSpecification:     spec,
 		IsPrimitiveKey:               si.IsPrimitiveKey,
 	}
 }

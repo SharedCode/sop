@@ -2,6 +2,8 @@
   "id": "doctor_pipeline",
   "name": "Dr. Pipeline",
   "description": "I am a pipeline-based medical assistant.",
+  "user_prompt": "Patient> ",
+  "assistant_name": "AI Doctor",
   "policies": [
     {
       "id": "profanity_filter",
@@ -30,7 +32,12 @@
         "pee": "urine"
       },
       "system_prompt": "You are a search index. Return the matching canonical terms.",
-      "storage_path": "nurse_local",
+      "storage_path": "data/nurse_local",
+      "requirements": {
+        "vector_store": true,
+        "search": true,
+        "model_store": false
+      },
       "data": []
     },
     {
@@ -38,10 +45,15 @@
       "name": "Dr. Core",
       "description": "I am the core medical knowledge base.",
       "system_prompt": "You are a medical expert. Based on the provided canonical symptoms, diagnose the condition.",
-      "storage_path": "doctor_core",
+      "storage_path": "data/doctor_core",
       "db_type": "standalone",
       "enable_ingestion_buffer": true,
       "auto_optimize": true,
+      "requirements": {
+        "vector_store": true,
+        "search": false,
+        "model_store": false
+      },
       "data": []
     }
   ],
