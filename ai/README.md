@@ -65,6 +65,13 @@ A "Natural Language Programming" engine.
 *   **Bare Metal Performance**: Executes loops and data fetches directly in Go, using the LLM only for reasoning.
 *   [Read the full documentation](MACROS.md).
 
+### 7. AI Assistant (Interactive Mode)
+A conversational interface for interacting with your data and building macros.
+*   **Natural Language Queries**: "Select all users where role is admin".
+*   **CRUD Operations**: Add, update, and delete records using plain English.
+*   **Macro Recording**: Teach the assistant workflows by doing them step-by-step.
+*   [Read the User Guide](AI_ASSISTANT_USAGE.md).
+
 ## Standards & Compatibility
 
 The SOP AI Kit is designed to play nicely with the broader AI ecosystem while adhering to strict software engineering standards.
