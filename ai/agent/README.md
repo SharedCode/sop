@@ -179,3 +179,49 @@ Process a large list of items in batches, committing every few steps to avoid lo
 ```
 
 This pattern ensures that if Batch 2 fails, Batch 1 remains committed.
+
+---
+
+## Data Engine & MOAT Features
+
+The SOP Agent Framework includes a specialized **Data Admin Agent** that provides "bare metal" data manipulation capabilities. This implementation represents a significant competitive advantage (MOAT) due to its unique architecture.
+
+### 1. Direct B-Tree Navigation (No Abstraction Layers)
+Unlike traditional SQL engines that rely on thick layers of abstraction (SQL parsers, query optimizers, execution plans, storage engine APIs), SOP's tools interact **directly with the B-Tree cursors**.
+*   **Efficiency**: Eliminates the overhead of query planning and intermediate object allocation.
+*   **Control**: The agent has fine-grained control over navigation (`Next`, `Previous`, `FindOne`), allowing for optimizations that generic SQL optimizers often miss.
+
+### 2. Zero-Copy Result Streaming (Cursor-to-Socket)
+The `select` and `join` tools implement a rare and highly efficient **Zero-Copy Streaming** architecture.
+*   **No Buffering**: Unlike standard ORMs or database drivers that load results into a massive slice or memory buffer before returning, SOP streams data **directly from the B-Tree cursor to the output stream**.
+*   **Cursor-Driven**: As the B-Tree iterator advances (`Next()`), the current item is immediately serialized and flushed to the response (e.g., HTTP socket or console).
+*   **Constant Memory**: This allows the agent to process, join, or select **millions of records** with a constant, minimal memory footprint (O(1) space complexity), regardless of the result set size.
+
+### 3. 3-Way Merge Join Optimization
+The `join` tool implements a sophisticated **Merge Join** strategy when joining on Primary Keys.
+*   **Synchronized Scanning**: Iterates through both the Left and Right B-Trees simultaneously.
+*   **Smart Seeking**: If one cursor falls behind, it doesn't just "scan" to catch up. It uses the B-Tree's `FindOne` capability to **jump** directly to the target key, skipping vast ranges of irrelevant data.
+*   **Full Join Support**: Efficiently handles **Inner**, **Left**, **Right**, and **Full Outer** joins in a single pass, a capability rarely found in embedded or lightweight engines.
+
+### 4. Smart Index Utilization
+The `select` tool bridges the gap between "Point Lookups" and "Table Scans".
+*   **Operator Awareness**: It analyzes filter criteria (e.g., `{"age": {"$gt": 25}}`).
+*   **Index Seeking**: Instead of starting at the beginning of the table, it uses the B-Tree index to **seek** directly to the first matching record (e.g., the first user with age > 25) before beginning the scan.
+
+### 5. Actionable Queries (Bulk Operations)
+The engine supports performing actions directly within the query execution pipeline, enabling **high-performance, bare-metal bulk operations** without the need for "Select-then-Update" round trips.
+
+*   **Bulk Delete**: The `select` tool accepts `action="delete"`. It iterates through the result set and removes items in-place.
+    *   *Optimality*: Uses direct B-Tree cursor manipulation. It employs a "Peek-Next-Delete" strategy to ensure the cursor remains valid, achieving **O(N)** performance where N is the number of items to delete, with zero memory overhead for buffering.
+*   **Bulk Update**: The `select` tool accepts `action="update"` and an `update_values` map. It merges the new values into the existing record and updates it in a single pass.
+    *   *Efficiency*: Updates happen in-place. If the update doesn't change the key, it avoids expensive re-balancing.
+*   **Join-Based Actions**: The `join` tool supports `action="delete_left"` and `action="update_left"`.
+    *   *Complex Logic*: You can delete or update records in the Left table based on complex join conditions with the Right table (e.g., "Delete all Users who have no Orders" via a Left Join).
+    *   *Performance*: These actions benefit from the same **Merge Join** and **Index Seeking** optimizations as standard queries. This allows for massive bulk updates across related tables with **optimal** I/O patterns.
+
+### 6. Transaction Safety & Auto-Rollback
+To ensure data integrity even when using powerful bulk operations or complex multi-step macros:
+
+*   **Auto-Rollback**: The Agent Runner enforces a "Clean Slate" policy. If a top-level macro finishes execution (successfully or with an error) and leaves a transaction open (e.g., a user forgot to call `commit`), the runner **automatically rolls back** the transaction.
+*   **Warning**: A warning is logged to the output, alerting the user that their uncommitted changes were discarded.
+*   **Benefit**: This prevents "dangling transactions" from locking resources or leaking uncommitted state into subsequent agent interactions.

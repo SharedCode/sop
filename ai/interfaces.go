@@ -296,7 +296,10 @@ type SessionPayload struct {
 	// CurrentDB is the active database name for the session.
 	CurrentDB string
 	// Transaction holds the active transaction for the session.
+	// Deprecated: Use Transactions map instead for multi-db support.
 	Transaction any
+	// Transactions holds active transactions keyed by database name.
+	Transactions map[string]any
 	// Variables holds session-scoped variables (e.g. cached store instances).
 	Variables map[string]any
 	// ExplicitTransaction indicates if the transaction was explicitly started by the user.

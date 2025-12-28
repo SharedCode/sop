@@ -8,9 +8,12 @@ import (
 	"sort"
 	"strings"
 
+	log "log/slog"
+
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/jsondb"
 )
@@ -23,7 +26,7 @@ func (a *DataAdminAgent) registerTools() {
 
 	a.registry.Register("list_databases", "Lists all available databases.", "()", a.toolListDatabases)
 	a.registry.Register("list_stores", "Lists all stores in the current or specified database.", "(database: string)", a.toolListStores)
-	a.registry.Register("select", "Retrieve data from a store. Supports filtering by key subset. You can optionally specify a list of fields to return.", "(database: string, store: string, limit: number, scan_limit: number, key_match: any, fields: []string)", a.toolSelect)
+	a.registry.Register("select", "Retrieve data from a store. Supports filtering by key subset and value subset. You can optionally specify a list of fields to return. Supports 'action'='delete' to delete matching records, or 'action'='update' to update matching records with 'update_values'. Supports MongoDB-style operators in key_match and value_match: $eq, $ne, $gt, $gte, $lt, $lte (e.g. {age: {$gt: 18}}).", "(database: string, store: string, limit: number, scan_limit: number, key_match: any, value_match: any, fields: []string, action: string, update_values: map[string]any)", a.toolSelect)
 	a.registry.Register("manage_transaction", "Manage database transactions (begin, commit, rollback).", "(action: string)", a.toolManageTransaction)
 	a.registry.Register("delete", "Delete an item from a store.", "(store: string, key: any)", a.toolDelete)
 	a.registry.Register("add", "Add an item to a store. You can pass the value as a single 'value' argument, or pass individual fields as arguments.", "(store: string, key: any, value: any, ...fields)", a.toolAdd)
@@ -43,6 +46,7 @@ func (a *DataAdminAgent) registerTools() {
 	a.registry.Register("first", "Move to the first item in a store.", "(store: string)", a.toolFirst)
 	a.registry.Register("last", "Move to the last item in a store.", "(store: string)", a.toolLast)
 	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new macro or block.", "(mode: string, name: string)", a.toolRefactorMacro)
+	a.registry.Register("join", "Join two stores. Supports inner, left, right, full joins. Note: 'right' and 'full' joins are only supported when joining on primary keys (left_join_field='key' and right_join_field='key'). Supports 'action'='delete_left' to delete matching records from the left store, or 'action'='update_left' to update them with 'update_values'.", "(database: string, left_store: string, right_database: string, right_store: string, left_join_field: string, right_join_field: string, join_type: string, limit: number, action: string, update_values: map[string]any)", a.toolJoin)
 }
 
 func (a *DataAdminAgent) toolListDatabases(ctx context.Context, args map[string]any) (string, error) {
@@ -153,20 +157,11 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 
 	storeName, _ := args["store"].(string)
 	storeName = strings.TrimSpace(storeName)
+
 	limit, _ := args["limit"].(float64)
 	if limit == 0 {
 		limit = 10
 	}
-	scanLimit, _ := args["scan_limit"].(float64)
-	if scanLimit == 0 {
-		scanLimit = 1000
-	}
-	// Ensure we can at least scan enough to find 'limit' items if they are contiguous
-	if scanLimit < limit {
-		scanLimit = limit
-	}
-
-	keyMatch, hasKeyMatch := args["key_match"]
 
 	var fields []string
 	if f, ok := args["fields"]; ok {
@@ -181,10 +176,90 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 		}
 	}
 
+	// Check if storeName is a macro (View)
+	if a.systemDB != nil {
+		sysTx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
+		if err == nil {
+			defer sysTx.Rollback(ctx)
+			macroStore, err := a.systemDB.OpenModelStore(ctx, "macros", sysTx)
+			if err == nil {
+				var macro ai.Macro
+				if err := macroStore.Load(ctx, "general", storeName, &macro); err == nil {
+					// Prepare Streamer
+					var targetStreamer ai.ResultStreamer
+					var buffer *BufferingStreamer
+
+					// Check for existing streamer in context
+					if s, ok := ctx.Value(ai.CtxKeyResultStreamer).(ai.ResultStreamer); ok {
+						targetStreamer = s
+					} else {
+						buffer = &BufferingStreamer{}
+						targetStreamer = buffer
+					}
+
+					// Wrap in FilteringStreamer
+					fs := &FilteringStreamer{
+						wrapped: targetStreamer,
+						fields:  fields,
+						limit:   int(limit),
+					}
+
+					// Inject into context
+					stepCtx := context.WithValue(ctx, ai.CtxKeyResultStreamer, fs)
+
+					// Execute Macro (ignoring string result, relying on streamer)
+					_, err := a.runMacroRaw(stepCtx, macro, args)
+					if err != nil {
+						return "", fmt.Errorf("failed to execute macro '%s': %w", storeName, err)
+					}
+
+					// If we buffered, return the result
+					if buffer != nil {
+						b, _ := json.Marshal(buffer.Items)
+						return string(b), nil
+					}
+
+					// If we streamed to the caller, return empty string (or whatever convention)
+					return "", nil
+				}
+			}
+		}
+	}
+
+	scanLimit, _ := args["scan_limit"].(float64)
+	if scanLimit == 0 {
+		scanLimit = 1000
+	}
+	// Ensure we can at least scan enough to find 'limit' items if they are contiguous
+	if scanLimit < limit {
+		scanLimit = limit
+	}
+
+	keyMatch, hasKeyMatch := args["key_match"]
+	valueMatch, hasValueMatch := args["value_match"]
+
+	action, _ := args["action"].(string)
+	isDelete := action == "delete"
+	isUpdate := action == "update"
+
+	var updateValues map[string]any
+	if isUpdate {
+		if uv, ok := args["update_values"].(map[string]any); ok {
+			updateValues = uv
+		} else {
+			return "", fmt.Errorf("update_values (map) is required for action='update'")
+		}
+	}
+
 	var tx sop.Transaction
 	var autoCommit bool
 
-	tx, autoCommit, err := a.resolveTransaction(ctx, db, dbName, sop.ForReading)
+	mode := sop.ForReading
+	if isDelete || isUpdate {
+		mode = sop.ForWriting
+	}
+
+	tx, autoCommit, err := a.resolveTransaction(ctx, db, dbName, mode)
 	if err != nil {
 		return "", err
 	}
@@ -244,6 +319,113 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 		}
 	}
 
+	// SMART SELECT: Auto-detect Key fields in value_match and move them to key_match
+	if indexSpec != nil && hasValueMatch {
+		vmMap, isVmMap := valueMatch.(map[string]any)
+		if isVmMap {
+			// Initialize keyMatch as map if it doesn't exist or isn't a map
+			var kmMap map[string]any
+			if hasKeyMatch {
+				if existingKm, ok := keyMatch.(map[string]any); ok {
+					kmMap = existingKm
+				} else {
+					// keyMatch is primitive, can't merge map fields into it easily without conflict
+					// but we can try if the user provided a mixed bag.
+					// For now, only proceed if keyMatch is nil or map.
+				}
+			} else {
+				kmMap = make(map[string]any)
+				hasKeyMatch = true
+			}
+
+			if kmMap != nil {
+				movedCount := 0
+				for _, field := range indexSpec.IndexFields {
+					if val, found := vmMap[field.FieldName]; found {
+						// Check if it's already in keyMatch (don't overwrite explicit key match)
+						if _, exists := kmMap[field.FieldName]; !exists {
+							kmMap[field.FieldName] = val
+							delete(vmMap, field.FieldName)
+							movedCount++
+						}
+					}
+				}
+
+				if movedCount > 0 {
+					keyMatch = kmMap
+					// If valueMatch is empty now, we can unset it to avoid unnecessary value checking
+					if len(vmMap) == 0 {
+						hasValueMatch = false
+						valueMatch = nil
+					} else {
+						valueMatch = vmMap
+					}
+					log.Info("Smart Select: Moved fields from value_match to key_match based on schema", "count", movedCount, "store", storeName)
+				}
+			}
+		}
+	}
+
+	// SMART CLEAN: Auto-detect Value fields in key_match and move them to value_match
+	if indexSpec != nil && hasKeyMatch {
+		kmMap, isKmMap := keyMatch.(map[string]any)
+		if isKmMap {
+			// Initialize valueMatch as map if it doesn't exist or isn't a map
+			var vmMap map[string]any
+			if hasValueMatch {
+				if existingVm, ok := valueMatch.(map[string]any); ok {
+					vmMap = existingVm
+				} else {
+					// valueMatch is primitive? Unlikely if we are here, but handle safely.
+				}
+			} else {
+				vmMap = make(map[string]any)
+				hasValueMatch = true
+			}
+
+			if vmMap != nil {
+				// Build set of valid key fields
+				validKeys := make(map[string]bool)
+				for _, field := range indexSpec.IndexFields {
+					validKeys[field.FieldName] = true
+				}
+
+				movedCount := 0
+				// Iterate over keyMatch fields
+				var fieldsToMove []string
+				for k := range kmMap {
+					if !validKeys[k] {
+						fieldsToMove = append(fieldsToMove, k)
+					}
+				}
+
+				for _, k := range fieldsToMove {
+					val := kmMap[k]
+					// Only move if not already in valueMatch (conflict resolution? prefer valueMatch?)
+					if _, exists := vmMap[k]; !exists {
+						vmMap[k] = val
+						delete(kmMap, k)
+						movedCount++
+					} else {
+						// If it exists in both, we should probably just remove it from keyMatch
+						// as it's definitely not a key field.
+						delete(kmMap, k)
+					}
+				}
+
+				if movedCount > 0 || len(fieldsToMove) > 0 {
+					valueMatch = vmMap
+					// If keyMatch is empty now? That's fine, it means full scan (or FindOne with empty key?)
+					if len(kmMap) == 0 {
+						hasKeyMatch = false
+						keyMatch = nil
+					}
+					log.Info("Smart Clean: Moved fields from key_match to value_match based on schema", "count", len(fieldsToMove), "store", storeName)
+				}
+			}
+		}
+	}
+
 	// Check for ResultStreamer
 	var streamer ai.ResultStreamer
 	if s, ok := ctx.Value(ai.CtxKeyResultStreamer).(ai.ResultStreamer); ok {
@@ -251,7 +433,29 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 	}
 
 	var ok bool
-	ok, err = store.First(ctx)
+	isExactLookup := false
+
+	// Optimization: Try to use FindOne for direct lookup or range start
+	startKey := getOptimizationKey(keyMatch)
+	if hasKeyMatch && startKey != nil {
+		// Peek to align type
+		if ok, _ := store.First(ctx); ok {
+			currKey, _ := store.GetCurrentKey()
+			startKey = alignType(startKey, currKey)
+		}
+
+		// If it's a primitive exact match, we mark it so we stop scanning after one mismatch
+		if !isMap(keyMatch) {
+			isExactLookup = true
+			ok, err = store.FindOne(ctx, startKey, true)
+		} else {
+			// Range query or operator match - use FindOne to seek, but allow scanning
+			// FindOne(..., false) finds the first item >= key
+			ok, err = store.FindOne(ctx, startKey, false)
+		}
+	} else {
+		ok, err = store.First(ctx)
+	}
 
 	var sb strings.Builder
 	if streamer == nil {
@@ -260,9 +464,9 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 		streamer.BeginArray()
 	}
 	itemsFound := false
+	count := 0
 
 	if ok && err == nil {
-		count := 0
 		// Safety break to prevent infinite scanning if no matches found
 		scanned := 0
 
@@ -278,8 +482,62 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 			}
 
 			// Apply filter if needed
+			var v any
+			var vLoaded bool
+
 			if hasKeyMatch {
-				if !matchesKey(k, keyMatch) {
+				matched, unwrappedField := matchesKey(k, keyMatch)
+				if !matched {
+					if isExactLookup {
+						break
+					}
+					if ok, _ := store.Next(ctx); !ok {
+						break
+					}
+					continue
+				}
+
+				// Safety Check: If we unwrapped a field (e.g. "employee_id"), check if it exists in Value.
+				// If it does, we must validate it there too to avoid false positives.
+				if unwrappedField != "" {
+					v, err = store.GetCurrentValue(ctx)
+					if err != nil {
+						break
+					}
+					vLoaded = true
+
+					if vMap, ok := v.(map[string]any); ok {
+						if valField, exists := vMap[unwrappedField]; exists {
+							// Retrieve the filter for this field from keyMatch
+							if kmMap, ok := keyMatch.(map[string]any); ok {
+								if filterVal, ok := kmMap[unwrappedField]; ok {
+									// Check if value matches the filter
+									valMatched, _ := matchesKey(valField, filterVal)
+									if !valMatched {
+										// False positive!
+										if ok, _ := store.Next(ctx); !ok {
+											break
+										}
+										continue
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// Apply value filter if needed
+			if hasValueMatch {
+				if !vLoaded {
+					v, err = store.GetCurrentValue(ctx)
+					if err != nil {
+						break
+					}
+					vLoaded = true
+				}
+				matched, _ := matchesKey(v, valueMatch)
+				if !matched {
 					if ok, _ := store.Next(ctx); !ok {
 						break
 					}
@@ -287,7 +545,83 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 				}
 			}
 
-			v, err := store.GetCurrentValue(ctx)
+			if isUpdate {
+				v, err = store.GetCurrentValue(ctx)
+				if err != nil {
+					break
+				}
+				var newVal any
+				if vMap, ok := v.(map[string]any); ok {
+					newVal = mergeMap(vMap, updateValues)
+				} else {
+					// If original is not a map, replace it with the update map
+					newVal = updateValues
+				}
+				if ok, err := store.Update(ctx, k, newVal); err != nil || !ok {
+					return "", fmt.Errorf("failed to update item: %v (found=%v)", err, ok)
+				}
+				itemsFound = true
+				count++
+				if count >= int(limit) {
+					break
+				}
+				if ok, _ = store.Next(ctx); !ok {
+					break
+				}
+				continue
+			}
+
+			if isDelete {
+				// Delete action
+				if _, err := store.Remove(ctx, k); err != nil {
+					return "", fmt.Errorf("failed to delete item: %w", err)
+				}
+				itemsFound = true // Mark as found so we return something meaningful
+				count++
+				// After delete, we must be careful with Next().
+				// In SOP, Remove might invalidate the cursor's current position.
+				// However, since we are iterating, we should have peeked or we rely on the store to handle it.
+				// Safest approach if store doesn't support Next() after Remove() is to re-seek or use a separate collection phase.
+				// Assuming SOP StoreAccessor supports Next() after Remove() or we need to restart scan?
+				// Actually, standard B-Tree iterators often become invalid.
+				// Let's assume we need to re-position or use a safer strategy.
+				// Strategy: Since we are in a loop, let's try Next(). If it fails, we might need to re-seek.
+				// But wait, if we deleted 'k', 'k' is gone. Next() from 'k' is undefined.
+				// We should have moved to Next BEFORE deleting?
+				// But we need to delete 'k'.
+				// Correct pattern: Get Next Key -> Delete Current -> Seek Next Key.
+				// But we don't have "Seek". We have FindOne.
+				// Let's try to get Next key first.
+				// But we can't move cursor and then delete previous.
+				// Let's just use the fact that we are deleting.
+				// If we delete, the "Next" item becomes the "Current" item in some implementations, or we need to search again.
+				// Simple approach: Collect keys to delete, then delete them? No, we want streaming/bulk.
+				// Let's assume for now we can just continue. If not, we might need to fix SOP iterator.
+				// Actually, let's use a safer approach:
+				// 1. Get Current Key (k)
+				// 2. Move Next (ok, _ = store.Next())
+				// 3. Delete k (store.Remove(ctx, k))
+				// This requires us to store 'k' and delete it after moving.
+				// But 'store' is the cursor. If we move it, we can't delete 'k' easily unless Remove takes a key (it does!).
+				// So:
+				// kToDelete := k
+				// ok, _ = store.Next(ctx)
+				// store.Remove(ctx, kToDelete)
+				// This works!
+				kToDelete := k
+				if ok, _ = store.Next(ctx); !ok {
+					// End of store, just delete and break
+					store.Remove(ctx, kToDelete)
+					break
+				}
+				store.Remove(ctx, kToDelete)
+				if count >= int(limit) {
+					break
+				}
+				continue
+			}
+
+			v, err = store.GetCurrentValue(ctx)
 			if err != nil {
 				break
 			}
@@ -337,6 +671,24 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 		streamer.EndArray()
 	} else {
 		sb.WriteString("\n]")
+	}
+
+	if isDelete {
+		if autoCommit {
+			if err := tx.Commit(ctx); err != nil {
+				return "", fmt.Errorf("failed to commit delete transaction: %w", err)
+			}
+		}
+		return fmt.Sprintf(`{"deleted_count": %d}`, count), nil
+	}
+
+	if isUpdate {
+		if autoCommit {
+			if err := tx.Commit(ctx); err != nil {
+				return "", fmt.Errorf("failed to commit update transaction: %w", err)
+			}
+		}
+		return fmt.Sprintf(`{"updated_count": %d}`, count), nil
 	}
 
 	if !itemsFound {
@@ -392,9 +744,17 @@ func (a *DataAdminAgent) toolManageTransaction(ctx context.Context, args map[str
 
 	switch action {
 	case "begin":
-		if p.Transaction != nil {
+		// Check if transaction exists for this database
+		if p.Transactions != nil {
+			if _, ok := p.Transactions[dbName]; ok {
+				return fmt.Sprintf("Transaction already active for database '%s'", dbName), nil
+			}
+		}
+		// Legacy check
+		if p.Transaction != nil && (dbName == "" || dbName == p.CurrentDB) {
 			return "Transaction already active", nil
 		}
+
 		if db == nil {
 			return "", fmt.Errorf("no database selected")
 		}
@@ -402,80 +762,124 @@ func (a *DataAdminAgent) toolManageTransaction(ctx context.Context, args map[str
 		if err != nil {
 			return "", fmt.Errorf("failed to begin transaction: %w", err)
 		}
-		p.Transaction = tx
+
+		if p.Transactions == nil {
+			p.Transactions = make(map[string]any)
+		}
+		p.Transactions[dbName] = tx
+
+		// Update legacy field if this is the current DB
+		if dbName == p.CurrentDB {
+			p.Transaction = tx
+		}
+
 		p.ExplicitTransaction = true
 		return "Transaction started", nil
 
 	case "commit":
-		if p.Transaction == nil {
-			return "No active transaction to commit", nil
+		var tx sop.Transaction
+		// Find transaction
+		if p.Transactions != nil {
+			if tAny, ok := p.Transactions[dbName]; ok {
+				tx, _ = tAny.(sop.Transaction)
+			}
 		}
-		if tx, ok := p.Transaction.(sop.Transaction); ok {
-			commitErr := tx.Commit(ctx)
+		if tx == nil && p.Transaction != nil && (dbName == "" || dbName == p.CurrentDB) {
+			tx, _ = p.Transaction.(sop.Transaction)
+		}
+
+		if tx == nil {
+			return fmt.Sprintf("No active transaction to commit for database '%s'", dbName), nil
+		}
+
+		commitErr := tx.Commit(ctx)
+
+		// Cleanup
+		if p.Transactions != nil {
+			delete(p.Transactions, dbName)
+		}
+		if dbName == p.CurrentDB {
 			p.Transaction = nil
-			p.ExplicitTransaction = false
+		}
+		p.ExplicitTransaction = false
+		p.Variables = nil // Clear cache
 
-			// Clear cached variables (stores) as they are bound to the transaction
-			p.Variables = nil
-
-			if db != nil {
-				newTx, beginErr := db.BeginTransaction(ctx, sop.ForWriting)
-				if beginErr != nil {
-					if commitErr != nil {
-						return "", fmt.Errorf("commit failed: %v. AND failed to auto-start new one: %v", commitErr, beginErr)
-					}
-					return "Transaction committed, but failed to auto-start new one: " + beginErr.Error(), nil
-				}
-				p.Transaction = newTx
-
-				if recorder, ok := ctx.Value(ai.CtxKeyMacroRecorder).(ai.MacroRecorder); ok {
-					// We don't need to record the auto-start of the new transaction here,
-					// because the user's intent was just to commit.
-					// The system's auto-restart is an implementation detail for the session.
-					_ = recorder
-				}
-
+		// Auto-restart logic (preserve existing behavior)
+		if db != nil {
+			newTx, beginErr := db.BeginTransaction(ctx, sop.ForWriting)
+			if beginErr != nil {
 				if commitErr != nil {
-					return fmt.Sprintf("New transaction started, but previous commit failed: %v", commitErr), commitErr
+					return "", fmt.Errorf("commit failed: %v. AND failed to auto-start new one: %v", commitErr, beginErr)
 				}
-				return "Transaction committed (and new one started)", nil
+				return "Transaction committed, but failed to auto-start new one: " + beginErr.Error(), nil
+			}
+
+			if p.Transactions == nil {
+				p.Transactions = make(map[string]any)
+			}
+			p.Transactions[dbName] = newTx
+			if dbName == p.CurrentDB {
+				p.Transaction = newTx
 			}
 
 			if commitErr != nil {
-				return "", fmt.Errorf("commit failed: %w", commitErr)
+				return fmt.Sprintf("New transaction started, but previous commit failed: %v", commitErr), commitErr
 			}
-			return "Transaction committed", nil
+			return "Transaction committed (and new one started)", nil
 		}
-		return "", fmt.Errorf("invalid transaction object")
+
+		if commitErr != nil {
+			return "", fmt.Errorf("commit failed: %w", commitErr)
+		}
+		return "Transaction committed", nil
 
 	case "rollback":
-		if p.Transaction == nil {
-			return "No active transaction to rollback", nil
-		}
-		if tx, ok := p.Transaction.(sop.Transaction); ok {
-			if err := tx.Rollback(ctx); err != nil {
-				return "", fmt.Errorf("rollback failed: %w", err)
+		var tx sop.Transaction
+		// Find transaction
+		if p.Transactions != nil {
+			if tAny, ok := p.Transactions[dbName]; ok {
+				tx, _ = tAny.(sop.Transaction)
 			}
+		}
+		if tx == nil && p.Transaction != nil && (dbName == "" || dbName == p.CurrentDB) {
+			tx, _ = p.Transaction.(sop.Transaction)
+		}
+
+		if tx == nil {
+			return fmt.Sprintf("No active transaction to rollback for database '%s'", dbName), nil
+		}
+
+		if err := tx.Rollback(ctx); err != nil {
+			return "", fmt.Errorf("rollback failed: %w", err)
+		}
+
+		// Cleanup
+		if p.Transactions != nil {
+			delete(p.Transactions, dbName)
+		}
+		if dbName == p.CurrentDB {
 			p.Transaction = nil
-			// Clear cached variables (stores) as they are bound to the transaction
-			p.Variables = nil
-
-			if db != nil {
-				newTx, err := db.BeginTransaction(ctx, sop.ForWriting)
-				if err != nil {
-					return "Transaction rolled back, but failed to auto-start new one: " + err.Error(), nil
-				}
-				p.Transaction = newTx
-
-				if recorder, ok := ctx.Value(ai.CtxKeyMacroRecorder).(ai.MacroRecorder); ok {
-					// We don't need to record the auto-start of the new transaction here.
-					_ = recorder
-				}
-				return "Transaction rolled back (and new one started)", nil
-			}
-			return "Transaction rolled back", nil
 		}
-		return "", fmt.Errorf("invalid transaction object")
+		p.ExplicitTransaction = false
+		p.Variables = nil
+
+		// Auto-restart logic
+		if db != nil {
+			newTx, err := db.BeginTransaction(ctx, sop.ForWriting)
+			if err != nil {
+				return "Transaction rolled back, but failed to auto-start new one: " + err.Error(), nil
+			}
+			if p.Transactions == nil {
+				p.Transactions = make(map[string]any)
+			}
+			p.Transactions[dbName] = newTx
+			if dbName == p.CurrentDB {
+				p.Transaction = newTx
+			}
+			return "Transaction rolled back (and new one started)", nil
+		}
+
+		return "Transaction rolled back", nil
 
 	default:
 		return "", fmt.Errorf("unknown action: %s", action)
@@ -1257,7 +1661,7 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 				}
 
 				// Return JSON array string
-				var filteredNeighbors []map[string]any
+				var filteredNeighbors []any
 				for _, n := range neighbors {
 					filteredNeighbors = append(filteredNeighbors, filterFields(n, fields))
 				}
@@ -1541,22 +1945,151 @@ func (a *DataAdminAgent) updateMacro(ctx context.Context, name string, updateFun
 
 // matchesKey checks if itemKey contains all fields and values from filterKey.
 // Currently supports map[string]any for both.
-func matchesKey(itemKey, filterKey any) bool {
-	// If both are maps
-	if mItem, ok := itemKey.(map[string]any); ok {
-		if mFilter, ok := filterKey.(map[string]any); ok {
+// Returns match status and the name of the field that was "unwrapped" if any (for ambiguity checks).
+func matchesKey(itemKey, filterKey any) (bool, string) {
+	if filterKey == nil {
+		return true, ""
+	}
+
+	// If filter is a map, it might be an operator map OR a composite key match
+	if mFilter, ok := filterKey.(map[string]any); ok {
+		// Check if it is an operator map (keys start with $)
+		isOp := false
+		for k := range mFilter {
+			if strings.HasPrefix(k, "$") {
+				isOp = true
+				break
+			}
+		}
+		if isOp {
+			return matchOperator(itemKey, mFilter), ""
+		}
+
+		// If itemKey is also a map, check fields
+		if mItem, ok := itemKey.(map[string]any); ok {
 			for k, v := range mFilter {
+				itemVal, exists := mItem[k]
+
+				// Check for operator map
+				if opMap, ok := v.(map[string]any); ok {
+					// Check if it is an operator map (keys start with $)
+					isOp := false
+					for opK := range opMap {
+						if strings.HasPrefix(opK, "$") {
+							isOp = true
+							break
+						}
+					}
+
+					if isOp {
+						if !exists {
+							// If field missing, fail unless checking for $ne: null?
+							// For simplicity, fail if missing.
+							return false, ""
+						}
+						if !matchOperator(itemVal, opMap) {
+							return false, ""
+						}
+						continue
+					}
+				}
+
 				// Simple equality check. For nested objects, this might need recursion.
 				// But for now, we assume flat keys or strict equality on values.
-				if itemVal, exists := mItem[k]; !exists || itemVal != v {
-					return false
+				if !exists || btree.Compare(itemVal, v) != 0 {
+					return false, ""
 				}
 			}
-			return true
+			return true, ""
+		}
+
+		// Handle JSON string keys (e.g. from jsondb stores with Map keys)
+		if sKey, ok := itemKey.(string); ok && strings.HasPrefix(strings.TrimSpace(sKey), "{") {
+			var mItem map[string]any
+			if err := json.Unmarshal([]byte(sKey), &mItem); err == nil {
+				// Recurse with the map
+				return matchesKey(mItem, mFilter)
+			}
+		}
+
+		// NEW: Handle Primitive Key vs Map Filter mismatch
+		// If itemKey is NOT a map, but filterKey IS a map (and not Op map).
+		// And filterKey has exactly 1 entry.
+		if len(mFilter) == 1 {
+			for k, v := range mFilter {
+				// Align types if possible
+				alignedV := alignType(v, itemKey)
+				matched, _ := matchesKey(itemKey, alignedV)
+				if matched {
+					return true, k
+				}
+				return false, ""
+			}
 		}
 	}
 	// If primitives, strict equality
-	return itemKey == filterKey
+	return btree.Compare(itemKey, filterKey) == 0, ""
+}
+
+func matchOperator(val any, opMap map[string]any) bool {
+	for op, target := range opMap {
+		// Align target type to val type
+		alignedTarget := alignType(target, val)
+		cmp := btree.Compare(val, alignedTarget)
+		switch op {
+		case "$eq":
+			if cmp != 0 {
+				return false
+			}
+		case "$ne":
+			if cmp == 0 {
+				return false
+			}
+		case "$gt":
+			if cmp <= 0 {
+				return false
+			}
+		case "$gte":
+			if cmp < 0 {
+				return false
+			}
+		case "$lt":
+			if cmp >= 0 {
+				return false
+			}
+		case "$lte":
+			if cmp > 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isMap(v any) bool {
+	_, ok := v.(map[string]any)
+	return ok
+}
+
+func getOptimizationKey(filter any) any {
+	if filter == nil {
+		return nil
+	}
+	if !isMap(filter) {
+		return filter
+	}
+	m := filter.(map[string]any)
+	if v, ok := m["$eq"]; ok {
+		return v
+	}
+	if v, ok := m["$gte"]; ok {
+		return v
+	}
+	if v, ok := m["$gt"]; ok {
+		return v
+	}
+
+	return nil
 }
 
 type OrderedKey struct {
@@ -1616,10 +2149,61 @@ func (o OrderedKey) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func filterFields(item map[string]any, fields []string) map[string]any {
+type OrderedMap struct {
+	m    map[string]any
+	keys []string
+}
+
+func (o OrderedMap) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	for i, k := range o.keys {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		kb, err := json.Marshal(k)
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(kb)
+		buf.WriteByte(':')
+		vb, err := json.Marshal(o.m[k])
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(vb)
+	}
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
+}
+
+func filterFields(item map[string]any, fields []string) any {
 	if len(fields) == 0 {
 		return item
 	}
+
+	// Check if the item looks like a standard SOP Store Item (has "key" and "value")
+	_, hasKey := item["key"]
+	_, hasValue := item["value"]
+
+	// If it's NOT a standard SOP wrapper (e.g. result of a Join or arbitrary JSON),
+	// treat it as a flat map and filter top-level fields.
+	if !hasKey || !hasValue {
+		om := OrderedMap{
+			m:    make(map[string]any),
+			keys: make([]string, 0),
+		}
+		for _, f := range fields {
+			if v, ok := item[f]; ok {
+				om.keys = append(om.keys, f)
+				om.m[f] = v
+			}
+		}
+		return om
+	}
+
+	// We must preserve the Key/Value structure for API consistency.
+	// However, we want to respect the order of fields requested within Key and Value.
 
 	var newKey any = nil
 	var newValue any = nil
@@ -1641,25 +2225,36 @@ func filterFields(item map[string]any, fields []string) map[string]any {
 	} else {
 		// Check if originalKey is a map/struct we can filter
 		if keyMap, ok := originalKey.(map[string]any); ok {
-			filtered := make(map[string]any)
-			for k, v := range keyMap {
-				if isRequested(k) {
-					filtered[k] = v
+			// Create OrderedMap for Key
+			om := OrderedMap{
+				m:    make(map[string]any),
+				keys: make([]string, 0),
+			}
+			// Iterate requested fields to preserve order
+			for _, f := range fields {
+				if v, ok := keyMap[f]; ok {
+					om.keys = append(om.keys, f)
+					om.m[f] = v
 				}
 			}
-			if len(filtered) > 0 {
-				newKey = filtered
+			if len(om.keys) > 0 {
+				newKey = om
 			}
 		} else if orderedKey, ok := originalKey.(OrderedKey); ok {
 			keyMap := orderedKey.m
-			filtered := make(map[string]any)
-			for k, v := range keyMap {
-				if isRequested(k) {
-					filtered[k] = v
+			// Create OrderedMap for Key
+			om := OrderedMap{
+				m:    make(map[string]any),
+				keys: make([]string, 0),
+			}
+			for _, f := range fields {
+				if v, ok := keyMap[f]; ok {
+					om.keys = append(om.keys, f)
+					om.m[f] = v
 				}
 			}
-			if len(filtered) > 0 {
-				newKey = filtered
+			if len(om.keys) > 0 {
+				newKey = om
 			}
 		}
 	}
@@ -1670,14 +2265,19 @@ func filterFields(item map[string]any, fields []string) map[string]any {
 		newValue = originalValue
 	} else {
 		if valMap, ok := originalValue.(map[string]any); ok {
-			filtered := make(map[string]any)
-			for k, v := range valMap {
-				if isRequested(k) {
-					filtered[k] = v
+			// Create OrderedMap for Value
+			om := OrderedMap{
+				m:    make(map[string]any),
+				keys: make([]string, 0),
+			}
+			for _, f := range fields {
+				if v, ok := valMap[f]; ok {
+					om.keys = append(om.keys, f)
+					om.m[f] = v
 				}
 			}
-			if len(filtered) > 0 {
-				newValue = filtered
+			if len(om.keys) > 0 {
+				newValue = om
 			}
 		}
 	}
@@ -1696,13 +2296,23 @@ func (a *DataAdminAgent) resolveTransaction(ctx context.Context, db *database.Da
 	var tx sop.Transaction
 	var localTx bool
 
-	if p != nil && p.Transaction != nil {
-		// Only use session transaction if it matches the target database
-		// Note: dbName is the resolved database name for the operation.
-		// p.CurrentDB is the database the session transaction is bound to.
-		if dbName == "" || dbName == p.CurrentDB {
-			if t, ok := p.Transaction.(sop.Transaction); ok {
-				tx = t
+	if p != nil {
+		// 1. Check Transactions map (Multi-DB support)
+		if p.Transactions != nil {
+			if tAny, ok := p.Transactions[dbName]; ok {
+				if t, ok := tAny.(sop.Transaction); ok {
+					tx = t
+				}
+			}
+		}
+
+		// 2. Fallback to legacy Transaction field if not found in map
+		// Only use if it matches the target database (or if dbName is empty/default)
+		if tx == nil && p.Transaction != nil {
+			if dbName == "" || dbName == p.CurrentDB {
+				if t, ok := p.Transaction.(sop.Transaction); ok {
+					tx = t
+				}
 			}
 		}
 	}
@@ -1720,4 +2330,541 @@ func (a *DataAdminAgent) resolveTransaction(ctx context.Context, db *database.Da
 		}
 	}
 	return tx, localTx, nil
+}
+
+func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (string, error) {
+	p := ai.GetSessionPayload(ctx)
+	if p == nil {
+		return "", fmt.Errorf("no session payload found")
+	}
+
+	// Resolve Left Database
+	var leftDb *database.Database
+	leftDbName, _ := args["database"].(string)
+	if leftDbName == "" {
+		leftDbName = p.CurrentDB
+	}
+	if leftDbName != "" {
+		if leftDbName == "system" && a.systemDB != nil {
+			leftDb = a.systemDB
+		} else if opts, ok := a.databases[leftDbName]; ok {
+			leftDb = database.NewDatabase(opts)
+		}
+	}
+	if leftDb == nil {
+		return "", fmt.Errorf("left database not found or not selected")
+	}
+
+	// Resolve Right Database
+	var rightDb *database.Database
+	rightDbName, _ := args["right_database"].(string)
+	if rightDbName == "" {
+		rightDbName = leftDbName
+	}
+	if rightDbName != "" {
+		if rightDbName == "system" && a.systemDB != nil {
+			rightDb = a.systemDB
+		} else if opts, ok := a.databases[rightDbName]; ok {
+			rightDb = database.NewDatabase(opts)
+		}
+	}
+	if rightDb == nil {
+		return "", fmt.Errorf("right database not found")
+	}
+
+	leftStoreName, _ := args["left_store"].(string)
+	rightStoreName, _ := args["right_store"].(string)
+	leftField, _ := args["left_join_field"].(string)
+	rightField, _ := args["right_join_field"].(string)
+	joinType, _ := args["join_type"].(string)
+	if joinType == "" {
+		joinType = "inner"
+	}
+	limit, _ := args["limit"].(float64)
+	if limit <= 0 {
+		limit = 10
+	}
+
+	action, _ := args["action"].(string)
+	isDeleteLeft := action == "delete_left"
+	isUpdateLeft := action == "update_left"
+	updateValues, _ := args["update_values"].(map[string]any)
+
+	if leftStoreName == "" || rightStoreName == "" {
+		return "", fmt.Errorf("both left_store and right_store are required")
+	}
+	if leftField == "" {
+		return "", fmt.Errorf("left_join_field is required")
+	}
+	if rightField == "" {
+		rightField = "key"
+	}
+
+	leftMode := sop.ForReading
+	if isDeleteLeft || isUpdateLeft {
+		leftMode = sop.ForWriting
+	}
+
+	leftTx, leftAutoCommit, err := a.resolveTransaction(ctx, leftDb, leftDbName, leftMode)
+	if err != nil {
+		return "", err
+	}
+	if leftAutoCommit {
+		defer leftTx.Rollback(ctx)
+	}
+
+	var rightTx sop.Transaction
+	var rightAutoCommit bool
+
+	if rightDbName == leftDbName {
+		rightTx = leftTx
+	} else {
+		rightTx, rightAutoCommit, err = a.resolveTransaction(ctx, rightDb, rightDbName, sop.ForReading)
+		if err != nil {
+			return "", err
+		}
+		if rightAutoCommit {
+			defer rightTx.Rollback(ctx)
+		}
+	}
+
+	// Open Stores
+	leftStore, err := jsondb.OpenStore(ctx, leftDb.Options(), leftStoreName, leftTx)
+	if err != nil {
+		return "", fmt.Errorf("failed to open left store: %w", err)
+	}
+	rightStore, err := jsondb.OpenStore(ctx, rightDb.Options(), rightStoreName, rightTx)
+	if err != nil {
+		return "", fmt.Errorf("failed to open right store: %w", err)
+	}
+
+	// Check for ResultStreamer
+	var streamer ai.ResultStreamer
+	if s, ok := ctx.Value(ai.CtxKeyResultStreamer).(ai.ResultStreamer); ok {
+		streamer = s
+	}
+
+	var sb strings.Builder
+	if streamer == nil {
+		sb.WriteString("[\n")
+	} else {
+		streamer.BeginArray()
+	}
+	itemsFound := false
+
+	// Helper to emit result
+	emit := func(res map[string]any) {
+		if streamer != nil {
+			streamer.WriteItem(res)
+			itemsFound = true
+		} else {
+			if itemsFound {
+				sb.WriteString(",\n")
+			}
+			itemsFound = true
+			b, _ := json.Marshal(res)
+			sb.WriteString("  ")
+			sb.Write(b)
+		}
+	}
+
+	count := 0
+
+	// Optimization: Key-Key Join (Merge Join Strategy)
+	if leftField == "key" && rightField == "key" {
+		lOk, _ := leftStore.First(ctx)
+		rOk, _ := rightStore.First(ctx)
+
+		for (lOk || rOk) && count < int(limit) {
+			// Optimization for Inner Join: if either is EOF, we are done
+			if joinType == "inner" && (!lOk || !rOk) {
+				break
+			}
+
+			var cmp int
+			// Determine comparison state
+			if lOk && rOk {
+				lKey, _ := leftStore.GetCurrentKey()
+				rKey, _ := rightStore.GetCurrentKey()
+				cmp = btree.Compare(lKey, rKey)
+			} else if lOk {
+				cmp = -1 // Right EOF, Left remains -> Left < "Infinity"
+			} else {
+				cmp = 1 // Left EOF, Right remains -> "Infinity" > Right
+			}
+
+			if cmp == 0 {
+				// Match
+				lVal, _ := leftStore.GetCurrentValue(ctx)
+				rVal, _ := rightStore.GetCurrentValue(ctx)
+
+				if isDeleteLeft {
+					// Delete Left Item
+					lKey, _ := leftStore.GetCurrentKey()
+					if _, err := leftStore.Remove(ctx, lKey); err != nil {
+						return "", fmt.Errorf("failed to delete left item: %w", err)
+					}
+					// For Merge Join, we need to be careful.
+					// If we delete Left, we advance Left.
+					// But wait, if we delete, does Next() work?
+					// Similar to Select, let's assume we need to advance carefully.
+					// Actually, in Merge Join, we control the cursor explicitly.
+					// If we delete, we should advance.
+					// Let's use the same pattern: Advance then Delete?
+					// Or Delete then Advance?
+					// If we delete, the cursor might be invalid.
+					// Safe pattern:
+					// 1. Get Next Key for Left (peek)
+					// 2. Delete Current Left
+					// 3. Reset Left Cursor to Next Key?
+					// Since we are doing a linear scan, we can just:
+					// lKeyToDelete := lKey
+					// lOk, _ = leftStore.Next(ctx)
+					// leftStore.Remove(ctx, lKeyToDelete)
+					// But we also need to advance Right?
+					// If it's a match, we advance both.
+					lKeyToDelete := lKey
+					lOk, _ = leftStore.Next(ctx)
+					rOk, _ = rightStore.Next(ctx)
+					leftStore.Remove(ctx, lKeyToDelete)
+					count++
+				} else if isUpdateLeft {
+					lKey, _ := leftStore.GetCurrentKey()
+					var newVal any
+					if lMap, ok := lVal.(map[string]any); ok {
+						newVal = mergeMap(lMap, updateValues)
+					} else {
+						newVal = updateValues
+					}
+					if ok, err := leftStore.Update(ctx, lKey, newVal); err != nil || !ok {
+						return "", fmt.Errorf("failed to update left item: %v", err)
+					}
+					count++
+					lOk, _ = leftStore.Next(ctx)
+					rOk, _ = rightStore.Next(ctx)
+				} else {
+					emit(map[string]any{"left": lVal, "right": rVal})
+					count++
+					lOk, _ = leftStore.Next(ctx)
+					rOk, _ = rightStore.Next(ctx)
+				}
+			} else if cmp < 0 {
+				// Left < Right (Unmatched Left)
+				if joinType == "left" || joinType == "full" {
+					lVal, _ := leftStore.GetCurrentValue(ctx)
+					if isDeleteLeft {
+						// Delete Left Item (for Left/Full join where right is missing? No, this is just unmatched left)
+						// If action is delete_left, do we delete unmatched lefts?
+						// Usually 'delete_left' implies deleting records that satisfy the join condition.
+						// If join_type is 'left', then unmatched records satisfy the join.
+						// So yes, delete them.
+						lKey, _ := leftStore.GetCurrentKey()
+						lKeyToDelete := lKey
+						lOk, _ = leftStore.Next(ctx)
+						leftStore.Remove(ctx, lKeyToDelete)
+						count++
+					} else if isUpdateLeft {
+						lKey, _ := leftStore.GetCurrentKey()
+						var newVal any
+						if lMap, ok := lVal.(map[string]any); ok {
+							newVal = mergeMap(lMap, updateValues)
+						} else {
+							newVal = updateValues
+						}
+						if ok, err := leftStore.Update(ctx, lKey, newVal); err != nil || !ok {
+							return "", fmt.Errorf("failed to update left item: %v", err)
+						}
+						count++
+						lOk, _ = leftStore.Next(ctx)
+					} else {
+						emit(map[string]any{"left": lVal})
+						count++
+						lOk, _ = leftStore.Next(ctx)
+					}
+				} else {
+					// Skip Left (Inner/Right join)
+					// Optimization: Jump Left to Right Key
+					if rOk {
+						rKey, _ := rightStore.GetCurrentKey()
+						// FindOne(rKey, false) -> finds first item >= rKey
+						if found, _ := leftStore.FindOne(ctx, rKey, false); found {
+							lOk = true
+						} else {
+							lOk = false
+						}
+					} else {
+						lOk, _ = leftStore.Next(ctx)
+					}
+				}
+			} else {
+				// Right < Left (Unmatched Right)
+				if joinType == "right" || joinType == "full" {
+					rVal, _ := rightStore.GetCurrentValue(ctx)
+					emit(map[string]any{"right": rVal})
+					count++
+					rOk, _ = rightStore.Next(ctx)
+				} else {
+					// Skip Right (Inner/Left join)
+					// Optimization: Jump Right to Left Key
+					if lOk {
+						lKey, _ := leftStore.GetCurrentKey()
+						if found, _ := rightStore.FindOne(ctx, lKey, false); found {
+							rOk = true
+						} else {
+							rOk = false
+						}
+					} else {
+						rOk, _ = rightStore.Next(ctx)
+					}
+				}
+			}
+		}
+	} else {
+		if joinType == "right" || joinType == "full" {
+			return "", fmt.Errorf("right and full joins are only supported when joining on primary keys (left_join_field='key' and right_join_field='key')")
+		}
+
+		// Standard Nested Loop Join (Left Scan + Right Lookup)
+		lOk, _ := leftStore.First(ctx)
+		if !lOk {
+			if streamer != nil {
+				streamer.EndArray()
+				return "", nil
+			}
+			return "[]", nil
+		}
+
+		for {
+			if count >= int(limit) {
+				break
+			}
+
+			k, _ := leftStore.GetCurrentKey()
+			v, _ := leftStore.GetCurrentValue(ctx)
+
+			// Extract Join Value from Left
+			var joinVal any
+			if leftField == "key" {
+				joinVal = k
+			} else {
+				// Assume v is a map
+				if vm, ok := v.(map[string]any); ok {
+					joinVal = vm[leftField]
+				}
+			}
+
+			var rightItem any
+			var rightFound bool
+
+			if joinVal != nil {
+				if rightField == "key" {
+					// Lookup by key
+					var err error
+					rightFound, err = rightStore.FindOne(ctx, joinVal, false)
+					if err == nil && rightFound {
+						rightItem, _ = rightStore.GetCurrentValue(ctx)
+					}
+				} else {
+					return "", fmt.Errorf("joining on non-key field '%s' in right store is not yet supported", rightField)
+				}
+			}
+
+			// Join Logic
+			include := false
+			if joinType == "inner" && rightFound {
+				include = true
+			} else if joinType == "left" {
+				include = true
+			}
+
+			if include {
+				if isDeleteLeft {
+					// Delete Left Item
+					// Same pattern: Advance then Delete
+					kToDelete := k
+					if ok, _ := leftStore.Next(ctx); !ok {
+						// End of store
+						leftStore.Remove(ctx, kToDelete)
+						count++
+						break
+					}
+					leftStore.Remove(ctx, kToDelete)
+					count++
+					continue
+				}
+
+				if isUpdateLeft {
+					var newVal any
+					if vMap, ok := v.(map[string]any); ok {
+						newVal = mergeMap(vMap, updateValues)
+					} else {
+						newVal = updateValues
+					}
+					if ok, err := leftStore.Update(ctx, k, newVal); err != nil || !ok {
+						return "", fmt.Errorf("failed to update left item: %v", err)
+					}
+					count++
+				} else {
+					res := map[string]any{
+						"left": v,
+					}
+					if rightFound {
+						res["right"] = rightItem
+					}
+					emit(res)
+					count++
+				}
+			}
+
+			if ok, _ := leftStore.Next(ctx); !ok {
+				break
+			}
+		}
+	}
+
+	if streamer != nil {
+		streamer.EndArray()
+	} else {
+		sb.WriteString("\n]")
+	}
+
+	if isDeleteLeft {
+		if leftAutoCommit {
+			if err := leftTx.Commit(ctx); err != nil {
+				return "", fmt.Errorf("failed to commit delete transaction: %w", err)
+			}
+		}
+		return fmt.Sprintf(`{"deleted_count": %d}`, count), nil
+	}
+
+	if isUpdateLeft {
+		if leftAutoCommit {
+			if err := leftTx.Commit(ctx); err != nil {
+				return "", fmt.Errorf("failed to commit update transaction: %w", err)
+			}
+		}
+		return fmt.Sprintf(`{"updated_count": %d}`, count), nil
+	}
+
+	if streamer == nil {
+		return sb.String(), nil
+	}
+	return "", nil
+}
+
+// --- Streamer Helpers ---
+
+type BufferingStreamer struct {
+	Items []any
+}
+
+func (bs *BufferingStreamer) BeginArray() {}
+func (bs *BufferingStreamer) EndArray()   {}
+func (bs *BufferingStreamer) WriteItem(item any) {
+	bs.Items = append(bs.Items, item)
+}
+
+type FilteringStreamer struct {
+	wrapped ai.ResultStreamer
+	fields  []string
+	limit   int
+	count   int
+}
+
+func (fs *FilteringStreamer) BeginArray() {
+	fs.wrapped.BeginArray()
+}
+
+func (fs *FilteringStreamer) WriteItem(item any) {
+	if fs.limit > 0 && fs.count >= fs.limit {
+		return
+	}
+
+	var filtered any
+	if len(fs.fields) > 0 {
+		if mapItem, ok := item.(map[string]any); ok {
+			filtered = filterFields(mapItem, fs.fields)
+		} else {
+			filtered = item
+		}
+	} else {
+		filtered = item
+	}
+
+	fs.wrapped.WriteItem(filtered)
+	fs.count++
+}
+
+func (fs *FilteringStreamer) EndArray() {
+	fs.wrapped.EndArray()
+}
+
+func mergeMap(original, updates map[string]any) map[string]any {
+	newMap := make(map[string]any)
+	for k, v := range original {
+		newMap[k] = v
+	}
+	for k, v := range updates {
+		newMap[k] = v
+	}
+	return newMap
+}
+
+// alignType attempts to convert filterVal to match the type of targetVal.
+// This is useful when comparing Int vs String keys.
+func alignType(filterVal any, targetVal any) any {
+	if _, ok := targetVal.(string); ok {
+		return convertToString(filterVal)
+	}
+	if _, ok := targetVal.(float64); ok {
+		return convertToFloat(filterVal)
+	}
+	if _, ok := targetVal.(int); ok {
+		return convertToInt(filterVal)
+	}
+	return filterVal
+}
+
+func convertToFloat(v any) any {
+	switch val := v.(type) {
+	case int:
+		return float64(val)
+	case int8:
+		return float64(val)
+	case int16:
+		return float64(val)
+	case int32:
+		return float64(val)
+	case int64:
+		return float64(val)
+	case float32:
+		return float64(val)
+	case float64:
+		return val
+	}
+	return v
+}
+
+func convertToInt(v any) any {
+	switch val := v.(type) {
+	case int:
+		return val
+	case int64:
+		return int(val)
+	case float64:
+		return int(val)
+	}
+	return v
+}
+
+func convertToString(v any) any {
+	if isMap(v) {
+		m := v.(map[string]any)
+		newM := make(map[string]any)
+		for k, val := range m {
+			newM[k] = convertToString(val)
+		}
+		return newM
+	}
+	return fmt.Sprintf("%v", v)
 }

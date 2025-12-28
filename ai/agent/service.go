@@ -323,6 +323,25 @@ func (s *Service) RunPipeline(ctx context.Context, input string) (string, error)
 	return currentInput, nil
 }
 
+// GetLastToolInstructions returns the JSON instructions of the last executed tool.
+func (s *Service) GetLastToolInstructions() string {
+	if s.session == nil || s.session.LastStep == nil {
+		return ""
+	}
+	if s.session.LastStep.Type != "command" {
+		return ""
+	}
+
+	// Reconstruct the tool call structure
+	toolCall := map[string]any{
+		"tool": s.session.LastStep.Command,
+		"args": s.session.LastStep.Args,
+	}
+
+	b, _ := json.MarshalIndent(toolCall, "", "  ")
+	return string(b)
+}
+
 // Ask performs a RAG (Retrieval-Augmented Generation) request.
 // RecordStep implements the MacroRecorder interface
 func (s *Service) RecordStep(ctx context.Context, step ai.MacroStep) {
@@ -533,7 +552,8 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 
 	// Capture "ask" step for potential manual addition
 	// We do this BEFORE handling /record or /play so those commands themselves aren't captured as "ask" steps
-	if !strings.HasPrefix(query, "/") {
+	// We explicitly exclude "last-tool" and any slash commands from being recorded as user intent.
+	if !strings.HasPrefix(query, "/") && query != "last-tool" {
 		// Only record "ask" step if NOT in compiled mode
 		// If in compiled mode, we wait for the tool execution to record the command step
 		if !s.session.Recording || s.session.RecordingMode != "compiled" {

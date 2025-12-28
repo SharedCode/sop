@@ -26,6 +26,7 @@ type Config struct {
 	ContentSize           string            `json:"content_size,omitempty"`            // Optional: "small", "medium", "big". Defaults to "medium".
 	SkipDeduplication     bool              `json:"skip_deduplication,omitempty"`      // Optional: Skip deduplication phase
 	EnableIngestionBuffer bool              `json:"enable_ingestion_buffer,omitempty"` // Optional: Enable Stage 0 buffering for faster ingestion
+	Verbose               bool              `json:"verbose,omitempty"`                 // Optional: Enable verbose output (e.g. tool instructions)
 	// AutoOptimize is deprecated. Use Params["auto_optimize"] instead.
 	AutoOptimize      bool           `json:"auto_optimize,omitempty"`      // Optional: Automatically run Optimize() after ingestion
 	EnableObfuscation bool           `json:"enable_obfuscation,omitempty"` // Optional: Enable metadata obfuscation

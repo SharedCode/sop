@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"text/template"
@@ -16,6 +17,7 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/obfuscation"
+	"github.com/sharedcode/sop/jsondb"
 )
 
 // DataAdminAgent is a specialized agent for database administration tasks.
@@ -99,6 +101,11 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 	}
 	agent.registerTools()
 	return agent
+}
+
+// SetVerbose enables or disables verbose output.
+func (a *DataAdminAgent) SetVerbose(v bool) {
+	a.Config.Verbose = v
 }
 
 // Open initializes the agent's resources.
@@ -200,7 +207,15 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 				if stores, err := tx.GetStores(ctx); err == nil {
 					toolsDef += fmt.Sprintf("\nActive Database: %s\nAvailable Stores:\n", p.CurrentDB)
 					for _, s := range stores {
-						toolsDef += fmt.Sprintf("- %s\n", s)
+						var schemaInfo string
+						// Try to open store to get schema info
+						if storeAccessor, err := jsondb.OpenStore(ctx, db.Config(), s, tx); err == nil {
+							info := storeAccessor.GetStoreInfo()
+							if info.MapKeyIndexSpecification != "" {
+								schemaInfo = fmt.Sprintf(" (Key Schema: %s)", info.MapKeyIndexSpecification)
+							}
+						}
+						toolsDef += fmt.Sprintf("- %s%s\n", s, schemaInfo)
 					}
 				}
 				tx.Rollback(ctx)
@@ -212,6 +227,7 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 	toolsDef += `
 IMPORTANT:
 - The 'select' tool returns the raw data string. You MUST include this raw data in your final response.
+- When filtering with 'select', use MongoDB-style operators ($eq, $ne, $gt, $gte, $lt, $lte) for comparisons. Example: {"age": {"$gt": 18}}.
 `
 	fullPrompt := toolsDef + "\n" + query
 
@@ -264,6 +280,18 @@ IMPORTANT:
 			}
 
 			if len(toolCalls) > 0 {
+				if a.Config.Verbose {
+					// Display Tool Instructions
+					if w, ok := ctx.Value(ai.CtxKeyWriter).(io.Writer); ok {
+						var prettyJSON bytes.Buffer
+						if err := json.Indent(&prettyJSON, []byte(cleanText), "", "  "); err == nil {
+							fmt.Fprintf(w, "\n[Tool Instructions]:\n%s\n", prettyJSON.String())
+						} else {
+							fmt.Fprintf(w, "\n[Tool Instructions]:\n%s\n", cleanText)
+						}
+					}
+				}
+
 				// Reset LastInteractionSteps
 				if p := ai.GetSessionPayload(ctx); p != nil {
 					p.LastInteractionSteps = 0
@@ -444,6 +472,54 @@ func (a *DataAdminAgent) runMacro(ctx context.Context, macro ai.Macro, args map[
 		}
 	}
 	return sb.String(), nil
+}
+
+func (a *DataAdminAgent) runMacroRaw(ctx context.Context, macro ai.Macro, args map[string]any) (string, error) {
+	// Scope for template resolution
+	scope := make(map[string]any)
+	for k, v := range args {
+		scope[k] = v
+	}
+
+	var lastResult string
+
+	for i, step := range macro.Steps {
+		if step.Type == "command" {
+			// Resolve args
+			resolvedArgs := make(map[string]any)
+			for k, v := range step.Args {
+				if strVal, ok := v.(string); ok {
+					resolvedArgs[k] = resolveTemplate(strVal, scope)
+				} else {
+					resolvedArgs[k] = v
+				}
+			}
+
+			// Handle Database Override
+			stepCtx := ctx
+			if step.Database != "" {
+				if p := ai.GetSessionPayload(ctx); p != nil {
+					// Clone payload to update CurrentDB for this step only
+					newPayload := *p
+					newPayload.CurrentDB = step.Database
+					// Clear transaction if switching DB, as the existing transaction is bound to the old DB
+					if p.CurrentDB != step.Database {
+						newPayload.Transaction = nil
+					}
+					stepCtx = context.WithValue(ctx, "session_payload", &newPayload)
+				}
+			}
+
+			res, err := a.Execute(stepCtx, step.Command, resolvedArgs)
+			if err != nil {
+				if !step.ContinueOnError {
+					return "", fmt.Errorf("step %d (%s) failed: %w", i+1, step.Command, err)
+				}
+			}
+			lastResult = res
+		}
+	}
+	return lastResult, nil
 }
 
 func resolveTemplate(tmplStr string, scope map[string]any) string {

@@ -30,6 +30,13 @@ func RunLoop(ctx context.Context, agent ai.Agent[map[string]any], r io.Reader, w
 			break
 		}
 		input := strings.TrimSpace(scanner.Text())
+		if input == "help" {
+			fmt.Fprintln(w, "Available commands:")
+			fmt.Fprintln(w, "  exit             - Exit the session")
+			fmt.Fprintln(w, "  reset            - Clear the screen")
+			fmt.Fprintln(w, "  help             - Display this help message")
+			continue
+		}
 		if input == "exit" {
 			break
 		}

@@ -50,6 +50,11 @@ func (db *Database) Cache() sop.L2Cache {
 	return db.cache
 }
 
+// Options returns the database options.
+func (db *Database) Options() sop.DatabaseOptions {
+	return db.config
+}
+
 // StoragePath returns the base storage path.
 func (db *Database) StoragePath() string {
 	if len(db.config.StoresFolders) > 0 {

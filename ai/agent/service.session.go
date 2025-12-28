@@ -42,6 +42,15 @@ func NewRunnerSession() *RunnerSession {
 // handleSessionCommand processes session-related commands like /record, /play, etc.
 // Returns (response, handled, error)
 func (s *Service) handleSessionCommand(ctx context.Context, query string, db *database.Database) (string, bool, error) {
+	// Handle last-tool command (support both "last-tool" and "/last-tool")
+	if query == "last-tool" || query == "/last-tool" {
+		instructions := s.GetLastToolInstructions()
+		if instructions == "" {
+			return "No tool instructions found.", true, nil
+		}
+		return fmt.Sprintf("\n[Last Tool Instructions]:\n%s", instructions), true, nil
+	}
+
 	// Handle Macro Management Commands
 	if strings.HasPrefix(query, "/macro ") {
 		resp, err := s.handleMacroCommand(ctx, query)
@@ -290,6 +299,16 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		defer func() {
 			if err := s.Close(macroCtx); err != nil {
 				sb.WriteString(fmt.Sprintf("\nError closing session: %v", err))
+			}
+			// Safety: If the macro left a transaction open (Explicitly), rollback it now.
+			// This prevents state leakage between top-level macro runs.
+			if s.session.Transaction != nil {
+				if tx, ok := s.session.Transaction.(sop.Transaction); ok {
+					_ = tx.Rollback(macroCtx)
+				}
+				s.session.Transaction = nil
+				s.session.Variables = nil
+				sb.WriteString("\nWarning: Uncommitted transaction was automatically rolled back for safety.")
 			}
 		}()
 

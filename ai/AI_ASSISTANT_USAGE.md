@@ -27,10 +27,12 @@ You can ask the Assistant to retrieve data using plain English. It translates yo
 The `select` tool is powerful and supports filtering and field selection.
 
 *   **Basic**: "Get the first 10 records from the 'users' store."
-*   **Filtering**: "Find users in the 'users' store where the 'role' is 'admin'."
+*   **Filtering**: "Find users in the 'users' store where the 'role' is 'admin'." Supports MongoDB-style operators for comparisons: `$gt`, `$gte`, `$lt`, `$lte`, `$ne`, `$eq`. Example: "Select employees where age > 30" (Assistant converts this to `{"age": {"$gt": 30}}`).
 *   **Field Selection**: "Show me just the 'username' and 'email' for all users."
 *   **Scanning**: "Scan the 'logs' store for entries with 'error' in the message." (Note: Scanning large stores can be slow; prefer key lookups).
 *   **Ordering**: SOP stores are B-Trees and are naturally ordered by their Keys. Therefore, explicit `ORDER BY` clauses are not supported (and not needed). You always operate in the native B-Tree sort order.
+*   **UI Display Note**: When selecting specific fields, the backend returns them in the requested order (e.g., `select salary, name` returns `salary` then `name`). However, the **UI Grid** always displays Key fields (columns from the Key object) *before* Value fields (columns from the Value object) for consistency. If you request a Value field followed by a Key field, they will appear as Key then Value in the grid. The raw JSON response (accessible via API) preserves your requested order within the Key and Value objects respectively.
+*   **Views (Macros)**: You can use a Macro as a data source! If you have a macro named 'active_users_view' that returns a list of users, you can query it like a table: "Select name, email from 'active_users_view'". This allows you to create complex "Views" using macros (even with Joins) and query them simply. **Streaming Support**: Unlike traditional views that might materialize results, SOP streams macro output directly. Field selection is applied "late-bound" as items flow through, ensuring high efficiency even for complex pipelines.
 
 ### Finding Specific Records
 *   **Exact Match**: "Find the user with key 'user_123'."
@@ -94,6 +96,12 @@ For complex, multi-step manual operations without creating a macro, you can manu
 
 ### Swarm Computing (Async)
 When defining macros manually (or asking the Assistant to edit them), you can mark steps as `is_async: true`. This allows the Assistant to execute multiple heavy tasks in parallel (e.g., "Summarize these 50 documents").
+
+---
+
+## 5. Session Tools
+
+*   **/last-tool**: Displays the exact JSON instructions (tool name and arguments) of the last executed action. Useful for debugging or verifying what the Assistant actually did.
 
 ---
 
