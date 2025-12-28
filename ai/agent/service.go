@@ -142,8 +142,13 @@ func (s *Service) Close(ctx context.Context) error {
 		// If an error occurred, the caller should have handled Rollback or we need a way to signal it.
 		// For now, we assume success if we reached Close without explicit rollback.
 		if tx.HasBegun() {
-			return tx.Commit(ctx)
+			if err := tx.Commit(ctx); err != nil {
+				return fmt.Errorf("failed to commit transaction on close: %w", err)
+			}
 		}
+		// Ensure we clear the session transaction to prevent reuse
+		s.session.Transaction = nil
+		s.session.Variables = nil
 		return nil
 	}
 	return nil
@@ -324,7 +329,7 @@ func (s *Service) RunPipeline(ctx context.Context, input string) (string, error)
 
 // Ask performs a RAG (Retrieval-Augmented Generation) request.
 // RecordStep implements the MacroRecorder interface
-func (s *Service) RecordStep(step ai.MacroStep) {
+func (s *Service) RecordStep(ctx context.Context, step ai.MacroStep) {
 	// Always capture the last step for potential manual addition
 	s.session.LastStep = &step
 
@@ -340,8 +345,64 @@ func (s *Service) RecordStep(step ai.MacroStep) {
 		if s.session.RecordingMode == "standard" && step.Type == "command" {
 			return
 		}
-		s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, step)
+		if err := s.appendStepToCurrentMacro(ctx, step); err != nil {
+			log.Error("failed to append step to macro", "error", err)
+		}
 	}
+}
+
+func (s *Service) appendStepToCurrentMacro(ctx context.Context, step ai.MacroStep) error {
+	if !s.session.Recording || s.session.CurrentMacro == nil {
+		return nil
+	}
+	macroDB := s.getMacroDB()
+	if macroDB == nil {
+		return nil
+	}
+
+	// Use a separate transaction for saving the macro
+	tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	store, err := macroDB.OpenModelStore(ctx, "macros", tx)
+	if err != nil {
+		tx.Rollback(ctx)
+		return fmt.Errorf("failed to open macros store: %w", err)
+	}
+
+	// Try to load the latest version of the macro from disk
+	var latestMacro ai.Macro
+	if err := store.Load(ctx, s.session.CurrentMacroCategory, s.session.CurrentMacro.Name, &latestMacro); err != nil {
+		// If load fails, assume it's a new macro (first step) and use the session's initial state
+		// We copy the metadata from the session macro
+		latestMacro = *s.session.CurrentMacro
+		// Ensure steps are empty if we are starting fresh (or use what's in session if we trust it)
+		// Since we are appending, we assume session might be empty or have previous steps?
+		// Actually, if Load fails, it means it's not on disk.
+		// So we should use the session's macro as the base, but we need to be careful about duplication if session has steps.
+		// But in this flow, we only append via this method.
+		// So if it's not on disk, session steps should be empty (except for what we are about to add).
+		// However, s.session.CurrentMacro is a pointer.
+	}
+
+	// Append the new step
+	latestMacro.Steps = append(latestMacro.Steps, step)
+
+	// Save back to disk
+	if err := store.Save(ctx, s.session.CurrentMacroCategory, latestMacro.Name, &latestMacro); err != nil {
+		tx.Rollback(ctx)
+		return fmt.Errorf("failed to save macro: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Update in-memory session to match disk
+	s.session.CurrentMacro = &latestMacro
+	return nil
 }
 
 // RefactorLastSteps refactors the last N steps into a new structure (macro or block).
@@ -435,6 +496,18 @@ func (s *Service) saveMacro(ctx context.Context, macro ai.Macro) error {
 }
 
 func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+	// Ensure statelessness for non-recording sessions
+	defer func() {
+		if !s.session.Recording && s.session.Transaction != nil {
+			// Rollback if not committed (safety)
+			// If it was committed, it should have been cleared.
+			// If it's still here, it's a leak.
+			s.session.Transaction.Rollback(ctx)
+			s.session.Transaction = nil
+			s.session.Variables = nil
+		}
+	}()
+
 	// Clear buffer at start of Ask
 	s.session.LastInteractionToolCalls = []ai.MacroStep{}
 
@@ -468,7 +541,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		// Only record "ask" step if NOT in compiled mode
 		// If in compiled mode, we wait for the tool execution to record the command step
 		if !s.session.Recording || s.session.RecordingMode != "compiled" {
-			s.RecordStep(ai.MacroStep{
+			s.RecordStep(ctx, ai.MacroStep{
 				Type:   "ask",
 				Prompt: query,
 			})
@@ -641,8 +714,54 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 						toolCall.Args["_db_instance"] = db
 					}
 
+					// Auto-Transaction Management for Tool Execution
+					// We ensure that if a database is present, we wrap the tool execution in a transaction.
+					// This prevents leaving open transactions if the tool doesn't manage them,
+					// and ensures atomic execution of the tool's operations.
+					var tx sop.Transaction
+					if db != nil {
+						if p := ai.GetSessionPayload(ctx); p != nil && p.Transaction == nil {
+							var err error
+							tx, err = db.BeginTransaction(ctx, sop.ForWriting)
+							if err != nil {
+								return "", fmt.Errorf("failed to begin auto-transaction: %w", err)
+							}
+							p.Transaction = tx
+						}
+					}
+
 					// Execute Tool
 					result, err := executor.Execute(ctx, toolCall.Tool, toolCall.Args)
+
+					// Commit or Rollback Auto-Transaction
+					if tx != nil {
+						if err != nil {
+							// If tool failed, rollback
+							tx.Rollback(ctx)
+						} else {
+							// If tool succeeded, commit
+							if commitErr := tx.Commit(ctx); commitErr != nil {
+								return "", fmt.Errorf("tool execution succeeded but transaction commit failed: %w", commitErr)
+							}
+						}
+						// Clear from payload to avoid reuse if p is reused
+						if p := ai.GetSessionPayload(ctx); p != nil {
+							p.Transaction = nil
+						}
+						// Also clear session transaction to ensure statelessness
+						s.session.Transaction = nil
+					} else if !s.session.Recording && s.session.Transaction != nil {
+						// Ensure statelessness for non-macro sessions even if no auto-transaction was started
+						if err != nil {
+							s.session.Transaction.Rollback(ctx)
+						} else {
+							// We commit if the tool execution was successful
+							s.session.Transaction.Commit(ctx)
+						}
+						s.session.Transaction = nil
+						s.session.Variables = nil
+					}
+
 					if err != nil {
 						return "", fmt.Errorf("tool execution failed: %w", err)
 					}
@@ -657,7 +776,9 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 					// Record Tool Call if recording
 					if s.session.Recording {
 						if s.session.RecordingMode == "compiled" {
-							s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, *s.session.LastStep)
+							if err := s.appendStepToCurrentMacro(ctx, *s.session.LastStep); err != nil {
+								log.Error("failed to append step to macro", "error", err)
+							}
 						}
 						// In natural mode, we already recorded the prompt via s.RecordStep at the top.
 						// So we do NOT record the tool call here to avoid double execution.

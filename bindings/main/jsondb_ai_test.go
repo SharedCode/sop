@@ -175,7 +175,7 @@ func TestModelStore_More_Coverage(t *testing.T) {
 
 	// 3. Open Model Store
 	msName := "test_model_store_more"
-	msPayload := fmt.Sprintf(`{"name": "%s", "transaction_id": "%s"}`, msName, transID)
+	msPayload := fmt.Sprintf(`{"path": "%s", "transaction_id": "%s"}`, msName, transID)
 	msID := ManageDatabaseForTest(ctxID, OpenModelStore, dbID, msPayload)
 	t.Logf("MsID: %s", msID)
 

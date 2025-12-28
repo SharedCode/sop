@@ -273,7 +273,7 @@ IMPORTANT:
 				for _, tc := range toolCalls {
 					// Record the tool call if a recorder is present
 					if recorder, ok := ctx.Value(ai.CtxKeyMacroRecorder).(ai.MacroRecorder); ok {
-						recorder.RecordStep(ai.MacroStep{
+						recorder.RecordStep(ctx, ai.MacroStep{
 							Type:    "command",
 							Command: tc.Tool,
 							Args:    tc.Args,

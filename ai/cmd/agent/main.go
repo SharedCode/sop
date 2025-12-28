@@ -28,11 +28,6 @@ func main() {
 
 	// Ensure absolute path for storage
 	if cfg.StoragePath != "" {
-		if !filepath.IsAbs(cfg.StoragePath) {
-			// Resolve relative to config file directory
-			configDir := filepath.Dir(*configPath)
-			cfg.StoragePath = filepath.Join(configDir, cfg.StoragePath)
-		}
 		if absPath, err := filepath.Abs(cfg.StoragePath); err == nil {
 			cfg.StoragePath = absPath
 		}
@@ -47,11 +42,6 @@ func main() {
 	initAgent := func(agentCfg agent.Config) (ai.Agent[map[string]any], error) {
 		// Ensure absolute path for storage
 		if agentCfg.StoragePath != "" {
-			if !filepath.IsAbs(agentCfg.StoragePath) {
-				// Resolve relative to the main config file directory
-				configDir := filepath.Dir(*configPath)
-				agentCfg.StoragePath = filepath.Join(configDir, agentCfg.StoragePath)
-			}
 			if absPath, err := filepath.Abs(agentCfg.StoragePath); err == nil {
 				agentCfg.StoragePath = absPath
 			}

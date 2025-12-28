@@ -156,11 +156,11 @@ func TestMacroExecution_SelectTwice(t *testing.T) {
 	svc.Ask(ctx, "/record demo_loop")
 
 	// Record steps
-	svc.RecordStep(ai.MacroStep{
+	svc.RecordStep(ctx, ai.MacroStep{
 		Type:   "ask",
 		Prompt: "select from employees limit 2",
 	})
-	svc.RecordStep(ai.MacroStep{
+	svc.RecordStep(ctx, ai.MacroStep{
 		Type:   "ask",
 		Prompt: "select from employees limit 3",
 	})

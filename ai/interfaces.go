@@ -473,7 +473,7 @@ type MacroStep struct {
 
 // MacroRecorder is an interface for recording macro steps.
 type MacroRecorder interface {
-	RecordStep(step MacroStep)
+	RecordStep(ctx context.Context, step MacroStep)
 	// RefactorLastSteps refactors the last N steps into a new structure (macro or block).
 	// count: number of steps to refactor.
 	// mode: "macro" (extract to new named macro) or "block" (group into block step).
