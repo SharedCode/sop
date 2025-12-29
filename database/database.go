@@ -13,6 +13,7 @@ import (
 	"github.com/sharedcode/sop/adapters/redis"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/cache"
+	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/incfs"
 	"github.com/sharedcode/sop/infs"
@@ -254,6 +255,16 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, config sop.Databas
 			return infs.OpenBtree[TK, TV](ctx, name, t, comparer)
 		}
 	}
+}
+
+// OpenBtreeCursor opens a cursor wrapper for a given Btree. It opens it if it is not yet.
+func OpenBtreeCursor[TK btree.Ordered, TV any](ctx context.Context, config sop.DatabaseOptions, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	return common.OpenBtreeCursor[TK, TV](ctx, name, t, comparer)
+}
+
+// CursorOnOpenedBtree opens a cursor wrapper for a given opened Btree.
+func CursorOnOpenedBtree[TK btree.Ordered, TV any](ctx context.Context, config sop.DatabaseOptions, name string, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
+	return common.CursorOnOpenedBtree[TK, TV](ctx, name, t)
 }
 
 // NewBtree creates a new general purpose B-Tree store.

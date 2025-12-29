@@ -37,14 +37,14 @@ func OpenStore(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string
 	}
 
 	if isPrimitiveKey {
-		store, err := database.OpenBtree[string, any](ctx, dbOpts, storeName, tx, nil)
+		store, err := database.OpenBtreeCursor[string, any](ctx, dbOpts, storeName, tx, nil)
 		if err != nil {
 			return nil, err
 		}
 		return &primitiveStore{btree: store}, nil
 	}
 
-	store, err := OpenJsonBtreeMapKey(ctx, dbOpts, storeName, tx)
+	store, err := OpenJsonBtreeMapKeyCursor(ctx, dbOpts, storeName, tx)
 	if err != nil {
 		return nil, err
 	}

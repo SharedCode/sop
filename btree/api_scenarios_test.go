@@ -303,11 +303,6 @@ func TestWithTransaction_FindWithID_And_Lock(t *testing.T) {
 	tx := &mockTx{begun: true, mode: sop.ForReading}
 	w := NewBtreeWithTransaction(tx, b)
 
-	// Cover Lock()
-	if err := w.Lock(nil, false); err != nil {
-		t.Fatalf("Lock: %v", err)
-	}
-
 	// FindWithID should select the requested duplicate
 	if ok, err := w.FindWithID(nil, 7, second.ID); !ok || err != nil {
 		t.Fatalf("FindWithID failed: %v", err)

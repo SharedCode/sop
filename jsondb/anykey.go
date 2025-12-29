@@ -78,6 +78,17 @@ func OpenJsonBtree[TK btree.Ordered, TV any](ctx context.Context, config sop.Dat
 	}, nil
 }
 
+// OpenJsonBtreeCursor opens a cursor wrapper for a given Btree. It opens it if it is not yet.
+func OpenJsonBtreeCursor[TK btree.Ordered, TV any](ctx context.Context, config sop.DatabaseOptions, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (*JsonDBAnyKey[TK, TV], error) {
+	b3, err := database.OpenBtreeCursor[TK, TV](ctx, config, name, t, comparer)
+	if err != nil {
+		return nil, err
+	}
+	return &JsonDBAnyKey[TK, TV]{
+		BtreeInterface: b3,
+	}, nil
+}
+
 // Add inserts items without duplicate checks; returns true only if all inserts succeed.
 func (j *JsonDBAnyKey[TK, TV]) Add(ctx context.Context, items []Item[TK, TV]) (bool, error) {
 	allSucceeded := true

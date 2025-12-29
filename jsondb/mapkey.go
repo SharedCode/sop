@@ -101,3 +101,27 @@ func OpenJsonBtreeMapKey(ctx context.Context, config sop.DatabaseOptions, name s
 	j.JsonDBAnyKey = b3
 	return &j, nil
 }
+
+// OpenJsonBtreeMapKeyCursor opens a cursor wrapper for a given Btree. It opens it if it is not yet.
+func OpenJsonBtreeMapKeyCursor(ctx context.Context, config sop.DatabaseOptions, name string, t sop.Transaction) (*JsonDBMapKey, error) {
+	j := JsonDBMapKey{}
+
+	b3, err := OpenJsonBtreeCursor[map[string]any, any](ctx, config, name, t, j.proxyComparer)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resurrect the Key index specification originally provided when creating B-tree.
+	iss := b3.GetStoreInfo().MapKeyIndexSpecification
+	if iss != "" {
+		// Create the comparer from the IndexSpecification JSON string that defines the fields list comprising the index (on key) & their sort order.
+		var is IndexSpecification
+		if err := encoding.DefaultMarshaler.Unmarshal([]byte(iss), &is); err != nil {
+			return nil, err
+		}
+		j.indexSpecification = &is
+	}
+
+	j.JsonDBAnyKey = b3
+	return &j, nil
+}

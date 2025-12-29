@@ -518,7 +518,7 @@ func (s *Service) runStepFetch(ctx context.Context, step ai.MacroStep, scope map
 			defer tx.Rollback(ctx)
 		}
 
-		store, err := db.OpenBtree(ctx, resource, tx)
+		store, err := db.OpenBtreeCursor(ctx, resource, tx)
 		if err != nil {
 			return fmt.Errorf("failed to open store '%s': %w", resource, err)
 		}
@@ -671,6 +671,9 @@ func (e *ServiceToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinitio
 }
 
 func (s *Service) executeMacro(ctx context.Context, macro *ai.Macro, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+	// Remove MacroRecorder from context during execution to ensure tools execute instead of recording
+	ctx = context.WithValue(ctx, ai.CtxKeyMacroRecorder, nil)
+
 	// Ensure we have a tool executor
 	if ctx.Value(ai.CtxKeyExecutor) == nil {
 		executor := &ServiceToolExecutor{s: s}

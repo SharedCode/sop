@@ -46,7 +46,7 @@ func Test_ManageBtree_OpenNewBtree_Cases(t *testing.T) {
 			t2 := trans.GetPhasedTransaction().(*Transaction)
 			_ = t2.StoreRepository.Add(ctx, sop.StoreInfo{Name: "store_incompat", SlotLength: 4})
 		}, expectErr: true, expectEnded: true},
-		{name: "new_duplicate_in_transaction_rolls_back", op: "new-dup", begin: true, so: sop.StoreOptions{Name: "dup_store", SlotLength: 2}, expectErr: true, expectEnded: true},
+		{name: "new_duplicate_in_transaction_success", op: "new-dup", begin: true, so: sop.StoreOptions{Name: "dup_store", SlotLength: 2}, expectErr: false, expectEnded: false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -88,8 +88,8 @@ func Test_ManageBtree_OpenNewBtree_Cases(t *testing.T) {
 				if _, err := NewBtree[int, int](ctx, tc.so, trans, cmp); err != nil {
 					t.Fatalf("unexpected first NewBtree error: %v", err)
 				}
-				if _, err := NewBtree[int, int](ctx, tc.so, trans, cmp); err == nil {
-					t.Fatalf("expected duplicate error on second NewBtree")
+				if _, err := NewBtree[int, int](ctx, tc.so, trans, cmp); err != nil {
+					t.Fatalf("unexpected error on second NewBtree: %v", err)
 				}
 			}
 			if tc.expectEnded && trans.HasBegun() {

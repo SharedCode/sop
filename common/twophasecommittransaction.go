@@ -14,6 +14,7 @@ import (
 )
 
 type btreeBackend struct {
+	btree          any
 	nodeRepository *nodeRepositoryBackend
 	// Following are function references because BTree is generic typed for Key & Value,
 	// and these functions being references allow the backend to deal without requiring knowing data types.

@@ -101,9 +101,9 @@ func TestMacroExecution_SelectTwice(t *testing.T) {
 	// 3. Setup Agent & Service
 	mockGen := &MockScriptedGenerator{
 		Responses: []string{
-			// Step 1
+			// Step 1 (Select 1)
 			`{"tool": "select", "args": {"database": "` + filepath.Base(tmpDir) + `", "store": "employees", "limit": 2}}`,
-			// Step 2
+			// Step 2 (Select 2)
 			`{"tool": "select", "args": {"database": "` + filepath.Base(tmpDir) + `", "store": "employees", "limit": 3}}`,
 		},
 	}
@@ -157,12 +157,24 @@ func TestMacroExecution_SelectTwice(t *testing.T) {
 
 	// Record steps
 	svc.RecordStep(ctx, ai.MacroStep{
-		Type:   "ask",
-		Prompt: "select from employees limit 2",
+		Type:    "command",
+		Command: "manage_transaction",
+		Args:    map[string]any{"action": "begin"},
 	})
 	svc.RecordStep(ctx, ai.MacroStep{
-		Type:   "ask",
-		Prompt: "select from employees limit 3",
+		Type:    "command",
+		Command: "select",
+		Args:    map[string]any{"database": filepath.Base(tmpDir), "store": "employees", "limit": 2},
+	})
+	svc.RecordStep(ctx, ai.MacroStep{
+		Type:    "command",
+		Command: "select",
+		Args:    map[string]any{"database": filepath.Base(tmpDir), "store": "employees", "limit": 3},
+	})
+	svc.RecordStep(ctx, ai.MacroStep{
+		Type:    "command",
+		Command: "manage_transaction",
+		Args:    map[string]any{"action": "commit"},
 	})
 
 	// Stop recording (saves macro)

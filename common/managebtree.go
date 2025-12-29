@@ -25,6 +25,17 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*Transaction)
+
+	// Check if store is already open in this transaction, if so, return error.
+	for _, backend := range trans.btreesBackend {
+		if backend.getStoreInfo != nil {
+			info := backend.getStoreInfo()
+			if info.Name == name {
+				return nil, fmt.Errorf("b-tree '%s' is already open, please use OpenBtreeCursor if you want to open a cursor to it", name)
+			}
+		}
+	}
+
 	stores, err := trans.StoreRepository.Get(ctx, name)
 	if len(stores) == 0 || stores[0].IsEmpty() || err != nil {
 		if err == nil {
@@ -38,7 +49,83 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 		}
 		return nil, err
 	}
-	return newBtree[TK, TV](ctx, &stores[0], trans, comparer, false)
+	return newBtreeWithTransaction[TK, TV](ctx, &stores[0], trans, comparer, false)
+}
+
+func CursorOnOpenedBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction) (btree.BtreeInterface[TK, TV], error) {
+	if t == nil {
+		return nil, fmt.Errorf("transaction 't' parameter can't be nil")
+	}
+	if !t.HasBegun() {
+		return nil, fmt.Errorf("transaction 't' parameter has not started")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("b-tree name can't be empty string")
+	}
+
+	var t2 interface{} = t.GetPhasedTransaction()
+	trans := t2.(*Transaction)
+
+	// Check if store is already open in this transaction, if so, return a Cursor to it.
+	for _, backend := range trans.btreesBackend {
+		if backend.getStoreInfo != nil {
+			info := backend.getStoreInfo()
+			if info.Name == name {
+				if b3, ok := backend.btree.(*btree.Btree[TK, TV]); ok {
+					return btree.NewBtreeWithTransaction(trans, btree.NewCursor(b3)), nil
+				}
+				return nil, fmt.Errorf("b-tree '%s' is already open with different key/value types", name)
+			}
+		}
+	}
+	return nil, fmt.Errorf("can't wrap a cursor on an unopened b-tree '%s'", name)
+}
+
+func OpenBtreeCursor[TK btree.Ordered, TV any](ctx context.Context, name string, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	if t == nil {
+		return nil, fmt.Errorf("transaction 't' parameter can't be nil")
+	}
+	if !t.HasBegun() {
+		return nil, fmt.Errorf("transaction 't' parameter has not started")
+	}
+	if name == "" {
+		return nil, fmt.Errorf("b-tree name can't be empty string")
+	}
+
+	var t2 interface{} = t.GetPhasedTransaction()
+	trans := t2.(*Transaction)
+
+	// Check if store is already open in this transaction, if so, return a Cursor to it.
+	for _, backend := range trans.btreesBackend {
+		if backend.getStoreInfo != nil {
+			info := backend.getStoreInfo()
+			if info.Name == name {
+				if b3, ok := backend.btree.(*btree.Btree[TK, TV]); ok {
+					return btree.NewBtreeWithTransaction(trans, btree.NewCursor(b3)), nil
+				}
+				return nil, fmt.Errorf("b-tree '%s' is already open with different key/value types", name)
+			}
+		}
+	}
+
+	stores, err := trans.StoreRepository.Get(ctx, name)
+	if len(stores) == 0 || stores[0].IsEmpty() || err != nil {
+		if err == nil {
+			if rbErr := trans.Rollback(ctx, nil); rbErr != nil {
+				return nil, fmt.Errorf("b-tree '%s' does not exist, please use NewBtree to create an instance of it, rollback failed: %v", name, rbErr)
+			}
+			return nil, fmt.Errorf("b-tree '%s' does not exist, please use NewBtree to create an instance of it", name)
+		}
+		if rbErr := trans.Rollback(ctx, err); rbErr != nil {
+			return nil, fmt.Errorf("Get store failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return nil, err
+	}
+	b3, err := newBtree[TK, TV](ctx, &stores[0], trans, comparer, false)
+	if err != nil {
+		return nil, err
+	}
+	return btree.NewBtreeWithTransaction(trans, btree.NewCursor(b3)), nil
 }
 
 // NewBtree will create a new B-Tree instance with data persisted to backend storage upon commit.
@@ -94,7 +181,7 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 			}
 			return nil, err
 		}
-		return newBtree[TK, TV](ctx, ns, trans, comparer, true)
+		return newBtreeWithTransaction[TK, TV](ctx, ns, trans, comparer, true)
 	}
 	// Check if store retrieved is empty or of non-compatible specification.
 	if !ns.IsCompatible(stores[0]) {
@@ -105,21 +192,18 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 		return nil, fmt.Errorf("b-tree '%s' exists & has different configuration, please use OpenBtree to open & create an instance of it", si.Name)
 	}
 	ns = &stores[0]
-	return newBtree[TK, TV](ctx, ns, trans, comparer, false)
+	return newBtreeWithTransaction[TK, TV](ctx, ns, trans, comparer, false)
 }
 
-func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, trans *Transaction, comparer btree.ComparerFunc[TK], created bool) (btree.BtreeInterface[TK, TV], error) {
-	// Fail if b-tree with a given name is already in the transaction's list.
-	for i := range trans.btreesBackend {
-		if s.Name == trans.btreesBackend[i].getStoreInfo().Name {
-			err := fmt.Errorf("b-tree '%s' is already in the transaction's b-tree instances list", s.Name)
-			if rbErr := trans.Rollback(ctx, err); rbErr != nil {
-				return nil, fmt.Errorf("b-tree '%s' is already in the transaction's b-tree instances list, rollback failed: %v", s.Name, rbErr)
-			}
-			return nil, err
-		}
+func newBtreeWithTransaction[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, trans *Transaction, comparer btree.ComparerFunc[TK], created bool) (btree.BtreeInterface[TK, TV], error) {
+	b3, err := newBtree[TK, TV](ctx, s, trans, comparer, created)
+	if err != nil {
+		return nil, err
 	}
+	return btree.NewBtreeWithTransaction(trans, b3), nil
+}
 
+func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, trans *Transaction, comparer btree.ComparerFunc[TK], created bool) (*btree.Btree[TK, TV], error) {
 	si := StoreInterface[TK, TV]{}
 
 	// Assign the item action tracker frontend and backend bits.
@@ -142,6 +226,7 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 
 	// B-Tree backend processing(of commit & rollback) required objects.
 	b3b := btreeBackend{
+		btree: b3,
 		// Node blob repository.
 		nodeRepository: nrw.nodeRepositoryBackend,
 		// Needed for auto-merging of Node contents.
@@ -162,7 +247,7 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, s *sop.StoreInfo, t
 	}
 	trans.btreesBackend = append(trans.btreesBackend, b3b)
 
-	return btree.NewBtreeWithTransaction(trans, b3), nil
+	return b3, nil
 }
 
 // Use tracked Items to refetch their Nodes(using B-Tree) and merge the changes in, if there is no conflict.

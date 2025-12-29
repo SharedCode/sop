@@ -2,6 +2,7 @@ package fs
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -131,7 +132,7 @@ func Test_HandleFailedToReplicate_L2CacheKnowsFailure(t *testing.T) {
 	cache := mocks.NewMockClient()
 	// Seed L2 with FailedToReplicate=true so syncWithL2Cache(false) loads it into GlobalReplicationDetails.
 	seed := ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: true}
-	if err := cache.SetStruct(ctx, replicationStatusCacheKey, seed, replicationStatusCacheTTLDuration); err != nil {
+	if err := cache.SetStruct(ctx, fmt.Sprintf("Rreplstat:%s", a), seed, replicationStatusCacheTTLDuration); err != nil {
 		t.Fatalf("seed l2: %v", err)
 	}
 

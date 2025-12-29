@@ -234,7 +234,7 @@ func Test_replicationTracker_failover_EarlyReturn_AfterCachePull(t *testing.T) {
 
 	// Seed L2 cache with flipped toggler state to simulate another process failing over already.
 	pulled := ReplicationTrackedDetails{FailedToReplicate: false, ActiveFolderToggler: !rt.ActiveFolderToggler}
-	if err := cache.SetStruct(ctx, replicationStatusCacheKey, pulled, replicationStatusCacheTTLDuration); err != nil {
+	if err := cache.SetStruct(ctx, rt.getReplicationStatusCacheKey(), pulled, replicationStatusCacheTTLDuration); err != nil {
 		t.Fatalf("seed cache: %v", err)
 	}
 
@@ -408,7 +408,7 @@ func Test_replicationTracker_syncWithL2Cache_PushAndPull(t *testing.T) {
 		t.Fatalf("push err: %v", err)
 	}
 	var got ReplicationTrackedDetails
-	if ok, err := cache.GetStructEx(ctx, replicationStatusCacheKey, &got, replicationStatusCacheTTLDuration); err != nil || !ok {
+	if ok, err := cache.GetStructEx(ctx, rt.getReplicationStatusCacheKey(), &got, replicationStatusCacheTTLDuration); err != nil || !ok {
 		t.Fatalf("expected cache set, ok=%v err=%v", ok, err)
 	}
 	if got != *GlobalReplicationDetails {
@@ -420,19 +420,19 @@ func Test_replicationTracker_syncWithL2Cache_PushAndPull(t *testing.T) {
 		t.Fatalf("push equal err: %v", err)
 	}
 	var got2 ReplicationTrackedDetails
-	_, _ = cache.GetStructEx(ctx, replicationStatusCacheKey, &got2, replicationStatusCacheTTLDuration)
+	_, _ = cache.GetStructEx(ctx, rt.getReplicationStatusCacheKey(), &got2, replicationStatusCacheTTLDuration)
 	if got2 != *GlobalReplicationDetails {
 		t.Fatalf("cache mismatch after push-equal")
 	}
 
 	// C) push when different -> updates cache to match global
 	diff := ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: false}
-	_ = cache.SetStruct(ctx, replicationStatusCacheKey, diff, replicationStatusCacheTTLDuration)
+	_ = cache.SetStruct(ctx, rt.getReplicationStatusCacheKey(), diff, replicationStatusCacheTTLDuration)
 	if err := rt.syncWithL2Cache(ctx, true); err != nil {
 		t.Fatalf("push different err: %v", err)
 	}
 	var got3 ReplicationTrackedDetails
-	_, _ = cache.GetStructEx(ctx, replicationStatusCacheKey, &got3, replicationStatusCacheTTLDuration)
+	_, _ = cache.GetStructEx(ctx, rt.getReplicationStatusCacheKey(), &got3, replicationStatusCacheTTLDuration)
 	if got3 != *GlobalReplicationDetails {
 		t.Fatalf("cache mismatch after push-different: %+v vs %+v", got3, *GlobalReplicationDetails)
 	}
@@ -449,7 +449,7 @@ func Test_replicationTracker_syncWithL2Cache_PushAndPull(t *testing.T) {
 
 	// E) pull when found -> global updated to cache value
 	want := ReplicationTrackedDetails{FailedToReplicate: true, ActiveFolderToggler: false}
-	_ = cache.SetStruct(ctx, replicationStatusCacheKey, want, replicationStatusCacheTTLDuration)
+	_ = cache.SetStruct(ctx, rt.getReplicationStatusCacheKey(), want, replicationStatusCacheTTLDuration)
 	if err := rt.syncWithL2Cache(ctx, false); err != nil {
 		t.Fatalf("pull found err: %v", err)
 	}

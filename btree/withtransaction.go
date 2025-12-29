@@ -15,7 +15,7 @@ import (
 //
 // It does not implement locking yet (see Lock). All methods simply delegate after precondition checks.
 type btreeWithTransaction[TK Ordered, TV any] struct {
-	// Inherit from B
+	// Inherit from Btree
 	BtreeInterface[TK, TV]
 	transaction sop.TwoPhaseCommitTransaction
 }
@@ -31,18 +31,6 @@ func NewBtreeWithTransaction[TK Ordered, TV any](t sop.TwoPhaseCommitTransaction
 		transaction:    t,
 		BtreeInterface: btree,
 	}
-}
-
-/*
-	- Implement Lock & unlock on commit.
-	- Implement Node early persist.
-	- Implement MRU caching.
-*/
-
-// Lock is reserved for coordinating store-level locking; currently a no-op.
-func (b3 *btreeWithTransaction[TK, TV]) Lock(ctx context.Context, forWriting bool) error {
-	// TODO
-	return nil
 }
 
 // Write operations: the following methods require a writer-mode transaction.

@@ -108,6 +108,16 @@ func (db *Database) OpenBtree(ctx context.Context, name string, t sop.Transactio
 	return database.OpenBtree[string, any](ctx, db.config, name, t, nil)
 }
 
+// OpenBtreeCursor opens a cursor wrapper for a given Btree. It opens it if it is not yet.
+func (db *Database) OpenBtreeCursor(ctx context.Context, name string, t sop.Transaction) (btree.BtreeInterface[string, any], error) {
+	if db.StoragePath() != "" {
+		if err := os.MkdirAll(db.StoragePath(), 0755); err != nil {
+			return nil, err
+		}
+	}
+	return database.OpenBtreeCursor[string, any](ctx, db.config, name, t, nil)
+}
+
 // OpenVectorStore opens a vector store with map[string]any payload.
 func (db *Database) OpenVectorStore(ctx context.Context, name string, t sop.Transaction, cfg vector.Config) (ai.VectorStore[map[string]any], error) {
 	if db.StoragePath() != "" {
