@@ -307,3 +307,153 @@ func main() {
 	t2.Commit(ctx)
 }
 ```
+
+## 3. Streaming Large Data (Video Library Pattern)
+
+For storing large objects (BLOBs) like videos, images, or large documents, SOP recommends a **Split-Store Pattern**. This keeps your metadata store fast and lightweight while efficiently managing large binary data in a dedicated store.
+
+### Architecture
+1.  **Metadata Store (`video_catalog`)**: Stores lightweight attributes (Title, Rating, Description) and references to the blob.
+2.  **Blob Store (`video_chunks`)**: Stores the actual binary data, split into chunks. The key is a composite of `{VideoID, ChunkIndex}`.
+
+### Data Structure
+
+**Metadata Store (`video_catalog`)**
+Key: `UUID` (Video ID)
+Value: `VideoMetadata`
+```json
+{
+    "Title": "The Matrix",
+    "Rating": "R",
+    "Duration": 136,
+    "ChunkCount": 500
+}
+```
+
+**Blob Store (`video_chunks`)**
+Key: `StreamingKey` (Composite)
+```json
+{
+    "Key": "550e8400-e29b-41d4-a716-446655440000",  // Video ID
+    "ChunkIndex": 0                                // 0, 1, 2, ...
+}
+```
+Value: `[]byte` (Raw binary data, e.g., 1MB chunk)
+
+### Implementation Example
+
+```go
+package main
+
+import (
+	"context"
+	"github.com/google/uuid"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/database"
+)
+
+// 1. Define Types
+type VideoMetadata struct {
+	Title      string
+	Rating     string
+	ChunkCount int
+}
+
+// StreamingKey is the required key structure for the Blob Store
+type StreamingKey struct {
+	Key        uuid.UUID `json:"Key"`
+	ChunkIndex int       `json:"ChunkIndex"`
+}
+
+func UploadVideo(ctx context.Context, dbOpts sop.DatabaseOptions, title string, data []byte) error {
+	trans, _ := database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+
+	// 2. Open Stores
+	// Metadata: Standard store
+	catalog, _ := database.NewBtree[uuid.UUID, VideoMetadata](ctx, dbOpts, "video_catalog", trans, nil, sop.StoreOptions{
+		SlotLength: 1000,
+	})
+	
+	// Blobs: Streaming store (Value is []byte)
+	// Note: We disable "ValueInNode" for large blobs to keep the B-Tree structure small and fast.
+	chunks, _ := database.NewBtree[StreamingKey, []byte](ctx, dbOpts, "video_chunks", trans, nil, sop.StoreOptions{
+		SlotLength: 1000,
+		IsValueDataInNodeSegment: false, // CRITICAL for performance with large blobs
+	})
+
+	// 3. Process Data
+	videoID := uuid.New()
+	chunkSize := 1024 * 1024 // 1MB chunks
+	totalChunks := 0
+
+	// Upload Chunks
+	for i := 0; i < len(data); i += chunkSize {
+		end := i + chunkSize
+		if end > len(data) {
+			end = len(data)
+		}
+		chunk := data[i:end]
+		
+		// Add to Blob Store
+		chunks.Add(ctx, StreamingKey{Key: videoID, ChunkIndex: totalChunks}, chunk)
+		totalChunks++
+	}
+
+	// 4. Save Metadata
+	meta := VideoMetadata{
+		Title:      title,
+		Rating:     "PG-13",
+		ChunkCount: totalChunks,
+	}
+	catalog.Add(ctx, videoID, meta)
+
+	return trans.Commit(ctx)
+}
+```
+
+### Granular Management (The "Hollywood" Use Case)
+
+Because SOP treats every chunk as a standard record, you have granular control over your data. This is ideal for media production pipelines where specific scenes or chapters need to be updated without re-uploading the entire petabyte-scale file.
+
+**Scenario**: A producer wants to update "Chapter 3" (Chunks 100-150) of a movie.
+
+```go
+func UpdateChapter(ctx context.Context, dbOpts sop.DatabaseOptions, videoID uuid.UUID, startChunk int, newChapterData []byte) error {
+	trans, _ := database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	chunks, _ := database.OpenBtree[StreamingKey, []byte](ctx, dbOpts, "video_chunks", trans, nil)
+
+	chunkSize := 1024 * 1024
+	currentChunk := startChunk
+
+	for i := 0; i < len(newChapterData); i += chunkSize {
+		end := i + chunkSize
+		if end > len(newChapterData) {
+			end = len(newChapterData)
+		}
+		chunk := newChapterData[i:end]
+
+		// Update specific chunk
+		// SOP handles this efficiently as a single record update
+		chunks.Update(ctx, StreamingKey{Key: videoID, ChunkIndex: currentChunk}, chunk)
+		currentChunk++
+	}
+
+	return trans.Commit(ctx)
+}
+```
+
+### Why this pattern?
+*   **Petabyte Scale**: SOP breaks down gigantic blobs into manageable pieces. To the database, a 100GB video is just 100,000 small, manageable records.
+*   **Network/Hardware Efficiency**: By dealing with standard-sized records, you avoid the memory pressure and network timeouts associated with moving massive monolithic files.
+*   **Granular Concurrency**: Multiple editors can work on different chunks of the same asset simultaneously without locking the entire file.
+*   **Streaming Optimization**: Developers can implement custom buffering or parallel retrieval logic on top of the chunk access, as SOP provides fast, random access to any chunk.
+
+### Built-in Storage Optimization & Erasure Coding
+
+It is important to note that **SOP natively manages the physical storage of these chunks**. You do not need to devise a special file management system.
+
+*   **Erasure Coding & Parallel I/O**: At the core of SOP's architecture is the ability to use **Erasure Coding** to split chunks across multiple physical disk drives. This mechanism provides High Availability and redundancy natively while giving high throughput for scaling.
+*   **Native Architecture**: SOP automatically stores data using an optimal strategy (e.g., hierarchical folders in a file system) to prevent directory bloating and ensure fast I/O.
+*   **Universal Pattern**: This isn't just for blobs. SOP uses this "breaking down monoliths into decent-sized files" pattern for *all* data. Whether it's a user profile, a transaction log, or a video chunk, SOP handles it with the same robust, scalable architecture.
+*   **Zero Overhead**: Developers get this petabyte-scale file management for free. You focus on the logical `Add` and `Get` operations, and SOP handles the physical distribution, replication, and parallel access on disk.
+

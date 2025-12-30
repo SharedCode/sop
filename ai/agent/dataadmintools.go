@@ -19,7 +19,7 @@ func (a *DataAdminAgent) registerTools() {
 
 	a.registry.Register("list_databases", "Lists all available databases.", "()", a.toolListDatabases)
 	a.registry.Register("list_stores", "Lists all stores in the current or specified database.", "(database: string)", a.toolListStores)
-	a.registry.Register("select", "Retrieve data from a store. Supports filtering by key subset and value subset. You can optionally specify a list of fields to return. Supports 'action'='delete' to delete matching records, or 'action'='update' to update matching records with 'update_values'. Supports MongoDB-style operators in key_match and value_match: $eq, $ne, $gt, $gte, $lt, $lte (e.g. {age: {$gt: 18}}).", "(database: string, store: string, limit: number, scan_limit: number, key_match: any, value_match: any, fields: []string, action: string, update_values: map[string]any)", a.toolSelect)
+	a.registry.Register("select", "Retrieve data from a store. Supports filtering by key subset and value subset. You can optionally specify a list of fields to return (supports 'field AS alias'). Supports 'action'='delete' to delete matching records, or 'action'='update' to update matching records with 'update_values'. Supports MongoDB-style operators in key_match and value_match: $eq, $ne, $gt, $gte, $lt, $lte (e.g. {age: {$gt: 18}}).", "(database: string, store: string, limit: number, scan_limit: number, key_match: any, value_match: any, fields: []string, action: string, update_values: map[string]any)", a.toolSelect)
 	a.registry.Register("manage_transaction", "Manage database transactions (begin, commit, rollback).", "(action: string)", a.toolManageTransaction)
 	a.registry.Register("delete", "Delete an item from a store.", "(store: string, key: any)", a.toolDelete)
 	a.registry.Register("add", "Add an item to a store. You can pass the value as a single 'value' argument, or pass individual fields as arguments.", "(store: string, key: any, value: any, ...fields)", a.toolAdd)
@@ -30,6 +30,7 @@ func (a *DataAdminAgent) registerTools() {
 	a.registry.Register("macro_delete_step", "Delete a step from a macro.", "(macro: string, index: number)", a.toolMacroDeleteStep)
 	a.registry.Register("macro_update_step", "Update a step in a macro.", "(macro: string, index: number, ...params)", a.toolMacroUpdateStep)
 	a.registry.Register("macro_reorder_steps", "Move a step in a macro to a new position.", "(macro: string, from_index: number, to_index: number)", a.toolMacroReorderSteps)
+	a.registry.Register("macro_add_step_from_last", "Add the last executed tool call as a new step to a macro. If 'index' is not provided, it appends to the end. If 'index' is provided, it inserts 'after' that index by default, unless 'position' is set to 'before'.", "(macro: string, index: number, position: string)", a.toolMacroAddStepFromLast)
 
 	// Navigation tools
 	a.registry.Register("find", "Find an item in a store. Returns exact match only. You can optionally specify a list of fields to return.", "(store: string, key: any, fields: []string)", a.toolFind)
@@ -39,7 +40,7 @@ func (a *DataAdminAgent) registerTools() {
 	a.registry.Register("first", "Move to the first item in a store.", "(store: string)", a.toolFirst)
 	a.registry.Register("last", "Move to the last item in a store.", "(store: string)", a.toolLast)
 	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new macro or block.", "(mode: string, name: string)", a.toolRefactorMacro)
-	a.registry.Register("join", "Join two stores. Supports inner, left, right, full joins. Supports joining on multiple fields via 'left_join_fields' and 'right_join_fields'. If 'right_join_fields' contains 'key', it uses efficient lookup; otherwise it performs a scan (slower). Supports 'action'='delete_left' to delete matching records from the left store, or 'action'='update_left' to update them with 'update_values'.", "(database: string, left_store: string, right_database: string, right_store: string, left_join_fields: []string, right_join_fields: []string, join_type: string, limit: number, action: string, update_values: map[string]any, fields: []string)", a.toolJoin)
+	a.registry.Register("join", "Join two stores. Supports inner, left, right, full joins. Supports joining on multiple fields via 'left_join_fields' and 'right_join_fields'. If 'right_join_fields' contains 'key', it uses efficient lookup; otherwise it performs a scan (slower). Supports 'action'='delete_left' to delete matching records from the left store, or 'action'='update_left' to update them with 'update_values'. You can optionally specify a list of fields to return (supports 'field AS alias').", "(database: string, left_store: string, right_database: string, right_store: string, left_join_fields: []string, right_join_fields: []string, join_type: string, limit: number, action: string, update_values: map[string]any, fields: []string)", a.toolJoin)
 }
 
 func (a *DataAdminAgent) toolListDatabases(ctx context.Context, args map[string]any) (string, error) {

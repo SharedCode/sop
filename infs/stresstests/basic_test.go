@@ -51,7 +51,7 @@ func init() {
 	// Initialize Erasure Coding (EC) for the EC tests.
 	initErasureCoding()
 
-	testDefaultCacheConfig = sop.GetDefaulCacheConfig()
+	testDefaultCacheConfig = sop.GetDefaultCacheConfig()
 	// Node Cache Duration for these tests is 5 minutes.
 	testDefaultCacheConfig.NodeCacheDuration = time.Duration(5 * time.Minute)
 	sop.SetDefaultCacheConfig(testDefaultCacheConfig)

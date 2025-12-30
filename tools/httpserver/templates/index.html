@@ -337,7 +337,7 @@
 <div id="main">
     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
         <h1 id="current-store-title" style="margin: 0;">Select a Store</h1>
-        <button id="btn-code-store" onclick="showGeneratedCode()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Show Go Structs">
+        <button id="btn-code-store" onclick="showGeneratedCode()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Generate Code">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M10.478 1.647a.5.5 0 1 0-.956-.294l-4 13a.5.5 0 0 0 .956.294l4-13zM4.854 4.146a.5.5 0 0 1 0 .708L1.707 8l3.147 3.146a.5.5 0 0 1-.708.708l-3.5-3.5a.5.5 0 0 1 0-.708l3.5-3.5a.5.5 0 0 1 .708 0zm6.292 0a.5.5 0 0 0 0 .708L14.293 8l-3.147 3.146a.5.5 0 0 0 .708.708l3.5-3.5a.5.5 0 0 0 0-.708l-3.5-3.5a.5.5 0 0 0-.708 0z"/>
             </svg>
@@ -419,10 +419,41 @@
                 <label style="display:block; margin-bottom: 5px;">Key Type:</label>
                 <select id="new-store-key-type" onchange="toggleIndexSpec()" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
                     <option value="string">String</option>
-                    <option value="int">Integer</option>
+                    <option value="int">Int</option>
+                    <option value="int8">Int8</option>
+                    <option value="int16">Int16</option>
+                    <option value="int32">Int32</option>
+                    <option value="int64">Int64</option>
+                    <option value="uint">Uint</option>
+                    <option value="uint8">Uint8</option>
+                    <option value="uint16">Uint16</option>
+                    <option value="uint32">Uint32</option>
+                    <option value="uint64">Uint64</option>
+                    <option value="float32">Float32</option>
+                    <option value="float64">Float64</option>
+                    <option value="complex64">Complex64</option>
+                    <option value="complex128">Complex128</option>
+                    <option value="rune">Rune</option>
+                    <option value="decimal">Decimal</option>
+                    <option value="bool">Bool</option>
+                    <option value="timestamp">Timestamp</option>
+                    <option value="timestampz">TimestampZ</option>
+                    <option value="date">Date</option>
+                    <option value="datetime">DateTime</option>
+                    <option value="time">Time</option>
                     <option value="uuid">UUID</option>
                     <option value="map">Map (JSON Object)</option>
                 </select>
+            </div>
+
+            <div style="margin-bottom: 15px; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(255, 255, 255, 0.05);">
+                <label style="display:flex; align-items:center; gap: 8px; cursor: pointer;">
+                    <input type="checkbox" id="new-store-is-streaming" onchange="toggleStreamingMode()"> 
+                    <strong>Streaming / Chunked Data</strong>
+                </label>
+                <div style="font-size: 11px; color: #888; margin-top: 4px; margin-left: 24px;">
+                    Enables chunked blob storage. Value will be a Blob. Key will be wrapped with a <code>ChunkIndex</code> field.
+                </div>
             </div>
             <div id="index-spec-container" style="margin-bottom: 10px; display: none; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; background: var(--bg-color);">
                 <label style="display:block; margin-bottom: 10px; font-weight: bold;">Map Key Configuration:</label>
@@ -511,8 +542,9 @@
             </div>
             <div id="advanced-options-container" style="display: none; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-bottom: 10px;">
                 <div style="margin-bottom: 10px;">
-                    <label style="display:block; margin-bottom: 5px;">Slot Length:</label>
-                    <input type="number" id="new-store-slot-length" value="1000" min="2" style="width: 100%; box-sizing: border-box;">
+                    <label style="display:block; margin-bottom: 5px;">Slot Length (Min: 2, Max: 10000):</label>
+                    <input type="number" id="new-store-slot-length" value="1000" min="2" max="10000" style="width: 100%; box-sizing: border-box;" oninput="updateSlotLengthWarning()">
+                    <div id="slot-length-warning" style="font-size: 11px; margin-top: 4px; color: #ffcc00; display: none;"></div>
                 </div>
                 <div style="margin-bottom: 5px;">
                     <label style="display:flex; align-items:center; gap: 5px; cursor: pointer;">
@@ -553,11 +585,28 @@
 </div>
 
 <div id="code-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:2000;">
-    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:600px; max-width:90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); display: flex; flex-direction: column; max-height: 80vh;">
+    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:700px; max-width:90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); display: flex; flex-direction: column; max-height: 80vh;">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <h3 style="margin:0;">Generated Go Structs</h3>
+            <h3 style="margin:0;">Generated Code</h3>
             <span style="cursor:pointer; font-size: 20px;" onclick="document.getElementById('code-modal').style.display='none'">&times;</span>
         </div>
+        
+        <div style="display:flex; gap:10px; margin-bottom:10px; align-items:center;">
+            <label>Language:</label>
+            <select id="code-lang-select" onchange="updateGeneratedCodeView()" style="padding: 4px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-color);">
+                <option value="go">Go</option>
+                <option value="python">Python</option>
+                <option value="csharp">C#</option>
+                <option value="java">Java</option>
+                <option value="rust">Rust</option>
+            </select>
+            
+            <div style="display:flex; gap:5px; margin-left: 10px;">
+                <label><input type="radio" name="code-view-mode" value="struct" checked onchange="updateGeneratedCodeView()"> Struct/Class</label>
+                <label><input type="radio" name="code-view-mode" value="map" onchange="updateGeneratedCodeView()"> Map/Dictionary</label>
+            </div>
+        </div>
+
         <div style="flex: 1; overflow-y: auto; margin-bottom: 10px;">
             <pre id="generated-code-content" style="margin:0; padding:10px; background:var(--pre-bg); border-radius:4px; font-family:monospace; font-size:12px; white-space:pre-wrap;"></pre>
         </div>
@@ -756,7 +805,7 @@
         // Show Code Button
         const codeBtn = document.getElementById('btn-code-store');
         codeBtn.style.display = 'inline-block';
-        codeBtn.title = `Show Go Structs for '${name}'`;
+        codeBtn.title = `Generate Code for '${name}'`;
 
         // Fetch Store Info
         fetch(`/api/store/info?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`)
@@ -3004,7 +3053,14 @@
     // --- Code Generation Logic ---
     function showGeneratedCode() {
         if (!currentStore) return;
+        updateGeneratedCodeView();
+        document.getElementById('code-modal').style.display = 'flex';
+    }
 
+    function updateGeneratedCodeView() {
+        const lang = document.getElementById('code-lang-select').value;
+        const mode = document.querySelector('input[name="code-view-mode"]:checked').value;
+        
         let keySample = null;
         let valSample = null;
 
@@ -3029,30 +3085,445 @@
         }
 
         const storeNamePascal = toPascalCase(currentStore);
-        let code = `// Generated structs for store "${currentStore}"\n\n`;
-        code += `package main\n\n`;
+        let code = "";
 
-        // Generate Key Struct
-        if (typeof keySample === 'object' && keySample !== null) {
-            code += jsonToGoStruct(`${storeNamePascal}Key`, keySample);
-        } else {
-            const type = getGoType(keySample);
-            code += `// Key is a primitive type: ${type}\n`;
-            code += `type ${storeNamePascal}Key ${type}\n`;
-        }
-        code += "\n";
-
-        // Generate Value Struct
-        if (typeof valSample === 'object' && valSample !== null) {
-            code += jsonToGoStruct(`${storeNamePascal}Value`, valSample);
-        } else {
-            const type = getGoType(valSample);
-            code += `// Value is a primitive type: ${type}\n`;
-            code += `type ${storeNamePascal}Value ${type}\n`;
+        if (lang === 'go') {
+            code = generateGoCode(storeNamePascal, keySample, valSample, mode);
+        } else if (lang === 'python') {
+            code = generatePythonCode(storeNamePascal, keySample, valSample, mode);
+        } else if (lang === 'csharp') {
+            code = generateCSharpCode(storeNamePascal, keySample, valSample, mode);
+        } else if (lang === 'java') {
+            code = generateJavaCode(storeNamePascal, keySample, valSample, mode);
+        } else if (lang === 'rust') {
+            code = generateRustCode(storeNamePascal, keySample, valSample, mode);
         }
 
         document.getElementById('generated-code-content').textContent = code;
-        document.getElementById('code-modal').style.display = 'flex';
+    }
+
+    // --- Go Generator ---
+    function generateGoCode(name, keySample, valSample, mode) {
+        let code = `// Generated Go code for store "${currentStore}"\n`;
+        code += `package main\n\n`;
+        
+        // Check for time and uuid imports
+        let needsTime = false;
+        let needsUUID = false;
+        const checkImports = (obj) => {
+            if (typeof obj === 'object' && obj !== null) {
+                Object.values(obj).forEach(v => {
+                    if (typeof v === 'string') {
+                        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v) || /^\d{4}-\d{2}-\d{2}$/.test(v)) needsTime = true;
+                        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) needsUUID = true;
+                    }
+                });
+            }
+        };
+        checkImports(keySample);
+        checkImports(valSample);
+        
+        if (needsTime || needsUUID) {
+            code += `import (\n`;
+            if (needsTime) code += `    "time"\n`;
+            if (needsUUID) code += `    "github.com/google/uuid"\n`;
+            code += `)\n\n`;
+        }
+
+        if (mode === 'struct') {
+            // Key Struct
+            if (typeof keySample === 'object' && keySample !== null) {
+                code += jsonToGoStruct(`${name}Key`, keySample);
+            } else {
+                code += `type ${name}Key ${getGoType(keySample)}\n`;
+            }
+            code += "\n";
+            // Value Struct
+            if (typeof valSample === 'object' && valSample !== null) {
+                code += jsonToGoStruct(`${name}Value`, valSample);
+            } else {
+                code += `type ${name}Value ${getGoType(valSample)}\n`;
+            }
+        } else {
+            // Map
+            code += `// Map representation\n`;
+            code += `var ${name}Map = map[string]interface{}{\n`;
+            if (keySample) code += `    "sampleKey": ${JSON.stringify(keySample)},\n`;
+            if (valSample) code += `    "sampleValue": ${JSON.stringify(valSample)},\n`;
+            code += `}\n`;
+        }
+        return code;
+    }
+
+    function getGoType(val) {
+        if (val === null) return "interface{}";
+        const type = typeof val;
+        if (type === 'string') {
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) return "uuid.UUID";
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) return "time.Time";
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return "time.Time";
+            return "string";
+        }
+        if (type === 'number') return Number.isInteger(val) ? "int" : "float64";
+        if (type === 'boolean') return "bool";
+        if (Array.isArray(val)) {
+            // Check if it looks like a byte array (all numbers 0-255)
+            if (val.length > 0 && val.every(v => typeof v === 'number' && v >= 0 && v <= 255 && Number.isInteger(v))) {
+                return "[]byte";
+            }
+            return "[]interface{}";
+        }
+        return "interface{}";
+    }
+
+    function jsonToGoStruct(structName, obj) {
+        let code = `type ${structName} struct {\n`;
+        const keys = Object.keys(obj);
+        keys.forEach(key => {
+            const val = obj[key];
+            const fieldName = toPascalCase(key);
+            let type = "interface{}";
+            if (val !== null) {
+                if (Array.isArray(val)) {
+                    type = (val.length > 0) ? `[]${getGoType(val[0])}` : "[]interface{}";
+                } else if (typeof val === 'object') {
+                    type = "map[string]interface{}"; 
+                } else {
+                    type = getGoType(val);
+                }
+            }
+            code += `    ${fieldName} ${type} \`json:"${key}"\`\n`;
+        });
+        code += `}`;
+        return code;
+    }
+
+    // --- Python Generator ---
+    function generatePythonCode(name, keySample, valSample, mode) {
+        let code = `# Generated Python code for store "${currentStore}"\n`;
+        
+        let imports = [];
+        if (mode === 'struct') {
+            imports.push("dataclasses.dataclass");
+            imports.push("typing.Any", "typing.List", "typing.Dict", "typing.Optional");
+        }
+        
+        // Check for datetime/uuid imports
+        let needsDateTime = false;
+        let needsUUID = false;
+        
+        const checkTypes = (obj) => {
+            if (typeof obj === 'object' && obj !== null) {
+                Object.values(obj).forEach(v => {
+                    if (typeof v === 'string') {
+                        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v) || /^\d{4}-\d{2}-\d{2}$/.test(v)) needsDateTime = true;
+                        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) needsUUID = true;
+                    }
+                });
+            }
+        };
+        checkTypes(keySample);
+        checkTypes(valSample);
+        
+        if (needsDateTime) imports.push("datetime.datetime");
+        if (needsUUID) imports.push("uuid.UUID");
+        
+        if (imports.length > 0) {
+            // Group imports
+            const fromImports = {};
+            imports.forEach(imp => {
+                const parts = imp.split('.');
+                if (parts.length > 1) {
+                    const mod = parts[0];
+                    const cls = parts[1];
+                    if (!fromImports[mod]) fromImports[mod] = [];
+                    fromImports[mod].push(cls);
+                }
+            });
+            
+            Object.keys(fromImports).forEach(mod => {
+                code += `from ${mod} import ${fromImports[mod].join(', ')}\n`;
+            });
+            code += "\n";
+        }
+        
+        if (mode === 'struct') {
+            // Key Class
+            if (typeof keySample === 'object' && keySample !== null) {
+                code += jsonToPythonClass(`${name}Key`, keySample);
+            } else {
+                code += `# Key is a primitive: ${typeof keySample}\n`;
+            }
+            code += "\n";
+            // Value Class
+            if (typeof valSample === 'object' && valSample !== null) {
+                code += jsonToPythonClass(`${name}Value`, valSample);
+            } else {
+                code += `# Value is a primitive: ${typeof valSample}\n`;
+            }
+        } else {
+            code += `# Dictionary representation\n`;
+            code += `${name.toLowerCase()}_data = {\n`;
+            if (keySample) code += `    "sample_key": ${JSON.stringify(keySample, null, 4)},\n`;
+            if (valSample) code += `    "sample_value": ${JSON.stringify(valSample, null, 4)}\n`;
+            code += `}\n`;
+        }
+        return code;
+    }
+
+    function getPythonType(val) {
+        if (val === null) return "Optional[Any]";
+        const type = typeof val;
+        if (type === 'string') {
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) return "UUID";
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) return "datetime";
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return "datetime";
+            return "str";
+        }
+        if (type === 'number') return Number.isInteger(val) ? "int" : "float";
+        if (type === 'boolean') return "bool";
+        if (Array.isArray(val)) {
+            if (val.length > 0 && val.every(v => typeof v === 'number' && v >= 0 && v <= 255 && Number.isInteger(v))) {
+                return "bytes";
+            }
+            return "List[Any]";
+        }
+        return "Any";
+    }
+
+    function jsonToPythonClass(className, obj) {
+        let code = `@dataclass\nclass ${className}:\n`;
+        const keys = Object.keys(obj);
+        if (keys.length === 0) code += "    pass\n";
+        
+        keys.forEach(key => {
+            const val = obj[key];
+            let type = "Any";
+            if (val !== null) {
+                if (Array.isArray(val)) {
+                    type = (val.length > 0) ? `List[${getPythonType(val[0])}]` : "List[Any]";
+                } else if (typeof val === 'object') {
+                    type = "Dict[str, Any]";
+                } else {
+                    type = getPythonType(val);
+                }
+            }
+            code += `    ${key}: ${type}\n`;
+        });
+        return code;
+    }
+
+    // --- C# Generator ---
+    function generateCSharpCode(name, keySample, valSample, mode) {
+        let code = `// Generated C# code for store "${currentStore}"\n`;
+        code += `using System;\nusing System.Collections.Generic;\n\n`;
+        code += `namespace Sop.Generated {\n`;
+
+        if (mode === 'struct') {
+            // Key Class
+            if (typeof keySample === 'object' && keySample !== null) {
+                code += jsonToCSharpClass(`${name}Key`, keySample);
+            } else {
+                code += `    // Key is a primitive: ${getCSharpType(keySample)}\n`;
+            }
+            code += "\n";
+            // Value Class
+            if (typeof valSample === 'object' && valSample !== null) {
+                code += jsonToCSharpClass(`${name}Value`, valSample);
+            } else {
+                code += `    // Value is a primitive: ${getCSharpType(valSample)}\n`;
+            }
+        } else {
+            code += `    public class ${name}Data {\n`;
+            code += `        public static Dictionary<string, object> Sample = new Dictionary<string, object> {\n`;
+            if (keySample) code += `            { "SampleKey", ${JSON.stringify(keySample)} },\n`;
+            if (valSample) code += `            { "SampleValue", ${JSON.stringify(valSample)} }\n`;
+            code += `        };\n    }\n`;
+        }
+        code += `}\n`;
+        return code;
+    }
+
+    function getCSharpType(val) {
+        if (val === null) return "object";
+        const type = typeof val;
+        if (type === 'string') {
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) return "Guid";
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) return "DateTime";
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return "DateTime";
+            return "string";
+        }
+        if (type === 'number') return Number.isInteger(val) ? "int" : "double";
+        if (type === 'boolean') return "bool";
+        if (Array.isArray(val)) {
+            if (val.length > 0 && val.every(v => typeof v === 'number' && v >= 0 && v <= 255 && Number.isInteger(v))) {
+                return "byte[]";
+            }
+            return "List<object>";
+        }
+        return "object";
+    }
+
+    function jsonToCSharpClass(className, obj) {
+        let code = `    public class ${className} {\n`;
+        const keys = Object.keys(obj);
+        keys.forEach(key => {
+            const val = obj[key];
+            const fieldName = toPascalCase(key);
+            let type = "object";
+            if (val !== null) {
+                if (Array.isArray(val)) {
+                    type = (val.length > 0) ? `List<${getCSharpType(val[0])}>` : "List<object>";
+                } else if (typeof val === 'object') {
+                    type = "Dictionary<string, object>";
+                } else {
+                    type = getCSharpType(val);
+                }
+            }
+            code += `        public ${type} ${fieldName} { get; set; }\n`;
+        });
+        code += `    }\n`;
+        return code;
+    }
+
+    // --- Java Generator ---
+    function generateJavaCode(name, keySample, valSample, mode) {
+        let code = `// Generated Java code for store "${currentStore}"\n`;
+        code += `import java.util.*;\n\n`;
+
+        if (mode === 'struct') {
+            // Key Class
+            if (typeof keySample === 'object' && keySample !== null) {
+                code += jsonToJavaClass(`${name}Key`, keySample);
+            } else {
+                code += `// Key is a primitive: ${getJavaType(keySample)}\n`;
+            }
+            code += "\n";
+            // Value Class
+            if (typeof valSample === 'object' && valSample !== null) {
+                code += jsonToJavaClass(`${name}Value`, valSample);
+            } else {
+                code += `// Value is a primitive: ${getJavaType(valSample)}\n`;
+            }
+        } else {
+            code += `public class ${name}Data {\n`;
+            code += `    public static Map<String, Object> getSample() {\n`;
+            code += `        Map<String, Object> map = new HashMap<>();\n`;
+            // Simplified map generation
+            code += `        // ... populate map with sample data ...\n`;
+            code += `        return map;\n`;
+            code += `    }\n}\n`;
+        }
+        return code;
+    }
+
+    function getJavaType(val) {
+        if (val === null) return "Object";
+        const type = typeof val;
+        if (type === 'string') {
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) return "UUID";
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) return "Date";
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return "Date";
+            return "String";
+        }
+        if (type === 'number') return Number.isInteger(val) ? "Integer" : "Double";
+        if (type === 'boolean') return "Boolean";
+        if (Array.isArray(val)) {
+            if (val.length > 0 && val.every(v => typeof v === 'number' && v >= 0 && v <= 255 && Number.isInteger(v))) {
+                return "byte[]";
+            }
+            return "List<Object>";
+        }
+        return "Object";
+    }
+
+    function jsonToJavaClass(className, obj) {
+        let code = `public class ${className} {\n`;
+        const keys = Object.keys(obj);
+        keys.forEach(key => {
+            const val = obj[key];
+            // Java convention: camelCase fields
+            const fieldName = key; 
+            let type = "Object";
+            if (val !== null) {
+                if (Array.isArray(val)) {
+                    type = (val.length > 0) ? `List<${getJavaType(val[0])}>` : "List<Object>";
+                } else if (typeof val === 'object') {
+                    type = "Map<String, Object>";
+                } else {
+                    type = getJavaType(val);
+                }
+            }
+            code += `    public ${type} ${fieldName};\n`;
+        });
+        code += `}\n`;
+        return code;
+    }
+
+    // --- Rust Generator ---
+    function generateRustCode(name, keySample, valSample, mode) {
+        let code = `// Generated Rust code for store "${currentStore}"\n`;
+        code += `use serde::{Deserialize, Serialize};\nuse std::collections::HashMap;\n\n`;
+
+        if (mode === 'struct') {
+            // Key Struct
+            if (typeof keySample === 'object' && keySample !== null) {
+                code += jsonToRustStruct(`${name}Key`, keySample);
+            } else {
+                code += `// Key is a primitive: ${getRustType(keySample)}\n`;
+                code += `type ${name}Key = ${getRustType(keySample)};\n`;
+            }
+            code += "\n";
+            // Value Struct
+            if (typeof valSample === 'object' && valSample !== null) {
+                code += jsonToRustStruct(`${name}Value`, valSample);
+            } else {
+                code += `// Value is a primitive: ${getRustType(valSample)}\n`;
+                code += `type ${name}Value = ${getRustType(valSample)};\n`;
+            }
+        } else {
+            code += `// HashMap representation\n`;
+            code += `// let mut map = HashMap::new();\n`;
+            code += `// map.insert("sample_key", ...);\n`;
+        }
+        return code;
+    }
+
+    function getRustType(val) {
+        if (val === null) return "Option<serde_json::Value>";
+        const type = typeof val;
+        if (type === 'string') return "String";
+        if (type === 'number') return Number.isInteger(val) ? "i64" : "f64";
+        if (type === 'boolean') return "bool";
+        if (Array.isArray(val)) {
+            if (val.length > 0 && val.every(v => typeof v === 'number' && v >= 0 && v <= 255 && Number.isInteger(v))) {
+                return "Vec<u8>";
+            }
+            return "Vec<serde_json::Value>";
+        }
+        return "serde_json::Value";
+    }
+
+    function jsonToRustStruct(structName, obj) {
+        let code = `#[derive(Serialize, Deserialize, Debug)]\nstruct ${structName} {\n`;
+        const keys = Object.keys(obj);
+        keys.forEach(key => {
+            const val = obj[key];
+            const fieldName = key; // Rust uses snake_case usually, but keeping key name for simplicity
+            let type = "serde_json::Value";
+            if (val !== null) {
+                if (Array.isArray(val)) {
+                    type = (val.length > 0) ? `Vec<${getRustType(val[0])}>` : "Vec<serde_json::Value>";
+                } else if (typeof val === 'object') {
+                    type = "HashMap<String, serde_json::Value>";
+                } else {
+                    type = getRustType(val);
+                }
+            }
+            code += `    ${fieldName}: ${type},\n`;
+        });
+        code += `}\n`;
+        return code;
     }
 
     function copyGeneratedCode() {
@@ -3066,53 +3537,6 @@
         return str.replace(/(?:^\w|[A-Z]|\b\w)/g, function(word, index) {
             return word.toUpperCase();
         }).replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
-    }
-
-    function getGoType(val) {
-        if (val === null) return "interface{}";
-        const type = typeof val;
-        if (type === 'string') return "string";
-        if (type === 'number') {
-            return Number.isInteger(val) ? "int" : "float64";
-        }
-        if (type === 'boolean') return "bool";
-        if (Array.isArray(val)) return "[]interface{}"; // Simple array fallback
-        return "interface{}";
-    }
-
-    function jsonToGoStruct(structName, obj) {
-        let code = `type ${structName} struct {\n`;
-        const keys = Object.keys(obj);
-        
-        keys.forEach(key => {
-            const val = obj[key];
-            const fieldName = toPascalCase(key);
-            let type = "interface{}";
-            
-            if (val !== null) {
-                if (Array.isArray(val)) {
-                    if (val.length > 0) {
-                        const elemType = getGoType(val[0]);
-                        type = `[]${elemType}`;
-                    } else {
-                        type = "[]interface{}";
-                    }
-                } else if (typeof val === 'object') {
-                    // Nested struct - simplified for now (inline or interface{})
-                    // Ideally we would recurse, but for now let's use map[string]interface{} for nested objects
-                    // to keep it simple, or maybe generate a nested struct name?
-                    // Let's stick to map for deep nesting to avoid complexity in this first pass
-                    type = "map[string]interface{}"; 
-                } else {
-                    type = getGoType(val);
-                }
-            }
-            
-            code += `    ${fieldName} ${type} \`json:"${key}"\`\n`;
-        });
-        
-        code += `}`;
-        return code;
     }
 </script>
 
@@ -3222,14 +3646,58 @@
             <select class="key-field-type" onchange="updateSeedKeyForm()" style="width: 100px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
                 <option value="string" ${type==='string'?'selected':''}>String</option>
                 <option value="int" ${type==='int'?'selected':''}>Int</option>
-                <option value="float" ${type==='float'?'selected':''}>Float</option>
+                <option value="int8" ${type==='int8'?'selected':''}>Int8</option>
+                <option value="int16" ${type==='int16'?'selected':''}>Int16</option>
+                <option value="int32" ${type==='int32'?'selected':''}>Int32</option>
+                <option value="int64" ${type==='int64'?'selected':''}>Int64</option>
+                <option value="uint" ${type==='uint'?'selected':''}>Uint</option>
+                <option value="uint8" ${type==='uint8'?'selected':''}>Uint8</option>
+                <option value="uint16" ${type==='uint16'?'selected':''}>Uint16</option>
+                <option value="uint32" ${type==='uint32'?'selected':''}>Uint32</option>
+                <option value="uint64" ${type==='uint64'?'selected':''}>Uint64</option>
+                <option value="float32" ${type==='float32'?'selected':''}>Float32</option>
+                <option value="float64" ${type==='float64'?'selected':''}>Float64</option>
+                <option value="complex64" ${type==='complex64'?'selected':''}>Complex64</option>
+                <option value="complex128" ${type==='complex128'?'selected':''}>Complex128</option>
+                <option value="rune" ${type==='rune'?'selected':''}>Rune</option>
+                <option value="decimal" ${type==='decimal'?'selected':''}>Decimal</option>
                 <option value="bool" ${type==='bool'?'selected':''}>Bool</option>
+                <option value="timestamp" ${type==='timestamp'?'selected':''}>Timestamp</option>
+                <option value="timestampz" ${type==='timestampz'?'selected':''}>TimestampZ</option>
+                <option value="date" ${type==='date'?'selected':''}>Date</option>
+                <option value="datetime" ${type==='datetime'?'selected':''}>DateTime</option>
+                <option value="time" ${type==='time'?'selected':''}>Time</option>
+                <option value="guid" ${type==='guid'?'selected':''}>UUID</option>
+                <option value="blob" ${type==='blob'?'selected':''}>Blob</option>
             </select>
-            <button onclick="this.parentElement.remove(); updateIndexDropdowns(); updateSeedKeyForm();" style="color:red; cursor:pointer; background:none; border:none;">&times;</button>
+            <div style="display:flex; gap:0; align-items:center; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg);">
+                <button onclick="moveFieldRow(this, -1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px;" title="Move Up">↑</button>
+                <button onclick="moveFieldRow(this, 1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px; border-left: 1px solid var(--input-border);" title="Move Down">↓</button>
+                <button onclick="this.closest('.key-field-row').remove(); updateIndexDropdowns(); updateSeedKeyForm();" style="color:red; cursor:pointer; background:none; border:none; padding: 2px 6px; border-left: 1px solid var(--input-border);">&times;</button>
+            </div>
         `;
         container.appendChild(div);
         updateIndexDropdowns();
         updateSeedKeyForm();
+    }
+
+    function moveFieldRow(btn, direction) {
+        const row = btn.closest('.key-field-row, .seed-value-field-row');
+        const container = row.parentElement;
+        if (direction === -1) {
+            if (row.previousElementSibling) {
+                container.insertBefore(row, row.previousElementSibling);
+            }
+        } else {
+            if (row.nextElementSibling) {
+                container.insertBefore(row.nextElementSibling, row);
+            }
+        }
+        // Update dependent UI
+        if (row.classList.contains('key-field-row')) {
+            updateIndexDropdowns();
+            updateSeedKeyForm();
+        }
     }
 
     function updateSeedKeyForm() {
@@ -3342,6 +3810,26 @@
         container.style.display = advanced ? 'block' : 'none';
         if (advanced) {
             toggleCacheOptions();
+            updateSlotLengthWarning();
+        }
+    }
+
+    function updateSlotLengthWarning() {
+        const val = parseInt(document.getElementById('new-store-slot-length').value);
+        const warning = document.getElementById('slot-length-warning');
+        if (isNaN(val)) {
+            warning.style.display = 'none';
+            return;
+        }
+        
+        if (val < 10) {
+            warning.textContent = "Warning: Very low slot length will degrade performance due to frequent node splitting/merging.";
+            warning.style.display = 'block';
+        } else if (val > 5000) {
+            warning.textContent = "Warning: Large slot length (>5000) may diminish performance gains and increase memory usage per node (L1/L2 cache pressure) when the node is full.";
+            warning.style.display = 'block';
+        } else {
+            warning.style.display = 'none';
         }
     }
 
@@ -3366,6 +3854,89 @@
         document.getElementById('new-store-seed-value').style.display = isRaw ? 'block' : 'none';
     }
 
+    let preStreamingState = null;
+
+    function toggleStreamingMode() {
+        const isStreaming = document.getElementById('new-store-is-streaming').checked;
+        const builder = document.getElementById('seed-value-builder');
+        const raw = document.getElementById('new-store-seed-value');
+        const rawToggle = document.getElementById('seed-value-raw-mode');
+        const keyInput = document.getElementById('new-store-seed-key');
+        const keyType = document.getElementById('new-store-key-type').value;
+        const valueInNode = document.getElementById('new-store-value-in-node');
+        
+        if (isStreaming) {
+            // Save state
+            preStreamingState = {
+                key: keyInput.value,
+                value: raw.value,
+                rawMode: rawToggle.checked
+            };
+
+            builder.style.display = 'none';
+            raw.style.display = 'block';
+            raw.value = '[10, 20, 30, 40, 50]'; // Sample Byte Array
+            raw.disabled = true;
+            rawToggle.disabled = true;
+            rawToggle.checked = true;
+            
+            // Disable Value In Node (must be false for streaming)
+            valueInNode.checked = false;
+            valueInNode.disabled = true;
+            if (typeof toggleCacheOptions === 'function') toggleCacheOptions();
+
+            // Pre-generate Streaming Key Wrapper
+            let sampleKey = preStreamingState.key;
+            
+            // If empty, generate default
+            if (!sampleKey) {
+                if (keyType === 'uuid') sampleKey = "00000000-0000-0000-0000-000000000000";
+                else if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(keyType)) sampleKey = 1001;
+                else if (keyType === 'timestamp') sampleKey = Date.now();
+                else sampleKey = "sample_id";
+            } else {
+                // Try to parse if it looks like JSON or number, otherwise keep as string
+                 try {
+                     // Don't parse if it's just a string key, but do if it's a map or number
+                     if (keyType === 'map' || (['int', 'uint', 'float'].some(t => keyType.startsWith(t)))) {
+                        sampleKey = JSON.parse(sampleKey);
+                     }
+                 } catch {}
+            }
+            
+            const streamingKey = {
+                Key: sampleKey,
+                ChunkIndex: 0
+            };
+            keyInput.value = JSON.stringify(streamingKey, null, 2);
+        } else {
+            raw.disabled = false;
+            rawToggle.disabled = false;
+            
+            // Restore Value In Node
+            valueInNode.disabled = false;
+            valueInNode.checked = true;
+            if (typeof toggleCacheOptions === 'function') toggleCacheOptions();
+
+            if (preStreamingState) {
+                keyInput.value = preStreamingState.key;
+                raw.value = preStreamingState.value;
+                rawToggle.checked = preStreamingState.rawMode;
+                preStreamingState = null;
+            } else {
+                // Fallback if no state saved
+                try {
+                    const k = JSON.parse(keyInput.value);
+                    if (k.ChunkIndex === 0 && k.Key !== undefined) {
+                        keyInput.value = typeof k.Key === 'object' ? JSON.stringify(k.Key) : k.Key;
+                    }
+                } catch(e) {}
+                raw.value = '';
+            }
+            toggleSeedValueMode(); // Refresh UI based on restored checkbox state
+        }
+    }
+
     function addSeedValueFieldRow(name = '', type = 'string', value = '') {
         const container = document.getElementById('seed-value-fields-list');
         const div = document.createElement('div');
@@ -3377,11 +3948,36 @@
             <select class="seed-field-type" style="width: 80px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
                 <option value="string" ${type==='string'?'selected':''}>String</option>
                 <option value="int" ${type==='int'?'selected':''}>Int</option>
-                <option value="float" ${type==='float'?'selected':''}>Float</option>
+                <option value="int8" ${type==='int8'?'selected':''}>Int8</option>
+                <option value="int16" ${type==='int16'?'selected':''}>Int16</option>
+                <option value="int32" ${type==='int32'?'selected':''}>Int32</option>
+                <option value="int64" ${type==='int64'?'selected':''}>Int64</option>
+                <option value="uint" ${type==='uint'?'selected':''}>Uint</option>
+                <option value="uint8" ${type==='uint8'?'selected':''}>Uint8</option>
+                <option value="uint16" ${type==='uint16'?'selected':''}>Uint16</option>
+                <option value="uint32" ${type==='uint32'?'selected':''}>Uint32</option>
+                <option value="uint64" ${type==='uint64'?'selected':''}>Uint64</option>
+                <option value="float32" ${type==='float32'?'selected':''}>Float32</option>
+                <option value="float64" ${type==='float64'?'selected':''}>Float64</option>
+                <option value="complex64" ${type==='complex64'?'selected':''}>Complex64</option>
+                <option value="complex128" ${type==='complex128'?'selected':''}>Complex128</option>
+                <option value="rune" ${type==='rune'?'selected':''}>Rune</option>
+                <option value="decimal" ${type==='decimal'?'selected':''}>Decimal</option>
                 <option value="bool" ${type==='bool'?'selected':''}>Bool</option>
+                <option value="timestamp" ${type==='timestamp'?'selected':''}>Timestamp</option>
+                <option value="timestampz" ${type==='timestampz'?'selected':''}>TimestampZ</option>
+                <option value="date" ${type==='date'?'selected':''}>Date</option>
+                <option value="datetime" ${type==='datetime'?'selected':''}>DateTime</option>
+                <option value="time" ${type==='time'?'selected':''}>Time</option>
+                <option value="guid" ${type==='guid'?'selected':''}>UUID</option>
+                <option value="blob" ${type==='blob'?'selected':''}>Blob</option>
             </select>
             <input type="text" placeholder="Value" class="seed-field-value" value="${value}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
-            <button onclick="this.parentElement.remove()" style="color:red; cursor:pointer; background:none; border:none;">&times;</button>
+            <div style="display:flex; gap:0; align-items:center; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg);">
+                <button onclick="moveFieldRow(this, -1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px;" title="Move Up">↑</button>
+                <button onclick="moveFieldRow(this, 1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px; border-left: 1px solid var(--input-border);" title="Move Down">↓</button>
+                <button onclick="this.closest('.seed-value-field-row').remove()" style="color:red; cursor:pointer; background:none; border:none; padding: 2px 6px; border-left: 1px solid var(--input-border);">&times;</button>
+            </div>
         `;
         container.appendChild(div);
     }
@@ -3408,14 +4004,32 @@
                 
                 if (name) {
                     let val = valStr;
-                    if (type === 'int') {
+                    if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(type)) {
                         val = parseInt(valStr);
                         if (isNaN(val)) val = 0;
-                    } else if (type === 'float') {
+                    } else if (['float32', 'float64', 'decimal'].includes(type)) {
                         val = parseFloat(valStr);
                         if (isNaN(val)) val = 0.0;
+                    } else if (['complex64', 'complex128'].includes(type)) {
+                        // Treat complex as string for now, or parse if user provides "real,imag"
+                        val = valStr;
                     } else if (type === 'bool') {
                         val = (valStr.toLowerCase() === 'true' || valStr === '1');
+                    } else if (type === 'timestamp') {
+                        let t = parseInt(valStr);
+                        if (isNaN(t)) {
+                            t = Date.parse(valStr);
+                            if (isNaN(t)) t = 0;
+                        }
+                        val = t;
+                    } else if (['date', 'datetime', 'time', 'guid', 'timestampz'].includes(type)) {
+                        val = valStr;
+                    } else if (type === 'blob') {
+                        // Convert string to byte array (simple ASCII for now)
+                        val = [];
+                        for (let i = 0; i < valStr.length; i++) {
+                            val.push(valStr.charCodeAt(i));
+                        }
                     }
                     obj[name] = val;
                 }
@@ -3435,7 +4049,10 @@
         }
 
         const advancedMode = document.getElementById('new-store-advanced-mode').checked;
-        const slotLength = parseInt(document.getElementById('new-store-slot-length').value);
+        let slotLength = parseInt(document.getElementById('new-store-slot-length').value);
+        if (isNaN(slotLength) || slotLength < 2) slotLength = 2;
+        if (slotLength > 10000) slotLength = 10000;
+
         const isUnique = document.getElementById('new-store-is-unique').checked;
         const valueInNode = document.getElementById('new-store-value-in-node').checked;
         const cacheDuration = parseInt(document.getElementById('new-store-cache-duration').value);
@@ -3464,14 +4081,30 @@
                     const fieldType = typeDefRow ? typeDefRow.querySelector('.key-field-type').value : 'string';
                     
                     let val = valStr;
-                    if (fieldType === 'int') {
+                    if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(fieldType)) {
                         val = parseInt(valStr);
                         if (isNaN(val)) val = 0;
-                    } else if (fieldType === 'float') {
+                    } else if (['float32', 'float64', 'decimal'].includes(fieldType)) {
                         val = parseFloat(valStr);
                         if (isNaN(val)) val = 0.0;
+                    } else if (['complex64', 'complex128'].includes(fieldType)) {
+                        val = valStr;
                     } else if (fieldType === 'bool') {
                         val = (valStr.toLowerCase() === 'true' || valStr === '1');
+                    } else if (fieldType === 'timestamp') {
+                        let t = parseInt(valStr);
+                        if (isNaN(t)) {
+                            t = Date.parse(valStr);
+                            if (isNaN(t)) t = 0;
+                        }
+                        val = t;
+                    } else if (['date', 'datetime', 'time', 'guid', 'timestampz'].includes(fieldType)) {
+                        val = valStr;
+                    } else if (fieldType === 'blob') {
+                        val = [];
+                        for (let i = 0; i < valStr.length; i++) {
+                            val.push(valStr.charCodeAt(i));
+                        }
                     }
                     seedKey[name] = val;
                 });
@@ -3480,14 +4113,35 @@
             // Simple Key
             const seedKeyStr = document.getElementById('new-store-seed-key').value.trim();
             if (seedKeyStr) {
-                try {
-                    // Try parsing as JSON first (for map keys or quoted strings)
-                    seedKey = JSON.parse(seedKeyStr);
-                } catch {
-                    // If not JSON, treat as string or number
-                    if (!isNaN(seedKeyStr) && type === 'int') {
-                        seedKey = Number(seedKeyStr);
-                    } else {
+                if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(type)) {
+                    seedKey = parseInt(seedKeyStr);
+                    if (isNaN(seedKey)) seedKey = 0;
+                } else if (['float32', 'float64', 'decimal'].includes(type)) {
+                    seedKey = parseFloat(seedKeyStr);
+                    if (isNaN(seedKey)) seedKey = 0.0;
+                } else if (['complex64', 'complex128'].includes(type)) {
+                    seedKey = seedKeyStr;
+                } else if (type === 'bool') {
+                    seedKey = (seedKeyStr.toLowerCase() === 'true' || seedKeyStr === '1');
+                } else if (type === 'timestamp') {
+                    let t = parseInt(seedKeyStr);
+                    if (isNaN(t)) {
+                        t = Date.parse(seedKeyStr);
+                        if (isNaN(t)) t = 0;
+                    }
+                    seedKey = t;
+                } else if (['date', 'datetime', 'time', 'guid', 'timestampz'].includes(type)) {
+                    seedKey = seedKeyStr;
+                } else if (type === 'blob') {
+                    seedKey = [];
+                    for (let i = 0; i < seedKeyStr.length; i++) {
+                        seedKey.push(seedKeyStr.charCodeAt(i));
+                    }
+                } else {
+                    // Default string or fallback
+                    try {
+                        seedKey = JSON.parse(seedKeyStr);
+                    } catch {
                         seedKey = seedKeyStr;
                     }
                 }
@@ -3504,6 +4158,17 @@
         } catch (e) {
             alert(e.message);
             return;
+        }
+
+        const isStreaming = document.getElementById('new-store-is-streaming').checked;
+        if (isStreaming) {
+            // Wrap Key for Streaming Data
+            seedKey = {
+                Key: seedKey,
+                ChunkIndex: 0
+            };
+            // Force Value to Blob (Sample)
+            seedValue = [1, 2, 3]; 
         }
 
         const payload = {

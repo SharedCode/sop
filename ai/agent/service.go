@@ -697,23 +697,37 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 				// If the LLM returned valid JSON (even with obfuscated values), this will succeed.
 				if err := json.Unmarshal([]byte(text), &toolCall); err == nil {
 					// 2. Sanitize Args
-					for k, v := range toolCall.Args {
-						if val, ok := v.(string); ok {
-							// a. Remove Markdown bold/italics/code wrappers from the value itself
-							// LLM might return: "database": "**DB_123**" or "`DB_123`"
+					var sanitize func(any) any
+					sanitize = func(v any) any {
+						switch val := v.(type) {
+						case string:
+							// a. Remove Markdown bold/italics/code wrappers
 							val = strings.Trim(val, "*_`")
-
 							// b. Replace NBSP with space and Trim whitespace
 							val = strings.ReplaceAll(val, "\u00a0", " ")
 							val = strings.TrimSpace(val)
-
 							// c. De-obfuscate if enabled
 							if s.EnableObfuscation {
 								val = obfuscation.GlobalObfuscator.DeobfuscateText(val)
 							}
-
-							toolCall.Args[k] = val
+							return val
+						case []any:
+							for i, item := range val {
+								val[i] = sanitize(item)
+							}
+							return val
+						case map[string]any:
+							for k, item := range val {
+								val[k] = sanitize(item)
+							}
+							return val
+						default:
+							return val
 						}
+					}
+
+					for k, v := range toolCall.Args {
+						toolCall.Args[k] = sanitize(v)
 					}
 
 					// Inject Database from Options if missing

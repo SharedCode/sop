@@ -384,3 +384,66 @@ func (a *DataAdminAgent) updateMacro(ctx context.Context, name string, updateFun
 
 	return tx.Commit(ctx)
 }
+
+func (a *DataAdminAgent) toolMacroAddStepFromLast(ctx context.Context, args map[string]any) (string, error) {
+if a.lastToolCall == nil {
+return "", fmt.Errorf("no last tool call found")
+}
+
+macroName, _ := args["macro"].(string)
+if macroName == "" {
+return "", fmt.Errorf("macro name required")
+}
+
+// Optional: index
+var index int = -1 
+if v, ok := args["index"].(float64); ok {
+index = int(v)
+}
+
+// Optional: position (before, after, append)
+position, _ := args["position"].(string)
+if position == "" {
+if index == -1 {
+position = "append"
+} else {
+position = "after" // Default to after if index is provided
+}
+}
+
+err := a.updateMacro(ctx, macroName, func(m *ai.Macro) error {
+step := *a.lastToolCall
+
+if position == "append" || index == -1 {
+m.Steps = append(m.Steps, step)
+return nil
+}
+
+if index < 0 || index >= len(m.Steps) {
+if index == len(m.Steps) {
+m.Steps = append(m.Steps, step)
+return nil
+}
+return fmt.Errorf("index out of bounds")
+}
+
+if position == "before" {
+// Insert at index
+m.Steps = append(m.Steps[:index], append([]ai.MacroStep{step}, m.Steps[index:]...)...)
+} else {
+// "after" -> Insert at index + 1
+if index+1 >= len(m.Steps) {
+m.Steps = append(m.Steps, step)
+} else {
+m.Steps = append(m.Steps[:index+1], append([]ai.MacroStep{step}, m.Steps[index+1:]...)...)
+}
+}
+return nil
+})
+
+if err != nil {
+return "", err
+}
+
+return fmt.Sprintf("Added last tool '%s' to macro '%s'.", a.lastToolCall.Command, macroName), nil
+}

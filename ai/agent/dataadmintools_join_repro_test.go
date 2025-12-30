@@ -3,12 +3,14 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
 	core_database "github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/jsondb"
 )
 
 func TestToolJoin_SuffixHandling(t *testing.T) {
@@ -113,4 +115,224 @@ func keys(m map[string]any) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+func TestToolJoin_WithAlias(t *testing.T) {
+	// 1. Setup
+	ctx := context.Background()
+	dbPath := "test_dataadmin_join_alias"
+	os.RemoveAll(dbPath)
+	defer os.RemoveAll(dbPath)
+
+	dbOpts := sop.DatabaseOptions{
+		StoresFolders: []string{dbPath},
+		CacheType:     sop.InMemory,
+	}
+
+	// Create DB
+	db := database.NewDatabase(dbOpts)
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	// Create Left Store (Departments)
+	leftStoreName := "departments"
+	if _, err := core_database.NewBtree[string, any](ctx, dbOpts, leftStoreName, tx, nil, sop.StoreOptions{Name: leftStoreName, SlotLength: 10}); err != nil {
+		t.Fatalf("NewBtree left failed: %v", err)
+	}
+
+	// Create Right Store (Employees)
+	rightStoreName := "employees"
+	if _, err := core_database.NewBtree[string, any](ctx, dbOpts, rightStoreName, tx, nil, sop.StoreOptions{Name: rightStoreName, SlotLength: 10}); err != nil {
+		t.Fatalf("NewBtree right failed: %v", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit creation failed: %v", err)
+	}
+
+	// Populate
+	tx, err = db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction population failed: %v", err)
+	}
+
+	leftStore, _ := jsondb.OpenStore(ctx, dbOpts, leftStoreName, tx)
+	rightStore, _ := jsondb.OpenStore(ctx, dbOpts, rightStoreName, tx)
+
+	// Dept: {id: 1, name: "Engineering"}
+	leftStore.Add(ctx, map[string]any{"id": 1}, map[string]any{"name": "Engineering", "region": "APAC"})
+
+	// Emp: {id: 101, name: "John", dept_id: 1}
+	rightStore.Add(ctx, map[string]any{"id": 101}, map[string]any{"name": "John", "dept_id": 1, "region": "APAC"})
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	// 2. Prepare Agent
+	agent := &DataAdminAgent{
+		databases: map[string]sop.DatabaseOptions{
+			"testdb": dbOpts,
+		},
+	}
+	sessionPayload := &ai.SessionPayload{
+		CurrentDB: "testdb",
+	}
+	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
+
+	// 3. Execute Join with Alias
+	// SQL: select a.region, b.name as employee from departments a inner join employees b on a.region=b.region
+	args := map[string]any{
+		"left_store":        leftStoreName,
+		"right_store":       rightStoreName,
+		"left_join_fields":  []string{"region"},
+		"right_join_fields": []string{"region"},
+		"fields": []string{
+			"a.region",
+			"b.name AS employee",
+		},
+	}
+
+	resultJSON, err := agent.toolJoin(ctx, args)
+	if err != nil {
+		t.Fatalf("toolJoin failed: %v", err)
+	}
+
+	// 4. Verify Result
+	var result []map[string]any
+	if err := json.Unmarshal([]byte(resultJSON), &result); err != nil {
+		t.Fatalf("Failed to unmarshal result: %v", err)
+	}
+
+	if len(result) != 1 {
+		t.Fatalf("Expected 1 result, got %d", len(result))
+	}
+
+	item := result[0]
+	// Join tool returns flat map in "key" usually? Or just flat map?
+	// Let's check the output structure. JoinProcessor uses ResultEmitter.
+	// ResultEmitter emits whatever is passed to it.
+	// In JoinProcessor.emitMatch, it constructs keyMap and valMap if fields are specified.
+	// And returns {"key": keyMap, "value": valMap}
+
+	// Check Region (Auto-titled)
+	// Note: OrderedMap marshals to JSON object, so unmarshalling gives map[string]any
+	// But we need to check if it's in Key or Value.
+	// "region" is likely a value field in the source stores unless it's part of the key.
+	// In the test setup:
+	// Left: Key={id:1}, Value={name:..., region:...} -> Region is Value
+	// Right: Key={id:101}, Value={name:..., region:...} -> Region is Value
+	// So both should be in "value" map, not "key" map.
+
+	valMap, ok := item["value"].(map[string]any)
+	if !ok {
+		t.Fatalf("Value is not a map: %v", item)
+	}
+
+	if val, ok := valMap["Region"]; !ok || val != "APAC" {
+		t.Errorf("Expected Region=APAC, got %v", valMap)
+	}
+
+	// Check Employee (Aliased)
+	// Note: The alias "employee" was lowercased in the test output "employee:John"
+	// This is because my Title Case logic in computeDisplayKeys only runs if it's NOT an alias?
+	// Or maybe I didn't Title Case the alias.
+	// Let's check the code.
+	// In computeDisplayKeys:
+	// if " as " found: candidates[i] = alias.
+	// It does NOT apply Title Case to the alias.
+	// So "b.name AS employee" -> alias "employee".
+
+	if val, ok := valMap["employee"]; !ok || val != "John" {
+		t.Errorf("Expected employee=John, got %v", valMap)
+	}
+}
+
+func TestToolJoin_StoreNamePrefix(t *testing.T) {
+	// Setup
+	tmpDir := t.TempDir()
+	dbOpts := sop.DatabaseOptions{
+		Type:          sop.Clustered,
+		StoresFolders: []string{tmpDir},
+		CacheType:     sop.InMemory,
+	}
+	sysDB := database.NewDatabase(dbOpts)
+
+	cfg := Config{
+		Name: "TestAgent",
+	}
+	dbs := make(map[string]sop.DatabaseOptions)
+	agent := NewDataAdminAgent(cfg, dbs, sysDB)
+
+	// Create Stores
+	ctx := context.Background()
+	tx, _ := core_database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+
+	// Department Store
+	deptStore, _ := core_database.NewBtree[string, any](ctx, dbOpts, "department", tx, nil)
+	deptStore.Add(ctx, "d1", map[string]any{"region": "East", "department": "Sales"})
+	deptStore.Add(ctx, "d2", map[string]any{"region": "West", "department": "Engineering"})
+
+	// Employees Store
+	empStore, _ := core_database.NewBtree[string, any](ctx, dbOpts, "employees", tx, nil)
+	empStore.Add(ctx, "e1", map[string]any{"region": "East", "department": "Sales", "name": "John"})
+	empStore.Add(ctx, "e2", map[string]any{"region": "West", "department": "Engineering", "name": "Jane"})
+	empStore.Add(ctx, "e3", map[string]any{"region": "East", "department": "Sales", "name": "Bob"})
+
+	tx.Commit(ctx)
+
+	// Register DB
+	agent.databases["default"] = dbOpts
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "default"})
+
+	// Execute Join
+	args := map[string]any{
+		"database":          "default",
+		"left_store":        "department",
+		"right_store":       "employees",
+		"left_join_fields":  []string{"region", "department"},
+		"right_join_fields": []string{"region", "department"},
+		"fields":            []string{"department.region", "employees.department", "employees.name as employee"},
+		"join_type":         "inner",
+	}
+
+	result, err := agent.toolJoin(ctx, args)
+	if err != nil {
+		t.Fatalf("Join failed: %v", err)
+	}
+
+	// Parse Result
+	var raw []map[string]any
+	if err := json.Unmarshal([]byte(result), &raw); err != nil {
+		t.Fatalf("Failed to parse result: %v", err)
+	}
+
+	if len(raw) == 0 {
+		t.Fatal("Expected results, got none")
+	}
+
+	first := raw[0]
+	valMap := first["value"].(map[string]any)
+
+	// Check for expected keys
+	// "department.region" -> "Region" (stripped prefix)
+	// "employees.department" -> "Department" (stripped prefix)
+	// "employees.name as employee" -> "employee"
+
+	if _, ok := valMap["Region"]; !ok {
+		t.Errorf("Missing 'Region' in value: %v", valMap)
+	}
+	if _, ok := valMap["Department"]; !ok {
+		t.Errorf("Missing 'Department' in value: %v", valMap)
+	}
+	if _, ok := valMap["employee"]; !ok {
+		t.Errorf("Missing 'employee' in value: %v", valMap)
+	}
+
+	// Check values
+	if valMap["Region"] != "East" && valMap["Region"] != "West" {
+		t.Errorf("Unexpected region: %v", valMap["Region"])
+	}
 }

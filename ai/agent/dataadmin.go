@@ -29,6 +29,7 @@ type DataAdminAgent struct {
 	registry          *Registry
 	databases         map[string]sop.DatabaseOptions
 	systemDB          *database.Database
+	lastToolCall      *ai.MacroStep
 }
 
 // SetGenerator sets the generator for the agent.
@@ -343,6 +344,26 @@ func (a *DataAdminAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, er
 
 // Execute executes the requested tool against the session payload.
 func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	// Save as Last Tool Call (for macro recording/refactoring)
+	// We clone args to avoid mutation issues
+	// BUT: If the tool is "macro_add_step_from_last", we should NOT overwrite the last tool call yet!
+	// We need to let it run using the *previous* last tool call.
+	// So we defer the update of lastToolCall until AFTER execution, OR we skip it for meta-tools.
+
+	isMetaTool := toolName == "macro_add_step_from_last"
+
+	if !isMetaTool {
+		savedArgs := make(map[string]any)
+		for k, v := range args {
+			savedArgs[k] = v
+		}
+		a.lastToolCall = &ai.MacroStep{
+			Type:    "command",
+			Command: toolName,
+			Args:    savedArgs,
+		}
+	}
+
 	// De-obfuscate Args if enabled
 	if a.enableObfuscation {
 		for k, v := range args {

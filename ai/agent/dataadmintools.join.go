@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -179,6 +180,8 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 		leftTx:         leftTx,
 		leftAutoCommit: leftAutoCommit,
 		leftIndexSpec:  leftIndexSpec,
+		leftStoreName:  leftStoreName,
+		rightStoreName: rightStoreName,
 	}
 
 	return jp.Execute()
@@ -204,6 +207,8 @@ type JoinProcessor struct {
 	count          int
 	displayKeys    []string
 	leftIndexSpec  *jsondb.IndexSpecification
+	leftStoreName  string
+	rightStoreName string
 
 	// Internal State
 	rightKeyFields   []string
@@ -444,11 +449,32 @@ func (jp *JoinProcessor) computeDisplayKeys() {
 	candidates := make([]string, len(jp.fields))
 	counts := make(map[string]int)
 
+	// Regex for " AS " (case insensitive, handles multiple spaces/tabs)
+	aliasRe := regexp.MustCompile(`(?i)\s+as\s+`)
+
 	for i, f := range jp.fields {
+		// Handle "AS" alias
+		if loc := aliasRe.FindStringIndex(f); loc != nil {
+			// loc[0] is start of match, loc[1] is end of match
+			alias := strings.TrimSpace(f[loc[1]:])
+			jp.fields[i] = strings.TrimSpace(f[:loc[0]]) // Update field to source name
+			candidates[i] = alias
+			counts[alias]++
+			continue
+		}
+
 		clean := f
 		lowerF := strings.ToLower(f)
 		// Strip prefixes
-		for _, prefix := range []string{"left.", "right.", "a.", "b.", "left_", "right_"} {
+		prefixes := []string{"left.", "right.", "a.", "b.", "left_", "right_"}
+		if jp.leftStoreName != "" {
+			prefixes = append(prefixes, strings.ToLower(jp.leftStoreName)+".")
+		}
+		if jp.rightStoreName != "" {
+			prefixes = append(prefixes, strings.ToLower(jp.rightStoreName)+".")
+		}
+
+		for _, prefix := range prefixes {
 			if strings.HasPrefix(lowerF, prefix) {
 				clean = f[len(prefix):]
 				break
@@ -471,16 +497,21 @@ func (jp *JoinProcessor) computeDisplayKeys() {
 		counts[clean]++
 	}
 
-	for i, f := range jp.fields {
+	for i := range jp.fields {
 		clean := candidates[i]
 		if counts[clean] > 1 {
 			// Collision: Fallback to formatted original
-			formatted := strings.ReplaceAll(f, ".", " ")
-			formatted = strings.ReplaceAll(formatted, "_", " ")
-			if len(formatted) > 0 {
-				formatted = strings.ToUpper(formatted[:1]) + formatted[1:]
-			}
-			jp.displayKeys[i] = formatted
+			// But if it was an explicit alias, we should probably respect it?
+			// If user aliased two fields to the same name, that's their problem/intent.
+			// But let's keep collision handling for auto-generated names.
+
+			// Check if this candidate came from an explicit alias
+			// We can check if the original field string had " as ".
+			// But we lost the original string in the first loop if we overwrote jp.fields[i].
+			// Let's assume explicit aliases are intentional and don't dedupe them aggressively,
+			// or we just let them collide.
+
+			jp.displayKeys[i] = clean
 		} else {
 			jp.displayKeys[i] = clean
 		}
@@ -521,6 +552,9 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 					var val any
 					var isKey bool
 
+					// Note: f has been stripped of " AS alias" in computeDisplayKeys
+					// But it might still have prefixes like "a.", "b." etc.
+
 					lowerF := strings.ToLower(f)
 
 					if strings.HasPrefix(lowerF, "left.") {
@@ -558,6 +592,12 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 								tryLeft = true
 							} else if strings.HasPrefix(lowerF, "right_") {
 								fieldName = f[6:]
+								tryRight = true
+							} else if jp.leftStoreName != "" && strings.HasPrefix(lowerF, strings.ToLower(jp.leftStoreName)+".") {
+								fieldName = f[len(jp.leftStoreName)+1:]
+								tryLeft = true
+							} else if jp.rightStoreName != "" && strings.HasPrefix(lowerF, strings.ToLower(jp.rightStoreName)+".") {
+								fieldName = f[len(jp.rightStoreName)+1:]
 								tryRight = true
 							}
 

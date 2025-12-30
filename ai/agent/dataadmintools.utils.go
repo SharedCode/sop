@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -250,6 +251,17 @@ func filterFields(item map[string]any, fields []string) any {
 		return item
 	}
 
+	// Helper to parse "field AS alias"
+	aliasRe := regexp.MustCompile(`(?i)\s+as\s+`)
+	parseFieldAlias := func(field string) (string, string) {
+		if loc := aliasRe.FindStringIndex(field); loc != nil {
+			source := strings.TrimSpace(field[:loc[0]])
+			alias := strings.TrimSpace(field[loc[1]:])
+			return source, alias
+		}
+		return field, field
+	}
+
 	// Check if the item looks like a standard SOP Store Item (has "key" and "value")
 	_, hasKey := item["key"]
 	_, hasValue := item["value"]
@@ -262,9 +274,10 @@ func filterFields(item map[string]any, fields []string) any {
 			keys: make([]string, 0),
 		}
 		for _, f := range fields {
-			if v, ok := item[f]; ok {
-				om.keys = append(om.keys, f)
-				om.m[f] = v
+			source, alias := parseFieldAlias(f)
+			if v, ok := item[source]; ok {
+				om.keys = append(om.keys, alias)
+				om.m[alias] = v
 			}
 		}
 		return om
@@ -277,9 +290,10 @@ func filterFields(item map[string]any, fields []string) any {
 	var newValue any = nil
 
 	// Helper to check if a field is requested
-	isRequested := func(f string) bool {
+	isRequested := func(target string) bool {
 		for _, field := range fields {
-			if field == f {
+			source, _ := parseFieldAlias(field)
+			if source == target {
 				return true
 			}
 		}
@@ -300,9 +314,10 @@ func filterFields(item map[string]any, fields []string) any {
 			}
 			// Iterate requested fields to preserve order
 			for _, f := range fields {
-				if v, ok := keyMap[f]; ok {
-					om.keys = append(om.keys, f)
-					om.m[f] = v
+				source, alias := parseFieldAlias(f)
+				if v, ok := keyMap[source]; ok {
+					om.keys = append(om.keys, alias)
+					om.m[alias] = v
 				}
 			}
 			if len(om.keys) > 0 {
@@ -316,9 +331,10 @@ func filterFields(item map[string]any, fields []string) any {
 				keys: make([]string, 0),
 			}
 			for _, f := range fields {
-				if v, ok := keyMap[f]; ok {
-					om.keys = append(om.keys, f)
-					om.m[f] = v
+				source, alias := parseFieldAlias(f)
+				if v, ok := keyMap[source]; ok {
+					om.keys = append(om.keys, alias)
+					om.m[alias] = v
 				}
 			}
 			if len(om.keys) > 0 {
@@ -339,9 +355,10 @@ func filterFields(item map[string]any, fields []string) any {
 				keys: make([]string, 0),
 			}
 			for _, f := range fields {
-				if v, ok := valMap[f]; ok {
-					om.keys = append(om.keys, f)
-					om.m[f] = v
+				source, alias := parseFieldAlias(f)
+				if v, ok := valMap[source]; ok {
+					om.keys = append(om.keys, alias)
+					om.m[alias] = v
 				}
 			}
 			if len(om.keys) > 0 {
