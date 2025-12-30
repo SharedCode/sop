@@ -205,16 +205,16 @@ func Test_StoreCachingDefaultCacheApplied(t *testing.T) {
 		Description:              "",
 	}, trans, cmp.Compare)
 
-	if b3.GetStoreInfo().CacheConfig.RegistryCacheDuration != sop.GetDefaulCacheConfig().RegistryCacheDuration {
+	if b3.GetStoreInfo().CacheConfig.RegistryCacheDuration != sop.GetDefaultCacheConfig().RegistryCacheDuration {
 		t.Errorf("Default cache check failed for RegistryCacheDuration.")
 	}
-	if b3.GetStoreInfo().CacheConfig.NodeCacheDuration != sop.GetDefaulCacheConfig().NodeCacheDuration {
+	if b3.GetStoreInfo().CacheConfig.NodeCacheDuration != sop.GetDefaultCacheConfig().NodeCacheDuration {
 		t.Errorf("Default cache check failed for NodeCacheDuration.")
 	}
-	if b3.GetStoreInfo().CacheConfig.StoreInfoCacheDuration != sop.GetDefaulCacheConfig().StoreInfoCacheDuration {
+	if b3.GetStoreInfo().CacheConfig.StoreInfoCacheDuration != sop.GetDefaultCacheConfig().StoreInfoCacheDuration {
 		t.Errorf("Default cache check failed for StoreInfoCacheDuration.")
 	}
-	if b3.GetStoreInfo().CacheConfig.ValueDataCacheDuration != sop.GetDefaulCacheConfig().ValueDataCacheDuration {
+	if b3.GetStoreInfo().CacheConfig.ValueDataCacheDuration != sop.GetDefaultCacheConfig().ValueDataCacheDuration {
 		t.Errorf("Default cache check failed for ValueDataCacheDuration.")
 	}
 }

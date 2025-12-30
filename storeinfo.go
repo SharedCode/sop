@@ -183,7 +183,7 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 
 	// Use the SOP default cache config if the parameter received is not set.
 	if si.CacheConfig == nil {
-		cc := GetDefaulCacheConfig()
+		cc := GetDefaultCacheConfig()
 		si.CacheConfig = &cc
 	}
 	// Apply SOP minimum caching rule if needed.

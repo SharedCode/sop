@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/sharedcode/sop"
@@ -121,6 +122,8 @@ func main() {
 	http.HandleFunc("/api/store/items", handleListItems)
 	http.HandleFunc("/api/store/item/update", handleUpdateItem)
 	http.HandleFunc("/api/store/item/add", handleAddItem)
+	http.HandleFunc("/api/store/add", handleAddStore)
+	http.HandleFunc("/api/store/delete", handleDeleteStore)
 	http.HandleFunc("/api/store/item/delete", handleDeleteItem)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
 
@@ -186,6 +189,7 @@ func getDBOptionsFromConfig(db *DatabaseConfig) (sop.DatabaseOptions, error) {
 		// Override with runtime config if necessary (e.g. Redis address from flags)
 		if db.Mode == "clustered" {
 			loadedOpts.Type = sop.Clustered
+			loadedOpts.CacheType = sop.Redis
 			loadedOpts.RedisConfig = &sop.RedisCacheConfig{
 				Address: db.RedisURL,
 			}
@@ -205,6 +209,7 @@ func getDBOptionsFromConfig(db *DatabaseConfig) (sop.DatabaseOptions, error) {
 
 	if db.Mode == "clustered" {
 		opts.Type = sop.Clustered
+		opts.CacheType = sop.Redis
 		opts.RedisConfig = &sop.RedisCacheConfig{
 			Address: db.RedisURL,
 		}
@@ -886,6 +891,188 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleAddStore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Database    string `json:"database"`
+		StoreName   string `json:"store"`
+		KeyType     string `json:"key_type"` // string, int, uuid, map
+		Description string `json:"description"`
+		IndexSpec   string `json:"index_spec"` // Optional, for map keys
+		SeedKey     any    `json:"seed_key"`   // Optional, for seeding
+		SeedValue   any    `json:"seed_value"` // Optional, for seeding
+
+		// Advanced options
+		AdvancedMode             bool `json:"advanced_mode"`
+		SlotLength               int  `json:"slot_length"`
+		IsUnique                 bool `json:"is_unique"`
+		IsValueDataInNodeSegment bool `json:"is_value_data_in_node_segment"`
+		CacheDuration            int  `json:"cache_duration"`
+		IsCacheTTL               bool `json:"is_cache_ttl"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if req.StoreName == "" {
+		http.Error(w, "Store name is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	dbOpts, err := getDBOptions(req.Database)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Open transaction for writing
+	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	if err != nil {
+		http.Error(w, "Failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer trans.Rollback(ctx)
+
+	storeOpts := sop.StoreOptions{
+		Name:        req.StoreName,
+		SlotLength:  1000,
+		IsUnique:    true,
+		Description: req.Description,
+	}
+
+	if req.AdvancedMode {
+		storeOpts.SlotLength = req.SlotLength
+		storeOpts.IsUnique = req.IsUnique
+		storeOpts.IsValueDataInNodeSegment = req.IsValueDataInNodeSegment
+
+		// Always start with SOP defaults
+		def := sop.GetDefaultCacheConfig()
+		storeOpts.CacheConfig = &def
+
+		// Only override ValueDataCacheDuration if not in node segment and duration provided
+		if !req.IsValueDataInNodeSegment {
+			storeOpts.IsValueDataGloballyCached = true
+			if req.CacheDuration > 0 {
+				storeOpts.CacheConfig.ValueDataCacheDuration = time.Duration(req.CacheDuration) * time.Minute
+				storeOpts.CacheConfig.IsValueDataCacheTTL = req.IsCacheTTL
+			}
+		}
+	}
+
+	switch req.KeyType {
+	case "string":
+		var s btree.BtreeInterface[string, any]
+		s, err = database.NewBtree[string, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+			if kStr, ok := req.SeedKey.(string); ok {
+				s.Add(ctx, kStr, req.SeedValue)
+			}
+		}
+	case "int":
+		var s btree.BtreeInterface[int, any]
+		s, err = database.NewBtree[int, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+			if f, ok := req.SeedKey.(float64); ok {
+				s.Add(ctx, int(f), req.SeedValue)
+			}
+		}
+	case "uuid":
+		var s btree.BtreeInterface[sop.UUID, any]
+		s, err = database.NewBtree[sop.UUID, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+			if str, ok := req.SeedKey.(string); ok {
+				if id, err := sop.ParseUUID(str); err == nil {
+					s.Add(ctx, id, req.SeedValue)
+				}
+			}
+		}
+	case "map":
+		var s *jsondb.JsonDBMapKey
+		s, err = jsondb.NewJsonBtreeMapKey(ctx, dbOpts, storeOpts, trans, req.IndexSpec)
+		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+			// JsonDBMapKey expects []jsondb.Item[map[string]any, any] for Add
+			// But wait, does it? Let's check jsondb.NewJsonBtreeMapKey return type.
+			// It returns *JsonDBMapKey.
+			// Let's check Add signature.
+			// It seems it might be batch add?
+			// If so, we need to wrap it.
+			// But wait, if it's a Btree, it should have Add(ctx, key, value).
+			// The error said: have Add(context.Context, []jsondb.Item[map[string]any, any]) (bool, error)
+			// So it is batch add.
+
+			// We need to construct the item.
+			if kMap, ok := req.SeedKey.(map[string]any); ok {
+				item := jsondb.Item[map[string]any, any]{
+					Key:   kMap,
+					Value: &req.SeedValue,
+				}
+				s.Add(ctx, []jsondb.Item[map[string]any, any]{item})
+			}
+		}
+	default:
+		http.Error(w, "Invalid key type. Supported: string, int, uuid, map", http.StatusBadRequest)
+		return
+	}
+
+	if err != nil {
+		http.Error(w, "Failed to create store: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := trans.Commit(ctx); err != nil {
+		http.Error(w, "Commit failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Store created successfully"})
+}
+
+func handleDeleteStore(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Database  string `json:"database"`
+		StoreName string `json:"store"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if req.StoreName == "" {
+		http.Error(w, "Store name is required", http.StatusBadRequest)
+		return
+	}
+
+	dbOpts, err := getDBOptions(req.Database)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := database.RemoveBtree(r.Context(), dbOpts, req.StoreName); err != nil {
+		http.Error(w, "Failed to delete store: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Store deleted successfully"})
 }
 
 func handleAddItem(w http.ResponseWriter, r *http.Request) {

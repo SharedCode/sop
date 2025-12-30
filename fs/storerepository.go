@@ -418,8 +418,9 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, true)
 	for _, storeName := range storeNames {
 		if _, ok := storesLookup[storeName]; !ok {
-			lastErr = fmt.Errorf("can't remove store %s, there is no item with such name", storeName)
-			log.Info(lastErr.Error())
+			// If store not found in list, it might be because the list is stale or the store was manually deleted.
+			// We should still attempt to remove the folder to ensure cleanup.
+			log.Info(fmt.Sprintf("Store %s not found in store list, proceeding with folder removal attempt.", storeName))
 		}
 
 		// Tolerate Redis cache failure.

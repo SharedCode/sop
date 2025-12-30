@@ -65,8 +65,8 @@ func SetDefaultCacheConfig(cacheDuration StoreCacheConfig) {
 	defaultCacheConfig = cacheDuration
 }
 
-// GetDefaulCacheConfig returns the global default cache configuration.
-func GetDefaulCacheConfig() StoreCacheConfig {
+// GetDefaultCacheConfig returns the global default cache configuration.
+func GetDefaultCacheConfig() StoreCacheConfig {
 	return defaultCacheConfig
 }
 

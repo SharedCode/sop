@@ -250,6 +250,57 @@
             color: var(--danger-bg);
             font-weight: bold;
         }
+
+        /* Modal */
+        .modal {
+            display: none; 
+            position: fixed; 
+            z-index: 2000; 
+            left: 0;
+            top: 0;
+            width: 100%; 
+            height: 100%; 
+            overflow: auto; 
+            background-color: rgba(0,0,0,0.4); 
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background-color: var(--bg-color);
+            margin: auto;
+            padding: 20px;
+            border: 1px solid var(--border-color);
+            width: 300px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+            max-height: 80vh;
+        }
+        #add-store-modal .modal-content {
+            width: 600px;
+            max-width: 90%;
+        }
+        .modal-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 15px;
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
     </style>
 </head>
 <body>
@@ -262,7 +313,10 @@
                 <option>Loading...</option>
             </select>
         </div>
-        <h2 style="margin-bottom: 2px;">Stores</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+            <h2 style="margin: 0;">Stores</h2>
+            <button onclick="showAddStore()" title="Add new store" style="padding: 2px 8px; font-size: 12px;">Add</button>
+        </div>
         <ul id="store-list" style="margin-bottom: 12px;">
             <li>Select a database...</li>
         </ul>
@@ -281,7 +335,20 @@
 <div id="resizer"></div>
 
 <div id="main">
-    <h1 id="current-store-title">Select a Store</h1>
+    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+        <h1 id="current-store-title" style="margin: 0;">Select a Store</h1>
+        <button id="btn-code-store" onclick="showGeneratedCode()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Show Go Structs">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M10.478 1.647a.5.5 0 1 0-.956-.294l-4 13a.5.5 0 0 0 .956.294l4-13zM4.854 4.146a.5.5 0 0 1 0 .708L1.707 8l3.147 3.146a.5.5 0 0 1-.708.708l-3.5-3.5a.5.5 0 0 1 0-.708l3.5-3.5a.5.5 0 0 1 .708 0zm6.292 0a.5.5 0 0 0 0 .708L14.293 8l-3.147 3.146a.5.5 0 0 0 .708.708l3.5-3.5a.5.5 0 0 0 0-.708l-3.5-3.5a.5.5 0 0 0-.708 0z"/>
+            </svg>
+        </button>
+        <button id="btn-delete-store" onclick="deleteStore()" style="display:none; background-color: transparent; color: var(--danger-bg); padding: 4px; border: none; cursor: pointer;" title="Delete Store">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+            </svg>
+        </button>
+    </div>
     
     <div class="toolbar" id="toolbar" style="display:none;">
         <input type="text" id="search-input" placeholder="Search keys...">
@@ -290,11 +357,14 @@
         <button onclick="showColumnSelector()" title="Select columns to display.">Columns</button>
     </div>
 
-    <div id="pagination-top" style="display:none; margin-bottom: 2px; gap: 10px; justify-content: center;">
-        <button onclick="firstPage()" tabindex="0" title="Go to the first page of items.">First</button>
-        <button onclick="prevPage()" tabindex="0" title="Go to the previous page of items.">Previous</button>
-        <button onclick="nextPage()" tabindex="0" title="Go to the next page of items.">Next</button>
-        <button onclick="lastPage()" tabindex="0" title="Go to the last page of items.">Last</button>
+    <div id="pagination-top" style="display:none; margin-bottom: 2px; position: relative; justify-content: center; align-items: center; min-height: 32px;">
+        <button onclick="showColumnSelector()" title="Select columns to display." style="position: absolute; left: 0;">Columns</button>
+        <div style="display: flex; gap: 10px;">
+            <button onclick="firstPage()" tabindex="0" title="Go to the first page of items.">First</button>
+            <button onclick="prevPage()" tabindex="0" title="Go to the previous page of items.">Previous</button>
+            <button onclick="nextPage()" tabindex="0" title="Go to the next page of items.">Next</button>
+            <button onclick="lastPage()" tabindex="0" title="Go to the last page of items.">Last</button>
+        </div>
     </div>
 
     <div id="data-grid"></div>
@@ -315,6 +385,186 @@
     </div>
     <div id="tab-details" class="tab-content active">
         <div id="json-viewer"></div>
+    </div>
+</div>
+
+<div id="column-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span>Select Columns</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="document.getElementById('column-modal').style.display='none'">&times;</span>
+        </div>
+        <div class="modal-body" id="column-list">
+            <!-- Checkboxes will be injected here -->
+        </div>
+        <div class="modal-footer">
+            <button onclick="applyColumns()">Apply</button>
+            <button onclick="document.getElementById('column-modal').style.display='none'" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="add-store-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span>Add New Store</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="closeAddStoreModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom: 10px;">
+                <label style="display:block; margin-bottom: 5px;">Store Name:</label>
+                <input type="text" id="new-store-name" style="width: 100%; box-sizing: border-box;">
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display:block; margin-bottom: 5px;">Key Type:</label>
+                <select id="new-store-key-type" onchange="toggleIndexSpec()" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                    <option value="string">String</option>
+                    <option value="int">Integer</option>
+                    <option value="uuid">UUID</option>
+                    <option value="map">Map (JSON Object)</option>
+                </select>
+            </div>
+            <div id="index-spec-container" style="margin-bottom: 10px; display: none; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; background: var(--bg-color);">
+                <label style="display:block; margin-bottom: 10px; font-weight: bold;">Map Key Configuration:</label>
+                
+                <!-- Key Fields Section -->
+                <div style="margin-bottom: 15px;">
+                    <label style="display:block; margin-bottom: 5px; font-size: 12px; font-weight: bold;">1. Define Key Fields:</label>
+                    <div id="key-fields-list" style="display: flex; flex-direction: column; gap: 5px;">
+                        <!-- Rows injected here -->
+                    </div>
+                    <button onclick="addKeyFieldRow()" style="font-size: 11px; padding: 4px 8px; margin-top: 5px; cursor: pointer;">+ Add Field</button>
+                </div>
+
+                <!-- Index Definition Section -->
+                <div>
+                    <label style="display:block; margin-bottom: 5px; font-size: 12px; font-weight: bold;">2. Define Index (Order Matters):</label>
+                    <div id="index-fields-list" style="display: flex; flex-direction: column; gap: 5px;">
+                        <!-- Rows injected here -->
+                    </div>
+                    <button onclick="addIndexFieldRow()" style="font-size: 11px; padding: 4px 8px; margin-top: 5px; cursor: pointer;">+ Add Index Field</button>
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 10px;">
+                    The index specification determines how map keys are compared and sorted.
+                </div>
+            </div>
+
+            <div id="seed-data-container" style="margin-bottom: 10px; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; background: var(--bg-color);">
+                <div style="display: flex; align-items: center; gap: 5px; margin-bottom: 10px;">
+                    <label style="font-weight: bold; margin: 0;">Data Entry:</label>
+                    <span onclick="toggleSeedHelp()" style="cursor: pointer; color: var(--active-bg); font-size: 14px;" title="Click for help">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                            <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z"/>
+                        </svg>
+                    </span>
+                </div>
+                <div id="seed-help-text" style="display: none; font-size: 11px; color: var(--text-muted); margin-bottom: 10px; background: var(--pre-bg); padding: 5px; border-radius: 4px;">
+                    Add an initial item to the store. This helps define the data structure (schema) for future items, especially for the Key and Value fields.
+                </div>
+                
+                <div style="margin-bottom: 10px;">
+                    <label style="display:block; margin-bottom: 5px; font-size: 12px;">Key:</label>
+                    <!-- Simple Key Input -->
+                    <textarea id="new-store-seed-key" placeholder="Enter key value" style="width: 100%; height: 40px; font-family: monospace; box-sizing: border-box;"></textarea>
+                    
+                    <!-- Map Key Form -->
+                    <div id="new-store-seed-key-map-container" style="display:none; border: 1px solid var(--input-border); padding: 5px; border-radius: 4px; background: var(--input-bg);">
+                        <div id="seed-key-fields-list" style="display: flex; flex-direction: column; gap: 5px;">
+                            <!-- Generated inputs go here -->
+                        </div>
+                        <div style="font-size: 10px; color: var(--text-muted); margin-top: 5px;">
+                            Values for the key fields defined above.
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                        <label style="font-size: 12px;">Value:</label>
+                        <label style="font-size: 11px; cursor: pointer;">
+                            <input type="checkbox" id="seed-value-raw-mode" onchange="toggleSeedValueMode()"> Raw JSON
+                        </label>
+                    </div>
+                    
+                    <!-- Builder Mode -->
+                    <div id="seed-value-builder" style="border: 1px solid var(--input-border); padding: 5px; border-radius: 4px; background: var(--input-bg);">
+                        <div id="seed-value-fields-list" style="display: flex; flex-direction: column; gap: 5px;">
+                            <!-- Rows injected here -->
+                        </div>
+                        <button onclick="addSeedValueFieldRow()" style="font-size: 11px; padding: 4px 8px; margin-top: 5px; cursor: pointer;">+ Add Field</button>
+                    </div>
+
+                    <!-- Raw Mode -->
+                    <textarea id="new-store-seed-value" placeholder="Enter value (JSON Object)" style="width: 100%; height: 80px; font-family: monospace; box-sizing: border-box; display: none;"></textarea>
+                </div>
+            </div>
+
+             <div style="margin-bottom: 10px;">
+                <label style="display:block; margin-bottom: 5px;">Description:</label>
+                <textarea id="new-store-description" style="width: 100%; box-sizing: border-box; height: 60px;"></textarea>
+            </div>
+            <div style="margin-bottom: 10px;">
+                <label style="display:flex; align-items:center; gap: 5px; cursor: pointer;">
+                    <input type="checkbox" id="new-store-advanced-mode" onchange="toggleAdvancedOptions()">
+                    <span>Advanced Mode</span>
+                </label>
+            </div>
+            <div id="advanced-options-container" style="display: none; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+                <div style="margin-bottom: 10px;">
+                    <label style="display:block; margin-bottom: 5px;">Slot Length:</label>
+                    <input type="number" id="new-store-slot-length" value="1000" min="2" style="width: 100%; box-sizing: border-box;">
+                </div>
+                <div style="margin-bottom: 5px;">
+                    <label style="display:flex; align-items:center; gap: 5px; cursor: pointer;">
+                        <input type="checkbox" id="new-store-is-unique" checked>
+                        <span>Is Unique</span>
+                    </label>
+                </div>
+                <div style="margin-bottom: 5px;">
+                    <label style="display:flex; align-items:center; gap: 5px; cursor: pointer;">
+                        <input type="checkbox" id="new-store-value-in-node" checked onchange="toggleCacheOptions()">
+                        <span>Value Data In Node Segment</span>
+                    </label>
+                </div>
+                <div id="cache-options-container" style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 10px; display: none;">
+                    <label style="display:block; margin-bottom: 5px; font-weight: bold;">Value Data Caching:</label>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px; font-style: italic;">
+                        Note: Caching settings are most effective in Clustered mode (using Redis). In Standalone mode, cache is in-memory and lost on restart.
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <label style="display:block; margin-bottom: 5px;">Duration (minutes):</label>
+                        <input type="number" id="new-store-cache-duration" value="0" min="0" placeholder="0 (Use Default)" style="width: 100%; box-sizing: border-box;">
+                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Set to 0 to use SOP default (10 mins).</div>
+                    </div>
+                    <div style="margin-bottom: 5px;">
+                        <label style="display:flex; align-items:center; gap: 5px; cursor: pointer;">
+                            <input type="checkbox" id="new-store-cache-ttl" checked>
+                            <span>Sliding Expiration (TTL)</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="saveNewStore()" class="btn-success">Create</button>
+            <button onclick="closeAddStoreModal()" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="code-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:2000;">
+    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:600px; max-width:90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); display: flex; flex-direction: column; max-height: 80vh;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+            <h3 style="margin:0;">Generated Go Structs</h3>
+            <span style="cursor:pointer; font-size: 20px;" onclick="document.getElementById('code-modal').style.display='none'">&times;</span>
+        </div>
+        <div style="flex: 1; overflow-y: auto; margin-bottom: 10px;">
+            <pre id="generated-code-content" style="margin:0; padding:10px; background:var(--pre-bg); border-radius:4px; font-family:monospace; font-size:12px; white-space:pre-wrap;"></pre>
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button onclick="copyGeneratedCode()" style="background:var(--button-bg); color:var(--button-text); padding: 5px 15px;">Copy</button>
+            <button onclick="document.getElementById('code-modal').style.display='none'" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 5px 15px;">Close</button>
+        </div>
     </div>
 </div>
 
@@ -391,8 +641,8 @@
             document.getElementById('database-select').innerHTML = '<option>Error loading databases</option>';
         });
 
-    function selectDatabase(name) {
-        if (currentDatabase === name) return;
+    function selectDatabase(name, forceRefresh = false, storeToSelect = null) {
+        if (!forceRefresh && currentDatabase === name) return;
 
         // Check for unsaved changes
         if (!closeDetail()) {
@@ -431,6 +681,10 @@
                     li.textContent = store.charAt(0).toUpperCase() + store.slice(1);
                     li.onclick = () => selectStore(store, li);
                     list.appendChild(li);
+
+                    if (storeToSelect && store === storeToSelect) {
+                        selectStore(store, li);
+                    }
                 });
             })
             .catch(err => {
@@ -494,6 +748,16 @@
         document.querySelectorAll('#sidebar li').forEach(el => el.classList.remove('active'));
         element.classList.add('active');
 
+        // Show Delete Button
+        const deleteBtn = document.getElementById('btn-delete-store');
+        deleteBtn.style.display = 'inline-block';
+        deleteBtn.title = `Delete store '${name}'`;
+
+        // Show Code Button
+        const codeBtn = document.getElementById('btn-code-store');
+        codeBtn.style.display = 'inline-block';
+        codeBtn.title = `Show Go Structs for '${name}'`;
+
         // Fetch Store Info
         fetch(`/api/store/info?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`)
             .then(res => res.json())
@@ -509,6 +773,49 @@
                 buildSearchUI(info);
                 loadItems('first');
             });
+    }
+
+    function deleteStore() {
+        if (!currentStore) return;
+        
+        const name = prompt(`Please type the store name '${currentStore}' to confirm deletion:`);
+        if (name === null) return; // User cancelled prompt
+        
+        if (name.trim().toLowerCase() !== currentStore.toLowerCase()) {
+            alert("Store name does not match. Deletion cancelled.");
+            return;
+        }
+
+        fetch('/api/store/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                database: currentDatabase,
+                store: currentStore
+            })
+        })
+        .then(async res => {
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || res.statusText);
+            }
+            return res.json();
+        })
+        .then(data => {
+            if (data.status === 'ok') {
+                alert("Store deleted successfully.");
+                currentStore = null;
+                document.getElementById('current-store-title').textContent = "Select a Store";
+                document.getElementById('btn-delete-store').style.display = 'none';
+                document.getElementById('data-grid').innerHTML = '';
+                document.getElementById('toolbar').style.display = 'none';
+                // Refresh list
+                selectDatabase(currentDatabase, true);
+            } else {
+                alert("Error: " + (data.error || "Unknown error"));
+            }
+        })
+        .catch(err => alert("Error: " + err));
     }
 
     function buildSearchUI(info) {
@@ -1436,23 +1743,33 @@
         }
 
         // --- Build Value UI ---
-        // Try to infer schema from first item
         let useForm = false;
-        if (currentItems && currentItems.length > 0) {
+        let valueSchema = [];
+
+        // 1. Fallback to Sample Value
+        if (currentStoreInfo && currentStoreInfo.sampleValue && typeof currentStoreInfo.sampleValue === 'object') {
+            valueSchema = Object.keys(currentStoreInfo.sampleValue);
+        }
+
+        // 2. Fallback to First Item
+        if (valueSchema.length === 0 && currentItems && currentItems.length > 0) {
             const sampleVal = currentItems[0].value;
             if (typeof sampleVal === 'object' && sampleVal !== null) {
-                useForm = true;
-                const keys = Object.keys(sampleVal);
-                keys.forEach(k => {
-                    const div = document.createElement('div');
-                    div.style.marginBottom = '5px';
-                    div.innerHTML = `
-                        <label style="display:block; font-size:12px; font-weight:bold;">${k}</label>
-                        <input type="text" class="add-value-field" data-name="${k}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
-                    `;
-                    valContainer.appendChild(div);
-                });
+                valueSchema = Object.keys(sampleVal);
             }
+        }
+
+        if (valueSchema.length > 0) {
+            useForm = true;
+            valueSchema.forEach(k => {
+                const div = document.createElement('div');
+                div.style.marginBottom = '5px';
+                div.innerHTML = `
+                    <label style="display:block; font-size:12px; font-weight:bold;">${k}</label>
+                    <input type="text" class="add-value-field" data-name="${k}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
+                `;
+                valContainer.appendChild(div);
+            });
         }
 
         if (!useForm) {
@@ -1960,7 +2277,7 @@
         widget.style.height = height + 'px';
         // Position at bottom-left, above the toggle button (which is ~52px from bottom)
         widget.style.left = '57px';
-        widget.style.top = (viewportHeight - height - 1) + 'px';
+        widget.style.top = (viewportHeight - height + 2) + 'px';
         widget.style.right = 'auto';
         widget.style.bottom = 'auto';
     }
@@ -2683,6 +3000,120 @@
     function toggleProviderSelect() {
         // No-op since we removed the agent select dropdown logic
     }
+
+    // --- Code Generation Logic ---
+    function showGeneratedCode() {
+        if (!currentStore) return;
+
+        let keySample = null;
+        let valSample = null;
+
+        // 1. Try to get sample from Store Info
+        if (currentStoreInfo) {
+            if (currentStoreInfo.sampleKey) keySample = currentStoreInfo.sampleKey;
+            if (currentStoreInfo.sampleValue) valSample = currentStoreInfo.sampleValue;
+        }
+
+        // 2. Fallback to first item in grid
+        if (currentItems && currentItems.length > 0) {
+            if (!keySample) keySample = currentItems[0].key;
+            if (!valSample) valSample = currentItems[0].value;
+        }
+
+        // 3. Try to parse if string
+        if (typeof keySample === 'string') {
+            try { keySample = JSON.parse(keySample); } catch(e) {}
+        }
+        if (typeof valSample === 'string') {
+            try { valSample = JSON.parse(valSample); } catch(e) {}
+        }
+
+        const storeNamePascal = toPascalCase(currentStore);
+        let code = `// Generated structs for store "${currentStore}"\n\n`;
+        code += `package main\n\n`;
+
+        // Generate Key Struct
+        if (typeof keySample === 'object' && keySample !== null) {
+            code += jsonToGoStruct(`${storeNamePascal}Key`, keySample);
+        } else {
+            const type = getGoType(keySample);
+            code += `// Key is a primitive type: ${type}\n`;
+            code += `type ${storeNamePascal}Key ${type}\n`;
+        }
+        code += "\n";
+
+        // Generate Value Struct
+        if (typeof valSample === 'object' && valSample !== null) {
+            code += jsonToGoStruct(`${storeNamePascal}Value`, valSample);
+        } else {
+            const type = getGoType(valSample);
+            code += `// Value is a primitive type: ${type}\n`;
+            code += `type ${storeNamePascal}Value ${type}\n`;
+        }
+
+        document.getElementById('generated-code-content').textContent = code;
+        document.getElementById('code-modal').style.display = 'flex';
+    }
+
+    function copyGeneratedCode() {
+        const content = document.getElementById('generated-code-content').textContent;
+        navigator.clipboard.writeText(content).then(() => {
+            alert("Code copied to clipboard!");
+        });
+    }
+
+    function toPascalCase(str) {
+        return str.replace(/(?:^\w|[A-Z]|\b\w)/g, function(word, index) {
+            return word.toUpperCase();
+        }).replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+    }
+
+    function getGoType(val) {
+        if (val === null) return "interface{}";
+        const type = typeof val;
+        if (type === 'string') return "string";
+        if (type === 'number') {
+            return Number.isInteger(val) ? "int" : "float64";
+        }
+        if (type === 'boolean') return "bool";
+        if (Array.isArray(val)) return "[]interface{}"; // Simple array fallback
+        return "interface{}";
+    }
+
+    function jsonToGoStruct(structName, obj) {
+        let code = `type ${structName} struct {\n`;
+        const keys = Object.keys(obj);
+        
+        keys.forEach(key => {
+            const val = obj[key];
+            const fieldName = toPascalCase(key);
+            let type = "interface{}";
+            
+            if (val !== null) {
+                if (Array.isArray(val)) {
+                    if (val.length > 0) {
+                        const elemType = getGoType(val[0]);
+                        type = `[]${elemType}`;
+                    } else {
+                        type = "[]interface{}";
+                    }
+                } else if (typeof val === 'object') {
+                    // Nested struct - simplified for now (inline or interface{})
+                    // Ideally we would recurse, but for now let's use map[string]interface{} for nested objects
+                    // to keep it simple, or maybe generate a nested struct name?
+                    // Let's stick to map for deep nesting to avoid complexity in this first pass
+                    type = "map[string]interface{}"; 
+                } else {
+                    type = getGoType(val);
+                }
+            }
+            
+            code += `    ${fieldName} ${type} \`json:"${key}"\`\n`;
+        });
+        
+        code += `}`;
+        return code;
+    }
 </script>
 
 <div id="add-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1100;">
@@ -2735,6 +3166,382 @@
 </div>
 
 <script>
+    function showAddStore() {
+        document.getElementById('add-store-modal').style.display = 'flex';
+        document.getElementById('new-store-name').value = '';
+        document.getElementById('new-store-description').value = '';
+        document.getElementById('new-store-key-type').value = 'string';
+        // Reset Seed Data
+        document.getElementById('new-store-seed-key').value = '';
+        document.getElementById('new-store-seed-value').value = '';
+        document.getElementById('seed-value-fields-list').innerHTML = '';
+        addSeedValueFieldRow(); // Add one empty row
+        document.getElementById('seed-value-raw-mode').checked = false;
+        toggleSeedValueMode();
+        
+        toggleIndexSpec();
+    }
+
+    function closeAddStoreModal() {
+        document.getElementById('add-store-modal').style.display = 'none';
+    }
+
+    function toggleIndexSpec() {
+        const type = document.getElementById('new-store-key-type').value;
+        const container = document.getElementById('index-spec-container');
+        
+        const simpleKeyInput = document.getElementById('new-store-seed-key');
+        const mapKeyContainer = document.getElementById('new-store-seed-key-map-container');
+
+        if (type === 'map') {
+            container.style.display = 'block';
+            simpleKeyInput.style.display = 'none';
+            mapKeyContainer.style.display = 'block';
+
+            // Initialize with one row if empty
+            if (document.getElementById('key-fields-list').children.length === 0) {
+                addKeyFieldRow();
+            }
+            updateSeedKeyForm();
+        } else {
+            container.style.display = 'none';
+            simpleKeyInput.style.display = 'block';
+            mapKeyContainer.style.display = 'none';
+        }
+    }
+
+    // --- Map Key Builder Logic ---
+    function addKeyFieldRow(name = '', type = 'string') {
+        const container = document.getElementById('key-fields-list');
+        const div = document.createElement('div');
+        div.className = 'key-field-row';
+        div.style.display = 'flex';
+        div.style.gap = '5px';
+        div.innerHTML = `
+            <input type="text" placeholder="Field Name" class="key-field-name" value="${name}" oninput="updateIndexDropdowns(); updateSeedKeyForm();" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <select class="key-field-type" onchange="updateSeedKeyForm()" style="width: 100px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                <option value="string" ${type==='string'?'selected':''}>String</option>
+                <option value="int" ${type==='int'?'selected':''}>Int</option>
+                <option value="float" ${type==='float'?'selected':''}>Float</option>
+                <option value="bool" ${type==='bool'?'selected':''}>Bool</option>
+            </select>
+            <button onclick="this.parentElement.remove(); updateIndexDropdowns(); updateSeedKeyForm();" style="color:red; cursor:pointer; background:none; border:none;">&times;</button>
+        `;
+        container.appendChild(div);
+        updateIndexDropdowns();
+        updateSeedKeyForm();
+    }
+
+    function updateSeedKeyForm() {
+        const container = document.getElementById('seed-key-fields-list');
+        if (!container) return;
+        
+        const currentValues = {};
+        container.querySelectorAll('.seed-key-field-row').forEach(row => {
+            const name = row.getAttribute('data-name');
+            const val = row.querySelector('input').value;
+            if (name) currentValues[name] = val;
+        });
+
+        container.innerHTML = '';
+        
+        const keyRows = document.querySelectorAll('.key-field-row');
+        keyRows.forEach(row => {
+            const nameInput = row.querySelector('.key-field-name');
+            const typeSelect = row.querySelector('.key-field-type');
+            const name = nameInput.value.trim();
+            const type = typeSelect.value;
+            
+            if (!name) return; // Skip empty names
+
+            const div = document.createElement('div');
+            div.className = 'seed-key-field-row';
+            div.setAttribute('data-name', name);
+            div.style.display = 'flex';
+            div.style.alignItems = 'center';
+            div.style.gap = '5px';
+            
+            const val = currentValues[name] || '';
+            
+            div.innerHTML = `
+                <label style="width: 100px; font-size: 12px; overflow:hidden; text-overflow:ellipsis;" title="${name}">${name} (${type}):</label>
+                <input type="text" class="seed-key-field-value" value="${val}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function addIndexFieldRow() {
+        const container = document.getElementById('index-fields-list');
+        const div = document.createElement('div');
+        div.className = 'index-field-row';
+        div.style.display = 'flex';
+        div.style.gap = '5px';
+        div.innerHTML = `
+            <select class="index-field-select" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                <!-- Populated by updateIndexDropdowns -->
+            </select>
+            <select class="index-field-order" style="width: 80px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                <option value="asc">Asc</option>
+                <option value="desc">Desc</option>
+            </select>
+            <button onclick="this.parentElement.remove()" style="color:red; cursor:pointer; background:none; border:none;">&times;</button>
+        `;
+        container.appendChild(div);
+        updateIndexDropdowns(div.querySelector('.index-field-select'));
+    }
+
+    function updateIndexDropdowns(targetSelect = null) {
+        // Collect all defined key field names
+        const keyRows = document.querySelectorAll('.key-field-row');
+        const fieldNames = [];
+        keyRows.forEach(row => {
+            const name = row.querySelector('.key-field-name').value.trim();
+            if (name) fieldNames.push(name);
+        });
+
+        // Update all index dropdowns
+        const indexSelects = document.querySelectorAll('.index-field-select');
+        indexSelects.forEach(select => {
+            const currentVal = select.value;
+            select.innerHTML = '';
+            fieldNames.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.text = name;
+                if (name === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            });
+        });
+    }
+
+    function generateIndexSpecJSON() {
+        const indexRows = document.querySelectorAll('.index-field-row');
+        if (indexRows.length === 0) return "";
+
+        const fields = [];
+        indexRows.forEach(row => {
+            const name = row.querySelector('.index-field-select').value;
+            const order = row.querySelector('.index-field-order').value;
+            if (name) {
+                fields.push({
+                    field_name: name,
+                    ascending_sort_order: order === 'asc'
+                });
+            }
+        });
+
+        if (fields.length === 0) return "";
+
+        return JSON.stringify({ index_fields: fields });
+    }
+
+    function toggleAdvancedOptions() {
+        const advanced = document.getElementById('new-store-advanced-mode').checked;
+        const container = document.getElementById('advanced-options-container');
+        container.style.display = advanced ? 'block' : 'none';
+        if (advanced) {
+            toggleCacheOptions();
+        }
+    }
+
+    function toggleCacheOptions() {
+        const inNode = document.getElementById('new-store-value-in-node').checked;
+        const container = document.getElementById('cache-options-container');
+        container.style.display = inNode ? 'none' : 'block';
+    }
+
+    function toggleSeedHelp() {
+        const el = document.getElementById('seed-help-text');
+        if (el.style.display === 'none') {
+            el.style.display = 'block';
+        } else {
+            el.style.display = 'none';
+        }
+    }
+
+    function toggleSeedValueMode() {
+        const isRaw = document.getElementById('seed-value-raw-mode').checked;
+        document.getElementById('seed-value-builder').style.display = isRaw ? 'none' : 'block';
+        document.getElementById('new-store-seed-value').style.display = isRaw ? 'block' : 'none';
+    }
+
+    function addSeedValueFieldRow(name = '', type = 'string', value = '') {
+        const container = document.getElementById('seed-value-fields-list');
+        const div = document.createElement('div');
+        div.className = 'seed-value-field-row';
+        div.style.display = 'flex';
+        div.style.gap = '5px';
+        div.innerHTML = `
+            <input type="text" placeholder="Field Name" class="seed-field-name" value="${name}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <select class="seed-field-type" style="width: 80px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                <option value="string" ${type==='string'?'selected':''}>String</option>
+                <option value="int" ${type==='int'?'selected':''}>Int</option>
+                <option value="float" ${type==='float'?'selected':''}>Float</option>
+                <option value="bool" ${type==='bool'?'selected':''}>Bool</option>
+            </select>
+            <input type="text" placeholder="Value" class="seed-field-value" value="${value}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <button onclick="this.parentElement.remove()" style="color:red; cursor:pointer; background:none; border:none;">&times;</button>
+        `;
+        container.appendChild(div);
+    }
+
+    function generateSeedValueJSON() {
+        const isRaw = document.getElementById('seed-value-raw-mode').checked;
+        if (isRaw) {
+            const raw = document.getElementById('new-store-seed-value').value.trim();
+            if (!raw) return null;
+            try {
+                return JSON.parse(raw);
+            } catch (e) {
+                throw new Error("Seed Value (Raw) must be valid JSON");
+            }
+        } else {
+            const rows = document.querySelectorAll('.seed-value-field-row');
+            if (rows.length === 0) return null;
+            
+            const obj = {};
+            rows.forEach(row => {
+                const name = row.querySelector('.seed-field-name').value.trim();
+                const type = row.querySelector('.seed-field-type').value;
+                const valStr = row.querySelector('.seed-field-value').value;
+                
+                if (name) {
+                    let val = valStr;
+                    if (type === 'int') {
+                        val = parseInt(valStr);
+                        if (isNaN(val)) val = 0;
+                    } else if (type === 'float') {
+                        val = parseFloat(valStr);
+                        if (isNaN(val)) val = 0.0;
+                    } else if (type === 'bool') {
+                        val = (valStr.toLowerCase() === 'true' || valStr === '1');
+                    }
+                    obj[name] = val;
+                }
+            });
+            return obj;
+        }
+    }
+
+    function saveNewStore() {
+        const name = document.getElementById('new-store-name').value.trim();
+        const type = document.getElementById('new-store-key-type').value;
+        const desc = document.getElementById('new-store-description').value.trim();
+        
+        let indexSpec = "";
+        if (type === 'map') {
+            indexSpec = generateIndexSpecJSON();
+        }
+
+        const advancedMode = document.getElementById('new-store-advanced-mode').checked;
+        const slotLength = parseInt(document.getElementById('new-store-slot-length').value);
+        const isUnique = document.getElementById('new-store-is-unique').checked;
+        const valueInNode = document.getElementById('new-store-value-in-node').checked;
+        const cacheDuration = parseInt(document.getElementById('new-store-cache-duration').value);
+        const isCacheTTL = document.getElementById('new-store-cache-ttl').checked;
+
+        if (!name) {
+            alert("Store name is required");
+            return;
+        }
+
+        // Parse Seed Data
+        let seedKey = null;
+        let seedValue = null;
+        
+        if (type === 'map') {
+            // Build from form
+            const rows = document.querySelectorAll('.seed-key-field-row');
+            if (rows.length > 0) {
+                seedKey = {};
+                rows.forEach(row => {
+                    const name = row.getAttribute('data-name');
+                    const valStr = row.querySelector('.seed-key-field-value').value;
+                    
+                    // Find type definition
+                    const typeDefRow = Array.from(document.querySelectorAll('.key-field-row')).find(r => r.querySelector('.key-field-name').value.trim() === name);
+                    const fieldType = typeDefRow ? typeDefRow.querySelector('.key-field-type').value : 'string';
+                    
+                    let val = valStr;
+                    if (fieldType === 'int') {
+                        val = parseInt(valStr);
+                        if (isNaN(val)) val = 0;
+                    } else if (fieldType === 'float') {
+                        val = parseFloat(valStr);
+                        if (isNaN(val)) val = 0.0;
+                    } else if (fieldType === 'bool') {
+                        val = (valStr.toLowerCase() === 'true' || valStr === '1');
+                    }
+                    seedKey[name] = val;
+                });
+            }
+        } else {
+            // Simple Key
+            const seedKeyStr = document.getElementById('new-store-seed-key').value.trim();
+            if (seedKeyStr) {
+                try {
+                    // Try parsing as JSON first (for map keys or quoted strings)
+                    seedKey = JSON.parse(seedKeyStr);
+                } catch {
+                    // If not JSON, treat as string or number
+                    if (!isNaN(seedKeyStr) && type === 'int') {
+                        seedKey = Number(seedKeyStr);
+                    } else {
+                        seedKey = seedKeyStr;
+                    }
+                }
+            }
+        }
+
+        if (seedKey === null || (typeof seedKey === 'string' && seedKey === '') || (typeof seedKey === 'object' && Object.keys(seedKey).length === 0)) {
+             alert("Initial Item Key is required.");
+             return;
+        }
+
+        try {
+            seedValue = generateSeedValueJSON();
+        } catch (e) {
+            alert(e.message);
+            return;
+        }
+
+        const payload = {
+            database: currentDatabase,
+            store: name,
+            key_type: type,
+            description: desc,
+            index_spec: indexSpec,
+            advanced_mode: advancedMode,
+            slot_length: slotLength,
+            is_unique: isUnique,
+            is_value_data_in_node_segment: valueInNode,
+            cache_duration: cacheDuration,
+            is_cache_ttl: isCacheTTL,
+            seed_key: seedKey,
+            seed_value: seedValue
+        };
+
+        fetch('/api/store/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                closeAddStoreModal();
+                // Refresh store list and select the new store
+                selectDatabase(currentDatabase, true, name);
+            } else {
+                alert("Error: " + (data.error || "Unknown error"));
+            }
+        })
+        .catch(err => {
+            alert("Error: " + err);
+        });
+    }
+
     window.onbeforeunload = function() {
         const btn = document.getElementById('btn-save');
         if (btn && !btn.disabled) {
