@@ -8,6 +8,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	sopdb "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/ai/database"
 	core_database "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/jsondb"
@@ -334,5 +335,83 @@ func TestToolJoin_StoreNamePrefix(t *testing.T) {
 	// Check values
 	if valMap["Region"] != "East" && valMap["Region"] != "West" {
 		t.Errorf("Unexpected region: %v", valMap["Region"])
+	}
+}
+
+func TestToolJoin_ReproUserScenario(t *testing.T) {
+	// Setup
+	tmpDir := t.TempDir()
+	dbOpts := sop.DatabaseOptions{
+		Type:          sop.Clustered,
+		StoresFolders: []string{tmpDir},
+		CacheType:     sop.InMemory,
+	}
+	sysDB := database.NewDatabase(dbOpts)
+
+	cfg := Config{Name: "TestAgent"}
+	dbs := make(map[string]sop.DatabaseOptions)
+	agent := NewDataAdminAgent(cfg, dbs, sysDB)
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
+
+	// Create Stores and Data
+	t2, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
+
+	// Left Store: department
+	// Keys: APAC, EMEA, US
+	leftOpts := sop.StoreOptions{Name: "department", SlotLength: 10, IsPrimitiveKey: true}
+	left, _ := sopdb.NewBtree[string, any](ctx, dbOpts, "department", t2, nil, leftOpts)
+	left.Add(ctx, "APAC", map[string]any{"region": "APAC", "department": "Sales"})
+	left.Add(ctx, "EMEA", map[string]any{"region": "EMEA", "department": "Sales"})
+	left.Add(ctx, "US", map[string]any{"region": "US", "department": "Sales"})
+
+	// Right Store: employees
+	rightOpts := sop.StoreOptions{Name: "employees", SlotLength: 10, IsPrimitiveKey: true}
+	right, _ := sopdb.NewBtree[string, any](ctx, dbOpts, "employees", t2, nil, rightOpts)
+	right.Add(ctx, "E1", map[string]any{"region": "APAC", "department": "Sales", "name": "Alice"})
+	right.Add(ctx, "E2", map[string]any{"region": "US", "department": "Sales", "name": "Bob"})
+
+	t2.Commit(ctx)
+
+	// Test DESC
+	args := map[string]any{
+		"left_store":        "department",
+		"right_store":       "employees",
+		"left_join_fields":  []string{"region", "department"},
+		"right_join_fields": []string{"region", "department"},
+		"order_by":          "key desc",
+		"limit":             4,
+		"fields":            []string{"left.region", "right.department", "right.name AS employee"},
+	}
+	res, err := agent.Execute(ctx, "join", args)
+	if err != nil {
+		t.Fatalf("Join failed: %v", err)
+	}
+
+	var items []map[string]any
+	json.Unmarshal([]byte(res), &items)
+
+    t.Logf("Items: %+v", items)
+
+	// We expect 2 items (US, APAC). EMEA has no match.
+	// Order should be US then APAC.
+	if len(items) != 2 {
+		t.Fatalf("Expected 2 items, got %d", len(items))
+	}
+
+	getRegion := func(item map[string]any) string {
+		v := item["value"].(map[string]any)
+        if val, ok := v["Region"]; ok {
+            return val.(string)
+        }
+		return v["region"].(string)
+	}
+
+	if getRegion(items[0]) != "US" {
+		t.Errorf("Expected first item 'US', got '%s'", getRegion(items[0]))
+	}
+	if getRegion(items[1]) != "APAC" {
+		t.Errorf("Expected second item 'APAC', got '%s'", getRegion(items[1]))
 	}
 }

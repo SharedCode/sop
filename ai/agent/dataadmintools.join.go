@@ -123,6 +123,21 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 		return "", fmt.Errorf("number of left join fields (%d) must match number of right join fields (%d)", len(leftFields), len(rightFields))
 	}
 
+	// Parse Order By
+	orderBy, _ := args["order_by"].(string)
+	isDesc := false
+	if orderBy != "" {
+		lowerOrder := strings.ToLower(orderBy)
+		if lowerOrder == "desc" {
+			isDesc = true
+		} else {
+			parts := strings.Fields(lowerOrder)
+			if len(parts) >= 2 && parts[1] == "desc" {
+				isDesc = true
+			}
+		}
+	}
+
 	leftMode := sop.ForReading
 	if isDeleteLeft || isUpdateLeft {
 		leftMode = sop.ForWriting
@@ -182,6 +197,7 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 		leftIndexSpec:  leftIndexSpec,
 		leftStoreName:  leftStoreName,
 		rightStoreName: rightStoreName,
+		isDesc:         isDesc,
 	}
 
 	return jp.Execute()
@@ -209,6 +225,7 @@ type JoinProcessor struct {
 	leftIndexSpec  *jsondb.IndexSpecification
 	leftStoreName  string
 	rightStoreName string
+	isDesc         bool
 
 	// Internal State
 	rightKeyFields   []string
@@ -307,16 +324,32 @@ func (jp *JoinProcessor) processLeftItem(k, v any) (bool, error) {
 		matches, ok := jp.rightCache[probeKey]
 
 		if ok {
-			for _, matchItem := range matches {
-				rKey := matchItem.Key
-				rVal := matchItem.Value
+			if jp.isDesc {
+				for i := len(matches) - 1; i >= 0; i-- {
+					matchItem := matches[i]
+					rKey := matchItem.Key
+					rVal := matchItem.Value
 
-				stop, err := jp.emitMatch(k, v, rKey, rVal)
-				if err != nil {
-					return false, err
+					stop, err := jp.emitMatch(k, v, rKey, rVal)
+					if err != nil {
+						return false, err
+					}
+					if stop {
+						return true, nil
+					}
 				}
-				if stop {
-					return true, nil
+			} else {
+				for _, matchItem := range matches {
+					rKey := matchItem.Key
+					rVal := matchItem.Value
+
+					stop, err := jp.emitMatch(k, v, rKey, rVal)
+					if err != nil {
+						return false, err
+					}
+					if stop {
+						return true, nil
+					}
 				}
 			}
 		}
@@ -689,7 +722,14 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 func (jp *JoinProcessor) Execute() (string, error) {
 	jp.computeDisplayKeys()
 
-	lOk, _ := jp.leftStore.First(jp.ctx)
+	var lOk bool
+	if jp.isDesc {
+		lOk, _ = jp.leftStore.Last(jp.ctx)
+		// fmt.Printf("DEBUG: isDesc=true. Last() returned: %v. Key=%v\n", lOk, jp.leftStore.GetCurrentKey())
+	} else {
+		lOk, _ = jp.leftStore.First(jp.ctx)
+		// fmt.Printf("DEBUG: isDesc=false. First() returned: %v. Key=%v\n", lOk, jp.leftStore.GetCurrentKey())
+	}
 	if !lOk {
 		return jp.emitter.Finalize(), nil
 	}
@@ -716,15 +756,17 @@ func (jp *JoinProcessor) Execute() (string, error) {
 			k := jp.leftStore.GetCurrentKey()
 			v, _ := jp.leftStore.GetCurrentValue(jp.ctx)
 			batch = append(batch, leftItem{k.Key, v})
-			lOk, _ = jp.leftStore.Next(jp.ctx)
+			if jp.isDesc {
+				lOk, _ = jp.leftStore.Previous(jp.ctx)
+			} else {
+				lOk, _ = jp.leftStore.Next(jp.ctx)
+			}
 		}
 
 		for _, lItem := range batch {
 			if jp.count >= int(jp.limit) {
 				break
 			}
-			// Debug Log
-			// fmt.Printf("Processing Left Item: Key=%v, Val=%v\n", lItem.k, lItem.v)
 			stop, err := jp.processLeftItem(lItem.k, lItem.v)
 			if err != nil {
 				return "", err

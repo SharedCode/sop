@@ -77,6 +77,21 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 		limit = 100
 	}
 
+	// Parse Order By
+	orderBy, _ := args["order_by"].(string)
+	isDesc := false
+	if orderBy != "" {
+		lowerOrder := strings.ToLower(orderBy)
+		if lowerOrder == "desc" {
+			isDesc = true
+		} else {
+			parts := strings.Fields(lowerOrder)
+			if len(parts) >= 2 && parts[1] == "desc" {
+				isDesc = true
+			}
+		}
+	}
+
 	// Parse Key Match
 	var keyMatch any
 	if k, ok := args["key"]; ok {
@@ -99,7 +114,7 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 			if strings.HasPrefix(k, "_") {
 				continue
 			}
-			if k != "store" && k != "key" && k != "key_match" && k != "database" && k != "fields" && k != "limit" && k != "action" && k != "update_values" && k != "value_match" {
+			if k != "store" && k != "key" && k != "key_match" && k != "database" && k != "fields" && k != "limit" && k != "action" && k != "update_values" && k != "value_match" && k != "order_by" {
 				valMap[k] = v
 			}
 		}
@@ -175,11 +190,19 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 				ok = true
 			}
 		} else {
-			ok, err = store.First(ctx)
-			fmt.Printf("store.First returned: %v, %v\n", ok, err)
+			if isDesc {
+				ok, err = store.Last(ctx)
+			} else {
+				ok, err = store.First(ctx)
+			}
+			fmt.Printf("store.First/Last returned: %v, %v\n", ok, err)
 		}
 	} else {
-		ok, _ = store.First(ctx)
+		if isDesc {
+			ok, _ = store.Last(ctx)
+		} else {
+			ok, _ = store.First(ctx)
+		}
 	}
 
 	// Iterate
@@ -227,7 +250,12 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 					count++
 				} else if isDelete {
 					kToDelete := k
-					hasNext, _ := store.Next(ctx)
+					var hasNext bool
+					if isDesc {
+						hasNext, _ = store.Previous(ctx)
+					} else {
+						hasNext, _ = store.Next(ctx)
+					}
 					if _, err := store.Remove(ctx, kToDelete); err != nil {
 						return "", fmt.Errorf("failed to delete item: %w", err)
 					}
@@ -261,7 +289,11 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 			}
 		}
 
-		ok, _ = store.Next(ctx)
+		if isDesc {
+			ok, _ = store.Previous(ctx)
+		} else {
+			ok, _ = store.Next(ctx)
+		}
 	}
 
 	if isDelete {

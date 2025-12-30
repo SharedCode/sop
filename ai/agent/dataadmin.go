@@ -300,6 +300,14 @@ IMPORTANT:
 
 				var results []string
 				for _, tc := range toolCalls {
+					// Execute Tool
+					// We need to execute the tool against the session payload
+					result, err := a.Execute(ctx, tc.Tool, tc.Args)
+					if err != nil {
+						result = "Error: " + err.Error()
+					}
+					results = append(results, result)
+
 					// Record the tool call if a recorder is present
 					if recorder, ok := ctx.Value(ai.CtxKeyMacroRecorder).(ai.MacroRecorder); ok {
 						recorder.RecordStep(ctx, ai.MacroStep{
@@ -311,14 +319,6 @@ IMPORTANT:
 							p.LastInteractionSteps++
 						}
 					}
-
-					// Execute Tool
-					// We need to execute the tool against the session payload
-					result, err := a.Execute(ctx, tc.Tool, tc.Args)
-					if err != nil {
-						result = "Error: " + err.Error()
-					}
-					results = append(results, result)
 				}
 
 				// Return tool output directly (Optimization)
@@ -344,6 +344,11 @@ func (a *DataAdminAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, er
 
 // Execute executes the requested tool against the session payload.
 func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	// De-obfuscate Args if enabled
+	if a.enableObfuscation {
+		a.deobfuscateMap(args)
+	}
+
 	// Save as Last Tool Call (for macro recording/refactoring)
 	// We clone args to avoid mutation issues
 	// BUT: If the tool is "macro_add_step_from_last", we should NOT overwrite the last tool call yet!
@@ -361,19 +366,6 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 			Type:    "command",
 			Command: toolName,
 			Args:    savedArgs,
-		}
-	}
-
-	// De-obfuscate Args if enabled
-	if a.enableObfuscation {
-		for k, v := range args {
-			if s, ok := v.(string); ok {
-				s = strings.Trim(s, "*_`")
-				s = strings.ReplaceAll(s, "\u00a0", " ")
-				s = strings.TrimSpace(s)
-				s = obfuscation.GlobalObfuscator.Deobfuscate(s)
-				args[k] = s
-			}
 		}
 	}
 
@@ -554,4 +546,30 @@ func resolveTemplate(tmplStr string, scope map[string]any) string {
 		}
 	}
 	return tmplStr
+}
+
+func (a *DataAdminAgent) deobfuscateMap(m map[string]any) {
+	for k, v := range m {
+		m[k] = a.deobfuscateValue(v)
+	}
+}
+
+func (a *DataAdminAgent) deobfuscateValue(v any) any {
+	switch val := v.(type) {
+	case string:
+		s := strings.Trim(val, "*_`")
+		s = strings.ReplaceAll(s, "\u00a0", " ")
+		s = strings.TrimSpace(s)
+		return obfuscation.GlobalObfuscator.Deobfuscate(s)
+	case []any:
+		for i, item := range val {
+			val[i] = a.deobfuscateValue(item)
+		}
+		return val
+	case map[string]any:
+		a.deobfuscateMap(val)
+		return val
+	default:
+		return v
+	}
 }

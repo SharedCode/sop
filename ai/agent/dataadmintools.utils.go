@@ -15,7 +15,6 @@ import (
 )
 
 func matchesKey(itemKey, filterKey any) (bool, string) {
-	// fmt.Printf("matchesKey: item=%v, filter=%v\n", itemKey, filterKey)
 	if filterKey == nil {
 		return true, ""
 	}

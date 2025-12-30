@@ -131,7 +131,7 @@ func TestMain(m *testing.M) {
 	_ = conn.Client.FlushDB(context.Background())
 
 	// Shorten default node cache to keep tests snappy.
-	testDefaultCacheConfig = sop.GetDefaulCacheConfig()
+	testDefaultCacheConfig = sop.GetDefaultCacheConfig()
 	testDefaultCacheConfig.NodeCacheDuration = time.Minute
 	sop.SetDefaultCacheConfig(testDefaultCacheConfig)
 
