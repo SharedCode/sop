@@ -1,6 +1,7 @@
 package btree
 
 import (
+	"bytes"
 	"cmp"
 	"fmt"
 	"time"
@@ -97,6 +98,70 @@ func Compare(anyX, anyY any) int {
 		x1, _ := anyX.(time.Time)
 		y1, _ := anyY.(time.Time)
 		return x1.Compare(y1)
+	case []any:
+		x1, _ := anyX.([]any)
+		y1, _ := anyY.([]any)
+		lenX := len(x1)
+		lenY := len(y1)
+		minLen := lenX
+		if lenY < minLen {
+			minLen = lenY
+		}
+		for i := 0; i < minLen; i++ {
+			if c := Compare(x1[i], y1[i]); c != 0 {
+				return c
+			}
+		}
+		return cmp.Compare(lenX, lenY)
+	case []byte:
+		x1, _ := anyX.([]byte)
+		y1, _ := anyY.([]byte)
+		return bytes.Compare(x1, y1)
+	case []string:
+		x1, _ := anyX.([]string)
+		y1, _ := anyY.([]string)
+		lenX := len(x1)
+		lenY := len(y1)
+		minLen := lenX
+		if lenY < minLen {
+			minLen = lenY
+		}
+		for i := 0; i < minLen; i++ {
+			if c := cmp.Compare(x1[i], y1[i]); c != 0 {
+				return c
+			}
+		}
+		return cmp.Compare(lenX, lenY)
+	case []int:
+		x1, _ := anyX.([]int)
+		y1, _ := anyY.([]int)
+		lenX := len(x1)
+		lenY := len(y1)
+		minLen := lenX
+		if lenY < minLen {
+			minLen = lenY
+		}
+		for i := 0; i < minLen; i++ {
+			if c := cmp.Compare(x1[i], y1[i]); c != 0 {
+				return c
+			}
+		}
+		return cmp.Compare(lenX, lenY)
+	case []float64:
+		x1, _ := anyX.([]float64)
+		y1, _ := anyY.([]float64)
+		lenX := len(x1)
+		lenY := len(y1)
+		minLen := lenX
+		if lenY < minLen {
+			minLen = lenY
+		}
+		for i := 0; i < minLen; i++ {
+			if c := cmp.Compare(x1[i], y1[i]); c != 0 {
+				return c
+			}
+		}
+		return cmp.Compare(lenX, lenY)
 	default:
 		if anyX == nil && anyY == nil {
 			return 0
@@ -223,6 +288,80 @@ func CoerceComparer(anyX any) func(x, y any) int {
 			x1, _ := x.(time.Time)
 			y1, _ := y.(time.Time)
 			return x1.Compare(y1)
+		}
+	case []any:
+		return func(x, y any) int {
+			x1, _ := x.([]any)
+			y1, _ := y.([]any)
+			lenX := len(x1)
+			lenY := len(y1)
+			minLen := lenX
+			if lenY < minLen {
+				minLen = lenY
+			}
+			for i := 0; i < minLen; i++ {
+				if c := Compare(x1[i], y1[i]); c != 0 {
+					return c
+				}
+			}
+			return cmp.Compare(lenX, lenY)
+		}
+	case []byte:
+		return func(x, y any) int {
+			x1, _ := x.([]byte)
+			y1, _ := y.([]byte)
+			return bytes.Compare(x1, y1)
+		}
+	case []string:
+		return func(x, y any) int {
+			x1, _ := x.([]string)
+			y1, _ := y.([]string)
+			lenX := len(x1)
+			lenY := len(y1)
+			minLen := lenX
+			if lenY < minLen {
+				minLen = lenY
+			}
+			for i := 0; i < minLen; i++ {
+				if c := cmp.Compare(x1[i], y1[i]); c != 0 {
+					return c
+				}
+			}
+			return cmp.Compare(lenX, lenY)
+		}
+	case []int:
+		return func(x, y any) int {
+			x1, _ := x.([]int)
+			y1, _ := y.([]int)
+			lenX := len(x1)
+			lenY := len(y1)
+			minLen := lenX
+			if lenY < minLen {
+				minLen = lenY
+			}
+			for i := 0; i < minLen; i++ {
+				if c := cmp.Compare(x1[i], y1[i]); c != 0 {
+					return c
+				}
+			}
+			return cmp.Compare(lenX, lenY)
+		}
+	case []float64:
+		return func(x, y any) int {
+			x1, _ := x.([]float64)
+			y1, _ := y.([]float64)
+			lenX := len(x1)
+			lenY := len(y1)
+			minLen := lenX
+			if lenY < minLen {
+				minLen = lenY
+			}
+			for i := 0; i < minLen; i++ {
+				if c := cmp.Compare(x1[i], y1[i]); c != 0 {
+					return c
+				}
+			}
+			return cmp.Compare(lenX, lenY)
 		}
 	default:
 		return func(x, y any) int {

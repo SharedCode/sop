@@ -263,7 +263,7 @@
         .btn-secondary { background-color: #6c757d !important; color: white; }
         .error-text { color: var(--danger-bg); }
         .form-label { font-weight: bold; font-size: 12px; color: var(--text-muted); }
-        .form-input { padding: 5px; border: 1px solid var(--input-border); border-radius: 3px; background-color: var(--input-bg); color: var(--text-color); }
+        .form-input { padding: 5px; border: 1px solid var(--input-border); border-radius: 3px; background-color: var(--input-bg); color: var(--text-color); box-sizing: border-box; }
         .pre-block { margin-top: 5px; background: var(--pre-bg); padding: 5px; color: var(--text-color); }
         
         .option-system {
@@ -280,14 +280,13 @@
             top: 0;
             width: 100%; 
             height: 100%; 
-            overflow: auto; 
+            overflow: hidden; 
             background-color: rgba(0,0,0,0.4); 
             align-items: center;
             justify-content: center;
         }
         .modal-content {
             background-color: var(--bg-color);
-            margin: auto;
             padding: 20px;
             border: 1px solid var(--border-color);
             width: 300px;
@@ -295,11 +294,16 @@
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
             display: flex;
             flex-direction: column;
-            max-height: 80vh;
+            max-height: 90vh;
+            box-sizing: border-box;
         }
         #add-store-modal .modal-content {
             width: 600px;
             max-width: 90%;
+        }
+        #store-details-modal .modal-content {
+            width: 700px;
+            max-width: 95%;
         }
         #cel-modal .modal-content {
             width: 600px;
@@ -311,6 +315,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
+            flex-shrink: 0;
         }
         .modal-body {
             flex: 1;
@@ -319,11 +324,13 @@
             border: 1px solid var(--border-color);
             padding: 10px;
             border-radius: 4px;
+            min-height: 0;
         }
         .modal-footer {
             display: flex;
             justify-content: flex-end;
             gap: 10px;
+            flex-shrink: 0;
         }
     </style>
 </head>
@@ -364,6 +371,18 @@
         <button id="btn-code-store" onclick="showGeneratedCode()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Generate Code">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M10.478 1.647a.5.5 0 1 0-.956-.294l-4 13a.5.5 0 0 0 .956.294l4-13zM4.854 4.146a.5.5 0 0 1 0 .708L1.707 8l3.147 3.146a.5.5 0 0 1-.708.708l-3.5-3.5a.5.5 0 0 1 0-.708l3.5-3.5a.5.5 0 0 1 .708 0zm6.292 0a.5.5 0 0 0 0 .708L14.293 8l-3.147 3.146a.5.5 0 0 0 .708.708l3.5-3.5a.5.5 0 0 0 0-.708l-3.5-3.5a.5.5 0 0 0-.708 0z"/>
+            </svg>
+        </button>
+        <button id="btn-edit-store" onclick="showEditStore()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Edit Store Configuration">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/>
+            </svg>
+        </button>
+        <!-- View Store Button Removed (Merged into Edit) -->
+        <button id="btn-view-store" onclick="showStoreDetails()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="View Store Details">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
+                <path d="M0 8s3-5.5 8-5.5S16 8 16 8s-3 5.5-8 5.5S0 8 0 8zm8 3.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z"/>
             </svg>
         </button>
         <button id="btn-edit-cel" onclick="showEditCEL()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Edit CEL Expression">
@@ -452,9 +471,9 @@
                 <label style="display:block; margin-bottom: 5px;">Store Name:</label>
                 <input type="text" id="new-store-name" style="width: 100%; box-sizing: border-box;">
             </div>
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom: 5px;">Key Type:</label>
-                <select id="new-store-key-type" onchange="toggleIndexSpec()" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <div id="key-type-container" style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+                <label style="margin-bottom: 0; white-space: nowrap;">Key Type:</label>
+                <select id="new-store-key-type" onchange="toggleIndexSpec()" style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
                     <option value="string">String</option>
                     <option value="int">Int</option>
                     <option value="int8">Int8</option>
@@ -481,16 +500,17 @@
                     <option value="uuid">UUID</option>
                     <option value="map">Map (JSON Object)</option>
                 </select>
+                <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                    <input type="checkbox" id="new-store-key-is-array" onchange="toggleIndexSpec()">
+                    <span>Array</span>
+                </label>
             </div>
 
-            <div style="margin-bottom: 15px; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(255, 255, 255, 0.05);">
-                <label style="display:flex; align-items:center; gap: 8px; cursor: pointer;">
+            <div style="margin-bottom: 10px;">
+                <label style="display:flex; align-items:center; gap: 8px; cursor: pointer;" title="Enables chunked blob storage. Value will be a Blob. Key will be wrapped with a ChunkIndex field.">
                     <input type="checkbox" id="new-store-is-streaming" onchange="toggleStreamingMode()"> 
-                    <strong>Streaming / Chunked Data</strong>
+                    <span>Streaming / Chunked Data</span>
                 </label>
-                <div style="font-size: 11px; color: #888; margin-top: 4px; margin-left: 24px;">
-                    Enables chunked blob storage. Value will be a Blob. Key will be wrapped with a <code>ChunkIndex</code> field.
-                </div>
             </div>
             <div id="index-spec-container" style="margin-bottom: 10px; display: none; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; background: var(--bg-color);">
                 <label style="display:block; margin-bottom: 10px; font-weight: bold;">Map Key Configuration:</label>
@@ -517,6 +537,49 @@
                 </div>
             </div>
 
+            <div id="value-type-container" style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+                <label style="margin-bottom: 0; font-size: 12px; white-space: nowrap;">Value Type:</label>
+                <select id="new-store-value-type" onchange="toggleValueSpec()" style="flex: 1; padding: 5px; border-radius: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                    <option value="string">String</option>
+                    <option value="int">Int</option>
+                    <option value="int8">Int8</option>
+                    <option value="int16">Int16</option>
+                    <option value="int32">Int32</option>
+                    <option value="int64">Int64</option>
+                    <option value="uint">Uint</option>
+                    <option value="uint8">Uint8</option>
+                    <option value="uint16">Uint16</option>
+                    <option value="uint32">Uint32</option>
+                    <option value="uint64">Uint64</option>
+                    <option value="float32">Float32</option>
+                    <option value="float64">Float64</option>
+                    <option value="complex64">Complex64</option>
+                    <option value="complex128">Complex128</option>
+                    <option value="rune">Rune</option>
+                    <option value="decimal">Decimal</option>
+                    <option value="bool">Bool</option>
+                    <option value="timestamp">Timestamp</option>
+                    <option value="timestampz">TimestampZ</option>
+                    <option value="date">Date</option>
+                    <option value="datetime">DateTime</option>
+                    <option value="time">Time</option>
+                    <option value="uuid">UUID</option>
+                    <option value="blob">Blob (Byte Array)</option>
+                    <option value="map">Map (JSON Object)</option>
+                </select>
+                <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                    <input type="checkbox" id="new-store-value-is-array" onchange="toggleValueSpec()">
+                    <span>Array</span>
+                </label>
+            </div>
+
+            <div id="value-map-spec-container" style="margin-bottom: 10px; display: none; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; background: var(--bg-color);">
+                 <label style="display:block; margin-bottom: 5px; font-size: 12px; font-weight: bold;">Value Map Fields (Read-Only):</label>
+                 <div id="value-map-fields-list" style="display: flex; flex-direction: column; gap: 5px;">
+                     <!-- Read-only rows injected here -->
+                 </div>
+            </div>
+
             <div id="seed-data-container" style="margin-bottom: 10px; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; background: var(--bg-color);">
                 <div style="display: flex; align-items: center; gap: 5px; margin-bottom: 10px;">
                     <label style="font-weight: bold; margin: 0;">Data Entry:</label>
@@ -531,45 +594,53 @@
                     Add an initial item to the store. This helps define the data structure (schema) for future items, especially for the Key and Value fields.
                 </div>
                 
-                <div style="margin-bottom: 10px;">
-                    <label style="display:block; margin-bottom: 5px; font-size: 12px;">Key:</label>
-                    <!-- Simple Key Input -->
-                    <textarea id="new-store-seed-key" placeholder="Enter key value" style="width: 100%; height: 40px; font-family: monospace; box-sizing: border-box;"></textarea>
-                    
-                    <!-- Map Key Form -->
-                    <div id="new-store-seed-key-map-container" style="display:none; border: 1px solid var(--input-border); padding: 5px; border-radius: 4px; background: var(--input-bg);">
-                        <div id="seed-key-fields-list" style="display: flex; flex-direction: column; gap: 5px;">
-                            <!-- Generated inputs go here -->
-                        </div>
-                        <div style="font-size: 10px; color: var(--text-muted); margin-top: 5px;">
-                            Values for the key fields defined above.
+                    <div style="margin-bottom: 10px;">
+                        <label style="display:block; margin-bottom: 5px; font-size: 12px;">Key:</label>
+                        <!-- Simple Key Input -->
+                        <input type="text" id="new-store-seed-key" placeholder="Enter key value" style="width: 100%; font-family: monospace; box-sizing: border-box; padding: 5px; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
+                        
+                        <!-- Map Key Form -->
+                        <div id="new-store-seed-key-map-container" style="display:none; border: 1px solid var(--input-border); padding: 5px; border-radius: 4px; background: var(--input-bg);">
+                            <div id="seed-key-fields-list" style="display: flex; flex-direction: column; gap: 5px;">
+                                <!-- Generated inputs go here -->
+                            </div>
+                            <div style="font-size: 10px; color: var(--text-muted); margin-top: 5px;">
+                                Values for the key fields defined above.
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                        <label style="font-size: 12px;">Value:</label>
-                        <label style="font-size: 11px; cursor: pointer;">
-                            <input type="checkbox" id="seed-value-raw-mode" onchange="toggleSeedValueMode()"> Raw JSON
-                        </label>
-                    </div>
-                    
-                    <!-- Builder Mode -->
-                    <div id="seed-value-builder" style="border: 1px solid var(--input-border); padding: 5px; border-radius: 4px; background: var(--input-bg);">
-                        <div id="seed-value-fields-list" style="display: flex; flex-direction: column; gap: 5px;">
-                            <!-- Rows injected here -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                            <label style="font-size: 12px;">Value:</label>
+                            <label id="seed-value-raw-option" style="font-size: 11px; cursor: pointer;">
+                                <input type="checkbox" id="seed-value-raw-mode" onchange="toggleSeedValueMode()"> Raw JSON
+                            </label>
                         </div>
-                        <button onclick="addSeedValueFieldRow()" style="font-size: 11px; padding: 4px 8px; margin-top: 5px; cursor: pointer;">+ Add Field</button>
-                    </div>
+                        
+                        <!-- Simple Value Input -->
+                        <input type="text" id="new-store-seed-value-simple" placeholder="Enter value" style="width: 100%; box-sizing: border-box; padding: 5px; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg); color: var(--text-color); display: block; margin-bottom: 5px;">
 
-                    <!-- Raw Mode -->
-                    <textarea id="new-store-seed-value" placeholder="Enter value (JSON Object)" style="width: 100%; height: 80px; font-family: monospace; box-sizing: border-box; display: none;"></textarea>
-                </div>
+                        <!-- Builder Mode -->
+                        <div id="seed-value-builder" style="display: none; border: 1px solid var(--input-border); padding: 5px; border-radius: 4px; background: var(--input-bg);">
+                            <div id="seed-value-fields-list" style="display: flex; flex-direction: column; gap: 5px;">
+                                <!-- Rows injected here -->
+                            </div>
+                            <button onclick="addSeedValueFieldRow()" style="font-size: 11px; padding: 4px 8px; margin-top: 5px; cursor: pointer;">+ Add Field</button>
+                        </div>
+
+                        <!-- Raw Mode -->
+                        <textarea id="new-store-seed-value" placeholder="Enter value (JSON Object)" style="width: 100%; height: 80px; font-family: monospace; box-sizing: border-box; display: none;"></textarea>
+                    </div>
             </div>
 
-             <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom: 5px;">Description:</label>
-                <textarea id="new-store-description" style="width: 100%; box-sizing: border-box; height: 60px;"></textarea>
+            <!-- VIEW/EDIT STORE CONTAINER (Used for existing stores) -->
+            <div id="view-store-container" style="display:none;">
+                <!-- Content injected dynamically by JS -->
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                <label style="margin-bottom: 0; white-space: nowrap;">Description:</label>
+                <input type="text" id="new-store-description" style="flex: 1; box-sizing: border-box; padding: 5px; border: 1px solid var(--input-border); border-radius: 3px; background-color: var(--input-bg); color: var(--text-color);">
             </div>
             <div style="margin-bottom: 10px;">
                 <label style="display:flex; align-items:center; gap: 5px; cursor: pointer;">
@@ -578,6 +649,17 @@
                 </label>
             </div>
             <div id="advanced-options-container" style="display: none; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+                <div id="new-store-cel-expression" style="margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                        <label style="font-weight: bold;">CEL Expression (Sorting):</label>
+                        <button onclick="openCELModal()" style="font-size: 11px; padding: 2px 8px;">Edit Expression</button>
+                    </div>
+                    <div id="cel-expression-preview" style="font-family: monospace; font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; padding: 5px; background: var(--pre-bg); border-radius: 3px; border: 1px solid var(--border-color); min-height: 15px;">
+                        (No expression defined - using default sorting)
+                    </div>
+                    <input type="hidden" id="cel-expression-value">
+                </div>
+
                 <div style="margin-bottom: 10px;">
                     <label style="display:block; margin-bottom: 5px;">Slot Length (Min: 2, Max: 10000):</label>
                     <input type="number" id="new-store-slot-length" value="1000" min="2" max="10000" style="width: 100%; box-sizing: border-box;" oninput="updateSlotLengthWarning()">
@@ -617,6 +699,63 @@
         <div class="modal-footer">
             <button onclick="saveNewStore()" class="btn-success">Create</button>
             <button onclick="closeAddStoreModal()" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Store Details Modal (Read-Only) -->
+<div id="store-details-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header" style="border-bottom: 1px solid var(--border-color); padding-bottom: 10px; margin-bottom: 15px;">
+            <span style="font-size: 18px;">Store Details</span>
+            <span style="cursor:pointer; font-size: 24px; line-height: 18px;" onclick="document.getElementById('store-details-modal').style.display='none'">&times;</span>
+        </div>
+        <div class="modal-body" style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            
+            <!-- Full Width Name -->
+            <div style="grid-column: 1 / -1;">
+                <label style="display:block; font-weight:bold; margin-bottom: 5px; color: var(--text-muted); font-size: 12px;">STORE NAME</label>
+                <div id="detail-store-name" style="padding: 10px; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px; font-size: 16px; font-weight: bold;"></div>
+            </div>
+
+            <!-- Description -->
+            <div style="grid-column: 1 / -1;">
+                <label style="display:block; font-weight:bold; margin-bottom: 5px; color: var(--text-muted); font-size: 12px;">DESCRIPTION</label>
+                <div id="detail-store-desc" style="padding: 10px; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px; min-height: 20px;"></div>
+            </div>
+
+            <!-- Key Type -->
+            <div>
+                <label style="display:block; font-weight:bold; margin-bottom: 5px; color: var(--text-muted); font-size: 12px;">KEY TYPE</label>
+                <div id="detail-store-key-type" style="padding: 10px; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px;"></div>
+            </div>
+
+            <!-- Item Count -->
+            <div>
+                <label style="display:block; font-weight:bold; margin-bottom: 5px; color: var(--text-muted); font-size: 12px;">ITEM COUNT</label>
+                <div id="detail-store-count" style="padding: 10px; background: var(--input-bg); border: 1px solid var(--border-color); border-radius: 4px;"></div>
+            </div>
+
+            <!-- CEL Expression -->
+            <div style="grid-column: 1 / -1;">
+                <label style="display:block; font-weight:bold; margin-bottom: 5px; color: var(--text-muted); font-size: 12px;">CEL EXPRESSION (SORTING)</label>
+                <div id="detail-store-cel" style="padding: 10px; background: var(--pre-bg); border: 1px solid var(--border-color); border-radius: 4px; font-family: monospace; white-space: pre-wrap; min-height: 20px;"></div>
+            </div>
+
+            <!-- Index Spec -->
+            <div id="detail-store-index-spec-container" style="grid-column: 1 / -1; display: none;">
+                <label style="display:block; font-weight:bold; margin-bottom: 5px; color: var(--text-muted); font-size: 12px;">INDEX SPECIFICATION</label>
+                <pre id="detail-store-index-spec" style="padding: 10px; background: var(--pre-bg); border: 1px solid var(--border-color); border-radius: 4px; margin: 0; font-size: 12px; overflow-x: auto;"></pre>
+            </div>
+
+            <!-- Migration Warning -->
+            <div id="detail-store-migration-warning" style="grid-column: 1 / -1; display: none; padding: 10px; background: rgba(255, 193, 7, 0.1); border: 1px solid var(--warning-text); border-radius: 4px; color: var(--warning-text);">
+                <strong>⚠️ Recommendation:</strong> This store lacks an Index Specification or CEL Expression. 
+                We recommend migrating to a new store with a defined schema to enable full management capabilities (Add/Delete) and ensure data integrity.
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="document.getElementById('store-details-modal').style.display='none'" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Close</button>
         </div>
     </div>
 </div>
@@ -842,8 +981,8 @@
             });
     }
 
-    function selectStore(name, element) {
-        if (currentStore === name) return;
+    function selectStore(name, element, force = false) {
+        if (currentStore === name && !force) return;
 
         // Close detail panel as it may be showing data from previous store
         if (!closeDetail()) return;
@@ -865,16 +1004,45 @@
         codeBtn.style.display = 'inline-block';
         codeBtn.title = `Generate Code for '${name}'`;
 
+        // Show Edit Store Button
+        const editBtn = document.getElementById('btn-edit-store');
+        editBtn.style.display = 'none';
+
+        // Show View Store Button
+        const viewBtn = document.getElementById('btn-view-store');
+        viewBtn.style.display = 'none';
+
         // Show Edit CEL Button
         const celBtn = document.getElementById('btn-edit-cel');
-        celBtn.style.display = 'inline-block';
-        celBtn.title = `Edit '${name}' CEL expression`;
+        celBtn.style.display = 'none'; // Hidden in favor of Edit Store
+        // celBtn.style.display = 'inline-block';
+        // celBtn.title = `Edit '${name}' CEL expression`;
 
         // Fetch Store Info
         fetch(`/api/store/info?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`)
             .then(res => res.json())
             .then(info => {
                 currentStoreInfo = info;
+
+                // Toggle Edit/View buttons based on count
+                // NOTE: We now use the Edit button for ALL stores (populated or empty).
+                // The Edit modal handles read-only fields for populated stores.
+                editBtn.style.display = 'inline-block';
+                editBtn.title = `Edit Store Metadata for '${name}'`;
+                viewBtn.style.display = 'none'; // Hide the old read-only view button
+                
+                /*
+                if (info.count > 0) {
+                    viewBtn.style.display = 'inline-block';
+                    viewBtn.title = `View Store Details for '${name}'`;
+                    editBtn.style.display = 'none';
+                } else {
+                    editBtn.style.display = 'inline-block';
+                    editBtn.title = `Edit Store '${name}'`;
+                    viewBtn.style.display = 'none';
+                }
+                */
+
                 // Use name for display, description for tooltip
                 let displayTitle = info.name;
                 if (displayTitle) {
@@ -1022,7 +1190,12 @@
         toolbar.appendChild(refreshBtn);
 
         // Only show Add Item for non-registry stores (Macros are too complex to add manually)
-        if (info.description !== "AI Models Registry") {
+        // Also disable for stores without explicit Index Specification OR CEL Expression
+        const isReadOnly = !info.isPrimitiveKey && 
+                             (!info.indexSpec || !info.indexSpec.index_fields) &&
+                             !info.celExpression;
+
+        if (info.description !== "AI Models Registry" && !isReadOnly) {
             const addBtn = document.createElement('button');
             addBtn.textContent = 'Add Item';
             addBtn.title = "Add a new item to the store.";
@@ -1030,7 +1203,17 @@
             addBtn.classList.add('btn-success');
             addBtn.style.marginLeft = '10px';
             addBtn.tabIndex = 0;
+            addBtn.id = 'btn-add-item';
             toolbar.appendChild(addBtn);
+        } else if (isReadOnly) {
+            const warning = document.createElement('span');
+            warning.textContent = "⚠️ Read-Only (No Schema)";
+            warning.title = "This store does not have an explicit Index Specification or CEL Expression. Adding or deleting items is disabled because the key structure is not strictly defined. Please migrate to a new store with a defined schema.";
+            warning.style.marginLeft = '10px';
+            warning.style.color = 'var(--warning-text)';
+            warning.style.fontSize = '12px';
+            warning.style.alignSelf = 'center';
+            toolbar.appendChild(warning);
         }
     }
 
@@ -1072,7 +1255,12 @@
     function updateDeleteButton() {
         const btn = document.getElementById('btn-bulk-delete');
         if (btn) {
-            if (showSelectionColumn) {
+            // Check if Read-Only (No Index Spec AND No CEL)
+            const isReadOnly = currentStoreInfo && !currentStoreInfo.isPrimitiveKey && 
+                                (!currentStoreInfo.indexSpec || !currentStoreInfo.indexSpec.index_fields) &&
+                                !currentStoreInfo.celExpression;
+
+            if (showSelectionColumn && !isReadOnly) {
                 btn.style.display = 'flex';
                 btn.disabled = selectedItems.size === 0;
                 btn.style.opacity = selectedItems.size === 0 ? '0.5' : '1';
@@ -1222,12 +1410,19 @@
                 try {
                     const parsed = JSON.parse(sampleVal);
                     if (typeof parsed === 'object' && parsed !== null) {
-                        sampleVal = parsed;
+                        // Check if it's a byte array (array of numbers)
+                        const isByteArray = Array.isArray(parsed) && parsed.every(n => typeof n === 'number');
+                        if (!isByteArray) {
+                            sampleVal = parsed;
+                        }
                     }
                 } catch(e) {}
+            } else if (Array.isArray(sampleVal) && sampleVal.every(n => typeof n === 'number')) {
+                // It's already a byte array object, treat as primitive for column purposes
+                sampleVal = "blob"; 
             }
 
-            if (typeof sampleVal === 'object' && sampleVal !== null) {
+            if (typeof sampleVal === 'object' && sampleVal !== null && !Array.isArray(sampleVal)) {
                 valCols = Object.keys(sampleVal);
                 
                 // Filter out columns that already exist in Key Columns (redundant)
@@ -1311,8 +1506,29 @@
             
             // Value Cells
             if (valCols.length === 1 && valCols[0] === 'Value') {
-                 const val = typeof item.value === 'object' ? JSON.stringify(item.value) : item.value;
-                 html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+                 let val = item.value;
+                 // Check for Byte Array
+                 let isBlob = false;
+                 if (Array.isArray(val) && val.every(n => typeof n === 'number')) {
+                     isBlob = true;
+                 } else if (typeof val === 'string') {
+                     try {
+                         const parsed = JSON.parse(val);
+                         if (Array.isArray(parsed) && parsed.every(n => typeof n === 'number')) {
+                             val = parsed;
+                             isBlob = true;
+                         }
+                     } catch(e) {}
+                 }
+
+                 if (isBlob) {
+                     const len = val.length;
+                     const preview = len > 20 ? `[Byte Array (${len} bytes)]` : `[${val.join(', ')}]`;
+                     html += `<td title="Byte Array (${len} bytes)">${preview}</td>`;
+                 } else {
+                     val = typeof item.value === 'object' ? JSON.stringify(item.value) : item.value;
+                     html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+                 }
             } else {
                 valCols.forEach(col => {
                     let valObj = item.value;
@@ -1320,7 +1536,7 @@
                     if (typeof valObj === 'string') {
                         try {
                             const parsed = JSON.parse(valObj);
-                            if (typeof parsed === 'object' && parsed !== null) {
+                            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
                                 valObj = parsed;
                             }
                         } catch(e) {}
@@ -1599,9 +1815,13 @@
             try {
                 const parsed = JSON.parse(currentItemValue);
                 if (typeof parsed === 'object' && parsed !== null) {
-                    currentItemValue = parsed;
-                    // Update item.value locally so the rest of the function uses the object
-                    item.value = parsed;
+                    // Check if it's a byte array
+                    const isByteArray = Array.isArray(parsed) && parsed.every(n => typeof n === 'number');
+                    if (!isByteArray) {
+                        currentItemValue = parsed;
+                        // Update item.value locally so the rest of the function uses the object
+                        item.value = parsed;
+                    }
                 }
             } catch (e) {
                 console.error("Failed to parse value as JSON:", e);
@@ -1615,13 +1835,53 @@
 
         const viewer = document.getElementById('json-viewer');
         
-        const keyStr = typeof item.key === 'object' ? JSON.stringify(item.key, null, 2) : item.key;
+        // Format Key Display
+        let keyStr = "";
+        if (typeof item.key === 'object' && item.key !== null) {
+            // Reorder key fields based on IndexSpec
+            let orderedKey = {};
+            let keyFields = Object.keys(item.key);
+            
+            if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+                const indexOrder = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
+                keyFields.sort((a, b) => {
+                    const idxA = indexOrder.indexOf(a);
+                    const idxB = indexOrder.indexOf(b);
+                    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                    if (idxA !== -1) return -1;
+                    if (idxB !== -1) return 1;
+                    return a.localeCompare(b);
+                });
+            }
+            
+            keyFields.forEach(k => {
+                orderedKey[k] = item.key[k];
+            });
+            keyStr = JSON.stringify(orderedKey, null, 2);
+        } else {
+            keyStr = item.key;
+        }
         
         // Debug Info on UI
         // (Removed debug message)
 
         let valueHtml = '';
-        if (typeof currentItemValue === 'object' && currentItemValue !== null) {
+        
+        // Check if Value is a Byte Array (Blob)
+        let isBlob = false;
+        if (Array.isArray(currentItemValue) && currentItemValue.every(n => typeof n === 'number')) {
+            isBlob = true;
+        }
+
+        if (isBlob) {
+             // Blob View (Raw JSON Array)
+             const len = currentItemValue.length;
+             const jsonStr = JSON.stringify(currentItemValue);
+             valueHtml = `
+                <div style="margin-bottom: 5px; font-size: 12px; color: var(--text-muted);">Byte Array (${len} bytes)</div>
+                <textarea id="edit-value" oninput="document.getElementById('btn-save').disabled = false;" style="width: 100%; height: 300px; font-family: monospace; margin-top: 5px;" class="form-input">${jsonStr}</textarea>
+            `;
+        } else if (typeof currentItemValue === 'object' && currentItemValue !== null) {
             // Form View
             valueHtml = '<div id="value-form" style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; padding-right: 2px;">';
             const keys = Object.keys(currentItemValue);
@@ -1716,6 +1976,26 @@
                 <button onclick="deleteItem()" class="btn-danger" title="Delete this item from the store.">Delete</button>
             </div>
         `;
+
+        // Disable Key Editing (Implicitly handled as Key is displayed in <pre>)
+        // But we should check if we need to disable Value editing for some reason?
+        // No, Value updates are allowed.
+        
+        // However, if the store is Read-Only (No Schema), we should disable Delete button here too.
+        const isReadOnly = currentStoreInfo && !currentStoreInfo.isPrimitiveKey && 
+                             (!currentStoreInfo.indexSpec || !currentStoreInfo.indexSpec.index_fields) &&
+                             !currentStoreInfo.celExpression;
+        
+        if (isReadOnly) {
+            const delBtn = viewer.querySelector('.btn-danger');
+            if (delBtn) {
+                delBtn.disabled = true;
+                delBtn.title = "Deletion is disabled for stores without an Index Specification or CEL Expression.";
+                delBtn.style.opacity = '0.5';
+                delBtn.style.cursor = 'not-allowed';
+            }
+        }
+
         document.getElementById('detail-resizer').style.display = 'block';
         panel.style.display = 'flex';
     }
@@ -1822,6 +2102,15 @@
 
     function deleteItem() {
         if (!currentStore || currentItemKey === null) return;
+        
+        // Check if Read-Only (No Index Spec AND No CEL)
+        if (currentStoreInfo && !currentStoreInfo.isPrimitiveKey && 
+            (!currentStoreInfo.indexSpec || !currentStoreInfo.indexSpec.index_fields) &&
+            !currentStoreInfo.celExpression) {
+            alert("Deletion is disabled for stores without an Index Specification or CEL Expression.");
+            return;
+        }
+
         showConfirm("Are you sure you want to delete this item?", () => {
             performDelete();
         });
@@ -1999,6 +2288,20 @@
         }
 
         if (keySchema.length > 0) {
+            // Reorder keySchema based on IndexSpec if available
+            if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+                const indexOrder = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
+                // Sort keySchema: index fields first (in order), then others
+                keySchema.sort((a, b) => {
+                    const idxA = indexOrder.indexOf(a);
+                    const idxB = indexOrder.indexOf(b);
+                    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                    if (idxA !== -1) return -1;
+                    if (idxB !== -1) return 1;
+                    return a.localeCompare(b);
+                });
+            }
+
             // Complex Key Form
             keySchema.forEach(fieldName => {
                 const div = document.createElement('div');
@@ -2018,21 +2321,32 @@
         // --- Build Value UI ---
         let useForm = false;
         let valueSchema = [];
+        let isArray = false;
 
         // 1. Fallback to Sample Value
-        if (currentStoreInfo && currentStoreInfo.sampleValue && typeof currentStoreInfo.sampleValue === 'object') {
-            valueSchema = Object.keys(currentStoreInfo.sampleValue);
+        if (currentStoreInfo && currentStoreInfo.sampleValue) {
+            if (Array.isArray(currentStoreInfo.sampleValue)) {
+                isArray = true;
+            } else if (typeof currentStoreInfo.sampleValue === 'object') {
+                valueSchema = Object.keys(currentStoreInfo.sampleValue);
+            }
         }
 
         // 2. Fallback to First Item
-        if (valueSchema.length === 0 && currentItems && currentItems.length > 0) {
+        if (!isArray && valueSchema.length === 0 && currentItems && currentItems.length > 0) {
             const sampleVal = currentItems[0].value;
-            if (typeof sampleVal === 'object' && sampleVal !== null) {
+            if (Array.isArray(sampleVal)) {
+                isArray = true;
+            } else if (typeof sampleVal === 'object' && sampleVal !== null) {
                 valueSchema = Object.keys(sampleVal);
             }
         }
 
-        if (valueSchema.length > 0) {
+        if (isArray) {
+            // Force JSON Mode for Arrays
+            valModeToggle.checked = true;
+            renderAddValueJson("[]");
+        } else if (valueSchema.length > 0) {
             useForm = true;
             valueSchema.forEach(k => {
                 const div = document.createElement('div');
@@ -2045,7 +2359,7 @@
             });
         }
 
-        if (!useForm) {
+        if (!useForm && !isArray) {
             // Fallback to JSON
             valModeToggle.checked = true;
             renderAddValueJson();
@@ -3814,20 +4128,368 @@
 </div>
 
 <script>
+    function showEditStore() {
+        if (!currentStoreInfo) return;
+        
+        document.getElementById('add-store-modal').style.display = 'flex';
+        
+        // Clear previous state
+        document.getElementById('key-fields-list').innerHTML = '';
+        document.getElementById('index-fields-list').innerHTML = '';
+        document.getElementById('seed-key-fields-list').innerHTML = '';
+        document.getElementById('seed-value-fields-list').innerHTML = '';
+        
+        // Populate Fields
+        document.getElementById('new-store-name').value = currentStoreInfo.name;
+        document.getElementById('new-store-name').disabled = true; // Cannot rename
+        document.getElementById('new-store-description').value = currentStoreInfo.description || '';
+        
+        // Key Type Inference & Population
+        let keyType = 'string';
+        if (!currentStoreInfo.isPrimitiveKey) {
+            keyType = 'map';
+            
+            // Reconstruct Key Fields from Sample Key
+            if (currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
+                Object.keys(currentStoreInfo.sampleKey).forEach(k => {
+                    const val = currentStoreInfo.sampleKey[k];
+                    let type = 'string';
+                    const t = typeof val;
+                    if (t === 'number') {
+                        if (Number.isInteger(val)) type = 'int';
+                        else type = 'float64';
+                    } else if (t === 'boolean') {
+                        type = 'bool';
+                    }
+                    addKeyFieldRow(k, type);
+                });
+            }
+            
+            // Reconstruct Index Spec
+            if (currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+                currentStoreInfo.indexSpec.index_fields.forEach(f => {
+                    addIndexFieldRow();
+                    // The last added row
+                    const rows = document.getElementById('index-fields-list').children;
+                    const lastRow = rows[rows.length - 1];
+                    const select = lastRow.querySelector('.index-field-select');
+                    const order = lastRow.querySelector('.index-field-order');
+                    
+                    select.value = f.field_name;
+                    order.value = f.ascending_sort_order ? 'asc' : 'desc';
+                });
+            }
+        } else {
+            if (currentStoreInfo.sampleKey !== undefined && currentStoreInfo.sampleKey !== null) {
+                const t = typeof currentStoreInfo.sampleKey;
+                if (t === 'number') {
+                    if (Number.isInteger(currentStoreInfo.sampleKey)) keyType = 'int';
+                    else keyType = 'float64';
+                } else if (t === 'boolean') {
+                    keyType = 'bool';
+                }
+            }
+        }
+        document.getElementById('new-store-key-type').value = keyType;
+        
+        // Value Type Inference
+        let valueType = 'string';
+        let isArray = false;
+        if (currentStoreInfo.sampleValue !== undefined && currentStoreInfo.sampleValue !== null) {
+            if (Array.isArray(currentStoreInfo.sampleValue)) {
+                // Check if it's a Blob (Byte Array)
+                // We assume array of numbers within byte range (0-255) is a Blob
+                const isAllNumbers = currentStoreInfo.sampleValue.every(i => typeof i === 'number');
+                const isByteRange = isAllNumbers && currentStoreInfo.sampleValue.every(n => n >= 0 && n <= 255);
+                
+                if (isAllNumbers && isByteRange) {
+                    valueType = 'blob';
+                    isArray = false; // Blob is inherently an array
+                } else {
+                    isArray = true;
+                    if (currentStoreInfo.sampleValue.length > 0) {
+                        const item = currentStoreInfo.sampleValue[0];
+                        const t = typeof item;
+                        if (t === 'object') valueType = 'map';
+                        else if (t === 'number') {
+                             if (Number.isInteger(item)) valueType = 'int';
+                             else valueType = 'float64';
+                        } else if (t === 'boolean') valueType = 'bool';
+                    }
+                }
+            } else {
+                const t = typeof currentStoreInfo.sampleValue;
+                if (t === 'object') valueType = 'map';
+                else if (t === 'number') {
+                     if (Number.isInteger(currentStoreInfo.sampleValue)) valueType = 'int';
+                     else valueType = 'float64';
+                } else if (t === 'boolean') valueType = 'bool';
+            }
+        }
+        document.getElementById('new-store-value-type').value = valueType;
+        document.getElementById('new-store-value-is-array').checked = isArray;
+        
+        // Populate Value Map Fields (Read-Only)
+        const valMapContainer = document.getElementById('value-map-spec-container');
+        const valMapList = document.getElementById('value-map-fields-list');
+        valMapList.innerHTML = '';
+        
+        if (valueType === 'map') {
+            valMapContainer.style.display = 'block';
+            let sample = currentStoreInfo.sampleValue;
+            if (isArray && Array.isArray(sample) && sample.length > 0) {
+                sample = sample[0];
+            }
+            
+            if (sample && typeof sample === 'object') {
+                Object.keys(sample).forEach(k => {
+                    const val = sample[k];
+                    let type = 'string';
+                    const t = typeof val;
+                    if (t === 'number') {
+                        if (Number.isInteger(val)) type = 'int';
+                        else type = 'float64';
+                    } else if (t === 'boolean') type = 'bool';
+                    
+                    const div = document.createElement('div');
+                    div.style.display = 'flex';
+                    div.style.gap = '5px';
+                    div.innerHTML = `
+                        <input type="text" value="${k}" disabled style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-muted);">
+                        <input type="text" value="${type}" disabled style="width: 80px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-muted);">
+                    `;
+                    valMapList.appendChild(div);
+                });
+            }
+        } else {
+            valMapContainer.style.display = 'none';
+        }
+
+        // toggleValueSpec(); // Moved to end to override toggleSeedValueMode
+
+        // Advanced Mode
+        const hasAdvanced = (currentStoreInfo.celExpression || (currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields));
+        document.getElementById('new-store-advanced-mode').checked = hasAdvanced;
+        toggleAdvancedOptions();
+        
+        if (currentStoreInfo.celExpression) {
+            document.getElementById('cel-expression-value').value = currentStoreInfo.celExpression;
+            document.getElementById('cel-expression-preview').textContent = currentStoreInfo.celExpression;
+            document.getElementById('cel-expression-preview').style.color = 'var(--text-color)';
+        } else {
+            document.getElementById('cel-expression-value').value = '';
+            document.getElementById('cel-expression-preview').textContent = "(No expression defined - using default sorting)";
+            document.getElementById('cel-expression-preview').style.color = 'var(--text-muted)';
+        }
+
+        const footer = document.querySelector('#add-store-modal .modal-footer');
+        const saveBtn = footer.querySelector('.btn-success');
+        const seedContainer = document.getElementById('seed-data-container');
+
+        // --- EDIT MODE ---
+        document.querySelector('#add-store-modal .modal-header span').textContent = 'Edit Store Metadata';
+        
+        // Hide Seed Data (Not relevant for populated store edit)
+        seedContainer.style.display = 'none';
+        
+        // Show Update Button
+        saveBtn.style.display = 'inline-block';
+        saveBtn.textContent = 'Update';
+        saveBtn.onclick = updateStore;
+        saveBtn.disabled = true; // Disable initially
+
+        // Enable Update only if Description changes
+        const descInput = document.getElementById('new-store-description');
+        const originalDesc = currentStoreInfo.description || '';
+        descInput.oninput = function() {
+            if (this.value !== originalDesc) {
+                saveBtn.disabled = false;
+            } else {
+                saveBtn.disabled = true;
+            }
+        };
+        
+        // Ensure UI state is correct before disabling
+        toggleIndexSpec();
+        toggleValueSpec();
+
+        // If advanced mode is ON, we should show the container but disable inputs inside
+        if (hasAdvanced) {
+             document.getElementById('advanced-options-container').style.display = 'block';
+        } else {
+             document.getElementById('advanced-options-container').style.display = 'none';
+        }
+        
+        // --- DISABLE EVERYTHING EXCEPT DESCRIPTION ---
+        
+        // Enable Description Only
+        document.getElementById('new-store-description').disabled = false;
+        
+        // Disable Structural Fields
+        document.getElementById('new-store-key-type').disabled = true;
+        document.getElementById('new-store-key-is-array').disabled = true;
+        document.getElementById('new-store-advanced-mode').disabled = true; 
+        
+        // Disable Map Key Fields inputs if they exist
+        const keyRows = document.querySelectorAll('.key-field-row input, .key-field-row select, .key-field-row button');
+        keyRows.forEach(el => el.disabled = true);
+        
+        // Disable Index Spec inputs if they exist
+        const indexRows = document.querySelectorAll('.index-field-row select, .index-field-row button');
+        indexRows.forEach(el => el.disabled = true);
+
+        // Disable "Add Field" and "Add Index" buttons
+        const addKeyFieldBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
+        if (addKeyFieldBtn) addKeyFieldBtn.disabled = true;
+        
+        const addIndexFieldBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
+        if (addIndexFieldBtn) addIndexFieldBtn.disabled = true;
+        
+        // Disable Value Type Dropdown
+        document.getElementById('new-store-value-type').disabled = true;
+        document.getElementById('new-store-value-is-array').disabled = true;
+
+        // Disable Streaming Checkbox
+        document.getElementById('new-store-is-streaming').disabled = true;
+        
+        // Disable Advanced Options
+        const celEditBtn = document.querySelector('#new-store-cel-expression button');
+        if (celEditBtn) celEditBtn.style.display = 'none';
+        
+        document.getElementById('new-store-slot-length').disabled = true;
+        document.getElementById('new-store-is-unique').disabled = true;
+        document.getElementById('new-store-value-in-node').disabled = true;
+        document.getElementById('new-store-cache-duration').disabled = true;
+        document.getElementById('new-store-cache-ttl').disabled = true;
+    }
+
+    function showStoreDetails() {
+        // Redirect to Edit Store (which now handles Read-Only/Edit hybrid view)
+        showEditStore();
+    }
+
+    /* 
+    function showStoreDetails_OLD() {
+        // ... (Old logic commented out)
+    }
+    */
+
+    function updateStore() {
+        const name = document.getElementById('new-store-name').value.trim();
+        const desc = document.getElementById('new-store-description').value.trim();
+        
+        const payload = {
+            database: currentDatabase,
+            storeName: name,
+            description: desc,
+            // Send current values for validation
+            celExpression: currentStoreInfo.celExpression,
+            keyType: currentStoreInfo.isPrimitiveKey ? "primitive" : "map"
+        };
+
+        fetch(`/api/store/update?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(async res => {
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || res.statusText);
+            }
+            closeAddStoreModal();
+            selectStore(name, document.querySelector('#sidebar li.active'), true); // Refresh
+            alert("Store updated successfully.");
+        })
+        .catch(err => alert("Error: " + err));
+    }
+
     function showAddStore() {
         document.getElementById('add-store-modal').style.display = 'flex';
+        document.querySelector('#add-store-modal .modal-header span').textContent = 'Add New Store';
         document.getElementById('new-store-name').value = '';
+        document.getElementById('new-store-name').disabled = false;
+        
+        // Clear previous state
+        document.getElementById('key-fields-list').innerHTML = '';
+        document.getElementById('index-fields-list').innerHTML = '';
+        document.getElementById('seed-key-fields-list').innerHTML = '';
+        document.getElementById('seed-value-fields-list').innerHTML = '';
+        
         document.getElementById('new-store-description').value = '';
         document.getElementById('new-store-key-type').value = 'string';
+        document.getElementById('new-store-key-type').disabled = false;
+        document.getElementById('new-store-key-is-array').disabled = false;
+        
+        // Reset Value Type
+        document.getElementById('new-store-value-type').value = 'string';
+        document.getElementById('new-store-value-type').disabled = false;
+        document.getElementById('new-store-value-is-array').checked = false;
+        document.getElementById('new-store-value-is-array').disabled = false;
+        
+        // Hide Read-Only Value Map Spec
+        document.getElementById('value-map-spec-container').style.display = 'none';
+
+        // Re-enable "Add Field" and "Add Index" buttons
+        const addKeyFieldBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
+        if (addKeyFieldBtn) addKeyFieldBtn.disabled = false;
+        
+        const addIndexFieldBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
+        if (addIndexFieldBtn) addIndexFieldBtn.disabled = false;
+
+        // Re-enable Streaming Checkbox
+        document.getElementById('new-store-is-streaming').disabled = false;
+        document.getElementById('new-store-is-streaming').checked = false;
+
+        // Reset Advanced Mode & CEL
+        document.getElementById('new-store-advanced-mode').checked = false;
+        toggleAdvancedOptions();
+        document.getElementById('cel-expression-value').value = '';
+        document.getElementById('cel-expression-preview').textContent = "(No expression defined - using default sorting)";
+        document.getElementById('cel-expression-preview').style.color = 'var(--text-muted)';
+
+        // Reset Other Options
+        document.getElementById('new-store-slot-length').value = 100;
+        document.getElementById('new-store-is-unique').checked = true;
+        document.getElementById('new-store-value-in-node').checked = true;
+        document.getElementById('new-store-cache-duration').value = 0;
+        document.getElementById('new-store-cache-ttl').checked = true;
+        // document.getElementById('new-store-is-streaming').checked = false; // Removed
+
+        // Ensure Seed Data Container is visible
+        document.getElementById('seed-data-container').style.display = 'block';
+        
+        // Enable all inputs (reset from Edit mode)
+        document.getElementById('new-store-description').disabled = false;
+        document.getElementById('new-store-key-type').disabled = false;
+        document.getElementById('new-store-key-is-array').disabled = false;
+        document.getElementById('new-store-advanced-mode').disabled = false;
+        document.getElementById('new-store-slot-length').disabled = false;
+        document.getElementById('new-store-is-unique').disabled = false;
+        document.getElementById('new-store-value-in-node').disabled = false;
+        
         // Reset Seed Data
         document.getElementById('new-store-seed-key').value = '';
         document.getElementById('new-store-seed-value').value = '';
         document.getElementById('seed-value-fields-list').innerHTML = '';
+        document.getElementById('seed-key-fields-list').innerHTML = ''; // Reset Map Key fields
         addSeedValueFieldRow(); // Add one empty row
         document.getElementById('seed-value-raw-mode').checked = false;
         toggleSeedValueMode();
         
         toggleIndexSpec();
+        toggleValueSpec();
+        
+        // Reset Save Button
+        const footer = document.querySelector('#add-store-modal .modal-footer');
+        const saveBtn = footer.querySelector('.btn-success');
+        saveBtn.style.display = 'inline-block';
+        saveBtn.textContent = 'Create';
+        saveBtn.onclick = saveNewStore;
+        saveBtn.disabled = false; // Always enabled for new store
+
+        // Clear Edit Mode listener
+        document.getElementById('new-store-description').oninput = null;
     }
 
     function closeAddStoreModal() {
@@ -4082,83 +4744,79 @@
 
     function toggleStreamingMode() {
         const isStreaming = document.getElementById('new-store-is-streaming').checked;
-        const builder = document.getElementById('seed-value-builder');
-        const raw = document.getElementById('new-store-seed-value');
-        const rawToggle = document.getElementById('seed-value-raw-mode');
-        const keyInput = document.getElementById('new-store-seed-key');
-        const keyType = document.getElementById('new-store-key-type').value;
+        const keyTypeSelect = document.getElementById('new-store-key-type');
+        const valueTypeSelect = document.getElementById('new-store-value-type');
         const valueInNode = document.getElementById('new-store-value-in-node');
         
         if (isStreaming) {
-            // Save state
-            preStreamingState = {
-                key: keyInput.value,
-                value: raw.value,
-                rawMode: rawToggle.checked
-            };
-
-            builder.style.display = 'none';
-            raw.style.display = 'block';
-            raw.value = '[10, 20, 30, 40, 50]'; // Sample Byte Array
-            raw.disabled = true;
-            rawToggle.disabled = true;
-            rawToggle.checked = true;
-            
-            // Disable Value In Node (must be false for streaming)
-            valueInNode.checked = false;
-            valueInNode.disabled = true;
-            if (typeof toggleCacheOptions === 'function') toggleCacheOptions();
-
-            // Pre-generate Streaming Key Wrapper
-            let sampleKey = preStreamingState.key;
-            
-            // If empty, generate default
-            if (!sampleKey) {
-                if (keyType === 'uuid') sampleKey = "00000000-0000-0000-0000-000000000000";
-                else if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64'].includes(keyType)) sampleKey = 1001;
-                else if (keyType === 'timestamp') sampleKey = Date.now();
-                else sampleKey = "sample_id";
-            } else {
-                // Try to parse if it looks like JSON or number, otherwise keep as string
-                 try {
-                     // Don't parse if it's just a string key, but do if it's a map or number
-                     if (keyType === 'map' || (['int', 'uint', 'float'].some(t => keyType.startsWith(t)))) {
-                        sampleKey = JSON.parse(sampleKey);
-                     }
-                 } catch {}
+            // 1. Force Key Type to Map
+            if (keyTypeSelect.value !== 'map') {
+                keyTypeSelect.value = 'map';
+                // Clear existing fields to avoid "undefined" field from toggleIndexSpec default
+                document.getElementById('key-fields-list').innerHTML = '';
+                toggleIndexSpec(); 
+                
+                // Add default "Key" field (String) if list is empty
+                const rows = document.getElementById('key-fields-list').children;
+                if (rows.length === 0) {
+                     addKeyFieldRow('Key', 'string');
+                } else if (rows.length === 1) {
+                    const nameInput = rows[0].querySelector('.key-field-name');
+                    if (!nameInput.value) nameInput.value = 'Key';
+                }
             }
             
-            const streamingKey = {
-                Key: sampleKey,
-                ChunkIndex: 0
-            };
-            keyInput.value = JSON.stringify(streamingKey, null, 2);
-        } else {
-            raw.disabled = false;
-            rawToggle.disabled = false;
+            // 2. Add ChunkIndex field if not exists
+            const keyFields = document.querySelectorAll('.key-field-name');
+            let hasChunkIndex = false;
+            keyFields.forEach(f => { if (f.value === 'ChunkIndex') hasChunkIndex = true; });
             
+            if (!hasChunkIndex) {
+                addKeyFieldRow('ChunkIndex', 'int');
+            }
+            
+            // 3. Add ChunkIndex to Index Spec if not exists
+            const indexSelects = document.querySelectorAll('.index-field-select');
+            let hasChunkIndexIndex = false;
+            indexSelects.forEach(s => { if (s.value === 'ChunkIndex') hasChunkIndexIndex = true; });
+            
+            if (!hasChunkIndexIndex) {
+                addIndexFieldRow();
+                const rows = document.getElementById('index-fields-list').children;
+                const lastRow = rows[rows.length - 1];
+                const select = lastRow.querySelector('.index-field-select');
+                select.value = 'ChunkIndex';
+            }
+            
+            // 4. Force Value Type to Blob
+            valueTypeSelect.value = 'blob';
+            toggleValueSpec(); 
+
+            // 5. Disable Value In Node
+            valueInNode.checked = false;
+            valueInNode.disabled = true;
+            
+            // 6. Update Seed Data Values
+            setTimeout(() => {
+                const seedRows = document.querySelectorAll('.seed-key-field-row');
+                seedRows.forEach(row => {
+                    const name = row.getAttribute('data-name');
+                    const input = row.querySelector('input');
+                    if (name === 'ChunkIndex') input.value = '0';
+                    else if (name === 'Key' && !input.value) input.value = 'sample_id';
+                });
+            }, 0);
+            
+            // Set Value to sample byte array
+            document.getElementById('new-store-seed-value-simple').value = "[10, 20, 30, 40, 50]";
+
+        } else {
             // Restore Value In Node
             valueInNode.disabled = false;
             valueInNode.checked = true;
-            if (typeof toggleCacheOptions === 'function') toggleCacheOptions();
-
-            if (preStreamingState) {
-                keyInput.value = preStreamingState.key;
-                raw.value = preStreamingState.value;
-                rawToggle.checked = preStreamingState.rawMode;
-                preStreamingState = null;
-            } else {
-                // Fallback if no state saved
-                try {
-                    const k = JSON.parse(keyInput.value);
-                    if (k.ChunkIndex === 0 && k.Key !== undefined) {
-                        keyInput.value = typeof k.Key === 'object' ? JSON.stringify(k.Key) : k.Key;
-                    }
-                } catch(e) {}
-                raw.value = '';
-            }
-            toggleSeedValueMode(); // Refresh UI based on restored checkbox state
         }
+        
+        if (typeof toggleCacheOptions === 'function') toggleCacheOptions();
     }
 
     function addSeedValueFieldRow(name = '', type = 'string', value = '') {
@@ -4207,6 +4865,59 @@
     }
 
     function generateSeedValueJSON() {
+        const valType = document.getElementById('new-store-value-type').value;
+        
+        // 1. Handle Non-Map Types (Simple Input)
+        if (valType !== 'map') {
+            const valStr = document.getElementById('new-store-seed-value-simple').value.trim();
+            if (!valStr) return null;
+            
+            const isArray = document.getElementById('new-store-value-is-array').checked;
+            if (isArray) {
+                try {
+                    return JSON.parse(valStr);
+                } catch (e) {
+                    throw new Error("For Array types, please enter a valid JSON array (e.g. [1, 2])");
+                }
+            }
+
+            // Single Value Parsing
+            if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(valType)) {
+                let val = parseInt(valStr);
+                if (isNaN(val)) val = 0;
+                return val;
+            } else if (['float32', 'float64', 'decimal'].includes(valType)) {
+                let val = parseFloat(valStr);
+                if (isNaN(val)) val = 0.0;
+                return val;
+            } else if (valType === 'bool') {
+                return (valStr.toLowerCase() === 'true' || valStr === '1');
+            } else if (valType === 'timestamp') {
+                let t = parseInt(valStr);
+                if (isNaN(t)) {
+                    t = Date.parse(valStr);
+                    if (isNaN(t)) t = 0;
+                }
+                return t;
+            } else if (valType === 'blob') {
+                try {
+                    const parsed = JSON.parse(valStr);
+                    if (Array.isArray(parsed)) return parsed;
+                } catch (e) {}
+
+                // Fallback: Convert string to byte array
+                let val = [];
+                for (let i = 0; i < valStr.length; i++) {
+                    val.push(valStr.charCodeAt(i));
+                }
+                return val;
+            }
+            
+            // Default string, date, etc.
+            return valStr;
+        }
+
+        // 2. Handle Map Type (Builder or Raw)
         const isRaw = document.getElementById('seed-value-raw-mode').checked;
         if (isRaw) {
             const raw = document.getElementById('new-store-seed-value').value.trim();
@@ -4259,6 +4970,36 @@
                 }
             });
             return obj;
+        }
+    }
+
+    function toggleValueSpec() {
+        const valType = document.getElementById('new-store-value-type').value;
+        
+        const simpleInput = document.getElementById('new-store-seed-value-simple');
+        const builder = document.getElementById('seed-value-builder');
+        const rawInput = document.getElementById('new-store-seed-value');
+        const rawOption = document.getElementById('seed-value-raw-option');
+        const rawModeCheckbox = document.getElementById('seed-value-raw-mode');
+
+        // If map, show builder or raw json
+        if (valType === 'map') {
+            if (rawOption) rawOption.style.display = 'block';
+            if (rawModeCheckbox && rawModeCheckbox.checked) {
+                if (simpleInput) simpleInput.style.display = 'none';
+                if (builder) builder.style.display = 'none';
+                if (rawInput) rawInput.style.display = 'block';
+            } else {
+                if (simpleInput) simpleInput.style.display = 'none';
+                if (builder) builder.style.display = 'block';
+                if (rawInput) rawInput.style.display = 'none';
+            }
+        } else {
+            // Simple type
+            if (rawOption) rawOption.style.display = 'none';
+            if (simpleInput) simpleInput.style.display = 'block';
+            if (builder) builder.style.display = 'none';
+            if (rawInput) rawInput.style.display = 'none';
         }
     }
 
@@ -4372,10 +5113,12 @@
             }
         }
 
+        /*
         if (seedKey === null || (typeof seedKey === 'string' && seedKey === '') || (typeof seedKey === 'object' && Object.keys(seedKey).length === 0)) {
              alert("Initial Item Key is required.");
              return;
         }
+        */
 
         try {
             seedValue = generateSeedValueJSON();
@@ -4386,19 +5129,74 @@
 
         const isStreaming = document.getElementById('new-store-is-streaming').checked;
         if (isStreaming) {
-            // Wrap Key for Streaming Data
-            seedKey = {
-                Key: seedKey,
-                ChunkIndex: 0
-            };
-            // Force Value to Blob (Sample)
-            seedValue = [1, 2, 3]; 
+            // --- Validation for Streaming/Chunked Data ---
+            
+            // 1. Validate Key Type
+            if (type !== 'map') {
+                alert("Streaming stores must use a Map key type.");
+                return;
+            }
+
+            // 2. Validate Value Type
+            const valType = document.getElementById('new-store-value-type').value;
+            if (valType !== 'blob') {
+                alert("Streaming stores must use 'Blob' (Byte Array) as the value type.");
+                return;
+            }
+
+            // 3. Validate Key Fields
+            const keyRows = document.querySelectorAll('.key-field-row');
+            let hasChunkIndex = false;
+            let chunkIndexType = '';
+            let otherFieldCount = 0;
+
+            keyRows.forEach(row => {
+                const name = row.querySelector('.key-field-name').value.trim();
+                const fType = row.querySelector('.key-field-type').value;
+                if (name === 'ChunkIndex') {
+                    hasChunkIndex = true;
+                    chunkIndexType = fType;
+                } else if (name) {
+                    otherFieldCount++;
+                }
+            });
+
+            if (!hasChunkIndex || chunkIndexType !== 'int') {
+                alert("Streaming stores must have a 'ChunkIndex' field of type 'int' in the Key.");
+                return;
+            }
+            if (otherFieldCount < 1) {
+                alert("Streaming stores must have at least one other field in the Key (besides ChunkIndex).");
+                return;
+            }
+
+            // 4. Validate Index Spec
+            const indexRows = document.querySelectorAll('.index-field-row');
+            if (indexRows.length === 0) {
+                alert("Streaming stores must have an Index defined.");
+                return;
+            }
+
+            const lastIndexRow = indexRows[indexRows.length - 1];
+            const lastIndexField = lastIndexRow.querySelector('.index-field-select').value;
+
+            if (lastIndexField !== 'ChunkIndex') {
+                alert("For Streaming stores, 'ChunkIndex' must be the LAST field in the Index.");
+                return;
+            }
+            
+            // Ensure at least one other field is indexed (ChunkIndex + Other = 2+)
+            if (indexRows.length < 2) {
+                 alert("Streaming stores must index both the ChunkIndex and the identifier field(s).");
+                 return;
+            }
         }
 
         const payload = {
             database: currentDatabase,
             store: name,
             key_type: type,
+            value_type: document.getElementById('new-store-value-type').value,
             description: desc,
             index_spec: indexSpec,
             advanced_mode: advancedMode,
@@ -4407,6 +5205,7 @@
             is_value_data_in_node_segment: valueInNode,
             cache_duration: cacheDuration,
             is_cache_ttl: isCacheTTL,
+            cel_expression: document.getElementById('cel-expression-value').value,
             seed_key: seedKey,
             seed_value: seedValue
         };
@@ -4432,11 +5231,23 @@
     }
 
     // --- CEL Editing Logic ---
-    function showEditCEL() {
-        if (!currentStoreInfo) return;
+    function openCELModal() {
         const modal = document.getElementById('cel-modal');
         const input = document.getElementById('cel-expression-input');
         const helpText = document.getElementById('cel-help-text');
+        
+        // Check if New Store Modal is open
+        const addStoreModal = document.getElementById('add-store-modal');
+        const isNewStore = addStoreModal && addStoreModal.style.display === 'flex';
+
+        if (isNewStore) {
+            input.value = document.getElementById('cel-expression-value').value;
+            helpText.style.display = 'none';
+            modal.style.display = 'flex';
+            return;
+        }
+
+        if (!currentStoreInfo) return;
 
         input.value = currentStoreInfo.celExpression || '';
 
@@ -4465,10 +5276,6 @@
              
              // Remove outer parens if they exist from recursion (optional cleanup)
              let generatedExpr = buildExpr(0);
-             // Clean up the trailing (0))))
-             // Actually the recursion adds parens around the 'Next' part.
-             // Let's make it cleaner without excessive parens if possible, or just accept them.
-             // The logic above: ... : (Next)
              
              helpContent += `
                 <div style="margin-bottom:10px;">
@@ -4521,6 +5328,24 @@
         const input = document.getElementById('cel-expression-input');
         const celExpr = input.value;
 
+        // Check if New Store Modal is open
+        const addStoreModal = document.getElementById('add-store-modal');
+        const isNewStore = addStoreModal && addStoreModal.style.display === 'flex';
+
+        if (isNewStore) {
+            document.getElementById('cel-expression-value').value = celExpr;
+            const preview = document.getElementById('cel-expression-preview');
+            if (celExpr) {
+                preview.textContent = celExpr;
+                preview.style.color = 'var(--text-color)';
+            } else {
+                preview.textContent = "(No expression defined - using default sorting)";
+                preview.style.color = 'var(--text-muted)';
+            }
+            closeCELModal();
+            return;
+        }
+
         fetch('/api/store/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -4537,9 +5362,6 @@
             }
             closeCELModal();
             // Refresh store info
-            // We need to find the active element to pass to selectStore, or just reload the page/store
-            // Since selectStore expects an element, we can just reload the store info manually or reload page.
-            // Or we can just update currentStoreInfo locally and alert.
             currentStoreInfo.celExpression = celExpr;
             alert('CEL Expression updated successfully.');
         })

@@ -285,6 +285,7 @@ func handleListDatabases(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleListStores(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	dbName := r.URL.Query().Get("database")
 	ctx := r.Context()
 	dbOpts, err := getDBOptions(dbName)
@@ -322,6 +323,7 @@ func handleGetDBOptions(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	storeName := r.URL.Query().Get("name")
 	dbName := r.URL.Query().Get("database")
 	if storeName == "" {
@@ -369,10 +371,15 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 			if err := encoding.DefaultMarshaler.Unmarshal([]byte(si.MapKeyIndexSpecification), &is); err == nil {
 				response["indexSpec"] = is
 			}
-		} else if si.Count > 0 {
-			// Fetch a sample key to infer structure for UI
-			if ok, _ := store.First(ctx); ok {
-				response["sampleKey"] = store.GetCurrentKey().Key
+		}
+	}
+
+	// Fetch a sample key to infer structure/type for UI if store is not empty
+	if si.Count > 0 {
+		if ok, _ := store.First(ctx); ok {
+			response["sampleKey"] = store.GetCurrentKey().Key
+			if v, err := store.GetCurrentValue(ctx); err == nil {
+				response["sampleValue"] = v
 			}
 		}
 	}
@@ -387,9 +394,14 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Database      string `json:"database"`
-		StoreName     string `json:"storeName"`
-		CelExpression string `json:"celExpression"`
+		Database      string  `json:"database"`
+		StoreName     string  `json:"storeName"`
+		CelExpression string  `json:"celExpression"`
+		Description   string  `json:"description"`
+		IndexSpec     *string `json:"indexSpec"`
+		KeyType       string  `json:"keyType"` // "map" or "primitive" (string, int, etc)
+		SeedKey       any     `json:"seedKey"`
+		SeedValue     any     `json:"seedValue"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -426,7 +438,26 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	si := store.GetStoreInfo()
-	si.CELexpression = req.CelExpression
+
+	// Update Description (Allowed for all stores)
+	si.Description = req.Description
+
+	// Validate that no structural changes are attempted
+	if req.CelExpression != si.CELexpression {
+		http.Error(w, "Cannot update CEL expression. Please delete and recreate the store if you need to change its structure.", http.StatusBadRequest)
+		return
+	}
+	if req.IndexSpec != nil {
+		http.Error(w, "Cannot update Index Specification. Please delete and recreate the store if you need to change its structure.", http.StatusBadRequest)
+		return
+	}
+	if req.KeyType != "" {
+		isPrimitive := req.KeyType != "map"
+		if si.IsPrimitiveKey != isPrimitive {
+			http.Error(w, "Cannot change Key Type. Please delete and recreate the store if you need to change its structure.", http.StatusBadRequest)
+			return
+		}
+	}
 
 	// Update StoreInfo via StoreRepository
 	t := trans.GetPhasedTransaction()
@@ -695,6 +726,13 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 			k := parseKey(refKeyStr)
 			// Find(ctx, k, true) positions cursor at k or next item if k is missing
 			ok, err = store.Find(ctx, k, true)
+			if !ok && err == nil {
+				// If key not found, we might be positioned at the next item.
+				// Check if we have a valid current item.
+				if _, err := store.GetCurrentItem(ctx); err == nil {
+					ok = true
+				}
+			}
 		} else {
 			ok, err = store.First(ctx)
 		}
@@ -974,6 +1012,7 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 		Database    string `json:"database"`
 		StoreName   string `json:"store"`
 		KeyType     string `json:"key_type"` // string, int, uuid, map
+		ValueType   string `json:"value_type"`
 		Description string `json:"description"`
 		IndexSpec   string `json:"index_spec"` // Optional, for map keys
 		SeedKey     any    `json:"seed_key"`   // Optional, for seeding
@@ -1039,13 +1078,78 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Cast SeedValue based on ValueType
+	var finalSeedValue any = req.SeedValue
+	if req.SeedValue != nil {
+		switch req.ValueType {
+		case "int":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = int(f)
+			}
+		case "int8":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = int8(f)
+			}
+		case "int16":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = int16(f)
+			}
+		case "int32":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = int32(f)
+			}
+		case "int64":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = int64(f)
+			}
+		case "uint":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = uint(f)
+			}
+		case "uint8":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = uint8(f)
+			}
+		case "uint16":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = uint16(f)
+			}
+		case "uint32":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = uint32(f)
+			}
+		case "uint64":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = uint64(f)
+			}
+		case "float32":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = float32(f)
+			}
+		case "rune":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = rune(f)
+			}
+		case "uuid":
+			if s, ok := req.SeedValue.(string); ok {
+				if id, err := sop.ParseUUID(s); err == nil {
+					finalSeedValue = id
+				}
+			}
+		case "timestamp":
+			if f, ok := req.SeedValue.(float64); ok {
+				finalSeedValue = int64(f)
+			}
+		}
+	}
+
 	switch req.KeyType {
 	case "string":
 		var s btree.BtreeInterface[string, any]
 		s, err = database.NewBtree[string, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
 		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
 			if kStr, ok := req.SeedKey.(string); ok {
-				s.Add(ctx, kStr, req.SeedValue)
+				_, err = s.Add(ctx, kStr, finalSeedValue)
 			}
 		}
 	case "int":
@@ -1053,7 +1157,7 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 		s, err = database.NewBtree[int, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
 		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
 			if f, ok := req.SeedKey.(float64); ok {
-				s.Add(ctx, int(f), req.SeedValue)
+				_, err = s.Add(ctx, int(f), finalSeedValue)
 			}
 		}
 	case "uuid":
@@ -1061,8 +1165,10 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 		s, err = database.NewBtree[sop.UUID, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
 		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
 			if str, ok := req.SeedKey.(string); ok {
-				if id, err := sop.ParseUUID(str); err == nil {
-					s.Add(ctx, id, req.SeedValue)
+				if id, err2 := sop.ParseUUID(str); err2 == nil {
+					_, err = s.Add(ctx, id, finalSeedValue)
+				} else {
+					err = err2
 				}
 			}
 		}
@@ -1071,26 +1177,48 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 		s, err = jsondb.NewJsonBtreeMapKey(ctx, dbOpts, storeOpts, trans, req.IndexSpec)
 		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
 			// JsonDBMapKey expects []jsondb.Item[map[string]any, any] for Add
-			// But wait, does it? Let's check jsondb.NewJsonBtreeMapKey return type.
-			// It returns *JsonDBMapKey.
-			// Let's check Add signature.
-			// It seems it might be batch add?
-			// If so, we need to wrap it.
-			// But wait, if it's a Btree, it should have Add(ctx, key, value).
-			// The error said: have Add(context.Context, []jsondb.Item[map[string]any, any]) (bool, error)
-			// So it is batch add.
-
-			// We need to construct the item.
 			if kMap, ok := req.SeedKey.(map[string]any); ok {
 				item := jsondb.Item[map[string]any, any]{
 					Key:   kMap,
-					Value: &req.SeedValue,
+					Value: &finalSeedValue,
 				}
-				s.Add(ctx, []jsondb.Item[map[string]any, any]{item})
+				_, err = s.Add(ctx, []jsondb.Item[map[string]any, any]{item})
+			}
+		}
+	case "array":
+		var s btree.BtreeInterface[[]any, any]
+		s, err = database.NewBtree[[]any, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+			if kArr, ok := req.SeedKey.([]any); ok {
+				_, err = s.Add(ctx, kArr, finalSeedValue)
+			}
+		}
+	case "int64":
+		var s btree.BtreeInterface[int64, any]
+		s, err = database.NewBtree[int64, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+			if f, ok := req.SeedKey.(float64); ok {
+				_, err = s.Add(ctx, int64(f), finalSeedValue)
+			}
+		}
+	case "float64":
+		var s btree.BtreeInterface[float64, any]
+		s, err = database.NewBtree[float64, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+			if f, ok := req.SeedKey.(float64); ok {
+				_, err = s.Add(ctx, f, finalSeedValue)
+			}
+		}
+	case "bool":
+		var s btree.BtreeInterface[bool, any]
+		s, err = database.NewBtree[bool, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+			if b, ok := req.SeedKey.(bool); ok {
+				_, err = s.Add(ctx, b, finalSeedValue)
 			}
 		}
 	default:
-		http.Error(w, "Invalid key type. Supported: string, int, uuid, map", http.StatusBadRequest)
+		http.Error(w, "Invalid key type. Supported: string, int, int64, float64, bool, uuid, map, array", http.StatusBadRequest)
 		return
 	}
 
