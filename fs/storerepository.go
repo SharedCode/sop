@@ -230,6 +230,10 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 			si.Count = si.Count - stores[ii].CountDelta
 			si.Timestamp = original[ii].Timestamp
 
+			// Include the CEL expression & MapKeyIndexSpecification now that we are using them, allow rollback too.
+			si.CELexpression = original[ii].CELexpression
+			si.MapKeyIndexSpecification = original[ii].MapKeyIndexSpecification
+
 			// Persist store info into a JSON text file.
 			ba, err := encoding.Marshal(si)
 			if err != nil {

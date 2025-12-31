@@ -119,6 +119,7 @@ func main() {
 	http.HandleFunc("/api/stores", handleListStores)
 	http.HandleFunc("/api/db/options", handleGetDBOptions)
 	http.HandleFunc("/api/store/info", handleGetStoreInfo)
+	http.HandleFunc("/api/store/update", handleUpdateStoreInfo)
 	http.HandleFunc("/api/store/items", handleListItems)
 	http.HandleFunc("/api/store/item/update", handleUpdateItem)
 	http.HandleFunc("/api/store/item/add", handleAddItem)
@@ -359,6 +360,7 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 		"description":    si.Description,
 		"count":          si.Count,
 		"isPrimitiveKey": si.IsPrimitiveKey,
+		"celExpression":  si.CELexpression,
 	}
 
 	if !si.IsPrimitiveKey {
@@ -376,6 +378,75 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(response)
+}
+
+func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Database      string `json:"database"`
+		StoreName     string `json:"storeName"`
+		CelExpression string `json:"celExpression"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.StoreName == "" {
+		http.Error(w, "Store name is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	dbOpts, err := getDBOptions(req.Database)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	if err != nil {
+		http.Error(w, "Failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// Always rollback if not committed.
+	defer trans.Rollback(ctx)
+
+	// Open the store to get current info
+	comparer := func(a, b any) int { return 0 }
+	store, err := database.OpenBtree[any, any](ctx, dbOpts, req.StoreName, trans, comparer)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v", req.StoreName, err), http.StatusInternalServerError)
+		return
+	}
+
+	si := store.GetStoreInfo()
+	si.CELexpression = req.CelExpression
+
+	// Update StoreInfo via StoreRepository
+	t := trans.GetPhasedTransaction()
+	if ct, ok := t.(*common.Transaction); ok {
+		if _, err := ct.StoreRepository.Update(ctx, []sop.StoreInfo{si}); err != nil {
+			http.Error(w, "Failed to update store info: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		http.Error(w, "Transaction type not supported for update", http.StatusInternalServerError)
+		return
+	}
+
+	if err := trans.Commit(ctx); err != nil {
+		http.Error(w, "Failed to commit transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func handleListItems(w http.ResponseWriter, r *http.Request) {

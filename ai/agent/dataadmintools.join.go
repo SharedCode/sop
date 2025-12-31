@@ -171,7 +171,7 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 	if err != nil {
 		return "", fmt.Errorf("failed to open left store: %w", err)
 	}
-	rightStore, rightComparer, _, err := a.openGenericStore(ctx, rightDb.Options(), rightStoreName, rightTx)
+	rightStore, rightComparer, rightIndexSpec, err := a.openGenericStore(ctx, rightDb.Options(), rightStoreName, rightTx)
 	if err != nil {
 		return "", fmt.Errorf("failed to open right store: %w", err)
 	}
@@ -195,6 +195,7 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 		leftTx:         leftTx,
 		leftAutoCommit: leftAutoCommit,
 		leftIndexSpec:  leftIndexSpec,
+		rightIndexSpec: rightIndexSpec,
 		leftStoreName:  leftStoreName,
 		rightStoreName: rightStoreName,
 		isDesc:         isDesc,
@@ -226,6 +227,7 @@ type JoinProcessor struct {
 	leftStoreName  string
 	rightStoreName string
 	isDesc         bool
+	rightIndexSpec *jsondb.IndexSpecification
 
 	// Internal State
 	rightKeyFields   []string
@@ -286,6 +288,55 @@ func (jp *JoinProcessor) analyzeRightStore() error {
 			}
 		}
 	}
+
+	// If IndexSpecification is present, verify that the join fields match the index prefix.
+	// If they don't match, we cannot use Lookup because the B-Tree is not sorted by the join fields.
+	if jp.rightIndexSpec != nil && len(jp.rightIndexSpec.IndexFields) > 0 {
+		// Check if rightKeyFields (the join fields that are keys) match the prefix of IndexFields
+		// Note: rightKeyFields order matters here. The user must supply them in index order for this check to pass strictly,
+		// OR we should check if the supplied fields form a prefix regardless of input order (but FindOne needs them in order).
+		// For simplicity, we check if the first N index fields are present in the join fields.
+
+		// Actually, FindOne with a map key works if the map contains the fields.
+		// But the B-Tree sorts by IndexFields[0], then [1], etc.
+		// If we join on IndexFields[1] but not [0], we cannot use Lookup.
+		// So we must ensure that for every IndexField from 0 to N, it is present in the join fields.
+		// We stop at the first missing index field. The join fields must cover at least the first index field.
+
+		matchesPrefix := false
+		for i, idxField := range jp.rightIndexSpec.IndexFields {
+			// Check if idxField.FieldName is in jp.rightKeyFields
+			found := false
+			for _, joinField := range jp.rightKeyFields {
+				if joinField == idxField.FieldName {
+					found = true
+					break
+				}
+			}
+			if !found {
+				// Missing a leading index field.
+				// If i == 0, we can't use lookup at all.
+				// If i > 0, we can use lookup using the prefix of length i.
+				// But wait, jp.rightKeyFields contains ALL join fields that are keys.
+				// If we have extra join fields that are NOT in the prefix, they will just be ignored by the comparer?
+				// No, the comparer uses the fields in the map.
+				// If we construct a search key with fields [0..i-1], FindOne will work.
+				// But if we construct a search key with fields [1], FindOne will fail.
+				if i == 0 {
+					matchesPrefix = false
+				}
+				break
+			}
+			// If we found the field, we are good so far.
+			matchesPrefix = true
+		}
+
+		if !matchesPrefix {
+			log.Info("Join: Disabling Lookup because join fields do not match IndexSpecification prefix.")
+			jp.canUseLookup = false
+		}
+	}
+
 	return nil
 }
 

@@ -35,8 +35,6 @@ func (idx *IndexSpecification) Comparer(x map[string]any, y map[string]any) int 
 		valX := x[idx.IndexFields[i].FieldName]
 		valY := y[idx.IndexFields[i].FieldName]
 		res := idx.IndexFields[i].coercedComparer(valX, valY)
-		// fmt.Printf("Comparing field %s: %v vs %v = %d\n", idx.IndexFields[i].FieldName, valX, valY, res)
-		// panic(fmt.Sprintf("Comparing field %s: %v vs %v = %d\n", idx.IndexFields[i].FieldName, valX, valY, res))
 		if res != 0 {
 			if !idx.IndexFields[i].AscendingSortOrder {
 				// Reverse the result if Descending order.

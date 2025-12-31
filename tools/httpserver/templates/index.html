@@ -238,9 +238,29 @@
         #chat-input { height: 40px; resize: none; }
         #tab-chat { overflow-y: hidden; height: auto; flex: 1; display: flex; flex-direction: column; }
 
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            #sidebar { width: 100%; max-width: 100%; height: auto; max-height: 30vh; border-right: none; border-bottom: 1px solid var(--border-color); }
+            #resizer { display: none; }
+            #detail-panel { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1100; }
+            /* Full screen chat on mobile for immersive experience */
+            .chat-widget { 
+                width: 100% !important; 
+                height: 100% !important; 
+                left: 0 !important; 
+                top: 0 !important; 
+                border-radius: 0;
+                border: none;
+                z-index: 1500; /* Above detail panel but below modals */
+            }
+            .modal-content { width: 95%; }
+            #add-store-modal .modal-content { width: 95%; }
+        }
+
         /* Utility Classes */
         .btn-success { background-color: var(--success-bg) !important; color: white; }
         .btn-danger { background-color: var(--danger-bg) !important; color: white; }
+        .btn-secondary { background-color: #6c757d !important; color: white; }
         .error-text { color: var(--danger-bg); }
         .form-label { font-weight: bold; font-size: 12px; color: var(--text-muted); }
         .form-input { padding: 5px; border: 1px solid var(--input-border); border-radius: 3px; background-color: var(--input-bg); color: var(--text-color); }
@@ -278,6 +298,10 @@
             max-height: 80vh;
         }
         #add-store-modal .modal-content {
+            width: 600px;
+            max-width: 90%;
+        }
+        #cel-modal .modal-content {
             width: 600px;
             max-width: 90%;
         }
@@ -342,6 +366,11 @@
                 <path d="M10.478 1.647a.5.5 0 1 0-.956-.294l-4 13a.5.5 0 0 0 .956.294l4-13zM4.854 4.146a.5.5 0 0 1 0 .708L1.707 8l3.147 3.146a.5.5 0 0 1-.708.708l-3.5-3.5a.5.5 0 0 1 0-.708l3.5-3.5a.5.5 0 0 1 .708 0zm6.292 0a.5.5 0 0 0 0 .708L14.293 8l-3.147 3.146a.5.5 0 0 0 .708.708l3.5-3.5a.5.5 0 0 0 0-.708l-3.5-3.5a.5.5 0 0 0-.708 0z"/>
             </svg>
         </button>
+        <button id="btn-edit-cel" onclick="showEditCEL()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Edit CEL Expression">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M2.114 8.063V7.9c1.005-.102 1.497-.615 1.497-1.6V4.503c0-1.094.39-1.538 1.354-1.538h.273V2h-.376C3.25 2 2.49 2.759 2.49 4.352v1.524c0 1.094-.376 1.456-1.49 1.456v1.299c1.114 0 1.49.362 1.49 1.456v1.524c0 1.593.759 2.352 2.372 2.352h.376v-.964h-.273c-.964 0-1.354-.444-1.354-1.538V9.663c0-.984-.492-1.497-1.497-1.6zM13.886 7.9v.163c-1.005.103-1.497.616-1.497 1.6v1.798c0 1.094-.39 1.538-1.354 1.538h-.273v.964h.376c1.613 0 2.372-.759 2.372-2.352v-1.524c0-1.094.376-1.456 1.49-1.456V7.332c-1.114 0-1.49-.362-1.49-1.456V4.352C13.51 2.759 12.75 2 11.138 2h-.376v.964h.273c.964 0 1.354.444 1.354 1.538V6.3c0 .984.492 1.497 1.497 1.6z"/>
+            </svg>
+        </button>
         <button id="btn-delete-store" onclick="deleteStore()" style="display:none; background-color: transparent; color: var(--danger-bg); padding: 4px; border: none; cursor: pointer;" title="Delete Store">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
@@ -358,7 +387,15 @@
     </div>
 
     <div id="pagination-top" style="display:none; margin-bottom: 2px; position: relative; justify-content: center; align-items: center; min-height: 32px;">
-        <button onclick="showColumnSelector()" title="Select columns to display." style="position: absolute; left: 0;">Columns</button>
+        <div style="position: absolute; left: 0; display: flex; gap: 5px; align-items: center;">
+            <button onclick="showColumnSelector()" title="Select columns to display.">Columns</button>
+            <button id="btn-bulk-delete" onclick="deleteSelectedItems()" style="display:none; background-color: var(--danger-bg); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; align-items: center; justify-content: center;" title="Delete selected items, no questions asked">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                    <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                </svg>
+            </button>
+        </div>
         <div style="display: flex; gap: 10px;">
             <button onclick="firstPage()" tabindex="0" title="Go to the first page of items.">First</button>
             <button onclick="prevPage()" tabindex="0" title="Go to the previous page of items.">Previous</button>
@@ -580,6 +617,27 @@
         <div class="modal-footer">
             <button onclick="saveNewStore()" class="btn-success">Create</button>
             <button onclick="closeAddStoreModal()" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<div id="cel-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span>Edit CEL Expression</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="closeCELModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <p style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 10px;">
+                Define a Common Expression Language (CEL) expression to sort keys in this store.
+                Leave empty to use default sorting.
+            </p>
+            <div id="cel-help-text" style="margin-bottom: 10px; font-size: 0.85em; color: var(--text-muted); background: var(--pre-bg); padding: 8px; border-radius: 4px; display: none;"></div>
+            <textarea id="cel-expression-input" style="width: 100%; height: 150px; box-sizing: border-box; font-family: monospace; padding: 8px; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--input-border);"></textarea>
+        </div>
+        <div class="modal-footer">
+            <button onclick="saveCELExpression()">Save</button>
+            <button onclick="closeCELModal()" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Cancel</button>
         </div>
     </div>
 </div>
@@ -807,17 +865,28 @@
         codeBtn.style.display = 'inline-block';
         codeBtn.title = `Generate Code for '${name}'`;
 
+        // Show Edit CEL Button
+        const celBtn = document.getElementById('btn-edit-cel');
+        celBtn.style.display = 'inline-block';
+        celBtn.title = `Edit '${name}' CEL expression`;
+
         // Fetch Store Info
         fetch(`/api/store/info?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`)
             .then(res => res.json())
             .then(info => {
                 currentStoreInfo = info;
-                // Use description if available, otherwise name
-                let displayTitle = info.description ? info.description : info.name;
-                if (!info.description && displayTitle) {
+                // Use name for display, description for tooltip
+                let displayTitle = info.name;
+                if (displayTitle) {
                     displayTitle = displayTitle.charAt(0).toUpperCase() + displayTitle.slice(1);
                 }
-                document.getElementById('current-store-title').textContent = displayTitle;
+                const titleElem = document.getElementById('current-store-title');
+                titleElem.textContent = displayTitle;
+                if (info.description) {
+                    titleElem.title = info.description;
+                } else {
+                    titleElem.removeAttribute('title');
+                }
 
                 buildSearchUI(info);
                 loadItems('first');
@@ -967,6 +1036,113 @@
 
     let userSelectedColumns = null; // Set of strings, or null if show all
     let allDetectedColumns = []; // List of all columns detected in currentItems
+    let showSelectionColumn = false; // Toggle for checkbox column
+    let selectedItems = new Set(); // Set of keys selected for deletion
+
+    function toggleSelection(checkbox) {
+        const key = checkbox.getAttribute('data-key');
+        if (checkbox.checked) {
+            selectedItems.add(key);
+        } else {
+            selectedItems.delete(key);
+        }
+        updateDeleteButton();
+        
+        // Update Select All checkbox state
+        const allCheckboxes = document.querySelectorAll('.row-checkbox');
+        const allChecked = Array.from(allCheckboxes).every(cb => cb.checked);
+        const selectAllCb = document.getElementById('cb-select-all');
+        if (selectAllCb) selectAllCb.checked = allChecked;
+    }
+
+    function toggleSelectAll(checkbox) {
+        const checkboxes = document.querySelectorAll('.row-checkbox');
+        checkboxes.forEach(cb => {
+            cb.checked = checkbox.checked;
+            const key = cb.getAttribute('data-key');
+            if (checkbox.checked) {
+                selectedItems.add(key);
+            } else {
+                selectedItems.delete(key);
+            }
+        });
+        updateDeleteButton();
+    }
+
+    function updateDeleteButton() {
+        const btn = document.getElementById('btn-bulk-delete');
+        if (btn) {
+            if (showSelectionColumn) {
+                btn.style.display = 'flex';
+                btn.disabled = selectedItems.size === 0;
+                btn.style.opacity = selectedItems.size === 0 ? '0.5' : '1';
+                btn.title = `Delete ${selectedItems.size} selected item(s), no questions asked`;
+            } else {
+                btn.style.display = 'none';
+            }
+        }
+    }
+
+    async function deleteSelectedItems() {
+        if (selectedItems.size === 0) return;
+        
+        const keysToDelete = Array.from(selectedItems);
+        let successCount = 0;
+        let failCount = 0;
+
+        const btn = document.getElementById('btn-bulk-delete');
+        const originalContent = btn.innerHTML;
+        btn.innerHTML = '<span style="font-size: 12px;">...</span>';
+        btn.disabled = true;
+
+        const batchSize = 5;
+        for (let i = 0; i < keysToDelete.length; i += batchSize) {
+            const batch = keysToDelete.slice(i, i + batchSize);
+            await Promise.all(batch.map(async (keyStr) => {
+                try {
+                    let keyVal;
+                    try {
+                        keyVal = JSON.parse(keyStr);
+                    } catch {
+                        keyVal = keyStr;
+                    }
+
+                    const payload = {
+                        database: currentDatabase,
+                        store: currentStore,
+                        key: keyVal
+                    };
+
+                    const response = await fetch('/api/store/item/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (response.ok) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                        console.error(`Failed to delete ${keyStr}`);
+                    }
+                } catch (e) {
+                    failCount++;
+                    console.error(e);
+                }
+            }));
+        }
+
+        btn.innerHTML = originalContent;
+        btn.disabled = false;
+        
+        selectedItems.clear();
+        updateDeleteButton();
+        loadItems('current', firstKey);
+        
+        if (failCount > 0) {
+            alert(`Deleted ${successCount} items. Failed to delete ${failCount} items.`);
+        }
+    }
 
     function renderGrid(items) {
         const grid = document.getElementById('data-grid');
@@ -1077,6 +1253,10 @@
 
         let html = '<table id="items-table"><thead><tr>';
         
+        if (showSelectionColumn) {
+             html += '<th style="width: 40px; text-align: center;"><input type="checkbox" id="cb-select-all" onchange="toggleSelectAll(this)"></th>';
+        }
+        
         // Key Headers
         keyCols.forEach((col, index) => {
              let style = '';
@@ -1098,6 +1278,18 @@
             // Escape single quotes for the onclick attribute
             const itemJson = JSON.stringify(item).replace(/'/g, "&#39;");
             html += `<tr onclick='showDetail(this, ${itemJson})'>`;
+            
+            if (showSelectionColumn) {
+                // Serialize key for storage/comparison
+                const keyStr = typeof item.key === 'object' ? JSON.stringify(item.key) : String(item.key);
+                const isChecked = selectedItems.has(keyStr) ? 'checked' : '';
+                // Escape for HTML attribute
+                const safeKey = keyStr.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                
+                html += `<td style="text-align: center;" onclick="event.stopPropagation()">
+                            <input type="checkbox" class="row-checkbox" onchange="toggleSelection(this)" data-key='${safeKey}' ${isChecked}>
+                         </td>`;
+            }
             
             // Key Cells
             if (keyCols.length === 1 && keyCols[0] === 'Key') {
@@ -1152,13 +1344,21 @@
         const list = document.getElementById('column-list');
         list.innerHTML = '';
 
+        // Special Option: Selection Checkbox
+        const divSelect = document.createElement('div');
+        divSelect.style.marginBottom = '10px';
+        divSelect.style.paddingBottom = '10px';
+        divSelect.style.borderBottom = '1px solid var(--border-color)';
+        divSelect.innerHTML = `<label><input type="checkbox" id="col-show-selection" ${showSelectionColumn ? 'checked' : ''}> <strong>Enable Selection / Bulk Delete</strong></label>`;
+        list.appendChild(divSelect);
+
         if (allDetectedColumns.length === 0) {
-            list.innerHTML = '<p>No columns detected. Load data first.</p>';
+            list.innerHTML += '<p>No columns detected. Load data first.</p>';
         } else {
             const uniqueCols = [...new Set(allDetectedColumns)];
             
             const divAll = document.createElement('div');
-            divAll.innerHTML = `<label><input type="checkbox" id="col-select-all" onchange="toggleAllColumns(this)"> <strong>Select All</strong></label>`;
+            divAll.innerHTML = `<label><input type="checkbox" id="col-select-all" onchange="toggleAllColumns(this)"> <strong>Select All Columns</strong></label>`;
             list.appendChild(divAll);
 
             uniqueCols.forEach(col => {
@@ -1178,12 +1378,30 @@
     }
 
     function applyColumns() {
+        // Save Selection Column State
+        const selectionCheckbox = document.getElementById('col-show-selection');
+        if (selectionCheckbox) {
+            showSelectionColumn = selectionCheckbox.checked;
+            // Reset selection if disabled
+            if (!showSelectionColumn) {
+                selectedItems.clear();
+            }
+            updateDeleteButton();
+        }
+
         // Save current column widths before rebuilding
         const existingTable = document.getElementById('items-table');
         if (existingTable) {
             const ths = existingTable.querySelectorAll('th');
             if (ths.length > 0) {
-                columnWidths = Array.from(ths).map(th => th.style.width);
+                // If the first column is the selection checkbox, skip it when saving widths
+                // We check if the first TH contains the select-all checkbox
+                let startIndex = 0;
+                const firstTh = ths[0];
+                if (firstTh.querySelector('#cb-select-all')) {
+                    startIndex = 1;
+                }
+                columnWidths = Array.from(ths).slice(startIndex).map(th => th.style.width);
             }
         }
 
@@ -1302,7 +1520,13 @@
                 if (existingTable) {
                     const ths = existingTable.querySelectorAll('th');
                     if (ths.length > 0) {
-                        columnWidths = Array.from(ths).map(th => th.style.width);
+                        // If the first column is the selection checkbox, skip it when saving widths
+                        let startIndex = 0;
+                        const firstTh = ths[0];
+                        if (firstTh.querySelector('#cb-select-all')) {
+                            startIndex = 1;
+                        }
+                        columnWidths = Array.from(ths).slice(startIndex).map(th => th.style.width);
                     }
                 }
 
@@ -4207,6 +4431,123 @@
         });
     }
 
+    // --- CEL Editing Logic ---
+    function showEditCEL() {
+        if (!currentStoreInfo) return;
+        const modal = document.getElementById('cel-modal');
+        const input = document.getElementById('cel-expression-input');
+        const helpText = document.getElementById('cel-help-text');
+
+        input.value = currentStoreInfo.celExpression || '';
+
+        let helpContent = '';
+
+        // 1. Generate from Index Spec if available
+        if (currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0) {
+             const fields = currentStoreInfo.indexSpec.index_fields;
+             
+             // Recursive function to build the ternary chain
+             function buildExpr(index) {
+                 if (index >= fields.length) return "0";
+                 
+                 const f = fields[index];
+                 const name = f.field_name;
+                 const isAsc = f.ascending_sort_order;
+                 
+                 // Standard: X < Y ? -1 : X > Y ? 1 : Next
+                 // Desc:    X < Y ? 1 : X > Y ? -1 : Next
+                 
+                 const lessVal = isAsc ? "-1" : "1";
+                 const greaterVal = isAsc ? "1" : "-1";
+                 
+                 return `mapX['${name}'] < mapY['${name}'] ? ${lessVal} : mapX['${name}'] > mapY['${name}'] ? ${greaterVal} : (${buildExpr(index + 1)})`;
+             }
+             
+             // Remove outer parens if they exist from recursion (optional cleanup)
+             let generatedExpr = buildExpr(0);
+             // Clean up the trailing (0))))
+             // Actually the recursion adds parens around the 'Next' part.
+             // Let's make it cleaner without excessive parens if possible, or just accept them.
+             // The logic above: ... : (Next)
+             
+             helpContent += `
+                <div style="margin-bottom:10px;">
+                    <strong>Generated from Index Spec:</strong>
+                    <div style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 2px;">Equivalent CEL for current index configuration:</div>
+                    <code style="display:block; padding:5px; background:var(--input-bg); border:1px solid var(--border-color); margin-top:3px; cursor:pointer; user-select:all; white-space: pre-wrap;" 
+                          onclick="document.getElementById('cel-expression-input').value = this.innerText">${generatedExpr}</code>
+                </div>
+                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
+             `;
+        }
+
+        // 2. Generate Help Text based on sample key
+        if (currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
+            const fields = Object.keys(currentStoreInfo.sampleKey);
+            if (fields.length > 0) {
+                const fieldName = fields[0];
+                // Sample expression using the first field
+                const sampleExpr = `mapX['${fieldName}'] < mapY['${fieldName}'] ? -1 : mapX['${fieldName}'] > mapY['${fieldName}'] ? 1 : 0`;
+                
+                helpContent += `
+                    <div style="margin-bottom:5px;"><strong>Available Fields (mapX/mapY):</strong> ${fields.map(f => `<code>${f}</code>`).join(', ')}</div>
+                    <div><strong>Sample Expression (Click to use):</strong></div>
+                    <code style="display:block; padding:5px; background:var(--input-bg); border:1px solid var(--border-color); margin-top:3px; cursor:pointer; user-select:all;" 
+                          onclick="document.getElementById('cel-expression-input').value = this.innerText">${sampleExpr}</code>
+                `;
+            }
+        } else {
+             // If no sample key, maybe show generic help if no index spec either
+             if (!helpContent) {
+                 helpContent = '<div>No sample data or index specification available to generate suggestions.</div>';
+             }
+        }
+
+        if (helpContent) {
+            helpText.innerHTML = helpContent;
+            helpText.style.display = 'block';
+        } else {
+            helpText.style.display = 'none';
+        }
+
+        modal.style.display = 'flex';
+    }
+
+    function closeCELModal() {
+        document.getElementById('cel-modal').style.display = 'none';
+    }
+
+    function saveCELExpression() {
+        const input = document.getElementById('cel-expression-input');
+        const celExpr = input.value;
+
+        fetch('/api/store/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                database: currentDatabase,
+                storeName: currentStore,
+                celExpression: celExpr
+            })
+        })
+        .then(async res => {
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || res.statusText);
+            }
+            closeCELModal();
+            // Refresh store info
+            // We need to find the active element to pass to selectStore, or just reload the page/store
+            // Since selectStore expects an element, we can just reload the store info manually or reload page.
+            // Or we can just update currentStoreInfo locally and alert.
+            currentStoreInfo.celExpression = celExpr;
+            alert('CEL Expression updated successfully.');
+        })
+        .catch(err => {
+            alert("Error updating CEL Expression: " + err);
+        });
+    }
+
     window.onbeforeunload = function() {
         const btn = document.getElementById('btn-save');
         if (btn && !btn.disabled) {
@@ -4281,6 +4622,46 @@
         // Left Click to Toggle
         btn.addEventListener('click', function(e) {
             toggleChatWidget(true);
+        });
+
+        // Global Escape Key Handler for Modals
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                // Add Store Modal
+                const addStoreModal = document.getElementById('add-store-modal');
+                if (addStoreModal && addStoreModal.style.display === 'flex') {
+                    closeAddStoreModal();
+                    return;
+                }
+
+                // Code Modal
+                const codeModal = document.getElementById('code-modal');
+                if (codeModal && codeModal.style.display === 'flex') {
+                    codeModal.style.display = 'none';
+                    return;
+                }
+
+                // CEL Modal
+                const celModal = document.getElementById('cel-modal');
+                if (celModal && celModal.style.display === 'flex') {
+                    closeCELModal();
+                    return;
+                }
+
+                // Column Modal
+                const colModal = document.getElementById('column-modal');
+                if (colModal && colModal.style.display === 'flex') {
+                    colModal.style.display = 'none';
+                    return;
+                }
+
+                // Macro Modal
+                const macroModal = document.getElementById('macro-modal');
+                if (macroModal && macroModal.style.display !== 'none') {
+                    closeMacroModal();
+                    return;
+                }
+            }
         });
     });
 </script>

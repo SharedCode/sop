@@ -53,6 +53,7 @@ These packages are intended for direct use by consumers of the library:
 1.  **Encapsulation**: Complex storage logic (like the `inredck` blob management) is hidden behind clean, high-level interfaces (`incfs`).
 2.  **ACID Transactions**: All public operations are designed to participate in SOP's Two-Phase Commit (2PC) transaction model.
 3.  **Pluggable Backends**: The architecture supports different backend implementations (`infs` vs `incfs`) sharing common interfaces where possible.
+4.  **UI-Driven Configuration**: Advanced store configuration, specifically **CEL Expressions** for custom sorting, is managed exclusively via the **Data Admin UI**. Language bindings (Go, Python, etc.) do not expose APIs for setting these expressions in code. This ensures that complex, dynamic logic is centralized in the administrative layer rather than scattered across application code.
 
 ## Development Guidelines
 

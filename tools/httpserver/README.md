@@ -14,6 +14,9 @@ A powerful, web-based management suite for SOP B-Tree repositories. This tool tr
 - **Advanced Search**: Perform complex queries on multi-field keys to jump directly to specific records.
 - **JSON Inspection**: View and edit complex value structures as formatted JSON.
 - **Database Configuration View**: Inspect critical database settings directly from the UI, including Erasure Coding parameters, Redis configuration, and Cache types.
+- **CEL Expression Editor**: Integrated editor for defining and testing Common Expression Language (CEL) scripts for custom sorting logic.
+- **Bulk Operations**: Select multiple items in the grid for batch deletion.
+- **Mobile Optimized**: Fully responsive design with touch-friendly controls and a fullscreen AI assistant for managing data on the go.
 
 ## The Power of the Web UI: From Embedded to Enterprise
 

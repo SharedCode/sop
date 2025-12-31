@@ -43,8 +43,8 @@ type StoreInfo struct {
 	// MapKeyIndexSpecification contains a CEL or index specification used by the comparer.
 	MapKeyIndexSpecification string `json:"mapkey_index_spec"`
 
-	// LegacyCELexpression is used for backward compatibility to retrieve index spec from old stores.
-	LegacyCELexpression string `json:"cel_expression,omitempty"`
+	// CELexpression specifies the CEL expression used as comparer for keys.
+	CELexpression string `json:"cel_expression,omitempty"`
 
 	// IsPrimitiveKey hints the Python binding which JSON B-Tree to instantiate on open.
 	IsPrimitiveKey bool `json:"is_primitive_key"`
@@ -194,11 +194,6 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 		si.IsValueDataGloballyCached = false
 	}
 
-	spec := si.MapKeyIndexSpecification
-	if spec == "" {
-		spec = si.CELexpression
-	}
-
 	return &StoreInfo{
 		Name:                         si.Name,
 		SlotLength:                   si.SlotLength,
@@ -211,7 +206,8 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 		IsValueDataGloballyCached:    si.IsValueDataGloballyCached,
 		LeafLoadBalancing:            si.LeafLoadBalancing,
 		CacheConfig:                  *si.CacheConfig,
-		MapKeyIndexSpecification:     spec,
+		MapKeyIndexSpecification:     si.MapKeyIndexSpecification,
+		CELexpression:                si.CELexpression,
 		IsPrimitiveKey:               si.IsPrimitiveKey,
 	}
 }
@@ -233,7 +229,8 @@ func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 		s.IsValueDataGloballyCached == b.IsValueDataGloballyCached &&
 		s.LeafLoadBalancing == b.LeafLoadBalancing &&
 		s.IsPrimitiveKey == b.IsPrimitiveKey &&
-		s.MapKeyIndexSpecification == b.MapKeyIndexSpecification
+		s.MapKeyIndexSpecification == b.MapKeyIndexSpecification &&
+		s.CELexpression == b.CELexpression
 }
 
 // FormatRegistryTable formats a store name into a registry table name by adding an _r suffix.
