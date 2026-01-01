@@ -307,6 +307,7 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, config sop.Database
 // RemoveBtree removes a B-Tree store from the database.
 // This is a destructive operation and cannot be undone.
 func RemoveBtree(ctx context.Context, config sop.DatabaseOptions, name string) error {
+	config, _ = ValidateOptions(config)
 	if config.IsCassandraHybrid() {
 		return incfs.RemoveBtree(ctx, name, config.CacheType)
 	}
@@ -316,6 +317,7 @@ func RemoveBtree(ctx context.Context, config sop.DatabaseOptions, name string) e
 // ReinstateFailedDrives asks the replication tracker to reinstate failed passive targets.
 // This API is only applicable for infs backend.
 func ReinstateFailedDrives(ctx context.Context, config sop.DatabaseOptions) error {
+	config, _ = ValidateOptions(config)
 	if config.IsCassandraHybrid() {
 		return fmt.Errorf("ReinstateFailedDrives only apply for infs, a pure File System based backend")
 	}

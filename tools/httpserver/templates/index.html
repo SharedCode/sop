@@ -346,7 +346,11 @@
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
             <h2 style="margin: 0;">Stores</h2>
-            <button onclick="showAddStore()" title="Add new store" style="padding: 2px 8px; font-size: 12px;">Add</button>
+            <button onclick="showAddStore()" title="Add new store" style="background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                </svg>
+            </button>
         </div>
         <ul id="store-list" style="margin-bottom: 12px;">
             <li>Select a database...</li>
@@ -1092,7 +1096,14 @@
                 alert("Store deleted successfully.");
                 currentStore = null;
                 document.getElementById('current-store-title').textContent = "Select a Store";
+                
+                // Hide all store-specific buttons
                 document.getElementById('btn-delete-store').style.display = 'none';
+                document.getElementById('btn-code-store').style.display = 'none';
+                document.getElementById('btn-edit-store').style.display = 'none';
+                document.getElementById('btn-view-store').style.display = 'none';
+                document.getElementById('btn-edit-cel').style.display = 'none';
+
                 document.getElementById('data-grid').innerHTML = '';
                 document.getElementById('toolbar').style.display = 'none';
                 // Refresh list
@@ -1190,10 +1201,26 @@
         toolbar.appendChild(refreshBtn);
 
         // Only show Add Item for non-registry stores (Macros are too complex to add manually)
-        // Also disable for stores without explicit Index Specification OR CEL Expression
-        const isReadOnly = !info.isPrimitiveKey && 
-                             (!info.indexSpec || !info.indexSpec.index_fields) &&
-                             !info.celExpression;
+        // Determine if store has "Schema" (Add/Delete Allowed)
+        // Rules:
+        // 1. Has IndexSpec OR Has CEL
+        // 2. Is Primitive Key (Metadata)
+        // 3. Is Primitive Key (Data Inspection - for legacy stores)
+        
+        const hasIndex = info.indexSpec && info.indexSpec.index_fields && info.indexSpec.index_fields.length > 0;
+        const hasCel = !!info.celExpression;
+        const isPrimitiveMetadata = info.isPrimitiveKey;
+        
+        let isPrimitiveData = false;
+        if (info.count > 0 && info.sampleKey !== undefined && info.sampleKey !== null) {
+             const t = typeof info.sampleKey;
+             if (t !== 'object' || Array.isArray(info.sampleKey)) {
+                 isPrimitiveData = true;
+             }
+        }
+        
+        const hasSchema = hasIndex || hasCel || isPrimitiveMetadata || isPrimitiveData;
+        const isReadOnly = !hasSchema;
 
         if (info.description !== "AI Models Registry" && !isReadOnly) {
             const addBtn = document.createElement('button');
@@ -2266,11 +2293,17 @@
         const valContainer = document.getElementById('add-value-container');
         const keyModeToggle = document.getElementById('add-key-mode-toggle');
         const valModeToggle = document.getElementById('add-value-mode-toggle');
+        const keyModeWrapper = document.getElementById('add-key-mode-wrapper');
+        const valModeWrapper = document.getElementById('add-value-mode-wrapper');
         
         keyContainer.innerHTML = '';
         valContainer.innerHTML = '';
         keyModeToggle.checked = false;
         valModeToggle.checked = false;
+        
+        // Reset visibility
+        if (keyModeWrapper) keyModeWrapper.style.display = 'block';
+        if (valModeWrapper) valModeWrapper.style.display = 'block';
 
         // --- Build Key UI ---
         let keySchema = [];
@@ -2316,6 +2349,8 @@
             // Simple Key or Unknown Schema -> JSON Mode
             keyModeToggle.checked = true;
             renderAddKeyJson();
+            // Hide toggle if primitive (no schema)
+            if (keyModeWrapper) keyModeWrapper.style.display = 'none';
         }
 
         // --- Build Value UI ---
@@ -2363,6 +2398,8 @@
             // Fallback to JSON
             valModeToggle.checked = true;
             renderAddValueJson();
+            // Hide toggle if primitive
+            if (valModeWrapper) valModeWrapper.style.display = 'none';
         }
 
         // Reset position to center
@@ -2428,7 +2465,7 @@
 
     function renderAddKeyJson(content = '') {
         const container = document.getElementById('add-key-container');
-        container.innerHTML = `<textarea id="add-key-json" placeholder="Key (JSON or String)" style="width:100%; height:60px; padding:5px; font-family:monospace; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">${content}</textarea>`;
+        container.innerHTML = `<textarea id="add-key-json" placeholder="Key (JSON Object or simple value)" style="width:100%; height:60px; padding:5px; font-family:monospace; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">${content}</textarea>`;
     }
 
     function toggleAddValueMode() {
@@ -2487,7 +2524,7 @@
 
     function renderAddValueJson(content = '') {
         const container = document.getElementById('add-value-container');
-        container.innerHTML = `<textarea id="add-value-json" style="width:100%; height:200px; padding:5px; font-family:monospace; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">${content}</textarea>`;
+        container.innerHTML = `<textarea id="add-value-json" placeholder="Enter JSON Object, Array, or simple value (String, Number, Boolean)" style="width:100%; height:200px; padding:5px; font-family:monospace; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">${content}</textarea>`;
     }
 
     function parseInputVal(val) {
@@ -2551,13 +2588,34 @@
                 val[inp.getAttribute('data-name')] = parseInputVal(inp.value);
             });
         } else {
-            // JSON Mode
-            const valText = document.getElementById('add-value-json').value;
-            try {
-                val = JSON.parse(valText);
-            } catch (e) {
-                alert("Invalid JSON in Value field: " + e.message);
-                return;
+            // JSON/Raw Mode
+            const valText = document.getElementById('add-value-json').value.trim();
+            
+            if (valText.startsWith('{') || valText.startsWith('[')) {
+                try {
+                    val = JSON.parse(valText);
+                } catch (e) {
+                    alert("Invalid JSON in Value field: " + e.message);
+                    return;
+                }
+            } else if (valText.startsWith('"') && valText.endsWith('"')) {
+                 // Explicitly quoted string -> parse as JSON to handle escapes
+                 try {
+                    val = JSON.parse(valText);
+                 } catch (e) {
+                    alert("Invalid JSON string: " + e.message);
+                    return;
+                 }
+            } else {
+                // Primitive inference
+                if (valText === 'true') val = true;
+                else if (valText === 'false') val = false;
+                else if (valText === 'null') val = null;
+                else if (valText !== "" && !isNaN(Number(valText))) {
+                    val = Number(valText);
+                } else {
+                    val = valText; // Treat as plain string
+                }
             }
         }
 
@@ -4084,13 +4142,13 @@
         
         <div style="overflow-y: auto; flex: 1; padding-right: 0;">
             <h4 style="margin-bottom: 5px; margin-top: 0;">Key</h4>
-            <div style="margin-bottom: 5px; font-size: 12px; color: var(--text-muted);">
+            <div id="add-key-mode-wrapper" style="margin-bottom: 5px; font-size: 12px; color: var(--text-muted);">
                 <label><input type="checkbox" id="add-key-mode-toggle" onchange="toggleAddKeyMode()"> Edit as JSON</label>
             </div>
             <div id="add-key-container" style="margin-bottom:15px;"></div>
 
             <h4 style="margin-bottom: 5px;">Value</h4>
-            <div style="margin-bottom: 5px; font-size: 12px; color: var(--text-muted);">
+            <div id="add-value-mode-wrapper" style="margin-bottom: 5px; font-size: 12px; color: var(--text-muted);">
                 <label><input type="checkbox" id="add-value-mode-toggle" onchange="toggleAddValueMode()"> Edit as JSON</label>
             </div>
             <div id="add-value-container"></div>
@@ -4146,7 +4204,31 @@
         
         // Key Type Inference & Population
         let keyType = 'string';
-        if (!currentStoreInfo.isPrimitiveKey) {
+        let isMap = true; // Default to Map (Schemaless)
+
+        const hasIndex = currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0;
+        const hasSample = currentStoreInfo.sampleKey !== undefined && currentStoreInfo.sampleKey !== null;
+
+        if (hasSample) {
+            // Rule 1: Data is Truth (Strongest Signal)
+            const t = typeof currentStoreInfo.sampleKey;
+            if (t !== 'object' || Array.isArray(currentStoreInfo.sampleKey)) {
+                isMap = false; // Primitive Data
+            } else {
+                isMap = true; // Map Data
+            }
+        } else {
+            // Rule 2: Metadata Inference (Empty Store)
+            if (currentStoreInfo.isPrimitiveKey) {
+                isMap = false; // Explicitly Primitive
+            } else if (hasIndex) {
+                isMap = true; // Index implies Map
+            }
+            // Note: CEL is NOT used to determine Map vs Primitive, as both can have CEL.
+            // Default remains true (Map) for ambiguous empty stores.
+        }
+        
+        if (isMap) {
             keyType = 'map';
             
             // Reconstruct Key Fields from Sample Key
@@ -5215,7 +5297,13 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         })
-        .then(res => res.json())
+        .then(async res => {
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || res.statusText);
+            }
+            return res.json();
+        })
         .then(data => {
             if (data.status === 'ok') {
                 closeAddStoreModal();
@@ -5226,7 +5314,7 @@
             }
         })
         .catch(err => {
-            alert("Error: " + err);
+            alert("Error: " + err.message);
         });
     }
 

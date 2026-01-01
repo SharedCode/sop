@@ -267,6 +267,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleListDatabases(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	w.Header().Set("Content-Type", "application/json")
 
 	dbs := make([]DatabaseConfig, len(config.Databases))
@@ -312,6 +313,7 @@ func handleListStores(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleGetDBOptions(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	dbName := r.URL.Query().Get("database")
 	dbOpts, err := getDBOptions(dbName)
 	if err != nil {
@@ -1053,10 +1055,11 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 	defer trans.Rollback(ctx)
 
 	storeOpts := sop.StoreOptions{
-		Name:        req.StoreName,
-		SlotLength:  1000,
-		IsUnique:    true,
-		Description: req.Description,
+		Name:           req.StoreName,
+		SlotLength:     1000,
+		IsUnique:       true,
+		Description:    req.Description,
+		IsPrimitiveKey: req.KeyType != "map",
 	}
 
 	if req.AdvancedMode {
