@@ -5,25 +5,28 @@
 **Polyglot** storage engine for high-performance, ACID storage with B-tree indexing, Redis-backed caching, and optional erasure-coded replication.
 Available for **Go**, **Python**, **Java**, **C#**, and **Rust**.
 
-## Interoperability & Data Management (Go)
+## Interoperability & Data Management
 
-For Go developers, SOP offers two distinct usage patterns depending on your needs for flexibility versus tooling support.
+SOP is designed as a **Universal Data Platform**. Whether you are writing in Go, Python, Java, C#, or Rust, your data should be accessible, manageable, and interoperable.
 
-1.  **SOP as a Library (Code First)**:
-    *   **Usage**: You define custom structs and a custom comparer, **without** providing an `IndexSpecification`.
-    *   **Pros**: Maximum flexibility for logic that cannot be expressed declaratively.
-    *   **Cons**: **No Data Manager Support**. Generic tools cannot navigate or sort your B-Trees because the sorting logic is hidden in your compiled code.
+### 1. The Universal Approach (JSONDB)
+This is the standard approach used by all language bindings (Python, Java, C#, Rust) and is also available to Go developers via the `jsondb` package.
+*   **Mechanism**: Data is serialized as JSON.
+*   **Benefit**: **Native Data Manager Support**. Since the format is standardized, the SOP Data Manager can automatically read, write, query, and visualize your B-Trees without any extra configuration.
+*   **Interoperability**: A B-Tree created in Python can be read by a Java app or managed by the Go-based Data Manager.
 
-2.  **SOP as a Managed Platform (Data First)**:
+### 2. The Native Go Approach (Structs & Comparers)
+Go developers often prefer storing native structs for maximum performance and type safety. SOP supports this fully but requires a bridge to be manageable by the generic Data Manager.
+
+*   **SOP as a Library (Code First)**:
+    *   **Usage**: You define custom structs and a custom comparer in Go code.
+    *   **Pros**: Maximum flexibility and performance.
+    *   **Cons**: **Hidden Logic**. The Data Manager cannot inherently understand your compiled sorting logic.
+
+*   **SOP as a Managed Platform (Data First)**:
     *   **Usage**: You provide an **`IndexSpecification`** that describes your key fields and sorting order.
     *   **Pros**: **Full Data Manager Support**. The `IndexSpecification` acts as the contract, allowing the UI and AI Agents to manage your data.
-    *   **Workflow**: You can use the **Data Manager** to create the B-Tree and define the `IndexSpecification` (including key/value structures). Then, use the built-in **Code Generator** to copy-paste the resulting struct definitions directly into your application code. This bridges the workflow, allowing you to easily specify the IndexSpecification needed that makes your SOP Btrees manageable by the Managed Platform.
-    *   **Edge Cases**: For custom sorting logic (e.g., specific string collation), you can provide a **CEL (Common Expression Language)** expression in the `StoreInfo`. This allows the Data Manager to execute your custom logic dynamically without needing to rebuild the binary. You can even open a B-Tree with `map[string]any` keys (no initial spec) and later attach a store-level CEL expression to define the sort order, bridging the gap between flexibility and management.
-        *   **Best Practice**: When using CEL, still populate the `IndexFields` list in the `IndexSpecification`. This informs the Data Manager which fields are the primary keys, enabling optimizations like **Lookup Joins** (O(log N)) instead of falling back to slower Hash Joins.
-        *   **Advanced Comparers**: With `IndexSpecification` and `CEL expression`, DBAs can add the equivalent of advanced comparers (often referred to as "Case 1" custom logic) directly in the platform. This essentially allows B-Trees defined and populated by pure code (using custom comparers) to be manageable correctly using the Data Platform, without requiring the UI to have the exact same compiled code.
-    *   **Note**: Primitive type keys (e.g., `string`, `int`, `float`) are supported natively and do not require an `IndexSpecification`.
-
-**Recommendation**: Always provide an **IndexSpecification** for composite keys. This ensures your data is manageable by the SOP platform tools.
+    *   **Workflow**: You can use the **Data Manager** to create the B-Tree and define the `IndexSpecification`. Then, use the built-in **Code Generator** to generate the Go structs.
 
 ### Bridging the Gap: From Code-First to Managed (Safe & Zero-Downtime)
 
