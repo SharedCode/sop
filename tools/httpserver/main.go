@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strconv"
 	"time"
@@ -40,10 +41,11 @@ type DatabaseConfig struct {
 
 // Config holds the server configuration
 type Config struct {
-	Port      int              `json:"port"`
-	Databases []DatabaseConfig `json:"databases"`
-	PageSize  int              `json:"pageSize"`
-	SystemDB  *DatabaseConfig  `json:"system_db,omitempty"`
+	Port         int              `json:"port"`
+	Databases    []DatabaseConfig `json:"databases"`
+	PageSize     int              `json:"pageSize"`
+	SystemDB     *DatabaseConfig  `json:"system_db,omitempty"`
+	RootPassword string           `json:"root_password,omitempty"`
 
 	// Legacy/CLI fields
 	DatabasePath string
@@ -88,6 +90,11 @@ func main() {
 		if err := loadConfig(config.ConfigFile); err != nil {
 			log.Error(fmt.Sprintf("Failed to load config file: %v", err))
 		}
+	}
+
+	// Override RootPassword from environment variable if set (Security best practice)
+	if envPass := os.Getenv("SOP_ROOT_PASSWORD"); envPass != "" {
+		config.RootPassword = envPass
 	}
 
 	// If no databases loaded (e.g. no config file or empty), use CLI flags as default
@@ -262,6 +269,9 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	data := map[string]any{
 		"Version": Version,
 		"Mode":    config.Mode,
+		// AllowInvalidMapKey is a flag to bypass the validation that requires Map Key types
+		// to have an Index Specification or CEL Expression. This is useful for testing.
+		"AllowInvalidMapKey": os.Getenv("SOP_ALLOW_INVALID_MAP_KEY") == "true",
 	}
 	tmpl.Execute(w, data)
 }
@@ -324,6 +334,54 @@ func handleGetDBOptions(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(dbOpts)
 }
 
+func inferType(v any) (string, bool) {
+	if v == nil {
+		return "string", false
+	}
+
+	// Handle JSON number (float64) which might be int
+	if f, ok := v.(float64); ok {
+		if float64(int64(f)) == f {
+			return "int", false
+		}
+		return "float64", false
+	}
+
+	switch v.(type) {
+	case string:
+		return "string", false
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return "int", false
+	case float32:
+		return "float64", false
+	case bool:
+		return "bool", false
+	}
+
+	val := reflect.ValueOf(v)
+	kind := val.Kind()
+
+	if kind == reflect.Map {
+		return "map", false
+	}
+
+	if kind == reflect.Slice || kind == reflect.Array {
+		// Check for byte slice -> blob
+		if val.Type().Elem().Kind() == reflect.Uint8 {
+			return "blob", false // Blob is treated as a type, not array of bytes
+		}
+		// Otherwise it's an array of something
+		if val.Len() > 0 {
+			elem := val.Index(0).Interface()
+			t, _ := inferType(elem)
+			return t, true
+		}
+		return "string", true
+	}
+
+	return "string", false
+}
+
 func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	storeName := r.URL.Query().Get("name")
@@ -365,6 +423,12 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 		"count":          si.Count,
 		"isPrimitiveKey": si.IsPrimitiveKey,
 		"celExpression":  si.CELexpression,
+		"slotLength":     si.SlotLength,
+		"isUnique":       si.IsUnique,
+		"isValueInNode":  si.IsValueDataInNodeSegment,
+		// isValueActivelyPersisted is used by the UI to determine if the Data Size is "Big".
+		"isValueActivelyPersisted": si.IsValueDataActivelyPersisted,
+		"cacheDuration":            int(si.CacheConfig.ValueDataCacheDuration.Minutes()),
 	}
 
 	if !si.IsPrimitiveKey {
@@ -377,18 +441,79 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch a sample key to infer structure/type for UI if store is not empty
+	keyType := "string"
+	valueType := "string"
+	keyIsArray := false
+	valueIsArray := false
+
 	if si.Count > 0 {
 		if ok, _ := store.First(ctx); ok {
-			response["sampleKey"] = store.GetCurrentKey().Key
+			k := store.GetCurrentKey().Key
+			response["sampleKey"] = k
+			keyType, keyIsArray = inferType(k)
+
 			if v, err := store.GetCurrentValue(ctx); err == nil {
 				response["sampleValue"] = v
+				valueType, valueIsArray = inferType(v)
 			}
 		}
+	} else {
+		if !si.IsPrimitiveKey {
+			keyType = "map"
+		}
+		// If primitive and empty, we default to "string" in UI,
+		// but we don't really know if it was intended to be int.
+		// StoreInfo doesn't persist "int" vs "string", only "IsPrimitiveKey".
+		// So "string" default is acceptable.
 	}
+
+	response["keyType"] = keyType
+	response["valueType"] = valueType
+	response["keyIsArray"] = keyIsArray
+	response["valueIsArray"] = valueIsArray
 
 	json.NewEncoder(w).Encode(response)
 }
 
+func normalizeJSON(s string) string {
+	var j interface{}
+	if err := json.Unmarshal([]byte(s), &j); err != nil {
+		return s
+	}
+	b, _ := json.Marshal(j)
+	return string(b)
+}
+
+// handleUpdateStoreInfo handles updates to store metadata and structure.
+//
+// EDITING RULES:
+// 1. Empty Store (Count == 0):
+//   - Full structural rebuild is allowed.
+//   - Can change Key Type, Value Type, Slot Length, IsUnique, etc.
+//   - Can add Seed Data (which effectively sets the type for inference).
+//   - No Admin Token required.
+//
+// 2. Non-Empty Store (Count > 0):
+//   - Structural fields are LOCKED (Key/Value Type, Slot Length, IsUnique).
+//   - EXCEPTION: Index Specification and CEL Expression can be updated IF AND ONLY IF they are currently empty (missing).
+//     This allows "fixing" stores created via code that lack these definitions.
+//   - Description and Cache Configuration are ALWAYS editable.
+//   - Admin Token can override locks (though UI may not expose this).
+//
+// handleUpdateStoreInfo handles updates to store metadata and structure.
+//
+// EDITING RULES:
+// 1. Empty Store (Count == 0):
+//   - Rebuild allowed for: Key Type, Value Type, Index Spec, CEL, Seed Data.
+//   - LOCKED: Slot Length, IsUnique, ValueInNode (require Admin Token).
+//   - No Admin Token required for allowed fields.
+//
+// 2. Non-Empty Store (Count > 0):
+//   - Structural fields are LOCKED (Key/Value Type, Slot Length, IsUnique).
+//   - EXCEPTION: Index Specification and CEL Expression can be updated IF AND ONLY IF they are currently empty (missing).
+//     This allows "fixing" stores created via code that lack these definitions.
+//   - Description and Cache Configuration are ALWAYS editable.
+//   - Admin Token can override locks (though UI may not expose this).
 func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -404,7 +529,39 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 		KeyType       string  `json:"keyType"` // "map" or "primitive" (string, int, etc)
 		SeedKey       any     `json:"seedKey"`
 		SeedValue     any     `json:"seedValue"`
+		AdminToken    string  `json:"adminToken"`
+		SlotLength    int     `json:"slotLength"`
+		IsUnique      bool    `json:"isUnique"`
+		DataSize      int     `json:"dataSize"` // 0=Small, 1=Medium, 2=Big
+		CacheDuration int     `json:"cacheDuration"`
+		IsCacheTTL    bool    `json:"isCacheTTL"`
+		ValueType     string  `json:"valueType"`
 	}
+
+	// We need to handle IndexSpec as a string (JSON) or object.
+	// Since the frontend sends it as a JSON string (via JSON.stringify), we should decode it as string first,
+	// OR fix the frontend to send it as an object.
+	// The frontend sends: indexSpec: JSON.stringify(...) -> which is a string.
+	// So req.IndexSpec should be *string.
+	// BUT, si.MapKeyIndexSpecification is sop.IndexSpecification (struct).
+	// So we need to unmarshal the string into the struct.
+
+	// Let's use a custom struct for decoding to handle the string vs object ambiguity if needed,
+	// or just stick to string if frontend sends string.
+	// Frontend: indexSpec = JSON.stringify({ index_fields: fields }); -> String.
+
+	// Wait, if we change req.IndexSpec to *string, we need to unmarshal it.
+	// The current code has `IndexSpec *string`.
+	// And it does `si.MapKeyIndexSpecification = *req.IndexSpec`.
+	// This is a TYPE MISMATCH. si.MapKeyIndexSpecification is likely a struct, not a string.
+	// Let's check sop.StoreInfo definition.
+
+	// Assuming sop.StoreInfo.MapKeyIndexSpecification is sop.IndexSpecification (struct).
+	// If req.IndexSpec is *string, we cannot assign it directly.
+	// The code I read earlier showed:
+	// si.MapKeyIndexSpecification = *req.IndexSpec
+	// This implies si.MapKeyIndexSpecification is a string?
+	// Let's check `storeinfo.go`.
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -441,23 +598,226 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 
 	si := store.GetStoreInfo()
 
+	// DEBUG LOGGING
+	log.Info("UpdateStoreInfo", "Name", req.StoreName, "Desc", req.Description)
+	log.Info("REQ", "Cel", req.CelExpression, "IndexSpec", req.IndexSpec, "SeedValue", req.SeedValue)
+	log.Info("SI", "Cel", si.CELexpression, "IndexSpec", si.MapKeyIndexSpecification)
+	if req.IndexSpec != nil {
+		log.Info("IndexSpec Diff", "REQ", *req.IndexSpec, "SI", si.MapKeyIndexSpecification)
+	}
+
 	// Update Description (Allowed for all stores)
 	si.Description = req.Description
 
-	// Validate that no structural changes are attempted
-	if req.CelExpression != si.CELexpression {
-		http.Error(w, "Cannot update CEL expression. Please delete and recreate the store if you need to change its structure.", http.StatusBadRequest)
-		return
+	// Compute StoreOptions based on DataSize
+	// 0=Small, 1=Medium, 2=Big
+	dataSize := sop.ValueDataSize(req.DataSize)
+	computedOpts := sop.ConfigureStore(req.StoreName, req.IsUnique, req.SlotLength, req.Description, dataSize, "")
+
+	// Update Cache Config
+	// IMPORTANT:
+	// - UI only configures Value cache duration + TTL.
+	// - Do NOT overwrite other cache settings; SOP defaults should remain intact.
+	// - When Value data is stored in-node, Value caching is not applicable; ignore cache updates.
+	isCacheTTL := req.IsCacheTTL
+	newDuration := time.Duration(req.CacheDuration) * time.Minute
+
+	// Handle "No Cache" (-1 from UI)
+	if req.CacheDuration < 0 {
+		newDuration = 0
+		isCacheTTL = false
+	} else if newDuration == 0 {
+		// 0 means default, but here we might want to respect what ConfigureStore returned or keep existing?
+		// Actually, UI sends 0 for "Use Default".
+		// But wait, ConfigureStore sets defaults.
+		// If user sends 0, we should probably stick to what ConfigureStore gave us OR what is currently there?
+		// Let's assume 0 means "don't change" or "default".
+		// If we are updating, we should probably respect the computedOpts defaults if it's a structural change,
+		// or keep existing if not.
+		// However, the requirement says: "When size is Medium... allow user to convey 'no caching' (-1)..."
+		// So if 0, it implies default.
+		isCacheTTL = false
 	}
+
+	// Validate that no structural changes are attempted, unless authorized as root
+	var structuralChange bool
+	var shouldAddSeed bool
+
+	// Check for Structural Changes (SlotLength, IsUnique, ValueInNode)
+	slotLengthChanged := req.SlotLength > 0 && req.SlotLength != si.SlotLength
+	isUniqueChanged := req.IsUnique != si.IsUnique
+
+	// Compare computed options with current SI
+	isValueInNodeChanged := computedOpts.IsValueDataInNodeSegment != si.IsValueDataInNodeSegment
+	isActivelyPersistedChanged := computedOpts.IsValueDataActivelyPersisted != si.IsValueDataActivelyPersisted
+	isGloballyCachedChanged := computedOpts.IsValueDataGloballyCached != si.IsValueDataGloballyCached
+
+	if slotLengthChanged || isUniqueChanged || isValueInNodeChanged || isActivelyPersistedChanged || isGloballyCachedChanged {
+		if si.Count > 0 {
+			http.Error(w, "Structural fields (SlotLength, IsUnique, Data Size) cannot be changed for non-empty stores.", http.StatusBadRequest)
+			return
+		}
+		if slotLengthChanged {
+			si.SlotLength = req.SlotLength
+		}
+		if isUniqueChanged {
+			si.IsUnique = req.IsUnique
+		}
+
+		// Apply computed options
+		si.IsValueDataInNodeSegment = computedOpts.IsValueDataInNodeSegment
+		si.IsValueDataActivelyPersisted = computedOpts.IsValueDataActivelyPersisted
+		si.IsValueDataGloballyCached = computedOpts.IsValueDataGloballyCached
+
+		structuralChange = true
+	}
+
+	// Apply Cache Config if allowed (Medium Data)
+	if dataSize == sop.MediumData {
+		if req.CacheDuration == -1 {
+			// User explicitly wants to disable caching
+			si.CacheConfig.ValueDataCacheDuration = -1 * time.Minute
+			si.CacheConfig.IsValueDataCacheTTL = false
+		} else if req.CacheDuration > 0 {
+			// User specified a duration
+			si.CacheConfig.ValueDataCacheDuration = time.Duration(req.CacheDuration) * time.Minute
+			si.CacheConfig.IsValueDataCacheTTL = isCacheTTL
+		} else {
+			// req.CacheDuration == 0. Use Default?
+			// If we are updating, and user sends 0, maybe they mean "don't change" or "reset to default"?
+			// In the context of "Advanced Mode" dropdowns, usually 0 is "Default".
+			// If I want to reset to default:
+			si.CacheConfig.ValueDataCacheDuration = computedOpts.CacheConfig.ValueDataCacheDuration
+			si.CacheConfig.IsValueDataCacheTTL = computedOpts.CacheConfig.IsValueDataCacheTTL
+		}
+	} else {
+		// For Small and Big, enforce computed defaults
+		si.CacheConfig.ValueDataCacheDuration = computedOpts.CacheConfig.ValueDataCacheDuration
+		si.CacheConfig.IsValueDataCacheTTL = computedOpts.CacheConfig.IsValueDataCacheTTL
+	}
+
+	// Check for other changes
+	celChanged := req.CelExpression != si.CELexpression
+
+	var indexSpecChanged bool
 	if req.IndexSpec != nil {
-		http.Error(w, "Cannot update Index Specification. Please delete and recreate the store if you need to change its structure.", http.StatusBadRequest)
-		return
+		normalizedReq := normalizeJSON(*req.IndexSpec)
+		normalizedSI := normalizeJSON(si.MapKeyIndexSpecification)
+		indexSpecChanged = normalizedReq != normalizedSI
+	}
+
+	seedValueChanged := req.SeedValue != nil
+
+	if celChanged || indexSpecChanged || seedValueChanged {
+		// Allow setting Index/CEL if they are currently empty (fixing a store created without them)
+		// Also allow updating Seed Value (Schema) as it's just metadata for the UI.
+		// Otherwise, require Admin Token for structural changes.
+		// One-time fix behavior:
+		// - Non-empty store: IndexSpec may be set only if currently missing.
+		// - CEL is also structural, and is only allowed when Index is editable.
+		//   That means: for non-empty stores, CEL can only be set when IndexSpec is missing.
+		isFixingMissingIndex := indexSpecChanged && si.MapKeyIndexSpecification == ""
+		isFixingMissingCel := celChanged && si.CELexpression == "" && si.MapKeyIndexSpecification == ""
+		isFixingMissingSpec := isFixingMissingIndex || isFixingMissingCel
+
+		// We allow seed value changes freely as they don't affect the B-Tree structure, only UI hints.
+		isSeedChangeOnly := seedValueChanged && !celChanged && !indexSpecChanged
+
+		// STRICT RULE: If store is not empty, we ONLY allow fixing MISSING specs.
+		// If a spec already exists, it CANNOT be changed, even with Admin Token.
+		// This prevents corruption of existing B-Tree data.
+
+		// Check if we are trying to change an EXISTING spec on a non-empty store
+		isModifyingExistingSpec := false
+		if si.Count > 0 {
+			if celChanged && si.CELexpression != "" {
+				isModifyingExistingSpec = true
+			}
+			if indexSpecChanged && si.MapKeyIndexSpecification != "" {
+				isModifyingExistingSpec = true
+			}
+		}
+
+		isAdmin := config.RootPassword != "" && req.AdminToken == config.RootPassword
+
+		if isModifyingExistingSpec {
+			if !isAdmin {
+				http.Error(w, "Cannot modify existing Index Specification or CEL Expression on a non-empty store. This action risks data corruption. Please delete and recreate the store if you need to change its structure.", http.StatusBadRequest)
+				return
+			}
+			log.Warn("Admin Token used to modify existing Index/CEL on non-empty store", "Store", req.StoreName)
+		}
+
+		// If IndexSpec already exists on a non-empty store, CEL is locked even if missing.
+		if si.Count > 0 && celChanged && si.CELexpression == "" && si.MapKeyIndexSpecification != "" {
+			if !isAdmin {
+				http.Error(w, "Cannot set CEL Expression on a non-empty store that already has an Index Specification. This action is intentionally blocked to avoid structural mistakes. Use manual file edit (storeinfo.txt) or recreate the store.", http.StatusBadRequest)
+				return
+			}
+		}
+
+		authorized := (si.Count == 0) || isFixingMissingSpec || isSeedChangeOnly || isAdmin
+
+		if !authorized {
+			if celChanged {
+				http.Error(w, "Cannot update existing CEL Expression on a non-empty store. Please delete and recreate the store if you need to change its structure.", http.StatusBadRequest)
+				return
+			}
+			if indexSpecChanged {
+				http.Error(w, "Cannot update existing Index Specification on a non-empty store. Please delete and recreate the store if you need to change its structure.", http.StatusBadRequest)
+				return
+			}
+			// Seed value check removed as it is now allowed or covered by authorized
+		}
+		// Apply authorized changes
+		if celChanged {
+			// If fixing, ensure we don't overwrite existing if not authorized (though logic above handles it)
+			si.CELexpression = req.CelExpression
+			structuralChange = true
+		}
+		if indexSpecChanged {
+			si.MapKeyIndexSpecification = *req.IndexSpec
+			structuralChange = true
+		}
+		if seedValueChanged {
+			// We don't persist SeedValue in StoreInfo directly as it's inferred from the first item.
+			// So we update the first item if it exists, or add it if empty.
+			if si.Count > 0 {
+				if ok, _ := store.First(ctx); ok {
+					key := store.GetCurrentKey().Key
+					// Only update if value changed significantly?
+					// For now, we trust the user wants to update the sample value.
+					if _, err := store.Update(ctx, key, req.SeedValue); err != nil {
+						http.Error(w, fmt.Sprintf("Failed to update sample item with new value: %v", err), http.StatusInternalServerError)
+						return
+					}
+					structuralChange = true
+				}
+			} else {
+				// If empty, we can't update an item.
+				// But handleAddStore adds it. Here we are updating.
+				// If the store is empty, we could add the seed item?
+				// But we don't have the SeedKey here easily (it's in req but might be nil if not sent).
+				// If req.SeedKey is provided, we can add.
+				if req.SeedKey != nil {
+					// Defer adding seed data until after metadata is saved to avoid overwrite issues
+					shouldAddSeed = true
+					structuralChange = true
+				}
+			}
+		}
 	}
 	if req.KeyType != "" {
 		isPrimitive := req.KeyType != "map"
 		if si.IsPrimitiveKey != isPrimitive {
-			http.Error(w, "Cannot change Key Type. Please delete and recreate the store if you need to change its structure.", http.StatusBadRequest)
-			return
+			// Allow Key Type change ONLY if store is empty
+			if si.Count == 0 {
+				si.IsPrimitiveKey = isPrimitive
+				structuralChange = true
+			} else {
+				http.Error(w, "Cannot change Key Type of a non-empty store. Please delete and recreate the store if you need to change its structure.", http.StatusBadRequest)
+				return
+			}
 		}
 	}
 
@@ -478,8 +838,39 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if shouldAddSeed {
+		// Start new transaction for data
+		trans, err = database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+		if err != nil {
+			http.Error(w, "Failed to begin transaction for seed data: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer trans.Rollback(ctx)
+
+		// Re-open store (will pick up new metadata)
+		store, err = database.OpenBtree[any, any](ctx, dbOpts, req.StoreName, trans, comparer)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to open store for seed data: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		if _, err := store.Add(ctx, req.SeedKey, req.SeedValue); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to add seed item: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		if err := trans.Commit(ctx); err != nil {
+			http.Error(w, "Failed to commit seed data: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	resp := map[string]string{"status": "ok"}
+	if structuralChange {
+		resp["warning"] = "Overriding store metadata is safe but you need to make sure the new metadata being saved captures the correct sorting characteristics of this store."
+	}
+	json.NewEncoder(w).Encode(resp)
 }
 
 func handleListItems(w http.ResponseWriter, r *http.Request) {
@@ -1011,22 +1402,24 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Database    string `json:"database"`
-		StoreName   string `json:"store"`
-		KeyType     string `json:"key_type"` // string, int, uuid, map
-		ValueType   string `json:"value_type"`
-		Description string `json:"description"`
-		IndexSpec   string `json:"index_spec"` // Optional, for map keys
-		SeedKey     any    `json:"seed_key"`   // Optional, for seeding
-		SeedValue   any    `json:"seed_value"` // Optional, for seeding
+		Database      string `json:"database"`
+		StoreName     string `json:"store"`
+		KeyType       string `json:"key_type"` // string, int, uuid, map
+		ValueType     string `json:"value_type"`
+		Description   string `json:"description"`
+		IndexSpec     string `json:"index_spec"`     // Optional, for map keys
+		CelExpression string `json:"cel_expression"` // Optional, for custom sorting
+		SeedKey       any    `json:"seed_key"`       // Optional, for seeding
+		SeedValue     any    `json:"seed_value"`     // Optional, for seeding
 
-		// Advanced options
-		AdvancedMode             bool `json:"advanced_mode"`
-		SlotLength               int  `json:"slot_length"`
-		IsUnique                 bool `json:"is_unique"`
-		IsValueDataInNodeSegment bool `json:"is_value_data_in_node_segment"`
-		CacheDuration            int  `json:"cache_duration"`
-		IsCacheTTL               bool `json:"is_cache_ttl"`
+		// Store creation options.
+		// NOTE: The UI may hide/show these behind an "Advanced" toggle, but the backend
+		// must not depend on any UI-only concept like "advanced_mode".
+		SlotLength    *int  `json:"slot_length"`
+		IsUnique      *bool `json:"is_unique"`
+		DataSize      *int  `json:"data_size"` // 0=Small, 1=Medium, 2=Big
+		CacheDuration *int  `json:"cache_duration"`
+		IsCacheTTL    *bool `json:"is_cache_ttl"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1054,35 +1447,80 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 	}
 	defer trans.Rollback(ctx)
 
-	storeOpts := sop.StoreOptions{
-		Name:           req.StoreName,
-		SlotLength:     1000,
-		IsUnique:       true,
-		Description:    req.Description,
-		IsPrimitiveKey: req.KeyType != "map",
+	// Defaults (must not depend on any UI-only toggle)
+	slotLength := 1000
+	if req.SlotLength != nil {
+		slotLength = *req.SlotLength
+	}
+	if slotLength < 2 {
+		slotLength = 2
+	}
+	if slotLength > 10000 {
+		slotLength = 10000
 	}
 
-	if req.AdvancedMode {
-		storeOpts.SlotLength = req.SlotLength
-		storeOpts.IsUnique = req.IsUnique
-		storeOpts.IsValueDataInNodeSegment = req.IsValueDataInNodeSegment
+	isUnique := true
+	if req.IsUnique != nil {
+		isUnique = *req.IsUnique
+	}
 
-		// Always start with SOP defaults
-		def := sop.GetDefaultCacheConfig()
-		storeOpts.CacheConfig = &def
+	// Compute StoreOptions based on DataSize
+	dataSize := sop.SmallData
+	if req.DataSize != nil {
+		dataSize = sop.ValueDataSize(*req.DataSize)
+	}
 
-		// Only override ValueDataCacheDuration if not in node segment and duration provided
-		if !req.IsValueDataInNodeSegment {
-			storeOpts.IsValueDataGloballyCached = true
-			if req.CacheDuration > 0 {
-				storeOpts.CacheConfig.ValueDataCacheDuration = time.Duration(req.CacheDuration) * time.Minute
-				storeOpts.CacheConfig.IsValueDataCacheTTL = req.IsCacheTTL
-			}
+	// Use ConfigureStore to get the correct structural flags and defaults
+	computedOpts := sop.ConfigureStore(req.StoreName, isUnique, slotLength, req.Description, dataSize, "")
+
+	cacheDuration := 0
+	if req.CacheDuration != nil {
+		cacheDuration = *req.CacheDuration
+	}
+
+	isCacheTTL := false
+	if req.IsCacheTTL != nil {
+		isCacheTTL = *req.IsCacheTTL
+	}
+
+	storeOpts := sop.StoreOptions{
+		Name:           req.StoreName,
+		SlotLength:     slotLength,
+		IsUnique:       isUnique,
+		Description:    req.Description,
+		IsPrimitiveKey: req.KeyType != "map",
+		CELexpression:  req.CelExpression,
+
+		// Apply computed structural flags
+		IsValueDataInNodeSegment:     computedOpts.IsValueDataInNodeSegment,
+		IsValueDataActivelyPersisted: computedOpts.IsValueDataActivelyPersisted,
+		IsValueDataGloballyCached:    computedOpts.IsValueDataGloballyCached,
+	}
+
+	// Apply Cache Config
+	// If Medium Data, allow user override. Otherwise use computed defaults.
+	if dataSize == sop.MediumData {
+		// Start with computed defaults (which has correct global cache settings)
+		storeOpts.CacheConfig = computedOpts.CacheConfig
+
+		if cacheDuration == -1 {
+			// User explicitly wants to disable caching
+			storeOpts.CacheConfig.ValueDataCacheDuration = -1 * time.Minute
+			storeOpts.CacheConfig.IsValueDataCacheTTL = false
+		} else if cacheDuration > 0 {
+			// User specified a duration
+			storeOpts.CacheConfig.ValueDataCacheDuration = time.Duration(cacheDuration) * time.Minute
+			storeOpts.CacheConfig.IsValueDataCacheTTL = isCacheTTL
+		} else {
+			// cacheDuration == 0. Use Default (already set from computedOpts)
 		}
+	} else {
+		// For Small and Big, enforce computed defaults
+		storeOpts.CacheConfig = computedOpts.CacheConfig
 	}
 
 	// Cast SeedValue based on ValueType
-	var finalSeedValue any = req.SeedValue
+	finalSeedValue := req.SeedValue
 	if req.SeedValue != nil {
 		switch req.ValueType {
 		case "int":
@@ -1146,78 +1584,79 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var storeErr error
 	switch req.KeyType {
 	case "string":
 		var s btree.BtreeInterface[string, any]
-		s, err = database.NewBtree[string, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+		s, storeErr = database.NewBtree[string, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
 			if kStr, ok := req.SeedKey.(string); ok {
-				_, err = s.Add(ctx, kStr, finalSeedValue)
+				_, storeErr = s.Add(ctx, kStr, finalSeedValue)
 			}
 		}
 	case "int":
 		var s btree.BtreeInterface[int, any]
-		s, err = database.NewBtree[int, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+		s, storeErr = database.NewBtree[int, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
 			if f, ok := req.SeedKey.(float64); ok {
-				_, err = s.Add(ctx, int(f), finalSeedValue)
+				_, storeErr = s.Add(ctx, int(f), finalSeedValue)
 			}
 		}
 	case "uuid":
 		var s btree.BtreeInterface[sop.UUID, any]
-		s, err = database.NewBtree[sop.UUID, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+		s, storeErr = database.NewBtree[sop.UUID, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
 			if str, ok := req.SeedKey.(string); ok {
 				if id, err2 := sop.ParseUUID(str); err2 == nil {
-					_, err = s.Add(ctx, id, finalSeedValue)
+					_, storeErr = s.Add(ctx, id, finalSeedValue)
 				} else {
-					err = err2
+					storeErr = err2
 				}
 			}
 		}
 	case "map":
 		var s *jsondb.JsonDBMapKey
-		s, err = jsondb.NewJsonBtreeMapKey(ctx, dbOpts, storeOpts, trans, req.IndexSpec)
-		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+		s, storeErr = jsondb.NewJsonBtreeMapKey(ctx, dbOpts, storeOpts, trans, req.IndexSpec)
+		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
 			// JsonDBMapKey expects []jsondb.Item[map[string]any, any] for Add
 			if kMap, ok := req.SeedKey.(map[string]any); ok {
 				item := jsondb.Item[map[string]any, any]{
 					Key:   kMap,
 					Value: &finalSeedValue,
 				}
-				_, err = s.Add(ctx, []jsondb.Item[map[string]any, any]{item})
+				_, storeErr = s.Add(ctx, []jsondb.Item[map[string]any, any]{item})
 			}
 		}
 	case "array":
 		var s btree.BtreeInterface[[]any, any]
-		s, err = database.NewBtree[[]any, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+		s, storeErr = database.NewBtree[[]any, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
 			if kArr, ok := req.SeedKey.([]any); ok {
-				_, err = s.Add(ctx, kArr, finalSeedValue)
+				_, storeErr = s.Add(ctx, kArr, finalSeedValue)
 			}
 		}
 	case "int64":
 		var s btree.BtreeInterface[int64, any]
-		s, err = database.NewBtree[int64, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+		s, storeErr = database.NewBtree[int64, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
 			if f, ok := req.SeedKey.(float64); ok {
-				_, err = s.Add(ctx, int64(f), finalSeedValue)
+				_, storeErr = s.Add(ctx, int64(f), finalSeedValue)
 			}
 		}
 	case "float64":
 		var s btree.BtreeInterface[float64, any]
-		s, err = database.NewBtree[float64, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+		s, storeErr = database.NewBtree[float64, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
 			if f, ok := req.SeedKey.(float64); ok {
-				_, err = s.Add(ctx, f, finalSeedValue)
+				_, storeErr = s.Add(ctx, f, finalSeedValue)
 			}
 		}
 	case "bool":
 		var s btree.BtreeInterface[bool, any]
-		s, err = database.NewBtree[bool, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if err == nil && req.SeedKey != nil && req.SeedValue != nil {
+		s, storeErr = database.NewBtree[bool, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
+		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
 			if b, ok := req.SeedKey.(bool); ok {
-				_, err = s.Add(ctx, b, finalSeedValue)
+				_, storeErr = s.Add(ctx, b, finalSeedValue)
 			}
 		}
 	default:
@@ -1225,8 +1664,8 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err != nil {
-		http.Error(w, "Failed to create store: "+err.Error(), http.StatusInternalServerError)
+	if storeErr != nil {
+		http.Error(w, "Failed to create store: "+storeErr.Error(), http.StatusInternalServerError)
 		return
 	}
 

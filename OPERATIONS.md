@@ -83,7 +83,7 @@ You can run the tool directly from the source:
 
 ```bash
 # Point to your SOP registry folder
-go run tools/httpserver/main.go -registry /path/to/your/sop/data
+go run ./tools/httpserver -registry /path/to/your/sop/data
 ```
 
 Access the UI at `http://localhost:8080`.
@@ -94,4 +94,4 @@ Access the UI at `http://localhost:8080`.
 *   **JSON Editor**: View and edit complex value objects as formatted JSON.
 *   **Bulk Friendly**: Pagination and efficient loading for large datasets.
 
-For more details, see the [SOP Data Management Suite Documentation](tools/httpserver/README.md).
+For more details, see the [SOP Data Manager Documentation](tools/httpserver/README.md).

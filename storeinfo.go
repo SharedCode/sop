@@ -130,7 +130,7 @@ func (scc *StoreCacheConfig) enforceMinimumRule() {
 	}
 
 	// Value Data can be set to minimum.
-	if scc.ValueDataCacheDuration == 0 && scc.IsValueDataCacheTTL {
+	if scc.ValueDataCacheDuration <= 0 && scc.IsValueDataCacheTTL {
 		scc.IsValueDataCacheTTL = false
 	}
 	if scc.ValueDataCacheDuration == 0 {

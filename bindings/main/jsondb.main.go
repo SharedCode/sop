@@ -730,6 +730,7 @@ type BtreeOptions struct {
 	CacheConfig                  sop.StoreCacheConfig `json:"cache_config"`
 
 	IndexSpecification string    `json:"index_specification"`
+	CELexpression      string    `json:"cel_expression"`
 	TransactionID      uuid.UUID `json:"transaction_id"`
 	IsPrimitiveKey     bool      `json:"is_primitive_key"`
 }
@@ -752,7 +753,11 @@ func convertTo(si *BtreeOptions) *sop.StoreOptions {
 	so.CacheConfig.RegistryCacheDuration = so.CacheConfig.RegistryCacheDuration * time.Minute
 	so.CacheConfig.StoreInfoCacheDuration = so.CacheConfig.StoreInfoCacheDuration * time.Minute
 	so.CacheConfig.ValueDataCacheDuration = so.CacheConfig.ValueDataCacheDuration * time.Minute
-	so.CELexpression = si.IndexSpecification
+	// IndexSpecification carries either the MapKey IndexSpecification JSON or a CEL expression.
+	// It must populate MapKeyIndexSpecification; CELexpression is handled by jsondb.NewJsonBtreeMapKey
+	// when it detects the string is a CEL expression.
+	so.MapKeyIndexSpecification = si.IndexSpecification
+	so.CELexpression = si.CELexpression
 	so.IsPrimitiveKey = si.IsPrimitiveKey
 	return &so
 }
@@ -766,6 +771,7 @@ func (bo *BtreeOptions) extract(si *sop.StoreInfo) {
 	bo.LeafLoadBalancing = si.LeafLoadBalancing
 	bo.Description = si.Description
 	bo.CacheConfig = si.CacheConfig
+	bo.CELexpression = si.CELexpression
 	bo.IndexSpecification = si.MapKeyIndexSpecification
 	bo.IsPrimitiveKey = si.IsPrimitiveKey
 	// Restore back to "minute" unit.

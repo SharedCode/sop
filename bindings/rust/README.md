@@ -9,6 +9,31 @@
 *   **Serde Integration**: Seamlessly serialize/deserialize Rust structs to B-Tree values.
 *   **RAII**: Automatic resource management for Contexts and Transactions.
 
+## SOP Data Management Suite
+
+SOP includes a powerful **Data Management Suite** that provides **full CRUD** capabilities for your B-Tree stores. It goes beyond simple viewing, offering a complete GUI for inspecting, searching, and managing your data at scale.
+
+*   **Web UI**: A modern, responsive interface for browsing B-Trees, managing stores, and visualizing data.
+*   **AI Assistant**: Integrated directly into the UI, the AI Assistant can help you write queries, explain data structures, and even generate code snippets.
+*   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
+
+To launch the Data Manager, you can use the Go toolchain or look for provided binaries:
+
+```bash
+# From the root of the repository
+go run ./tools/httpserver
+```
+
+## SOP AI Kit
+
+The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data platform.
+
+*   **Vector Store**: Native support for storing and searching high-dimensional vectors.
+*   **RAG Agents**: Build Retrieval-Augmented Generation applications with ease.
+*   **Macros**: A functional AI runtime for recording and replaying complex workflows.
+
+See [ai/README.md](../../ai/README.md) for a deep dive into the AI capabilities.
+
 ## Prerequisites
 
 *   Rust 1.56+

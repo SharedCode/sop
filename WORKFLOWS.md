@@ -15,7 +15,7 @@ The `infs` package uses the file system as the storage backend. While it works p
     *   Configure SOP to use **Standalone Mode**.
     *   Target a local folder or a mounted network drive.
     *   **Benefit**: Zero dependencies. No Redis to install. You can code, test, and debug on a plane without internet.
-    *   **Tip**: Use the **SOP Data Management Suite** (`go run tools/httpserver/main.go`) to visually inspect and manage your local data as you build.
+    *   **Tip**: Use the **SOP Data Manager** (`go run ./tools/httpserver`) to visually inspect and manage your local data as you build.
 
 2.  **Release to Production (Clustered Mode)**
     *   Mount that same network drive (or share the S3 bucket) to your production servers.

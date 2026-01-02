@@ -83,9 +83,9 @@ func main() {
 }
 ```
 
-> **Pro Tip**: Want to verify your data? Run the **SOP Data Management Suite** to inspect the `users` store visually:
+> **Pro Tip**: Want to verify your data? Run the **SOP Data Manager** to inspect the `users` store visually:
 > ```bash
-> go run tools/httpserver/main.go -registry /tmp/sop_data
+> go run ./tools/httpserver -registry /tmp/sop_data
 > ```
 
 ## 2. Multi-Store Transaction

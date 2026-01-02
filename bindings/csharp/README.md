@@ -37,6 +37,31 @@ dotnet tool install -g Sop4CS.CLI
 *   **Multi-Tenancy**: Native support for Cassandra Keyspaces or Directory-based isolation.
 *   **Flexible Deployment**: Supports both **Standalone** (local) and **Clustered** (distributed) modes.
 
+## SOP Data Manager
+
+SOP includes a powerful **SOP Data Manager** that provides **full CRUD** capabilities for your B-Tree stores. It goes beyond simple viewing, offering a complete GUI for inspecting, searching, and managing your data at scale.
+
+*   **Web UI**: A modern, responsive interface for browsing B-Trees, managing stores, and visualizing data.
+*   **AI Assistant**: Integrated directly into the UI, the AI Assistant can help you write queries, explain data structures, and even generate code snippets.
+*   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
+
+To launch the SOP Data Manager, you can use the Go toolchain or look for provided binaries:
+
+```bash
+# From the root of the repository
+go run ./tools/httpserver
+```
+
+## SOP AI Kit
+
+The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data platform.
+
+*   **Vector Store**: Native support for storing and searching high-dimensional vectors.
+*   **RAG Agents**: Build Retrieval-Augmented Generation applications with ease.
+*   **Macros**: A functional AI runtime for recording and replaying complex workflows.
+
+See [ai/README.md](../../ai/README.md) for a deep dive into the AI capabilities.
+
 ## Performance & Big Data Management
 
 SOP is designed for high-throughput, low-latency scenarios, making it suitable for "Big Data" management on commodity hardware.
@@ -84,17 +109,17 @@ The suite includes:
 
 SOP includes a powerful **SOP HTTP Server** that acts as a comprehensive **Data Management Console** and a **RESTful API**. It transforms your embedded SOP database into a fully manageable server instance.
 
-To launch the Management Console / Server:
+To launch the Management Console / SOP HTTP Server:
 
 ```bash
 sop-cli httpserver
 ```
 
-### Server Capabilities
+### SOP HTTP Server Capabilities
 
 It is important to distinguish between the **SOP HTTP Server** (this tool) and SOP's internal **Clustered Mode**:
 
-1.  **SOP HTTP Server**: This is a standard web server that serves the Management UI and REST API.
+1.  **SOP HTTP Server**: This is a standard web server that serves the SOP Data Manager UI and REST API.
     *   **Multi-Client**: It can serve **many concurrent HTTP clients** (users on web browsers, mobile apps, or other services).
     *   **Collaborative Management**: Multiple team members can access the console simultaneously to view, edit, and query data in real-time.
     *   **REST API**: Exposes your B-Tree stores via standard HTTP endpoints, allowing you to integrate SOP with any language or tool (curl, Postman, Python scripts).
@@ -105,7 +130,7 @@ It is important to distinguish between the **SOP HTTP Server** (this tool) and S
 
 **In short**: You run `sop-cli httpserver` to give your team a GUI and API. You configure "Clustered Mode" in your code when building distributed applications.
 
-### Launching the Server
+### Launching the SOP HTTP Server
 
 To launch it using the global tool:
 
@@ -115,12 +140,12 @@ sop-cli httpserver
 
 ### Programmatic Usage
 
-You can also launch the server directly from your C# application using the `Sop.Server` namespace:
+You can also launch the SOP HTTP Server directly from your C# application using the `Sop.Server` namespace:
 
 ```csharp
 using Sop.Server;
 
-// Launch the server (downloads binary if needed)
+// Launch the SOP HTTP Server (downloads binary if needed)
 await SopServer.RunAsync(args);
 ```
 
@@ -134,7 +159,7 @@ await SopServer.RunAsync(args);
 *   **Zero-Config Setup**: The tool automatically downloads the correct optimized binary for your OS/Architecture upon first run. No manual installation required.
 
 **Usage**: By default, it opens on `http://localhost:8080`.
-**Arguments**: You can pass standard flags to configure the server.
+**Arguments**: You can pass standard flags to configure the SOP HTTP Server.
 ```bash
 # Specify a custom database path
 sop-cli httpserver -database ./my_data
@@ -152,7 +177,7 @@ sop-cli httpserver -clustered
 The SOP Data Manager includes a built-in **AI Assistant** that allows you to interact with your data using natural language and automate workflows using **Macros**.
 
 ### 1. Launch the Assistant
-Start the server:
+Start the SOP HTTP Server:
 ```bash
 sop-cli httpserver
 ```
@@ -162,7 +187,8 @@ Open your browser to `http://localhost:8080` and click the **AI Assistant** floa
 You can ask the assistant to perform tasks or query data:
 *   "Show me the schema for the 'users' store."
 *   "Find all records where age is greater than 30."
-*   "Explain the structure of the 'orders' B-Tree."
+*   "Join 'Users' and 'Orders' on 'UserID'."
+*   "Add a new product 'Laptop' with price 999."
 
 ### 3. Macros: Record & Replay
 Macros allow you to record a sequence of actions and replay them later. This is a "Natural Language Programming" system where the LLM compiles your intent into a high-performance script.
@@ -192,7 +218,7 @@ Execute the macro instantly. The system runs the compiled steps without invoking
 /play daily_check
 ```
 
-### 4. Passing Parameters
+### 4. Parameterized Macros (Beta)
 You can make macros dynamic by using parameters.
 *   **Record**: When recording, use specific values (e.g., "user_123").
 *   **Edit**: You can edit the macro JSON to use templates like `{{.user_id}}`.
@@ -201,7 +227,12 @@ You can make macros dynamic by using parameters.
     /play user_audit user_id=456
     ```
 
-### 5. Remote Execution
+### 5. Macros as Views & Streaming
+The SOP Data Manager supports **Streaming Results**, allowing you to use Macros as data sources (Views) in your queries.
+*   **Efficiency**: Results are streamed in real-time, enabling low-latency processing of large datasets.
+*   **Composition**: You can join a Macro's output with a B-Tree store: "Join 'Users' and 'MyMacro' on 'ID'".
+
+### 6. Remote Execution
 You can trigger these macros from your C# code via the REST API:
 
 ```csharp
@@ -259,7 +290,7 @@ If **clustered**, no worries, as SOP takes care of Redis-based coordination with
 
 ### Configuration File
 
-You can also configure the server using a JSON configuration file. This is useful for persisting settings across sessions.
+You can also configure the SOP HTTP Server using a JSON configuration file. This is useful for persisting settings across sessions.
 
 **Example `config.json`:**
 ```json
@@ -277,7 +308,7 @@ sop-cli httpserver -config ./config.json
 
 ## Production Deployment
 
-For production environments (e.g., Kubernetes, Docker, Linux Servers), you should run the standalone binary directly instead of using the `dotnet tool` wrapper.
+For production environments (e.g., Kubernetes, Docker, Linux Servers), you should run the standalone SOP HTTP Server binary directly instead of using the `dotnet tool` wrapper.
 
 1.  **Download**: Get the latest binary for your platform (Linux, Windows, macOS) from the [GitHub Releases](https://github.com/sharedcode/sop/releases) page.
 2.  **Run**: Execute the binary with your configuration.
@@ -290,7 +321,7 @@ RUN chmod +x /app/sop-httpserver
 CMD ["/app/sop-httpserver", "-database", "/data", "-port", "8080"]
 ```
 
-This ensures a minimal footprint and removes the dependency on the .NET Runtime for the server process.
+This ensures a minimal footprint and removes the dependency on the .NET Runtime for the SOP HTTP Server process.
 
 ## Generating Sample Data
 

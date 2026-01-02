@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>SOP Data Manager</title>
     <style>
         :root {
@@ -287,7 +290,7 @@
         }
         .modal-content {
             background-color: var(--bg-color);
-            padding: 20px;
+            padding: 13px 18px 12px 18px;
             border: 1px solid var(--border-color);
             width: 300px;
             border-radius: 8px;
@@ -300,6 +303,7 @@
         #add-store-modal .modal-content {
             width: 600px;
             max-width: 90%;
+            max-height: 95vh;
         }
         #store-details-modal .modal-content {
             width: 700px;
@@ -337,7 +341,7 @@
 <body>
 
 <div id="sidebar">
-    <div style="flex: 1; overflow-y: auto; padding-right: 2px;">
+    <div style="flex: 1; overflow-y: auto;">
         <div id="database-section" style="display: none; margin-bottom: 12px;">
             <h2 style="margin-bottom: 7px;">Databases</h2>
             <select id="database-select" onchange="selectDatabase(this.value)" style="width: 100%; padding: 5px;">
@@ -346,7 +350,7 @@
         </div>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
             <h2 style="margin: 0;">Stores</h2>
-            <button onclick="showAddStore()" title="Add new store" style="background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;">
+            <button id="btn-add-store" onclick="showAddStore()" title="Add new store" style="background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                     <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
                 </svg>
@@ -471,9 +475,9 @@
             <span style="cursor:pointer; font-size: 20px;" onclick="closeAddStoreModal()">&times;</span>
         </div>
         <div class="modal-body">
-            <div style="margin-bottom: 10px;">
-                <label style="display:block; margin-bottom: 5px;">Store Name:</label>
-                <input type="text" id="new-store-name" style="width: 100%; box-sizing: border-box;">
+            <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+                <label style="margin-bottom: 0; white-space: nowrap;">Store Name:</label>
+                <input type="text" id="new-store-name" style="flex: 1; box-sizing: border-box;">
             </div>
             <div id="key-type-container" style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
                 <label style="margin-bottom: 0; white-space: nowrap;">Key Type:</label>
@@ -534,10 +538,10 @@
                     <div id="index-fields-list" style="display: flex; flex-direction: column; gap: 5px;">
                         <!-- Rows injected here -->
                     </div>
-                    <button onclick="addIndexFieldRow()" style="font-size: 11px; padding: 4px 8px; margin-top: 5px; cursor: pointer;">+ Add Index Field</button>
-                </div>
-                <div style="font-size: 11px; color: var(--text-muted); margin-top: 10px;">
-                    The index specification determines how map keys are compared and sorted.
+                    <div style="display: flex; align-items: center; gap: 10px; margin-top: 5px;">
+                        <button onclick="addIndexFieldRow()" style="font-size: 11px; padding: 4px 8px; cursor: pointer;">+ Add Index Field</button>
+                        <span style="font-size: 11px; color: var(--text-muted);">Index spec. determines how map keys are compared & sorted.</span>
+                    </div>
                 </div>
             </div>
 
@@ -571,7 +575,7 @@
                     <option value="blob">Blob (Byte Array)</option>
                     <option value="map">Map (JSON Object)</option>
                 </select>
-                <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+                <label id="new-store-value-is-array-label" style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
                     <input type="checkbox" id="new-store-value-is-array" onchange="toggleValueSpec()">
                     <span>Array</span>
                 </label>
@@ -646,6 +650,18 @@
                 <label style="margin-bottom: 0; white-space: nowrap;">Description:</label>
                 <input type="text" id="new-store-description" style="flex: 1; box-sizing: border-box; padding: 5px; border: 1px solid var(--input-border); border-radius: 3px; background-color: var(--input-bg); color: var(--text-color);">
             </div>
+
+            <div id="new-store-cel-expression" style="margin-bottom: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <label style="font-weight: bold;">CEL Expression (Sorting):</label>
+                    <button onclick="openCELModal()" style="font-size: 11px; padding: 2px 8px;">Edit Expression</button>
+                </div>
+                <div id="cel-expression-preview" style="font-family: monospace; font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; padding: 5px; background: var(--pre-bg); border-radius: 3px; border: 1px solid var(--border-color); min-height: 15px;">
+                    (No expression defined - using default sorting)
+                </div>
+                <input type="hidden" id="cel-expression-value">
+            </div>
+
             <div style="margin-bottom: 10px;">
                 <label style="display:flex; align-items:center; gap: 5px; cursor: pointer;">
                     <input type="checkbox" id="new-store-advanced-mode" onchange="toggleAdvancedOptions()">
@@ -653,54 +669,56 @@
                 </label>
             </div>
             <div id="advanced-options-container" style="display: none; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; margin-bottom: 10px;">
-                <div id="new-store-cel-expression" style="margin-bottom: 10px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                        <label style="font-weight: bold;">CEL Expression (Sorting):</label>
-                        <button onclick="openCELModal()" style="font-size: 11px; padding: 2px 8px;">Edit Expression</button>
+                <!-- Combined Row: Slot Length, Data Size, Is Unique -->
+                <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                    <!-- Slot Length -->
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <label style="margin-bottom: 0; white-space: nowrap;">Slot Length:</label>
+                        <input type="number" id="new-store-slot-length" value="1000" min="2" max="10000" style="width: 80px; box-sizing: border-box;" oninput="updateSlotLengthWarning()">
                     </div>
-                    <div id="cel-expression-preview" style="font-family: monospace; font-size: 11px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; padding: 5px; background: var(--pre-bg); border-radius: 3px; border: 1px solid var(--border-color); min-height: 15px;">
-                        (No expression defined - using default sorting)
+                    
+                    <!-- Data Size -->
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <label style="margin-bottom: 0; white-space: nowrap;">Data Size:</label>
+                        <select id="new-store-data-size" onchange="toggleCacheOptions()" style="width: 80px; padding: 5px; border-radius: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                            <option value="0">Small</option>
+                            <option value="1">Medium</option>
+                            <option value="2">Big</option>
+                        </select>
                     </div>
-                    <input type="hidden" id="cel-expression-value">
-                </div>
 
-                <div style="margin-bottom: 10px;">
-                    <label style="display:block; margin-bottom: 5px;">Slot Length (Min: 2, Max: 10000):</label>
-                    <input type="number" id="new-store-slot-length" value="1000" min="2" max="10000" style="width: 100%; box-sizing: border-box;" oninput="updateSlotLengthWarning()">
-                    <div id="slot-length-warning" style="font-size: 11px; margin-top: 4px; color: #ffcc00; display: none;"></div>
-                </div>
-                <div style="margin-bottom: 5px;">
-                    <label style="display:flex; align-items:center; gap: 5px; cursor: pointer;">
+                    <!-- Is Unique -->
+                    <label style="display:flex; align-items:center; gap: 5px; cursor: pointer; margin-bottom: 0;">
                         <input type="checkbox" id="new-store-is-unique" checked>
                         <span>Is Unique</span>
                     </label>
                 </div>
-                <div style="margin-bottom: 5px;">
-                    <label style="display:flex; align-items:center; gap: 5px; cursor: pointer;">
-                        <input type="checkbox" id="new-store-value-in-node" checked onchange="toggleCacheOptions()">
-                        <span>Value Data In Node Segment</span>
-                    </label>
-                </div>
-                <div id="cache-options-container" style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 10px; display: none;">
-                    <label style="display:block; margin-bottom: 5px; font-weight: bold;">Value Data Caching:</label>
+                <div id="slot-length-warning" style="font-size: 11px; margin-top: -5px; margin-bottom: 10px; color: #ffcc00; display: none;"></div>
+
+                <div id="cache-options-container" style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                    <label style="display:block; margin-bottom: 5px; font-weight: bold;">Caching Configuration:</label>
                     <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px; font-style: italic;">
                         Note: Caching settings are most effective in Clustered mode (using Redis). In Standalone mode, cache is in-memory and lost on restart.
                     </div>
-                    <div style="margin-bottom: 10px;">
-                        <label style="display:block; margin-bottom: 5px;">Duration (minutes):</label>
-                        <input type="number" id="new-store-cache-duration" value="0" min="0" placeholder="0 (Use Default)" style="width: 100%; box-sizing: border-box;">
-                        <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Set to 0 to use SOP default (10 mins).</div>
-                    </div>
-                    <div style="margin-bottom: 5px;">
-                        <label style="display:flex; align-items:center; gap: 5px; cursor: pointer;">
+                    
+                    <!-- Combined Cache Row -->
+                    <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <label style="margin-bottom: 0; white-space: nowrap;">Duration (mins):</label>
+                            <input type="number" id="new-store-cache-duration" value="0" min="-1" placeholder="0" style="width: 80px; box-sizing: border-box;">
+                        </div>
+                        
+                        <label style="display:flex; align-items:center; gap: 5px; cursor: pointer; margin-bottom: 0;">
                             <input type="checkbox" id="new-store-cache-ttl" checked>
                             <span>Sliding Expiration (TTL)</span>
                         </label>
                     </div>
+                    <div style="font-size: 11px; color: var(--text-muted); margin-top: -5px;">Set to 0 to use SOP default (10 mins). Set to -1 to disable caching.</div>
                 </div>
             </div>
         </div>
         <div class="modal-footer">
+            <button id="btn-unlock-admin" onclick="unlockAdminFields()" style="display:none; margin-right: auto; background: #ffc107; color: black; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Unlock Admin</button>
             <button onclick="saveNewStore()" class="btn-success">Create</button>
             <button onclick="closeAddStoreModal()" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Cancel</button>
         </div>
@@ -819,12 +837,22 @@
 </div>
 
 <script>
+    window.onerror = function(message, source, lineno, colno, error) {
+        console.error("GLOBAL ERROR CAUGHT:", message, "at", source, ":", lineno, ":", colno);
+        return false; // Let default handler run
+    };
+
     let currentDatabase = null;
     let currentStore = null;
     let firstKey = null;
     let lastKey = null;
     let currentStoreInfo = null;
     let currentItemKey = null;
+    
+    // Environment Flags
+    // ALLOW_INVALID_MAP_KEY: If true, allows saving a store with Map Key type without
+    // requiring an Index Specification or CEL Expression. Controlled by SOP_ALLOW_INVALID_MAP_KEY env var.
+    const ALLOW_INVALID_MAP_KEY = {{ .AllowInvalidMapKey }};
     let currentItems = [];
     let currentKeyColumnWidth = '45%';
     let columnWidths = [];
@@ -983,6 +1011,25 @@
                 document.getElementById('db-options-content').innerHTML = '<span class="error-text">Failed to load options</span>';
                 document.getElementById('db-options-section').style.display = 'block';
             });
+    }
+
+    function isStoreReadOnly(info) {
+        if (!info) return true;
+        
+        const hasIndex = info.indexSpec && info.indexSpec.index_fields && info.indexSpec.index_fields.length > 0;
+        const hasCel = !!info.celExpression;
+        const isPrimitiveMetadata = info.isPrimitiveKey;
+        
+        let isPrimitiveData = false;
+        if (info.count > 0 && info.sampleKey !== undefined && info.sampleKey !== null) {
+             const t = typeof info.sampleKey;
+             if (t !== 'object' || Array.isArray(info.sampleKey)) {
+                 isPrimitiveData = true;
+             }
+        }
+        
+        const hasSchema = hasIndex || hasCel || isPrimitiveMetadata || isPrimitiveData;
+        return !hasSchema;
     }
 
     function selectStore(name, element, force = false) {
@@ -1202,25 +1249,7 @@
 
         // Only show Add Item for non-registry stores (Macros are too complex to add manually)
         // Determine if store has "Schema" (Add/Delete Allowed)
-        // Rules:
-        // 1. Has IndexSpec OR Has CEL
-        // 2. Is Primitive Key (Metadata)
-        // 3. Is Primitive Key (Data Inspection - for legacy stores)
-        
-        const hasIndex = info.indexSpec && info.indexSpec.index_fields && info.indexSpec.index_fields.length > 0;
-        const hasCel = !!info.celExpression;
-        const isPrimitiveMetadata = info.isPrimitiveKey;
-        
-        let isPrimitiveData = false;
-        if (info.count > 0 && info.sampleKey !== undefined && info.sampleKey !== null) {
-             const t = typeof info.sampleKey;
-             if (t !== 'object' || Array.isArray(info.sampleKey)) {
-                 isPrimitiveData = true;
-             }
-        }
-        
-        const hasSchema = hasIndex || hasCel || isPrimitiveMetadata || isPrimitiveData;
-        const isReadOnly = !hasSchema;
+        const isReadOnly = isStoreReadOnly(info);
 
         if (info.description !== "AI Models Registry" && !isReadOnly) {
             const addBtn = document.createElement('button');
@@ -1234,7 +1263,7 @@
             toolbar.appendChild(addBtn);
         } else if (isReadOnly) {
             const warning = document.createElement('span');
-            warning.textContent = "⚠️ Read-Only (No Schema)";
+            warning.textContent = "⚠️ Read-Only (No Index/CEL)";
             warning.title = "This store does not have an explicit Index Specification or CEL Expression. Adding or deleting items is disabled because the key structure is not strictly defined. Please migrate to a new store with a defined schema.";
             warning.style.marginLeft = '10px';
             warning.style.color = 'var(--warning-text)';
@@ -1283,9 +1312,7 @@
         const btn = document.getElementById('btn-bulk-delete');
         if (btn) {
             // Check if Read-Only (No Index Spec AND No CEL)
-            const isReadOnly = currentStoreInfo && !currentStoreInfo.isPrimitiveKey && 
-                                (!currentStoreInfo.indexSpec || !currentStoreInfo.indexSpec.index_fields) &&
-                                !currentStoreInfo.celExpression;
+            const isReadOnly = isStoreReadOnly(currentStoreInfo);
 
             if (showSelectionColumn && !isReadOnly) {
                 btn.style.display = 'flex';
@@ -2008,10 +2035,8 @@
         // But we should check if we need to disable Value editing for some reason?
         // No, Value updates are allowed.
         
-        // However, if the store is Read-Only (No Schema), we should disable Delete button here too.
-        const isReadOnly = currentStoreInfo && !currentStoreInfo.isPrimitiveKey && 
-                             (!currentStoreInfo.indexSpec || !currentStoreInfo.indexSpec.index_fields) &&
-                             !currentStoreInfo.celExpression;
+        // However, if the store is Read-Only (No Index Specs/CEL), we should disable Delete button here too.
+        const isReadOnly = isStoreReadOnly(currentStoreInfo);
         
         if (isReadOnly) {
             const delBtn = viewer.querySelector('.btn-danger');
@@ -2131,9 +2156,7 @@
         if (!currentStore || currentItemKey === null) return;
         
         // Check if Read-Only (No Index Spec AND No CEL)
-        if (currentStoreInfo && !currentStoreInfo.isPrimitiveKey && 
-            (!currentStoreInfo.indexSpec || !currentStoreInfo.indexSpec.index_fields) &&
-            !currentStoreInfo.celExpression) {
+        if (isStoreReadOnly(currentStoreInfo)) {
             alert("Deletion is disabled for stores without an Index Specification or CEL Expression.");
             return;
         }
@@ -2771,7 +2794,7 @@
 
     function resizeDetail(e) {
         const newWidth = window.innerWidth - e.clientX;
-        if (newWidth > 200 && newWidth < window.innerWidth - 100) {
+        if (newWidth > 200 && newWidth < (window.innerWidth * 0.5)) {
             detailPanel.style.width = newWidth + 'px';
         }
     }
@@ -4186,263 +4209,389 @@
 </div>
 
 <script>
+    /*
+     * showEditStore opens the modal to edit store metadata.
+     * 
+     * EDITING RULES:
+     * 1. Empty Store (Count == 0):
+     *    - Full structural rebuild allowed (Key/Value Type, Slot Length, etc.).
+     *    - Seed Data inputs are shown to allow initializing the store with a specific type.
+     * 
+     * 2. Non-Empty Store (Count > 0):
+     *    - Structural fields are LOCKED.
+     *    - EXCEPTION: Index Spec and CEL can be edited IF AND ONLY IF they are currently missing.
+     *    - Description and Cache Duration are always editable.
+     */
     function showEditStore() {
-        if (!currentStoreInfo) return;
-        
-        document.getElementById('add-store-modal').style.display = 'flex';
-        
-        // Clear previous state
-        document.getElementById('key-fields-list').innerHTML = '';
-        document.getElementById('index-fields-list').innerHTML = '';
-        document.getElementById('seed-key-fields-list').innerHTML = '';
-        document.getElementById('seed-value-fields-list').innerHTML = '';
-        
-        // Populate Fields
-        document.getElementById('new-store-name').value = currentStoreInfo.name;
-        document.getElementById('new-store-name').disabled = true; // Cannot rename
-        document.getElementById('new-store-description').value = currentStoreInfo.description || '';
-        
-        // Key Type Inference & Population
-        let keyType = 'string';
-        let isMap = true; // Default to Map (Schemaless)
-
-        const hasIndex = currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0;
-        const hasSample = currentStoreInfo.sampleKey !== undefined && currentStoreInfo.sampleKey !== null;
-
-        if (hasSample) {
-            // Rule 1: Data is Truth (Strongest Signal)
-            const t = typeof currentStoreInfo.sampleKey;
-            if (t !== 'object' || Array.isArray(currentStoreInfo.sampleKey)) {
-                isMap = false; // Primitive Data
-            } else {
-                isMap = true; // Map Data
-            }
-        } else {
-            // Rule 2: Metadata Inference (Empty Store)
-            if (currentStoreInfo.isPrimitiveKey) {
-                isMap = false; // Explicitly Primitive
-            } else if (hasIndex) {
-                isMap = true; // Index implies Map
-            }
-            // Note: CEL is NOT used to determine Map vs Primitive, as both can have CEL.
-            // Default remains true (Map) for ambiguous empty stores.
-        }
-        
-        if (isMap) {
-            keyType = 'map';
+        try {
+            if (!currentStoreInfo) return;
             
-            // Reconstruct Key Fields from Sample Key
-            if (currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
-                Object.keys(currentStoreInfo.sampleKey).forEach(k => {
-                    const val = currentStoreInfo.sampleKey[k];
-                    let type = 'string';
-                    const t = typeof val;
-                    if (t === 'number') {
-                        if (Number.isInteger(val)) type = 'int';
-                        else type = 'float64';
-                    } else if (t === 'boolean') {
-                        type = 'bool';
-                    }
-                    addKeyFieldRow(k, type);
-                });
+            const modal = document.getElementById('add-store-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+                const header = modal.querySelector('.modal-header span');
+                if (header) header.textContent = 'Edit Store Metadata';
             }
             
-            // Reconstruct Index Spec
-            if (currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
-                currentStoreInfo.indexSpec.index_fields.forEach(f => {
-                    addIndexFieldRow();
-                    // The last added row
-                    const rows = document.getElementById('index-fields-list').children;
-                    const lastRow = rows[rows.length - 1];
-                    const select = lastRow.querySelector('.index-field-select');
-                    const order = lastRow.querySelector('.index-field-order');
-                    
-                    select.value = f.field_name;
-                    order.value = f.ascending_sort_order ? 'asc' : 'desc';
-                });
+            // Populate fields
+            const nameInput = document.getElementById('new-store-name');
+            if (nameInput) {
+                nameInput.value = currentStoreInfo.name;
+                nameInput.disabled = true; // Name cannot be changed
             }
-        } else {
-            if (currentStoreInfo.sampleKey !== undefined && currentStoreInfo.sampleKey !== null) {
-                const t = typeof currentStoreInfo.sampleKey;
-                if (t === 'number') {
-                    if (Number.isInteger(currentStoreInfo.sampleKey)) keyType = 'int';
-                    else keyType = 'float64';
-                } else if (t === 'boolean') {
-                    keyType = 'bool';
-                }
+            
+            const descInput = document.getElementById('new-store-description');
+            if (descInput) descInput.value = currentStoreInfo.description || '';
+            
+            // Ensure count is treated as number
+            const isEmptyStore = (currentStoreInfo.count === 0);
+            console.log("showEditStore: currentStoreInfo.count=", currentStoreInfo.count, "isEmptyStore=", isEmptyStore);
+    
+            // Key Type (Read-Only unless empty)
+            const keyType = document.getElementById('new-store-key-type');
+            if (keyType) {
+                keyType.value = currentStoreInfo.keyType || 'string';
+                keyType.disabled = !isEmptyStore;
             }
-        }
-        document.getElementById('new-store-key-type').value = keyType;
-        
-        // Value Type Inference
-        let valueType = 'string';
-        let isArray = false;
-        if (currentStoreInfo.sampleValue !== undefined && currentStoreInfo.sampleValue !== null) {
-            if (Array.isArray(currentStoreInfo.sampleValue)) {
-                // Check if it's a Blob (Byte Array)
-                // We assume array of numbers within byte range (0-255) is a Blob
-                const isAllNumbers = currentStoreInfo.sampleValue.every(i => typeof i === 'number');
-                const isByteRange = isAllNumbers && currentStoreInfo.sampleValue.every(n => n >= 0 && n <= 255);
-                
-                if (isAllNumbers && isByteRange) {
-                    valueType = 'blob';
-                    isArray = false; // Blob is inherently an array
+            
+            const keyIsArray = document.getElementById('new-store-key-is-array');
+            if (keyIsArray) {
+                keyIsArray.checked = currentStoreInfo.keyIsArray || false;
+                keyIsArray.disabled = !isEmptyStore;
+            }
+            
+            // Trigger visibility and populate fields
+            if (typeof toggleIndexSpec === 'function') toggleIndexSpec();
+            
+            if (keyType && keyType.value === 'map') {
+                 if (typeof populateKeyFieldsAndIndexSpec === 'function') populateKeyFieldsAndIndexSpec(currentStoreInfo);
+                 
+                 if (!isEmptyStore) {
+                     // Default: Disable all structural fields
+                     if (typeof disableKeyAndIndexFields === 'function') disableKeyAndIndexFields();
+                 } else {
+                     // Empty Store: Enable everything
+                     const keyRows = document.querySelectorAll('.key-field-row input, .key-field-row select, .key-field-row button');
+                     keyRows.forEach(el => el.disabled = false);
+                     
+                     const indexRows = document.querySelectorAll('.index-field-row select, .index-field-row button');
+                     indexRows.forEach(el => el.disabled = false);
+                     
+                     const addKeyBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
+                     if (addKeyBtn) addKeyBtn.disabled = false;
+                     
+                     const addIndexBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
+                     if (addIndexBtn) addIndexBtn.disabled = false;
+                 }
+            }
+    
+            // Value Type (Read-Only unless empty)
+            const valType = document.getElementById('new-store-value-type');
+            if (valType) {
+                valType.value = currentStoreInfo.valueType || 'string';
+                valType.disabled = !isEmptyStore;
+            }
+            
+            const valIsArray = document.getElementById('new-store-value-is-array');
+            if (valIsArray) {
+                valIsArray.checked = currentStoreInfo.valueIsArray || false;
+                valIsArray.disabled = !isEmptyStore;
+            }
+
+            if (typeof toggleValueSpec === 'function') toggleValueSpec();
+            
+            // Other fields
+            const slotLength = document.getElementById('new-store-slot-length');
+            if (slotLength) {
+                slotLength.value = currentStoreInfo.slotLength || 1000;
+                slotLength.disabled = !isEmptyStore;
+            }
+            
+            const isUnique = document.getElementById('new-store-is-unique');
+            if (isUnique) {
+                isUnique.checked = currentStoreInfo.isUnique !== false;
+                isUnique.disabled = !isEmptyStore;
+            }
+            
+            // Infer Data Size from IsValueInNode & IsValueDataActivelyPersisted
+            // 0: Small (Value in Node)
+            // 1: Medium (Value in Segment, not actively persisted)
+            // 2: Big (Value actively persisted)
+            let dataSize = "1"; // Default to Medium
+            if (currentStoreInfo.isValueActivelyPersisted) {
+                dataSize = "2"; // Big
+            } else if (currentStoreInfo.isValueInNode) {
+                dataSize = "0"; // Small
+            }
+            const dataSizeInput = document.getElementById('new-store-data-size');
+            if (dataSizeInput) {
+                dataSizeInput.value = dataSize;
+                dataSizeInput.disabled = !isEmptyStore;
+            }
+            
+            const cacheDuration = document.getElementById('new-store-cache-duration');
+            if (cacheDuration) {
+                cacheDuration.value = currentStoreInfo.cacheDuration || 0;
+                cacheDuration.disabled = false; // Always editable
+            }
+    
+            // Infer Streaming Mode
+            let isStreaming = false;
+            if (currentStoreInfo.keyType === 'map' && currentStoreInfo.valueType === 'blob') {
+                 if (currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+                     const fields = currentStoreInfo.indexSpec.index_fields;
+                     if (fields.length > 0 && fields[fields.length-1].field_name === 'ChunkIndex') {
+                         isStreaming = true;
+                     }
+                 }
+            }
+            const streamingInput = document.getElementById('new-store-is-streaming');
+            if (streamingInput) {
+                streamingInput.checked = isStreaming;
+                streamingInput.disabled = !isEmptyStore;
+            }
+    
+            // Enable Advanced Mode to show all fields
+            const advMode = document.getElementById('new-store-advanced-mode');
+            if (advMode) advMode.checked = true;
+            if (typeof toggleAdvancedOptions === 'function') toggleAdvancedOptions();
+    
+            // Ensure cache options visibility matches current ValueInNode state
+            if (typeof toggleCacheOptions === 'function') toggleCacheOptions();
+    
+            // Show Unlock Button only if BOTH Index and CEL are missing AND store is NOT empty.
+            const unlockBtn = document.getElementById('btn-unlock-admin');
+            if (unlockBtn) {
+                let hasIndex = currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0;
+                let hasCel = currentStoreInfo.celExpression && currentStoreInfo.celExpression.trim() !== "";
+    
+                if (!isEmptyStore && !hasIndex && !hasCel && !currentStoreInfo.isPrimitiveKey) {
+                    unlockBtn.style.display = 'inline-block';
                 } else {
-                    isArray = true;
-                    if (currentStoreInfo.sampleValue.length > 0) {
-                        const item = currentStoreInfo.sampleValue[0];
-                        const t = typeof item;
-                        if (t === 'object') valueType = 'map';
-                        else if (t === 'number') {
-                             if (Number.isInteger(item)) valueType = 'int';
-                             else valueType = 'float64';
-                        } else if (t === 'boolean') valueType = 'bool';
-                    }
+                    unlockBtn.style.display = 'none';
                 }
-            } else {
-                const t = typeof currentStoreInfo.sampleValue;
-                if (t === 'object') valueType = 'map';
-                else if (t === 'number') {
-                     if (Number.isInteger(currentStoreInfo.sampleValue)) valueType = 'int';
-                     else valueType = 'float64';
-                } else if (t === 'boolean') valueType = 'bool';
-            }
-        }
-        document.getElementById('new-store-value-type').value = valueType;
-        document.getElementById('new-store-value-is-array').checked = isArray;
-        
-        // Populate Value Map Fields (Read-Only)
-        const valMapContainer = document.getElementById('value-map-spec-container');
-        const valMapList = document.getElementById('value-map-fields-list');
-        valMapList.innerHTML = '';
-        
-        if (valueType === 'map') {
-            valMapContainer.style.display = 'block';
-            let sample = currentStoreInfo.sampleValue;
-            if (isArray && Array.isArray(sample) && sample.length > 0) {
-                sample = sample[0];
             }
             
-            if (sample && typeof sample === 'object') {
-                Object.keys(sample).forEach(k => {
-                    const val = sample[k];
-                    let type = 'string';
-                    const t = typeof val;
-                    if (t === 'number') {
-                        if (Number.isInteger(val)) type = 'int';
-                        else type = 'float64';
-                    } else if (t === 'boolean') type = 'bool';
-                    
-                    const div = document.createElement('div');
-                    div.style.display = 'flex';
-                    div.style.gap = '5px';
-                    div.innerHTML = `
-                        <input type="text" value="${k}" disabled style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-muted);">
-                        <input type="text" value="${type}" disabled style="width: 80px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-muted);">
-                    `;
-                    valMapList.appendChild(div);
+            // Show Seed Data (relevant for empty store)
+            const seedContainer = document.getElementById('seed-data-container');
+            if (seedContainer) seedContainer.style.display = isEmptyStore ? 'block' : 'none';
+            if (isEmptyStore) {
+                if (typeof populateSeedDataUI === 'function') populateSeedDataUI();
+            }
+            
+            // Update Button
+            const footer = document.querySelector('#add-store-modal .modal-footer');
+            if (footer) {
+                const saveBtn = footer.querySelector('.btn-success');
+                if (saveBtn) {
+                    saveBtn.textContent = 'Update';
+                    saveBtn.onclick = updateStore;
+                }
+            }
+            
+            // Enable Description editing
+            if (descInput) descInput.disabled = false;
+    
+            // CEL is structural: editable only when Index is editable.
+            const celEditBtn = document.querySelector('#new-store-cel-expression button');
+            const hasIndexSpec = !!(currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0);
+            
+            const canEditIndex = isEmptyStore;
+    
+            if (celEditBtn) {
+                celEditBtn.disabled = !canEditIndex;
+            }
+            const celExprVal = document.getElementById('cel-expression-value');
+            if (celExprVal) celExprVal.disabled = !canEditIndex;
+    
+            // Disable Advanced Mode Toggle
+            if (advMode) advMode.disabled = true;
+            
+        } catch (e) {
+            console.error("Error in showEditStore:", e);
+            alert("Error showing store details: " + e.message);
+        }
+    }
+
+
+
+    function populateSeedDataUI() {
+        if (!currentStoreInfo) return;
+
+        // Populate Seed Key
+        const keyType = document.getElementById('new-store-key-type').value;
+        if (keyType === 'map') {
+            // Ensure forms are generated
+            updateSeedKeyForm();
+            
+            if (currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
+                const rows = document.querySelectorAll('.seed-key-field-row');
+                rows.forEach(row => {
+                    const name = row.getAttribute('data-field');
+                    if (currentStoreInfo.sampleKey[name] !== undefined) {
+                        row.querySelector('input').value = currentStoreInfo.sampleKey[name];
+                    }
                 });
             }
         } else {
-            valMapContainer.style.display = 'none';
-        }
-
-        // toggleValueSpec(); // Moved to end to override toggleSeedValueMode
-
-        // Advanced Mode
-        const hasAdvanced = (currentStoreInfo.celExpression || (currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields));
-        document.getElementById('new-store-advanced-mode').checked = hasAdvanced;
-        toggleAdvancedOptions();
-        
-        if (currentStoreInfo.celExpression) {
-            document.getElementById('cel-expression-value').value = currentStoreInfo.celExpression;
-            document.getElementById('cel-expression-preview').textContent = currentStoreInfo.celExpression;
-            document.getElementById('cel-expression-preview').style.color = 'var(--text-color)';
-        } else {
-            document.getElementById('cel-expression-value').value = '';
-            document.getElementById('cel-expression-preview').textContent = "(No expression defined - using default sorting)";
-            document.getElementById('cel-expression-preview').style.color = 'var(--text-muted)';
-        }
-
-        const footer = document.querySelector('#add-store-modal .modal-footer');
-        const saveBtn = footer.querySelector('.btn-success');
-        const seedContainer = document.getElementById('seed-data-container');
-
-        // --- EDIT MODE ---
-        document.querySelector('#add-store-modal .modal-header span').textContent = 'Edit Store Metadata';
-        
-        // Hide Seed Data (Not relevant for populated store edit)
-        seedContainer.style.display = 'none';
-        
-        // Show Update Button
-        saveBtn.style.display = 'inline-block';
-        saveBtn.textContent = 'Update';
-        saveBtn.onclick = updateStore;
-        saveBtn.disabled = true; // Disable initially
-
-        // Enable Update only if Description changes
-        const descInput = document.getElementById('new-store-description');
-        const originalDesc = currentStoreInfo.description || '';
-        descInput.oninput = function() {
-            if (this.value !== originalDesc) {
-                saveBtn.disabled = false;
-            } else {
-                saveBtn.disabled = true;
+            if (currentStoreInfo.sampleKey !== undefined) {
+                 document.getElementById('new-store-seed-key').value = currentStoreInfo.sampleKey;
             }
-        };
-        
-        // Ensure UI state is correct before disabling
-        toggleIndexSpec();
-        toggleValueSpec();
-
-        // If advanced mode is ON, we should show the container but disable inputs inside
-        if (hasAdvanced) {
-             document.getElementById('advanced-options-container').style.display = 'block';
-        } else {
-             document.getElementById('advanced-options-container').style.display = 'none';
         }
-        
-        // --- DISABLE EVERYTHING EXCEPT DESCRIPTION ---
-        
-        // Enable Description Only
-        document.getElementById('new-store-description').disabled = false;
-        
-        // Disable Structural Fields
-        document.getElementById('new-store-key-type').disabled = true;
-        document.getElementById('new-store-key-is-array').disabled = true;
-        document.getElementById('new-store-advanced-mode').disabled = true; 
-        
-        // Disable Map Key Fields inputs if they exist
-        const keyRows = document.querySelectorAll('.key-field-row input, .key-field-row select, .key-field-row button');
-        keyRows.forEach(el => el.disabled = true);
-        
-        // Disable Index Spec inputs if they exist
-        const indexRows = document.querySelectorAll('.index-field-row select, .index-field-row button');
-        indexRows.forEach(el => el.disabled = true);
 
-        // Disable "Add Field" and "Add Index" buttons
-        const addKeyFieldBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
-        if (addKeyFieldBtn) addKeyFieldBtn.disabled = true;
-        
-        const addIndexFieldBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
-        if (addIndexFieldBtn) addIndexFieldBtn.disabled = true;
-        
-        // Disable Value Type Dropdown
-        document.getElementById('new-store-value-type').disabled = true;
-        document.getElementById('new-store-value-is-array').disabled = true;
+        // Populate Seed Value
+        const valType = document.getElementById('new-store-value-type').value;
+        if (valType === 'map') {
+            document.getElementById('seed-value-fields-list').innerHTML = '';
+            if (currentStoreInfo.sampleValue && typeof currentStoreInfo.sampleValue === 'object') {
+                Object.keys(currentStoreInfo.sampleValue).forEach(k => {
+                    const val = currentStoreInfo.sampleValue[k];
+                    let type = 'string';
+                    const t = typeof val;
+                    if (t === 'number') {
+                         if (Number.isInteger(val)) type = 'int';
+                         if (!Number.isInteger(val)) type = 'float64';
+                    } 
+                    if (t === 'boolean') type = 'bool';
+                    
+                    addSeedValueFieldRow(k, type, val);
+                });
+            }
+        } else {
+            if (currentStoreInfo.sampleValue !== undefined) {
+                let val = currentStoreInfo.sampleValue;
+                if (valType === 'blob' && Array.isArray(val)) {
+                    if (typeof val === 'object') val = JSON.stringify(val);
+                }
+                document.getElementById('new-store-seed-value-simple').value = val;
+            }
+        }
+    }
 
-        // Disable Streaming Checkbox
-        document.getElementById('new-store-is-streaming').disabled = true;
-        
-        // Disable Advanced Options
-        const celEditBtn = document.querySelector('#new-store-cel-expression button');
-        if (celEditBtn) celEditBtn.style.display = 'none';
-        
-        document.getElementById('new-store-slot-length').disabled = true;
-        document.getElementById('new-store-is-unique').disabled = true;
-        document.getElementById('new-store-value-in-node').disabled = true;
-        document.getElementById('new-store-cache-duration').disabled = true;
-        document.getElementById('new-store-cache-ttl').disabled = true;
+    function unlockAdminFields() {
+        try {
+            console.log("unlockAdminFields called");
+            const token = prompt("Enter Admin Token to unlock structural fields:");
+            if (!token) return;
+            
+            window.currentAdminToken = token;
+    
+            const isEmptyStore = currentStoreInfo && currentStoreInfo.count === 0;
+    
+            // --- Key/Value Structure (Only editable if empty) ---
+            if (isEmptyStore) {
+                const keyType = document.getElementById('new-store-key-type');
+                if (keyType) keyType.disabled = false;
+                
+                const keyIsArray = document.getElementById('new-store-key-is-array');
+                if (keyIsArray) keyIsArray.disabled = false;
+                
+                // Enable Key Field inputs (for Map keys)
+                const keyRows = document.querySelectorAll('.key-field-row input, .key-field-row select, .key-field-row button');
+                keyRows.forEach(el => el.disabled = false);
+    
+                // Enable "Add Key Field" button
+                const addKeyFieldBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
+                if (addKeyFieldBtn) addKeyFieldBtn.disabled = false;
+    
+                const valType = document.getElementById('new-store-value-type');
+                if (valType) valType.disabled = false;
+                
+                const valIsArray = document.getElementById('new-store-value-is-array');
+                if (valIsArray) valIsArray.disabled = false;
+    
+                // Enable Value Map Fields
+                const valRows = document.querySelectorAll('.value-field-row input, .value-field-row select, .value-field-row button');
+                valRows.forEach(el => el.disabled = false);
+                
+                // Add "Add Field" button for Value Map if not exists
+                const valMapContainer = document.getElementById('value-map-spec-container');
+                if (valMapContainer) {
+                    let addValBtn = valMapContainer.querySelector('button.add-val-btn');
+                    if (!addValBtn) {
+                        addValBtn = document.createElement('button');
+                        addValBtn.className = 'add-val-btn';
+                        addValBtn.textContent = '+ Add Field';
+                        addValBtn.onclick = () => addValueFieldRow();
+                        addValBtn.style.marginTop = '5px';
+                        addValBtn.style.padding = '4px 8px';
+                        addValBtn.style.cursor = 'pointer';
+                        valMapContainer.appendChild(addValBtn);
+                    }
+                    addValBtn.disabled = false;
+                }
+    
+                // Show Seed Data Container for Empty Store
+                const seedContainer = document.getElementById('seed-data-container');
+                if (seedContainer) seedContainer.style.display = 'block';
+                
+                // Ensure Seed Key form is populated and correct inputs are shown
+                if (typeof updateSeedKeyForm === 'function') updateSeedKeyForm();
+                if (typeof toggleIndexSpec === 'function') toggleIndexSpec();
+                if (typeof populateSeedDataUI === 'function') populateSeedDataUI();
+            }
+    
+            // --- Index & CEL (Always editable when unlocked) ---
+    
+            // Enable Advanced Mode Toggle
+            console.log("Unlocking: advanced-mode");
+            // document.getElementById('new-store-advanced-mode').disabled = false;
+            
+            // Advanced Options: Structural vs Config
+            // Slot Length, Is Unique, Value In Node are Structural -> STRICTLY LOCKED ALWAYS
+            console.log("Unlocking: slot-length");
+            // document.getElementById('new-store-slot-length').disabled = true;
+            console.log("Unlocking: is-unique");
+            // document.getElementById('new-store-is-unique').disabled = true;
+            console.log("Unlocking: data-size");
+            // document.getElementById('new-store-data-size').disabled = true;
+            console.log("Unlocking: is-streaming");
+            // document.getElementById('new-store-is-streaming').disabled = !isEmptyStore;
+            
+            // Cache Duration is Config -> Always Unlocked
+            console.log("Unlocking: cache-duration");
+            // document.getElementById('new-store-cache-duration').disabled = false;
+            if (typeof toggleCacheOptions === 'function') toggleCacheOptions();
+    
+            
+            // Enable Index Spec inputs
+            const indexRows = document.querySelectorAll('.index-field-row select, .index-field-row button');
+            indexRows.forEach(el => el.disabled = false);
+    
+            // Enable "Add Index" button
+            const addIndexFieldBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
+            if (addIndexFieldBtn) addIndexFieldBtn.disabled = false;
+            
+            // CEL is structural: editable only when Index is editable.
+            const hasIndexSpec = !!(currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0);
+            const canEditIndex = isEmptyStore || !hasIndexSpec;
+    
+            const celEditBtn = document.querySelector('#new-store-cel-expression button');
+            if (celEditBtn) {
+                celEditBtn.style.display = 'inline-block';
+                celEditBtn.disabled = !canEditIndex;
+            }
+            const celExprVal = document.getElementById('cel-expression-value');
+            if (celExprVal) celExprVal.disabled = !canEditIndex;
+            
+            // Hide the unlock button
+            const unlockBtn = document.getElementById('btn-unlock-admin');
+            if (unlockBtn) unlockBtn.style.display = 'none';
+            
+            // Enable Update button
+            const saveBtn = document.querySelector('#add-store-modal .modal-footer .btn-success');
+            if (saveBtn) saveBtn.disabled = false;
+            
+            if (isEmptyStore) {
+                 // alert("Admin fields unlocked. You can now modify Key/Value definitions, Index Specs, CEL Expressions and Cache Duration.");
+            } else {
+                 // alert("Admin fields unlocked. You can now modify Index Specs, CEL Expressions and Cache Duration. Key/Value structure remains locked for non-empty stores.");
+            }
+            
+        } catch (e) {
+            console.error("Error in unlockAdminFields:", e);
+            alert("Error unlocking: " + e.message);
+        }
     }
 
     function showStoreDetails() {
@@ -4456,20 +4605,108 @@
     }
     */
 
+    function isEqual(a, b) {
+        return false;
+    }
+
     function updateStore() {
         const name = document.getElementById('new-store-name').value.trim();
         const desc = document.getElementById('new-store-description').value.trim();
+        const celExpression = document.getElementById('cel-expression-value').value;
         
+        const type = document.getElementById('new-store-key-type').value;
+        let indexSpec = null;
+        if (type === 'map') {
+            indexSpec = generateIndexSpecJSON();
+        }
+
+        let slotLength = parseInt(document.getElementById('new-store-slot-length').value);
+        if (isNaN(slotLength)) slotLength = 1000;
+        
+        const isUnique = document.getElementById('new-store-is-unique').checked;
+        const dataSize = parseInt(document.getElementById('new-store-data-size').value);
+        
+        let cacheDuration = parseInt(document.getElementById('new-store-cache-duration').value);
+        if (isNaN(cacheDuration)) cacheDuration = 0;
+        let isCacheTTL = document.getElementById('new-store-cache-ttl').checked;
+
+        // If Data Size is Small (0) or Big (2), cache settings are not applicable/hidden.
+        if (dataSize !== 1) {
+            cacheDuration = 0;
+            isCacheTTL = false;
+        }
+
+        // Seed Data (Only if visible/empty)
+        let seedKey = null;
+        let seedValue = null;
+        const seedContainer = document.getElementById('seed-data-container');
+        
+        if (seedContainer.style.display !== 'none') {
+             // Reuse logic from saveNewStore (simplified duplication for now)
+             if (type === 'map') {
+                const rows = document.querySelectorAll('.seed-key-field-row');
+                if (rows.length > 0) {
+                    seedKey = {};
+                    rows.forEach(row => {
+                        const name = row.getAttribute('data-name') || row.getAttribute('data-field');
+                        const valStr = row.querySelector('.seed-key-field-value').value;
+                        const typeDefRow = Array.from(document.querySelectorAll('.key-field-row')).find(r => r.querySelector('.key-field-name').value.trim() === name);
+                        const fieldType = typeDefRow ? typeDefRow.querySelector('.key-field-type').value : 'string';
+                        let val = valStr;
+                        if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(fieldType)) {
+                            val = parseInt(valStr); if (isNaN(val)) val = 0;
+                        } else if (['float32', 'float64', 'decimal'].includes(fieldType)) {
+                            val = parseFloat(valStr); if (isNaN(val)) val = 0.0;
+                        } else if (fieldType === 'bool') {
+                            val = (valStr.toLowerCase() === 'true' || valStr === '1');
+                        }
+                        seedKey[name] = val;
+                    });
+                }
+             } else {
+                 const seedKeyStr = document.getElementById('new-store-seed-key').value.trim();
+                 if (seedKeyStr) {
+                     seedKey = seedKeyStr;
+                     // Parse based on selected Key Type to ensure backend receives correct type
+                     if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(type)) {
+                         const n = parseInt(seedKeyStr);
+                         if (!isNaN(n)) seedKey = n;
+                     } else if (['float32', 'float64', 'decimal'].includes(type)) {
+                         const n = parseFloat(seedKeyStr);
+                         if (!isNaN(n)) seedKey = n;
+                     } else if (type === 'bool') {
+                         seedKey = (seedKeyStr.toLowerCase() === 'true' || seedKeyStr === '1');
+                     }
+                 }
+             }
+             
+             try {
+                seedValue = generateSeedValueJSON();
+             } catch (e) {
+                alert(e.message);
+                return;
+             }
+        }
+
         const payload = {
             database: currentDatabase,
             storeName: name,
             description: desc,
-            // Send current values for validation
-            celExpression: currentStoreInfo.celExpression,
-            keyType: currentStoreInfo.isPrimitiveKey ? "primitive" : "map"
+            keyType: type,
+            valueType: document.getElementById('new-store-value-type').value,
+            celExpression: celExpression,
+            indexSpec: indexSpec,
+            slotLength: slotLength,
+            isUnique: isUnique,
+            dataSize: dataSize,
+            cacheDuration: cacheDuration,
+            isCacheTTL: isCacheTTL,
+            seedKey: seedKey,
+            seedValue: seedValue,
+            adminToken: window.currentAdminToken || ""
         };
 
-        fetch(`/api/store/update?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`, {
+        fetch('/api/store/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -4477,30 +4714,67 @@
         .then(async res => {
             if (!res.ok) {
                 const text = await res.text();
+                if (text.includes("Cannot update") && text.includes("structure") && !window.currentAdminToken) {
+                    const token = prompt("Structural changes detected. Please enter Admin Token to override:");
+                    if (token) {
+                        window.currentAdminToken = token;
+                        payload.adminToken = token;
+                        return fetch('/api/store/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        }).then(async res2 => {
+                            if (!res2.ok) {
+                                const text2 = await res2.text();
+                                throw new Error(text2 || res2.statusText);
+                            }
+                            return res2.json();
+                        });
+                    }
+                }
                 throw new Error(text || res.statusText);
             }
-            closeAddStoreModal();
-            selectStore(name, document.querySelector('#sidebar li.active'), true); // Refresh
-            alert("Store updated successfully.");
+            return res.json();
         })
-        .catch(err => alert("Error: " + err));
+        .then(data => {
+            closeAddStoreModal();
+            // Refresh store info
+            selectDatabase(currentDatabase, true, name);
+            if (data && data.warning) {
+                alert('Store updated successfully.\n\nWARNING: ' + data.warning);
+            } else {
+                alert('Store updated successfully.');
+            }
+        })
+        .catch(err => {
+            alert("Error updating store: " + err.message);
+        });
     }
 
     function showAddStore() {
+        currentStoreInfo = null; 
+        window.currentAdminToken = null;
+
         document.getElementById('add-store-modal').style.display = 'flex';
         document.querySelector('#add-store-modal .modal-header span').textContent = 'Add New Store';
+
+        // Reset Button
+        const footer = document.querySelector('#add-store-modal .modal-footer');
+        const saveBtn = footer.querySelector('.btn-success');
+        saveBtn.textContent = 'Add';
+        saveBtn.onclick = saveNewStore;
+        saveBtn.disabled = false;
+
+        // Reset Basic Fields
         document.getElementById('new-store-name').value = '';
         document.getElementById('new-store-name').disabled = false;
-        
-        // Clear previous state
-        document.getElementById('key-fields-list').innerHTML = '';
-        document.getElementById('index-fields-list').innerHTML = '';
-        document.getElementById('seed-key-fields-list').innerHTML = '';
-        document.getElementById('seed-value-fields-list').innerHTML = '';
-        
         document.getElementById('new-store-description').value = '';
+        document.getElementById('new-store-description').disabled = false;
+
+        // Reset Key Type
         document.getElementById('new-store-key-type').value = 'string';
         document.getElementById('new-store-key-type').disabled = false;
+        document.getElementById('new-store-key-is-array').checked = false;
         document.getElementById('new-store-key-is-array').disabled = false;
         
         // Reset Value Type
@@ -4508,85 +4782,126 @@
         document.getElementById('new-store-value-type').disabled = false;
         document.getElementById('new-store-value-is-array').checked = false;
         document.getElementById('new-store-value-is-array').disabled = false;
-        
-        // Hide Read-Only Value Map Spec
-        document.getElementById('value-map-spec-container').style.display = 'none';
 
-        // Re-enable "Add Field" and "Add Index" buttons
-        const addKeyFieldBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
-        if (addKeyFieldBtn) addKeyFieldBtn.disabled = false;
-        
-        const addIndexFieldBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
-        if (addIndexFieldBtn) addIndexFieldBtn.disabled = false;
-
-        // Re-enable Streaming Checkbox
-        document.getElementById('new-store-is-streaming').disabled = false;
-        document.getElementById('new-store-is-streaming').checked = false;
-
-        // Reset Advanced Mode & CEL
-        document.getElementById('new-store-advanced-mode').checked = false;
-        toggleAdvancedOptions();
+        // Reset CEL
         document.getElementById('cel-expression-value').value = '';
-        document.getElementById('cel-expression-preview').textContent = "(No expression defined - using default sorting)";
-        document.getElementById('cel-expression-preview').style.color = 'var(--text-muted)';
+        document.getElementById('cel-expression-value').disabled = false;
+        const celEditBtn = document.querySelector('#new-store-cel-expression button');
+        if (celEditBtn) celEditBtn.disabled = false;
 
-        // Reset Other Options
-        document.getElementById('new-store-slot-length').value = 100;
-        document.getElementById('new-store-is-unique').checked = true;
-        document.getElementById('new-store-value-in-node').checked = true;
-        document.getElementById('new-store-cache-duration').value = 0;
-        document.getElementById('new-store-cache-ttl').checked = true;
-        // document.getElementById('new-store-is-streaming').checked = false; // Removed
-
-        // Ensure Seed Data Container is visible
-        document.getElementById('seed-data-container').style.display = 'block';
-        
-        // Enable all inputs (reset from Edit mode)
-        document.getElementById('new-store-description').disabled = false;
-        document.getElementById('new-store-key-type').disabled = false;
-        document.getElementById('new-store-key-is-array').disabled = false;
+        // Reset Advanced Mode
+        document.getElementById('new-store-advanced-mode').checked = false;
         document.getElementById('new-store-advanced-mode').disabled = false;
-        document.getElementById('new-store-slot-length').disabled = false;
-        document.getElementById('new-store-is-unique').disabled = false;
-        document.getElementById('new-store-value-in-node').disabled = false;
-        
-        // Reset Seed Data
-        document.getElementById('new-store-seed-key').value = '';
-        document.getElementById('new-store-seed-value').value = '';
-        document.getElementById('seed-value-fields-list').innerHTML = '';
-        document.getElementById('seed-key-fields-list').innerHTML = ''; // Reset Map Key fields
-        addSeedValueFieldRow(); // Add one empty row
-        document.getElementById('seed-value-raw-mode').checked = false;
-        toggleSeedValueMode();
-        
-        toggleIndexSpec();
-        toggleValueSpec();
-        
-        // Reset Save Button
-        const footer = document.querySelector('#add-store-modal .modal-footer');
-        const saveBtn = footer.querySelector('.btn-success');
-        saveBtn.style.display = 'inline-block';
-        saveBtn.textContent = 'Create';
-        saveBtn.onclick = saveNewStore;
-        saveBtn.disabled = false; // Always enabled for new store
+        toggleAdvancedOptions();
 
-        // Clear Edit Mode listener
-        document.getElementById('new-store-description').oninput = null;
+        // Reset Advanced Fields
+        document.getElementById('new-store-slot-length').value = 1000;
+        document.getElementById('new-store-slot-length').disabled = false;
+        document.getElementById('new-store-is-unique').checked = true;
+        document.getElementById('new-store-is-unique').disabled = false;
+        document.getElementById('new-store-data-size').value = "0"; // Small
+        document.getElementById('new-store-data-size').disabled = false;
+        
+        document.getElementById('new-store-cache-duration').value = 0;
+        document.getElementById('new-store-cache-duration').disabled = false;
+        document.getElementById('new-store-is-streaming').checked = false;
+        document.getElementById('new-store-is-streaming').disabled = false;
+        
+        toggleCacheOptions();
+
+        // Clear Dynamic Lists
+        document.getElementById('key-fields-list').innerHTML = '';
+        document.getElementById('index-fields-list').innerHTML = '';
+        document.getElementById('value-map-fields-list').innerHTML = '';
+        document.getElementById('seed-key-fields-list').innerHTML = '';
+        document.getElementById('seed-value-fields-list').innerHTML = '';
+
+        // Reset Seed Data Inputs
+        document.getElementById('new-store-seed-key').value = '';
+        document.getElementById('new-store-seed-value-simple').value = '';
+        document.getElementById('seed-data-container').style.display = 'block'; // Always show for new store
+
+        // Reset UI State
+        toggleIndexSpec();
+        
+        // Re-enable Add Buttons (in case they were disabled by Edit Store)
+        const addKeyBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
+        if (addKeyBtn) addKeyBtn.disabled = false;
+        
+        const addIndexBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
+        if (addIndexBtn) addIndexBtn.disabled = false;
+        
+        // Hide Unlock Button
+        const unlockBtn = document.getElementById('btn-unlock-admin');
+        if (unlockBtn) unlockBtn.style.display = 'none';
+
+        // Sync UI with reset values
+        if (typeof toggleIndexSpec === 'function') toggleIndexSpec();
+        if (typeof toggleValueSpec === 'function') toggleValueSpec();
     }
 
     function closeAddStoreModal() {
         document.getElementById('add-store-modal').style.display = 'none';
+        window.currentAdminToken = null;
+        const unlockBtn = document.getElementById('btn-unlock-admin');
+        if (unlockBtn) unlockBtn.style.display = 'none';
+    }
+
+    function addValueFieldRow(name = '', type = 'string', value = '') {
+        const container = document.getElementById('value-map-fields-list');
+        const div = document.createElement('div');
+        div.className = 'value-field-row';
+        div.style.display = 'flex';
+        div.style.gap = '5px';
+        div.innerHTML = `
+            <input type="text" placeholder="Field Name" class="value-field-name" value="${name}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <select class="value-field-type" style="width: 100px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                <option value="string" ${type==='string'?'selected':''}>String</option>
+                <option value="int" ${type==='int'?'selected':''}>Int</option>
+                <option value="float64" ${type==='float64'?'selected':''}>Float64</option>
+                <option value="bool" ${type==='bool'?'selected':''}>Bool</option>
+            </select>
+            <input type="text" placeholder="Value" class="value-field-value" value="${value}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <button onclick="this.parentElement.remove();" style="background:var(--danger-bg); color:white; border:none; padding: 4px 8px; cursor:pointer;">×</button>
+        `;
+        container.appendChild(div);
+    }
+
+    // Updates the visibility of the "Is Array" checkbox based on the selected type.
+    // Blob and Map types cannot be arrays, so we hide the checkbox.
+    function updateArrayCheckboxVisibility(type, checkboxId) {
+        const checkbox = document.getElementById(checkboxId);
+        // Try to find the label container by ID convention first
+        let container = document.getElementById(checkboxId + '-label');
+        
+        // Fallback to parentElement if no specific container found
+        if (!container && checkbox) {
+            container = checkbox.parentElement;
+        }
+
+        if (container) {
+            if (type === 'blob' || type === 'map') {
+                if (checkbox) checkbox.checked = false;
+                container.style.display = 'none';
+            } else {
+                container.style.display = 'flex';
+            }
+        }
     }
 
     function toggleIndexSpec() {
         const type = document.getElementById('new-store-key-type').value;
+        updateArrayCheckboxVisibility(type, 'new-store-key-is-array');
+
         const container = document.getElementById('index-spec-container');
+        const celContainer = document.getElementById('new-store-cel-expression');
         
         const simpleKeyInput = document.getElementById('new-store-seed-key');
         const mapKeyContainer = document.getElementById('new-store-seed-key-map-container');
 
         if (type === 'map') {
             container.style.display = 'block';
+            if (celContainer) celContainer.style.display = 'block';
             simpleKeyInput.style.display = 'none';
             mapKeyContainer.style.display = 'block';
 
@@ -4597,6 +4912,7 @@
             updateSeedKeyForm();
         } else {
             container.style.display = 'none';
+            if (celContainer) celContainer.style.display = 'none';
             simpleKeyInput.style.display = 'block';
             mapKeyContainer.style.display = 'none';
         }
@@ -4650,7 +4966,7 @@
     }
 
     function moveFieldRow(btn, direction) {
-        const row = btn.closest('.key-field-row, .seed-value-field-row');
+        const row = btn.closest('.key-field-row, .seed-value-field-row, .index-field-row');
         const container = row.parentElement;
         if (direction === -1) {
             if (row.previousElementSibling) {
@@ -4674,7 +4990,7 @@
         
         const currentValues = {};
         container.querySelectorAll('.seed-key-field-row').forEach(row => {
-            const name = row.getAttribute('data-name');
+            const name = row.getAttribute('data-field');
             const val = row.querySelector('input').value;
             if (name) currentValues[name] = val;
         });
@@ -4692,7 +5008,8 @@
 
             const div = document.createElement('div');
             div.className = 'seed-key-field-row';
-            div.setAttribute('data-name', name);
+            div.setAttribute('data-field', name);
+            div.setAttribute('data-type', type);
             div.style.display = 'flex';
             div.style.alignItems = 'center';
             div.style.gap = '5px';
@@ -4707,7 +5024,7 @@
         });
     }
 
-    function addIndexFieldRow() {
+    function addIndexFieldRow(fieldName = '', order = 'asc') {
         const container = document.getElementById('index-fields-list');
         const div = document.createElement('div');
         div.className = 'index-field-row';
@@ -4718,13 +5035,76 @@
                 <!-- Populated by updateIndexDropdowns -->
             </select>
             <select class="index-field-order" style="width: 80px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
-                <option value="asc">Asc</option>
-                <option value="desc">Desc</option>
+                <option value="asc" ${order==='asc'?'selected':''}>Asc</option>
+                <option value="desc" ${order==='desc'?'selected':''}>Desc</option>
             </select>
-            <button onclick="this.parentElement.remove()" style="color:red; cursor:pointer; background:none; border:none;">&times;</button>
+            <div style="display:flex; gap:0; align-items:center; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg);">
+                <button onclick="moveFieldRow(this, -1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px;" title="Move Up">↑</button>
+                <button onclick="moveFieldRow(this, 1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px; border-left: 1px solid var(--input-border);" title="Move Down">↓</button>
+                <button onclick="this.closest('.index-field-row').remove()" style="color:red; cursor:pointer; background:none; border:none; padding: 2px 6px; border-left: 1px solid var(--input-border);">&times;</button>
+            </div>
         `;
         container.appendChild(div);
-        updateIndexDropdowns(div.querySelector('.index-field-select'));
+        const select = div.querySelector('.index-field-select');
+        updateIndexDropdowns(select);
+        if (fieldName) {
+            select.value = fieldName;
+        }
+    }
+
+    function populateKeyFieldsAndIndexSpec(info) {
+        // 1. Populate Key Fields (Definition)
+        const keyList = document.getElementById('key-fields-list');
+        keyList.innerHTML = '';
+        
+        let fieldsFound = false;
+        
+        if (info.sampleKey && typeof info.sampleKey === 'object') {
+            Object.keys(info.sampleKey).forEach(k => {
+                const val = info.sampleKey[k];
+                let type = 'string';
+                const t = typeof val;
+                if (t === 'number') {
+                     if (Number.isInteger(val)) type = 'int';
+                     else type = 'float64';
+                } else if (t === 'boolean') type = 'bool';
+                
+                addKeyFieldRow(k, type);
+            });
+            fieldsFound = true;
+        }
+        
+        // Fallback to Index Spec if sample key is missing
+        if (!fieldsFound && info.indexSpec && info.indexSpec.index_fields) {
+            info.indexSpec.index_fields.forEach(f => {
+                addKeyFieldRow(f.field_name, 'string');
+            });
+        }
+
+        // 2. Populate Index Spec
+        const indexList = document.getElementById('index-fields-list');
+        indexList.innerHTML = '';
+        
+        if (info.indexSpec && info.indexSpec.index_fields) {
+            info.indexSpec.index_fields.forEach(f => {
+                addIndexFieldRow(f.field_name, f.ascending_sort_order ? 'asc' : 'desc');
+            });
+        }
+    }
+
+    function disableKeyAndIndexFields() {
+        const keyRows = document.querySelectorAll('.key-field-row input, .key-field-row select, .key-field-row button');
+        keyRows.forEach(el => el.disabled = true);
+        
+        const indexRows = document.querySelectorAll('.index-field-row select, .index-field-row button');
+        indexRows.forEach(el => el.disabled = true);
+        
+        // Disable Add buttons
+        const addKeyBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
+        if (addKeyBtn) addKeyBtn.disabled = true;
+        
+        const addIndexBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
+        if (addIndexBtn) addIndexBtn.disabled = true;
     }
 
     function updateIndexDropdowns(targetSelect = null) {
@@ -4802,9 +5182,23 @@
     }
 
     function toggleCacheOptions() {
-        const inNode = document.getElementById('new-store-value-in-node').checked;
+        const dataSize = document.getElementById('new-store-data-size').value;
         const container = document.getElementById('cache-options-container');
-        container.style.display = inNode ? 'none' : 'block';
+        
+        // Data Size: 0=Small, 1=Medium, 2=Big
+        // Small (0): Value in Node -> No Cache Config needed (implicit)
+        // Medium (1): Value separate -> Cache Config allowed
+        // Big (2): Value separate + Persisted -> No Cache Config (typically)
+        
+        if (dataSize === "1") { // Medium
+            container.style.display = 'block';
+        } else {
+            container.style.display = 'none';
+            // Reset values if hidden? Or keep them?
+            // If hidden, user can't edit.
+            // For Big (2), we might want to force disable cache.
+            // For Small (0), cache is irrelevant.
+        }
     }
 
     function toggleSeedHelp() {
@@ -4829,6 +5223,7 @@
         const keyTypeSelect = document.getElementById('new-store-key-type');
         const valueTypeSelect = document.getElementById('new-store-value-type');
         const valueInNode = document.getElementById('new-store-value-in-node');
+        const dataSizeSelect = document.getElementById('new-store-data-size');
         
         if (isStreaming) {
             // 1. Force Key Type to Map
@@ -4874,9 +5269,17 @@
             valueTypeSelect.value = 'blob';
             toggleValueSpec(); 
 
-            // 5. Disable Value In Node
-            valueInNode.checked = false;
-            valueInNode.disabled = true;
+            // 5. Auto-set Data Size to Big
+            if (dataSizeSelect) {
+                dataSizeSelect.value = "2"; // Big
+                toggleCacheOptions();
+            }
+            
+            if (typeof toggleIndexSpec === 'function') toggleIndexSpec();
+            if (typeof toggleValueSpec === 'function') toggleValueSpec();
+
+            // 6. Disable Value In Node (Handled by Data Size now)
+            // if (valueInNode) { valueInNode.checked = false; valueInNode.disabled = true; }
             
             // 6. Update Seed Data Values
             setTimeout(() => {
@@ -4885,7 +5288,7 @@
                     const name = row.getAttribute('data-name');
                     const input = row.querySelector('input');
                     if (name === 'ChunkIndex') input.value = '0';
-                    else if (name === 'Key' && !input.value) input.value = 'sample_id';
+                    if (name === 'Key' && !input.value) input.value = 'sample_id';
                 });
             }, 0);
             
@@ -5057,6 +5460,7 @@
 
     function toggleValueSpec() {
         const valType = document.getElementById('new-store-value-type').value;
+        updateArrayCheckboxVisibility(valType, 'new-store-value-is-array');
         
         const simpleInput = document.getElementById('new-store-seed-value-simple');
         const builder = document.getElementById('seed-value-builder');
@@ -5091,8 +5495,21 @@
         const desc = document.getElementById('new-store-description').value.trim();
         
         let indexSpec = "";
+        const celExpression = document.getElementById('cel-expression-value').value;
+
         if (type === 'map') {
             indexSpec = generateIndexSpecJSON();
+            
+            // Validation: Map Key must have Index OR CEL, unless bypassed via env var
+            if (!ALLOW_INVALID_MAP_KEY) {
+                const hasIndex = indexSpec && indexSpec !== "";
+                const hasCEL = celExpression && celExpression.trim() !== "";
+                
+                if (!hasIndex && !hasCEL) {
+                    alert("Map Key type requires an Index Specification OR a CEL Expression.");
+                    return;
+                }
+            }
         }
 
         const advancedMode = document.getElementById('new-store-advanced-mode').checked;
@@ -5101,9 +5518,17 @@
         if (slotLength > 10000) slotLength = 10000;
 
         const isUnique = document.getElementById('new-store-is-unique').checked;
-        const valueInNode = document.getElementById('new-store-value-in-node').checked;
-        const cacheDuration = parseInt(document.getElementById('new-store-cache-duration').value);
-        const isCacheTTL = document.getElementById('new-store-cache-ttl').checked;
+        const dataSize = parseInt(document.getElementById('new-store-data-size').value);
+        let cacheDuration = parseInt(document.getElementById('new-store-cache-duration').value);
+        if (isNaN(cacheDuration)) cacheDuration = 0;
+        let isCacheTTL = document.getElementById('new-store-cache-ttl').checked;
+        // celExpression already retrieved above
+
+        // If Data Size is Small (0) or Big (2), cache settings are not applicable/hidden.
+        if (dataSize !== 1) {
+            cacheDuration = 0;
+            isCacheTTL = false;
+        }
 
         if (!name) {
             alert("Store name is required");
@@ -5120,7 +5545,7 @@
             if (rows.length > 0) {
                 seedKey = {};
                 rows.forEach(row => {
-                    const name = row.getAttribute('data-name');
+                    const name = row.getAttribute('data-name') || row.getAttribute('data-field');
                     const valStr = row.querySelector('.seed-key-field-value').value;
                     
                     // Find type definition
@@ -5277,19 +5702,21 @@
         const payload = {
             database: currentDatabase,
             store: name,
-            key_type: type,
-            value_type: document.getElementById('new-store-value-type').value,
             description: desc,
+            key_type: type,
+            keyIsArray: document.getElementById('new-store-key-is-array').checked,
+            value_type: document.getElementById('new-store-value-type').value,
+            valueIsArray: document.getElementById('new-store-value-is-array').checked,
             index_spec: indexSpec,
-            advanced_mode: advancedMode,
+            cel_expression: celExpression,
             slot_length: slotLength,
             is_unique: isUnique,
-            is_value_data_in_node_segment: valueInNode,
+            data_size: dataSize,
             cache_duration: cacheDuration,
             is_cache_ttl: isCacheTTL,
-            cel_expression: document.getElementById('cel-expression-value').value,
             seed_key: seedKey,
-            seed_value: seedValue
+            seed_value: seedValue,
+            adminToken: window.currentAdminToken || ""
         };
 
         fetch('/api/store/add', {
@@ -5330,7 +5757,89 @@
 
         if (isNewStore) {
             input.value = document.getElementById('cel-expression-value').value;
-            helpText.style.display = 'none';
+            
+            // Generate Help Content for New Store
+            let helpContent = '';
+            let generatedExpr = null;
+            
+            // 1. Try to generate from UI Index Spec
+            const indexRows = document.querySelectorAll('.index-field-row');
+            if (indexRows.length > 0) {
+                const fields = [];
+                indexRows.forEach(row => {
+                    const field = row.querySelector('.index-field-select').value;
+                    const order = row.querySelector('.index-field-order').value;
+                    if (field) {
+                        fields.push({
+                            field_name: field,
+                            ascending_sort_order: order === 'asc'
+                        });
+                    }
+                });
+
+                if (fields.length > 0) {
+                    // Recursive function to build the ternary chain
+                    function buildExpr(index) {
+                        if (index >= fields.length) return "0";
+                        
+                        const f = fields[index];
+                        const name = f.field_name;
+                        const isAsc = f.ascending_sort_order;
+                        
+                        const lessVal = isAsc ? "-1" : "1";
+                        const greaterVal = isAsc ? "1" : "-1";
+                        
+                        return `mapX['${name}'] < mapY['${name}'] ? ${lessVal} : mapX['${name}'] > mapY['${name}'] ? ${greaterVal} : (${buildExpr(index + 1)})`;
+                    }
+                    
+                    generatedExpr = buildExpr(0);
+                }
+            }
+
+            // 2. Generate Help Text based on Key Fields
+            const keyRows = document.querySelectorAll('.key-field-row');
+            const keyFields = [];
+            keyRows.forEach(row => {
+                const name = row.querySelector('.key-field-name').value.trim();
+                if (name) keyFields.push(name);
+            });
+
+            if (keyFields.length > 0) {
+                helpContent += `<div style="margin-bottom:5px;"><strong>Available Fields (mapX/mapY):</strong> ${keyFields.map(f => `<code>${f}</code>`).join(', ')}</div>`;
+                
+                if (generatedExpr) {
+                    helpContent += `
+                        <div style="margin-bottom:10px;">
+                            <strong>Generated from Index Spec:</strong>
+                            <div style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 2px;">Equivalent CEL for current index configuration:</div>
+                            <code style="display:block; padding:5px; background:var(--input-bg); border:1px solid var(--border-color); margin-top:3px; cursor:pointer; user-select:all; white-space: pre-wrap;" 
+                                onclick="document.getElementById('cel-expression-input').value = this.innerText">${generatedExpr}</code>
+                        </div>
+                        <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
+                    `;
+                } else {
+                    const fieldName = keyFields[0];
+                    const sampleExpr = `mapX['${fieldName}'] < mapY['${fieldName}'] ? -1 : mapX['${fieldName}'] > mapY['${fieldName}'] ? 1 : 0`;
+                    
+                    helpContent += `
+                        <div><strong>Sample Expression (Click to use):</strong></div>
+                        <code style="display:block; padding:5px; background:var(--input-bg); border:1px solid var(--border-color); margin-top:3px; cursor:pointer; user-select:all;" 
+                              onclick="document.getElementById('cel-expression-input').value = this.innerText">${sampleExpr}</code>
+                    `;
+                }
+            } else {
+                 if (!helpContent) {
+                     helpContent = '<div>Define Key Fields or Index Spec to see suggestions.</div>';
+                 }
+            }
+
+            if (helpContent) {
+                helpText.innerHTML = helpContent;
+                helpText.style.display = 'block';
+            } else {
+                helpText.style.display = 'none';
+            }
+
             modal.style.display = 'flex';
             return;
         }
@@ -5446,12 +5955,40 @@
         .then(async res => {
             if (!res.ok) {
                 const text = await res.text();
+                if (text.includes("Cannot update") && text.includes("structure")) {
+                    const token = prompt("Structural changes detected. Please enter Admin Token to override:");
+                    if (token) {
+                        return fetch('/api/store/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                database: currentDatabase,
+                                storeName: currentStore,
+                                celExpression: celExpr,
+                                adminToken: token
+                            })
+                        }).then(async res2 => {
+                            if (!res2.ok) {
+                                const text2 = await res2.text();
+                                throw new Error(text2 || res2.statusText);
+                            }
+                            return res2.json();
+                        });
+                    }
+                }
                 throw new Error(text || res.statusText);
             }
+            return res.json(); // Expect JSON now
+        })
+        .then(data => {
             closeCELModal();
             // Refresh store info
             currentStoreInfo.celExpression = celExpr;
-            alert('CEL Expression updated successfully.');
+            if (data && data.warning) {
+                alert('CEL Expression updated successfully.\n\nWARNING: ' + data.warning);
+            } else {
+                alert('CEL Expression updated successfully.');
+            }
         })
         .catch(err => {
             alert("Error updating CEL Expression: " + err);
@@ -5537,6 +6074,13 @@
         // Global Escape Key Handler for Modals
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
+                // CEL Modal (Check first as it can be on top of Add Store)
+                const celModal = document.getElementById('cel-modal');
+                if (celModal && celModal.style.display === 'flex') {
+                    closeCELModal();
+                    return;
+                }
+
                 // Add Store Modal
                 const addStoreModal = document.getElementById('add-store-modal');
                 if (addStoreModal && addStoreModal.style.display === 'flex') {
@@ -5548,13 +6092,6 @@
                 const codeModal = document.getElementById('code-modal');
                 if (codeModal && codeModal.style.display === 'flex') {
                     codeModal.style.display = 'none';
-                    return;
-                }
-
-                // CEL Modal
-                const celModal = document.getElementById('cel-modal');
-                if (celModal && celModal.style.display === 'flex') {
-                    closeCELModal();
                     return;
                 }
 

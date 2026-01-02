@@ -25,6 +25,8 @@ SOP features a unique optimization for handling large data (e.g., media files, G
 | `IsValueDataGloballyCached` | `bool` | Caches the Value in Redis. | `true` for read-heavy workloads. `false` for write-heavy or very large data. |
 | `LeafLoadBalancing` | `bool` | Checks siblings for space before splitting a node. | `false` (default). Set to `true` to save space at the cost of insert latency. |
 | `BlobStoreBaseFolderPath` | `string` | Base path for the filesystem blob store. | Required for `infs` / `incfs`. |
+| `CELexpression` | `string` | CEL expression used for custom key comparison/sorting. | Optional. |
+| `MapKeyIndexSpecification` | `string` | JSON specification for compound indexes on Map keys. | Optional. |
 
 ## Performance Tuning
 
