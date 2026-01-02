@@ -133,6 +133,7 @@ func main() {
 	http.HandleFunc("/api/store/add", handleAddStore)
 	http.HandleFunc("/api/store/delete", handleDeleteStore)
 	http.HandleFunc("/api/store/item/delete", handleDeleteItem)
+	http.HandleFunc("/api/admin/validate", handleValidateAdminToken)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
 
 	// Initialize Agents
@@ -1928,6 +1929,34 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 	}
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func handleValidateAdminToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		AdminToken string `json:"adminToken"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if config.RootPassword == "" {
+		// If no root password set, we can't validate (fail closed)
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	if req.AdminToken != config.RootPassword {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }

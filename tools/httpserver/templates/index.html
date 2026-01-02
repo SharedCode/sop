@@ -4359,13 +4359,11 @@
             // Ensure cache options visibility matches current ValueInNode state
             if (typeof toggleCacheOptions === 'function') toggleCacheOptions();
     
-            // Show Unlock Button only if BOTH Index and CEL are missing AND store is NOT empty.
+            // Show Unlock Button for non-empty stores to allow Admin override for Index/CEL
             const unlockBtn = document.getElementById('btn-unlock-admin');
             if (unlockBtn) {
-                let hasIndex = currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0;
-                let hasCel = currentStoreInfo.celExpression && currentStoreInfo.celExpression.trim() !== "";
-    
-                if (!isEmptyStore && !hasIndex && !hasCel && !currentStoreInfo.isPrimitiveKey) {
+                // We allow Admin override for any non-empty store that uses Map keys (Index/CEL supported)
+                if (!isEmptyStore && !currentStoreInfo.isPrimitiveKey) {
                     unlockBtn.style.display = 'inline-block';
                 } else {
                     unlockBtn.style.display = 'none';
@@ -4474,9 +4472,38 @@
             const token = prompt("Enter Admin Token to unlock structural fields:");
             if (!token) return;
             
-            window.currentAdminToken = token;
-    
+            // Validate Token
+            fetch('/api/admin/validate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adminToken: token })
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error("Invalid Admin Token");
+                }
+                return res.json();
+            })
+            .then(data => {
+                window.currentAdminToken = token;
+                proceedUnlock();
+            })
+            .catch(err => {
+                alert("Error: " + err.message);
+            });
+        } catch (e) {
+            console.error("Error in unlockAdminFields:", e);
+            alert("Error unlocking: " + e.message);
+        }
+    }
+
+    function proceedUnlock() {
+        try {
             const isEmptyStore = currentStoreInfo && currentStoreInfo.count === 0;
+
+            if (!isEmptyStore) {
+                 alert("WARNING: You are about to modify the schema (Index/CEL) of a non-empty store.\n\nThis is an advanced operation. Ensure you understand the implications on existing data.");
+            }
     
             // --- Key/Value Structure (Only editable if empty) ---
             if (isEmptyStore) {
@@ -4564,8 +4591,9 @@
             
             // CEL is structural: editable only when Index is editable.
             const hasIndexSpec = !!(currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0);
-            const canEditIndex = isEmptyStore || !hasIndexSpec;
-    
+            // Since we have Admin Token (we are in unlockAdminFields), we allow editing Index/CEL even if they exist.
+            const canEditIndex = true;
+
             const celEditBtn = document.querySelector('#new-store-cel-expression button');
             if (celEditBtn) {
                 celEditBtn.style.display = 'inline-block';
@@ -4582,14 +4610,8 @@
             const saveBtn = document.querySelector('#add-store-modal .modal-footer .btn-success');
             if (saveBtn) saveBtn.disabled = false;
             
-            if (isEmptyStore) {
-                 // alert("Admin fields unlocked. You can now modify Key/Value definitions, Index Specs, CEL Expressions and Cache Duration.");
-            } else {
-                 // alert("Admin fields unlocked. You can now modify Index Specs, CEL Expressions and Cache Duration. Key/Value structure remains locked for non-empty stores.");
-            }
-            
         } catch (e) {
-            console.error("Error in unlockAdminFields:", e);
+            console.error("Error in proceedUnlock:", e);
             alert("Error unlocking: " + e.message);
         }
     }
