@@ -159,8 +159,8 @@ go run ./tools/httpserver -config config.json
 The Web UI allows administrators to perform advanced maintenance tasks, such as updating the **Index Specification** and/or **CEL Expression** of an existing store. These are structural changes that can affect data retrieval and sorting.
 
 *   **Protection**: These operations are protected and require the `RootPassword` (configured via JSON or `SOP_ROOT_PASSWORD` env var).
-*   **Workflow**: If you attempt to save a structural change, the UI will prompt you for the Admin Token.
-*   **Warning**: Upon success, a warning is displayed reminding you to ensure the new metadata accurately reflects the store's data "ordering" characteristics.
+*   **Workflow**: Structural fields are disabled by default for non-empty stores. Click the **Unlock** button (lock icon), enter the Admin Token, and upon validation, the fields become editable.
+*   **Warning**: A warning is displayed immediately after validation to remind you that modifying the schema of a populated store is an advanced operation that may impact existing data ordering.
 
 ### Important Note on Concurrency
 
