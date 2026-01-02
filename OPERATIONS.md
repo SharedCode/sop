@@ -93,5 +93,6 @@ Access the UI at `http://localhost:8080`.
 *   **Rich Search**: Search by key prefix or complex multi-field queries (if using `IndexSpecification`).
 *   **JSON Editor**: View and edit complex value objects as formatted JSON.
 *   **Bulk Friendly**: Pagination and efficient loading for large datasets.
+*   **Safe Schema Updates**: Admins can securely unlock and modify Index/CEL expressions on live stores.
 
 For more details, see the [SOP Data Manager Documentation](tools/httpserver/README.md).
