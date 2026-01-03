@@ -460,7 +460,12 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 	}
 
 	if !dbFound && toolName != "list_databases" && toolName != "list_macros" && toolName != "get_macro_details" {
-		return "", fmt.Errorf("database not found or not selected")
+		// Debugging
+		var keys []string
+		for k := range a.databases {
+			keys = append(keys, k)
+		}
+		return "", fmt.Errorf("database not found or not selected (DataAdmin). Requested: '%s', Available: %v", dbName, keys)
 	}
 
 	// Execute specific tool

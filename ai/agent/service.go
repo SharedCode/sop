@@ -174,6 +174,9 @@ func (s *Service) getMacroDB() *database.Database {
 
 // evaluateInputPolicy checks the input against the domain's policies.
 func (s *Service) evaluateInputPolicy(ctx context.Context, input string) error {
+	if s.domain == nil {
+		return nil
+	}
 	if pol := s.domain.Policies(); pol != nil {
 		classifier := s.domain.Classifier()
 		if classifier != nil {
@@ -200,6 +203,10 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 	// 1. Policy Check (Input)
 	if err := s.evaluateInputPolicy(ctx, query); err != nil {
 		return nil, err
+	}
+
+	if s.domain == nil {
+		return nil, nil
 	}
 
 	// 2. Embed
@@ -545,6 +552,35 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 				}
 			}
 		}
+	} else if p := ai.GetSessionPayload(ctx); p != nil {
+		// Payload already exists in context, respect it.
+		// Ensure db is set if needed.
+		if db == nil && p.CurrentDB != "" {
+			if opts, ok := s.databases[p.CurrentDB]; ok {
+				db = database.NewDatabase(opts)
+			}
+		}
+	} else {
+		// If no payload provided, create a default one from session state
+		p := &ai.SessionPayload{
+			CurrentDB: s.session.CurrentDB,
+		}
+		if s.session.Transaction != nil {
+			p.Transaction = s.session.Transaction
+			p.Variables = s.session.Variables
+			p.ExplicitTransaction = true
+		}
+		// If Transactions map is needed, we might need to store it in session too?
+		// Currently RunnerSession doesn't seem to have Transactions map.
+		// But for single-DB transaction it works.
+		ctx = context.WithValue(ctx, "session_payload", p)
+
+		// Set db if available
+		if db == nil && p.CurrentDB != "" {
+			if opts, ok := s.databases[p.CurrentDB]; ok {
+				db = database.NewDatabase(opts)
+			}
+		}
 	}
 
 	// Inject MacroRecorder into context
@@ -604,7 +640,10 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 
 	// 2. Construct Prompt
 	contextText := s.formatContext(hits)
-	systemPrompt, _ := s.domain.Prompt(ctx, "system")
+	var systemPrompt string
+	if s.domain != nil {
+		systemPrompt, _ = s.domain.Prompt(ctx, "system")
+	}
 
 	// If obfuscation is enabled, we should obfuscate the context too.
 	// This ensures that if the vector store returns real names, they are hidden from the LLM.

@@ -8,6 +8,5 @@ use (
 	./incfs
 	./infs
 	./jsondb
-	./restapi
 	./search
 )

@@ -19,9 +19,6 @@ echo "Running JSONDB Tests..."
 echo "Running Bindings Tests..."
 (cd bindings/main && go test ./...)
 
-echo "Running REST API Tests..."
-(cd restapi && go test ./...)
-
 echo "Running INFS Tests..."
 (cd infs && go test ./...)
 

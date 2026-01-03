@@ -1,6 +1,8 @@
 {
     "port": 8080,
     "pageSize": 40,
+    "enable_rest_auth": false,
+    "root_password": "",
     "databases": [
         {
             "name": "Python Complex DB",

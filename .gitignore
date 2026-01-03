@@ -207,9 +207,55 @@ ai/doctor_pipeline/
 ai/data/sop_ai_config.json
 ai/data/doctor_data.json
 ai/data/nurse_data.json
+data/
+storelist.txt
+translogs/
+tools/httpserver/system_db/
+tools/httpserver/storelist.txt
+tools/httpserver/translogs/
+search/test_search_*/
+bindings/**/data/
+bindings/**/sop_data_*/
+jsondb/data/
+ai/nurse_local/
+ai/doctor_core/
+ai/storelist.txt
+ai/nurse_output.txt
 
 # Generated Shared Libraries and Headers
 libjsondb.h
 libjsondb.dylib
 libjsondb.so
 libjsondb.dll
+
+# Python
+.venv/
+dist/
+build/
+*.egg-info/
+__pycache__/
+bindings/python/complex_key_demo_db/
+bindings/python/metadata_key_demo_db/
+bindings/python/sop/examples/large_complex_key_db/
+
+# Java
+bindings/java/target/
+bindings/java/test_btree_*/
+
+# Rust
+bindings/rust/target/
+
+# Generated Binaries
+*.dylib
+*.so
+*.dll
+*.a
+httpserver
+httpserver_test
+main
+server
+sop_server
+tools/httpserver/httpserver
+tools/httpserver/sop_server
+# Generated Headers
+bindings/**/libjsondb*.h

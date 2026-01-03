@@ -82,7 +82,12 @@ func (a *DataAdminAgent) toolListStores(ctx context.Context, args map[string]any
 	}
 
 	if db == nil {
-		return "", fmt.Errorf("database not found or not selected")
+		// Debugging
+		var keys []string
+		for k := range a.databases {
+			keys = append(keys, k)
+		}
+		return "", fmt.Errorf("database not found or not selected. Requested: '%s', Available: %v", dbName, keys)
 	}
 
 	// Need transaction

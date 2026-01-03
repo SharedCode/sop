@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 
 	log "log/slog"
 
@@ -30,6 +29,20 @@ type RunnerSession struct {
 	LastInteractionSteps int
 	// LastInteractionToolCalls buffers the tool calls from the last interaction for refactoring.
 	LastInteractionToolCalls []ai.MacroStep
+
+	// PendingRefinement holds the proposed changes for a macro from /macro refine
+	PendingRefinement *RefinementProposal
+}
+
+// RefinementProposal holds the proposed changes for a macro.
+type RefinementProposal struct {
+	MacroName     string
+	Category      string
+	OriginalMacro ai.Macro
+	NewMacro      ai.Macro
+	Description   string   // The new summary description
+	NewParams     []string // List of new parameters
+	Replacements  []string // Human readable list of replacements
 }
 
 // NewRunnerSession creates a new runner session.
@@ -215,7 +228,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		}
 		name := parts[0]
 		category := "general"
-		args := make(map[string]string)
+		var rawArgs []string
 
 		for i := 1; i < len(parts); i++ {
 			arg := parts[i]
@@ -224,10 +237,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 				i++
 				continue
 			}
-			kv := strings.SplitN(arg, "=", 2)
-			if len(kv) == 2 {
-				args[kv[0]] = kv[1]
-			}
+			rawArgs = append(rawArgs, arg)
 		}
 
 		macroDB := s.getMacroDB()
@@ -253,86 +263,60 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		}
 		tx.Commit(ctx)
 
-		var sb strings.Builder
-		// sb.WriteString(fmt.Sprintf("Playing macro '%s'...\n", name))
+		// Process arguments (Named and Positional)
+		args := make(map[string]string)
 
+		// First pass: Extract named arguments
+		var positionalArgs []string
+		for _, arg := range rawArgs {
+			kv := strings.SplitN(arg, "=", 2)
+			if len(kv) == 2 {
+				args[kv[0]] = kv[1]
+			} else {
+				positionalArgs = append(positionalArgs, arg)
+			}
+		}
+
+		// Second pass: Map positional arguments to macro parameters
+		for i, val := range positionalArgs {
+			if i < len(macro.Parameters) {
+				paramName := macro.Parameters[i]
+				// Only set if not already set by named arg (Named takes precedence? Or Positional? Usually Named overrides)
+				// But here, let's say if you provide both, Named wins.
+				if _, exists := args[paramName]; !exists {
+					args[paramName] = val
+				}
+			}
+		}
+
+		// Validation: Check if all parameters are satisfied
+		var missingParams []string
+		for _, param := range macro.Parameters {
+			if _, ok := args[param]; !ok {
+				missingParams = append(missingParams, param)
+			}
+		}
+		if len(missingParams) > 0 {
+			return fmt.Sprintf("Error: Missing required parameters: %v", missingParams), true, nil
+		}
+
+		var sb strings.Builder
 		// Convert args to map[string]any
 		scope := make(map[string]any)
 		for k, v := range args {
 			scope[k] = v
 		}
-		var scopeMu sync.RWMutex
 
-		// Handle Database Switching for Macro
-		var macroCtx context.Context = ctx
-
-		// Initialize streamer for structured output
-		streamer := NewJSONStreamer(&sb)
-		sb.WriteString("[\n") // Start JSON array
-		macroCtx = context.WithValue(macroCtx, CtxKeyJSONStreamer, streamer)
-
-		if macro.Database != "" && !macro.Portable {
-			// Resolve Database from Service Options
-			if opts, ok := s.databases[macro.Database]; ok {
-				targetDB := database.NewDatabase(opts)
-
-				// Update Payload in Context
-				if p := ai.GetSessionPayload(ctx); p != nil {
-					newPayload := *p
-					newPayload.CurrentDB = macro.Database
-					newPayload.Transaction = nil // Ensure Open starts a new one
-					macroCtx = context.WithValue(macroCtx, "session_payload", &newPayload)
-
-					// Update local db var for executeMacro
-					db = targetDB
-				}
-			} else {
-				return fmt.Sprintf("Error: Macro '%s' requires database '%s' which is not configured.", name, macro.Database), true, nil
-			}
+		// Use the shared PlayMacro function
+		if err := s.PlayMacro(ctx, name, category, scope, &sb); err != nil {
+			// The error is already logged to sb/streamer if possible, but PlayMacro returns error too.
+			// We append the error message if not already there?
+			// PlayMacro writes error to writer.
+			// But handleSessionCommand expects (string, bool, error).
+			// If PlayMacro fails, the output is in sb.
+			return sb.String(), true, nil
 		}
 
-		// Lifecycle Management for Macro Execution
-		if err := s.Open(macroCtx); err != nil {
-			return fmt.Sprintf("Error initializing session: %v", err), true, nil
-		}
-		// Ensure we close the session (commit transaction)
-		defer func() {
-			if err := s.Close(macroCtx); err != nil {
-				sb.WriteString(fmt.Sprintf("\nError closing session: %v", err))
-			}
-			// Safety: If the macro left a transaction open (Explicitly), rollback it now.
-			// This prevents state leakage between top-level macro runs.
-			if s.session.Transaction != nil {
-				if tx, ok := s.session.Transaction.(sop.Transaction); ok {
-					_ = tx.Rollback(macroCtx)
-				}
-				s.session.Transaction = nil
-				s.session.Variables = nil
-				sb.WriteString("\nWarning: Uncommitted transaction was automatically rolled back for safety.")
-			}
-		}()
-
-		if err := s.executeMacro(macroCtx, &macro, scope, &scopeMu, &sb, db); err != nil {
-			errMsg := fmt.Sprintf("Error executing macro: %v", err)
-
-			// Also add to streamer
-			streamer.Write(StepExecutionResult{
-				Type:  "error",
-				Error: errMsg,
-			})
-
-			// If error, we might want to rollback.
-			// Currently Close() commits.
-			// We should probably rollback here if we can access the transaction.
-			if p := ai.GetSessionPayload(macroCtx); p != nil && p.Transaction != nil {
-				if tx, ok := p.Transaction.(sop.Transaction); ok {
-					tx.Rollback(macroCtx)
-					p.Transaction = nil // Prevent Close from committing
-				}
-			}
-		}
-
-		sb.WriteString("\n]") // End JSON array
 		return sb.String(), true, nil
 	}
 
@@ -443,6 +427,9 @@ func (s *Service) handleMacroCommand(ctx context.Context, query string) (string,
 	case "list":
 		return s.macroList(ctx, macroDB, args)
 
+	case "create":
+		return s.macroCreate(ctx, macroDB, args)
+
 	case "show":
 		return s.macroShow(ctx, macroDB, args)
 
@@ -455,7 +442,16 @@ func (s *Service) handleMacroCommand(ctx context.Context, query string) (string,
 	case "step":
 		return s.macroStep(ctx, macroDB, args)
 
+	case "parameters":
+		return s.macroParameters(ctx, macroDB, args)
+
+	case "parameterize":
+		return s.macroParameterize(ctx, macroDB, args)
+
+	case "refine":
+		return s.macroRefine(ctx, macroDB, args)
+
 	default:
-		return "Unknown macro command. Usage: /macro <list|show|delete|step> ...", nil
+		return "Unknown macro command. Usage: /macro <list|create|show|delete|step|parameters|parameterize|refine> ...", nil
 	}
 }

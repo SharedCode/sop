@@ -80,7 +80,8 @@ func (db *Database) StoresFolders() []string {
 
 // BeginTransaction starts a new transaction.
 func (db *Database) BeginTransaction(ctx context.Context, mode sop.TransactionMode, maxTime ...time.Duration) (sop.Transaction, error) {
-	return database.BeginTransaction(ctx, db.config, mode, maxTime...)
+	tx, err := database.BeginTransaction(ctx, db.config, mode, maxTime...)
+	return tx, err
 }
 
 // Config returns the database configuration.
@@ -106,6 +107,16 @@ func (db *Database) OpenBtree(ctx context.Context, name string, t sop.Transactio
 		}
 	}
 	return database.OpenBtree[string, any](ctx, db.config, name, t, nil)
+}
+
+// NewBtree creates a new B-Tree store with string keys and any values.
+func (db *Database) NewBtree(ctx context.Context, name string, t sop.Transaction) (btree.BtreeInterface[string, any], error) {
+	if db.StoragePath() != "" {
+		if err := os.MkdirAll(db.StoragePath(), 0755); err != nil {
+			return nil, err
+		}
+	}
+	return database.NewBtree[string, any](ctx, db.config, name, t, nil)
 }
 
 // OpenBtreeCursor opens a cursor wrapper for a given Btree. It opens it if it is not yet.

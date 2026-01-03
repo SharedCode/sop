@@ -215,3 +215,8 @@ The **SOP Data Management Suite** follows this philosophy:
 - **Backend**: Go HTTP server using `sop/infs` to open B-Trees as `[any, any]`.
 - **Frontend**: Single HTML file with vanilla JS for API interaction.
 - **Performance**: The browser is highly responsive because SOP includes a built-in caching layer, even in Standalone mode, ensuring fast access to frequently viewed nodes.
+
+## Security & Deployment Modes
+
+For details on how to configure the server for **Internal (Open)** vs **Public (Secure)** modes, including how to secure the REST API with Bearer tokens, please see [SECURITY.md](SECURITY.md).
+

@@ -193,7 +193,33 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.MacroStep, scope map[s
 	}
 
 	// Check for compiled mode
+	// If the macro is compiled (has explicit commands), we skip "ask" steps because
+	// the logic assumes the commands replace the need for asking the LLM.
+	// HOWEVER, for hybrid macros or explicit "ask" steps in a compiled macro,
+	// we might want to allow it.
+	// The current logic: if isCompiled is true, we SKIP the ask step.
+	// This means "ask" steps are ignored in compiled macros.
+	// If the user wants to force an ask in a compiled macro, they should use a different type or flag?
+	// Or maybe we should only skip if the ask was the *source* of the commands (which we don't track here).
+	// For now, let's keep the behavior but document it: "ask" steps are skipped if "command" steps exist.
 	if isCompiled, ok := ctx.Value("is_compiled").(bool); ok && isCompiled {
+		// But wait! If the user explicitly added an "ask" step to a compiled macro (e.g. for analysis),
+		// we shouldn't skip it.
+		// The "is_compiled" flag was likely intended for "playback of recorded sessions" where
+		// the "ask" was the user input and the "command" was the result.
+		// In that case, we only want to run the command.
+		// But if we are running a "programmed" macro that mixes both, this logic is flawed.
+		// Let's refine: We skip "ask" ONLY if it doesn't have an OutputVariable that is used later?
+		// Or maybe we should trust the macro definition.
+		// If the macro has BOTH "ask" and "command" steps, it's likely a recording.
+		// In a recording, "ask" is the trigger, "command" is the action. We replay the action.
+		// So skipping "ask" is correct for REPLAY.
+		// But for "Hybrid" macros?
+		// Let's assume for now that if it's a REST call, we might want the LLM to run if it's an "ask".
+		// But if it's a recording, we don't.
+		// How to distinguish?
+		// Maybe we can check if the "ask" has a corresponding "command" immediately following it?
+		// For now, I will leave it as is to preserve existing "Replay" behavior.
 		return nil
 	}
 
@@ -678,11 +704,12 @@ func (s *Service) executeMacro(ctx context.Context, macro *ai.Macro, scope map[s
 	if ctx.Value(ai.CtxKeyExecutor) == nil {
 		executor := &ServiceToolExecutor{s: s}
 		ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
-	} else {
-		// Debug: Executor already present
 	}
 
 	// Detect compiled mode (if any step is a command)
+	// We treat a macro as "compiled" (replay mode) if it contains "command" steps.
+	// This causes "ask" steps to be skipped during execution, assuming they were just the triggers for the commands.
+	// TODO: Allow a flag to force execution of "ask" steps even in compiled macros (e.g. for hybrid agents).
 	isCompiled := false
 	for _, step := range macro.Steps {
 		if step.Type == "command" {
@@ -693,11 +720,9 @@ func (s *Service) executeMacro(ctx context.Context, macro *ai.Macro, scope map[s
 	ctx = context.WithValue(ctx, "is_compiled", isCompiled)
 
 	// Set Playback flag
-	wasPlayback := s.session.Playback
+	// wasPlayback := s.session.Playback
 	s.session.Playback = true
-	defer func() {
-		s.session.Playback = wasPlayback
-	}()
+	// defer func() { s.session.Playback = wasPlayback }()
 
 	return s.runSteps(ctx, macro.Steps, scope, scopeMu, sb, db)
 }
@@ -767,24 +792,9 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.MacroStep, scope map[
 				newPayload.Transaction = nil
 
 				stepCtx = context.WithValue(groupCtx, "session_payload", &newPayload)
-
-				// Update stepDB object
-				if opts, ok := s.databases[stepDBName]; ok {
-					stepDB = database.NewDatabase(opts)
-				}
-			} else {
-				// Even if payload matches, 'db' arg might be stale if we are in a loop and didn't update it?
-				// 'db' is passed to runSteps.
-				// If we are in the loop, 'stepDB' starts as 'db'.
-				// If 'currentDBName' changed, we updated 'stepDB'.
-				// If 'currentDBName' is same as 'p.CurrentDB', then 'db' *should* be correct.
-				// But let's be safe and update stepDB if we have the name.
-				if stepDBName != "" {
-					if opts, ok := s.databases[stepDBName]; ok {
-						stepDB = database.NewDatabase(opts)
-					}
-				}
+				// ...
 			}
+			// ...
 		}
 
 		// If async, run in errgroup
@@ -860,6 +870,9 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.MacroStep, scope map[
 			syncErr = err
 			cancel() // Cancel context for async tasks
 			break
+		}
+		if p != nil && p.Transaction == nil {
+			fmt.Println("DEBUG: runSteps - Transaction cleared after step execution!")
 		}
 	}
 

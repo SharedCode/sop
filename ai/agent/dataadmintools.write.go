@@ -307,6 +307,8 @@ func (a *DataAdminAgent) toolUpdate(ctx context.Context, args map[string]any) (s
 		if err := tx.Commit(ctx); err != nil {
 			return "", fmt.Errorf("failed to commit update transaction: %w", err)
 		}
+	} else {
+		fmt.Printf("DEBUG: toolAdd finishing. localTx=false. HasBegun=%v\n", tx.HasBegun())
 	}
 
 	return fmt.Sprintf("Item updated in store '%s'", storeName), nil
@@ -475,7 +477,8 @@ func (a *DataAdminAgent) toolManageTransaction(ctx context.Context, args map[str
 		}
 		// Legacy check
 		if p.Transaction != nil && (dbName == "" || dbName == p.CurrentDB) {
-			return "Transaction already active", nil
+			p.ExplicitTransaction = true
+			return "Transaction already active (promoted to explicit)", nil
 		}
 
 		if db == nil {

@@ -1,0 +1,37 @@
+.git
+.venv
+.vscode
+.idea
+node_modules
+dist
+build
+*.egg-info
+__pycache__
+data
+tools/httpserver/data_browser
+tools/httpserver/sop-browser
+*.so
+*.dylib
+*.dll
+*.a
+*.test
+*.out
+*.log
+bindings/python/.venv
+bindings/rust/target
+
+# Generated Binaries
+httpserver
+httpserver_test
+main
+server
+sop_server
+tools/httpserver/httpserver
+tools/httpserver/sop_server
+
+# Generated Data
+translogs/
+storelist.txt
+ai/data/
+ai/nurse_output.txt
+ai/storelist.txt

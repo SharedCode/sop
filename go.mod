@@ -42,6 +42,4 @@ replace github.com/sharedcode/sop/adapters/redis => ./adapters/redis
 
 replace github.com/sharedcode/sop/jsondb => ./jsondb
 
-replace github.com/sharedcode/sop/restapi => ./restapi
-
 replace github.com/sharedcode/sop/infs => ./infs

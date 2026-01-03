@@ -41,11 +41,12 @@ type DatabaseConfig struct {
 
 // Config holds the server configuration
 type Config struct {
-	Port         int              `json:"port"`
-	Databases    []DatabaseConfig `json:"databases"`
-	PageSize     int              `json:"pageSize"`
-	SystemDB     *DatabaseConfig  `json:"system_db,omitempty"`
-	RootPassword string           `json:"root_password,omitempty"`
+	Port           int              `json:"port"`
+	Databases      []DatabaseConfig `json:"databases"`
+	PageSize       int              `json:"pageSize"`
+	SystemDB       *DatabaseConfig  `json:"system_db,omitempty"`
+	RootPassword   string           `json:"root_password,omitempty"`
+	EnableRestAuth bool             `json:"enable_rest_auth,omitempty"`
 
 	// Legacy/CLI fields
 	DatabasePath string
@@ -78,6 +79,7 @@ func main() {
 	flag.StringVar(&config.ConfigFile, "config", "", "Path to configuration file (optional)")
 	flag.StringVar(&config.RedisURL, "redis", "localhost:6379", "Redis URL for clustered mode (e.g. localhost:6379)")
 	flag.IntVar(&config.PageSize, "pageSize", 40, "Number of items to display per page")
+	flag.BoolVar(&config.EnableRestAuth, "enable-rest-auth", false, "Enable Bearer token authentication for REST endpoints")
 	flag.Parse()
 
 	if showVersion {
@@ -95,6 +97,9 @@ func main() {
 	// Override RootPassword from environment variable if set (Security best practice)
 	if envPass := os.Getenv("SOP_ROOT_PASSWORD"); envPass != "" {
 		config.RootPassword = envPass
+	}
+	if os.Getenv("SOP_ENABLE_REST_AUTH") == "true" {
+		config.EnableRestAuth = true
 	}
 
 	// If no databases loaded (e.g. no config file or empty), use CLI flags as default
@@ -135,6 +140,7 @@ func main() {
 	http.HandleFunc("/api/store/item/delete", handleDeleteItem)
 	http.HandleFunc("/api/admin/validate", handleValidateAdminToken)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
+	http.HandleFunc("/api/macros/execute", withAuth(handleExecuteMacro))
 
 	// Initialize Agents
 	initAgents()
