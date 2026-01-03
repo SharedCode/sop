@@ -78,8 +78,8 @@ The SOP AI Kit is designed to play nicely with the broader AI ecosystem while ad
 
 ### Supported Interfaces
 *   **Generators (LLMs)**:
+    *   **Google (Gemini)**: Native support for Gemini Pro. **(Default & Tested)**
     *   **OpenAI (ChatGPT)**: Native support for GPT-3.5/4.
-    *   **Google (Gemini)**: Native support for Gemini Pro.
     *   **Ollama**: Native support for local models (Llama 3, Mistral, Gemma).
     *   **Custom**: Implement the `ai.Generator` interface to connect any other provider.
 *   **Embedders**:

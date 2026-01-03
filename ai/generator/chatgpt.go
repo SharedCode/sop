@@ -69,7 +69,7 @@ type openAIResponse struct {
 // Generate sends a prompt to the ChatGPT API and returns the generated text.
 func (g *chatgpt) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	if g.apiKey == "" {
-		return ai.GenOutput{}, fmt.Errorf("missing OpenAI API Key")
+		return ai.GenOutput{}, fmt.Errorf("missing OpenAI API Key. Please set OPENAI_API_KEY environment variable")
 	}
 
 	url := "https://api.openai.com/v1/chat/completions"

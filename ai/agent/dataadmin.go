@@ -30,6 +30,10 @@ type DataAdminAgent struct {
 	databases         map[string]sop.DatabaseOptions
 	systemDB          *database.Database
 	lastToolCall      *ai.MacroStep
+
+	// API Keys for dynamic switching
+	geminiKey string
+	openAIKey string
 }
 
 // SetGenerator sets the generator for the agent.
@@ -99,6 +103,8 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 		enableObfuscation: cfg.EnableObfuscation,
 		databases:         databases,
 		systemDB:          systemDB,
+		geminiKey:         geminiKey,
+		openAIKey:         openAIKey,
 	}
 	agent.registerTools()
 	return agent
@@ -156,7 +162,58 @@ func (a *DataAdminAgent) Search(ctx context.Context, query string, limit int) ([
 func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
 	// cfg := ai.NewAskConfig(opts...)
 
-	if a.brain == nil {
+	// Determine Generator to use (Dynamic Switching)
+	gen := a.brain
+	if providerOverride, ok := ctx.Value(ai.CtxKeyProvider).(string); ok && providerOverride != "" {
+		var err error
+		var tempGen ai.Generator
+
+		switch providerOverride {
+		case "gemini":
+			if a.geminiKey != "" {
+				model := os.Getenv("GEMINI_MODEL")
+				if model == "" {
+					model = "gemini-2.5-flash"
+				}
+				tempGen, err = generator.New("gemini", map[string]any{
+					"api_key": a.geminiKey,
+					"model":   model,
+				})
+			}
+		case "chatgpt":
+			if a.openAIKey != "" {
+				model := os.Getenv("OPENAI_MODEL")
+				if model == "" {
+					model = "gpt-4o"
+				}
+				tempGen, err = generator.New("chatgpt", map[string]any{
+					"api_key": a.openAIKey,
+					"model":   model,
+				})
+			}
+		case "ollama":
+			model := os.Getenv("OLLAMA_MODEL")
+			if model == "" {
+				model = "llama3"
+			}
+			host := os.Getenv("OLLAMA_HOST")
+			if host == "" {
+				host = "http://localhost:11434"
+			}
+			tempGen, err = generator.New("ollama", map[string]any{
+				"base_url": host,
+				"model":    model,
+			})
+		}
+
+		if err == nil && tempGen != nil {
+			gen = tempGen
+		} else {
+			log.Warn("Failed to switch provider", "provider", providerOverride, "error", err)
+		}
+	}
+
+	if gen == nil {
 		return "Error: No AI Provider configured. Set GEMINI_API_KEY or OPENAI_API_KEY.", nil
 	}
 
@@ -242,7 +299,7 @@ IMPORTANT:
 	history := fullPrompt
 
 	for i := 0; i < maxTurns; i++ {
-		resp, err := a.brain.Generate(ctx, history, ai.GenOptions{})
+		resp, err := gen.Generate(ctx, history, ai.GenOptions{})
 		if err != nil {
 			return "", err
 		}

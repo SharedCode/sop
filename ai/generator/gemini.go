@@ -68,7 +68,7 @@ type geminiResponse struct {
 func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	if g.apiKey == "" || g.apiKey == "YOUR_API_KEY" {
 		return ai.GenOutput{
-			Text: fmt.Sprintf("[Gemini Stub] Missing API Key. Would send: %q", prompt),
+			Text: fmt.Sprintf("[Gemini Stub] Missing API Key. Please set GEMINI_API_KEY environment variable. Would send: %q", prompt),
 		}, nil
 	}
 
