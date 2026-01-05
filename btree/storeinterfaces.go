@@ -49,6 +49,11 @@ type BtreeInterface[TK Ordered, TV any] interface {
 	// This is useful for B-tree configurations that allow duplicate keys (IsUnique = false),
 	// as it provides a way to differentiate duplicates via the unique ID (sop.UUID).
 	FindWithID(ctx context.Context, key TK, id sop.UUID) (bool, error)
+
+	// FindInDescendingOrder is analogous to Find but is useful when doing search item and
+	// retrieval will be in descending order. Use Previous to navigate backwards.
+	FindInDescendingOrder(ctx context.Context, key TK) (bool, error)
+
 	// GetCurrentKey returns the current item's key (and Item ID). If the B-tree allows duplicates,
 	// having the Item ID available allows finding that item conveniently (see FindWithID).
 	GetCurrentKey() Item[TK, TV]

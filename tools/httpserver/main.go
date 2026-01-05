@@ -10,8 +10,10 @@ import (
 	log "log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strconv"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	aidb "github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/database"
@@ -72,7 +75,9 @@ func main() {
 	log.SetDefault(l) // configures log package to print with LevelInfo
 
 	var showVersion bool
+	var openBrowserFlag bool
 	flag.BoolVar(&showVersion, "version", false, "Show version and exit")
+	flag.BoolVar(&openBrowserFlag, "open-browser", true, "Open browser on startup")
 	flag.IntVar(&config.Port, "port", 8080, "Port to run the server on")
 	flag.StringVar(&config.DatabasePath, "database", "/tmp/sop_data", "Path to the SOP database/data directory")
 	flag.StringVar(&config.Mode, "mode", "standalone", "SOP mode: 'standalone' or 'clustered'")
@@ -92,6 +97,12 @@ func main() {
 		if err := loadConfig(config.ConfigFile); err != nil {
 			log.Error(fmt.Sprintf("Failed to load config file: %v", err))
 		}
+	} else {
+		// Try default config.json
+		if _, err := os.Stat("config.json"); err == nil {
+			config.ConfigFile = "config.json"
+			loadConfig("config.json")
+		}
 	}
 
 	// Override RootPassword from environment variable if set (Security best practice)
@@ -103,7 +114,15 @@ func main() {
 	}
 
 	// If no databases loaded (e.g. no config file or empty), use CLI flags as default
-	if len(config.Databases) == 0 {
+	// BUT only if config file was NOT loaded. If config file was loaded but empty, that's a valid state (Setup Mode).
+	// Actually, if config file is missing, we are in Setup Mode.
+	// We only fallback to CLI flags if the user explicitly provided them?
+	// Or maybe we just start empty and let the UI handle it.
+	// Let's say: If config file is missing, we start with NO databases, which triggers Setup Mode in UI.
+	// UNLESS the user provided a specific database path via CLI that is NOT the default.
+	// The default is "/tmp/sop_data".
+	isDefaultPath := config.DatabasePath == "/tmp/sop_data"
+	if len(config.Databases) == 0 && config.ConfigFile == "" && !isDefaultPath {
 		config.Databases = []DatabaseConfig{
 			{
 				Name:     "Default",
@@ -142,6 +161,11 @@ func main() {
 	http.HandleFunc("/api/ai/chat", handleAIChat)
 	http.HandleFunc("/api/macros/execute", withAuth(handleExecuteMacro))
 
+	// Configuration Endpoints
+	http.HandleFunc("/api/config/save", handleSaveConfig)
+	http.HandleFunc("/api/db/init", handleInitDatabase)
+	http.HandleFunc("/api/config/validate-path", handleValidatePath)
+
 	// Initialize Agents
 	initAgents()
 
@@ -152,8 +176,34 @@ func main() {
 		log.Debug(fmt.Sprintf("Database '%s': %s (%s)", db.Name, db.Path, db.Mode))
 	}
 
+	// Open Browser
+	if openBrowserFlag {
+		go func() {
+			// Wait a bit for server to start
+			time.Sleep(500 * time.Millisecond)
+			openBrowser(fmt.Sprintf("http://localhost:%d", config.Port))
+		}()
+	}
+
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Error(err.Error())
+	}
+}
+
+func openBrowser(url string) {
+	var err error
+	switch runtime.GOOS {
+	case "linux":
+		err = exec.Command("xdg-open", url).Start()
+	case "windows":
+		err = exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+	case "darwin":
+		err = exec.Command("open", url).Start()
+	default:
+		err = fmt.Errorf("unsupported platform")
+	}
+	if err != nil {
+		log.Error(fmt.Sprintf("Failed to open browser: %v", err))
 	}
 }
 
@@ -273,12 +323,31 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not load template: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	// Check if "users" store exists in any of the configured databases
+	hasDemo := false
+	ctx := r.Context()
+	for _, dbCfg := range config.Databases {
+		if dbOpts, err := getDBOptionsFromConfig(&dbCfg); err == nil {
+			// Use a lightweight check if possible, or just try to open a transaction
+			// Since we just added StoreExists to Database, we can use it if we had a Database object.
+			// But here we have DatabaseOptions.
+			// Let's create a temporary Database object to check.
+			db := aidb.NewDatabase(dbOpts)
+			if exists, err := db.StoreExists(ctx, "users"); err == nil && exists {
+				hasDemo = true
+				break
+			}
+		}
+	}
+
 	data := map[string]any{
 		"Version": Version,
 		"Mode":    config.Mode,
 		// AllowInvalidMapKey is a flag to bypass the validation that requires Map Key types
 		// to have an Index Specification or CEL Expression. This is useful for testing.
 		"AllowInvalidMapKey": os.Getenv("SOP_ALLOW_INVALID_MAP_KEY") == "true",
+		"HasDemo":            hasDemo,
 	}
 	tmpl.Execute(w, data)
 }

@@ -153,6 +153,27 @@ The flow is identical to the above, except **Cassandra** is replaced by the **Fi
     *   **Temporary Artifacts**: B-Tree nodes and data pages modified in a transaction are considered **temporary** until their handles are fully written to the Registry during the commit phase.
     *   **Lazy Cleanup**: Because these artifacts are not "live" until registered, their cleanup (garbage collection) can be performed at a "luxury of time" pace (defaulting to a 4-hour interval), reducing system overhead without compromising data integrity.
 
+## Dual-View Architecture & Serialization Efficiency
+
+SOP employs a unique **"Dual-View" Architecture** that decouples the storage format from the runtime representation, achieving high performance for both strongly-typed and dynamic use cases.
+
+### 1. The "Common Ground": JSON on Disk
+The underlying storage format for B-Tree nodes and items is **JSON** (via `DefaultMarshaler`). This neutral format on disk allows data to be agnostic of the consuming application's type system.
+
+### 2. Direct Deserialization (Zero Waste)
+SOP avoids the common "double conversion" penalty found in many ORMs or hybrid systems.
+*   **The Inefficient Way**: `Disk Bytes` -> `Generic Map` -> `Strong Struct` (Double allocation/conversion).
+*   **The SOP Way**:
+    *   **App View (Generics)**: `Disk Bytes` -> `Strong Struct` (Direct `json.Unmarshal`).
+    *   **Data Manager View (Dynamic)**: `Disk Bytes` -> `map[string]any` (Direct `json.Unmarshal`).
+
+The Data Manager reads the *exact same bytes* as the Application but requests a `map[string]any`. The JSON decoder constructs the map directly, bypassing the need for the original Struct definition. This allows administrative tools to view and manipulate data without needing the application's source code or type definitions.
+
+### 3. `JsonDBMapKey`: The Intelligence Layer
+While `map[string]any` provides flexibility, it lacks inherent ordering. `JsonDBMapKey` bridges this gap by injecting a **Proxy Comparer** into the B-Tree.
+*   **Role**: It teaches the B-Tree how to sort dynamic maps based on **Index Specifications** and/or **CEL Expressions** (allowing fine-grained comparison logic to complement standard indexing).
+*   **Result**: You get the flexibility of a NoSQL document store (schema-less, dynamic) with the performance and ordered capabilities of a B-Tree (Range Queries, Prefix Scans), all without sacrificing type safety in the main application.
+
 ## Deployment Modes
 
 SOP is designed to run in two distinct modes, catering to different scale requirements.

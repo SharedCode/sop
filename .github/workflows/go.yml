@@ -25,7 +25,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Build
-        run: go build -v ./inmemory ./infs ./btree ./common ./fs ./incfs ./restapi
+        run: go build -v ./inmemory ./infs ./btree ./common ./fs ./incfs
 
       - name: Unit tests with coverage
         run: go test -timeout 600s -race -covermode=atomic -coverprofile=coverage.out -coverpkg=./btree/...,./inmemory/...,./fs/...,./common

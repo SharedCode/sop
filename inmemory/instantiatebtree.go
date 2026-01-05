@@ -66,6 +66,13 @@ func (b3 BtreeInterface[TK, TV]) Find(key TK, firstItemWithKey bool) bool {
 	return ok
 }
 
+// FindInDescendingOrder is analogous to Find but is useful when doing search item and
+// retrieval will be in descending order. Use Previous to navigate backwards.
+func (b3 BtreeInterface[TK, TV]) FindInDescendingOrder(key TK) bool {
+	ok, _ := b3.Btree.FindInDescendingOrder(nil, key)
+	return ok
+}
+
 // GetCurrentKey returns the current item's value.
 func (b3 BtreeInterface[TK, TV]) GetCurrentKey() TK {
 	return b3.Btree.GetCurrentKey().Key

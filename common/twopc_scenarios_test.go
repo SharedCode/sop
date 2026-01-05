@@ -44,7 +44,8 @@ func Test_TwoPC_Preconditions_And_BeginClose(t *testing.T) {
 	// Seed some stores and verify GetStores forwards
 	_ = mockStoreRepository.Add(context.Background(), *sop.NewStoreInfo(sop.StoreOptions{Name: "s1", SlotLength: 8}))
 	_ = mockStoreRepository.Add(context.Background(), *sop.NewStoreInfo(sop.StoreOptions{Name: "s2", SlotLength: 8}))
-	names, err := tr.GetStores(context.Background())
+
+	names, err := tr.GetStoreRepository().GetAll(ctx)
 	if err != nil || len(names) < 2 {
 		t.Fatalf("GetStores got=%v err=%v", names, err)
 	}

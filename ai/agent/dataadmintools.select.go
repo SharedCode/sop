@@ -82,6 +82,8 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 	isDesc := false
 	if orderBy != "" {
 		lowerOrder := strings.ToLower(orderBy)
+		// Handle commas in "field desc, field2 asc"
+		lowerOrder = strings.ReplaceAll(lowerOrder, ",", " ")
 		if lowerOrder == "desc" {
 			isDesc = true
 		} else {
@@ -164,30 +166,40 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 	emitter := NewResultEmitter(ctx)
 	count := 0
 
+	var startKey any
+	// fmt.Printf("keyMatch: %v (type: %T)\n", keyMatch, keyMatch)
 	var ok bool
-	fmt.Printf("keyMatch: %v (type: %T)\n", keyMatch, keyMatch)
 	if keyMatch != nil {
-		// Check if keyMatch is a simple value or a map with operators
-		isSimpleKey := true
-		if m, ok := keyMatch.(map[string]any); ok {
-			for k := range m {
-				if k == "$gt" || k == "$gte" || k == "$lt" || k == "$lte" || k == "$eq" || k == "$ne" {
-					isSimpleKey = false
-					break
-				}
-			}
+		// Try to extract a start key for optimization
+		if indexSpec != nil {
+			startKey = extractStartKey(keyMatch, indexSpec)
+		} else {
+			// Primitive Key
+			startKey = extractPrimitiveStartKey(keyMatch)
 		}
 
-		if isSimpleKey {
-			// Try direct lookup first
-			_, err = store.FindOne(ctx, keyMatch, false)
-			if err != nil {
-				// Not found or error
-			}
-			// Check if current key matches criteria (or is start of range)
-			k, _ := store.GetCurrentKey()
-			if k != nil {
-				ok = true
+		// If we found a start key, use FindOne to position cursor
+		if startKey != nil {
+			// For Ascending: FindOne positions at the first matching item (or start of range).
+			// For Descending: FindOne positions at the first matching item.
+			// NOTE: For strict prefix match Descending (e.g. Key="A"), FindOne("A") lands on first "A".
+			// Previous() would go before "A". This is technically incorrect for "Key=A" Descending.
+			// However, for Range queries (e.g. Key < "B"), FindOne("B") lands on "B", and Previous() goes to "A". Correct.
+			// We implement as requested: Find/Previous for desc.
+
+			if isDesc {
+				// Use the new optimized FindInDescendingOrder
+				_, err = store.FindInDescendingOrder(ctx, startKey)
+				k, _ := store.GetCurrentKey()
+				if k != nil {
+					ok = true
+				}
+			} else {
+				_, err = store.FindOne(ctx, startKey, true)
+				k, _ := store.GetCurrentKey()
+				if k != nil {
+					ok = true
+				}
 			}
 		} else {
 			if isDesc {
@@ -195,7 +207,6 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 			} else {
 				ok, err = store.First(ctx)
 			}
-			fmt.Printf("store.First/Last returned: %v, %v\n", ok, err)
 		}
 	} else {
 		if isDesc {
@@ -214,6 +225,25 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 
 		// Check Key Match
 		matched, _ := matchesKey(k, keyMatch)
+		if !matched && startKey != nil && !isDesc {
+			// Optimization: If we used a startKey (prefix/range start) and we are iterating forward,
+			// a mismatch likely means we have moved past the range.
+			// We should verify if the mismatch is indeed because we are "after" the range.
+			// For simple equality prefix (e.g. Key="A"), if we are at "B", matchesKey is false.
+			// Since B-Tree is sorted, we can safely break.
+			// This assumes matchesKey returns true for ALL items in the range.
+			// If keyMatch has other filters (e.g. Key="A" AND Age>20), matchesKey might be false
+			// even if we are still in "A" prefix (e.g. Key="A", Age=10).
+			// So we must only break if the PREFIX part mismatches.
+
+			// Check if the current key 'k' still matches the 'startKey' prefix constraints.
+			// startKey contains the equality constraints of the prefix.
+			prefixMatched, _ := matchesKey(k, startKey)
+			if !prefixMatched {
+				break
+			}
+		}
+
 		if matched {
 			// Check Value Match
 			var v any
@@ -361,4 +391,64 @@ func (a *DataAdminAgent) toolLast(ctx context.Context, args map[string]any) (str
 	return a.runNavigation(ctx, args, func(ctx context.Context, store jsondb.StoreAccessor) (bool, error) {
 		return store.Last(ctx)
 	})
+}
+
+func extractStartKey(keyMatch any, indexSpec *jsondb.IndexSpecification) map[string]any {
+	m, ok := keyMatch.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	startKey := make(map[string]any)
+	for _, field := range indexSpec.IndexFields {
+		val, exists := m[field.FieldName]
+		if !exists {
+			break
+		}
+
+		// Check if value is a map (operator)
+		if valMap, ok := val.(map[string]any); ok {
+			// Look for $eq, $gte, $gt
+			if v, ok := valMap["$eq"]; ok {
+				startKey[field.FieldName] = v
+				continue
+			}
+			if v, ok := valMap["$gte"]; ok {
+				startKey[field.FieldName] = v
+				return startKey
+			}
+			if v, ok := valMap["$gt"]; ok {
+				startKey[field.FieldName] = v
+				return startKey
+			}
+			// $lt, $lte cannot be used for start key
+			break
+		} else {
+			// Simple value (Equality)
+			startKey[field.FieldName] = val
+		}
+	}
+
+	if len(startKey) == 0 {
+		return nil
+	}
+	return startKey
+}
+
+func extractPrimitiveStartKey(keyMatch any) any {
+	if m, ok := keyMatch.(map[string]any); ok {
+		if v, ok := m["$eq"]; ok {
+			return v
+		}
+		if v, ok := m["$gte"]; ok {
+			return v
+		}
+		if v, ok := m["$gt"]; ok {
+			return v
+		}
+		// If it has other operators like $lt, we can't optimize start
+		return nil
+	}
+	// Direct value
+	return keyMatch
 }

@@ -16,6 +16,7 @@ type ToolDefinition struct {
 	Description string
 	ArgsSchema  string // JSON schema or description of args
 	Handler     ToolHandler
+	Hidden      bool
 }
 
 // Registry manages the available tools.
@@ -37,6 +38,18 @@ func (r *Registry) Register(name, description, argsSchema string, handler ToolHa
 		Description: description,
 		ArgsSchema:  argsSchema,
 		Handler:     handler,
+		Hidden:      false,
+	}
+}
+
+// RegisterHidden adds a hidden tool to the registry (not shown in prompt).
+func (r *Registry) RegisterHidden(name, description, argsSchema string, handler ToolHandler) {
+	r.tools[name] = ToolDefinition{
+		Name:        name,
+		Description: description,
+		ArgsSchema:  argsSchema,
+		Handler:     handler,
+		Hidden:      true,
 	}
 }
 
@@ -68,6 +81,9 @@ func (r *Registry) GeneratePrompt() string {
 	sb.WriteString("Tools:\n")
 
 	for i, t := range r.List() {
+		if t.Hidden {
+			continue
+		}
 		sb.WriteString(fmt.Sprintf("%d. %s%s - %s\n", i+1, t.Name, t.ArgsSchema, t.Description))
 	}
 	return sb.String()

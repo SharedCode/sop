@@ -371,13 +371,13 @@ func UploadVideo(ctx context.Context, dbOpts sop.DatabaseOptions, title string, 
 	// 2. Open Stores
 	// Metadata: Standard store
 	catalog, _ := database.NewBtree[uuid.UUID, VideoMetadata](ctx, dbOpts, "video_catalog", trans, nil, sop.StoreOptions{
-		SlotLength: 1000,
+		SlotLength: 2000,
 	})
 	
 	// Blobs: Streaming store (Value is []byte)
 	// Note: We disable "ValueInNode" for large blobs to keep the B-Tree structure small and fast.
 	chunks, _ := database.NewBtree[StreamingKey, []byte](ctx, dbOpts, "video_chunks", trans, nil, sop.StoreOptions{
-		SlotLength: 1000,
+		SlotLength: 2000,
 		IsValueDataInNodeSegment: false, // CRITICAL for performance with large blobs
 	})
 

@@ -554,8 +554,8 @@ func Test_CopyToPassiveFolders_WriteErrors(t *testing.T) {
 
 	// storeinfo write error by creating a directory at passive/<store>/storeinfo.txt
 	// Add() replicates to passive and creates a file at this path; remove it first to allow mkdir.
-	_ = os.Remove(filepath.Join(p, s.Name, storeInfoFilename))
-	if err := os.MkdirAll(filepath.Join(p, s.Name, storeInfoFilename), 0o755); err != nil {
+	_ = os.Remove(filepath.Join(p, s.Name, StoreInfoFilename))
+	if err := os.MkdirAll(filepath.Join(p, s.Name, StoreInfoFilename), 0o755); err != nil {
 		t.Fatalf("prep storeinfo dir: %v", err)
 	}
 	if err := sr.CopyToPassiveFolders(ctx); err == nil {

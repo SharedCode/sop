@@ -211,6 +211,22 @@ func (btree *Btree[TK, TV]) Find(ctx context.Context, key TK, firstItemWithKey b
 	return r, err
 }
 
+// FindInDescendingOrder is analogous to Find but is useful when doing search item and
+// retrieval will be in descending order. Use Previous to navigate backwards.
+func (btree *Btree[TK, TV]) FindInDescendingOrder(ctx context.Context, key TK) (bool, error) {
+	// return default value & no error if B-tree is empty.
+	if btree.StoreInfo.Count == 0 {
+		return false, nil
+	}
+	node, err := btree.getRootNode(ctx)
+	if err != nil {
+		return false, err
+	}
+	r, err := node.findInDescendingOrder(ctx, btree, key)
+	btree.getCurrentItem(ctx)
+	return r, err
+}
+
 // FindWithID searches for the key and then walks duplicates until the specified ID is matched.
 func (btree *Btree[TK, TV]) FindWithID(ctx context.Context, key TK, id sop.UUID) (bool, error) {
 	if ok, err := btree.Find(ctx, key, true); ok && err == nil {

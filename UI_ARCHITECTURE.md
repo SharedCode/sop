@@ -1,5 +1,23 @@
 # UI Architecture & Metadata Strategy
 
+## Client-Side Persistence & Preferences
+To ensure a seamless user experience across devices, the UI persists specific user preferences directly in the browser using `localStorage`. This avoids unnecessary server round-trips for purely presentational settings.
+
+### Mobile Mode Strategy (`sop_ui_mobile_mode`)
+The application supports a responsive design that adapts not just layout, but behavior, based on the device type. This is controlled by the `sop_ui_mobile_mode` preference.
+
+*   **App Mode (Default)**:
+    *   **Behavior**: Treats the mobile web view as a native app.
+    *   **AI Widget**: Automatically opens and locks to full screen on mobile devices to maximize usability.
+*   **Hybrid Mode**:
+    *   **Behavior**: Balanced approach.
+    *   **AI Widget**: Opens by default on mobile but remains minimizable, allowing access to the underlying data grid.
+*   **Desktop Mode**:
+    *   **Behavior**: Traditional web application behavior.
+    *   **AI Widget**: Manual toggle only. Does not auto-open.
+
+This preference is managed via the "Preferences" modal in the UI and applied immediately upon selection.
+
 ## Problem Statement: Hardcoded UI Logic
 Currently, the SOP Data Manager UI (`tools/httpserver/templates/index.html`) contains hardcoded logic to handle specific display requirements for different stores. 
 

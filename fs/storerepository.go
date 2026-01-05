@@ -28,7 +28,7 @@ const (
 	lockStoreListKey             = "infs_sr"
 	lockStoreListDuration        = time.Duration(10 * time.Minute)
 	storeListFilename            = "storelist.txt"
-	storeInfoFilename            = "storeinfo.txt"
+	StoreInfoFilename            = "storeinfo.txt"
 	registryHashModValueFilename = "reghashmod.txt"
 	// updateStoresLockDuration is the TTL for cache-based locking during updates.
 	updateStoresLockDuration = time.Duration(15 * time.Minute)
@@ -156,7 +156,7 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 			return err
 		}
 
-		if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, store.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
+		if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, store.Name, os.PathSeparator, StoreInfoFilename), ba); err != nil {
 			return err
 		}
 	}
@@ -237,7 +237,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 				continue
 			}
 
-			if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
+			if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, StoreInfoFilename), ba); err != nil {
 				log.Warn(fmt.Sprintf("StoreRepository Update Undo store %s failed write, details: %v", si.Name, err))
 				continue
 			}
@@ -270,7 +270,7 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 			return nil, err
 		}
 
-		if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, storeInfoFilename), ba); err != nil {
+		if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, StoreInfoFilename), ba); err != nil {
 			// Undo changes.
 			undo(i, beforeUpdateStores)
 			return nil, err
@@ -339,7 +339,7 @@ func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 	sio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
 	for _, s := range storesNotInCache {
 
-		fn := fmt.Sprintf("%s%c%s", s, os.PathSeparator, storeInfoFilename)
+		fn := fmt.Sprintf("%s%c%s", s, os.PathSeparator, StoreInfoFilename)
 		if !sio.exists(ctx, fn) {
 			continue
 		}
@@ -367,7 +367,7 @@ func (sr *StoreRepository) GetWithTTL(ctx context.Context, isCacheTTL bool, cach
 // GetStoreFileStat returns the FileInfo of the store's metadata file.
 func (sr *StoreRepository) GetStoreFileStat(ctx context.Context, storeName string) (os.FileInfo, error) {
 	fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
-	fn := fmt.Sprintf("%s%c%s", storeName, os.PathSeparator, storeInfoFilename)
+	fn := fmt.Sprintf("%s%c%s", storeName, os.PathSeparator, StoreInfoFilename)
 	return fio.stat(ctx, fn)
 }
 
@@ -479,7 +479,7 @@ func (sr *StoreRepository) Replicate(ctx context.Context, stores []sop.StoreInfo
 		// When store is being written and it failed, we need to handle whether to turn off writing to the replication's passive destination
 		// because if will break synchronization from here on out, thus, better to just log then turn off replication altogether, until cleared
 		// to resume.
-		filename := sr.replicationTracker.formatPassiveFolderEntity(fmt.Sprintf("%s%c%s", stores[i].Name, os.PathSeparator, storeInfoFilename))
+		filename := sr.replicationTracker.formatPassiveFolderEntity(fmt.Sprintf("%s%c%s", stores[i].Name, os.PathSeparator, StoreInfoFilename))
 		if err := fio.WriteFile(ctx, filename, ba, permission); err != nil {
 			// passive-side write failed: mark replication as failed to stop further passive writes
 			sr.replicationTracker.handleFailedToReplicate(ctx)

@@ -29,10 +29,25 @@ This architecture allows us to create a **fully controllable, customizable AI** 
 *   **For Developers**: You get a natural language interface to your raw data. "Show me the top 5 users created yesterday" translates automatically to a B-Tree range query.
 *   **For Operations**: Troubleshooting becomes conversational. "Why is this store empty?" prompts the AI to check schemas and transaction logs.
 
-## Natural Language Programming
-We've taken this a step further with our **Macro System**. You can now "program" the database using natural language.
-*   **Compile Intent**: Tell the AI "Send a report for every inactive user."
-*   **Execute Efficiently**: The system compiles this into a high-performance SOP Macro (loops, fetches, conditions) that runs on the bare-metal Go engine.
+## Natural Language Programming: The "Lego Blocks" Evolution
+We've taken this a step further with our **Macro System**, evolving it into a robust scripting engine built on "Atomic Lego Blocks."
+
+Instead of asking an LLM to generate raw, potentially unsafe code (which is hard to debug and secure), we use a **Compiler Approach**:
+1.  **Intent Extraction**: The LLM analyzes your request (e.g., "Find users older than 25 who haven't logged in for a month").
+2.  **Block Assembly**: It assembles a script using our pre-built, high-performance atomic functions (the "Lego Blocks").
+    *   **`compare(val1, val2)`**: A universal comparator handling strings, numbers, and dates seamlessly.
+    *   **`matchesMap(item, criteria)`**: A MongoDB-style query evaluator supporting operators like `$gt`, `$lt`, `$in`, and `$eq`.
+    *   **`toFloat(val)`**: Robust type conversion for numerical analysis.
+    *   **`Scan(store, options)`**: High-performance B-Tree traversal (Range, Prefix, Forward/Backward).
+    *   **`JoinRightCursor(left, right, key)`**: Optimized Right Outer Join iterator.
+3.  **Safe Execution**: These blocks are compiled into a SOP Macro that runs on the bare-metal Go engine.
+
+### Why "Lego Blocks"?
+*   **Agility & Control**: We can tweak the underlying implementation of a block (e.g., optimizing `compare` for speed) without changing the AI's behavior.
+*   **Safety**: The AI cannot "hallucinate" dangerous code. It can only arrange the safe blocks we provide.
+*   **Performance**: The resulting macros run at native Go speeds, not interpreted Python/JS speeds.
+*   **Streaming & Efficiency**: Results are streamed directly to the UI or REST client. This allows processing **SQL Joins on huge B-Trees with minimal memory**, as we never load the full dataset into RAM.
+
 *   **SystemDB**: These macros are stored in a dedicated B-Tree, effectively turning your database into a programmable application server.
 
 ## Next Steps

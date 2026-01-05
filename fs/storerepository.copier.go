@@ -60,7 +60,7 @@ func (sr *StoreRepository) CopyToPassiveFolders(ctx context.Context) error {
 			if err != nil {
 				return err
 			}
-			if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, storeName, os.PathSeparator, storeInfoFilename), ba); err != nil {
+			if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, storeName, os.PathSeparator, StoreInfoFilename), ba); err != nil {
 				return err
 			}
 

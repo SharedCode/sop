@@ -9,7 +9,7 @@ The `StoreOptions` struct is the primary way to configure a B-Tree store.
 | Field | Type | Description | Default / Recommendation |
 | :--- | :--- | :--- | :--- |
 | `Name` | `string` | Short name of the store. Must be unique within the repository. | Required. |
-| `SlotLength` | `int` | Number of items stored in a single B-Tree node. | **Default: 1000**. **Max: 10,000**. Higher values (e.g., 5000) improve read performance but increase write latency. |
+| `SlotLength` | `int` | Number of items stored in a single B-Tree node. | **Default: 2000**. **Max: 10,000**. Higher values improve density. **Trade-off**: Larger nodes increase memory usage (L1/L2 cache). Read & Write latency is generally unaffected due to EC striping (parallel I/O). **4,000** is a recommended balance for high scale. |
 | `IsUnique` | `bool` | Enforces uniqueness of keys. | `true` for primary keys, `false` for non-unique indexes. |
 | `IsValueDataInNodeSegment` | `bool` | Stores the Value directly inside the B-Tree node. | **Best for Small Data** (< 1KB). Improves locality. If `false`, stores Value in a separate file/blob. |
 | `IsValueDataActivelyPersisted` | `bool` | If `true`, persists the Value to a separate file immediately upon `Add`. | **Best for Big Data & Streaming**. Prevents large values from bloating the B-Tree structure. Makes commit faster as data is already persisted. |

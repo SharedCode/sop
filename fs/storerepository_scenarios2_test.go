@@ -57,7 +57,7 @@ func TestStoreRepository_Update_MarshalError_Undo(t *testing.T) {
 	}
 
 	// Verify storeinfo on disk did not change Count (remains 0) due to undo/abort.
-	fn := filepath.Join(rt.getActiveBaseFolder(), "u1", storeInfoFilename)
+	fn := filepath.Join(rt.getActiveBaseFolder(), "u1", StoreInfoFilename)
 	ba, rerr := NewFileIO().ReadFile(ctx, fn)
 	if rerr != nil {
 		t.Fatalf("ReadFile: %v", rerr)
@@ -157,7 +157,7 @@ func Test_StoreRepository_GetWithTTL_TTLPath_And_JSONError(t *testing.T) {
 	}
 
 	// Corrupt the on-disk JSON and use a third fresh cache to force disk read error branch.
-	if err := os.WriteFile(filepath.Join(a, s.Name, storeInfoFilename), []byte("{"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(a, s.Name, StoreInfoFilename), []byte("{"), 0o644); err != nil {
 		t.Fatalf("corrupt: %v", err)
 	}
 	cache3 := mocks.NewMockClient()
@@ -190,7 +190,7 @@ func Test_StoreRepository_Update_GetWithTTLError(t *testing.T) {
 
 	// Make storeinfo.txt path a directory to cause ReadFile error.
 	base := sr.GetStoresBaseFolder()
-	target := filepath.Join(base, s.Name, storeInfoFilename)
+	target := filepath.Join(base, s.Name, StoreInfoFilename)
 	_ = os.Remove(target)
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		t.Fatalf("mkdir target: %v", err)
@@ -296,7 +296,7 @@ func Test_StoreRepository_Update_WriteError_Undo(t *testing.T) {
 	// Do not clear cache so Update.GetWithTTL uses cache and proceeds to marshal then write.
 	// Sabotage the target storeinfo.txt path to a directory to cause write error.
 	base := sr.GetStoresBaseFolder()
-	target := filepath.Join(base, s.Name, storeInfoFilename)
+	target := filepath.Join(base, s.Name, StoreInfoFilename)
 	_ = os.Remove(target)
 	if err := os.MkdirAll(target, 0o755); err != nil {
 		t.Fatalf("mkdir target: %v", err)

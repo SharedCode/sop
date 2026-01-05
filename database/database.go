@@ -276,7 +276,7 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, config sop.Database
 	} else {
 		opts = sop.StoreOptions{
 			Name:                     name,
-			SlotLength:               1000,
+			SlotLength:               2000,
 			IsUnique:                 true,
 			IsValueDataInNodeSegment: true,
 			LeafLoadBalancing:        false,

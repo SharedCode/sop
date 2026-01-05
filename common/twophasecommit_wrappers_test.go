@@ -70,13 +70,15 @@ func Test_NewTwoPhase_TimeBounds_Begin_Close(t *testing.T) {
 	}
 	// GetStores delegates
 	_ = sr.Add(ctx, sop.StoreInfo{Name: "s1"})
-	names, err := tx2.GetStores(ctx)
-	if err != nil || len(names) == 0 {
-		t.Fatalf("GetStores err=%v names=%v", err, names)
-	}
 	if tx2.GetStoreRepository() == nil {
 		t.Fatal("GetStoreRepository nil")
 	}
+
+	names, err := tx2.GetStoreRepository().GetAll(ctx)
+	if err != nil || len(names) == 0 {
+		t.Fatalf("GetStores err=%v names=%v", err, names)
+	}
+
 	if tx2.GetID().IsNil() {
 		t.Fatal("GetID is nil")
 	}

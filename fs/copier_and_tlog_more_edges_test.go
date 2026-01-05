@@ -117,7 +117,7 @@ func Test_CopyToPassiveFolders_Success(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(passive, storeListFilename)); err != nil {
 		t.Fatalf("passive missing store list: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(passive, store.Name, storeInfoFilename)); err != nil {
+	if _, err := os.Stat(filepath.Join(passive, store.Name, StoreInfoFilename)); err != nil {
 		t.Fatalf("passive missing store info: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(passive, store.RegistryTable, store.RegistryTable+"-1"+registryFileExtension)); err != nil {
@@ -212,7 +212,7 @@ func Test_Copier_MoreCoverage(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(passive, storeListFilename)); err != nil {
 			t.Fatalf("missing passive store list: %v", err)
 		}
-		if _, err := os.Stat(filepath.Join(passive, store.Name, storeInfoFilename)); err != nil {
+		if _, err := os.Stat(filepath.Join(passive, store.Name, StoreInfoFilename)); err != nil {
 			t.Fatalf("missing passive store info: %v", err)
 		}
 		if _, err := os.Stat(filepath.Join(passive, store.RegistryTable, store.RegistryTable+"-1"+registryFileExtension)); err != nil {
@@ -385,8 +385,8 @@ func Test_CopyToPassiveFolders_Error_GetStoreInfo_ReadError(t *testing.T) {
 
 	// Make active/<name>/storeinfo.txt a directory so reading it fails
 	// Remove the file if it exists from Add() and then create a directory in its place.
-	_ = os.Remove(filepath.Join(active, s.Name, storeInfoFilename))
-	if err := os.MkdirAll(filepath.Join(active, s.Name, storeInfoFilename), 0o755); err != nil {
+	_ = os.Remove(filepath.Join(active, s.Name, StoreInfoFilename))
+	if err := os.MkdirAll(filepath.Join(active, s.Name, StoreInfoFilename), 0o755); err != nil {
 		t.Fatalf("mkdir storeinfo as dir: %v", err)
 	}
 	if err := sr.CopyToPassiveFolders(ctx); err == nil {
@@ -428,8 +428,8 @@ func Test_CopyToPassiveFolders_Error_WriteStoreInfo_TargetIsDir(t *testing.T) {
 	// Ensure passive/<name> exists and create passive/<name>/storeinfo.txt as directory to force write error.
 	// Remove the file if it exists from prior replication and replace with a directory.
 	_ = os.MkdirAll(filepath.Join(passive, s.Name), 0o755)
-	_ = os.Remove(filepath.Join(passive, s.Name, storeInfoFilename))
-	if err := os.MkdirAll(filepath.Join(passive, s.Name, storeInfoFilename), 0o755); err != nil {
+	_ = os.Remove(filepath.Join(passive, s.Name, StoreInfoFilename))
+	if err := os.MkdirAll(filepath.Join(passive, s.Name, StoreInfoFilename), 0o755); err != nil {
 		t.Fatalf("mkdir passive storeinfo dir: %v", err)
 	}
 	if err := sr.CopyToPassiveFolders(ctx); err == nil {

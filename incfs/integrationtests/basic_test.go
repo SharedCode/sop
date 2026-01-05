@@ -58,7 +58,7 @@ func Test_GetStoreList(t *testing.T) {
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-	stores, _ := trans.GetStores(ctx)
+	stores, _ := trans.GetPhasedTransaction().GetStores(ctx)
 
 	log.Info(fmt.Sprintf("Store count: %d", len(stores)))
 }

@@ -99,6 +99,40 @@
         .tab-content { display: none; flex: 1; overflow-y: auto; padding: 10px; }
         .tab-content.active { display: flex; flex-direction: column; }
 
+        /* Setup Wizard */
+        #setup-wizard {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-color);
+            z-index: 3000;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .wizard-container {
+            width: 600px;
+            max-width: 100%;
+            background: var(--sidebar-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .wizard-step { display: none; }
+        .wizard-step.active { display: block; }
+        .wizard-header { margin-bottom: 20px; text-align: center; }
+        .wizard-footer { margin-top: 30px; display: flex; justify-content: space-between; }
+        .wizard-progress { display: flex; gap: 5px; justify-content: center; margin-bottom: 20px; }
+        .progress-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border-color); }
+        .progress-dot.active { background: var(--active-bg); }
+        .progress-dot.completed { background: var(--success-bg); }
+
         /* Macro Tree View */
         .macro-tree ul { list-style: none; padding-left: 20px; border-left: 1px solid var(--border-color); margin: 5px 0; }
         .macro-tree li { margin: 5px 0; padding: 0; background: transparent; }
@@ -238,7 +272,7 @@
         .chat-message.user { background-color: #007bff; color: white; align-self: flex-end; margin-left: auto; margin-right:7px; text-align: left; border: 1px solid #0056b3; }
         .chat-message.ai { background: var(--pre-bg); color: var(--text-color); align-self: flex-start; margin-right: auto; border: 1px solid var(--border-color); }
         .chat-input-area { display: flex; gap: 5px; flex-shrink: 0; padding: 10px; border-top: 1px solid var(--border-color); background: var(--sidebar-bg); }
-        #chat-input { height: 40px; resize: none; }
+        #chat-input { height: 40px; resize: vertical; min-height: 40px; max-height: 200px; font-size: 13px; }
         #tab-chat { overflow-y: hidden; height: auto; flex: 1; display: flex; flex-direction: column; }
 
         @media (max-width: 768px) {
@@ -250,10 +284,17 @@
             .chat-widget { 
                 width: 100% !important; 
                 height: 100% !important; 
+                height: 100dvh !important; /* Use dynamic viewport height if available */
                 left: 0 !important; 
                 top: 0 !important; 
                 border-radius: 0;
                 border: none;
+                z-index: 1500; /* Above detail panel but below modals */
+                display: none; /* Hidden by default, toggled by JS */
+            }
+            .chat-widget.active {
+                display: flex !important;
+            }
                 z-index: 1500; /* Above detail panel but below modals */
             }
             .modal-content { width: 95%; }
@@ -368,6 +409,16 @@
                 Loading...
             </div>
         </div>
+    </div>
+    
+    <!-- Sidebar Footer -->
+    <div style="padding-top: 10px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; align-items: center;">
+        <button onclick="showPreferences()" title="Preferences" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
+                <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/>
+            </svg>
+        </button>
     </div>
 </div>
 
@@ -674,7 +725,7 @@
                     <!-- Slot Length -->
                     <div style="display: flex; align-items: center; gap: 5px;">
                         <label style="margin-bottom: 0; white-space: nowrap;">Slot Length:</label>
-                        <input type="number" id="new-store-slot-length" value="1000" min="2" max="10000" style="width: 80px; box-sizing: border-box;" oninput="updateSlotLengthWarning()">
+                        <input type="number" id="new-store-slot-length" value="2000" min="2" max="10000" style="width: 80px; box-sizing: border-box;" oninput="updateSlotLengthWarning()">
                     </div>
                     
                     <!-- Data Size -->
@@ -836,6 +887,88 @@
     </div>
 </div>
 
+<!-- Setup Wizard Modal -->
+<div id="setup-wizard">
+    <div class="wizard-container">
+        <div class="wizard-header">
+            <h2>Welcome to SOP Data Manager</h2>
+            <p>Let's get your environment set up.</p>
+        </div>
+        
+        <div class="wizard-progress">
+            <div class="progress-dot active" id="dot-1"></div>
+            <div class="progress-dot" id="dot-2"></div>
+            <div class="progress-dot" id="dot-3"></div>
+        </div>
+
+        <!-- Step 1: System Configuration -->
+        <div class="wizard-step active" id="step-1">
+            <h3>1. System Configuration</h3>
+            <p>Where should the System Registry be stored?</p>
+            <div class="form-group">
+                <label>Registry Path</label>
+                <input type="text" id="setup-reg-path" placeholder="/var/lib/sop/registry" value="/tmp/sop_data/registry">
+                <small>This folder will store system metadata.</small>
+            </div>
+            <div class="form-group">
+                <label>Server Port</label>
+                <input type="number" id="setup-port" value="9092">
+            </div>
+        </div>
+
+        <!-- Step 2: Create First Database -->
+        <div class="wizard-step" id="step-2">
+            <h3>2. Create Your First Database</h3>
+            <p>Let's create a place for your data.</p>
+            <div class="form-group">
+                <label>Database Name</label>
+                <input type="text" id="setup-db-name" placeholder="MyFirstDB" value="dev_db">
+            </div>
+            <div class="form-group">
+                <label>Data Path</label>
+                <input type="text" id="setup-db-path" placeholder="/var/lib/sop/data" value="/tmp/sop_data/db">
+            </div>
+            <div class="form-group">
+                <label>Type</label>
+                <select id="setup-db-type" onchange="toggleSetupConnectionField()">
+                    <option value="filesystem">Filesystem (Standard)</option>
+                    <option value="cassandra">Cassandra</option>
+                    <option value="redis">Redis</option>
+                </select>
+            </div>
+            <div class="form-group" id="setup-conn-group" style="display: none;">
+                <label>Connection URL</label>
+                <input type="text" id="setup-db-conn" placeholder="localhost:6379">
+                <small>For Redis/Cassandra clusters.</small>
+            </div>
+            <div class="form-group" style="margin-top: 15px;">
+                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" id="setup-populate-demo" style="width: auto;">
+                    <span>Populate with Demo Data (E-commerce)</span>
+                </label>
+                <small style="display: block; margin-top: 5px; color: var(--text-muted);">
+                    Optional: Creates 'users', 'products', and 'orders' stores with sample data. Ideal for testing AI chat and macros.
+                </small>
+            </div>
+        </div>
+
+        <!-- Step 3: Review -->
+        <div class="wizard-step" id="step-3">
+            <h3>3. Ready to Go!</h3>
+            <p>We are ready to initialize your environment.</p>
+            <div id="setup-summary" style="background: var(--pre-bg); padding: 15px; border-radius: 4px; font-family: monospace; margin-bottom: 15px;">
+                <!-- Summary populated by JS -->
+            </div>
+            <p>Click "Finish" to create the configuration and initialize the databases.</p>
+        </div>
+
+        <div class="wizard-footer">
+            <button id="wizard-prev" onclick="wizardPrev()" style="visibility: hidden;">Back</button>
+            <button id="wizard-next" onclick="wizardNext()" class="primary-btn">Next</button>
+        </div>
+    </div>
+</div>
+
 <script>
     window.onerror = function(message, source, lineno, colno, error) {
         console.error("GLOBAL ERROR CAUGHT:", message, "at", source, ":", lineno, ":", colno);
@@ -869,6 +1002,7 @@
                 const opt = document.createElement('option');
                 opt.textContent = "No databases found";
                 select.appendChild(opt);
+                showSetupWizard();
                 return;
             }
             
@@ -2936,6 +3070,22 @@
 
     function resetChatPosition() {
         const widget = document.getElementById('chat-widget');
+        
+        // Mobile Detection: Check width or user agent
+        const isMobile = window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        if (isMobile) {
+            // On mobile, we let the CSS media query handle the full-screen layout.
+            // We clear inline styles that might interfere.
+            widget.style.width = '';
+            widget.style.height = '';
+            widget.style.left = '';
+            widget.style.top = '';
+            widget.style.right = '';
+            widget.style.bottom = '';
+            return;
+        }
+
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
         const width = 480;
@@ -2949,6 +3099,14 @@
         widget.style.right = 'auto';
         widget.style.bottom = 'auto';
     }
+
+    // Handle resize events to adjust chat position if needed
+    window.addEventListener('resize', function() {
+        const widget = document.getElementById('chat-widget');
+        if (widget && widget.classList.contains('active')) {
+            resetChatPosition();
+        }
+    });
 
     function toggleChatWidget(forceOpen) {
         const widget = document.getElementById('chat-widget');
@@ -4303,7 +4461,7 @@
             // Other fields
             const slotLength = document.getElementById('new-store-slot-length');
             if (slotLength) {
-                slotLength.value = currentStoreInfo.slotLength || 1000;
+                slotLength.value = currentStoreInfo.slotLength || 2000;
                 slotLength.disabled = !isEmptyStore;
             }
             
@@ -4643,7 +4801,7 @@
         }
 
         let slotLength = parseInt(document.getElementById('new-store-slot-length').value);
-        if (isNaN(slotLength)) slotLength = 1000;
+        if (isNaN(slotLength)) slotLength = 2000;
         
         const isUnique = document.getElementById('new-store-is-unique').checked;
         const dataSize = parseInt(document.getElementById('new-store-data-size').value);
@@ -4774,7 +4932,7 @@
     }
 
     function showAddStore() {
-        currentStoreInfo = null; 
+        // currentStoreInfo = null; // Do not clear this, as it breaks Edit Store if we cancel Add
         window.currentAdminToken = null;
 
         document.getElementById('add-store-modal').style.display = 'flex';
@@ -4817,7 +4975,7 @@
         toggleAdvancedOptions();
 
         // Reset Advanced Fields
-        document.getElementById('new-store-slot-length').value = 1000;
+        document.getElementById('new-store-slot-length').value = 2000;
         document.getElementById('new-store-slot-length').disabled = false;
         document.getElementById('new-store-is-unique').checked = true;
         document.getElementById('new-store-is-unique').disabled = false;
@@ -6133,7 +6291,259 @@
             }
         });
     });
+
+    // Setup Wizard Logic
+    let currentWizardStep = 1;
+
+    function toggleSetupConnectionField() {
+        const type = document.getElementById('setup-db-type').value;
+        const group = document.getElementById('setup-conn-group');
+        const input = document.getElementById('setup-db-conn');
+        
+        if (type === 'redis') {
+            group.style.display = 'block';
+            input.placeholder = 'localhost:6379';
+        } else if (type === 'cassandra') {
+            group.style.display = 'block';
+            input.placeholder = 'localhost:9042';
+        } else {
+            group.style.display = 'none';
+        }
+    }
+
+    function showSetupWizard() {
+        document.getElementById('setup-wizard').style.display = 'flex';
+        updateWizardStep();
+    }
+
+    function updateWizardStep() {
+        // Update Steps
+        document.querySelectorAll('.wizard-step').forEach(el => el.classList.remove('active'));
+        document.getElementById(`step-${currentWizardStep}`).classList.add('active');
+
+        // Update Dots
+        for (let i = 1; i <= 3; i++) {
+            const dot = document.getElementById(`dot-${i}`);
+            dot.classList.remove('active', 'completed');
+            if (i === currentWizardStep) dot.classList.add('active');
+            if (i < currentWizardStep) dot.classList.add('completed');
+        }
+
+        // Update Buttons
+        document.getElementById('wizard-prev').style.visibility = currentWizardStep === 1 ? 'hidden' : 'visible';
+        const nextBtn = document.getElementById('wizard-next');
+        nextBtn.textContent = currentWizardStep === 3 ? 'Finish' : 'Next';
+
+        // Populate Summary on Step 3
+        if (currentWizardStep === 3) {
+            const regPath = document.getElementById('setup-reg-path').value;
+            const port = document.getElementById('setup-port').value;
+            const dbName = document.getElementById('setup-db-name').value;
+            const dbPath = document.getElementById('setup-db-path').value;
+            const dbType = document.getElementById('setup-db-type').value;
+            const dbConn = document.getElementById('setup-db-conn').value;
+            const populateDemo = document.getElementById('setup-populate-demo').checked;
+
+            let summaryHtml = `
+                <strong>System Registry:</strong> ${regPath}<br>
+                <strong>Port:</strong> ${port}<br>
+                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
+                <strong>New Database:</strong> ${dbName}<br>
+                <strong>Path:</strong> ${dbPath}<br>
+                <strong>Type:</strong> ${dbType}<br>
+            `;
+
+            if (dbType !== 'filesystem' && dbConn) {
+                summaryHtml += `<strong>Connection:</strong> ${dbConn}<br>`;
+            }
+
+            summaryHtml += `<strong>Demo Data:</strong> ${populateDemo ? 'Yes' : 'No'}`;
+            document.getElementById('setup-summary').innerHTML = summaryHtml;
+        }
+    }
+
+    function wizardNext() {
+        if (currentWizardStep < 3) {
+            // Validation
+            if (currentWizardStep === 1) {
+                const path = document.getElementById('setup-reg-path').value;
+                if (!path) return alert("Please enter a registry path");
+                // Validate path via API
+                fetch('/api/validate-path', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({path: path})
+                }).then(res => {
+                    if (!res.ok) return alert("Invalid path");
+                    currentWizardStep++;
+                    updateWizardStep();
+                });
+                return;
+            }
+            currentWizardStep++;
+            updateWizardStep();
+        } else {
+            finishSetup();
+        }
+    }
+
+    function wizardPrev() {
+        if (currentWizardStep > 1) {
+            currentWizardStep--;
+            updateWizardStep();
+        }
+    }
+
+    function finishSetup() {
+        const regPath = document.getElementById('setup-reg-path').value;
+        const port = parseInt(document.getElementById('setup-port').value);
+        const dbName = document.getElementById('setup-db-name').value;
+        const dbPath = document.getElementById('setup-db-path').value;
+        const dbType = document.getElementById('setup-db-type').value;
+        const dbConn = document.getElementById('setup-db-conn').value;
+        const populateDemo = document.getElementById('setup-populate-demo').checked;
+
+        const nextBtn = document.getElementById('wizard-next');
+        nextBtn.disabled = true;
+        nextBtn.textContent = "Setting up...";
+
+        // 1. Save Config
+        fetch('/api/config/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                registry_path: regPath,
+                port: port
+            })
+        })
+        .then(res => {
+            if (!res.ok) throw new Error("Failed to save config");
+            
+            // 2. Init Database
+            return fetch('/api/db/init', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: dbName,
+                    path: dbPath,
+                    type: dbType,
+                    connection: dbConn,
+                    populate_demo: populateDemo
+                })
+            });
+        })
+        .then(res => {
+            if (!res.ok) throw new Error("Failed to initialize database");
+            
+            // 3. Reload
+            alert("Setup Complete! Reloading...");
+            window.location.reload();
+        })
+        .catch(err => {
+            alert("Error: " + err.message);
+            nextBtn.disabled = false;
+            nextBtn.textContent = "Finish";
+        });
+    }
+
+    // --- Preferences Logic ---
+    function showPreferences() {
+        const modal = document.getElementById('preferences-modal');
+        const mobileMode = localStorage.getItem('sop_ui_mobile_mode') || 'app';
+        document.getElementById('pref-mobile-mode').value = mobileMode;
+        modal.style.display = 'flex';
+    }
+
+    function closePreferences() {
+        document.getElementById('preferences-modal').style.display = 'none';
+    }
+
+    function savePreferences() {
+        const mobileMode = document.getElementById('pref-mobile-mode').value;
+        localStorage.setItem('sop_ui_mobile_mode', mobileMode);
+        closePreferences();
+        applyPreferences();
+    }
+
+    function applyPreferences() {
+        // Default to 'app' (Auto 2) if not set
+        const mobileMode = localStorage.getItem('sop_ui_mobile_mode') || 'app';
+        const isMobile = window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        let useAI = false;
+        let lockAI = false;
+
+        if (mobileMode === 'app') {
+            // Auto 2: AI Only on Mobile
+            if (isMobile) {
+                useAI = true;
+                lockAI = true;
+            }
+        } else if (mobileMode === 'hybrid') {
+            // Auto 1: AI Default on Mobile, but can minimize
+            if (isMobile) {
+                useAI = true;
+                lockAI = false;
+            }
+        } else if (mobileMode === 'desktop') {
+            // Desktop Mode: Manual toggle only
+            useAI = false;
+            lockAI = false;
+        }
+
+        const widget = document.getElementById('chat-widget');
+        const minimizeBtn = widget.querySelector('.minimize-btn');
+        const resetBtn = widget.querySelector('.reset-btn');
+
+        if (useAI) {
+            // Auto-open chat if not already open
+            if (!widget.classList.contains('active')) {
+                toggleChatWidget(true);
+            }
+        }
+
+        // On Mobile "App Mode", hide window controls to enforce the "App" feel
+        if (lockAI && isMobile) {
+            if (minimizeBtn) minimizeBtn.style.display = 'none';
+            if (resetBtn) resetBtn.style.display = 'none';
+        } else {
+            if (minimizeBtn) minimizeBtn.style.display = '';
+            if (resetBtn) resetBtn.style.display = '';
+        }
+    }
+
+    // Apply preferences on load
+    document.addEventListener('DOMContentLoaded', applyPreferences);
 </script>
+
+<!-- Preferences Modal -->
+<div id="preferences-modal" class="modal">
+    <div class="modal-content" style="width: 400px;">
+        <div class="modal-header">
+            <span>Preferences</span>
+            <button onclick="closePreferences()" style="background:none; border:none; cursor:pointer; font-size:16px;">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:block; margin-bottom:5px;">Mobile Experience</label>
+                <select id="pref-mobile-mode" class="form-input" style="width: 100%;">
+                    <option value="app">App Mode (AI Only)</option>
+                    <option value="hybrid">Hybrid Mode (AI Default + Desktop)</option>
+                    <option value="desktop">Desktop Mode (Manual AI)</option>
+                </select>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">
+                    <strong>App Mode:</strong> Turns the site into a dedicated AI Assistant app on mobile. Desktop UI is hidden.<br>
+                    <strong>Hybrid Mode:</strong> Opens AI Assistant by default on mobile, but allows minimizing to access the desktop UI.<br>
+                    <strong>Desktop Mode:</strong> Standard web view. AI Assistant must be opened manually.
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closePreferences()" class="btn-secondary">Cancel</button>
+            <button onclick="savePreferences()" class="btn-success">Save</button>
+        </div>
+    </div>
+</div>
 
 <!-- Macro Steps Modal -->
 <div id="macro-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1200;">
@@ -6171,7 +6581,18 @@
         </div>
     </div>
     <div id="chat-history">
-        <div class="chat-message ai">Hello! I am your SOP Data Assistant. How can I help you today?</div>
+        <div class="chat-message ai">
+            Hello! I am your SOP Data Assistant. I can help you query your data using natural language.<br><br>
+            {{if .HasDemo}}
+            <strong>Try these examples (if you loaded the Demo Data):</strong>
+            <ul>
+                <li>"Show me all users sorted by Age descending"</li>
+                <li>"Find orders for user 'John' with total amount > 500"</li>
+                <li>"List products in 'Electronics' category"</li>
+                <li>"Create a macro named 'expensive_orders' to find orders over $1000"</li>
+            </ul>
+            {{end}}
+        </div>
     </div>
     <div class="chat-input-area">
         <textarea id="chat-input" placeholder="Ask about your data (e.g., 'Find users in New York')..." onkeydown="handleChatKeydown(event)"></textarea>

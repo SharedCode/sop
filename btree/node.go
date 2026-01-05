@@ -373,6 +373,66 @@ func (node *Node[TK, TV]) find(ctx context.Context, btree *Btree[TK, TV], key TK
 	return false, nil
 }
 
+func (node *Node[TK, TV]) findInDescendingOrder(ctx context.Context, btree *Btree[TK, TV], key TK) (bool, error) {
+	n := node
+	foundItemIndex := 0
+	foundNodeID := sop.NilUUID
+	var err error
+	index := 0
+	for n != nil {
+		index = 0
+		if n.Count > 0 {
+			index = sort.Search(n.Count, func(index int) bool {
+				return btree.compare(n.Slots[index].Key, key) > 0
+			})
+			if index > 0 {
+				i := index - 1
+				if btree.compare(n.Slots[i].Key, key) == 0 {
+					foundNodeID = n.ID
+					foundItemIndex = i
+				}
+			}
+		}
+		// Check children if there are.
+		if n.hasChildren() {
+			if n.ChildrenIDs[index] == sop.NilUUID {
+				break
+			}
+			n, err = n.getChild(ctx, btree, index)
+			if err != nil {
+				return false, err
+			}
+			continue
+		}
+		// Short circuit loop if there are no more children.
+		break
+	}
+	if !foundNodeID.IsNil() {
+		btree.setCurrentItemID(foundNodeID, foundItemIndex)
+		return true, nil
+	}
+	// This must be the outermost node
+	// This block will make this item the current one to give chance to the Btree
+	// caller the chance to check the items having the nearest key to the one it is interested at.
+	if index == n.Count {
+		// make sure i points to valid item
+		index--
+	}
+	if n.Slots[index] != nil {
+		btree.setCurrentItemID(n.ID, index)
+	} else {
+		index--
+		// Update Current Item of this Node and nearest to the Key in sought Slot index
+		btree.setCurrentItemID(n.ID, index)
+		// Make the next item the current item. This has the effect of positioning making the next greater item the current item.
+		_, err = n.moveToNext(ctx, btree)
+		if err != nil {
+			return false, err
+		}
+	}
+	return false, nil
+}
+
 // moveToFirst positions the cursor at the smallest key in the tree by
 // traversing the left-most branch until a leaf is reached.
 func (node *Node[TK, TV]) moveToFirst(ctx context.Context, btree *Btree[TK, TV]) (bool, error) {

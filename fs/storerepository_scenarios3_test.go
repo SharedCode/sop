@@ -238,7 +238,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 			if err := sr.CopyToPassiveFolders(ctx); err != nil {
 				t.Fatalf("CopyToPassiveFolders: %v", err)
 			}
-			for _, fn := range []string{filepath.Join(p, storeListFilename), filepath.Join(p, si.Name, storeInfoFilename), filepath.Join(p, si.RegistryTable, "0000-0000.reg")} {
+			for _, fn := range []string{filepath.Join(p, storeListFilename), filepath.Join(p, si.Name, StoreInfoFilename), filepath.Join(p, si.RegistryTable, "0000-0000.reg")} {
 				if _, err := os.Stat(fn); err != nil {
 					t.Fatalf("expected file: %s err %v", fn, err)
 				}
@@ -307,7 +307,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 				t.Fatalf("expected storelist in f1: %v", err)
 			}
 			for _, si := range stores {
-				if _, err := os.Stat(filepath.Join(f1, si.Name, storeInfoFilename)); err != nil {
+				if _, err := os.Stat(filepath.Join(f1, si.Name, StoreInfoFilename)); err != nil {
 					t.Fatalf("missing storeinfo in f1: %v", err)
 				}
 				if _, err := os.Stat(filepath.Join(f1, si.RegistryTable, si.RegistryTable+"-1"+registryFileExtension)); err != nil {
@@ -346,7 +346,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 			if err := sr.Replicate(ctx, []sop.StoreInfo{*si}); err != nil {
 				t.Fatalf("Replicate: %v", err)
 			}
-			if _, err := os.Stat(filepath.Join(p, si.Name, storeInfoFilename)); err != nil {
+			if _, err := os.Stat(filepath.Join(p, si.Name, StoreInfoFilename)); err != nil {
 				t.Fatalf("missing replicated storeinfo: %v", err)
 			}
 		}},
@@ -424,13 +424,13 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 			upd2 := *s2
 			upd2.CountDelta, upd2.Timestamp = 5, 888
 			upd2.CacheConfig.StoreInfoCacheDuration = time.Minute
-			s2File := filepath.Join(base, upd2.Name, storeInfoFilename)
+			s2File := filepath.Join(base, upd2.Name, StoreInfoFilename)
 			os.Remove(s2File)
 			os.Mkdir(s2File, 0o755)
 			if _, err := sr.Update(ctx, []sop.StoreInfo{upd1, upd2}); err == nil {
 				t.Fatalf("expected Update error")
 			}
-			ba, _ := os.ReadFile(filepath.Join(base, s1.Name, storeInfoFilename))
+			ba, _ := os.ReadFile(filepath.Join(base, s1.Name, StoreInfoFilename))
 			var got sop.StoreInfo
 			json.Unmarshal(ba, &got)
 			if got.Count != 0 || got.Timestamp != 111 {
@@ -444,7 +444,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 			s := sop.NewStoreInfo(sop.StoreOptions{Name: "one", SlotLength: 10})
 			s.Timestamp = 123
 			sr.Add(ctx, *s)
-			infoFile := filepath.Join(base, s.Name, storeInfoFilename)
+			infoFile := filepath.Join(base, s.Name, StoreInfoFilename)
 			os.Remove(infoFile)
 			os.Mkdir(infoFile, 0o755)
 			upd := *s
@@ -511,7 +511,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 			sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), 0)
 			c := *sop.NewStoreInfo(sop.StoreOptions{Name: "c1", SlotLength: 5})
 			sr.Add(ctx, c)
-			infoFile := filepath.Join(base, c.Name, storeInfoFilename)
+			infoFile := filepath.Join(base, c.Name, StoreInfoFilename)
 			os.Remove(infoFile)
 			os.Mkdir(infoFile, 0o755)
 			upd := c
@@ -529,7 +529,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 			s2 := sop.NewStoreInfo(sop.StoreOptions{Name: "j2", SlotLength: 10})
 			s1.Timestamp, s2.Timestamp = 100, 200
 			sr.Add(ctx, *s1, *s2)
-			infoFile2 := filepath.Join(base, s2.Name, storeInfoFilename)
+			infoFile2 := filepath.Join(base, s2.Name, StoreInfoFilename)
 			os.Remove(infoFile2)
 			os.Mkdir(infoFile2, 0o755)
 			upd1 := *s1
@@ -541,7 +541,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 			if _, err := sr.Update(ctx, []sop.StoreInfo{upd1, upd2}); err == nil {
 				t.Fatalf("expected update error")
 			}
-			ba, _ := os.ReadFile(filepath.Join(base, s1.Name, storeInfoFilename))
+			ba, _ := os.ReadFile(filepath.Join(base, s1.Name, StoreInfoFilename))
 			var got sop.StoreInfo
 			json.Unmarshal(ba, &got)
 			if got.Timestamp != 100 || got.Count != 0 {

@@ -2,6 +2,16 @@
 
 A powerful, web-based management suite for SOP B-Tree repositories. This tool transforms SOP from a library into a full-fledged SOP HTTP Server with a rich User Interface.
 
+## Installation
+
+### Download Binaries
+You can download the latest pre-compiled binaries for macOS, Linux, and Windows from the [Releases Page](../../releases).
+
+### Build from Source
+```bash
+go build -o sop-manager ./tools/httpserver
+```
+
 ## Features
 - **Multi-Database Support**: Seamlessly switch between different databases (e.g., Local Dev, Production Cluster) from a single UI.
 - **Full CRUD Management**: Create, Read, Update, and Delete records directly from the UI.
@@ -211,7 +221,60 @@ The **SOP Data Management Suite** follows this philosophy:
 - **Swarm Participation**: Each user managing data via this app participates in **"swarm" computing**. Their changes to records are efficiently merged (or rejected if conflicting) by SOP, all under strict **ACID transaction guarantees**.
 - **Network & Cloud Ready**: While it works great on a local laptop disk, SOP is built to manage data on **Network Attached Storage (NAS)**, **S3-mounted drives**, or **Cloud Volumes**. This allows you to manage massive datasets that exceed local disk capacity, shared across the entire cluster.
 
-## Backend Implementation
+## Performance
+
+SOP is designed for high performance. You can measure the performance on your own hardware using the included benchmark tool.
+
+```bash
+go run tools/benchmark/main.go --count 10000 --path /tmp/sop_bench
+```
+
+Typical results on a modern laptop (M1/M2/M3 Mac):
+- **Insert**: ~20,000+ ops/sec
+- **Read**: ~50,000+ ops/sec
+- **Delete**: ~30,000+ ops/sec
+
+## Demo & Tutorial
+
+The SOP Data Manager includes a built-in **Setup Wizard** that can populate your database with a sample E-commerce dataset (Users, Products, Orders).
+
+This dataset is perfect for exploring the **AI Assistant** capabilities:
+1.  **Natural Language Queries**: "Show me all users from France"
+2.  **Joins**: "Find orders for user 'James Smith'"
+3.  **Macros**: Create reusable workflows for complex reporting.
+
+## Language Bindings & Downloads
+
+> **New to SOP?** Check out the **[Getting Started Guide](../../GETTING_STARTED.md)** for a step-by-step tutorial.
+
+When you download a release from GitHub, you can choose between:
+
+1.  **Platform Bundles (Recommended)**: A single `.zip` file containing the `sop-manager` server AND all language bindings for your specific OS/Architecture.
+    *   `sop-bundle-macos-arm64.zip` (Apple Silicon)
+    *   `sop-bundle-macos-amd64.zip` (Intel Mac)
+    *   `sop-bundle-linux-amd64.zip` (Linux x64)
+    *   `sop-bundle-linux-arm64.zip` (Linux ARM64)
+    *   `sop-bundle-windows-amd64.zip` (Windows)
+
+    **Inside the Bundle:**
+    *   `sop-manager`: The server executable.
+    *   `libs/`: The shared library (`.dylib`, `.so`, `.dll`) for your OS.
+    *   `python/`: Python `.whl` package.
+    *   `java/`: Java `.jar` library.
+    *   `dotnet/`: C# `.nupkg` package.
+
+2.  **Individual Artifacts**: If you only need a specific language package, you can download them separately:
+    *   **Python**: `sop-x.y.z-py3-none-any.whl`
+    *   **C#**: `Sop.x.y.z.nupkg`
+    *   **Java**: `sop-java-x.y.z.jar`
+
+### Installation
+
+#### 1. Start the Server
+Unzip your bundle and run the manager:
+```bash
+./sop-manager
+
 - **Backend**: Go HTTP server using `sop/infs` to open B-Trees as `[any, any]`.
 - **Frontend**: Single HTML file with vanilla JS for API interaction.
 - **Performance**: The browser is highly responsive because SOP includes a built-in caching layer, even in Standalone mode, ensuring fast access to frequently viewed nodes.

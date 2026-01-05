@@ -108,6 +108,17 @@ func (b3 *Cursor[TK, TV]) FindWithID(ctx context.Context, key TK, id sop.UUID) (
 	return b3.Btree.FindWithID(ctx, key, id)
 }
 
+// FindInDescendingOrder positions the cursor on a match for descending iteration; requires begun transaction.
+func (b3 *Cursor[TK, TV]) FindInDescendingOrder(ctx context.Context, key TK) (bool, error) {
+	b3.Btree.currentItem = b3.currentItem
+	b3.Btree.currentItemRef = b3.currentItemRef
+	defer func() {
+		b3.currentItem = b3.Btree.currentItem
+		b3.currentItemRef = b3.Btree.currentItemRef
+	}()
+	return b3.Btree.FindInDescendingOrder(ctx, key)
+}
+
 // First positions the cursor at the smallest key.
 func (b3 *Cursor[TK, TV]) First(ctx context.Context) (bool, error) {
 	b3.Btree.currentItem = b3.currentItem

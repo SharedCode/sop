@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"text/template"
 
 	log "log/slog"
@@ -30,6 +31,13 @@ type DataAdminAgent struct {
 	databases         map[string]sop.DatabaseOptions
 	systemDB          *database.Database
 	lastToolCall      *ai.MacroStep
+
+	// Session State
+	sessionContext *ScriptContext
+
+	// Compiled Scripts Cache
+	compiledScripts   map[string]CompiledScript
+	compiledScriptsMu sync.RWMutex
 
 	// API Keys for dynamic switching
 	geminiKey string
@@ -105,6 +113,8 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 		systemDB:          systemDB,
 		geminiKey:         geminiKey,
 		openAIKey:         openAIKey,
+		sessionContext:    NewScriptContext(),
+		compiledScripts:   make(map[string]CompiledScript),
 	}
 	agent.registerTools()
 	return agent
@@ -286,6 +296,7 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 IMPORTANT:
 - The 'select' tool returns the raw data string. You MUST include this raw data in your final response.
 - When filtering with 'select', use MongoDB-style operators ($eq, $ne, $gt, $gte, $lt, $lte) for comparisons. Example: {"age": {"$gt": 18}}.
+- Sorting/Ordering is ONLY supported by the store's Key or a prefix of the Key. You CANNOT sort by arbitrary fields (e.g. "salary", "date") unless they are the Key or a prefix of the Key. If a user asks to sort by a non-Key field, explain that SOP only supports sorting by Key (or Key prefix).
 `
 	fullPrompt := toolsDef + "\n" + query
 
@@ -622,7 +633,7 @@ func (a *DataAdminAgent) deobfuscateValue(v any) any {
 		s := strings.Trim(val, "*_`")
 		s = strings.ReplaceAll(s, "\u00a0", " ")
 		s = strings.TrimSpace(s)
-		return obfuscation.GlobalObfuscator.Deobfuscate(s)
+		return obfuscation.GlobalObfuscator.DeobfuscateText(s)
 	case []any:
 		for i, item := range val {
 			val[i] = a.deobfuscateValue(item)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	log "log/slog"
@@ -13,7 +14,9 @@ import (
 	"github.com/sharedcode/sop/ai/model"
 	"github.com/sharedcode/sop/ai/vector"
 	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/search"
 )
 
@@ -82,6 +85,36 @@ func (db *Database) StoresFolders() []string {
 func (db *Database) BeginTransaction(ctx context.Context, mode sop.TransactionMode, maxTime ...time.Duration) (sop.Transaction, error) {
 	tx, err := database.BeginTransaction(ctx, db.config, mode, maxTime...)
 	return tx, err
+}
+
+// StoreExists checks if a B-Tree store with the given name exists.
+// It starts a read-only transaction to perform the check.
+func (db *Database) StoreExists(ctx context.Context, name string) (bool, error) {
+	// Optimization: For filesystem-based databases, check for the store's existence directly
+	// to avoid the overhead of starting a transaction.
+	if (db.config.Type == sop.Standalone || db.config.Type == sop.Clustered) && len(db.config.StoresFolders) > 0 {
+		storePath := filepath.Join(db.config.StoresFolders[0], name, fs.StoreInfoFilename)
+		if _, err := os.Stat(storePath); err == nil {
+			return true, nil
+		} else if !os.IsNotExist(err) {
+			// Log error but fall back to transaction-based check just in case
+			log.Warn("Direct filesystem check for store existence failed", "error", err)
+		} else {
+			return false, nil
+		}
+	}
+
+	tx, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+
+	trans, _ := tx.GetPhasedTransaction().(*common.Transaction)
+	sr := trans.GetStoreRepository()
+
+	stores, err := sr.Get(ctx, name)
+	return len(stores) > 0, err
 }
 
 // Config returns the database configuration.

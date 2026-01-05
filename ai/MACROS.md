@@ -18,6 +18,34 @@ SOP exposes its B-Tree engine directly to the macro system. This effectively cre
 *   **No Parsing Overhead**: Unlike SQL statements that require complex parsing and query planning at runtime, SOP macros are pre-structured units of work.
 *   **System Database**: Macros are persisted in a dedicated **SystemDB**, a robust SOP B-Tree store. This ensures your "programs" are durable, transactional, and available across server restarts.
 
+## Atomic Lego Blocks: The Foundation of Safe Scripting
+
+To enable the LLM to generate scripts with "fine-grained agility" and control, we have exposed a set of **Atomic Lego Blocks**. These are highly optimized, safe, and versatile functions that the LLM can assemble to perform complex logic without writing raw code.
+
+*   **`compare(val1, val2)`**: A universal comparator that intelligently handles strings, numbers, and dates. It returns `-1`, `0`, or `1`, making it perfect for sorting and range checks.
+*   **`matchesMap(item, criteria)`**: A powerful pattern matcher inspired by MongoDB query syntax. It supports operators like:
+    *   `$gt`, `$gte`, `$lt`, `$lte`: Range comparisons.
+    *   `$in`: Set membership.
+    *   `$eq`, `$ne`: Equality checks.
+    *   `$regex`: Pattern matching.
+*   **`toFloat(val)`**: A robust type converter that safely extracts numerical values from various input types (strings, ints, floats) for mathematical operations.
+*   **`Scan(store, options)`**: The fundamental B-Tree traversal block. It supports forward/backward iteration, prefix matching, and range queries, serving as the engine for `SELECT * FROM ... WHERE ...` style operations.
+*   **`JoinRightCursor(left_store, right_store, join_key)`**: A specialized cursor that efficiently performs a Right Outer Join between two B-Trees. It iterates through the 'Right' store and performs optimized lookups in the 'Left' store, handling missing matches gracefully.
+
+**Why this matters:**
+Instead of asking the LLM to "write a Python script to filter users," we ask it to "generate a JSON structure using `matchesMap`." This ensures:
+1.  **Safety**: No arbitrary code execution.
+2.  **Consistency**: The logic behaves exactly the same way every time, powered by our compiled Go implementation.
+3.  **Agility**: The LLM can easily tweak the JSON parameters (e.g., changing a threshold from `> 10` to `> 20`) without rewriting logic.
+
+## Streaming & Minimal Memory Footprint
+
+A critical advantage of using `Scan` and `JoinRightCursor` is **Streaming**.
+
+*   **Zero-Buffer Execution**: When performing a Join or a large Scan, the system does *not* load all results into memory. Instead, it streams items one by one through the pipeline.
+*   **Huge Volume Support**: You can perform complex SQL-style Joins on B-Trees containing millions of records with **minimal memory requirements**. The memory footprint remains constant regardless of dataset size.
+*   **Remote Agility**: These streams are piped directly to the HTTP response, allowing a REST client on the other side of the world (or the UI) to start receiving data immediately, byte-by-byte.
+
 ## Natural Language Programming (NLP) System
 
 We are building a system where the **LLM acts as the compiler**.

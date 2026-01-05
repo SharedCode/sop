@@ -53,7 +53,7 @@ func (s *btreeModelStore) openStore(ctx context.Context) (btree.BtreeInterface[M
 	storeName := s.name
 	slotLength := 500
 	if s.name == "macros" {
-		slotLength = 1000
+		slotLength = 2000
 	}
 	so := sop.ConfigureStore(storeName, true, slotLength, "AI Models Registry", sop.MediumData, "")
 	comparer := func(a, b ModelKey) int {

@@ -170,6 +170,14 @@ func (b3 b3WithInducedErrors[TK, TV]) Upsert(ctx context.Context, key TK, value 
 	return true, nil
 }
 
+func (b3 b3WithInducedErrors[TK, TV]) FindInDescendingOrder(ctx context.Context, key TK) (bool, error) {
+	b3.t.Helper()
+	if b3.induceErrorOnMethod == 16 {
+		return false, fmt.Errorf("foobar")
+	}
+	return true, nil
+}
+
 func (b3 b3WithInducedErrors[TK, TV]) GetStoreInfo() sop.StoreInfo {
 	return sop.StoreInfo{}
 }

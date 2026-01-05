@@ -67,7 +67,7 @@ func Test_StoreRepository_CopyToPassiveFolders_CopiesSegments(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(passive, storeListFilename)); err != nil {
 		t.Fatalf("missing passive store list: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(passive, "s1", storeInfoFilename)); err != nil {
+	if _, err := os.Stat(filepath.Join(passive, "s1", StoreInfoFilename)); err != nil {
 		t.Fatalf("missing passive storeinfo: %v", err)
 	}
 	// Registry segment copied
@@ -191,7 +191,7 @@ func Test_StoreRepository_Add_Duplicate_And_CopyToPassive(t *testing.T) {
 		storeWriter := newFileIOWithReplication(rt, nil, true)
 		ba, _ := encoding.Marshal(sop.StoreInfo{Name: "s1", RegistryTable: sop.FormatRegistryTable("s1")})
 		_ = storeWriter.createStore(ctx, "s1")
-		_ = storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, "s1", os.PathSeparator, storeInfoFilename), ba)
+		_ = storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, "s1", os.PathSeparator, StoreInfoFilename), ba)
 	}
 	// Create a registry segment file in the active source directory so copyFilesByExtension finds something to copy.
 	srcDir := filepath.Join(rt.storesBaseFolders[0], sop.FormatRegistryTable("s1"))
@@ -303,7 +303,7 @@ func Test_StoreRepository_CopyToPassiveFolders_WriteStoreInfoError(t *testing.T)
 	}
 
 	// Create a directory at passive/y/storeinfo.txt so write fails after toggling.
-	_ = os.MkdirAll(filepath.Join(passive, "y", storeInfoFilename), 0o755)
+	_ = os.MkdirAll(filepath.Join(passive, "y", StoreInfoFilename), 0o755)
 
 	if err := sr.CopyToPassiveFolders(ctx); err == nil {
 		t.Fatalf("expected error writing passive storeinfo due to directory collision")
@@ -381,7 +381,7 @@ func Test_StoreRepository_CopyToPassiveFolders_GetStoreError(t *testing.T) {
 		t.Fatalf("add: %v", err)
 	}
 	// Overwrite active storeinfo with invalid content to make Get(ctx) fail to Unmarshal.
-	if err := os.WriteFile(filepath.Join(active, "e1", storeInfoFilename), []byte("not-json"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(active, "e1", StoreInfoFilename), []byte("not-json"), 0o644); err != nil {
 		t.Fatalf("write invalid json: %v", err)
 	}
 
@@ -461,7 +461,7 @@ func Test_StoreRepository_Update_UndoOnWriteError(t *testing.T) {
 	}
 
 	// Induce write error for B by replacing its storeinfo file with a directory.
-	bInfoPath := filepath.Join(active, "B", storeInfoFilename)
+	bInfoPath := filepath.Join(active, "B", StoreInfoFilename)
 	_ = os.Remove(bInfoPath)
 	if err := os.MkdirAll(bInfoPath, 0o755); err != nil {
 		t.Fatalf("mkdir collide: %v", err)
@@ -474,7 +474,7 @@ func Test_StoreRepository_Update_UndoOnWriteError(t *testing.T) {
 	}
 
 	// Validate that A's count was undone (remains 0) on disk.
-	aInfoPath := filepath.Join(active, "A", storeInfoFilename)
+	aInfoPath := filepath.Join(active, "A", StoreInfoFilename)
 	ba, err := os.ReadFile(aInfoPath)
 	if err != nil {
 		t.Fatalf("read A info: %v", err)
@@ -603,7 +603,7 @@ func Test_StoreRepository_Add_MarshalStoreInfo_Error(t *testing.T) {
 		t.Fatalf("expected Marshal error for StoreInfo payload")
 	}
 	// Ensure no storeinfo file was written.
-	if _, err := os.Stat(filepath.Join(a, store.Name, storeInfoFilename)); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(a, store.Name, StoreInfoFilename)); !os.IsNotExist(err) {
 		t.Fatalf("unexpected storeinfo persisted despite marshal error: %v", err)
 	}
 }
@@ -623,12 +623,12 @@ func Test_StoreRepository_Add_StoreInfo_Write_Error(t *testing.T) {
 
 	// Pre-create a directory where the storeinfo file should be to force ENOTDIR on write.
 	name := "s2"
-	if err := os.MkdirAll(filepath.Join(a, name, storeInfoFilename), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(a, name, StoreInfoFilename), 0o755); err != nil {
 		t.Fatalf("pre-create dir collision: %v", err)
 	}
 
 	if err := sr.Add(ctx, sop.StoreInfo{Name: name}); err == nil {
-		t.Fatalf("expected write error due to directory at %s", filepath.Join(a, name, storeInfoFilename))
+		t.Fatalf("expected write error due to directory at %s", filepath.Join(a, name, StoreInfoFilename))
 	} else {
 		// sanity: error mentions write
 		_ = fmt.Sprintf("%v", err)
