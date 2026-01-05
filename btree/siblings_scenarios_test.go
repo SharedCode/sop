@@ -41,8 +41,8 @@ func TestSiblings_Table(t *testing.T) {
 	p := newNode[int, string](b.getSlotLength())
 	p.newID(sop.NilUUID)
 	b.StoreInfo.RootNodeID = p.ID
-	p.Slots[0] = &Item[int, string]{Key: 10, Value: &[]string{"a"}[0], ID: sop.NewUUID()}
-	p.Slots[1] = &Item[int, string]{Key: 20, Value: &[]string{"b"}[0], ID: sop.NewUUID()}
+	p.Slots[0] = Item[int, string]{Key: 10, Value: &[]string{"a"}[0], ID: sop.NewUUID()}
+	p.Slots[1] = Item[int, string]{Key: 20, Value: &[]string{"b"}[0], ID: sop.NewUUID()}
 	p.Count = 2
 	c0 := newNode[int, string](b.getSlotLength())
 	c0.newID(p.ID)

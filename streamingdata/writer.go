@@ -25,6 +25,11 @@ func newWriter[TK btree.Ordered](ctx context.Context, addOrUpdate bool, key TK, 
 }
 
 func (w *writer[TK]) Write(p []byte) (int, error) {
+	// Copy p to avoid sharing buffer with json.Encoder or other writers.
+	pCopy := make([]byte, len(p))
+	copy(pCopy, p)
+	p = pCopy
+
 	// Add.
 	if w.addOrUpdate {
 		if ok, err := w.btree.Add(w.ctx, StreamingDataKey[TK]{Key: w.key, ChunkIndex: w.chunkIndex}, p); err != nil || !ok {

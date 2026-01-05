@@ -31,8 +31,9 @@ func (t *fetchedNilRepo) Fetched(id sop.UUID) {
 	if cn, ok := t.backend.localCache[id]; ok && cn.node != nil {
 		if n, ok2 := cn.node.(*btree.Node[PersonKey, Person]); ok2 {
 			for i := range n.Slots {
-				n.Slots[i] = nil
+				n.Slots[i] = btree.Item[PersonKey, Person]{}
 			}
+			n.Count = 0
 		}
 	}
 }

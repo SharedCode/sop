@@ -342,7 +342,7 @@ func TestWithTransaction_UpdateCurrentValue_ModesAndError(t *testing.T) {
 	root := newNode[int, string](b.getSlotLength())
 	root.newID(sop.NilUUID)
 	v := "v"
-	root.Slots[0] = &Item[int, string]{Key: 1, Value: &v, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 1, Value: &v, ID: sop.NewUUID()}
 	root.Count = 1
 	b.StoreInfo.RootNodeID = root.ID
 	fnr.Add(root)
@@ -372,7 +372,7 @@ func TestWithTransaction_UpdateCurrentValue_ModesAndError(t *testing.T) {
 	r3 := newNode[int, string](b3.getSlotLength())
 	r3.newID(sop.NilUUID)
 	vv := "v"
-	r3.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	r3.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
 	r3.Count = 1
 	b3.StoreInfo.RootNodeID = r3.ID
 	fnr3.Add(r3)

@@ -5,8 +5,9 @@ package btree
 
 import (
 	"context"
-	"github.com/sharedcode/sop"
 	"testing"
+
+	"github.com/sharedcode/sop"
 )
 
 // (from promote_test.go)
@@ -70,7 +71,7 @@ func TestPromote_RootSplit_And_PropagateToParent(t *testing.T) {
 	for i, k := range []int{10, 20, 30, 40} {
 		v := "r"
 		vv := v
-		root.Slots[i] = &Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
+		root.Slots[i] = Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
 	}
 	root.Count = slot
 	b.StoreInfo.RootNodeID = root.ID
@@ -79,7 +80,7 @@ func TestPromote_RootSplit_And_PropagateToParent(t *testing.T) {
 	// Prepare temp parent to be inserted around the middle; index 2 is fine (after 2nd slot)
 	pv := "p"
 	temp := &Item[int, string]{Key: 25, Value: &pv, ID: sop.NewUUID()}
-	b.tempParent = temp
+	b.tempParent = *temp
 	// tempParentChildren are not essential for root split verification but set for completeness
 	b.tempParentChildren[0] = sop.NewUUID()
 	b.tempParentChildren[1] = sop.NewUUID()
@@ -88,9 +89,9 @@ func TestPromote_RootSplit_And_PropagateToParent(t *testing.T) {
 		t.Fatalf("root promote split err: %v", err)
 	}
 	// After root split: root has 1 item (the middle), and two children IDs
-	if root.Count != 1 || root.Slots[0] == nil || root.Slots[0].Key != 25 {
+	if root.Count != 1 || root.Slots[0].ID.IsNil() || root.Slots[0].Key != 25 {
 		t.Fatalf("root not restructured as expected; count=%d key=%v", root.Count, func() any {
-			if root.Slots[0] == nil {
+			if root.Slots[0].ID.IsNil() {
 				return nil
 			}
 			return root.Slots[0].Key
@@ -106,7 +107,7 @@ func TestPromote_RootSplit_And_PropagateToParent(t *testing.T) {
 	parent.ChildrenIDs = make([]sop.UUID, slot+1)
 	// One item in parent initially, so it has space for insertion during propagate
 	pv2 := "p2"
-	parent.Slots[0] = &Item[int, string]{Key: 100, Value: &pv2, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 100, Value: &pv2, ID: sop.NewUUID()}
 	parent.Count = 1
 	fnr.Add(parent)
 	b.StoreInfo.RootNodeID = parent.ID
@@ -118,7 +119,7 @@ func TestPromote_RootSplit_And_PropagateToParent(t *testing.T) {
 	for i, k := range []int{110, 120, 130, 140} {
 		v := "c"
 		vv := v
-		child.Slots[i] = &Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
+		child.Slots[i] = Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
 	}
 	child.Count = slot
 	parent.ChildrenIDs[0] = child.ID
@@ -126,7 +127,7 @@ func TestPromote_RootSplit_And_PropagateToParent(t *testing.T) {
 
 	// Prepare temp parent to be inserted on split at index 2
 	pv3 := "pp"
-	b.tempParent = &Item[int, string]{Key: 135, Value: &pv3, ID: sop.NewUUID()}
+	b.tempParent = Item[int, string]{Key: 135, Value: &pv3, ID: sop.NewUUID()}
 	clear(b.tempChildren)
 	if err := child.promote(nil, b, 2); err != nil {
 		t.Fatalf("child promote split err: %v", err)

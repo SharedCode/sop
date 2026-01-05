@@ -80,7 +80,7 @@ func TestAddItem_DistributeError_Propagates(t *testing.T) {
 	v := "v"
 	vv := v
 	for i := 0; i < b.getSlotLength(); i++ {
-		left.Slots[i] = &Item[int, string]{Key: 10 + i, Value: &vv, ID: sop.NewUUID()}
+		left.Slots[i] = Item[int, string]{Key: 10 + i, Value: &vv, ID: sop.NewUUID()}
 	}
 	left.Count = b.getSlotLength()
 
@@ -92,7 +92,7 @@ func TestAddItem_DistributeError_Propagates(t *testing.T) {
 	parent.ChildrenIDs[0] = left.ID
 	parent.ChildrenIDs[1] = right.ID
 	// Set a valid separator key on parent slot 0 to avoid nil deref during add traversal
-	parent.Slots[0] = &Item[int, string]{Key: 60, Value: &vv, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 60, Value: &vv, ID: sop.NewUUID()}
 
 	// Add to repo
 	fnr.Add(parent)
@@ -152,7 +152,7 @@ func fillFullNode(b *Btree[int, string], n *Node[int, string], base int) {
 	v := "v"
 	for i := 0; i < b.getSlotLength(); i++ {
 		vv := v
-		n.Slots[i] = &Item[int, string]{Key: base + i, Value: &vv, ID: sop.NewUUID()}
+		n.Slots[i] = Item[int, string]{Key: base + i, Value: &vv, ID: sop.NewUUID()}
 	}
 	n.Count = b.getSlotLength()
 }
@@ -164,8 +164,8 @@ func TestAddOnLeaf_NotFull_InsertsAndShifts(t *testing.T) {
 	// Preload two items [10, 30] leaving a gap at index 1
 	v := "v"
 	vv := v
-	leaf.Slots[0] = &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
-	leaf.Slots[1] = &Item[int, string]{Key: 30, Value: &vv, ID: sop.NewUUID()}
+	leaf.Slots[0] = Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+	leaf.Slots[1] = Item[int, string]{Key: 30, Value: &vv, ID: sop.NewUUID()}
 	leaf.Count = 2
 	fnr.Add(leaf)
 	// Insert 20 at index 1
@@ -173,7 +173,7 @@ func TestAddOnLeaf_NotFull_InsertsAndShifts(t *testing.T) {
 	if err := leaf.addOnLeaf(nil, b, item, 1); err != nil {
 		t.Fatalf("addOnLeaf err: %v", err)
 	}
-	if leaf.Count != 3 || leaf.Slots[1] == nil || leaf.Slots[1].Key != 20 {
+	if leaf.Count != 3 || leaf.Count < 2 || leaf.Slots[1].Key != 20 {
 		t.Fatalf("expected insert+shift; got count=%d mid=%v", leaf.Count, leaf.Slots[1])
 	}
 }
@@ -190,7 +190,7 @@ func TestAddOnLeaf_Full_VacancyLeft_SetsDistributeLeft(t *testing.T) {
 	// left has room
 	v := "v"
 	vv := v
-	left.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	left.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
 	left.Count = 1
 
 	cur := newNode[int, string](b.getSlotLength())
@@ -214,7 +214,7 @@ func TestAddOnLeaf_Full_VacancyLeft_SetsDistributeLeft(t *testing.T) {
 	if err := cur.addOnLeaf(nil, b, item, 1); err != nil {
 		t.Fatalf("addOnLeaf err: %v", err)
 	}
-	if b.distributeAction.sourceNode != cur || !b.distributeAction.distributeToLeft || b.distributeAction.item == nil {
+	if b.distributeAction.sourceNode != cur || !b.distributeAction.distributeToLeft || b.distributeAction.item.ID.IsNil() {
 		t.Fatalf("expected distribute left to be set")
 	}
 }
@@ -239,7 +239,7 @@ func TestAddOnLeaf_Full_VacancyRight_SetsDistributeRight(t *testing.T) {
 	// right has room
 	v := "v"
 	vv := v
-	right.Slots[0] = &Item[int, string]{Key: 200, Value: &vv, ID: sop.NewUUID()}
+	right.Slots[0] = Item[int, string]{Key: 200, Value: &vv, ID: sop.NewUUID()}
 	right.Count = 1
 
 	parent.ChildrenIDs = make([]sop.UUID, 3)
@@ -255,7 +255,7 @@ func TestAddOnLeaf_Full_VacancyRight_SetsDistributeRight(t *testing.T) {
 	if err := cur.addOnLeaf(nil, b, item, 1); err != nil {
 		t.Fatalf("addOnLeaf err: %v", err)
 	}
-	if b.distributeAction.sourceNode != cur || b.distributeAction.distributeToLeft || b.distributeAction.item == nil {
+	if b.distributeAction.sourceNode != cur || b.distributeAction.distributeToLeft || b.distributeAction.item.ID.IsNil() {
 		t.Fatalf("expected distribute right to be set")
 	}
 }

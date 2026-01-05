@@ -39,7 +39,7 @@ func TestFind_Duplicates_FirstItemWithKey_Leftmost(t *testing.T) {
 	parent := newNode[int, string](b.getSlotLength())
 	parent.newID(sop.NilUUID)
 	pv := "p"
-	parent.Slots[0] = &Item[int, string]{Key: 5, Value: &pv, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 5, Value: &pv, ID: sop.NewUUID()}
 	parent.Count = 1
 	parent.ChildrenIDs = make([]sop.UUID, 2)
 
@@ -47,8 +47,8 @@ func TestFind_Duplicates_FirstItemWithKey_Leftmost(t *testing.T) {
 	left.newID(parent.ID)
 	l1 := "a"
 	l2 := "b"
-	left.Slots[0] = &Item[int, string]{Key: 5, Value: &l1, ID: sop.NewUUID()}
-	left.Slots[1] = &Item[int, string]{Key: 5, Value: &l2, ID: sop.NewUUID()}
+	left.Slots[0] = Item[int, string]{Key: 5, Value: &l1, ID: sop.NewUUID()}
+	left.Slots[1] = Item[int, string]{Key: 5, Value: &l2, ID: sop.NewUUID()}
 	left.Count = 2
 
 	// right child (unused but present)
@@ -83,7 +83,7 @@ func TestFind_FoundWithNilLeftChild_BreaksAtParent(t *testing.T) {
 	parent := newNode[int, string](b.getSlotLength())
 	parent.newID(sop.NilUUID)
 	v := "v"
-	parent.Slots[0] = &Item[int, string]{Key: 10, Value: &v, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 10, Value: &v, ID: sop.NewUUID()}
 	parent.Count = 1
 	parent.ChildrenIDs = make([]sop.UUID, 2)
 	// Force nil left child at index 0
@@ -119,7 +119,7 @@ func TestDistributeToLeft_Rotation_Full(t *testing.T) {
 	left.newID(parent.ID)
 	// left not full (room at end)
 	lv := "l"
-	left.Slots[0] = &Item[int, string]{Key: 1, Value: &lv, ID: sop.NewUUID()}
+	left.Slots[0] = Item[int, string]{Key: 1, Value: &lv, ID: sop.NewUUID()}
 	left.Count = 1
 
 	cur := newNode[int, string](b.getSlotLength())
@@ -128,7 +128,7 @@ func TestDistributeToLeft_Rotation_Full(t *testing.T) {
 	for i := 0; i < b.getSlotLength(); i++ {
 		v := "c"
 		vv := v
-		cur.Slots[i] = &Item[int, string]{Key: 10 + i, Value: &vv, ID: sop.NewUUID()}
+		cur.Slots[i] = Item[int, string]{Key: 10 + i, Value: &vv, ID: sop.NewUUID()}
 	}
 	cur.Count = b.getSlotLength()
 
@@ -141,8 +141,8 @@ func TestDistributeToLeft_Rotation_Full(t *testing.T) {
 	// separators [slot0, slot1]
 	s0 := "s0"
 	s1 := "s1"
-	parent.Slots[0] = &Item[int, string]{Key: 20, Value: &s0, ID: sop.NewUUID()}
-	parent.Slots[1] = &Item[int, string]{Key: 30, Value: &s1, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 20, Value: &s0, ID: sop.NewUUID()}
+	parent.Slots[1] = Item[int, string]{Key: 30, Value: &s1, ID: sop.NewUUID()}
 
 	fnr.Add(parent)
 	fnr.Add(left)
@@ -204,14 +204,14 @@ func TestFind_NotFound_NearestNeighborOnParentRightNilChild(t *testing.T) {
 	parent := newNode[int, string](b.getSlotLength())
 	parent.newID(sop.NilUUID)
 	pv := "p"
-	parent.Slots[0] = &Item[int, string]{Key: 10, Value: &pv, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 10, Value: &pv, ID: sop.NewUUID()}
 	parent.Count = 1
 	parent.ChildrenIDs = make([]sop.UUID, 2)
 	// Left child exists; right child is nil to trigger short-circuit.
 	left := newNode[int, string](b.getSlotLength())
 	left.newID(parent.ID)
 	lv := "l"
-	left.Slots[0] = &Item[int, string]{Key: 5, Value: &lv, ID: sop.NewUUID()}
+	left.Slots[0] = Item[int, string]{Key: 5, Value: &lv, ID: sop.NewUUID()}
 	left.Count = 1
 	parent.ChildrenIDs[0] = left.ID
 	parent.ChildrenIDs[1] = sop.NilUUID
@@ -244,7 +244,7 @@ func TestFind_GetChildError_Propagates(t *testing.T) {
 	parent := newNode[int, string](b.getSlotLength())
 	parent.newID(sop.NilUUID)
 	pv := "p"
-	parent.Slots[0] = &Item[int, string]{Key: 10, Value: &pv, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 10, Value: &pv, ID: sop.NewUUID()}
 	parent.Count = 1
 	parent.ChildrenIDs = make([]sop.UUID, 2)
 	// Left child ID will error when fetched.

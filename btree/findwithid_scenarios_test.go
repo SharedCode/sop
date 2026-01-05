@@ -52,8 +52,8 @@ func TestFindWithID_NextError(t *testing.T) {
 	v := "v"
 	vv := v
 	id1, id2 := sop.NewUUID(), sop.NewUUID()
-	root.Slots[0] = &Item[int, string]{Key: 5, Value: &vv, ID: id1}
-	root.Slots[1] = &Item[int, string]{Key: 5, Value: &vv, ID: id2}
+	root.Slots[0] = Item[int, string]{Key: 5, Value: &vv, ID: id1}
+	root.Slots[1] = Item[int, string]{Key: 5, Value: &vv, ID: id2}
 	root.Count = 2
 
 	// Add a right child id to force a right-walk on Next and inject an error on fetching that child
@@ -209,8 +209,8 @@ func TestFindWithID_PropagatesNextError(t *testing.T) {
 	root.newID(sop.NilUUID)
 	v := "v"
 	vv := v
-	root.Slots[0] = &Item[int, string]{Key: 9, Value: &vv, ID: sop.NewUUID()}
-	root.Slots[1] = &Item[int, string]{Key: 9, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 9, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[1] = Item[int, string]{Key: 9, Value: &vv, ID: sop.NewUUID()}
 	root.Count = 2
 	b.StoreInfo.RootNodeID = root.ID
 	b.StoreInfo.Count = 2

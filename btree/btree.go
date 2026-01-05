@@ -25,8 +25,8 @@ import (
 type Btree[TK Ordered, TV any] struct {
 	StoreInfo          *sop.StoreInfo
 	storeInterface     *StoreInterface[TK, TV]
-	tempSlots          []*Item[TK, TV]
-	tempParent         *Item[TK, TV]
+	tempSlots          []Item[TK, TV]
+	tempParent         Item[TK, TV]
 	tempChildren       []sop.UUID
 	tempParentChildren []sop.UUID
 	currentItemRef     currentItemRef
@@ -58,7 +58,7 @@ func (c currentItemRef) getNodeID() sop.UUID {
 // that is known to have a vacant slot.
 type distributeAction[TK Ordered, TV any] struct {
 	sourceNode *Node[TK, TV]
-	item       *Item[TK, TV]
+	item       Item[TK, TV]
 	// distributeToLeft is true if item needs to be distributed to the left side,
 	// otherwise to the right side.
 	distributeToLeft bool
@@ -90,7 +90,7 @@ func New[TK Ordered, TV any](storeInfo *sop.StoreInfo, si *StoreInterface[TK, TV
 	var b3 = Btree[TK, TV]{
 		StoreInfo:          storeInfo,
 		storeInterface:     si,
-		tempSlots:          make([]*Item[TK, TV], storeInfo.SlotLength+1),
+		tempSlots:          make([]Item[TK, TV], storeInfo.SlotLength+1),
 		tempChildren:       make([]sop.UUID, storeInfo.SlotLength+2),
 		tempParentChildren: make([]sop.UUID, 2),
 		comparer:           comparer,
@@ -352,7 +352,7 @@ func (btree *Btree[TK, TV]) Next(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+	if node == nil || btree.currentItemRef.getNodeItemIndex() >= node.Count {
 		return false, nil
 	}
 	r, err := node.moveToNext(ctx, btree)
@@ -370,7 +370,7 @@ func (btree *Btree[TK, TV]) Previous(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+	if node == nil || btree.currentItemRef.getNodeItemIndex() >= node.Count {
 		return false, nil
 	}
 	r, err := node.moveToPrevious(ctx, btree)
@@ -411,7 +411,7 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, key TK, value
 	if err != nil {
 		return false, err
 	}
-	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+	if node == nil || btree.currentItemRef.getNodeItemIndex() >= node.Count {
 		return false, nil
 	}
 
@@ -426,9 +426,10 @@ func (btree *Btree[TK, TV]) UpdateCurrentItem(ctx context.Context, key TK, value
 	item.Key = key
 	item.Value = &value
 	// Register to local cache the "item update" for submit/resolution on Commit.
-	if err := btree.storeInterface.ItemActionTracker.Update(ctx, item); err != nil {
+	if err := btree.storeInterface.ItemActionTracker.Update(ctx, &item); err != nil {
 		return false, err
 	}
+	node.Slots[btree.currentItemRef.getNodeItemIndex()] = item
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
 	btree.saveNode(node)
 	return true, nil
@@ -443,15 +444,16 @@ func (btree *Btree[TK, TV]) UpdateCurrentValue(ctx context.Context, newValue TV)
 	if err != nil {
 		return false, err
 	}
-	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+	if node == nil || btree.currentItemRef.getNodeItemIndex() >= node.Count {
 		return false, nil
 	}
 	item := node.Slots[btree.currentItemRef.getNodeItemIndex()]
 	item.Value = &newValue
 	// Register to local cache the "item update" for submit/resolution on Commit.
-	if err := btree.storeInterface.ItemActionTracker.Update(ctx, item); err != nil {
+	if err := btree.storeInterface.ItemActionTracker.Update(ctx, &item); err != nil {
 		return false, err
 	}
+	node.Slots[btree.currentItemRef.getNodeItemIndex()] = item
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
 	btree.saveNode(node)
 	return true, nil
@@ -466,7 +468,7 @@ func (btree *Btree[TK, TV]) UpdateCurrentKey(ctx context.Context, key TK) (bool,
 	if err != nil {
 		return false, err
 	}
-	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+	if node == nil || btree.currentItemRef.getNodeItemIndex() >= node.Count {
 		return false, nil
 	}
 	item := node.Slots[btree.currentItemRef.getNodeItemIndex()]
@@ -481,9 +483,10 @@ func (btree *Btree[TK, TV]) UpdateCurrentKey(ctx context.Context, key TK) (bool,
 	item.Key = key
 
 	// Register to local cache the "item update" for submit/resolution on Commit.
-	if err := btree.storeInterface.ItemActionTracker.Update(ctx, item); err != nil {
+	if err := btree.storeInterface.ItemActionTracker.Update(ctx, &item); err != nil {
 		return false, err
 	}
+	node.Slots[btree.currentItemRef.getNodeItemIndex()] = item
 	// Let the NodeRepository (& TransactionManager take care of backend storage upsert, etc...)
 	btree.saveNode(node)
 	return true, nil
@@ -498,12 +501,12 @@ func (btree *Btree[TK, TV]) UpdateCurrentItemWithItem(ctx context.Context, item 
 	if err != nil {
 		return false, err
 	}
-	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+	if node == nil || btree.currentItemRef.getNodeItemIndex() >= node.Count {
 		return false, nil
 	}
 	btree.unfetchCurrentValue()
 	btree.currentItem = item
-	node.Slots[btree.currentItemRef.getNodeItemIndex()] = item
+	node.Slots[btree.currentItemRef.getNodeItemIndex()] = *item
 
 	// Register to local cache the "item update" for submit/resolution on Commit.
 	if err := btree.storeInterface.ItemActionTracker.Update(ctx, item); err != nil {
@@ -548,7 +551,10 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 	if err != nil {
 		return false, err
 	}
-	if node == nil || node.Slots[btree.currentItemRef.getNodeItemIndex()] == nil {
+	if node == nil || btree.currentItemRef.getNodeItemIndex() >= node.Count {
+		return false, nil
+	}
+	if node.Slots[btree.currentItemRef.getNodeItemIndex()].ID.IsNil() {
 		return false, nil
 	}
 	// Check if there are children nodes.
@@ -558,7 +564,7 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 		if ok, err := node.removeItemOnNodeWithNilChild(ctx, btree, index); ok || err != nil {
 			if ok {
 				// Register to local cache the "item remove" for submit/resolution on Commit.
-				if err := btree.storeInterface.ItemActionTracker.Remove(ctx, deletedItem); err != nil {
+				if err := btree.storeInterface.ItemActionTracker.Remove(ctx, &deletedItem); err != nil {
 					return false, err
 				}
 				// Make the current item pointer point to null since we just deleted the current item.
@@ -585,7 +591,7 @@ func (btree *Btree[TK, TV]) RemoveCurrentItem(ctx context.Context) (bool, error)
 		if ok, err := currentNode.removeItemOnNodeWithNilChild(ctx, btree, btree.currentItemRef.getNodeItemIndex()); ok || err != nil {
 			if ok {
 				// Register to local cache the "item remove" for submit/resolution on Commit.
-				if err := btree.storeInterface.ItemActionTracker.Remove(ctx, deletedItem); err != nil {
+				if err := btree.storeInterface.ItemActionTracker.Remove(ctx, &deletedItem); err != nil {
 					return false, err
 				}
 				// Make the current item pointer point to null since we just deleted the current item.
@@ -643,7 +649,7 @@ func (btree *Btree[TK, TV]) getCurrentItem(ctx context.Context) (*Item[TK, TV], 
 	if err != nil {
 		return nil, err
 	}
-	btree.currentItem = n.Slots[btree.currentItemRef.getNodeItemIndex()]
+	btree.currentItem = &n.Slots[btree.currentItemRef.getNodeItemIndex()]
 	return btree.currentItem, nil
 }
 
@@ -727,15 +733,15 @@ func (btree *Btree[TK, TV]) distribute(ctx context.Context) error {
 		n := btree.distributeAction.sourceNode
 		btree.distributeAction.sourceNode = nil
 		item := btree.distributeAction.item
-		btree.distributeAction.item = nil
+		btree.distributeAction.item = Item[TK, TV]{}
 
 		// Node DistributeLeft or XxRight contains actual logic of "item distribution".
 		if btree.distributeAction.distributeToLeft {
-			if err := n.distributeToLeft(ctx, btree, item); err != nil {
+			if err := n.distributeToLeft(ctx, btree, &item); err != nil {
 				return err
 			}
 		} else {
-			if err := n.distributeToRight(ctx, btree, item); err != nil {
+			if err := n.distributeToRight(ctx, btree, &item); err != nil {
 				return err
 			}
 		}

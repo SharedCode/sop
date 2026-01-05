@@ -50,7 +50,7 @@ func TestGetCurrentValue_FetchFlags(t *testing.T) {
 	root := newNode[int, string](b.getSlotLength())
 	root.newID(sop.NilUUID)
 	val := "x"
-	it := &Item[int, string]{Key: 1, Value: &val, ID: sop.NewUUID(), ValueNeedsFetch: true}
+	it := Item[int, string]{Key: 1, Value: &val, ID: sop.NewUUID(), ValueNeedsFetch: true}
 	root.Slots[0] = it
 	root.Count = 1
 	b.StoreInfo.RootNodeID = root.ID
@@ -64,10 +64,10 @@ func TestGetCurrentValue_FetchFlags(t *testing.T) {
 	if v != "x" {
 		t.Fatalf("want x, got %s", v)
 	}
-	if it.ValueNeedsFetch {
+	if root.Slots[0].ValueNeedsFetch {
 		t.Fatalf("expected ValueNeedsFetch=false after GetCurrentValue")
 	}
-	if !it.valueWasFetched {
+	if !root.Slots[0].valueWasFetched {
 		t.Fatalf("expected valueWasFetched=true after fetch")
 	}
 
@@ -78,7 +78,7 @@ func TestGetCurrentValue_FetchFlags(t *testing.T) {
 	b.StoreInfo.IsValueDataInNodeSegment = false
 	b.StoreInfo.IsValueDataActivelyPersisted = true
 	b.unfetchCurrentValue()
-	if it.Value != nil || !it.ValueNeedsFetch || it.valueWasFetched {
+	if root.Slots[0].Value != nil || !root.Slots[0].ValueNeedsFetch || root.Slots[0].valueWasFetched {
 		t.Fatalf("expected value cleared and needs fetch again")
 	}
 }

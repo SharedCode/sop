@@ -167,10 +167,11 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 		}
 	}
 
-	const maxSlotLength = 10000
+	// Maximum number of items a node can accommodate.
+	const maxSlotLength = 20000
 
-	// Maximum slot length is 10,000. It may be ridiculously huge blob if too big.
-	// Even 10,000 may be too much, depending on key & value data size you'll store.
+	// Maximum slot length is 20,000. It may be ridiculously huge blob if too big.
+	// Even 20,000 may be too much, depending on key & value data size you'll store.
 	if si.SlotLength > maxSlotLength {
 		si.SlotLength = maxSlotLength
 	}

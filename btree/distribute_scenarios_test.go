@@ -4,8 +4,9 @@ package btree
 import (
 	"context"
 	"fmt"
-	"github.com/sharedcode/sop"
 	"testing"
+
+	"github.com/sharedcode/sop"
 )
 
 // NOTE: Original distribute_* test files have been removed. This file intentionally contains
@@ -43,7 +44,7 @@ func TestDistributeToRight_ReturnsParentError(t *testing.T) {
 	v := "v"
 	vv := v
 	for i := 0; i < b.getSlotLength(); i++ {
-		node.Slots[i] = &Item[int, string]{Key: 100 + i, Value: &vv, ID: sop.NewUUID()}
+		node.Slots[i] = Item[int, string]{Key: 100 + i, Value: &vv, ID: sop.NewUUID()}
 	}
 	node.Count = b.getSlotLength()
 
@@ -68,7 +69,7 @@ func TestDistributeToRight_ReturnsRightSiblingError(t *testing.T) {
 	v := "v"
 	vv := v
 	for i := 0; i < b.getSlotLength(); i++ {
-		node.Slots[i] = &Item[int, string]{Key: 100 + i, Value: &vv, ID: sop.NewUUID()}
+		node.Slots[i] = Item[int, string]{Key: 100 + i, Value: &vv, ID: sop.NewUUID()}
 	}
 	node.Count = b.getSlotLength()
 
@@ -104,7 +105,7 @@ func TestDistribute_Controller_ReturnsError(t *testing.T) {
 	v := "v"
 	vv := v
 	for i := 0; i < b.getSlotLength(); i++ {
-		left.Slots[i] = &Item[int, string]{Key: 10 + i, Value: &vv, ID: sop.NewUUID()}
+		left.Slots[i] = Item[int, string]{Key: 10 + i, Value: &vv, ID: sop.NewUUID()}
 	}
 	left.Count = b.getSlotLength()
 
@@ -119,7 +120,7 @@ func TestDistribute_Controller_ReturnsError(t *testing.T) {
 	fnr.Add(right)
 
 	b.distributeAction.sourceNode = left
-	b.distributeAction.item = &Item[int, string]{Key: 999, Value: &vv, ID: sop.NewUUID()}
+	b.distributeAction.item = Item[int, string]{Key: 999, Value: &vv, ID: sop.NewUUID()}
 	b.distributeAction.distributeToLeft = false
 
 	fnr.errs[right.ID] = true
@@ -140,7 +141,7 @@ func TestDistributeToLeft_NilChildShortCircuit(t *testing.T) {
 	for i := 0; i < b.getSlotLength(); i++ {
 		v := "a"
 		vv := v
-		n.Slots[i] = &Item[int, string]{Key: i + 1, Value: &vv, ID: sop.NewUUID()}
+		n.Slots[i] = Item[int, string]{Key: i + 1, Value: &vv, ID: sop.NewUUID()}
 	}
 	n.Count = b.getSlotLength()
 	n.ChildrenIDs = make([]sop.UUID, b.getSlotLength()+1)
@@ -173,7 +174,7 @@ func TestDistributeToLeft_RotationAndAppend(t *testing.T) {
 	parent := newNode[int, string](b.getSlotLength())
 	parent.newID(sop.NilUUID)
 	sepVal := "m"
-	parent.Slots[0] = &Item[int, string]{Key: 100, Value: &sepVal, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 100, Value: &sepVal, ID: sop.NewUUID()}
 	parent.Count = 1
 
 	left := newNode[int, string](b.getSlotLength())
@@ -181,7 +182,7 @@ func TestDistributeToLeft_RotationAndAppend(t *testing.T) {
 	for i, k := range []int{10, 20, 30} {
 		v := "l"
 		vv := v
-		left.Slots[i] = &Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
+		left.Slots[i] = Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
 	}
 	left.Count = 3
 
@@ -190,7 +191,7 @@ func TestDistributeToLeft_RotationAndAppend(t *testing.T) {
 	for i, k := range []int{110, 120, 130, 140} {
 		v := "r"
 		vv := v
-		right.Slots[i] = &Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
+		right.Slots[i] = Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
 	}
 	right.Count = 4
 
@@ -214,7 +215,7 @@ func TestDistributeToLeft_RotationAndAppend(t *testing.T) {
 	if left.Count != 4 {
 		t.Fatalf("left count want 4 got %d", left.Count)
 	}
-	if parent.Slots[0] == nil {
+	if parent.Slots[0].ID.IsNil() {
 		t.Fatalf("parent separator not set")
 	}
 }

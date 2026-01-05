@@ -17,9 +17,9 @@ func TestRemoveItemOnNodeWithNilChild_Shifts(t *testing.T) {
 		n.newID(sop.NilUUID)
 		v := "v"
 		vv := v
-		n.Slots[0] = &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
-		n.Slots[1] = &Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
-		n.Slots[2] = &Item[int, string]{Key: 30, Value: &vv, ID: sop.NewUUID()}
+		n.Slots[0] = Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+		n.Slots[1] = Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
+		n.Slots[2] = Item[int, string]{Key: 30, Value: &vv, ID: sop.NewUUID()}
 		n.Count = 3
 		n.ChildrenIDs = make([]sop.UUID, 4)
 		n.ChildrenIDs[0] = sop.NewUUID()
@@ -37,7 +37,7 @@ func TestRemoveItemOnNodeWithNilChild_Shifts(t *testing.T) {
 	if ok, err := nA.removeItemOnNodeWithNilChild(nil, b, 1); !ok || err != nil {
 		t.Fatalf("removeItemOnNodeWithNilChild A failed: %v", err)
 	}
-	if nA.Count != 2 || nA.Slots[1] == nil || nA.Slots[1].Key != 30 {
+	if nA.Count != 2 || nA.Slots[1].ID.IsNil() || nA.Slots[1].Key != 30 {
 		t.Fatalf("left-nil shift did not move items correctly")
 	}
 
@@ -47,7 +47,7 @@ func TestRemoveItemOnNodeWithNilChild_Shifts(t *testing.T) {
 	if ok, err := nB.removeItemOnNodeWithNilChild(nil, b, 1); !ok || err != nil {
 		t.Fatalf("removeItemOnNodeWithNilChild B failed: %v", err)
 	}
-	if nB.Count != 2 || nB.Slots[1] == nil || nB.Slots[1].Key != 30 {
+	if nB.Count != 2 || nB.Slots[1].ID.IsNil() || nB.Slots[1].Key != 30 {
 		t.Fatalf("right-nil shift did not move items correctly")
 	}
 }
@@ -60,7 +60,7 @@ func TestRemoveItemOnNodeWithNilChild_RootCollapse(t *testing.T) {
 	// Root with one item
 	v := "r"
 	vv := v
-	root.Slots[0] = &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
 	root.Count = 1
 	root.ChildrenIDs = make([]sop.UUID, b.getSlotLength()+1)
 	// Set right child nil and left child populated
@@ -68,8 +68,8 @@ func TestRemoveItemOnNodeWithNilChild_RootCollapse(t *testing.T) {
 	child.newID(root.ID)
 	v1 := "c1"
 	v2 := "c2"
-	child.Slots[0] = &Item[int, string]{Key: 5, Value: &v1, ID: sop.NewUUID()}
-	child.Slots[1] = &Item[int, string]{Key: 15, Value: &v2, ID: sop.NewUUID()}
+	child.Slots[0] = Item[int, string]{Key: 5, Value: &v1, ID: sop.NewUUID()}
+	child.Slots[1] = Item[int, string]{Key: 15, Value: &v2, ID: sop.NewUUID()}
 	child.Count = 2
 	root.ChildrenIDs[0] = child.ID
 	root.ChildrenIDs[1] = sop.NilUUID
@@ -104,7 +104,7 @@ func TestRemoveItemOnNodeWithNilChild_Unlink(t *testing.T) {
 	n.newID(parent.ID)
 	v := "x"
 	vv := v
-	n.Slots[0] = &Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
+	n.Slots[0] = Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
 	n.Count = 1
 	n.ChildrenIDs = make([]sop.UUID, 2)
 	n.ChildrenIDs[0] = sop.NilUUID
@@ -138,8 +138,8 @@ func TestDistributeItemOnNodeWithNilChild(t *testing.T) {
 	// Two items and three children slots with a nil in the middle
 	v := "v"
 	vv := v
-	n.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
-	n.Slots[1] = &Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
+	n.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	n.Slots[1] = Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
 	n.Count = 2
 	n.ChildrenIDs = make([]sop.UUID, 3)
 	n.ChildrenIDs[0] = sop.NewUUID()
@@ -181,7 +181,7 @@ func TestAddItemOnNodeWithNilChild(t *testing.T) {
 	}
 	// Verify child received the item
 	child, _ := n.getChild(nil, b, 0)
-	if child == nil || child.Count != 1 || child.Slots[0] != item {
+	if child == nil || child.Count != 1 || child.Slots[0] != *item {
 		t.Fatalf("child item not inserted as expected")
 	}
 }
@@ -226,8 +226,8 @@ func TestGoLeftUpItemOnNodeWithNilChild(t *testing.T) {
 	// Two items
 	v := "v"
 	vv := v
-	n.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
-	n.Slots[1] = &Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
+	n.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	n.Slots[1] = Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
 	n.Count = 2
 	// Children with a nil at index 1
 	n.ChildrenIDs = make([]sop.UUID, 3)
@@ -264,7 +264,7 @@ func TestGoLeftUpItemOnNodeWithNilChild_ClimbParent(t *testing.T) {
 	p := newNode[int, string](b.getSlotLength())
 	p.newID(sop.NilUUID)
 	v := "p"
-	p.Slots[0] = &Item[int, string]{Key: 100, Value: &v, ID: sop.NewUUID()}
+	p.Slots[0] = Item[int, string]{Key: 100, Value: &v, ID: sop.NewUUID()}
 	p.Count = 1
 	p.ChildrenIDs = make([]sop.UUID, 2)
 
@@ -304,8 +304,8 @@ func TestGoRightUpItemOnNodeWithNilChild_Paths(t *testing.T) {
 	n1.newID(sop.NilUUID)
 	v := "v"
 	vv := v
-	n1.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
-	n1.Slots[1] = &Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
+	n1.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	n1.Slots[1] = Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
 	n1.Count = 2
 	n1.ChildrenIDs = make([]sop.UUID, 3)
 	n1.ChildrenIDs[0] = sop.NewUUID()
@@ -323,7 +323,7 @@ func TestGoRightUpItemOnNodeWithNilChild_Paths(t *testing.T) {
 	// Case 2: at root end -> false
 	n2 := newNode[int, string](b.getSlotLength())
 	n2.newID(sop.NilUUID)
-	n2.Slots[0] = &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+	n2.Slots[0] = Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
 	n2.Count = 1
 	n2.ChildrenIDs = make([]sop.UUID, 2)
 	n2.ChildrenIDs[0] = sop.NewUUID()
@@ -339,7 +339,7 @@ func TestGoRightUpItemOnNodeWithNilChild_Paths(t *testing.T) {
 	// Case 3: climb to parent and select parent's item
 	parent := newNode[int, string](b.getSlotLength())
 	parent.newID(sop.NilUUID)
-	parent.Slots[0] = &Item[int, string]{Key: 100, Value: &vv, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 100, Value: &vv, ID: sop.NewUUID()}
 	parent.Count = 1
 	parent.ChildrenIDs = make([]sop.UUID, 2)
 
@@ -370,7 +370,7 @@ func TestGoRightLeftUp_WithNonNilChild_ReturnsFalse(t *testing.T) {
 	root := newNode[int, string](b.getSlotLength())
 	root.newID(sop.NilUUID)
 	// One slot and two children positions
-	root.Slots[0] = &Item[int, string]{Key: 10, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 10, ID: sop.NewUUID()}
 	root.Count = 1
 	// Prepare non-nil child at index 0 for left-up path and at index 1 for right-up path
 	c0 := newNode[int, string](b.getSlotLength())

@@ -4,8 +4,9 @@ package btree
 // NOTE: Pure content merge; originals removed.
 
 import (
-	"github.com/sharedcode/sop"
 	"testing"
+
+	"github.com/sharedcode/sop"
 )
 
 // (from traversal_test.go)
@@ -32,8 +33,8 @@ func TestMoveToPrevious_WithChildren_GoLeftUpShortcut(t *testing.T) {
 	n.newID(sop.NilUUID)
 	v := "v"
 	vv := v
-	n.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
-	n.Slots[1] = &Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
+	n.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	n.Slots[1] = Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
 	n.Count = 2
 	n.ChildrenIDs = make([]sop.UUID, 3)
 	n.ChildrenIDs[0] = sop.NewUUID()
@@ -65,7 +66,7 @@ func TestMoveToPrevious_DescendLeftSubtree_LastItem(t *testing.T) {
 	parent.newID(sop.NilUUID)
 	pv := "p"
 	pvv := pv
-	parent.Slots[0] = &Item[int, string]{Key: 100, Value: &pvv, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 100, Value: &pvv, ID: sop.NewUUID()}
 	parent.Count = 1
 	parent.ChildrenIDs = make([]sop.UUID, 2)
 
@@ -73,8 +74,8 @@ func TestMoveToPrevious_DescendLeftSubtree_LastItem(t *testing.T) {
 	child.newID(parent.ID)
 	v := "c"
 	vv := v
-	child.Slots[0] = &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
-	child.Slots[1] = &Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
+	child.Slots[0] = Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+	child.Slots[1] = Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
 	child.Count = 2
 
 	parent.ChildrenIDs[0] = child.ID
@@ -106,7 +107,7 @@ func TestMoveToPrevious_Edges(t *testing.T) {
 	root := newNode[int, string](b.getSlotLength())
 	root.newID(sop.NilUUID)
 	v := "v"
-	root.Slots[0] = &Item[int, string]{Key: 50, Value: &v, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 50, Value: &v, ID: sop.NewUUID()}
 	root.Count = 1
 	root.ChildrenIDs = make([]sop.UUID, 2)
 	left := newNode[int, string](b.getSlotLength())
@@ -114,8 +115,8 @@ func TestMoveToPrevious_Edges(t *testing.T) {
 	right := newNode[int, string](b.getSlotLength())
 	right.newID(root.ID)
 	// left has two items so slotIndex-1 path is exercised
-	left.Slots[0] = &Item[int, string]{Key: 10, Value: &v, ID: sop.NewUUID()}
-	left.Slots[1] = &Item[int, string]{Key: 20, Value: &v, ID: sop.NewUUID()}
+	left.Slots[0] = Item[int, string]{Key: 10, Value: &v, ID: sop.NewUUID()}
+	left.Slots[1] = Item[int, string]{Key: 20, Value: &v, ID: sop.NewUUID()}
 	left.Count = 2
 	root.ChildrenIDs[0] = left.ID
 	root.ChildrenIDs[1] = right.ID
@@ -165,7 +166,7 @@ func TestNext_GoRightUpToEnd(t *testing.T) {
 	root.newID(sop.NilUUID)
 	v := "v"
 	vv := v
-	root.Slots[0] = &Item[int, string]{Key: 50, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 50, Value: &vv, ID: sop.NewUUID()}
 	root.Count = 1
 	root.ChildrenIDs = make([]sop.UUID, 2)
 	// left child can be anything or nil; right child nil triggers goRightUp end
@@ -213,8 +214,8 @@ func TestPrevious_DescendLeftSubtree(t *testing.T) {
 	p.newID(sop.NilUUID)
 	v := "v"
 	vv := v
-	p.Slots[0] = &Item[int, string]{Key: 50, Value: &vv, ID: sop.NewUUID()}
-	p.Slots[1] = &Item[int, string]{Key: 100, Value: &vv, ID: sop.NewUUID()}
+	p.Slots[0] = Item[int, string]{Key: 50, Value: &vv, ID: sop.NewUUID()}
+	p.Slots[1] = Item[int, string]{Key: 100, Value: &vv, ID: sop.NewUUID()}
 	p.Count = 2
 	p.ChildrenIDs = make([]sop.UUID, 3)
 	left := newNode[int, string](b.getSlotLength())
@@ -226,8 +227,8 @@ func TestPrevious_DescendLeftSubtree(t *testing.T) {
 	p.ChildrenIDs[0] = left.ID
 	p.ChildrenIDs[1] = mid.ID
 	p.ChildrenIDs[2] = right.ID
-	left.Slots[0] = &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
-	left.Slots[1] = &Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
+	left.Slots[0] = Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+	left.Slots[1] = Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
 	left.Count = 2
 	fnr.Add(p)
 	fnr.Add(left)
@@ -264,8 +265,8 @@ func TestMoveToPrevious_GoLeftUpImmediateSelect(t *testing.T) {
 	root := newNode[int, string](b.getSlotLength())
 	root.newID(sop.NilUUID)
 	// Two items
-	root.Slots[0] = &Item[int, string]{Key: 10, ID: sop.NewUUID()}
-	root.Slots[1] = &Item[int, string]{Key: 20, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 10, ID: sop.NewUUID()}
+	root.Slots[1] = Item[int, string]{Key: 20, ID: sop.NewUUID()}
 	root.Count = 2
 	// Children present with nil at index 1 to trigger goLeftUp immediate selection of slot 0
 	root.ChildrenIDs = make([]sop.UUID, 3)
@@ -294,8 +295,8 @@ func TestMoveToNext_GoRightUpImmediateSelect(t *testing.T) {
 	b, fnr := newTestBtree[string]()
 	root := newNode[int, string](b.getSlotLength())
 	root.newID(sop.NilUUID)
-	root.Slots[0] = &Item[int, string]{Key: 10, ID: sop.NewUUID()}
-	root.Slots[1] = &Item[int, string]{Key: 20, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 10, ID: sop.NewUUID()}
+	root.Slots[1] = Item[int, string]{Key: 20, ID: sop.NewUUID()}
 	root.Count = 2
 	// Children present with nil at index 1 to trigger goRightUp immediate selection
 	root.ChildrenIDs = make([]sop.UUID, 3)

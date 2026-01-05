@@ -83,14 +83,14 @@ func TestRemoveItemOnNodeWithNilChild_RightBranch_PromoteChild(t *testing.T) {
 	// Parent with one slot -> two children
 	parent := newNode[int, string](b.getSlotLength())
 	parent.newID(sop.NilUUID)
-	parent.Slots[0] = &Item[int, string]{Key: 100, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 100, ID: sop.NewUUID()}
 	parent.Count = 1
 
 	// Target node as left child; it has one slot and exactly one non-nil child on the left,
 	// and a nil right child to activate the right-branch in removeItemOnNodeWithNilChild.
 	n := newNode[int, string](b.getSlotLength())
 	n.newID(parent.ID)
-	n.Slots[0] = &Item[int, string]{Key: 10, ID: sop.NewUUID()}
+	n.Slots[0] = Item[int, string]{Key: 10, ID: sop.NewUUID()}
 	n.Count = 1
 	n.ChildrenIDs = make([]sop.UUID, 2)
 	// left child exists

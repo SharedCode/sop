@@ -15,6 +15,12 @@ import (
 	"github.com/sharedcode/sop/infs"
 )
 
+func init() {
+	for i := 1; i <= 7; i++ {
+		os.MkdirAll(fmt.Sprintf("%s%cdisk%d", dataPath, os.PathSeparator, i), 0755)
+	}
+}
+
 func initErasureCoding() {
 	// Erasure Coding configuration lookup table (map).
 	ec := make(map[string]sop.ErasureCodingConfig)

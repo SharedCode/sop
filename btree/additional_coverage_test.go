@@ -38,7 +38,7 @@ func TestFind_ShortCircuitWithCurrentSelection(t *testing.T) {
 	root := newNode[int, string](b.getSlotLength())
 	root.newID(sop.NilUUID)
 	v := "v"
-	root.Slots[0] = &Item[int, string]{Key: 10, Value: &v, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 10, Value: &v, ID: sop.NewUUID()}
 	root.Count = 1
 	fnr.Add(root)
 	b.StoreInfo.RootNodeID = root.ID
@@ -62,7 +62,7 @@ func TestGetCurrentItem_ErrorOnGet(t *testing.T) {
 	root := newNode[int, string](b.getSlotLength())
 	root.newID(sop.NilUUID)
 	v := "x"
-	root.Slots[0] = &Item[int, string]{Key: 1, Value: &v, ID: sop.NewUUID(), ValueNeedsFetch: true}
+	root.Slots[0] = Item[int, string]{Key: 1, Value: &v, ID: sop.NewUUID(), ValueNeedsFetch: true}
 	root.Count = 1
 	fnr.Add(root)
 	b.StoreInfo.RootNodeID = root.ID
@@ -128,7 +128,7 @@ func TestRemoveCurrentItem_Leaf_RemoveError(t *testing.T) {
 	leaf := newNode[int, string](b.getSlotLength())
 	leaf.newID(sop.NilUUID)
 	v := "z"
-	leaf.Slots[0] = &Item[int, string]{Key: 9, Value: &v, ID: sop.NewUUID()}
+	leaf.Slots[0] = Item[int, string]{Key: 9, Value: &v, ID: sop.NewUUID()}
 	leaf.Count = 1
 	fnr.Add(leaf)
 	b.StoreInfo.RootNodeID = leaf.ID
@@ -171,7 +171,7 @@ func TestFind_CurrentSelected_ShortCircuit(t *testing.T) {
 	root := newNode[int, string](b.getSlotLength())
 	root.newID(sop.NilUUID)
 	v := "v"
-	root.Slots[0] = &Item[int, string]{Key: 10, Value: &v, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 10, Value: &v, ID: sop.NewUUID()}
 	root.Count = 1
 	fnr.Add(root)
 	b.StoreInfo.RootNodeID = root.ID
@@ -244,7 +244,7 @@ func TestRemoveCurrentItem_RemoveError(t *testing.T) {
 	n := newNode[int, string](b.getSlotLength())
 	n.newID(sop.NilUUID)
 	v := "x"
-	n.Slots[0] = &Item[int, string]{Key: 1, Value: &v, ID: sop.NewUUID()}
+	n.Slots[0] = Item[int, string]{Key: 1, Value: &v, ID: sop.NewUUID()}
 	n.Count = 1
 	fnr.Add(n)
 	b.StoreInfo.RootNodeID = n.ID
@@ -316,7 +316,7 @@ func TestIsThereVacantSlotInLeft_ErrorPropagation(t *testing.T) {
 	for i := 0; i < b.getSlotLength(); i++ {
 		v := "v"
 		vv := v
-		cur.Slots[i] = &Item[int, string]{Key: 100 + i, Value: &vv, ID: sop.NewUUID()}
+		cur.Slots[i] = Item[int, string]{Key: 100 + i, Value: &vv, ID: sop.NewUUID()}
 	}
 	cur.Count = b.getSlotLength()
 
@@ -354,7 +354,7 @@ func TestDistributeToLeft_IndexBeyondParentCount(t *testing.T) {
 	for i := 0; i < b.getSlotLength(); i++ {
 		v := "x"
 		vv := v
-		n.Slots[i] = &Item[int, string]{Key: i + 1, Value: &vv, ID: sop.NewUUID()}
+		n.Slots[i] = Item[int, string]{Key: i + 1, Value: &vv, ID: sop.NewUUID()}
 	}
 	n.Count = b.getSlotLength()
 	fnr.Add(p)
@@ -378,7 +378,7 @@ func TestMoveToFirst_Paths(t *testing.T) {
 	p := newNode[int, string](b.getSlotLength())
 	p.newID(sop.NilUUID)
 	v := "v"
-	p.Slots[0] = &Item[int, string]{Key: 5, Value: &v, ID: sop.NewUUID()}
+	p.Slots[0] = Item[int, string]{Key: 5, Value: &v, ID: sop.NewUUID()}
 	p.Count = 1
 	p.ChildrenIDs = make([]sop.UUID, 2)
 	p.ChildrenIDs[0] = sop.NilUUID
@@ -394,7 +394,7 @@ func TestMoveToFirst_Paths(t *testing.T) {
 	// Case 2: child exists -> descend to child index 0
 	c := newNode[int, string](b.getSlotLength())
 	c.newID(p.ID)
-	c.Slots[0] = &Item[int, string]{Key: 1, Value: &v, ID: sop.NewUUID()}
+	c.Slots[0] = Item[int, string]{Key: 1, Value: &v, ID: sop.NewUUID()}
 	c.Count = 1
 	fnr.Add(c)
 	p.ChildrenIDs[0] = c.ID
@@ -467,7 +467,7 @@ func TestDistributeToLeft_NotFull_Appends(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		v := "v"
 		vv := v
-		n.Slots[i] = &Item[int, string]{Key: i + 1, Value: &vv, ID: sop.NewUUID()}
+		n.Slots[i] = Item[int, string]{Key: i + 1, Value: &vv, ID: sop.NewUUID()}
 	}
 	n.Count = 2
 	fnr.Add(n)
@@ -477,7 +477,7 @@ func TestDistributeToLeft_NotFull_Appends(t *testing.T) {
 	if err := n.distributeToLeft(context.Background(), b, item); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if n.Count != 3 || n.Slots[2] == nil || n.Slots[2].Key != 99 {
+	if n.Count != 3 || n.Slots[2].Key != 99 {
 		t.Fatalf("expected item appended at end; count=%d slot2=%v", n.Count, n.Slots[2])
 	}
 }

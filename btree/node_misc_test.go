@@ -70,8 +70,8 @@ func TestMoveToLast_Paths(t *testing.T) {
 	p.newID(sop.NilUUID)
 	v := "v"
 	vv := v
-	p.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
-	p.Slots[1] = &Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
+	p.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	p.Slots[1] = Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
 	p.Count = 2
 	p.ChildrenIDs = make([]sop.UUID, 3)
 	p.ChildrenIDs[0] = sop.NewUUID()
@@ -90,8 +90,8 @@ func TestMoveToLast_Paths(t *testing.T) {
 	// Case 2: right-most child exists with two items -> descend and select child's last
 	c := newNode[int, string](b.getSlotLength())
 	c.newID(p.ID)
-	c.Slots[0] = &Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
-	c.Slots[1] = &Item[int, string]{Key: 30, Value: &vv, ID: sop.NewUUID()}
+	c.Slots[0] = Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
+	c.Slots[1] = Item[int, string]{Key: 30, Value: &vv, ID: sop.NewUUID()}
 	c.Count = 2
 	fnr.Add(c)
 	p.ChildrenIDs[2] = c.ID
@@ -113,16 +113,16 @@ func TestFixVacatedSlot_LeafAndRoot(t *testing.T) {
 	leaf.newID(sop.NewUUID())
 	v := "x"
 	vv := v
-	leaf.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
-	leaf.Slots[1] = &Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
-	leaf.Slots[2] = &Item[int, string]{Key: 3, Value: &vv, ID: sop.NewUUID()}
+	leaf.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	leaf.Slots[1] = Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
+	leaf.Slots[2] = Item[int, string]{Key: 3, Value: &vv, ID: sop.NewUUID()}
 	leaf.Count = 3
 	fnr.Add(leaf)
 	b.setCurrentItemID(leaf.ID, 1)
 	if err := leaf.fixVacatedSlot(nil, b); err != nil {
 		t.Fatalf("fixVacatedSlot leaf: %v", err)
 	}
-	if leaf.Count != 2 || leaf.Slots[0].Key != 1 || leaf.Slots[1] == nil || leaf.Slots[1].Key != 3 {
+	if leaf.Count != 2 || leaf.Slots[0].Key != 1 || leaf.Slots[1].ID.IsNil() || leaf.Slots[1].Key != 3 {
 		t.Fatalf("leaf compaction did not shift/trim correctly")
 	}
 
@@ -130,14 +130,14 @@ func TestFixVacatedSlot_LeafAndRoot(t *testing.T) {
 	root := newNode[int, string](b.getSlotLength())
 	root.newID(sop.NilUUID)
 	b.StoreInfo.RootNodeID = root.ID
-	root.Slots[0] = &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
 	root.Count = 1
 	fnr.Add(root)
 	b.setCurrentItemID(root.ID, 0)
 	if err := root.fixVacatedSlot(nil, b); err != nil {
 		t.Fatalf("fixVacatedSlot root: %v", err)
 	}
-	if root.Count != 0 || root.Slots[0] != nil {
+	if root.Count != 0 || !root.Slots[0].ID.IsNil() {
 		t.Fatalf("root item not cleared")
 	}
 }
@@ -215,8 +215,8 @@ func TestGoRightUp_NilChildAscendParentSelect(t *testing.T) {
 	parent.newID(sop.NilUUID)
 	v := "v"
 	vv := v
-	parent.Slots[0] = &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
-	parent.Slots[1] = &Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+	parent.Slots[1] = Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
 	parent.Count = 2
 
 	// Child node positioned so that index==parent slot index on ascent

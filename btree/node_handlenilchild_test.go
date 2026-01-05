@@ -19,15 +19,15 @@ func TestRemoveItemOnNodeWithNilChild_RootMergesChild(t *testing.T) {
 	// Single item to delete at index 0, Count=1 so Count-- => 0 hits the special branch
 	v := "v"
 	vv := v
-	root.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
 	root.Count = 1
 
 	// Child on the left, nil on the right at index 1
 	child := newNode[int, string](b.getSlotLength())
 	child.newID(root.ID)
 	// Give child some contents that will be merged into root
-	child.Slots[0] = &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
-	child.Slots[1] = &Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
+	child.Slots[0] = Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+	child.Slots[1] = Item[int, string]{Key: 20, Value: &vv, ID: sop.NewUUID()}
 	child.Count = 2
 
 	root.ChildrenIDs = make([]sop.UUID, 2)
@@ -44,7 +44,7 @@ func TestRemoveItemOnNodeWithNilChild_RootMergesChild(t *testing.T) {
 		t.Fatalf("removeItemOnNodeWithNilChild root-merge err=%v ok=%v", err, ok)
 	}
 	// Root should now contain child's items
-	if root.Count != 2 || root.Slots[0] == nil || root.Slots[1] == nil {
+	if root.Count != 2 || root.Slots[0].ID.IsNil() || root.Slots[1].ID.IsNil() {
 		t.Fatalf("root did not merge child contents correctly")
 	}
 	// Children should be nilified since child had no children
@@ -71,7 +71,7 @@ func TestRemoveItemOnNodeWithNilChild_UnlinkWhenAllChildrenNil(t *testing.T) {
 	child.newID(parent.ID)
 	v := "v"
 	vv := v
-	child.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	child.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
 	child.Count = 1
 	child.ChildrenIDs = make([]sop.UUID, 2) // both zero => NilUUID
 
@@ -165,8 +165,8 @@ func TestGoRightUpItemOnNodeWithNilChild_RootEnd(t *testing.T) {
 	// Two items so Count=2; pass index=2 to simulate no right item, with nil right child
 	v := "v"
 	vv := v
-	root.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
-	root.Slots[1] = &Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[1] = Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
 	root.Count = 2
 	root.ChildrenIDs = make([]sop.UUID, 3)
 	root.ChildrenIDs[2] = sop.NilUUID
@@ -194,8 +194,8 @@ func TestGoRightUpItemOnNodeWithNilChild_SelectRightInSameNode(t *testing.T) {
 	root.newID(sop.NilUUID)
 	v := "v"
 	vv := v
-	root.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
-	root.Slots[1] = &Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[1] = Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
 	root.Count = 2
 	root.ChildrenIDs = make([]sop.UUID, 3)
 	// Nil child at index 1 to trigger goRightUp path
@@ -221,7 +221,7 @@ func TestGoLeftUpItemOnNodeWithNilChild_RootEnd(t *testing.T) {
 	root.newID(sop.NilUUID)
 	v := "v"
 	vv := v
-	root.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
 	root.Count = 1
 	root.ChildrenIDs = make([]sop.UUID, 2)
 	root.ChildrenIDs[0] = sop.NilUUID // ensure left child nil
@@ -248,8 +248,8 @@ func TestGoLeftUpItemOnNodeWithNilChild_SelectLeftInSameNode(t *testing.T) {
 	root.newID(sop.NilUUID)
 	v := "v"
 	vv := v
-	root.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
-	root.Slots[1] = &Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[1] = Item[int, string]{Key: 2, Value: &vv, ID: sop.NewUUID()}
 	root.Count = 2
 	root.ChildrenIDs = make([]sop.UUID, 3)
 	root.ChildrenIDs[1] = sop.NilUUID // ensure we go left within node
@@ -310,7 +310,7 @@ func TestDistributeItemOnNodeWithNilChild_Success(t *testing.T) {
 	}
 	// Ensure new child exists in repo and contains the item
 	child := fnr.n[n.ChildrenIDs[0]]
-	if child == nil || child.Count != 1 || child.Slots[0] == nil || child.Slots[0].Key != 42 {
+	if child == nil || child.Count != 1 || child.Slots[0].ID.IsNil() || child.Slots[0].Key != 42 {
 		t.Fatalf("distributed child not created or item not set")
 	}
 }
@@ -330,7 +330,7 @@ func TestRemoveItemOnNodeWithNilChild_PromoteSingleChildNonRoot(t *testing.T) {
 	// One item to delete, Count will become 0
 	v := "v"
 	vv := v
-	node.Slots[0] = &Item[int, string]{Key: 7, Value: &vv, ID: sop.NewUUID()}
+	node.Slots[0] = Item[int, string]{Key: 7, Value: &vv, ID: sop.NewUUID()}
 	node.Count = 1
 	// Single non-nil child
 	child := newNode[int, string](b.getSlotLength())
@@ -364,13 +364,13 @@ func TestRemoveItemOnNodeWithNilChild_RootMergesChild_WithChildren(t *testing.T)
 	b.StoreInfo.RootNodeID = root.ID
 	v := "v"
 	vv := v
-	root.Slots[0] = &Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 1, Value: &vv, ID: sop.NewUUID()}
 	root.Count = 1
 
 	child := newNode[int, string](b.getSlotLength())
 	child.newID(root.ID)
 	// child has one slot and a non-nil child under it
-	child.Slots[0] = &Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
+	child.Slots[0] = Item[int, string]{Key: 10, Value: &vv, ID: sop.NewUUID()}
 	child.Count = 1
 	gc := newNode[int, string](b.getSlotLength())
 	gc.newID(child.ID)

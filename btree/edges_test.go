@@ -25,7 +25,7 @@ func TestAdd_DistributeError_Propagates(t *testing.T) {
 	for i := 0; i < b.getSlotLength(); i++ {
 		v := "v"
 		vv := v
-		cur.Slots[i] = &Item[int, string]{Key: 10 + i, Value: &vv, ID: sop.NewUUID()}
+		cur.Slots[i] = Item[int, string]{Key: 10 + i, Value: &vv, ID: sop.NewUUID()}
 	}
 	cur.Count = b.getSlotLength()
 
@@ -37,7 +37,7 @@ func TestAdd_DistributeError_Propagates(t *testing.T) {
 	parent.ChildrenIDs[1] = right.ID
 	// separator key
 	kv := "s"
-	parent.Slots[0] = &Item[int, string]{Key: 99, Value: &kv, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 99, Value: &kv, ID: sop.NewUUID()}
 
 	fnr.Add(parent)
 	fnr.Add(cur)
@@ -65,7 +65,7 @@ func TestMoveToPrevious_ChildMissing_ReturnsFalse(t *testing.T) {
 	root := newNode[int, string](b.getSlotLength())
 	root.newID(sop.NilUUID)
 	v := "v"
-	root.Slots[0] = &Item[int, string]{Key: 10, Value: &v, ID: sop.NewUUID()}
+	root.Slots[0] = Item[int, string]{Key: 10, Value: &v, ID: sop.NewUUID()}
 	root.Count = 1
 	// Left child ID not present in repo (simulates missing)
 	missingLeftID := sop.NewUUID()
@@ -93,7 +93,7 @@ func TestMoveToFirst_ChildFetchNil_StopsAtParent(t *testing.T) {
 	p := newNode[int, string](b.getSlotLength())
 	p.newID(sop.NilUUID)
 	v := "p"
-	p.Slots[0] = &Item[int, string]{Key: 5, Value: &v, ID: sop.NewUUID()}
+	p.Slots[0] = Item[int, string]{Key: 5, Value: &v, ID: sop.NewUUID()}
 	p.Count = 1
 	// First child points to unknown ID (not in repo)
 	p.ChildrenIDs = make([]sop.UUID, 2)

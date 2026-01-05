@@ -27,7 +27,7 @@ func TestAdd_DistributeToLeft_Success_ViaAdd(t *testing.T) {
 	// Left is full: [1,2,3,4]
 	for i, k := range []int{1, 2, 3, 4} {
 		vv := lv
-		left.Slots[i] = &Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
+		left.Slots[i] = Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
 	}
 	left.Count = b.getSlotLength()
 
@@ -37,7 +37,7 @@ func TestAdd_DistributeToLeft_Success_ViaAdd(t *testing.T) {
 	for i := 0; i < b.getSlotLength(); i++ {
 		v := "c"
 		vv := v
-		cur.Slots[i] = &Item[int, string]{Key: 10 + i, Value: &vv, ID: sop.NewUUID()}
+		cur.Slots[i] = Item[int, string]{Key: 10 + i, Value: &vv, ID: sop.NewUUID()}
 	}
 	cur.Count = b.getSlotLength()
 
@@ -52,8 +52,8 @@ func TestAdd_DistributeToLeft_Success_ViaAdd(t *testing.T) {
 	s0 := "s0"
 	s1 := "s1"
 	// separator keys chosen between left and cur, and cur and right
-	parent.Slots[0] = &Item[int, string]{Key: 15, Value: &s0, ID: sop.NewUUID()}
-	parent.Slots[1] = &Item[int, string]{Key: 35, Value: &s1, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 15, Value: &s0, ID: sop.NewUUID()}
+	parent.Slots[1] = Item[int, string]{Key: 35, Value: &s1, ID: sop.NewUUID()}
 
 	fnr.Add(parent)
 	fnr.Add(left)
@@ -113,13 +113,13 @@ func TestAdd_Promote_AllFull_SplitsAndPromotes(t *testing.T) {
 	parent.Count = 1
 	parent.ChildrenIDs = make([]sop.UUID, b.getSlotLength()+1)
 	sep := "sep"
-	parent.Slots[0] = &Item[int, string]{Key: 9, Value: &sep, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 9, Value: &sep, ID: sop.NewUUID()}
 
 	left := newNode[int, string](b.getSlotLength())
 	left.newID(parent.ID)
 	l1, l2 := "l1", "l2"
-	left.Slots[0] = &Item[int, string]{Key: 1, Value: &l1, ID: sop.NewUUID()}
-	left.Slots[1] = &Item[int, string]{Key: 2, Value: &l2, ID: sop.NewUUID()}
+	left.Slots[0] = Item[int, string]{Key: 1, Value: &l1, ID: sop.NewUUID()}
+	left.Slots[1] = Item[int, string]{Key: 2, Value: &l2, ID: sop.NewUUID()}
 	left.Count = 2
 
 	cur := newNode[int, string](b.getSlotLength())
@@ -128,7 +128,7 @@ func TestAdd_Promote_AllFull_SplitsAndPromotes(t *testing.T) {
 	for i, k := range []int{10, 20, 30, 40} {
 		v := "c"
 		vv := v
-		cur.Slots[i] = &Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
+		cur.Slots[i] = Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
 	}
 	cur.Count = b.getSlotLength()
 
@@ -156,8 +156,8 @@ func TestAdd_Promote_AllFull_SplitsAndPromotes(t *testing.T) {
 		t.Fatalf("expected parent.Count=2 after promote, got %d", p.Count)
 	}
 	// One of parent's slots should be 25 (the promoted separator).
-	if !(p.Slots[0] != nil && p.Slots[0].Key == 9 || p.Slots[1] != nil && p.Slots[1].Key == 25) &&
-		!(p.Slots[0] != nil && p.Slots[0].Key == 25 || p.Slots[1] != nil && p.Slots[1].Key == 9) {
+	if !(p.Count > 0 && p.Slots[0].Key == 9 || p.Count > 1 && p.Slots[1].Key == 25) &&
+		!(p.Count > 0 && p.Slots[0].Key == 25 || p.Count > 1 && p.Slots[1].Key == 9) {
 		t.Fatalf("parent slots do not contain expected keys 9 and 25: got [%v,%v]",
 			slotKey(p.Slots[0]), slotKey(p.Slots[1]))
 	}
@@ -179,10 +179,7 @@ func TestAdd_Promote_AllFull_SplitsAndPromotes(t *testing.T) {
 }
 
 // helpers for succinct error messages
-func slotKey[T any](it *Item[int, T]) any {
-	if it == nil {
-		return nil
-	}
+func slotKey[T any](it Item[int, T]) any {
 	return it.Key
 }
 func rCount[T any](n *Node[int, T]) any {
@@ -206,13 +203,13 @@ func TestGoRightUpItemOnNodeWithNilChild_ClimbAndSelectParent(t *testing.T) {
 	parent.Count = 2
 	parent.ChildrenIDs = make([]sop.UUID, b.getSlotLength()+1)
 	s0, s1 := "s0", "s1"
-	parent.Slots[0] = &Item[int, string]{Key: 5, Value: &s0, ID: sop.NewUUID()}
-	parent.Slots[1] = &Item[int, string]{Key: 15, Value: &s1, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 5, Value: &s0, ID: sop.NewUUID()}
+	parent.Slots[1] = Item[int, string]{Key: 15, Value: &s1, ID: sop.NewUUID()}
 
 	left := newNode[int, string](b.getSlotLength())
 	left.newID(parent.ID)
 	l := "l"
-	left.Slots[0] = &Item[int, string]{Key: 1, Value: &l, ID: sop.NewUUID()}
+	left.Slots[0] = Item[int, string]{Key: 1, Value: &l, ID: sop.NewUUID()}
 	left.Count = 1
 
 	cur := newNode[int, string](b.getSlotLength())
@@ -225,7 +222,7 @@ func TestGoRightUpItemOnNodeWithNilChild_ClimbAndSelectParent(t *testing.T) {
 	right := newNode[int, string](b.getSlotLength())
 	right.newID(parent.ID)
 	r := "r"
-	right.Slots[0] = &Item[int, string]{Key: 20, Value: &r, ID: sop.NewUUID()}
+	right.Slots[0] = Item[int, string]{Key: 20, Value: &r, ID: sop.NewUUID()}
 	right.Count = 1
 
 	parent.ChildrenIDs[0] = left.ID
@@ -245,7 +242,7 @@ func TestGoRightUpItemOnNodeWithNilChild_ClimbAndSelectParent(t *testing.T) {
 	}
 	// Fetch current key to verify selection.
 	if item, _ := b.getCurrentItem(context.Background()); item == nil || item.Key != 15 {
-		t.Fatalf("expected current key=15 from parent separator, got %v", slotKey(item))
+		t.Fatalf("expected current key=15 from parent separator, got %v", slotKey(*item))
 	}
 }
 
@@ -261,8 +258,8 @@ func TestAdd_DuplicateAtEnd_Unique_ReturnsFalse(t *testing.T) {
 	leaf := newNode[int, string](b.getSlotLength())
 	leaf.newID(sop.NilUUID)
 	v1, v2 := "a", "b"
-	leaf.Slots[0] = &Item[int, string]{Key: 10, Value: &v1, ID: sop.NewUUID()}
-	leaf.Slots[1] = &Item[int, string]{Key: 20, Value: &v2, ID: sop.NewUUID()}
+	leaf.Slots[0] = Item[int, string]{Key: 10, Value: &v1, ID: sop.NewUUID()}
+	leaf.Slots[1] = Item[int, string]{Key: 20, Value: &v2, ID: sop.NewUUID()}
 	leaf.Count = 2
 	repo.Add(leaf)
 	b.StoreInfo.RootNodeID = leaf.ID
@@ -301,7 +298,7 @@ func TestDistributeToRight_Rotation_Full(t *testing.T) {
 	left := newNode[int, string](b.getSlotLength())
 	left.newID(parent.ID)
 	lv := "l"
-	left.Slots[0] = &Item[int, string]{Key: 1, Value: &lv, ID: sop.NewUUID()}
+	left.Slots[0] = Item[int, string]{Key: 1, Value: &lv, ID: sop.NewUUID()}
 	left.Count = 1
 
 	cur := newNode[int, string](b.getSlotLength())
@@ -310,7 +307,7 @@ func TestDistributeToRight_Rotation_Full(t *testing.T) {
 	for i, k := range []int{20, 30, 40, 50} {
 		v := "c"
 		vv := v
-		cur.Slots[i] = &Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
+		cur.Slots[i] = Item[int, string]{Key: k, Value: &vv, ID: sop.NewUUID()}
 	}
 	cur.Count = b.getSlotLength()
 
@@ -324,8 +321,8 @@ func TestDistributeToRight_Rotation_Full(t *testing.T) {
 	// separators [slot0, slot1]
 	s0 := "s0"
 	s1 := "s1"
-	parent.Slots[0] = &Item[int, string]{Key: 15, Value: &s0, ID: sop.NewUUID()}
-	parent.Slots[1] = &Item[int, string]{Key: 60, Value: &s1, ID: sop.NewUUID()}
+	parent.Slots[0] = Item[int, string]{Key: 15, Value: &s0, ID: sop.NewUUID()}
+	parent.Slots[1] = Item[int, string]{Key: 60, Value: &s1, ID: sop.NewUUID()}
 
 	fnr.Add(parent)
 	fnr.Add(left)
@@ -352,7 +349,7 @@ func TestDistributeToRight_Rotation_Full(t *testing.T) {
 		t.Fatalf("distribute err: %v", err)
 	}
 	r2, _ := b.getNode(context.Background(), right.ID)
-	if r2.Count != 1 || r2.Slots[0] == nil || r2.Slots[0].Key != 60 {
+	if r2.Count != 1 || r2.Count == 0 || r2.Slots[0].Key != 60 {
 		t.Fatalf("right sibling did not receive scheduled item; count=%d key0=%v", r2.Count, slotKey(r2.Slots[0]))
 	}
 }
@@ -368,8 +365,8 @@ func TestGoRightUpItemOnNodeWithNilChild_SelectInNode(t *testing.T) {
 	n := newNode[int, string](b.getSlotLength())
 	n.newID(sop.NilUUID)
 	v1, v2 := "a", "b"
-	n.Slots[0] = &Item[int, string]{Key: 10, Value: &v1, ID: sop.NewUUID()}
-	n.Slots[1] = &Item[int, string]{Key: 20, Value: &v2, ID: sop.NewUUID()}
+	n.Slots[0] = Item[int, string]{Key: 10, Value: &v1, ID: sop.NewUUID()}
+	n.Slots[1] = Item[int, string]{Key: 20, Value: &v2, ID: sop.NewUUID()}
 	n.Count = 2
 	n.ChildrenIDs = make([]sop.UUID, b.getSlotLength()+1)
 	// Make child at index 1 nil to trigger short path
@@ -455,7 +452,7 @@ func TestAdd_CreatesChildWhenNilChildAtIndex(t *testing.T) {
 		t.Fatalf("expected child created at index 0")
 	}
 	c, _ := b.getNode(context.Background(), cid)
-	if c == nil || c.Count != 1 || c.Slots[0] == nil || c.Slots[0].Key != 10 {
+	if c == nil || c.Count != 1 || c.Slots[0].Key != 10 {
 		t.Fatalf("expected child with single item key=10; got count=%v key0=%v", rCount(c), slotKey(c.Slots[0]))
 	}
 }

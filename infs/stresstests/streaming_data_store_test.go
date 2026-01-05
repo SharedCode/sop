@@ -18,7 +18,10 @@ import (
 func Test_StreamingDataStoreInvalidCases(t *testing.T) {
 	ctx := context.Background()
 	to := sop.TransactionOptions{Mode: sop.ForWriting, MaxTime: -1, RegistryHashModValue: fs.MinimumModValue, StoresFolders: storesFoldersDefault, CacheType: l2Cache}
-	trans, _ := infs.NewTransactionWithReplication(ctx, to)
+	trans, err := infs.NewTransactionWithReplication(ctx, to)
+	if err != nil {
+		t.Fatalf("NewTransactionWithReplication failed: %v", err)
+	}
 	_ = trans.Begin(ctx)
 
 	// Empty Store get/update methods test cases.
@@ -41,12 +44,20 @@ func Test_StreamingDataStoreBasicUse(t *testing.T) {
 	trans, _ := infs.NewTransactionWithReplication(ctx, to)
 	_ = trans.Begin(ctx)
 	so := sop.ConfigureStore("videoStore", true, 100, "", sop.BigData, "")
-	sds, _ := infs.NewStreamingDataStoreWithReplication[string](ctx, so, trans, nil)
-	encoder, _ := sds.Add(ctx, "fooVideo")
+	sds, err := infs.NewStreamingDataStoreWithReplication[string](ctx, so, trans, nil)
+	if err != nil {
+		t.Fatalf("NewStreamingDataStoreWithReplication failed: %v", err)
+	}
+	encoder, err := sds.Add(ctx, "fooVideo")
+	if err != nil {
+		t.Fatalf("sds.Add failed: %v", err)
+	}
 	for i := 0; i < 10; i++ {
 		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 10MB.", i))
 	}
-	trans.Commit(ctx)
+	if err := trans.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
 
 	// Read back the data. Pass false on 2nd argument will toggle to a "reader" transaction.
 	trans, _ = infs.NewTransactionWithReplication(ctx, to)
@@ -204,10 +215,18 @@ func Test_StreamingDataStoreBigDataUpdate(t *testing.T) {
 	trans, _ = infs.NewTransactionWithReplication(ctx, to)
 	trans.Begin(ctx)
 	sds, _ = infs.NewStreamingDataStoreWithReplication[string](ctx, so, trans, nil)
-	encoder, _ = sds.Update(ctx, "fooVideo2")
+	encoder, err := sds.Update(ctx, "fooVideo2")
+	if err != nil {
+		t.Fatalf("Update failed: %v", err)
+	}
+	if encoder == nil {
+		t.Fatalf("Update failed: key 'fooVideo2' not found")
+	}
 	chunkCount := 9
 	for i := 0; i < chunkCount; i++ {
-		encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 15MB.", i))
+		if err := encoder.Encode(fmt.Sprintf("%d. a huge chunk, about 15MB.", i)); err != nil {
+			t.Fatalf("Encode failed: %v", err)
+		}
 	}
 	// Close the "update" encoder to cleanup mis-aligned chunks.
 	encoder.Close()

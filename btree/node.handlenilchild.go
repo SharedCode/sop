@@ -28,7 +28,7 @@ func (node *Node[TK, TV]) removeItemOnNodeWithNilChild(ctx context.Context, btre
 		}
 	}
 	// Set to nil the last item & its child.
-	node.Slots[node.Count-1] = nil
+	node.Slots[node.Count-1] = Item[TK, TV]{}
 	node.ChildrenIDs[node.Count] = sop.NilUUID
 	node.Count--
 
@@ -121,7 +121,7 @@ func (node *Node[TK, TV]) addItemOnNodeWithNilChild(btree *Btree[TK, TV], item *
 	child := newNode[TK, TV](btree.getSlotLength())
 	child.newID(node.ID)
 	node.ChildrenIDs[index] = child.ID
-	child.Slots[0] = item
+	child.Slots[0] = *item
 	child.Count = 1
 	btree.saveNode(node)
 	btree.saveNode(child)
@@ -221,7 +221,7 @@ func (node *Node[TK, TV]) distributeItemOnNodeWithNilChild(btree *Btree[TK, TV],
 	child := newNode[TK, TV](btree.getSlotLength())
 	child.newID(node.ID)
 	node.ChildrenIDs[i] = child.ID
-	child.Slots[0] = item
+	child.Slots[0] = *item
 	child.Count = 1
 	btree.saveNode(node)
 	btree.saveNode(child)

@@ -169,7 +169,7 @@ func TestUpdateCurrentNodeItem_And_FlagsGetter(t *testing.T) {
 	root.newID(sop.NilUUID)
 	v1 := "old"
 	it1 := &Item[int, string]{Key: 1, Value: &v1, ID: sop.NewUUID()}
-	root.Slots[0] = it1
+	root.Slots[0] = *it1
 	root.Count = 1
 	b.StoreInfo.RootNodeID = root.ID
 	fnr.Add(root)
@@ -180,7 +180,7 @@ func TestUpdateCurrentNodeItem_And_FlagsGetter(t *testing.T) {
 	if ok, err := b.UpdateCurrentItemWithItem(nil, it2); !ok || err != nil {
 		t.Fatalf("UpdateCurrentNodeItem failed: %v", err)
 	}
-	if root.Slots[0] != it2 {
+	if root.Slots[0] != *it2 {
 		t.Fatalf("node slot not replaced")
 	}
 	if b.currentItem != it2 {

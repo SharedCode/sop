@@ -24,17 +24,17 @@ type Item[TK Ordered, TV any] struct {
 	// 1. so the B-tree can identify or differentiate items with duplicated keys.
 	// 2. used as the value data ID if the item's value is persisted in another
 	//    data segment, separate from the node segment (IsValueDataInNodeSegment=false).
-	ID sop.UUID
+	ID sop.UUID `json:"ID"`
 	// Key is the key part in the key/value pair.
-	Key TK
+	Key TK `json:"Key"`
 	// Value is nil when data is persisted in the separate data segment (with ValueID set to a valid sop.UUID);
 	// otherwise it points to the actual data and is persisted in the B-tree node segment together with the key.
-	Value *TV
+	Value *TV `json:"Value,omitempty"`
 	// Version is used for conflict resolution among in-flight transactions.
-	Version int32
+	Version int32 `json:"Version"`
 	// ValueNeedsFetch tells the B-tree whether the value data needs fetching.
 	// Applicable only when IsValueDataInNodeSegment is false.
-	ValueNeedsFetch bool
+	ValueNeedsFetch bool `json:"ValueNeedsFetch,omitempty"`
 	// valueWasFetched is for internal use only; it indicates whether the value was just read from the backend.
 	valueWasFetched bool
 }
@@ -49,16 +49,16 @@ func newItem[TK Ordered, TV any](key TK, value TV) *Item[TK, TV] {
 
 // Node contains a B-Tree node's data.
 type Node[TK Ordered, TV any] struct {
-	ID       sop.UUID
-	ParentID sop.UUID
+	ID       sop.UUID `json:"ID"`
+	ParentID sop.UUID `json:"ParentID"`
 	// Slots is an array where the Items get stored.
-	Slots []*Item[TK, TV]
+	Slots []Item[TK, TV] `json:"Slots"`
 	// Count of items in this node.
-	Count int
+	Count int `json:"Count"`
 	// Version of this node.
-	Version int32
+	Version int32 `json:"Version"`
 	// ChildrenIDs holds the IDs of this node's children.
-	ChildrenIDs []sop.UUID
+	ChildrenIDs []sop.UUID `json:"ChildrenIDs,omitempty"`
 	indexOfNode int
 }
 
@@ -80,7 +80,7 @@ func (n *Node[TK, TV]) SetVersion(v int32) {
 // newNode creates a new node.
 func newNode[TK Ordered, TV any](slotCount int) *Node[TK, TV] {
 	return &Node[TK, TV]{
-		Slots:       make([]*Item[TK, TV], slotCount),
+		Slots:       make([]Item[TK, TV], slotCount),
 		indexOfNode: -1,
 	}
 }
@@ -150,7 +150,7 @@ func (node *Node[TK, TV]) addOnLeaf(ctx context.Context, btree *Btree[TK, TV], i
 	// Shift items to the right and assign the item to the vacated slot.
 	copy(btree.tempSlots[index+1:], btree.tempSlots[index:])
 	// Set the item to the newly vacated slot.
-	btree.tempSlots[index] = item
+	btree.tempSlots[index] = *item
 
 	var isVacantSlotInLeft, isVacantSlotInRight bool
 	var err error
@@ -358,7 +358,7 @@ func (node *Node[TK, TV]) find(ctx context.Context, btree *Btree[TK, TV], key TK
 		// make sure i points to valid item
 		index--
 	}
-	if n.Slots[index] != nil {
+	if index >= 0 && index < n.Count {
 		btree.setCurrentItemID(n.ID, index)
 	} else {
 		index--
@@ -418,7 +418,7 @@ func (node *Node[TK, TV]) findInDescendingOrder(ctx context.Context, btree *Btre
 		// make sure i points to valid item
 		index--
 	}
-	if n.Slots[index] != nil {
+	if index >= 0 && index < n.Count {
 		btree.setCurrentItemID(n.ID, index)
 	} else {
 		index--
@@ -594,7 +594,7 @@ func (node *Node[TK, TV]) moveToPrevious(ctx context.Context, btree *Btree[TK, T
 func (node *Node[TK, TV]) fixVacatedSlot(ctx context.Context, btree *Btree[TK, TV]) error {
 	position := btree.currentItemRef.getNodeItemIndex()
 	deletedItem := node.Slots[position]
-	if err := btree.storeInterface.ItemActionTracker.Remove(ctx, deletedItem); err != nil {
+	if err := btree.storeInterface.ItemActionTracker.Remove(ctx, &deletedItem); err != nil {
 		return err
 	}
 	// If there are more than 1 items in slot then we move the items 1 slot to omit deleted item slot.
@@ -607,7 +607,7 @@ func (node *Node[TK, TV]) fixVacatedSlot(ctx context.Context, btree *Btree[TK, T
 		}
 		// Nullify the last slot.
 		node.Count--
-		node.Slots[node.Count] = nil
+		node.Slots[node.Count] = Item[TK, TV]{}
 		// We don't fix the children since there are no children at this scenario.
 		btree.saveNode(node)
 		return nil
@@ -615,7 +615,7 @@ func (node *Node[TK, TV]) fixVacatedSlot(ctx context.Context, btree *Btree[TK, T
 	if node.isRootNode() {
 		// Delete the single item in root node.
 		node.Count = 0
-		node.Slots[0] = nil
+		node.Slots[0] = Item[TK, TV]{}
 		btree.setCurrentItemID(sop.NilUUID, 0)
 		btree.saveNode(node)
 		return nil
@@ -731,7 +731,7 @@ func (node *Node[TK, TV]) distributeToLeft(ctx context.Context, btree *Btree[TK,
 	} else {
 		node.Count++
 	}
-	node.Slots[node.Count-1] = item
+	node.Slots[node.Count-1] = *item
 	btree.saveNode(node)
 	return nil
 }
@@ -767,7 +767,7 @@ func (node *Node[TK, TV]) distributeToRight(ctx context.Context, btree *Btree[TK
 		node.Count++
 	}
 	moveArrayElements(node.Slots, 1, 0, btree.getSlotLength()-1)
-	node.Slots[0] = item
+	node.Slots[0] = *item
 	btree.saveNode(node)
 	return nil
 }
@@ -1008,7 +1008,7 @@ func (node *Node[TK, TV]) isFull() bool {
 
 func (node *Node[TK, TV]) insertSlotItem(item *Item[TK, TV], position int) {
 	copy(node.Slots[position+1:], node.Slots[position:])
-	node.Slots[position] = item
+	node.Slots[position] = *item
 	node.Count++
 }
 
