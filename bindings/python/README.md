@@ -47,7 +47,7 @@ The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data 
 
 *   **Vector Store**: Native support for storing and searching high-dimensional vectors.
 *   **RAG Agents**: Build Retrieval-Augmented Generation applications with ease.
-*   **Macros**: A functional AI runtime for recording and replaying complex workflows.
+*   **Scripts**: A functional AI runtime for recording and replaying complex workflows.
 
 See [ai/README.md](../../ai/README.md) for a deep dive into the AI capabilities.
 
@@ -118,9 +118,9 @@ If database(s) are configured in **standalone mode**, ensure that the http serve
 
 If **clustered**, no worries, as SOP takes care of Redis-based coordination with other apps and/or SOP HTTP Servers managing databases using SOP in clustered mode.
 
-## AI Assistant & Macros
+## AI Assistant & Scripts
 
-The SOP Data Manager includes a built-in **AI Assistant** that allows you to interact with your data using natural language and automate workflows using **Macros**.
+The SOP Data Manager includes a built-in **AI Assistant** that allows you to interact with your data using natural language and automate workflows using **Scripts**.
 
 ### 1. Launch the Assistant
 Start the server:
@@ -135,8 +135,8 @@ You can ask the assistant to perform tasks or query data:
 *   "Find all records where age is greater than 30."
 *   "Explain the structure of the 'orders' B-Tree."
 
-### 3. Macros: Record & Replay
-Macros allow you to record a sequence of actions and replay them later. This is a "Natural Language Programming" system where the LLM compiles your intent into a high-performance script.
+### 3. Scripts: Record & Replay
+Scripts allow you to record a sequence of actions and replay them later. This is a "Natural Language Programming" system where the LLM compiles your intent into a high-performance script.
 
 **Step 1: Record**
 Type `/record my_workflow` in the chat.
@@ -152,28 +152,28 @@ Count the number of active users.
 ```
 
 **Step 3: Stop**
-Save the macro.
+Save the script.
 ```
 /stop
 ```
 
 **Step 4: Replay**
-Execute the macro instantly. The system runs the compiled steps without invoking the LLM again.
+Execute the script instantly. The system runs the compiled steps without invoking the LLM again.
 ```
 /play daily_check
 ```
 
 ### 4. Passing Parameters
-You can make macros dynamic by using parameters.
+You can make scripts dynamic by using parameters.
 *   **Record**: When recording, use specific values (e.g., "user_123").
-*   **Edit**: You can edit the macro JSON to use templates like `{{.user_id}}`.
+*   **Edit**: You can edit the script JSON to use templates like `{{.user_id}}`.
 *   **Play**: Pass values at runtime.
     ```
     /play user_audit user_id=456
     ```
 
 ### 5. Remote Execution
-You can trigger these macros from your Python code via the REST API:
+You can trigger these scripts from your Python code via the REST API:
 
 ```python
 import requests

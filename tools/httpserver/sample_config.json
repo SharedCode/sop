@@ -3,11 +3,13 @@
     "pageSize": 40,
     "enable_rest_auth": false,
     "root_password": "",
+    "obfuscation_mode": "per_database",
     "databases": [
         {
             "name": "Python Complex DB",
             "path": "/Users/grecinto/sop/bindings/python/sop/examples/large_complex_key_db",
-            "mode": "standalone"
+            "mode": "standalone",
+            "enable_obfuscation": true
         },
         {
             "name": "Go Interop Indexes",

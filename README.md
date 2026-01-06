@@ -139,9 +139,9 @@ SOP now includes a powerful **SOP Data Manager** that provides **full CRUD** cap
 *   **Web UI**: A modern, responsive interface for browsing B-Trees, managing stores, and visualizing data.
 *   **AI Assistant**: Integrated directly into the UI, the AI Assistant can help you write queries (including SQL-like Joins), explain data structures, and even generate code snippets.
 *   **Natural Language SQL**: Perform complex Selects, Joins, and CRUD operations using plain English.
-*   **Streaming Architecture**: Results from Agents and Macros are streamed in real-time, enabling **Macros as Views** and efficient handling of large datasets with minimal memory footprint.
+*   **Streaming Architecture**: Results from Agents and Scripts are streamed in real-time, enabling **Scripts as Views** and efficient handling of large datasets with minimal memory footprint.
 *   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
-*   **Macros**: Record and replay complex data operations for testing or automation (now with Parameter support).
+*   **Scripts**: Record and replay complex data operations for testing or automation (now with Parameter support).
 
 To launch the SOP Data Manager:
 
@@ -158,7 +158,7 @@ The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data 
 
 *   **Vector Store**: Native support for storing and searching high-dimensional vectors.
 *   **RAG Agents**: Build Retrieval-Augmented Generation applications with ease.
-*   **Macros**: A functional AI runtime for recording and replaying complex workflows.
+*   **Scripts**: A functional AI runtime for recording and replaying complex workflows.
 
 See [ai/README.md](ai/README.md) for a deep dive into the AI capabilities.
 
@@ -188,8 +188,9 @@ See [ai/README.md](ai/README.md) for a deep dive into the AI capabilities.
 - [SOP for Java (sop4j)](bindings/java/README.md)
 - [SOP for C# (sop4cs)](bindings/csharp/README.md)
 - [SOP for Rust (sop4rs)](bindings/rust/README.md)
-- [SOP AI Kit](ai/README.md) - **New!** Includes Vector Store, RAG Agents, and **Macros** (Record & Replay).
-  - [AI Macro Architecture](ai/AI_MACRO_ARCHITECTURE.md) - Deep dive into our scalable, functional AI runtime.
+- [SOP AI Kit](ai/README.md) - **New!** Includes Vector Store, RAG Agents, and **Scripts** (Record & Replay).
+  - [AI Script Architecture](ai/AI_SCRIPT_ARCHITECTURE.md) - Deep dive into our scalable, functional AI runtime.
+  - [Scripting Guide](ai/SCRIPTS.md) - Learn how to record and write scripts.
 - [SOP Data Manager](tools/httpserver/README.md) - **Updated!** A powerful SOP HTTP Server & Web UI that scales from a local embedded viewer to a clustered enterprise management console on Kubernetes.
 - [Changelog](CHANGELOG.md)
 - [Community & support](#community--support)

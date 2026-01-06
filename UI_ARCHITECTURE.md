@@ -22,9 +22,9 @@ This preference is managed via the "Preferences" modal in the UI and applied imm
 Currently, the SOP Data Manager UI (`tools/httpserver/templates/index.html`) contains hardcoded logic to handle specific display requirements for different stores. 
 
 **Example:**
-The `macros` store has a field named `database`. In the code, we explicitly check:
+The `scripts` store has a field named `database`. In the code, we explicitly check:
 ```javascript
-if (currentStore === 'macros' && key === 'database') {
+if (currentStore === 'scripts' && key === 'database') {
     // Render a dropdown populated from /api/databases
 }
 ```
@@ -40,7 +40,7 @@ We will introduce a reserved store (or a convention-based store) called `_meta_u
 **Schema Structure (Draft):**
 ```json
 {
-  "store_name": "macros",
+  "store_name": "scripts",
   "fields": {
     "database": {
       "widget": "dropdown",
@@ -57,7 +57,7 @@ We will introduce a reserved store (or a convention-based store) called `_meta_u
     },
     "steps": {
       "widget": "complex_tree",
-      "modal_title": "Macro Steps Viewer"
+      "modal_title": "Script Steps Viewer"
     },
     "category": {
       "widget": "dropdown",
@@ -81,6 +81,6 @@ The frontend `showDetail` function will be refactored to be **data-driven**:
 
 ### 3. Benefits
 *   **Flexibility**: Users can define custom UI behaviors for their own data without touching the codebase.
-*   **Consistency**: System stores (like `macros`) and user stores are treated identically.
+*   **Consistency**: System stores (like `scripts`) and user stores are treated identically.
 *   **Scalability**: The UI code remains clean and generic, regardless of how many special field types are added.
 *   **"Meta" Management**: Users can use the SOP Data Manager to edit the `_meta_ui` store itself, effectively building a "No-Code" admin interface builder.
