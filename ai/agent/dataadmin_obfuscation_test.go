@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/obfuscation"
 )
@@ -11,8 +12,10 @@ import (
 func TestDataAdminAgent_Execute_Deobfuscation(t *testing.T) {
 	// Setup
 	agent := &DataAdminAgent{
-		enableObfuscation: true,
-		registry:          NewRegistry(),
+		registry: NewRegistry(),
+		databases: map[string]sop.DatabaseOptions{
+			"testdb": {EnableObfuscation: true},
+		},
 	}
 
 	// We'll use a known string.
@@ -64,8 +67,10 @@ func TestDataAdminAgent_Execute_Deobfuscation(t *testing.T) {
 func TestDataAdminAgent_Execute_Deobfuscation_Nested(t *testing.T) {
 	// Setup
 	agent := &DataAdminAgent{
-		enableObfuscation: true,
-		registry:          NewRegistry(),
+		registry: NewRegistry(),
+		databases: map[string]sop.DatabaseOptions{
+			"testdb": {EnableObfuscation: true},
+		},
 	}
 
 	// We'll use a known string.

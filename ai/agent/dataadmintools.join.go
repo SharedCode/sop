@@ -17,6 +17,15 @@ import (
 )
 
 func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (string, error) {
+	// Stub Mode Check
+	if a.Config.StubMode {
+		// We need to import "encoding/json" first, but it's not imported in this file.
+		// I'll just print the args map directly for now or add the import.
+		// Since I can't easily add imports with replace_string, I'll just use fmt.Printf("%+v", args)
+		fmt.Printf("DEBUG: toolJoin called in STUB MODE with:\n%+v\n", args)
+		return "Join executed successfully (STUBBED).", nil
+	}
+
 	p := ai.GetSessionPayload(ctx)
 	if p == nil {
 		return "", fmt.Errorf("no session payload found")
@@ -499,7 +508,47 @@ func (jp *JoinProcessor) processLeftItem(k, v any) (bool, error) {
 		}
 
 		if !match && jp.canUseLookup {
-			break
+			// We can only break if the mismatch occurred on a field that is part of the Index Sort Order.
+			// If the mismatch occurred on a non-indexed field, we must continue scanning (as the record might be valid but out of order relative to non-indexed fields).
+			shouldBreak := false
+			if jp.rightIndexSpec != nil {
+				for _, idxField := range jp.rightIndexSpec.IndexFields {
+					// Find if this index field is part of the join criteria
+					var constraintVal any
+					isJoinField := false
+
+					for _, kf := range jp.rightKeyFields {
+						// Map the join field to the actual store field name
+						if jp.rightKeyFieldMap[kf] == idxField.FieldName {
+							isJoinField = true
+							constraintVal = leftJoinVals[kf]
+							break
+						}
+					}
+
+					if !isJoinField {
+						// Index field not in join criteria?
+						// We can stop checking index fields (subsequent sort order doesn't matter for breaking)
+						break
+					}
+
+					// It IS a join field. Check if current record matches constraint.
+					rFieldVal := extractVal(rKey.Key, rVal, idxField.FieldName)
+					if !valuesMatch(constraintVal, rFieldVal) {
+						// Index field mismatch!
+						// Since B-Tree is sorted by this field, and we found a diff, we left the matching block.
+						shouldBreak = true
+						break
+					}
+				}
+			} else {
+				// Should not happen if canUseLookup is true, but safe fallback
+				shouldBreak = true
+			}
+
+			if shouldBreak {
+				break
+			}
 		}
 
 		if match {
@@ -648,16 +697,18 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 					} else if strings.HasPrefix(lowerF, "right.") {
 						fieldName := f[6:]
 						val = extractVal(rKey, rVal, fieldName)
-						isKey, _ = isKeyField(rKey, fieldName)
+						// Right Key parts belong to Value in the Join Result
+						isKey = false
 					} else {
+						// Try Left
 						val = extractVal(k, v, f)
 						if val != nil {
 							isKey, _ = isKeyField(k, f)
 						} else {
+							// Try Right
 							val = extractVal(rKey, rVal, f)
-							if val != nil {
-								isKey, _ = isKeyField(rKey, f)
-							}
+							// Right Key/Val is always Value in Join Result
+							isKey = false
 						}
 
 						// Heuristic for aliases (a., b., left_, right_)
@@ -690,7 +741,7 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 								isKey, _ = isKeyField(k, fieldName)
 							} else if tryRight {
 								val = extractVal(rKey, rVal, fieldName)
-								isKey, _ = isKeyField(rKey, fieldName)
+								isKey = false
 							}
 						}
 
@@ -706,16 +757,14 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 										isKey, _ = isKeyField(k, baseName)
 									} else {
 										val = extractVal(rKey, rVal, baseName)
-										if val != nil {
-											isKey, _ = isKeyField(rKey, baseName)
-										}
+										isKey = false
 									}
 								}
 							}
 						}
 					}
 
-					// Normalize key for display (replace . with _)
+					// Normalize key for display
 					displayKey := jp.displayKeys[i]
 
 					if isKey {
@@ -726,8 +775,35 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 						valMap.keys = append(valMap.keys, displayKey)
 					}
 				}
+
+				// Heuristic: If Key is nil, move the first Value field to Key
+				// This ensures the UI renders valid "Key, Value" pairs instead of ", Value"
+				if len(keyMap.keys) == 0 && len(valMap.keys) > 0 {
+					firstKey := valMap.keys[0]
+					if val, ok := valMap.m[firstKey]; ok {
+						keyMap.keys = append(keyMap.keys, firstKey)
+						keyMap.m[firstKey] = val
+
+						// Remove from Value
+						newValKeys := make([]string, 0, len(valMap.keys)-1)
+						for _, k := range valMap.keys {
+							if k != firstKey {
+								newValKeys = append(newValKeys, k)
+							}
+						}
+						valMap.keys = newValKeys
+						delete(valMap.m, firstKey)
+					}
+				}
+
+				// Construct Result
+				var finalKey any = nil
+				if len(keyMap.keys) > 0 {
+					finalKey = keyMap
+				}
+
 				jp.emitter.Emit(map[string]any{
-					"key":   keyMap,
+					"key":   finalKey,
 					"value": valMap,
 				})
 			} else {
@@ -749,17 +825,13 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 					merged["right"] = rVal
 				}
 
-				var keyFormatted any = k
-				if jp.leftIndexSpec != nil {
-					if m, ok := k.(map[string]any); ok {
-						keyFormatted = OrderedKey{m: m, spec: jp.leftIndexSpec}
-					}
-				}
-
-				jp.emitter.Emit(map[string]any{
-					"key":   keyFormatted,
+				// Format output using standard helper (preserves Index Spec)
+				item := map[string]any{
+					"key":   k,
 					"value": merged,
-				})
+				}
+				finalItem := reorderItem(item, jp.fields, jp.leftIndexSpec)
+				jp.emitter.Emit(finalItem)
 			}
 			jp.count++
 			if jp.count >= int(jp.limit) {

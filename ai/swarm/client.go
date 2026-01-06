@@ -8,9 +8,9 @@ import (
 	"github.com/sharedcode/sop"
 )
 
-// Distribute fires a macro into the swarm.
+// Distribute fires a script into the swarm.
 // It uses the provided transaction to enqueue the job.
-func Distribute(ctx context.Context, t sop.Transaction, macroName string, params map[string]string, targetFilter map[string]string) (string, error) {
+func Distribute(ctx context.Context, t sop.Transaction, scriptName string, params map[string]string, targetFilter map[string]string) (string, error) {
 	store, err := NewStore(ctx, t)
 	if err != nil {
 		return "", err
@@ -19,7 +19,7 @@ func Distribute(ctx context.Context, t sop.Transaction, macroName string, params
 	jobID := fmt.Sprintf("job-%d", time.Now().UnixNano())
 	job := Job{
 		ID:           jobID,
-		MacroName:    macroName,
+		ScriptName:    scriptName,
 		Params:       params,
 		TargetFilter: targetFilter,
 		CreatedAt:    time.Now(),

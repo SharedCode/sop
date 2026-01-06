@@ -48,10 +48,12 @@ type DatabaseOptions struct {
 	// Type specifies the database type (Standalone or Clustered).
 	// This is a convenience field that sets the default CacheType.
 	Type DatabaseType `json:"type"`
+
+	// EnableObfuscation specifies if this database should be obfuscated when accessed by AI tools.
+	// This is a runtime-only field and is not persisted to JSON.
+	EnableObfuscation bool `json:"-"`
 }
 
-// TransactionOptions holds the configuration for transactions.
-// It duplicates DatabaseOptions fields to allow flat initialization syntax.
 type TransactionOptions struct {
 	// StoresFolders specifies the folders for replication.
 	StoresFolders []string `json:"stores_folders,omitempty"`

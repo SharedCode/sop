@@ -10,7 +10,7 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 )
 
-func TestMacro_AutoParameterize(t *testing.T) {
+func TestScript_AutoParameterize(t *testing.T) {
 	// 1. Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -43,26 +43,26 @@ func TestMacro_AutoParameterize(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
-	// 2. Create Macro with hardcoded values
-	svc.handleSessionCommand(ctx, "/macro create auto_test Auto Param Test", sysDB)
+	// 2. Create Script with hardcoded values
+	svc.handleSessionCommand(ctx, "/script create auto_test Auto Param Test", sysDB)
 
 	// Add steps
-	svc.session.LastStep = &ai.MacroStep{
+	svc.session.LastStep = &ai.ScriptStep{
 		Type:    "command",
 		Command: "select",
 		Args:    map[string]any{"store": "users", "region": "US"},
 	}
-	svc.handleSessionCommand(ctx, "/macro step add auto_test bottom", sysDB)
+	svc.handleSessionCommand(ctx, "/script step add auto_test bottom", sysDB)
 
-	svc.session.LastStep = &ai.MacroStep{
+	svc.session.LastStep = &ai.ScriptStep{
 		Type:    "command",
 		Command: "select",
 		Args:    map[string]any{"store": "employees", "salary": "50000"},
 	}
-	svc.handleSessionCommand(ctx, "/macro step add auto_test bottom", sysDB)
+	svc.handleSessionCommand(ctx, "/script step add auto_test bottom", sysDB)
 
 	// 3. Run Auto Parameterization (Refine)
-	resp, handled, err := svc.handleSessionCommand(ctx, "/macro refine auto_test", sysDB)
+	resp, handled, err := svc.handleSessionCommand(ctx, "/script refine auto_test", sysDB)
 	if err != nil {
 		t.Fatalf("Auto parameterize (refine) failed: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestMacro_AutoParameterize(t *testing.T) {
 	}
 
 	// 4. Apply Refinement
-	resp, handled, err = svc.handleSessionCommand(ctx, "/macro refine apply", sysDB)
+	resp, handled, err = svc.handleSessionCommand(ctx, "/script refine apply", sysDB)
 	if err != nil {
 		t.Fatalf("Refine apply failed: %v", err)
 	}
@@ -79,12 +79,12 @@ func TestMacro_AutoParameterize(t *testing.T) {
 		t.Errorf("Unexpected response from apply: %s", resp)
 	}
 
-	// 5. Verify Macro Content
-	resp, _, _ = svc.handleSessionCommand(ctx, "/macro show auto_test", sysDB)
+	// 5. Verify Script Content
+	resp, _, _ = svc.handleSessionCommand(ctx, "/script show auto_test", sysDB)
 	if !strings.Contains(resp, "{{.target_region}}") {
-		t.Errorf("Macro missing target_region replacement: %s", resp)
+		t.Errorf("Script missing target_region replacement: %s", resp)
 	}
 	if !strings.Contains(resp, "{{.min_salary}}") {
-		t.Errorf("Macro missing min_salary replacement: %s", resp)
+		t.Errorf("Script missing min_salary replacement: %s", resp)
 	}
 }

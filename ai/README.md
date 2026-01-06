@@ -1,8 +1,16 @@
-# SOP AI Library
+# SOP AI Kit
 
 > **Note**: This package was developed with an AI copilot. I want to keep an open development approach (not finicky and narrow) in this package to keep efficient in "automaton" cycles. Thus, source codes here may be subject to refactor because of AI first philosophy.
 
-The `sop/ai` package provides a complete toolkit for building local, privacy-first AI applications backed by the power of SOP's B-Tree storage engine. It enables you to build Vector Databases, RAG (Retrieval-Augmented Generation) systems, and Autonomous Agents without external database dependencies.
+The `sop/ai` package is the **SOP AI Kit** — a versatile **AI Platform** that transforms SOP from a storage engine into a complete **Computing Platform**.
+
+It enables you to build:
+*   **Domain-Specific AI Assistants**: Adapt the Scripting engine to any vertical (Finance, Healthcare, Media).
+*   **Embedded Applications**: Combine the database + scripting engine for powerful edge devices.
+*   **Personal AI Assistants**: Privacy-first, web-based assistants.
+*   **Enterprise AI Systems**: Acid-compliant RAG and autonomous agents.
+
+It provides a complete toolkit for building local, privacy-first AI applications backed by the power of SOP's B-Tree storage engine.
 
 ## Core Components
 
@@ -30,15 +38,14 @@ A persistent, ACID-compliant vector store that runs on your local filesystem.
     *   **Dynamic**: For systems with continuous updates. Maintains auxiliary structures to handle frequent inserts/deletes.
     *   **DynamicWithVectorCountTracking**: Specialized mode for external centroid management (e.g., Agents). It tracks vector counts per centroid to help you decide when to trigger `Optimize()`.
 
-### 2. Agent Framework (`ai/agent`)
-A flexible framework for defining AI agents with:
-*   **Personality**: System prompts and policies.
-*   **Memory**: Long-term knowledge retrieval from the Vector DB.
-*   **Tools**: Capability to use other agents (e.g., for translation or embedding).
-*   **Macros**: "Natural Language Programming" for defining complex, multi-step workflows.
+### 2. Versatile Scripting Engine (`ai/agent`)
+The core of the **Computing Platform**. It allows you to define complex, multi-step workflows using **Natural Language Programming** (Scripts/Scripts).
+*   **Adaptable**: Can be tailored to any domain (Finance, Media, etc.) by registering custom Tools.
 *   **Swarm Computing**: Async execution of steps for high-performance parallel processing.
+*   **Agent Framework**: Define agents with Personality, Memory, and Tool access.
+*   **Interoperable**: Scripts are stored as JSON and can be managed/visualized via the SOP Data Manager.
 
-See [ai/agent/README.md](ai/agent/README.md) for full documentation on Macros, Swarm Computing, and the Tool Registry.
+See [ai/agent/README.md](ai/agent/README.md) for full documentation on Scripts, Swarm Computing, and the Tool Registry.
 
 ### 3. Generators & Embedders (`ai/generator`, `ai/embed`)
 Interfaces for connecting to AI models:
@@ -58,18 +65,18 @@ A transactional, embedded text search engine.
 *   **Architecture**: Stores Inverted Indices in SOP B-Trees.
 *   **Usage**: Ideal for "Search this wiki" or "Filter by text" features alongside Vector Search.
 
-### 6. Macro System (`ai/MACROS.md`)
+### 6. Script System (`ai/SCRIPTS.md`)
 A "Natural Language Programming" engine.
 *   **Compiled Instructions**: Turns natural language intent into deterministic, high-performance SOP programs.
 *   **Mini-SDK**: A stable JSON schema (`ask`, `set`, `if`, `loop`, `fetch`) for scripting complex logic.
 *   **Bare Metal Performance**: Executes loops and data fetches directly in Go, using the LLM only for reasoning.
-*   [Read the full documentation](MACROS.md).
+*   [Read the full documentation](SCRIPTS.md).
 
 ### 7. AI Assistant (Interactive Mode)
-A conversational interface for interacting with your data and building macros.
+A conversational interface for interacting with your data and building scripts.
 *   **Natural Language Queries**: "Select all users where role is admin".
 *   **CRUD Operations**: Add, update, and delete records using plain English.
-*   **Macro Recording**: Teach the assistant workflows by doing them step-by-step.
+*   **Script Recording**: Teach the assistant workflows by doing them step-by-step.
 *   [Read the User Guide](AI_ASSISTANT_USAGE.md).
 
 ## Standards & Compatibility

@@ -45,7 +45,7 @@ func (m *MockToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, 
 	return nil, nil
 }
 
-func TestMacroExecution_SelectTwice(t *testing.T) {
+func TestScriptExecution_SelectTwice(t *testing.T) {
 	// 1. Setup Temp DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -121,7 +121,6 @@ func TestMacroExecution_SelectTwice(t *testing.T) {
 	adminAgent := &DataAdminAgent{
 		Config:            agentCfg,
 		brain:             mockGen,
-		enableObfuscation: false,
 	}
 	// Ensure registry is initialized and tools are registered
 	adminAgent.registry = NewRegistry()
@@ -141,8 +140,8 @@ func TestMacroExecution_SelectTwice(t *testing.T) {
 
 	svc := NewService(&MockDomain{}, sysDB, dbs, mockGen, nil, registry, false)
 
-	// 4. Execute Macro Logic (Simulated via /play)
-	t.Log("Starting Macro Execution Simulation via /play...")
+	// 4. Execute Script Logic (Simulated via /play)
+	t.Log("Starting Script Execution Simulation via /play...")
 
 	payload := &ai.SessionPayload{
 		CurrentDB: filepath.Base(tmpDir),
@@ -151,36 +150,36 @@ func TestMacroExecution_SelectTwice(t *testing.T) {
 	ctx = context.WithValue(ctx, "session_payload", payload)
 	// ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &MockToolExecutor{}) // Use real executor
 
-	// We need to save the macro first
-	// We can manually insert it into the macros store or use /record
+	// We need to save the script first
+	// We can manually insert it into the scripts store or use /record
 	// Let's use /record for realism
 
 	// Start recording
 	svc.Ask(ctx, "/record demo_loop")
 
 	// Record steps
-	svc.RecordStep(ctx, ai.MacroStep{
+	svc.RecordStep(ctx, ai.ScriptStep{
 		Type:    "command",
 		Command: "manage_transaction",
 		Args:    map[string]any{"action": "begin"},
 	})
-	svc.RecordStep(ctx, ai.MacroStep{
+	svc.RecordStep(ctx, ai.ScriptStep{
 		Type:    "command",
 		Command: "select",
 		Args:    map[string]any{"database": filepath.Base(tmpDir), "store": "employees", "limit": 2},
 	})
-	svc.RecordStep(ctx, ai.MacroStep{
+	svc.RecordStep(ctx, ai.ScriptStep{
 		Type:    "command",
 		Command: "select",
 		Args:    map[string]any{"database": filepath.Base(tmpDir), "store": "employees", "limit": 3},
 	})
-	svc.RecordStep(ctx, ai.MacroStep{
+	svc.RecordStep(ctx, ai.ScriptStep{
 		Type:    "command",
 		Command: "manage_transaction",
 		Args:    map[string]any{"action": "commit"},
 	})
 
-	// Stop recording (saves macro)
+	// Stop recording (saves script)
 	resp, err := svc.Ask(ctx, "/stop")
 	if err != nil {
 		t.Fatalf("Failed to stop recording: %v", err)
@@ -208,7 +207,7 @@ func TestMacroExecution_SelectTwice(t *testing.T) {
 	}
 }
 
-func TestMacroExecution_NoPipeline(t *testing.T) {
+func TestScriptExecution_NoPipeline(t *testing.T) {
 	// Setup Service with NO pipeline, just a generator
 	mockGen := &MockScriptedGenerator{
 		Responses: []string{
@@ -222,15 +221,15 @@ func TestMacroExecution_NoPipeline(t *testing.T) {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &MockToolExecutor{})
 
-	// Play macro
-	macro := ai.Macro{
-		Steps: []ai.MacroStep{
+	// Play script
+	script := ai.Script{
+		Steps: []ai.ScriptStep{
 			{Type: "ask", Prompt: "select something"},
 		},
 	}
 
 	var sb strings.Builder
-	err := svc.runSteps(ctx, macro.Steps, make(map[string]any), nil, &sb, nil)
+	err := svc.runSteps(ctx, script.Steps, make(map[string]any), nil, &sb, nil)
 	if err != nil {
 		t.Fatalf("Execution failed: %v", err)
 	}
@@ -241,16 +240,16 @@ func TestMacroExecution_NoPipeline(t *testing.T) {
 	}
 }
 
-func TestMacroExecution_CommandStep(t *testing.T) {
+func TestScriptExecution_CommandStep(t *testing.T) {
 	svc := NewService(&MockDomain{}, nil, nil, nil, nil, nil, false)
 
 	// Inject MockToolExecutor
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &MockToolExecutor{})
 
-	// Play macro with "command" step
-	macro := ai.Macro{
-		Steps: []ai.MacroStep{
+	// Play script with "command" step
+	script := ai.Script{
+		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
 				Command: "select",
@@ -260,7 +259,7 @@ func TestMacroExecution_CommandStep(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	err := svc.runSteps(ctx, macro.Steps, make(map[string]any), nil, &sb, nil)
+	err := svc.runSteps(ctx, script.Steps, make(map[string]any), nil, &sb, nil)
 	if err != nil {
 		t.Fatalf("Execution failed: %v", err)
 	}
@@ -271,7 +270,7 @@ func TestMacroExecution_CommandStep(t *testing.T) {
 	}
 }
 
-func TestMacroShow(t *testing.T) {
+func TestScriptShow(t *testing.T) {
 	// Setup Temp DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -284,30 +283,30 @@ func TestMacroShow(t *testing.T) {
 	svc := NewService(&MockDomain{}, sysDB, nil, nil, nil, nil, false)
 	ctx := context.Background()
 
-	// Create a macro manually
-	macro := ai.Macro{
-		Name: "test_macro",
-		Steps: []ai.MacroStep{
+	// Create a script manually
+	script := ai.Script{
+		Name: "test_script",
+		Steps: []ai.ScriptStep{
 			{Type: "ask", Prompt: "hello"},
 			{Type: "command", Command: "select", Args: map[string]any{"store": "users"}},
 		},
 	}
 
-	// Save macro
+	// Save script
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
-	store, _ := sysDB.OpenModelStore(ctx, "macros", tx)
-	store.Save(ctx, "general", "test_macro", macro)
+	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
+	store.Save(ctx, "general", "test_script", script)
 	tx.Commit(ctx)
 
-	// Test /macro show
-	resp, err := svc.Ask(ctx, "/macro show test_macro")
+	// Test /script show
+	resp, err := svc.Ask(ctx, "/script show test_script")
 	if err != nil {
 		t.Fatalf("Show failed: %v", err)
 	}
 	t.Logf("Show Response:\n%s", resp)
 
-	if !strings.Contains(resp, "test_macro") {
-		t.Error("Response missing macro name")
+	if !strings.Contains(resp, "test_script") {
+		t.Error("Response missing script name")
 	}
 	if !strings.Contains(resp, "hello") {
 		t.Error("Response missing prompt")
@@ -317,7 +316,7 @@ func TestMacroShow(t *testing.T) {
 	}
 }
 
-func TestMacroSaveAs(t *testing.T) {
+func TestScriptSaveAs(t *testing.T) {
 	// Setup Temp DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -347,35 +346,35 @@ func TestMacroSaveAs(t *testing.T) {
 		t.Fatalf("Ask failed: %v", err)
 	}
 
-	// 2. Save as macro
-	resp, err := svc.Ask(ctx, "/macro save_as my_saved_macro")
+	// 2. Save as script
+	resp, err := svc.Ask(ctx, "/script save_as my_saved_script")
 	if err != nil {
 		t.Fatalf("Save As failed: %v", err)
 	}
 	t.Logf("Save As Response: %s", resp)
 
-	// 3. Verify macro exists and has the command step
+	// 3. Verify script exists and has the command step
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForReading)
-	store, _ := sysDB.OpenModelStore(ctx, "macros", tx)
-	var macro ai.Macro
-	err = store.Load(ctx, "general", "my_saved_macro", &macro)
+	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
+	var script ai.Script
+	err = store.Load(ctx, "general", "my_saved_script", &script)
 	tx.Commit(ctx)
 
 	if err != nil {
-		t.Fatalf("Failed to load saved macro: %v", err)
+		t.Fatalf("Failed to load saved script: %v", err)
 	}
-	if len(macro.Steps) != 1 {
-		t.Fatalf("Expected 1 step, got %d", len(macro.Steps))
+	if len(script.Steps) != 1 {
+		t.Fatalf("Expected 1 step, got %d", len(script.Steps))
 	}
-	if macro.Steps[0].Type != "command" {
-		t.Errorf("Expected step type 'command', got '%s'", macro.Steps[0].Type)
+	if script.Steps[0].Type != "command" {
+		t.Errorf("Expected step type 'command', got '%s'", script.Steps[0].Type)
 	}
-	if macro.Steps[0].Command != "select" {
-		t.Errorf("Expected command 'select', got '%s'", macro.Steps[0].Command)
+	if script.Steps[0].Command != "select" {
+		t.Errorf("Expected command 'select', got '%s'", script.Steps[0].Command)
 	}
 }
 
-func TestMacroRecording_SelectTwice(t *testing.T) {
+func TestScriptRecording_SelectTwice(t *testing.T) {
 	// 1. Setup Temp DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -428,7 +427,6 @@ func TestMacroRecording_SelectTwice(t *testing.T) {
 	adminAgent := &DataAdminAgent{
 		Config:            agentCfg,
 		brain:             mockGen,
-		enableObfuscation: false,
 		registry:          NewRegistry(),
 	}
 	adminAgent.registerTools()
@@ -445,8 +443,8 @@ func TestMacroRecording_SelectTwice(t *testing.T) {
 	dbs := map[string]sop.DatabaseOptions{dbName: dbOpts}
 	svc := NewService(&MockDomain{}, sysDB, dbs, mockGen, nil, nil, false)
 
-	// 4. Execute Macro Logic (Recording Mode)
-	t.Log("Starting Macro Recording Simulation...")
+	// 4. Execute Script Logic (Recording Mode)
+	t.Log("Starting Script Recording Simulation...")
 
 	payload := &ai.SessionPayload{
 		CurrentDB: filepath.Base(tmpDir),
@@ -494,7 +492,7 @@ func TestMacroRecording_SelectTwice(t *testing.T) {
 	svc.Ask(ctx, "/stop")
 }
 
-func TestMacroRecording_OverwriteProtection(t *testing.T) {
+func TestScriptRecording_OverwriteProtection(t *testing.T) {
 	// 1. Setup Temp DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -507,7 +505,7 @@ func TestMacroRecording_OverwriteProtection(t *testing.T) {
 	sysDB := database.NewDatabase(dbOpts)
 
 	// 2. Setup Service
-	// We don't need a real generator or pipeline for this test, just the macro recording logic.
+	// We don't need a real generator or pipeline for this test, just the script recording logic.
 	mockGen := &MockScriptedGenerator{Responses: []string{}}
 
 	dbName := filepath.Base(tmpDir)
@@ -516,12 +514,12 @@ func TestMacroRecording_OverwriteProtection(t *testing.T) {
 
 	ctx := context.Background()
 
-	// 3. Record a macro "test_macro"
-	resp, err := svc.Ask(ctx, "/record test_macro")
+	// 3. Record a script "test_script"
+	resp, err := svc.Ask(ctx, "/record test_script")
 	if err != nil {
 		t.Fatalf("Failed to start recording: %v", err)
 	}
-	if !strings.Contains(resp, "Recording macro 'test_macro'") {
+	if !strings.Contains(resp, "Recording script 'test_script'") {
 		t.Errorf("Unexpected response: %s", resp)
 	}
 
@@ -531,29 +529,29 @@ func TestMacroRecording_OverwriteProtection(t *testing.T) {
 		t.Fatalf("Failed to stop recording: %v", err)
 	}
 	if strings.Contains(resp, "Error") {
-		t.Fatalf("Failed to save macro: %s", resp)
+		t.Fatalf("Failed to save script: %s", resp)
 	}
 
-	// 4. Try to record "test_macro" again (should fail)
-	resp, err = svc.Ask(ctx, "/record test_macro")
+	// 4. Try to record "test_script" again (should fail)
+	resp, err = svc.Ask(ctx, "/record test_script")
 	if err != nil {
 		t.Fatalf("Failed to ask: %v", err)
 	}
-	if !strings.Contains(resp, "Error: Macro 'test_macro' (Category: general) already exists") {
+	if !strings.Contains(resp, "Error: Script 'test_script' (Category: general) already exists") {
 		t.Errorf("Expected overwrite error, got: %s", resp)
 	}
 
-	// 5. Try to record "test_macro" again with --force (should succeed)
-	resp, err = svc.Ask(ctx, "/record test_macro --force")
+	// 5. Try to record "test_script" again with --force (should succeed)
+	resp, err = svc.Ask(ctx, "/record test_script --force")
 	if err != nil {
 		t.Fatalf("Failed to ask: %v", err)
 	}
-	if !strings.Contains(resp, "Recording macro 'test_macro'") {
+	if !strings.Contains(resp, "Recording script 'test_script'") {
 		t.Errorf("Expected success with --force, got: %s", resp)
 	}
 }
 
-func TestMacroManagement(t *testing.T) {
+func TestScriptManagement(t *testing.T) {
 	// 1. Setup Temp DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -568,35 +566,35 @@ func TestMacroManagement(t *testing.T) {
 	svc := NewService(&MockDomain{}, sysDB, dbs, mockGen, nil, nil, false)
 	ctx := context.Background()
 
-	// 2. Create a macro "my_macro" with 3 steps
-	svc.Ask(ctx, "/record my_macro")
-	svc.session.CurrentMacro.Steps = []ai.MacroStep{
+	// 2. Create a script "my_script" with 3 steps
+	svc.Ask(ctx, "/record my_script")
+	svc.session.CurrentScript.Steps = []ai.ScriptStep{
 		{Type: "ask", Prompt: "Step 1"},
 		{Type: "ask", Prompt: "Step 2"},
 		{Type: "ask", Prompt: "Step 3"},
 	}
 	svc.Ask(ctx, "/stop")
 
-	// 3. Test /macro list
-	resp, err := svc.Ask(ctx, "/macro list")
+	// 3. Test /script list
+	resp, err := svc.Ask(ctx, "/script list")
 	if err != nil {
-		t.Fatalf("Failed to list macros: %v", err)
+		t.Fatalf("Failed to list scripts: %v", err)
 	}
-	if !strings.Contains(resp, "my_macro") {
-		t.Errorf("Expected 'my_macro' in list, got: %s", resp)
+	if !strings.Contains(resp, "my_script") {
+		t.Errorf("Expected 'my_script' in list, got: %s", resp)
 	}
 
-	// 4. Test /macro show
-	resp, err = svc.Ask(ctx, "/macro show my_macro")
+	// 4. Test /script show
+	resp, err = svc.Ask(ctx, "/script show my_script")
 	if err != nil {
-		t.Fatalf("Failed to show macro: %v", err)
+		t.Fatalf("Failed to show script: %v", err)
 	}
 	if !strings.Contains(resp, "1. [ask] Step 1") || !strings.Contains(resp, "3. [ask] Step 3") {
 		t.Errorf("Unexpected show output: %s", resp)
 	}
 
-	// 5. Test /macro step delete (delete Step 2)
-	resp, err = svc.Ask(ctx, "/macro step delete my_macro 2")
+	// 5. Test /script step delete (delete Step 2)
+	resp, err = svc.Ask(ctx, "/script step delete my_script 2")
 	if err != nil {
 		t.Fatalf("Failed to delete step: %v", err)
 	}
@@ -605,37 +603,37 @@ func TestMacroManagement(t *testing.T) {
 	}
 
 	// Verify deletion
-	resp, err = svc.Ask(ctx, "/macro show my_macro")
+	resp, err = svc.Ask(ctx, "/script show my_script")
 	if !strings.Contains(resp, "1. [ask] Step 1") || !strings.Contains(resp, "2. [ask] Step 3") {
 		t.Errorf("Step 2 was not deleted correctly. Output: %s", resp)
 	}
 
-	// 6. Test /macro show --json
-	resp, err = svc.Ask(ctx, "/macro show my_macro --json")
+	// 6. Test /script show --json
+	resp, err = svc.Ask(ctx, "/script show my_script --json")
 	if err != nil {
-		t.Fatalf("Failed to show macro json: %v", err)
+		t.Fatalf("Failed to show script json: %v", err)
 	}
-	if !strings.Contains(resp, "```json") || !strings.Contains(resp, "\"name\": \"my_macro\"") {
+	if !strings.Contains(resp, "```json") || !strings.Contains(resp, "\"name\": \"my_script\"") {
 		t.Errorf("Unexpected JSON output: %s", resp)
 	}
 
-	// 7. Test /macro delete
-	resp, err = svc.Ask(ctx, "/macro delete my_macro")
+	// 7. Test /script delete
+	resp, err = svc.Ask(ctx, "/script delete my_script")
 	if err != nil {
-		t.Fatalf("Failed to delete macro: %v", err)
+		t.Fatalf("Failed to delete script: %v", err)
 	}
 	if !strings.Contains(resp, "deleted") {
 		t.Errorf("Unexpected delete response: %s", resp)
 	}
 
 	// Verify deletion
-	resp, err = svc.Ask(ctx, "/macro list")
-	if strings.Contains(resp, "my_macro") {
-		t.Errorf("Macro should be deleted, but found in list: %s", resp)
+	resp, err = svc.Ask(ctx, "/script list")
+	if strings.Contains(resp, "my_script") {
+		t.Errorf("Script should be deleted, but found in list: %s", resp)
 	}
 }
 
-func TestMacroNestedAndUpdates(t *testing.T) {
+func TestScriptNestedAndUpdates(t *testing.T) {
 	// 1. Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -653,36 +651,36 @@ func TestMacroNestedAndUpdates(t *testing.T) {
 	svc := NewService(&MockDomain{}, sysDB, dbs, mockGen, nil, nil, false)
 	ctx := context.Background()
 
-	// 2. Create sub-macro
-	svc.Ask(ctx, "/record sub_macro")
-	svc.session.CurrentMacro.Steps = []ai.MacroStep{
+	// 2. Create sub-script
+	svc.Ask(ctx, "/record sub_script")
+	svc.session.CurrentScript.Steps = []ai.ScriptStep{
 		{Type: "say", Message: "Sub Step 1"},
 	}
 	svc.Ask(ctx, "/stop")
 
-	// 3. Create main-macro with nested macro step
-	svc.Ask(ctx, "/record main_macro")
-	svc.session.CurrentMacro.Steps = []ai.MacroStep{
+	// 3. Create main-script with nested script step
+	svc.Ask(ctx, "/record main_script")
+	svc.session.CurrentScript.Steps = []ai.ScriptStep{
 		{Type: "ask", Prompt: "Main Step 1"},
-		{Type: "macro", MacroName: "sub_macro"},
+		{Type: "call_script", ScriptName: "sub_script"},
 	}
 	svc.Ask(ctx, "/stop")
 
-	// 4. Verify /macro show displays nested macro correctly
-	resp, err := svc.Ask(ctx, "/macro show main_macro")
+	// 4. Verify /script show displays nested script correctly
+	resp, err := svc.Ask(ctx, "/script show main_script")
 	if err != nil {
-		t.Fatalf("Failed to show macro: %v", err)
+		t.Fatalf("Failed to show script: %v", err)
 	}
-	if !strings.Contains(resp, "2. [macro] Run 'sub_macro'") {
-		t.Errorf("Unexpected show output for nested macro: %s", resp)
+	if !strings.Contains(resp, "2. [call_script] Run 'sub_script'") {
+		t.Errorf("Unexpected show output for nested script: %s", resp)
 	}
 
-	// 5. Test /macro step update
+	// 5. Test /script step update
 	// First, run a command to set s.lastStep
 	svc.Ask(ctx, "New Prompt") // This sets s.lastStep to an "ask" step with "New Prompt"
 
-	// Update step 1 of main_macro
-	resp, err = svc.Ask(ctx, "/macro step update main_macro 1")
+	// Update step 1 of main_script
+	resp, err = svc.Ask(ctx, "/script step update main_script 1")
 	if err != nil {
 		t.Fatalf("Failed to update step: %v", err)
 	}
@@ -691,26 +689,26 @@ func TestMacroNestedAndUpdates(t *testing.T) {
 	}
 
 	// Verify update
-	resp, err = svc.Ask(ctx, "/macro show main_macro")
+	resp, err = svc.Ask(ctx, "/script show main_script")
 	if !strings.Contains(resp, "1. [ask] New Prompt") {
 		t.Errorf("Step 1 was not updated correctly. Output: %s", resp)
 	}
 
-	// 6. Test /macro step add (add to bottom)
+	// 6. Test /script step add (add to bottom)
 	svc.Ask(ctx, "Added Prompt")
-	resp, err = svc.Ask(ctx, "/macro step add main_macro bottom")
+	resp, err = svc.Ask(ctx, "/script step add main_script bottom")
 	if err != nil {
 		t.Fatalf("Failed to add step: %v", err)
 	}
 
 	// Verify add
-	resp, err = svc.Ask(ctx, "/macro show main_macro")
+	resp, err = svc.Ask(ctx, "/script show main_script")
 	if !strings.Contains(resp, "3. [ask] Added Prompt") {
 		t.Errorf("Step was not added correctly. Output: %s", resp)
 	}
 }
 
-func TestToolMacroAddStepFromLast(t *testing.T) {
+func TestToolScriptAddStepFromLast(t *testing.T) {
 	// Setup
 	ctx := context.Background()
 
@@ -720,19 +718,19 @@ func TestToolMacroAddStepFromLast(t *testing.T) {
 	}
 
 	// Mock Last Tool Call
-	agent.lastToolCall = &ai.MacroStep{
+	agent.lastToolCall = &ai.ScriptStep{
 		Type:    "command",
 		Command: "test_tool",
 		Args:    map[string]any{"arg1": "val1"},
 	}
 
-	// We need a system DB with macros store to test this fully.
+	// We need a system DB with scripts store to test this fully.
 	// Since setting up a full system DB mock is complex, we will just check if the method exists and compiles.
-	// The logic inside relies on updateMacro which interacts with the DB.
+	// The logic inside relies on updateScript which interacts with the DB.
 
 	// Let's just verify the method signature matches what we expect by calling it with nil context (it will fail but compile)
-	_, _ = agent.toolMacroAddStepFromLast(ctx, map[string]any{
-		"macro": "test_macro",
+	_, _ = agent.toolScriptAddStepFromLast(ctx, map[string]any{
+		"script": "test_script",
 	})
 }
 
@@ -754,7 +752,7 @@ func (m *AsyncMockToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinit
 	return nil, nil
 }
 
-func TestMacroAsyncExecution(t *testing.T) {
+func TestScriptAsyncExecution(t *testing.T) {
 	// Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -770,10 +768,10 @@ func TestMacroAsyncExecution(t *testing.T) {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
 
-	// Define macro with async steps
-	macro := ai.Macro{
+	// Define script with async steps
+	script := ai.Script{
 		Name: "async_test",
-		Steps: []ai.MacroStep{
+		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
 				Command: "sleep",
@@ -793,7 +791,7 @@ func TestMacroAsyncExecution(t *testing.T) {
 	var scopeMu sync.RWMutex
 
 	start := time.Now()
-	err := svc.runSteps(ctx, macro.Steps, scope, &scopeMu, &sb, sysDB)
+	err := svc.runSteps(ctx, script.Steps, scope, &scopeMu, &sb, sysDB)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -840,7 +838,7 @@ func (m *ErrorMockToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinit
 	return nil, nil
 }
 
-func TestMacroAsyncErrorPropagation(t *testing.T) {
+func TestScriptAsyncErrorPropagation(t *testing.T) {
 	// Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -856,12 +854,12 @@ func TestMacroAsyncErrorPropagation(t *testing.T) {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
 
-	// Define macro:
+	// Define script:
 	// 1. Async sleep (should be cancelled)
 	// 2. Sync fail (should stop everything)
-	macro := ai.Macro{
+	script := ai.Script{
 		Name: "error_test",
-		Steps: []ai.MacroStep{
+		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
 				Command: "sleep",
@@ -875,7 +873,7 @@ func TestMacroAsyncErrorPropagation(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	err := svc.runSteps(ctx, macro.Steps, make(map[string]any), nil, &sb, sysDB)
+	err := svc.runSteps(ctx, script.Steps, make(map[string]any), nil, &sb, sysDB)
 
 	if err == nil {
 		t.Fatal("Expected error, got nil")
@@ -891,7 +889,7 @@ func TestMacroAsyncErrorPropagation(t *testing.T) {
 	// but we can check that the test finished quickly (sleep didn't block for full duration).
 }
 
-func TestToolMacroAddStepFromLast_MetaToolExclusion(t *testing.T) {
+func TestToolScriptAddStepFromLast_MetaToolExclusion(t *testing.T) {
 	// Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -908,16 +906,16 @@ func TestToolMacroAddStepFromLast_MetaToolExclusion(t *testing.T) {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
 
-	// 1. Create a Macro
-	// We don't have a direct tool for creating macro in registry yet (it's usually done via recording),
+	// 1. Create a Script
+	// We don't have a direct tool for creating script in registry yet (it's usually done via recording),
 	// but we can manually create it in the system DB.
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
-	store, _ := sysDB.OpenModelStore(ctx, "macros", tx)
-	macro := ai.Macro{
-		Name:  "test_macro",
-		Steps: []ai.MacroStep{},
+	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
+	script := ai.Script{
+		Name:  "test_script",
+		Steps: []ai.ScriptStep{},
 	}
-	store.Save(ctx, "general", "test_macro", &macro)
+	store.Save(ctx, "general", "test_script", &script)
 	tx.Commit(ctx)
 
 	// 2. Execute a "Real" Tool (e.g. list_databases)
@@ -928,37 +926,37 @@ func TestToolMacroAddStepFromLast_MetaToolExclusion(t *testing.T) {
 		t.Fatalf("Expected lastToolCall to be 'list_databases', got %v", agent.lastToolCall)
 	}
 
-	// 3. Execute "macro_add_step_from_last"
-	// This should NOT update lastToolCall, so it should add "list_databases" to the macro
+	// 3. Execute "script_add_step_from_last"
+	// This should NOT update lastToolCall, so it should add "list_databases" to the script
 	addArgs := map[string]any{
-		"macro": "test_macro",
+		"script": "test_script",
 	}
-	_, err := agent.Execute(ctx, "macro_add_step_from_last", addArgs)
+	_, err := agent.Execute(ctx, "script_add_step_from_last", addArgs)
 	if err != nil {
 		t.Fatalf("Failed to add step: %v", err)
 	}
 
-	// 4. Verify Macro Content
+	// 4. Verify Script Content
 	tx, _ = sysDB.BeginTransaction(ctx, sop.ForReading)
-	store, _ = sysDB.OpenModelStore(ctx, "macros", tx)
-	var loadedMacro ai.Macro
-	store.Load(ctx, "general", "test_macro", &loadedMacro)
+	store, _ = sysDB.OpenModelStore(ctx, "scripts", tx)
+	var loadedScript ai.Script
+	store.Load(ctx, "general", "test_script", &loadedScript)
 	tx.Commit(ctx)
 
-	if len(loadedMacro.Steps) != 1 {
-		t.Fatalf("Expected 1 step, got %d", len(loadedMacro.Steps))
+	if len(loadedScript.Steps) != 1 {
+		t.Fatalf("Expected 1 step, got %d", len(loadedScript.Steps))
 	}
-	if loadedMacro.Steps[0].Command != "list_databases" {
-		t.Errorf("Expected step command 'list_databases', got '%s'", loadedMacro.Steps[0].Command)
+	if loadedScript.Steps[0].Command != "list_databases" {
+		t.Errorf("Expected step command 'list_databases', got '%s'", loadedScript.Steps[0].Command)
 	}
 
-	// 5. Verify lastToolCall is STILL "list_databases" (or at least not "macro_add_step_from_last")
-	if agent.lastToolCall.Command == "macro_add_step_from_last" {
-		t.Error("lastToolCall was updated to 'macro_add_step_from_last', which is wrong")
+	// 5. Verify lastToolCall is STILL "list_databases" (or at least not "script_add_step_from_last")
+	if agent.lastToolCall.Command == "script_add_step_from_last" {
+		t.Error("lastToolCall was updated to 'script_add_step_from_last', which is wrong")
 	}
 }
 
-func TestToolMacroUpdateStep(t *testing.T) {
+func TestToolScriptUpdateStep(t *testing.T) {
 	// Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -975,44 +973,44 @@ func TestToolMacroUpdateStep(t *testing.T) {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
 
-	// 1. Create a Macro with 1 step
+	// 1. Create a Script with 1 step
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
-	store, _ := sysDB.OpenModelStore(ctx, "macros", tx)
-	macro := ai.Macro{
-		Name: "update_test_macro",
-		Steps: []ai.MacroStep{
+	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
+	script := ai.Script{
+		Name: "update_test_script",
+		Steps: []ai.ScriptStep{
 			{Type: "command", Command: "echo", Args: map[string]any{"msg": "hello"}},
 		},
 	}
-	store.Save(ctx, "general", "update_test_macro", &macro)
+	store.Save(ctx, "general", "update_test_script", &script)
 	tx.Commit(ctx)
 
-	// 2. Execute "macro_update_step" to change command to "print" and msg to "world"
+	// 2. Execute "script_update_step" to change command to "print" and msg to "world"
 	updateArgs := map[string]any{
-		"macro":   "update_test_macro",
+		"script":   "update_test_script",
 		"index":   0.0, // 0-based index
 		"command": "print",
 		"args":    map[string]any{"msg": "world"},
 	}
-	_, err := agent.Execute(ctx, "macro_update_step", updateArgs)
+	_, err := agent.Execute(ctx, "script_update_step", updateArgs)
 	if err != nil {
 		t.Fatalf("Failed to update step: %v", err)
 	}
 
-	// 3. Verify Macro Content
+	// 3. Verify Script Content
 	tx, _ = sysDB.BeginTransaction(ctx, sop.ForReading)
-	store, _ = sysDB.OpenModelStore(ctx, "macros", tx)
-	var loadedMacro ai.Macro
-	store.Load(ctx, "general", "update_test_macro", &loadedMacro)
+	store, _ = sysDB.OpenModelStore(ctx, "scripts", tx)
+	var loadedScript ai.Script
+	store.Load(ctx, "general", "update_test_script", &loadedScript)
 	tx.Commit(ctx)
 
-	if len(loadedMacro.Steps) != 1 {
-		t.Fatalf("Expected 1 step, got %d", len(loadedMacro.Steps))
+	if len(loadedScript.Steps) != 1 {
+		t.Fatalf("Expected 1 step, got %d", len(loadedScript.Steps))
 	}
-	if loadedMacro.Steps[0].Command != "print" {
-		t.Errorf("Expected step command 'print', got '%s'", loadedMacro.Steps[0].Command)
+	if loadedScript.Steps[0].Command != "print" {
+		t.Errorf("Expected step command 'print', got '%s'", loadedScript.Steps[0].Command)
 	}
-	args := loadedMacro.Steps[0].Args
+	args := loadedScript.Steps[0].Args
 	if args["msg"] != "world" {
 		t.Errorf("Expected arg msg='world', got %v", args["msg"])
 	}

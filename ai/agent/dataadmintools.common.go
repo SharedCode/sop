@@ -306,7 +306,7 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 				if streamer != nil {
 					streamer.BeginArray()
 					for _, n := range neighbors {
-						streamer.WriteItem(filterFields(n, fields))
+						streamer.WriteItem(reorderItem(n, fields, indexSpec))
 					}
 					streamer.EndArray()
 					return "", nil
@@ -315,7 +315,7 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 				// Return JSON array string
 				var filteredNeighbors []any
 				for _, n := range neighbors {
-					filteredNeighbors = append(filteredNeighbors, filterFields(n, fields))
+					filteredNeighbors = append(filteredNeighbors, reorderItem(n, fields, indexSpec))
 				}
 				b, _ := json.Marshal(filteredNeighbors)
 				return string(b), nil
@@ -333,16 +333,9 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 	k, _ := store.GetCurrentKey()
 	v, _ := store.GetCurrentValue(ctx)
 
-	// Format key if it's a map and we have an index spec
-	var keyFormatted any = k
-	if indexSpec != nil {
-		if m, ok := k.(map[string]any); ok {
-			keyFormatted = OrderedKey{m: m, spec: indexSpec}
-		}
-	}
-
-	item := map[string]any{"key": keyFormatted, "value": v}
-	finalItem := filterFields(item, fields)
+	// Format Output using common helper
+	item := map[string]any{"key": k, "value": v}
+	finalItem := reorderItem(item, fields, indexSpec)
 
 	if streamer != nil {
 		streamer.BeginArray()

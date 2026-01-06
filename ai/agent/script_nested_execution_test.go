@@ -10,7 +10,7 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 )
 
-func TestMacro_Play_Nested_Execution(t *testing.T) {
+func TestScript_Play_Nested_Execution(t *testing.T) {
 	// 1. Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -21,12 +21,12 @@ func TestMacro_Play_Nested_Execution(t *testing.T) {
 	sysDB := database.NewDatabase(dbOpts)
 	ctx := context.Background()
 
-	// 2. Define Child Macro: "echo_msg"
+	// 2. Define Child Script: "echo_msg"
 	// It simply "says" the message.
-	childMacro := ai.Macro{
+	childScript := ai.Script{
 		Name:       "echo_msg",
 		Parameters: []string{"msg"},
-		Steps: []ai.MacroStep{
+		Steps: []ai.ScriptStep{
 			{
 				Type:    "say",
 				Message: "Child says: {{.msg}}",
@@ -34,33 +34,33 @@ func TestMacro_Play_Nested_Execution(t *testing.T) {
 		},
 	}
 
-	// 3. Define Parent Macro: "greet_user"
+	// 3. Define Parent Script: "greet_user"
 	// It takes "user" and calls "echo_msg" with "Hello {{.user}}"
-	parentMacro := ai.Macro{
+	parentScript := ai.Script{
 		Name:       "greet_user",
 		Parameters: []string{"user"},
-		Steps: []ai.MacroStep{
+		Steps: []ai.ScriptStep{
 			{
-				Type:      "macro",
-				MacroName: "echo_msg",
-				MacroArgs: map[string]string{
+				Type: "call_script",
+				ScriptName: "echo_msg",
+				ScriptArgs: map[string]string{
 					"msg": "Hello {{.user}}",
 				},
 			},
 		},
 	}
 
-	// 4. Save Macros
+	// 4. Save Scripts
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
-	store, _ := sysDB.OpenModelStore(ctx, "macros", tx)
-	store.Save(ctx, "general", "echo_msg", childMacro)
-	store.Save(ctx, "general", "greet_user", parentMacro)
+	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
+	store.Save(ctx, "general", "echo_msg", childScript)
+	store.Save(ctx, "general", "greet_user", parentScript)
 	tx.Commit(ctx)
 
 	// 5. Initialize Service
 	svc := NewService(nil, sysDB, nil, nil, nil, nil, false)
 
-	// 6. Execute Parent Macro
+	// 6. Execute Parent Script
 	// /play greet_user user=Alice
 	cmd := "/play greet_user user=Alice"
 	resp, err := svc.Ask(ctx, cmd)
@@ -70,12 +70,12 @@ func TestMacro_Play_Nested_Execution(t *testing.T) {
 
 	// 7. Verify Output
 	// We expect the output to contain the JSON structure with the "say" result
-	// The "say" step in the child macro should produce "Child says: Hello Alice"
+	// The "say" step in the child script should produce "Child says: Hello Alice"
 	
 	// The output format is a JSON array of StepExecutionResult
 	// We look for the string "Child says: Hello Alice" in the response.
 	expected := "Child says: Hello Alice"
 	if !strings.Contains(resp, expected) {
-		t.Errorf("Nested macro execution failed.\nExpected output to contain: %s\nGot: %s", expected, resp)
+		t.Errorf("Nested script execution failed.\nExpected output to contain: %s\nGot: %s", expected, resp)
 	}
 }

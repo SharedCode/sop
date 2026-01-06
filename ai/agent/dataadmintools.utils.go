@@ -245,6 +245,73 @@ func (o OrderedMap) MarshalJSON() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// reorderItem ensures the output map follows the IndexSpecification order if available,
+// or the requested fields order.
+func reorderItem(item any, fields []string, indexSpec *jsondb.IndexSpecification) any {
+	mItem, ok := item.(map[string]any)
+	if !ok {
+		return item
+	}
+
+	// 1. If explicit fields are requested, filterFields handles ordering.
+	if len(fields) > 0 {
+		return filterFields(mItem, fields)
+	}
+
+	// 2. Use IndexSpecification for default ordering (Key vs Value vs Index Fields)
+	if indexSpec != nil {
+		// Case A: Item has "key" field which is a Map -> Apply OrderedKey to it
+		if kVal, hasKey := mItem["key"]; hasKey {
+			if kMap, kOk := kVal.(map[string]any); kOk {
+				// Replace "key" with OrderedKey wrapper
+				mItem["key"] = OrderedKey{m: kMap, spec: indexSpec}
+			}
+			// Return OrderedMap ensuring "key" comes before "value"
+			// Check if "value" exists
+			keys := []string{"key"}
+			if _, hasVal := mItem["value"]; hasVal {
+				keys = append(keys, "value")
+			}
+			// Append any other fields (e.g. valid, deleted, etc)
+			for k := range mItem {
+				if k != "key" && k != "value" {
+					keys = append(keys, k)
+				}
+			}
+			return OrderedMap{m: mItem, keys: keys}
+		}
+
+		// Case B: Flat Map - Order by Index Fields
+		orderedKeys := make([]string, 0, len(mItem))
+		used := make(map[string]bool)
+
+		// Add index fields first
+		for _, f := range indexSpec.IndexFields {
+			if _, ok := mItem[f.FieldName]; ok {
+				orderedKeys = append(orderedKeys, f.FieldName)
+				used[f.FieldName] = true
+			}
+		}
+
+		// Add remaining fields (sorted alphabetically)
+		var remaining []string
+		for k := range mItem {
+			if !used[k] {
+				remaining = append(remaining, k)
+			}
+		}
+		sort.Strings(remaining)
+		orderedKeys = append(orderedKeys, remaining...)
+
+		return OrderedMap{
+			m:    mItem,
+			keys: orderedKeys,
+		}
+	}
+
+	return item
+}
+
 func filterFields(item map[string]any, fields []string) any {
 	if len(fields) == 0 {
 		return item
@@ -261,114 +328,172 @@ func filterFields(item map[string]any, fields []string) any {
 		return field, field
 	}
 
-	// Check if the item looks like a standard SOP Store Item (has "key" and "value")
+	// 0. Detect Flat Input Case (e.g. from Script variables or Join output that was already flattened)
+	// If the item doesn't structurally look like a Key/Value store wrapper (which must have "key" and/or "value"),
+	// and we are filtering it, we treat it as a flat map and return an OrderedMap.
 	_, hasKey := item["key"]
 	_, hasValue := item["value"]
 
-	// If it's NOT a standard SOP wrapper (e.g. result of a Join or arbitrary JSON),
-	// treat it as a flat map and filter top-level fields.
-	if !hasKey || !hasValue {
-		om := OrderedMap{
+	// Assuming standard wrapper always produces "key" and "value" fields, even if nil.
+	// But sometimes they might be missing?
+	// If strict Key/Value context, at least one should exist.
+	if !hasKey && !hasValue {
+		// Flat Mode: Return primitives directly in OrderedMap
+		out := OrderedMap{
 			m:    make(map[string]any),
-			keys: make([]string, 0),
+			keys: make([]string, 0, len(fields)),
 		}
+
 		for _, f := range fields {
 			source, alias := parseFieldAlias(f)
-			if v, ok := item[source]; ok {
-				om.keys = append(om.keys, alias)
-				om.m[alias] = v
+
+			// Simple dotted path navigation could be supported here too?
+			// For now, simple key lookup.
+			val, ok := item[source]
+
+			// If not found, check if source has dot?
+			if !ok && strings.Contains(source, ".") {
+				// Very basic nested lookup (one level)
+				parts := strings.SplitN(source, ".", 2)
+				if sub, subOk := item[parts[0]].(map[string]any); subOk {
+					val, ok = sub[parts[1]]
+				}
+			}
+
+			if ok {
+				out.keys = append(out.keys, alias)
+				out.m[alias] = val
 			}
 		}
-		return om
+		return out
 	}
 
-	// We must preserve the Key/Value structure for API consistency.
-	// However, we want to respect the order of fields requested within Key and Value.
+	// 1. Prepare Key and Value Containers
+	// We always respect the UI contract: Output must be {"key": ..., "value": ...}
 
-	var newKey any = nil
-	var newValue any = nil
-
-	// Helper to check if a field is requested
-	isRequested := func(target string) bool {
-		for _, field := range fields {
-			source, _ := parseFieldAlias(field)
-			if source == target {
-				return true
-			}
-		}
-		return false
-	}
-
-	// 1. Handle Key
 	originalKey := item["key"]
-	if isRequested("key") || isRequested("Key") {
-		newKey = originalKey
-	} else {
-		// Check if originalKey is a map/struct we can filter
-		if keyMap, ok := originalKey.(map[string]any); ok {
-			// Create OrderedMap for Key
-			om := OrderedMap{
-				m:    make(map[string]any),
-				keys: make([]string, 0),
+	originalValue := item["value"]
+
+	// These hold the projected sub-fields
+	keyMap := &OrderedMap{m: make(map[string]any), keys: make([]string, 0)}
+	valMap := &OrderedMap{m: make(map[string]any), keys: make([]string, 0)}
+
+	// Flags to track if we should just return the whole original key/value (e.g. "select key")
+	var finalKey any = nil
+	var finalValue any = nil
+	keySelected := false
+	valueSelected := false
+
+	// Helper to extract a field from a map with case-insensitivity
+	getFromMap := func(source any, fieldName string) (any, bool) {
+		if source == nil {
+			return nil, false
+		}
+
+		// If source is OrderedKey, unwrap
+		if ok, isOk := source.(OrderedKey); isOk {
+			source = ok.m
+		}
+
+		if m, ok := source.(map[string]any); ok {
+			if v, ok := m[fieldName]; ok {
+				return v, true
 			}
-			// Iterate requested fields to preserve order
-			for _, f := range fields {
-				source, alias := parseFieldAlias(f)
-				if v, ok := keyMap[source]; ok {
-					om.keys = append(om.keys, alias)
-					om.m[alias] = v
+			// Case-insensitive fallback
+			lowerField := strings.ToLower(fieldName)
+			for k, v := range m {
+				if strings.ToLower(k) == lowerField {
+					return v, true
 				}
 			}
-			if len(om.keys) > 0 {
-				newKey = om
-			}
-		} else if orderedKey, ok := originalKey.(OrderedKey); ok {
-			keyMap := orderedKey.m
-			// Create OrderedMap for Key
-			om := OrderedMap{
-				m:    make(map[string]any),
-				keys: make([]string, 0),
-			}
-			for _, f := range fields {
-				source, alias := parseFieldAlias(f)
-				if v, ok := keyMap[source]; ok {
-					om.keys = append(om.keys, alias)
-					om.m[alias] = v
+		}
+		return nil, false
+	}
+
+	for _, f := range fields {
+		source, alias := parseFieldAlias(f)
+
+		// 1. Direct Selection of "key" or "value"
+		if strings.EqualFold(source, "key") {
+			finalKey = originalKey
+			keySelected = true
+			continue
+		}
+		if strings.EqualFold(source, "value") {
+			finalValue = originalValue
+			valueSelected = true
+			continue
+		}
+
+		// 2. Probing
+
+		// Try Key first (strict precedence?)
+		found := false
+		if v, ok := getFromMap(originalKey, source); ok {
+			keyMap.keys = append(keyMap.keys, alias)
+			keyMap.m[alias] = v
+			found = true
+		}
+
+		// Then Try Value
+		if v, ok := getFromMap(originalValue, source); ok {
+			// If alias collision with key, value takes precedence? Or duplicate?
+			// SQL typically allows duplicates.
+			// But here we are splitting into Key and Value structs.
+			// If it's in both, we probably want it in both to represent the record accurately.
+			// BUT, usually an ID is in Key and Name is in Value.
+
+			// Note: if I "select id", and id is in Key. I don't want it in Value if it's NOT in Value.
+			valMap.keys = append(valMap.keys, alias)
+			valMap.m[alias] = v
+			found = true
+		}
+
+		// Robustness: If not found in either map, maybe it's a "value.something" path?
+		// or "key.something"?
+		if !found {
+			// Check prefixes
+			lowerSource := strings.ToLower(source)
+			if strings.HasPrefix(lowerSource, "key.") {
+				fieldName := source[4:]
+				if v, ok := getFromMap(originalKey, fieldName); ok {
+					keyMap.keys = append(keyMap.keys, alias)
+					keyMap.m[alias] = v
 				}
-			}
-			if len(om.keys) > 0 {
-				newKey = om
+			} else if strings.HasPrefix(lowerSource, "value.") {
+				fieldName := source[6:]
+				if v, ok := getFromMap(originalValue, fieldName); ok {
+					valMap.keys = append(valMap.keys, alias)
+					valMap.m[alias] = v
+				}
 			}
 		}
 	}
 
-	// 2. Handle Value
-	originalValue := item["value"]
-	if isRequested("value") || isRequested("Value") {
-		newValue = originalValue
-	} else {
-		if valMap, ok := originalValue.(map[string]any); ok {
-			// Create OrderedMap for Value
-			om := OrderedMap{
-				m:    make(map[string]any),
-				keys: make([]string, 0),
-			}
-			for _, f := range fields {
-				source, alias := parseFieldAlias(f)
-				if v, ok := valMap[source]; ok {
-					om.keys = append(om.keys, alias)
-					om.m[alias] = v
-				}
-			}
-			if len(om.keys) > 0 {
-				newValue = om
-			}
+	// Construct Final Output
+
+	// If "key" was not explicitly selected as a whole, use the projected map
+	if !keySelected {
+		if len(keyMap.keys) > 0 {
+			finalKey = keyMap
+		} else {
+			// If nothing extracted from key, and it wasn't requested, it stays nil?
+			// The original code passed `nil` if empty.
+			// But wait, if I select ONLY fields from Value, Key should be nil?
+			// Yes.
+		}
+	}
+
+	// If "value" was not explicitly selected as a whole, use the projected map
+	if !valueSelected {
+		if len(valMap.keys) > 0 {
+			finalValue = valMap
 		}
 	}
 
 	return map[string]any{
-		"key":   newKey,
-		"value": newValue,
+		"key":   finalKey,
+		"value": finalValue,
 	}
 }
 

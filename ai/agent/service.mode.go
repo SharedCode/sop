@@ -6,9 +6,9 @@ type SessionMode int
 const (
 	// SessionModeInteractive is the default mode where each request is independent.
 	SessionModeInteractive SessionMode = iota
-	// SessionModeRecording captures steps into a macro.
+	// SessionModeRecording captures steps into a script.
 	SessionModeRecording
-	// SessionModePlayback executes a macro with state preservation.
+	// SessionModePlayback executes a script with state preservation.
 	SessionModePlayback
 )
 

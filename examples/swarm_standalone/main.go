@@ -21,7 +21,7 @@ const (
 
 var databaseOptions = sop.DatabaseOptions{
 	Type:          sop.Standalone,
-	StoresFolders: []string{"data/concurrent_demo_go"},
+	StoresFolders: []string{"data/constd_demo_go"},
 }
 
 func main() {
@@ -64,7 +64,8 @@ func main() {
 
 	// Verify
 	verify(ctx, int(targetCount))
-	//database.RemoveBtree(ctx, databaseOptions, storeName)
+	// In a real app, you may not want to clear the data.
+	database.RemoveBtree(ctx, databaseOptions, storeName)
 }
 
 func seed(ctx context.Context) {

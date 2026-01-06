@@ -39,14 +39,14 @@ Because we operate directly on B-Tree cursors, we don't just "scan" tables to fi
 
 This allows for massive joins—including Inner, Left, Right, and Full Outer joins—to be executed with incredible speed and minimal I/O, as we skip vast ranges of irrelevant data.
 
-## 4. Macros as "Near" Materialized Views
+## 4. Scripts as "Near" Materialized Views
 
 In traditional databases, a **View** is a saved query, and a **Materialized View** is a saved result set (fast to read, slow to update).
 
-SOP AI introduces **Macros**—composable, natural language workflows that behave like **"Near" Materialized Views**.
+SOP AI introduces **Scripts**—composable, natural language workflows that behave like **"Near" Materialized Views**.
 
-*   **Composable**: A macro can call other macros. You can define a macro `active_high_value_users` that filters users, joins with orders, and calculates lifetime value.
-*   **Streaming Performance**: Because of our Zero-Copy Streaming and Smart Seeking, executing this macro feels instantaneous. The data flows from the disk to the user without intermediate materialization steps.
+*   **Composable**: A script can call other scripts. You can define a script `active_high_value_users` that filters users, joins with orders, and calculates lifetime value.
+*   **Streaming Performance**: Because of our Zero-Copy Streaming and Smart Seeking, executing this script feels instantaneous. The data flows from the disk to the user without intermediate materialization steps.
 *   **Resource Efficiency**: Unlike a materialized view, it consumes no extra disk space. Unlike a standard view, the lack of abstraction overhead makes it perform nearly as fast as reading a pre-computed table.
 
 ## 5. Actionable Queries

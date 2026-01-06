@@ -70,7 +70,7 @@ func TestFilterFields_LateBinding(t *testing.T) {
 		t.Error("Expected 'value' wrapper in result")
 	}
 
-	// Case 2: Flat JSON (e.g. from Macro/Join)
+	// Case 2: Flat JSON (e.g. from Script/Join)
 	itemFlat := map[string]any{
 		"id":     1,
 		"name":   "Alice",
@@ -164,10 +164,10 @@ func TestToolSelect_ValueMatch(t *testing.T) {
 	}
 }
 
-// TestToolSelect_MacroView verifies using a Macro as a data source.
-func TestToolSelect_MacroView(t *testing.T) {
+// TestToolSelect_ScriptView verifies using a Script as a data source.
+func TestToolSelect_ScriptView(t *testing.T) {
 	ctx := context.Background()
-	dbPath := "test_dataadmin_select_macro"
+	dbPath := "test_dataadmin_select_script"
 	os.RemoveAll(dbPath)
 	defer os.RemoveAll(dbPath)
 
@@ -176,9 +176,9 @@ func TestToolSelect_MacroView(t *testing.T) {
 		CacheType:     sop.InMemory,
 	}
 
-	// 1. Setup System DB (for Macros)
+	// 1. Setup System DB (for Scripts)
 	systemDB := database.NewDatabase(dbOpts)
-	// No need to manually create "macros" store, model.New/Save will handle it with correct types.
+	// No need to manually create "scripts" store, model.New/Save will handle it with correct types.
 
 	// 2. Setup User DB (for Data)
 	userDB := database.NewDatabase(dbOpts)
@@ -194,13 +194,13 @@ func TestToolSelect_MacroView(t *testing.T) {
 	userStore.Add(ctx, "u3", map[string]any{"name": "Charlie", "active": true})
 	tx.Commit(ctx)
 
-	// 3. Create a Macro "active_users"
+	// 3. Create a Script "active_users"
 	tx, _ = systemDB.BeginTransaction(ctx, sop.ForWriting)
-	macroStore, _ := systemDB.OpenModelStore(ctx, "macros", tx)
+	scriptStore, _ := systemDB.OpenModelStore(ctx, "scripts", tx)
 
-	macro := ai.Macro{
+	script := ai.Script{
 		Name: "active_users",
-		Steps: []ai.MacroStep{
+		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
 				Command: "select",
@@ -212,12 +212,12 @@ func TestToolSelect_MacroView(t *testing.T) {
 			},
 		},
 	}
-	if err := macroStore.Save(ctx, "general", "active_users", macro); err != nil {
-		t.Fatalf("Failed to save macro: %v", err)
+	if err := scriptStore.Save(ctx, "general", "active_users", script); err != nil {
+		t.Fatalf("Failed to save script: %v", err)
 	}
 	tx.Commit(ctx)
 
-	// 4. Run Select against Macro
+	// 4. Run Select against Script
 	agent := &DataAdminAgent{
 		databases: map[string]sop.DatabaseOptions{"testdb": dbOpts},
 		systemDB:  systemDB,
@@ -236,16 +236,16 @@ func TestToolSelect_MacroView(t *testing.T) {
 		t.Fatalf("toolSelect failed: %v", err)
 	}
 
-	// The result from macro select (which calls select internally) will be wrapped in Key/Value
-	// But our filterFields for flat JSON (if macro returned flat) would handle it.
-	// However, the macro "select" returns [{"key":..., "value":...}, ...].
+	// The result from script select (which calls select internally) will be wrapped in Key/Value
+	// But our filterFields for flat JSON (if script returned flat) would handle it.
+	// However, the script "select" returns [{"key":..., "value":...}, ...].
 	// So the "View" sees items with Key/Value.
 	// If we request "name", and "name" is in Value, filterFields needs to find it.
 	// Wait, filterFields logic for Key/Value wrapper:
 	// It looks for "name" in Key OR Value.
 	// Let's check filterFields implementation again.
 	// It checks if requested field is in Key map, then in Value map.
-	// So `select name from active_users` should work if `name` is in the value map of the macro result.
+	// So `select name from active_users` should work if `name` is in the value map of the script result.
 
 	var results []any
 	if err := json.Unmarshal([]byte(resJSON), &results); err != nil {

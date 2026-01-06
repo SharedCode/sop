@@ -10,7 +10,7 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 )
 
-func TestService_ExecuteMacro_StringDB(t *testing.T) {
+func TestService_ExecuteScript_StringDB(t *testing.T) {
 	// 1. Setup System DB
 	tmpDir := t.TempDir()
 	sysDB := database.NewDatabase(sop.DatabaseOptions{
@@ -18,22 +18,22 @@ func TestService_ExecuteMacro_StringDB(t *testing.T) {
 		StoresFolders: []string{tmpDir},
 	})
 
-	// 2. Seed Macro
+	// 2. Seed Script
 	ctx := context.Background()
 	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("Failed to begin transaction: %v", err)
 	}
-	store, err := sysDB.OpenModelStore(ctx, "macros", tx)
+	store, err := sysDB.OpenModelStore(ctx, "scripts", tx)
 	if err != nil {
 		t.Fatalf("Failed to open model store: %v", err)
 	}
-	macro := ai.Macro{
-		Name:  "test_macro",
-		Steps: []ai.MacroStep{{Type: "say", Message: "Hello"}},
+	script := ai.Script{
+		Name:  "test_script",
+		Steps: []ai.ScriptStep{{Type: "say", Message: "Hello"}},
 	}
-	if err := store.Save(ctx, "general", "test_macro", macro); err != nil {
-		t.Fatalf("Failed to save macro: %v", err)
+	if err := store.Save(ctx, "general", "test_script", script); err != nil {
+		t.Fatalf("Failed to save script: %v", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Failed to commit transaction: %v", err)
@@ -56,7 +56,7 @@ func TestService_ExecuteMacro_StringDB(t *testing.T) {
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
 	// This should NOT panic
-	resp, err := svc.Ask(ctx, "/play test_macro")
+	resp, err := svc.Ask(ctx, "/play test_script")
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}

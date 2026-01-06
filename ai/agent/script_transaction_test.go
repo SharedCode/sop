@@ -10,7 +10,7 @@ import (
 	core_database "github.com/sharedcode/sop/database"
 )
 
-func TestMacro_Transactions(t *testing.T) {
+func TestScript_Transactions(t *testing.T) {
 	// 1. Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -41,14 +41,14 @@ func TestMacro_Transactions(t *testing.T) {
 		userDBName: dbOpts,
 	}
 
-	// 2. Define Macros
+	// 2. Define Scripts
 
-	// Macro 1: Implicit Transaction (Auto-commit)
+	// Script 1: Implicit Transaction (Auto-commit)
 	// Should succeed and persist data.
-	macroImplicit := ai.Macro{
+	scriptImplicit := ai.Script{
 		Name:     "implicit_tx",
 		Database: userDBName,
-		Steps: []ai.MacroStep{
+		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
 				Command: "add",
@@ -61,12 +61,12 @@ func TestMacro_Transactions(t *testing.T) {
 		},
 	}
 
-	// Macro 2: Explicit Transaction (Commit)
+	// Script 2: Explicit Transaction (Commit)
 	// Should succeed and persist data.
-	macroExplicitCommit := ai.Macro{
+	scriptExplicitCommit := ai.Script{
 		Name:     "explicit_commit",
 		Database: userDBName,
-		Steps: []ai.MacroStep{
+		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
 				Command: "manage_transaction",
@@ -89,12 +89,12 @@ func TestMacro_Transactions(t *testing.T) {
 		},
 	}
 
-	// Macro 3: Explicit Transaction (Rollback)
+	// Script 3: Explicit Transaction (Rollback)
 	// Should NOT persist data.
-	macroExplicitRollback := ai.Macro{
+	scriptExplicitRollback := ai.Script{
 		Name:     "explicit_rollback",
 		Database: userDBName,
-		Steps: []ai.MacroStep{
+		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
 				Command: "manage_transaction",
@@ -117,12 +117,12 @@ func TestMacro_Transactions(t *testing.T) {
 		},
 	}
 
-	// Macro 4: Uncommitted Explicit Transaction (Safety Rollback)
+	// Script 4: Uncommitted Explicit Transaction (Safety Rollback)
 	// Should NOT persist data because the session closer should rollback uncommitted explicit txs.
-	macroUncommitted := ai.Macro{
+	scriptUncommitted := ai.Script{
 		Name:     "uncommitted",
 		Database: userDBName,
-		Steps: []ai.MacroStep{
+		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
 				Command: "manage_transaction",
@@ -140,13 +140,13 @@ func TestMacro_Transactions(t *testing.T) {
 		},
 	}
 
-	// Save Macros
+	// Save Scripts
 	tx, _ = sysDB.BeginTransaction(ctx, sop.ForWriting)
-	store, _ := sysDB.OpenModelStore(ctx, "macros", tx)
-	store.Save(ctx, "general", "implicit_tx", macroImplicit)
-	store.Save(ctx, "general", "explicit_commit", macroExplicitCommit)
-	store.Save(ctx, "general", "explicit_rollback", macroExplicitRollback)
-	store.Save(ctx, "general", "uncommitted", macroUncommitted)
+	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
+	store.Save(ctx, "general", "implicit_tx", scriptImplicit)
+	store.Save(ctx, "general", "explicit_commit", scriptExplicitCommit)
+	store.Save(ctx, "general", "explicit_rollback", scriptExplicitRollback)
+	store.Save(ctx, "general", "uncommitted", scriptUncommitted)
 	tx.Commit(ctx)
 
 	// 3. Initialize Service
@@ -188,25 +188,25 @@ func TestMacro_Transactions(t *testing.T) {
 
 	// Test 1: Implicit
 	if _, err := svc.Ask(ctx, "/play implicit_tx"); err != nil {
-		t.Fatalf("Implicit macro failed: %v", err)
+		t.Fatalf("Implicit script failed: %v", err)
 	}
 	checkKey("emp_implicit", true)
 
 	// Test 2: Explicit Commit
 	if _, err := svc.Ask(ctx, "/play explicit_commit"); err != nil {
-		t.Fatalf("Explicit Commit macro failed: %v", err)
+		t.Fatalf("Explicit Commit script failed: %v", err)
 	}
 	checkKey("emp_explicit_commit", true)
 
 	// Test 3: Explicit Rollback
 	if _, err := svc.Ask(ctx, "/play explicit_rollback"); err != nil {
-		t.Fatalf("Explicit Rollback macro failed: %v", err)
+		t.Fatalf("Explicit Rollback script failed: %v", err)
 	}
 	checkKey("emp_explicit_rollback", false)
 
 	// Test 4: Uncommitted (Safety Rollback)
 	if _, err := svc.Ask(ctx, "/play uncommitted"); err != nil {
-		t.Fatalf("Uncommitted macro failed: %v", err)
+		t.Fatalf("Uncommitted script failed: %v", err)
 	}
 	checkKey("emp_uncommitted", false)
 }

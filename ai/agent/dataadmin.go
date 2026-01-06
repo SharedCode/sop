@@ -24,19 +24,18 @@ import (
 // DataAdminAgent is a specialized agent for database administration tasks.
 // It implements the ai.Agent interface.
 type DataAdminAgent struct {
-	Config            Config
-	brain             ai.Generator
-	enableObfuscation bool
-	registry          *Registry
-	databases         map[string]sop.DatabaseOptions
-	systemDB          *database.Database
-	lastToolCall      *ai.MacroStep
+	Config       Config
+	brain        ai.Generator
+	registry     *Registry
+	databases    map[string]sop.DatabaseOptions
+	systemDB     *database.Database
+	lastToolCall *ai.ScriptStep
 
 	// Session State
 	sessionContext *ScriptContext
 
 	// Compiled Scripts Cache
-	compiledScripts   map[string]CompiledScript
+	compiledScripts   map[string]CachedScript
 	compiledScriptsMu sync.RWMutex
 
 	// API Keys for dynamic switching
@@ -80,7 +79,7 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 	} else if (provider == "gemini" || provider == "local" || provider == "") && geminiKey != "" {
 		model := os.Getenv("GEMINI_MODEL")
 		if model == "" {
-			model = "gemini-2.5-flash"
+			model = "gemini-2.5-pro"
 		}
 		gen, err = generator.New("gemini", map[string]any{
 			"api_key": geminiKey,
@@ -102,22 +101,32 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 	}
 
 	if err != nil {
-		log.Warn("Failed to initialize DataAdmin brain", "error", err)
+		log.Error("Failed to initialize AI generator", "error", err)
 	}
 
 	agent := &DataAdminAgent{
-		Config:            cfg,
-		brain:             gen,
-		enableObfuscation: cfg.EnableObfuscation,
-		databases:         databases,
-		systemDB:          systemDB,
-		geminiKey:         geminiKey,
-		openAIKey:         openAIKey,
-		sessionContext:    NewScriptContext(),
-		compiledScripts:   make(map[string]CompiledScript),
+		Config:          cfg,
+		brain:           gen,
+		databases:       databases,
+		systemDB:        systemDB,
+		geminiKey:       geminiKey,
+		openAIKey:       openAIKey,
+		sessionContext:  NewScriptContext(),
+		compiledScripts: make(map[string]CachedScript),
 	}
 	agent.registerTools()
 	return agent
+}
+
+// shouldObfuscate determines if obfuscation should be applied for a given database.
+func (a *DataAdminAgent) shouldObfuscate(dbName string) bool {
+	// Look up database options
+	if opts, ok := a.databases[dbName]; ok {
+		return opts.EnableObfuscation
+	}
+	// Fallback to mode if no DB options found (e.g. legacy or system)
+	// But usually systemDB is also in databases map.
+	return false
 }
 
 // SetVerbose enables or disables verbose output.
@@ -183,7 +192,7 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 			if a.geminiKey != "" {
 				model := os.Getenv("GEMINI_MODEL")
 				if model == "" {
-					model = "gemini-2.5-flash"
+					model = "gemini-2.5-pro"
 				}
 				tempGen, err = generator.New("gemini", map[string]any{
 					"api_key": a.geminiKey,
@@ -230,28 +239,28 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 	// 1. Construct System Prompt with Tools
 	toolsDef := a.registry.GeneratePrompt()
 
-	// Append Macros as Tools
+	// Append Scripts as Tools
 	if a.systemDB != nil {
 		// We need a transaction to read from system DB
 		tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
 		if err == nil {
-			store, err := a.systemDB.OpenModelStore(ctx, "macros", tx)
+			store, err := a.systemDB.OpenModelStore(ctx, "scripts", tx)
 			if err == nil {
 				names, err := store.List(ctx, "general")
 				if err == nil {
 					for _, name := range names {
-						var macro ai.Macro
-						if err := store.Load(ctx, "general", name, &macro); err == nil {
+						var script ai.Script
+						if err := store.Load(ctx, "general", name, &script); err == nil {
 							// Format args schema
 							argsSchema := "()"
-							if len(macro.Parameters) > 0 {
+							if len(script.Parameters) > 0 {
 								var params []string
-								for _, p := range macro.Parameters {
+								for _, p := range script.Parameters {
 									params = append(params, fmt.Sprintf("%s: string", p))
 								}
 								argsSchema = fmt.Sprintf("(%s)", strings.Join(params, ", "))
 							}
-							toolsDef += fmt.Sprintf("- %s: %s %s\n", macro.Name, macro.Description, argsSchema)
+							toolsDef += fmt.Sprintf("- %s: %s %s\n", script.Name, script.Description, argsSchema)
 						}
 					}
 				}
@@ -297,11 +306,20 @@ IMPORTANT:
 - The 'select' tool returns the raw data string. You MUST include this raw data in your final response.
 - When filtering with 'select', use MongoDB-style operators ($eq, $ne, $gt, $gte, $lt, $lte) for comparisons. Example: {"age": {"$gt": 18}}.
 - Sorting/Ordering is ONLY supported by the store's Key or a prefix of the Key. You CANNOT sort by arbitrary fields (e.g. "salary", "date") unless they are the Key or a prefix of the Key. If a user asks to sort by a non-Key field, explain that SOP only supports sorting by Key (or Key prefix).
+- For complex queries involving joins or multiple steps, use the 'execute_script' tool. The 'script' argument MUST be a valid JSON array of instruction objects (e.g. [{"op": "...", "args": {...}}]).
+- When using 'execute_script', the 'script' argument MUST be a valid JSON array of instruction objects. Do NOT leave it empty.
 `
 	fullPrompt := toolsDef + "\n" + query
 
 	// Obfuscate Prompt if enabled
-	if a.enableObfuscation {
+	// Note: We use the session payload's CurrentDB to decide, checking "shouldObfuscate".
+	// If no DB is selected yet, we might fallback to global setting or skip.
+	currentDB := ""
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		currentDB = p.CurrentDB
+	}
+
+	if a.shouldObfuscate(currentDB) {
 		fullPrompt = obfuscation.GlobalObfuscator.ObfuscateText(fullPrompt)
 	}
 
@@ -377,8 +395,8 @@ IMPORTANT:
 					results = append(results, result)
 
 					// Record the tool call if a recorder is present
-					if recorder, ok := ctx.Value(ai.CtxKeyMacroRecorder).(ai.MacroRecorder); ok {
-						recorder.RecordStep(ctx, ai.MacroStep{
+					if recorder, ok := ctx.Value(ai.CtxKeyScriptRecorder).(ai.ScriptRecorder); ok {
+						recorder.RecordStep(ctx, ai.ScriptStep{
 							Type:    "command",
 							Command: tc.Tool,
 							Args:    tc.Args,
@@ -395,7 +413,13 @@ IMPORTANT:
 		}
 
 		// De-obfuscate Output Text if enabled
-		if a.enableObfuscation {
+		// Check if obfuscation was likely used based on our config logic
+		// We use the same DB check as before
+		currentDB := ""
+		if p := ai.GetSessionPayload(ctx); p != nil {
+			currentDB = p.CurrentDB
+		}
+		if a.shouldObfuscate(currentDB) {
 			text = obfuscation.GlobalObfuscator.DeobfuscateText(text)
 		}
 		return text, nil
@@ -412,29 +436,65 @@ func (a *DataAdminAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, er
 
 // Execute executes the requested tool against the session payload.
 func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
-	// De-obfuscate Args if enabled
-	if a.enableObfuscation {
-		a.deobfuscateMap(args)
+	// Determine if we should deobfuscate
+	dbName, _ := args["database"].(string)
+	if dbName == "" {
+		if p := ai.GetSessionPayload(ctx); p != nil {
+			dbName = p.CurrentDB
+		}
 	}
 
-	// Save as Last Tool Call (for macro recording/refactoring)
+	shouldDeobfuscate := a.shouldObfuscate(dbName)
+
+	// De-obfuscate Args if enabled
+	if shouldDeobfuscate {
+		// Log before deobfuscation
+		if b, err := json.Marshal(args); err == nil {
+			log.Debug(fmt.Sprintf("Args before deobfuscation: %s", string(b)))
+		}
+
+		a.deobfuscateMap(args)
+
+		// Log after deobfuscation
+		if b, err := json.MarshalIndent(args, "", "  "); err == nil {
+			log.Debug(fmt.Sprintf("Args after deobfuscation: %s", string(b)))
+		}
+	}
+
+	// Save as Last Tool Call (for script recording/refactoring)
 	// We clone args to avoid mutation issues
-	// BUT: If the tool is "macro_add_step_from_last", we should NOT overwrite the last tool call yet!
+	// BUT: If the tool is "script_add_step_from_last", we should NOT overwrite the last tool call yet!
 	// We need to let it run using the *previous* last tool call.
 	// So we defer the update of lastToolCall until AFTER execution, OR we skip it for meta-tools.
 
-	isMetaTool := toolName == "macro_add_step_from_last"
+	isMetaTool := toolName == "script_add_step_from_last"
+
+	savedArgs := deepCopyMap(args)
 
 	if !isMetaTool {
-		savedArgs := make(map[string]any)
-		for k, v := range args {
-			savedArgs[k] = v
-		}
-		a.lastToolCall = &ai.MacroStep{
+		a.lastToolCall = &ai.ScriptStep{
 			Type:    "command",
 			Command: toolName,
 			Args:    savedArgs,
 		}
+	}
+
+	// Notify Recorder (Service) if available
+	// This ensures that the Service knows about the tool execution for /last-tool and recording
+	if recorder, ok := ctx.Value(ai.CtxKeyScriptRecorder).(ai.ScriptRecorder); ok {
+		// Debug: Check script content
+		if script, ok := savedArgs["script"]; ok {
+			log.Debug(fmt.Sprintf("Recording script step. Type: %T, Value: %+v", script, script))
+		}
+
+		// We record it even if it's a meta-tool, because from the Service's perspective, it's an action.
+		// However, for "script_add_step_from_last", the user might want to see the *previous* tool.
+		// But strictly speaking, "last-tool" should show the LAST executed tool.
+		recorder.RecordStep(ctx, ai.ScriptStep{
+			Type:    "command",
+			Command: toolName,
+			Args:    savedArgs,
+		})
 	}
 
 	// Get Session Payload
@@ -448,7 +508,7 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 	// 1. Explicit 'database' argument in tool call
 	// 2. CurrentDB in SessionPayload
 	var dbFound bool
-	dbName, _ := args["database"].(string)
+	dbName, _ = args["database"].(string)
 	if dbName != "" {
 		if _, ok := a.databases[dbName]; ok {
 			dbFound = true
@@ -470,7 +530,7 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 		ctx = context.WithValue(ctx, "session_payload", &newPayload)
 	}
 
-	if !dbFound && toolName != "list_databases" && toolName != "list_macros" && toolName != "get_macro_details" {
+	if !dbFound && toolName != "list_databases" && toolName != "list_scripts" && toolName != "get_script_details" {
 		// Debugging
 		var keys []string
 		for k := range a.databases {
@@ -484,21 +544,21 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 		return toolDef.Handler(ctx, args)
 	}
 
-	// Check if it's a macro
+	// Check if it's a script
 	if a.systemDB != nil {
-		// Try to load macro
+		// Try to load script
 		// We need a transaction to read from system DB
 		// But we might already be in a transaction on the user DB?
 		// System DB is separate.
 		tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
 		if err == nil {
 			defer tx.Rollback(ctx)
-			store, err := a.systemDB.OpenModelStore(ctx, "macros", tx)
+			store, err := a.systemDB.OpenModelStore(ctx, "scripts", tx)
 			if err == nil {
-				var macro ai.Macro
-				if err := store.Load(ctx, "general", toolName, &macro); err == nil {
-					// Found macro! Execute it.
-					return a.runMacro(ctx, macro, args)
+				var script ai.Script
+				if err := store.Load(ctx, "general", toolName, &script); err == nil {
+					// Found script! Execute it.
+					return a.runScript(ctx, script, args)
 				}
 			}
 		}
@@ -507,9 +567,9 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 	return "", fmt.Errorf("unknown tool: %s", toolName)
 }
 
-func (a *DataAdminAgent) runMacro(ctx context.Context, macro ai.Macro, args map[string]any) (string, error) {
+func (a *DataAdminAgent) runScript(ctx context.Context, script ai.Script, args map[string]any) (string, error) {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Running macro '%s'...\n", macro.Name))
+	sb.WriteString(fmt.Sprintf("Running script '%s'...\n", script.Name))
 
 	// Scope for template resolution
 	scope := make(map[string]any)
@@ -517,7 +577,7 @@ func (a *DataAdminAgent) runMacro(ctx context.Context, macro ai.Macro, args map[
 		scope[k] = v
 	}
 
-	for i, step := range macro.Steps {
+	for i, step := range script.Steps {
 		if step.Type == "command" {
 			// Resolve args
 			resolvedArgs := make(map[string]any)
@@ -560,7 +620,7 @@ func (a *DataAdminAgent) runMacro(ctx context.Context, macro ai.Macro, args map[
 	return sb.String(), nil
 }
 
-func (a *DataAdminAgent) runMacroRaw(ctx context.Context, macro ai.Macro, args map[string]any) (string, error) {
+func (a *DataAdminAgent) runScriptRaw(ctx context.Context, script ai.Script, args map[string]any) (string, error) {
 	// Scope for template resolution
 	scope := make(map[string]any)
 	for k, v := range args {
@@ -569,7 +629,7 @@ func (a *DataAdminAgent) runMacroRaw(ctx context.Context, macro ai.Macro, args m
 
 	var lastResult string
 
-	for i, step := range macro.Steps {
+	for i, step := range script.Steps {
 		if step.Type == "command" {
 			// Resolve args
 			resolvedArgs := make(map[string]any)
@@ -622,8 +682,38 @@ func resolveTemplate(tmplStr string, scope map[string]any) string {
 }
 
 func (a *DataAdminAgent) deobfuscateMap(m map[string]any) {
+	// We need to handle key deobfuscation which usually requires removing the old key and adding the new one.
+	// Since we can't safely modify keys during range, we collect changes first.
+	type keyChange struct {
+		oldKey string
+		newKey string
+		value  any
+	}
+	var changes []keyChange
+
 	for k, v := range m {
-		m[k] = a.deobfuscateValue(v)
+		// 1. Deobfuscate Value (Recursive)
+		newVal := a.deobfuscateValue(v)
+
+		// 2. Deobfuscate Key
+		newKey := obfuscation.GlobalObfuscator.DeobfuscateText(k)
+
+		if newKey != k {
+			changes = append(changes, keyChange{
+				oldKey: k,
+				newKey: newKey,
+				value:  newVal,
+			})
+		} else {
+			// If key didn't change, just update value in place
+			m[k] = newVal
+		}
+	}
+
+	// Apply Key Changes
+	for _, c := range changes {
+		delete(m, c.oldKey)
+		m[c.newKey] = c.value
 	}
 }
 
@@ -642,6 +732,29 @@ func (a *DataAdminAgent) deobfuscateValue(v any) any {
 	case map[string]any:
 		a.deobfuscateMap(val)
 		return val
+	default:
+		return v
+	}
+}
+
+func deepCopyMap(m map[string]any) map[string]any {
+	result := make(map[string]any)
+	for k, v := range m {
+		result[k] = deepCopyValue(v)
+	}
+	return result
+}
+
+func deepCopyValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		return deepCopyMap(val)
+	case []any:
+		newSlice := make([]any, len(val))
+		for i, item := range val {
+			newSlice[i] = deepCopyValue(item)
+		}
+		return newSlice
 	default:
 		return v
 	}

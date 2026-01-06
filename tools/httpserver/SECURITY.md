@@ -9,7 +9,7 @@ This is the default mode, optimized for running inside a secure network (e.g., l
 - **Configuration**: `EnableRestAuth = false` (Default)
 - **Behavior**: 
     - The WebUI can communicate freely with the backend.
-    - The `/api/macros/execute` endpoint is open and does not require authentication.
+    - The `/api/scripts/execute` endpoint is open and does not require authentication.
     - **Ideal for**: Developers, internal admin panels, and trusted environments.
 
 ### 2. Public / Edge Mode (Secure)
@@ -19,7 +19,7 @@ Use this mode when deploying the server to a public environment (e.g., Kubernete
     - Set `SOP_ENABLE_REST_AUTH=true` (or use flag `--enable-rest-auth`).
     - Set `SOP_ROOT_PASSWORD` to a strong secret.
 - **Behavior**:
-    - The `/api/macros/execute` endpoint requires an `Authorization: Bearer <SOP_ROOT_PASSWORD>` header.
+    - The `/api/scripts/execute` endpoint requires an `Authorization: Bearer <SOP_ROOT_PASSWORD>` header.
     - Requests without the header or with an invalid token will be rejected (HTTP 401).
     - **Ideal for**: Remote programmatic access, mobile app backends, and public-facing APIs.
 
@@ -38,8 +38,8 @@ export SOP_ENABLE_REST_AUTH="true"
 
 ### Example: Calling the Secure API
 ```bash
-curl -X POST http://localhost:8080/api/macros/execute \
+curl -X POST http://localhost:8080/api/scripts/execute \
   -H "Authorization: Bearer my-secret-token" \
   -H "Content-Type: application/json" \
-  -d '{"name": "my_macro", "args": {"param": "value"}}'
+  -d '{"name": "my_script", "args": {"param": "value"}}'
 ```

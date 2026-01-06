@@ -13,6 +13,7 @@ import (
 
 func main() {
 	configPath := flag.String("config", "", "Path to the agent configuration JSON file")
+	stubMode := flag.Bool("stub", false, "Enable stub mode for all agents")
 	flag.Parse()
 
 	if *configPath == "" {
@@ -24,6 +25,15 @@ func main() {
 	cfg, err := agent.LoadConfigFromFile(*configPath)
 	if err != nil {
 		panic(fmt.Errorf("failed to load config: %w", err))
+	}
+
+	// Apply Stub Mode override
+	if *stubMode {
+		fmt.Println("WARNING: Stub Mode enabled via flag. Database operations will be simulated.")
+		cfg.StubMode = true
+		for i := range cfg.Agents {
+			cfg.Agents[i].StubMode = true
+		}
 	}
 
 	// Ensure absolute path for storage
@@ -99,6 +109,11 @@ func main() {
 				panic(fmt.Errorf("failed to load dependency agent %s: %w", agentID, err))
 			}
 
+			// Apply Stub Mode override
+			if *stubMode {
+				depCfg.StubMode = true
+			}
+
 			svc, err := initAgent(*depCfg)
 			if err != nil {
 				panic(fmt.Errorf("failed to initialize dependency agent %s: %w", agentID, err))
@@ -117,6 +132,10 @@ func main() {
 		// Case 1: Inline Config
 		if step.Agent.Config != nil {
 			fmt.Printf("Initializing inline pipeline agent: %s...\n", agentID)
+			// Apply Stub Mode override
+			if *stubMode {
+				step.Agent.Config.StubMode = true
+			}
 			svc, err := initAgent(*step.Agent.Config)
 			if err != nil {
 				panic(fmt.Errorf("failed to initialize inline pipeline agent %s: %w", agentID, err))
@@ -140,6 +159,11 @@ func main() {
 		depCfg, err := agent.LoadConfigFromFile(depConfigPath)
 		if err != nil {
 			panic(fmt.Errorf("failed to load pipeline agent %s: %w", agentID, err))
+		}
+
+		// Apply Stub Mode override
+		if *stubMode {
+			depCfg.StubMode = true
 		}
 
 		svc, err := initAgent(*depCfg)

@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/jsondb"
 )
@@ -29,10 +32,11 @@ type ScriptInstruction struct {
 
 // ScriptContext holds the state of the script execution.
 type ScriptContext struct {
-	Variables    map[string]any
-	Transactions map[string]sop.Transaction
-	Stores       map[string]jsondb.StoreAccessor
-	Databases    map[string]Database
+	Variables      map[string]any
+	Transactions   map[string]sop.Transaction
+	Stores         map[string]jsondb.StoreAccessor
+	Databases      map[string]Database
+	LastUpdatedVar string // helper to track the prioritization of variable draining
 }
 
 // ScriptCursor represents a streaming iterator for script operations.
@@ -41,17 +45,37 @@ type ScriptCursor interface {
 	Close() error
 }
 
+// OrderedFieldsProvider allows cursors to expose the list of fields in order.
+type OrderedFieldsProvider interface {
+	GetOrderedFields() []string
+}
+
+// SpecProvider allows cursors to expose IndexSpecifications for field ordering.
+type SpecProvider interface {
+	GetIndexSpecs() map[string]*jsondb.IndexSpecification
+}
+
 // StoreCursor wraps a StoreAccessor to provide a ScriptCursor.
 type StoreCursor struct {
-	store   jsondb.StoreAccessor
-	ctx     context.Context
-	limit   int
-	count   int
-	filter  map[string]any
-	engine  *ScriptEngine
-	isDesc  bool
-	prefix  any
-	started bool
+	store     jsondb.StoreAccessor
+	indexSpec *jsondb.IndexSpecification
+	ctx       context.Context
+	limit     int
+	count     int
+	filter    map[string]any
+	engine    *ScriptEngine
+	isDesc    bool
+	prefix    any
+	started   bool
+}
+
+func (sc *StoreCursor) GetIndexSpecs() map[string]*jsondb.IndexSpecification {
+	if sc.indexSpec != nil {
+		return map[string]*jsondb.IndexSpecification{
+			"key": sc.indexSpec,
+		}
+	}
+	return nil
 }
 
 func (sc *StoreCursor) Next(ctx context.Context) (map[string]any, bool, error) {
@@ -102,6 +126,14 @@ func (sc *StoreCursor) Next(ctx context.Context) (map[string]any, bool, error) {
 			"key":   k,
 			"value": v,
 		}
+
+		// Flatten "value" if it's a map to look like a flat record for easy access
+		if vMap, ok := v.(map[string]any); ok {
+			for vk, vv := range vMap {
+				item[vk] = vv
+			}
+		}
+
 		if sc.filter != nil {
 			match, err := sc.engine.evaluateCondition(item, sc.filter)
 			if err != nil {
@@ -128,6 +160,22 @@ func (sc *StoreCursor) Close() error {
 	return nil
 }
 
+// Join Strategy Constants
+const (
+	StrategyUnset     = 0
+	StrategyIndexSeek = 1
+	StrategyInMemory  = 2
+	StrategyFullScan  = 3
+)
+
+type JoinPlan struct {
+	Strategy     int
+	IndexFields  []string // Ordered list of fields in the Index
+	PrefixFields []string // Fields from ON clause that match the Index Prefix
+	IsComposite  bool     // True if the Store uses a Map Key (Composite)
+	Ascending    bool     // True if the first prefix field is Ascending
+}
+
 // JoinRightCursor performs a streaming join with probing and scanning support.
 // It replaces both JoinCursor (Lookup) and NestedLoopJoinCursor (Scan).
 type JoinRightCursor struct {
@@ -140,238 +188,19 @@ type JoinRightCursor struct {
 	currentL  map[string]any
 	matched   bool
 	rightIter bool
+
+	// Execution Plan
+	plan      JoinPlan
+	planReady bool
+
+	// Legacy / Runtime State
+	useFallback  bool             // optimization: materialization fallback
+	fallbackList []map[string]any // fallback: in-memory list
+	fallbackIdx  int
 }
 
 func (jc *JoinRightCursor) Next(ctx context.Context) (map[string]any, bool, error) {
-	for {
-		// 1. Load Left Item
-		if jc.currentL == nil {
-			var ok bool
-			var err error
-			jc.currentL, ok, err = jc.left.Next(ctx)
-			if err != nil {
-				return nil, false, err
-			}
-			if !ok {
-				return nil, false, nil // End of Left Stream
-			}
-
-			jc.rightIter = false
-			jc.matched = false
-
-			// 2. Probe Right Store
-			// Construct Probe Key
-			var probeKey any
-			var useProbe bool
-
-			// Simple heuristic: if 'on' maps to 'key', use it as probe key.
-			// If multiple fields, try to construct map key (if supported by store).
-			// For now, we support single key probe or map key probe.
-
-			if len(jc.on) == 1 {
-				for lField, rFieldRaw := range jc.on {
-					rField := fmt.Sprintf("%v", rFieldRaw)
-					lVal := getField(jc.currentL, lField)
-					if rField == "key" {
-						probeKey = lVal
-					} else {
-						// Assuming store supports map keys if we probe by value field?
-						// Usually B-Tree keys are the "key".
-						// If we join on value field, we can't probe unless we have secondary index.
-						// But let's assume user knows what they are doing or we fall back to scan.
-						// If rField is NOT "key", we can't use FindOne on the primary store.
-						// So we only probe if rField == "key".
-					}
-				}
-				if probeKey != nil {
-					useProbe = true
-				}
-			}
-
-			if useProbe {
-				// Probe
-				// Optimization: Check if we are already at the key or close to it.
-				// This optimizes for sorted streams (Merge Join behavior).
-				shouldFind := true
-				currentKey, _ := jc.right.GetCurrentKey()
-
-				if currentKey != nil {
-					sCurrent := fmt.Sprintf("%v", currentKey)
-					sProbe := fmt.Sprintf("%v", probeKey)
-
-					if sCurrent == sProbe {
-						shouldFind = false
-					} else if sCurrent < sProbe {
-						// We are behind. Try moving forward once.
-						// If we are 1-to-1 sorted, Next() should land on it.
-						ok, err := jc.right.Next(ctx)
-						if err != nil {
-							return nil, false, err
-						}
-						if !ok {
-							// EOF. Since sCurrent < sProbe, and we hit EOF,
-							// the key definitely doesn't exist.
-							// We are positioned at EOF.
-							shouldFind = false
-						} else {
-							nextKey, _ := jc.right.GetCurrentKey()
-							sNext := fmt.Sprintf("%v", nextKey)
-
-							if sNext >= sProbe {
-								// We found it or went past it (which is what FindOne does).
-								shouldFind = false
-							}
-							// If sNext < sProbe, we are still behind, so we fall through to FindOne.
-						}
-					}
-					// If sCurrent > sProbe, we are ahead, so we must FindOne (to go back).
-					// Optimization: Try Previous() first.
-					// If Left Stream is DESC, or we just overshot by one, Previous might hit it.
-					if sCurrent > sProbe {
-						// Try moving back once
-						ok, err := jc.right.Previous(ctx)
-						if err != nil {
-							return nil, false, err
-						}
-						if !ok {
-							// BOF. Since sCurrent > sProbe, and we hit BOF, key doesn't exist.
-							shouldFind = false
-						} else {
-							prevKey, _ := jc.right.GetCurrentKey()
-							sPrev := fmt.Sprintf("%v", prevKey)
-
-							if sPrev <= sProbe {
-								// We went back enough.
-								if sPrev == sProbe {
-									// Found it.
-									// If Store is Unique, we are at the single match.
-									// If Not Unique, we might be at the last duplicate.
-									// We need to be at the first duplicate for the loop to work.
-									if jc.right.GetStoreInfo().IsUnique {
-										shouldFind = false
-									} else {
-										// Fallback to FindOne to ensure we get the first match
-										shouldFind = true
-									}
-								} else {
-									// sPrev < sProbe.
-									// Probe is between Prev and Current. Does not exist.
-									// We are positioned at Prev (< Probe).
-									// Loop will Next() -> Current (> Probe) -> Break.
-									shouldFind = false
-								}
-							}
-							// If sPrev > sProbe, we are still ahead. Fall through to FindOne.
-						}
-					}
-				}
-
-				if shouldFind {
-					found, err := jc.right.FindOne(ctx, probeKey, true)
-					if err != nil {
-						return nil, false, err
-					}
-					// If found=false, we are positioned at the next item.
-					// We will check match in the loop below.
-					// If exact match is required (equality join), and found=false,
-					_ = found
-				}
-				// If !shouldFind, we are already positioned correctly (either at match or just past it).
-
-				// the current item might be > probeKey.
-				// We can check that to abort early.
-			} else {
-				// No probe possible, scan from start
-				if _, err := jc.right.First(ctx); err != nil {
-					return nil, false, err
-				}
-			}
-		}
-
-		// 3. Iterate Right and Check Match
-		for {
-			k, _ := jc.right.GetCurrentKey()
-			if k == nil {
-				break // End of Right Store
-			}
-
-			v, _ := jc.right.GetCurrentValue(ctx)
-
-			// Check Match
-			match := true
-			shouldStop := false
-			for lField, rFieldRaw := range jc.on {
-				rField := fmt.Sprintf("%v", rFieldRaw)
-				lVal := getField(jc.currentL, lField)
-
-				var rVal any
-				if rField == "key" {
-					rVal = k
-				} else {
-					if vMap, ok := v.(map[string]any); ok {
-						rVal = vMap[rField]
-					}
-				}
-
-				if fmt.Sprintf("%v", lVal) != fmt.Sprintf("%v", rVal) {
-					match = false
-					// Optimization: If joining on key, and k > lVal, break.
-					// This assumes B-Tree is sorted and we are looking for equality.
-					if rField == "key" {
-						// Simple string comparison for now as keys are usually strings or comparable
-						if fmt.Sprintf("%v", k) > fmt.Sprintf("%v", lVal) {
-							shouldStop = true
-						}
-					}
-					break
-				}
-			}
-
-			if shouldStop {
-				break
-			}
-
-			if match {
-				jc.matched = true
-				// Merge
-				merged := make(map[string]any)
-				for k, v := range jc.currentL {
-					merged[k] = v
-				}
-				if vMap, ok := v.(map[string]any); ok {
-					for k, v := range vMap {
-						merged[k] = v
-					}
-				} else {
-					merged["right_value"] = v
-				}
-				merged["right_key"] = k
-
-				// Advance for next call
-				jc.right.Next(ctx)
-				return merged, true, nil
-			}
-
-			// Advance to next item in Right Store
-			ok, err := jc.right.Next(ctx)
-			if err != nil {
-				return nil, false, err
-			}
-			if !ok {
-				break
-			}
-		}
-
-		// 4. Handle Left Join (No Match)
-		if !jc.matched && jc.joinType == "left" {
-			res := jc.currentL
-			jc.currentL = nil
-			return res, true, nil
-		}
-
-		// Done with this Left Item
-		jc.currentL = nil
-	}
+	return jc.NextOptimized(ctx)
 }
 
 func (jc *JoinRightCursor) Close() error {
@@ -436,11 +265,22 @@ func (pc *ProjectCursor) Close() error {
 	return pc.source.Close()
 }
 
+func (pc *ProjectCursor) GetOrderedFields() []string {
+	return pc.fields
+}
+
 // LimitCursor limits a stream.
 type LimitCursor struct {
 	source ScriptCursor
 	limit  int
 	count  int
+}
+
+func (lc *LimitCursor) GetIndexSpecs() map[string]*jsondb.IndexSpecification {
+	if provider, ok := lc.source.(SpecProvider); ok {
+		return provider.GetIndexSpecs()
+	}
+	return nil
 }
 
 func (lc *LimitCursor) Next(ctx context.Context) (map[string]any, bool, error) {
@@ -454,6 +294,7 @@ func (lc *LimitCursor) Next(ctx context.Context) (map[string]any, bool, error) {
 	if !ok {
 		return nil, false, nil
 	}
+
 	lc.count++
 	return item, true, nil
 }
@@ -475,7 +316,8 @@ func NewScriptContext() *ScriptContext {
 type ScriptEngine struct {
 	Context         *ScriptContext
 	ResolveDatabase func(name string) (Database, error)
-	MacroHandler    func(ctx context.Context, name string, args map[string]any) (any, error)
+	FunctionHandler func(ctx context.Context, name string, args map[string]any) (any, error)
+	LastResult      any
 }
 
 func NewScriptEngine(ctx *ScriptContext, dbResolver func(string) (Database, error)) *ScriptEngine {
@@ -507,7 +349,7 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 		return "", fmt.Errorf("script argument is required")
 	}
 
-	// Parse Script
+	// Parse Script first to ensure it's valid and normalized
 	var script []ScriptInstruction
 	if pStr, ok := scriptRaw.(string); ok {
 		if err := json.Unmarshal([]byte(pStr), &script); err != nil {
@@ -522,6 +364,18 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 		return "", fmt.Errorf("script must be a JSON string or array")
 	}
 
+	// Stub Mode Check
+	if a.Config.StubMode {
+		// Log the NORMALIZED script for debugging
+		bytes, err := json.MarshalIndent(script, "", "  ")
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal script for display: %v", err)
+		}
+
+		fmt.Printf("DEBUG: toolExecuteScript called in STUB MODE with:\n%s\n", string(bytes))
+		return fmt.Sprintf("Script prepared successfully (STUBBED). execution skipped.\nGenerated Script:\n```json\n%s\n```", string(bytes)), nil
+	}
+
 	// Initialize Engine
 	var scriptCtx *ScriptContext
 	if a.sessionContext != nil {
@@ -530,15 +384,25 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 		scriptCtx = NewScriptContext()
 	}
 
-	engine := NewScriptEngine(scriptCtx, a.resolveDatabase)
-	engine.MacroHandler = func(c context.Context, name string, args map[string]any) (any, error) {
-		// Bridge to Agent's macro execution
-		// We need to implement this properly, reusing opCallMacro logic or similar
+	// Wrap resolver to handle default database from context
+	resolver := func(name string) (Database, error) {
+		if name == "" || name == "@db" || name == "current" {
+			if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
+				name = p.CurrentDB
+			}
+		}
+		return a.resolveDatabase(name)
+	}
+
+	engine := NewScriptEngine(scriptCtx, resolver)
+	engine.FunctionHandler = func(c context.Context, name string, args map[string]any) (any, error) {
+		// Bridge to Agent's script execution
+		// We need to implement this properly, reusing opCallScript logic or similar
 		// For now, we can call a method on Agent if we expose it, or inline the logic.
-		// Since opCallMacro is being moved to Engine, we can just call Engine.CallMacro?
-		// But Engine.CallMacro needs access to SystemDB.
+		// Since opCallScript is being moved to Engine, we can just call Engine.CallFunction?
+		// But Engine.CallFunction needs access to SystemDB.
 		// So we should pass SystemDB to Engine or handle it here.
-		return a.opCallMacroLegacy(c, engine.Context, map[string]any{"name": name, "params": args})
+		return a.opCallScript(c, engine.Context, map[string]any{"name": name, "params": args})
 	}
 
 	// Execute
@@ -551,8 +415,52 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	}
 
 	// Return Result
+	// Priority 0: Explicit 'return' instruction
+	// This should be handled during execution loop if we supported early exit.
+	// Since we execute the whole list, we check if the last instruction was a return or provided a return value?
+	// Actually, the engine.Execute loop doesn't handle 'return' control flow yet.
+	// But assuming we add a 'return' OP, we would look for that.
+
+	// Priority 1: Check for 'output' variable (Explicit override)
 	if val, ok := scriptCtx.Variables["output"]; ok {
 		return serializeResult(val)
+	}
+
+	// Priority 2: Check for 'final_result' variable (Deprecated: Standard convention for query chains)
+	if val, ok := scriptCtx.Variables["final_result"]; ok {
+		return serializeResult(val)
+	}
+
+	// Priority 3: Check the last instruction's result variable (Fallback for simple scripts)
+	if len(script) > 0 {
+		lastInstr := script[len(script)-1]
+
+		// If last instruction is specifically a "return" or "output" op (hypothetically)
+		if lastInstr.Op == "return" {
+			// If arguments has "value", return it
+			if val, ok := lastInstr.Args["value"]; ok {
+				// We need to resolve the value if it's a variable reference
+				if sVal, ok := val.(string); ok && strings.HasPrefix(sVal, "@") {
+					varName := strings.TrimPrefix(sVal, "@") // Basic variable resolution
+					// Handle @variable syntax slightly better if needed, but Engine does it.
+					// However, at this point, we are outside engine execution loop.
+					// The engine should have surely resolved it if we had a return op.
+					// But our engine is simple: it executes list of steps.
+
+					// Let's rely on Context variables.
+					if v, found := scriptCtx.Variables[varName]; found {
+						return serializeResult(v)
+					}
+				}
+				return serializeResult(val)
+			}
+		}
+
+		if lastInstr.ResultVar != "" {
+			if val, ok := scriptCtx.Variables[lastInstr.ResultVar]; ok {
+				return serializeResult(val)
+			}
+		}
 	}
 
 	return "Script executed successfully.", nil
@@ -560,6 +468,11 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 
 // CompiledScript is a function that executes the compiled script against an engine.
 type CompiledScript func(ctx context.Context, e *ScriptEngine) error
+
+type CachedScript struct {
+	Script CompiledScript
+	Hash   string
+}
 
 func (e *ScriptEngine) Execute(ctx context.Context, script []ScriptInstruction) error {
 	compiled, err := CompileScript(script)
@@ -609,10 +522,14 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 			var input any
 			if instr.InputVar != "" {
 				var ok bool
-				input, ok = e.Context.Variables[instr.InputVar]
+				inputVar := e.resolveVarName(instr.InputVar)
+				input, ok = e.Context.Variables[inputVar]
 				if !ok {
 					return fmt.Errorf("input variable '%s' not found", instr.InputVar)
 				}
+			} else {
+				// Implicit piping: Use result of last operation
+				input = e.LastResult
 			}
 
 			// Execute Operation
@@ -621,9 +538,13 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 				return fmt.Errorf("operation '%s' failed: %v", instr.Op, err)
 			}
 
+			// Update LastResult for implicit piping
+			e.LastResult = result
+
 			// Store Result
 			if instr.ResultVar != "" {
 				e.Context.Variables[instr.ResultVar] = result
+				e.Context.LastUpdatedVar = instr.ResultVar
 				// Type Registration
 				if db, ok := result.(Database); ok {
 					e.Context.Databases[instr.ResultVar] = db
@@ -774,9 +695,9 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			return nil, e.Loop(ctx, args)
 		}, nil
-	case "call_macro":
+	case "call_function":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
-			return e.CallMacro(ctx, args)
+			return e.CallFunction(ctx, args)
 		}, nil
 	case "list_new":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
@@ -826,17 +747,83 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			return e.GetCurrentValue(ctx, args)
 		}, nil
+	case "return":
+		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
+			if val, ok := args["value"]; ok {
+				return val, nil
+			}
+			return nil, nil
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown operation: %s", op)
 	}
 }
 
 func serializeResult(val any) (string, error) {
+	if cursor, ok := val.(ScriptCursor); ok {
+		var results []any
+		defer cursor.Close()
+
+		// Helper to wrap fields if spec available
+		var specs map[string]*jsondb.IndexSpecification
+		if provider, ok := cursor.(SpecProvider); ok {
+			specs = provider.GetIndexSpecs()
+		}
+
+		// Helper to force field order if provider available
+		var orderedFields []string
+		if provider, ok := cursor.(OrderedFieldsProvider); ok {
+			orderedFields = provider.GetOrderedFields()
+		}
+
+		for {
+			itemMap, ok, err := cursor.Next(context.Background())
+			if err != nil {
+				return "", fmt.Errorf("failed to read cursor: %v", err)
+			}
+			if !ok {
+				break
+			}
+
+			var item any = itemMap
+
+			// Apply ordering if specs available
+			if len(specs) > 0 {
+				for fieldName, spec := range specs {
+					if val, ok := itemMap[fieldName]; ok {
+						if m, ok := val.(map[string]any); ok {
+							itemMap[fieldName] = OrderedKey{m: m, spec: spec}
+						}
+					}
+				}
+			}
+
+			// Apply top-level field ordering
+			if len(orderedFields) > 0 {
+				item = filterFields(itemMap, orderedFields)
+			}
+
+			results = append(results, item)
+		}
+
+		val = results
+	}
+
 	bytes, err := json.MarshalIndent(val, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize result: %v", err)
 	}
 	return string(bytes), nil
+}
+
+func (e *ScriptEngine) CallScript(ctx context.Context, args map[string]any) (any, error) {
+	name, _ := args["name"].(string)
+	params, _ := args["params"].(map[string]any)
+
+	if e.FunctionHandler != nil {
+		return e.FunctionHandler(ctx, name, params)
+	}
+	return nil, fmt.Errorf("function handler not available")
 }
 
 // Deprecated: Use Compile/Execute instead
@@ -893,8 +880,8 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 		err = e.If(ctx, instr.Args)
 	case "loop":
 		err = e.Loop(ctx, instr.Args)
-	case "call_macro":
-		result, err = e.CallMacro(ctx, instr.Args)
+	case "call_script":
+		result, err = e.CallScript(ctx, instr.Args)
 	// List / Map Operations (Memory)
 	case "list_new":
 		result = make([]any, 0)
@@ -948,6 +935,11 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 
 // --- Operations ---
 
+// resolveVarName strips the optional '@' prefix from a variable name.
+func (e *ScriptEngine) resolveVarName(name string) string {
+	return strings.TrimPrefix(name, "@")
+}
+
 func (e *ScriptEngine) OpenDB(args map[string]any) (Database, error) {
 	name, _ := args["name"].(string)
 	if name == "" {
@@ -961,6 +953,7 @@ func (e *ScriptEngine) OpenDB(args map[string]any) (Database, error) {
 
 func (e *ScriptEngine) BeginTx(ctx context.Context, args map[string]any) (sop.Transaction, error) {
 	dbName, _ := args["database"].(string) // Variable name of DB
+	dbName = e.resolveVarName(dbName)
 	modeStr, _ := args["mode"].(string)
 
 	var db Database
@@ -988,15 +981,79 @@ func (e *ScriptEngine) BeginTx(ctx context.Context, args map[string]any) (sop.Tr
 
 func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error {
 	txName, _ := args["transaction"].(string)
+	txName = e.resolveVarName(txName)
 	tx, ok := e.Context.Transactions[txName]
 	if !ok {
 		return fmt.Errorf("transaction '%s' not found", txName)
 	}
+
+	// Trigger: Commit Transaction
+	// Action: Materialize all active cursors to ensure they are captured before transaction closes.
+
+	drain := func(name string, cursor ScriptCursor) error {
+		results := make([]map[string]any, 0)
+
+		// Helper to wrap fields if spec available
+		var specs map[string]*jsondb.IndexSpecification
+		if provider, ok := cursor.(SpecProvider); ok {
+			specs = provider.GetIndexSpecs()
+		}
+
+		// Drain cursor
+		for {
+			item, ok, err := cursor.Next(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to materialize cursor '%s' before commit: %v", name, err)
+			}
+			if !ok {
+				break
+			}
+
+			// Apply ordering if specs available
+			if len(specs) > 0 {
+				for fieldName, spec := range specs {
+					if val, ok := item[fieldName]; ok {
+						if m, ok := val.(map[string]any); ok {
+							item[fieldName] = OrderedKey{m: m, spec: spec}
+						}
+					}
+				}
+			}
+			results = append(results, item)
+		}
+		cursor.Close()
+		e.Context.Variables[name] = results
+		return nil
+	}
+
+	// Prioritize LastUpdatedVar to ensure downstream cursors (limit, etc) get first dibs on consuming shared inputs
+	if e.Context.LastUpdatedVar != "" {
+		if val, ok := e.Context.Variables[e.Context.LastUpdatedVar]; ok {
+			if cursor, ok := val.(ScriptCursor); ok {
+				if err := drain(e.Context.LastUpdatedVar, cursor); err != nil {
+					return err
+				}
+			}
+		}
+	}
+
+	for name, val := range e.Context.Variables {
+		if name == e.Context.LastUpdatedVar {
+			continue
+		}
+		if cursor, ok := val.(ScriptCursor); ok {
+			if err := drain(name, cursor); err != nil {
+				return err
+			}
+		}
+	}
+
 	return tx.Commit(ctx)
 }
 
 func (e *ScriptEngine) RollbackTx(ctx context.Context, args map[string]any) error {
 	txName, _ := args["transaction"].(string)
+	txName = e.resolveVarName(txName)
 	tx, ok := e.Context.Transactions[txName]
 	if !ok {
 		return fmt.Errorf("transaction '%s' not found", txName)
@@ -1006,6 +1063,7 @@ func (e *ScriptEngine) RollbackTx(ctx context.Context, args map[string]any) erro
 
 func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (jsondb.StoreAccessor, error) {
 	txName, _ := args["transaction"].(string)
+	txName = e.resolveVarName(txName)
 	storeName, _ := args["name"].(string)
 
 	var tx sop.Transaction
@@ -1039,6 +1097,7 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 	// Let's try to find the DB that owns this TX? Not easy.
 	// Let's require 'database' arg (variable name)
 	dbName, _ := args["database"].(string)
+	dbName = e.resolveVarName(dbName)
 	db, ok := e.Context.Databases[dbName]
 	if !ok {
 		// Fallback: maybe dbName is the actual name?
@@ -1057,6 +1116,7 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 
 func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, error) {
 	storeName, _ := args["store"].(string) // Variable name
+	storeName = e.resolveVarName(storeName)
 	store, ok := e.Context.Stores[storeName]
 	if !ok {
 		return nil, fmt.Errorf("store variable '%s' not found", storeName)
@@ -1075,6 +1135,16 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 
 	var okIter bool
 	var err error
+
+	// Inspect store for IndexSpecification
+	var indexSpec *jsondb.IndexSpecification
+	info := store.GetStoreInfo()
+	if info.MapKeyIndexSpecification != "" {
+		var spec jsondb.IndexSpecification
+		if err := json.Unmarshal([]byte(info.MapKeyIndexSpecification), &spec); err == nil {
+			indexSpec = &spec
+		}
+	}
 
 	// Positioning
 	if startKey != nil {
@@ -1105,10 +1175,11 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 		if stream {
 			// Return empty cursor
 			return &StoreCursor{
-				store:   store,
-				ctx:     ctx,
-				limit:   int(limit),
-				started: true, // Started but empty
+				store:     store,
+				indexSpec: indexSpec,
+				ctx:       ctx,
+				limit:     int(limit),
+				started:   true, // Started but empty
 			}, nil
 		}
 		return []map[string]any{}, nil
@@ -1123,17 +1194,15 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 
 	if stream {
 		return &StoreCursor{
-			store:   store,
-			ctx:     ctx,
-			limit:   int(limit),
-			filter:  filterMap,
-			engine:  e,
-			isDesc:  isDesc,
-			prefix:  prefix,
-			started: false, // Not yet advanced past the first element (Scan positions at first)
-			// Wait, Scan positions at first. StoreCursor.Next() calls Next().
-			// If we are already at the first element, we should return it on the first call to Next().
-			// My StoreCursor logic handles this with `started` flag.
+			store:     store,
+			indexSpec: indexSpec,
+			ctx:       ctx,
+			limit:     int(limit),
+			filter:    filterMap,
+			engine:    e,
+			isDesc:    isDesc,
+			prefix:    prefix,
+			started:   false, // Not yet advanced past the first element (Scan positions at first)
 		}, nil
 	}
 
@@ -1326,6 +1395,11 @@ func (lc *ListCursor) Close() error {
 
 func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any) (any, error) {
 	rightVar, _ := args["with"].(string)
+	if rightVar == "" {
+		// Try 'store' arg (alias for join_right)
+		rightVar, _ = args["store"].(string)
+	}
+	rightVar = e.resolveVarName(rightVar)
 
 	joinType, _ := args["type"].(string)
 	if joinType == "" {
@@ -1344,9 +1418,6 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		}
 	}
 
-	// Check if Right is a Store (for optimized lookup join)
-	rightStore, isRightStore := e.Context.Stores[rightVar]
-
 	// Prepare Left Cursor
 	var leftCursor ScriptCursor
 	if lc, ok := input.(ScriptCursor); ok {
@@ -1357,8 +1428,21 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		return nil, fmt.Errorf("input must be a list of items or a cursor")
 	}
 
+	// Check if Right is a Store
+	rightStore, isRightStore := e.Context.Stores[rightVar]
+
+	// DECISION: Prefer Lookup Join (JoinRightCursor) for Stores
+	// We rely on JoinRightCursor's internal "Smart Mode":
+	// 1. It attempts to find a Key Field (Prefix Match) to do fast Lookups.
+	// 2. If it fails to identifying a Probe Key, it falls back to In-Memory Materialization.
+	// This covers both "Indexed Join" (Fast) and "Non-Indexed Join" (Safe, No Hang).
+	useLookupJoin := false
 	if isRightStore {
-		// Use JoinRightCursor for all store joins (Lookup or Scan)
+		useLookupJoin = true
+	}
+
+	if useLookupJoin {
+		// Use JoinRightCursor for optimized lookup join (or adaptive fallback)
 		return &JoinRightCursor{
 			left:     leftCursor,
 			right:    rightStore,
@@ -1369,16 +1453,14 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		}, nil
 	}
 
-	// Fallback to In-Memory Nested Loop Join
-	// We need to materialize Left Cursor if it's a cursor (unless we implement streaming nested loop, which is hard without random access to right)
-	// If Right is NOT a store, it must be a list variable.
-
+	// Fallback to In-Memory Nested Loop Join (For Variables, not Stores)
 	rightInput, ok := e.Context.Variables[rightVar]
 	if !ok {
 		return nil, fmt.Errorf("right input variable '%s' not found", rightVar)
 	}
-	rightList, ok := rightInput.([]map[string]any)
-	if !ok {
+	var okList bool
+	rightList, okList := rightInput.([]map[string]any)
+	if !okList {
 		return nil, fmt.Errorf("right input must be a list of items")
 	}
 
@@ -1769,14 +1851,14 @@ func (e *ScriptEngine) Loop(ctx context.Context, args map[string]any) error {
 	return nil
 }
 
-func (e *ScriptEngine) CallMacro(ctx context.Context, args map[string]any) (any, error) {
-	macroName, _ := args["name"].(string)
-	if macroName == "" {
-		return nil, fmt.Errorf("macro name required")
+func (e *ScriptEngine) CallFunction(ctx context.Context, args map[string]any) (any, error) {
+	functionName, _ := args["name"].(string)
+	if functionName == "" {
+		return nil, fmt.Errorf("function name required")
 	}
 
-	if e.MacroHandler == nil {
-		return nil, fmt.Errorf("macro handler not configured")
+	if e.FunctionHandler == nil {
+		return nil, fmt.Errorf("function handler not configured")
 	}
 
 	// Handle Parameters (Scoped Variable Injection)
@@ -1796,7 +1878,7 @@ func (e *ScriptEngine) CallMacro(ctx context.Context, args map[string]any) (any,
 	if p, ok := args["params"].(map[string]any); ok {
 		params = p
 	}
-	res, err := e.MacroHandler(ctx, macroName, params)
+	res, err := e.FunctionHandler(ctx, functionName, params)
 
 	// Restore Variables
 	for k, v := range savedVars {
@@ -1942,10 +2024,10 @@ func (e *ScriptEngine) MapMerge(ctx context.Context, args map[string]any) (map[s
 	return result, nil
 }
 
-func (a *DataAdminAgent) opCallMacroLegacy(ctx context.Context, scriptCtx *ScriptContext, args map[string]any) (any, error) {
-	macroName, _ := args["name"].(string)
-	if macroName == "" {
-		return nil, fmt.Errorf("macro name required")
+func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptContext, args map[string]any) (any, error) {
+	scriptName, _ := args["name"].(string)
+	if scriptName == "" {
+		return nil, fmt.Errorf("script name required")
 	}
 
 	if a.systemDB == nil {
@@ -1958,79 +2040,109 @@ func (a *DataAdminAgent) opCallMacroLegacy(ctx context.Context, scriptCtx *Scrip
 	}
 	defer sysTx.Rollback(ctx)
 
-	macroStore, err := jsondb.OpenStore(ctx, a.systemDB.Config(), "macros", sysTx)
+	funcStore, err := jsondb.OpenStore(ctx, a.systemDB.Config(), "scripts", sysTx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open macros store: %v", err)
+		return nil, fmt.Errorf("failed to open scripts store: %v", err)
 	}
 
-	found, err := macroStore.FindOne(ctx, macroName, true)
+	found, err := funcStore.FindOne(ctx, scriptName, true)
 	if err != nil {
-		return nil, fmt.Errorf("failed to find macro: %v", err)
+		return nil, fmt.Errorf("failed to find script: %v", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("macro '%s' not found", macroName)
+		return nil, fmt.Errorf("script '%s' not found", scriptName)
 	}
 
-	val, err := macroStore.GetCurrentValue(ctx)
+	val, err := funcStore.GetCurrentValue(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	macroMap, ok := val.(map[string]any)
+	funcMap, ok := val.(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("invalid macro format")
+		return nil, fmt.Errorf("invalid script format")
 	}
 
-	stepsRaw, ok := macroMap["steps"].([]any)
+	stepsRaw, ok := funcMap["steps"].([]any)
 	if !ok {
-		return nil, nil // Empty macro
+		return nil, nil // Empty script
 	}
 
-	// Detect Macro Type
-	isScript := false
+	// Detect Script Type (Legacy vs Atomic)
+	isAtomic := false
 	if len(stepsRaw) > 0 {
 		if firstStep, ok := stepsRaw[0].(map[string]any); ok {
 			if _, hasOp := firstStep["op"]; hasOp {
-				isScript = true
+				isAtomic = true
 			}
 		}
 	}
 
-	if isScript {
+	if isAtomic {
+		// Serialize to detect changes
+		bytes, err := json.Marshal(stepsRaw)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal script steps: %v", err)
+		}
+
+		sum := sha256.Sum256(bytes)
+		currentHash := hex.EncodeToString(sum[:])
+
 		// Check Cache
 		a.compiledScriptsMu.RLock()
-		compiled, cached := a.compiledScripts[macroName]
+		cachedEntry, cached := a.compiledScripts[scriptName]
 		a.compiledScriptsMu.RUnlock()
 
-		if !cached {
+		var compiled CompiledScript
+
+		if !cached || cachedEntry.Hash != currentHash {
 			var script []ScriptInstruction
-			bytes, _ := json.Marshal(stepsRaw)
 			if err := json.Unmarshal(bytes, &script); err != nil {
-				return nil, fmt.Errorf("failed to parse script macro: %v", err)
+				return nil, fmt.Errorf("failed to parse script: %v", err)
 			}
 
-			var err error
 			compiled, err = CompileScript(script)
 			if err != nil {
-				return nil, fmt.Errorf("failed to compile macro '%s': %v", macroName, err)
+				return nil, fmt.Errorf("failed to compile script '%s': %v", scriptName, err)
 			}
 
 			// Update Cache
 			a.compiledScriptsMu.Lock()
-			a.compiledScripts[macroName] = compiled
+			a.compiledScripts[scriptName] = CachedScript{Script: compiled, Hash: currentHash}
 			a.compiledScriptsMu.Unlock()
+		} else {
+			compiled = cachedEntry.Script
 		}
 
 		// Execute in CURRENT context (inherits variables, txs)
-		engine := NewScriptEngine(scriptCtx, a.resolveDatabase)
-		engine.MacroHandler = func(c context.Context, name string, args map[string]any) (any, error) {
-			return a.opCallMacroLegacy(c, engine.Context, map[string]any{"name": name, "params": args})
+		// Wrap resolver to handle default database from context
+		resolver := func(name string) (Database, error) {
+			if name == "" {
+				if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
+					name = p.CurrentDB
+				}
+			}
+			return a.resolveDatabase(name)
+		}
+		engine := NewScriptEngine(scriptCtx, resolver)
+		engine.FunctionHandler = func(c context.Context, name string, args map[string]any) (any, error) {
+			return a.opCallScript(c, engine.Context, map[string]any{"name": name, "params": args})
 		}
 
-		return nil, compiled(ctx, engine)
+		if err := compiled(ctx, engine); err != nil {
+			return nil, err
+		}
+
+		// Return Result
+		// Priority 1: Check for 'output' variable (Explicit override)
+		if val, ok := engine.Context.Variables["output"]; ok {
+			return val, nil
+		}
+
+		return nil, nil
 	}
 
-	// Legacy Tool Macro
+	// Legacy Tool Script
 	for _, step := range stepsRaw {
 		stepMap, _ := step.(map[string]any)
 		toolName, _ := stepMap["tool"].(string)
@@ -2046,7 +2158,7 @@ func (a *DataAdminAgent) opCallMacroLegacy(ctx context.Context, scriptCtx *Scrip
 		}
 		_, err := toolDef.Handler(ctx, toolArgs)
 		if err != nil {
-			return nil, fmt.Errorf("macro step '%s' failed: %v", toolName, err)
+			return nil, fmt.Errorf("script step '%s' failed: %v", toolName, err)
 		}
 	}
 
@@ -2132,11 +2244,35 @@ func getField(item map[string]any, field string) any {
 	if v, ok := item[field]; ok {
 		return v
 	}
+
+	// Check for key field (alias or direct)
+	if field == "key" {
+		if v, ok := item["key"]; ok {
+			return v
+		}
+	}
+
+	// Check inside key if it's a map (Composite Key support)
+	if keyMap, ok := item["key"].(map[string]any); ok {
+		if v, ok := keyMap[field]; ok {
+			return v
+		}
+	}
+
+	// Implicit check in "value" map
 	if valMap, ok := item["value"].(map[string]any); ok {
 		if v, ok := valMap[field]; ok {
 			return v
 		}
 	}
+
+	// Implicit check in "key" if it is a map (Composite Key)
+	if keyMap, ok := item["key"].(map[string]any); ok {
+		if v, ok := keyMap[field]; ok {
+			return v
+		}
+	}
+
 	return nil
 }
 

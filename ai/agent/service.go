@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -122,7 +123,7 @@ func (s *Service) Close(ctx context.Context) error {
 				s.session.Variables = p.Variables
 				return nil
 			}
-			// Otherwise, we commit it as it's an implicit transaction for this request/macro.
+			// Otherwise, we commit it as it's an implicit transaction for this request/script.
 			if tx.HasBegun() {
 				if err := tx.Commit(ctx); err != nil {
 					return fmt.Errorf("failed to commit implicit transaction: %w", err)
@@ -163,12 +164,12 @@ func (s *Service) StopOnError() bool {
 // StopRecording stops the current recording session.
 func (s *Service) StopRecording() {
 	s.session.Recording = false
-	s.session.CurrentMacro = nil
+	s.session.CurrentScript = nil
 	s.session.Transaction = nil
 	s.session.Variables = nil
 }
 
-func (s *Service) getMacroDB() *database.Database {
+func (s *Service) getScriptDB() *database.Database {
 	return s.systemDB
 }
 
@@ -332,17 +333,37 @@ func (s *Service) RunPipeline(ctx context.Context, input string) (string, error)
 
 // GetLastToolInstructions returns the JSON instructions of the last executed tool.
 func (s *Service) GetLastToolInstructions() string {
-	if s.session == nil || s.session.LastStep == nil {
+	if s.session == nil {
 		return ""
 	}
-	if s.session.LastStep.Type != "command" {
+
+	// Try to get the last command from LastInteractionToolCalls if available,
+	// as this is the most reliable source for the *last interaction's* tools.
+	var targetStep *ai.ScriptStep
+
+	if len(s.session.LastInteractionToolCalls) > 0 {
+		// Use the last one in the buffer
+		targetStep = &s.session.LastInteractionToolCalls[len(s.session.LastInteractionToolCalls)-1]
+	} else if s.session.LastStep != nil && s.session.LastStep.Type == "command" {
+		// Fallback to LastStep
+		targetStep = s.session.LastStep
+	}
+
+	if targetStep == nil || targetStep.Type != "command" {
 		return ""
+	}
+
+	// Debug: Log what we are retrieving
+	if script, ok := targetStep.Args["script"]; ok {
+		log.Debug(fmt.Sprintf("Service.GetLastToolInstructions: Retrieving script. Type: %T, Value: %+v", script, script))
+	} else {
+		log.Debug(fmt.Sprintf("Service.GetLastToolInstructions: Retrieving command '%s' without script. Args keys: %v", targetStep.Command, reflect.ValueOf(targetStep.Args).MapKeys()))
 	}
 
 	// Reconstruct the tool call structure
 	toolCall := map[string]any{
-		"tool": s.session.LastStep.Command,
-		"args": s.session.LastStep.Args,
+		"tool": targetStep.Command,
+		"args": targetStep.Args,
 	}
 
 	b, _ := json.MarshalIndent(toolCall, "", "  ")
@@ -350,8 +371,23 @@ func (s *Service) GetLastToolInstructions() string {
 }
 
 // Ask performs a RAG (Retrieval-Augmented Generation) request.
-// RecordStep implements the MacroRecorder interface
-func (s *Service) RecordStep(ctx context.Context, step ai.MacroStep) {
+// RecordStep implements the ScriptRecorder interface
+func (s *Service) RecordStep(ctx context.Context, step ai.ScriptStep) {
+	// Debug: Log what we are recording
+	if step.Type == "command" {
+		if script, ok := step.Args["script"]; ok {
+			log.Debug(fmt.Sprintf("Service.RecordStep: Recording script. Type: %T, Value: %+v", script, script))
+		} else {
+			log.Debug(fmt.Sprintf("Service.RecordStep: Recording command '%s' without script. Args keys: %v", step.Command, reflect.ValueOf(step.Args).MapKeys()))
+		}
+	}
+
+	// Deep copy args to ensure we persist the exact state at this moment
+	// and protect against future mutations of the map by the caller.
+	if step.Args != nil {
+		step.Args = deepCopyMap(step.Args)
+	}
+
 	// Always capture the last step for potential manual addition
 	s.session.LastStep = &step
 
@@ -360,62 +396,62 @@ func (s *Service) RecordStep(ctx context.Context, step ai.MacroStep) {
 		s.session.LastInteractionToolCalls = append(s.session.LastInteractionToolCalls, step)
 	}
 
-	if s.session.Recording && s.session.CurrentMacro != nil {
+	if s.session.Recording && s.session.CurrentScript != nil {
 		// In standard mode, we only record high-level "ask" steps (user intent).
 		// We ignore "command" steps (tool calls) because replaying the "ask" step
 		// will naturally trigger the tool call again.
 		if s.session.RecordingMode == "standard" && step.Type == "command" {
 			return
 		}
-		if err := s.appendStepToCurrentMacro(ctx, step); err != nil {
-			log.Error("failed to append step to macro", "error", err)
+		if err := s.appendStepToCurrentScript(ctx, step); err != nil {
+			log.Error("failed to append step to script", "error", err)
 		}
 	}
 }
 
-func (s *Service) appendStepToCurrentMacro(ctx context.Context, step ai.MacroStep) error {
-	if !s.session.Recording || s.session.CurrentMacro == nil {
+func (s *Service) appendStepToCurrentScript(ctx context.Context, step ai.ScriptStep) error {
+	if !s.session.Recording || s.session.CurrentScript == nil {
 		return nil
 	}
-	macroDB := s.getMacroDB()
-	if macroDB == nil {
+	scriptDB := s.getScriptDB()
+	if scriptDB == nil {
 		return nil
 	}
 
-	// Use a separate transaction for saving the macro
-	tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
+	// Use a separate transaction for saving the script
+	tx, err := scriptDB.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 
-	store, err := macroDB.OpenModelStore(ctx, "macros", tx)
+	store, err := scriptDB.OpenModelStore(ctx, "scripts", tx)
 	if err != nil {
 		tx.Rollback(ctx)
-		return fmt.Errorf("failed to open macros store: %w", err)
+		return fmt.Errorf("failed to open scripts store: %w", err)
 	}
 
-	// Try to load the latest version of the macro from disk
-	var latestMacro ai.Macro
-	if err := store.Load(ctx, s.session.CurrentMacroCategory, s.session.CurrentMacro.Name, &latestMacro); err != nil {
-		// If load fails, assume it's a new macro (first step) and use the session's initial state
-		// We copy the metadata from the session macro
-		latestMacro = *s.session.CurrentMacro
+	// Try to load the latest version of the script from disk
+	var latestScript ai.Script
+	if err := store.Load(ctx, s.session.CurrentScriptCategory, s.session.CurrentScript.Name, &latestScript); err != nil {
+		// If load fails, assume it's a new script (first step) and use the session's initial state
+		// We copy the metadata from the session script
+		latestScript = *s.session.CurrentScript
 		// Ensure steps are empty if we are starting fresh (or use what's in session if we trust it)
 		// Since we are appending, we assume session might be empty or have previous steps?
 		// Actually, if Load fails, it means it's not on disk.
-		// So we should use the session's macro as the base, but we need to be careful about duplication if session has steps.
+		// So we should use the session's script as the base, but we need to be careful about duplication if session has steps.
 		// But in this flow, we only append via this method.
 		// So if it's not on disk, session steps should be empty (except for what we are about to add).
-		// However, s.session.CurrentMacro is a pointer.
+		// However, s.session.CurrentScript is a pointer.
 	}
 
 	// Append the new step
-	latestMacro.Steps = append(latestMacro.Steps, step)
+	latestScript.Steps = append(latestScript.Steps, step)
 
 	// Save back to disk
-	if err := store.Save(ctx, s.session.CurrentMacroCategory, latestMacro.Name, &latestMacro); err != nil {
+	if err := store.Save(ctx, s.session.CurrentScriptCategory, latestScript.Name, &latestScript); err != nil {
 		tx.Rollback(ctx)
-		return fmt.Errorf("failed to save macro: %w", err)
+		return fmt.Errorf("failed to save script: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -423,30 +459,30 @@ func (s *Service) appendStepToCurrentMacro(ctx context.Context, step ai.MacroSte
 	}
 
 	// Update in-memory session to match disk
-	s.session.CurrentMacro = &latestMacro
+	s.session.CurrentScript = &latestScript
 	return nil
 }
 
-// RefactorLastSteps refactors the last N steps into a new structure (macro or block).
+// RefactorLastSteps refactors the last N steps into a new structure (script or block).
 func (s *Service) RefactorLastSteps(count int, mode string, name string) error {
-	if !s.session.Recording || s.session.CurrentMacro == nil {
+	if !s.session.Recording || s.session.CurrentScript == nil {
 		return fmt.Errorf("not recording")
 	}
 
-	var stepsToGroup []ai.MacroStep
+	var stepsToGroup []ai.ScriptStep
 
 	if s.session.RecordingMode == "standard" {
-		// In standard mode, the last step in CurrentMacro is likely the "ask" step.
+		// In standard mode, the last step in CurrentScript is likely the "ask" step.
 		// We want to replace it with the buffered tool calls.
-		if len(s.session.CurrentMacro.Steps) > 0 {
-			lastIdx := len(s.session.CurrentMacro.Steps) - 1
-			if s.session.CurrentMacro.Steps[lastIdx].Type == "ask" {
-				s.session.CurrentMacro.Steps = s.session.CurrentMacro.Steps[:lastIdx]
+		if len(s.session.CurrentScript.Steps) > 0 {
+			lastIdx := len(s.session.CurrentScript.Steps) - 1
+			if s.session.CurrentScript.Steps[lastIdx].Type == "ask" {
+				s.session.CurrentScript.Steps = s.session.CurrentScript.Steps[:lastIdx]
 			}
 		}
 		stepsToGroup = s.session.LastInteractionToolCalls
 	} else {
-		// In compiled mode, the tool calls are already in CurrentMacro.Steps.
+		// In compiled mode, the tool calls are already in CurrentScript.Steps.
 		// Use count if provided, otherwise use the length of buffered tool calls.
 		if count <= 0 {
 			count = len(s.session.LastInteractionToolCalls)
@@ -454,40 +490,40 @@ func (s *Service) RefactorLastSteps(count int, mode string, name string) error {
 		if count <= 0 {
 			return fmt.Errorf("no steps to refactor")
 		}
-		if len(s.session.CurrentMacro.Steps) < count {
+		if len(s.session.CurrentScript.Steps) < count {
 			return fmt.Errorf("not enough steps to refactor")
 		}
-		startIdx := len(s.session.CurrentMacro.Steps) - count
-		stepsToGroup = s.session.CurrentMacro.Steps[startIdx:]
-		s.session.CurrentMacro.Steps = s.session.CurrentMacro.Steps[:startIdx]
+		startIdx := len(s.session.CurrentScript.Steps) - count
+		stepsToGroup = s.session.CurrentScript.Steps[startIdx:]
+		s.session.CurrentScript.Steps = s.session.CurrentScript.Steps[:startIdx]
 	}
 
 	if len(stepsToGroup) == 0 {
 		return fmt.Errorf("no steps to refactor")
 	}
 
-	if mode == "macro" {
+	if mode == "script" {
 		if name == "" {
-			return fmt.Errorf("macro name required")
+			return fmt.Errorf("script name required")
 		}
-		// Create new macro
-		newMacro := ai.Macro{
+		// Create new script
+		newScript := ai.Script{
 			Name:            name,
 			Steps:           stepsToGroup,
 			TransactionMode: "single", // Default to single tx for extracted scripts
 		}
 		// Save it
-		if err := s.saveMacro(context.Background(), newMacro); err != nil {
+		if err := s.saveScript(context.Background(), newScript); err != nil {
 			return err
 		}
-		// Add macro step
-		s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, ai.MacroStep{
-			Type:      "macro",
-			MacroName: name,
+		// Add script step
+		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, ai.ScriptStep{
+			Type:       "call_script",
+			ScriptName: name,
 		})
 	} else if mode == "block" {
 		// Add block step
-		s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, ai.MacroStep{
+		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, ai.ScriptStep{
 			Type:  "block",
 			Steps: stepsToGroup,
 		})
@@ -496,23 +532,23 @@ func (s *Service) RefactorLastSteps(count int, mode string, name string) error {
 	return nil
 }
 
-func (s *Service) saveMacro(ctx context.Context, macro ai.Macro) error {
-	macroDB := s.getMacroDB()
-	if macroDB == nil {
-		return fmt.Errorf("macro database not available")
+func (s *Service) saveScript(ctx context.Context, script ai.Script) error {
+	scriptDB := s.getScriptDB()
+	if scriptDB == nil {
+		return fmt.Errorf("script database not available")
 	}
-	tx, err := macroDB.BeginTransaction(ctx, sop.ForWriting)
+	tx, err := scriptDB.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		return err
 	}
-	store, err := macroDB.OpenModelStore(ctx, "macros", tx)
+	store, err := scriptDB.OpenModelStore(ctx, "scripts", tx)
 	if err != nil {
 		tx.Rollback(ctx)
 		return err
 	}
-	if err := store.Save(ctx, "general", macro.Name, &macro); err != nil {
+	if err := store.Save(ctx, "general", script.Name, &script); err != nil {
 		tx.Rollback(ctx)
-		return err
+		return fmt.Errorf("failed to save script: %w", err)
 	}
 	return tx.Commit(ctx)
 }
@@ -531,7 +567,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	}()
 
 	// Clear buffer at start of Ask
-	s.session.LastInteractionToolCalls = []ai.MacroStep{}
+	s.session.LastInteractionToolCalls = []ai.ScriptStep{}
 
 	cfg := ai.NewAskConfig(opts...)
 	var db *database.Database
@@ -583,8 +619,8 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		}
 	}
 
-	// Inject MacroRecorder into context
-	ctx = context.WithValue(ctx, ai.CtxKeyMacroRecorder, s)
+	// Inject ScriptRecorder into context
+	ctx = context.WithValue(ctx, ai.CtxKeyScriptRecorder, s)
 
 	// Capture "ask" step for potential manual addition
 	// We do this BEFORE handling /record or /play so those commands themselves aren't captured as "ask" steps
@@ -593,14 +629,14 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		// Only record "ask" step if NOT in compiled mode
 		// If in compiled mode, we wait for the tool execution to record the command step
 		if !s.session.Recording || s.session.RecordingMode != "compiled" {
-			s.RecordStep(ctx, ai.MacroStep{
+			s.RecordStep(ctx, ai.ScriptStep{
 				Type:   "ask",
 				Prompt: query,
 			})
 		}
 	}
 
-	// Handle Session Commands (Macros, Recording, etc.)
+	// Handle Session Commands (Scripts, Recording, etc.)
 	if resp, handled, err := s.handleSessionCommand(ctx, query, db); handled {
 		return resp, err
 	}
@@ -702,7 +738,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	if output.Raw != nil {
 		if b, err := json.Marshal(output.Raw); err == nil {
 			if s.session.Recording {
-				s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, ai.MacroStep{
+				s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, ai.ScriptStep{
 					Type:   "ask",
 					Prompt: string(b), // Store raw tool call as prompt
 				})
@@ -812,7 +848,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 						// Also clear session transaction to ensure statelessness
 						s.session.Transaction = nil
 					} else if !s.session.Recording && s.session.Transaction != nil {
-						// Ensure statelessness for non-macro sessions even if no auto-transaction was started
+						// Ensure statelessness for non-script sessions even if no auto-transaction was started
 						if err != nil {
 							s.session.Transaction.Rollback(ctx)
 						} else {
@@ -828,7 +864,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 					}
 
 					// Always capture as last step (for manual addition)
-					s.session.LastStep = &ai.MacroStep{
+					s.session.LastStep = &ai.ScriptStep{
 						Type:    "command",
 						Command: toolCall.Tool,
 						Args:    toolCall.Args,
@@ -837,8 +873,8 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 					// Record Tool Call if recording
 					if s.session.Recording {
 						if s.session.RecordingMode == "compiled" {
-							if err := s.appendStepToCurrentMacro(ctx, *s.session.LastStep); err != nil {
-								log.Error("failed to append step to macro", "error", err)
+							if err := s.appendStepToCurrentScript(ctx, *s.session.LastStep); err != nil {
+								log.Error("failed to append step to script", "error", err)
 							}
 						}
 						// In natural mode, we already recorded the prompt via s.RecordStep at the top.
@@ -865,7 +901,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		// Only record "say" step if NOT in compiled mode
 		// In compiled mode, we only care about the commands (tools)
 		if s.session.RecordingMode != "compiled" {
-			s.session.CurrentMacro.Steps = append(s.session.CurrentMacro.Steps, ai.MacroStep{
+			s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, ai.ScriptStep{
 				Type:    "say",
 				Message: finalText,
 			})

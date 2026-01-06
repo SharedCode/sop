@@ -70,52 +70,52 @@ The Data Manager provides a comprehensive interface for managing your B-Tree sto
     *   *Note*: For populated stores, structural fields (Key/Value types) are locked to prevent data corruption. You can still edit the Description and Cache settings.
 *   **Delete Store**: Select a store, then click the **Trash** icon in the main header. You will be asked to type the store name to confirm deletion.
 
-### 2. AI Assistant & Macros
+### 2. AI Assistant & Scripts
 
-The built-in AI Assistant allows you to interact with your data using natural language and automate tasks using Macros.
+The built-in AI Assistant allows you to interact with your data using natural language and automate tasks using Scripts.
 
 *   **Open Assistant**: Click the floating chat button in the bottom-left corner.
 *   **Natural Language SQL**: Perform complex queries without writing code.
     *   *Select*: "Find all users where Age > 25 and City is 'Seattle'."
     *   *Join*: "Join 'Users' and 'Orders' on 'UserID' and show me the top 5 spenders."
     *   *CRUD*: "Add a new user named 'John Doe' with age 30." or "Delete the record with key 'user_123'."
-*   **Record Macro**: Tell the assistant to record your actions.
-    *   *Command*: "Record a macro named 'MyMacro' to find users in New York."
+*   **Record Script**: Tell the assistant to record your actions.
+    *   *Command*: "Record a script named 'MyScript' to find users in New York."
     *   The assistant will generate the steps and save them to the `SystemDB`.
-*   **Play Macro**: Execute a saved macro.
-    *   *Command*: "Play macro 'MyMacro'."
+*   **Play Script**: Execute a saved script.
+    *   *Command*: "Play script 'MyScript'."
     *   The assistant will execute the recorded steps and display the results.
-*   **Parameterized Macros (Beta)**: You can now record macros with placeholders and pass values at runtime.
-    *   *Record*: "Record a macro 'FindUser' that finds a user by 'UserID'."
-    *   *Play*: "Play macro 'FindUser' with UserID='123'."
-*   **View Macro Steps**:
-    *   If the assistant returns a macro trace, it will be displayed as an interactive tree view in the chat.
-    *   You can also view raw macro data in the **SystemDB** (see below).
+*   **Parameterized Scripts (Beta)**: You can now record scripts with placeholders and pass values at runtime.
+    *   *Record*: "Record a script 'FindUser' that finds a user by 'UserID'."
+    *   *Play*: "Play script 'FindUser' with UserID='123'."
+*   **View Script Steps**:
+    *   If the assistant returns a script trace, it will be displayed as an interactive tree view in the chat.
+    *   You can also view raw script data in the **SystemDB** (see below).
 
-### 3. Advanced Queries (SQL Joins & Macros as Views)
+### 3. Advanced Queries (SQL Joins & Scripts as Views)
 
 The AI Assistant supports complex queries that mimic SQL operations, even though SOP is a NoSQL Key-Value store. It achieves high performance by leveraging the underlying B-Tree structure.
 
 *   **Inner Join & Prefix Queries**: Ask the assistant to join two stores.
     *   *Command*: "Join 'Users' and 'Orders' on 'UserID'."
     *   **Performance**: The engine utilizes **Prefix Queries** in Hash Joins, fully exploiting the B-Tree's `Find` and navigation APIs. This allows for efficient range queries and lookups without full table scans.
-*   **Macros as Views**: You can use a Macro as a data source in your queries, effectively treating it as a SQL View.
-    *   *Command*: "Select * from 'MyMacro' where Age > 20."
-    *   *Join*: "Join 'Users' and 'MyMacro' on 'RegionID'."
-    *   **Efficiency**: Because Macros stream their results, using them as Views is extremely lightweight. The system pipelines the data, allowing for complex transformations with minimal memory footprint.
+*   **Scripts as Views**: You can use a Script as a data source in your queries, effectively treating it as a SQL View.
+    *   *Command*: "Select * from 'MyScript' where Age > 20."
+    *   *Join*: "Join 'Users' and 'MyScript' on 'RegionID'."
+    *   **Efficiency**: Because Scripts stream their results, using them as Views is extremely lightweight. The system pipelines the data, allowing for complex transformations with minimal memory footprint.
 *   **Agent Streaming**: Results are streamed in real-time from the Agent to the Data Manager.
     *   **Benefit**: You see results immediately as they are found.
     *   **Resource Utilization**: This streaming architecture ensures **lightweight resource utilization**, as the server doesn't need to buffer the entire result set. It combines the raw speed of B-Tree navigation with the flexibility of an AI agent to provide a complete, high-performance solution.
 
 ### 4. SystemDB
 
-The `SystemDB` is a special database that holds internal SOP metadata, including Registry information and Macros.
+The `SystemDB` is a special database that holds internal SOP metadata, including Registry information and Scripts.
 
 *   **View SystemDB**: In the "Databases" dropdown in the sidebar, select **SystemDB** (if available/configured).
-*   **View Macros**:
-    1.  Select the **Macro** store within SystemDB.
-    2.  Browse the list of macros.
-    3.  Click on a macro to view its details in the "Item Details" panel. The `Value` field contains the JSON definition of the macro steps.
+*   **View Scripts**:
+    1.  Select the **Script** store within SystemDB.
+    2.  Browse the list of scripts.
+    3.  Click on a script to view its details in the "Item Details" panel. The `Value` field contains the JSON definition of the script steps.
 
 ### Running
 
@@ -241,7 +241,7 @@ The SOP Data Manager includes a built-in **Setup Wizard** that can populate your
 This dataset is perfect for exploring the **AI Assistant** capabilities:
 1.  **Natural Language Queries**: "Show me all users from France"
 2.  **Joins**: "Find orders for user 'James Smith'"
-3.  **Macros**: Create reusable workflows for complex reporting.
+3.  **Scripts**: Create reusable workflows for complex reporting.
 
 ## Language Bindings & Downloads
 

@@ -44,7 +44,7 @@ func (d *GenericDomain) Classifier() ai.Classifier                              
 func (d *GenericDomain) Prompt(ctx context.Context, kind string) (string, error) { return "", nil }
 func (d *GenericDomain) DataPath() string                                        { return "" }
 
-func TestHandleExecuteMacro(t *testing.T) {
+func TestHandleExecuteScript(t *testing.T) {
 	// 1. Setup Agent Service
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -59,13 +59,13 @@ func TestHandleExecuteMacro(t *testing.T) {
 	loadedAgents = make(map[string]ai.Agent[map[string]any])
 	loadedAgents["sql_admin"] = svc
 
-	// 3. Create a Test Macro
+	// 3. Create a Test Script
 	ctx := context.Background()
-	macro := ai.Macro{
-		Name:        "test_macro",
-		Description: "A test macro",
+	script := ai.Script{
+		Name:        "test_script",
+		Description: "A test script",
 		Parameters:  []string{"name"},
-		Steps: []ai.MacroStep{
+		Steps: []ai.ScriptStep{
 			{
 				Type: "command",
 				// We use a dummy command. The execution might fail if the command handler isn't registered,
@@ -76,22 +76,22 @@ func TestHandleExecuteMacro(t *testing.T) {
 		},
 	}
 
-	// Save macro to system DB
+	// Save script to system DB
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
-	store, _ := sysDB.OpenModelStore(ctx, "macros", tx)
-	store.Save(ctx, "general", "test_macro", macro)
+	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
+	store.Save(ctx, "general", "test_script", script)
 	tx.Commit(ctx)
 
 	// 4. Create Request
-	reqBody := `{"name": "test_macro", "args": {"name": "World"}}`
-	req, _ := http.NewRequest("POST", "/api/macros/execute", strings.NewReader(reqBody))
+	reqBody := `{"name": "test_script", "args": {"name": "World"}}`
+	req, _ := http.NewRequest("POST", "/api/scripts/execute", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
 	// 5. Execute Handler
 	// We test the handler directly, bypassing the auth middleware for this basic test
 	// (or we could wrap it if we wanted to test auth)
-	handleExecuteMacro(w, req)
+	handleExecuteScript(w, req)
 
 	// 6. Verify
 	if w.Code != http.StatusOK {
@@ -113,7 +113,7 @@ func TestHandleExecuteMacro(t *testing.T) {
 	}
 }
 
-func TestHandleExecuteMacro_Auth(t *testing.T) {
+func TestHandleExecuteScript_Auth(t *testing.T) {
 	// Setup Config
 	config.EnableRestAuth = true
 	config.RootPassword = "secret_password"
@@ -124,7 +124,7 @@ func TestHandleExecuteMacro_Auth(t *testing.T) {
 	})
 
 	// Case 1: No Header
-	req, _ := http.NewRequest("POST", "/api/macros/execute", nil)
+	req, _ := http.NewRequest("POST", "/api/scripts/execute", nil)
 	w := httptest.NewRecorder()
 	handler(w, req)
 	if w.Code != http.StatusUnauthorized {
@@ -132,7 +132,7 @@ func TestHandleExecuteMacro_Auth(t *testing.T) {
 	}
 
 	// Case 2: Wrong Token
-	req, _ = http.NewRequest("POST", "/api/macros/execute", nil)
+	req, _ = http.NewRequest("POST", "/api/scripts/execute", nil)
 	req.Header.Set("Authorization", "Bearer wrong")
 	w = httptest.NewRecorder()
 	handler(w, req)
@@ -141,7 +141,7 @@ func TestHandleExecuteMacro_Auth(t *testing.T) {
 	}
 
 	// Case 3: Correct Token
-	req, _ = http.NewRequest("POST", "/api/macros/execute", nil)
+	req, _ = http.NewRequest("POST", "/api/scripts/execute", nil)
 	req.Header.Set("Authorization", "Bearer secret_password")
 	w = httptest.NewRecorder()
 	handler(w, req)

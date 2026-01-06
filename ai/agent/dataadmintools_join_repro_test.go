@@ -8,9 +8,9 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
-	sopdb "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/ai/database"
 	core_database "github.com/sharedcode/sop/database"
+	sopdb "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/jsondb"
 )
 
@@ -227,13 +227,14 @@ func TestToolJoin_WithAlias(t *testing.T) {
 	// Right: Key={id:101}, Value={name:..., region:...} -> Region is Value
 	// So both should be in "value" map, not "key" map.
 
+	keyMap, ok := item["key"].(map[string]any)
 	valMap, ok := item["value"].(map[string]any)
 	if !ok {
-		t.Fatalf("Value is not a map: %v", item)
+		t.Fatalf("Key is not a map: %v", item)
 	}
 
-	if val, ok := valMap["Region"]; !ok || val != "APAC" {
-		t.Errorf("Expected Region=APAC, got %v", valMap)
+	if val, ok := keyMap["Region"]; !ok || val != "APAC" {
+		t.Errorf("Expected Region=APAC, got %v", keyMap)
 	}
 
 	// Check Employee (Aliased)
@@ -247,7 +248,7 @@ func TestToolJoin_WithAlias(t *testing.T) {
 	// So "b.name AS employee" -> alias "employee".
 
 	if val, ok := valMap["employee"]; !ok || val != "John" {
-		t.Errorf("Expected employee=John, got %v", valMap)
+		t.Errorf("Expected employee=John, got %v", keyMap)
 	}
 }
 
@@ -315,26 +316,42 @@ func TestToolJoin_StoreNamePrefix(t *testing.T) {
 	}
 
 	first := raw[0]
-	valMap := first["value"].(map[string]any)
+	keyMap := first["key"].(map[string]any)
+	valuePart, _ := first["value"].(map[string]any)
+	if valuePart == nil {
+		valuePart = make(map[string]any)
+	}
+
+	// Helper to check in either key or value
+	checkKey := func(k string) any {
+		if v, ok := keyMap[k]; ok {
+			return v
+		}
+		if v, ok := valuePart[k]; ok {
+			return v
+		}
+		return nil
+	}
 
 	// Check for expected keys
 	// "department.region" -> "Region" (stripped prefix)
 	// "employees.department" -> "Department" (stripped prefix)
 	// "employees.name as employee" -> "employee"
 
-	if _, ok := valMap["Region"]; !ok {
-		t.Errorf("Missing 'Region' in value: %v", valMap)
+	if v := checkKey("Region"); v == nil {
+		t.Errorf("Missing 'Region' in result. Key: %v, Value: %v", keyMap, valuePart)
 	}
-	if _, ok := valMap["Department"]; !ok {
-		t.Errorf("Missing 'Department' in value: %v", valMap)
+	if v := checkKey("Department"); v == nil {
+		t.Errorf("Missing 'Department' in result. Key: %v, Value: %v", keyMap, valuePart)
 	}
-	if _, ok := valMap["employee"]; !ok {
-		t.Errorf("Missing 'employee' in value: %v", valMap)
+	if v := checkKey("employee"); v == nil {
+		t.Errorf("Missing 'employee' in result. Key: %v, Value: %v", keyMap, valuePart)
 	}
 
 	// Check values
-	if valMap["Region"] != "East" && valMap["Region"] != "West" {
-		t.Errorf("Unexpected region: %v", valMap["Region"])
+	regVal := checkKey("Region")
+	if regVal != "East" && regVal != "West" {
+		t.Errorf("Unexpected region: %v", regVal)
 	}
 }
 
@@ -392,7 +409,7 @@ func TestToolJoin_ReproUserScenario(t *testing.T) {
 	var items []map[string]any
 	json.Unmarshal([]byte(res), &items)
 
-    t.Logf("Items: %+v", items)
+	t.Logf("Items: %+v", items)
 
 	// We expect 2 items (US, APAC). EMEA has no match.
 	// Order should be US then APAC.
@@ -401,10 +418,10 @@ func TestToolJoin_ReproUserScenario(t *testing.T) {
 	}
 
 	getRegion := func(item map[string]any) string {
-		v := item["value"].(map[string]any)
-        if val, ok := v["Region"]; ok {
-            return val.(string)
-        }
+		v := item["key"].(map[string]any)
+		if val, ok := v["Region"]; ok {
+			return val.(string)
+		}
 		return v["region"].(string)
 	}
 

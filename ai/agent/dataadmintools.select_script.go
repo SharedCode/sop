@@ -7,20 +7,20 @@ import (
 	"github.com/sharedcode/sop/ai"
 )
 
-func (a *DataAdminAgent) executeMacroView(ctx context.Context, macro ai.Macro, args map[string]any) (string, error) {
-	// For a "View" macro, we expect it to have exactly one step which is a "select" command.
-	if len(macro.Steps) == 0 {
-		return "", fmt.Errorf("macro '%s' is empty", macro.Name)
+func (a *DataAdminAgent) executeScriptView(ctx context.Context, script ai.Script, args map[string]any) (string, error) {
+	// For a "View" script, we expect it to have exactly one step which is a "select" command.
+	if len(script.Steps) == 0 {
+		return "", fmt.Errorf("script '%s' is empty", script.Name)
 	}
 
 	// Let's handle the simple case: Single Select Step
-	step := macro.Steps[0]
+	step := script.Steps[0]
 	if step.Type != "command" || step.Command != "select" {
-		return "", fmt.Errorf("macro '%s' is not a simple select view (first step is %s:%s)", macro.Name, step.Type, step.Command)
+		return "", fmt.Errorf("script '%s' is not a simple select view (first step is %s:%s)", script.Name, step.Type, step.Command)
 	}
 
 	// Merge Args
-	// Macro args are the base.
+	// Script args are the base.
 	mergedArgs := make(map[string]any)
 	for k, v := range step.Args {
 		mergedArgs[k] = v

@@ -13,6 +13,12 @@ import (
 )
 
 func (a *DataAdminAgent) toolAdd(ctx context.Context, args map[string]any) (string, error) {
+	// Stub Mode Check
+	if a.Config.StubMode {
+		fmt.Printf("DEBUG: toolAdd called in STUB MODE with:\n%+v\n", args)
+		return "Add executed successfully (STUBBED).", nil
+	}
+
 	p := ai.GetSessionPayload(ctx)
 	if p == nil {
 		return "", fmt.Errorf("no session payload found")
@@ -163,6 +169,12 @@ func (a *DataAdminAgent) toolAdd(ctx context.Context, args map[string]any) (stri
 }
 
 func (a *DataAdminAgent) toolUpdate(ctx context.Context, args map[string]any) (string, error) {
+	// Stub Mode Check
+	if a.Config.StubMode {
+		fmt.Printf("DEBUG: toolUpdate called in STUB MODE with:\n%+v\n", args)
+		return "Update executed successfully (STUBBED).", nil
+	}
+
 	p := ai.GetSessionPayload(ctx)
 	if p == nil {
 		return "", fmt.Errorf("no session payload found")
@@ -315,6 +327,12 @@ func (a *DataAdminAgent) toolUpdate(ctx context.Context, args map[string]any) (s
 }
 
 func (a *DataAdminAgent) toolDelete(ctx context.Context, args map[string]any) (string, error) {
+	// Stub Mode Check
+	if a.Config.StubMode {
+		fmt.Printf("DEBUG: toolDelete called in STUB MODE with:\n%+v\n", args)
+		return "Delete executed successfully (STUBBED).", nil
+	}
+
 	p := ai.GetSessionPayload(ctx)
 	if p == nil {
 		return "", fmt.Errorf("no session payload found")
@@ -438,6 +456,12 @@ func (a *DataAdminAgent) toolDelete(ctx context.Context, args map[string]any) (s
 }
 
 func (a *DataAdminAgent) toolManageTransaction(ctx context.Context, args map[string]any) (string, error) {
+	// Stub Mode Check
+	if a.Config.StubMode {
+		fmt.Printf("DEBUG: toolManageTransaction called in STUB MODE with:\n%+v\n", args)
+		return "Transaction managed successfully (STUBBED).", nil
+	}
+
 	p := ai.GetSessionPayload(ctx)
 	if p == nil {
 		return "", fmt.Errorf("no session payload found")
@@ -463,8 +487,8 @@ func (a *DataAdminAgent) toolManageTransaction(ctx context.Context, args map[str
 		return "", fmt.Errorf("action is required")
 	}
 
-	if _, ok := ctx.Value(ai.CtxKeyMacroRecorder).(ai.MacroRecorder); ok {
-		return fmt.Sprintf("Transaction action '%s' recorded as macro step. (Skipped execution during recording)", action), nil
+	if _, ok := ctx.Value(ai.CtxKeyScriptRecorder).(ai.ScriptRecorder); ok {
+		return fmt.Sprintf("Transaction action '%s' recorded as script step. (Skipped execution during recording)", action), nil
 	}
 
 	switch action {

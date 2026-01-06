@@ -37,6 +37,10 @@ type DatabaseConfig struct {
 	RedisURL string `json:"redis"` // Optional, for clustered
 	IsSystem bool   `json:"is_system,omitempty"`
 
+	// EnableObfuscation specifies if this database should be obfuscated when accessed by AI tools.
+	// This allows per-database granular control.
+	EnableObfuscation bool `json:"enable_obfuscation,omitempty"`
+
 	// // DetectedRoot is the inferred root directory for relative paths in this database.
 	// // It is calculated at startup and not read from JSON.
 	// DetectedRoot string `json:"-"`
@@ -50,6 +54,11 @@ type Config struct {
 	SystemDB       *DatabaseConfig  `json:"system_db,omitempty"`
 	RootPassword   string           `json:"root_password,omitempty"`
 	EnableRestAuth bool             `json:"enable_rest_auth,omitempty"`
+	StubMode       bool             `json:"stub_mode,omitempty"`
+
+	// ObfuscationMode defines the global obfuscation policy (disabled, per_database, all_databases).
+	// This overrides any setting in the agent's own configuration.
+	ObfuscationMode string `json:"obfuscation_mode,omitempty"`
 
 	// Legacy/CLI fields
 	DatabasePath string
@@ -85,6 +94,7 @@ func main() {
 	flag.StringVar(&config.RedisURL, "redis", "localhost:6379", "Redis URL for clustered mode (e.g. localhost:6379)")
 	flag.IntVar(&config.PageSize, "pageSize", 40, "Number of items to display per page")
 	flag.BoolVar(&config.EnableRestAuth, "enable-rest-auth", false, "Enable Bearer token authentication for REST endpoints")
+	flag.BoolVar(&config.StubMode, "stub", false, "Enable stub mode for AI agents")
 	flag.Parse()
 
 	if showVersion {
@@ -159,7 +169,7 @@ func main() {
 	http.HandleFunc("/api/store/item/delete", handleDeleteItem)
 	http.HandleFunc("/api/admin/validate", handleValidateAdminToken)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
-	http.HandleFunc("/api/macros/execute", withAuth(handleExecuteMacro))
+	http.HandleFunc("/api/scripts/execute", withAuth(handleExecuteScript))
 
 	// Configuration Endpoints
 	http.HandleFunc("/api/config/save", handleSaveConfig)

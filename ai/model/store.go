@@ -52,7 +52,7 @@ func (s *btreeModelStore) openStore(ctx context.Context) (btree.BtreeInterface[M
 	// Prefix the store name with the domain name to allow multiple stores in the same folder.
 	storeName := s.name
 	slotLength := 500
-	if s.name == "macros" {
+	if s.name == "scripts" {
 		slotLength = 2000
 	}
 	so := sop.ConfigureStore(storeName, true, slotLength, "AI Models Registry", sop.MediumData, "")

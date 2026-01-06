@@ -70,7 +70,7 @@ func TestToolJoin_OrderBy_RightStoreDirection(t *testing.T) {
 
 	// Check Order: Should be E3, E2, E1
 	getVal := func(item map[string]any) string {
-		v := item["value"].(map[string]any)
+		v := item["key"].(map[string]any)
         // Try "Id" (Title Case) or "id"
         if val, ok := v["Id"]; ok {
             return val.(string)

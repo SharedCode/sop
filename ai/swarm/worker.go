@@ -14,7 +14,7 @@ type Worker struct {
 	PollInterval    time.Duration
 	StopChan        chan struct{}
 	tf              TransactionFactory
-	supportedMacros map[string]func(context.Context, map[string]string) (string, error)
+	supportedScripts map[string]func(context.Context, map[string]string) (string, error)
 }
 
 // NewWorker creates a new swarm worker.
@@ -24,13 +24,13 @@ func NewWorker(id string, tf TransactionFactory) *Worker {
 		PollInterval:    2 * time.Second, // Default poll interval
 		StopChan:        make(chan struct{}),
 		tf:              tf,
-		supportedMacros: make(map[string]func(context.Context, map[string]string) (string, error)),
+		supportedScripts: make(map[string]func(context.Context, map[string]string) (string, error)),
 	}
 }
 
-// RegisterMacro registers a handler for a specific macro name.
-func (w *Worker) RegisterMacro(name string, handler func(context.Context, map[string]string) (string, error)) {
-	w.supportedMacros[name] = handler
+// RegisterScript registers a handler for a specific script name.
+func (w *Worker) RegisterScript(name string, handler func(context.Context, map[string]string) (string, error)) {
+	w.supportedScripts[name] = handler
 }
 
 // Start begins the worker loop.

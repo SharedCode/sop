@@ -94,7 +94,7 @@ func TestRecordingTransactionBehavior(t *testing.T) {
 	// We manually set the session state to simulate /record command having been run
 	svc.session.Recording = true
 	svc.session.RecordingMode = "standard"
-	svc.session.CurrentMacro = &ai.Macro{Name: "test_macro"}
+	svc.session.CurrentScript = &ai.Script{Name: "test_script"}
 
 	// 3. Execute Step 1: Add user1
 	// We need to simulate the full request cycle: Open -> Ask -> Close

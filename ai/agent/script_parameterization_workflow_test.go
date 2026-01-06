@@ -9,9 +9,9 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 )
 
-// TestMacroParameterizationWorkflow demonstrates how a recorded macro with hardcoded values
-// is converted into a parameterized macro using the /macro parameterize command.
-func TestMacroParameterizationWorkflow(t *testing.T) {
+// TestScriptParameterizationWorkflow demonstrates how a recorded script with hardcoded values
+// is converted into a parameterized script using the /script parameterize command.
+func TestScriptParameterizationWorkflow(t *testing.T) {
 	// 1. Setup Infrastructure
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -22,12 +22,12 @@ func TestMacroParameterizationWorkflow(t *testing.T) {
 	sysDB := database.NewDatabase(dbOpts)
 	ctx := context.Background()
 
-	// 2. Simulate a "Recorded" Macro
+	// 2. Simulate a "Recorded" Script
 	// Imagine the user recorded: "select * from employees where department = 'Sales'"
-	macroName := "find_sales_employees"
-	originalMacro := ai.Macro{
-		Name: macroName,
-		Steps: []ai.MacroStep{
+	scriptName := "find_sales_employees"
+	originalScript := ai.Script{
+		Name: scriptName,
+		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
 				Command: "select",
@@ -42,17 +42,17 @@ func TestMacroParameterizationWorkflow(t *testing.T) {
 		},
 	}
 
-	// Save this "recorded" macro to the system DB
+	// Save this "recorded" script to the system DB
 	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		t.Fatalf("Failed to begin tx: %v", err)
 	}
-	store, err := sysDB.OpenModelStore(ctx, "macros", tx)
+	store, err := sysDB.OpenModelStore(ctx, "scripts", tx)
 	if err != nil {
 		t.Fatalf("Failed to open store: %v", err)
 	}
-	if err := store.Save(ctx, "general", macroName, originalMacro); err != nil {
-		t.Fatalf("Failed to save macro: %v", err)
+	if err := store.Save(ctx, "general", scriptName, originalScript); err != nil {
+		t.Fatalf("Failed to save script: %v", err)
 	}
 	tx.Commit(ctx)
 
@@ -62,8 +62,8 @@ func TestMacroParameterizationWorkflow(t *testing.T) {
 
 	// 4. Execute Parameterization Command
 	// User wants to replace 'Sales' with a parameter named 'dept'
-	// Command: /macro parameterize <macro_name> <param_name> <value_to_replace>
-	cmd := "/macro parameterize find_sales_employees dept Sales"
+	// Command: /script parameterize <script_name> <param_name> <value_to_replace>
+	cmd := "/script parameterize find_sales_employees dept Sales"
 
 	response, err := svc.Ask(ctx, cmd)
 	if err != nil {
@@ -72,34 +72,34 @@ func TestMacroParameterizationWorkflow(t *testing.T) {
 	t.Logf("Command Response: %s", response)
 
 	// 5. Verify the Transformation
-	// Reload the macro
+	// Reload the script
 	tx, _ = sysDB.BeginTransaction(ctx, sop.ForReading)
-	store, _ = sysDB.OpenModelStore(ctx, "macros", tx)
-	var updatedMacro ai.Macro
-	store.Load(ctx, "general", macroName, &updatedMacro)
+	store, _ = sysDB.OpenModelStore(ctx, "scripts", tx)
+	var updatedScript ai.Script
+	store.Load(ctx, "general", scriptName, &updatedScript)
 	tx.Commit(ctx)
 
 	// Check Parameters list
 	foundParam := false
-	for _, p := range updatedMacro.Parameters {
+	for _, p := range updatedScript.Parameters {
 		if p == "dept" {
 			foundParam = true
 			break
 		}
 	}
 	if !foundParam {
-		t.Errorf("Expected 'dept' in Parameters list, got: %v", updatedMacro.Parameters)
+		t.Errorf("Expected 'dept' in Parameters list, got: %v", updatedScript.Parameters)
 	}
 
 	// Check Step 1 (Command Arg)
-	argQuery := updatedMacro.Steps[0].Args["query"].(string)
+	argQuery := updatedScript.Steps[0].Args["query"].(string)
 	expectedQuery := "select * from employees where department = '{{.dept}}'"
 	if argQuery != expectedQuery {
 		t.Errorf("Step 1 replacement failed.\nGot:      %s\nExpected: %s", argQuery, expectedQuery)
 	}
 
 	// Check Step 2 (Prompt)
-	prompt := updatedMacro.Steps[1].Prompt
+	prompt := updatedScript.Steps[1].Prompt
 	expectedPrompt := "Summarize the performance of the {{.dept}} team"
 	if prompt != expectedPrompt {
 		t.Errorf("Step 2 replacement failed.\nGot:      %s\nExpected: %s", prompt, expectedPrompt)

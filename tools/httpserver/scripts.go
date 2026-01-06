@@ -11,29 +11,29 @@ import (
 	"github.com/sharedcode/sop/ai/agent"
 )
 
-// ExecuteMacroRequest defines the payload for executing a macro.
-type ExecuteMacroRequest struct {
+// ExecuteScriptRequest defines the payload for executing a script.
+type ExecuteScriptRequest struct {
 	Name     string         `json:"name"`
 	Category string         `json:"category"`
 	Args     map[string]any `json:"args"`
 	Agent    string         `json:"agent"` // Optional: specify which agent to use
 }
 
-// handleExecuteMacro handles the POST /api/macros/execute endpoint.
-func handleExecuteMacro(w http.ResponseWriter, r *http.Request) {
+// handleExecuteScript handles the POST /api/scripts/execute endpoint.
+func handleExecuteScript(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var req ExecuteMacroRequest
+	var req ExecuteScriptRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("Invalid JSON body: %v", err), http.StatusBadRequest)
 		return
 	}
 
 	if req.Name == "" {
-		http.Error(w, "Macro name is required", http.StatusBadRequest)
+		http.Error(w, "Script name is required", http.StatusBadRequest)
 		return
 	}
 
@@ -62,12 +62,12 @@ func handleExecuteMacro(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Type assert to *agent.Service to access PlayMacro
+	// Type assert to *agent.Service to access PlayScript
 	// Note: loadedAgents is map[string]ai.Agent[map[string]any]
 	// We need to check if the underlying implementation is *agent.Service
 	agentSvc, ok := agentIntf.(*agent.Service)
 	if !ok {
-		http.Error(w, fmt.Sprintf("Agent '%s' does not support macro execution (not an *agent.Service)", agentID), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Agent '%s' does not support script execution (not an *agent.Service)", agentID), http.StatusInternalServerError)
 		return
 	}
 
@@ -84,16 +84,16 @@ func handleExecuteMacro(w http.ResponseWriter, r *http.Request) {
 	// We don't strictly need to set status 200 here, the first Write will do it.
 	// But it's good to be explicit if we haven't encountered an error yet.
 
-	// Use PlayMacro with the response writer
-	// PlayMacro writes JSON chunks to w
-	if err := agentSvc.PlayMacro(ctx, req.Name, req.Category, req.Args, w); err != nil {
+	// Use PlayScript with the response writer
+	// PlayScript writes JSON chunks to w
+	if err := agentSvc.PlayScript(ctx, req.Name, req.Category, req.Args, w); err != nil {
 		// If an error occurs during streaming, we can't easily change the HTTP status code
 		// if headers have already been sent (which happens on the first Write).
-		// However, PlayMacro is expected to write error details to the stream if possible,
+		// However, PlayScript is expected to write error details to the stream if possible,
 		// or we can log it here.
 		// Since we are streaming JSON, appending a JSON error object might be invalid if the stream is mid-object.
 		// For now, we just log it.
-		fmt.Printf("Error executing macro '%s': %v\n", req.Name, err)
+		fmt.Printf("Error executing script '%s': %v\n", req.Name, err)
 	}
 }
 

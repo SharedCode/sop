@@ -13,6 +13,13 @@ import (
 )
 
 func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (string, error) {
+	// Stub Mode Check
+	if a.Config.StubMode {
+		bytes, _ := json.MarshalIndent(args, "", "  ")
+		fmt.Printf("DEBUG: toolSelect called in STUB MODE with:\n%s\n", string(bytes))
+		return "Select executed successfully (STUBBED).", nil
+	}
+
 	p := ai.GetSessionPayload(ctx)
 	if p == nil {
 		return "", fmt.Errorf("no session payload found")
@@ -38,19 +45,19 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 		return "", fmt.Errorf("store name is required")
 	}
 
-	// Check if storeName is a Macro (View)
+	// Check if storeName is a Script (View)
 	if a.systemDB != nil {
-		// Try to find macro in "general" category (default)
+		// Try to find script in "general" category (default)
 		// We need a transaction for systemDB
 		sysTx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
 		if err == nil {
-			macroStore, err := a.systemDB.OpenModelStore(ctx, "macros", sysTx)
+			scriptStore, err := a.systemDB.OpenModelStore(ctx, "scripts", sysTx)
 			if err == nil {
-				var macro ai.Macro
-				if err := macroStore.Load(ctx, "general", storeName, &macro); err == nil {
+				var script ai.Script
+				if err := scriptStore.Load(ctx, "general", storeName, &script); err == nil {
 					sysTx.Commit(ctx)
-					// Found Macro! Execute it.
-					return a.executeMacroView(ctx, macro, args)
+					// Found Script! Execute it.
+					return a.executeScriptView(ctx, script, args)
 				}
 			}
 			sysTx.Rollback(ctx)
@@ -300,15 +307,9 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 					continue
 				} else {
 					// Select
-					var keyFormatted any = k
-					if indexSpec != nil {
-						if m, ok := k.(map[string]any); ok {
-							keyFormatted = OrderedKey{m: m, spec: indexSpec}
-						}
-					}
-
-					itemMap := map[string]any{"key": keyFormatted, "value": v}
-					finalItem := filterFields(itemMap, fields)
+					itemMap := map[string]any{"key": k, "value": v}
+					// Ensure we pass explicit fields if they exist, otherwise rely on indexSpec
+					finalItem := reorderItem(itemMap, fields, indexSpec)
 					emitter.Emit(finalItem)
 					count++
 				}

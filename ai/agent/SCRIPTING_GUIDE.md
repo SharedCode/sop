@@ -132,7 +132,7 @@ The scripting engine is based on **Traits** and **Capabilities**. The LLM acts a
 | `list_new` | - | - | `List` | Creates a new empty list. |
 | `list_append` | - | `list`, `item` | - | Appends an item to a list. |
 | `map_merge` | - | `map1`, `map2` | `Map` | Merges two maps. |
-| `call_macro` | - | `name`, `params` | - | Invokes a macro. `params` are injected as variables (scoped). |
+| `call_script` | - | `name`, `params` | - | Invokes a script. `params` are injected as variables (scoped). |
 | `list_append` | - | `list`, `item` | - | Appends an item to a list. |
 | `map_merge` | - | `map1`, `map2` | `Map` | Merges two maps. |
 
@@ -146,8 +146,8 @@ For complex logic that cannot be expressed as a simple pipeline, the engine supp
     *   Args: `condition` (CEL string or bool), `then` (block), `else` (block).
 *   **`loop`**: Iterate over a list.
     *   Args: `collection` (var name), `item_var` (name for item), `body` (block).
-*   **`call_macro`**: Invoke a stored macro.
-    *   Args: `name` (macro name).
+*   **`call_script`**: Invoke a stored script.
+    *   Args: `name` (script name).
 
 ### Cursor Operations (B-Tree)
 
@@ -170,7 +170,7 @@ Instead of `scan` (which returns a list), you can manually navigate the B-Tree c
           { "op": "get_current_value", "args": { "store": "s" }, "result_var": "val" },
           { "op": "if", "args": { 
               "condition": "val.age > 50", 
-              "then": [ { "op": "call_macro", "args": { "name": "process_senior" } } ] 
+              "then": [ { "op": "call_script", "args": { "name": "process_senior" } } ] 
           }},
           { "op": "next", "args": { "store": "s" } }
       ]

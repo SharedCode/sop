@@ -12,7 +12,7 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-func TestMultiDBMacroExecution(t *testing.T) {
+func TestMultiDBScriptExecution(t *testing.T) {
 	// 1. Setup Databases
 	ctx := context.Background()
 	dbPath1 := "test_multidb_1"
@@ -63,10 +63,10 @@ func TestMultiDBMacroExecution(t *testing.T) {
 		"db2": dbOpts2,
 	}, systemDB)
 
-	// 3. Define Macro
-	macro := ai.Macro{
-		Name: "multidb_macro",
-		Steps: []ai.MacroStep{
+	// 3. Define Script
+	script := ai.Script{
+		Name: "multidb_script",
+		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
 				Command: "select",
@@ -86,15 +86,15 @@ func TestMultiDBMacroExecution(t *testing.T) {
 		},
 	}
 
-	// Save Macro
+	// Save Script
 	{
 		tx, _ := systemDB.BeginTransaction(ctx, sop.ForWriting)
-		store, _ := systemDB.OpenModelStore(ctx, "macros", tx)
-		store.Save(ctx, "general", macro.Name, &macro)
+		store, _ := systemDB.OpenModelStore(ctx, "scripts", tx)
+		store.Save(ctx, "general", script.Name, &script)
 		tx.Commit(ctx)
 	}
 
-	// 4. Execute Macro via ExecuteTool (simulating LLM call)
+	// 4. Execute Script via ExecuteTool (simulating LLM call)
 	// We need to simulate a session where a transaction is active on "db1" (default)
 
 	// Case A: No active transaction in payload (Auto-commit mode)
@@ -105,11 +105,11 @@ func TestMultiDBMacroExecution(t *testing.T) {
 		}
 		ctxWithPayload := context.WithValue(ctx, "session_payload", payload)
 
-		// We call ExecuteTool directly for the macro
-		// But wait, ExecuteTool for a macro calls runMacro, which calls ExecuteTool for steps.
-		res, err := daAgent.Execute(ctxWithPayload, "multidb_macro", map[string]any{})
+		// We call ExecuteTool directly for the script
+		// But wait, ExecuteTool for a script calls runScript, which calls ExecuteTool for steps.
+		res, err := daAgent.Execute(ctxWithPayload, "multidb_script", map[string]any{})
 		if err != nil {
-			t.Fatalf("Macro execution failed: %v", err)
+			t.Fatalf("Script execution failed: %v", err)
 		}
 		t.Logf("Result: %s", res)
 	})
@@ -127,7 +127,7 @@ func TestMultiDBMacroExecution(t *testing.T) {
 		ctxWithPayload := context.WithValue(ctx, "session_payload", payload)
 
 		// This should succeed now that we handle cross-db transactions
-		res, err := daAgent.Execute(ctxWithPayload, "multidb_macro", map[string]any{})
+		res, err := daAgent.Execute(ctxWithPayload, "multidb_script", map[string]any{})
 		if err != nil {
 			t.Errorf("Expected success, but got error: %v", err)
 		} else {

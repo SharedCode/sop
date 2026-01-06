@@ -103,7 +103,7 @@ func TestReproLoadFailedError(t *testing.T) {
 		Response: fmt.Sprintf("```json\n%s\n```", string(toolCallJSON)),
 	}
 
-	// We need a system DB for macros
+	// We need a system DB for scripts
 	systemDBPath := "test_repro_system_db"
 	os.RemoveAll(systemDBPath)
 	defer os.RemoveAll(systemDBPath)
@@ -144,7 +144,7 @@ func TestReproLoadFailedError(t *testing.T) {
 
 	// Start recording
 	// Note: /record is handled by Service.Ask directly, not pipeline
-	resp, err := svc.Ask(ctx, "/record my_macro", ai.WithSessionPayload(payload))
+	resp, err := svc.Ask(ctx, "/record my_script", ai.WithSessionPayload(payload))
 	if err != nil {
 		t.Fatalf("Start recording failed: %v", err)
 	}

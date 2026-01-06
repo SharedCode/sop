@@ -10,7 +10,7 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 )
 
-func TestMacro_Refine(t *testing.T) {
+func TestScript_Refine(t *testing.T) {
 	// 1. Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -24,7 +24,7 @@ func TestMacro_Refine(t *testing.T) {
 	// Mock Generator for Refine
 	mockGen := &MockScriptedGenerator{
 		Responses: []string{
-			// Response for /macro refine
+			// Response for /script refine
 			`{
 				"summary": "Fetches user data for a specific region.",
 				"new_parameters": ["region"],
@@ -46,24 +46,24 @@ func TestMacro_Refine(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
-	// 2. Create Macro with hardcoded value
-	_, _, err := svc.handleSessionCommand(ctx, "/macro create refine_test Original Description", sysDB)
+	// 2. Create Script with hardcoded value
+	_, _, err := svc.handleSessionCommand(ctx, "/script create refine_test Original Description", sysDB)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
 
-	svc.session.LastStep = &ai.MacroStep{
+	svc.session.LastStep = &ai.ScriptStep{
 		Type:    "command",
 		Command: "select",
 		Args:    map[string]any{"store": "users", "region": "US"},
 	}
-	_, _, err = svc.handleSessionCommand(ctx, "/macro step add refine_test bottom", sysDB)
+	_, _, err = svc.handleSessionCommand(ctx, "/script step add refine_test bottom", sysDB)
 	if err != nil {
 		t.Fatalf("Step add failed: %v", err)
 	}
 
-	// 3. Run /macro refine
-	resp, handled, err := svc.handleSessionCommand(ctx, "/macro refine refine_test", sysDB)
+	// 3. Run /script refine
+	resp, handled, err := svc.handleSessionCommand(ctx, "/script refine refine_test", sysDB)
 	if err != nil {
 		t.Fatalf("Refine failed: %v", err)
 	}
@@ -77,8 +77,8 @@ func TestMacro_Refine(t *testing.T) {
 		t.Errorf("Refine response missing replacement info: %s", resp)
 	}
 
-	// 4. Run /macro refine apply
-	resp, handled, err = svc.handleSessionCommand(ctx, "/macro refine apply", sysDB)
+	// 4. Run /script refine apply
+	resp, handled, err = svc.handleSessionCommand(ctx, "/script refine apply", sysDB)
 	if err != nil {
 		t.Fatalf("Refine apply failed: %v", err)
 	}
@@ -86,8 +86,8 @@ func TestMacro_Refine(t *testing.T) {
 		t.Errorf("Unexpected apply response: %s", resp)
 	}
 
-	// 5. Verify Macro Changes (Summary & Params)
-	resp, handled, err = svc.handleSessionCommand(ctx, "/macro show refine_test", sysDB)
+	// 5. Verify Script Changes (Summary & Params)
+	resp, handled, err = svc.handleSessionCommand(ctx, "/script show refine_test", sysDB)
 	if err != nil {
 		t.Fatalf("Show failed: %v", err)
 	}

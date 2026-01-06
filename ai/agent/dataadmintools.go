@@ -20,15 +20,15 @@ func (a *DataAdminAgent) registerTools() {
 	a.registry.Register("list_databases", "Lists all available databases.", "()", a.toolListDatabases)
 	a.registry.Register("list_stores", "Lists all stores in the current or specified database.", "(database: string)", a.toolListStores)
 
-	// Macro Management
-	a.registry.Register("list_macros", "Lists all available macros.", "()", a.toolListMacros)
-	a.registry.Register("get_macro_details", "Get details of a specific macro.", "(name: string)", a.toolGetMacroDetails)
-	a.registry.Register("macro_insert_step", "Insert a step into a macro.", "(macro: string, index: number, type: string, ...params)", a.toolMacroInsertStep)
-	a.registry.Register("macro_delete_step", "Delete a step from a macro.", "(macro: string, index: number)", a.toolMacroDeleteStep)
-	a.registry.Register("macro_update_step", "Update a step in a macro.", "(macro: string, index: number, ...params)", a.toolMacroUpdateStep)
-	a.registry.Register("macro_reorder_steps", "Move a step in a macro to a new position.", "(macro: string, from_index: number, to_index: number)", a.toolMacroReorderSteps)
-	a.registry.Register("macro_add_step_from_last", "Add the last executed tool call as a new step to a macro. If 'index' is not provided, it appends to the end. If 'index' is provided, it inserts 'after' that index by default, unless 'position' is set to 'before'.", "(macro: string, index: number, position: string)", a.toolMacroAddStepFromLast)
-	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new macro or block.", "(mode: string, name: string)", a.toolRefactorMacro)
+	// Script Management
+	a.registry.Register("list_scripts", "Lists all available scripts.", "()", a.toolListScripts)
+	a.registry.Register("get_script_details", "Get details of a specific script.", "(name: string)", a.toolGetScriptDetails)
+	a.registry.Register("script_insert_step", "Insert a step into a script.", "(script: string, index: number, type: string, ...params)", a.toolScriptInsertStep)
+	a.registry.Register("script_delete_step", "Delete a step from a script.", "(script: string, index: number)", a.toolScriptDeleteStep)
+	a.registry.Register("script_update_step", "Update a step in a script.", "(script: string, index: number, ...params)", a.toolScriptUpdateStep)
+	a.registry.Register("script_reorder_steps", "Move a step in a script to a new position.", "(script: string, from_index: number, to_index: number)", a.toolScriptReorderSteps)
+	a.registry.Register("script_add_step_from_last", "Add the last executed tool call as a new step to a script. If 'index' is not provided, it appends to the end. If 'index' is provided, it inserts 'after' that index by default, unless 'position' is set to 'before'.", "(script: string, index: number, position: string)", a.toolScriptAddStepFromLast)
+	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new script or block.", "(mode: string, name: string)", a.toolRefactorScript)
 
 	// High-Level Tools
 	a.registry.Register("select", "Selects data from a store. Arguments: store (string), key (any, optional), value (any, optional), fields (list<string>, optional), limit (number, optional), order_by (string, optional, e.g. 'field desc'), action (string, optional: 'delete', 'update'), update_values (map, optional).", "(store: string, ...)", a.toolSelect)
@@ -69,7 +69,8 @@ Operations:
 - join_right(input, store, type, on) -> cursor/list (Pipeline alias for join)
 - if(condition, then, else)
 - loop(condition, body)
-- call_macro(name, params)
+- call_script(name, params)
+- return(value) -> stops execution and returns value
 
 Example Pipeline Join:
 [
@@ -79,9 +80,9 @@ Example Pipeline Join:
   {"op": "open_store", "args": {"transaction": "tx1", "name": "orders"}, "result_var": "orders"},
   {"op": "scan", "args": {"store": "users", "stream": true}, "result_var": "stream"},
   {"op": "join_right", "args": {"store": "orders", "on": {"user_id": "user_id"}}, "input_var": "stream", "result_var": "stream"},
-  {"op": "limit", "args": {"limit": 5}, "input_var": "stream", "result_var": "final_result"},
+  {"op": "limit", "args": {"limit": 5}, "input_var": "stream", "result_var": "output"},
   {"op": "commit_tx", "args": {"transaction": "tx1"}}
-]`, "(script: [{op: string, args: map, input_var: string, result_var: string}])", a.toolExecuteScript)
+]`, "(script: Array<{op: string, args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
 }
 
 func (a *DataAdminAgent) toolListDatabases(ctx context.Context, args map[string]any) (string, error) {

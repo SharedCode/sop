@@ -10,7 +10,7 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 )
 
-func TestMacro_Play_ArgumentParsing_Correct(t *testing.T) {
+func TestScript_Play_ArgumentParsing_Correct(t *testing.T) {
 	// 1. Setup Temp DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -20,13 +20,13 @@ func TestMacro_Play_ArgumentParsing_Correct(t *testing.T) {
 	}
 	sysDB := database.NewDatabase(dbOpts)
 
-	// 2. Create a Macro with Parameters
+	// 2. Create a Script with Parameters
 	ctx := context.Background()
-	macroName := "test_macro_args"
-	macro := ai.Macro{
-		Name:       macroName,
+	scriptName := "test_script_args"
+	script := ai.Script{
+		Name:       scriptName,
 		Parameters: []string{"table", "role", "limit"},
-		Steps: []ai.MacroStep{
+		Steps: []ai.ScriptStep{
 			{
 				Type:   "ask",
 				Prompt: "Selecting from {{.table}} where role={{.role}} limit={{.limit}}",
@@ -34,10 +34,10 @@ func TestMacro_Play_ArgumentParsing_Correct(t *testing.T) {
 		},
 	}
 
-	// Save Macro
+	// Save Script
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
-	store, _ := sysDB.OpenModelStore(ctx, "macros", tx)
-	store.Save(ctx, "general", macroName, macro)
+	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
+	store.Save(ctx, "general", scriptName, script)
 	tx.Commit(ctx)
 
 	// 3. Initialize Service
@@ -52,22 +52,22 @@ func TestMacro_Play_ArgumentParsing_Correct(t *testing.T) {
 	}{
 		{
 			name:      "All Named",
-			cmd:       "/play test_macro_args table=users role=admin limit=10",
+			cmd:       "/play test_script_args table=users role=admin limit=10",
 			wantError: false,
 		},
 		{
 			name:      "All Positional",
-			cmd:       "/play test_macro_args users admin 10",
+			cmd:       "/play test_script_args users admin 10",
 			wantError: false,
 		},
 		{
 			name:      "Mixed (Positional then Named)",
-			cmd:       "/play test_macro_args users role=admin limit=10",
+			cmd:       "/play test_script_args users role=admin limit=10",
 			wantError: false,
 		},
 		{
 			name:      "Missing Parameter",
-			cmd:       "/play test_macro_args users",
+			cmd:       "/play test_script_args users",
 			wantError: true,
 			errorMsg:  "Missing required parameters",
 		},

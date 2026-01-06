@@ -2,7 +2,18 @@
 
 [![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions) [![CI](https://github.com/SharedCode/sop/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/sop/actions/workflows/go.yml) [![codecov](https://codecov.io/gh/SharedCode/sop/branch/master/graph/badge.svg)](https://app.codecov.io/github/SharedCode/sop) [![Go Reference](https://pkg.go.dev/badge/github.com/sharedcode/sop.svg)](https://pkg.go.dev/github.com/sharedcode/sop) [![Go Report Card](https://goreportcard.com/badge/github.com/sharedcode/sop)](https://goreportcard.com/report/github.com/sharedcode/sop)
 
-**Polyglot** storage engine for high-performance, ACID storage with B-tree indexing, Redis-backed caching, and optional erasure-coded replication.
+**SOP (Scalable Objects Persistence)** is a Universal **Computing Platform** and **AI Kit**.
+
+It combines a high-performance **Polyglot Storage Engine** (ACID B-trees, Caching, Erasure Coding) with a versatile **AI Scripting & Computing Engine**.
+
+This architecture allows SOP to be packaged into diverse applications:
+*   **AI Kit / Platform**: Adopt the AI Assistant into any domain using the versatile Scripting "engine".
+*   **Embedded Systems**: A powerful combination of an embedded database and a scripting/compute engine.
+*   **Personal AI Assistant**: A web-based, privacy-focused assistant for personal data.
+*   **Enterprise Database**: Scalable, ACID-compliant storage for business-critical applications.
+*   **Big Data / Media**: High-performance storage for media libraries (e.g., Hollywood production databases).
+*   **Swarm Computing**: Future-ready foundation for map-reduce and swarm architectures.
+
 Available for **Go**, **Python**, **Java**, **C#**, and **Rust**.
 
 ## 🚀 Getting Started

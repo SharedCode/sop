@@ -4,32 +4,32 @@ The SOP Agent Framework (`ai/agent`) is a powerful system for building autonomou
 
 ## Core Concepts
 
-### 1. Macros ("Natural Language Programming")
-Macros are the building blocks of agent behavior. They are JSON-based scripts that define a sequence of steps.
-*   **Compiled Instructions**: Macros are parsed and executed by the `Service`.
+### 1. Scripts ("Natural Language Programming")
+Scripts (formerly Scripts) are the building blocks of agent behavior. They are JSON-based functional scripts that define a sequence of steps.
+*   **Compiled Instructions**: Scripts are parsed and executed by the `Service`.
 *   **Inspectable**: Tools and steps are defined in a registry, allowing for validation and introspection.
 
 ### 2. Swarm Computing (Async Execution)
 The framework supports "Swarm Computing" by allowing steps to run in parallel.
 *   **Async Steps**: Any step can be marked as `"is_async": true`.
 *   **Transaction Isolation**: Async steps are **detached** from the parent transaction. They must start their own transaction if they need to write to the database. This prevents race conditions and allows for "In-Flight Data Merging" at the storage layer.
-*   **Nested Swarms**: A step of type `macro` can be run asynchronously even if the parent macro is in a transaction. The nested macro will start with a detached context and can establish its own transaction (e.g., on a different database), enabling powerful hierarchical agent swarms.
-*   **Safeguards**: For non-macro steps (like `command` or `set`), the system enforces synchronous execution if an active transaction exists to prevent accidental data corruption.
+*   **Nested Swarms**: A step of type `call_script` can be run asynchronously even if the parent script is in a transaction. The nested script will start with a detached context and can establish its own transaction (e.g., on a different database), enabling powerful hierarchical agent swarms.
+*   **Safeguards**: For non-script steps (like `command` or `set`), the system enforces synchronous execution if an active transaction exists to prevent accidental data corruption.
 *   **Error Propagation**: By default, if an async step fails, it cancels the entire group. You can override this with `"continue_on_error": true`.
 
 ### 3. Transaction Inheritance (Subroutines)
-If a nested macro is run **synchronously** (`"is_async": false`) and does **not** specify a different database, it acts as a **Subroutine**.
+If a nested script is run **synchronously** (`"is_async": false`) and does **not** specify a different database, it acts as a **Subroutine**.
 *   **Inheritance**: It inherits the parent's active transaction.
 *   **Atomicity**: Operations in the subroutine are part of the parent's atomic unit of work. If the subroutine fails, the parent transaction rolls back.
 
 ### 4. Saga Pattern (Multi-Database Workflows)
-SOP encourages the **Saga Pattern** for workflows that span multiple databases. Instead of a single distributed transaction (which is complex and brittle), you chain macros where each macro operates on a specific database.
+SOP encourages the **Saga Pattern** for workflows that span multiple databases. Instead of a single distributed transaction (which is complex and brittle), you chain scripts where each script operates on a specific database.
 
-*   **Database-Scoped Macros**: A macro can specify a `"database"` field.
-*   **Automatic Transaction Wrapping**: When a macro specifies a database, the system automatically:
+*   **Database-Scoped Scripts**: A script can specify a `"database"` field.
+*   **Automatic Transaction Wrapping**: When a script specifies a database, the system automatically:
     1.  Switches the context to that database.
     2.  Starts a new transaction (`ForWriting`).
-    3.  Commits the transaction if the macro succeeds.
+    3.  Commits the transaction if the script succeeds.
     4.  Rolls back if it fails.
 
 ### 4. Tool Registry
@@ -40,21 +40,21 @@ Tools are no longer hardcoded strings. They are defined in a structured `Registr
 ### 5. Explicit Transaction Management
 While automatic transaction wrapping (Saga Pattern) is recommended for most cases, you can still manage transactions explicitly using the `manage_transaction` tool. This is useful when:
 *   **Minimizing Lock Time**: You want to perform heavy AI processing or external API calls *outside* of a transaction, and only wrap the database writes.
-*   **Multiple Transactions**: A single macro needs to perform multiple independent commits.
-*   **Inherited Context**: You are running a macro without a specific `database` field and want to control the transaction on the inherited database connection.
+*   **Multiple Transactions**: A single script needs to perform multiple independent commits.
+*   **Inherited Context**: You are running a script without a specific `database` field and want to control the transaction on the inherited database connection.
 
 ---
 
-## Macro Schema
+## Script Schema
 
-A `Macro` consists of metadata and a list of `Steps`.
+A `Script` consists of metadata and a list of `Steps`.
 
 ```json
 {
-  "name": "example_macro",
+  "name": "example_script",
   "description": "Demonstrates async and db features",
   "parameters": ["user_id"],
-  "database": "users_db", // Optional: Target DB for this macro
+  "database": "users_db", // Optional: Target DB for this script
   "steps": [ ... ]
 }
 ```
@@ -69,12 +69,12 @@ A `Macro` consists of metadata and a list of `Steps`.
 | `loop` | Iterate over a list | `list`, `iterator`, `steps` |
 | `fetch` | Retrieve data from B-Tree | `source`, `resource`, `variable` |
 | `command` | Execute a registered tool | `command`, `args` |
-| `macro` | Run a nested macro | `macro_name`, `macro_args` |
+| `script` | Run a nested script | `script_name`, `script_args` |
 
 ### Async & Error Handling Fields
 
 *   `"is_async": true`: Runs the step in a background goroutine.
-*   `"continue_on_error": true`: If this step fails, do not stop the rest of the macro.
+*   `"continue_on_error": true`: If this step fails, do not stop the rest of the script.
 
 ---
 
@@ -106,9 +106,9 @@ Run two heavy tasks in parallel.
 
 ### 2. Saga Pattern (Multi-DB)
 
-Orchestrate a workflow across two databases using nested macros.
+Orchestrate a workflow across two databases using nested scripts.
 
-**Macro 1: Update User (on `users_db`)**
+**Script 1: Update User (on `users_db`)**
 ```json
 {
   "name": "update_user",
@@ -120,7 +120,7 @@ Orchestrate a workflow across two databases using nested macros.
 }
 ```
 
-**Macro 2: Log Audit (on `audit_db`)**
+**Script 2: Log Audit (on `audit_db`)**
 ```json
 {
   "name": "log_audit",
@@ -132,20 +132,20 @@ Orchestrate a workflow across two databases using nested macros.
 }
 ```
 
-**Macro 3: Orchestrator (Saga)**
+**Script 3: Orchestrator (Saga)**
 ```json
 {
   "name": "user_update_saga",
   "steps": [
     {
-      "type": "macro",
-      "macro_name": "update_user",
-      "macro_args": {"uid": "123"}
+      "type": "script",
+      "script_name": "update_user",
+      "script_args": {"uid": "123"}
     },
     {
-      "type": "macro",
-      "macro_name": "log_audit",
-      "macro_args": {"action": "User 123 updated"}
+      "type": "script",
+      "script_name": "log_audit",
+      "script_args": {"action": "User 123 updated"}
     }
   ]
 }
@@ -220,8 +220,32 @@ The engine supports performing actions directly within the query execution pipel
     *   *Performance*: These actions benefit from the same **Merge Join** and **Index Seeking** optimizations as standard queries. This allows for massive bulk updates across related tables with **optimal** I/O patterns.
 
 ### 6. Transaction Safety & Auto-Rollback
-To ensure data integrity even when using powerful bulk operations or complex multi-step macros:
+To ensure data integrity even when using powerful bulk operations or complex multi-step scripts:
 
-*   **Auto-Rollback**: The Agent Runner enforces a "Clean Slate" policy. If a top-level macro finishes execution (successfully or with an error) and leaves a transaction open (e.g., a user forgot to call `commit`), the runner **automatically rolls back** the transaction.
+*   **Auto-Rollback**: The Agent Runner enforces a "Clean Slate" policy. If a top-level script finishes execution (successfully or with an error) and leaves a transaction open (e.g., a user forgot to call `commit`), the runner **automatically rolls back** the transaction.
 *   **Warning**: A warning is logged to the output, alerting the user that their uncommitted changes were discarded.
 *   **Benefit**: This prevents "dangling transactions" from locking resources or leaking uncommitted state into subsequent agent interactions.
+
+---
+
+## Testing & Development
+
+### Pipeline Integration Test Harness
+We have a dedicated integration test harness for verifying the full RAG pipeline (Service + DataAdminAgent) end-to-end without running the full HTTP server. This is useful for debugging agent logic, tool execution, and session history recording.
+
+**File**: `ai/agent/pipeline_integration_test.go`
+
+**Features**:
+*   **Real LLM Integration**: Uses the configured Gemini model to generate real plans.
+*   **Stub Mode**: Runs with `StubMode: true`, so it simulates DB operations without side effects.
+*   **Full Pipeline**: Tests the `Service` -> `Pipeline` -> `DataAdminAgent` flow.
+*   **History Verification**: Verifies that `last-tool` correctly captures complex tool arguments (like scripts).
+
+**How to Run**:
+```bash
+# Ensure GEMINI_API_KEY is set
+export GEMINI_API_KEY="your_key_here"
+
+# Run the specific test
+go test -v ./ai/agent -run TestServiceIntegration_LastTool
+```

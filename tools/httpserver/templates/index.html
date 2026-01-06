@@ -133,9 +133,9 @@
         .progress-dot.active { background: var(--active-bg); }
         .progress-dot.completed { background: var(--success-bg); }
 
-        /* Macro Tree View */
-        .macro-tree ul { list-style: none; padding-left: 20px; border-left: 1px solid var(--border-color); margin: 5px 0; }
-        .macro-tree li { margin: 5px 0; padding: 0; background: transparent; }
+        /* Script Tree View */
+        .script-tree ul { list-style: none; padding-left: 20px; border-left: 1px solid var(--border-color); margin: 5px 0; }
+        .script-tree li { margin: 5px 0; padding: 0; background: transparent; }
         .step-card { border: 1px solid var(--border-color); border-radius: 4px; background: var(--input-bg); overflow: hidden; }
         .step-header { padding: 5px 8px; display: flex; align-items: center; gap: 8px; background: var(--table-header-bg); cursor: pointer; user-select: none; }
         .step-header:hover { background: var(--hover-bg); }
@@ -147,7 +147,7 @@
         .type-fetch { background-color: #28a745; }
         .type-say { background-color: #e83e8c; }
         .type-command { background-color: #fd7e14; }
-        .type-macro { background-color: #6610f2; }
+        .type-script { background-color: #6610f2; }
         .step-summary { flex: 1; font-size: 12px; font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .step-details { padding: 8px; font-size: 12px; border-top: 1px solid var(--border-color); display: none; }
         .step-details.open { display: block; }
@@ -947,7 +947,7 @@
                     <span>Populate with Demo Data (E-commerce)</span>
                 </label>
                 <small style="display: block; margin-top: 5px; color: var(--text-muted);">
-                    Optional: Creates 'users', 'products', and 'orders' stores with sample data. Ideal for testing AI chat and macros.
+                    Optional: Creates 'users', 'products', and 'orders' stores with sample data. Ideal for testing AI chat and scripts.
                 </small>
             </div>
         </div>
@@ -2079,23 +2079,23 @@
             keys.forEach(key => {
                 let val = currentItemValue[key];
                 
-                // Check if this is a macro store
-                const isMacroStore = currentStore && currentStore.toLowerCase() === 'macros';
+                // Check if this is a script store
+                const isScriptStore = currentStore && currentStore.toLowerCase() === 'scripts';
 
-                // Skip 'category' field for macros as it is redundant with the Key
-                if (isMacroStore && key.toLowerCase() === 'category') {
+                // Skip 'category' field for scripts as it is redundant with the Key
+                if (isScriptStore && key.toLowerCase() === 'category') {
                     return;
                 }
 
-                // Special handling for 'steps' in 'macros' store
-                if (isMacroStore && key === 'steps' && Array.isArray(val)) {
+                // Special handling for 'steps' in 'scripts' store
+                if (isScriptStore && key === 'steps' && Array.isArray(val)) {
                     // Hidden input to preserve value for save
                     const safeVal = String(JSON.stringify(val)).replace(/"/g, '&quot;');
                     valueHtml += `
                         <div class="form-group" style="display: flex; flex-direction: column;">
                             <label class="form-label">${key}</label>
                             <input type="hidden" class="value-input" data-key="${key}" value="${safeVal}">
-                            <button onclick='openMacroModal()' style="width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center;">
+                            <button onclick='openScriptModal()' style="width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center;">
                                 <span>View ${val.length} Steps (Complex)</span>
                                 <span>&#x2197;</span>
                             </button>
@@ -2104,8 +2104,8 @@
                     return;
                 }
 
-                // Special handling for 'database' in 'macros' store
-                if (isMacroStore && key === 'database') {
+                // Special handling for 'database' in 'scripts' store
+                if (isScriptStore && key === 'database') {
                     let optionsHtml = '<option value="">(None / Portable)</option>';
                     if (availableDatabases && availableDatabases.length > 0) {
                         availableDatabases.forEach(db => {
@@ -2976,9 +2976,9 @@
                 e.preventDefault();
                 return;
             }
-            const macroModal = document.getElementById('macro-modal');
-            if (macroModal && macroModal.style.display !== 'none') {
-                closeMacroModal();
+            const scriptModal = document.getElementById('script-modal');
+            if (scriptModal && scriptModal.style.display !== 'none') {
+                closeScriptModal();
                 e.preventDefault();
                 return;
             }
@@ -3316,7 +3316,47 @@
                 console.log("First item structure:", JSON.stringify(items[0]));
             }
 
-            // Determine headers
+            // Check if items have the specific SOP 'key'/'value' structure
+            const isSopStructure = items.some(item => 
+                (item && typeof item === 'object') && ('key' in item || 'value' in item));
+
+            let headers = [];
+            let csv = "";
+
+            if (!isSopStructure) {
+                // Handle generic JSON array (e.g. Script steps)
+                let fields = new Set();
+                items.forEach(item => {
+                    if (item && typeof item === 'object') {
+                        Object.keys(item).forEach(k => fields.add(k));
+                    }
+                });
+                headers = Array.from(fields);
+                csv = headers.join(", ") + "\n";
+                
+                items.forEach(item => {
+                    let row = [];
+                    headers.forEach(h => {
+                        let val = item[h];
+                         if (typeof val === 'object' && val !== null) {
+                            val = JSON.stringify(val).replace(/"/g, '""'); 
+                            val = `"${val}"`;
+                        } else if (typeof val === 'string') {
+                             if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+                                val = val.replace(/"/g, '""');
+                                val = `"${val}"`;
+                             }
+                        } else if (val === undefined || val === null) {
+                            val = "";
+                        }
+                        row.push(val);
+                    });
+                    csv += row.join(", ") + "\n";
+                });
+                return csv;
+            }
+
+            // Existing SOP Structure Logic
             let keyIsMap = false;
             let valueIsMap = false;
             let keyFields = new Set();
@@ -3338,7 +3378,6 @@
                 }
             });
 
-            let headers = [];
             // Use Set insertion order (which matches server order), do NOT sort.
             let kFieldsArr = Array.from(keyFields);
             let vFieldsArr = Array.from(valueFields);
@@ -3355,7 +3394,7 @@
                 headers.push("Value");
             }
 
-            let csv = headers.join(", ") + "\n";
+            csv = headers.join(", ") + "\n";
 
             items.forEach(item => {
                 let row = [];
@@ -3679,9 +3718,9 @@
 
     // --- Macro Tree View Logic ---
 
-    function openMacroModal() {
-        const modal = document.getElementById('macro-modal');
-        const container = document.getElementById('macro-tree-container');
+    function openScriptModal() {
+        const modal = document.getElementById('script-modal');
+        const container = document.getElementById('script-tree-container');
         container.innerHTML = '';
         
         let steps = [];
@@ -3700,8 +3739,8 @@
         modal.style.display = 'block';
     }
 
-    function closeMacroModal() {
-        document.getElementById('macro-modal').style.display = 'none';
+    function closeScriptModal() {
+        document.getElementById('script-modal').style.display = 'none';
     }
 
     function renderMacroSteps(steps, container) {
@@ -3721,7 +3760,7 @@
             else if (step.type === 'fetch') summary = `Fetch: ${step.resource} -> ${step.variable}`;
             else if (step.type === 'say') summary = `Say: "${step.message}"`;
             else if (step.type === 'command') summary = `Cmd: ${step.command} ${JSON.stringify(step.args || {})}`;
-            else if (step.type === 'macro') summary = `Run Macro: ${step.macro_name}`;
+            else if (step.type === 'script') summary = `Run Script: ${step.script_name}`;
             else summary = JSON.stringify(step);
 
             // Check for children (nested steps)
@@ -6282,10 +6321,10 @@
                     return;
                 }
 
-                // Macro Modal
-                const macroModal = document.getElementById('macro-modal');
-                if (macroModal && macroModal.style.display !== 'none') {
-                    closeMacroModal();
+                // Script Modal
+                const scriptModal = document.getElementById('script-modal');
+                if (scriptModal && scriptModal.style.display !== 'none') {
+                    closeScriptModal();
                     return;
                 }
             }
@@ -6545,14 +6584,14 @@
     </div>
 </div>
 
-<!-- Macro Steps Modal -->
-<div id="macro-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1200;">
+<!-- Script Steps Modal -->
+<div id="script-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1200;">
     <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background:var(--bg-color); color:var(--text-color); padding:0; border-radius:5px; width:800px; max-width:95%; height: 80vh; display: flex; flex-direction: column; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
         <div style="padding: 15px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
-            <h3 style="margin:0;">Macro Steps Viewer</h3>
-            <button onclick="closeMacroModal()" style="padding: 4px 8px; font-size: 12px;">Close</button>
+            <h3 style="margin:0;">Script Steps Viewer</h3>
+            <button onclick="closeScriptModal()" style="padding: 4px 8px; font-size: 12px;">Close</button>
         </div>
-        <div id="macro-tree-container" class="macro-tree" style="flex: 1; overflow-y: auto; padding: 15px; background: var(--sidebar-bg);">
+        <div id="script-tree-container" class="script-tree" style="flex: 1; overflow-y: auto; padding: 15px; background: var(--sidebar-bg);">
             <!-- Tree content goes here -->
         </div>
     </div>
@@ -6589,7 +6628,7 @@
                 <li>"Show me all users sorted by Age descending"</li>
                 <li>"Find orders for user 'John' with total amount > 500"</li>
                 <li>"List products in 'Electronics' category"</li>
-                <li>"Create a macro named 'expensive_orders' to find orders over $1000"</li>
+                <li>"Create a script named 'expensive_orders' to find orders over $1000"</li>
             </ul>
             {{end}}
         </div>

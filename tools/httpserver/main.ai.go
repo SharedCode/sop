@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	log "log/slog"
 	"net/http"
 	"os"
@@ -18,11 +20,32 @@ import (
 	"github.com/sharedcode/sop/ai/obfuscation"
 )
 
+// ObfuscationMode defines the global obfuscation policy.
+type ObfuscationMode string
+
+const (
+	// ObfuscationDisabled means no obfuscation globally.
+	ObfuscationDisabled ObfuscationMode = "disabled"
+	// ObfuscationPerDatabase means we respect obfuscation flag per database.
+	ObfuscationPerDatabase ObfuscationMode = "per_database"
+	// ObfuscationAllDatabases means we enforce obfuscation globally.
+	ObfuscationAllDatabases ObfuscationMode = "all_databases"
+)
+
 func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
+		return
+	}
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	log.Debug("Received AIChat Request", "body", string(bodyBytes))
 
 	var req struct {
 		Message   string `json:"message"`
@@ -34,6 +57,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Error("Invalid JSON body", "error", err)
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
@@ -45,11 +69,13 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// Validate Database if provided
 	if req.Database != "" {
 		if _, err := getDBOptions(req.Database); err != nil {
+			responseMap := map[string]string{
+				"error": fmt.Sprintf("Invalid database '%s': %v", req.Database, err),
+			}
+			log.Info("Response: Invalid Database", "response", responseMap)
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": fmt.Sprintf("Invalid database '%s': %v", req.Database, err),
-			})
+			json.NewEncoder(w).Encode(responseMap)
 			return
 		}
 	}
@@ -62,13 +88,13 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// Check if a specific RAG Agent is requested
 	agentSvc, exists := loadedAgents[req.Agent]
 	if !exists {
-		// If the requested agent doesn't exist, we could fall back or error.
-		// For now, let's error to be explicit.
+		responseMap := map[string]string{
+			"error": fmt.Sprintf("Agent '%s' is not initialized or not found.", req.Agent),
+		}
+		log.Info("Response: Agent Not Found", "response", responseMap)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": fmt.Sprintf("Agent '%s' is not initialized or not found.", req.Agent),
-		})
+		json.NewEncoder(w).Encode(responseMap)
 		return
 	}
 
@@ -144,11 +170,13 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	// Initialize Agent Session (Transaction)
 	if err := agentSvc.Open(ctx); err != nil {
+		responseMap := map[string]string{
+			"error": fmt.Sprintf("Agent '%s' failed to open session: %v", req.Agent, err),
+		}
+		log.Error("Response: Session Open Failed", "response", responseMap)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": fmt.Sprintf("Agent '%s' failed to open session: %v", req.Agent, err),
-		})
+		json.NewEncoder(w).Encode(responseMap)
 		return
 	}
 	defer func() {
@@ -160,11 +188,13 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// agentSvc delegates to dataadmin agent as necessary for LLM ask.
 	response, err := agentSvc.Ask(ctx, fullMessage, askOpts...)
 	if err != nil {
+		responseMap := map[string]string{
+			"error": fmt.Sprintf("Agent '%s' failed: %v", req.Agent, err),
+		}
+		log.Error("Response: Agent Ask Failed", "response", responseMap)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": fmt.Sprintf("Agent '%s' failed: %v", req.Agent, err),
-		})
+		json.NewEncoder(w).Encode(responseMap)
 		return
 	}
 
@@ -188,52 +218,59 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		// We no longer execute tools here. We return the raw response.
 		// Or should we error?
 		// Let's return it as a response so the user sees what the agent tried to do.
+		responseMap := map[string]string{
+			"response": fmt.Sprintf("Agent attempted to call tool '%s' but failed to execute it internally.", toolCall.Tool),
+		}
+		log.Info("Response: Raw Tool Call", "response", responseMap)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(map[string]string{
-			"response": fmt.Sprintf("Agent attempted to call tool '%s' but failed to execute it internally.", toolCall.Tool),
-		})
+		json.NewEncoder(w).Encode(responseMap)
 		return
 	}
 
+	responseMap := map[string]string{
+		"response": response,
+	}
+	log.Debug("Response: Success", "response", responseMap)
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{
-		"response": response,
-	})
+	if err := json.NewEncoder(w).Encode(responseMap); err != nil {
+		log.Error("Failed to write response JSON", "error", err)
+	}
 }
 
 func initAgents() {
 	loadAgent("sql_admin", "ai/data/sql_admin_pipeline.json")
 }
 
-func seedDefaultMacros(db *aidb.Database) {
+func seedDefaultScripts(db *aidb.Database) {
 	ctx := context.Background()
 	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
-		log.Error(fmt.Sprintf("Failed to begin transaction for seeding macros: %v", err))
+		log.Error(fmt.Sprintf("Failed to begin transaction for seeding scripts: %v", err))
 		return
 	}
-	store, err := db.OpenModelStore(ctx, "macros", tx)
+	store, err := db.OpenModelStore(ctx, "scripts", tx)
 	if err != nil {
 		tx.Rollback(ctx)
-		log.Error(fmt.Sprintf("Failed to open macro store: %v", err))
+		log.Error(fmt.Sprintf("Failed to open scripts store: %v", err))
 		return
 	}
 
 	// Check if demo_loop exists
 	// We force update it to ensure latest schema is used during development
-	// var existing ai.Macro
-	// if err := store.Load(ctx, "macros", "demo_loop", &existing); err == nil {
+	// var existing ai.Script
+	// if err := store.Load(ctx, "scripts", "demo_loop", &existing); err == nil {
 	// 	tx.Rollback(ctx)
 	// 	return // Already exists
 	// }
 
-	// Create demo_loop macro
-	demoLoop := ai.Macro{
+	// Create demo_loop script
+	demoLoop := ai.Script{
 		Name:        "demo_loop",
 		Description: "Demonstrates loops and variables",
-		Steps: []ai.MacroStep{
+		Steps: []ai.ScriptStep{
 			{
 				Type:     "set",
 				Variable: "items",
@@ -243,7 +280,7 @@ func seedDefaultMacros(db *aidb.Database) {
 				Type:     "loop",
 				List:     "items",
 				Iterator: "fruit",
-				Steps: []ai.MacroStep{
+				Steps: []ai.ScriptStep{
 					{
 						Type:    "say",
 						Message: "Processing {{.fruit}}...",
@@ -258,13 +295,13 @@ func seedDefaultMacros(db *aidb.Database) {
 	}
 
 	if err := store.Save(ctx, "general", "demo_loop", demoLoop); err != nil {
-		log.Error(fmt.Sprintf("Failed to save demo_loop macro: %v", err))
+		log.Error(fmt.Sprintf("Failed to save demo_loop script: %v", err))
 		tx.Rollback(ctx)
 		return
 	}
 
 	tx.Commit(ctx)
-	log.Info("Seeded 'demo_loop' macro.")
+	log.Info("Seeded 'demo_loop' script.")
 }
 
 func loadAgent(key, configPath string) {
@@ -295,6 +332,23 @@ func loadAgent(key, configPath string) {
 		return
 	}
 
+	// Apply Stub Mode if enabled globally
+	if config.StubMode {
+		log.Info(fmt.Sprintf("Enabling Stub Mode for agent %s", key))
+		cfg.StubMode = true
+		for i := range cfg.Agents {
+			cfg.Agents[i].StubMode = true
+		}
+	}
+
+	// Apply Global Obfuscation Mode if specified in HTTP Config
+	// We do NOT update the agent config anymore, instead we calculate the per-database flag below
+	globalObfMode := ObfuscationDisabled
+	if config.ObfuscationMode != "" {
+		log.Info("Applying Global Obfuscation Mode from HTTP config", "mode", config.ObfuscationMode)
+		globalObfMode = ObfuscationMode(config.ObfuscationMode)
+	}
+
 	// Ensure absolute path for storage
 	if cfg.StoragePath != "" {
 		if !filepath.IsAbs(cfg.StoragePath) {
@@ -313,8 +367,8 @@ func loadAgent(key, configPath string) {
 	var sysDB *aidb.Database
 	if err == nil {
 		sysDB = aidb.NewDatabase(sysOpts)
-		// Seed default macros for testing
-		seedDefaultMacros(sysDB)
+		// Seed default scripts for testing
+		seedDefaultScripts(sysDB)
 	} else {
 		log.Debug(fmt.Sprintf("System DB not available for agent %s: %v", cfg.ID, err))
 	}
@@ -334,6 +388,19 @@ func loadAgent(key, configPath string) {
 		d := dbCfg
 		opts, err := getDBOptionsFromConfig(&d)
 		if err == nil {
+			// Calculate Obfuscation Flag based on Global Mode and Per-DB Config
+			switch globalObfMode {
+			case ObfuscationAllDatabases:
+				opts.EnableObfuscation = true
+			case ObfuscationDisabled:
+				opts.EnableObfuscation = false
+			case ObfuscationPerDatabase:
+				opts.EnableObfuscation = dbCfg.EnableObfuscation
+			default:
+				// Fallback to Disabled if unknown
+				opts.EnableObfuscation = false
+			}
+
 			databases[d.Name] = opts
 		}
 	}
@@ -351,11 +418,12 @@ func loadAgent(key, configPath string) {
 				agentCfg.StoragePath = absPath
 			}
 		}
-		return agent.NewFromConfig(context.Background(), agentCfg, agent.Dependencies{
+		svc, err := agent.NewFromConfig(context.Background(), agentCfg, agent.Dependencies{
 			AgentRegistry: registry,
 			SystemDB:      sysDB,
 			Databases:     databases,
 		})
+		return svc, err
 	}
 
 	// Pre-register internal policy agents

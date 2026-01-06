@@ -144,7 +144,7 @@ func (ss *StepStreamer) Close() {
 	ss.closed = true
 }
 
-func (s *Service) runStep(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+func (s *Service) runStep(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
 	switch step.Type {
 	case "ask":
 		return s.runStepAsk(ctx, step, scope, scopeMu, sb, db)
@@ -160,19 +160,19 @@ func (s *Service) runStep(ctx context.Context, step ai.MacroStep, scope map[stri
 		return s.runStepFetch(ctx, step, scope, scopeMu, sb, db)
 	case "say", "print":
 		return s.runStepSay(ctx, step, scope, scopeMu, sb)
-	case "macro":
-		return s.runStepMacro(ctx, step, scope, scopeMu, sb, db)
+	case "call_script":
+		return s.runStepScript(ctx, step, scope, scopeMu, sb, db)
 	case "block":
 		return s.runStepBlock(ctx, step, scope, scopeMu, sb, db)
 	}
 	return nil
 }
 
-func (s *Service) runStepBlock(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+func (s *Service) runStepBlock(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
 	return s.runSteps(ctx, step.Steps, scope, scopeMu, sb, db)
 }
 
-func (s *Service) runStepAsk(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+func (s *Service) runStepAsk(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
 	w, _ := ctx.Value(ai.CtxKeyWriter).(io.Writer)
 
 	prompt := step.Prompt
@@ -193,28 +193,28 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.MacroStep, scope map[s
 	}
 
 	// Check for compiled mode
-	// If the macro is compiled (has explicit commands), we skip "ask" steps because
+	// If the script is compiled (has explicit commands), we skip "ask" steps because
 	// the logic assumes the commands replace the need for asking the LLM.
-	// HOWEVER, for hybrid macros or explicit "ask" steps in a compiled macro,
+	// HOWEVER, for hybrid scripts or explicit "ask" steps in a compiled script,
 	// we might want to allow it.
 	// The current logic: if isCompiled is true, we SKIP the ask step.
-	// This means "ask" steps are ignored in compiled macros.
-	// If the user wants to force an ask in a compiled macro, they should use a different type or flag?
+	// This means "ask" steps are ignored in compiled scripts.
+	// If the user wants to force an ask in a compiled script, they should use a different type or flag?
 	// Or maybe we should only skip if the ask was the *source* of the commands (which we don't track here).
 	// For now, let's keep the behavior but document it: "ask" steps are skipped if "command" steps exist.
 	if isCompiled, ok := ctx.Value("is_compiled").(bool); ok && isCompiled {
-		// But wait! If the user explicitly added an "ask" step to a compiled macro (e.g. for analysis),
+		// But wait! If the user explicitly added an "ask" step to a compiled script (e.g. for analysis),
 		// we shouldn't skip it.
 		// The "is_compiled" flag was likely intended for "playback of recorded sessions" where
 		// the "ask" was the user input and the "command" was the result.
 		// In that case, we only want to run the command.
-		// But if we are running a "programmed" macro that mixes both, this logic is flawed.
+		// But if we are running a "programmed" script that mixes both, this logic is flawed.
 		// Let's refine: We skip "ask" ONLY if it doesn't have an OutputVariable that is used later?
-		// Or maybe we should trust the macro definition.
-		// If the macro has BOTH "ask" and "command" steps, it's likely a recording.
+		// Or maybe we should trust the script definition.
+		// If the script has BOTH "ask" and "command" steps, it's likely a recording.
 		// In a recording, "ask" is the trigger, "command" is the action. We replay the action.
 		// So skipping "ask" is correct for REPLAY.
-		// But for "Hybrid" macros?
+		// But for "Hybrid" scripts?
 		// Let's assume for now that if it's a REST call, we might want the LLM to run if it's an "ask".
 		// But if it's a recording, we don't.
 		// How to distinguish?
@@ -288,7 +288,7 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.MacroStep, scope map[s
 	return nil
 }
 
-func (s *Service) runStepCommand(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder) error {
+func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder) error {
 	w, _ := ctx.Value(ai.CtxKeyWriter).(io.Writer)
 
 	// Resolve templates in Args
@@ -385,7 +385,7 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.MacroStep, scope m
 	return nil
 }
 
-func (s *Service) runStepSet(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder) error {
+func (s *Service) runStepSet(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder) error {
 	val := step.Value
 	val = s.resolveTemplate(val, scope, scopeMu)
 
@@ -399,7 +399,7 @@ func (s *Service) runStepSet(ctx context.Context, step ai.MacroStep, scope map[s
 	return nil
 }
 
-func (s *Service) runStepIf(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+func (s *Service) runStepIf(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
 	w, _ := ctx.Value(ai.CtxKeyWriter).(io.Writer)
 
 	cond := step.Condition
@@ -436,7 +436,7 @@ func (s *Service) runStepIf(ctx context.Context, step ai.MacroStep, scope map[st
 	return nil
 }
 
-func (s *Service) runStepLoop(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+func (s *Service) runStepLoop(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
 	listExpr := step.List
 	iterator := step.Iterator
 	body := step.Steps
@@ -486,7 +486,7 @@ func (s *Service) runStepLoop(ctx context.Context, step ai.MacroStep, scope map[
 	return nil
 }
 
-func (s *Service) runStepFetch(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, currentDB *database.Database) error {
+func (s *Service) runStepFetch(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, currentDB *database.Database) error {
 	w, _ := ctx.Value(ai.CtxKeyWriter).(io.Writer)
 
 	resource := step.Resource
@@ -576,7 +576,7 @@ func (s *Service) runStepFetch(ctx context.Context, step ai.MacroStep, scope map
 	return nil
 }
 
-func (s *Service) runStepSay(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder) error {
+func (s *Service) runStepSay(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder) error {
 	w, _ := ctx.Value(ai.CtxKeyWriter).(io.Writer)
 
 	msgText := step.Message
@@ -597,38 +597,38 @@ func (s *Service) runStepSay(ctx context.Context, step ai.MacroStep, scope map[s
 	return nil
 }
 
-func (s *Service) runStepMacro(ctx context.Context, step ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
-	name := step.MacroName
+func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+	name := step.ScriptName
 	if name == "" {
-		return fmt.Errorf("macro name required")
+		return fmt.Errorf("script name required")
 	}
 
-	// Load the macro
-	macroDB := s.getMacroDB()
-	if macroDB == nil {
+	// Load the script
+	scriptDB := s.getScriptDB()
+	if scriptDB == nil {
 		return fmt.Errorf("no database configured")
 	}
 
-	tx, err := macroDB.BeginTransaction(ctx, sop.ForReading)
+	tx, err := scriptDB.BeginTransaction(ctx, sop.ForReading)
 	if err != nil {
 		return fmt.Errorf("error starting transaction: %v", err)
 	}
 
-	store, err := macroDB.OpenModelStore(ctx, "macros", tx)
+	store, err := scriptDB.OpenModelStore(ctx, "scripts", tx)
 	if err != nil {
 		tx.Rollback(ctx)
 		return fmt.Errorf("error opening store: %v", err)
 	}
 
-	var macro ai.Macro
-	if err := store.Load(ctx, "general", name, &macro); err != nil {
+	var script ai.Script
+	if err := store.Load(ctx, "general", name, &script); err != nil {
 		tx.Rollback(ctx)
-		return fmt.Errorf("error loading macro '%s': %v", name, err)
+		return fmt.Errorf("error loading script '%s': %v", name, err)
 	}
 	tx.Commit(ctx)
 
-	// Prepare scope for the nested macro
-	// We inherit the current scope, but we might want to override with MacroArgs
+	// Prepare scope for the nested script
+	// We inherit the current scope, but we might want to override with ScriptArgs
 	nestedScope := make(map[string]any)
 	if scopeMu != nil {
 		scopeMu.RLock()
@@ -640,26 +640,26 @@ func (s *Service) runStepMacro(ctx context.Context, step ai.MacroStep, scope map
 		scopeMu.RUnlock()
 	}
 
-	for k, v := range step.MacroArgs {
+	for k, v := range step.ScriptArgs {
 		// Resolve template in args
 		val := s.resolveTemplate(v, scope, scopeMu)
 		nestedScope[k] = val
 	}
 
-	sb.WriteString(fmt.Sprintf("Running nested macro '%s'...\n", name))
-	// Nested macro gets its own mutex because it has its own scope map
+	sb.WriteString(fmt.Sprintf("Running nested script '%s'...\n", name))
+	// Nested script gets its own mutex because it has its own scope map
 	var nestedMu sync.RWMutex
 
-	// Handle Database Switching for Nested Macro
-	// Priority: step.Database > macro.Database > inherited db
+	// Handle Database Switching for Nested Script
+	// Priority: step.Database > script.Database > inherited db
 
 	// Handle Database Override from Step
 	if step.Database != "" {
-		macro.Database = step.Database
-		macro.Portable = false // Enforce the step's DB
+		script.Database = step.Database
+		script.Portable = false // Enforce the step's DB
 	}
 
-	return s.executeMacro(ctx, &macro, nestedScope, &nestedMu, sb, db)
+	return s.executeScript(ctx, &script, nestedScope, &nestedMu, sb, db)
 }
 
 // ToolProvider interface for agents that can execute tools
@@ -696,9 +696,9 @@ func (e *ServiceToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinitio
 	return nil, nil
 }
 
-func (s *Service) executeMacro(ctx context.Context, macro *ai.Macro, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
-	// Remove MacroRecorder from context during execution to ensure tools execute instead of recording
-	ctx = context.WithValue(ctx, ai.CtxKeyMacroRecorder, nil)
+func (s *Service) executeScript(ctx context.Context, script *ai.Script, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+	// Remove ScriptRecorder from context during execution to ensure tools execute instead of recording
+	ctx = context.WithValue(ctx, ai.CtxKeyScriptRecorder, nil)
 
 	// Ensure we have a tool executor
 	if ctx.Value(ai.CtxKeyExecutor) == nil {
@@ -707,11 +707,11 @@ func (s *Service) executeMacro(ctx context.Context, macro *ai.Macro, scope map[s
 	}
 
 	// Detect compiled mode (if any step is a command)
-	// We treat a macro as "compiled" (replay mode) if it contains "command" steps.
+	// We treat a script as "compiled" (replay mode) if it contains "command" steps.
 	// This causes "ask" steps to be skipped during execution, assuming they were just the triggers for the commands.
-	// TODO: Allow a flag to force execution of "ask" steps even in compiled macros (e.g. for hybrid agents).
+	// TODO: Allow a flag to force execution of "ask" steps even in compiled scripts (e.g. for hybrid agents).
 	isCompiled := false
-	for _, step := range macro.Steps {
+	for _, step := range script.Steps {
 		if step.Type == "command" {
 			isCompiled = true
 			break
@@ -724,12 +724,12 @@ func (s *Service) executeMacro(ctx context.Context, macro *ai.Macro, scope map[s
 	s.session.Playback = true
 	// defer func() { s.session.Playback = wasPlayback }()
 
-	return s.runSteps(ctx, macro.Steps, scope, scopeMu, sb, db)
+	return s.runSteps(ctx, script.Steps, scope, scopeMu, sb, db)
 }
 
-// runSteps runs a sequence of macro steps with support for control flow and variables.
-func (s *Service) runSteps(ctx context.Context, steps []ai.MacroStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
-	// Create cancellable context for this macro execution scope to support stopping on error
+// runSteps runs a sequence of script steps with support for control flow and variables.
+func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+	// Create cancellable context for this script execution scope to support stopping on error
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -807,10 +807,10 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.MacroStep, scope map[
 
 			// Check if we are in a transaction.
 			// If so, we generally force sync execution to maintain integrity for simple steps.
-			// HOWEVER, if the step is a nested "macro", we allow it to run async (Swarm pattern),
+			// HOWEVER, if the step is a nested "script", we allow it to run async (Swarm pattern),
 			// assuming it will manage its own transaction (e.g. on a different DB).
 			p := ai.GetSessionPayload(stepCtx) // Use stepCtx
-			if p != nil && p.Transaction != nil && step.Type != "macro" {
+			if p != nil && p.Transaction != nil && step.Type != "script" {
 				if ctx.Value(CtxKeyJSONStreamer) == nil {
 					msg := fmt.Sprintf("Info: Step '%s' marked async but active transaction exists. Running synchronously.\n", step.Type)
 					sb.WriteString(msg)

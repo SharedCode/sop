@@ -28,8 +28,9 @@ type Config struct {
 	EnableIngestionBuffer bool              `json:"enable_ingestion_buffer,omitempty"` // Optional: Enable Stage 0 buffering for faster ingestion
 	Verbose               bool              `json:"verbose,omitempty"`                 // Optional: Enable verbose output (e.g. tool instructions)
 	// AutoOptimize is deprecated. Use Params["auto_optimize"] instead.
-	AutoOptimize      bool           `json:"auto_optimize,omitempty"`      // Optional: Automatically run Optimize() after ingestion
-	EnableObfuscation bool           `json:"enable_obfuscation,omitempty"` // Optional: Enable metadata obfuscation
+	AutoOptimize bool              `json:"auto_optimize,omitempty"` // Optional: Automatically run Optimize() after ingestion
+	EnableObfuscation bool           `json:"enable_obfuscation,omitempty"` // Optional: Enable metadata obfuscation (Legacy)
+	StubMode          bool           `json:"stub_mode,omitempty"`          // Optional: If true, tools will return success without executing (for debugging LLM output)
 	Agents            []Config       `json:"agents,omitempty"`             // Optional: Define agents locally to be referenced by ID
 	Pipeline          []PipelineStep `json:"pipeline,omitempty"`           // Optional: Define a chain of agents
 	Params            map[string]any `json:"params,omitempty"`             // Type-specific configuration parameters

@@ -1,22 +1,22 @@
-# AI Assistant Macros: Natural Language Programming
+# AI Assistant Scripts: Natural Language Programming
 
-The SOP AI Assistant includes a powerful **Macro System** that transforms your AI chat sessions into a "Natural Language Programming" environment. It allows you to record, script, and execute complex workflows that combine the flexibility of LLMs with the performance of compiled code.
+The SOP AI Assistant includes a powerful **Script System** that transforms your AI chat sessions into a "Natural Language Programming" environment. It allows you to record, script, and execute complex workflows that combine the flexibility of LLMs with the performance of compiled code.
 
 ## Concept: "Compiled Instructions"
 
-Unlike traditional chat history, SOP Macros are **deterministic programs**.
+Unlike traditional chat history, SOP Scripts are **deterministic programs**.
 *   **Recording**: When you record a session, the system captures the **logic** of your interaction.
-*   **Scripting**: You can manually edit or generate macros using a standardized JSON schema, adding loops, conditions, and variables.
+*   **Scripting**: You can manually edit or generate scripts using a standardized JSON schema, adding loops, conditions, and variables.
 *   **Execution**: The SOP engine executes these steps directly using compiled Go code. This is akin to running a compiled binary or a high-performance stored procedure, not just replaying a chat log.
 
 ## The SOP Advantage: Bare Metal Performance
 
-SOP exposes its B-Tree engine directly to the macro system. This effectively creates a **machine instruction set** for end-users.
+SOP exposes its B-Tree engine directly to the script system. This effectively creates a **machine instruction set** for end-users.
 
 *   **Bare Metal API**: SOP's B-Tree API is compiled Go code.
-*   **High-Performance Units**: Recorded macros are sequences of JSON instructions that command this compiled code to perform iterations, expression evaluations, and data lookups.
-*   **No Parsing Overhead**: Unlike SQL statements that require complex parsing and query planning at runtime, SOP macros are pre-structured units of work.
-*   **System Database**: Macros are persisted in a dedicated **SystemDB**, a robust SOP B-Tree store. This ensures your "programs" are durable, transactional, and available across server restarts.
+*   **High-Performance Units**: Recorded scripts are sequences of JSON instructions that command this compiled code to perform iterations, expression evaluations, and data lookups.
+*   **No Parsing Overhead**: Unlike SQL statements that require complex parsing and query planning at runtime, SOP scripts are pre-structured units of work.
+*   **System Database**: Scripts are persisted in a dedicated **SystemDB**, a robust SOP B-Tree store. This ensures your "programs" are durable, transactional, and available across server restarts.
 
 ## Atomic Lego Blocks: The Foundation of Safe Scripting
 
@@ -50,16 +50,16 @@ A critical advantage of using `Scan` and `JoinRightCursor` is **Streaming**.
 
 We are building a system where the **LLM acts as the compiler**.
 1.  **User Intent**: You describe a complex task in natural language (e.g., "For every user in the 'users' table who hasn't logged in for 30 days, send a reminder email").
-2.  **LLM Compilation**: The AI translates this intent into a structured SOP Macro (JSON) containing loops (`loop`), conditions (`if`), and tool calls (`ask`, `fetch`).
+2.  **LLM Compilation**: The AI translates this intent into a structured SOP Script (JSON) containing loops (`loop`), conditions (`if`), and tool calls (`ask`, `fetch`).
 3.  **SOP Execution**: The SOP engine executes this script. It fetches data from B-Trees efficiently (`fetch`), iterates in compiled code (`loop`), and only calls the LLM when semantic understanding is needed (`ask`).
 
 This hybrid approach gives you the best of both worlds:
 *   **Ease of Use**: "Programming" via chat.
 *   **Performance**: Heavy lifting (loops, data access) is done by compiled Go code, not the LLM.
 
-## Macro Schema (The "Language")
+## Script Schema (The "Language")
 
-The macro system uses a stable JSON schema acting as a mini-SDK:
+The script system uses a stable JSON schema acting as a mini-SDK:
 
 *   **`ask`**: Query the LLM for reasoning or creative generation.
 *   **`set`**: Assign values to variables.
@@ -71,18 +71,18 @@ The macro system uses a stable JSON schema acting as a mini-SDK:
 ## Commands
 
 ### Recording & Playback
-*   `/record <name>`: Start recording a session as a new macro.
+*   `/record <name>`: Start recording a session as a new script.
 *   `/stop`: Stop recording and save to SystemDB.
-*   `/play <name> [param=value ...]`: Execute a saved macro.
+*   `/play <name> [param=value ...]`: Execute a saved script.
     *   **Parameters**: Pass arguments like `user_id=123`.
-    *   **Templating**: Use `{{.user_id}}` in your macro to inject values.
+    *   **Templating**: Use `{{.user_id}}` in your script to inject values.
 
 ### Management
-*   `/list`: List all available macros in the SystemDB.
+*   `/list`: List all available scripts in the SystemDB.
 
 ## Remote Execution via REST API
 
-Because macros are stored in the persistent SystemDB, they are instantly available as **API Endpoints**. You can trigger any complex workflow remotely:
+Because scripts are stored in the persistent SystemDB, they are instantly available as **API Endpoints**. You can trigger any complex workflow remotely:
 
 ```bash
 curl -X POST http://localhost:8080/api/ai/chat \

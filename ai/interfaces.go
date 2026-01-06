@@ -22,10 +22,12 @@ const (
 	CtxKeyHistory ContextKey = "ai_history"
 	// CtxKeyWriter is the context key for passing an io.Writer for streaming output.
 	CtxKeyWriter ContextKey = "ai_writer"
-	// CtxKeyDatabase is the context key for passing the target database for macro execution.
+	// CtxKeyDatabase is the context key for passing the target database for script execution.
 	CtxKeyDatabase ContextKey = "ai_database"
 	// CtxKeyResultStreamer is the context key for passing the ResultStreamer.
 	CtxKeyResultStreamer ContextKey = "ai_result_streamer"
+	// CtxKeyScriptRecorder is the context key for passing the ScriptRecorder.
+	CtxKeyScriptRecorder ContextKey = "ai_script_recorder"
 )
 
 // ResultStreamer defines the interface for streaming tool results.
@@ -384,24 +386,24 @@ type ModelStore interface {
 	Delete(ctx context.Context, category string, name string) error
 }
 
-// Macro represents a recorded sequence of user interactions or a programmed script.
-type Macro struct {
+// Script represents a recorded sequence of user interactions or a programmed script.
+type Script struct {
 	Name        string   `json:"name"`
 	Description string   `json:"description"`
-	Parameters  []string `json:"parameters"`         // Input parameters for the macro
-	Database    string   `json:"database,omitempty"` // Database to run the macro against
+	Parameters  []string `json:"parameters"`         // Input parameters for the script
+	Database    string   `json:"database,omitempty"` // Database to run the script against
 	Portable    bool     `json:"portable,omitempty"` // If true, allows running on any database
-	// TransactionMode specifies how transactions are handled for this macro.
+	// TransactionMode specifies how transactions are handled for this script.
 	// Values: "none" (default, manual), "single" (one tx for all steps), "per_step" (auto-commit each step)
-	TransactionMode string      `json:"transaction_mode,omitempty"`
-	Steps           []MacroStep `json:"steps"`
+	TransactionMode string       `json:"transaction_mode,omitempty"`
+	Steps           []ScriptStep `json:"steps"`
 }
 
-// MacroStep represents a single instruction in a macro.
+// ScriptStep represents a single instruction in a script.
 // It follows a stabilized schema for "Natural Language Programming".
-type MacroStep struct {
+type ScriptStep struct {
 	// Type of the step.
-	// Valid values: "ask", "set", "if", "loop", "fetch", "say", "command", "macro", "block"
+	// Valid values: "ask", "set", "if", "loop", "fetch", "say", "command", "call_script", "block"
 	Type string `json:"type"`
 
 	// --- Fields for "ask" (LLM Interaction) ---
@@ -422,9 +424,9 @@ type MacroStep struct {
 	// Example: "{{ gt .count 5 }}"
 	Condition string `json:"condition,omitempty"`
 	// Then is the list of steps to execute if the condition is true.
-	Then []MacroStep `json:"then,omitempty"`
+	Then []ScriptStep `json:"then,omitempty"`
 	// Else is the list of steps to execute if the condition is false.
-	Else []MacroStep `json:"else,omitempty"`
+	Else []ScriptStep `json:"else,omitempty"`
 
 	// --- Fields for "loop" (Iteration) ---
 	// List is the variable name or expression evaluating to a list/slice to iterate over.
@@ -433,7 +435,7 @@ type MacroStep struct {
 	Iterator string `json:"iterator,omitempty"`
 	// Steps is the list of steps to execute for each item.
 	// Also used for "block" type to hold the sequence of steps.
-	Steps []MacroStep `json:"steps,omitempty"`
+	Steps []ScriptStep `json:"steps,omitempty"`
 
 	// --- Fields for "fetch" (Data Retrieval) ---
 	// Database specifies the database name (optional). If empty, uses the current context database.
@@ -456,35 +458,30 @@ type MacroStep struct {
 	// Args are the arguments for the command.
 	Args map[string]any `json:"args,omitempty"`
 
-	// --- Fields for "macro" (Nested Macro Execution) ---
-	// MacroName is the name of the macro to execute.
-	MacroName string `json:"macro_name,omitempty"`
-	// MacroArgs are the arguments to pass to the macro.
-	MacroArgs map[string]string `json:"macro_args,omitempty"`
+	// --- Fields for "call_script" (Nested Script Execution) ---
+	// ScriptName is the name of the script to execute.
+	ScriptName string `json:"script_name,omitempty"`
+	// ScriptArgs are the arguments to pass to the script.
+	ScriptArgs map[string]string `json:"script_args,omitempty"`
 
 	// --- Async Execution ---
 	// IsAsync specifies if the step should be executed asynchronously.
-	// If true, the step runs in a goroutine and the macro continues to the next step.
-	// All async steps are gathered (waited for) at the end of the macro execution.
+	// If true, the step runs in a goroutine and the script continues to the next step.
+	// All async steps are gathered (waited for) at the end of the script execution.
 	IsAsync bool `json:"is_async,omitempty"`
 
-	// ContinueOnError specifies if the macro should continue executing if this step fails.
-	// If false (default), the macro stops and returns the error.
+	// ContinueOnError specifies if the script should continue executing if this step fails.
+	// If false (default), the script stops and returns the error.
 	// For async steps, if this is false and the step fails, it cancels the execution of other steps.
 	ContinueOnError bool `json:"continue_on_error,omitempty"`
 }
 
-// MacroRecorder is an interface for recording macro steps.
-type MacroRecorder interface {
-	RecordStep(ctx context.Context, step MacroStep)
-	// RefactorLastSteps refactors the last N steps into a new structure (macro or block).
+// ScriptRecorder is an interface for recording script steps.
+type ScriptRecorder interface {
+	RecordStep(ctx context.Context, step ScriptStep)
+	// RefactorLastSteps refactors the last N steps into a new structure (script or block).
 	// count: number of steps to refactor.
-	// mode: "macro" (extract to new named macro) or "block" (group into block step).
-	// name: name of the new macro (if mode is "macro").
+	// mode: "script" (extract to new named script) or "block" (group into block step).
+	// name: name of the new script (if mode is "script").
 	RefactorLastSteps(count int, mode string, name string) error
 }
-
-const (
-	// CtxKeyMacroRecorder is the context key for passing the MacroRecorder.
-	CtxKeyMacroRecorder ContextKey = "ai_macro_recorder"
-)
