@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	log "log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -41,7 +42,7 @@ type ScriptContext struct {
 
 // ScriptCursor represents a streaming iterator for script operations.
 type ScriptCursor interface {
-	Next(ctx context.Context) (map[string]any, bool, error)
+	Next(ctx context.Context) (any, bool, error)
 	Close() error
 }
 
@@ -67,6 +68,7 @@ type StoreCursor struct {
 	isDesc    bool
 	prefix    any
 	started   bool
+	closed    bool
 }
 
 func (sc *StoreCursor) GetIndexSpecs() map[string]*jsondb.IndexSpecification {
@@ -78,7 +80,10 @@ func (sc *StoreCursor) GetIndexSpecs() map[string]*jsondb.IndexSpecification {
 	return nil
 }
 
-func (sc *StoreCursor) Next(ctx context.Context) (map[string]any, bool, error) {
+func (sc *StoreCursor) Next(ctx context.Context) (any, bool, error) {
+	if sc.closed {
+		return nil, false, nil
+	}
 	if sc.limit > 0 && sc.count >= sc.limit {
 		return nil, false, nil
 	}
@@ -122,17 +127,7 @@ func (sc *StoreCursor) Next(ctx context.Context) (map[string]any, bool, error) {
 		}
 
 		// Filter Check
-		item := map[string]any{
-			"key":   k,
-			"value": v,
-		}
-
-		// Flatten "value" if it's a map to look like a flat record for easy access
-		if vMap, ok := v.(map[string]any); ok {
-			for vk, vv := range vMap {
-				item[vk] = vv
-			}
-		}
+		item := renderItem(k, v, nil)
 
 		if sc.filter != nil {
 			match, err := sc.engine.evaluateCondition(item, sc.filter)
@@ -157,6 +152,7 @@ func (sc *StoreCursor) Next(ctx context.Context) (map[string]any, bool, error) {
 }
 
 func (sc *StoreCursor) Close() error {
+	sc.closed = true
 	return nil
 }
 
@@ -185,7 +181,7 @@ type JoinRightCursor struct {
 	on        map[string]any
 	ctx       context.Context
 	engine    *ScriptEngine
-	currentL  map[string]any
+	currentL  any
 	matched   bool
 	rightIter bool
 
@@ -194,16 +190,45 @@ type JoinRightCursor struct {
 	planReady bool
 
 	// Legacy / Runtime State
-	useFallback  bool             // optimization: materialization fallback
-	fallbackList []map[string]any // fallback: in-memory list
+	useFallback  bool  // optimization: materialization fallback
+	fallbackList []any // fallback: in-memory list
 	fallbackIdx  int
+	closed       bool
 }
 
-func (jc *JoinRightCursor) Next(ctx context.Context) (map[string]any, bool, error) {
-	return jc.NextOptimized(ctx)
+func (jc *JoinRightCursor) Next(ctx context.Context) (any, bool, error) {
+	if jc.closed {
+		return nil, false, nil
+	}
+	val, ok, err := jc.NextOptimized(ctx)
+	if ok && err == nil {
+		// b, _ := json.Marshal(val)
+
+		// Attempt to inspect if the result is an OrderedMap
+		var fields []string
+		if om, isOm := val.(*OrderedMap); isOm {
+			fields = om.keys
+		} else if om, isOm := val.(OrderedMap); isOm {
+			fields = om.keys
+		} else if m, isM := val.(map[string]any); isM {
+			// standard map, extract keys but they won't be ordered
+			for k := range m {
+				fields = append(fields, k)
+			}
+			sort.Strings(fields)
+		}
+
+		// log.Debug("payload contents:",
+		// 	"Function", "JoinRightCursor.Next",
+		// 	"json", string(b),
+		// 	"fields_found_in_result", fields,
+		// )
+	}
+	return val, ok, err
 }
 
 func (jc *JoinRightCursor) Close() error {
+	jc.closed = true
 	return jc.left.Close()
 }
 
@@ -212,9 +237,13 @@ type FilterCursor struct {
 	source ScriptCursor
 	filter map[string]any
 	engine *ScriptEngine
+	closed bool
 }
 
-func (fc *FilterCursor) Next(ctx context.Context) (map[string]any, bool, error) {
+func (fc *FilterCursor) Next(ctx context.Context) (any, bool, error) {
+	if fc.closed {
+		return nil, false, nil
+	}
 	for {
 		item, ok, err := fc.source.Next(ctx)
 		if err != nil {
@@ -235,16 +264,28 @@ func (fc *FilterCursor) Next(ctx context.Context) (map[string]any, bool, error) 
 }
 
 func (fc *FilterCursor) Close() error {
+	fc.closed = true
 	return fc.source.Close()
+}
+
+func (fc *FilterCursor) GetOrderedFields() []string {
+	if provider, ok := fc.source.(OrderedFieldsProvider); ok {
+		return provider.GetOrderedFields()
+	}
+	return nil
 }
 
 // ProjectCursor projects fields from a stream.
 type ProjectCursor struct {
 	source ScriptCursor
 	fields []string
+	closed bool
 }
 
-func (pc *ProjectCursor) Next(ctx context.Context) (map[string]any, bool, error) {
+func (pc *ProjectCursor) Next(ctx context.Context) (any, bool, error) {
+	if pc.closed {
+		return nil, false, nil
+	}
 	item, ok, err := pc.source.Next(ctx)
 	if err != nil {
 		return nil, false, err
@@ -253,15 +294,29 @@ func (pc *ProjectCursor) Next(ctx context.Context) (map[string]any, bool, error)
 		return nil, false, nil
 	}
 
-	newItem := make(map[string]any)
+	// Log input to projection
+	// if inBytes, err := json.Marshal(item); err == nil {
+	// 	log.Debug("payload contents:", "Function", "ProjectCursor.Next (Input)", "json", string(inBytes))
+	// } else {
+	// 	log.Debug("payload contents:", "Function", "ProjectCursor.Next (Input)", "error", "failed to marshal input", "item", item)
+	// }
+
+	resultMap := &OrderedMap{m: make(map[string]any), keys: make([]string, 0)}
 	for _, f := range pc.fields {
 		val := getField(item, f)
-		newItem[f] = val
+		resultMap.m[f] = val
+		resultMap.keys = append(resultMap.keys, f)
 	}
-	return newItem, true, nil
+
+	// Logging order preservation in ProjectCursor
+	// b, _ := json.Marshal(resultMap)
+	// log.Debug("payload contents:", "Function", "ProjectCursor.Next (Output)", "json", string(b))
+
+	return resultMap, true, nil
 }
 
 func (pc *ProjectCursor) Close() error {
+	pc.closed = true
 	return pc.source.Close()
 }
 
@@ -274,6 +329,7 @@ type LimitCursor struct {
 	source ScriptCursor
 	limit  int
 	count  int
+	closed bool
 }
 
 func (lc *LimitCursor) GetIndexSpecs() map[string]*jsondb.IndexSpecification {
@@ -283,7 +339,10 @@ func (lc *LimitCursor) GetIndexSpecs() map[string]*jsondb.IndexSpecification {
 	return nil
 }
 
-func (lc *LimitCursor) Next(ctx context.Context) (map[string]any, bool, error) {
+func (lc *LimitCursor) Next(ctx context.Context) (any, bool, error) {
+	if lc.closed {
+		return nil, false, nil
+	}
 	if lc.count >= lc.limit {
 		return nil, false, nil
 	}
@@ -300,7 +359,15 @@ func (lc *LimitCursor) Next(ctx context.Context) (map[string]any, bool, error) {
 }
 
 func (lc *LimitCursor) Close() error {
+	lc.closed = true
 	return lc.source.Close()
+}
+
+func (lc *LimitCursor) GetOrderedFields() []string {
+	if provider, ok := lc.source.(OrderedFieldsProvider); ok {
+		return provider.GetOrderedFields()
+	}
+	return nil
 }
 
 func NewScriptContext() *ScriptContext {
@@ -344,6 +411,7 @@ func (a *DataAdminAgent) resolveDatabase(name string) (Database, error) {
 // Args:
 // - script: []ScriptInstruction (JSON array)
 func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]any) (string, error) {
+	log.Debug("toolExecuteScript: Called", "args", args)
 	scriptRaw, ok := args["script"]
 	if !ok {
 		return "", fmt.Errorf("script argument is required")
@@ -372,7 +440,7 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 			return "", fmt.Errorf("failed to marshal script for display: %v", err)
 		}
 
-		fmt.Printf("DEBUG: toolExecuteScript called in STUB MODE with:\n%s\n", string(bytes))
+		log.Debug("toolExecuteScript called in STUB MODE", "script", string(bytes))
 		return fmt.Sprintf("Script prepared successfully (STUBBED). execution skipped.\nGenerated Script:\n```json\n%s\n```", string(bytes)), nil
 	}
 
@@ -584,7 +652,7 @@ func (e *ScriptEngine) resolveTemplate(tmpl string) any {
 	if len(parts) > 0 {
 		current, ok = e.Context.Variables[parts[0]]
 		if !ok {
-			fmt.Printf("DEBUG: resolveTemplate var '%s' not found\n", parts[0])
+			log.Debug("resolveTemplate var not found", "var", parts[0])
 			return tmpl // Return original if var not found? Or nil?
 		}
 	}
@@ -600,15 +668,15 @@ func (e *ScriptEngine) resolveTemplate(tmpl string) any {
 				}
 			}
 			if !ok {
-				fmt.Printf("DEBUG: resolveTemplate field '%s' not found in %v\n", part, currentMap)
+				log.Debug("resolveTemplate field not found", "field", part, "map", currentMap)
 				return nil // Field not found
 			}
 		} else {
-			fmt.Printf("DEBUG: resolveTemplate current %v is not a map\n", current)
+			log.Debug("resolveTemplate current is not a map", "current", current)
 			return nil // Not a map
 		}
 	}
-	fmt.Printf("DEBUG: resolveTemplate '%s' -> %v\n", tmpl, current)
+	log.Debug("resolveTemplate result", "tmpl", tmpl, "current", current)
 	return current
 }
 
@@ -730,7 +798,7 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 	case "find":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			res, err := e.Find(ctx, args)
-			fmt.Printf("DEBUG: Find result: %v, err: %v\n", res, err)
+			log.Debug("Find result", "result", res, "err", err)
 			return res, err
 		}, nil
 	case "add":
@@ -740,7 +808,7 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 	case "get_current_key":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			res, err := e.GetCurrentKey(ctx, args)
-			fmt.Printf("DEBUG: GetCurrentKey result: %v, err: %v\n", res, err)
+			log.Debug("GetCurrentKey result", "result", res, "err", err)
 			return res, err
 		}, nil
 	case "get_current_value":
@@ -760,6 +828,8 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 }
 
 func serializeResult(val any) (string, error) {
+	// log.Debug("serializeResult called", "type", fmt.Sprintf("%T", val), "val", val)
+
 	if cursor, ok := val.(ScriptCursor); ok {
 		var results []any
 		defer cursor.Close()
@@ -776,8 +846,15 @@ func serializeResult(val any) (string, error) {
 			orderedFields = provider.GetOrderedFields()
 		}
 
+		/*
+			log.Debug("serializeResult: Consuming Cursor",
+				"cursorType", fmt.Sprintf("%T", cursor),
+				"hasOrderedFields", len(orderedFields) > 0,
+				"orderedFields", orderedFields)
+		*/
+
 		for {
-			itemMap, ok, err := cursor.Next(context.Background())
+			itemObj, ok, err := cursor.Next(context.Background())
 			if err != nil {
 				return "", fmt.Errorf("failed to read cursor: %v", err)
 			}
@@ -785,10 +862,17 @@ func serializeResult(val any) (string, error) {
 				break
 			}
 
-			var item any = itemMap
+			var itemMap map[string]any
+			if m, ok := itemObj.(map[string]any); ok {
+				itemMap = m
+			} else if om, ok := itemObj.(*OrderedMap); ok && om != nil {
+				itemMap = om.m
+			} else if om, ok := itemObj.(OrderedMap); ok {
+				itemMap = om.m
+			}
 
 			// Apply ordering if specs available
-			if len(specs) > 0 {
+			if itemMap != nil && len(specs) > 0 {
 				for fieldName, spec := range specs {
 					if val, ok := itemMap[fieldName]; ok {
 						if m, ok := val.(map[string]any); ok {
@@ -798,9 +882,28 @@ func serializeResult(val any) (string, error) {
 				}
 			}
 
+			var item any = itemObj
 			// Apply top-level field ordering
-			if len(orderedFields) > 0 {
+			if itemMap != nil && len(orderedFields) > 0 {
+				// log.Debug("serializeResult calling filterFields", "orderedFields", orderedFields)
 				item = filterFields(itemMap, orderedFields)
+				/*
+					if om, ok := item.(*OrderedMap); ok {
+						log.Debug("serializeResult received OrderedMap", "keys", om.keys)
+					} else {
+						log.Debug("serializeResult received item", "type", fmt.Sprintf("%T", item))
+					}
+					// Debug log to trace what we actually got
+					if om, ok := item.(OrderedMap); ok {
+						b, _ := json.Marshal(om)
+						log.Debug("payload contents:", "Function", "serializeResult", "keys", om.keys, "json", string(b))
+					} else if om, ok := item.(*OrderedMap); ok {
+						b, _ := json.Marshal(om)
+						log.Debug("payload contents:", "Function", "serializeResult", "keys", om.keys, "json", string(b))
+					} else {
+						log.Debug("payload contents:", "Function", "serializeResult", "type", fmt.Sprintf("%T", item), "val", item)
+					}
+				*/
 			}
 
 			results = append(results, item)
@@ -813,7 +916,16 @@ func serializeResult(val any) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to serialize result: %v", err)
 	}
-	return string(bytes), nil
+	resStr := string(bytes)
+	// log.Debug("payload contents:", "json", resStr[:min(len(resStr), 500)], "Function", "serializeResult")
+	return resStr, nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (e *ScriptEngine) CallScript(ctx context.Context, args map[string]any) (any, error) {
@@ -900,12 +1012,12 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 		result, err = e.Previous(ctx, instr.Args)
 	case "find":
 		result, err = e.Find(ctx, instr.Args)
-		fmt.Printf("DEBUG: Find result: %v, err: %v\n", result, err)
+		log.Debug("Find result", "result", result, "err", err)
 	case "add":
 		result, err = e.Add(ctx, instr.Args)
 	case "get_current_key":
 		result, err = e.GetCurrentKey(ctx, instr.Args)
-		fmt.Printf("DEBUG: GetCurrentKey result: %v, err: %v\n", result, err)
+		log.Debug("GetCurrentKey result", "result", result, "err", err)
 	case "get_current_value":
 		result, err = e.GetCurrentValue(ctx, instr.Args)
 	default:
@@ -991,7 +1103,7 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 	// Action: Materialize all active cursors to ensure they are captured before transaction closes.
 
 	drain := func(name string, cursor ScriptCursor) error {
-		results := make([]map[string]any, 0)
+		results := make([]any, 0)
 
 		// Helper to wrap fields if spec available
 		var specs map[string]*jsondb.IndexSpecification
@@ -1001,7 +1113,7 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 
 		// Drain cursor
 		for {
-			item, ok, err := cursor.Next(ctx)
+			itemObj, ok, err := cursor.Next(ctx)
 			if err != nil {
 				return fmt.Errorf("failed to materialize cursor '%s' before commit: %v", name, err)
 			}
@@ -1009,17 +1121,26 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 				break
 			}
 
+			var itemMap map[string]any
+			if m, ok := itemObj.(map[string]any); ok {
+				itemMap = m
+			} else if om, ok := itemObj.(*OrderedMap); ok && om != nil {
+				itemMap = om.m
+			} else if om, ok := itemObj.(OrderedMap); ok {
+				itemMap = om.m
+			}
+
 			// Apply ordering if specs available
-			if len(specs) > 0 {
+			if itemMap != nil && len(specs) > 0 {
 				for fieldName, spec := range specs {
-					if val, ok := item[fieldName]; ok {
+					if val, ok := itemMap[fieldName]; ok {
 						if m, ok := val.(map[string]any); ok {
-							item[fieldName] = OrderedKey{m: m, spec: spec}
+							itemMap[fieldName] = OrderedKey{m: m, spec: spec}
 						}
 					}
 				}
 			}
-			results = append(results, item)
+			results = append(results, itemObj)
 		}
 		cursor.Close()
 		e.Context.Variables[name] = results
@@ -1258,7 +1379,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 	return results, nil
 }
 
-func (e *ScriptEngine) evaluateCondition(item map[string]any, condition any) (bool, error) {
+func (e *ScriptEngine) evaluateCondition(item any, condition any) (bool, error) {
 	// CEL Filter
 	if _, ok := condition.(string); ok {
 		return false, fmt.Errorf("CEL filter expressions not supported yet")
@@ -1284,8 +1405,15 @@ func (e *ScriptEngine) Filter(ctx context.Context, input any, args map[string]an
 		}, nil
 	}
 
-	list, ok := input.([]map[string]any)
-	if !ok {
+	var list []any
+	if l, ok := input.([]any); ok {
+		list = l
+	} else if lMap, ok := input.([]map[string]any); ok {
+		list = make([]any, len(lMap))
+		for i, v := range lMap {
+			list[i] = v
+		}
+	} else {
 		return nil, fmt.Errorf("input must be a list of items or a cursor")
 	}
 	return e.stageFilter(list, args)
@@ -1293,7 +1421,7 @@ func (e *ScriptEngine) Filter(ctx context.Context, input any, args map[string]an
 
 func (e *ScriptEngine) Sort(ctx context.Context, input any, args map[string]any) (any, error) {
 	// Sort requires materialization
-	var list []map[string]any
+	var list []any
 
 	if cursor, ok := input.(ScriptCursor); ok {
 		// Materialize
@@ -1307,8 +1435,13 @@ func (e *ScriptEngine) Sort(ctx context.Context, input any, args map[string]any)
 			}
 			list = append(list, item)
 		}
-	} else if l, ok := input.([]map[string]any); ok {
+	} else if l, ok := input.([]any); ok {
 		list = l
+	} else if lMap, ok := input.([]map[string]any); ok {
+		list = make([]any, len(lMap))
+		for i, v := range lMap {
+			list[i] = v
+		}
 	} else {
 		return nil, fmt.Errorf("input must be a list or cursor")
 	}
@@ -1317,6 +1450,7 @@ func (e *ScriptEngine) Sort(ctx context.Context, input any, args map[string]any)
 }
 
 func (e *ScriptEngine) Project(ctx context.Context, input any, args map[string]any) (any, error) {
+	log.Debug("Project input", "type", fmt.Sprintf("%T", input))
 	// Parse fields
 	var fields []string
 	// args itself might be the map of fields if called from bindOperation?
@@ -1340,20 +1474,31 @@ func (e *ScriptEngine) Project(ctx context.Context, input any, args map[string]a
 	}
 
 	if cursor, ok := input.(ScriptCursor); ok {
+		log.Debug("Project returning ProjectCursor")
 		return &ProjectCursor{
 			source: cursor,
 			fields: fields,
 		}, nil
 	}
 
-	list, ok := input.([]map[string]any)
-	if !ok {
+	log.Debug("Project falling back to stageProject (List)", "input_type", fmt.Sprintf("%T", input))
+
+	var list []any
+	if l, ok := input.([]any); ok {
+		list = l
+	} else if lMap, ok := input.([]map[string]any); ok {
+		list = make([]any, len(lMap))
+		for i, v := range lMap {
+			list[i] = v
+		}
+	} else {
 		return nil, fmt.Errorf("input must be a list of items or a cursor")
 	}
 	return e.stageProject(list, args)
 }
 
 func (e *ScriptEngine) Limit(ctx context.Context, input any, args map[string]any) (any, error) {
+	log.Debug("Limit input", "type", fmt.Sprintf("%T", input))
 	limitVal, _ := args["limit"].(float64)
 	limit := int(limitVal)
 	if limit <= 0 {
@@ -1361,14 +1506,24 @@ func (e *ScriptEngine) Limit(ctx context.Context, input any, args map[string]any
 	}
 
 	if cursor, ok := input.(ScriptCursor); ok {
+		log.Debug("Limit returning LimitCursor")
 		return &LimitCursor{
 			source: cursor,
 			limit:  limit,
 		}, nil
 	}
 
-	list, ok := input.([]map[string]any)
-	if !ok {
+	log.Debug("Limit falling back to stageLimit (List)", "input_type", fmt.Sprintf("%T", input))
+
+	var list []any
+	if l, ok := input.([]any); ok {
+		list = l
+	} else if lMap, ok := input.([]map[string]any); ok {
+		list = make([]any, len(lMap))
+		for i, v := range lMap {
+			list[i] = v
+		}
+	} else {
 		return nil, fmt.Errorf("input must be a list of items or a cursor")
 	}
 	return e.stageLimit(list, args)
@@ -1376,11 +1531,11 @@ func (e *ScriptEngine) Limit(ctx context.Context, input any, args map[string]any
 
 // ListCursor wraps a slice of maps.
 type ListCursor struct {
-	items []map[string]any
+	items []any
 	index int
 }
 
-func (lc *ListCursor) Next(ctx context.Context) (map[string]any, bool, error) {
+func (lc *ListCursor) Next(ctx context.Context) (any, bool, error) {
 	if lc.index >= len(lc.items) {
 		return nil, false, nil
 	}
@@ -1423,13 +1578,21 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	if lc, ok := input.(ScriptCursor); ok {
 		leftCursor = lc
 	} else if list, ok := input.([]map[string]any); ok {
-		leftCursor = &ListCursor{items: list}
+		var anyList []any
+		for _, x := range list {
+			anyList = append(anyList, x)
+		}
+		leftCursor = &ListCursor{items: anyList}
+	} else if anyList, ok := input.([]any); ok {
+		leftCursor = &ListCursor{items: anyList}
 	} else {
 		return nil, fmt.Errorf("input must be a list of items or a cursor")
 	}
 
 	// Check if Right is a Store
 	rightStore, isRightStore := e.Context.Stores[rightVar]
+
+	log.Debug("Join", "RightVar", rightVar, "IsStore", isRightStore, "JoinType", joinType)
 
 	// DECISION: Prefer Lookup Join (JoinRightCursor) for Stores
 	// We rely on JoinRightCursor's internal "Smart Mode":
@@ -1458,14 +1621,20 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("right input variable '%s' not found", rightVar)
 	}
-	var okList bool
-	rightList, okList := rightInput.([]map[string]any)
-	if !okList {
+
+	var rightList []any
+	if l, ok := rightInput.([]map[string]any); ok {
+		for _, x := range l {
+			rightList = append(rightList, x)
+		}
+	} else if l, ok := rightInput.([]any); ok {
+		rightList = l
+	} else {
 		return nil, fmt.Errorf("right input must be a list of items")
 	}
 
 	// Materialize Left Cursor
-	var leftList []map[string]any
+	var leftList []any
 	if lc, ok := leftCursor.(*ListCursor); ok {
 		leftList = lc.items
 	} else {
@@ -1485,8 +1654,8 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	return e.stageJoin(leftList, rightList, joinType, on)
 }
 
-func (e *ScriptEngine) stageJoin(left, right []map[string]any, joinType string, on map[string]any) ([]map[string]any, error) {
-	var results []map[string]any
+func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[string]any) ([]any, error) {
+	var results []any
 
 	for _, lItem := range left {
 		matched := false
@@ -1505,12 +1674,35 @@ func (e *ScriptEngine) stageJoin(left, right []map[string]any, joinType string, 
 			if match {
 				matched = true
 				merged := make(map[string]any)
-				for k, v := range lItem {
-					merged[k] = v
+
+				if m, ok := lItem.(map[string]any); ok {
+					for k, v := range m {
+						merged[k] = v
+					}
+				} else if om, ok := lItem.(*OrderedMap); ok && om != nil {
+					for k, v := range om.m {
+						merged[k] = v
+					}
+				} else if om, ok := lItem.(OrderedMap); ok {
+					for k, v := range om.m {
+						merged[k] = v
+					}
 				}
-				for k, v := range rItem {
-					merged[k] = v
+
+				if m, ok := rItem.(map[string]any); ok {
+					for k, v := range m {
+						merged[k] = v
+					}
+				} else if om, ok := rItem.(*OrderedMap); ok && om != nil {
+					for k, v := range om.m {
+						merged[k] = v
+					}
+				} else if om, ok := rItem.(OrderedMap); ok {
+					for k, v := range om.m {
+						merged[k] = v
+					}
 				}
+
 				results = append(results, merged)
 			}
 		}
@@ -1531,8 +1723,8 @@ func (e *ScriptEngine) JoinRight(ctx context.Context, input any, args map[string
 	return e.Join(ctx, input, args)
 }
 
-func (e *ScriptEngine) Update(ctx context.Context, input any, args map[string]any) ([]map[string]any, error) {
-	var list []map[string]any
+func (e *ScriptEngine) Update(ctx context.Context, input any, args map[string]any) ([]any, error) {
+	var list []any
 	if cursor, ok := input.(ScriptCursor); ok {
 		for {
 			item, ok, err := cursor.Next(ctx)
@@ -1545,6 +1737,10 @@ func (e *ScriptEngine) Update(ctx context.Context, input any, args map[string]an
 			list = append(list, item)
 		}
 	} else if l, ok := input.([]map[string]any); ok {
+		for _, x := range l {
+			list = append(list, x)
+		}
+	} else if l, ok := input.([]any); ok {
 		list = l
 	} else {
 		return nil, fmt.Errorf("input must be a list of items or a cursor")
@@ -1559,8 +1755,8 @@ func (e *ScriptEngine) Update(ctx context.Context, input any, args map[string]an
 	return e.stageUpdate(ctx, list, store, args)
 }
 
-func (e *ScriptEngine) Delete(ctx context.Context, input any, args map[string]any) ([]map[string]any, error) {
-	var list []map[string]any
+func (e *ScriptEngine) Delete(ctx context.Context, input any, args map[string]any) ([]any, error) {
+	var list []any
 	if cursor, ok := input.(ScriptCursor); ok {
 		for {
 			item, ok, err := cursor.Next(ctx)
@@ -1573,6 +1769,10 @@ func (e *ScriptEngine) Delete(ctx context.Context, input any, args map[string]an
 			list = append(list, item)
 		}
 	} else if l, ok := input.([]map[string]any); ok {
+		for _, x := range l {
+			list = append(list, x)
+		}
+	} else if l, ok := input.([]any); ok {
 		list = l
 	} else {
 		return nil, fmt.Errorf("input must be a list of items or a cursor")
@@ -1608,13 +1808,13 @@ func (e *ScriptEngine) Inspect(ctx context.Context, args map[string]any) (any, e
 
 // --- Stage Implementations (In-Memory) ---
 
-func (e *ScriptEngine) stageFilter(input []map[string]any, args map[string]any) ([]map[string]any, error) {
+func (e *ScriptEngine) stageFilter(input []any, args map[string]any) ([]any, error) {
 	conditionRaw := args["condition"]
 	if conditionRaw == nil {
 		return input, nil
 	}
 
-	var output []map[string]any
+	var output []any
 
 	// CEL Filter
 	if _, ok := conditionRaw.(string); ok {
@@ -1640,7 +1840,7 @@ func (e *ScriptEngine) stageFilter(input []map[string]any, args map[string]any) 
 	return input, fmt.Errorf("unsupported filter condition type")
 }
 
-func (e *ScriptEngine) stageSort(input []map[string]any, args map[string]any) ([]map[string]any, error) {
+func (e *ScriptEngine) stageSort(input []any, args map[string]any) ([]any, error) {
 	fieldsRaw, ok := args["fields"].([]any)
 	if !ok {
 		return input, nil
@@ -1680,39 +1880,63 @@ func (e *ScriptEngine) stageSort(input []map[string]any, args map[string]any) ([
 	return input, nil
 }
 
-func (e *ScriptEngine) stageProject(input []map[string]any, args map[string]any) ([]map[string]any, error) {
-	fieldsRaw, ok := args["fields"].([]any)
-	if !ok {
+func (e *ScriptEngine) stageProject(input []any, args map[string]any) ([]any, error) {
+	var fields []string
+
+	if fAny, ok := args["fields"].([]any); ok {
+		for _, f := range fAny {
+			if s, ok := f.(string); ok {
+				fields = append(fields, s)
+			}
+		}
+	} else if fStr, ok := args["fields"].([]string); ok {
+		fields = fStr
+	} else {
 		return input, nil
 	}
-	var fields []string
-	for _, f := range fieldsRaw {
-		if s, ok := f.(string); ok {
-			fields = append(fields, s)
+
+	log.Debug("stageProject called", "input_len", len(input), "input_fields", fields)
+
+	var output []any
+	for i, item := range input {
+		newItem := renderItem(nil, item, fields)
+		output = append(output, newItem)
+
+		// Log sample of what we are creating
+		if i == 0 {
+			if om, ok := newItem.(*OrderedMap); ok {
+				log.Debug("stageProject first item (OrderedMap)", "keys", om.keys)
+			} else if om, ok := newItem.(OrderedMap); ok {
+				log.Debug("stageProject first item (OrderedMap Value)", "keys", om.keys)
+			} else {
+				log.Debug("stageProject first item (Map/Other)", "type", fmt.Sprintf("%T", newItem))
+			}
 		}
 	}
 
-	var output []map[string]any
-	for _, item := range input {
-		newItem := make(map[string]any)
-		for _, f := range fields {
-			newItem[f] = getField(item, f)
-		}
-		output = append(output, newItem)
-	}
 	return output, nil
 }
 
-func (e *ScriptEngine) stageLimit(input []map[string]any, args map[string]any) ([]map[string]any, error) {
-	count, _ := args["count"].(float64)
-	limit := int(count)
+func (e *ScriptEngine) stageLimit(input []any, args map[string]any) ([]any, error) {
+	var limit int
+	if l, ok := args["limit"].(float64); ok {
+		limit = int(l)
+	} else if l, ok := args["count"].(float64); ok {
+		limit = int(l)
+	} else {
+		// Default or error?
+		limit = 1000
+	}
+
+	log.Debug("stageLimit called", "input_len", len(input), "limit", limit)
+
 	if limit < len(input) {
 		return input[:limit], nil
 	}
 	return input, nil
 }
 
-func (e *ScriptEngine) stageUpdate(ctx context.Context, input []map[string]any, store jsondb.StoreAccessor, args map[string]any) ([]map[string]any, error) {
+func (e *ScriptEngine) stageUpdate(ctx context.Context, input []any, store jsondb.StoreAccessor, args map[string]any) ([]any, error) {
 	if store == nil {
 		return nil, fmt.Errorf("update stage requires an active store from a previous scan")
 	}
@@ -1721,7 +1945,18 @@ func (e *ScriptEngine) stageUpdate(ctx context.Context, input []map[string]any, 
 		return input, nil
 	}
 
-	for _, item := range input {
+	for _, itemObj := range input {
+		var item map[string]any
+		if m, ok := itemObj.(map[string]any); ok {
+			item = m
+		} else if om, ok := itemObj.(*OrderedMap); ok && om != nil {
+			item = om.m
+		} else if om, ok := itemObj.(OrderedMap); ok {
+			item = om.m
+		} else {
+			continue
+		}
+
 		key := item["key"]
 		// Merge values
 		currentVal := item["value"]
@@ -1749,18 +1984,18 @@ func (e *ScriptEngine) stageUpdate(ctx context.Context, input []map[string]any, 
 	return input, nil
 }
 
-func (e *ScriptEngine) stageDelete(ctx context.Context, input []map[string]any, store jsondb.StoreAccessor, args map[string]any) ([]map[string]any, error) {
+func (e *ScriptEngine) stageDelete(ctx context.Context, input []any, store jsondb.StoreAccessor, args map[string]any) ([]any, error) {
 	if store == nil {
 		return nil, fmt.Errorf("delete stage requires an active store from a previous scan")
 	}
 
-	for _, item := range input {
-		key := item["key"]
+	for _, itemObj := range input {
+		key := getField(itemObj, "key")
 		if _, err := store.Remove(ctx, key); err != nil {
 			return nil, err
 		}
 	}
-	return []map[string]any{}, nil // Return empty list after delete? Or deleted items?
+	return []any{}, nil
 }
 
 // --- Control Flow Operations ---
@@ -2167,7 +2402,7 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 
 // --- Helper Functions ---
 
-func matchesMap(item map[string]any, condition map[string]any) bool {
+func matchesMap(item any, condition map[string]any) bool {
 	for k, v := range condition {
 		itemVal := getField(item, k)
 
@@ -2239,10 +2474,29 @@ func matchesMap(item map[string]any, condition map[string]any) bool {
 	return true
 }
 
-func getField(item map[string]any, field string) any {
+func getField(itemObj any, field string) any {
+	var item map[string]any
+	if m, ok := itemObj.(map[string]any); ok {
+		item = m
+	} else if om, ok := itemObj.(OrderedMap); ok {
+		item = om.m
+	} else if om, ok := itemObj.(*OrderedMap); ok && om != nil {
+		item = om.m
+	} else {
+		return nil
+	}
+
 	// Support "value.age" or just "age" (implicit value)
 	if v, ok := item[field]; ok {
 		return v
+	}
+
+	// Support relaxed aliased lookup (e.g. "a.name" -> "name") provided the alias didn't match
+	if idx := strings.Index(field, "."); idx != -1 {
+		suffix := field[idx+1:]
+		if v, ok := item[suffix]; ok {
+			return v
+		}
 	}
 
 	// Check for key field (alias or direct)

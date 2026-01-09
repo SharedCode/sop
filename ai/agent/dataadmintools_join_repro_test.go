@@ -96,7 +96,12 @@ func TestToolJoin_SuffixHandling(t *testing.T) {
 	}
 
 	firstRow := results[0]
-	valMap := firstRow["value"].(map[string]any)
+	var valMap map[string]any
+	if vm, ok := firstRow["value"].(map[string]any); ok {
+		valMap = vm
+	} else {
+		valMap = firstRow
+	}
 
 	// Check if Department has a value (normalized from department_1)
 	if val, ok := valMap["Department"]; ok {
@@ -418,11 +423,25 @@ func TestToolJoin_ReproUserScenario(t *testing.T) {
 	}
 
 	getRegion := func(item map[string]any) string {
-		v := item["key"].(map[string]any)
-		if val, ok := v["Region"]; ok {
+		// Handle both nested "key" layout and flat layout
+		if k, ok := item["key"]; ok && k != nil {
+			if v, ok := k.(map[string]any); ok {
+				if val, ok := v["Region"]; ok {
+					return val.(string)
+				}
+				if val, ok := v["region"]; ok {
+					return val.(string)
+				}
+			}
+		}
+		// Flat layout fallback
+		if val, ok := item["Region"]; ok {
 			return val.(string)
 		}
-		return v["region"].(string)
+		if val, ok := item["region"]; ok {
+			return val.(string)
+		}
+		return ""
 	}
 
 	if getRegion(items[0]) != "US" {

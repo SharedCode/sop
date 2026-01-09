@@ -64,21 +64,35 @@ func TestToolJoin_OrderBy_RightStoreDirection(t *testing.T) {
 	json.Unmarshal([]byte(res), &items)
 
 	// We expect 3 items
+	t.Logf("Items: %+v", items)
 	if len(items) != 3 {
 		t.Fatalf("Expected 3 items, got %d", len(items))
 	}
 
 	// Check Order: Should be E3, E2, E1
 	getVal := func(item map[string]any) string {
-		v := item["key"].(map[string]any)
-        // Try "Id" (Title Case) or "id"
-        if val, ok := v["Id"]; ok {
-            return val.(string)
-        }
-        return v["id"].(string)
-    }
+		// Handle both nested "key" layout and flat layout
+		if k, ok := item["key"]; ok && k != nil {
+			if v, ok := k.(map[string]any); ok {
+				if val, ok := v["Id"]; ok {
+					return val.(string)
+				}
+				if val, ok := v["id"]; ok {
+					return val.(string)
+				}
+			}
+		}
+		// Flat layout fallback
+		if val, ok := item["Id"]; ok {
+			return val.(string)
+		}
+		if val, ok := item["id"]; ok {
+			return val.(string)
+		}
+		return ""
+	}
 
-    if getVal(items[0]) != "E3" {
+	if getVal(items[0]) != "E3" {
 		t.Errorf("Expected first item 'E3', got '%s'", getVal(items[0]))
 	}
 	if getVal(items[1]) != "E2" {

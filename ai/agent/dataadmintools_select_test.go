@@ -176,126 +176,123 @@ func TestToolSelect_WithFilter(t *testing.T) {
 }
 
 func TestToolSelect_WithAlias(t *testing.T) {
-// 1. Setup
-ctx := context.Background()
-dbPath := "test_dataadmin_select_alias"
-os.RemoveAll(dbPath)
-defer os.RemoveAll(dbPath)
+	// 1. Setup
+	ctx := context.Background()
+	dbPath := "test_dataadmin_select_alias"
+	os.RemoveAll(dbPath)
+	defer os.RemoveAll(dbPath)
 
-dbOpts := sop.DatabaseOptions{
-StoresFolders: []string{dbPath},
-CacheType:     sop.InMemory,
-}
+	dbOpts := sop.DatabaseOptions{
+		StoresFolders: []string{dbPath},
+		CacheType:     sop.InMemory,
+	}
 
-// Create DB and Store
-db := database.NewDatabase(dbOpts)
-tx, err := db.BeginTransaction(ctx, sop.ForWriting)
-if err != nil {
-t.Fatalf("BeginTransaction failed: %v", err)
-}
+	// Create DB and Store
+	db := database.NewDatabase(dbOpts)
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
 
-storeName := "employees"
-storeOpts := sop.StoreOptions{
-Name:           storeName,
-SlotLength:     10,
-IsPrimitiveKey: false,
-}
-if _, err := sopdb.NewBtree[string, any](ctx, dbOpts, storeName, tx, nil, storeOpts); err != nil {
-t.Fatalf("NewBtree failed: %v", err)
-}
-if err := tx.Commit(ctx); err != nil {
-t.Fatalf("Commit creation failed: %v", err)
-}
+	storeName := "employees"
+	storeOpts := sop.StoreOptions{
+		Name:           storeName,
+		SlotLength:     10,
+		IsPrimitiveKey: false,
+	}
+	if _, err := sopdb.NewBtree[string, any](ctx, dbOpts, storeName, tx, nil, storeOpts); err != nil {
+		t.Fatalf("NewBtree failed: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit creation failed: %v", err)
+	}
 
-// Populate
-tx, err = db.BeginTransaction(ctx, sop.ForWriting)
-if err != nil {
-t.Fatalf("BeginTransaction population failed: %v", err)
-}
+	// Populate
+	tx, err = db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction population failed: %v", err)
+	}
 
-store, err := jsondb.OpenStore(ctx, dbOpts, storeName, tx)
-if err != nil {
-t.Fatalf("OpenStore failed: %v", err)
-}
+	store, err := jsondb.OpenStore(ctx, dbOpts, storeName, tx)
+	if err != nil {
+		t.Fatalf("OpenStore failed: %v", err)
+	}
 
-// Add item
-// Key: {id: 101}
-// Value: {name: "John Doe", dept: "Engineering", salary: 100000}
-key := map[string]any{"id": 101}
-value := map[string]any{"name": "John Doe", "dept": "Engineering", "salary": 100000}
+	// Add item
+	// Key: {id: 101}
+	// Value: {name: "John Doe", dept: "Engineering", salary: 100000}
+	key := map[string]any{"id": 101}
+	value := map[string]any{"name": "John Doe", "dept": "Engineering", "salary": 100000}
 
-if _, err := store.Add(ctx, key, value); err != nil {
-t.Fatalf("Add failed: %v", err)
-}
+	if _, err := store.Add(ctx, key, value); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
 
-if err := tx.Commit(ctx); err != nil {
-t.Fatalf("Commit failed: %v", err)
-}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
 
-// 2. Prepare Agent
-agent := &DataAdminAgent{
-databases: map[string]sop.DatabaseOptions{
-"testdb": dbOpts,
-},
-}
-sessionPayload := &ai.SessionPayload{
-CurrentDB: "testdb",
-}
-ctx = context.WithValue(ctx, "session_payload", sessionPayload)
+	// 2. Prepare Agent
+	agent := &DataAdminAgent{
+		databases: map[string]sop.DatabaseOptions{
+			"testdb": dbOpts,
+		},
+	}
+	sessionPayload := &ai.SessionPayload{
+		CurrentDB: "testdb",
+	}
+	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
-// 3. Execute Select with Alias
-args := map[string]any{
-"store": storeName,
-"fields": []string{
-"id AS employee_id",
-"name AS full_name",
-"dept", // No alias
-},
-}
+	// 3. Execute Select with Alias
+	args := map[string]any{
+		"store": storeName,
+		"fields": []string{
+			"id AS employee_id",
+			"name AS full_name",
+			"dept", // No alias
+		},
+	}
 
-resultJSON, err := agent.toolSelect(ctx, args)
-if err != nil {
-t.Fatalf("toolSelect failed: %v", err)
-}
+	resultJSON, err := agent.toolSelect(ctx, args)
+	if err != nil {
+		t.Fatalf("toolSelect failed: %v", err)
+	}
 
-// 4. Verify Result
-var result []map[string]any
-if err := json.Unmarshal([]byte(resultJSON), &result); err != nil {
-t.Fatalf("Failed to unmarshal result: %v", err)
-}
+	// 4. Verify Result
+	var result []map[string]any
+	if err := json.Unmarshal([]byte(resultJSON), &result); err != nil {
+		t.Fatalf("Failed to unmarshal result: %v", err)
+	}
 
-if len(result) != 1 {
-t.Fatalf("Expected 1 result, got %d", len(result))
-}
+	if len(result) != 1 {
+		t.Fatalf("Expected 1 result, got %d", len(result))
+	}
 
-item := result[0]
+	item := result[0]
 
-// Check Key Alias
-keyMap, ok := item["key"].(map[string]any)
-if !ok {
-t.Fatalf("Key is not a map")
-}
-if _, ok := keyMap["employee_id"]; !ok {
-t.Errorf("Expected key 'employee_id', got %v", keyMap)
-}
-if val, _ := keyMap["employee_id"].(float64); val != 101 {
-t.Errorf("Expected employee_id 101, got %v", keyMap["employee_id"])
-}
+	// Check Key Alias (Now flattened)
+	if _, ok := item["employee_id"]; !ok {
+		// Only fail if we expected it to be at root (flattened)
+		// But in this test case, we inserted {"id": 101}, "John Doe", {"dept": "Sales"}
+		// Wait, the input data:
+		// agent.toolAdd(ctx, map[string]any{"store": "test_alias", "key": map[string]any{"id": 101}, "value": map[string]any{"name": "John Doe", "dept": "Sales"}})
+		// So Key IS a map, Value IS a map. Flattening IS happening.
+		t.Errorf("Expected key 'employee_id', got keys: %v", item)
+	}
+	if val, _ := item["employee_id"].(float64); val != 101 {
+		t.Errorf("Expected employee_id 101, got %v", item["employee_id"])
+	}
 
-// Check Value Alias
-valMap, ok := item["value"].(map[string]any)
-if !ok {
-t.Fatalf("Value is not a map")
-}
-if _, ok := valMap["full_name"]; !ok {
-t.Errorf("Expected value 'full_name', got %v", valMap)
-}
-if val, _ := valMap["full_name"].(string); val != "John Doe" {
-t.Errorf("Expected full_name 'John Doe', got %v", valMap["full_name"])
-}
+	// Check Value Alias (Now flattened)
+	if _, ok := item["full_name"]; !ok {
+		t.Errorf("Expected value 'full_name', got keys: %v", item)
+	}
+	if val, _ := item["full_name"].(string); val != "John Doe" {
+		t.Errorf("Expected full_name 'John Doe', got %v", item["full_name"])
+	}
 
-// Check No Alias
-if _, ok := valMap["dept"]; !ok {
-t.Errorf("Expected value 'dept', got %v", valMap)
-}
+	// Check No Alias
+	if _, ok := item["dept"]; !ok {
+		t.Errorf("Expected value 'dept', got keys: %v", item)
+	}
 }

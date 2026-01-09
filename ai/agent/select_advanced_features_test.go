@@ -156,8 +156,14 @@ func TestToolSelect_ValueMatch(t *testing.T) {
 	// Verify names
 	names := make(map[string]bool)
 	for _, r := range results {
-		val := r["value"].(map[string]any)
-		names[val["name"].(string)] = true
+		// With flattening, fields are at root
+		if name, ok := r["name"].(string); ok {
+			names[name] = true
+		} else if val, ok := r["value"].(map[string]any); ok {
+			// Fallback for legacy if flattening didn't assume map?
+			// But for this test, Value IS a map {"name":"...", ...}
+			names[val["name"].(string)] = true
+		}
 	}
 	if !names["Alice"] || !names["Dave"] {
 		t.Errorf("Expected Alice and Dave, got %v", names)
@@ -263,8 +269,16 @@ func TestToolSelect_ScriptView(t *testing.T) {
 
 	// Let's inspect first result
 	r1 := results[0].(map[string]any)
-	val := r1["value"].(map[string]any)
-	if val["name"] != "Alice" && val["name"] != "Charlie" {
-		t.Errorf("Unexpected name: %v", val["name"])
+
+	// NEW: Verify Flat Structure
+	name, ok := r1["name"].(string)
+	if !ok {
+		// Fallback debugging
+		t.Errorf("Expected 'name' field in result, got: %v", r1)
+		return
+	}
+
+	if name != "Alice" && name != "Charlie" {
+		t.Errorf("Unexpected name: %v", name)
 	}
 }

@@ -49,9 +49,16 @@ func TestToolJoin_OrderBy(t *testing.T) {
 
 	// Helper to extract key
 	getKey := func(item map[string]any) string {
-		k := item["key"]
-		if s, ok := k.(string); ok {
-			return s
+		if k, ok := item["key"]; ok {
+			if s, ok := k.(string); ok {
+				return s
+			}
+		}
+		// Fallback for flat results (using "id" field which is the key in this test data)
+		if v, ok := item["id"]; ok {
+			if s, ok := v.(string); ok {
+				return s
+			}
 		}
 		return ""
 	}

@@ -61,7 +61,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		if instructions == "" {
 			return "No tool instructions found.", true, nil
 		}
-		return fmt.Sprintf("\n[Last Tool Instructions]:\n%s", instructions), true, nil
+		return fmt.Sprintf("Last Tool Instructions\n```json\n%s\n```", instructions), true, nil
 	}
 
 	// Handle Script Management Commands

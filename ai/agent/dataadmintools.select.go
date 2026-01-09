@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	log "log/slog"
+
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
@@ -75,6 +77,15 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 			}
 		} else if fSlice, ok := f.([]string); ok {
 			fields = fSlice
+		} else if fStr, ok := f.(string); ok {
+			// Allow comma-separated fields list (e.g. "a.region, b.name as employee")
+			parts := strings.Split(fStr, ",")
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					fields = append(fields, p)
+				}
+			}
 		}
 	}
 
@@ -307,10 +318,13 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 					continue
 				} else {
 					// Select
-					itemMap := map[string]any{"key": k, "value": v}
-					// Ensure we pass explicit fields if they exist, otherwise rely on indexSpec
-					finalItem := reorderItem(itemMap, fields, indexSpec)
-					emitter.Emit(finalItem)
+					item := renderItem(k, v, fields)
+
+
+					log.Debug(fmt.Sprintf("item: %v", item))
+
+					emitter.Emit(item)
+
 					count++
 				}
 

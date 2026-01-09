@@ -66,8 +66,9 @@ func (a *DataAdminAgent) openGenericStore(ctx context.Context, dbOpts sop.Databa
 	if t2, ok := tx.GetPhasedTransaction().(*common.Transaction); ok {
 		stores, err := t2.StoreRepository.Get(ctx, storeName)
 		if err == nil && len(stores) > 0 {
+			// log.Info(fmt.Sprintf("OpenGenericStore: Store %s found. Primitive=%v, SpecLen=%d", storeName, stores[0].IsPrimitiveKey, len(stores[0].MapKeyIndexSpecification)))
 			isPrimitiveKey = stores[0].IsPrimitiveKey
-			if !isPrimitiveKey && stores[0].MapKeyIndexSpecification != "" {
+			if stores[0].MapKeyIndexSpecification != "" {
 				var is jsondb.IndexSpecification
 				if err := encoding.DefaultMarshaler.Unmarshal([]byte(stores[0].MapKeyIndexSpecification), &is); err == nil {
 					indexSpec = &is

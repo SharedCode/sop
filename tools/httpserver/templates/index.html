@@ -7,6 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>SOP Data Manager</title>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         :root {
             --bg-color: #ffffff;
@@ -84,7 +85,8 @@
         tr:hover { background-color: var(--table-row-hover); cursor: pointer; }
         tr.selected-row { background-color: var(--table-row-selected) !important; }
         #detail-panel { width: 400px; border-left: 1px solid var(--border-color); padding: 0; background: var(--detail-panel-bg); display: none; overflow-y: hidden; box-sizing: border-box; flex-shrink: 0; flex-direction: column; }
-        pre { background: var(--pre-bg); padding: 10px; border-radius: 4px; overflow-x: auto; color: var(--text-color); font-size: 12px; font-family: Consolas, "Courier New", monospace; }
+        pre, code, .data-table { font-family: inherit; }
+        pre { background: var(--pre-bg); padding: 5px 6px; border-radius: 4px; overflow-x: auto; color: var(--text-color); font-size: 13px; margin: 0; }
         .toolbar { display: flex; gap: 10px; margin-bottom: 20px; }
         input[type="text"], textarea { padding: 8px; border: 1px solid var(--input-border); border-radius: 4px; flex: 1; background-color: var(--input-bg); color: var(--text-color); }
         button { padding: 8px 16px; background: var(--button-bg); color: var(--button-text); border: none; border-radius: 4px; cursor: pointer; }
@@ -250,7 +252,7 @@
             flex: 1; 
             overflow-y: auto; 
             overflow-x: hidden;
-            padding: 15px 5px 15px 12px; 
+            padding: 10px 5px 10px 12px; 
             background: var(--bg-color); 
             scroll-behavior: smooth; 
             display: flex; 
@@ -259,8 +261,8 @@
         .chat-message { 
             display: block; 
             width: fit-content; 
-            margin-bottom: 10px; 
-            padding: 10px; 
+            margin-bottom: 5px; 
+            padding: 5px 6px; 
             border-radius: 4px; 
             max-width: calc(100% - 7px); 
             font-size: 13px; 
@@ -271,6 +273,11 @@
         }
         .chat-message.user { background-color: #007bff; color: white; align-self: flex-end; margin-left: auto; margin-right:7px; text-align: left; border: 1px solid #0056b3; }
         .chat-message.ai { background: var(--pre-bg); color: var(--text-color); align-self: flex-start; margin-right: auto; border: 1px solid var(--border-color); }
+        .chat-message.ai-table-container { overflow-x: auto; max-width: 100%; display: block; padding: 0 6px; background: transparent; border: none; }
+        .data-table { margin: 0; border: 1px solid var(--border-color); width: auto; min-width: 100%; font-size: 12px; }
+        .data-table th, .data-table td { white-space: nowrap; padding: 4px 8px; }
+        .data-table th { text-transform: capitalize; border-bottom: 2px solid var(--border-color); }
+        .csv-header { text-transform: capitalize; border-bottom: 1px solid var(--border-color); display: inline-block; min-width: 100%; }
         .chat-input-area { display: flex; gap: 5px; flex-shrink: 0; padding: 10px; border-top: 1px solid var(--border-color); background: var(--sidebar-bg); }
         #chat-input { height: 40px; resize: vertical; min-height: 40px; max-height: 200px; font-size: 13px; }
         #tab-chat { overflow-y: hidden; height: auto; flex: 1; display: flex; flex-direction: column; }
@@ -295,7 +302,10 @@
             .chat-widget.active {
                 display: flex !important;
             }
-                z-index: 1500; /* Above detail panel but below modals */
+            .chat-message.ai-table-container {
+                overflow-x: auto;
+                max-width: 100%;
+                display: block; /* Override default flow */
             }
             .modal-content { width: 95%; }
             #add-store-modal .modal-content { width: 95%; }
@@ -1532,139 +1542,92 @@
             return;
         }
 
-        // --- DYNAMIC TABLE GENERATION ---
-        let keyCols = [];
-        let valCols = [];
-        
-        // Determine Key Columns
-        // Check if all keys are null (e.g. projection query where key was not requested)
-        // We use loose equality (== null) to catch both null and undefined
-        const allKeysNull = items.length > 0 && items.every(item => item.key == null);
-        
-        console.log("RenderGrid: allKeysNull =", allKeysNull, "First Key:", items.length > 0 ? items[0].key : "N/A");
-
-        if (!allKeysNull) {
-            if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
-                // Priority 1: Use Index Spec for order
-                keyCols = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
-                
-                // If we have data, append any extra fields not in index spec
-                if (items.length > 0) {
-                    const sampleKey = items[0].key;
-                    if (typeof sampleKey === 'object' && sampleKey !== null) {
-                        const dataKeys = Object.keys(sampleKey);
-                        dataKeys.forEach(k => {
-                            if (!keyCols.includes(k)) {
-                                keyCols.push(k);
-                            }
-                        });
-                    }
-                }
-            } else if (items.length > 0) {
-                // Priority 2: Infer from data
-                const sampleKey = items[0].key;
-                if (typeof sampleKey === 'object' && sampleKey !== null) {
-                    // Use keys as they appear in the object (insertion order)
-                    keyCols = Object.keys(sampleKey);
-                }
-                
-                // Fallback: check if it's a JSON string
-                if ((!keyCols || keyCols.length === 0) && typeof sampleKey === 'string' && sampleKey.trim().startsWith('{')) {
-                    try {
-                        const parsed = JSON.parse(sampleKey);
-                        if (typeof parsed === 'object' && parsed !== null) {
-                            keyCols = Object.keys(parsed);
-                        }
-                    } catch(e) {}
-                }
-
-                if (!keyCols || keyCols.length === 0) {
-                    keyCols = ['Key'];
-                }
-            } else {
-                // Fallback
-                keyCols = ['Key'];
-            }
-        }
-
-        // Determine Value Columns
-        const allValuesNull = items.length > 0 && items.every(item => item.value == null);
-
-        if (!allValuesNull && items.length > 0) {
-            let sampleVal = items[0].value;
+        // --- FLATTENING LOGIC (Retrofit) ---
+        // Flatten Key and Value into a single object for display.
+        const flatItems = items.map(item => {
+            const flat = {};
             
-            // Try to parse if string
-            if (typeof sampleVal === 'string') {
-                try {
-                    const parsed = JSON.parse(sampleVal);
-                    if (typeof parsed === 'object' && parsed !== null) {
-                        // Check if it's a byte array (array of numbers)
-                        const isByteArray = Array.isArray(parsed) && parsed.every(n => typeof n === 'number');
-                        if (!isByteArray) {
-                            sampleVal = parsed;
-                        }
-                    }
-                } catch(e) {}
-            } else if (Array.isArray(sampleVal) && sampleVal.every(n => typeof n === 'number')) {
-                // It's already a byte array object, treat as primitive for column purposes
-                sampleVal = "blob"; 
+            // 1. Flatten Key
+            let k = item.key;
+            // Try parse string JSON (Legacy/StringDB support)
+            if (typeof k === 'string' && k.trim().startsWith('{')) {
+                try { k = JSON.parse(k); } catch(e){}
             }
-
-            if (typeof sampleVal === 'object' && sampleVal !== null && !Array.isArray(sampleVal)) {
-                valCols = Object.keys(sampleVal);
-                
-                // Filter out columns that already exist in Key Columns (redundant)
-                const keyColsLower = new Set(keyCols.map(k => k.toLowerCase()));
-                valCols = valCols.filter(col => !keyColsLower.has(col.toLowerCase()));
+            
+            if (k !== null && typeof k === 'object' && !Array.isArray(k)) {
+                Object.assign(flat, k);
             } else {
-                valCols = ['Value'];
+                // Primitive Key
+                flat['Key'] = item.key;
             }
-        } else if (!allValuesNull) {
-            valCols = ['Value'];
-        } else {
-            valCols = [];
-        }
 
+            // 2. Flatten Value
+            let v = item.value;
+            // Try parse string JSON
+            if (typeof v === 'string' && v.trim().startsWith('{') && !v.includes('"type":"Buffer"')) { // Avoid buffer objects if possible
+                try { v = JSON.parse(v); } catch(e){}
+            }
+
+            if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+                 Object.assign(flat, v);
+            } else if (v !== undefined) {
+                 flat['Value'] = item.value;
+            }
+            
+            // Metadata for UI operations (Keep hidden)
+            flat.__original_key = item.key;
+            flat.__original_value = item.value;
+            
+            return flat;
+        });
+
+        // --- COLUMN DETECTION ---
+        let columns = new Set();
+        flatItems.forEach(item => {
+            Object.keys(item).forEach(k => {
+                if (k !== '__original_key' && k !== '__original_value') {
+                    columns.add(k);
+                }
+            });
+        });
+        
+        let cols = Array.from(columns);
         // Store all detected columns for the selector
-        allDetectedColumns = [...keyCols, ...valCols];
+        allDetectedColumns = cols;
 
         // Filter based on user selection
         if (userSelectedColumns) {
-            keyCols = keyCols.filter(c => userSelectedColumns.has(c));
-            valCols = valCols.filter(c => userSelectedColumns.has(c));
+            cols = cols.filter(c => userSelectedColumns.has(c));
         }
 
+        // --- DYNAMIC TABLE GENERATION ---
         let html = '<table id="items-table"><thead><tr>';
         
         if (showSelectionColumn) {
              html += '<th style="width: 40px; text-align: center;"><input type="checkbox" id="cb-select-all" onchange="toggleSelectAll(this)"></th>';
         }
         
-        // Key Headers
-        keyCols.forEach((col, index) => {
+        // Render Columns
+        cols.forEach((col, index) => {
              let style = '';
              if (columnWidths[index]) style = `style="width: ${columnWidths[index]}"`;
-             html += `<th class="th-key" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
-        });
-        
-        // Value Headers
-        let valOffset = keyCols.length;
-        valCols.forEach((col, index) => {
-             let style = '';
-             if (columnWidths[valOffset + index]) style = `style="width: ${columnWidths[valOffset + index]}"`;
-             html += `<th class="th-val" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
+             // Use generic header class
+             html += `<th class="th-generic" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
         });
         
         html += '</tr></thead><tbody>';
         
-        items.forEach(item => {
+        flatItems.forEach(item => {
+            // Reconstruct original item context for Detail View / OnClick
+            const originalItem = { key: item.__original_key, value: item.__original_value };
             // Escape single quotes for the onclick attribute
-            const itemJson = JSON.stringify(item).replace(/'/g, "&#39;");
+            const itemJson = JSON.stringify(originalItem).replace(/'/g, "&#39;");
+            
             html += `<tr onclick='showDetail(this, ${itemJson})'>`;
             
             if (showSelectionColumn) {
                 // Serialize key for storage/comparison
-                const keyStr = typeof item.key === 'object' ? JSON.stringify(item.key) : String(item.key);
+                const keyStr = typeof item.__original_key === 'object' ? JSON.stringify(item.__original_key) : String(item.__original_key);
                 const isChecked = selectedItems.has(keyStr) ? 'checked' : '';
                 // Escape for HTML attribute
                 const safeKey = keyStr.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
@@ -1674,68 +1637,22 @@
                          </td>`;
             }
             
-            // Key Cells
-            if (keyCols.length === 1 && keyCols[0] === 'Key') {
-                 const val = typeof item.key === 'object' ? JSON.stringify(item.key) : item.key;
-                 html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
-            } else {
-                keyCols.forEach(col => {
-                    let keyObj = item.key;
-                    if (typeof keyObj === 'string' && keyObj.trim().startsWith('{')) {
-                        try { keyObj = JSON.parse(keyObj); } catch(e){}
+            // Render Cells
+            cols.forEach(col => {
+                let val = item[col];
+                
+                // Formatting
+                if (typeof val === 'object') {
+                    if (val === null) {
+                        val = 'null';
+                    } else {
+                        val = JSON.stringify(val);
                     }
-                    
-                    let val = (keyObj && typeof keyObj === 'object') ? keyObj[col] : '';
-                    if (col === 'Key') val = item.key;
-                    if (typeof val === 'object') val = JSON.stringify(val);
-                    html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
-                });
-            }
-            
-            // Value Cells
-            if (valCols.length === 1 && valCols[0] === 'Value') {
-                 let val = item.value;
-                 // Check for Byte Array
-                 let isBlob = false;
-                 if (Array.isArray(val) && val.every(n => typeof n === 'number')) {
-                     isBlob = true;
-                 } else if (typeof val === 'string') {
-                     try {
-                         const parsed = JSON.parse(val);
-                         if (Array.isArray(parsed) && parsed.every(n => typeof n === 'number')) {
-                             val = parsed;
-                             isBlob = true;
-                         }
-                     } catch(e) {}
-                 }
-
-                 if (isBlob) {
-                     const len = val.length;
-                     const preview = len > 20 ? `[Byte Array (${len} bytes)]` : `[${val.join(', ')}]`;
-                     html += `<td title="Byte Array (${len} bytes)">${preview}</td>`;
-                 } else {
-                     val = typeof item.value === 'object' ? JSON.stringify(item.value) : item.value;
-                     html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
-                 }
-            } else {
-                valCols.forEach(col => {
-                    let valObj = item.value;
-                    // Try to parse if string
-                    if (typeof valObj === 'string') {
-                        try {
-                            const parsed = JSON.parse(valObj);
-                            if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
-                                valObj = parsed;
-                            }
-                        } catch(e) {}
-                    }
-
-                    let val = valObj ? valObj[col] : '';
-                    if (col === 'Value') val = item.value;
-                    if (typeof val === 'object') val = JSON.stringify(val);
-                    html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
-                });
-            }
+                }
+                if (val === undefined) val = '';
+                
+                html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+            });
             
             html += '</tr>';
         });
@@ -1916,8 +1833,38 @@
              }
         }
 
-        return fetch(url)
-            .then(res => res.json())
+        // Use NDJSON for streaming support
+        return fetch(url, {
+             headers: { 'Accept': 'application/x-ndjson' }
+        })
+            .then(async res => {
+                if (!res.ok) throw new Error(res.statusText);
+                const contentType = res.headers.get("content-type");
+                if (contentType && contentType.includes("application/x-ndjson")) {
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    const items = [];
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop(); // Keep last incomplete line
+                        for (const line of lines) {
+                            if (line.trim()) {
+                                try { items.push(JSON.parse(line)); } catch(e) {}
+                            }
+                        }
+                    }
+                    if (buffer.trim()) {
+                        try { items.push(JSON.parse(buffer)); } catch(e) {}
+                    }
+                    return items;
+                } else {
+                    return res.json();
+                }
+            })
             .then(items => {
                 // Save current column widths before rebuilding
                 const existingTable = document.getElementById('items-table');
@@ -3497,7 +3444,7 @@
         return output.trim();
     }
 
-    function sendChatMessage() {
+    async function sendChatMessage() {
         const input = document.getElementById('chat-input');
         const sendBtn = document.getElementById('chat-send-btn');
         
@@ -3527,163 +3474,251 @@
         // Add User Message
         appendChatMessage('user', message);
         input.value = '';
+        
+        // Show Loading
+        const loadingId = appendChatMessage('ai', 'Thinking...');
+        // Setup AbortController
+        chatAbortController = new AbortController();
+        if (sendBtn) sendBtn.textContent = 'Stop';
 
-        // Use double requestAnimationFrame to ensure the browser paints the user message
-        // before we start the network operation. This is more reliable than setTimeout.
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                // Show Loading
-                const loadingId = appendChatMessage('ai', 'Thinking...');
-                
-                // Setup AbortController
-                chatAbortController = new AbortController();
-                if (sendBtn) sendBtn.textContent = 'Stop';
-
-                fetch('/api/ai/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        message: message,
-                        database: currentDatabase,
-                        store: currentStore,
-                        agent: agent,
-                        provider: provider,
-                        format: format
-                    }),
-                    signal: chatAbortController.signal
-                })
-                .then(res => res.json())
-                .then(data => {
-                    // Remove Loading
-                    const loadingEl = document.getElementById(loadingId);
-                    if (loadingEl) loadingEl.remove();
-
-                    if (data.error) {
-                        appendChatMessage('ai', 'Error: ' + data.error);
-                    } else {
-                        let responseText = data.response;
-                        
-                        // Client-side formatting
-                        console.log("Format:", format);
-                        
-                        // Check if response is a Macro Trace (JSON Array of Steps)
-                        let isMacroTrace = false;
-                        try {
-                            // Try to parse the whole response as JSON
-                            const parsed = JSON.parse(responseText);
-                            // Heuristic: Array of objects with 'type' field
-                            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].type) {
-                                console.log("Detected Macro Trace");
-                                responseText = processMacroTrace(parsed, format);
-                                isMacroTrace = true;
-                            }
-                        } catch (e) {
-                            // Not a JSON trace
-                        }
-
-                        if (!isMacroTrace && format === 'csv') {
-                            let newResponse = "";
-                            let currentIndex = 0;
-                            const text = responseText;
-                            
-                            while (currentIndex < text.length) {
-                                // Find start of JSON array
-                                const start = text.indexOf('[', currentIndex);
-                                if (start === -1) {
-                                    newResponse += text.substring(currentIndex);
-                                    break;
-                                }
-                                
-                                // Find matching closing bracket
-                                let balance = 0;
-                                let end = -1;
-                                for (let i = start; i < text.length; i++) {
-                                    if (text[i] === '[') balance++;
-                                    else if (text[i] === ']') balance--;
-                                    
-                                    if (balance === 0) {
-                                        end = i;
-                                        break;
-                                    }
-                                }
-                                
-                                if (end !== -1) {
-                                    // We found a balanced block [ ... ]
-                                    const potentialJson = text.substring(start, end + 1);
-                                    let replacement = potentialJson;
-                                    let isJson = false;
-                                    
-                                    try {
-                                        // Heuristic: only parse if it looks like an array of objects or empty array
-                                        if (potentialJson.includes('{') || potentialJson.includes('[]')) {
-                                            const parsed = JSON.parse(potentialJson);
-                                            if (Array.isArray(parsed) && parsed.length > 0) {
-                                                replacement = "\n" + jsonToCSV(parsed) + "\n";
-                                                isJson = true;
-                                            }
-                                        }
-                                    } catch (e) {
-                                        // Not JSON, ignore
-                                    }
-                                    
-                                    // Append text before this block
-                                    let preText = text.substring(currentIndex, start);
-                                    
-                                    if (isJson) {
-                                        // Clean up trailing markdown code block start from preText
-                                        // e.g. "Here is data:\n```json\n" -> "Here is data:\n"
-                                        preText = preText.replace(/```[a-z]*\s*$/, '');
-                                    }
-                                    
-                                    newResponse += preText + replacement;
-                                    
-                                    // Advance index
-                                    currentIndex = end + 1;
-                                    
-                                    if (isJson) {
-                                        // Check if the next characters are the closing markdown ```
-                                        // We need to peek ahead
-                                        const remaining = text.substring(currentIndex);
-                                        const match = remaining.match(/^\s*```/);
-                                        if (match) {
-                                            currentIndex += match[0].length;
-                                        }
-                                    }
-                                } else {
-                                    // Unbalanced, just append everything remaining
-                                    newResponse += text.substring(currentIndex);
-                                    break;
-                                }
-                            }
-                            responseText = newResponse;
-                        }
-
-
-                        appendChatMessage('ai', responseText);
-                        
-                        // If the AI performed an action (like search), we might want to refresh the grid
-                        if (data.action === 'refresh') {
-                            loadItems('current', firstKey);
-                        }
-                    }
-                })
-                .catch(err => {
-                    const loadingEl = document.getElementById(loadingId);
-                    if (loadingEl) loadingEl.remove();
-                    
-                    if (err.name === 'AbortError') {
-                        // Handled by the abort click logic mostly, but ensures cleanup
-                    } else {
-                        appendChatMessage('ai', 'Error: ' + err.message);
-                    }
-                })
-                .finally(() => {
-                    chatAbortController = null;
-                    if (sendBtn) sendBtn.textContent = 'Send';
-                });
+        try {
+            const response = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    message: message,
+                    database: currentDatabase,
+                    store: currentStore,
+                    agent: agent,
+                    provider: provider,
+                    format: format
+                }),
+                signal: chatAbortController.signal
             });
-        });
+
+            // Remove Loading
+            const loadingEl = document.getElementById(loadingId);
+            if (loadingEl) loadingEl.remove();
+
+            if (!response.ok) {
+                const text = await response.text();
+                appendChatMessage('ai', 'HTTP Error: ' + response.status + ' - ' + text);
+                return;
+            }
+
+            // Read the stream
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            
+            // State for rendering
+            let currentContentSpan = null;
+            let currentTableContainer = null;
+            let currentTableRecords = [];
+            let currentTableType = null; // 'record' or 'kv'
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                // Split by newline to handle multiple objects in one chunk
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const event = JSON.parse(line);
+                        
+                        if (event.type === 'content') {
+                             if (!currentContentSpan) {
+                                // Start new content block
+                                const msgDiv = document.createElement('div');
+                                msgDiv.className = 'chat-message ai';
+                                currentContentSpan = document.createElement('span');
+                                msgDiv.appendChild(currentContentSpan);
+                                document.getElementById('chat-history').appendChild(msgDiv);
+                                document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+                            }
+                            
+                            // For now basic accumulation, markdown later?
+                            // If event.payload is the whole response (as per our backend right now), just set it.
+                            // If we switch to token streaming, we append.
+                            // Backend emits entire string for now.
+                            // Handle Markdown
+                            const markdownHtml = marked.parse(String(event.payload));
+                            currentContentSpan.innerHTML += markdownHtml;
+                        } 
+                        else if (event.type === 'record' || event.type === 'kv') {
+                            // Collect records
+                            currentTableRecords.push(event.payload);
+                            currentTableType = event.type;
+                        }
+                        else if (event.type === 'tool_call') {
+                            appendChatMessage('ai', '🛠️ Calling Tool: ' + event.payload.tool);
+                        }
+                        else if (event.type === 'error') {
+                            appendChatMessage('ai', 'Error: ' + event.payload);
+                        }
+                    } catch (e) {
+                        console.error("Failed to parse stream line:", line, e);
+                    }
+                }
+            }
+            
+            // After stream, if we have records, render them
+            if (currentTableRecords.length > 0) {
+                renderDataResults(currentTableRecords, format, currentTableType);
+            }
+
+        } catch (err) {
+             const loadingEl = document.getElementById(loadingId);
+             if (loadingEl) loadingEl.remove();
+
+             if (err.name === 'AbortError') {
+                 // Ignore
+             } else {
+                 appendChatMessage('ai', 'Error: ' + err.message);
+             }
+        } finally {
+             chatAbortController = null;
+             if (sendBtn) sendBtn.textContent = 'Send';
+        }
     }
+
+    function renderDataResults(records, format, type) {
+        // Auto-flatten records if they contain SOP internal fields (key, value, etc)
+        // This makes the output much cleaner for Joins and raw Store scans.
+        if (type === 'record') {
+            records = records.map(r => {
+                const flat = Object.assign({}, r);
+                ['key', 'value', 'right_key', 'right_value'].forEach(field => {
+                     if (flat[field] !== undefined) {
+                         let val = flat[field];
+                         // Try parse string JSON if possible
+                         if (typeof val === 'string' && val.trim().startsWith('{')) {
+                            try { val = JSON.parse(val); } catch(e){}
+                         }
+                         
+                         // If it's an object, merge it up
+                         if (val && typeof val === 'object' && !Array.isArray(val)) {
+                             Object.assign(flat, val);
+                             delete flat[field];
+                         }
+                     }
+                });
+                return flat;
+            });
+        }
+
+        if (format === 'table') {
+            renderRecordTable(records, type);
+        } else if (format === 'json') {
+            const block = document.createElement('div');
+            block.className = 'chat-message ai';
+            const uuid = generateUUID();
+            block.id = 'msg-' + uuid;
+            block.innerHTML = '<pre>' + JSON.stringify(records, null, 2) + '</pre>';
+            document.getElementById('chat-history').appendChild(block);
+            document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+        } else if (format === 'csv') {
+            const block = document.createElement('div');
+            block.className = 'chat-message ai';
+            const uuid = generateUUID();
+            block.id = 'msg-' + uuid;
+            
+            // Convert Records to CSV
+            const headerSet = new Set();
+            records.forEach(r => Object.keys(r).forEach(k => headerSet.add(k)));
+            const headers = Array.from(headerSet);
+            
+            let csvHeader = headers.join(',');
+            let csvBody = '';
+
+            records.forEach(r => {
+                const row = headers.map(h => {
+                        let val = r[h];
+                        if (val === undefined || val === null) return '';
+                        if (typeof val === 'object') val = JSON.stringify(val);
+                        val = String(val);
+                        if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+                            val = '"' + val.replace(/"/g, '""') + '"';
+                        }
+                        return val;
+                }).join(',');
+                csvBody += row + '\n';
+            });
+
+            block.innerHTML = '<pre class="csv-output"><span class="csv-header">' + csvHeader + '</span>\n' + csvBody + '</pre>';
+            document.getElementById('chat-history').appendChild(block);
+            document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+        } else {
+                // Default Fallback (Table)
+                renderRecordTable(records, type);
+        }
+    }
+
+    function renderRecordTable(records, type) {
+        const container = document.createElement('div');
+        container.className = 'chat-message ai-table-container';
+        
+        const table = document.createElement('table');
+        table.className = 'data-table';
+        const thead = document.createElement('thead');
+        const tbody = document.createElement('tbody');
+        
+        let headers = [];
+        if (type === 'kv') {
+             headers = ['Key', 'Value'];
+        } else {
+             // Discover headers
+             const headerSet = new Set();
+             records.forEach(r => Object.keys(r).forEach(k => headerSet.add(k)));
+             headers = Array.from(headerSet);
+        }
+        
+        // Header Row
+        const trHead = document.createElement('tr');
+        headers.forEach(h => {
+            const th = document.createElement('th');
+            // Replace underscores with spaces so CSS capitalize can work on words
+            th.textContent = h.replace(/_/g, ' ');
+            trHead.appendChild(th);
+        });
+        thead.appendChild(trHead);
+        
+        // Body
+        records.forEach(r => {
+            const tr = document.createElement('tr');
+            if (type === 'kv') {
+                 // KV Specific rendering
+                 const tdK = document.createElement('td');
+                 // TODO: Pretty print objects
+                 tdK.textContent = typeof r.key === 'object' ? JSON.stringify(r.key) : r.key;
+                 
+                 const tdV = document.createElement('td');
+                 tdV.textContent = typeof r.value === 'object' ? JSON.stringify(r.value) : r.value;
+                 
+                 tr.appendChild(tdK);
+                 tr.appendChild(tdV);
+            } else {
+                 headers.forEach(h => {
+                     const td = document.createElement('td');
+                     const val = r[h];
+                     td.textContent = (typeof val === 'object' && val !== null) ? JSON.stringify(val) : (val === undefined ? '' : val);
+                     tr.appendChild(td);
+                 });
+            }
+            tbody.appendChild(tr);
+        });
+        
+        table.appendChild(thead);
+        table.appendChild(tbody);
+        container.appendChild(table);
+        
+        document.getElementById('chat-history').appendChild(container);
+        document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+    }
+
 
     function handleChatKeydown(e) {
         const input = document.getElementById('chat-input');
@@ -3825,12 +3860,22 @@
 
     // --- End Macro Tree View Logic ---
 
+    function generateUUID() {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            return crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
     function appendChatMessage(role, text) {
         console.log("Appending message:", role, text); // Debug Log
         const history = document.getElementById('chat-history');
         const div = document.createElement('div');
         div.className = `chat-message ${role}`;
-        div.id = 'msg-' + new Date().getTime();
+        div.id = 'msg-' + generateUUID();
         
         // Simple markdown-like parsing for code blocks
         if (text.includes('```')) {
@@ -6610,6 +6655,7 @@
             <select id="format-select" style="padding: 2px; border-radius: 3px; border: 1px solid #ccc; font-size: 11px; font-weight: normal; color: #333;" onclick="event.stopPropagation()" title="Response Format">
                 <option value="csv">CSV</option>
                 <option value="json">JSON</option>
+                <option value="table">Table</option>
             </select>
             <!-- Hidden Agent Select (Hardcoded to sql_admin) -->
             <input type="hidden" id="agent-select" value="sql_admin">

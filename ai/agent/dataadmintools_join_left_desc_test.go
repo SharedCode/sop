@@ -72,12 +72,25 @@ func TestToolJoin_OrderBy_LeftStoreDirection(t *testing.T) {
 
 	// Check Order: Should be D3, D2, D1
 	getVal := func(item map[string]any) string {
-		v := item["key"].(map[string]any)
-		// Try "Id" (Title Case) or "id"
-		if val, ok := v["Id"]; ok {
+		// Handle both nested "key" layout and flat layout
+		if k, ok := item["key"]; ok && k != nil {
+			if v, ok := k.(map[string]any); ok {
+				if val, ok := v["Id"]; ok {
+					return val.(string)
+				}
+				if val, ok := v["id"]; ok {
+					return val.(string)
+				}
+			}
+		}
+		// Flat layout fallback
+		if val, ok := item["Id"]; ok {
 			return val.(string)
 		}
-		return v["id"].(string)
+		if val, ok := item["id"]; ok {
+			return val.(string)
+		}
+		return ""
 	}
 
 	if getVal(items[0]) != "D3" {

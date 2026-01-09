@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 )
 
 // ensurePlan selects the execution strategy using simple schema analysis.
@@ -78,7 +79,7 @@ func (jc *JoinRightCursor) ensurePlan() error {
 }
 
 // NextOptimized is the "Execution Phase".
-func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (map[string]any, bool, error) {
+func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error) {
 	if err := jc.ensurePlan(); err != nil {
 		return nil, false, err
 	}
@@ -109,15 +110,7 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (map[string]any, b
 					return nil, false, fmt.Errorf("join materialization error (Value): %w", err)
 				}
 
-				item := make(map[string]any)
-				if vMap, ok := v.(map[string]any); ok {
-					for vk, vv := range vMap {
-						item[vk] = vv
-					}
-				} else {
-					item["value"] = v
-				}
-				item["key"] = k
+				item := renderItem(k, v, nil)
 				jc.fallbackList = append(jc.fallbackList, item)
 
 				scanIter, err = jc.right.Next(ctx)
@@ -169,7 +162,7 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (map[string]any, b
 
 				if match {
 					jc.matched = true
-					merged := jc.mergeResult(jc.currentL, rItem, rItem["key"])
+					merged := jc.mergeResult(jc.currentL, rItem, getField(rItem, "key"))
 					return merged, true, nil
 				}
 			}
@@ -229,10 +222,7 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (map[string]any, b
 				// No match for this key
 				if jc.joinType == "left" {
 					// Emit (LHS, nil)
-					res := make(map[string]any)
-					for k, v := range jc.currentL {
-						res[k] = v
-					}
+					res := jc.currentL
 					jc.currentL = nil // Consumed
 					return res, true, nil
 				}
@@ -374,18 +364,69 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (map[string]any, b
 	}
 }
 
-func (jc *JoinRightCursor) mergeResult(l map[string]any, rAny any, rKey any) map[string]any {
-	merged := make(map[string]any)
-	for k, v := range l {
-		merged[k] = v
-	}
-	if rMap, ok := rAny.(map[string]any); ok {
-		for k, v := range rMap {
-			merged[k] = v
+func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
+	// Determine keys for L
+	var lKeys []string
+	var lMap map[string]any
+
+	if om, ok := l.(*OrderedMap); ok && om != nil {
+		lKeys = om.keys
+		lMap = om.m
+	} else if om, ok := l.(OrderedMap); ok {
+		lKeys = om.keys
+		lMap = om.m
+	} else if m, ok := l.(map[string]any); ok && m != nil {
+		lMap = m
+		for k := range m {
+			lKeys = append(lKeys, k)
 		}
+		sort.Strings(lKeys)
 	} else {
-		merged["right_value"] = rAny
+		lMap = make(map[string]any)
 	}
-	merged["right_key"] = rKey
-	return merged
+
+	// Flatten Right Item
+	rObj := renderItem(rKey, rAny, nil)
+
+	var rMap map[string]any
+	if m, ok := rObj.(map[string]any); ok {
+		rMap = m
+	} else if om, ok := rObj.(*OrderedMap); ok && om != nil {
+		rMap = om.m
+	} else if om, ok := rObj.(OrderedMap); ok {
+		rMap = om.m
+	}
+
+	// Merge
+	newKeys := make([]string, len(lKeys))
+	copy(newKeys, lKeys)
+	newMap := make(map[string]any)
+
+	for k, v := range lMap {
+		newMap[k] = v
+	}
+
+	if rMap != nil {
+		var rKeys []string
+		for k := range rMap {
+			rKeys = append(rKeys, k)
+		}
+		sort.Strings(rKeys)
+
+		for _, k := range rKeys {
+			newMap[k] = rMap[k]
+			found := false
+			for _, existing := range newKeys {
+				if existing == k {
+					found = true
+					break
+				}
+			}
+			if !found {
+				newKeys = append(newKeys, k)
+			}
+		}
+	}
+
+	return &OrderedMap{m: newMap, keys: newKeys}
 }

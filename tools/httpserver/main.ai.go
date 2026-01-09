@@ -66,16 +66,50 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	req.Database = strings.TrimSpace(req.Database)
 	req.StoreName = strings.TrimSpace(req.StoreName)
 
+	// Helper to send NDJSON event
+	sendEvent := func(eventType string, payload any) {
+		// LOGGING FOR ORDERING
+		if eventType == "records" || eventType == "record" || eventType == "preview" {
+			// Try to detect if payload has ordered structure
+			// Using json.Marshal to mimic wire format
+			b, _ := json.Marshal(payload)
+			log.Debug("UI: Sending Payload (WIRE)", "type", eventType, "json_preview", string(b))
+		} else if eventType == "content" {
+			s := fmt.Sprintf("%v", payload)
+			log.Debug("UI: Sending Content", "length", len(s))
+		}
+
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		// WriteHeader is idempotent in Go's http server (only first call matters),
+		// but we should set headers before the first write.
+		// Since we only send one event for now, this is fine.
+		// If we stream multiple, we must check if headers were written.
+		// But for now, let's just write header if we haven't?
+		// Actually, standard library handles WriteHeader(200) implicitly on first Write.
+		// But we want to be explicit about 200.
+
+		// Note: We don't check if we already wrote, assuming this helper is used once or
+		// we accept that headers are sent on first call.
+
+		if err := json.NewEncoder(w).Encode(map[string]any{
+			"type":    eventType,
+			"payload": payload,
+		}); err != nil {
+			log.Error("Failed to encode NDJSON event", "error", err)
+			return
+		}
+
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
+
 	// Validate Database if provided
 	if req.Database != "" {
 		if _, err := getDBOptions(req.Database); err != nil {
-			responseMap := map[string]string{
-				"error": fmt.Sprintf("Invalid database '%s': %v", req.Database, err),
-			}
-			log.Info("Response: Invalid Database", "response", responseMap)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(responseMap)
+			msg := fmt.Sprintf("Invalid database '%s': %v", req.Database, err)
+			log.Info("Response: Invalid Database", "error", msg)
+			sendEvent("error", msg)
 			return
 		}
 	}
@@ -88,13 +122,9 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// Check if a specific RAG Agent is requested
 	agentSvc, exists := loadedAgents[req.Agent]
 	if !exists {
-		responseMap := map[string]string{
-			"error": fmt.Sprintf("Agent '%s' is not initialized or not found.", req.Agent),
-		}
-		log.Info("Response: Agent Not Found", "response", responseMap)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(responseMap)
+		msg := fmt.Sprintf("Agent '%s' is not initialized or not found.", req.Agent)
+		log.Info("Response: Agent Not Found", "error", msg)
+		sendEvent("error", msg)
 		return
 	}
 
@@ -170,13 +200,9 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	// Initialize Agent Session (Transaction)
 	if err := agentSvc.Open(ctx); err != nil {
-		responseMap := map[string]string{
-			"error": fmt.Sprintf("Agent '%s' failed to open session: %v", req.Agent, err),
-		}
-		log.Error("Response: Session Open Failed", "response", responseMap)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(responseMap)
+		msg := fmt.Sprintf("Agent '%s' failed to open session: %v", req.Agent, err)
+		log.Error("Response: Session Open Failed", "error", msg)
+		sendEvent("error", msg)
 		return
 	}
 	defer func() {
@@ -188,13 +214,9 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// agentSvc delegates to dataadmin agent as necessary for LLM ask.
 	response, err := agentSvc.Ask(ctx, fullMessage, askOpts...)
 	if err != nil {
-		responseMap := map[string]string{
-			"error": fmt.Sprintf("Agent '%s' failed: %v", req.Agent, err),
-		}
-		log.Error("Response: Agent Ask Failed", "response", responseMap)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(responseMap)
+		msg := fmt.Sprintf("Agent '%s' failed: %v", req.Agent, err)
+		log.Error("Response: Agent Ask Failed", "error", msg)
+		sendEvent("error", msg)
 		return
 	}
 
@@ -218,26 +240,48 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		// We no longer execute tools here. We return the raw response.
 		// Or should we error?
 		// Let's return it as a response so the user sees what the agent tried to do.
-		responseMap := map[string]string{
-			"response": fmt.Sprintf("Agent attempted to call tool '%s' but failed to execute it internally.", toolCall.Tool),
-		}
-		log.Info("Response: Raw Tool Call", "response", responseMap)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(responseMap)
+		msg := fmt.Sprintf("Agent attempted to call tool '%s' but failed to execute it internally.", toolCall.Tool)
+		log.Info("Response: Raw Tool Call", "response", msg)
+		sendEvent("content", msg)
 		return
 	}
 
-	responseMap := map[string]string{
-		"response": response,
+	// Try to interpret the response as Data (JSON Array)
+	// Many agents return a JSON array of objects for data queries.
+	// NOTE: We use RawMessage to preserve field ordering within the records.
+	var rawRecords []json.RawMessage
+	var mapRecords []map[string]any
+	if err := json.Unmarshal([]byte(cleanText), &mapRecords); err == nil && len(mapRecords) > 0 {
+		// It's a valid list of maps (objects).
+		// Re-unmarshal as RawMessage to get the ordered bytes source
+		if err := json.Unmarshal([]byte(cleanText), &rawRecords); err == nil {
+			log.Debug("Response: Detected JSON Records", "count", len(rawRecords))
+			for _, rec := range rawRecords {
+				sendEvent("record", rec)
+			}
+			return
+		}
 	}
-	log.Debug("Response: Success", "response", responseMap)
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(responseMap); err != nil {
-		log.Error("Failed to write response JSON", "error", err)
+	// Try to interpret as single object?
+	// Sometimes an agent returns a single object.
+	var singleRecord map[string]any
+	// Ensure it's not just a string disguised as object? No, json.Unmarshal handles that.
+	// But check if it starts with '{' to avoid false positives with numbers or strings if cleanText was weird found.
+	if strings.HasPrefix(cleanText, "{") {
+		if err := json.Unmarshal([]byte(cleanText), &singleRecord); err == nil {
+			log.Debug("Response: Detected Single JSON Record")
+			// Check if it's a KV pair structure?
+			// The UI treats 'kv' as generic key-value, but 'record' works too.
+			// Let's just send as record.
+			sendEvent("record", singleRecord)
+			return
+		}
 	}
+
+	//log.Debug("Response: Success (Text)", "response", response)
+
+	sendEvent("content", response)
 }
 
 func initAgents() {

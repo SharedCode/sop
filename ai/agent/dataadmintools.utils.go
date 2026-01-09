@@ -223,6 +223,9 @@ type OrderedMap struct {
 }
 
 func (o OrderedMap) MarshalJSON() ([]byte, error) {
+	// Debug logging
+	// fmt.Printf("DEBUG: OrderedMap.MarshalJSON Keys: %v\n", o.keys)
+
 	var buf bytes.Buffer
 	buf.WriteByte('{')
 	for i, k := range o.keys {
@@ -278,7 +281,7 @@ func reorderItem(item any, fields []string, indexSpec *jsondb.IndexSpecification
 					keys = append(keys, k)
 				}
 			}
-			return OrderedMap{m: mItem, keys: keys}
+			return &OrderedMap{m: mItem, keys: keys}
 		}
 
 		// Case B: Flat Map - Order by Index Fields
@@ -303,7 +306,7 @@ func reorderItem(item any, fields []string, indexSpec *jsondb.IndexSpecification
 		sort.Strings(remaining)
 		orderedKeys = append(orderedKeys, remaining...)
 
-		return OrderedMap{
+		return &OrderedMap{
 			m:    mItem,
 			keys: orderedKeys,
 		}
@@ -313,6 +316,7 @@ func reorderItem(item any, fields []string, indexSpec *jsondb.IndexSpecification
 }
 
 func filterFields(item map[string]any, fields []string) any {
+	// log.Debug("filterFields called", "fields", fields)
 	if len(fields) == 0 {
 		return item
 	}
@@ -339,7 +343,7 @@ func filterFields(item map[string]any, fields []string) any {
 	// If strict Key/Value context, at least one should exist.
 	if !hasKey && !hasValue {
 		// Flat Mode: Return primitives directly in OrderedMap
-		out := OrderedMap{
+		out := &OrderedMap{
 			m:    make(map[string]any),
 			keys: make([]string, 0, len(fields)),
 		}
@@ -365,6 +369,7 @@ func filterFields(item map[string]any, fields []string) any {
 				out.m[alias] = val
 			}
 		}
+		// log.Debug("payload contents:", "Function", "filterFields", "keys", out.keys, "fields", fields)
 		return out
 	}
 
@@ -474,21 +479,14 @@ func filterFields(item map[string]any, fields []string) any {
 
 	// If "key" was not explicitly selected as a whole, use the projected map
 	if !keySelected {
-		if len(keyMap.keys) > 0 {
-			finalKey = keyMap
-		} else {
-			// If nothing extracted from key, and it wasn't requested, it stays nil?
-			// The original code passed `nil` if empty.
-			// But wait, if I select ONLY fields from Value, Key should be nil?
-			// Yes.
-		}
+		// Always return the projected map (even if empty) to ensure consumers receive a map structure
+		finalKey = keyMap
 	}
 
 	// If "value" was not explicitly selected as a whole, use the projected map
 	if !valueSelected {
-		if len(valMap.keys) > 0 {
-			finalValue = valMap
-		}
+		// Always return the projected map (even if empty) to ensure consumers receive a map structure
+		finalValue = valMap
 	}
 
 	return map[string]any{
@@ -537,6 +535,26 @@ func convertToFloat(v any) any {
 	return v
 }
 
+func coerceToFloat(v any) float64 {
+	switch val := v.(type) {
+	case int:
+		return float64(val)
+	case int32:
+		return float64(val)
+	case int64:
+		return float64(val)
+	case float64:
+		return val
+	case float32:
+		return float64(val)
+	case string:
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
 func convertToInt(v any) any {
 	switch val := v.(type) {
 	case int:
@@ -565,8 +583,17 @@ func extractVal(key any, val any, field string) any {
 		if source == nil {
 			return nil
 		}
+		// Handle OrderedMap
+		if om, ok := source.(*OrderedMap); ok && om != nil {
+			source = om.m
+		} else if om, ok := source.(OrderedMap); ok {
+			source = om.m
+		}
 		// 1. Map
 		if m, ok := source.(map[string]any); ok {
+			if field == "*" {
+				return m
+			}
 			if v, ok := m[field]; ok {
 				return v
 			}
@@ -581,6 +608,9 @@ func extractVal(key any, val any, field string) any {
 		if s, ok := source.(string); ok && strings.HasPrefix(strings.TrimSpace(s), "{") {
 			var m map[string]any
 			if err := json.Unmarshal([]byte(s), &m); err == nil {
+				if field == "*" {
+					return m
+				}
 				if v, ok := m[field]; ok {
 					return v
 				}
@@ -822,4 +852,79 @@ func generateJoinKey(key any, val any, fields []string) string {
 		parts = append(parts, fmt.Sprintf("%v", v))
 	}
 	return strings.Join(parts, "|")
+}
+
+// flattenItem merges key and value into a single map.
+// If key/value are maps, their fields are merged at the top level.
+// If they are primitives, they are stored as "key" and "value" (or specific field names if needed).
+func flattenItem(key any, value any) map[string]any {
+	result := make(map[string]any)
+
+	// 1. Flatten Key
+	if kMap, ok := key.(map[string]any); ok {
+		for k, v := range kMap {
+			result[k] = v
+		}
+	} else {
+		// If primitive key, and not nil (though nil key is rare in B-Tree)
+		if key != nil {
+			result["key"] = key
+		}
+	}
+
+	// 2. Flatten Value
+	if vMap, ok := value.(map[string]any); ok {
+		for k, v := range vMap {
+			// Value fields overwrite key fields in case of name collision?
+			// Usually Value fields are distinct or "more details"
+			result[k] = v
+		}
+	} else {
+		if value != nil {
+			result["value"] = value
+		}
+	}
+
+	return result
+}
+
+// renderItem creates a result map from the key and value, applying standard flattening or field selection.
+// It is used by Scan, Select, and Join cursors to ensure consistent output format.
+func renderItem(key any, val any, fields []string) any {
+	// 1. Wildcard / Flatten Mode
+	if len(fields) == 0 {
+		return flattenItem(key, val)
+	}
+
+	// 2. Projection Mode
+	resultMap := OrderedMap{m: make(map[string]any), keys: make([]string, 0)}
+
+	for _, f := range fields {
+		// Handle Alias: "field AS alias"
+		srcField := f
+		dstField := f
+
+		// Case-insensitive " AS " check
+		lowerF := strings.ToLower(f)
+		if strings.Contains(lowerF, " as ") {
+			parts := strings.Split(f, " AS ") // Try uppercase
+			if len(parts) != 2 {
+				parts = strings.Split(f, " as ") // Try lowercase
+			}
+			if len(parts) == 2 {
+				srcField = strings.TrimSpace(parts[0])
+				dstField = strings.TrimSpace(parts[1])
+			}
+		}
+
+		// Extract Value
+		v := extractVal(key, val, srcField)
+
+		// Include even if nil?
+		if v != nil {
+			resultMap.m[dstField] = v
+			resultMap.keys = append(resultMap.keys, dstField)
+		}
+	}
+	return &resultMap
 }

@@ -7,8 +7,6 @@ import (
 	"sort"
 	"time"
 
-	log "log/slog"
-
 	"github.com/sharedcode/sop"
 )
 
@@ -40,7 +38,7 @@ func (c *L2InMemoryCache) GetType() sop.L2CacheType {
 }
 
 func (c *L2InMemoryCache) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
-	log.Debug("entered Set")
+	// log.Debug("entered Set")
 	var exp time.Time
 	if expiration > 0 {
 		exp = time.Now().Add(expiration)
@@ -54,7 +52,7 @@ func (c *L2InMemoryCache) Set(ctx context.Context, key string, value string, exp
 }
 
 func (c *L2InMemoryCache) Get(ctx context.Context, key string) (bool, string, error) {
-	log.Debug("entered Get")
+	// log.Debug("entered Get")
 	val, ok := c.data.load(key)
 	if !ok {
 		return false, "", nil
@@ -70,7 +68,7 @@ func (c *L2InMemoryCache) Get(ctx context.Context, key string) (bool, string, er
 }
 
 func (c *L2InMemoryCache) GetEx(ctx context.Context, key string, expiration time.Duration) (bool, string, error) {
-	log.Debug("entered GetEx")
+	// log.Debug("entered GetEx")
 	val, ok := c.data.load(key)
 	if !ok {
 		return false, "", nil
@@ -113,7 +111,7 @@ func (c *L2InMemoryCache) SetStruct(ctx context.Context, key string, value inter
 }
 
 func (c *L2InMemoryCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
-	log.Debug("entered GetStruct")
+	// log.Debug("entered GetStruct")
 	val, ok := c.data.load(key)
 	if !ok {
 		return false, nil
@@ -133,7 +131,7 @@ func (c *L2InMemoryCache) GetStruct(ctx context.Context, key string, target inte
 }
 
 func (c *L2InMemoryCache) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error) {
-	log.Debug("entered GetStructEx")
+	// log.Debug("entered GetStructEx")
 	val, ok := c.data.load(key)
 	if !ok {
 		return false, nil
@@ -209,7 +207,7 @@ func (c *L2InMemoryCache) CreateLockKeysForIDs(keys []sop.Tuple[string, sop.UUID
 }
 
 func (c *L2InMemoryCache) IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, error) {
-	log.Debug("entered IsLockedTTL")
+	// log.Debug("entered IsLockedTTL")
 	// 1. Check if all keys are locked by us and valid
 	for _, lk := range lockKeys {
 		val, ok := c.locks.load(lk.Key)
@@ -252,7 +250,7 @@ func (c *L2InMemoryCache) IsLockedTTL(ctx context.Context, duration time.Duratio
 }
 
 func (c *L2InMemoryCache) Lock(ctx context.Context, duration time.Duration, lockKeys []*sop.LockKey) (bool, sop.UUID, error) {
-	log.Debug("entered Lock")
+	// log.Debug("entered Lock")
 	if duration <= 0 {
 		duration = 15 * time.Minute
 	}
@@ -333,7 +331,7 @@ func (c *L2InMemoryCache) DualLock(ctx context.Context, duration time.Duration, 
 }
 
 func (c *L2InMemoryCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
-	log.Debug("entered IsLocked")
+	// log.Debug("entered IsLocked")
 	for _, lk := range lockKeys {
 		val, ok := c.locks.load(lk.Key)
 		if !ok {
@@ -351,7 +349,7 @@ func (c *L2InMemoryCache) IsLocked(ctx context.Context, lockKeys []*sop.LockKey)
 }
 
 func (c *L2InMemoryCache) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error) {
-	log.Debug("entered IsLockedByOthers")
+	// log.Debug("entered IsLockedByOthers")
 	for _, key := range lockKeyNames {
 		val, ok := c.locks.load(key)
 		if ok {
@@ -366,7 +364,7 @@ func (c *L2InMemoryCache) IsLockedByOthers(ctx context.Context, lockKeyNames []s
 }
 
 func (c *L2InMemoryCache) IsLockedByOthersTTL(ctx context.Context, lockKeyNames []string, duration time.Duration) (bool, error) {
-	log.Debug("entered IsLockedByOthersTTL")
+	// log.Debug("entered IsLockedByOthersTTL")
 	return true, nil
 }
 

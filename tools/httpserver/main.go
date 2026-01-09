@@ -1265,19 +1265,40 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Check for NDJSON Streaming Mode
+	isNDJSON := r.Header.Get("Accept") == "application/x-ndjson"
+	if isNDJSON {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+	}
+
+	var encoder *json.Encoder
+	if isNDJSON {
+		encoder = json.NewEncoder(w)
+	}
+
 	for ok && err == nil && count < limit {
 		kItem := store.GetCurrentKey()
 		v, err := store.GetCurrentValue(ctx)
 		if err != nil {
 			log.Error(fmt.Sprintf("Error reading value for key %v: %v", kItem.Key, err))
-			// Continue to next item even if value fetch fails? Or break?
-			// Let's try to continue.
 		}
 
-		items = append(items, map[string]any{
+		itemMap := map[string]any{
 			"key":   kItem.Key,
 			"value": v,
-		})
+		}
+
+		if isNDJSON {
+			if err := encoder.Encode(itemMap); err != nil {
+				log.Error(fmt.Sprintf("Error streaming item: %v", err))
+				return
+			}
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		} else {
+			items = append(items, itemMap)
+		}
 
 		ok, err = store.Next(ctx)
 		count++
@@ -1287,7 +1308,9 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 		log.Error(fmt.Sprintf("Error during iteration: %v", err))
 	}
 
-	json.NewEncoder(w).Encode(items)
+	if !isNDJSON {
+		json.NewEncoder(w).Encode(items)
+	}
 }
 
 func handleUpdateItem(w http.ResponseWriter, r *http.Request) {

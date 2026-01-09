@@ -102,6 +102,15 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 			}
 		} else if fSlice, ok := f.([]string); ok {
 			fields = fSlice
+		} else if fStr, ok := f.(string); ok {
+			// Allow comma-separated fields list (e.g. "a.region, a.department, b.name as employee")
+			parts := strings.Split(fStr, ",")
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					fields = append(fields, p)
+				}
+			}
 		}
 	}
 
@@ -109,7 +118,10 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 	if joinType == "" {
 		joinType = "inner"
 	}
-	limit, _ := args["limit"].(float64)
+	limit := 10.0
+	if l, ok := args["limit"]; ok {
+		limit = coerceToFloat(l)
+	}
 	if limit <= 0 {
 		limit = 10
 	}
@@ -265,10 +277,23 @@ func (jp *JoinProcessor) analyzeRightStore() error {
 		// Check if key is JSON string
 		if s, ok := rKey.Key.(string); ok && strings.HasPrefix(strings.TrimSpace(s), "{") {
 			jp.rightKeyIsJSON = true
+			log.Info("Join: Right Store Key detected as JSON.")
 		}
 
 		for _, field := range jp.rightFields {
 			isKey, actualName := isKeyField(rKey.Key, field)
+			if !isKey && jp.rightIndexSpec != nil {
+				// If the store has an Index Specification, check if this field is part of it.
+				// If so, we treat it as a Key field because the B-Tree is ordered/indexed by it.
+				for _, idxField := range jp.rightIndexSpec.IndexFields {
+					if strings.EqualFold(idxField.FieldName, field) {
+						isKey = true
+						actualName = idxField.FieldName
+						break
+					}
+				}
+			}
+
 			if isKey {
 				jp.rightKeyFields = append(jp.rightKeyFields, field)
 				jp.rightKeyFieldMap[field] = actualName
@@ -286,6 +311,8 @@ func (jp *JoinProcessor) analyzeRightStore() error {
 	// AND we are not trying to lookup sub-fields of a JSON string key (unless we have the full key string)
 	// We use FindOne(..., false) to seek to the first item >= key, which supports partial keys (prefix search).
 	jp.canUseLookup = len(jp.rightKeyFields) > 0
+	log.Info(fmt.Sprintf("Join: Initial canUseLookup=%v (RightKeyFields=%v)", jp.canUseLookup, jp.rightKeyFields))
+
 	if jp.rightKeyIsJSON && len(jp.rightKeyFields) > 0 {
 		// If we are joining on "key" explicitly, we can lookup (assuming left side provides the full JSON string)
 		// If we are joining on sub-fields (e.g. "region"), we cannot construct the JSON string key reliably -> Disable Lookup
@@ -296,11 +323,15 @@ func (jp *JoinProcessor) analyzeRightStore() error {
 				break
 			}
 		}
+		if !jp.canUseLookup {
+			log.Info("Join: Disabled Lookup because Key is JSON and not joining on full 'key'.")
+		}
 	}
 
 	// If IndexSpecification is present, verify that the join fields match the index prefix.
 	// If they don't match, we cannot use Lookup because the B-Tree is not sorted by the join fields.
 	if jp.rightIndexSpec != nil && len(jp.rightIndexSpec.IndexFields) > 0 {
+		log.Info(fmt.Sprintf("Join: Right has IndexSpec with %d fields.", len(jp.rightIndexSpec.IndexFields)))
 		// Check if rightKeyFields (the join fields that are keys) match the prefix of IndexFields
 		// Note: rightKeyFields order matters here. The user must supply them in index order for this check to pass strictly,
 		// OR we should check if the supplied fields form a prefix regardless of input order (but FindOne needs them in order).
@@ -420,8 +451,18 @@ func (jp *JoinProcessor) processLeftItem(k, v any) (bool, error) {
 
 	if jp.canUseLookup {
 		var lookupKey any
-		if len(jp.rightKeyFields) == 1 && jp.rightKeyFields[0] == "key" {
-			lookupKey = leftJoinVals["key"]
+
+		// Check if we are doing a simple Key lookup (either explicit "key" field or mapped to "key")
+		isSimpleKeyLookup := false
+		if len(jp.rightKeyFields) == 1 {
+			// Check if the single key field maps to "key" (effectively the Primary Key)
+			if actualName, ok := jp.rightKeyFieldMap[jp.rightKeyFields[0]]; ok && actualName == "key" {
+				isSimpleKeyLookup = true
+			}
+		}
+
+		if isSimpleKeyLookup {
+			lookupKey = leftJoinVals[jp.rightKeyFields[0]]
 			if jp.rightSampleKey != nil {
 				lookupKey = coerce(lookupKey, jp.rightSampleKey)
 			}
@@ -678,12 +719,10 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 			return false, nil
 		} else {
 			if len(jp.fields) > 0 {
-				keyMap := OrderedMap{m: make(map[string]any), keys: make([]string, 0)}
-				valMap := OrderedMap{m: make(map[string]any), keys: make([]string, 0)}
+				resultMap := OrderedMap{m: make(map[string]any), keys: make([]string, 0)}
 
 				for i, f := range jp.fields {
 					var val any
-					var isKey bool
 
 					// Note: f has been stripped of " AS alias" in computeDisplayKeys
 					// But it might still have prefixes like "a.", "b." etc.
@@ -693,22 +732,15 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 					if strings.HasPrefix(lowerF, "left.") {
 						fieldName := f[5:]
 						val = extractVal(k, v, fieldName)
-						isKey, _ = isKeyField(k, fieldName)
 					} else if strings.HasPrefix(lowerF, "right.") {
 						fieldName := f[6:]
 						val = extractVal(rKey, rVal, fieldName)
-						// Right Key parts belong to Value in the Join Result
-						isKey = false
 					} else {
 						// Try Left
 						val = extractVal(k, v, f)
-						if val != nil {
-							isKey, _ = isKeyField(k, f)
-						} else {
+						if val == nil {
 							// Try Right
 							val = extractVal(rKey, rVal, f)
-							// Right Key/Val is always Value in Join Result
-							isKey = false
 						}
 
 						// Heuristic for aliases (a., b., left_, right_)
@@ -738,10 +770,8 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 
 							if tryLeft {
 								val = extractVal(k, v, fieldName)
-								isKey, _ = isKeyField(k, fieldName)
 							} else if tryRight {
 								val = extractVal(rKey, rVal, fieldName)
-								isKey = false
 							}
 						}
 
@@ -754,10 +784,8 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 									baseName := f[:lastUnderscore]
 									val = extractVal(k, v, baseName)
 									if val != nil {
-										isKey, _ = isKeyField(k, baseName)
 									} else {
 										val = extractVal(rKey, rVal, baseName)
-										isKey = false
 									}
 								}
 							}
@@ -767,45 +795,13 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 					// Normalize key for display
 					displayKey := jp.displayKeys[i]
 
-					if isKey {
-						keyMap.m[displayKey] = val
-						keyMap.keys = append(keyMap.keys, displayKey)
-					} else {
-						valMap.m[displayKey] = val
-						valMap.keys = append(valMap.keys, displayKey)
-					}
+					resultMap.m[displayKey] = val
+					resultMap.keys = append(resultMap.keys, displayKey)
 				}
 
-				// Heuristic: If Key is nil, move the first Value field to Key
-				// This ensures the UI renders valid "Key, Value" pairs instead of ", Value"
-				if len(keyMap.keys) == 0 && len(valMap.keys) > 0 {
-					firstKey := valMap.keys[0]
-					if val, ok := valMap.m[firstKey]; ok {
-						keyMap.keys = append(keyMap.keys, firstKey)
-						keyMap.m[firstKey] = val
+				log.Debug(fmt.Sprintf("resultMap: %v\n", resultMap))
 
-						// Remove from Value
-						newValKeys := make([]string, 0, len(valMap.keys)-1)
-						for _, k := range valMap.keys {
-							if k != firstKey {
-								newValKeys = append(newValKeys, k)
-							}
-						}
-						valMap.keys = newValKeys
-						delete(valMap.m, firstKey)
-					}
-				}
-
-				// Construct Result
-				var finalKey any = nil
-				if len(keyMap.keys) > 0 {
-					finalKey = keyMap
-				}
-
-				jp.emitter.Emit(map[string]any{
-					"key":   finalKey,
-					"value": valMap,
-				})
+				jp.emitter.Emit(resultMap)
 			} else {
 				// Merge left and right values
 				merged := make(map[string]any)
@@ -825,12 +821,22 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 					merged["right"] = rVal
 				}
 
-				// Format output using standard helper (preserves Index Spec)
-				item := map[string]any{
-					"key":   k,
-					"value": merged,
+				// If Key is a JSON object map, assume it's part of the data and merge it too!
+				// This avoids "key" column floating around disjointed in Join results.
+				// (Unless key conflicts with existing value field, then we keep it as 'key')
+				if keyMap, ok := k.(map[string]any); ok {
+					for kField, kVal := range keyMap {
+						if _, exists := merged[kField]; !exists {
+							merged[kField] = kVal
+						}
+					}
 				}
-				finalItem := reorderItem(item, jp.fields, jp.leftIndexSpec)
+
+				// Format output using standard helper (preserves Index Spec)
+				finalItem := reorderItem(merged, jp.fields, jp.leftIndexSpec)
+
+				log.Debug(fmt.Sprintf("finalItem: %v\n", finalItem))
+
 				jp.emitter.Emit(finalItem)
 			}
 			jp.count++
