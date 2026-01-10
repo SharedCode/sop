@@ -523,6 +523,35 @@ func extractVal(key any, val any, field string) any {
 					return v
 				}
 			}
+
+			// Dot-Notation Fallback (e.g. "a.name" -> "name" if "a.name" is missing)
+			// This allows referring to "a.name" even if the map only has "name" (unaliased Left side)
+			if idx := strings.Index(field, "."); idx > 0 {
+				stripped := field[idx+1:]
+				if v, ok := m[stripped]; ok {
+					return v
+				}
+				// Case-insensitive fallback for stripped
+				for k, v := range m {
+					if strings.EqualFold(k, stripped) {
+						return v
+					}
+				}
+			}
+
+			// Reverse Fallback / Suffix Match
+			// If we asked for "name" but map only has "b.name" (aliased), and "name" is unique (suffix match).
+			// This enables selecting un-aliased names when storage is strictly aliased.
+			dotSuffix := "." + field
+			for k, v := range m {
+				if strings.HasSuffix(k, dotSuffix) {
+					// We found a candidate e.g. "b.name" for "name"
+					// TODO: Should we check for ambiguity? (e.g. "a.name" and "b.name" both exist)
+					// SQL standard says "Ambiguous". For now, we pick the first one we find to allow progress.
+					// Or we could check if there are multiple.
+					return v
+				}
+			}
 		}
 		// 2. JSON String
 		if s, ok := source.(string); ok && strings.HasPrefix(strings.TrimSpace(s), "{") {
@@ -537,6 +566,28 @@ func extractVal(key any, val any, field string) any {
 				// Case-insensitive fallback
 				for k, v := range m {
 					if strings.EqualFold(k, field) {
+						return v
+					}
+				}
+
+				// Dot-Notation Fallback
+				if idx := strings.Index(field, "."); idx > 0 {
+					stripped := field[idx+1:]
+					if v, ok := m[stripped]; ok {
+						return v
+					}
+					// Case-insensitive fallback for stripped
+					for k, v := range m {
+						if strings.EqualFold(k, stripped) {
+							return v
+						}
+					}
+				}
+
+				// Reverse Fallback / Suffix Match for JSON too
+				dotSuffix := "." + field
+				for k, v := range m {
+					if strings.HasSuffix(k, dotSuffix) {
 						return v
 					}
 				}
@@ -805,6 +856,14 @@ func flattenItem(key any, value any) map[string]any {
 		for k, v := range kMap {
 			result[k] = v
 		}
+	} else if kOm, ok := key.(OrderedMap); ok {
+		for k, v := range kOm.m {
+			result[k] = v
+		}
+	} else if kOm, ok := key.(*OrderedMap); ok && kOm != nil {
+		for k, v := range kOm.m {
+			result[k] = v
+		}
 	} else {
 		if key != nil {
 			result["key"] = key
@@ -814,6 +873,14 @@ func flattenItem(key any, value any) map[string]any {
 	// 2. Flatten Value
 	if vMap, ok := value.(map[string]any); ok {
 		for k, v := range vMap {
+			result[k] = v
+		}
+	} else if vOm, ok := value.(OrderedMap); ok {
+		for k, v := range vOm.m {
+			result[k] = v
+		}
+	} else if vOm, ok := value.(*OrderedMap); ok && vOm != nil {
+		for k, v := range vOm.m {
 			result[k] = v
 		}
 	} else {
@@ -841,8 +908,12 @@ func parseProjectionFields(input any) []ProjectionField {
 			if strings.HasPrefix(lowerF, p) {
 				// If it's a wildcard projection like "a.*" or "left.*", preserve the prefix!
 				// We need the prefix in renderItem to know WHICH side to broaden.
-				if f[len(p):] == "*" {
+				if len(f) > len(p) && f[len(p):] == "*" {
 					return f
+				}
+				// Handle case where LLM sends "a." or "left." meaning "a.*"
+				if len(f) == len(p) {
+					return f + "*"
 				}
 				return f[len(p):]
 			}
@@ -870,6 +941,20 @@ func parseProjectionFields(input any) []ProjectionField {
 		} else {
 			dst = cleanName(f)
 		}
+
+		// Handle "a." -> "a.*" expansion manually, but DO NOT strip prefixes for fields
+		// We want to pass "b.name" as "b.name" so extractVal can find the aliased key.
+		prefixes := []string{"left.", "right.", "a.", "b.", "left_", "right_"}
+		lowerSrc := strings.ToLower(src)
+		for _, p := range prefixes {
+			if strings.HasPrefix(lowerSrc, p) {
+				if len(src) == len(p) {
+					src = src + "*"
+				}
+				break
+			}
+		}
+
 		result = append(result, ProjectionField{Src: src, Dst: dst})
 	}
 
@@ -911,6 +996,31 @@ func parseProjectionFields(input any) []ProjectionField {
 			for _, k := range keys {
 				v := m[k]
 				src := fmt.Sprintf("%v", v)
+
+				// Apply cleanName logic to source to handle wildcards properly
+				// e.g. "a." -> "a.*"
+				// cleanSrc := cleanName(src) // Unused now, we do manual logic below
+
+				prefixes := []string{"left.", "right.", "a.", "b.", "left_", "right_"}
+				// isSpecial := false // Unused
+				lowerSrc := strings.ToLower(src)
+
+				// If source is just "left" or "right" (common mistake), treat as wildcard
+				if lowerSrc == "left" || lowerSrc == "right" {
+					src = src + ".*"
+					// isSpecial = true
+				} else {
+					for _, p := range prefixes {
+						if strings.HasPrefix(lowerSrc, p) {
+							if len(src) == len(p) {
+								src = src + "*" // "left." -> "left.*"
+							}
+							// isSpecial = true
+							break
+						}
+					}
+				}
+
 				res = append(res, ProjectionField{Src: src, Dst: k})
 			}
 			// This rule is greedy and always matches if the map is not empty
@@ -994,9 +1104,19 @@ func renderItem(key any, val any, fields any) any {
 		// Handle Wildcard Projection (e.g. "a.*" or "*")
 		if strings.HasSuffix(f.Src, "*") {
 			// Determine filter scope
+			isAny := f.Src == "*"
 			isLeft := strings.HasPrefix(strings.ToLower(f.Src), "a.") || strings.HasPrefix(strings.ToLower(f.Src), "left.")
 			isRight := strings.HasPrefix(strings.ToLower(f.Src), "b.") || strings.HasPrefix(strings.ToLower(f.Src), "right.")
-			isAny := f.Src == "*"
+			// Also support custom aliases ending in ".*"
+			// If not matching specific keywords but has prefix
+			customPrefix := ""
+			if !isLeft && !isRight && !isAny {
+				if idx := strings.Index(f.Src, ".*"); idx > 0 {
+					customPrefix = f.Src[:idx+1] // e.g. "my."
+				}
+			}
+
+			// isAny declaration moved up
 
 			// Flatten the source object and merge all keys
 			flat := flattenItem(key, val)
@@ -1016,25 +1136,49 @@ func renderItem(key any, val any, fields any) any {
 				if isAny {
 					include = true
 				} else if isLeft {
-					// Left side = include keys relative to Left (no "Right." prefix)
-					// Note: "Right.xyz" fields come from the Right join.
-					if !strings.HasPrefix(k, "Right.") {
+					// Left side "a.*" or "left.*"
+					// Include keys relative to Left.
+					// Strictly, this means keys starting with "a." or keys WITHOUT any dot (standard SQL legacy where Left is naked).
+					// But we must EXCLUDE keys that definitely belong to another alias (e.g. "b.something", "right.something").
+
+					hasDot := strings.Contains(k, ".")
+					if !hasDot {
 						include = true
+					} else {
+						// It has a dot. Only include if it matches "left." or "a." (our prefixes)
+						// OR if it doesn't match known "alien" prefixes.
+						// Since we don't know all aliases, we assume if it starts with "Right." => Alien.
+						// If it starts with "b." => Alien (heuristic common pattern).
+						// Ideally we should prefer including ONLY if it starts with "a." or "left."?
+						// But what if Left data has "user.name"?
+						// SQL behavior: a.* returns columns of table A.
+
+						if strings.HasPrefix(strings.ToLower(k), "a.") || strings.HasPrefix(strings.ToLower(k), "left.") {
+							include = true
+						} else if !strings.HasPrefix(k, "Right.") && !strings.HasPrefix(strings.ToLower(k), "b.") {
+							// HEURISTIC: Exclude "b." and "Right." to fix duplication issue in "select a.*, b.name".
+							// This is valid because we now enforce prefixing for "b" in JoinRight.
+							include = true
+						}
 					}
 				} else if isRight {
 					// Right side = include keys starting with "Right."
 					if strings.HasPrefix(k, "Right.") {
 						include = true
-						// For b.*, we usually want to expose them as "field", not "Right.field"?
-						// But if we stripped "Right.", we might collide with "a.field".
-						// User asked for "a.*".
-						// Let's keep the name as is for now to avoid implicit collisions,
-						// unless we want to support "b.*" as "b fields".
+					}
+					// Also include keys matching the specific requested prefix (e.g. "b." from "b.*")
+					prefix := f.Src[:len(f.Src)-1]
+					if len(prefix) > 0 && strings.HasPrefix(k, prefix) {
+						include = true
+					}
+				} else if customPrefix != "" {
+					if strings.HasPrefix(k, customPrefix) {
+						include = true
 					}
 				}
 
 				if include {
-					// Don't overwrite existing explicit aliased fields (precedence)
+					// Don't overwrite existing explicit explicit aliased fields (precedence)
 					// Actually, in projection lists, order matters.
 					resultMap.m[k] = v
 

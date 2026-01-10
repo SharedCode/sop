@@ -189,6 +189,9 @@ type JoinRightCursor struct {
 	plan      JoinPlan
 	planReady bool
 
+	// Dataset info for prefixing
+	rightStoreName string
+
 	// Legacy / Runtime State
 	useFallback  bool  // optimization: materialization fallback
 	fallbackList []any // fallback: in-memory list
@@ -294,16 +297,9 @@ func (pc *ProjectCursor) Next(ctx context.Context) (any, bool, error) {
 		return nil, false, nil
 	}
 
-	resultMap := &OrderedMap{m: make(map[string]any), keys: make([]string, 0)}
-
-	for _, f := range pc.fields {
-		val := getField(item, f.Src)
-		fmt.Printf("ProjectCursor: Src=%s Dst=%s Val=%v Type=%T\n", f.Src, f.Dst, val, val)
-		resultMap.m[f.Dst] = val
-		resultMap.keys = append(resultMap.keys, f.Dst)
-	}
-
-	return resultMap, true, nil
+	// Use renderItem to handle projection, aliasing, and wildcard expansion
+	result := renderItem(nil, item, pc.fields)
+	return result, true, nil
 }
 
 func (pc *ProjectCursor) Close() error {
@@ -427,6 +423,10 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	} else {
 		return "", fmt.Errorf("script must be a JSON string or array")
 	}
+
+	// 1. Sanitize Script (Pre-Execution Cleanup)
+	// This acts as a firewall against common LLM mistakes (wildcards, sloppy args)
+	script = sanitizeScript(script)
 
 	// Stub Mode Check
 	if a.Config.StubMode {
@@ -1563,6 +1563,69 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 
 	log.Debug("Join", "RightVar", rightVar, "IsStore", isRightStore, "JoinType", joinType)
 
+	/*
+	// --- RIGHT OUTER JOIN SUPPORT (Swapped Left Join) ---
+	if joinType == "right" {
+		// Invert ON clause: {LeftKey: RightKey} -> {RightKey: LeftKey}
+		invertedOn := make(map[string]any)
+		for k, v := range on {
+			invertedOn[fmt.Sprintf("%v", v)] = k
+		}
+
+		// Materialize Left Input locally (as it mimics "Look up" table in this reversed join)
+		// Note: We scan the Right Store (Driver) and look up in the Left List.
+		var leftList []any
+		if lc, ok := leftCursor.(*ListCursor); ok {
+			leftList = lc.items
+		} else {
+			// Drain cursor
+			// Note: We consume the "Input" stream entirely to use it as the lookup side.
+			for {
+				item, ok, err := leftCursor.Next(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if !ok {
+					break
+				}
+				leftList = append(leftList, item)
+			}
+		}
+
+		if isRightStore {
+			// Right Side is Store: Use Streaming RightOuterJoinStoreCursor
+			// This scans the Right Store and probes the in-memory Left List.
+			return &RightOuterJoinStoreCursor{
+				rightStore: rightStore,
+				leftList:   leftList,
+				on:         invertedOn,
+				ctx:        ctx,
+			}, nil
+		} else {
+			// Right Side is Value: Use In-Memory stageJoin with swapped arguments
+			// Resolve Right List
+			rightInput, ok := e.Context.Variables[rightVar]
+			if !ok {
+				return nil, fmt.Errorf("right input variable '%s' not found", rightVar)
+			}
+			var rightList []any
+			if l, ok := rightInput.([]map[string]any); ok {
+				for _, x := range l {
+					rightList = append(rightList, x)
+				}
+			} else if l, ok := rightInput.([]any); ok {
+				rightList = l
+			} else {
+				return nil, fmt.Errorf("right input must be a list of items")
+			}
+
+			// Call stageJoin(Driver=Right, Lookup=Left, Type=Left)
+			// This effectively processes: For each Right, Match Left. If no Match, emit Right.
+			return e.stageJoin(rightList, leftList, "left", invertedOn)
+		}
+	}
+	*/
+
 	// DECISION: Prefer Lookup Join (JoinRightCursor) for Stores
 	// We rely on JoinRightCursor's internal "Smart Mode":
 	// 1. It attempts to find a Key Field (Prefix Match) to do fast Lookups.
@@ -1575,13 +1638,24 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 
 	if useLookupJoin {
 		// Use JoinRightCursor for optimized lookup join (or adaptive fallback)
+		// Extract store name/alias from args if possible, or fallback to variable name
+		alias := rightVar
+		if a, ok := args["right_alias"].(string); ok && a != "" {
+			alias = a
+		} else if a, ok := args["store"].(string); ok && a != "" {
+			alias = strings.TrimPrefix(a, "@")
+		} else if a, ok := args["right_dataset"].(string); ok && a != "" {
+			alias = strings.TrimPrefix(a, "@")
+		}
+
 		return &JoinRightCursor{
-			left:     leftCursor,
-			right:    rightStore,
-			joinType: joinType,
-			on:       on,
-			ctx:      ctx,
-			engine:   e,
+			left:           leftCursor,
+			right:          rightStore,
+			joinType:       joinType,
+			on:             on,
+			ctx:            ctx,
+			engine:         e,
+			rightStoreName: alias,
 		}, nil
 	}
 
@@ -1686,9 +1760,20 @@ func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[stri
 // It expects the input to be the Left stream, and the 'store' argument to be the Right store.
 func (e *ScriptEngine) JoinRight(ctx context.Context, input any, args map[string]any) (any, error) {
 	// Map 'store' to 'with' for Join compatibility
+	// Also attempt to capture alias if provided in args (e.g. from SQL FROM clause)
 	if store, ok := args["store"]; ok {
 		args["with"] = store
+		// If we wanted to enforce alias passthrough, we assume "store" name is the default alias
+		// unless overridden by "alias" key.
+		// note: Join() method above looks at "with" or "variables".
 	}
+
+	// FIX: Explicitly map 'alias' to 'right_alias' so the underlying Join operation usage
+	// of JoinRightCursor respects the user-defined alias.
+	if alias, ok := args["alias"]; ok {
+		args["right_alias"] = alias
+	}
+
 	return e.Join(ctx, input, args)
 }
 
@@ -2574,4 +2659,90 @@ func toFloat(v any) (float64, bool) {
 		return float64(i), true
 	}
 	return 0, false
+}
+
+// sanitizeScript performs a pass over the script instructions to clean up common LLM errors.
+// This is the "Compiler/Linter" phase before execution.
+func sanitizeScript(script []ScriptInstruction) []ScriptInstruction {
+	for i := range script {
+		instr := &script[i]
+
+		// 1. PROJECT Op: Normalize "fields"
+		if instr.Op == "project" {
+			if fieldsRaw, ok := instr.Args["fields"]; ok {
+				// Convert Maps/Sloppy lists to Clean List<ProjectionField>
+				// We reuse parseProjectionFields to do the heavy lifting
+				parsed := parseProjectionFields(fieldsRaw)
+
+				// Re-serialize back to a clean list of strings (or structured objects)
+				// Actually, the Engine expects "fields" to be consumable by parseProjectionFields again.
+				// But we can simplify it here to ensure it's normalized.
+
+				// Let's replace the raw args with the parsed struct slice?
+				// Engine uses: parsedFields := parseProjectionFields(args["fields"])
+				// So if we put []ProjectionField back into args["fields"], it works (parseProjectionFields handles it).
+				instr.Args["fields"] = parsed
+			}
+		}
+
+		// 2. JOIN Op: Normalize "type"
+		if instr.Op == "join" || instr.Op == "join_right" {
+			if t, ok := instr.Args["type"].(string); ok {
+				instr.Args["type"] = strings.ToLower(strings.TrimSpace(t))
+			}
+			// Default to inner if missing
+			if _, ok := instr.Args["type"]; !ok {
+				instr.Args["type"] = "inner"
+			}
+
+			// 3. Infer Alias from Projection Usage (Heuristic)
+			// If the user projects "b.name" from the result of this join (variable "b"),
+			// strongly imply that they expect the join to be aliased as "b".
+			if _, hasAlias := instr.Args["alias"]; !hasAlias {
+				if _, hasRightAlias := instr.Args["right_alias"]; !hasRightAlias {
+					// Check result var
+					resultVar := instr.ResultVar
+					if resultVar != "" {
+						// Look ahead for usage
+						for j := i + 1; j < len(script); j++ {
+							future := &script[j]
+							if future.Op == "project" && future.InputVar == resultVar {
+								// Check fields for prefix matching resultVar
+								// Note: fields might have been normalized to []ProjectionField already in step 1,
+								// BUT step 1 runs on the same pass.
+								// If future is ahead, it hasn't been processed by step 1 yet (loop is i, future is j).
+								// So we must handle raw or parsed fields.
+
+								var candidates []string
+								if fRaw, ok := future.Args["fields"]; ok {
+									p := parseProjectionFields(fRaw)
+									for _, field := range p {
+										candidates = append(candidates, field.Src)
+									}
+								}
+
+								// Check for prefix "resultVar."
+								prefix := resultVar + "."
+								found := false
+								for _, c := range candidates {
+									if strings.HasPrefix(c, prefix) {
+										found = true
+										break
+									}
+								}
+
+								if found {
+									// INFER ALIAS
+									// Inject alias into Current Instruction
+									instr.Args["alias"] = resultVar
+									break // Stop looking
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	return script
 }

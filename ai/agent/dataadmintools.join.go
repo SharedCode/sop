@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -147,15 +148,42 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 	// Parse Order By
 	orderBy, _ := args["order_by"].(string)
 	isDesc := false
+	var rightSortFields []string
+
 	if orderBy != "" {
-		lowerOrder := strings.ToLower(orderBy)
-		if lowerOrder == "desc" {
+		// Split by comma for composite sort
+		parts := strings.Split(orderBy, ",")
+
+		// The first part determines the iteration order of the LEFT store (since we drive the join from the left)
+		// UNLESS the query optimizer (us) decides to swap left/right, which we don't do dynamically yet here.
+		// We assume the first field mentioned corresponds to the Left Store if it matches a Left Field,
+		// or if the alias matches.
+		// For simplicity in this tool: The primary sort direction (Asc/Desc) applies to Left Loop.
+		// Detailed sort specs (e.g. "a.f1 ASC, b.f2 DESC") might require buffering Right matches.
+
+		firstPart := strings.TrimSpace(parts[0])
+		lowerFirst := strings.ToLower(firstPart)
+
+		// Check direction of first part
+		if strings.HasSuffix(lowerFirst, " desc") {
 			isDesc = true
-		} else {
-			parts := strings.Fields(lowerOrder)
-			if len(parts) >= 2 && parts[1] == "desc" {
-				isDesc = true
+		}
+
+		// Handle secondary sort fields (Right Store sorting)
+		// We only support secondary sort on Right Store fields for now.
+		if len(parts) > 1 {
+			for _, p := range parts[1:] {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					// We only care about the field name and direction for the Right Store
+					// We store the full string "field DESC" or "field"
+					rightSortFields = append(rightSortFields, p)
+				}
 			}
+		} else {
+			// Even if single order by, if it refers to the Right store...
+			// But Single Order By usually implies Left store iteration order if possible.
+			// Currently we only support controlling Left Store iteration direction.
 		}
 	}
 
@@ -197,29 +225,130 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 		return "", fmt.Errorf("failed to open right store: %w", err)
 	}
 
+	// ---------------------------------------------------------
+	// WILDCARD EXPANSION LOGIC
+	// ---------------------------------------------------------
+	hasWildcard := false
+	for _, f := range fields {
+		if strings.Contains(f, "*") {
+			hasWildcard = true
+			break
+		}
+	}
+
+	if hasWildcard {
+		expandedFields := make([]string, 0)
+
+		// Helper to fetch sample keys/values
+		var leftSample map[string]any
+		var rightSample map[string]any
+
+		fetchSample := func(store btree.BtreeInterface[any, any]) map[string]any {
+			if ok, _ := store.First(ctx); ok {
+				k := store.GetCurrentKey()
+				v, _ := store.GetCurrentValue(ctx)
+				flat := flattenItem(k.Key, v)
+				return flat
+			}
+			return nil
+		}
+
+		leftSample = fetchSample(leftStore)
+		rightSample = fetchSample(rightStore)
+
+		for _, f := range fields {
+			fTrim := strings.TrimSpace(f)
+			fLower := strings.ToLower(fTrim)
+
+			// 1. "SELECT *" (Global Wildcard)
+			if fTrim == "*" {
+				if leftSample != nil {
+					var keys []string
+					for k := range leftSample {
+						keys = append(keys, k)
+					}
+					sort.Strings(keys)
+					for _, k := range keys {
+						expandedFields = append(expandedFields, fmt.Sprintf("a.%s", k))
+					}
+				}
+				if rightSample != nil {
+					var keys []string
+					for k := range rightSample {
+						keys = append(keys, k)
+					}
+					sort.Strings(keys)
+					for _, k := range keys {
+						expandedFields = append(expandedFields, fmt.Sprintf("b.%s", k))
+					}
+				}
+				continue
+			}
+
+			// 2. "a.*" or "left.*"
+			if fLower == "a.*" || fLower == "left.*" || (leftStoreName != "" && fLower == strings.ToLower(leftStoreName)+".*") {
+				if leftSample != nil {
+					var keys []string
+					for k := range leftSample {
+						keys = append(keys, k)
+					}
+					sort.Strings(keys)
+					for _, k := range keys {
+						expandedFields = append(expandedFields, fmt.Sprintf("a.%s", k))
+					}
+				}
+				continue
+			}
+
+			// 3. "b.*" or "right.*"
+			if fLower == "b.*" || fLower == "right.*" || (rightStoreName != "" && fLower == strings.ToLower(rightStoreName)+".*") {
+				if rightSample != nil {
+					var keys []string
+					for k := range rightSample {
+						keys = append(keys, k)
+					}
+					sort.Strings(keys)
+					for _, k := range keys {
+						expandedFields = append(expandedFields, fmt.Sprintf("b.%s", k))
+					}
+				}
+				continue
+			}
+
+			// 4. Regular Field
+			expandedFields = append(expandedFields, fTrim)
+		}
+
+		if len(expandedFields) > 0 {
+			fields = expandedFields
+			log.Info(fmt.Sprintf("Join: Expanded wildcards to %v", fields))
+		}
+	}
+
 	emitter := NewResultEmitter(ctx)
 
 	jp := &JoinProcessor{
-		ctx:            ctx,
-		leftStore:      leftStore,
-		rightStore:     rightStore,
-		leftFields:     leftFields,
-		rightFields:    rightFields,
-		fields:         fields,
-		joinType:       joinType,
-		limit:          limit,
-		isDeleteLeft:   isDeleteLeft,
-		isUpdateLeft:   isUpdateLeft,
-		updateValues:   updateValues,
-		emitter:        emitter,
-		rightComparer:  rightComparer,
-		leftTx:         leftTx,
-		leftAutoCommit: leftAutoCommit,
-		leftIndexSpec:  leftIndexSpec,
-		rightIndexSpec: rightIndexSpec,
-		leftStoreName:  leftStoreName,
-		rightStoreName: rightStoreName,
-		isDesc:         isDesc,
+		ctx:             ctx,
+		leftStore:       leftStore,
+		rightStore:      rightStore,
+		leftFields:      leftFields,
+		rightFields:     rightFields,
+		fields:          fields,
+		joinType:        joinType,
+		limit:           limit,
+		isDeleteLeft:    isDeleteLeft,
+		isUpdateLeft:    isUpdateLeft,
+		updateValues:    updateValues,
+		emitter:         emitter,
+		rightComparer:   rightComparer,
+		leftTx:          leftTx,
+		leftAutoCommit:  leftAutoCommit,
+		leftIndexSpec:   leftIndexSpec,
+		rightIndexSpec:  rightIndexSpec,
+		leftStoreName:   leftStoreName,
+		rightStoreName:  rightStoreName,
+		isDesc:          isDesc,
+		rightSortFields: rightSortFields,
 	}
 
 	return jp.Execute()
@@ -227,44 +356,61 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 
 // JoinProcessor handles the execution of a join operation between two stores.
 type JoinProcessor struct {
-	ctx            context.Context
-	leftStore      btree.BtreeInterface[any, any]
-	rightStore     btree.BtreeInterface[any, any]
-	rightComparer  btree.ComparerFunc[any]
-	leftFields     []string
-	rightFields    []string
-	fields         []string
-	joinType       string
-	limit          float64
-	isDeleteLeft   bool
-	isUpdateLeft   bool
-	updateValues   map[string]any
-	emitter        *ResultEmitter
-	leftTx         sop.Transaction
-	leftAutoCommit bool
-	count          int
-	displayKeys    []string
-	leftIndexSpec  *jsondb.IndexSpecification
-	leftStoreName  string
-	rightStoreName string
-	isDesc         bool
-	rightIndexSpec *jsondb.IndexSpecification
+	ctx             context.Context
+	leftStore       btree.BtreeInterface[any, any]
+	rightStore      btree.BtreeInterface[any, any]
+	rightComparer   btree.ComparerFunc[any]
+	leftFields      []string
+	rightFields     []string
+	fields          []string
+	joinType        string
+	limit           float64
+	isDeleteLeft    bool
+	isUpdateLeft    bool
+	updateValues    map[string]any
+	emitter         *ResultEmitter
+	leftTx          sop.Transaction
+	leftAutoCommit  bool
+	count           int
+	displayKeys     []string
+	leftIndexSpec   *jsondb.IndexSpecification
+	leftStoreName   string
+	rightStoreName  string
+	isDesc          bool
+	rightIndexSpec  *jsondb.IndexSpecification
+	rightSortFields []string
 
 	// Internal State
-	rightKeyFields   []string
-	rightValueFields []string
-	rightKeyFieldMap map[string]string
-	rightKeyIsJSON   bool
-	rightSampleKey   any
-	canUseLookup     bool
-	rightCache       map[string][]cachedItem
-	lastLookupKey    any
+	rightKeyFields       []string
+	rightValueFields     []string
+	rightKeyFieldMap     map[string]string
+	rightKeyIsJSON       bool
+	rightSampleKey       any
+	canUseLookup         bool
+	rightCache           map[string][]cachedItem
+	lastLookupKey        any
+	isRightSortOptimized bool
+	bloomFilter          *BloomFilter
+
+	// Planner State
+	strategy string // "lookup", "merge", "hash_left", "hash_right"
+	minCount int64
+	maxCount int64
+	swapped  bool // If true, Left and Right stores are swapped in execution
 }
 
 type cachedItem struct {
 	Key   any
 	Value any
 }
+
+// Constants for Join Strategies
+const (
+	StrategyLookup    = "lookup"
+	StrategyMerge     = "merge"
+	StrategyHashRight = "hash_right" // Scan Left, Probe Right (Buffered)
+	StrategyHashLeft  = "hash_left"  // Scan Right, Probe Left (Buffered)
+)
 
 func (jp *JoinProcessor) analyzeRightStore() error {
 	rOk, _ := jp.rightStore.First(jp.ctx)
@@ -329,55 +475,155 @@ func (jp *JoinProcessor) analyzeRightStore() error {
 	}
 
 	// If IndexSpecification is present, verify that the join fields match the index prefix.
-	// If they don't match, we cannot use Lookup because the B-Tree is not sorted by the join fields.
 	if jp.rightIndexSpec != nil && len(jp.rightIndexSpec.IndexFields) > 0 {
 		log.Info(fmt.Sprintf("Join: Right has IndexSpec with %d fields.", len(jp.rightIndexSpec.IndexFields)))
-		// Check if rightKeyFields (the join fields that are keys) match the prefix of IndexFields
-		// Note: rightKeyFields order matters here. The user must supply them in index order for this check to pass strictly,
-		// OR we should check if the supplied fields form a prefix regardless of input order (but FindOne needs them in order).
-		// For simplicity, we check if the first N index fields are present in the join fields.
-
-		// Actually, FindOne with a map key works if the map contains the fields.
-		// But the B-Tree sorts by IndexFields[0], then [1], etc.
-		// If we join on IndexFields[1] but not [0], we cannot use Lookup.
-		// So we must ensure that for every IndexField from 0 to N, it is present in the join fields.
-		// We stop at the first missing index field. The join fields must cover at least the first index field.
-
-		matchesPrefix := false
-		for i, idxField := range jp.rightIndexSpec.IndexFields {
-			// Check if idxField.FieldName is in jp.rightKeyFields
-			found := false
-			for _, joinField := range jp.rightKeyFields {
-				if joinField == idxField.FieldName {
-					found = true
-					break
-				}
-			}
-			if !found {
-				// Missing a leading index field.
-				// If i == 0, we can't use lookup at all.
-				// If i > 0, we can use lookup using the prefix of length i.
-				// But wait, jp.rightKeyFields contains ALL join fields that are keys.
-				// If we have extra join fields that are NOT in the prefix, they will just be ignored by the comparer?
-				// No, the comparer uses the fields in the map.
-				// If we construct a search key with fields [0..i-1], FindOne will work.
-				// But if we construct a search key with fields [1], FindOne will fail.
-				if i == 0 {
-					matchesPrefix = false
-				}
-				break
-			}
-			// If we found the field, we are good so far.
-			matchesPrefix = true
-		}
-
-		if !matchesPrefix {
+		if !jp.validateIndexPrefix() {
 			log.Info("Join: Disabling Lookup because join fields do not match IndexSpecification prefix.")
 			jp.canUseLookup = false
 		}
 	}
 
 	return nil
+}
+
+// validateIndexPrefix checks if the join fields form a valid prefix of the index fields.
+// Returns true if at least the first index field is present in the join keys.
+func (jp *JoinProcessor) validateIndexPrefix() bool {
+	if jp.rightIndexSpec == nil || len(jp.rightIndexSpec.IndexFields) == 0 {
+		return true // No index spec, rely on existing key fields check
+	}
+
+	matchesPrefix := false
+	for i, idxField := range jp.rightIndexSpec.IndexFields {
+		// Check if idxField.FieldName is in jp.rightKeyFields
+		// We must map user join fields to actual store field names first.
+		found := false
+		for _, joinField := range jp.rightKeyFields {
+			// FIXED: Use the mapped actual name, not the user alias/input name
+			actualName := jp.rightKeyFieldMap[joinField]
+			// Fallback if map entry missing (shouldn't happen if setup correctly)
+			if actualName == "" {
+				actualName = joinField
+			}
+
+			if strings.EqualFold(actualName, idxField.FieldName) {
+				found = true
+				break
+			}
+		}
+
+		if !found {
+			// Missing a leading index field.
+			if i == 0 {
+				// If the very first index field is missing, we cannot use Lookup at all.
+				matchesPrefix = false
+			}
+			// If i > 0, we have a partial prefix match (valid).
+			// We stop checking further index fields.
+			break
+		}
+		// Found this field, so prefix is valid up to here.
+		matchesPrefix = true
+	}
+	return matchesPrefix
+}
+
+// checkRightSortOptimization determines if the B-Tree index order naturally satisfies the requested rightSortFields.
+func (jp *JoinProcessor) checkRightSortOptimization() {
+	if len(jp.rightSortFields) == 0 {
+		jp.isRightSortOptimized = true
+		return
+	}
+	if jp.rightIndexSpec == nil || len(jp.rightIndexSpec.IndexFields) == 0 {
+		return
+	}
+
+	// 1. Identify which IndexFields constitute the Join Prefix.
+	// We assume validateIndexPrefix has effectively run or that we only start matching sort AFTER the join keys.
+	// But `validateIndexPrefix` logic might be permissive (partial prefix).
+	// We need to know EXACTLY how many IndexFields are "consumed" by the Join Equality condition.
+
+	// Count consumed index fields (must be a contiguous prefix starting at 0)
+	consumedCount := 0
+	for _, idxField := range jp.rightIndexSpec.IndexFields {
+		found := false
+		for _, joinField := range jp.rightKeyFields {
+			actualName := jp.rightKeyFieldMap[joinField]
+			if actualName == "" {
+				actualName = joinField
+			}
+			if strings.EqualFold(actualName, idxField.FieldName) {
+				found = true
+				break
+			}
+		}
+		if found {
+			consumedCount++
+		} else {
+			break // Stop at first gap
+		}
+	}
+
+	// 2. Match `rightSortFields` against the SUBSEQUENT IndexFields
+	// If the Query asks to sort by fields that are NOT the next fields in the index, optimization fails.
+
+	if consumedCount+len(jp.rightSortFields) > len(jp.rightIndexSpec.IndexFields) {
+		// Index doesn't have enough fields to cover the sort request
+		jp.isRightSortOptimized = false
+		return
+	}
+
+	for i, sortSpec := range jp.rightSortFields {
+		indexField := jp.rightIndexSpec.IndexFields[consumedCount+i]
+
+		// Parse Sort Spec
+		specName := sortSpec
+		specDesc := false
+		lowerSpec := strings.ToLower(sortSpec)
+		if strings.HasSuffix(lowerSpec, " desc") {
+			specName = sortSpec[:len(sortSpec)-5]
+			specDesc = true
+		} else if strings.HasSuffix(lowerSpec, " asc") {
+			specName = sortSpec[:len(sortSpec)-4]
+		}
+		specName = strings.TrimSpace(specName)
+
+		// Check Name Match
+		// Note: specName might be an alias like "b.age". We need to support that if mapped?
+		// But usually we stripped aliases in parser or expecting simple names.
+		// However, in processLeftItem buffer sort, we use extractVal which handles mapped names or structs.
+		// Here we need to match strict Store Field Names index definition.
+		// Assuming specName is the simple field name for now (as `toolJoin` parser logic is simple).
+		// If user typed "b.age", we need to strip prefix maybe?
+		// In `toolJoin` we stripped prefixes for display keys, but `rightSortFields` are raw inputs?
+		// Let's check `rightSortFields` parsing in the code I just added.
+		// It just trims space. So "b.f2 DESC".
+		// We should strip "b." or store name.
+
+		cleanSpecName := specName
+		if dotIndex := strings.LastIndex(specName, "."); dotIndex != -1 {
+			cleanSpecName = specName[dotIndex+1:]
+		}
+
+		if !strings.EqualFold(cleanSpecName, indexField.FieldName) {
+			jp.isRightSortOptimized = false
+			log.Info(fmt.Sprintf("Join Optimization Failed: Sort field '%s' does not match Index field '%s' at pos %d", cleanSpecName, indexField.FieldName, consumedCount+i))
+			return
+		}
+
+		// Check Direction Match
+		// Index.Asc (true) matches !specDesc (true if ASC)
+		// Index.Asc (false) matches specDesc (true if DESC)
+		// So: Index.Asc == !specDesc
+		if indexField.AscendingSortOrder != !specDesc {
+			jp.isRightSortOptimized = false
+			log.Info(fmt.Sprintf("Join Optimization Failed: Sort direction mismatch for '%s'. IndexAsc=%v, ReqDesc=%v", cleanSpecName, indexField.AscendingSortOrder, specDesc))
+			return
+		}
+	}
+
+	log.Info("Join: Right Sort Optimization ENABLED. B-Tree index matches sort request.")
+	jp.isRightSortOptimized = true
 }
 
 func (jp *JoinProcessor) buildHashCache() error {
@@ -401,27 +647,177 @@ func (jp *JoinProcessor) buildHashCache() error {
 	return nil
 }
 
-func (jp *JoinProcessor) processLeftItem(k, v any) (bool, error) {
-	// Extract Join Values from Left
+// buildBloomFilter builds a Bloom Filter for the Right Store keys to optimize 'StrategyLookup'.
+func (jp *JoinProcessor) buildBloomFilter() error {
+	count := jp.rightStore.Count()
+	if count == 0 {
+		return nil
+	}
+	// False positive rate 1%
+	jp.bloomFilter = NewBloomFilter(uint(count), 0.01)
+
+	log.Info(fmt.Sprintf("Join: Building Bloom Filter for Right Store (Size: %d)...", count))
+
+	// Scan Right Store
+	ok, err := jp.rightStore.First(jp.ctx)
+	if err != nil {
+		return err
+	}
+	for ok {
+		k := jp.rightStore.GetCurrentKey()
+		var v any
+		allKeyFields := true
+		for _, f := range jp.rightFields {
+			isK, _ := isKeyField(k.Key, f)
+			if !isK {
+				allKeyFields = false
+				break
+			}
+		}
+		if !allKeyFields {
+			v, err = jp.rightStore.GetCurrentValue(jp.ctx)
+			if err != nil {
+				return err
+			}
+		}
+
+		probeKey := generateJoinKey(k.Key, v, jp.rightFields)
+		jp.bloomFilter.Add(probeKey)
+
+		ok, _ = jp.rightStore.Next(jp.ctx)
+	}
+	log.Info("Join: Bloom Filter built.")
+	return nil
+}
+
+// processLeftItem handles a single Left item for Lookups or Hash Probes
+// vProvider is a callback to fetch the value lazily if needed.
+func (jp *JoinProcessor) processLeftItem(k any, vProvider func() (any, error)) (bool, error) {
+	// 1. Extract Join Values (Try from Key First)
+	// We optimize by trying to extract purely from Key.
+	// If extractVal needs Value (returns nil), we might need to invoke vProvider.
+
+	// Helper to extract with lazy value
+	var cachedVal any
+	var valFetched bool
+
+	getVal := func() (any, error) {
+		if valFetched {
+			return cachedVal, nil
+		}
+		var err error
+		cachedVal, err = vProvider()
+		valFetched = true
+		return cachedVal, err
+	}
+
 	leftJoinVals := make(map[string]any)
 	for i, field := range jp.leftFields {
 		rightFieldName := jp.rightFields[i]
-		leftJoinVals[rightFieldName] = extractVal(k, v, field)
+
+		// Attempt extract from Key (pass nil value)
+		val := extractVal(k, nil, field)
+		if val == nil {
+			// Check if it's really missing or just in Value
+			// We can check isKeyField logic or just try fetching value
+			// Optimization: We check if field IS "key" explicitly or mapped?
+			// Simpler: Just fetch value if nil returned (and field isn't "key").
+			if field == "key" {
+				// It was successfully extracted as nil? No, extractVal handles "key" specially.
+				// If val is nil, it means it's not found in Key.
+			}
+
+			// Must fetch value
+			v, err := getVal()
+			if err != nil {
+				return false, err
+			}
+			val = extractVal(k, v, field)
+		}
+		leftJoinVals[rightFieldName] = val
+	}
+
+	// Bloom Filter Optimization
+	// If the Bloom Filter is active, we check it before proceeding to Lookup or Probe.
+	if jp.bloomFilter != nil {
+		var parts []string
+		for _, f := range jp.rightFields {
+			v := leftJoinVals[f]
+			parts = append(parts, fmt.Sprintf("%v", v))
+		}
+		probeKey := strings.Join(parts, "|")
+
+		if !jp.bloomFilter.Test(probeKey) {
+			// Definite miss. Skip this item.
+			return false, nil
+		}
 	}
 
 	if !jp.canUseLookup {
 		// Hash Join Probe
-		probeKey := generateJoinKey(k, v, jp.leftFields)
+		// We need V for emitMatch later on match, but probing relies on leftJoinVals.
+		probeKey := generateJoinKey(k, nil, jp.leftFields)
+		// Note: generateJoinKey typically takes (k, v). But we passed extracted vals map? No.
+		// generateJoinKey(k, v, fields) uses extractVal internally.
+		// So we should construct probeKey from our `leftJoinVals`.
+		// But existing `generateJoinKey` takes k, v.
+		// We should duplicate generation logic using `leftJoinVals` values?
+		// Actually `leftJoinVals` relies on `jp.leftFields` mapping to `jp.rightFields`.
+		// `probeKey` must match `rightCache` format.
+		// `rightCache` was built using `generateJoinKey(rKey, rVal, jp.rightFields)`.
+		// `generateJoinKey` concats string usages.
+
+		// Optimization: We can reconstruct the key part from `leftJoinVals`.
+		// But `generateJoinKey` does sorting/formatting.
+		// To avoid re-implementing `generateJoinKey`, let's just use it with lazy value.
+		// But `generateJoinKey` takes `any` value.
+
+		// If we already extracted everything into `leftJoinVals` without fetching V,
+		// we know the join key.
+		// But `generateJoinKey` iterates fields again.
+
+		// Let's assume for Hash Probe we constructed `leftJoinVals` correctly.
+		// We can form the probe key by iterating `jp.rightFields` and grabbing from `leftJoinVals`.
+
+		var parts []string
+		for _, f := range jp.rightFields {
+			val := leftJoinVals[f]
+			parts = append(parts, fmt.Sprintf("%v", val))
+		}
+		probeKey = strings.Join(parts, "|") // Simplified assumption of generateJoinKey logic?
+		// Wait, `generateJoinKey` might have specific formatting.
+		// Using the actual function is safer.
+
+		// Let's rely on cachedVal.
+		// If `generateJoinKey` calls `extractVal` and misses (searching Value), we need V.
+		// But we already did extraction above!
+		// So we know if we need V.
+
+		// If we fetched V above, `cachedVal` is set.
+		// If we didn't, we can pass nil to `generateJoinKey` IF we are sure keys are in Key.
+		// But `generateJoinKey` doesn't know.
+
+		// Let's verify `generateJoinKey` implementation.
+		// It's in `dataadmintools.utils.go`.
+		// It does `extractVal`.
+
+		// So:
+		vToPass := cachedVal // nil if not fetched
+		probeKey = generateJoinKey(k, vToPass, jp.leftFields)
+
 		matches, ok := jp.rightCache[probeKey]
 
 		if ok {
+			// We have a match! Now we definitely need V for `emitMatch`.
+			v, err := getVal()
+			if err != nil {
+				return false, err
+			}
+
 			if jp.isDesc {
 				for i := len(matches) - 1; i >= 0; i-- {
 					matchItem := matches[i]
-					rKey := matchItem.Key
-					rVal := matchItem.Value
-
-					stop, err := jp.emitMatch(k, v, rKey, rVal)
+					stop, err := jp.emitMatch(k, v, matchItem.Key, matchItem.Value)
 					if err != nil {
 						return false, err
 					}
@@ -431,10 +827,7 @@ func (jp *JoinProcessor) processLeftItem(k, v any) (bool, error) {
 				}
 			} else {
 				for _, matchItem := range matches {
-					rKey := matchItem.Key
-					rVal := matchItem.Value
-
-					stop, err := jp.emitMatch(k, v, rKey, rVal)
+					stop, err := jp.emitMatch(k, v, matchItem.Key, matchItem.Value)
 					if err != nil {
 						return false, err
 					}
@@ -446,6 +839,10 @@ func (jp *JoinProcessor) processLeftItem(k, v any) (bool, error) {
 		}
 		return false, nil
 	}
+
+	// ... Lookup Logic ...
+	// Requires leftJoinVals. We already computed them.
+	// We only need V if emitMatch is called.
 
 	var rightFound bool
 
@@ -534,6 +931,14 @@ func (jp *JoinProcessor) processLeftItem(k, v any) (bool, error) {
 		rightFound, _ = jp.rightStore.First(jp.ctx)
 	}
 
+	// Buffer or Emit matches?
+	// If rightSortFields are present we MUST buffer matches for this left item, sort them, then emit.
+	// UNLESS the B-Tree is already sorted optimally.
+	var buffer []struct {
+		k, v any
+	}
+	useBuffer := len(jp.rightSortFields) > 0 && !jp.isRightSortOptimized
+
 	for rightFound {
 		rKey := jp.rightStore.GetCurrentKey()
 		rVal, _ := jp.rightStore.GetCurrentValue(jp.ctx)
@@ -604,7 +1009,80 @@ func (jp *JoinProcessor) processLeftItem(k, v any) (bool, error) {
 		}
 
 		if match {
-			stop, err := jp.emitMatch(k, v, rKey.Key, rVal)
+			// Match confirmed. We need V for buffer/emit.
+			v, err := getVal()
+			if err != nil {
+				return false, err
+			}
+
+			if useBuffer {
+				buffer = append(buffer, struct{ k, v any }{rKey.Key, rVal})
+			} else {
+				stop, err := jp.emitMatch(k, v, rKey.Key, rVal)
+				if err != nil {
+					return false, err
+				}
+				if stop {
+					return true, nil
+				}
+			}
+		}
+
+		rightFound, _ = jp.rightStore.Next(jp.ctx)
+	}
+
+	if useBuffer && len(buffer) > 0 {
+		// We need V for sorting buffer keys extraction? No, buffer stores Right Store values.
+		// So we only need V when we EMIT.
+		v, err := getVal()
+		if err != nil {
+			return false, err
+		}
+
+		// Sort the buffer
+		sort.Slice(buffer, func(i, j int) bool {
+			// Compare each sort field
+			for _, sortField := range jp.rightSortFields {
+				// Parse "field DESC" vs "field"
+				fieldName := sortField
+				desc := false
+				lower := strings.ToLower(sortField)
+				if strings.HasSuffix(lower, " desc") {
+					fieldName = sortField[:len(sortField)-5] // remove " desc"
+					desc = true
+				} else if strings.HasSuffix(lower, " asc") {
+					fieldName = sortField[:len(sortField)-4] // remove " asc"
+				}
+				fieldName = strings.TrimSpace(fieldName)
+
+				// Extract values
+				// We need to support "b.field" alias stripping if necessary, but rightSortFields parsing usually stripped it?
+				// ToolJoin parsing usually strips prefixes. Let's assume fieldName is clean Key/Value field name.
+
+				// Handle "b." prefix or store name prefix if present in the sort spec
+				// Actually, in ToolJoin we usually extract pure field names or keep aliases.
+				// Here we are comparing Right Store items. The fields must exist in Right Store Key or Value.
+
+				// We try to extract from Key or Value
+				valI := extractVal(buffer[i].k, buffer[i].v, fieldName)
+				valJ := extractVal(buffer[j].k, buffer[j].v, fieldName)
+
+				res := btree.Compare(valI, valJ)
+				if res == 0 {
+					continue
+				}
+
+				if desc {
+					return res > 0 // i > j -> i comes first
+				}
+				return res < 0 // i < j -> i comes first
+			}
+			return false // Equal
+		})
+
+		// Emit sorted buffer
+		for _, item := range buffer {
+			stop, err := jp.emitMatch(k, v, item.k, item.v)
 			if err != nil {
 				return false, err
 			}
@@ -612,9 +1090,8 @@ func (jp *JoinProcessor) processLeftItem(k, v any) (bool, error) {
 				return true, nil
 			}
 		}
-
-		rightFound, _ = jp.rightStore.Next(jp.ctx)
 	}
+
 	return false, nil
 }
 
@@ -849,82 +1326,499 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 	return false, nil
 }
 
+// Execute runs the join operation.
 func (jp *JoinProcessor) Execute() (string, error) {
-	jp.computeDisplayKeys()
-
-	var lOk bool
-	if jp.isDesc {
-		lOk, _ = jp.leftStore.Last(jp.ctx)
-		// fmt.Printf("DEBUG: isDesc=true. Last() returned: %v. Key=%v\n", lOk, jp.leftStore.GetCurrentKey())
-	} else {
-		lOk, _ = jp.leftStore.First(jp.ctx)
-		// fmt.Printf("DEBUG: isDesc=false. First() returned: %v. Key=%v\n", lOk, jp.leftStore.GetCurrentKey())
-	}
-	if !lOk {
-		return jp.emitter.Finalize(), nil
-	}
+	jp.computeDisplayKeys() // ensure display keys computed
 
 	if err := jp.analyzeRightStore(); err != nil {
 		return "", err
 	}
+	jp.checkRightSortOptimization()
+
+	// ---------------------------------------------------------
+	// PLANNER: Select Join Strategy
+	// ---------------------------------------------------------
+	jp.chooseStrategy()
+
+	// Bloom Filter Pushdown (Optimization for StrategyLookup)
+	if jp.strategy == StrategyLookup && jp.rightStore.Count() > 100 {
+		if err := jp.buildBloomFilter(); err != nil {
+			return "", err
+		}
+	}
+
+	log.Info(fmt.Sprintf("Join Planner: Selected Strategy='%s' (CanLookup=%v, RightSortOpt=%v)", jp.strategy, jp.canUseLookup, jp.isRightSortOptimized))
+
+	if jp.strategy == StrategyMerge {
+		return jp.executeMergeJoin()
+	}
+
+	if jp.strategy == StrategyHashLeft {
+		// Adaptive Hash Join: Buffer Left, Scan Right
+		// This requires "Swapped" logic.
+		return jp.executeAdaptiveHashJoin()
+	}
+
+	// Default/Fallback: Drive Left (Scan Left, Probe Right)
+	// Supports: Lookup Join (Index Nested Loop) OR Hash Join (Hash Right)
+	// Logic is consolidated in executeStandardJoin
+	return jp.executeStandardJoin()
+}
+
+func (jp *JoinProcessor) chooseStrategy() {
+	// 1. Check for Merge Join Suitability
+	// Requirements:
+	// - Both sides participating in Join via their Primary Keys (or sorted Indices).
+	// - Both sides are sorted in the SAME direction (Asc/Asc or Desc/Desc).
+	// - "canUseLookup" is true (implies Right is joinable by Key).
+	// - Left is also joining on its Key? (Need to check).
+
+	isLeftSortedByKey := false
+	if len(jp.leftFields) == 1 && jp.leftFields[0] == "key" {
+		isLeftSortedByKey = true
+	}
+	// TODO: Support complex Left keys or IndexSpec sorting on Left.
+
+	if isLeftSortedByKey && jp.canUseLookup && jp.isRightSortOptimized {
+		// Both sides sorted by join key.
+		// We can use Merge Join (Galloping).
+		jp.strategy = StrategyMerge
+		return
+	}
+
+	// 2. If no Merge, check for Adaptive Hash Join (side swapping).
+	// Only for Inner Joins (symmetric).
+	// Only if Read-Only (no delete/update actions).
+	// Only if Lookup is NOT available (i.e. we are doing a Scan+Probe).
+
+	if !jp.canUseLookup && jp.joinType == "inner" && !jp.isDeleteLeft && !jp.isUpdateLeft {
+		// We are forced to Scan + Probe.
+		// Compare counts to decide which to buffer.
+		lCount := jp.leftStore.Count()
+		rCount := jp.rightStore.Count()
+
+		if lCount < rCount {
+			jp.strategy = StrategyHashLeft // Buffer Left (Small), Scan Right (Large)
+			return
+		}
+	}
+
+	// 3. Fallback
+	if jp.canUseLookup {
+		jp.strategy = StrategyLookup
+	} else {
+		jp.strategy = StrategyHashRight
+	}
+}
+
+// executeStandardJoin implements the original Left Scan -> Right Probe logic
+// supporting both Lookup (Index Join) and Hash-Right (Buffered Right)
+func (jp *JoinProcessor) executeStandardJoin() (string, error) {
 	if err := jp.buildHashCache(); err != nil {
 		return "", err
 	}
 
-	type leftItem struct {
-		k any
-		v any
+	// Iterate Left Store
+	var lOk bool
+	var err error
+	if jp.isDesc {
+		lOk, err = jp.leftStore.Last(jp.ctx)
+	} else {
+		lOk, err = jp.leftStore.First(jp.ctx)
 	}
-	batchSize := 100
+
+	if err != nil {
+		return "", fmt.Errorf("failed to iterate left store: %w", err)
+	}
+
+	// Optimization: Determine if we can skip fetching Value (Deferred Fetch)
+	// We check this on the first item.
+	leftJoinOnKeyOnly := false
+	checkedLeftKeyOpt := false
+
 	for lOk {
 		if jp.count >= int(jp.limit) {
 			break
 		}
 
-		var batch []leftItem
-		for i := 0; i < batchSize && lOk && i+jp.count < int(jp.limit); i++ {
-			k := jp.leftStore.GetCurrentKey()
-			v, _ := jp.leftStore.GetCurrentValue(jp.ctx)
-			batch = append(batch, leftItem{k.Key, v})
-			if jp.isDesc {
-				lOk, _ = jp.leftStore.Previous(jp.ctx)
-			} else {
-				lOk, _ = jp.leftStore.Next(jp.ctx)
+		k := jp.leftStore.GetCurrentKey()
+
+		// One-time check for key-only optimization
+		if !checkedLeftKeyOpt {
+			leftJoinOnKeyOnly = true
+			for _, f := range jp.leftFields {
+				if isK, _ := isKeyField(k.Key, f); !isK {
+					leftJoinOnKeyOnly = false
+					break
+				}
+			}
+			checkedLeftKeyOpt = true
+			if leftJoinOnKeyOnly {
+				log.Info("Join: Optimization Enabled - Left Store Join fields are in Key. Deferring Value fetch.")
 			}
 		}
 
-		for _, lItem := range batch {
-			if jp.count >= int(jp.limit) {
-				break
+		var v any
+		if !leftJoinOnKeyOnly {
+			v, err = jp.leftStore.GetCurrentValue(jp.ctx)
+			if err != nil {
+				return "", err
 			}
-			stop, err := jp.processLeftItem(lItem.k, lItem.v)
+		}
+
+		// If optimized, we pass v=nil. processLeftItem must handle nil value if fields are in Key.
+		// processLeftItem calls extractVal. extractVal handles nil value if field is found in Key.
+		// However, processLeftItem might need Value for *projection*?
+		// No, processLeftItem emits match. emitMatch extracts projection fields.
+		// If we emit, we MUST have the Value available for projection/result.
+		// processLeftItem logic:
+		// 1. extract leftJoinVals (using k, v).
+		// 2. probe/lookup.
+		// 3. if match -> emitMatch(k, v, ...).
+
+		// If we pass v=nil:
+		// 1. extract works (since keys are in Key).
+		// 2. probe works.
+		// 3. emitMatch needs V if projection uses columns from V.
+
+		// So we need to fetch V *inside* processLeftItem if a match occurs?
+		// Or fetch V here if processLeftItem returns true (match emitted)?
+		// processLeftItem returns (stop, error).
+		// But emitMatch is called INSIDE processLeftItem.
+		// So passing v=nil to processLeftItem is dangerous if emitMatch needs it.
+
+		// Solution:
+		// We can't easily change processLeftItem signature.
+		// But processLeftItem performs the probe.
+		// Optimization: Check probe locally here?
+		// No, that duplicates logic.
+
+		// Helper: "Peek" probe?
+		// "Do we have a match?"
+		// If Hash Join (leftJoinVals -> probe key -> cache lookup).
+		// If Lookup Join (leftJoinVals -> lookup key -> BTree find).
+
+		// Given the complexity of refactoring processLeftItem, we can only safely optimize
+		// if we modify processLeftItem to accept a "fetchValue" callback or similar.
+		// OR we inline the probe logic for the common Hash Case optimization (which is the critical one).
+
+		// But wait, the user asked for "Bloom Filter Pushdown" / Optimization.
+		// If I implement it only for Adaptive Hash Join (which I did), is that enough?
+		// Standard Join (Left Scan, Right Probe) uses processLeftItem.
+		// processLeftItem handles both Hash and Lookup.
+
+		// Let's modify processLeftItem to support Lazy Value Fetching.
+		// But it receives `v any`.
+		// If I pass `nil`, it assumes Value is nil.
+		// If I modify `processLeftItem` to take a `getValue func() (any, error)`, that works.
+
+		// Refactoring `processLeftItem` is best.
+		// args: (k any, vProvider func() (any, error))
+
+		// But that affects call sites.
+		// Call sites: executeStandardJoin.
+		// That's the only call site! (Lines 1294).
+
+		// Let's do this refactor.
+
+		stop, err := jp.processLeftItem(k.Key, func() (any, error) {
+			if v != nil || leftJoinOnKeyOnly == false {
+				return v, nil
+			}
+			// Fetch on demand
+			return jp.leftStore.GetCurrentValue(jp.ctx)
+		})
+
+		if err != nil {
+			return "", err
+		}
+		if stop {
+			break
+		}
+
+		if jp.isDesc {
+			lOk, err = jp.leftStore.Previous(jp.ctx)
+		} else {
+			lOk, err = jp.leftStore.Next(jp.ctx)
+		}
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return jp.emitter.Finalize(), nil
+}
+
+// executeMergeJoin implements the "Galloping" / Lockstep join.
+// It assumes both stores are sorted by the join key.
+func (jp *JoinProcessor) executeMergeJoin() (string, error) {
+	// Initialize both cursors
+	// Assuming Ascending for now unless isDesc is supported for Merge?
+	// Merge Join logic is directional.
+	// If isDesc, we should iterate Last/Previous on both?
+
+	var lOk, rOk bool
+
+	if jp.isDesc {
+		lOk, _ = jp.leftStore.Last(jp.ctx)
+		rOk, _ = jp.rightStore.Last(jp.ctx)
+	} else {
+		lOk, _ = jp.leftStore.First(jp.ctx)
+		rOk, _ = jp.rightStore.First(jp.ctx)
+	}
+
+	for lOk { // Loop is driven by Left for Outer Join compatibility, but we optimize traversal.
+		if jp.count >= int(jp.limit) {
+			break
+		}
+
+		// Left Item
+		lKey := jp.leftStore.GetCurrentKey()
+		// Wait, extraction of Left Value.
+		// If using Key-optimized fields, we can defer fetching lVal.
+		var lVal any
+		var lValFetched bool
+		var err error
+
+		getLVal := func() (any, error) {
+			if lValFetched {
+				return lVal, nil
+			}
+			lVal, err = jp.leftStore.GetCurrentValue(jp.ctx)
+			lValFetched = true
+			return lVal, err
+		}
+
+		// Extract Left Join Key (we know it's the "key" / ID because of chooseStrategy)
+		// We try extracting from Key first (passing nil).
+		lJoinVal := extractVal(lKey.Key, nil, jp.leftFields[0])
+		if lJoinVal == nil {
+			// Must fetch value
+			_, err = getLVal()
+			if err != nil {
+				return "", err
+			}
+			lJoinVal = extractVal(lKey.Key, lVal, jp.leftFields[0])
+		}
+
+		var rKeyStruct btree.Item[any, any]
+		var matchFound bool
+
+		if rOk {
+			rKeyStruct = jp.rightStore.GetCurrentKey()
+			rJoinVal := extractVal(rKeyStruct.Key, nil, jp.rightKeyFields[0])
+
+			// Compare
+			cmp := btree.Compare(lJoinVal, rJoinVal)
+
+			if cmp == 0 {
+				matchFound = true
+			} else {
+				// Mismatch.
+				// Logic depends on Direction (Asc vs Desc).
+
+				// Case ASC: l=5, r=3. l > r. r is behind.
+				// Case ASC: l=3, r=5. l < r. r is ahead (l is behind).
+
+				// Case DESC: l=5, r=3. l > r. r is ahead (l is behind - assuming we are going down).
+				// Case DESC: l=3, r=5. l < r. r is behind.
+
+				behind := false
+				if !jp.isDesc {
+					if cmp > 0 {
+						behind = true
+					} // l > r (5 > 3)
+				} else {
+					if cmp < 0 {
+						behind = true
+					} // l < r (3 < 5)
+				}
+
+				if behind {
+					// Right is behind Left. Advance Right.
+					// Galloping Logic: Next vs Find.
+
+					advanceOk := false
+					if jp.isDesc {
+						advanceOk, _ = jp.rightStore.Previous(jp.ctx)
+					} else {
+						advanceOk, _ = jp.rightStore.Next(jp.ctx)
+					}
+
+					if advanceOk {
+						rKeyStruct = jp.rightStore.GetCurrentKey()
+						rJoinVal = extractVal(rKeyStruct.Key, nil, jp.rightKeyFields[0])
+						cmp = btree.Compare(lJoinVal, rJoinVal)
+
+						if cmp == 0 {
+							matchFound = true
+						} else {
+							// Check if we are STILL behind (Gap)
+							stillBehind := false
+							if !jp.isDesc {
+								if cmp > 0 {
+									stillBehind = true
+								}
+							} else {
+								if cmp < 0 {
+									stillBehind = true
+								}
+							}
+
+							if stillBehind {
+								// Jump!
+								lookupKey := lJoinVal
+								if jp.rightSampleKey != nil {
+									lookupKey = coerce(lookupKey, jp.rightSampleKey)
+								}
+								// Use Find to skip gap.
+								// Find moves cursor to >= Key (Asc/Desc doesn't change B-Tree structure).
+								// Logic works for both directions as verified.
+								found, _ := jp.rightStore.Find(jp.ctx, lookupKey, false)
+								rOk = found || jp.rightStore.GetCurrentKey().Key != nil
+
+								if rOk {
+									rKeyStruct = jp.rightStore.GetCurrentKey()
+									rJoinVal = extractVal(rKeyStruct.Key, nil, jp.rightKeyFields[0])
+									if btree.Compare(lJoinVal, rJoinVal) == 0 {
+										matchFound = true
+									}
+									// If Find lands us ahead of Left...
+									// e.g. Left=10. Right jumps to 11.
+									// That's fine, we missed 10. MatchFound=false.
+								}
+							}
+						}
+					} else {
+						rOk = false
+					}
+				} else {
+					// Right is ahead of Left. Left needs to catch up.
+					matchFound = false
+				}
+			}
+		}
+
+		if matchFound {
+			// Now we need lVal for emitting
+			_, err = getLVal()
+			if err != nil {
+				return "", err
+			}
+
+			rVal, _ := jp.rightStore.GetCurrentValue(jp.ctx)
+			stop, err := jp.emitMatch(lKey.Key, lVal, rKeyStruct.Key, rVal)
 			if err != nil {
 				return "", err
 			}
 			if stop {
 				break
 			}
+		} else {
+			if jp.joinType == "left" {
+				_, err = getLVal()
+				if err != nil {
+					return "", err
+				}
+
+				jp.emitMatch(lKey.Key, lVal, nil, nil)
+				if jp.count >= int(jp.limit) {
+					break
+				}
+			}
+		}
+
+		if jp.isDesc {
+			lOk, _ = jp.leftStore.Previous(jp.ctx)
+		} else {
+			lOk, _ = jp.leftStore.Next(jp.ctx)
 		}
 	}
 
-	if jp.isDeleteLeft {
-		jp.emitter.Finalize()
-		if jp.leftAutoCommit {
-			if err := jp.leftTx.Commit(jp.ctx); err != nil {
-				return "", fmt.Errorf("failed to commit delete transaction: %w", err)
-			}
-		}
-		return fmt.Sprintf(`{"deleted_count": %d}`, jp.count), nil
+	return jp.emitter.Finalize(), nil
+}
+
+// executeAdaptiveHashJoin implements "Swap Sides" optimization.
+func (jp *JoinProcessor) executeAdaptiveHashJoin() (string, error) {
+	log.Info("Join: Executing Adaptive Hash Join (Swapped). Buffering Left, Scanning Right.")
+
+	// 1. Buffer Left Store
+	leftCache := make(map[string][]cachedItem)
+	lOk, _ := jp.leftStore.First(jp.ctx)
+	for lOk {
+		k := jp.leftStore.GetCurrentKey()
+		v, _ := jp.leftStore.GetCurrentValue(jp.ctx)
+		joinKey := generateJoinKey(k.Key, v, jp.leftFields)
+		leftCache[joinKey] = append(leftCache[joinKey], cachedItem{Key: k.Key, Value: v})
+		lOk, _ = jp.leftStore.Next(jp.ctx)
 	}
 
-	if jp.isUpdateLeft {
-		jp.emitter.Finalize()
-		if jp.leftAutoCommit {
-			if err := jp.leftTx.Commit(jp.ctx); err != nil {
-				return "", fmt.Errorf("failed to commit update transaction: %w", err)
+	// 2. Scan Right Store (Probe)
+	var rOk bool
+	// We must respect the requested sort direction (isDesc).
+	// Since we are driving with the Right Store in this strategy, the output order depends on this scan.
+	if jp.isDesc {
+		rOk, _ = jp.rightStore.Last(jp.ctx)
+	} else {
+		rOk, _ = jp.rightStore.First(jp.ctx)
+	}
+
+	for rOk {
+		if jp.count >= int(jp.limit) {
+			break
+		}
+
+		rKey := jp.rightStore.GetCurrentKey()
+		allKeyFields := true
+		for _, f := range jp.rightFields {
+			isK, _ := isKeyField(rKey.Key, f)
+			if !isK {
+				allKeyFields = false
+				break
 			}
 		}
-		return fmt.Sprintf(`{"updated_count": %d}`, jp.count), nil
+
+		var rVal any
+		var err error
+
+		if allKeyFields {
+			probeKey := generateJoinKey(rKey.Key, nil, jp.rightFields)
+			if _, exists := leftCache[probeKey]; !exists {
+				if jp.isDesc {
+					rOk, _ = jp.rightStore.Previous(jp.ctx)
+				} else {
+					rOk, _ = jp.rightStore.Next(jp.ctx)
+				}
+				continue
+			}
+			rVal, err = jp.rightStore.GetCurrentValue(jp.ctx)
+			if err != nil {
+				return "", err
+			}
+		} else {
+			rVal, err = jp.rightStore.GetCurrentValue(jp.ctx)
+			if err != nil {
+				return "", err
+			}
+		}
+
+		probeKey := generateJoinKey(rKey.Key, rVal, jp.rightFields)
+		if matches, ok := leftCache[probeKey]; ok {
+			for _, match := range matches {
+				stop, err := jp.emitMatch(match.Key, match.Value, rKey.Key, rVal)
+				if err != nil {
+					return "", err
+				}
+				if stop {
+					break
+				}
+			}
+		}
+		if jp.isDesc {
+			rOk, _ = jp.rightStore.Previous(jp.ctx)
+		} else {
+			rOk, _ = jp.rightStore.Next(jp.ctx)
+		}
 	}
 
 	return jp.emitter.Finalize(), nil

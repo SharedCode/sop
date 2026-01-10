@@ -98,6 +98,51 @@ User-facing documentation. We generally do *not* put internal prompt instruction
 *   **`ai/agent/dataadmintools_utils.go`**: Logic for projection parsing.
 *   **`ai/agent/limit_ordering_test.go`**: Tests for `project`, `limit`, and order preservation.
 *   **`ai/agent/dataadmintools_join_repro_test.go`**: Regression tests for joins and alias collisions.
+
+---
+
+## 7. Join Optimization & JIT Planning
+
+We implemented a **Just-In-Time (JIT) Planner** within the `JoinProcessor` (`ai/agent/dataadmintools.join.go`) to optimize Joins dynamically based on the B-Tree structure.
+
+### Hash Join vs. Lookup Join
+The Join Processor chooses between:
+1.  **Lookup Join (Preferred)**: Uses B-Tree `Find()` and `Next()`. Complexity: $O(M \times \log N)$.
+2.  **Hash Join (Fallback)**: Scans Right store completely into memory. Complexity: $O(M + N)$.
+
+### Optimization Logic
+1.  **Prefix Validation** (`validateIndexPrefix`):
+    *   Verifies that the `JOIN ON` columns match the **Right Store's Index Prefix**.
+    *   Checks strictly (must start at Index Field 0) but allows partial prefixes (e.g., Index `[A, B]`, Join `[A]`).
+    *   **Mapped Names**: Resolves user aliases (e.g., `join on b`) to internal Store Field Names (e.g., `B`) before checking.
+2.  **Sort Optimization** (`checkRightSortOptimization`):
+    *   If the query requests `ORDER BY a.field, b.field DESC`:
+        *   Standard behavior: Buffer Right matches in memory and sort using Go `sort.Slice`.
+        *   **Optimization**: If the **Right B-Tree Index** naturally provides this order (e.g., Index is `[A ASC, B DESC]`), we **disable buffering**.
+    *   This logic strictly compares Field Names and Sort Direction (Asc/Desc) against the B-Tree spec.
+3.  **Execution**:
+    *   The `Execute` method runs these checks *before* processing any rows.
+    *   If `isRightSortOptimized` is true, `processLeftItem` streams results directly, achieving maximum performance.
+
+### Efficient Query Scenarios (Supported)
+
+The following scenarios leverage the B-Tree structure for **Fast Lookup** ($O(M \log N)$) instead of Full Table Scan ($O(N)$):
+
+| Scenario | Index Spec | Join Condition | Order By | Status | Reason |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Exact Full Key** | `[A, B]` | `ON b.A=.. AND b.B=..` | (Any) | **Fast** | Full match. |
+| **Prefix Match** | `[A, B]` | `ON b.A=..` | (Any) | **Fast** | Partial prefix A is valid for lookup. |
+| **Sort Optimization (Value)** | `[A, B]` | `ON b.A=..` | `ORDER BY b.B` | **Fast + Stream** | `B` follows `A` in index. Sorted natively. |
+| **Sort Optimization (Direction)** | `[A ASC, B DESC]` | `ON b.A=..` | `ORDER BY b.B DESC` | **Fast + Stream** | Requested `DESC` matches Index `DESC`. |
+
+### Inefficient Scenarios (Fallback to Hash Join)
+
+| Scenario | Index Spec | Join Condition | Order By | Status | Reason |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Skip First Field** | `[A, B]` | `ON b.B=..` | (Any) | **Slow (Scan)** | Cannot seek B-Tree without prefix `A`. |
+| **Sort Mismatch** | `[A, B]` | `ON b.A=..` | `ORDER BY b.B DESC` | **Buffered Sort** | Index is `B ASC`, Query wants `B DESC`. Requires memory sort. |
+| **Sort Gap** | `[A, B, C]` | `ON b.A=..` | `ORDER BY b.C` | **Buffered Sort** | Skipping `B` breaks sort order continuity. |
+
 *   **`ai/agent/dataadmintools_select_ordered_test.go`**: Tests for simple select ordering.
 
 ### Running Tests

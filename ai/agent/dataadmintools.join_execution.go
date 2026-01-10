@@ -420,29 +420,31 @@ func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
 		}
 
 		for _, k := range rKeys {
-			// Collision Handling: Prefix with "Right." if key exists
-			// This prevents data loss during join of tables with same column names (e.g. "key", "id", "name")
-			finalKey := k
-			if _, exists := newMap[k]; exists {
-				// We have a collision.
-				// In SQL, usually you access via Table Alias.
-				// Here, we don't know the table alias easily inside this loop.
-				// So we prefix with "Right." to preserve it.
-				finalKey = "Right." + k
-			}
+			val := rMap[k]
 
-			newMap[finalKey] = rMap[k]
+			// Check for collision in the map constructed so far
+			_, collision := newMap[k]
 
-			// Add to keys list
-			found := false
-			for _, existing := range newKeys {
-				if existing == finalKey {
-					found = true
-					break
+			if jc.rightStoreName != "" {
+				// Strategy: Smart Prefixing with Alias
+
+				// 1. Always inject the aliased key (e.g. "b.name")
+				aliasedKey := jc.rightStoreName + "." + k
+				newMap[aliasedKey] = val
+				newKeys = append(newKeys, aliasedKey)
+
+				// 2. DO NOT inject naked keys if we have a strict alias.
+				// This prevents pollution (e.g. appearing in "a.*") and duplicates.
+			} else {
+				// Strategy: Legacy "Right." Prefixing
+				if collision {
+					finalKey := "Right." + k
+					newMap[finalKey] = val
+					newKeys = append(newKeys, finalKey)
+				} else {
+					newMap[k] = val
+					newKeys = append(newKeys, k)
 				}
-			}
-			if !found {
-				newKeys = append(newKeys, finalKey)
 			}
 		}
 	}

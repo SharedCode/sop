@@ -171,7 +171,7 @@ func TestToolJoin_WithAlias(t *testing.T) {
 	leftStore.Add(ctx, map[string]any{"id": 1}, map[string]any{"name": "Engineering", "region": "APAC"})
 
 	// Emp: {id: 101, name: "John", dept_id: 1}
-	rightStore.Add(ctx, map[string]any{"id": 101}, map[string]any{"name": "John", "dept_id": 1, "region": "APAC"})
+	rightStore.Add(ctx, map[string]any{"id": 101}, map[string]any{"emp_name": "John", "dept_id": 1, "region": "APAC"})
 
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Commit failed: %v", err)
@@ -197,7 +197,7 @@ func TestToolJoin_WithAlias(t *testing.T) {
 		"right_join_fields": []string{"region"},
 		"fields": []string{
 			"a.region",
-			"b.name AS employee",
+			"b.emp_name AS employee",
 		},
 	}
 

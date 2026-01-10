@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,10 @@ import (
 )
 
 func TestReproSlowJoin(t *testing.T) {
+	// 0. Cleanup from previous runs
+	os.RemoveAll("./test_data/repro_slow_3")
+	defer os.RemoveAll("./test_data/repro_slow_3")
+
 	// 1. Setup Database
 	dbName := "TestReproSlowJoinDB"
 	t.Log("Initializing database...")

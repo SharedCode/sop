@@ -38,6 +38,24 @@ The `select` tool is powerful and supports filtering and field selection.
 *   **Exact Match**: "Find the user with key 'user_123'."
 *   **Nearest Match**: "Find the user closest to 'user_125'." (Useful for finding range boundaries).
 
+### Efficient Query Scenarios
+
+SOP is a high-performance database that uses B-Trees. To get the maximum speed (especially on large datasets), structure your questions to leverage the Index (Key) structure.
+
+**How to write fast queries:**
+The "Index" is defined by the Key fields of your store.
+*   **Fast**: Filtering by the *first* field(s) of the Key (Prefix Match).
+*   **Fast**: Joining on the Key fields.
+*   **Slow**: Filtering by a field that is *not* at the start of the Key (requires a full scan).
+
+| Scenario | Index (Key) Structure | Query Example | Status |
+| :--- | :--- | :--- | :--- |
+| **Exact Match** | `[Region, Dept]` | "Find employees in 'US' 'Sales'" | ⚡ **Fast** |
+| **Prefix Match** | `[Region, Dept]` | "Find employees in 'US'" | ⚡ **Fast** |
+| **Natural Sort** | `[Region, Dept]` | "Find 'US' employees, ordered by Dept" | ⚡ **Fast** |
+| **Skip Prefix** | `[Region, Dept]` | "Find employees in 'Sales'" (Skipped Region) | 🐢 **Slow** (Full Scan) |
+| **Sort Conflict** | `[Region, Dept]` | "Find 'US' employees, ordered by Dept DESC" (If index is ASC) | 🐢 **Slower** (Buffered) |
+
 ---
 
 ## 2. CRUD Operations

@@ -40,9 +40,9 @@ func TestToolJoin_OrderBy_RightStoreDirection(t *testing.T) {
 	rightOpts := sop.StoreOptions{Name: "employees", SlotLength: 10, IsPrimitiveKey: true}
 	right, _ := sopdb.NewBtree[string, any](ctx, dbOpts, "employees", t2, nil, rightOpts)
 	// Add in order E1, E2, E3
-	right.Add(ctx, "E1", map[string]any{"id": "E1", "dept_id": "D1", "name": "Alice"})
-	right.Add(ctx, "E2", map[string]any{"id": "E2", "dept_id": "D1", "name": "Bob"})
-	right.Add(ctx, "E3", map[string]any{"id": "E3", "dept_id": "D1", "name": "Charlie"})
+	right.Add(ctx, "E1", map[string]any{"uid": "E1", "dept_id": "D1", "name": "Alice"})
+	right.Add(ctx, "E2", map[string]any{"uid": "E2", "dept_id": "D1", "name": "Bob"})
+	right.Add(ctx, "E3", map[string]any{"uid": "E3", "dept_id": "D1", "name": "Charlie"})
 
 	t2.Commit(ctx)
 
@@ -53,7 +53,7 @@ func TestToolJoin_OrderBy_RightStoreDirection(t *testing.T) {
 		"left_join_fields":  []string{"id"},
 		"right_join_fields": []string{"dept_id"},
 		"order_by":          "key desc",
-		"fields":            []string{"employees.id"},
+		"fields":            []string{"employees.uid"},
 	}
 	res, err := agent.Execute(ctx, "join", args)
 	if err != nil {
@@ -74,7 +74,7 @@ func TestToolJoin_OrderBy_RightStoreDirection(t *testing.T) {
 		// Handle both nested "key" layout and flat layout
 		if k, ok := item["key"]; ok && k != nil {
 			if v, ok := k.(map[string]any); ok {
-				if val, ok := v["Id"]; ok {
+				if val, ok := v["uid"]; ok {
 					return val.(string)
 				}
 				if val, ok := v["id"]; ok {
@@ -83,7 +83,7 @@ func TestToolJoin_OrderBy_RightStoreDirection(t *testing.T) {
 			}
 		}
 		// Flat layout fallback
-		if val, ok := item["Id"]; ok {
+		if val, ok := item["uid"]; ok {
 			return val.(string)
 		}
 		if val, ok := item["id"]; ok {

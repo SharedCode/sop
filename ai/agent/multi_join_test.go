@@ -84,7 +84,7 @@ func TestMultiJoinBehavior(t *testing.T) {
 		// Step 3: Join Products (on orders.product_id = products.key)
 		// Note: products.key is the Key, so this will be a Lookup Join (Probe)
 		// The input 's2' has merged fields. 'product_id' comes from orders value.
-		{"op": "join_right", "args": map[string]any{"store": "products", "on": map[string]any{"product_id": "key"}}, "input_var": "s2", "result_var": "s3"},
+		{"op": "join_right", "args": map[string]any{"store": "products", "on": map[string]any{"orders.product_id": "key"}}, "input_var": "s2", "result_var": "s3"},
 
 		// Step 4: Collect
 		{"op": "limit", "args": map[string]any{"limit": 10}, "input_var": "s3", "result_var": "final"},

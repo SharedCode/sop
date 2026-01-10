@@ -76,7 +76,7 @@ func TestReproJoinCollision(t *testing.T) {
 		}, "input_var": "stream", "result_var": "stream"},
 		{"op": "project", "args": map[string]any{
 			"fields": []any{
-				map[string]any{"employee": "right.name"},
+				map[string]any{"employee": "b.name"},
 			},
 		}, "input_var": "stream", "result_var": "output"},
 		{"op": "commit_tx", "args": map[string]any{"transaction": "tx"}},
