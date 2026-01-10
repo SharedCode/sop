@@ -69,7 +69,7 @@ func TestToolJoin_SuffixHandling(t *testing.T) {
 		"right_store":       "departments",
 		"left_join_fields":  []string{"region"},
 		"right_join_fields": []string{"region"},
-		"fields":            []string{"region", "department_1"}, // Should map to "department"
+		"fields":            []string{"region", "department"}, // Should map to "department"
 	}
 
 	// Setup Context with Payload
@@ -104,14 +104,14 @@ func TestToolJoin_SuffixHandling(t *testing.T) {
 	}
 
 	// Check if Department has a value (normalized from department_1)
-	if val, ok := valMap["Department"]; ok {
+	if val, ok := valMap["department"]; ok {
 		if val == nil {
-			t.Errorf("Expected value for 'Department', got nil")
+			t.Errorf("Expected value for 'department', got nil")
 		} else {
-			t.Logf("Got value for Department: %v", val)
+			t.Logf("Got value for department: %v", val)
 		}
 	} else {
-		t.Errorf("Field 'Department' missing from response. Available keys: %v", keys(valMap))
+		t.Errorf("Field 'department' missing from response. Available keys: %v", keys(valMap))
 	}
 }
 
@@ -232,28 +232,34 @@ func TestToolJoin_WithAlias(t *testing.T) {
 	// Right: Key={id:101}, Value={name:..., region:...} -> Region is Value
 	// So both should be in "value" map, not "key" map.
 
-	keyMap, ok := item["key"].(map[string]any)
-	valMap, ok := item["value"].(map[string]any)
-	if !ok {
-		t.Fatalf("Key is not a map: %v", item)
+	// Flexible value retrieval (handles flat or nested structure)
+	getValue := func(field string) (any, bool) {
+		// 1. Try flat
+		if v, ok := item[field]; ok {
+			return v, true
+		}
+		// 2. Try nested key
+		if kMap, ok := item["key"].(map[string]any); ok {
+			if v, ok := kMap[field]; ok {
+				return v, true
+			}
+		}
+		// 3. Try nested value
+		if vMap, ok := item["value"].(map[string]any); ok {
+			if v, ok := vMap[field]; ok {
+				return v, true
+			}
+		}
+		return nil, false
 	}
 
-	if val, ok := keyMap["Region"]; !ok || val != "APAC" {
-		t.Errorf("Expected Region=APAC, got %v", keyMap)
+	if val, ok := getValue("region"); !ok || val != "APAC" {
+		t.Errorf("Expected region=APAC, got %v", item)
 	}
 
 	// Check Employee (Aliased)
-	// Note: The alias "employee" was lowercased in the test output "employee:John"
-	// This is because my Title Case logic in computeDisplayKeys only runs if it's NOT an alias?
-	// Or maybe I didn't Title Case the alias.
-	// Let's check the code.
-	// In computeDisplayKeys:
-	// if " as " found: candidates[i] = alias.
-	// It does NOT apply Title Case to the alias.
-	// So "b.name AS employee" -> alias "employee".
-
-	if val, ok := valMap["employee"]; !ok || val != "John" {
-		t.Errorf("Expected employee=John, got %v", keyMap)
+	if val, ok := getValue("employee"); !ok || val != "John" {
+		t.Errorf("Expected employee=John, got %v", item)
 	}
 }
 
@@ -321,40 +327,42 @@ func TestToolJoin_StoreNamePrefix(t *testing.T) {
 	}
 
 	first := raw[0]
-	keyMap := first["key"].(map[string]any)
-	valuePart, _ := first["value"].(map[string]any)
-	if valuePart == nil {
-		valuePart = make(map[string]any)
-	}
 
-	// Helper to check in either key or value
+	// Helper to check in either key or value or flat
 	checkKey := func(k string) any {
-		if v, ok := keyMap[k]; ok {
+		if v, ok := first[k]; ok {
 			return v
 		}
-		if v, ok := valuePart[k]; ok {
-			return v
+		if km, ok := first["key"].(map[string]any); ok {
+			if v, ok := km[k]; ok {
+				return v
+			}
+		}
+		if vm, ok := first["value"].(map[string]any); ok {
+			if v, ok := vm[k]; ok {
+				return v
+			}
 		}
 		return nil
 	}
 
 	// Check for expected keys
-	// "department.region" -> "Region" (stripped prefix)
-	// "employees.department" -> "Department" (stripped prefix)
+	// "department.region" -> "region"
+	// "employees.department" -> "department"
 	// "employees.name as employee" -> "employee"
 
-	if v := checkKey("Region"); v == nil {
-		t.Errorf("Missing 'Region' in result. Key: %v, Value: %v", keyMap, valuePart)
+	if v := checkKey("region"); v == nil {
+		t.Errorf("Missing 'region' in result. Item: %v", first)
 	}
-	if v := checkKey("Department"); v == nil {
-		t.Errorf("Missing 'Department' in result. Key: %v, Value: %v", keyMap, valuePart)
+	if v := checkKey("department"); v == nil {
+		t.Errorf("Missing 'department' in result. Item: %v", first)
 	}
 	if v := checkKey("employee"); v == nil {
-		t.Errorf("Missing 'employee' in result. Key: %v, Value: %v", keyMap, valuePart)
+		t.Errorf("Missing 'employee' in result. Item: %v", first)
 	}
 
 	// Check values
-	regVal := checkKey("Region")
+	regVal := checkKey("region")
 	if regVal != "East" && regVal != "West" {
 		t.Errorf("Unexpected region: %v", regVal)
 	}

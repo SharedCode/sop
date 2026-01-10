@@ -332,167 +332,87 @@ func filterFields(item map[string]any, fields []string) any {
 		return field, field
 	}
 
-	// 0. Detect Flat Input Case (e.g. from Script variables or Join output that was already flattened)
-	// If the item doesn't structurally look like a Key/Value store wrapper (which must have "key" and/or "value"),
-	// and we are filtering it, we treat it as a flat map and return an OrderedMap.
-	_, hasKey := item["key"]
-	_, hasValue := item["value"]
+	// 0. Always execute Flat Mode (Tabular Output)
+	// We no longer enforce Key/Value structure for UI compatibility.
+	// The result is a flat record based on the projection fields.
 
-	// Assuming standard wrapper always produces "key" and "value" fields, even if nil.
-	// But sometimes they might be missing?
-	// If strict Key/Value context, at least one should exist.
-	if !hasKey && !hasValue {
-		// Flat Mode: Return primitives directly in OrderedMap
-		out := &OrderedMap{
-			m:    make(map[string]any),
-			keys: make([]string, 0, len(fields)),
-		}
-
-		for _, f := range fields {
-			source, alias := parseFieldAlias(f)
-
-			// Simple dotted path navigation could be supported here too?
-			// For now, simple key lookup.
-			val, ok := item[source]
-
-			// If not found, check if source has dot?
-			if !ok && strings.Contains(source, ".") {
-				// Very basic nested lookup (one level)
-				parts := strings.SplitN(source, ".", 2)
-				if sub, subOk := item[parts[0]].(map[string]any); subOk {
-					val, ok = sub[parts[1]]
-				}
-			}
-
-			if ok {
-				out.keys = append(out.keys, alias)
-				out.m[alias] = val
-			}
-		}
-		// log.Debug("payload contents:", "Function", "filterFields", "keys", out.keys, "fields", fields)
-		return out
-	}
-
-	// 1. Prepare Key and Value Containers
-	// We always respect the UI contract: Output must be {"key": ..., "value": ...}
-
-	originalKey := item["key"]
-	originalValue := item["value"]
-
-	// These hold the projected sub-fields
-	keyMap := &OrderedMap{m: make(map[string]any), keys: make([]string, 0)}
-	valMap := &OrderedMap{m: make(map[string]any), keys: make([]string, 0)}
-
-	// Flags to track if we should just return the whole original key/value (e.g. "select key")
-	var finalKey any = nil
-	var finalValue any = nil
-	keySelected := false
-	valueSelected := false
-
-	// Helper to extract a field from a map with case-insensitivity
-	getFromMap := func(source any, fieldName string) (any, bool) {
-		if source == nil {
-			return nil, false
-		}
-
-		// If source is OrderedKey, unwrap
-		if ok, isOk := source.(OrderedKey); isOk {
-			source = ok.m
-		}
-
-		if m, ok := source.(map[string]any); ok {
-			if v, ok := m[fieldName]; ok {
-				return v, true
-			}
-			// Case-insensitive fallback
-			lowerField := strings.ToLower(fieldName)
-			for k, v := range m {
-				if strings.ToLower(k) == lowerField {
-					return v, true
-				}
-			}
-		}
-		return nil, false
+	// Flat Mode: Return primitives directly in OrderedMap
+	out := &OrderedMap{
+		m:    make(map[string]any),
+		keys: make([]string, 0, len(fields)),
 	}
 
 	for _, f := range fields {
 		source, alias := parseFieldAlias(f)
 
-		// 1. Direct Selection of "key" or "value"
-		if strings.EqualFold(source, "key") {
-			finalKey = originalKey
-			keySelected = true
-			continue
-		}
-		if strings.EqualFold(source, "value") {
-			finalValue = originalValue
-			valueSelected = true
-			continue
-		}
+		// 1. Try direct lookup first (most common for flat join results)
+		val, ok := item[source]
 
-		// 2. Probing
-
-		// Try Key first (strict precedence?)
-		found := false
-		if v, ok := getFromMap(originalKey, source); ok {
-			keyMap.keys = append(keyMap.keys, alias)
-			keyMap.m[alias] = v
-			found = true
+		// 2. If not found, check if it's a "key" or "value" access on a Store Item wrapper
+		if !ok {
+			if source == "key" {
+				val, ok = item["key"]
+			} else if source == "value" {
+				val, ok = item["value"]
+			}
 		}
 
-		// Then Try Value
-		if v, ok := getFromMap(originalValue, source); ok {
-			// If alias collision with key, value takes precedence? Or duplicate?
-			// SQL typically allows duplicates.
-			// But here we are splitting into Key and Value structs.
-			// If it's in both, we probably want it in both to represent the record accurately.
-			// BUT, usually an ID is in Key and Name is in Value.
-
-			// Note: if I "select id", and id is in Key. I don't want it in Value if it's NOT in Value.
-			valMap.keys = append(valMap.keys, alias)
-			valMap.m[alias] = v
-			found = true
-		}
-
-		// Robustness: If not found in either map, maybe it's a "value.something" path?
-		// or "key.something"?
-		if !found {
-			// Check prefixes
-			lowerSource := strings.ToLower(source)
-			if strings.HasPrefix(lowerSource, "key.") {
-				fieldName := source[4:]
-				if v, ok := getFromMap(originalKey, fieldName); ok {
-					keyMap.keys = append(keyMap.keys, alias)
-					keyMap.m[alias] = v
+		// 3. If still not found, try to dig into Key/Value wrappers if they exist
+		// This supports "name" mapping to "value.name" implicitly
+		if !ok {
+			// Check Value map
+			if vMap, isMap := item["value"].(map[string]any); isMap {
+				// Try exact match
+				if v, found := vMap[source]; found {
+					val = v
+					ok = true
+				} else {
+					// Try case-insensitive? (Maybe later)
 				}
-			} else if strings.HasPrefix(lowerSource, "value.") {
-				fieldName := source[6:]
-				if v, ok := getFromMap(originalValue, fieldName); ok {
-					valMap.keys = append(valMap.keys, alias)
-					valMap.m[alias] = v
+			}
+			// Check Key map (Composite Key)
+			if !ok {
+				if kMap, isMap := item["key"].(map[string]any); isMap {
+					if v, found := kMap[source]; found {
+						val = v
+						ok = true
+					}
 				}
 			}
 		}
-	}
 
-	// Construct Final Output
+		// 4. Nested Dot Notation (e.g. "address.city", "left.name")
+		if !ok && strings.Contains(source, ".") {
+			parts := strings.SplitN(source, ".", 2)
+			root := parts[0]
+			path := parts[1]
 
-	// If "key" was not explicitly selected as a whole, use the projected map
-	if !keySelected {
-		// Always return the projected map (even if empty) to ensure consumers receive a map structure
-		finalKey = keyMap
-	}
+			// Resolve root
+			var rootObj any
+			if rVal, rOk := item[root]; rOk {
+				rootObj = rVal
+			} else if root == "key" {
+				rootObj, _ = item["key"]
+			} else if root == "value" {
+				rootObj, _ = item["value"]
+			}
 
-	// If "value" was not explicitly selected as a whole, use the projected map
-	if !valueSelected {
-		// Always return the projected map (even if empty) to ensure consumers receive a map structure
-		finalValue = valMap
-	}
+			// Dig
+			if rootObj != nil {
+				if rootMap, isMap := rootObj.(map[string]any); isMap {
+					val, ok = rootMap[path]
+				} else if rootOm, isOm := rootObj.(*OrderedMap); isOm {
+					val, ok = rootOm.m[path]
+				}
+			}
+		}
 
-	return map[string]any{
-		"key":   finalKey,
-		"value": finalValue,
+		if ok {
+			out.keys = append(out.keys, alias)
+			out.m[alias] = val
+		}
 	}
+	return out
 }
 
 func mergeMap(original, updates map[string]any) map[string]any {
@@ -858,7 +778,27 @@ func generateJoinKey(key any, val any, fields []string) string {
 // If key/value are maps, their fields are merged at the top level.
 // If they are primitives, they are stored as "key" and "value" (or specific field names if needed).
 func flattenItem(key any, value any) map[string]any {
+	// fmt.Printf("flattenItem Input: keyType=%T valType=%T val=%+v\n", key, value, value)
 	result := make(map[string]any)
+
+	// Helper to unwrap pointers
+	var unwrap func(v any) any
+	unwrap = func(v any) any {
+		if v == nil {
+			return nil
+		}
+		// 1. Check for *any (pointer to interface)
+		if ptr, ok := v.(*any); ok {
+			if ptr == nil {
+				return nil
+			}
+			return unwrap(*ptr) // Recursively unwrap
+		}
+		return v
+	}
+
+	key = unwrap(key)
+	value = unwrap(value)
 
 	// 1. Flatten Key
 	if kMap, ok := key.(map[string]any); ok {
@@ -866,7 +806,6 @@ func flattenItem(key any, value any) map[string]any {
 			result[k] = v
 		}
 	} else {
-		// If primitive key, and not nil (though nil key is rare in B-Tree)
 		if key != nil {
 			result["key"] = key
 		}
@@ -875,8 +814,6 @@ func flattenItem(key any, value any) map[string]any {
 	// 2. Flatten Value
 	if vMap, ok := value.(map[string]any); ok {
 		for k, v := range vMap {
-			// Value fields overwrite key fields in case of name collision?
-			// Usually Value fields are distinct or "more details"
 			result[k] = v
 		}
 	} else {
@@ -888,42 +825,242 @@ func flattenItem(key any, value any) map[string]any {
 	return result
 }
 
+type ProjectionField struct {
+	Src string
+	Dst string
+}
+
+func parseProjectionFields(input any) []ProjectionField {
+	var result []ProjectionField
+	aliasRe := regexp.MustCompile(`(?i)\s+as\s+`)
+
+	cleanName := func(f string) string {
+		prefixes := []string{"left.", "right.", "a.", "b.", "left_", "right_"}
+		lowerF := strings.ToLower(f)
+		for _, p := range prefixes {
+			if strings.HasPrefix(lowerF, p) {
+				// If it's a wildcard projection like "a.*" or "left.*", preserve the prefix!
+				// We need the prefix in renderItem to know WHICH side to broaden.
+				if f[len(p):] == "*" {
+					return f
+				}
+				return f[len(p):]
+			}
+		}
+		// Also stripping "Department." if table alias expansion happened?
+		// User reported "Department.region".
+		// Let's rely on standard SQL behavior: usually "TableName.Column"
+		// If we encounter "TableName.Column", should we strip TableName?
+		// Only if user didn't ask for it specifically?
+		// If input is "a.region", loop below handles "a." stripping.
+		// If input was "region" but system expanded it to "Department.region".
+		// We should probably strip ANY prefix if it looks like Table.Col
+		if idx := strings.Index(f, "."); idx > 0 {
+			return f[idx+1:]
+		}
+		return f
+	}
+
+	processString := func(f string) {
+		src := f
+		dst := f
+		if loc := aliasRe.FindStringIndex(f); loc != nil {
+			src = strings.TrimSpace(f[:loc[0]])
+			dst = strings.TrimSpace(f[loc[1]:])
+		} else {
+			dst = cleanName(f)
+		}
+		result = append(result, ProjectionField{Src: src, Dst: dst})
+	}
+
+	// Definition of a Map Parsing Rule:
+	// Tries to interpret a map object as a projection definition.
+	// Returns true if handled, and appends fields to the result.
+	type MapParsingRule func(map[string]any) ([]ProjectionField, bool)
+
+	rules := []MapParsingRule{
+		// Rule 1: Specific {"field": "src", "alias": "dst"} format
+		// Used by some SQL Agents for explicit aliasing
+		func(m map[string]any) ([]ProjectionField, bool) {
+			// Check for "alias" or "as"
+			var alias string
+			if a, ok := m["alias"].(string); ok {
+				alias = a
+			} else if a, ok := m["as"].(string); ok {
+				alias = a
+			}
+
+			if alias != "" {
+				if field, okF := m["field"].(string); okF {
+					return []ProjectionField{{Src: field, Dst: alias}}, true
+				}
+			}
+			return nil, false
+		},
+		// Rule 2: Generic Mapping {"alias": "src"} (Target : Source)
+		// Used by Agent for JSON construction: {"employee": "right.name"} -> employee = right.name
+		func(m map[string]any) ([]ProjectionField, bool) {
+			var res []ProjectionField
+			// Sort keys to ensure deterministic output order (map iteration is random)
+			keys := make([]string, 0, len(m))
+			for k := range m {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+
+			for _, k := range keys {
+				v := m[k]
+				src := fmt.Sprintf("%v", v)
+				res = append(res, ProjectionField{Src: src, Dst: k})
+			}
+			// This rule is greedy and always matches if the map is not empty
+			return res, len(res) > 0
+		},
+	}
+
+	if list, ok := input.([]any); ok {
+		for _, item := range list {
+			if s, ok := item.(string); ok {
+				processString(s)
+			} else if m, ok := item.(map[string]any); ok {
+				// Try apply rules in order
+				for _, rule := range rules {
+					if res, handled := rule(m); handled {
+						result = append(result, res...)
+						break
+					}
+				}
+			}
+		}
+	} else if list, ok := input.([]string); ok {
+		for _, s := range list {
+			processString(s)
+		}
+	} else if list, ok := input.([]ProjectionField); ok {
+		return list
+	} else if m, ok := input.(map[string]any); ok {
+		// Handle single map as projection definition (Target: Source)
+		for _, rule := range rules {
+			if res, handled := rule(m); handled {
+				return res
+			}
+		}
+	}
+
+	return result
+}
+
 // renderItem creates a result map from the key and value, applying standard flattening or field selection.
 // It is used by Scan, Select, and Join cursors to ensure consistent output format.
-func renderItem(key any, val any, fields []string) any {
+func renderItem(key any, val any, fields any) any {
 	// 1. Wildcard / Flatten Mode
-	if len(fields) == 0 {
+	shouldFlatten := false
+	if fields == nil {
+		shouldFlatten = true
+	} else if l, ok := fields.([]string); ok {
+		if len(l) == 0 || (len(l) == 1 && l[0] == "") {
+			shouldFlatten = true
+		}
+	} else if l, ok := fields.([]any); ok {
+		if len(l) == 0 {
+			shouldFlatten = true
+		} else if len(l) == 1 {
+			if s, ok := l[0].(string); ok && s == "" {
+				shouldFlatten = true
+			}
+		}
+	}
+
+	if shouldFlatten {
+		return flattenItem(key, val)
+	}
+
+	// Parse fields using the common helper if not already parsed
+	var pFields []ProjectionField
+	if pf, ok := fields.([]ProjectionField); ok {
+		pFields = pf
+	} else {
+		pFields = parseProjectionFields(fields)
+	}
+
+	if len(pFields) == 0 {
 		return flattenItem(key, val)
 	}
 
 	// 2. Projection Mode
 	resultMap := OrderedMap{m: make(map[string]any), keys: make([]string, 0)}
 
-	for _, f := range fields {
-		// Handle Alias: "field AS alias"
-		srcField := f
-		dstField := f
+	for _, f := range pFields {
+		// Handle Wildcard Projection (e.g. "a.*" or "*")
+		if strings.HasSuffix(f.Src, "*") {
+			// Determine filter scope
+			isLeft := strings.HasPrefix(strings.ToLower(f.Src), "a.") || strings.HasPrefix(strings.ToLower(f.Src), "left.")
+			isRight := strings.HasPrefix(strings.ToLower(f.Src), "b.") || strings.HasPrefix(strings.ToLower(f.Src), "right.")
+			isAny := f.Src == "*"
 
-		// Case-insensitive " AS " check
-		lowerF := strings.ToLower(f)
-		if strings.Contains(lowerF, " as ") {
-			parts := strings.Split(f, " AS ") // Try uppercase
-			if len(parts) != 2 {
-				parts = strings.Split(f, " as ") // Try lowercase
+			// Flatten the source object and merge all keys
+			flat := flattenItem(key, val)
+
+			// Collect keys in deterministic order
+			var flatKeys []string
+			for k := range flat {
+				flatKeys = append(flatKeys, k)
 			}
-			if len(parts) == 2 {
-				srcField = strings.TrimSpace(parts[0])
-				dstField = strings.TrimSpace(parts[1])
+			sort.Strings(flatKeys)
+
+			for _, k := range flatKeys {
+				v := flat[k]
+
+				// Apply Scope Filtering
+				include := false
+				if isAny {
+					include = true
+				} else if isLeft {
+					// Left side = include keys relative to Left (no "Right." prefix)
+					// Note: "Right.xyz" fields come from the Right join.
+					if !strings.HasPrefix(k, "Right.") {
+						include = true
+					}
+				} else if isRight {
+					// Right side = include keys starting with "Right."
+					if strings.HasPrefix(k, "Right.") {
+						include = true
+						// For b.*, we usually want to expose them as "field", not "Right.field"?
+						// But if we stripped "Right.", we might collide with "a.field".
+						// User asked for "a.*".
+						// Let's keep the name as is for now to avoid implicit collisions,
+						// unless we want to support "b.*" as "b fields".
+					}
+				}
+
+				if include {
+					// Don't overwrite existing explicit aliased fields (precedence)
+					// Actually, in projection lists, order matters.
+					resultMap.m[k] = v
+
+					// Add to key list if not present
+					found := false
+					for _, existingKey := range resultMap.keys {
+						if existingKey == k {
+							found = true
+							break
+						}
+					}
+					if !found {
+						resultMap.keys = append(resultMap.keys, k)
+					}
+				}
 			}
+			continue
 		}
 
 		// Extract Value
-		v := extractVal(key, val, srcField)
+		v := extractVal(key, val, f.Src)
 
 		// Include even if nil?
 		if v != nil {
-			resultMap.m[dstField] = v
-			resultMap.keys = append(resultMap.keys, dstField)
+			resultMap.m[f.Dst] = v
+			resultMap.keys = append(resultMap.keys, f.Dst)
 		}
 	}
 	return &resultMap

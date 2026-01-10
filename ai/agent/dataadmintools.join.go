@@ -663,10 +663,10 @@ func (jp *JoinProcessor) computeDisplayKeys() {
 			}
 		}
 
-		// Title Case (Simple)
-		if len(clean) > 0 {
-			clean = strings.ToUpper(clean[:1]) + clean[1:]
-		}
+		// Title Case (Simple) - DISABLED per ANSI SQL preference
+		// if len(clean) > 0 {
+		// 	clean = strings.ToUpper(clean[:1]) + clean[1:]
+		// }
 		candidates[i] = clean
 		counts[clean]++
 	}
@@ -833,7 +833,8 @@ func (jp *JoinProcessor) emitMatch(k, v, rKey, rVal any) (bool, error) {
 				}
 
 				// Format output using standard helper (preserves Index Spec)
-				finalItem := reorderItem(merged, jp.fields, jp.leftIndexSpec)
+				// Use renderItem to handle projection/aliasing consistently
+				finalItem := renderItem(merged, nil, jp.fields)
 
 				log.Debug(fmt.Sprintf("finalItem: %v\n", finalItem))
 

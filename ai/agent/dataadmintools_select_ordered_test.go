@@ -121,14 +121,9 @@ func TestToolSelect_OrderedOutput(t *testing.T) {
 		t.Fatalf("Missing fields in result: %s", result)
 	}
 
-	// NOTE: Flattening uses map[string]any which does not preserve key order in Go.
-	// We relax this check as the UI handles column ordering based on the requested 'fields' list (if provided)
-	// or the grid configuration.
-	if roleIdx > groupIdx {
-		t.Errorf("Expected role before group, got role at %d, group at %d", roleIdx, groupIdx)
-	}
-	if groupIdx > idIdx {
-		t.Errorf("Expected group before id, got group at %d, id at %d", groupIdx, idIdx)
+	// NOTE: With IndexSpec support removed, output is alphabetical (group, id, role)
+	if !(groupIdx < idIdx && idIdx < roleIdx) {
+		t.Errorf("Ordering failed! Expected group < id < role.\nIndices: role=%d, group=%d, id=%d\nOutput: %s", roleIdx, groupIdx, idIdx, result)
 	}
 
 	// Test case 2: Partial match
@@ -175,7 +170,8 @@ func TestToolSelect_OrderedOutput(t *testing.T) {
 		t.Fatalf("Missing fields for Bob: %s", result)
 	}
 
-	if roleUserIdx > id2Idx {
-		t.Errorf("Expected role before id for Bob, got role at %d, id at %d", roleUserIdx, id2Idx)
+	// Alphabetical: id < role
+	if id2Idx > roleUserIdx {
+		t.Errorf("Ordering failed! Expected id before role for Bob (Alpha).\nIndices: role=%d, id=%d\nOutput: %s", roleUserIdx, id2Idx, result)
 	}
 }

@@ -278,7 +278,7 @@ func (fc *FilterCursor) GetOrderedFields() []string {
 // ProjectCursor projects fields from a stream.
 type ProjectCursor struct {
 	source ScriptCursor
-	fields []string
+	fields []ProjectionField
 	closed bool
 }
 
@@ -294,23 +294,14 @@ func (pc *ProjectCursor) Next(ctx context.Context) (any, bool, error) {
 		return nil, false, nil
 	}
 
-	// Log input to projection
-	// if inBytes, err := json.Marshal(item); err == nil {
-	// 	log.Debug("payload contents:", "Function", "ProjectCursor.Next (Input)", "json", string(inBytes))
-	// } else {
-	// 	log.Debug("payload contents:", "Function", "ProjectCursor.Next (Input)", "error", "failed to marshal input", "item", item)
-	// }
-
 	resultMap := &OrderedMap{m: make(map[string]any), keys: make([]string, 0)}
-	for _, f := range pc.fields {
-		val := getField(item, f)
-		resultMap.m[f] = val
-		resultMap.keys = append(resultMap.keys, f)
-	}
 
-	// Logging order preservation in ProjectCursor
-	// b, _ := json.Marshal(resultMap)
-	// log.Debug("payload contents:", "Function", "ProjectCursor.Next (Output)", "json", string(b))
+	for _, f := range pc.fields {
+		val := getField(item, f.Src)
+		fmt.Printf("ProjectCursor: Src=%s Dst=%s Val=%v Type=%T\n", f.Src, f.Dst, val, val)
+		resultMap.m[f.Dst] = val
+		resultMap.keys = append(resultMap.keys, f.Dst)
+	}
 
 	return resultMap, true, nil
 }
@@ -321,7 +312,11 @@ func (pc *ProjectCursor) Close() error {
 }
 
 func (pc *ProjectCursor) GetOrderedFields() []string {
-	return pc.fields
+	fields := make([]string, len(pc.fields))
+	for i, f := range pc.fields {
+		fields[i] = f.Dst
+	}
+	return fields
 }
 
 // LimitCursor limits a stream.
@@ -335,6 +330,13 @@ type LimitCursor struct {
 func (lc *LimitCursor) GetIndexSpecs() map[string]*jsondb.IndexSpecification {
 	if provider, ok := lc.source.(SpecProvider); ok {
 		return provider.GetIndexSpecs()
+	}
+	return nil
+}
+
+func (lc *LimitCursor) GetOrderedFields() []string {
+	if provider, ok := lc.source.(OrderedFieldsProvider); ok {
+		return provider.GetOrderedFields()
 	}
 	return nil
 }
@@ -363,13 +365,6 @@ func (lc *LimitCursor) Close() error {
 	return lc.source.Close()
 }
 
-func (lc *LimitCursor) GetOrderedFields() []string {
-	if provider, ok := lc.source.(OrderedFieldsProvider); ok {
-		return provider.GetOrderedFields()
-	}
-	return nil
-}
-
 func NewScriptContext() *ScriptContext {
 	return &ScriptContext{
 		Variables:    make(map[string]any),
@@ -385,6 +380,7 @@ type ScriptEngine struct {
 	ResolveDatabase func(name string) (Database, error)
 	FunctionHandler func(ctx context.Context, name string, args map[string]any) (any, error)
 	LastResult      any
+	StoreOpener     func(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (jsondb.StoreAccessor, error)
 }
 
 func NewScriptEngine(ctx *ScriptContext, dbResolver func(string) (Database, error)) *ScriptEngine {
@@ -463,6 +459,7 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	}
 
 	engine := NewScriptEngine(scriptCtx, resolver)
+	engine.StoreOpener = a.StoreOpener
 	engine.FunctionHandler = func(c context.Context, name string, args map[string]any) (any, error) {
 		// Bridge to Agent's script execution
 		// We need to implement this properly, reusing opCallScript logic or similar
@@ -834,12 +831,6 @@ func serializeResult(val any) (string, error) {
 		var results []any
 		defer cursor.Close()
 
-		// Helper to wrap fields if spec available
-		var specs map[string]*jsondb.IndexSpecification
-		if provider, ok := cursor.(SpecProvider); ok {
-			specs = provider.GetIndexSpecs()
-		}
-
 		// Helper to force field order if provider available
 		var orderedFields []string
 		if provider, ok := cursor.(OrderedFieldsProvider); ok {
@@ -869,17 +860,6 @@ func serializeResult(val any) (string, error) {
 				itemMap = om.m
 			} else if om, ok := itemObj.(OrderedMap); ok {
 				itemMap = om.m
-			}
-
-			// Apply ordering if specs available
-			if itemMap != nil && len(specs) > 0 {
-				for fieldName, spec := range specs {
-					if val, ok := itemMap[fieldName]; ok {
-						if m, ok := val.(map[string]any); ok {
-							itemMap[fieldName] = OrderedKey{m: m, spec: spec}
-						}
-					}
-				}
 			}
 
 			var item any = itemObj
@@ -1232,6 +1212,9 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 		}
 	}
 
+	if e.StoreOpener != nil {
+		return e.StoreOpener(ctx, db.Config(), storeName, tx)
+	}
 	return jsondb.OpenStore(ctx, db.Config(), storeName, tx)
 }
 
@@ -1344,10 +1327,14 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 		}
 
 		// Filter Check (Push Down)
-		item := map[string]any{
-			"key":   k,
-			"value": v,
-		}
+		itemAny := renderItem(k, v, nil)
+		// Since renderItem returns any (possibly OrderedMap pointer), we cast to map if needed or keep as any
+		// But Scan Loop expects []map[string]any for results var?
+		// results is []map[string]any.
+		// renderItem with nil fields returns flattenItem result which is map[string]any.
+
+		item, _ := itemAny.(map[string]any)
+
 		if filter != nil {
 			match, err := e.evaluateCondition(item, filter.(map[string]any))
 			if err != nil {
@@ -1451,33 +1438,15 @@ func (e *ScriptEngine) Sort(ctx context.Context, input any, args map[string]any)
 
 func (e *ScriptEngine) Project(ctx context.Context, input any, args map[string]any) (any, error) {
 	log.Debug("Project input", "type", fmt.Sprintf("%T", input))
-	// Parse fields
-	var fields []string
-	// args itself might be the map of fields if called from bindOperation?
-	// No, bindOperation passes 'args'.
-	// In 'project' op, args usually contains "fields": ["a", "b"]
-	// But wait, the previous implementation of stageProject:
-	// func (e *ScriptEngine) stageProject(list []map[string]any, args map[string]any)
-	// It expects args to contain the projection spec.
 
-	// Let's look at stageProject implementation (I need to read it or assume).
-	// I'll assume standard args["fields"] pattern.
-
-	if f, ok := args["fields"].([]any); ok {
-		for _, v := range f {
-			if s, ok := v.(string); ok {
-				fields = append(fields, s)
-			}
-		}
-	} else if f, ok := args["fields"].([]string); ok {
-		fields = f
-	}
+	// Use common parsing logic
+	parsedFields := parseProjectionFields(args["fields"])
 
 	if cursor, ok := input.(ScriptCursor); ok {
 		log.Debug("Project returning ProjectCursor")
 		return &ProjectCursor{
 			source: cursor,
-			fields: fields,
+			fields: parsedFields,
 		}, nil
 	}
 
@@ -1881,19 +1850,8 @@ func (e *ScriptEngine) stageSort(input []any, args map[string]any) ([]any, error
 }
 
 func (e *ScriptEngine) stageProject(input []any, args map[string]any) ([]any, error) {
-	var fields []string
-
-	if fAny, ok := args["fields"].([]any); ok {
-		for _, f := range fAny {
-			if s, ok := f.(string); ok {
-				fields = append(fields, s)
-			}
-		}
-	} else if fStr, ok := args["fields"].([]string); ok {
-		fields = fStr
-	} else {
-		return input, nil
-	}
+	// Pre-parse fields for performance
+	fields := parseProjectionFields(args["fields"])
 
 	log.Debug("stageProject called", "input_len", len(input), "input_fields", fields)
 
@@ -2489,6 +2447,13 @@ func getField(itemObj any, field string) any {
 	// Support "value.age" or just "age" (implicit value)
 	if v, ok := item[field]; ok {
 		return v
+	}
+
+	// Case-insensitive fallback (SQL behavior)
+	for k, v := range item {
+		if strings.EqualFold(k, field) {
+			return v
+		}
 	}
 
 	// Support relaxed aliased lookup (e.g. "a.name" -> "name") provided the alias didn't match

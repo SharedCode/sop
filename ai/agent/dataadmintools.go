@@ -31,8 +31,8 @@ func (a *DataAdminAgent) registerTools() {
 	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new script or block.", "(mode: string, name: string)", a.toolRefactorScript)
 
 	// High-Level Tools
-	a.registry.Register("select", "Selects data from a store. Arguments: store (string), key (any, optional), value (any, optional), fields (list<string>, optional), limit (number, optional), order_by (string, optional, e.g. 'field desc'), action (string, optional: 'delete', 'update'), update_values (map, optional).", "(store: string, ...)", a.toolSelect)
-	a.registry.RegisterHidden("join", "Joins data from two stores. Arguments: left_store (string), right_store (string), left_join_fields (list<string>), right_join_fields (list<string>), join_type (string, optional: 'inner', 'left', 'right'), fields (list<string>, optional), limit (number, optional), order_by (string, optional), action (string, optional: 'delete_left', 'update_left'), update_values (map, optional).", "(left_store: string, right_store: string, ...)", a.toolJoin)
+	a.registry.Register("select", "Selects data from a store. Arguments: store (string), key (any, optional), value (any, optional), fields (list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias']), limit (number, optional), order_by (string, optional, e.g. 'field desc'), action (string, optional: 'delete', 'update'), update_values (map, optional).", "(store: string, ...)", a.toolSelect)
+	a.registry.RegisterHidden("join", "Joins data from two stores. Arguments: left_store (string), right_store (string), left_join_fields (list<string>), right_join_fields (list<string>), join_type (string, optional: 'inner', 'left', 'right'), fields (list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias']), limit (number, optional), order_by (string, optional), action (string, optional: 'delete_left', 'update_left'), update_values (map, optional).", "(left_store: string, right_store: string, ...)", a.toolJoin)
 	a.registry.Register("add", "Adds data to a store.", "(store: string, key: any, value: any)", a.toolAdd)
 	a.registry.Register("update", "Updates data in a store.", "(store: string, key: any, value: any)", a.toolUpdate)
 	a.registry.Register("delete", "Deletes data from a store.", "(store: string, key: any)", a.toolDelete)
@@ -63,7 +63,7 @@ Operations:
 - map_merge(map1, map2) -> map
 - sort(input, fields) -> list
 - filter(input, condition) -> cursor/list
-- project(input, fields) -> cursor/list
+- project(input, fields) -> cursor/list (fields: list<string> ['field', 'field AS alias'] for ordered output, or map {alias: field} for unordered)
 - limit(input, limit) -> cursor/list
 - join(input, with, type, on) -> cursor/list
 - join_right(input, store, type, on) -> cursor/list (Pipeline alias for join)
@@ -80,9 +80,11 @@ Example Pipeline Join:
   {"op": "open_store", "args": {"transaction": "tx1", "name": "orders"}, "result_var": "orders"},
   {"op": "scan", "args": {"store": "users", "stream": true}, "result_var": "stream"},
   {"op": "join_right", "args": {"store": "orders", "on": {"user_id": "user_id"}}, "input_var": "stream", "result_var": "stream"},
-  {"op": "limit", "args": {"limit": 5}, "input_var": "stream", "result_var": "output"},
+    {"op": "project", "args": {"fields": ["name", "order_date"]}, "input_var": "stream", "result_var": "projected"},
+  {"op": "limit", "args": {"limit": 5}, "input_var": "projected", "result_var": "output"},
   {"op": "commit_tx", "args": {"transaction": "tx1"}}
-]`, "(script: Array<{op: string, args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
+]
+Note: 'scan' and 'join' return full objects. To select specific fields or renamed columns, you MUST add a 'project' step.`, "(script: Array<{op: string, args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
 }
 
 func (a *DataAdminAgent) toolListDatabases(ctx context.Context, args map[string]any) (string, error) {

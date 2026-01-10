@@ -41,6 +41,9 @@ type DataAdminAgent struct {
 	// API Keys for dynamic switching
 	geminiKey string
 	openAIKey string
+
+	// StoreOpener allows mocking the store creation (e.g. for testing)
+	StoreOpener func(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (jsondb.StoreAccessor, error)
 }
 
 // SetGenerator sets the generator for the agent.

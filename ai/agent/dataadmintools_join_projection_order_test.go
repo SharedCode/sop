@@ -54,8 +54,9 @@ func TestToolJoin_ProjectionOrder_WithFieldsString(t *testing.T) {
 		"join_type":         "inner",
 		"left_join_fields":  []string{"region", "department"},
 		"right_join_fields": []string{"region", "department"},
-		"fields":            "a.region, a.department, b.name as employee",
-		"limit":             4,
+		// Removed table prefixes (a., b.) as Join produces flat map
+		"fields": "region, department, name as employee",
+		"limit":  4,
 	}
 
 	res, err := adminAgent.toolJoin(ctx, args)
@@ -64,13 +65,13 @@ func TestToolJoin_ProjectionOrder_WithFieldsString(t *testing.T) {
 	}
 
 	// Verify order in raw JSON output (map-based unmarshalling would lose ordering).
-	regionIdx := strings.Index(res, `"Region"`)
-	deptIdx := strings.Index(res, `"Department"`)
+	regionIdx := strings.Index(res, `"region"`)
+	deptIdx := strings.Index(res, `"department"`)
 	empIdx := strings.Index(res, `"employee"`)
 	if regionIdx == -1 || deptIdx == -1 || empIdx == -1 {
 		t.Fatalf("Missing expected fields in output: %s", res)
 	}
 	if !(regionIdx < deptIdx && deptIdx < empIdx) {
-		t.Fatalf("Projection order not preserved. Expected Region then Department then employee. Got: %s", res)
+		t.Fatalf("Projection order not preserved. Expected region then department then employee. Got: %s", res)
 	}
 }

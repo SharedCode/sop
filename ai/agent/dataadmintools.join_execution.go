@@ -408,22 +408,41 @@ func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
 
 	if rMap != nil {
 		var rKeys []string
-		for k := range rMap {
-			rKeys = append(rKeys, k)
+		if om, ok := rObj.(*OrderedMap); ok && om != nil {
+			rKeys = om.keys
+		} else if om, ok := rObj.(OrderedMap); ok {
+			rKeys = om.keys
+		} else {
+			for k := range rMap {
+				rKeys = append(rKeys, k)
+			}
+			sort.Strings(rKeys)
 		}
-		sort.Strings(rKeys)
 
 		for _, k := range rKeys {
-			newMap[k] = rMap[k]
+			// Collision Handling: Prefix with "Right." if key exists
+			// This prevents data loss during join of tables with same column names (e.g. "key", "id", "name")
+			finalKey := k
+			if _, exists := newMap[k]; exists {
+				// We have a collision.
+				// In SQL, usually you access via Table Alias.
+				// Here, we don't know the table alias easily inside this loop.
+				// So we prefix with "Right." to preserve it.
+				finalKey = "Right." + k
+			}
+
+			newMap[finalKey] = rMap[k]
+
+			// Add to keys list
 			found := false
 			for _, existing := range newKeys {
-				if existing == k {
+				if existing == finalKey {
 					found = true
 					break
 				}
 			}
 			if !found {
-				newKeys = append(newKeys, k)
+				newKeys = append(newKeys, finalKey)
 			}
 		}
 	}

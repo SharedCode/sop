@@ -320,7 +320,6 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 					// Select
 					item := renderItem(k, v, fields)
 
-
 					log.Debug(fmt.Sprintf("item: %v", item))
 
 					emitter.Emit(item)
