@@ -450,6 +450,18 @@ func (s *Service) runStepLoop(ctx context.Context, step ai.ScriptStep, scope map
 	}
 
 	if ok {
+		// Attempt to parse string as JSON array if it looks like one
+		if strVal, ok := val.(string); ok {
+			trimmed := strings.TrimSpace(strVal)
+			if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+				var list []any
+				if err := json.Unmarshal([]byte(strVal), &list); err == nil {
+					// It's a valid JSON array, switch to slice iteration
+					val = list
+				}
+			}
+		}
+
 		if strVal, ok := val.(string); ok {
 			lines := strings.Split(strVal, "\n")
 			for _, line := range lines {

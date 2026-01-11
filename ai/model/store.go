@@ -9,6 +9,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/sop/jsondb"
 )
 
 // btreeModelStore implements ModelStore using SOP B-Trees.
@@ -56,6 +57,19 @@ func (s *btreeModelStore) openStore(ctx context.Context) (btree.BtreeInterface[M
 		slotLength = 2000
 	}
 	so := sop.ConfigureStore(storeName, true, slotLength, "AI Models Registry", sop.MediumData, "")
+
+	// Use jsondb.IndexSpecification to generating the MapKeyIndexSpecification JSON string.
+	// This ensures consistency with other components that check or use this specification.
+	idxSpec := jsondb.IndexSpecification{
+		IndexFields: []jsondb.IndexFieldSpecification{
+			{FieldName: "Category", AscendingSortOrder: true},
+			{FieldName: "Name", AscendingSortOrder: true},
+		},
+	}
+	if b, err := json.Marshal(idxSpec); err == nil {
+		so.MapKeyIndexSpecification = string(b)
+	}
+
 	comparer := func(a, b ModelKey) int {
 		if a.Category < b.Category {
 			return -1

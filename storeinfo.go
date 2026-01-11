@@ -140,6 +140,11 @@ func (scc *StoreCacheConfig) enforceMinimumRule() {
 
 // NewStoreInfo creates and normalizes a StoreInfo based on StoreOptions, applying default naming and cache policy.
 func NewStoreInfo(si StoreOptions) *StoreInfo {
+	// Default Slot length to 2000, if not specified.
+	if si.SlotLength <= 0 {
+		si.SlotLength = 2000
+	}
+
 	// Only even numbered slot lengths are allowed as we reduced scenarios to simplify logic.
 	if si.SlotLength%2 != 0 {
 		si.SlotLength--

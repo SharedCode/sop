@@ -22,12 +22,15 @@ func (a *DataAdminAgent) registerTools() {
 
 	// Script Management
 	a.registry.Register("list_scripts", "Lists all available scripts.", "()", a.toolListScripts)
+	a.registry.Register("create_script", "Creates a new empty script.", "(name: string, description: string)", a.toolCreateScript)
+	a.registry.Register("save_script", "Saves a full script definition (create or overwrite).", "(name: string, description: string, steps: list<object>)", a.toolSaveScript)
 	a.registry.Register("get_script_details", "Get details of a specific script.", "(name: string)", a.toolGetScriptDetails)
-	a.registry.Register("script_insert_step", "Insert a step into a script.", "(script: string, index: number, type: string, ...params)", a.toolScriptInsertStep)
+	a.registry.Register("save_step", "Appends a new step to a script. Usage: save_step(script='MyScript', type='command', command='select', ...).", "(script: string, ...step_def)", a.toolScriptSaveStep)
+	a.registry.Register("script_insert_step", "Insert a step into a script.", "(script: string, index: number, type: string, description: string, name: string, ...params)", a.toolScriptInsertStep)
 	a.registry.Register("script_delete_step", "Delete a step from a script.", "(script: string, index: number)", a.toolScriptDeleteStep)
-	a.registry.Register("script_update_step", "Update a step in a script.", "(script: string, index: number, ...params)", a.toolScriptUpdateStep)
+	a.registry.Register("script_update_step", "Update a step in a script.", "(script: string, index: number, description: string, name: string, ...params)", a.toolScriptUpdateStep)
 	a.registry.Register("script_reorder_steps", "Move a step in a script to a new position.", "(script: string, from_index: number, to_index: number)", a.toolScriptReorderSteps)
-	a.registry.Register("script_add_step_from_last", "Add the last executed tool call as a new step to a script. If 'index' is not provided, it appends to the end. If 'index' is provided, it inserts 'after' that index by default, unless 'position' is set to 'before'.", "(script: string, index: number, position: string)", a.toolScriptAddStepFromLast)
+	a.registry.Register("script_add_step_from_last", "Add the last executed tool call as a new step to a script. If 'index' is not provided, it appends to the end. If 'index' is provided, it inserts 'after' that index by default, unless 'position' is set to 'before'.", "(script: string, index: number, position: string, description: string, name: string)", a.toolScriptAddStepFromLast)
 	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new script or block.", "(mode: string, name: string)", a.toolRefactorScript)
 
 	// High-Level Tools

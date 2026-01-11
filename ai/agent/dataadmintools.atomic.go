@@ -1200,20 +1200,50 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 	dbName, _ := args["database"].(string)
 	dbName = e.resolveVarName(dbName)
 	db, ok := e.Context.Databases[dbName]
+
+	if !ok {
+		// If dbName is empty, try to infer default DB
+		if dbName == "" && len(e.Context.Databases) == 1 {
+			for _, d := range e.Context.Databases {
+				db = d
+				ok = true
+				break
+			}
+		}
+	}
+
 	if !ok {
 		// Fallback: maybe dbName is the actual name?
 		if e.ResolveDatabase == nil {
 			return nil, fmt.Errorf("database resolver not configured")
 		}
 		var err error
+		// If dbName is empty here, ResolveDatabase will likely fail or return system DB?
+		// ResolveDatabase implementation currently requires name.
+		if dbName == "" {
+			return nil, fmt.Errorf("database argument required")
+		}
+
 		db, err = e.ResolveDatabase(dbName)
 		if err != nil {
 			return nil, fmt.Errorf("database '%s' required for opening store", dbName)
 		}
 	}
 
+	create, _ := args["create"].(bool)
+
 	if e.StoreOpener != nil {
+		// Mock/Override doesn't standardized on Create yet?
+		// We assume StoreOpener handles it or we update signature?
+		// StoreOpener signature: func(ctx, opts, name, tx) (StoreAccessor, error)
+		// It doesn't take 'create' flag.
+		// We can't change signature easily as it might be used elsewhere?
+		// But e.StoreOpener is defined in this file.
 		return e.StoreOpener(ctx, db.Config(), storeName, tx)
+	}
+
+	if create {
+		return jsondb.CreateStore(ctx, db.Config(), storeName, tx)
 	}
 	return jsondb.OpenStore(ctx, db.Config(), storeName, tx)
 }
@@ -1517,6 +1547,88 @@ func (lc *ListCursor) Close() error {
 	return nil
 }
 
+// handleInto checks for 'into' argument and drains cursor/list to a store.
+func (e *ScriptEngine) handleInto(ctx context.Context, input any, args map[string]any) (any, error) {
+	intoStoreName, _ := args["into"].(string)
+	if intoStoreName == "" {
+		return input, nil
+	}
+
+	// Resolve store name
+	intoStoreName = e.resolveVarName(intoStoreName)
+
+	// Create/Open the store. We assume "create" is needed if explicit 'into' is used for a temp store.
+	// But it might be an existing store? Let's check if user requested create behavior.
+	// If it's a "temp" store for pipeline, we likely want to create it.
+	// Let's assume we create/open it.
+	store, err := e.OpenStore(ctx, map[string]any{"name": intoStoreName, "create": true})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open/create store '%s': %v", intoStoreName, err)
+	}
+
+	// Drain Input into Store
+	cursor, isCursor := input.(ScriptCursor)
+	list, isList := input.([]any)
+
+	if !isCursor && !isList {
+		// Try casting list of maps?
+		if lMap, ok := input.([]map[string]any); ok {
+			for _, v := range lMap {
+				list = append(list, v)
+			}
+			isList = true
+		} else {
+			return nil, fmt.Errorf("cannot pour result of type %T into store (must be cursor or list)", input)
+		}
+	}
+
+	count := 0
+
+	addToStore := func(item any) error {
+		count++
+		// Generate Key?
+		// We use a simple counter key or UUID?
+		// User didn't specify key field.
+		// "into" implies a table structure. We just dump items.
+		// Use UUID or simple sequence.
+		key := fmt.Sprintf("row_%d_%d", time.Now().UnixNano(), count)
+		_, err := store.Add(ctx, key, item)
+		return err
+	}
+
+	if isCursor {
+		defer cursor.Close()
+		for {
+			item, ok, err := cursor.Next(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				break
+			}
+			if err := addToStore(item); err != nil {
+				return nil, err
+			}
+		}
+	} else {
+		for _, item := range list {
+			if err := addToStore(item); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Return the Store Accessor? Or just the name?
+	// The next step in pipeline would use `store: "temp1"`.
+	// ScriptInstruction returns result to ResultVar.
+	// If we return the store object, it gets put into generic var.
+	// But `Join` expects store name or variable with list/cursor.
+	// If `Join` gets a StoreAccessor variable, it doesn't handle it directly as Input.
+	// It handles it as `args["store"]`.
+	// So we should return the StoreAccessor, so user can say `result_var: "myStore"`.
+	return store, nil
+}
+
 func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any) (any, error) {
 	rightVar, _ := args["with"].(string)
 	if rightVar == "" {
@@ -1563,7 +1675,9 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 
 	log.Debug("Join", "RightVar", rightVar, "IsStore", isRightStore, "JoinType", joinType)
 
-	/*
+	var result any
+	var err error
+
 	// --- RIGHT OUTER JOIN SUPPORT (Swapped Left Join) ---
 	if joinType == "right" {
 		// Invert ON clause: {LeftKey: RightKey} -> {RightKey: LeftKey}
@@ -1573,36 +1687,42 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		}
 
 		// Materialize Left Input locally (as it mimics "Look up" table in this reversed join)
-		// Note: We scan the Right Store (Driver) and look up in the Left List.
+		// We pass the cursor to RightOuterJoinStoreCursor to let it handle materialization (or spilling) lazily.
 		var leftList []any
 		if lc, ok := leftCursor.(*ListCursor); ok {
 			leftList = lc.items
-		} else {
-			// Drain cursor
-			// Note: We consume the "Input" stream entirely to use it as the lookup side.
-			for {
-				item, ok, err := leftCursor.Next(ctx)
-				if err != nil {
-					return nil, err
-				}
-				if !ok {
-					break
-				}
-				leftList = append(leftList, item)
-			}
 		}
 
 		if isRightStore {
 			// Right Side is Store: Use Streaming RightOuterJoinStoreCursor
-			// This scans the Right Store and probes the in-memory Left List.
-			return &RightOuterJoinStoreCursor{
+			// This scans the Right Store and probes the Left Cursor (which builds an index internally).
+			// We pass the Engine to allow creating temp stores if needed for spilling.
+			result, err = &RightOuterJoinStoreCursor{
 				rightStore: rightStore,
+				// Pass Cursor if list is not fully available, otherwise pass list
+				leftCursor: leftCursor,
 				leftList:   leftList,
 				on:         invertedOn,
 				ctx:        ctx,
+				engine:     e,
 			}, nil
 		} else {
 			// Right Side is Value: Use In-Memory stageJoin with swapped arguments
+			// We must materialize left side fully here if it wasn't already
+			if len(leftList) == 0 && leftCursor != nil {
+				// Drain cursor
+				for {
+					item, ok, err := leftCursor.Next(ctx)
+					if err != nil {
+						return nil, err
+					}
+					if !ok {
+						break
+					}
+					leftList = append(leftList, item)
+				}
+			}
+
 			// Resolve Right List
 			rightInput, ok := e.Context.Variables[rightVar]
 			if !ok {
@@ -1621,10 +1741,14 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 
 			// Call stageJoin(Driver=Right, Lookup=Left, Type=Left)
 			// This effectively processes: For each Right, Match Left. If no Match, emit Right.
-			return e.stageJoin(rightList, leftList, "left", invertedOn)
+			result, err = e.stageJoin(rightList, leftList, "left", invertedOn)
 		}
+
+		if err == nil {
+			return e.handleInto(ctx, result, args)
+		}
+		return result, err
 	}
-	*/
 
 	// DECISION: Prefer Lookup Join (JoinRightCursor) for Stores
 	// We rely on JoinRightCursor's internal "Smart Mode":
@@ -1648,7 +1772,7 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 			alias = strings.TrimPrefix(a, "@")
 		}
 
-		return &JoinRightCursor{
+		cursor := &JoinRightCursor{
 			left:           leftCursor,
 			right:          rightStore,
 			joinType:       joinType,
@@ -1656,7 +1780,9 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 			ctx:            ctx,
 			engine:         e,
 			rightStoreName: alias,
-		}, nil
+		}
+
+		return e.handleInto(ctx, cursor, args)
 	}
 
 	// Fallback to In-Memory Nested Loop Join (For Variables, not Stores)
@@ -1694,7 +1820,12 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		}
 	}
 
-	return e.stageJoin(leftList, rightList, joinType, on)
+	result, err = e.stageJoin(leftList, rightList, joinType, on)
+	if err == nil {
+		// Handle Into (Wait, result is []any. We need to support handleInto for List too)
+		return e.handleInto(ctx, result, args)
+	}
+	return result, err
 }
 
 func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[string]any) ([]any, error) {
@@ -1777,6 +1908,7 @@ func (e *ScriptEngine) JoinRight(ctx context.Context, input any, args map[string
 	return e.Join(ctx, input, args)
 }
 
+// handleInto handles the 'into' argument for JoinResult.
 func (e *ScriptEngine) Update(ctx context.Context, input any, args map[string]any) ([]any, error) {
 	var list []any
 	if cursor, ok := input.(ScriptCursor); ok {

@@ -135,6 +135,12 @@
         .progress-dot.active { background: var(--active-bg); }
         .progress-dot.completed { background: var(--success-bg); }
 
+        /* Detail Pane Forms */
+        .form-group { margin-bottom: 10px; display: flex; flex-direction: column; }
+        .form-label { font-size: 12px; font-weight: bold; margin-bottom: 4px; color: var(--text-muted); }
+        .form-input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg); color: var(--text-color); font-size: 13px; height: 32px; }
+        .script-view-container { display: flex; flex-direction: column; }
+
         /* Script Tree View */
         .script-tree ul { list-style: none; padding-left: 20px; border-left: 1px solid var(--border-color); margin: 5px 0; }
         .script-tree li { margin: 5px 0; padding: 0; background: transparent; }
@@ -1569,9 +1575,21 @@
             }
 
             if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
-                 Object.assign(flat, v);
+                 // Priority to Key fields: only add Value fields if they don't exist in Key
+                 Object.keys(v).forEach(k => {
+                     // Check exact match and case-insensitive match against existing keys
+                     // This prevents showing both "Name" (key) and "name" (value) or duplicates
+                     const isDuplicate = flat.hasOwnProperty(k) || 
+                                       Object.keys(flat).some(existingKey => existingKey.toLowerCase() === k.toLowerCase());
+                     
+                     if (!isDuplicate) {
+                         flat[k] = v[k];
+                     }
+                 });
             } else if (v !== undefined) {
-                 flat['Value'] = item.value;
+                 if (!flat.hasOwnProperty('Value')) {
+                     flat['Value'] = item.value;
+                 }
             }
             
             // Metadata for UI operations (Keep hidden)
@@ -1592,6 +1610,31 @@
         });
         
         let cols = Array.from(columns);
+
+        // --- APPLY INDEX SPEC SORTING ---
+        if (typeof currentStoreInfo !== 'undefined' && currentStoreInfo && currentStoreInfo.indexSpec && Array.isArray(currentStoreInfo.indexSpec.index_fields)) {
+            const specFields = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
+            const sortedCols = [];
+            const visited = new Set();
+
+            // 1. Add columns defined in IndexSpecification
+            specFields.forEach(f => {
+                if (columns.has(f)) {
+                    sortedCols.push(f);
+                    visited.add(f);
+                }
+            });
+
+            // 2. Add remaining columns
+            cols.forEach(c => {
+                if (!visited.has(c)) {
+                    sortedCols.push(c);
+                }
+            });
+            
+            cols = sortedCols;
+        }
+
         // Store all detected columns for the selector
         allDetectedColumns = cols;
 
@@ -1607,12 +1650,21 @@
              html += '<th style="width: 40px; text-align: center;"><input type="checkbox" id="cb-select-all" onchange="toggleSelectAll(this)"></th>';
         }
         
+        // Identify Index Fields for Styling
+        const indexFieldSet = new Set();
+        if (typeof currentStoreInfo !== 'undefined' && currentStoreInfo && currentStoreInfo.indexSpec && Array.isArray(currentStoreInfo.indexSpec.index_fields)) {
+             currentStoreInfo.indexSpec.index_fields.forEach(f => indexFieldSet.add(f.field_name));
+        }
+        
         // Render Columns
         cols.forEach((col, index) => {
              let style = '';
              if (columnWidths[index]) style = `style="width: ${columnWidths[index]}"`;
-             // Use generic header class
-             html += `<th class="th-generic" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
+             
+             // Determine class: th-key for index columns, th-val for others
+             const headerClass = indexFieldSet.has(col) ? 'th-key' : 'th-val';
+             
+             html += `<th class="${headerClass}" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
         });
         
         html += '</tr></thead><tbody>';
@@ -1920,6 +1972,335 @@
 
     let currentItemValue = null;
 
+    // --- Navigation Stack ---
+    let viewStack = [];
+
+    function pushView() {
+        if (currentItemKey !== null) {
+            viewStack.push({
+                store: currentStore,
+                key: currentItemKey,
+                value: JSON.parse(JSON.stringify(currentItemValue)), // Deep copy (simple)
+            });
+        }
+    }
+
+    function popView() {
+        if (viewStack.length === 0) return;
+        const state = viewStack.pop();
+        
+        // Restore context
+        // Note: If we switched stores, we'd need more logic. Assuming same store for now.
+        if (state.store !== currentStore) {
+            alert("Navigation across stores not supported in history yet.");
+            return;
+        }
+
+        currentItemKey = state.key;
+        currentItemValue = state.value;
+        
+        // Construct item wrapper
+        const item = { key: currentItemKey, value: currentItemValue };
+        
+        // Call showDetail with isHistoryNav = true to prevent re-pushing? 
+        // Or just bypassing the push logic in showDetail if we handle it here.
+        // Actually, showDetail doesn't push. We push explicitly before navigating away.
+        showDetail(null, item, true);
+    }
+
+    function drillDownToScript(scriptName) {
+        if (!scriptName) return;
+
+        // Fetch the script item
+        // We use the Items API with start_key
+        const url = `/api/store/items?database=${encodeURIComponent(currentDatabase)}&store=${encodeURIComponent(currentStore)}&batch_count=1&start_key=${encodeURIComponent(scriptName)}`;
+        
+        // UI Feedback
+        const originalCursor = document.body.style.cursor;
+        document.body.style.cursor = 'wait';
+
+        fetch(url)
+        .then(r => r.json())
+        .then(items => {
+            document.body.style.cursor = originalCursor;
+            
+            if (items && items.length > 0) {
+                const item = items[0];
+                let fetchedKey = item.key;
+                // Normalize key for comparison
+                // If the key is a string in DB, items[0].key is a string.
+                
+                if (fetchedKey === scriptName) {
+                    // Push current view to stack BEFORE showing new one
+                    pushView();
+                    
+                    // Show new item
+                    showDetail(null, item, true);
+                    return;
+                }
+            }
+            alert(`Script '${scriptName}' not found in current store.`);
+        })
+        .catch(e => {
+            document.body.style.cursor = originalCursor;
+            alert("Failed to drill down: " + e);
+        });
+    }
+
+    // --- Script Visualizer Helper Functions ---
+
+    function escapeHtml(unsafe) {
+        if (unsafe === undefined || unsafe === null) return '';
+        return String(unsafe)
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    }
+
+    function showToolInstructions(toolName) {
+        alert("Instructions for " + toolName + " are not yet available.");
+    }
+
+    function renderScriptView(script) {
+        // Ensure steps is an array
+        const steps = Array.isArray(script.steps) ? script.steps : [];
+        const stepsJson = JSON.stringify(steps);
+        
+        // Ensure name/desc are strings
+        const name = script.name || '';
+        const desc = script.description || '';
+        const db = script.database || '';
+        const cat = script.category || '';
+        const ver = script.version || '';
+
+        // Options for Database
+        let dbOptions = '<option value="">(None / Portable)</option>';
+        if (typeof availableDatabases !== 'undefined' && availableDatabases.length > 0) {
+            availableDatabases.forEach(d => {
+                const sel = d.name === db ? 'selected' : '';
+                dbOptions += `<option value="${d.name}" ${sel}>${d.name}</option>`;
+            });
+        }
+
+        return `
+            <div id="value-form" class="script-view-container">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                        <label class="form-label" style="margin-bottom: 0;">Name</label>
+                        <input type="text" class="value-input form-input" data-key="name" value="${escapeHtml(name)}" oninput="document.getElementById('btn-save').disabled=false;" style="flex: 1;">
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                        <label class="form-label" style="margin-bottom: 0;" title="Description">Desc</label>
+                        <input type="text" class="value-input form-input" data-key="description" value="${escapeHtml(desc)}" oninput="document.getElementById('btn-save').disabled=false;" style="flex: 1;">
+                    </div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 0px;">
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                         <label class="form-label" style="margin-bottom: 0;">Category</label>
+                         <input type="text" class="value-input form-input" data-key="category" value="${escapeHtml(cat)}" oninput="document.getElementById('btn-save').disabled=false;" style="flex: 1;">
+                    </div>
+                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                         <label class="form-label" style="margin-bottom: 0;">Context</label>
+                         <select class="value-input form-input" data-key="database" onchange="document.getElementById('btn-save').disabled=false;" style="flex: 1;">
+                            ${dbOptions}
+                         </select>
+                    </div>
+                </div>
+
+                <!-- Hidden inputs for other fields to preserve them -->
+                <input type="hidden" class="value-input" data-key="version" value="${escapeHtml(ver)}">
+
+                <!-- Steps Section -->
+                <div style="margin-top: 9px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <label class="form-label" style="font-size: 1.1em;">Program Steps</label>
+                        <button onclick="addScriptStep()" style="font-size: 12px; padding: 2px 8px;">+ Add Step</button>
+                    </div>
+                    
+                    <!-- The Master Source of Truth for Steps -->
+                    <input type="hidden" class="value-input" data-key="steps" id="hidden-steps-json" value="${escapeHtml(stepsJson)}">
+
+                    <div id="script-steps-list" style="display: flex; flex-direction: column; gap: 8px;">
+                        ${renderScriptSteps(steps)}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function renderScriptSteps(steps) {
+        if (!steps || steps.length === 0) {
+            return '<div style="text-align: center; color: var(--text-muted); padding: 20px; border: 1px dashed var(--border-color); border-radius: 4px;">No steps defined. Add one to start programming.</div>';
+        }
+        return steps.map((step, idx) => renderSingleStepCard(step, idx)).join('');
+    }
+
+    function renderSingleStepCard(step, idx) {
+        // Resolve the Display Name for the step
+        let fn = step.function || step.command || step.script_name || 'unknown';
+        const type = step.type || 'unknown';
+
+        // Color coding
+        let color = '#7f8c8d'; // Gray
+        if (fn.startsWith('llm.') || type === 'ask') color = '#9b59b6'; // Purple
+        else if (fn.startsWith('db.') || type === 'fetch') color = '#2ecc71'; // Green
+        else if (fn.startsWith('os.') || type === 'command') color = '#e74c3c'; // Red
+        else if (fn === 'loop' || type === 'loop') color = '#f39c12'; // Orange
+        else if (fn === 'map' || fn === 'reduce') color = '#d35400'; // Dark Orange
+        else if (type === 'call_script') color = '#3498db'; // Blue for Script Calls
+
+        const argsCount = Object.keys(step.args || {}).length;
+        const outVar = step.out ? `<span style="background: var(--bg-primary); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-color); font-size: 0.85em; margin-left: auto;">&rarr; ${escapeHtml(step.out)}</span>` : '';
+
+        // Step Arguments Summary
+        let summary = '';
+        if (type === 'ask' && step.prompt) summary = `"${step.prompt.substring(0, 30)}${step.prompt.length>30?'...':''}"`;
+        else if (step.args && step.args.prompt) summary = `"${step.args.prompt.substring(0, 30)}${step.args.prompt.length>30?'...':''}"`;
+        else if (step.args && step.args.query) summary = `"${step.args.query.substring(0, 30)}${step.args.query.length>30?'...':''}"`;
+        else summary = `${argsCount} Args`;
+
+        // Drill Down Logic
+        // Always allow drill-down if type is 'call_script'
+        // Or if it looks like a custom function (not standard namespaces)
+        const isStandard = fn.startsWith('llm.') || fn.startsWith('db.') || fn.startsWith('os.') || ['loop', 'map', 'reduce'].includes(fn) || ['ask', 'set', 'if', 'say'].includes(type);
+        
+        let shouldDrill = (type === 'call_script');
+        if (!shouldDrill && !isStandard && type === 'tool') {
+            shouldDrill = true; // Assume custom tool is a script
+        }
+        
+        // Target for drill down
+        const drillTarget = step.script_name || fn;
+
+        const drillBtn = (shouldDrill && drillTarget) 
+            ? `<button onclick="event.stopPropagation(); drillDownToScript('${escapeHtml(drillTarget)}')" title="Drill into script '${escapeHtml(drillTarget)}'" style="margin-left: 8px; padding: 1px 6px; font-size: 0.8em; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 3px; cursor: pointer; color: var(--text-color);">🔍</button>` 
+            : '';
+
+        // Label (e.g. "call: my_script")
+        const label = (type === 'call_script') ? `call: ${fn}` : fn;
+
+        return `
+            <div class="step-card" id="step-card-${idx}" style="border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary);">
+                <div class="step-header" onclick="toggleStepDetails(${idx})" style="padding: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-left: 4px solid ${color};">
+                    <span style="font-weight: bold; color: ${color}; font-family: monospace;">${escapeHtml(label)}</span>
+                    ${drillBtn}
+                    <span style="color: var(--text-muted); font-size: 0.9em;">${escapeHtml(summary)}</span>
+                    ${outVar}
+                    <button style="margin-left: auto; padding: 2px 6px; font-size: 0.8em; z-index: 10;" onclick="event.stopPropagation(); showToolInstructions('${escapeHtml(step.function)}')" title="Instructions">ℹ️</button>
+                </div>
+                <div id="step-body-${idx}" style="display: none; padding: 10px 10px 6px 10px; border-top: 1px solid var(--border-color); background: var(--bg-primary);">
+                    <!-- We will render the form for editing this step here -->
+                    ${renderStepEditForm(step, idx)}
+                </div>
+            </div>
+        `;
+    }
+
+    function renderStepEditForm(step, idx) {
+        const argsJson = JSON.stringify(step.args || {}, null, 2);
+        
+        return `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 0px;">
+                <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                    <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;">Function</label>
+                    <input type="text" class="form-input" style="font-family: monospace; flex: 1;" value="${escapeHtml(step.function)}" onchange="updateStepField(${idx}, 'function', this.value)">
+                </div>
+                <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                    <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Output Variable">Output Var</label>
+                    <input type="text" class="form-input" style="font-family: monospace; flex: 1;" value="${escapeHtml(step.out || '')}" onchange="updateStepField(${idx}, 'out', this.value)">
+                </div>
+            </div>
+            <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                    <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;">Args(JSON)</label>
+                    <div>
+                        <button class="btn-danger" style="padding: 2px 8px; font-size: 0.8em;" onclick="deleteScriptStep(${idx})">Delete Step</button>
+                    </div>
+                </div>
+                <textarea class="form-input" style="font-family: monospace; height: 56px; font-size: 0.9em; width: 100%; box-sizing: border-box; white-space: nowrap; overflow-x: auto;" onchange="updateStepField(${idx}, 'args', this.value)">${escapeHtml(JSON.stringify(step.args || {}))}</textarea>
+            </div>
+        `;
+    }
+
+    function toggleStepDetails(idx) {
+        const body = document.getElementById(`step-body-${idx}`);
+        if (body.style.display === 'none') {
+            body.style.display = 'block';
+        } else {
+            body.style.display = 'none';
+        }
+    }
+
+    // State Management for Steps
+    // We read from the hidden input, modify, and write back
+    
+    function getStepsFromDOM() {
+        const el = document.getElementById('hidden-steps-json');
+        try {
+            return JSON.parse(el.value);
+        } catch(e) { return []; }
+    }
+
+    function saveStepsToDOM(steps) {
+        const el = document.getElementById('hidden-steps-json');
+        el.value = JSON.stringify(steps);
+        // Refresh the list view
+        document.getElementById('script-steps-list').innerHTML = renderScriptSteps(steps);
+        // Enable main save button
+        document.getElementById('btn-save').disabled = false;
+    }
+
+    function updateStepField(idx, field, value) {
+        const steps = getStepsFromDOM();
+        if (!steps[idx]) return;
+
+        if (field === 'args') {
+            try {
+                steps[idx].args = JSON.parse(value);
+            } catch (e) {
+                alert("Invalid JSON for arguments");
+                return;
+            }
+        } else {
+            steps[idx][field] = value;
+        }
+        saveStepsToDOM(steps);
+        // Just re-open the one we were editing.
+        setTimeout(() => {
+             const newBody = document.getElementById(`step-body-\${idx}`);
+             if(newBody) newBody.style.display = 'block';
+        }, 0);
+    }
+
+    function addScriptStep() {
+        const steps = getStepsFromDOM();
+        steps.push({
+            function: "llm.generate",
+            args: { prompt: "New instruction" },
+            out: "result"
+        });
+        saveStepsToDOM(steps);
+         setTimeout(() => {
+             const idx = steps.length - 1;
+             const newBody = document.getElementById(`step-body-\${idx}`);
+             if(newBody) newBody.style.display = 'block';
+             // Scroll to bottom
+             newBody.scrollIntoView({ behavior: 'smooth' });
+        }, 50);
+    }
+
+    function deleteScriptStep(idx) {
+        if(!confirm("Delete this step?")) return;
+        const steps = getStepsFromDOM();
+        steps.splice(idx, 1);
+        saveStepsToDOM(steps);
+    }
+
+    // --- End Script Visualizer ---
+
     function showDetail(row, item, autoOpen = true) {
         console.log("showDetail called. Store:", currentStore); // Debug
         
@@ -2017,91 +2398,61 @@
                 <textarea id="edit-value" oninput="document.getElementById('btn-save').disabled = false;" style="width: 100%; height: 300px; font-family: monospace; margin-top: 5px;" class="form-input">${jsonStr}</textarea>
             `;
         } else if (typeof currentItemValue === 'object' && currentItemValue !== null) {
-            // Form View
-            valueHtml = '<div id="value-form" style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; padding-right: 2px;">';
-            const keys = Object.keys(currentItemValue);
-            if (keys.length === 0) {
-                 valueHtml += '<em>Empty Object</em>';
-            }
-            keys.forEach(key => {
-                let val = currentItemValue[key];
-                
-                // Check if this is a script store
-                const isScriptStore = currentStore && currentStore.toLowerCase() === 'scripts';
-
-                // Skip 'category' field for scripts as it is redundant with the Key
-                if (isScriptStore && key.toLowerCase() === 'category') {
-                    return;
+            
+            // Check if this is a script store
+            const isScriptStore = currentStore && currentStore.toLowerCase() === 'scripts';
+            
+            if (isScriptStore) {
+                 valueHtml = renderScriptView(currentItemValue);
+            } else {
+                // Form View
+                valueHtml = '<div id="value-form" style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; padding-right: 2px;">';
+                const keys = Object.keys(currentItemValue);
+                if (keys.length === 0) {
+                     valueHtml += '<em>Empty Object</em>';
                 }
-
-                // Special handling for 'steps' in 'scripts' store
-                if (isScriptStore && key === 'steps' && Array.isArray(val)) {
-                    // Hidden input to preserve value for save
-                    const safeVal = String(JSON.stringify(val)).replace(/"/g, '&quot;');
-                    valueHtml += `
-                        <div class="form-group" style="display: flex; flex-direction: column;">
-                            <label class="form-label">${key}</label>
-                            <input type="hidden" class="value-input" data-key="${key}" value="${safeVal}">
-                            <button onclick='openScriptModal()' style="width: 100%; text-align: left; display: flex; justify-content: space-between; align-items: center;">
-                                <span>View ${val.length} Steps (Complex)</span>
-                                <span>&#x2197;</span>
-                            </button>
-                        </div>
-                    `;
-                    return;
-                }
-
-                // Special handling for 'database' in 'scripts' store
-                if (isScriptStore && key === 'database') {
-                    let optionsHtml = '<option value="">(None / Portable)</option>';
-                    if (availableDatabases && availableDatabases.length > 0) {
-                        availableDatabases.forEach(db => {
-                            const selected = db.name === val ? 'selected' : '';
-                            optionsHtml += `<option value="${db.name}" ${selected}>${db.name}</option>`;
-                        });
+                keys.forEach(key => {
+                    let val = currentItemValue[key];
+                    let displayVal = val;
+                    if (typeof val === 'object') {
+                        displayVal = JSON.stringify(val);
                     }
+                    // Escape quotes for attribute
+                    const safeVal = String(displayVal).replace(/"/g, '&quot;');
                     
                     valueHtml += `
                         <div class="form-group" style="display: flex; flex-direction: column;">
                             <label class="form-label">${key}</label>
-                            <select class="value-input form-input" data-key="${key}" onchange="document.getElementById('btn-save').disabled = false;">
-                                ${optionsHtml}
-                            </select>
+                            <input type="text" class="value-input form-input" data-key="${key}" value="${safeVal}" 
+                                oninput="document.getElementById('btn-save').disabled = false;">
                         </div>
                     `;
-                    return;
-                }
-
-                let displayVal = val;
-                if (typeof val === 'object') {
-                    displayVal = JSON.stringify(val);
-                }
-                // Escape quotes for attribute
-                const safeVal = String(displayVal).replace(/"/g, '&quot;');
-                
-                valueHtml += `
-                    <div class="form-group" style="display: flex; flex-direction: column;">
-                        <label class="form-label">${key}</label>
-                        <input type="text" class="value-input form-input" data-key="${key}" value="${safeVal}" 
-                            oninput="document.getElementById('btn-save').disabled = false;">
-                    </div>
-                `;
-            });
-            valueHtml += '</div>';
+                });
+                valueHtml += '</div>';
+            }
         } else {
             // Primitive View (Textarea)
             const valStr = JSON.stringify(currentItemValue, null, 2);
             valueHtml = `<textarea id="edit-value" oninput="document.getElementById('btn-save').disabled = false;" style="width: 100%; height: 300px; font-family: monospace; margin-top: 5px;" class="form-input">${valStr}</textarea>`;
         }
 
+        // Back Button Logic
+        let backBtn = '';
+        if (viewStack.length > 0) {
+            backBtn = `<button onclick="popView()" style="padding: 2px 8px; font-size: 12px; margin-right: 10px;" title="Go back to previous item.">⬅ Back</button>`;
+        }
+
         viewer.innerHTML = `
-            <div style="margin-bottom: 10px;">
+            <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
                 <strong>Key:</strong>
-                <pre class="pre-block">${keyStr}</pre>
+                <pre class="pre-block" style="margin: 0; flex: 1; padding: 4px; overflow-x: auto;">${keyStr.replace(/\n/g, ' ')}</pre>
             </div>
             <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
                 <strong>Value:</strong>
-                <button onclick="closeDetail()" style="padding: 2px 8px; font-size: 12px;" title="Close the item details panel.">Close</button>
+                <div style="display: flex; align-items: center;">
+                    ${backBtn}
+                    <button onclick="closeDetail()" style="padding: 2px 8px; font-size: 12px;" title="Close the item details panel.">Close</button>
+                </div>
             </div>
             <div style="margin-bottom: 10px;">
                 ${valueHtml}
@@ -2151,7 +2502,11 @@
                 
                 // Type conversion
                 let finalVal = rawVal;
-                if (typeof originalVal === 'number') {
+                
+                // Force JSON parse for 'steps' to ensure array, even if originalVal was missing/null
+                if(key === 'steps') {
+                     try { finalVal = JSON.parse(rawVal); } catch(e) { finalVal = []; }
+                } else if (typeof originalVal === 'number') {
                     finalVal = Number(rawVal);
                 } else if (typeof originalVal === 'boolean') {
                     finalVal = (rawVal.toLowerCase() === 'true');

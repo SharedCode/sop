@@ -45,14 +45,18 @@ We moved away from "script recording" (saving text commands) to an **Abstract Sy
 
 ```go
 type ScriptStep struct {
-    Type      string         // "command", "ask", "if", "loop", "script"
-    Command   string         // The actual instruction
-    Args      map[string]any // Parameters
-    Steps     []ScriptStep    // Nested steps (for loops/conditionals)
+    Name        string         // Unique identifier for the step
+    Description string         // Human-readable explanation of what this step does
+    Type        string         // "command", "ask", "if", "loop", "script", "tool"
+    Command     string         // The actual instruction
+    Args        map[string]any // Parameters
+    Steps       []ScriptStep    // Nested steps (for loops/conditionals)
 }
 ```
 
-This design unlocked **Composability**. Because a `ScriptStep` can be of type `script`, one script can call another.
+This design unlocked **Composability** and **Self-Documentation**.
+*   **Composability**: Because a `ScriptStep` can be of type `script`, one script can call another.
+*   **Self-Documentation**: The `Description` field allows the script to be read and understood by humans and LLMs alike, facilitating "Code Review" for AI agents.
 *   We can build small, atomic scripts (`find_user`, `calculate_tax`).
 *   We can compose them into complex workflows (`process_payroll` calls `find_user` then `calculate_tax`).
 *   The runner (`runStepScript`) simply pushes a new stack frame and executes the child script, just like a function call in a programming language.

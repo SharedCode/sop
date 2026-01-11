@@ -1,5 +1,7 @@
 # SOP Scripting Engine Guide
 
+> **Note:** This document describes the low-level **Execution Plan** optimization concepts. for the user-facing AI Scripting Language (AST), please refer to `ai/SCRIPTS.md` and `ai/agent/README.md`.
+
 This guide describes the **Object-Oriented Scripting Language** used by the Data Admin Agent to interact with SOP databases. This language allows the LLM to compose complex workflows, optimize queries, and manage transactions programmatically.
 
 ## Core Concepts

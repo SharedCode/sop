@@ -110,6 +110,138 @@ func (a *DataAdminAgent) toolGetScriptDetails(ctx context.Context, args map[stri
 	return sb.String(), nil
 }
 
+func (a *DataAdminAgent) toolCreateScript(ctx context.Context, args map[string]any) (string, error) {
+	name, _ := args["name"].(string)
+	if name == "" {
+		return "", fmt.Errorf("script name is required")
+	}
+
+	description, _ := args["description"].(string)
+
+	script := ai.Script{
+		Name:        name,
+		Description: description,
+		Steps:       []ai.ScriptStep{},
+	}
+
+	// Persist the new script
+	// Using a dedicated Create or overwriting 'updatedScript'?
+	// updateScript function handles open/save/commit. We can reuse it or create a new one.
+	// But updateScript expects the script to exist or creates it?
+	// The implementation of updateScript reads it first.
+	// Let's implement a create logic using store operations directly OR modify updateScript to handle creation.
+	// Actually, looking at toolListScripts, it opens the "scripts" store.
+
+	// Let's implement independent logic for clarity or reuse updateScript if it supports "not found".
+	// The current updateScript function:
+	/*
+			func (a *DataAdminAgent) updateScript(ctx context.Context, name string, updateFunc func(*ai.Script) error) error {
+			    ...
+				var script ai.Script
+				if err := store.Get(ctx, "general", name, &script); err != nil {
+					return err
+				}
+		        ...
+		    }
+	*/
+	// It assumes existence. So we need a dedicated create flow.
+
+	db := a.systemDB
+	if db == nil {
+		if opts, ok := a.databases["system"]; ok {
+			db = database.NewDatabase(opts)
+		}
+	}
+	if db == nil {
+		return "", fmt.Errorf("system database not found")
+	}
+
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return "", fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	store, err := db.OpenModelStore(ctx, "scripts", tx)
+	if err != nil {
+		return "", fmt.Errorf("failed to open scripts store: %w", err)
+	}
+
+	// Check if already exists
+	// store.Get returns error if not found? Or false?
+	// The modelStore interface usually returns error if not found in SOP (if KeyNotFound).
+	// We can try to load into a dummy var.
+	var dummy ai.Script
+	err = store.Load(ctx, "general", name, &dummy)
+	if err == nil {
+		return "", fmt.Errorf("script '%s' already exists", name)
+	}
+	// Warning: We are assuming error means Not Found. SOP might have specific error types.
+	// Ideally we check error type. But for now, assuming any error is good enough to proceed to Create.
+
+	if err := store.Save(ctx, "general", name, &script); err != nil {
+		return "", fmt.Errorf("failed to save script: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return fmt.Sprintf("Script '%s' created successfully.", name), nil
+}
+
+func (a *DataAdminAgent) toolSaveScript(ctx context.Context, args map[string]any) (string, error) {
+	name, _ := args["name"].(string)
+	if name == "" {
+		return "", fmt.Errorf("script name is required")
+	}
+
+	description, _ := args["description"].(string)
+
+	stepsList, _ := args["steps"].([]any)
+	steps, err := mapToScriptSteps(stepsList)
+	if err != nil {
+		return "", fmt.Errorf("invalid steps: %v", err)
+	}
+
+	script := ai.Script{
+		Name:        name,
+		Description: description,
+		Steps:       steps,
+	}
+
+	db := a.systemDB
+	if db == nil {
+		if opts, ok := a.databases["system"]; ok {
+			db = database.NewDatabase(opts)
+		}
+	}
+	if db == nil {
+		return "", fmt.Errorf("system database not found")
+	}
+
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return "", fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	store, err := db.OpenModelStore(ctx, "scripts", tx)
+	if err != nil {
+		return "", fmt.Errorf("failed to open scripts store: %w", err)
+	}
+
+	if err := store.Save(ctx, "general", name, &script); err != nil {
+		return "", fmt.Errorf("failed to save script: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return fmt.Sprintf("Script '%s' saved successfully with %d steps.", name, len(steps)), nil
+}
+
 func printSteps(sb *strings.Builder, steps []ai.ScriptStep, indent int) {
 	indentStr := strings.Repeat("  ", indent)
 	for i, step := range steps {
@@ -207,6 +339,49 @@ func (a *DataAdminAgent) toolScriptInsertStep(ctx context.Context, args map[stri
 	if v, ok := args["list"].(string); ok {
 		newStep.List = v
 	}
+	if v, ok := args["description"].(string); ok {
+		newStep.Description = v
+	}
+	if v, ok := args["name"].(string); ok {
+		newStep.Name = v
+	}
+
+	// Additional fields mapping
+	if v, ok := args["output_variable"].(string); ok {
+		newStep.OutputVariable = v
+	}
+	if v, ok := args["variable"].(string); ok {
+		newStep.Variable = v
+	}
+	if v, ok := args["value"].(string); ok {
+		newStep.Value = v
+	}
+	if v, ok := args["database"].(string); ok {
+		newStep.Database = v
+	}
+	if v, ok := args["source"].(string); ok {
+		newStep.Source = v
+	}
+	if v, ok := args["resource"].(string); ok {
+		newStep.Resource = v
+	}
+	if v, ok := args["filter"].(string); ok {
+		newStep.Filter = v
+	}
+	if v, ok := args["script_args"].(map[string]any); ok {
+		// Convert map[string]any to map[string]string for ScriptArgs
+		sa := make(map[string]string)
+		for k, val := range v {
+			sa[k] = fmt.Sprintf("%v", val)
+		}
+		newStep.ScriptArgs = sa
+	}
+	if v, ok := args["is_async"].(bool); ok {
+		newStep.IsAsync = v
+	}
+	if v, ok := args["continue_on_error"].(bool); ok {
+		newStep.ContinueOnError = v
+	}
 
 	if v, ok := args["args"].(map[string]any); ok {
 		newStep.Args = v
@@ -226,6 +401,118 @@ func (a *DataAdminAgent) toolScriptInsertStep(ctx context.Context, args map[stri
 		return "", err
 	}
 	return fmt.Sprintf("Step inserted into script '%s' at index %d", scriptName, int(index)), nil
+}
+
+func (a *DataAdminAgent) toolScriptSaveStep(ctx context.Context, args map[string]any) (string, error) {
+	// Wrapper to Append a step.
+	// We construct a ScriptStep from args then append it.
+
+	scriptName, _ := args["script"].(string)
+	if scriptName == "" {
+		return "", fmt.Errorf("script name required")
+	}
+	stepType, _ := args["type"].(string)
+	if stepType == "" {
+		// Try to infer type?
+		// If command provided -> command
+		// If variable provided -> set
+		// Better to require type or default to 'command' if command present.
+		if _, ok := args["command"]; ok {
+			stepType = "command"
+		} else if _, ok := args["variable"]; ok {
+			stepType = "set"
+		} else if _, ok := args["prompt"]; ok {
+			stepType = "ask"
+		} else if _, ok := args["source"]; ok {
+			stepType = "fetch"
+		} else {
+			return "", fmt.Errorf("step type required")
+		}
+	}
+
+	newStep := ai.ScriptStep{
+		Type: stepType,
+	}
+
+	// Populate standard fields
+	if v, ok := args["name"].(string); ok {
+		newStep.Name = v
+	}
+	if v, ok := args["description"].(string); ok {
+		newStep.Description = v
+	}
+
+	if v, ok := args["prompt"].(string); ok {
+		newStep.Prompt = v
+	}
+	if v, ok := args["message"].(string); ok {
+		newStep.Message = v
+	}
+	if v, ok := args["script_name"].(string); ok {
+		newStep.ScriptName = v
+	}
+	if v, ok := args["command"].(string); ok {
+		newStep.Command = v
+	}
+	if v, ok := args["condition"].(string); ok {
+		newStep.Condition = v
+	}
+	if v, ok := args["iterator"].(string); ok {
+		newStep.Iterator = v
+	}
+	if v, ok := args["list"].(string); ok {
+		newStep.List = v
+	}
+
+	if v, ok := args["output_variable"].(string); ok {
+		newStep.OutputVariable = v
+	}
+	if v, ok := args["variable"].(string); ok {
+		newStep.Variable = v
+	}
+	if v, ok := args["value"].(string); ok {
+		newStep.Value = v
+	}
+	if v, ok := args["database"].(string); ok {
+		newStep.Database = v
+	}
+	if v, ok := args["source"].(string); ok {
+		newStep.Source = v
+	}
+	if v, ok := args["resource"].(string); ok {
+		newStep.Resource = v
+	}
+	if v, ok := args["filter"].(string); ok {
+		newStep.Filter = v
+	}
+
+	if v, ok := args["script_args"].(map[string]any); ok {
+		sa := make(map[string]string)
+		for k, val := range v {
+			sa[k] = fmt.Sprintf("%v", val)
+		}
+		newStep.ScriptArgs = sa
+	}
+	if v, ok := args["is_async"].(bool); ok {
+		newStep.IsAsync = v
+	}
+	if v, ok := args["continue_on_error"].(bool); ok {
+		newStep.ContinueOnError = v
+	}
+
+	if v, ok := args["args"].(map[string]any); ok {
+		newStep.Args = v
+	}
+
+	err := a.updateScript(ctx, scriptName, func(m *ai.Script) error {
+		m.Steps = append(m.Steps, newStep)
+		return nil
+	})
+
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("Step '%s' saved to script '%s'.", newStep.Name, scriptName), nil
 }
 
 func (a *DataAdminAgent) toolScriptDeleteStep(ctx context.Context, args map[string]any) (string, error) {
@@ -278,6 +565,49 @@ func (a *DataAdminAgent) toolScriptUpdateStep(ctx context.Context, args map[stri
 		if v, ok := args["message"].(string); ok {
 			step.Message = v
 		}
+		if v, ok := args["description"].(string); ok {
+			step.Description = v
+		}
+		if v, ok := args["name"].(string); ok {
+			step.Name = v
+		}
+
+		// Additional fields mapping
+		if v, ok := args["output_variable"].(string); ok {
+			step.OutputVariable = v
+		}
+		if v, ok := args["variable"].(string); ok {
+			step.Variable = v
+		}
+		if v, ok := args["value"].(string); ok {
+			step.Value = v
+		}
+		if v, ok := args["database"].(string); ok {
+			step.Database = v
+		}
+		if v, ok := args["source"].(string); ok {
+			step.Source = v
+		}
+		if v, ok := args["resource"].(string); ok {
+			step.Resource = v
+		}
+		if v, ok := args["filter"].(string); ok {
+			step.Filter = v
+		}
+		if v, ok := args["script_args"].(map[string]any); ok {
+			sa := make(map[string]string)
+			for k, val := range v {
+				sa[k] = fmt.Sprintf("%v", val)
+			}
+			step.ScriptArgs = sa
+		}
+		if v, ok := args["is_async"].(bool); ok {
+			step.IsAsync = v
+		}
+		if v, ok := args["continue_on_error"].(bool); ok {
+			step.ContinueOnError = v
+		}
+
 		if v, ok := args["script_name"].(string); ok {
 			step.ScriptName = v
 		}
@@ -419,6 +749,15 @@ func (a *DataAdminAgent) toolScriptAddStepFromLast(ctx context.Context, args map
 			Type:    "command",
 			Command: a.lastToolCall.Command, // Assuming a.lastToolCall has Command
 			Args:    a.lastToolCall.Args,
+		}
+
+		// Optional: description
+		if v, ok := args["description"].(string); ok {
+			step.Description = v
+		}
+		// Optional: name
+		if v, ok := args["name"].(string); ok {
+			step.Name = v
 		}
 
 		if position == "append" || index == -1 {

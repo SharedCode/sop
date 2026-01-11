@@ -580,6 +580,67 @@ func (a *DataAdminAgent) runScript(ctx context.Context, script ai.Script, args m
 		scope[k] = v
 	}
 
+	// Transaction Handling
+	var tx sop.Transaction
+	var commitFunc func() error
+	var rollbackFunc func()
+
+	// Default to "manual" (let steps handle it or caller) unless specified
+	// The Script struct has TransactionMode field.
+	// Values: "none" (default), "single" (global tx), "per_step" (not implemented here, steps do it naturally if no global tx)
+
+	if script.TransactionMode == "single" {
+		// Identify Target DB
+		// Need a database to start transaction on.
+		dbName := script.Database
+		if dbName == "" {
+			if p := ai.GetSessionPayload(ctx); p != nil {
+				dbName = p.CurrentDB
+			}
+		}
+		if dbName == "" {
+			dbName = "system" // fallback
+		}
+
+		db, err := a.resolveDatabase(dbName)
+		if err != nil {
+			return "", fmt.Errorf("failed to resolve database '%s' for global transaction: %w", dbName, err)
+		}
+
+		tx, err = db.BeginTransaction(ctx, sop.ForWriting) // Assert Write for global scripts usually
+		if err != nil {
+			return "", fmt.Errorf("failed to begin global transaction: %w", err)
+		}
+
+		sb.WriteString(fmt.Sprintf("Global Transaction Started (%s)\n", dbName))
+
+		rollbackFunc = func() {
+			tx.Rollback(ctx)
+		}
+		commitFunc = func() error {
+			return tx.Commit(ctx)
+		}
+
+		// Inject into Context
+		if p := ai.GetSessionPayload(ctx); p != nil {
+			// Clone payload
+			newPayload := *p
+			if newPayload.Transactions == nil {
+				newPayload.Transactions = make(map[string]any)
+			}
+			newPayload.Transactions[dbName] = tx
+			newPayload.Transaction = tx           // Legacy field for tools that don't support multi-db yet
+			newPayload.ExplicitTransaction = true // Prevent tools from auto-committing
+			ctx = context.WithValue(ctx, "session_payload", &newPayload)
+		}
+	}
+
+	defer func() {
+		if rollbackFunc != nil {
+			rollbackFunc() // No-op if committed
+		}
+	}()
+
 	for i, step := range script.Steps {
 		if step.Type == "command" {
 			// Resolve args
@@ -620,6 +681,15 @@ func (a *DataAdminAgent) runScript(ctx context.Context, script ai.Script, args m
 			sb.WriteString(fmt.Sprintf("Skipping step %d (type '%s' not supported in tool execution)\n", i+1, step.Type))
 		}
 	}
+
+	if commitFunc != nil {
+		if err := commitFunc(); err != nil {
+			return "", fmt.Errorf("failed to commit global transaction: %w", err)
+		}
+		// Clear rollbackFunc so defer doesn't rollback
+		rollbackFunc = nil
+	}
+
 	return sb.String(), nil
 }
 

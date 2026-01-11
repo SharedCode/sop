@@ -59,6 +59,11 @@ A `Script` consists of metadata and a list of `Steps`.
 }
 ```
 
+### Common Step Fields
+All steps support the following optional fields to improve readability and control:
+*   `name`: A unique identifier for the step (useful for logs and future jumps).
+*   `description`: A human-readable explanation of the step's intent.
+
 ### Step Types
 
 | Type | Description | Key Fields |
@@ -75,6 +80,13 @@ A `Script` consists of metadata and a list of `Steps`.
 
 *   `"is_async": true`: Runs the step in a background goroutine.
 *   `"continue_on_error": true`: If this step fails, do not stop the rest of the script.
+
+## System Tools for Script Authoring
+The Agent can manage its own scripts using the following registered tools:
+*   **`create_script`**: Initialize a new empty script with a description.
+*   **`save_script`**: Save (overwrite) a complete script structure.
+*   **`save_step`**: Append a single step to the end of a script. This supports a "stream of thought" authoring process where the agent builds a program incrementally.
+*   **`insert_step` / `update_step`**: Edit existing logic in place.
 
 ---
 

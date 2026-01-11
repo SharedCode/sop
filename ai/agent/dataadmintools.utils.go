@@ -10,9 +10,32 @@ import (
 	"strings"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/jsondb"
 )
+
+// mapToScriptSteps converts a generic slice of maps into []ai.ScriptStep.
+func mapToScriptSteps(list []any) ([]ai.ScriptStep, error) {
+	var steps []ai.ScriptStep
+	for _, item := range list {
+		if m, ok := item.(map[string]any); ok {
+			// Round trip via JSON to robustly handle type conversion
+			b, err := json.Marshal(m)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal step: %v", err)
+			}
+			var step ai.ScriptStep
+			if err := json.Unmarshal(b, &step); err != nil {
+				return nil, fmt.Errorf("failed to unmarshal step: %v", err)
+			}
+			steps = append(steps, step)
+		} else {
+			return nil, fmt.Errorf("invalid step format (expected object)")
+		}
+	}
+	return steps, nil
+}
 
 func matchesKey(itemKey, filterKey any) (bool, string) {
 	if filterKey == nil {

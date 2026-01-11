@@ -59,9 +59,22 @@ This hybrid approach gives you the best of both worlds:
 
 ## Script Schema (The "Language")
 
-The script system uses a stable JSON schema acting as a mini-SDK:
+The script system uses a stable JSON schema acting as a mini-SDK. Each step now includes a **Name** (ID) and **Description** (Docstring) to make scripts self-documenting and easier for looking up logic.
 
+### Step Structure
+```json
+{
+  "name": "fetch_user_data",
+  "description": "Retrieve the user record from the primary database",
+  "type": "tool",
+  "function": "fetch_record",
+  "args": { ... }
+}
+```
+
+### Core Operations
 *   **`ask`**: Query the LLM for reasoning or creative generation.
+*   **`tool`**: Execute any registered tool (database ops, file IO (safe), etc).
 *   **`set`**: Assign values to variables.
 *   **`if`**: Conditional branching logic.
 *   **`loop`**: Iterate over lists or data fetched from B-Trees.
@@ -79,6 +92,28 @@ The script system uses a stable JSON schema acting as a mini-SDK:
 
 ### Management
 *   `/list`: List all available scripts in the SystemDB.
+
+## AI Script Authoring
+
+We have moved beyond simple "Recording". The AI Agent itself is now equipped with a suite of tools to author, edit, and maintain scripts programmatically. This treats scripts as **managed software artifacts**.
+
+*   **`create_script`**: Initializes a new named script.
+*   **`save_step`**: Appends a new step to an existing script. This allows the AI to "compose" a program step-by-step, thinking through the logic as it goes.
+*   **`save_script`**: Overwrites a script entirely (bulk save).
+*   **`insert_step` / `update_step`**: Fine-grained editing of existing logic.
+
+## Advanced Orchestration
+
+### Transaction Management
+Scripts can manage data integrity just like trusted backend code.
+*   **Implicit Transactions**: By default, scripts run in a unified context.
+*   **Explicit Control**: Scripts can utilize transaction tools (e.g., `begin_transaction`, `commit_transaction`) to handle complex multi-step commits, ensuring that a chain of operations either succeeds entirely or rolls back safely.
+
+### Map/Reduce & Batch Processing
+The combination of `loop` and `tool` steps enables a Map/Reduce pattern:
+1.  **Map**: Use `fetch` or `Scan` to retrieve a cursor of items.
+2.  **Reduce**: Use `loop` to iterate over the cursor, applying a `tool` (like `update_record` or `calculate_metric`) to each item.
+This allows the agent to perform massive batch operations (e.g., "Update the status of all 10,000 overdue orders") efficiently and reliably.
 
 ## Remote Execution via REST API
 

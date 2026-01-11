@@ -406,6 +406,10 @@ type ScriptStep struct {
 	// Valid values: "ask", "set", "if", "loop", "fetch", "say", "command", "call_script", "block"
 	Type string `json:"type"`
 
+	// Name acts as a label or identifier for the step.
+	// It can be used for UI display or referenced in complex flows.
+	Name string `json:"name,omitempty"`
+
 	// --- Fields for "ask" (LLM Interaction) ---
 	// Prompt is the question or command to send to the LLM. Supports templating.
 	Prompt string `json:"prompt,omitempty"`
@@ -474,6 +478,11 @@ type ScriptStep struct {
 	// If false (default), the script stops and returns the error.
 	// For async steps, if this is false and the step fails, it cancels the execution of other steps.
 	ContinueOnError bool `json:"continue_on_error,omitempty"`
+
+	// --- Documentation ---
+	// Description provides a human-readable explanation of what this step does.
+	// It is used for documentation and self-explanation of the script.
+	Description string `json:"description,omitempty"`
 }
 
 // ScriptRecorder is an interface for recording script steps.

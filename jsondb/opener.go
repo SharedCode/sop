@@ -52,6 +52,22 @@ func OpenStore(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string
 	return &jsonStore{btree: store}, nil
 }
 
+// CreateStore creates a new B-Tree store.
+func CreateStore(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (StoreAccessor, error) {
+	// For now, default to primitive string key for simplicity or auto-detect?
+	// The OpenStore logic detects phase transaction stores.
+	// We'll default to primitive string key for Temp Stores usage.
+	// Explicitly allow duplicates for spill support
+	opts := sop.StoreOptions{
+		IsUnique: false,
+	}
+	store, err := database.NewBtree[string, any](ctx, dbOpts, storeName, tx, nil, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &primitiveStore{btree: store}, nil
+}
+
 type primitiveStore struct {
 	btree btree.BtreeInterface[string, any]
 }
