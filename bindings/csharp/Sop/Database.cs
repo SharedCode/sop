@@ -127,7 +127,8 @@ internal enum DatabaseAction
     RemoveModelStore = 9,
     RemoveVectorStore = 10,
     RemoveSearch = 11,
-    SetupDatabase = 12
+    SetupDatabase = 12,
+    GetDatabaseOptions = 13
 }
 
 /// <summary>
@@ -164,8 +165,29 @@ public class Database
         var res = Interop.FromPtr(resPtr);
         if (res != null)
         {
-            throw new SopException(res);
+            if (!res.TrimStart().StartsWith("{"))
+                throw new SopException(res);
         }
+    }
+
+    /// <summary>
+    /// Gets the database options from the specified store path.
+    /// </summary>
+    /// <param name="ctx">The context.</param>
+    /// <param name="storePath">The path to the store.</param>
+    /// <returns>The database options.</returns>
+    public static DatabaseOptions GetOptions(Context ctx, string storePath)
+    {
+        var payload = System.Text.Encoding.UTF8.GetBytes(storePath);
+        var resPtr = NativeMethods.ManageDatabase(ctx.Id, (int)DatabaseAction.GetDatabaseOptions, null, payload);
+        var res = Interop.FromPtr(resPtr);
+
+        if (string.IsNullOrEmpty(res)) return null;
+
+        if (!res.TrimStart().StartsWith("{"))
+            throw new SopException(res);
+
+        return JsonSerializer.Deserialize<DatabaseOptions>(res);
     }
 
     /// <summary>

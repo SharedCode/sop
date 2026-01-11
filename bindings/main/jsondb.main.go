@@ -322,6 +322,7 @@ const (
 	RemoveVectorStore
 	RemoveSearch
 	SetupDatabase
+	GetDatabaseOptions
 )
 
 //export manageDatabase
@@ -405,8 +406,26 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 		if err := encoding.DefaultMarshaler.Unmarshal([]byte(jsonPayload), &opts); err != nil {
 			return C.CString(fmt.Sprintf("invalid options: %v", err))
 		}
-		if _, err := sopdb.Setup(ctx, opts); err != nil {
+		updatedOpts, err := sopdb.Setup(ctx, opts)
+		if err != nil {
 			return C.CString(err.Error())
+		}
+		if b, err := encoding.DefaultMarshaler.Marshal(updatedOpts); err == nil {
+			return C.CString(string(b))
+		}
+		return nil
+
+	case GetDatabaseOptions:
+		// Payload is the store path string
+		if jsonPayload == "" {
+			return C.CString("store path is required")
+		}
+		opts, err := sopdb.GetOptions(ctx, jsonPayload)
+		if err != nil {
+			return C.CString(err.Error())
+		}
+		if b, err := encoding.DefaultMarshaler.Marshal(opts); err == nil {
+			return C.CString(string(b))
 		}
 		return nil
 

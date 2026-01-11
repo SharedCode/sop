@@ -25,6 +25,7 @@ class DatabaseAction(Enum):
     RemoveVectorStore = 10
     RemoveSearch = 11
     SetupDatabase = 12
+    GetDatabaseOptions = 13
 
 class Database:
     """
@@ -41,10 +42,51 @@ class Database:
         self.id = None
 
     @staticmethod
+    def _deserialize_opts(json_str: str) -> Optional[DatabaseOptions]:
+        try:
+            if not json_str.strip().startswith('{'):
+                return None
+            
+            # Since Go JSON tags match Python snake_case arguments, we can use the dict directly.
+            # We just need to filter out unknown keys (like cache_type) and hydrate objects/enums.
+            data = json.loads(json_str)
+
+            # 1. Transform Nested Objects (Dict -> Object)
+            if "redis_config" in data and isinstance(data["redis_config"], dict):
+                # Only pass known fields to constructor to be safe
+                valid_rc = RedisCacheConfig.__dataclass_fields__.keys()
+                rc_args = {k: v for k, v in data["redis_config"].items() if k in valid_rc}
+                data["redis_config"] = RedisCacheConfig(**rc_args)
+
+            if "erasure_config" in data and isinstance(data["erasure_config"], dict):
+                valid_ec = ErasureCodingConfig.__dataclass_fields__.keys()
+                ec_map = {}
+                for k, v in data["erasure_config"].items():
+                    if isinstance(v, dict):
+                        ec_args = {ik: iv for ik, iv in v.items() if ik in valid_ec}
+                        ec_map[k] = ErasureCodingConfig(**ec_args)
+                data["erasure_config"] = ec_map
+
+            # 2. Transform Enum (Int -> Enum)
+            if "type" in data:
+                data["type"] = DatabaseType(data["type"])
+
+            # 3. Filter top-level keys (remove 'cache_type' etc. that Python doesn't have)
+            valid_db_keys = DatabaseOptions.__dataclass_fields__.keys()
+            input_db_kwargs = {k: v for k, v in data.items() if k in valid_db_keys}
+            
+            return DatabaseOptions(**input_db_kwargs)
+        except:
+            return None
+
+    @staticmethod
     def setup(ctx: context.Context, options: DatabaseOptions):
         """
         Persists the database options to the stores folders.
         This is a one-time setup operation for the database.
+        
+        It parses the returned JSON options (if any) from the Go Setup implementation,
+        and updates the passed options object with the updated values.
 
         Args:
             ctx (context.Context): The context.
@@ -55,7 +97,16 @@ class Database:
         
         res = call_go.manage_database(ctx.id, DatabaseAction.SetupDatabase.value, None, payload)
         if res:
-            raise Exception(res)
+            updated = Database._deserialize_opts(res)
+            if updated:
+                for field in DatabaseOptions.__dataclass_fields__:
+                    val = getattr(updated, field)
+                    if val is not None:
+                        setattr(options, field, val)
+                return
+
+            if not res.strip().startswith('{'):
+                raise Exception(res)
 
     @staticmethod
     def _serialize_options(options: DatabaseOptions) -> Dict:
@@ -77,6 +128,66 @@ class Database:
             opts["cache_type"] = 2 # Redis enum value in Go
             
         return opts
+
+    @staticmethod
+    def get_options(ctx: context.Context, store_path: str) -> Optional[DatabaseOptions]:
+        """
+        Retrieves the database options from the given store path.
+
+        Args:
+            ctx (context.Context): The context.
+            store_path (str): The path to the store.
+
+        Returns:
+            Optional[DatabaseOptions]: The database options if found, otherwise None.
+        """
+        res = call_go.manage_database(ctx.id, DatabaseAction.GetDatabaseOptions.value, None, store_path)
+        if res:
+            try:
+                if res.strip().startswith('{'):
+                    raw_opts = json.loads(res)
+                    
+                    # Convert Go PascalCase keys to Python snake_case
+                    def to_snake(k):
+                        return ''.join(['_'+c.lower() if c.isupper() else c for c in k]).lstrip('_')
+
+                    data = {to_snake(k): v for k, v in raw_opts.items()}
+                    
+                    # Fixup Enums and Nested Objects
+                    if "type" in data:
+                        data["type"] = DatabaseType(data["type"])
+                    
+                    if "redis_config" in data and data["redis_config"]:
+                        rc_data = {to_snake(k): v for k, v in data["redis_config"].items()}
+                        # Filter keys to match RedisCacheConfig fields
+                        valid_keys = RedisCacheConfig.__dataclass_fields__.keys()
+                        input_kwargs = {k: v for k, v in rc_data.items() if k in valid_keys}
+                        data["redis_config"] = RedisCacheConfig(**input_kwargs)
+                        
+                    if "erasure_config" in data and data["erasure_config"]:
+                        ec_map = {}
+                        valid_keys = ErasureCodingConfig.__dataclass_fields__.keys()
+                        for k, v in data["erasure_config"].items():
+                            ec_data = {to_snake(ik): iv for ik, iv in v.items()}
+                            input_kwargs = {ik: iv for ik, iv in ec_data.items() if ik in valid_keys}
+                            ec_map[k] = ErasureCodingConfig(**input_kwargs)
+                        data["erasure_config"] = ec_map
+
+                    # Safe Instantiation
+                    # Filter top-level keys against DatabaseOptions fields
+                    valid_db_keys = DatabaseOptions.__dataclass_fields__.keys()
+                    input_db_kwargs = {k: v for k, v in data.items() if k in valid_db_keys}
+                    
+                    return DatabaseOptions(**input_db_kwargs)
+            except Exception as e:
+                # Fallthrough to error handling or re-raise if it was a JSON parse success but logic error?
+                # For now, treat any exception as a failure to satisfy "options found" logic or explicit error.
+                pass
+            
+            # If we received an error string that is not JSON
+            if not res.strip().startswith('{'):
+                raise Exception(res)
+        return None
 
     def _ensure_database_created(self, ctx: context.Context):
         if self.id:

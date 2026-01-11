@@ -20,6 +20,10 @@ public static class VectorSearchAI
             StoresFolders = new List<string> { "sop_data_vector" },
             Type = (int)DatabaseType.Standalone
         };
+        
+        // Saving database options for discoverability in DataManager
+        Database.Setup(ctx, dbOpts);
+        
         var db = new Database(dbOpts);
 
         using var trans = db.BeginTransaction(ctx);

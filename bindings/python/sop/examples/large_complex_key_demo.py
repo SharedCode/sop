@@ -36,7 +36,12 @@ def main():
 
     print(f"Initializing Large Complex Key Demo in '{db_path}'...")
     ctx = Context()
-    db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Standalone))
+    dbOpts = DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Standalone)
+
+    # Setup will persist database options for discoverability by tools like Data Manager.
+    Database.setup(ctx, dbOpts)
+
+    db = Database(dbOpts)
 
     regions = ["US", "EU", "APAC", "LATAM"]
     departments = ["Engineering", "Sales", "HR", "Marketing", "Finance"]

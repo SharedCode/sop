@@ -41,8 +41,13 @@ def main():
         
     print(f"Generating Large Complex DB at {db_path}...")
     
-    ctx = Context()
-    db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Standalone))
+    ctx = Context()    
+    dbOpts = DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Standalone)
+
+    # Setup will persist database options for discoverability by tools like Data Manager.
+    Database.setup(ctx, dbOpts)
+    
+    db = Database(dbOpts)
     
     store_name = "people"
     

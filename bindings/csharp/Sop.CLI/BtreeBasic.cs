@@ -18,6 +18,10 @@ public static class BtreeBasic
             StoresFolders = new List<string> { "sop_data_basic" },
             Type = (int)DatabaseType.Standalone
         };
+        
+        // Saving database options for discoverability in DataManager
+        Database.Setup(ctx, dbOpts);
+
         var db = new Database(dbOpts);
 
         // 2. Start Transaction

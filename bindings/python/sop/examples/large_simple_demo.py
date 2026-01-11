@@ -1,7 +1,11 @@
 import os
 import shutil
 import sys
-from sop import Context, Database, DatabaseOptions, DatabaseType, Item
+# Add the parent directory to sys.path to import sop
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+
+from sop import Context, Database, DatabaseOptions, Item
+from sop.ai import DatabaseType
 
 def main():
     # Use a local data directory relative to where the script is run
@@ -12,7 +16,13 @@ def main():
     print(f"Generating Large Simple DB at {db_path}...")
     
     ctx = Context()
-    db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Standalone))
+    
+    options = DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Standalone)
+    
+    # Saving database options for discoverability in DataManager
+    Database.setup(ctx, options)
+    
+    db = Database(options)
     
     store_name = "large_simple_tree"
     

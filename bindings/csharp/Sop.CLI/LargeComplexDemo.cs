@@ -50,6 +50,10 @@ public static class LargeComplexDemo
             StoresFolders = new List<string> { dbPath },
             Type = (int)DatabaseType.Standalone
         };
+        
+        // Saving database options for discoverability in DataManager
+        Database.Setup(ctx, dbOpts);
+
         var db = new Database(dbOpts);
 
         using (var trans = db.BeginTransaction(ctx))

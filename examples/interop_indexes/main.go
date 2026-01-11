@@ -18,7 +18,7 @@ type Product struct {
 }
 
 func main() {
-	fmt.Println("--- Interoperability Demo (Secondary Indexes) ---")
+	fmt.Println("--- Interoperability Demo, Indexed Fields ---")
 	fmt.Println("This example creates a database with a composite index on the Key.")
 	fmt.Println("The Key is a map[string]any, allowing dynamic fields.")
 
