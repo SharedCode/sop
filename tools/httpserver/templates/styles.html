@@ -54,7 +54,25 @@
             }
         }
 
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; display: flex; height: 100vh; background-color: var(--bg-color); color: var(--text-color); }
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* Prevent body scroll */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overscroll-behavior: none; /* Prevent bounce */
+            touch-action: pan-x pan-y; /* Allow internal scrolling but prevent zoom */
+        }
+
+        @supports (-webkit-touch-callout: none) {
+            body {
+                /* iOS specific fix */
+                height: -webkit-fill-available;
+            }
+        }
         #sidebar { width: 250px; min-width: 150px; max-width: 50%; background: var(--sidebar-bg); border-right: 1px solid var(--border-color); padding: 6px 7px; display: flex; flex-direction: column; flex-shrink: 0; box-sizing: border-box; }
         #resizer { width: 5px; background: var(--border-color); cursor: col-resize; user-select: none; transition: background 0.2s; flex-shrink: 0; }
         #resizer:hover, #resizer.resizing { background: var(--active-bg); }
@@ -289,15 +307,31 @@
             #detail-panel { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1100; }
             /* Full screen chat on mobile for immersive experience */
             .chat-widget { 
-                width: 100% !important; 
-                height: 100% !important; 
-                height: 100dvh !important; /* Use dynamic viewport height if available */
-                left: 0 !important; 
-                top: 0 !important; 
-                border-radius: 0;
-                border: none;
-                z-index: 1500; /* Above detail panel but below modals */
-                display: none; /* Hidden by default, toggled by JS */
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                width: auto !important;
+                height: auto !important;
+                margin: 0 !important;
+                border: none !important;
+                border-radius: 0 !important;
+                min-width: 0 !important;
+                min-height: 0 !important;
+                max-width: none !important;
+                max-height: none !important;
+                z-index: 1500;
+                display: none;
+                flex-direction: column;
+                overflow: hidden;
+                box-sizing: border-box !important;
+                
+                /* Safe area handling */
+                padding-top: env(safe-area-inset-top) !important;
+                padding-bottom: env(safe-area-inset-bottom) !important;
+                padding-left: env(safe-area-inset-left) !important;
+                padding-right: env(safe-area-inset-right) !important;
             }
             .chat-widget.active {
                 display: flex !important;

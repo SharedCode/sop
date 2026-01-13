@@ -128,7 +128,16 @@
         </div>
     </div>
     <div class="chat-input-area">
-        <textarea id="chat-input" placeholder="Ask about your data (e.g., 'Find users in New York')..." onkeydown="handleChatKeydown(event)"></textarea>
+        <textarea id="chat-input" 
+            name="sop_ai_chat_prompt_input"
+            placeholder="Ask about your data (e.g., 'Find users in New York')..." 
+            onkeydown="handleChatKeydown(event)"
+            autocomplete="off" 
+            autocorrect="off" 
+            autocapitalize="off" 
+            spellcheck="false"
+            enterkeyhint="send"
+            data-form-type="other"></textarea>
         <button id="chat-send-btn" onclick="sendChatMessage()">Send</button>
     </div>
     <div class="resize-handle resize-handle-n" data-dir="n"></div>
