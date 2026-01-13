@@ -343,7 +343,7 @@ func getDBOptions(dbName string) (sop.DatabaseOptions, error) {
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFS(content, "templates/index.html")
+	tmpl, err := template.ParseFS(content, "templates/*.html")
 	if err != nil {
 		http.Error(w, "Could not load template: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -374,7 +374,10 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		"AllowInvalidMapKey": os.Getenv("SOP_ALLOW_INVALID_MAP_KEY") == "true",
 		"HasDemo":            hasDemo,
 	}
-	tmpl.Execute(w, data)
+	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
+		log.Error("Failed to execute template", "error", err)
+		http.Error(w, "Template execution failed", http.StatusInternalServerError)
+	}
 }
 
 func handleListDatabases(w http.ResponseWriter, r *http.Request) {
@@ -1210,7 +1213,8 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 		if ok {
 			// Go back limit-1 items to find start of last page
 			for i := 0; i < limit-1; i++ {
-				if ok, _ := store.Previous(ctx); !ok {
+				if okPrev, _ := store.Previous(ctx); !okPrev {
+					store.First(ctx)
 					break
 				}
 			}
@@ -1250,6 +1254,7 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 					// Go back limit-1 more
 					for i := 0; i < limit-1; i++ {
 						if okPrev, _ := store.Previous(ctx); !okPrev {
+							store.First(ctx)
 							break
 						}
 					}

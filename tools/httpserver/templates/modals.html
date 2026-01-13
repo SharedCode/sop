@@ -1,0 +1,169 @@
+{{define "modals"}}
+<div id="add-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1100;">
+    <div id="add-modal-content" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:600px; max-width:90%; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+        <h3 id="add-modal-header" style="margin-top:0; margin-bottom: 10px; cursor: move; user-select: none;">Add New Item</h3>
+        
+        <div style="overflow-y: auto; flex: 1; padding-right: 0;">
+            <h4 style="margin-bottom: 5px; margin-top: 0;">Key</h4>
+            <div id="add-key-mode-wrapper" style="margin-bottom: 5px; font-size: 12px; color: var(--text-muted);">
+                <label><input type="checkbox" id="add-key-mode-toggle" onchange="toggleAddKeyMode()"> Edit as JSON</label>
+            </div>
+            <div id="add-key-container" style="margin-bottom:15px;"></div>
+
+            <h4 style="margin-bottom: 5px;">Value</h4>
+            <div id="add-value-mode-wrapper" style="margin-bottom: 5px; font-size: 12px; color: var(--text-muted);">
+                <label><input type="checkbox" id="add-value-mode-toggle" onchange="toggleAddValueMode()"> Edit as JSON</label>
+            </div>
+            <div id="add-value-container"></div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top: 20px;">
+            <button onclick="closeAdd()" title="Cancel adding a new item.">Cancel</button>
+            <button onclick="addItem()" style="background:#28a745; color:white;" title="Add the new item to the store.">Add</button>
+        </div>
+    </div>
+</div>
+
+<div id="column-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:2000;">
+    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:400px; max-width:90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); display: flex; flex-direction: column; max-height: 80vh;">
+        <h3 style="margin-top:0;">Select Columns</h3>
+        <div id="column-list" style="overflow-y: auto; flex: 1; margin: 10px 0; border: 1px solid var(--border-color); padding: 10px;">
+            <!-- Checkboxes will be injected here -->
+        </div>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button onclick="document.getElementById('column-modal').style.display='none'" style="padding: 5px 15px; background: var(--button-bg); color: var(--button-text);">Cancel</button>
+            <button onclick="applyColumns()" style="background:var(--success-bg); color:white; padding: 5px 15px;">Apply</button>
+        </div>
+    </div>
+</div>
+
+<div id="confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); justify-content:center; align-items:center; z-index:2000;">
+    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:400px; max-width:90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color);">
+        <h3 style="margin-top:0;">Confirm Action</h3>
+        <p id="confirm-message" style="margin: 20px 0;">Are you sure?</p>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button id="confirm-cancel" style="padding: 5px 15px; background: var(--button-bg); color: var(--button-text);" title="Cancel the action.">Cancel</button>
+            <button id="confirm-ok" style="background:var(--danger-bg); color:white; padding: 5px 15px;" title="Confirm deletion.">Delete</button>
+        </div>
+    </div>
+</div>
+
+<!-- Preferences Modal -->
+<div id="preferences-modal" class="modal">
+    <div class="modal-content" style="width: 400px;">
+        <div class="modal-header">
+            <span>Preferences</span>
+            <button onclick="closePreferences()" style="background:none; border:none; cursor:pointer; font-size:16px;">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:block; margin-bottom:5px;">Mobile Experience</label>
+                <select id="pref-mobile-mode" class="form-input" style="width: 100%;">
+                    <option value="app">App Mode (AI Only)</option>
+                    <option value="hybrid">Hybrid Mode (AI Default + Desktop)</option>
+                    <option value="desktop">Desktop Mode (Manual AI)</option>
+                </select>
+                <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">
+                    <strong>App Mode:</strong> Turns the site into a dedicated AI Assistant app on mobile. Desktop UI is hidden.<br>
+                    <strong>Hybrid Mode:</strong> Opens AI Assistant by default on mobile, but allows minimizing to access the desktop UI.<br>
+                    <strong>Desktop Mode:</strong> Standard web view. AI Assistant must be opened manually.
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closePreferences()" class="btn-secondary">Cancel</button>
+            <button onclick="savePreferences()" class="btn-success">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Script Steps Modal -->
+<div id="script-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1200;">
+    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background:var(--bg-color); color:var(--text-color); padding:0; border-radius:5px; width:800px; max-width:95%; height: 80vh; display: flex; flex-direction: column; border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0,0,0,0.2);">
+        <div style="padding: 15px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center;">
+            <h3 style="margin:0;">Script Steps Viewer</h3>
+            <button onclick="closeScriptModal()" style="padding: 4px 8px; font-size: 12px;">Close</button>
+        </div>
+        <div id="script-tree-container" class="script-tree" style="flex: 1; overflow-y: auto; padding: 15px; background: var(--sidebar-bg);">
+            <!-- Tree content goes here -->
+        </div>
+    </div>
+</div>
+
+<!-- Floating Chat Widget -->
+<div id="chat-widget" class="chat-widget">
+    <div class="chat-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <span>AI Assistant</span>
+            <select id="provider-select" style="padding: 2px; border-radius: 3px; border: 1px solid #ccc; font-size: 11px; font-weight: normal; color: #333;" onclick="event.stopPropagation()" title="Select AI Partner">
+                <option value="">Gemini (Default)</option>
+                <option value="ollama">Ollama (Local AI)</option>
+                <option value="chatgpt">ChatGPT (Cloud)</option>
+            </select>
+            <select id="format-select" style="padding: 2px; border-radius: 3px; border: 1px solid #ccc; font-size: 11px; font-weight: normal; color: #333;" onclick="event.stopPropagation()" title="Response Format">
+                <option value="csv">CSV</option>
+                <option value="json">JSON</option>
+                <option value="table">Table</option>
+            </select>
+            <!-- Hidden Agent Select (Hardcoded to sql_admin) -->
+            <input type="hidden" id="agent-select" value="sql_admin">
+        </div>
+        <div class="chat-controls">
+            <button class="reset-btn" onclick="resetChatPosition()" title="Reset Position" style="font-size: 14px;">&#x21ba;</button>
+            <button class="minimize-btn" onclick="toggleChatWidget()">_</button>
+        </div>
+    </div>
+    <div id="chat-history">
+        <div class="chat-message ai">
+            Hello! I am your SOP Data Assistant. I can help you query your data using natural language.<br><br>
+            {{if .HasDemo}}
+            <strong>Try these examples (if you loaded the Demo Data):</strong>
+            <ul>
+                <li>"Show me all users sorted by Age descending"</li>
+                <li>"Find orders for user 'John' with total amount > 500"</li>
+                <li>"List products in 'Electronics' category"</li>
+                <li>"Create a script named 'expensive_orders' to find orders over $1000"</li>
+            </ul>
+            {{end}}
+        </div>
+    </div>
+    <div class="chat-input-area">
+        <textarea id="chat-input" placeholder="Ask about your data (e.g., 'Find users in New York')..." onkeydown="handleChatKeydown(event)"></textarea>
+        <button id="chat-send-btn" onclick="sendChatMessage()">Send</button>
+    </div>
+    <div class="resize-handle resize-handle-n" data-dir="n"></div>
+    <div class="resize-handle resize-handle-s" data-dir="s"></div>
+    <div class="resize-handle resize-handle-e" data-dir="e"></div>
+    <div class="resize-handle resize-handle-w" data-dir="w"></div>
+    <div class="resize-handle resize-handle-ne" data-dir="ne"></div>
+    <div class="resize-handle resize-handle-nw" data-dir="nw"></div>
+    <div class="resize-handle resize-handle-se" data-dir="se"></div>
+    <div class="resize-handle resize-handle-sw" data-dir="sw"></div>
+</div>
+
+<button id="chat-toggle-btn" class="chat-toggle-btn" title="Open AI Assistant (Left-click to Open, Right-click to Drag)">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+    </svg>
+</button>
+
+<div id="args-modal" class="modal">
+    <div class="modal-content" style="width: 800px; height: 80vh; max-width: 95%;">
+        <div class="modal-header">
+            <span>Edit Arguments (JSON)</span>
+            <span class="close" onclick="closeArgsModal()" style="cursor: pointer;">&times;</span>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; padding: 0;">
+             <p style="margin: 5px 10px; font-size: 0.9em; color: var(--text-muted);">
+                Edit the script arguments below. Proper JSON syntax is required.
+            </p>
+            <textarea id="args-modal-input" style="flex: 1; font-family: monospace; border: none; padding: 10px; resize: none; width: 100%; box-sizing: border-box; background: var(--pre-bg); color: var(--text-color);"></textarea>
+        </div>
+        <div class="modal-footer">
+             <button onclick="closeArgsModal()" class="btn-secondary">Cancel</button>
+             <button onclick="saveArgsFromModal()" class="btn-success">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+{{end}}
