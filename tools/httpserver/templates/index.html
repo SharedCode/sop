@@ -60,7 +60,11 @@
 
     <div id="pagination-top" style="display:none; margin-bottom: 2px; position: relative; justify-content: center; align-items: center; min-height: 32px;">
         <div style="position: absolute; left: 0; display: flex; gap: 5px; align-items: center;">
-            <button onclick="showColumnSelector()" title="Select columns to display.">Columns</button>
+            <button onclick="showColumnSelector()" title="Select columns to display." style="padding: 4px 8px; font-size: 1.1em; background: none; border: none; cursor: pointer;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M0 2a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2zm15 2h-4v3h4V4zm0 4h-4v3h4V8zm0 4h-4v3h3a1 1 0 0 0 1-1v-2zm-5 3v-3H6v3h4zm-5 0v-3H1v2a1 1 0 0 0 1 1h3zm-4-4h4V8H1v3zm0-4h4V4H1v3zm5-3v3h4V4H6zm4 8V8H6v4h4z"/>
+                </svg>
+            </button>
             <button id="btn-bulk-delete" onclick="deleteSelectedItems()" style="display:none; background-color: var(--danger-bg); color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; align-items: center; justify-content: center;" title="Delete selected items, no questions asked">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                     <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
@@ -69,20 +73,56 @@
             </button>
         </div>
         <div style="display: flex; gap: 10px;">
-            <button onclick="firstPage()" tabindex="0" title="Go to the first page of items.">First</button>
-            <button onclick="prevPage()" tabindex="0" title="Go to the previous page of items.">Previous</button>
-            <button onclick="nextPage()" tabindex="0" title="Go to the next page of items.">Next</button>
-            <button onclick="lastPage()" tabindex="0" title="Go to the last page of items.">Last</button>
+            <button onclick="firstPage()" tabindex="0" title="Go to the first page of items." style="text-decoration: none; padding: 4px 8px; background: none; border: none; font-size: 1.2em; cursor: pointer;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M8.354 1.646a.5.5 0 0 1 0 .708L2.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+                    <path fill-rule="evenodd" d="M12.354 1.646a.5.5 0 0 1 0 .708L6.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+                </svg>
+            </button>
+            <button onclick="prevPage()" tabindex="0" title="Go to the previous page of items." style="text-decoration: none; padding: 4px 8px; background: none; border: none; font-size: 1.2em; cursor: pointer;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+                </svg>
+            </button>
+            <button onclick="nextPage()" tabindex="0" title="Go to the next page of items." style="text-decoration: none; padding: 4px 8px; background: none; border: none; font-size: 1.2em; cursor: pointer;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+                </svg>
+            </button>
+            <button onclick="lastPage()" tabindex="0" title="Go to the last page of items." style="text-decoration: none; padding: 4px 8px; background: none; border: none; font-size: 1.2em; cursor: pointer;">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M3.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L9.293 8 3.646 2.354a.5.5 0 0 1 0-.708z"/>
+                    <path fill-rule="evenodd" d="M7.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L13.293 8 7.646 2.354a.5.5 0 0 1 0-.708z"/>
+                </svg>
+            </button>
         </div>
     </div>
 
     <div id="data-grid"></div>
     
     <div id="pagination" style="display:none; margin-top: 10px; gap: 10px; justify-content: center;">
-        <button onclick="firstPage()" tabindex="0" title="Go to the first page of items.">First</button>
-        <button onclick="prevPage()" tabindex="0" title="Go to the previous page of items.">Previous</button>
-        <button onclick="nextPage()" tabindex="0" title="Go to the next page of items.">Next</button>
-        <button onclick="lastPage()" tabindex="0" title="Go to the last page of items.">Last</button>
+        <button onclick="firstPage()" tabindex="0" title="Go to the first page of items." style="text-decoration: none; padding: 4px 8px; background: none; border: none; font-size: 1.2em; cursor: pointer;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M8.354 1.646a.5.5 0 0 1 0 .708L2.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+                <path fill-rule="evenodd" d="M12.354 1.646a.5.5 0 0 1 0 .708L6.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+            </svg>
+        </button>
+        <button onclick="prevPage()" tabindex="0" title="Go to the previous page of items." style="text-decoration: none; padding: 4px 8px; background: none; border: none; font-size: 1.2em; cursor: pointer;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+            </svg>
+        </button>
+        <button onclick="nextPage()" tabindex="0" title="Go to the next page of items." style="text-decoration: none; padding: 4px 8px; background: none; border: none; font-size: 1.2em; cursor: pointer;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M4.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L10.293 8 4.646 2.354a.5.5 0 0 1 0-.708z"/>
+            </svg>
+        </button>
+        <button onclick="lastPage()" tabindex="0" title="Go to the last page of items." style="text-decoration: none; padding: 4px 8px; background: none; border: none; font-size: 1.2em; cursor: pointer;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M3.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L9.293 8 3.646 2.354a.5.5 0 0 1 0-.708z"/>
+                <path fill-rule="evenodd" d="M7.646 1.646a.5.5 0 0 1 .708 0l6 6a.5.5 0 0 1 0 .708l-6 6a.5.5 0 0 1-.708-.708L13.293 8 7.646 2.354a.5.5 0 0 1 0-.708z"/>
+            </svg>
+        </button>
     </div>
 </div>
 

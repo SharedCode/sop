@@ -157,7 +157,7 @@
                 html += `<div style="margin-bottom: 5px;"><strong>Type:</strong> ${typeStr}</div>`;
 
                 if (opts.stores_folders && opts.stores_folders.length > 0) {
-                    html += '<strong>Stores Folders:</strong><ul style="margin: 5px 0; padding-left: 20px; list-style-type: disc;">';
+                    html += '<strong>Stores Folders:</strong><ul style="margin: 0; padding-left: 20px; list-style-type: disc;">';
                     opts.stores_folders.forEach(f => {
                         // Shorten path logic:
                         // Only shorten if length > 27 characters
@@ -414,10 +414,16 @@
         }
 
         const btn = document.createElement('button');
-        btn.textContent = 'Search';
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>`;
         btn.title = "Search for items in the store based on the key or index fields.";
         btn.onclick = triggerSearch;
         btn.tabIndex = 0;
+        // Search icon styling (transparent)
+        btn.style.padding = '4px 8px';
+        btn.style.background = 'none';
+        btn.style.border = 'none';
+        btn.style.cursor = 'pointer';
+        btn.style.fontSize = '1.2em';
         toolbar.appendChild(btn);
 
         // Add Enter key support for simple search input
@@ -429,11 +435,17 @@
         }
 
         const refreshBtn = document.createElement('button');
-        refreshBtn.textContent = 'Refresh';
+        refreshBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>`;
         refreshBtn.title = "Refreshes the selected store's currently displayed data. Useful when wanting to fetch latest data from the database";
         refreshBtn.onclick = () => loadItems('current', firstKey);
-        refreshBtn.style.marginLeft = '10px';
+        refreshBtn.style.marginLeft = '0px';
         refreshBtn.tabIndex = 0;
+        // Refresh icon styling
+        refreshBtn.style.padding = '4px 8px';
+        refreshBtn.style.background = 'none';
+        refreshBtn.style.border = 'none';
+        refreshBtn.style.cursor = 'pointer';
+        refreshBtn.style.fontSize = '1.2em';
         toolbar.appendChild(refreshBtn);
 
         // Only show Add Item for non-registry stores (Macros are too complex to add manually)
@@ -442,13 +454,22 @@
 
         if (info.description !== "AI Models Registry" && !isReadOnly) {
             const addBtn = document.createElement('button');
-            addBtn.textContent = 'Add Item';
+            addBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>`;
             addBtn.title = "Add a new item to the store.";
             addBtn.onclick = () => showAdd();
-            addBtn.classList.add('btn-success');
-            addBtn.style.marginLeft = '10px';
+            // addBtn.classList.add('btn-success'); // Removing class to strip background
+            addBtn.style.marginLeft = '0px';
             addBtn.tabIndex = 0;
             addBtn.id = 'btn-add-item';
+             // Add Item icon styling (Green Icon)
+            addBtn.style.padding = '4px 8px';
+            addBtn.style.background = 'none';
+            addBtn.style.border = 'none';
+            addBtn.style.cursor = 'pointer';
+            addBtn.style.fontSize = '1.4em';
+            addBtn.style.color = '#28a745'; // Green color for Add
+            addBtn.style.display = 'flex';
+            addBtn.style.alignItems = 'center';
             toolbar.appendChild(addBtn);
         } else if (isReadOnly) {
             const warning = document.createElement('span');
@@ -1156,9 +1177,9 @@
                         <div style="display: flex; align-items: center; gap: 0;">
                             ${stepsBackBtn}
                             <label class="form-label" style="font-size: 1.1em; margin-bottom: 0; margin-left: ${stepsBackBtn ? '0' : '0'};">Program Steps</label>
-                            <button onclick="runScriptInEditor()" style="font-size: 12px; padding: 2px 8px; background: #28a745; border: none; color: white; cursor: pointer; margin-left: 10px;">▶ Run</button>
+                            <button onclick="runScriptInEditor()" style="font-size: 18px; padding: 0 5px; background: transparent; border: none; color: #28a745; cursor: pointer; margin-left: 5px; display: flex; align-items: center; justify-content: center;" title="Run">▶</button>
                         </div>
-                        <button onclick="addScriptStep()" style="font-size: 12px; padding: 2px 8px;">+ Add Step</button>
+                        <button onclick="addScriptStep()" style="font-size: 22px; padding: 0 5px; background: transparent; border: none; color: var(--text-color); cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center;" title="Add Step">+</button>
                     </div>
                     
                     <!-- The Master Source of Truth for Steps -->
@@ -1268,7 +1289,7 @@
         if (shouldDrill && drillTarget) {
              toolBtn = `<button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); drillDownToScript('${escapeHtml(drillTarget)}')" title="Drill into script">🔍</button>`;
         } else {
-             toolBtn = `<button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); showToolInstructions('${escapeHtml(step.command)}', this.getAttribute('data-summary'))" data-summary="${escapeHtml(fullSummary)}" title="Instructions">ℹ️</button>`;
+             toolBtn = `<button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); showToolInstructions('${escapeHtml(step.command)}', this.getAttribute('data-summary'))" data-summary="${escapeHtml(fullSummary)}" title="Instructions"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/></svg></button>`;
         }
 
         // Label (e.g. "call: my_script")
@@ -1387,7 +1408,7 @@
                         </span>
                     </div>
                 </div>
-                <textarea id="args-input-${idx}" class="form-input" style="font-family: monospace; height: 56px; max-height: 200px; font-size: 0.9em; width: 100%; box-sizing: border-box; white-space: nowrap; overflow-x: auto;" onchange="updateStepField(${idx}, 'args', this.value)">${escapeHtml(JSON.stringify(step.args || {}))}</textarea>
+                <textarea id="args-input-${idx}" class="form-input" style="font-family: monospace; height: 56px; max-height: 200px; font-size: 0.9em; width: 100%; box-sizing: border-box; white-space: nowrap; overflow-x: auto; overflow-y: hidden;" onchange="updateStepField(${idx}, 'args', this.value)">${escapeHtml(JSON.stringify(step.args || {}))}</textarea>
             </div>
         `;
     }
@@ -1897,7 +1918,7 @@
                 <strong>Value:</strong>
                 <div style="display: flex; align-items: center;">
                     ${backBtn}
-                    <button onclick="closeDetail()" style="padding: 2px 8px; font-size: 12px;" title="Close the item details panel.">Close</button>
+                    <button onclick="closeDetail()" style="padding: 2px 4px; font-size: 1.1em; background: none; border: none; cursor: pointer;" title="Close the item details panel.">✕</button>
                 </div>
             </div>
             <div style="margin-bottom: 10px;">
@@ -6539,15 +6560,21 @@
     }
 
     // --- Preferences Logic ---
+    function handlePrefEsc(e) {
+        if (e.key === 'Escape') closePreferences();
+    }
+
     function showPreferences() {
         const modal = document.getElementById('preferences-modal');
         const mobileMode = localStorage.getItem('sop_ui_mobile_mode') || 'app';
         document.getElementById('pref-mobile-mode').value = mobileMode;
         modal.style.display = 'flex';
+        document.addEventListener('keydown', handlePrefEsc);
     }
 
     function closePreferences() {
         document.getElementById('preferences-modal').style.display = 'none';
+        document.removeEventListener('keydown', handlePrefEsc);
     }
 
     function savePreferences() {
