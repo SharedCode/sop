@@ -127,17 +127,24 @@
             {{end}}
         </div>
     </div>
-    <div class="chat-input-area">
+    <div class="chat-input-area" style="position: relative;">
+        <!-- Mobile History Controls -->
+        <div class="chat-history-controls" style="display: none;">
+            <button onclick="navigateHistory('up')" class="hist-btn">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 15l-6-6-6 6"></path></svg>
+            </button>
+            <button onclick="navigateHistory('down')" class="hist-btn">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+            </button>
+        </div>
         <textarea id="chat-input" 
-            name="sop_ai_chat_prompt_input"
-            placeholder="Ask about your data (e.g., 'Find users in New York')..." 
+            name="sop_ai_chat_prompt"
+            placeholder="Ask..." 
             onkeydown="handleChatKeydown(event)"
             autocomplete="off" 
             autocorrect="off" 
             autocapitalize="off" 
-            spellcheck="false"
-            enterkeyhint="send"
-            data-form-type="other"></textarea>
+            spellcheck="false"></textarea>
         <button id="chat-send-btn" onclick="sendChatMessage()">Send</button>
     </div>
     <div class="resize-handle resize-handle-n" data-dir="n"></div>

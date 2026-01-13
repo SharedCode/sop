@@ -308,6 +308,7 @@
             /* Full screen chat on mobile for immersive experience */
             .chat-widget { 
                 position: fixed !important;
+
                 top: 0 !important;
                 left: 0 !important;
                 right: 0 !important;
@@ -333,14 +334,41 @@
                 padding-left: env(safe-area-inset-left) !important;
                 padding-right: env(safe-area-inset-right) !important;
             }
-            .chat-widget.active {
-                display: flex !important;
-            }
-            .chat-message.ai-table-container {
-                overflow-x: auto;
-                max-width: 100%;
-                display: block; /* Override default flow */
-            }
+        .chat-widget.active {
+            display: flex !important;
+        }
+
+        .chat-history-controls {
+            display: flex !important;
+            flex-direction: column;
+            justify-content: center;
+            gap: 2px;
+            margin-right: 5px;
+        }
+
+        .hist-btn {
+            background: none;
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            padding: 2px 4px;
+            cursor: pointer;
+            color: var(--text-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 20px;
+        }
+
+        .hist-btn:active {
+            background: var(--active-bg);
+            color: white;
+        }
+
+        .chat-message.ai-table-container {
+            overflow-x: auto;
+            max-width: 100%;
+            display: block; /* Override default flow */
+        }
             .modal-content { width: 95%; }
             #add-store-modal .modal-content { width: 95%; }
         }

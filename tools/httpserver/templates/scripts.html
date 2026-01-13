@@ -2894,6 +2894,7 @@
     function toggleChatWidget(forceOpen) {
         const widget = document.getElementById('chat-widget');
         const btn = document.getElementById('chat-toggle-btn');
+        const input = document.getElementById('chat-input');
         
         if (widget.classList.contains('active') && !forceOpen) {
             widget.classList.remove('active');
@@ -2902,8 +2903,21 @@
             resetChatPosition();
             
             widget.classList.add('active');
+
+            // Mobile-specific input optimization
+            if (window.innerWidth <= 768) {
+                input.setAttribute('inputmode', 'search');
+                input.setAttribute('enterkeyhint', 'send');
+                input.name = 'sop_ai_chat_prompt_unique_id'; // Prevent history
+            } else {
+                // Reset for desktop
+                input.removeAttribute('inputmode');
+                input.removeAttribute('enterkeyhint');
+                input.name = 'sop_ai_chat_prompt';
+            }
+
             // Focus input when opening
-            setTimeout(() => document.getElementById('chat-input').focus(), 100);
+            setTimeout(() => input.focus(), 100);
         }
     }
 
@@ -3580,6 +3594,28 @@
     }
 
 
+    function navigateHistory(direction) {
+        const input = document.getElementById('chat-input');
+        const e = {
+            key: direction === 'up' ? 'ArrowUp' : 'ArrowDown',
+            preventDefault: () => {}
+        };
+        handleChatKeydown(e);
+        input.focus();
+    }
+
+    function moveCursorToEnd(el) {
+        el.focus();
+        if (typeof window.getSelection != "undefined" && typeof document.createRange != "undefined") {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+    }
+
     function handleChatKeydown(e) {
         const input = document.getElementById('chat-input');
         
@@ -3587,19 +3623,20 @@
             e.preventDefault();
             sendChatMessage();
         } else if (e.key === 'ArrowUp') {
-            // Only navigate history if cursor is at start or single line
+            // History Up
             if (chatHistory.length > 0) {
-                e.preventDefault();
                 if (historyIndex === -1) {
                     historyIndex = chatHistory.length - 1;
                 } else if (historyIndex > 0) {
                     historyIndex--;
                 }
-                input.value = chatHistory[historyIndex];
+                const msg = chatHistory[historyIndex];
+                if (msg) input.value = msg;
+                e.preventDefault();
             }
         } else if (e.key === 'ArrowDown') {
+            // History Down
             if (historyIndex !== -1) {
-                e.preventDefault();
                 if (historyIndex < chatHistory.length - 1) {
                     historyIndex++;
                     input.value = chatHistory[historyIndex];
@@ -3607,6 +3644,7 @@
                     historyIndex = -1;
                     input.value = '';
                 }
+                e.preventDefault();
             }
         }
     }
