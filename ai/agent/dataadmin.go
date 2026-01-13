@@ -30,6 +30,7 @@ type DataAdminAgent struct {
 	databases    map[string]sop.DatabaseOptions
 	systemDB     *database.Database
 	lastToolCall *ai.ScriptStep
+	service      *Service // Reference back to main service for cache invalidation
 
 	// Session State
 	sessionContext *ScriptContext
@@ -119,6 +120,11 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 	}
 	agent.registerTools()
 	return agent
+}
+
+// SetService sets the reference to the main service (for cache invalidation).
+func (a *DataAdminAgent) SetService(s *Service) {
+	a.service = s
 }
 
 // shouldObfuscate determines if obfuscation should be applied for a given database.

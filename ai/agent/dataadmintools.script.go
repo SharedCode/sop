@@ -118,9 +118,15 @@ func (a *DataAdminAgent) toolCreateScript(ctx context.Context, args map[string]a
 
 	description, _ := args["description"].(string)
 
+	var currentDB string
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		currentDB = p.CurrentDB
+	}
+
 	script := ai.Script{
 		Name:        name,
 		Description: description,
+		Database:    currentDB,
 		Steps:       []ai.ScriptStep{},
 	}
 
@@ -204,9 +210,15 @@ func (a *DataAdminAgent) toolSaveScript(ctx context.Context, args map[string]any
 		return "", fmt.Errorf("invalid steps: %v", err)
 	}
 
+	var currentDB string
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		currentDB = p.CurrentDB
+	}
+
 	script := ai.Script{
 		Name:        name,
 		Description: description,
+		Database:    currentDB,
 		Steps:       steps,
 	}
 
@@ -611,7 +623,11 @@ func (a *DataAdminAgent) toolScriptUpdateStep(ctx context.Context, args map[stri
 		if v, ok := args["script_name"].(string); ok {
 			step.ScriptName = v
 		}
-		if v, ok := args["command"].(string); ok {
+
+		// PROTECT COMMAND: Only update if explicitly provided and non-empty.
+		// UI might send empty "command" if it's mapping "Function" to "Name" but clearing command.
+		// However, if the intent is to update "Function" (Name), strictly update Name.
+		if v, ok := args["command"].(string); ok && v != "" {
 			step.Command = v
 		}
 		if v, ok := args["condition"].(string); ok {

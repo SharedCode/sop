@@ -58,7 +58,7 @@ The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data 
 
 *   **Vector Store**: Native support for storing and searching high-dimensional vectors.
 *   **RAG Agents**: Build Retrieval-Augmented Generation applications with ease.
-*   **Scripts**: A functional AI runtime for recording and replaying complex workflows.
+*   **Scripts**: A functional AI runtime for drafting, refining, and executing complex workflows (Hybrid Execution Model).
 
 See [ai/README.md](../../ai/README.md) for a deep dive into the AI capabilities.
 
@@ -384,6 +384,30 @@ var dbOpts = new DatabaseOptions
 };
 
 var db = new Database(dbOpts);
+```
+
+### SOP Data Manager Visibility
+
+To ensure your C#-created databases are fully discoverable and manageable in the **SOP Data Manager** GUI, you should use the `Database.Setup` method. This persists your configuration options (like schema types, store paths, etc.) to the disk.
+
+```csharp
+var dbOpts = new DatabaseOptions 
+{ 
+    StoresFolders = new List<string> { "./sop_data" },
+    Type = (int)DatabaseType.Standalone
+};
+
+// Persist options for discoverability
+Database.Setup(ctx, dbOpts);
+
+var db = new Database(dbOpts);
+```
+
+You can also retrieve these options programmatically:
+
+```csharp
+var opts = Database.GetOptions(ctx, "./sop_data");
+Console.WriteLine($"DB Type: {opts.Type}");
 ```
 
 ### 2. Start a Transaction

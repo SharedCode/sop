@@ -2059,8 +2059,15 @@
              .replace(/'/g, "&#039;");
     }
 
-    function showToolInstructions(toolName) {
-        alert("Instructions for " + toolName + " are not yet available.");
+    function showToolInstructions(toolName, summary) {
+        let msg = "";
+        if (summary) {
+            msg += "Summary:\n" + summary + "\n\n";
+        }
+        msg += "Tool: " + toolName;
+        // The summary often contains the full args which IS the instruction for execute_script
+        // msg += "\n(Full instructions are not yet available.)";
+        alert(msg);
     }
 
     function renderScriptView(script) {
@@ -2116,7 +2123,10 @@
                 <!-- Steps Section -->
                 <div style="margin-top: 9px; border-top: 1px solid var(--border-color); padding-top: 10px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <label class="form-label" style="font-size: 1.1em;">Program Steps</label>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label class="form-label" style="font-size: 1.1em;">Program Steps</label>
+                            <button onclick="runScriptInEditor()" style="font-size: 12px; padding: 2px 8px; background: #28a745; border: none; color: white; cursor: pointer;">▶ Run</button>
+                        </div>
                         <button onclick="addScriptStep()" style="font-size: 12px; padding: 2px 8px;">+ Add Step</button>
                     </div>
                     
@@ -2126,21 +2136,33 @@
                     <div id="script-steps-list" style="display: flex; flex-direction: column; gap: 8px;">
                         ${renderScriptSteps(steps)}
                     </div>
+
+                    <!-- Execution Output -->
+                    <div id="script-execution-output" style="margin-top: 15px; display: none; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                        <label class="form-label">Execution Output (NDJSON Stream)</label>
+                        <div id="script-output-content" style="background: #1e1e1e; color: #d4d4d4; padding: 10px; font-family: monospace; border-radius: 4px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-size: 12px;"></div>
+                    </div>
                 </div>
             </div>
         `;
     }
 
-    function renderScriptSteps(steps) {
+    function renderScriptSteps(steps, openIdx = -1) {
         if (!steps || steps.length === 0) {
             return '<div style="text-align: center; color: var(--text-muted); padding: 20px; border: 1px dashed var(--border-color); border-radius: 4px;">No steps defined. Add one to start programming.</div>';
         }
-        return steps.map((step, idx) => renderSingleStepCard(step, idx)).join('');
+        return steps.map((step, idx) => renderSingleStepCard(step, idx, idx === openIdx)).join('');
     }
 
-    function renderSingleStepCard(step, idx) {
+    function renderSingleStepCard(step, idx, isOpen) {
         // Resolve the Display Name for the step
-        let fn = step.function || step.command || step.script_name || 'unknown';
+        // We prioritize Name as the primary label ("Function"), falling back to Command/Script
+        if (step.function && !step.command) {
+             // Migration fix for old "function" field
+             step.command = step.function;
+             if (!step.type) step.type = 'command';
+        }
+        let fn = step.name || step.command || step.script_name || step.function || 'unknown';
         const type = step.type || 'unknown';
 
         // Color coding
@@ -2156,11 +2178,30 @@
         const outVar = step.out ? `<span style="background: var(--bg-primary); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-color); font-size: 0.85em; margin-left: auto;">&rarr; ${escapeHtml(step.out)}</span>` : '';
 
         // Step Arguments Summary
+        let fullSummary = '';
+        if (type === 'ask' && step.prompt) fullSummary = step.prompt;
+        else if (step.args && step.args.prompt) fullSummary = step.args.prompt;
+        else if (step.args && step.args.query) fullSummary = step.args.query;
+        else if (step.args && Object.keys(step.args).length > 0) fullSummary = JSON.stringify(step.args);
+        else fullSummary = '';
+
         let summary = '';
-        if (type === 'ask' && step.prompt) summary = `"${step.prompt.substring(0, 30)}${step.prompt.length>30?'...':''}"`;
-        else if (step.args && step.args.prompt) summary = `"${step.args.prompt.substring(0, 30)}${step.args.prompt.length>30?'...':''}"`;
-        else if (step.args && step.args.query) summary = `"${step.args.query.substring(0, 30)}${step.args.query.length>30?'...':''}"`;
-        else summary = `${argsCount} Args`;
+        if (fullSummary.startsWith('{') || fullSummary.startsWith('[')) {
+             // JSON Args Logic
+             if (fullSummary.length <= 18) {
+                 summary = fullSummary;
+             } else {
+                 summary = "{...}";
+             }
+        } else if (fullSummary) {
+             // String/Text logic
+             if (fullSummary.length > 30) {
+                 summary = `"${fullSummary.substring(0, 30)}..."`;
+             } else {
+                 summary = `"${fullSummary}"`;
+             }
+        }
+
 
         // Drill Down Logic
         // Always allow drill-down if type is 'call_script'
@@ -2174,24 +2215,36 @@
         
         // Target for drill down
         const drillTarget = step.script_name || fn;
-
-        const drillBtn = (shouldDrill && drillTarget) 
-            ? `<button onclick="event.stopPropagation(); drillDownToScript('${escapeHtml(drillTarget)}')" title="Drill into script '${escapeHtml(drillTarget)}'" style="margin-left: 8px; padding: 1px 6px; font-size: 0.8em; background: var(--bg-tertiary); border: 1px solid var(--border-color); border-radius: 3px; cursor: pointer; color: var(--text-color);">🔍</button>` 
-            : '';
+        
+        // --- Toolbar Button Logic ---
+        // If it's drillable, show Spyglass. Otherwise show Info.
+        // We now place this in the main toolbar, not next to title.
+        
+        let toolBtn = '';
+        if (shouldDrill && drillTarget) {
+             toolBtn = `<button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); drillDownToScript('${escapeHtml(drillTarget)}')" title="Drill into script">🔍</button>`;
+        } else {
+             toolBtn = `<button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); showToolInstructions('${escapeHtml(step.command)}', this.getAttribute('data-summary'))" data-summary="${escapeHtml(fullSummary)}" title="Instructions">ℹ️</button>`;
+        }
 
         // Label (e.g. "call: my_script")
         const label = (type === 'call_script') ? `call: ${fn}` : fn;
 
+        let headerTitle = step.description || step.prompt || fullSummary || label;
+
         return `
             <div class="step-card" id="step-card-${idx}" style="border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary);">
                 <div class="step-header" onclick="toggleStepDetails(${idx})" style="padding: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-left: 4px solid ${color};">
-                    <span style="font-weight: bold; color: ${color}; font-family: monospace;">${escapeHtml(label)}</span>
-                    ${drillBtn}
-                    <span style="color: var(--text-muted); font-size: 0.9em;">${escapeHtml(summary)}</span>
-                    ${outVar}
-                    <button style="margin-left: auto; padding: 2px 6px; font-size: 0.8em; z-index: 10;" onclick="event.stopPropagation(); showToolInstructions('${escapeHtml(step.function)}')" title="Instructions">ℹ️</button>
+                    <span style="font-weight: bold; color: ${color}; font-family: monospace;" title="${escapeHtml(headerTitle)}">${escapeHtml(label)}</span>
+                    <span style="color: var(--text-muted); font-size: 0.9em;" title="${escapeHtml(fullSummary)}">${escapeHtml(summary)}</span>
+                    <div style="margin-left: auto; display: flex; align-items: center; gap: 0px;">
+                        <button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); moveScriptStepUp(${idx})" title="Move Up"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L7.5 2.707V14.5a.5.5 0 0 0 .5.5z"/></svg></button>
+                        <button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); moveScriptStepDown(${idx})" title="Move Down"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/></svg></button>
+                        ${toolBtn}
+                        <button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; margin-left: 0px; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); deleteScriptStep(${idx})" title="Delete Step"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
+                    </div>
                 </div>
-                <div id="step-body-${idx}" style="display: none; padding: 10px 10px 6px 10px; border-top: 1px solid var(--border-color); background: var(--bg-primary);">
+                <div id="step-body-${idx}" style="display: ${isOpen ? 'block' : 'none'}; padding: 10px 10px 6px 10px; border-top: 1px solid var(--border-color); background: var(--bg-primary);">
                     <!-- We will render the form for editing this step here -->
                     ${renderStepEditForm(step, idx)}
                 </div>
@@ -2202,23 +2255,85 @@
     function renderStepEditForm(step, idx) {
         const argsJson = JSON.stringify(step.args || {}, null, 2);
         
-        return `
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 0px;">
+        // --- Type Selection ---
+        const typeOptions = ['command', 'ask', 'set', 'if', 'loop', 'fetch', 'say', 'call_script'];
+        let typeOptsHtml = '';
+        typeOptions.forEach(t => {
+            const sel = (step.type || 'command') === t ? 'selected' : '';
+           typeOptsHtml += `<option value="${t}" ${sel}>${t}</option>`;
+        });
+        
+        // Exact Execution Field Logic (No Magic)
+        // Modified Layout: Type | Name | Output
+        
+        let execInput = '';
+        let execLabel = '';
+        
+        if (step.type === 'command') {
+            execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Command">Cmd</label>`;
+            execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.command || '')}" onchange="updateStepField(${idx}, 'command', this.value)">`;
+        } else if (step.type === 'call_script' || step.type === 'script') {
+            execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Script Name">Script</label>`;
+            execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.script_name || '')}" onchange="updateStepField(${idx}, 'script_name', this.value)">`;
+        } else if (step.type === 'ask') {
+             execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Prompt">Prompt</label>`;
+             execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.prompt || '')}" onchange="updateStepField(${idx}, 'prompt', this.value)">`;
+        } else if (step.type === 'set') {
+             execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Variable">Var</label>`;
+             execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.variable || '')}" onchange="updateStepField(${idx}, 'variable', this.value)">`;
+        } else if (step.type === 'fetch') {
+             execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Resource">Res</label>`;
+             execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.resource || '')}" onchange="updateStepField(${idx}, 'resource', this.value)">`;
+        } else if (step.type === 'say') {
+             execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Message">Msg</label>`;
+             execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.message || '')}" onchange="updateStepField(${idx}, 'message', this.value)">`;
+        } else if (step.type === 'if') {
+             execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Condition">If</label>`;
+             execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.condition || '')}" onchange="updateStepField(${idx}, 'condition', this.value)">`;
+        }
+        
+        let row2Html = '';
+        if (execInput) {
+             row2Html = `
+            <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px; margin-top: 0px;">
+                ${execLabel}
+                ${execInput}
+                <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Description">Desc</label>
+                <input type="text" class="form-input" style="flex: 1;" value="${escapeHtml(step.description || '')}" onchange="updateStepField(${idx}, 'description', this.value)">
+            </div>`;
+        } else {
+             // Fallback: Just Description row
+             row2Html = `
+            <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px; margin-top: 0px;">
+                <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Description">Desc</label>
+                <input type="text" class="form-input" style="flex: 1;" value="${escapeHtml(step.description || '')}" onchange="updateStepField(${idx}, 'description', this.value)">
+            </div>`;
+        }
+
+        let row1 = `
+            <div style="display: grid; grid-template-columns: 1.2fr 1.4fr 1.4fr; gap: 8px; margin-bottom: 0px;">
                 <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
-                    <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;">Function</label>
-                    <input type="text" class="form-input" style="font-family: monospace; flex: 1;" value="${escapeHtml(step.function)}" onchange="updateStepField(${idx}, 'function', this.value)">
+                    <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;">Type</label>
+                    <select class="form-input" style="flex: 1; padding: 2px;" onchange="updateStepField(${idx}, 'type', this.value)">
+                        ${typeOptsHtml}
+                    </select>
                 </div>
                 <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
-                    <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Output Variable">Output Var</label>
+                    <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;">Name</label>
+                    <input type="text" class="form-input" style="font-family: monospace; flex: 1;" value="${escapeHtml(step.name || '')}" onchange="updateStepField(${idx}, 'name', this.value)">
+                </div>
+                <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                    <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Output Variable">Output</label>
                     <input type="text" class="form-input" style="font-family: monospace; flex: 1;" value="${escapeHtml(step.out || '')}" onchange="updateStepField(${idx}, 'out', this.value)">
                 </div>
-            </div>
-            <div class="form-group">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            </div>`;
+
+        return `
+            ${row1}
+            ${row2Html}
+            <div class="form-group" style="margin-top: 2px; margin-bottom: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
                     <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;">Args(JSON)</label>
-                    <div>
-                        <button class="btn-danger" style="padding: 2px 8px; font-size: 0.8em;" onclick="deleteScriptStep(${idx})">Delete Step</button>
-                    </div>
                 </div>
                 <textarea class="form-input" style="font-family: monospace; height: 56px; font-size: 0.9em; width: 100%; box-sizing: border-box; white-space: nowrap; overflow-x: auto;" onchange="updateStepField(${idx}, 'args', this.value)">${escapeHtml(JSON.stringify(step.args || {}))}</textarea>
             </div>
@@ -2244,11 +2359,11 @@
         } catch(e) { return []; }
     }
 
-    function saveStepsToDOM(steps) {
+    function saveStepsToDOM(steps, openIdx = -1) {
         const el = document.getElementById('hidden-steps-json');
         el.value = JSON.stringify(steps);
         // Refresh the list view
-        document.getElementById('script-steps-list').innerHTML = renderScriptSteps(steps);
+        document.getElementById('script-steps-list').innerHTML = renderScriptSteps(steps, openIdx);
         // Enable main save button
         document.getElementById('btn-save').disabled = false;
     }
@@ -2267,28 +2382,214 @@
         } else {
             steps[idx][field] = value;
         }
-        saveStepsToDOM(steps);
-        // Just re-open the one we were editing.
-        setTimeout(() => {
-             const newBody = document.getElementById(`step-body-\${idx}`);
-             if(newBody) newBody.style.display = 'block';
-        }, 0);
+        saveStepsToDOM(steps, idx);
+    }
+
+    async function runScriptInEditor() {
+        const nameInput = document.querySelector('input[data-key="name"]');
+        const catInput = document.querySelector('input[data-key="category"]');
+        const name = nameInput ? nameInput.value : '';
+        const category = catInput ? catInput.value : 'general';
+        
+        if (!name) {
+            alert("Script must have a name to run.");
+            return;
+        }
+
+        const outputDiv = document.getElementById('script-execution-output');
+        const contentDiv = document.getElementById('script-output-content');
+        if (outputDiv) outputDiv.style.display = 'block';
+        if (contentDiv) {
+            contentDiv.innerHTML = '<div style="color: #fff;">Initializing execution...</div>';
+            contentDiv.innerHTML += '<div style="color: #e74c3c; font-size: 0.9em;">Note: Runs the SAVED version of the script. Verify "Save" is disabled (saved).</div>';
+        }
+
+        try {
+            const response = await fetch('/api/scripts/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: name,
+                    category: category,
+                    args: {} 
+                })
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+                if (contentDiv) contentDiv.innerHTML += `<div style="color: #e74c3c;">HTTP Error: ${response.status} - ${text}</div>`;
+                return;
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            
+            // State for rendering
+            let currentTableRecords = [];
+            
+            const flushRecords = () => {
+                if (currentTableRecords.length > 0) {
+                    // We can reuse renderDataResults if we can access it, or inline a simple table renderer
+                    // Since renderDataResults is in scope (global-ish), let's try to use it
+                    // But we need to adapt it to append to contentDiv instead of chat-history
+                     const container = document.createElement('div');
+                     container.className = 'chat-message ai-table-container';
+                     
+                     // Simple Table renderer reuse
+                     // We manually construct table for the editor output
+                     const records = currentTableRecords;
+                     if (records.length > 0) {
+                        const table = document.createElement('table');
+                        table.className = 'data-table';
+                        table.style.width = '100%';
+                        table.style.fontSize = '0.9em';
+                        
+                        // Headers
+                        const keys = Object.keys(records[0]);
+                        const thead = document.createElement('thead');
+                        const trHead = document.createElement('tr');
+                        keys.forEach(k => {
+                            const th = document.createElement('th');
+                            th.textContent = k;
+                            th.style.textAlign = 'left';
+                            trHead.appendChild(th);
+                        });
+                        thead.appendChild(trHead);
+                        table.appendChild(thead);
+                        
+                        // Body
+                        const tbody = document.createElement('tbody');
+                        records.forEach(r => {
+                            const tr = document.createElement('tr');
+                            keys.forEach(k => {
+                                const td = document.createElement('td');
+                                let val = r[k];
+                                if (typeof val === 'object') val = JSON.stringify(val);
+                                td.textContent = String(val);
+                                tr.appendChild(td);
+                            });
+                            tbody.appendChild(tr);
+                        });
+                        table.appendChild(tbody);
+                        container.appendChild(table);
+                     }
+                     
+                     contentDiv.appendChild(container);
+                     currentTableRecords = [];
+                     contentDiv.scrollTop = contentDiv.scrollHeight;
+                }
+            };
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const event = JSON.parse(line);
+                        
+                        if (event.type === 'step_start') {
+                            flushRecords();
+                            const el = document.createElement('div');
+                            el.style.marginTop = '10px';
+                            el.style.borderBottom = '1px solid #444';
+                            el.style.paddingBottom = '4px';
+                            // console.log("step_start event:", event); // Debug in console
+                            const stepPrefix = (event.step_index !== undefined && event.step_index !== null) ? `Step ${event.step_index}` : 'Step';
+                            el.innerHTML = `<span style="color: #64b5f6;">▶ ${stepPrefix}: Executing</span> <code>${event.command || 'unknown'}</code>`; // Removed inline debug
+                            contentDiv.appendChild(el);
+                            contentDiv.appendChild(el);
+                        } else if (event.type === 'ask') {
+                            flushRecords();
+                            const el = document.createElement('div');
+                            el.style.marginTop = '10px';
+                            el.style.borderBottom = '1px solid #444';
+                            el.style.paddingBottom = '4px';
+                            const stepPrefix = event.step_index ? `Step ${event.step_index}` : 'Step (No Index)';
+                            // Escape prompt to avoid HTML injection issues, though prompt is usually safe text.
+                            // But cleaner is setting textContent for the variable part.
+                            // However, using innerHTML for structure.
+                            const promptSafe = (event.prompt || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                            el.innerHTML = `<span style="color: #64b5f6;">▶ ${stepPrefix} Ask:</span> "${promptSafe}"`;
+                            contentDiv.appendChild(el);
+
+                            const res = event.record || event.result;
+                            if (res) {
+                                const resEl = document.createElement('div');
+                                resEl.style.marginTop = '4px';
+                                resEl.style.whiteSpace = 'pre-wrap';
+                                if (typeof res === 'object') {
+                                     resEl.textContent = JSON.stringify(res, null, 2);
+                                } else {
+                                     resEl.textContent = res;
+                                }
+                                contentDiv.appendChild(resEl);
+                            }
+                        } else if (event.type === 'record') {
+                            const rec = event.record || event.result || event.payload;
+                            if (rec) {
+                                currentTableRecords.push(rec);
+                            }
+                        } else if (event.type === 'error') {
+                            flushRecords();
+                            const el = document.createElement('div');
+                            el.style.color = '#e74c3c';
+                            el.innerHTML = `<strong>Error:</strong> ${event.error}`;
+                            contentDiv.appendChild(el);
+                        } else {
+                            // Fallback for other events
+                            flushRecords();
+                            const el = document.createElement('div');
+                            el.style.color = '#aaa';
+                            el.textContent = JSON.stringify(event);
+                            contentDiv.appendChild(el);
+                        }
+                        
+                        contentDiv.scrollTop = contentDiv.scrollHeight;
+
+                    } catch (e) {
+                         // Maybe not JSON?
+                         if (contentDiv) {
+                            const el = document.createElement('div');
+                            el.textContent = line;
+                            contentDiv.appendChild(el);
+                         }
+                    }
+                }
+            }
+            flushRecords();
+            
+            if (contentDiv) {
+                const end = document.createElement('div');
+                end.innerHTML = '<span style="color: #2ecc71;">Done.</span>';
+                contentDiv.appendChild(end);
+                contentDiv.scrollTop = contentDiv.scrollHeight;
+            }
+
+        } catch (e) {
+            if (contentDiv) contentDiv.innerHTML += `<div style="color: red;">Exception: ${e.message}</div>`;
+        }
     }
 
     function addScriptStep() {
         const steps = getStepsFromDOM();
         steps.push({
-            function: "llm.generate",
+            type: "command",
+            name: "Generate",
+            command: "llm.generate",
             args: { prompt: "New instruction" },
             out: "result"
         });
-        saveStepsToDOM(steps);
-         setTimeout(() => {
-             const idx = steps.length - 1;
-             const newBody = document.getElementById(`step-body-\${idx}`);
-             if(newBody) newBody.style.display = 'block';
-             // Scroll to bottom
-             newBody.scrollIntoView({ behavior: 'smooth' });
+        const newIdx = steps.length - 1;
+        saveStepsToDOM(steps, newIdx);
+        
+        setTimeout(() => {
+             const newBody = document.getElementById(`step-body-\${newIdx}`);
+             if(newBody) newBody.scrollIntoView({ behavior: 'smooth' });
         }, 50);
     }
 
@@ -2296,6 +2597,20 @@
         if(!confirm("Delete this step?")) return;
         const steps = getStepsFromDOM();
         steps.splice(idx, 1);
+        saveStepsToDOM(steps);
+    }
+
+    function moveScriptStepUp(idx) {
+        if (idx <= 0) return;
+        const steps = getStepsFromDOM();
+        [steps[idx - 1], steps[idx]] = [steps[idx], steps[idx - 1]];
+        saveStepsToDOM(steps);
+    }
+
+    function moveScriptStepDown(idx) {
+        const steps = getStepsFromDOM();
+        if (idx >= steps.length - 1) return;
+        [steps[idx + 1], steps[idx]] = [steps[idx], steps[idx + 1]];
         saveStepsToDOM(steps);
     }
 
@@ -3884,7 +4199,23 @@
                     try {
                         const event = JSON.parse(line);
                         
+                        // Helper to flush pending records before showing text or other content
+                        const flushRecords = () => {
+                            if (currentTableRecords.length > 0) {
+                                renderDataResults(currentTableRecords, format, currentTableType);
+                                currentTableRecords = []; // Clear
+                                // Also ensure we create a NEW content span for subsequent text
+                                currentContentSpan = null; 
+                                
+                                // Scroll down
+                                const hist = document.getElementById('chat-history');
+                                if (hist) hist.scrollTop = hist.scrollHeight;
+                            }
+                        };
+
                         if (event.type === 'content') {
+                             flushRecords(); // Flush any data tables before showing new text analysis/headers
+
                              if (!currentContentSpan) {
                                 // Start new content block
                                 const msgDiv = document.createElement('div');
@@ -3892,6 +4223,7 @@
                                 currentContentSpan = document.createElement('span');
                                 msgDiv.appendChild(currentContentSpan);
                                 document.getElementById('chat-history').appendChild(msgDiv);
+                                pruneChatHistory();
                                 document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
                             }
                             
@@ -3902,17 +4234,24 @@
                             // Handle Markdown
                             const markdownHtml = marked.parse(String(event.payload));
                             currentContentSpan.innerHTML += markdownHtml;
+                            document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
                         } 
                         else if (event.type === 'record' || event.type === 'kv') {
                             // Collect records
+                            // If we encounter a schema change, we might want to flush?
+                            // For simplicity, we just collect until text/content interrupts.
                             currentTableRecords.push(event.payload);
                             currentTableType = event.type;
                         }
                         else if (event.type === 'tool_call') {
+                            flushRecords();
                             appendChatMessage('ai', '🛠️ Calling Tool: ' + event.payload.tool);
+                            currentContentSpan = null;
                         }
                         else if (event.type === 'error') {
+                            flushRecords();
                             appendChatMessage('ai', 'Error: ' + event.payload);
+                            currentContentSpan = null;
                         }
                     } catch (e) {
                         console.error("Failed to parse stream line:", line, e);
@@ -4108,25 +4447,123 @@
 
     // --- Macro Tree View Logic ---
 
+    // History Stack for Script Navigation
+    let scriptViewStack = [];
+    let currentScriptView = { name: '', steps: [] };
+
     function openScriptModal() {
         const modal = document.getElementById('script-modal');
         const container = document.getElementById('script-tree-container');
-        container.innerHTML = '';
         
         let steps = [];
+        let name = "Current Item";
+        
+        // Initial Load from selected item
         if (currentItemValue && Array.isArray(currentItemValue.steps)) {
             steps = currentItemValue.steps;
         }
-        
-        if (!steps || steps.length === 0) {
-            container.innerHTML = '<em>No steps defined.</em>';
-        } else {
-            const ul = document.createElement('ul');
-            renderMacroSteps(steps, ul);
-            container.appendChild(ul);
+        if (currentItemKey) {
+            name = currentItemKey;
         }
         
+        // Reset Stack
+        scriptViewStack = [];
+        currentScriptView = { name: name, steps: steps };
+        
+        renderScriptTree();
         modal.style.display = 'block';
+    }
+
+    function renderScriptTree() {
+        const container = document.getElementById('script-tree-container');
+        container.innerHTML = '';
+        
+        // Render Header with Back Button if needed
+        const header = document.createElement('div');
+        header.style.marginBottom = '10px';
+        header.style.borderBottom = '1px solid var(--border-color)';
+        header.style.paddingBottom = '10px';
+        header.style.display = 'flex';
+        header.style.alignItems = 'center';
+        header.style.gap = '10px';
+        
+        if (scriptViewStack.length > 0) {
+            const backBtn = document.createElement('button');
+            backBtn.innerHTML = '&#8592; Back';
+            backBtn.onclick = goBackScript;
+            backBtn.style.padding = '2px 8px';
+            backBtn.style.cursor = 'pointer';
+            header.appendChild(backBtn);
+        }
+        
+        const title = document.createElement('h4');
+        title.style.margin = '0';
+        title.textContent = "Script: " + currentScriptView.name;
+        header.appendChild(title);
+        
+        container.appendChild(header);
+
+        if (!currentScriptView.steps || currentScriptView.steps.length === 0) {
+            const msg = document.createElement('div');
+            msg.innerHTML = '<em>No steps defined.</em>';
+            container.appendChild(msg);
+        } else {
+            const ul = document.createElement('ul');
+            renderMacroSteps(currentScriptView.steps, ul);
+            container.appendChild(ul);
+        }
+    }
+
+    function drillDownToScript(scriptName) {
+        // Fetch the script item
+        // Note: We use action=current with 'q' to try and fetch the specific item
+        // Backend handles 'q' by searching. We hope it returns exact match first.
+        fetch(`/api/store/items?database=${currentDatabase}&name=${currentStore}&q=${encodeURIComponent(scriptName)}`)
+        .then(res => res.json())
+        .then(items => {
+            if (items && items.length > 0) {
+                // Find exact match if multiple returned
+                const item = items.find(i => i.key === scriptName) || items[0];
+                
+                if (item.key === scriptName) {
+                    let steps = [];
+                    if (item.value && Array.isArray(item.value.steps)) {
+                        steps = item.value.steps;
+                    } else if (typeof item.value === 'string') {
+                         try {
+                             const parsed = JSON.parse(item.value);
+                             if (parsed.steps) steps = parsed.steps;
+                         } catch(e) {}
+                    } else if (item.value && item.value.steps && typeof item.value.steps === 'string') {
+                         // Double encoded JSON?
+                         try {
+                             steps = JSON.parse(item.value.steps);
+                         } catch(e) {}
+                    }
+                    
+                    // Push current to stack
+                    scriptViewStack.push(currentScriptView);
+                    
+                    // Update current
+                    currentScriptView = { name: scriptName, steps: steps };
+                    renderScriptTree();
+                } else {
+                    alert("Script found but key mismatch? Found: " + item.key);
+                }
+            } else {
+                alert("Script not found: " + scriptName);
+            }
+        })
+        .catch(err => {
+            alert("Error fetching script: " + err.message);
+        });
+    }
+
+    function goBackScript() {
+        if (scriptViewStack.length > 0) {
+            currentScriptView = scriptViewStack.pop();
+            renderScriptTree();
+        }
     }
 
     function closeScriptModal() {
@@ -4143,6 +4580,8 @@
             
             // Determine Summary
             let summary = '';
+            let isScriptCall = false;
+
             if (step.type === 'ask') summary = `Ask: "${step.prompt}" -> ${step.output_variable || '(no var)'}`;
             else if (step.type === 'set') summary = `Set: ${step.variable} = ${step.value}`;
             else if (step.type === 'if') summary = `If: ${step.condition}`;
@@ -4150,7 +4589,10 @@
             else if (step.type === 'fetch') summary = `Fetch: ${step.resource} -> ${step.variable}`;
             else if (step.type === 'say') summary = `Say: "${step.message}"`;
             else if (step.type === 'command') summary = `Cmd: ${step.command} ${JSON.stringify(step.args || {})}`;
-            else if (step.type === 'script') summary = `Run Script: ${step.script_name}`;
+            else if (step.type === 'script' || step.type === 'call_script') {
+                 summary = `Run Script: ${step.script_name}`;
+                 isScriptCall = true;
+            }
             else summary = JSON.stringify(step);
 
             // Check for children (nested steps)
@@ -4163,10 +4605,20 @@
             // Header
             const header = document.createElement('div');
             header.className = 'step-header';
+            
+            let actionHtml = '';
+            if (isScriptCall && step.script_name) {
+                actionHtml = `<button class="step-action-btn" title="View Script" onclick="event.stopPropagation(); drillDownToScript('${step.script_name}')" style="margin-left:auto; background:none; border:none; cursor:pointer; font-size:16px;">🔍</button>`;
+            } else {
+                // Ensure layout consistency
+                actionHtml = '<span style="margin-left:auto;"></span>';
+            }
+
             header.innerHTML = `
                 ${toggleHtml}
                 <span class="step-type ${typeClass}">${step.type || '?'}</span>
                 <span class="step-summary">${summary.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+                ${actionHtml}
             `;
             
             // Details (JSON view)
@@ -4225,7 +4677,19 @@
         });
     }
 
+    const MAX_CHAT_MESSAGES = 100; // Limit chat history to prevent DOM bloat
+
+    function pruneChatHistory() {
+        const history = document.getElementById('chat-history');
+        if (history) {
+            while (history.children.length > MAX_CHAT_MESSAGES) {
+                history.removeChild(history.firstChild);
+            }
+        }
+    }
+
     function appendChatMessage(role, text) {
+        pruneChatHistory();
         console.log("Appending message:", role, text); // Debug Log
         const history = document.getElementById('chat-history');
         const div = document.createElement('div');

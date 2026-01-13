@@ -279,6 +279,114 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Try to interpret as NDJSON (Newline Delimited JSON)
+	// This handles script outputs that now default to NDJSON stream format.
+	lines := strings.Split(cleanText, "\n")
+	var ndjsonEvents []map[string]any
+	isNDJSON := false
+
+	// Heuristic: If we have multiple lines and the first non-empty one parses as JSON, try to parse all.
+	// Or even if just one line parses? No, "Hello" isn't JSON. "{...}" is.
+	// If it contains at least one valid JSON object line, treating it as NDJSON might be valid,
+	// but we should fail gracefully if lines are mixed.
+	// Actually, if PlayScript returns NDJSON, every line is JSON.
+	if len(lines) > 0 {
+		validCount := 0
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			var obj map[string]any
+			if strings.HasPrefix(line, "{") && json.Unmarshal([]byte(line), &obj) == nil {
+				ndjsonEvents = append(ndjsonEvents, obj)
+				validCount++
+			} else {
+				// Found a non-JSON line. If we already found JSON, this is mixed content (bad).
+				// But maybe it's just some text at the start/end?
+				// For now, if we encounter ANY non-JSON line, cancel NDJSON detection to be partial?
+				// No, let's treat it as text if it's not 100% NDJSON (ignoring empty lines).
+				// Exception: "Error: ..." sometimes creeps in.
+				isNDJSON = false
+				break
+			}
+		}
+		// If we found valid JSON lines and didn't break (meaning all non-empty lines were JSON)
+		if validCount > 0 && len(ndjsonEvents) == validCount {
+			isNDJSON = true
+		}
+	}
+
+	if isNDJSON {
+		log.Debug("Response: Detected NDJSON Stream", "count", len(ndjsonEvents))
+		for _, evt := range ndjsonEvents {
+			// Map specific event types from PlayScript to UI events
+			// PlayScript types: "log", "record", "error", "step_start", "outputs"
+			// UI events: "record", "content", "error", "tool_call"
+
+			rawType, _ := evt["type"].(string)
+
+			switch rawType {
+			case "record":
+				if rec, ok := evt["record"]; ok {
+					sendEvent("record", rec)
+				} else if rec, ok := evt["data"]; ok {
+					// Fallback for older scripts
+					sendEvent("record", rec)
+				}
+			case "log":
+				msg, _ := evt["message"].(string)
+				// Send as markdown content? or console log?
+				// UI parses 'content' as markdown.
+				// Let's prefix logs given they are debug info usually.
+				sendEvent("content", fmt.Sprintf("> *Log:* %s\n", msg))
+			case "error":
+				msg, _ := evt["error"].(string)
+				sendEvent("error", msg)
+			case "step_start":
+				// Maybe ignore or show simple header?
+				name, _ := evt["name"].(string)
+				if name == "" {
+					name, _ = evt["command"].(string)
+				}
+				stepIndexVal := evt["step_index"]
+
+				// Handle different types for step_index (float64 if from JSON unmarshal)
+				var stepIndex int
+				if f, ok := stepIndexVal.(float64); ok {
+					stepIndex = int(f)
+				} else if i, ok := stepIndexVal.(int); ok {
+					stepIndex = i
+				}
+
+				if stepIndex > 0 {
+					sendEvent("content", fmt.Sprintf("**Step %d:** `%s`\n", stepIndex, name))
+				} else {
+					sendEvent("content", fmt.Sprintf("**Step:** `%s`\n", name))
+				}
+			case "outputs":
+				// This is usually the final result or step result.
+				// If it's a list, we might want to iterate?
+				if list, ok := evt["outputs"].([]any); ok {
+					// Check if these are records
+					for _, item := range list {
+						sendEvent("record", item)
+					}
+				} else {
+					// Send as content
+					b, _ := json.MarshalIndent(evt["outputs"], "", "  ")
+					sendEvent("content", fmt.Sprintf("```json\n%s\n```", string(b)))
+				}
+			default:
+				// Fallback: send the whole event payload as a record or content?
+				// If it has 'payload' or 'data', send that.
+				// If not, just send the event object itself as a record (for debugging)
+				sendEvent("record", evt)
+			}
+		}
+		return
+	}
+
 	//log.Debug("Response: Success (Text)", "response", response)
 
 	sendEvent("content", response)

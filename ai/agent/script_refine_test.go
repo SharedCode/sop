@@ -47,7 +47,7 @@ func TestScript_Refine(t *testing.T) {
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
 	// 2. Create Script with hardcoded value
-	_, _, err := svc.handleSessionCommand(ctx, "/script create refine_test Original Description", sysDB)
+	_, _, err := svc.handleSessionCommand(ctx, "/create refine_test --category general", sysDB)
 	if err != nil {
 		t.Fatalf("Create failed: %v", err)
 	}
@@ -57,13 +57,15 @@ func TestScript_Refine(t *testing.T) {
 		Command: "select",
 		Args:    map[string]any{"store": "users", "region": "US"},
 	}
-	_, _, err = svc.handleSessionCommand(ctx, "/script step add refine_test bottom", sysDB)
+	_, _, err = svc.handleSessionCommand(ctx, "/step", sysDB)
 	if err != nil {
 		t.Fatalf("Step add failed: %v", err)
 	}
 
-	// 3. Run /script refine
-	resp, handled, err := svc.handleSessionCommand(ctx, "/script refine refine_test", sysDB)
+	svc.handleSessionCommand(ctx, "/save", sysDB)
+
+	// 3. Run /refine
+	resp, handled, err := svc.handleSessionCommand(ctx, "/refine refine_test", sysDB)
 	if err != nil {
 		t.Fatalf("Refine failed: %v", err)
 	}
@@ -77,8 +79,8 @@ func TestScript_Refine(t *testing.T) {
 		t.Errorf("Refine response missing replacement info: %s", resp)
 	}
 
-	// 4. Run /script refine apply
-	resp, handled, err = svc.handleSessionCommand(ctx, "/script refine apply", sysDB)
+	// 4. Run /refine apply
+	resp, handled, err = svc.handleSessionCommand(ctx, "/refine apply", sysDB)
 	if err != nil {
 		t.Fatalf("Refine apply failed: %v", err)
 	}
@@ -87,7 +89,7 @@ func TestScript_Refine(t *testing.T) {
 	}
 
 	// 5. Verify Script Changes (Summary & Params)
-	resp, handled, err = svc.handleSessionCommand(ctx, "/script show refine_test", sysDB)
+	resp, handled, err = svc.handleSessionCommand(ctx, "/show refine_test", sysDB)
 	if err != nil {
 		t.Fatalf("Show failed: %v", err)
 	}

@@ -1,6 +1,6 @@
 # SOP System Knowledge Base & Handoff
 
-**Last Updated:** January 9, 2026
+**Last Updated:** January 12, 2026
 **Purpose:** This document serves as a knowledge transfer artifact for future AI agents (e.g., GPT-5.2) or developers continuing work on the SOP Data Manager. It details the system architecture, specific implementation nuances, and recent modifications.
 
 ---
@@ -89,6 +89,19 @@ User-facing documentation. We generally do *not* put internal prompt instruction
 ### Chat Interface (`tools/httpserver/templates/index.html`)
 *   **Input Box**: Default height increased to `60px` (min `40px`) to accommodate multi-line queries better.
 *   **CSS**: `#chat-input` styling rules.
+*   **Step Visibility**: The prompt for the step number is now rendered as "Step [N]:" (e.g., "Step 1:").
+    *   Logic ensures `step_index` is checked strictly (`!== undefined && !== null`).
+    *   Fallback for missing index displays "Step (No Index):".
+
+### Backend UI Rendering (`tools/httpserver/main.ai.go`)
+*   **Event Interception**: The chat backend intercepts NDJSON events from the execution engine.
+*   **Structured Formatting**: Parses the new structured `step_start` events to render distinct step headers (e.g., `**Step <N>:**`).
+    *   Extracts `step_index`.
+    *   Uses `command` as fallback if `name` is missing.
+
+### Script Execution Architecture (`ai/agent/service.runner.go`)
+*   **Structured Execution Results**: The engine now emits discrete, structured events for each execution step (`step_start`, `record`, `outputs`) rather than a single blob. This enables granular real-time feedback.
+*   **Context Propagation**: `step_index` and metadata are propagated via `context.Context` to ensure deep nested calls (streaming or legacy fallback) can correctly attribute their output to the specific step.
 
 ---
 

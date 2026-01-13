@@ -57,9 +57,26 @@ func (s *Service) PlayScript(ctx context.Context, name string, category string, 
 	var scriptCtx context.Context = ctx
 	var db *database.Database = s.systemDB
 
+	// Check for NDJSON request
+	useNDJSON, _ := ctx.Value(CtxKeyUseNDJSON).(bool)
+	// Force set NDJSON to true for now, as we want to default to NDJSON streaming
+	useNDJSON = true
+
+	// Determine flush policy (Default: true)
+	shouldFlush := true
+	if v, ok := ctx.Value(ai.CtxKeyAutoFlush).(bool); ok {
+		shouldFlush = v
+	}
+
 	// Initialize streamer for structured output
-	streamer := NewJSONStreamer(w)
-	fmt.Fprint(w, "[\n") // Start JSON array
+	var streamer *JSONStreamer
+	if useNDJSON {
+		streamer = NewNDJSONStreamer(w)
+	} else {
+		streamer = NewJSONStreamer(w)
+		fmt.Fprint(w, "[\n") // Start JSON array
+	}
+	streamer.SetFlush(shouldFlush)
 	scriptCtx = context.WithValue(scriptCtx, CtxKeyJSONStreamer, streamer)
 
 	if script.Database != "" && !script.Portable {
@@ -105,7 +122,9 @@ func (s *Service) PlayScript(ctx context.Context, name string, category string, 
 			s.session.Variables = nil
 			fmt.Fprint(w, "\nWarning: Uncommitted transaction was automatically rolled back for safety.")
 		}
-		fmt.Fprint(w, "\n]") // End JSON array
+		if !useNDJSON {
+			fmt.Fprint(w, "\n]") // End JSON array
+		}
 	}()
 
 	// Capture transaction to prevent loss during execution
@@ -903,12 +922,12 @@ IMPORTANT:
 
 	s.session.PendingRefinement = &RefinementProposal{
 		ScriptName:     name,
-		Category:      category,
+		Category:       category,
 		OriginalScript: script,
 		NewScript:      newScript,
-		Description:   result.Summary,
-		NewParams:     result.NewParameters,
-		Replacements:  replacementDescs,
+		Description:    result.Summary,
+		NewParams:      result.NewParameters,
+		Replacements:   replacementDescs,
 	}
 
 	// 7. Generate Preview Output

@@ -30,7 +30,7 @@ The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data 
 
 *   **Vector Store**: Native support for storing and searching high-dimensional vectors.
 *   **RAG Agents**: Build Retrieval-Augmented Generation applications with ease.
-*   **Scripts**: A functional AI runtime for recording and replaying complex workflows.
+*   **Scripts**: A functional AI runtime for drafting, refining, and executing complex workflows (Hybrid Execution Model).
 
 See [ai/README.md](../../ai/README.md) for a deep dive into the AI capabilities.
 

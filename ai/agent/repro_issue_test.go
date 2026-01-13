@@ -142,16 +142,16 @@ func TestReproLoadFailedError(t *testing.T) {
 		CurrentDB: "testdb",
 	}
 
-	// Start recording
-	// Note: /record is handled by Service.Ask directly, not pipeline
-	resp, err := svc.Ask(ctx, "/record my_script", ai.WithSessionPayload(payload))
+	// Start drafting (formerly recording)
+	// Note: /create is handled by Service.Ask directly
+	resp, err := svc.Ask(ctx, "/create my_script", ai.WithSessionPayload(payload))
 	if err != nil {
-		t.Fatalf("Start recording failed: %v", err)
+		t.Fatalf("Start drafting failed: %v", err)
 	}
-	if !svc.session.Recording {
-		t.Fatalf("Expected recording to be true")
+	if svc.session.CurrentScript == nil {
+		t.Fatalf("Expected CurrentScript to be set")
 	}
-	t.Logf("Start recording response: %s", resp)
+	t.Logf("Start drafting response: %s", resp)
 
 	// Issue the query
 	// Service.Ask will run the pipeline.

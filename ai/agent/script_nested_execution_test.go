@@ -41,7 +41,7 @@ func TestScript_Play_Nested_Execution(t *testing.T) {
 		Parameters: []string{"user"},
 		Steps: []ai.ScriptStep{
 			{
-				Type: "call_script",
+				Type:       "call_script",
 				ScriptName: "echo_msg",
 				ScriptArgs: map[string]string{
 					"msg": "Hello {{.user}}",
@@ -61,8 +61,8 @@ func TestScript_Play_Nested_Execution(t *testing.T) {
 	svc := NewService(nil, sysDB, nil, nil, nil, nil, false)
 
 	// 6. Execute Parent Script
-	// /play greet_user user=Alice
-	cmd := "/play greet_user user=Alice"
+	// /run greet_user user=Alice
+	cmd := "/run greet_user user=Alice"
 	resp, err := svc.Ask(ctx, cmd)
 	if err != nil {
 		t.Fatalf("Execution failed: %v", err)
@@ -71,7 +71,7 @@ func TestScript_Play_Nested_Execution(t *testing.T) {
 	// 7. Verify Output
 	// We expect the output to contain the JSON structure with the "say" result
 	// The "say" step in the child script should produce "Child says: Hello Alice"
-	
+
 	// The output format is a JSON array of StepExecutionResult
 	// We look for the string "Child says: Hello Alice" in the response.
 	expected := "Child says: Hello Alice"

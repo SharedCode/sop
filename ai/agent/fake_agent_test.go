@@ -88,7 +88,7 @@ func TestFakeAgentGeneration(t *testing.T) {
 	adminAgent := agent.NewDataAdminAgent(cfg, databases, sysDB)
 	adminAgent.SetGenerator(gen)
 
-	// Create a dummy script to test recording
+	// Create a dummy script manually to test execution
 	ctx = context.WithValue(ctx, ai.CtxKeyWriter, os.Stdout)
 	// We need to mock the session payload
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{

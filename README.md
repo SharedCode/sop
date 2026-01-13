@@ -16,6 +16,41 @@ This architecture allows SOP to be packaged into diverse applications:
 
 Available for **Go**, **Python**, **Java**, **C#**, and **Rust**.
 
+## SOP Data Manager & AI Suite
+
+SOP allows you to interact with your data using the **SOP Data Manager**—a web-based console that features a powerful **SQL-like** query engine and an **AI Assistant**.
+
+### Data Manager
+*   **Visual Management**: Inspect B-Trees, manage Stores (Key-Value, Vector, Model), and view System Logs.
+*   **SQL Capabilities**: Perform familiar SQL operations directly on your NoSQL B-Trees:
+    *   **SELECT / SCAN**: Filter data using rich criteria (`$gt`, `$regex`, `$in`).
+    *   **JOIN**: Perform high-performance connections between stores (e.g., `Join 'Users' and 'Orders'`).
+    *   **CRUD**: Insert, Update, and Delete records via a query interface.
+
+### AI Assistant & Scripts
+The Data Manager includes an integrated AI Assistant that supports **Natural Language Programming**.
+*   **Natural Language Queries**: Ask "Show me all active users" or "Join users with their last order", and the system acts on it.
+*   **Script Drafting**:
+    *   **Draft**: Type `/create my_script` to start a draft.
+    *   **Build**: Add steps naturally with `/step` or automatically from your last command.
+    *   **Save**: Commit your workflow with `/save`.
+*   **Execution**:
+    *   **Run**: Execute logic with `/run my_script`.
+    *   **Parameters**: Pass dynamic arguments like `/run user_audit id=123`.
+*   **Hybrid Engine**:
+    *   **Tool Steps**: Preserved as raw code (e.g., `Scan`, `Join`) for **zero-latency** execution.
+    *   **Natural Language Steps**: Invokes the LLM only when reasoning is required (e.g., "Analyze sentiment").
+*   **Bare-Metal Performance**: Scripts are compiled into efficient engine instructions (Go code), avoiding the overhead of runtime parsing for repeated tasks.
+
+To launch the Data Manager:
+```bash
+# Using the CLI tool (if installed)
+sop-cli httpserver
+
+# Or running directly from source
+go run ./tools/httpserver
+```
+
 ## 🚀 Getting Started
 
 **[Download & Installation Guide](GETTING_STARTED.md)**: The fastest way to get up and running with SOP.

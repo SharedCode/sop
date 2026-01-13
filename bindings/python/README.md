@@ -47,7 +47,7 @@ The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data 
 
 *   **Vector Store**: Native support for storing and searching high-dimensional vectors.
 *   **RAG Agents**: Build Retrieval-Augmented Generation applications with ease.
-*   **Scripts**: A functional AI runtime for recording and replaying complex workflows.
+*   **Scripts**: A functional AI runtime for drafting, refining, and executing complex workflows (Hybrid Execution Model).
 
 See [ai/README.md](../../ai/README.md) for a deep dive into the AI capabilities.
 
@@ -461,6 +461,33 @@ db = Database(
     stores_folders=["/mnt/shared_data"], 
     type=DatabaseType.Clustered
 )
+```
+
+### SOP Data Manager Visibility
+
+To ensure your Python-created databases are visible and fully manageable in the **SOP Data Manager** (GUI), you should use the `setup` method during initialization. This persists your configuration options (like store paths, erasure coding settings, etc.) so the UI can discover them.
+
+```python
+# 1. Define Options
+options = DatabaseOptions(
+    stores_folders=["./data/my_db"], 
+    type=DatabaseType.Standalone
+)
+
+# 2. Persist Options (One-time setup or on startup)
+# This saves 'dboptions.json' in the database folder
+Database.setup(ctx, options)
+
+# 3. Initialize
+db = Database(options)
+```
+
+Later, you (or the Data Manager) can inspect these options using `get_options`:
+
+```python
+# Retrieve config from a path
+opts = Database.get_options(ctx, "./data/my_db")
+print(f"Database Type: {opts.type}")
 ```
 
 ### Clustered Backend Setup (Cassandra + Redis)

@@ -63,7 +63,7 @@ func TestScriptParameterizationWorkflow(t *testing.T) {
 	// 4. Execute Parameterization Command
 	// User wants to replace 'Sales' with a parameter named 'dept'
 	// Command: /script parameterize <script_name> <param_name> <value_to_replace>
-	cmd := "/script parameterize find_sales_employees dept Sales"
+	cmd := "/parameterize find_sales_employees dept Sales"
 
 	response, err := svc.Ask(ctx, cmd)
 	if err != nil {

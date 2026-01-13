@@ -28,6 +28,8 @@ const (
 	CtxKeyResultStreamer ContextKey = "ai_result_streamer"
 	// CtxKeyScriptRecorder is the context key for passing the ScriptRecorder.
 	CtxKeyScriptRecorder ContextKey = "ai_script_recorder"
+	// CtxKeyAutoFlush is the context key for enabling/disabling auto-flush (boolean).
+	CtxKeyAutoFlush ContextKey = "ai_auto_flush"
 )
 
 // ResultStreamer defines the interface for streaming tool results.

@@ -6,16 +6,12 @@ type SessionMode int
 const (
 	// SessionModeInteractive is the default mode where each request is independent.
 	SessionModeInteractive SessionMode = iota
-	// SessionModeRecording captures steps into a script.
-	SessionModeRecording
 	// SessionModePlayback executes a script with state preservation.
 	SessionModePlayback
 )
 
 func (m SessionMode) String() string {
 	switch m {
-	case SessionModeRecording:
-		return "recording"
 	case SessionModePlayback:
 		return "playback"
 	default:
@@ -27,9 +23,6 @@ func (m SessionMode) String() string {
 func (s *Service) GetSessionMode() SessionMode {
 	if s.session.Playback {
 		return SessionModePlayback
-	}
-	if s.session.Recording {
-		return SessionModeRecording
 	}
 	return SessionModeInteractive
 }

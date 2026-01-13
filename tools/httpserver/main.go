@@ -231,9 +231,10 @@ func loadConfig(path string) error {
 	configDir := filepath.Dir(path)
 	if config.SystemDB == nil {
 		config.SystemDB = &DatabaseConfig{
-			Name: "System",
-			Mode: "standalone",
-			Path: configDir,
+			Name:     "System",
+			Mode:     config.Mode,
+			RedisURL: config.RedisURL,
+			Path:     configDir,
 		}
 	} else {
 		if config.SystemDB.Path == "" {
@@ -241,6 +242,12 @@ func loadConfig(path string) error {
 		}
 		if config.SystemDB.Name == "" {
 			config.SystemDB.Name = "System"
+		}
+		if config.SystemDB.Mode == "" {
+			config.SystemDB.Mode = config.Mode
+		}
+		if config.SystemDB.RedisURL == "" {
+			config.SystemDB.RedisURL = config.RedisURL
 		}
 	}
 	return nil
@@ -250,10 +257,18 @@ func getSystemDBOptions() (sop.DatabaseOptions, error) {
 	if config.SystemDB == nil {
 		// Fallback if no config file was loaded
 		cwd, _ := os.Getwd()
-		return sop.DatabaseOptions{
+		opts := sop.DatabaseOptions{
 			Type:          sop.Standalone,
 			StoresFolders: []string{cwd},
-		}, nil
+		}
+		if config.Mode == "clustered" {
+			opts.Type = sop.Clustered
+			opts.CacheType = sop.Redis
+			opts.RedisConfig = &sop.RedisCacheConfig{
+				Address: config.RedisURL,
+			}
+		}
+		return opts, nil
 	}
 	return getDBOptionsFromConfig(config.SystemDB)
 }
@@ -1481,6 +1496,16 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 				if id, err := uuid.Parse(s); err == nil {
 					finalKey = id
 				}
+			}
+		}
+	}
+
+	// Special handling for "scripts" store (ModelStore validation)
+	// ModelStore expects the value to be a JSON string, but the UI might send a JSON object.
+	if req.StoreName == "scripts" {
+		if _, isString := req.Value.(string); !isString {
+			if b, err := json.Marshal(req.Value); err == nil {
+				req.Value = string(b)
 			}
 		}
 	}

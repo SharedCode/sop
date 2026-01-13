@@ -44,7 +44,7 @@ func TestScript_AutoParameterize(t *testing.T) {
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
 	// 2. Create Script with hardcoded values
-	svc.handleSessionCommand(ctx, "/script create auto_test Auto Param Test", sysDB)
+	svc.handleSessionCommand(ctx, "/create auto_test", sysDB)
 
 	// Add steps
 	svc.session.LastStep = &ai.ScriptStep{
@@ -52,17 +52,19 @@ func TestScript_AutoParameterize(t *testing.T) {
 		Command: "select",
 		Args:    map[string]any{"store": "users", "region": "US"},
 	}
-	svc.handleSessionCommand(ctx, "/script step add auto_test bottom", sysDB)
+	svc.handleSessionCommand(ctx, "/step", sysDB)
 
 	svc.session.LastStep = &ai.ScriptStep{
 		Type:    "command",
 		Command: "select",
 		Args:    map[string]any{"store": "employees", "salary": "50000"},
 	}
-	svc.handleSessionCommand(ctx, "/script step add auto_test bottom", sysDB)
+	svc.handleSessionCommand(ctx, "/step", sysDB)
+
+	svc.handleSessionCommand(ctx, "/save", sysDB)
 
 	// 3. Run Auto Parameterization (Refine)
-	resp, handled, err := svc.handleSessionCommand(ctx, "/script refine auto_test", sysDB)
+	resp, handled, err := svc.handleSessionCommand(ctx, "/refine auto_test", sysDB)
 	if err != nil {
 		t.Fatalf("Auto parameterize (refine) failed: %v", err)
 	}
@@ -71,7 +73,7 @@ func TestScript_AutoParameterize(t *testing.T) {
 	}
 
 	// 4. Apply Refinement
-	resp, handled, err = svc.handleSessionCommand(ctx, "/script refine apply", sysDB)
+	resp, handled, err = svc.handleSessionCommand(ctx, "/refine apply", sysDB)
 	if err != nil {
 		t.Fatalf("Refine apply failed: %v", err)
 	}
@@ -80,7 +82,7 @@ func TestScript_AutoParameterize(t *testing.T) {
 	}
 
 	// 5. Verify Script Content
-	resp, _, _ = svc.handleSessionCommand(ctx, "/script show auto_test", sysDB)
+	resp, _, _ = svc.handleSessionCommand(ctx, "/show auto_test --json", sysDB)
 	if !strings.Contains(resp, "{{.target_region}}") {
 		t.Errorf("Script missing target_region replacement: %s", resp)
 	}

@@ -28,7 +28,7 @@ func TestScriptParameterization_Nested(t *testing.T) {
 		Name: scriptName,
 		Steps: []ai.ScriptStep{
 			{
-				Type:      "script",
+				Type:       "script",
 				ScriptName: "find_employees",
 				ScriptArgs: map[string]string{
 					"dept": "Sales",
@@ -48,7 +48,7 @@ func TestScriptParameterization_Nested(t *testing.T) {
 	svc := NewService(nil, sysDB, nil, nil, nil, nil, false)
 
 	// 4. Parameterize "Sales" -> "target_dept"
-	cmd := "/script parameterize audit_department target_dept Sales"
+	cmd := "/parameterize audit_department target_dept Sales"
 	resp, err := svc.Ask(ctx, cmd)
 	if err != nil {
 		t.Fatalf("Command failed: %v", err)

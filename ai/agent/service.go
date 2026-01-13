@@ -32,6 +32,9 @@ type Service struct {
 	session *RunnerSession
 }
 
+// Check that Service implements ScriptRecorder
+var _ ai.ScriptRecorder = (*Service)(nil)
+
 // NewService creates a new agent service for a specific domain.
 func NewService(domain ai.Domain[map[string]any], systemDB *database.Database, databases map[string]sop.DatabaseOptions, generator ai.Generator, pipeline []PipelineStep, registry map[string]ai.Agent[map[string]any], enableObfuscation bool) *Service {
 	return &Service{
@@ -56,10 +59,7 @@ func (s *Service) Open(ctx context.Context) error {
 	// If we are recording, we do NOT use the session transaction.
 	// The user requirement is that during recording, each step is an isolated transaction (auto-commit).
 	// Explicit transaction commands (begin/commit) are recorded as steps but do not affect the recording session.
-	if s.session.Recording {
-		// Ensure we don't accidentally carry over any state
-		p.Transaction = nil
-	} else if s.session.Transaction != nil {
+	if s.session.Transaction != nil {
 		// If NOT recording, and we have an active session transaction (e.g. from a previous step in a stateful session), use it.
 		// BUT ONLY if it matches the requested database.
 		if s.session.CurrentDB == "" || s.session.CurrentDB == p.CurrentDB {
@@ -113,37 +113,20 @@ func (s *Service) Close(ctx context.Context) error {
 		return nil
 	}
 	if tx, ok := p.Transaction.(sop.Transaction); ok {
-		// If we are recording, we do NOT capture the transaction.
-		// We commit it immediately (auto-commit per step).
-		if !s.session.Recording {
-			// If the transaction was explicitly started by the user, we persist it.
-			if p.ExplicitTransaction {
-				s.session.Transaction = tx
-				s.session.CurrentDB = p.CurrentDB
-				s.session.Variables = p.Variables
-				return nil
-			}
-			// Otherwise, we commit it as it's an implicit transaction for this request/script.
-			if tx.HasBegun() {
-				if err := tx.Commit(ctx); err != nil {
-					return fmt.Errorf("failed to commit implicit transaction: %w", err)
-				}
-			}
-			// Clear session state
-			s.session.Transaction = nil
-			s.session.Variables = nil
+		// If the transaction was explicitly started by the user, we persist it.
+		if p.ExplicitTransaction {
+			s.session.Transaction = tx
+			s.session.CurrentDB = p.CurrentDB
+			s.session.Variables = p.Variables
 			return nil
 		}
-
-		// We commit by default on Close.
-		// If an error occurred, the caller should have handled Rollback or we need a way to signal it.
-		// For now, we assume success if we reached Close without explicit rollback.
+		// Otherwise, we commit it as it's an implicit transaction for this request/script.
 		if tx.HasBegun() {
 			if err := tx.Commit(ctx); err != nil {
-				return fmt.Errorf("failed to commit transaction on close: %w", err)
+				return fmt.Errorf("failed to commit implicit transaction: %w", err)
 			}
 		}
-		// Ensure we clear the session transaction to prevent reuse
+		// Clear session state
 		s.session.Transaction = nil
 		s.session.Variables = nil
 		return nil
@@ -154,19 +137,6 @@ func (s *Service) Close(ctx context.Context) error {
 // Domain returns the underlying domain of the service.
 func (s *Service) Domain() ai.Domain[map[string]any] {
 	return s.domain
-}
-
-// StopOnError returns true if the agent is configured to stop recording on error.
-func (s *Service) StopOnError() bool {
-	return s.session.StopOnError
-}
-
-// StopRecording stops the current recording session.
-func (s *Service) StopRecording() {
-	s.session.Recording = false
-	s.session.CurrentScript = nil
-	s.session.Transaction = nil
-	s.session.Variables = nil
 }
 
 func (s *Service) getScriptDB() *database.Database {
@@ -395,141 +365,12 @@ func (s *Service) RecordStep(ctx context.Context, step ai.ScriptStep) {
 	if step.Type == "command" {
 		s.session.LastInteractionToolCalls = append(s.session.LastInteractionToolCalls, step)
 	}
-
-	if s.session.Recording && s.session.CurrentScript != nil {
-		// In standard mode, we only record high-level "ask" steps (user intent).
-		// We ignore "command" steps (tool calls) because replaying the "ask" step
-		// will naturally trigger the tool call again.
-		if s.session.RecordingMode == "standard" && step.Type == "command" {
-			return
-		}
-		if err := s.appendStepToCurrentScript(ctx, step); err != nil {
-			log.Error("failed to append step to script", "error", err)
-		}
-	}
 }
 
-func (s *Service) appendStepToCurrentScript(ctx context.Context, step ai.ScriptStep) error {
-	if !s.session.Recording || s.session.CurrentScript == nil {
-		return nil
-	}
-	scriptDB := s.getScriptDB()
-	if scriptDB == nil {
-		return nil
-	}
-
-	// Use a separate transaction for saving the script
-	tx, err := scriptDB.BeginTransaction(ctx, sop.ForWriting)
-	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-
-	store, err := scriptDB.OpenModelStore(ctx, "scripts", tx)
-	if err != nil {
-		tx.Rollback(ctx)
-		return fmt.Errorf("failed to open scripts store: %w", err)
-	}
-
-	// Try to load the latest version of the script from disk
-	var latestScript ai.Script
-	if err := store.Load(ctx, s.session.CurrentScriptCategory, s.session.CurrentScript.Name, &latestScript); err != nil {
-		// If load fails, assume it's a new script (first step) and use the session's initial state
-		// We copy the metadata from the session script
-		latestScript = *s.session.CurrentScript
-		// Ensure steps are empty if we are starting fresh (or use what's in session if we trust it)
-		// Since we are appending, we assume session might be empty or have previous steps?
-		// Actually, if Load fails, it means it's not on disk.
-		// So we should use the session's script as the base, but we need to be careful about duplication if session has steps.
-		// But in this flow, we only append via this method.
-		// So if it's not on disk, session steps should be empty (except for what we are about to add).
-		// However, s.session.CurrentScript is a pointer.
-	}
-
-	// Append the new step
-	latestScript.Steps = append(latestScript.Steps, step)
-
-	// Save back to disk
-	if err := store.Save(ctx, s.session.CurrentScriptCategory, latestScript.Name, &latestScript); err != nil {
-		tx.Rollback(ctx)
-		return fmt.Errorf("failed to save script: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	// Update in-memory session to match disk
-	s.session.CurrentScript = &latestScript
-	return nil
-}
-
-// RefactorLastSteps refactors the last N steps into a new structure (script or block).
+// RefactorLastSteps implements the ScriptRecorder interface
 func (s *Service) RefactorLastSteps(count int, mode string, name string) error {
-	if !s.session.Recording || s.session.CurrentScript == nil {
-		return fmt.Errorf("not recording")
-	}
-
-	var stepsToGroup []ai.ScriptStep
-
-	if s.session.RecordingMode == "standard" {
-		// In standard mode, the last step in CurrentScript is likely the "ask" step.
-		// We want to replace it with the buffered tool calls.
-		if len(s.session.CurrentScript.Steps) > 0 {
-			lastIdx := len(s.session.CurrentScript.Steps) - 1
-			if s.session.CurrentScript.Steps[lastIdx].Type == "ask" {
-				s.session.CurrentScript.Steps = s.session.CurrentScript.Steps[:lastIdx]
-			}
-		}
-		stepsToGroup = s.session.LastInteractionToolCalls
-	} else {
-		// In compiled mode, the tool calls are already in CurrentScript.Steps.
-		// Use count if provided, otherwise use the length of buffered tool calls.
-		if count <= 0 {
-			count = len(s.session.LastInteractionToolCalls)
-		}
-		if count <= 0 {
-			return fmt.Errorf("no steps to refactor")
-		}
-		if len(s.session.CurrentScript.Steps) < count {
-			return fmt.Errorf("not enough steps to refactor")
-		}
-		startIdx := len(s.session.CurrentScript.Steps) - count
-		stepsToGroup = s.session.CurrentScript.Steps[startIdx:]
-		s.session.CurrentScript.Steps = s.session.CurrentScript.Steps[:startIdx]
-	}
-
-	if len(stepsToGroup) == 0 {
-		return fmt.Errorf("no steps to refactor")
-	}
-
-	if mode == "script" {
-		if name == "" {
-			return fmt.Errorf("script name required")
-		}
-		// Create new script
-		newScript := ai.Script{
-			Name:            name,
-			Steps:           stepsToGroup,
-			TransactionMode: "single", // Default to single tx for extracted scripts
-		}
-		// Save it
-		if err := s.saveScript(context.Background(), newScript); err != nil {
-			return err
-		}
-		// Add script step
-		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, ai.ScriptStep{
-			Type:       "call_script",
-			ScriptName: name,
-		})
-	} else if mode == "block" {
-		// Add block step
-		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, ai.ScriptStep{
-			Type:  "block",
-			Steps: stepsToGroup,
-		})
-	}
-
-	return nil
+	// TODO: Implement script refactoring logic
+	return fmt.Errorf("not implemented")
 }
 
 func (s *Service) saveScript(ctx context.Context, script ai.Script) error {
@@ -571,9 +412,17 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 
 	cfg := ai.NewAskConfig(opts...)
 	var db *database.Database
+	var forcedDBName string
+
 	if val, ok := cfg.Values["database"]; ok {
 		if d, ok := val.(*database.Database); ok {
 			db = d
+		} else if dName, ok := val.(string); ok && dName != "" {
+			// If a string name is provided, use it to resolve DB and set as forcedDBName
+			forcedDBName = dName
+			if opts, ok := s.databases[dName]; ok {
+				db = database.NewDatabase(opts)
+			}
 		}
 	}
 
@@ -598,8 +447,14 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		}
 	} else {
 		// If no payload provided, create a default one from session state
+		// Use forcedDBName if provided via Ask options, otherwise session state
+		targetDB := s.session.CurrentDB
+		if forcedDBName != "" {
+			targetDB = forcedDBName
+		}
+
 		p := &ai.SessionPayload{
-			CurrentDB: s.session.CurrentDB,
+			CurrentDB: targetDB,
 		}
 		if s.session.Transaction != nil {
 			p.Transaction = s.session.Transaction
@@ -626,14 +481,10 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	// We do this BEFORE handling /record or /play so those commands themselves aren't captured as "ask" steps
 	// We explicitly exclude "last-tool" and any slash commands from being recorded as user intent.
 	if !strings.HasPrefix(query, "/") && query != "last-tool" {
-		// Only record "ask" step if NOT in compiled mode
-		// If in compiled mode, we wait for the tool execution to record the command step
-		if !s.session.Recording || s.session.RecordingMode != "compiled" {
-			s.RecordStep(ctx, ai.ScriptStep{
-				Type:   "ask",
-				Prompt: query,
-			})
-		}
+		s.RecordStep(ctx, ai.ScriptStep{
+			Type:   "ask",
+			Prompt: query,
+		})
 	}
 
 	// Handle Session Commands (Scripts, Recording, etc.)
@@ -736,13 +587,8 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 
 	// Check for Raw Tool Call (from DataAdmin or similar generators)
 	if output.Raw != nil {
-		if b, err := json.Marshal(output.Raw); err == nil {
-			if s.session.Recording {
-				s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, ai.ScriptStep{
-					Type:   "ask",
-					Prompt: string(b), // Store raw tool call as prompt
-				})
-			}
+		if _, err := json.Marshal(output.Raw); err == nil {
+			// REMOVED: Recording Logic for Raw Tool Call
 			toolRecorded = true
 		}
 	}
@@ -847,7 +693,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 						}
 						// Also clear session transaction to ensure statelessness
 						s.session.Transaction = nil
-					} else if !s.session.Recording && s.session.Transaction != nil {
+					} else if s.session.Transaction != nil {
 						// Ensure statelessness for non-script sessions even if no auto-transaction was started
 						if err != nil {
 							s.session.Transaction.Rollback(ctx)
@@ -861,24 +707,6 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 
 					if err != nil {
 						return "", fmt.Errorf("tool execution failed: %w", err)
-					}
-
-					// Always capture as last step (for manual addition)
-					s.session.LastStep = &ai.ScriptStep{
-						Type:    "command",
-						Command: toolCall.Tool,
-						Args:    toolCall.Args,
-					}
-
-					// Record Tool Call if recording
-					if s.session.Recording {
-						if s.session.RecordingMode == "compiled" {
-							if err := s.appendStepToCurrentScript(ctx, *s.session.LastStep); err != nil {
-								log.Error("failed to append step to script", "error", err)
-							}
-						}
-						// In natural mode, we already recorded the prompt via s.RecordStep at the top.
-						// So we do NOT record the tool call here to avoid double execution.
 					}
 
 					return result, nil
@@ -897,16 +725,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	}
 
 	// Record Chat Output if recording
-	if s.session.Recording && !toolRecorded {
-		// Only record "say" step if NOT in compiled mode
-		// In compiled mode, we only care about the commands (tools)
-		if s.session.RecordingMode != "compiled" {
-			s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, ai.ScriptStep{
-				Type:    "say",
-				Message: finalText,
-			})
-		}
-	}
+	// REMOVED: Recording Logic
 
 	return finalText, nil
 }

@@ -1,20 +1,19 @@
 # AI Assistant Scripts: Natural Language Programming
 
-The SOP AI Assistant includes a powerful **Script System** that transforms your AI chat sessions into a "Natural Language Programming" environment. It allows you to record, script, and execute complex workflows that combine the flexibility of LLMs with the performance of compiled code.
+The SOP AI Assistant includes a powerful **Script System** that transforms your AI chat sessions into a "Natural Language Programming" environment. It allows you to draft, refine, and execute complex workflows that combine the flexibility of LLMs with the performance of compiled code.
 
 ## Concept: "Compiled Instructions"
 
-Unlike traditional chat history, SOP Scripts are **deterministic programs**.
-*   **Recording**: When you record a session, the system captures the **logic** of your interaction.
-*   **Scripting**: You can manually edit or generate scripts using a standardized JSON schema, adding loops, conditions, and variables.
-*   **Execution**: The SOP engine executes these steps directly using compiled Go code. This is akin to running a compiled binary or a high-performance stored procedure, not just replaying a chat log.
+SOP Scripts are **deterministic programs**.
+*   **Drafting**: You create scripts interactively by adding steps via chat commands.
+*   **Execution**: The SOP engine executes these steps directly using compiled Go code. This is akin to running a compiled binary or a high-performance stored procedure.
 
 ## The SOP Advantage: Bare Metal Performance
 
 SOP exposes its B-Tree engine directly to the script system. This effectively creates a **machine instruction set** for end-users.
 
 *   **Bare Metal API**: SOP's B-Tree API is compiled Go code.
-*   **High-Performance Units**: Recorded scripts are sequences of JSON instructions that command this compiled code to perform iterations, expression evaluations, and data lookups.
+*   **High-Performance Units**: Scripts are sequences of JSON instructions that command this compiled code to perform iterations, expression evaluations, and data lookups.
 *   **No Parsing Overhead**: Unlike SQL statements that require complex parsing and query planning at runtime, SOP scripts are pre-structured units of work.
 *   **System Database**: Scripts are persisted in a dedicated **SystemDB**, a robust SOP B-Tree store. This ensures your "programs" are durable, transactional, and available across server restarts.
 
@@ -46,16 +45,42 @@ A critical advantage of using `Scan` and `JoinRightCursor` is **Streaming**.
 *   **Huge Volume Support**: You can perform complex SQL-style Joins on B-Trees containing millions of records with **minimal memory requirements**. The memory footprint remains constant regardless of dataset size.
 *   **Remote Agility**: These streams are piped directly to the HTTP response, allowing a REST client on the other side of the world (or the UI) to start receiving data immediately, byte-by-byte.
 
-## Natural Language Programming (NLP) System
+## Hybrid Execution Model: LLM vs. Code
 
-We are building a system where the **LLM acts as the compiler**.
-1.  **User Intent**: You describe a complex task in natural language (e.g., "For every user in the 'users' table who hasn't logged in for 30 days, send a reminder email").
-2.  **LLM Compilation**: The AI translates this intent into a structured SOP Script (JSON) containing loops (`loop`), conditions (`if`), and tool calls (`ask`, `fetch`).
-3.  **SOP Execution**: The SOP engine executes this script. It fetches data from B-Trees efficiently (`fetch`), iterates in compiled code (`loop`), and only calls the LLM when semantic understanding is needed (`ask`).
+SOP Scripts function as a hybrid engine, allowing you to mix **Intelligence** with **Performance**.
 
-This hybrid approach gives you the best of both worlds:
-*   **Ease of Use**: "Programming" via chat.
-*   **Performance**: Heavy lifting (loops, data access) is done by compiled Go code, not the LLM.
+1.  **Natural Language Steps (`ask`)**
+    *   **What it is**: A prompt for the LLM.
+    *   **Behavior**: The system pauses, sends the context to the LLM, and executes the response.
+    *   **Use Case**: Decision making, analyzing text, reasoning about data.
+    *   **Example**: `/step Analyze the sentiment of the last 5 reviews.`
+
+2.  **Tool Steps (`command`)**
+    *   **What it is**: A precise instruction for the SOP Engine.
+    *   **Behavior**: **Direct Execution**. The LLM is **skipped entirely**.
+    *   **Use Case**: Deterministic data fetching, math, standardized business logic.
+    *   **Example**: `Scan(store="Users", query={"age": {"$gt": 18}})` -> *Runs in microseconds.*
+
+**The "Drafting" Power Move:**
+When you ask the AI to "Find users in California", it runs a tool. If you then type `/step`, you save that **Tool Step** to your script.
+*   **Result**: You used the LLM to *write* the code, but the final script runs as *pure code*.
+
+## Workflow: Drafting & Execution
+
+We have replaced "Record & Play" with a more robust **Drafting** workflow. This allows you to construct scripts intentionally, avoiding the noise of conversation.
+
+### 1. Drafting a Script
+*   **Start**: `/create <name> [category] [--autosave]` initiates a draft.
+    *   **--autosave**: Optional. Automatically saves the script to the database after every `/step` command, ensuring no work is lost during long drafting sessions.
+*   **Add Logic**:
+    *   **Manual**: `/step <instruction>` adds a natural language instruction to the script.
+    *   **From History**: `/step` (with no args) adds the *last executed command* to the script. This allows you to test a command and then "commit" it to the script.
+*   **Save**: `/save` persists the draft to the SystemDB (useful as a final checkpoint or if auto-save is off).
+
+### 2. Execution
+*   **Run**: `/run <name> [param=value ...]` executes the script.
+    *   **Parameters**: Pass variables like `region=US` or `limit=10`.
+    *   **Context**: The script runs in the context of your current database session unless specified otherwise.
 
 ## Script Schema (The "Language")
 
@@ -81,23 +106,15 @@ The script system uses a stable JSON schema acting as a mini-SDK. Each step now 
 *   **`fetch`**: High-performance data retrieval directly from SOP B-Trees.
 *   **`say`**: Output information to the user.
 
-## Commands
+## Commands Reference
 
-### Recording & Playback
-*   `/record <name>`: Start recording a session as a new script.
-*   `/stop`: Stop recording and save to SystemDB.
-*   `/play <name> [param=value ...]`: Execute a saved script.
-    *   **Parameters**: Pass arguments like `user_id=123`.
-    *   **Templating**: Use `{{.user_id}}` in your script to inject values.
+*   `/create <name> [category]`
+*   `/step [instruction]`
+*   `/save`
+*   `/run <name> [args]`
+*   `/list`
+*   `/delete <name>`
 
-### Management
-*   `/list`: List all available scripts in the SystemDB.
-
-## AI Script Authoring
-
-We have moved beyond simple "Recording". The AI Agent itself is now equipped with a suite of tools to author, edit, and maintain scripts programmatically. This treats scripts as **managed software artifacts**.
-
-*   **`create_script`**: Initializes a new named script.
 *   **`save_step`**: Appends a new step to an existing script. This allows the AI to "compose" a program step-by-step, thinking through the logic as it goes.
 *   **`save_script`**: Overwrites a script entirely (bulk save).
 *   **`insert_step` / `update_step`**: Fine-grained editing of existing logic.

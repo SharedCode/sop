@@ -79,7 +79,7 @@ func handleExecuteScript(w http.ResponseWriter, r *http.Request) {
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
 	// Set headers for streaming
-	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Type", "application/x-ndjson")
 	w.Header().Set("Transfer-Encoding", "chunked")
 	// We don't strictly need to set status 200 here, the first Write will do it.
 	// But it's good to be explicit if we haven't encountered an error yet.

@@ -22,20 +22,33 @@ import (
 type contextKey string
 
 const CtxKeyJSONStreamer contextKey = "json_streamer"
+const CtxKeyUseNDJSON contextKey = "use_ndjson"
 
 type StepExecutionResult struct {
-	Type    string `json:"type"`
-	Command string `json:"command,omitempty"`
-	Prompt  string `json:"prompt,omitempty"`
-	Result  any    `json:"result,omitempty"`
-	Error   string `json:"error,omitempty"`
+	Type      string `json:"type"`
+	Command   string `json:"command,omitempty"`
+	Prompt    string `json:"prompt,omitempty"`
+	StepIndex int    `json:"step_index"`
+	Result    any    `json:"result,omitempty"`
+	Record    any    `json:"record,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
+type Flusher interface {
+	Flush()
 }
 
 // JSONStreamer handles streaming JSON array elements
 type JSONStreamer struct {
-	w     io.Writer
-	mu    sync.Mutex
-	first bool
+	w           io.Writer
+	mu          sync.Mutex
+	first       bool
+	isNDJSON    bool
+	shouldFlush bool
+}
+
+func (s *JSONStreamer) SetFlush(flush bool) {
+	s.shouldFlush = flush
 }
 
 func NewJSONStreamer(w io.Writer) *JSONStreamer {
@@ -45,9 +58,28 @@ func NewJSONStreamer(w io.Writer) *JSONStreamer {
 	}
 }
 
+func NewNDJSONStreamer(w io.Writer) *JSONStreamer {
+	return &JSONStreamer{
+		w:        w,
+		first:    true,
+		isNDJSON: true,
+	}
+}
+
 func (s *JSONStreamer) Write(step StepExecutionResult) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if s.isNDJSON {
+		bytes, _ := json.Marshal(step)
+		fmt.Fprintln(s.w, string(bytes))
+		if s.shouldFlush {
+			if f, ok := s.w.(Flusher); ok {
+				f.Flush()
+			}
+		}
+		return
+	}
 
 	if !s.first {
 		fmt.Fprint(s.w, ",\n")
@@ -57,34 +89,57 @@ func (s *JSONStreamer) Write(step StepExecutionResult) {
 	// Marshal the step
 	bytes, _ := json.MarshalIndent(step, "  ", "  ")
 	fmt.Fprint(s.w, string(bytes))
+	if s.shouldFlush {
+		if f, ok := s.w.(Flusher); ok {
+			f.Flush()
+		}
+	}
 }
 
 // StartStreamingStep starts a new step in the JSON stream and returns a StepStreamer.
 // Note: The header is written lazily when the first item is written.
-func (s *JSONStreamer) StartStreamingStep(stepType, command, prompt string) *StepStreamer {
+func (s *JSONStreamer) StartStreamingStep(stepType, command, prompt string, stepIndex int) *StepStreamer {
 	return &StepStreamer{
-		parent:   s,
-		first:    true,
-		stepType: stepType,
-		command:  command,
-		prompt:   prompt,
+		parent:    s,
+		first:     true,
+		stepType:  stepType,
+		command:   command,
+		prompt:    prompt,
+		stepIndex: stepIndex,
 	}
 }
 
 // StepStreamer implements ai.ResultStreamer to stream result items.
 type StepStreamer struct {
-	parent   *JSONStreamer
-	first    bool
-	closed   bool
-	used     bool
-	stepType string
-	command  string
-	prompt   string
+	parent    *JSONStreamer
+	first     bool
+	closed    bool
+	used      bool
+	stepType  string
+	command   string
+	prompt    string
+	stepIndex int
 }
 
 func (ss *StepStreamer) writeHeader() {
 	ss.parent.mu.Lock()
 	defer ss.parent.mu.Unlock()
+
+	if ss.parent.isNDJSON {
+		// Emit step_start event
+		res := StepExecutionResult{
+			Type:      "step_start",
+			Command:   ss.command,
+			Prompt:    ss.prompt,
+			StepIndex: ss.stepIndex,
+		}
+		b, _ := json.Marshal(res)
+		fmt.Fprintln(ss.parent.w, string(b))
+		if f, ok := ss.parent.w.(Flusher); ok {
+			f.Flush()
+		}
+		return
+	}
 
 	if !ss.parent.first {
 		fmt.Fprint(ss.parent.w, ",\n")
@@ -106,6 +161,9 @@ func (ss *StepStreamer) BeginArray() {
 		ss.writeHeader()
 		ss.used = true
 	}
+	if ss.parent.isNDJSON {
+		return
+	}
 	ss.parent.mu.Lock()
 	defer ss.parent.mu.Unlock()
 	fmt.Fprint(ss.parent.w, "[")
@@ -119,6 +177,19 @@ func (ss *StepStreamer) WriteItem(item any) {
 	ss.parent.mu.Lock()
 	defer ss.parent.mu.Unlock()
 
+	if ss.parent.isNDJSON {
+		res := StepExecutionResult{
+			Type:   "record",
+			Record: item,
+		}
+		b, _ := json.Marshal(res)
+		fmt.Fprintln(ss.parent.w, string(b))
+		if f, ok := ss.parent.w.(Flusher); ok {
+			f.Flush()
+		}
+		return
+	}
+
 	if !ss.first {
 		fmt.Fprint(ss.parent.w, ",")
 	}
@@ -129,6 +200,9 @@ func (ss *StepStreamer) WriteItem(item any) {
 }
 
 func (ss *StepStreamer) EndArray() {
+	if ss.parent.isNDJSON {
+		return
+	}
 	ss.parent.mu.Lock()
 	defer ss.parent.mu.Unlock()
 	fmt.Fprint(ss.parent.w, "]")
@@ -140,6 +214,12 @@ func (ss *StepStreamer) Close() {
 	}
 	ss.parent.mu.Lock()
 	defer ss.parent.mu.Unlock()
+
+	if ss.parent.isNDJSON {
+		ss.closed = true
+		return
+	}
+
 	fmt.Fprint(ss.parent.w, "}")
 	ss.closed = true
 }
@@ -258,10 +338,12 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.ScriptStep, scope map[
 				resultAny = json.RawMessage(resp)
 			}
 
+			stepIndex, _ := ctx.Value("step_index").(int)
 			streamer.Write(StepExecutionResult{
-				Type:   "ask",
-				Prompt: prompt,
-				Result: resultAny,
+				Type:      "ask",
+				Prompt:    prompt,
+				Result:    resultAny,
+				StepIndex: stepIndex,
 			})
 		} else {
 			msg := fmt.Sprintf("%s\n", resp)
@@ -325,7 +407,9 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 		// Prepare streamer if available
 		var stepStreamer *StepStreamer
 		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
-			stepStreamer = streamer.StartStreamingStep("command", step.Command, "")
+			stepIndex, _ := ctx.Value("step_index").(int)
+			log.Debug("runStepCommand: Got step_index", "index", stepIndex)
+			stepStreamer = streamer.StartStreamingStep("command", step.Command, "", stepIndex)
 			ctx = context.WithValue(ctx, ai.CtxKeyResultStreamer, stepStreamer)
 		}
 
@@ -348,18 +432,54 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 		// Stream result if streamer is present (and wasn't used by tool)
 		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
 			var resultAny any = resp
-			// Try to unmarshal if it looks like JSON
+
+			// Optimization/UX: If the result is a JSON array (list of records),
+			// we want to stream them individually or at least separate the command metadata from data.
+			// This matches the "Pattern 3" request: Header -> Row -> Row ...
+
+			stepIndex, _ := ctx.Value("step_index").(int)
+
 			trimmed := strings.TrimSpace(resp)
-			if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
-				// Optimization: Use RawMessage to avoid full unmarshal/marshal cycle
-				// This assumes the tool output is valid JSON.
+			if strings.HasPrefix(trimmed, "[") {
+				// Parse array
+				var list []json.RawMessage
+				if err := json.Unmarshal([]byte(trimmed), &list); err == nil {
+					// 1. Emit Step Header
+					streamer.Write(StepExecutionResult{
+						Type:      "step_start",
+						Command:   step.Command,
+						StepIndex: stepIndex,
+					})
+
+					// 2. Emit Records
+					for _, item := range list {
+						streamer.Write(StepExecutionResult{
+							Type:   "record",
+							Record: item,
+						})
+					}
+					return nil
+				}
+			}
+
+			// Fallback: Single Object or Primitive or Failed Array Parse
+			// Try to unmarshal if it looks like JSON object to avoid escaping
+			if strings.HasPrefix(trimmed, "{") {
 				resultAny = json.RawMessage(resp)
 			}
 
+			// Emit as single result (legacy behavior for non-list outputs)
+			// But maybe we should still wrap in step_start?
+			// Let's emit header + 1 record
+			log.Debug("runStepCommand: Emitting fallback step_start", "index", stepIndex)
 			streamer.Write(StepExecutionResult{
-				Type:    "command",
-				Command: step.Command,
-				Result:  resultAny,
+				Type:      "step_start",
+				Command:   step.Command,
+				StepIndex: stepIndex,
+			})
+			streamer.Write(StepExecutionResult{
+				Type:   "record",
+				Record: resultAny,
 			})
 		} else {
 			// Fallback to string builder if no streamer (legacy mode)
@@ -756,7 +876,7 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map
 		currentDBName = p.CurrentDB
 	}
 
-	for _, step := range steps {
+	for i, step := range steps {
 		// Check if context is already cancelled (by errgroup or sync error)
 		if groupCtx.Err() != nil {
 			break
@@ -776,6 +896,8 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map
 
 		// Prepare Context and DB for this step
 		stepCtx := groupCtx
+		log.Debug("runSteps: Setting step_index", "index", i+1, "command", step.Command)
+		stepCtx = context.WithValue(stepCtx, "step_index", i+1)
 		stepDB := db
 
 		// Check for dead transaction (committed or rolled back)

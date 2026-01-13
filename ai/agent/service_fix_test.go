@@ -48,7 +48,7 @@ func TestService_ExecuteScript_StringDB(t *testing.T) {
 
 	svc := NewService(&MockDomain{}, sysDB, dbs, &MockGenerator{}, nil, nil, false)
 
-	// 4. Call Ask with /play and String DB in payload
+	// 4. Call Ask with /run and String DB in payload
 	payload := &ai.SessionPayload{
 		CurrentDB: "test_db", // String!
 	}
@@ -56,16 +56,13 @@ func TestService_ExecuteScript_StringDB(t *testing.T) {
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
 	// This should NOT panic
-	resp, err := svc.Ask(ctx, "/play test_script")
+	resp, err := svc.Ask(ctx, "/run test_script")
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
 
 	// The response is now a JSON array of steps/results
-	if !strings.Contains(resp, "\"type\": \"say\"") {
-		t.Errorf("Expected response to contain '\"type\": \"say\"', got: %s", resp)
-	}
-	if !strings.Contains(resp, "\"result\": \"Hello\"") {
-		t.Errorf("Expected response to contain '\"result\": \"Hello\"', got: %s", resp)
+	if !strings.Contains(resp, "Hello") {
+		t.Errorf("Expected response to contain 'Hello', got: %s", resp)
 	}
 }

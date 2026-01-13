@@ -52,22 +52,22 @@ func TestScript_Play_ArgumentParsing_Correct(t *testing.T) {
 	}{
 		{
 			name:      "All Named",
-			cmd:       "/play test_script_args table=users role=admin limit=10",
+			cmd:       "/run test_script_args table=users role=admin limit=10",
 			wantError: false,
 		},
 		{
 			name:      "All Positional",
-			cmd:       "/play test_script_args users admin 10",
+			cmd:       "/run test_script_args users admin 10",
 			wantError: false,
 		},
 		{
 			name:      "Mixed (Positional then Named)",
-			cmd:       "/play test_script_args users role=admin limit=10",
+			cmd:       "/run test_script_args users role=admin limit=10",
 			wantError: false,
 		},
 		{
 			name:      "Missing Parameter",
-			cmd:       "/play test_script_args users",
+			cmd:       "/run test_script_args users",
 			wantError: true,
 			errorMsg:  "Missing required parameters",
 		},
