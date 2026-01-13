@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,6 +24,25 @@ func (m *MockGenerator) Generate(ctx context.Context, prompt string, options ai.
 }
 
 func (m *MockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+// MockAgent implements ai.Agent and ToolProvider
+type MockAgent struct{}
+
+func (a *MockAgent) Open(ctx context.Context) error  { return nil }
+func (a *MockAgent) Close(ctx context.Context) error { return nil }
+func (a *MockAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
+	return nil, nil
+}
+func (a *MockAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+	return "", nil
+}
+func (a *MockAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	if toolName == "echo" {
+		msg, _ := args["msg"].(string)
+		return "Echo: " + msg, nil
+	}
+	return "", fmt.Errorf("unknown tool: %s", toolName)
+}
 
 // GenericDomain is a placeholder.
 type GenericDomain struct{}
@@ -53,7 +73,13 @@ func TestHandleExecuteScript(t *testing.T) {
 		CacheType:     sop.NoCache,
 	}
 	sysDB := database.NewDatabase(dbOpts)
-	svc := agent.NewService(&GenericDomain{}, sysDB, map[string]sop.DatabaseOptions{"system": dbOpts}, &MockGenerator{}, nil, nil, false)
+
+	// Create registry with MockAgent to handle "echo" tool
+	registry := map[string]ai.Agent[map[string]any]{
+		"mock": &MockAgent{},
+	}
+
+	svc := agent.NewService(&GenericDomain{}, sysDB, map[string]sop.DatabaseOptions{"system": dbOpts}, &MockGenerator{}, nil, registry, false)
 
 	// 2. Register Agent in global map
 	loadedAgents = make(map[string]ai.Agent[map[string]any])
@@ -105,11 +131,9 @@ func TestHandleExecuteScript(t *testing.T) {
 
 	// Check Body
 	body := w.Body.String()
-	if !strings.Contains(body, "[") {
-		t.Errorf("Expected JSON array start, got: %s", body)
-	}
-	if !strings.HasSuffix(strings.TrimSpace(body), "]") {
-		t.Errorf("Expected JSON array end, got: %s", body)
+	// Verify output contains the expected result (NDJSON format)
+	if !strings.Contains(body, "\"record\":\"Echo: Hello World\"") {
+		t.Errorf("Expected output to contain result 'Echo: Hello World', got: %s", body)
 	}
 }
 

@@ -508,11 +508,28 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		// Check for streaming writer in context
 		var w io.Writer = &sb
 		if ctxW, ok := ctx.Value(ai.CtxKeyWriter).(io.Writer); ok {
+			// If we are given an explicit writer (like in scripts_test),
+			// update context to prefer NDJSON if applicable for that writer.
+			// But wait, TestScriptExecution_SelectTwice calls Ask via handleSessionCommand.
+			// Ask DOES NOT inject CtxKeyWriter.
+			// So w will be &sb.
+			// PlayScript will use NewJSONStreamer(&sb).
+			// So sb will contain "[...]" JSON array.
 			w = ctxW
+			// For external streaming, we often prefer NDJSON.
 			ctx = context.WithValue(ctx, CtxKeyUseNDJSON, true)
+		} else {
+			// Default to internal buffer &sb.
+			// PlayScript defaults to JSON array if not NDJSON.
+			// We want nice text output from handleSessionCommand if possible.
+			// But PlayScript outputs JSON.
+			// So we should capture JSON in sb, and then parse it if we want to return text?
+			// OR we just return the raw JSON string if that's what the test expects.
+			// Test expects: "Response missing data" (John Doe etc).
 		}
 
 		// Use the shared PlayScript function
+		// Note: PlayScript uses internal flushing.
 		if err := s.PlayScript(ctx, name, category, scope, w); err != nil {
 			// The error is already logged to sb/streamer if possible, but PlayScript returns error too.
 			// We append the error message if not already there?

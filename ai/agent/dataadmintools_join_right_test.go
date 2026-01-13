@@ -66,7 +66,7 @@ func TestToolJoin_RightOuterJoin(t *testing.T) {
 	// We use the JSON-based atomic script which uses ScriptEngine (and thus our new RightOuterJoinStoreCursor)
 	// We must Open DB -> Begin TX -> Open Stores -> Scan -> Join
 	scriptJSON := `[
-		{"op": "open_db", "args": {"name": "test_db"}},
+		{"op": "open_db", "args": {"name": "test_db"}, "result_var": "test_db"},
 		{"op": "begin_tx", "args": {"database": "test_db", "mode": "read"}, "result_var": "tx"},
 		{"op": "open_store", "args": {"transaction": "tx", "name": "clients_rj"}, "result_var": "clients_store"},
 		{"op": "open_store", "args": {"transaction": "tx", "name": "orders_rj"}, "result_var": "orders_store"},
@@ -97,7 +97,7 @@ func TestToolJoin_RightOuterJoin(t *testing.T) {
 	// If InMemory, it might be transient.
 	// We might need to ensure they share the same registry or usage.
 
-	// To be safe, we can inject a StoreOpener that returns the already opened stores? 
+	// To be safe, we can inject a StoreOpener that returns the already opened stores?
 	// Or relies on the fact that we passed 'dbOpts' which points to the same tmpDir.
 	// For sop.InMemory, it usually means "No Disk I/O", so if instances share the same Registry it works.
 	// If not, it fails.

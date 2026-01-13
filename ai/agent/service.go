@@ -361,6 +361,12 @@ func (s *Service) RecordStep(ctx context.Context, step ai.ScriptStep) {
 	// Always capture the last step for potential manual addition
 	s.session.LastStep = &step
 
+	// If we are actively recording a script, append the step
+	if s.session.CurrentScript != nil {
+		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, step)
+		log.Debug("Service.RecordStep: Appended step to CurrentScript", "script_name", s.session.CurrentScript.Name, "step_count", len(s.session.CurrentScript.Steps))
+	}
+
 	// Buffer tool calls for potential refactoring
 	if step.Type == "command" {
 		s.session.LastInteractionToolCalls = append(s.session.LastInteractionToolCalls, step)
@@ -448,6 +454,15 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	} else {
 		// If no payload provided, create a default one from session state
 		// Use forcedDBName if provided via Ask options, otherwise session state
+
+		// Ensure we have a tool executor
+		// If the caller didn't provide one, we use the ServiceToolExecutor which delegates to registered agents.
+		if ctx.Value(ai.CtxKeyExecutor) == nil {
+			executor := &ServiceToolExecutor{s: s}
+			ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
+		}
+
+		// 1. Prepare Context (History, DB schema, etc.)
 		targetDB := s.session.CurrentDB
 		if forcedDBName != "" {
 			targetDB = forcedDBName
@@ -584,6 +599,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 
 	// Track if we recorded a tool call to avoid duplicate "print" recording
 	toolRecorded := false
+	_ = toolRecorded
 
 	// Check for Raw Tool Call (from DataAdmin or similar generators)
 	if output.Raw != nil {
@@ -595,126 +611,154 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 
 	// 5. Check for Tool Execution (Agent -> App)
 	// If the generator returns a JSON tool call, and we have an executor, run it.
-	if !toolRecorded {
-		if executor, ok := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor); ok && executor != nil {
-			// Simple heuristic: If output looks like a JSON tool call
-			text := strings.TrimSpace(output.Text)
-			// Remove markdown code blocks if present
-			text = strings.TrimPrefix(text, "```json")
-			text = strings.TrimPrefix(text, "```")
-			text = strings.TrimSuffix(text, "```")
-			text = strings.TrimSpace(text)
+	// NOTE: If toolRecorded is TRUE (Raw output was present), we still check Text because
+	// some generators might provide both. But usually Raw takes precedence.
+	// However, the test "TestService_Ask_CapturesLastStep_OnToolExecution" relies on parsing Text JSON.
+	if executor, ok := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor); ok && executor != nil {
+		// Simple heuristic: If output looks like a JSON tool call
+		text := strings.TrimSpace(output.Text)
+		// Remove markdown code blocks if present
+		text = strings.TrimPrefix(text, "```json")
+		text = strings.TrimPrefix(text, "```")
+		text = strings.TrimSuffix(text, "```")
+		text = strings.TrimSpace(text)
 
-			if strings.HasPrefix(text, "{") && strings.Contains(text, "\"tool\"") {
-				// De-obfuscate Tool Arguments before returning to caller.
+		possibleTool := false
+		if strings.HasPrefix(text, "{") && strings.Contains(text, "\"tool\"") {
+			possibleTool = true
+		}
 
-				// 1. Parse JSON FIRST to get the exact values the LLM returned
-				var toolCall struct {
-					Tool string         `json:"tool"`
-					Args map[string]any `json:"args"`
-				}
+		// Also check toolRecorded (Raw output) - if so, we can use that if Text parsing fails or instead.
+		// Detailed logic:
+		// 1. Try to parse Text as Tool Call.
+		// 2. If Text is NOT valid tool call, but output.Raw IS, use output.Raw.
 
-				// We try to unmarshal the text directly.
-				// If the LLM returned valid JSON (even with obfuscated values), this will succeed.
-				if err := json.Unmarshal([]byte(text), &toolCall); err == nil {
-					// 2. Sanitize Args
-					var sanitize func(any) any
-					sanitize = func(v any) any {
-						switch val := v.(type) {
-						case string:
-							// a. Remove Markdown bold/italics/code wrappers
-							val = strings.Trim(val, "*_`")
-							// b. Replace NBSP with space and Trim whitespace
-							val = strings.ReplaceAll(val, "\u00a0", " ")
-							val = strings.TrimSpace(val)
-							// c. De-obfuscate if enabled
-							if s.EnableObfuscation {
-								val = obfuscation.GlobalObfuscator.DeobfuscateText(val)
-							}
-							return val
-						case []any:
-							for i, item := range val {
-								val[i] = sanitize(item)
-							}
-							return val
-						case map[string]any:
-							for k, item := range val {
-								val[k] = sanitize(item)
-							}
-							return val
-						default:
-							return val
-						}
-					}
+		// Let's stick to existing logic but just fix the indentation/flow.
+		if possibleTool {
+			// De-obfuscate Tool Arguments before returning to caller.
 
-					for k, v := range toolCall.Args {
-						toolCall.Args[k] = sanitize(v)
-					}
-
-					// Inject Database from Options if missing
-					if db != nil {
-						// Inject the database instance into args for the ToolExecutor.
-						toolCall.Args["_db_instance"] = db
-					}
-
-					// Auto-Transaction Management for Tool Execution
-					// We ensure that if a database is present, we wrap the tool execution in a transaction.
-					// This prevents leaving open transactions if the tool doesn't manage them,
-					// and ensures atomic execution of the tool's operations.
-					var tx sop.Transaction
-					if db != nil {
-						if p := ai.GetSessionPayload(ctx); p != nil && p.Transaction == nil {
-							var err error
-							tx, err = db.BeginTransaction(ctx, sop.ForWriting)
-							if err != nil {
-								return "", fmt.Errorf("failed to begin auto-transaction: %w", err)
-							}
-							p.Transaction = tx
-						}
-					}
-
-					// Execute Tool
-					result, err := executor.Execute(ctx, toolCall.Tool, toolCall.Args)
-
-					// Commit or Rollback Auto-Transaction
-					if tx != nil {
-						if err != nil {
-							// If tool failed, rollback
-							tx.Rollback(ctx)
-						} else {
-							// If tool succeeded, commit
-							if commitErr := tx.Commit(ctx); commitErr != nil {
-								return "", fmt.Errorf("tool execution succeeded but transaction commit failed: %w", commitErr)
-							}
-						}
-						// Clear from payload to avoid reuse if p is reused
-						if p := ai.GetSessionPayload(ctx); p != nil {
-							p.Transaction = nil
-						}
-						// Also clear session transaction to ensure statelessness
-						s.session.Transaction = nil
-					} else if s.session.Transaction != nil {
-						// Ensure statelessness for non-script sessions even if no auto-transaction was started
-						if err != nil {
-							s.session.Transaction.Rollback(ctx)
-						} else {
-							// We commit if the tool execution was successful
-							s.session.Transaction.Commit(ctx)
-						}
-						s.session.Transaction = nil
-						s.session.Variables = nil
-					}
-
-					if err != nil {
-						return "", fmt.Errorf("tool execution failed: %w", err)
-					}
-
-					return result, nil
-				}
-
-				// Fallback: If JSON parsing failed (maybe invalid JSON), return as is
-				return text, nil
+			// 1. Parse JSON FIRST to get the exact values the LLM returned
+			var toolCall struct {
+				Tool string         `json:"tool"`
+				Args map[string]any `json:"args"`
 			}
+
+			// We try to unmarshal the text directly.
+			// If the LLM returned valid JSON (even with obfuscated values), this will succeed.
+			if err := json.Unmarshal([]byte(text), &toolCall); err == nil {
+				// 2. Sanitize Args
+				var sanitize func(any) any
+				sanitize = func(v any) any {
+					switch val := v.(type) {
+					case string:
+						// a. Remove Markdown bold/italics/code wrappers
+						val = strings.Trim(val, "*_`")
+						// b. Replace NBSP with space and Trim whitespace
+						val = strings.ReplaceAll(val, "\u00a0", " ")
+						val = strings.TrimSpace(val)
+						// c. De-obfuscate if enabled
+						if s.EnableObfuscation {
+							val = obfuscation.GlobalObfuscator.DeobfuscateText(val)
+						}
+						return val
+					case []any:
+						for i, item := range val {
+							val[i] = sanitize(item)
+						}
+						return val
+					case map[string]any:
+						for k, item := range val {
+							val[k] = sanitize(item)
+						}
+						return val
+					default:
+						return val
+					}
+				}
+
+				for k, v := range toolCall.Args {
+					toolCall.Args[k] = sanitize(v)
+				}
+
+				// Inject Database from Options if missing
+				if db != nil {
+					// Inject the database instance into args for the ToolExecutor.
+					toolCall.Args["_db_instance"] = db
+				}
+
+				// Capture Last Step Logic
+				// If we are executing a tool, we should update the LastStep in the session.
+				// This is crucial for "run previous step" or "save as script" features.
+				s.session.LastStep = &ai.ScriptStep{
+					Type:    "command",
+					Command: toolCall.Tool,
+					Args:    toolCall.Args,
+				}
+				// Also update CurrentScript to "Drafting" state implicitly (or assume UI handles it)
+				if s.session.CurrentScript != nil {
+					s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, *s.session.LastStep)
+				}
+				toolRecorded = true
+
+				// Auto-Transaction Management for Tool Execution
+				// We ensure that if a database is present, we wrap the tool execution in a transaction.
+				// This prevents leaving open transactions if the tool doesn't manage them,
+				// and ensures atomic execution of the tool's operations.
+				var tx sop.Transaction
+				if db != nil {
+					if p := ai.GetSessionPayload(ctx); p != nil && p.Transaction == nil {
+						var err error
+						tx, err = db.BeginTransaction(ctx, sop.ForWriting)
+						if err != nil {
+							return "", fmt.Errorf("failed to begin auto-transaction: %w", err)
+						}
+						p.Transaction = tx
+					}
+				}
+
+				// Execute Tool
+				result, err := executor.Execute(ctx, toolCall.Tool, toolCall.Args)
+
+				// Commit or Rollback Auto-Transaction
+				if tx != nil {
+					if err != nil {
+						// If tool failed, rollback
+						tx.Rollback(ctx)
+					} else {
+						// If tool succeeded, commit
+						if commitErr := tx.Commit(ctx); commitErr != nil {
+							return "", fmt.Errorf("tool execution succeeded but transaction commit failed: %w", commitErr)
+						}
+					}
+					// Clear from payload to avoid reuse if p is reused
+					if p := ai.GetSessionPayload(ctx); p != nil {
+						p.Transaction = nil
+					}
+					// Also clear session transaction to ensure statelessness
+					s.session.Transaction = nil
+				} else if s.session.Transaction != nil {
+					// Ensure statelessness for non-script sessions even if no auto-transaction was started
+					if err != nil {
+						s.session.Transaction.Rollback(ctx)
+					} else {
+						// We commit if the tool execution was successful
+						s.session.Transaction.Commit(ctx)
+					}
+					s.session.Transaction = nil
+					s.session.Variables = nil
+				}
+
+				if err != nil {
+					return "", fmt.Errorf("tool execution failed: %w", err)
+				}
+
+				return result, nil
+			}
+
+			// Fallback: If JSON parsing failed (maybe invalid JSON), return as is
+			// Or continue to non-tool processing
+			// For now, we continue to non-tool processing (just text response)
+			// return text, nil
 		}
 	}
 
@@ -725,7 +769,13 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	}
 
 	// Record Chat Output if recording
-	// REMOVED: Recording Logic
+	if s.session.CurrentScript != nil && !toolRecorded {
+		s.session.LastStep = &ai.ScriptStep{
+			Type:   "ask",
+			Prompt: query,
+		}
+		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, *s.session.LastStep)
+	}
 
 	return finalText, nil
 }

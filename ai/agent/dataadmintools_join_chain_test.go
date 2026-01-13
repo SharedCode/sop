@@ -65,7 +65,7 @@ func TestToolJoin_Chained_InnerThenRight(t *testing.T) {
 
 	// 3. Script
 	scriptJSON := `[
-		{"op": "open_db", "args": {"name": "test_db"}},
+		{"op": "open_db", "args": {"name": "test_db"}, "result_var": "test_db"},
 		{"op": "begin_tx", "args": {"database": "test_db", "mode": "read"}, "result_var": "tx"},
 		
 		{"op": "open_store", "args": {"transaction": "tx", "name": "users_chain"}, "result_var": "s_users"},
