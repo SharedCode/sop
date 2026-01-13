@@ -972,7 +972,7 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 		err = e.If(ctx, instr.Args)
 	case "loop":
 		err = e.Loop(ctx, instr.Args)
-	case "call_script":
+	case "call_script", "script":
 		result, err = e.CallScript(ctx, instr.Args)
 	// List / Map Operations (Memory)
 	case "list_new":

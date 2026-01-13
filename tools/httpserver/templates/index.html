@@ -29,6 +29,7 @@
             --button-hover: #0056b3;
             --success-bg: #28a745;
             --danger-bg: #dc3545;
+            --danger-btn-bg: #c9302c;
             --key-color: #155724;
             --text-muted: #555;
             --detail-panel-bg: #fff;
@@ -55,6 +56,7 @@
                 --button-hover: #1177bb;
                 --success-bg: #4caf50;
                 --danger-bg: #f14c4c;
+                --danger-btn-bg: #d9534f;
                 --key-color: #9cdcfe;
                 --text-muted: #aaa;
                 --detail-panel-bg: #1e1e1e;
@@ -319,7 +321,7 @@
 
         /* Utility Classes */
         .btn-success { background-color: var(--success-bg) !important; color: white; }
-        .btn-danger { background-color: var(--danger-bg) !important; color: white; }
+        .btn-danger { background-color: var(--danger-btn-bg) !important; color: white; }
         .btn-secondary { background-color: #6c757d !important; color: white; }
         .error-text { color: var(--danger-bg); }
         .form-label { font-weight: bold; font-size: 12px; color: var(--text-muted); }
@@ -465,7 +467,7 @@
                 <path d="M2.114 8.063V7.9c1.005-.102 1.497-.615 1.497-1.6V4.503c0-1.094.39-1.538 1.354-1.538h.273V2h-.376C3.25 2 2.49 2.759 2.49 4.352v1.524c0 1.094-.376 1.456-1.49 1.456v1.299c1.114 0 1.49.362 1.49 1.456v1.524c0 1.593.759 2.352 2.372 2.352h.376v-.964h-.273c-.964 0-1.354-.444-1.354-1.538V9.663c0-.984-.492-1.497-1.497-1.6zM13.886 7.9v.163c-1.005.103-1.497.616-1.497 1.6v1.798c0 1.094-.39 1.538-1.354 1.538h-.273v.964h.376c1.613 0 2.372-.759 2.372-2.352v-1.524c0-1.094.376-1.456 1.49-1.456V7.332c-1.114 0-1.49-.362-1.49-1.456V4.352C13.51 2.759 12.75 2 11.138 2h-.376v.964h.273c.964 0 1.354.444 1.354 1.538V6.3c0 .984.492 1.497 1.497 1.6z"/>
             </svg>
         </button>
-        <button id="btn-delete-store" onclick="deleteStore()" style="display:none; background-color: transparent; color: var(--danger-bg); padding: 4px; border: none; cursor: pointer;" title="Delete Store">
+        <button id="btn-delete-store" onclick="deleteStore()" style="display:none; background: none; padding: 4px; border: none; cursor: pointer;" title="Delete Store">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
                 <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
@@ -1703,7 +1705,13 @@
                 }
                 if (val === undefined) val = '';
                 
-                html += `<td title="${String(val).replace(/"/g, '&quot;')}">${val}</td>`;
+                let displayVal = val;
+                // Truncate Steps column if too long
+                if (col.toLowerCase() === 'steps' && String(val).length > 18) {
+                    displayVal = '{...}';
+                }
+
+                html += `<td title="${String(val).replace(/"/g, '&quot;')}">${displayVal}</td>`;
             });
             
             html += '</tr>';
@@ -1978,6 +1986,7 @@
     function pushView() {
         if (currentItemKey !== null) {
             viewStack.push({
+                database: currentDatabase, // Save current database
                 store: currentStore,
                 key: currentItemKey,
                 value: JSON.parse(JSON.stringify(currentItemValue)), // Deep copy (simple)
@@ -1989,11 +1998,27 @@
         if (viewStack.length === 0) return;
         const state = viewStack.pop();
         
-        // Restore context
-        // Note: If we switched stores, we'd need more logic. Assuming same store for now.
+        let contextChanged = false;
+
+        // Restore Database context if changed
+        if (state.database && state.database !== currentDatabase) {
+             currentDatabase = state.database;
+             const dbSelect = document.getElementById('db-select');
+             if(dbSelect) dbSelect.value = currentDatabase;
+             contextChanged = true;
+        }
+
+        // Restore Store context if changed
         if (state.store !== currentStore) {
-            alert("Navigation across stores not supported in history yet.");
-            return;
+            currentStore = state.store;
+            const storeSelect = document.getElementById('store-select');
+            if(storeSelect) storeSelect.value = currentStore;
+            contextChanged = true;
+        }
+
+        // If context changed, reload items in background to keep Grid in sync
+        if (contextChanged) {
+             loadItems('first', null, true);
         }
 
         currentItemKey = state.key;
@@ -2002,49 +2027,7 @@
         // Construct item wrapper
         const item = { key: currentItemKey, value: currentItemValue };
         
-        // Call showDetail with isHistoryNav = true to prevent re-pushing? 
-        // Or just bypassing the push logic in showDetail if we handle it here.
-        // Actually, showDetail doesn't push. We push explicitly before navigating away.
         showDetail(null, item, true);
-    }
-
-    function drillDownToScript(scriptName) {
-        if (!scriptName) return;
-
-        // Fetch the script item
-        // We use the Items API with start_key
-        const url = `/api/store/items?database=${encodeURIComponent(currentDatabase)}&store=${encodeURIComponent(currentStore)}&batch_count=1&start_key=${encodeURIComponent(scriptName)}`;
-        
-        // UI Feedback
-        const originalCursor = document.body.style.cursor;
-        document.body.style.cursor = 'wait';
-
-        fetch(url)
-        .then(r => r.json())
-        .then(items => {
-            document.body.style.cursor = originalCursor;
-            
-            if (items && items.length > 0) {
-                const item = items[0];
-                let fetchedKey = item.key;
-                // Normalize key for comparison
-                // If the key is a string in DB, items[0].key is a string.
-                
-                if (fetchedKey === scriptName) {
-                    // Push current view to stack BEFORE showing new one
-                    pushView();
-                    
-                    // Show new item
-                    showDetail(null, item, true);
-                    return;
-                }
-            }
-            alert(`Script '${scriptName}' not found in current store.`);
-        })
-        .catch(e => {
-            document.body.style.cursor = originalCursor;
-            alert("Failed to drill down: " + e);
-        });
     }
 
     // --- Script Visualizer Helper Functions ---
@@ -2087,8 +2070,18 @@
         if (typeof availableDatabases !== 'undefined' && availableDatabases.length > 0) {
             availableDatabases.forEach(d => {
                 const sel = d.name === db ? 'selected' : '';
-                dbOptions += `<option value="${d.name}" ${sel}>${d.name}</option>`;
+                dbOptions += `<option value="\${d.name}" \${sel}>\${d.name}</option>`;
             });
+        }
+
+        // Back button logic for "Program Steps" header
+        let stepsBackBtn = '';
+        if (typeof viewStack !== 'undefined' && viewStack.length > 0) {
+            stepsBackBtn = `<span onclick="popView()" style="cursor: pointer; display: inline-flex; align-items: center; color: var(--text-color); margin-right: 0;" title="Back to caller script">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+                </svg>
+            </span>`;
         }
 
         return `
@@ -2123,9 +2116,10 @@
                 <!-- Steps Section -->
                 <div style="margin-top: 9px; border-top: 1px solid var(--border-color); padding-top: 10px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <label class="form-label" style="font-size: 1.1em;">Program Steps</label>
-                            <button onclick="runScriptInEditor()" style="font-size: 12px; padding: 2px 8px; background: #28a745; border: none; color: white; cursor: pointer;">▶ Run</button>
+                        <div style="display: flex; align-items: center; gap: 0;">
+                            ${stepsBackBtn}
+                            <label class="form-label" style="font-size: 1.1em; margin-bottom: 0; margin-left: ${stepsBackBtn ? '0' : '0'};">Program Steps</label>
+                            <button onclick="runScriptInEditor()" style="font-size: 12px; padding: 2px 8px; background: #28a745; border: none; color: white; cursor: pointer; margin-left: 10px;">▶ Run</button>
                         </div>
                         <button onclick="addScriptStep()" style="font-size: 12px; padding: 2px 8px;">+ Add Step</button>
                     </div>
@@ -2139,7 +2133,10 @@
 
                     <!-- Execution Output -->
                     <div id="script-execution-output" style="margin-top: 15px; display: none; border-top: 1px solid var(--border-color); padding-top: 10px;">
-                        <label class="form-label">Execution Output (NDJSON Stream)</label>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                            <label class="form-label">Execution Output (NDJSON Stream)</label>
+                            <button onclick="document.getElementById('script-output-content').innerHTML = ''; document.getElementById('script-execution-output').style.display = 'none';" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 12px;" title="Clear Output">Clear</button>
+                        </div>
                         <div id="script-output-content" style="background: #1e1e1e; color: #d4d4d4; padding: 10px; font-family: monospace; border-radius: 4px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-size: 12px;"></div>
                     </div>
                 </div>
@@ -2162,8 +2159,18 @@
              step.command = step.function;
              if (!step.type) step.type = 'command';
         }
-        let fn = step.name || step.command || step.script_name || step.function || 'unknown';
+        
         const type = step.type || 'unknown';
+        
+        let fn = step.name || step.command || step.script_name || step.function || 'unknown';
+        if (type === 'script' || type === 'call_script') {
+            // For scripts, always prioritize script_name unless an explicit Name overrides it.
+            // If Name is present, we use that (step.name check above covers it).
+            // But if Name is missing, we MUST use script_name, not fall through to 'command' or 'llm.generate'.
+            if (!step.name && step.script_name) {
+                fn = step.script_name;
+            }
+        }
 
         // Color coding
         let color = '#7f8c8d'; // Gray
@@ -2172,7 +2179,7 @@
         else if (fn.startsWith('os.') || type === 'command') color = '#e74c3c'; // Red
         else if (fn === 'loop' || type === 'loop') color = '#f39c12'; // Orange
         else if (fn === 'map' || fn === 'reduce') color = '#d35400'; // Dark Orange
-        else if (type === 'call_script') color = '#3498db'; // Blue for Script Calls
+        else if (type === 'call_script' || type === 'script') color = '#3498db'; // Blue for Script Calls
 
         const argsCount = Object.keys(step.args || {}).length;
         const outVar = step.out ? `<span style="background: var(--bg-primary); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-color); font-size: 0.85em; margin-left: auto;">&rarr; ${escapeHtml(step.out)}</span>` : '';
@@ -2208,7 +2215,7 @@
         // Or if it looks like a custom function (not standard namespaces)
         const isStandard = fn.startsWith('llm.') || fn.startsWith('db.') || fn.startsWith('os.') || ['loop', 'map', 'reduce'].includes(fn) || ['ask', 'set', 'if', 'say'].includes(type);
         
-        let shouldDrill = (type === 'call_script');
+        let shouldDrill = (type === 'call_script' || type === 'script');
         if (!shouldDrill && !isStandard && type === 'tool') {
             shouldDrill = true; // Assume custom tool is a script
         }
@@ -2228,14 +2235,14 @@
         }
 
         // Label (e.g. "call: my_script")
-        const label = (type === 'call_script') ? `call: ${fn}` : fn;
+        const label = (type === 'call_script' || type === 'script') ? `call: ${fn}` : fn;
 
         let headerTitle = step.description || step.prompt || fullSummary || label;
 
         return `
             <div class="step-card" id="step-card-${idx}" style="border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary);">
                 <div class="step-header" onclick="toggleStepDetails(${idx})" style="padding: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-left: 4px solid ${color};">
-                    <span style="font-weight: bold; color: ${color}; font-family: monospace;" title="${escapeHtml(headerTitle)}">${escapeHtml(label)}</span>
+                    <span style="font-weight: bold; font-family: monospace;" title="${escapeHtml(headerTitle)}">${escapeHtml(label)}</span>
                     <span style="color: var(--text-muted); font-size: 0.9em;" title="${escapeHtml(fullSummary)}">${escapeHtml(summary)}</span>
                     <div style="margin-left: auto; display: flex; align-items: center; gap: 0px;">
                         <button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); moveScriptStepUp(${idx})" title="Move Up"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L7.5 2.707V14.5a.5.5 0 0 0 .5.5z"/></svg></button>
@@ -2256,11 +2263,11 @@
         const argsJson = JSON.stringify(step.args || {}, null, 2);
         
         // --- Type Selection ---
-        const typeOptions = ['command', 'ask', 'set', 'if', 'loop', 'fetch', 'say', 'call_script'];
+        const typeOptions = ['command', 'ask', 'set', 'if', 'loop', 'fetch', 'say', 'script'];
         let typeOptsHtml = '';
         typeOptions.forEach(t => {
             const sel = (step.type || 'command') === t ? 'selected' : '';
-           typeOptsHtml += `<option value="${t}" ${sel}>${t}</option>`;
+            typeOptsHtml += `<option value="${t}" ${sel}>${t}</option>`;
         });
         
         // Exact Execution Field Logic (No Magic)
@@ -2311,7 +2318,7 @@
         }
 
         let row1 = `
-            <div style="display: grid; grid-template-columns: 1.2fr 1.4fr 1.4fr; gap: 8px; margin-bottom: 0px;">
+            <div id="step-row1-${idx}" style="display: grid; grid-template-columns: 1.2fr 1.4fr 1.4fr; gap: 8px; margin-bottom: 0px;">
                 <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
                     <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;">Type</label>
                     <select class="form-input" style="flex: 1; padding: 2px;" onchange="updateStepField(${idx}, 'type', this.value)">
@@ -2330,14 +2337,98 @@
 
         return `
             ${row1}
-            ${row2Html}
+            <div id="step-row2-${idx}">${row2Html}</div>
             <div class="form-group" style="margin-top: 2px; margin-bottom: 8px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                    <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;">Args(JSON)</label>
+                    <div style="display: flex; align-items: center; gap: 5px;">
+                        <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;">Args(JSON)</label>
+                        <span onclick="openArgsModal(${idx})" style="cursor: pointer; padding: 2px;" title="Open in Editor">
+                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/>
+                                <path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5v11z"/>
+                             </svg>
+                        </span>
+                    </div>
                 </div>
-                <textarea class="form-input" style="font-family: monospace; height: 56px; font-size: 0.9em; width: 100%; box-sizing: border-box; white-space: nowrap; overflow-x: auto;" onchange="updateStepField(${idx}, 'args', this.value)">${escapeHtml(JSON.stringify(step.args || {}))}</textarea>
+                <textarea id="args-input-${idx}" class="form-input" style="font-family: monospace; height: 56px; max-height: 200px; font-size: 0.9em; width: 100%; box-sizing: border-box; white-space: nowrap; overflow-x: auto;" onchange="updateStepField(${idx}, 'args', this.value)">${escapeHtml(JSON.stringify(step.args || {}))}</textarea>
             </div>
         `;
+    }
+
+    let currentEditingStepIdx = -1;
+
+    function openArgsModal(idx) {
+        currentEditingStepIdx = idx;
+        const input = document.getElementById(`args-input-${idx}`);
+        const modal = document.getElementById('args-modal');
+        const modalInput = document.getElementById('args-modal-input');
+        
+        if (!input || !modal || !modalInput) return;
+        
+        try {
+            const json = JSON.parse(input.value);
+            modalInput.value = JSON.stringify(json, null, 4);
+        } catch(e) {
+            modalInput.value = input.value;
+        }
+        
+        modal.style.display = 'flex';
+        modalInput.focus();
+    }
+
+    function saveArgsFromModal() {
+        if (currentEditingStepIdx === -1) return;
+        
+        const modalInput = document.getElementById('args-modal-input');
+        const input = document.getElementById(`args-input-${currentEditingStepIdx}`);
+        
+        if (input && modalInput) {
+            try {
+                // Minify or reformat to compact JSON
+                const json = JSON.parse(modalInput.value);
+                // Keep it relatively compact in the list view? Or just stringify.
+                input.value = JSON.stringify(json);
+                updateStepField(currentEditingStepIdx, 'args', input.value);
+            } catch(e) {
+                alert("Invalid JSON: " + e.message);
+                return;
+            }
+        }
+        
+        closeArgsModal();
+    }
+
+    function closeArgsModal() {
+        document.getElementById('args-modal').style.display = 'none';
+        currentEditingStepIdx = -1;
+    }
+    
+    // Legacy function placeholder if needed
+    function toggleArgsEditor(idx) {
+        openArgsModal(idx);
+    }
+
+    // Dirty State Management for Item Details
+    function markItemDirty() {
+        const btn = document.getElementById('btn-save');
+        const icon = document.getElementById('btn-save-icon');
+        if (btn) {
+             btn.disabled = false;
+             // Visual Cue: Blue color when dirty
+             btn.style.color = '#3498db'; 
+             if (icon) icon.style.color = '#3498db';
+        }
+    }
+
+    function markItemClean() {
+        const btn = document.getElementById('btn-save');
+        const icon = document.getElementById('btn-save-icon');
+        if (btn) {
+             btn.disabled = true;
+             // Reset color
+             btn.style.color = 'var(--text-color)';
+             if (icon) icon.style.color = 'currentColor';
+        }
     }
 
     function toggleStepDetails(idx) {
@@ -2697,6 +2788,7 @@
         // (Removed debug message)
 
         let valueHtml = '';
+        let isScriptView = false;
         
         // Check if Value is a Byte Array (Blob)
         let isBlob = false;
@@ -2710,14 +2802,14 @@
              const jsonStr = JSON.stringify(currentItemValue);
              valueHtml = `
                 <div style="margin-bottom: 5px; font-size: 12px; color: var(--text-muted);">Byte Array (${len} bytes)</div>
-                <textarea id="edit-value" oninput="document.getElementById('btn-save').disabled = false;" style="width: 100%; height: 300px; font-family: monospace; margin-top: 5px;" class="form-input">${jsonStr}</textarea>
+                <textarea id="edit-value" oninput="markItemDirty()" style="width: 100%; height: 300px; font-family: monospace; margin-top: 5px;" class="form-input">${jsonStr}</textarea>
             `;
         } else if (typeof currentItemValue === 'object' && currentItemValue !== null) {
             
             // Check if this is a script store
-            const isScriptStore = currentStore && currentStore.toLowerCase() === 'scripts';
+            isScriptView = currentStore && currentStore.toLowerCase() === 'scripts';
             
-            if (isScriptStore) {
+            if (isScriptView) {
                  valueHtml = renderScriptView(currentItemValue);
             } else {
                 // Form View
@@ -2739,7 +2831,7 @@
                         <div class="form-group" style="display: flex; flex-direction: column;">
                             <label class="form-label">${key}</label>
                             <input type="text" class="value-input form-input" data-key="${key}" value="${safeVal}" 
-                                oninput="document.getElementById('btn-save').disabled = false;">
+                                oninput="markItemDirty()">
                         </div>
                     `;
                 });
@@ -2748,12 +2840,14 @@
         } else {
             // Primitive View (Textarea)
             const valStr = JSON.stringify(currentItemValue, null, 2);
-            valueHtml = `<textarea id="edit-value" oninput="document.getElementById('btn-save').disabled = false;" style="width: 100%; height: 300px; font-family: monospace; margin-top: 5px;" class="form-input">${valStr}</textarea>`;
+            valueHtml = `<textarea id="edit-value" oninput="markItemDirty()" style="width: 100%; height: 300px; font-family: monospace; margin-top: 5px;" class="form-input">${valStr}</textarea>`;
         }
 
         // Back Button Logic
         let backBtn = '';
-        if (viewStack.length > 0) {
+        // If it is a Script View, renderScriptView handles the Back button logic (Steps Section).
+        // If it is a Standard View (JSON/Primitive), we show the Back button here.
+        if (!isScriptView && viewStack.length > 0) {
             backBtn = `<button onclick="popView()" style="padding: 2px 8px; font-size: 12px; margin-right: 10px;" title="Go back to previous item.">⬅ Back</button>`;
         }
 
@@ -2773,8 +2867,22 @@
                 ${valueHtml}
             </div>
             <div style="display: flex; gap: 10px;">
-                <button id="btn-save" onclick="saveItem()" disabled title="Save changes to the item.">Save</button>
-                <button onclick="deleteItem()" class="btn-danger" title="Delete this item from the store.">Delete</button>
+                <!-- Save Button (Icon) -->
+                <!-- Color #3498db is applied when dirty via markItemDirty() -->
+                <button id="btn-save" onclick="saveItem()" disabled title="Save changes to the item" style="background: none; border: none; padding: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-color);">
+                    <svg id="btn-save-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16" style="transition: color 0.2s ease;">
+                        <path d="M11 2H9v3h2z"/>
+                        <path d="M1.5 0h11.586a1.5 1.5 0 0 1 1.06.44l1.415 1.414A1.5 1.5 0 0 1 16 2.914V14.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 14.5v-13A1.5 1.5 0 0 1 1.5 0M1 1.5v13a.5.5 0 0 0 .5.5H2v-4.5A1.5 1.5 0 0 1 3.5 9h9a1.5 1.5 0 0 1 1.5 1.5V15h.5a.5.5 0 0 0 .5-.5V2.914a.5.5 0 0 0-.146-.353l-1.415-1.415A.5.5 0 0 0 13.086 1H13v4.5A1.5 1.5 0 0 1 11.5 7h-7A1.5 1.5 0 0 1 3 5.5V1H1.5a.5.5 0 0 0-.5.5m3 4a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 .5-.5V1H4zM3 15h10v-4.5a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5z"/>
+                    </svg>
+                </button>
+                
+                <!-- Delete Button (Icon) -->
+                <button onclick="deleteItem()" title="Delete this item from the store" style="background: none; border: none; padding: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-color);">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                    </svg>
+                </button>
             </div>
         `;
 
@@ -2854,9 +2962,9 @@
         };
 
         const btn = document.getElementById('btn-save');
-        const originalText = btn.textContent;
-        btn.textContent = "Saving...";
+        // Visual feedback: Disable while saving
         btn.disabled = true;
+        btn.style.opacity = '0.5';
 
         fetch('/api/store/item/update', {
             method: 'POST',
@@ -2868,9 +2976,9 @@
             return res.json();
         })
         .then(() => {
-            // Success: Keep button disabled (greyed out) to indicate saved state
-            btn.textContent = "Save";
-            btn.disabled = true;
+            // Success: Reset button state
+            btn.style.opacity = '1';
+            markItemClean();
             
             // Update local state so subsequent edits work correctly
             currentItemValue = newVal;
@@ -2898,8 +3006,8 @@
                         "Another user may have modified this record (Swarm conflict).\n" +
                         "Please refresh the data to see the latest changes.";
             alert(msg);
-            btn.textContent = "Save";
-            btn.disabled = false; // Re-enable so user can try again
+            btn.style.opacity = '1';
+            markItemDirty(); // Re-enable so user can try again
         });
     }
 
@@ -4515,48 +4623,137 @@
     }
 
     function drillDownToScript(scriptName) {
-        // Fetch the script item
-        // Note: We use action=current with 'q' to try and fetch the specific item
-        // Backend handles 'q' by searching. We hope it returns exact match first.
-        fetch(`/api/store/items?database=${currentDatabase}&name=${currentStore}&q=${encodeURIComponent(scriptName)}`)
-        .then(res => res.json())
-        .then(items => {
-            if (items && items.length > 0) {
-                // Find exact match if multiple returned
-                const item = items.find(i => i.key === scriptName) || items[0];
+        // Parse Category if present (e.g. "finance.compute_monthly")
+        let searchName = scriptName;
+        let searchCategory = null;
+        if (scriptName.indexOf('.') > 0) {
+            const parts = scriptName.split('.');
+            // Assume format: category.name
+            searchCategory = parts[0];
+            searchName = parts[1];
+        } else {
+             // If no category is present, can we assume any? 
+             // Ideally we search globally?
+        }
+
+        // Check for unsaved changes before starting navigation
+        const btn = document.getElementById('btn-save');
+        if (btn && !btn.disabled) {
+             if (!confirm("You have unsaved changes. Navigating to script will discard them. Continue?")) {
+                 return;
+             }
+        }
+
+        const targetStore = "scripts";
+        
+        // Helper to find the script in a specific database
+        const tryFetch = (dbName) => {
+            // Using query on Name only for flexibility
+            return fetch(`/api/store/items?database=${encodeURIComponent(dbName)}&name=${targetStore}&q=${encodeURIComponent(searchName)}`)
+                .then(res => {
+                    if (!res.ok) throw new Error(res.statusText);
+                    return res.json();
+                });
+        };
+
+        // UI Feedback
+        const originalCursor = document.body.style.cursor;
+        document.body.style.cursor = 'wait';
+
+        tryFetch(currentDatabase)
+            .then(items => {
+                // Return { db: currentDatabase, items: items } if found
+                if (items && items.length > 0) return { db: currentDatabase, items: items };
                 
-                if (item.key === scriptName) {
-                    let steps = [];
-                    if (item.value && Array.isArray(item.value.steps)) {
-                        steps = item.value.steps;
-                    } else if (typeof item.value === 'string') {
-                         try {
-                             const parsed = JSON.parse(item.value);
-                             if (parsed.steps) steps = parsed.steps;
-                         } catch(e) {}
-                    } else if (item.value && item.value.steps && typeof item.value.steps === 'string') {
-                         // Double encoded JSON?
-                         try {
-                             steps = JSON.parse(item.value.steps);
-                         } catch(e) {}
+                // If not found, look for a System DB to fallback to
+                const systemDB = availableDatabases.find(d => d.is_system);
+                if (systemDB && systemDB.name !== currentDatabase) {
+                    console.log(`Script '${scriptName}' not found in '${currentDatabase}', trying System DB '${systemDB.name}'...`);
+                    return tryFetch(systemDB.name).then(sysItems => {
+                        return { db: systemDB.name, items: sysItems };
+                    });
+                }
+                return { db: currentDatabase, items: [] };
+            })
+            .then(result => {
+                const items = result.items;
+                const foundDB = result.db;
+                
+                if (items && items.length > 0) {
+                    // Match Logic (Object Key vs String Key vs Namespace)
+                    const item = items.find(i => {
+                        if (i.key && typeof i.key === 'object') {
+                             const keyName = i.key.name || i.key.Name;
+                             const keyCat = i.key.category || i.key.Category;
+                             
+                             if (keyName !== searchName) return false;
+                             if (searchCategory && keyCat !== searchCategory) return false;
+                             return true;
+                        }
+                        if (i.key === searchName) {
+                            if (searchCategory) return false;
+                            return true;
+                        }
+                        return false;
+                    }) || items[0];
+
+                    // Verify correctness of match
+                    let isMatch = false;
+                    if (item.key && typeof item.key === 'object') {
+                         const keyName = item.key.name || item.key.Name;
+                         if (keyName === searchName) isMatch = true;
+                    } else if (item.key === searchName) {
+                        isMatch = true;
                     }
                     
-                    // Push current to stack
-                    scriptViewStack.push(currentScriptView);
-                    
-                    // Update current
-                    currentScriptView = { name: scriptName, steps: steps };
-                    renderScriptTree();
+                    if (isMatch) {
+                        // FOUND! Now navigate the main UI.
+
+                        // 1. Switch Database Context if needed
+                        if (foundDB !== currentDatabase) {
+                            currentDatabase = foundDB;
+                            const dbSelect = document.getElementById('db-select');
+                            if (dbSelect) dbSelect.value = currentDatabase;
+                        }
+
+                        // 2. Switch Store Context
+                        currentStore = targetStore;
+                        const storeSelect = document.getElementById('store-select');
+                        if (storeSelect) {
+                            storeSelect.value = currentStore;
+                            // Optionally trigger onchange to update store info, but we are manually driving here
+                        }
+
+                        // 3. Load Items (to populate the grid for context) AND Show Detail
+                        // We use loadItems() but we know it might be async.
+                        // However, we already HAVE the item we want to show.
+                        // We can show it immediately.
+                        
+                        document.body.style.cursor = originalCursor;
+                        
+                        // Push View State to History
+                        pushView(); 
+
+                        // Trigger loadItems to update the background grid
+                        // We pass keepPanel=true so it doesn't close our detail view if we open it effectively immediately
+                        loadItems('first', null, true); // This runs in background
+
+                        // Open the Detail Pane with the Found Item
+                        showDetail(null, item, true); 
+
+                    } else {
+                        document.body.style.cursor = originalCursor;
+                        alert("Script found but key mismatch? Found: " + JSON.stringify(item.key));
+                    }
                 } else {
-                    alert("Script found but key mismatch? Found: " + item.key);
+                    document.body.style.cursor = originalCursor;
+                    alert("Script not found: " + scriptName);
                 }
-            } else {
-                alert("Script not found: " + scriptName);
-            }
-        })
-        .catch(err => {
-            alert("Error fetching script: " + err.message);
-        });
+            })
+            .catch(err => {
+                document.body.style.cursor = originalCursor;
+                alert("Error fetching script: " + err.message);
+            });
     }
 
     function goBackScript() {
@@ -7157,6 +7354,13 @@
         // Global Escape Key Handler for Modals
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
+                // Args Modal (Check first)
+                const argsModal = document.getElementById('args-modal');
+                if (argsModal && argsModal.style.display === 'flex') {
+                    closeArgsModal();
+                    return;
+                }
+
                 // CEL Modal (Check first as it can be on top of Add Store)
                 const celModal = document.getElementById('cel-modal');
                 if (celModal && celModal.style.display === 'flex') {
@@ -7517,6 +7721,25 @@
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
     </svg>
 </button>
+
+<div id="args-modal" class="modal">
+    <div class="modal-content" style="width: 800px; height: 80vh; max-width: 95%;">
+        <div class="modal-header">
+            <span>Edit Arguments (JSON)</span>
+            <span class="close" onclick="closeArgsModal()" style="cursor: pointer;">&times;</span>
+        </div>
+        <div class="modal-body" style="display: flex; flex-direction: column; padding: 0;">
+             <p style="margin: 5px 10px; font-size: 0.9em; color: var(--text-muted);">
+                Edit the script arguments below. Proper JSON syntax is required.
+            </p>
+            <textarea id="args-modal-input" style="flex: 1; font-family: monospace; border: none; padding: 10px; resize: none; width: 100%; box-sizing: border-box; background: var(--pre-bg); color: var(--text-color);"></textarea>
+        </div>
+        <div class="modal-footer">
+             <button onclick="closeArgsModal()" class="btn-secondary">Cancel</button>
+             <button onclick="saveArgsFromModal()" class="btn-success">Save Changes</button>
+        </div>
+    </div>
+</div>
 
 </body>
 </html>

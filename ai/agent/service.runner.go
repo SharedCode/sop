@@ -23,6 +23,7 @@ type contextKey string
 
 const CtxKeyJSONStreamer contextKey = "json_streamer"
 const CtxKeyUseNDJSON contextKey = "use_ndjson"
+const CtxKeyCurrentScriptCategory contextKey = "current_script_category"
 
 type StepExecutionResult struct {
 	Type      string `json:"type"`
@@ -40,11 +41,12 @@ type Flusher interface {
 
 // JSONStreamer handles streaming JSON array elements
 type JSONStreamer struct {
-	w           io.Writer
-	mu          sync.Mutex
-	first       bool
-	isNDJSON    bool
-	shouldFlush bool
+	w                 io.Writer
+	mu                *sync.Mutex
+	first             bool
+	isNDJSON          bool
+	shouldFlush       bool
+	suppressStepStart bool
 }
 
 func (s *JSONStreamer) SetFlush(flush bool) {
@@ -54,6 +56,7 @@ func (s *JSONStreamer) SetFlush(flush bool) {
 func NewJSONStreamer(w io.Writer) *JSONStreamer {
 	return &JSONStreamer{
 		w:     w,
+		mu:    &sync.Mutex{},
 		first: true,
 	}
 }
@@ -61,12 +64,17 @@ func NewJSONStreamer(w io.Writer) *JSONStreamer {
 func NewNDJSONStreamer(w io.Writer) *JSONStreamer {
 	return &JSONStreamer{
 		w:        w,
+		mu:       &sync.Mutex{},
 		first:    true,
 		isNDJSON: true,
 	}
 }
 
 func (s *JSONStreamer) Write(step StepExecutionResult) {
+	if s.suppressStepStart && step.Type == "step_start" {
+		return
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -122,6 +130,10 @@ type StepStreamer struct {
 }
 
 func (ss *StepStreamer) writeHeader() {
+	if ss.parent.suppressStepStart {
+		return
+	}
+
 	ss.parent.mu.Lock()
 	defer ss.parent.mu.Unlock()
 
@@ -240,7 +252,7 @@ func (s *Service) runStep(ctx context.Context, step ai.ScriptStep, scope map[str
 		return s.runStepFetch(ctx, step, scope, scopeMu, sb, db)
 	case "say", "print":
 		return s.runStepSay(ctx, step, scope, scopeMu, sb)
-	case "call_script":
+	case "call_script", "script":
 		return s.runStepScript(ctx, step, scope, scopeMu, sb, db)
 	case "block":
 		return s.runStepBlock(ctx, step, scope, scopeMu, sb, db)
@@ -753,9 +765,33 @@ func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope m
 	}
 
 	var script ai.Script
-	if err := store.Load(ctx, "general", name, &script); err != nil {
-		tx.Rollback(ctx)
-		return fmt.Errorf("error loading script '%s': %v", name, err)
+	// Parse category from script name (e.g. "finance.compute_monthly")
+	targetCategory := "general"
+	scriptName := name
+	if idx := strings.Index(name, "."); idx > 0 {
+		targetCategory = name[:idx]
+		scriptName = name[idx+1:]
+	} else {
+		// No category specified, try to inherit from current context
+		if curr, ok := ctx.Value(CtxKeyCurrentScriptCategory).(string); ok && curr != "" {
+			targetCategory = curr
+		}
+	}
+
+	// Try loading from target category
+	if err := store.Load(ctx, targetCategory, scriptName, &script); err != nil {
+		// If not found and we were looking in a specific category (not general), try general
+		if targetCategory != "general" {
+			if errFallback := store.Load(ctx, "general", scriptName, &script); errFallback == nil {
+				targetCategory = "general" // Found in general
+				err = nil
+			}
+		}
+
+		if err != nil {
+			tx.Rollback(ctx)
+			return fmt.Errorf("error loading script '%s': %v", name, err)
+		}
 	}
 	tx.Commit(ctx)
 
@@ -779,6 +815,34 @@ func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope m
 	}
 
 	sb.WriteString(fmt.Sprintf("Running nested script '%s'...\n", name))
+
+	// Prepared Streamer for Nested Script (Output Handling)
+	// We want to suppress 'step_start' events from the nested script so they don't clutter the UI.
+	// We emit the PARENT step start (Script Step) here, then create a suppressive streamer for children.
+	if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+		stepIndex, _ := ctx.Value("step_index").(int)
+
+		// 1. Emit Parent Step Start (The "Run Script" step)
+		// We use the script name as the command label
+		ss := streamer.StartStreamingStep("script", name, "", stepIndex)
+		ss.writeHeader()
+		// We do not close ss because the step persists while children run
+
+		// 2. Create Suppressed Streamer for Child
+		// We share the mutex and writer to ensure thread safety
+		childStreamer := &JSONStreamer{
+			w:                 streamer.w,
+			mu:                streamer.mu, // Share the mutex pointer
+			first:             streamer.first,
+			isNDJSON:          streamer.isNDJSON,
+			shouldFlush:       streamer.shouldFlush,
+			suppressStepStart: true, // Suppress child step events
+		}
+
+		// Override streamer in context
+		ctx = context.WithValue(ctx, CtxKeyJSONStreamer, childStreamer)
+	}
+
 	// Nested script gets its own mutex because it has its own scope map
 	var nestedMu sync.RWMutex
 
@@ -790,6 +854,9 @@ func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope m
 		script.Database = step.Database
 		script.Portable = false // Enforce the step's DB
 	}
+
+	// Update context with the category where the script was found/resolved
+	ctx = context.WithValue(ctx, CtxKeyCurrentScriptCategory, targetCategory)
 
 	return s.executeScript(ctx, &script, nestedScope, &nestedMu, sb, db)
 }

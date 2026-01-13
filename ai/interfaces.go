@@ -405,7 +405,7 @@ type Script struct {
 // It follows a stabilized schema for "Natural Language Programming".
 type ScriptStep struct {
 	// Type of the step.
-	// Valid values: "ask", "set", "if", "loop", "fetch", "say", "command", "call_script", "block"
+	// Valid values: "ask", "set", "if", "loop", "fetch", "say", "command", "call_script" (or "script"), "block"
 	Type string `json:"type"`
 
 	// Name acts as a label or identifier for the step.

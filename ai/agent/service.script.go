@@ -55,6 +55,9 @@ func (s *Service) PlayScript(ctx context.Context, name string, category string, 
 
 	// Handle Database Switching for Script
 	var scriptCtx context.Context = ctx
+	// Set the current category context for nested script calls
+	scriptCtx = context.WithValue(scriptCtx, CtxKeyCurrentScriptCategory, category)
+
 	var db *database.Database = s.systemDB
 
 	// Check for NDJSON request
@@ -330,7 +333,7 @@ func (s *Service) scriptShow(ctx context.Context, scriptDB *database.Database, a
 		desc := step.Message
 		if step.Type == "ask" {
 			desc = step.Prompt
-		} else if step.Type == "call_script" {
+		} else if step.Type == "call_script" || step.Type == "script" {
 			desc = fmt.Sprintf("Run '%s'", step.ScriptName)
 		} else if step.Type == "command" {
 			argsJSON, _ := json.Marshal(step.Args)
