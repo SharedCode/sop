@@ -433,8 +433,12 @@ func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
 				newMap[aliasedKey] = val
 				newKeys = append(newKeys, aliasedKey)
 
-				// 2. DO NOT inject naked keys if we have a strict alias.
-				// This prevents pollution (e.g. appearing in "a.*") and duplicates.
+				// 2. Also inject naked key if no collision, for UX convenience (e.g. "name" instead of "users.name")
+				// This matches "Select" behavior where we want cleaner output if possible.
+				if _, exists := newMap[k]; !exists {
+					newMap[k] = val
+					newKeys = append(newKeys, k)
+				}
 			} else {
 				// Strategy: Legacy "Right." Prefixing
 				if collision {

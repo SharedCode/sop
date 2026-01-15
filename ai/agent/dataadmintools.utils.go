@@ -1197,6 +1197,10 @@ func renderItem(key any, val any, fields any) any {
 				} else if customPrefix != "" {
 					if strings.HasPrefix(k, customPrefix) {
 						include = true
+						// UX Improvement: Strip the prefix from the output key
+						// If we are projecting "users.*" (customPrefix="users."), and we find "users.age",
+						// we want the output key to be "age".
+						k = k[len(customPrefix):]
 					}
 				}
 

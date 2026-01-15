@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp" // Added
 	"context"
 	"embed"
 	"encoding/json"
@@ -26,16 +27,26 @@ import (
 	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/jsondb"
 )
 
 // DatabaseConfig holds configuration for a single SOP database
 type DatabaseConfig struct {
-	Name     string `json:"name"`
-	Path     string `json:"path"`
-	Mode     string `json:"mode"`  // "standalone" or "clustered"
-	RedisURL string `json:"redis"` // Optional, for clustered
-	IsSystem bool   `json:"is_system,omitempty"`
+	Name          string   `json:"name"`
+	Path          string   `json:"path"`
+	StoresFolders []string `json:"stores_folders,omitempty"`
+	Mode          string   `json:"mode"`  // "standalone" or "clustered"
+	RedisURL      string   `json:"redis"` // Optional, for clustered
+	IsSystem      bool     `json:"is_system,omitempty"`
+
+	// ErasureConfigs stores a list of EC configurations.
+	ErasureConfigs []struct {
+		Key          string   `json:"key"`
+		DataChunks   int      `json:"data_chunks"`
+		ParityChunks int      `json:"parity_chunks"`
+		BasePaths    []string `json:"base_paths"`
+	} `json:"erasure_configs,omitempty"`
 
 	// EnableObfuscation specifies if this database should be obfuscated when accessed by AI tools.
 	// This allows per-database granular control.
@@ -59,6 +70,9 @@ type Config struct {
 	// ObfuscationMode defines the global obfuscation policy (disabled, per_database, all_databases).
 	// This overrides any setting in the agent's own configuration.
 	ObfuscationMode string `json:"obfuscation_mode,omitempty"`
+
+	// LLMApiKey is the default API key for AI Agents (e.g. Gemini).
+	LLMApiKey string `json:"llm_api_key,omitempty"`
 
 	// Legacy/CLI fields
 	DatabasePath string
@@ -156,7 +170,8 @@ func main() {
 
 	// Setup Routes
 	http.HandleFunc("/", handleIndex)
-	http.HandleFunc("/api/databases", handleListDatabases)
+	http.HandleFunc("/api/databases", handleDatabases)
+	http.HandleFunc("/api/databases/update", handleUpdateDatabase)
 	http.HandleFunc("/api/stores", handleListStores)
 	http.HandleFunc("/api/db/options", handleGetDBOptions)
 	http.HandleFunc("/api/store/info", handleGetStoreInfo)
@@ -175,6 +190,11 @@ func main() {
 	http.HandleFunc("/api/config/save", handleSaveConfig)
 	http.HandleFunc("/api/db/init", handleInitDatabase)
 	http.HandleFunc("/api/config/validate-path", handleValidatePath)
+	http.HandleFunc("/api/system/uninstall", handleUninstallSystem)
+	http.HandleFunc("/api/config/sets", handleListRegistrySets)
+	http.HandleFunc("/api/config/sets/create", handleCreateRegistrySet)
+	http.HandleFunc("/api/config/sets/switch", handleSwitchRegistrySet)
+	http.HandleFunc("/api/config/sets/delete", handleDeleteRegistrySet)
 
 	// Initialize Agents
 	initAgents()
@@ -223,20 +243,22 @@ func loadConfig(path string) error {
 		return err
 	}
 	defer f.Close()
+
+	// Reset data pointers to prevent pollution from previous active configuration
+	config.Databases = nil
+	config.SystemDB = nil
+
 	if err := json.NewDecoder(f).Decode(&config); err != nil {
 		return err
 	}
 
 	// Default System DB logic
-	configDir := filepath.Dir(path)
-	if config.SystemDB == nil {
-		config.SystemDB = &DatabaseConfig{
-			Name:     "System",
-			Mode:     config.Mode,
-			RedisURL: config.RedisURL,
-			Path:     configDir,
-		}
-	} else {
+	// We ONLY populate SystemDB if it is explicitly defined in the config.
+	// If it is nil, we leave it as nil. This allows us to distinguish between
+	// "Legacy/Default" (handled by getters) and "New Empty Environment" (handled by UI Wizard).
+
+	if config.SystemDB != nil {
+		configDir := filepath.Dir(path)
 		if config.SystemDB.Path == "" {
 			config.SystemDB.Path = configDir
 		}
@@ -255,7 +277,15 @@ func loadConfig(path string) error {
 
 func getSystemDBOptions() (sop.DatabaseOptions, error) {
 	if config.SystemDB == nil {
-		// Fallback if no config file was loaded
+		// Fallback if no config file was loaded OR if it's nil (Implicit System DB)
+		// This fallback is crucial for backward compatibility with config files that don't specify system_db.
+		// However, for "New Empty Environments", we might want this to return an error or special state?
+		// But in Go backend, we often need *some* system DB to function.
+
+		// For now, we return the implicit default (cwd).
+		// If the Wizard hasn't run yet, this folder (cwd) might not contain a registry.
+		// That's okay, SOP will handle "registry not found" errors if we try to use it.
+
 		cwd, _ := os.Getwd()
 		opts := sop.DatabaseOptions{
 			Type:          sop.Standalone,
@@ -373,6 +403,13 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		// to have an Index Specification or CEL Expression. This is useful for testing.
 		"AllowInvalidMapKey": os.Getenv("SOP_ALLOW_INVALID_MAP_KEY") == "true",
 		"HasDemo":            hasDemo,
+		"ConfigFile":         config.ConfigFile,
+		"MinHashMod":         fs.MinimumModValue,
+		"MaxHashMod":         fs.MaximumModValue,
+		"Env": map[string]bool{
+			"SOP_ROOT_PASSWORD": os.Getenv("SOP_ROOT_PASSWORD") != "",
+			"GEMINI_API_KEY":    os.Getenv("GEMINI_API_KEY") != "",
+		},
 	}
 	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
 		log.Error("Failed to execute template", "error", err)
@@ -380,23 +417,336 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleListDatabases(w http.ResponseWriter, r *http.Request) {
+func handleDatabases(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	w.Header().Set("Content-Type", "application/json")
 
-	dbs := make([]DatabaseConfig, len(config.Databases))
-	copy(dbs, config.Databases)
+	// GET: List Databases
+	if r.Method == http.MethodGet {
+		dbs := make([]DatabaseConfig, len(config.Databases))
+		copy(dbs, config.Databases)
 
-	if config.SystemDB != nil {
-		sysDB := *config.SystemDB
-		if sysDB.Name == "" {
-			sysDB.Name = "system"
+		if config.SystemDB != nil {
+			sysDB := *config.SystemDB
+			if sysDB.Name == "" {
+				sysDB.Name = "system"
+			}
+			sysDB.IsSystem = true
+			dbs = append(dbs, sysDB)
+		} else if len(config.Databases) > 0 {
+			// Backward Compatibility:
+			// If we have user databases but no explicit SystemDB, we include the implicit one.
+			// This prevents existing setups from "losing" their System DB in the UI.
+			// But if Databases is EMPTY, we assume it's a fresh env and return nothing, triggering the Wizard.
+
+			// We can reconstruct the implicit path logic or just ignore it for the list?
+			// Generally, if it's implicit, it's in the CWD (or config dir).
+			// Let's add it to key users happy.
+
+			// Determine implicit path
+			implicitPath := "."
+			if config.ConfigFile != "" {
+				implicitPath = filepath.Dir(config.ConfigFile)
+			}
+
+			dbs = append(dbs, DatabaseConfig{
+				Name:     "System (Implicit)",
+				Path:     implicitPath,
+				Mode:     config.Mode,
+				IsSystem: true,
+			})
 		}
-		sysDB.IsSystem = true
-		dbs = append(dbs, sysDB)
+
+		json.NewEncoder(w).Encode(dbs)
+		return
 	}
 
-	json.NewEncoder(w).Encode(dbs)
+	// DELETE: Remove Database
+	if r.Method == http.MethodDelete {
+		name := r.URL.Query().Get("name")
+		if name == "" {
+			http.Error(w, "Database name is required", http.StatusBadRequest)
+			return
+		}
+
+		found := -1
+		var dbPath string
+		isSystem := false
+
+		for i, db := range config.Databases {
+			if db.Name == name {
+				found = i
+				dbPath = db.Path
+				break
+			}
+		}
+
+		if found == -1 && config.SystemDB != nil && config.SystemDB.Name == name {
+			isSystem = true
+			dbPath = config.SystemDB.Path
+		}
+
+		if found == -1 && !isSystem {
+			http.Error(w, "Database not found", http.StatusNotFound)
+			return
+		}
+
+		// Cleanup B-Trees using options from disk
+		// We ignore errors here because if the options file is missing/corrupt, we can't cleanup,
+		// but we still want to remove the database entry and folder.
+		if cleanOpts, err := database.GetOptions(context.Background(), dbPath); err == nil {
+			if err := database.RemoveBtrees(context.Background(), cleanOpts); err != nil {
+				log.Warn(fmt.Sprintf("Cleanup: Failed to remove B-Trees (some metadata may persist): %v", err))
+			}
+		} else {
+			log.Warn(fmt.Sprintf("Cleanup: Could not load database options (skipping B-Tree cleanup): %v", err))
+		}
+
+		// Remove from config
+		if found != -1 {
+			config.Databases = append(config.Databases[:found], config.Databases[found+1:]...)
+		} else if isSystem {
+			// Clearing SystemDB means setting it to nil
+			config.SystemDB = nil
+		}
+
+		// Save Config
+		if config.ConfigFile != "" {
+			saveConfigFile()
+		}
+
+		// Delete Data on Disk
+		if dbPath != "" {
+			// Basic security check: don't delete root or /tmp directly (though users might have subfolders in /tmp)
+			// Also avoid deleting the current working directory if it happens to be the DB path.
+			absPath, _ := filepath.Abs(dbPath)
+			cwd, _ := os.Getwd()
+			if absPath == cwd {
+				log.Warn("Skipping os.RemoveAll for database path because it is the current working directory.")
+			} else {
+				os.RemoveAll(dbPath)
+			}
+		}
+
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		return
+	}
+
+	// POST: Create Database
+	if r.Method == http.MethodPost {
+		var req struct {
+			Name            string   `json:"name"`
+			Path            string   `json:"path"`
+			Type            string   `json:"type"`
+			Connection      string   `json:"conn_url"`
+			StoresFolders   []string `json:"stores_folders"`
+			RegistryHashMod int      `json:"registry_hash_mod"`
+			ErasureConfigs  []struct {
+				Key          string   `json:"key"`
+				DataChunks   int      `json:"data_chunks"`
+				ParityChunks int      `json:"parity_chunks"`
+				BasePaths    []string `json:"base_paths"`
+			} `json:"erasure_configs"`
+		}
+
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		if req.Name == "" || req.Path == "" {
+			http.Error(w, "Name and Path are required", http.StatusBadRequest)
+			return
+		}
+
+		// Prepare Options
+		options := sop.DatabaseOptions{
+			StoresFolders:        []string{req.Path},
+			RegistryHashModValue: req.RegistryHashMod,
+		}
+		// Append additional folders if provided
+		if len(req.StoresFolders) > 0 {
+			options.StoresFolders = append(options.StoresFolders, req.StoresFolders...)
+		}
+
+		// Set Erasure Config if provided
+		if len(req.ErasureConfigs) > 0 {
+			options.ErasureConfig = make(map[string]sop.ErasureCodingConfig)
+			for _, ec := range req.ErasureConfigs {
+				options.ErasureConfig[ec.Key] = sop.ErasureCodingConfig{
+					DataShardsCount:             ec.DataChunks,
+					ParityShardsCount:           ec.ParityChunks,
+					BaseFolderPathsAcrossDrives: ec.BasePaths,
+				}
+			}
+		}
+
+		// 1. Setup Database
+		ctx := context.Background()
+		if _, err := database.Setup(ctx, options); err != nil {
+			http.Error(w, "Failed to setup database: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// 2. Initialize Registry (Create dummy store)
+		tx, err := database.BeginTransaction(ctx, options, sop.ForWriting)
+		if err != nil {
+			http.Error(w, "Failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		comparer := func(a, b string) int {
+			return cmp.Compare(a, b)
+		}
+
+		if _, err = database.NewBtree[string, string](ctx, options, "system_check", tx, comparer); err != nil {
+			tx.Rollback(ctx)
+			http.Error(w, "Failed to initialize registry: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		tx.Commit(ctx)
+
+		// 3. Update Config
+		newDB := DatabaseConfig{
+			Name:     req.Name,
+			Path:     req.Path,
+			Mode:     "standalone",
+			RedisURL: req.Connection,
+		}
+		if req.Type == "clustered" {
+			newDB.Mode = "clustered"
+		}
+
+		// Copy Erasure Configs
+		for _, ec := range req.ErasureConfigs {
+			newDB.ErasureConfigs = append(newDB.ErasureConfigs, struct {
+				Key          string   `json:"key"`
+				DataChunks   int      `json:"data_chunks"`
+				ParityChunks int      `json:"parity_chunks"`
+				BasePaths    []string `json:"base_paths"`
+			}{
+				Key:          ec.Key,
+				DataChunks:   ec.DataChunks,
+				ParityChunks: ec.ParityChunks,
+				BasePaths:    ec.BasePaths,
+			})
+		}
+
+		// Check duplication
+		for _, db := range config.Databases {
+			if db.Name == newDB.Name {
+				http.Error(w, "Database with this name already exists", http.StatusConflict)
+				return
+			}
+		}
+
+		config.Databases = append(config.Databases, newDB)
+
+		if config.ConfigFile != "" {
+			saveConfigFile()
+		}
+
+		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		return
+	}
+}
+
+func saveConfigFile() {
+	if config.ConfigFile == "" {
+		return
+	}
+	f, err := os.Create(config.ConfigFile)
+	if err != nil {
+		log.Error(fmt.Sprintf("Failed to save config: %v", err))
+		return
+	}
+	defer f.Close()
+	encoder := json.NewEncoder(f)
+	encoder.SetIndent("", "    ")
+	encoder.Encode(config)
+}
+
+func handleUpdateDatabase(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Name           string `json:"name"`
+		ErasureConfigs []struct {
+			Key          string   `json:"key"`
+			DataChunks   int      `json:"data_chunks"`
+			ParityChunks int      `json:"parity_chunks"`
+			BasePaths    []string `json:"base_paths"`
+		} `json:"erasure_configs"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	dbIdx := -1
+	for i, db := range config.Databases {
+		if db.Name == req.Name {
+			dbIdx = i
+			break
+		}
+	}
+
+	if dbIdx == -1 {
+		http.Error(w, "Database not found", http.StatusNotFound)
+		return
+	}
+
+	// Validate (No Deletions allowed for now)
+	currentKeys := make(map[string]bool)
+	for _, ec := range config.Databases[dbIdx].ErasureConfigs {
+		currentKeys[ec.Key] = true
+	}
+
+	newKeys := make(map[string]bool)
+	for _, ec := range req.ErasureConfigs {
+		newKeys[ec.Key] = true
+	}
+
+	for k := range currentKeys {
+		if !newKeys[k] {
+			http.Error(w, fmt.Sprintf("Deletion of Data File entry '%s' is not allowed.", k), http.StatusForbidden)
+			return
+		}
+	}
+
+	// Apply Update
+	var newConfigs []struct {
+		Key          string   `json:"key"`
+		DataChunks   int      `json:"data_chunks"`
+		ParityChunks int      `json:"parity_chunks"`
+		BasePaths    []string `json:"base_paths"`
+	}
+
+	for _, ec := range req.ErasureConfigs {
+		newConfigs = append(newConfigs, struct {
+			Key          string   `json:"key"`
+			DataChunks   int      `json:"data_chunks"`
+			ParityChunks int      `json:"parity_chunks"`
+			BasePaths    []string `json:"base_paths"`
+		}{
+			Key:          ec.Key,
+			DataChunks:   ec.DataChunks,
+			ParityChunks: ec.ParityChunks,
+			BasePaths:    ec.BasePaths,
+		})
+	}
+
+	config.Databases[dbIdx].ErasureConfigs = newConfigs
+
+	if config.ConfigFile != "" {
+		saveConfigFile()
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
 func handleListStores(w http.ResponseWriter, r *http.Request) {
@@ -1488,6 +1838,51 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 				finalKey = uint64(f)
 			case float32:
 				finalKey = float32(f)
+			}
+		}
+		// Handle String input for integer keys (UI compat)
+		if s, ok := req.Key.(string); ok {
+			switch sampleKey.(type) {
+			case int:
+				if v, err := strconv.Atoi(s); err == nil {
+					finalKey = v
+				}
+			case int8:
+				if v, err := strconv.ParseInt(s, 10, 8); err == nil {
+					finalKey = int8(v)
+				}
+			case int16:
+				if v, err := strconv.ParseInt(s, 10, 16); err == nil {
+					finalKey = int16(v)
+				}
+			case int32:
+				if v, err := strconv.ParseInt(s, 10, 32); err == nil {
+					finalKey = int32(v)
+				}
+			case int64:
+				if v, err := strconv.ParseInt(s, 10, 64); err == nil {
+					finalKey = v
+				}
+			case uint:
+				if v, err := strconv.ParseUint(s, 10, 64); err == nil {
+					finalKey = uint(v)
+				}
+			case uint8:
+				if v, err := strconv.ParseUint(s, 10, 8); err == nil {
+					finalKey = uint8(v)
+				}
+			case uint16:
+				if v, err := strconv.ParseUint(s, 10, 16); err == nil {
+					finalKey = uint16(v)
+				}
+			case uint32:
+				if v, err := strconv.ParseUint(s, 10, 32); err == nil {
+					finalKey = uint32(v)
+				}
+			case uint64:
+				if v, err := strconv.ParseUint(s, 10, 64); err == nil {
+					finalKey = uint64(v)
+				}
 			}
 		}
 		// Handle String to UUID

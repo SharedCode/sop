@@ -40,14 +40,17 @@ Double-click `sop-manager.exe` or run it from PowerShell.
 
 ## 2. First Run & Setup
 
-Once the server is running, open your browser to: **[http://localhost:9980](http://localhost:9980)**
+Once the server is running, open your browser to: **[http://localhost:8080](http://localhost:8080)**
+
+### Quick Start (Demo)
+For a step-by-step walkthrough of the **Setup Wizard** and features, please see the **[SOP Demo Walkthrough](DEMO_GUIDE.md)**.
 
 ### The Setup Wizard
 On your first visit, you will see the **Setup Wizard**.
 
 1.  **Database Engine**:
-    *   **Filesystem (Default)**: Best for local development. Data is stored in a local folder.
-    *   **Redis**: For clustered/production environments. Requires a Redis connection string.
+    *   **Standalone**: Best for local development. Data is stored in a local folder.
+    *   **Clustered**: For distributed environments. Requires a Redis connection string.
 
 2.  **Initialize Database**:
     *   **Populate Demo Data**: Check this box! It will create a sample E-commerce database (Users, Products, Orders) so you can explore the features immediately.

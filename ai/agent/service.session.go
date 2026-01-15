@@ -629,6 +629,445 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		return fmt.Sprintf("Script '%s' (Category: %s) deleted.", name, category), true, nil
 	}
 
+	// /delete_step <script> <index>
+	if strings.HasPrefix(query, "/delete_step ") {
+		parts := strings.Fields(strings.TrimPrefix(query, "/delete_step "))
+		if len(parts) < 2 {
+			return "Usage: /delete_step <script_name> <index> [--category <cat>]", true, nil
+		}
+		name := parts[0]
+		idxStr := parts[1]
+		category := "general"
+
+		for i := 2; i < len(parts); i++ {
+			if parts[i] == "--category" && i+1 < len(parts) {
+				category = parts[i+1]
+				i++
+			}
+		}
+
+		idx, err := strconv.Atoi(idxStr)
+		if err != nil {
+			return "Error: Index must be a number.", true, nil
+		}
+		idx-- // 1-based to 0-based
+
+		scriptDB := s.getScriptDB()
+		if scriptDB == nil {
+			return "Error: No database configured", true, nil
+		}
+		tx, err := scriptDB.BeginTransaction(ctx, sop.ForWriting)
+		if err != nil {
+			return fmt.Sprintf("Error starting transaction: %v", err), true, nil
+		}
+		defer tx.Rollback(ctx)
+
+		store, err := scriptDB.OpenModelStore(ctx, "scripts", tx)
+		if err != nil {
+			return fmt.Sprintf("Error opening store: %v", err), true, nil
+		}
+
+		var script ai.Script
+		if err := store.Load(ctx, category, name, &script); err != nil {
+			return fmt.Sprintf("Error loading script: %v", err), true, nil
+		}
+
+		if idx < 0 || idx >= len(script.Steps) {
+			return fmt.Sprintf("Error: Index %d out of bounds (1-%d).", idx+1, len(script.Steps)), true, nil
+		}
+
+		// Remove step
+		script.Steps = append(script.Steps[:idx], script.Steps[idx+1:]...)
+
+		if err := store.Save(ctx, category, name, &script); err != nil {
+			return fmt.Sprintf("Error saving script: %v", err), true, nil
+		}
+		tx.Commit(ctx)
+		return fmt.Sprintf("Step %d deleted from script '%s'.", idx+1, name), true, nil
+	}
+
+	// /update_step <script> <index> <new_instruction>
+	if strings.HasPrefix(query, "/update_step ") {
+		// Args: name index instruction...
+		// But we need to handle flag support too? Complex parsing.
+		// Let's assume standard field splitting then reconstruction of the message.
+		parts := strings.Fields(strings.TrimPrefix(query, "/update_step "))
+		if len(parts) < 3 {
+			return "Usage: /update_step <script_name> <index> <new_instruction>", true, nil
+		}
+		name := parts[0]
+		idxStr := parts[1]
+
+		// Reconstruct instruction from remaining parts (and handle category flag if strictly needed, but let's assume default for simplicity with this signature)
+		// To be robust: Check for --category in parts first.
+		category := "general"
+		instructionParts := []string{}
+
+		skipNext := false
+		for i := 2; i < len(parts); i++ {
+			if skipNext {
+				skipNext = false
+				continue
+			}
+			if parts[i] == "--category" && i+1 < len(parts) {
+				category = parts[i+1]
+				skipNext = true
+				continue
+			}
+			instructionParts = append(instructionParts, parts[i])
+		}
+		instruction := strings.Join(instructionParts, " ")
+
+		idx, err := strconv.Atoi(idxStr)
+		if err != nil {
+			return "Error: Index must be a number.", true, nil
+		}
+		idx-- // 1-based
+
+		scriptDB := s.getScriptDB()
+		if scriptDB == nil {
+			return "Error: No database configured", true, nil
+		}
+		tx, err := scriptDB.BeginTransaction(ctx, sop.ForWriting)
+		if err != nil {
+			return fmt.Sprintf("Error starting transaction: %v", err), true, nil
+		}
+		defer tx.Rollback(ctx)
+
+		store, err := scriptDB.OpenModelStore(ctx, "scripts", tx)
+		if err != nil {
+			return fmt.Sprintf("Error opening store: %v", err), true, nil
+		}
+
+		var script ai.Script
+		if err := store.Load(ctx, category, name, &script); err != nil {
+			return fmt.Sprintf("Error loading script: %v", err), true, nil
+		}
+
+		if idx < 0 || idx >= len(script.Steps) {
+			return fmt.Sprintf("Error: Index %d out of bounds (1-%d).", idx+1, len(script.Steps)), true, nil
+		}
+
+		// Update step prompt/message
+		script.Steps[idx].Prompt = instruction
+		script.Steps[idx].Message = instruction
+		// If it was a 'command' type, we leave it as is? Or do we convert to 'ask' if the user types natural language?
+		// For now, simple text update.
+
+		if err := store.Save(ctx, category, name, &script); err != nil {
+			return fmt.Sprintf("Error saving script: %v", err), true, nil
+		}
+		tx.Commit(ctx)
+		return fmt.Sprintf("Step %d updated in script '%s'.", idx+1, name), true, nil
+	}
+
+	// /reorder_steps <script> <from> <to>
+	if strings.HasPrefix(query, "/reorder_steps ") {
+		parts := strings.Fields(strings.TrimPrefix(query, "/reorder_steps "))
+		if len(parts) < 3 {
+			return "Usage: /reorder_steps <script_name> <from_index> <to_index> [--category <cat>]", true, nil
+		}
+		name := parts[0]
+		fromDefault := "-1"
+		toDefault := "-1"
+
+		category := "general"
+
+		// Parsing is tricky with mixed args.
+		// Expected: name from to [flags]
+		if len(parts) >= 3 {
+			fromDefault = parts[1]
+			toDefault = parts[2]
+		}
+
+		for i := 3; i < len(parts); i++ {
+			if parts[i] == "--category" && i+1 < len(parts) {
+				category = parts[i+1]
+				i++
+			}
+		}
+
+		fromIdx, err1 := strconv.Atoi(fromDefault)
+		toIdx, err2 := strconv.Atoi(toDefault)
+		if err1 != nil || err2 != nil {
+			return "Error: Indices must be numbers.", true, nil
+		}
+		fromIdx-- // 1-based
+		toIdx--   // 1-based
+
+		scriptDB := s.getScriptDB()
+		if scriptDB == nil {
+			return "Error: No database configured", true, nil
+		}
+		tx, err := scriptDB.BeginTransaction(ctx, sop.ForWriting)
+		if err != nil {
+			return fmt.Sprintf("Error starting transaction: %v", err), true, nil
+		}
+		defer tx.Rollback(ctx)
+
+		store, err := scriptDB.OpenModelStore(ctx, "scripts", tx)
+		if err != nil {
+			return fmt.Sprintf("Error opening store: %v", err), true, nil
+		}
+
+		var script ai.Script
+		if err := store.Load(ctx, category, name, &script); err != nil {
+			return fmt.Sprintf("Error loading script: %v", err), true, nil
+		}
+
+		if fromIdx < 0 || fromIdx >= len(script.Steps) || toIdx < 0 || toIdx >= len(script.Steps) {
+			return fmt.Sprintf("Error: Indices out of bounds (1-%d).", len(script.Steps)), true, nil
+		}
+
+		// Reorder
+		step := script.Steps[fromIdx]
+		// Remove
+		script.Steps = append(script.Steps[:fromIdx], script.Steps[fromIdx+1:]...)
+		// Insert
+		if toIdx >= len(script.Steps) {
+			script.Steps = append(script.Steps, step)
+		} else {
+			script.Steps = append(script.Steps[:toIdx], append([]ai.ScriptStep{step}, script.Steps[toIdx:]...)...)
+		}
+
+		if err := store.Save(ctx, category, name, &script); err != nil {
+			return fmt.Sprintf("Error saving script: %v", err), true, nil
+		}
+		tx.Commit(ctx)
+		return fmt.Sprintf("Step moved from %d to %d in script '%s'.", fromIdx+1, toIdx+1, name), true, nil
+	}
+
+	// Data Operations as Slash Commands
+
+	// /list_databases
+	if strings.HasPrefix(query, "/list_databases") {
+		// Call to registry? No registry in s.session. We need s.agent or just use system tools.
+		// But Service wraps DataAdminAgent?
+		// We have access to db via 'db' arg.
+		// Let's implement directly for speed, or call the tool if we can.
+		// Service has no direct access to agent registry from here easily without exposing it.
+		// But we have s as *Service. s has Agents? No.
+		// This is a "Service" which might be running an Agent.
+		// But this method 'handleSessionCommand' is on Service.
+		// Let's implement simple queries directly.
+
+		// However, DataAdminAgent is where these are defined.
+		// To be DRY, we should invoke the tool.
+		// But handleSessionCommand is called BEFORE tool selection.
+		// If we return handled=true, we handle it.
+
+		// Let's implement the basic view logic here.
+		// Actually, we can assume db is the system DB (which contains registry of DBs if any?)
+		// Wait, list_databases usually lists from config or connected sessions?
+		// In SOP, databases are folders in the data path.
+		// We need the data path.
+		// The simplest way: Ask the LLM to do it? No, user wants NO LLM.
+		// We need to implement the logic.
+		// In dataadmin.go: toolListDatabases lists subdirectories of registry.RegistryPath or similar.
+
+		// For now, let's just list what we can see from the active DB connection if possible.
+		// Since we don't have a direct ListDatabases method in the public interface exposed here easily,
+		// and Listing databases involves scanning the data root which might not be exposed in `db` struct.
+		// We will punt on this for now or use a hardcoded check if we knew the root.
+
+		return "Command /list_databases is limited in this context. Use system tools or LLM to list all available databases.", true, nil
+	}
+
+	// /list_stores [database]
+	if strings.HasPrefix(query, "/list_stores") {
+		// List stores in CURRENT db
+		if db == nil {
+			return "Error: No active database connection.", true, nil
+		}
+
+		// db.ListStores does not exist on the simplified struct?
+		// We can try to list files in the database path if we can access it.
+		// db.StoragePath() is available?
+		// Actually, `db` is *database.Database.
+		// Looking at usage, we don't see ListStores.
+		// But valid stores are registered in the Store Repository.
+		// In B-Tree mode, they are files.
+
+		// Let's rely on standard listing if available, or just fail gracefully if not.
+		// For now:
+		// We can't easily list stores without a transaction and registry lookup,
+		// OR filesystem scan.
+		// db.Config() returns options.
+
+		return "Error: listing stores via slash command is not yet fully linked to storage registry.", true, nil
+	}
+
+	// /select <store> [limit=10] [filter=json]
+	// Simplifying /select to just a dump for now, or basic JSON filter.
+	if strings.HasPrefix(query, "/select ") {
+		parts := strings.Fields(strings.TrimPrefix(query, "/select "))
+		if len(parts) == 0 {
+			return "Usage: /select <store_name> [limit=N] [filter=json]", true, nil
+		}
+		storeName := parts[0]
+		limit := 10
+
+		// Parse rudimentary args
+		for i := 1; i < len(parts); i++ {
+			if strings.HasPrefix(parts[i], "limit=") {
+				l, _ := strconv.Atoi(strings.TrimPrefix(parts[i], "limit="))
+				if l > 0 {
+					limit = l
+				}
+			}
+		}
+
+		if db == nil {
+			return "Error: No active database connection.", true, nil
+		}
+
+		tx, err := db.BeginTransaction(ctx, sop.ForReading)
+		if err != nil {
+			return fmt.Sprintf("Error: %v", err), true, nil
+		}
+		defer tx.Rollback(ctx)
+
+		// OpenBtree instead of OpenStore
+		store, err := db.OpenBtree(ctx, storeName, tx)
+		if err != nil {
+			return fmt.Sprintf("Error opening store '%s': %v", storeName, err), true, nil
+		}
+
+		// Simple scan using cursor methods
+		results := []string{}
+		count := 0
+
+		if ok, err := store.First(ctx); ok && err == nil {
+			for {
+				if count >= limit {
+					break
+				}
+				// GetCurrentKey returns the Item object, no error, no context
+				item := store.GetCurrentKey()
+				k := item.Key
+
+				v, _ := store.GetCurrentValue(ctx)
+				results = append(results, fmt.Sprintf("%v: %v", k, v))
+				count++
+
+				if ok, err := store.Next(ctx); !ok || err != nil {
+					break
+				}
+			}
+		}
+
+		return fmt.Sprintf("Top %d records from '%s':\n%s", limit, storeName, strings.Join(results, "\n")), true, nil
+	}
+
+	// /add <store> <key> <value>
+	if strings.HasPrefix(query, "/add ") {
+		parts := strings.Fields(strings.TrimPrefix(query, "/add "))
+		if len(parts) < 3 {
+			return "Usage: /add <store> <key> <value>", true, nil
+		}
+		storeName := parts[0]
+		key := parts[1]
+		// Value is the rest
+		valStr := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(query, "/add "+storeName), key))
+
+		if db == nil {
+			return "Error: No active database connection.", true, nil
+		}
+
+		tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+		if err != nil {
+			return fmt.Sprintf("Error: %v", err), true, nil
+		}
+		defer tx.Rollback(ctx)
+
+		store, err := db.OpenBtree(ctx, storeName, tx)
+		if err != nil {
+			return fmt.Sprintf("Error opening store: %v", err), true, nil
+		}
+
+		// Try to unmarshal value as JSON, else use string
+		var valObj any
+		if err := json.Unmarshal([]byte(valStr), &valObj); err != nil {
+			valObj = valStr
+		}
+
+		if _, err := store.Add(ctx, key, valObj); err != nil {
+			return fmt.Sprintf("Error adding record: %v", err), true, nil
+		}
+		tx.Commit(ctx)
+		return fmt.Sprintf("Record added to '%s'.", storeName), true, nil
+	}
+
+	// /update <store> <key> <value>
+	if strings.HasPrefix(query, "/update ") {
+		parts := strings.Fields(strings.TrimPrefix(query, "/update "))
+		if len(parts) < 3 {
+			return "Usage: /update <store> <key> <value>", true, nil
+		}
+		storeName := parts[0]
+		key := parts[1]
+		// Value is the rest
+		valStr := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(query, "/update "+storeName), key))
+
+		if db == nil {
+			return "Error: No active database connection.", true, nil
+		}
+
+		tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+		if err != nil {
+			return fmt.Sprintf("Error: %v", err), true, nil
+		}
+		defer tx.Rollback(ctx)
+
+		store, err := db.OpenBtree(ctx, storeName, tx)
+		if err != nil {
+			return fmt.Sprintf("Error opening store: %v", err), true, nil
+		}
+
+		// Try to unmarshal value as JSON, else use string
+		var valObj any
+		if err := json.Unmarshal([]byte(valStr), &valObj); err != nil {
+			valObj = valStr
+		}
+
+		if _, err := store.Update(ctx, key, valObj); err != nil {
+			return fmt.Sprintf("Error updating record: %v", err), true, nil
+		}
+		tx.Commit(ctx)
+		return fmt.Sprintf("Record updated in '%s'.", storeName), true, nil
+	}
+
+	// /delete_record <store> <key>
+	if strings.HasPrefix(query, "/delete_record ") {
+		parts := strings.Fields(strings.TrimPrefix(query, "/delete_record "))
+		if len(parts) < 2 {
+			return "Usage: /delete_record <store> <key>", true, nil
+		}
+		storeName := parts[0]
+		key := parts[1]
+
+		if db == nil {
+			return "Error: No active database connection.", true, nil
+		}
+
+		tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+		if err != nil {
+			return fmt.Sprintf("Error: %v", err), true, nil
+		}
+		defer tx.Rollback(ctx)
+
+		store, err := db.OpenBtree(ctx, storeName, tx)
+		if err != nil {
+			return fmt.Sprintf("Error opening store: %v", err), true, nil
+		}
+
+		if _, err := store.Remove(ctx, key); err != nil {
+			return fmt.Sprintf("Error deleting record: %v", err), true, nil
+		}
+		tx.Commit(ctx)
+		return fmt.Sprintf("Record '%s' deleted from '%s'.", key, storeName), true, nil
+	}
+
 	if strings.HasPrefix(query, "/list") {
 		args := strings.Fields(query)
 		category := "general"

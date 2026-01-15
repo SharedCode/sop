@@ -188,7 +188,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 			active, passive := t.TempDir(), t.TempDir()
 			rt, _ := NewReplicationTracker(ctx, []string{active, passive}, true, mocks.NewMockClient())
 			sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), 0)
-			fn := filepath.Join(active, registryHashModValueFilename)
+			fn := filepath.Join(active, RegistryHashModValueFilename)
 			if err := os.WriteFile(fn, []byte("777"), 0o644); err != nil {
 				t.Fatalf("write: %v", err)
 			}
@@ -328,7 +328,7 @@ func TestStoreRepository_Scenarios(t *testing.T) {
 			if err != nil {
 				t.Fatalf("repo: %v", err)
 			}
-			if err := os.WriteFile(filepath.Join(active, registryHashModValueFilename), []byte("not-an-int"), 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(active, RegistryHashModValueFilename), []byte("not-an-int"), 0o644); err != nil {
 				t.Fatalf("seed invalid: %v", err)
 			}
 			if _, err := sr.GetRegistryHashModValue(ctx); err == nil {
@@ -617,7 +617,7 @@ func Test_StoreRepository_GetRegistryHashModValue_Invalid(t *testing.T) {
 	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, mocks.NewMockClient())
 
 	// Seed invalid content
-	if err := os.WriteFile(filepath.Join(a, registryHashModValueFilename), []byte("not-int"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(a, RegistryHashModValueFilename), []byte("not-int"), 0o644); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), 0)

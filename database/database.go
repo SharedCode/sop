@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	log "log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -115,6 +116,15 @@ func Setup(ctx context.Context, opts sop.DatabaseOptions) (DatabaseOptions, erro
 		if err := os.WriteFile(fname, ba, 0644); err != nil {
 			return opts, err
 		}
+
+		if opts.RegistryHashModValue > 0 {
+			fname = filepath.Join(folder, fs.RegistryHashModValueFilename)
+			if _, err := os.Stat(fname); os.IsNotExist(err) {
+				if err := os.WriteFile(fname, []byte(fmt.Sprintf("%d", opts.RegistryHashModValue)), 0644); err != nil {
+					return opts, err
+				}
+			}
+		}
 	}
 
 	setOptionToLookup(fileName, &opts)
@@ -209,6 +219,7 @@ func BeginTransaction(ctx context.Context, config sop.DatabaseOptions, mode sop.
 	var opts sop.TransactionOptions
 	// Merge DatabaseOptions into TransactionOptions
 	config.CopyTo(&opts)
+	log.Debug(fmt.Sprintf("BeginTransaction: StoresFolders=%v, ErasureConfigLen=%d, IsReplicated=%v", opts.StoresFolders, len(opts.ErasureConfig), opts.IsReplicated()))
 	opts.Mode = mode
 	opts.MaxTime = mt
 
@@ -312,6 +323,31 @@ func RemoveBtree(ctx context.Context, config sop.DatabaseOptions, name string) e
 		return incfs.RemoveBtree(ctx, name, config.CacheType)
 	}
 	return infs.RemoveBtree(ctx, name, config.StoresFolders, config.ErasureConfig, config.CacheType)
+}
+
+// RemoveBtrees removes all B-Trees (stores) in the database.
+// This is a destructive operation and cannot be undone.
+// This function ensures a clean removal of all stores and their metadata (e.g. Redis keys).
+func RemoveBtrees(ctx context.Context, config sop.DatabaseOptions) error {
+	t, err := BeginTransaction(ctx, config, sop.ForReading)
+	if err != nil {
+		return err
+	}
+
+	stores, err := t.GetStores(ctx)
+	// Always rollback since we only needed to read the store list.
+	_ = t.Rollback(ctx)
+
+	if err != nil {
+		return err
+	}
+
+	for _, name := range stores {
+		if err := RemoveBtree(ctx, config, name); err != nil {
+			return fmt.Errorf("failed to remove btree %s: %v", name, err)
+		}
+	}
+	return nil
 }
 
 // ReinstateFailedDrives asks the replication tracker to reinstate failed passive targets.

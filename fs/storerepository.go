@@ -29,7 +29,7 @@ const (
 	lockStoreListDuration        = time.Duration(10 * time.Minute)
 	storeListFilename            = "storelist.txt"
 	StoreInfoFilename            = "storeinfo.txt"
-	registryHashModValueFilename = "reghashmod.txt"
+	RegistryHashModValueFilename = "reghashmod.txt"
 	// updateStoresLockDuration is the TTL for cache-based locking during updates.
 	updateStoresLockDuration = time.Duration(15 * time.Minute)
 )
@@ -48,9 +48,9 @@ func NewStoreRepository(ctx context.Context, rt *replicationTracker, manageStore
 
 	if registryHashModVal > 0 {
 		sw := newFileIOWithReplication(rt, manageStore, true)
-		if !sw.exists(ctx, registryHashModValueFilename) {
+		if !sw.exists(ctx, RegistryHashModValueFilename) {
 			// Write to file the global registry hash mod value.
-			sw.write(ctx, registryHashModValueFilename, []byte(fmt.Sprintf("%d", registryHashModVal)))
+			sw.write(ctx, RegistryHashModValueFilename, []byte(fmt.Sprintf("%d", registryHashModVal)))
 			// Replicate to passive drive so it has a copy of it.
 			sw.replicate(ctx)
 		}
@@ -69,12 +69,12 @@ func NewStoreRepository(ctx context.Context, rt *replicationTracker, manageStore
 func (sr *StoreRepository) GetRegistryHashModValue(ctx context.Context) (int, error) {
 	if sr.registryHashModValue == 0 {
 		fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
-		if fio.exists(ctx, registryHashModValueFilename) {
-			if ba, err := fio.read(ctx, registryHashModValueFilename); err != nil {
-				return 0, fmt.Errorf("failed reading registry hash mod value from %s, details: %v", registryHashModValueFilename, err)
+		if fio.exists(ctx, RegistryHashModValueFilename) {
+			if ba, err := fio.read(ctx, RegistryHashModValueFilename); err != nil {
+				return 0, fmt.Errorf("failed reading registry hash mod value from %s, details: %v", RegistryHashModValueFilename, err)
 			} else {
 				if i, err := strconv.Atoi(string(ba)); err != nil {
-					return 0, fmt.Errorf("read invalid registry hash mod value from %s, details: %v", registryHashModValueFilename, err)
+					return 0, fmt.Errorf("read invalid registry hash mod value from %s, details: %v", RegistryHashModValueFilename, err)
 				} else {
 					sr.registryHashModValue = i
 				}

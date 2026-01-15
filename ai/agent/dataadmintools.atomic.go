@@ -35,6 +35,7 @@ type ScriptInstruction struct {
 type ScriptContext struct {
 	Variables      map[string]any
 	Transactions   map[string]sop.Transaction
+	TxToDB         map[sop.Transaction]Database // Mapping from Transaction to its Database
 	Stores         map[string]jsondb.StoreAccessor
 	Databases      map[string]Database
 	LastUpdatedVar string // helper to track the prioritization of variable draining
@@ -365,6 +366,7 @@ func NewScriptContext() *ScriptContext {
 	return &ScriptContext{
 		Variables:    make(map[string]any),
 		Transactions: make(map[string]sop.Transaction),
+		TxToDB:       make(map[sop.Transaction]Database),
 		Stores:       make(map[string]jsondb.StoreAccessor),
 		Databases:    make(map[string]Database),
 	}
@@ -1068,7 +1070,14 @@ func (e *ScriptEngine) BeginTx(ctx context.Context, args map[string]any) (sop.Tr
 		mode = sop.ForWriting
 	}
 
-	return db.BeginTransaction(ctx, mode)
+	tx, err := db.BeginTransaction(ctx, mode)
+	if err == nil {
+		if e.Context.TxToDB == nil {
+			e.Context.TxToDB = make(map[sop.Transaction]Database)
+		}
+		e.Context.TxToDB[tx] = db
+	}
+	return tx, err
 }
 
 func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error {
@@ -1191,42 +1200,41 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 		return nil, fmt.Errorf("transaction '%s' not found", txName)
 	}
 
-	// We need DB config. Assuming TX has access or we need DB variable?
-	// jsondb.OpenStore needs sop.DatabaseOptions.
-	// We can get it from the DB object if we tracked which DB created the TX.
-	// Or we pass the DB variable name too.
-	// Let's try to find the DB that owns this TX? Not easy.
-	// Let's require 'database' arg (variable name)
+	// Resolve Database
+	var db Database
 	dbName, _ := args["database"].(string)
 	dbName = e.resolveVarName(dbName)
-	db, ok := e.Context.Databases[dbName]
 
-	if !ok {
-		// If dbName is empty, try to infer default DB
-		if dbName == "" && len(e.Context.Databases) == 1 {
-			for _, d := range e.Context.Databases {
-				db = d
-				ok = true
-				break
+	if dbName != "" {
+		// Explicit database argument
+		var found bool
+		db, found = e.Context.Databases[dbName]
+		if !found {
+			if e.ResolveDatabase != nil {
+				var err error
+				db, err = e.ResolveDatabase(dbName)
+				if err != nil {
+					return nil, fmt.Errorf("database '%s' not found", dbName)
+				}
+			} else {
+				return nil, fmt.Errorf("database '%s' not found", dbName)
 			}
 		}
-	}
-
-	if !ok {
-		// Fallback: maybe dbName is the actual name?
-		if e.ResolveDatabase == nil {
-			return nil, fmt.Errorf("database resolver not configured")
-		}
-		var err error
-		// If dbName is empty here, ResolveDatabase will likely fail or return system DB?
-		// ResolveDatabase implementation currently requires name.
-		if dbName == "" {
+	} else {
+		// Implicit database resolution
+		// 1. Try mapping from transaction
+		if associatedDB, found := e.Context.TxToDB[tx]; found {
+			db = associatedDB
+		} else if len(e.Context.Databases) == 1 {
+			// 2. Fallback to single active database
+			for _, d := range e.Context.Databases {
+				db = d
+				break
+			}
+		} else if len(e.Context.Databases) > 1 {
+			return nil, fmt.Errorf("database argument required (multiple open databases)")
+		} else {
 			return nil, fmt.Errorf("database argument required")
-		}
-
-		db, err = e.ResolveDatabase(dbName)
-		if err != nil {
-			return nil, fmt.Errorf("database '%s' required for opening store", dbName)
 		}
 	}
 
@@ -1261,7 +1269,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 		limit = 1000
 	}
 	direction, _ := args["direction"].(string)
-	isDesc := strings.ToLower(direction) == "desc"
+	isDesc := strings.ToLower(direction) == "desc" || strings.ToLower(direction) == "backward"
 	startKey := args["start_key"]
 	prefix := args["prefix"]
 	filter := args["filter"]

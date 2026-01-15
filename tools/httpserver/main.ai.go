@@ -493,6 +493,11 @@ func loadAgent(key, configPath string) {
 		}
 	}
 
+	// Apply Global LLM API Key if provided in HTTP Config
+	if config.LLMApiKey != "" {
+		injectAPIKey(cfg, config.LLMApiKey)
+	}
+
 	// Apply Global Obfuscation Mode if specified in HTTP Config
 	// We do NOT update the agent config anymore, instead we calculate the per-database flag below
 	globalObfMode := ObfuscationDisabled
@@ -653,6 +658,28 @@ func (e *DefaultToolExecutor) Execute(ctx context.Context, tool string, args map
 	}
 
 	return "", fmt.Errorf("tool '%s' not found or no executor available", tool)
+}
+
+func injectAPIKey(cfg *agent.Config, apiKey string) {
+	if cfg.Generator.Type == "gemini" {
+		if cfg.Generator.Options == nil {
+			cfg.Generator.Options = make(map[string]any)
+		}
+		// Only override if not set (or should we strictly override?)
+		// Let's force override for now as the global config is likely the user's intent
+		cfg.Generator.Options["api_key"] = apiKey
+	}
+
+	// Recursive injection
+	for i := range cfg.Agents {
+		// We need to take address of slice element to modify it
+		// But cfg.Agents is []Config.
+		// wait, Config struct has []Config.
+		// We can't easily recurse efficiently on value type slices in Go without pointers or rewriting the slice.
+		// cfg.Agents is []Config (values).
+		subCfg := &cfg.Agents[i]
+		injectAPIKey(subCfg, apiKey)
+	}
 }
 
 func (e *DefaultToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {

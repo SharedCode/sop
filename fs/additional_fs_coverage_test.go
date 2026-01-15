@@ -308,7 +308,7 @@ func Test_StoreRepository_GetRegistryHashModValue_InvalidValue(t *testing.T) {
 	rt.ActiveFolderToggler = true
 
 	// Manually write invalid value to active reghashmod.txt
-	fn := rt.formatActiveFolderEntity(registryHashModValueFilename)
+	fn := rt.formatActiveFolderEntity(RegistryHashModValueFilename)
 	if err := os.WriteFile(fn, []byte("abc"), 0o644); err != nil {
 		t.Fatal(err)
 	}

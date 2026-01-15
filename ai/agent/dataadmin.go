@@ -297,8 +297,11 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 						// Try to open store to get schema info
 						if storeAccessor, err := jsondb.OpenStore(ctx, db.Config(), s, tx); err == nil {
 							info := storeAccessor.GetStoreInfo()
+							if info.Description != "" {
+								schemaInfo += fmt.Sprintf(" [%s]", info.Description)
+							}
 							if info.MapKeyIndexSpecification != "" {
-								schemaInfo = fmt.Sprintf(" (Key Schema: %s)", info.MapKeyIndexSpecification)
+								schemaInfo += fmt.Sprintf(" (Key Schema: %s)", info.MapKeyIndexSpecification)
 							}
 						}
 						toolsDef += fmt.Sprintf("- %s%s\n", s, schemaInfo)
@@ -314,7 +317,9 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 IMPORTANT:
 - The 'select' tool returns the raw data string. You MUST include this raw data in your final response.
 - When filtering with 'select', use MongoDB-style operators ($eq, $ne, $gt, $gte, $lt, $lte) for comparisons. Example: {"age": {"$gt": 18}}.
-- Sorting/Ordering is ONLY supported by the store's Key or a prefix of the Key. You CANNOT sort by arbitrary fields (e.g. "salary", "date") unless they are the Key or a prefix of the Key. If a user asks to sort by a non-Key field, explain that SOP only supports sorting by Key (or Key prefix).
+- Sorting/Ordering is ONLY supported by the store's Key or a prefix of the Key. You CANNOT sort by arbitrary fields (e.g. "salary", "date") unless they are the Key.
+- Check if a secondary index store exists (e.g. 'users_by_age' -> Index of users by age). If so, use it to fulfill sort/filter requests by joining it with the main store (e.g. scan 'users_by_age' and join 'users').
+- If no index exists, explain that SOP only supports sorting by Key.
 - For complex queries involving joins or multiple steps, use the 'execute_script' tool. The 'script' argument MUST be a valid JSON array of instruction objects (e.g. [{"op": "...", "args": {...}}]).
 - When using 'execute_script', the 'script' argument MUST be a valid JSON array of instruction objects. Do NOT leave it empty.
 `

@@ -126,7 +126,7 @@ func Test_StoreRepository_GetRegistryHashModValue_ReadError(t *testing.T) {
 	rt, _ := NewReplicationTracker(ctx, []string{a, p}, true, mocks.NewMockClient())
 
 	// Create a directory in place of the file so Exists() returns true and ReadFile fails.
-	if err := os.MkdirAll(filepath.Join(a, registryHashModValueFilename), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(a, RegistryHashModValueFilename), 0o755); err != nil {
 		t.Fatalf("prep: %v", err)
 	}
 	sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), 0)

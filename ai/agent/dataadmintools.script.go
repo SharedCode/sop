@@ -117,6 +117,11 @@ func (a *DataAdminAgent) toolCreateScript(ctx context.Context, args map[string]a
 	}
 
 	description, _ := args["description"].(string)
+	stepsList, _ := args["steps"].([]any)
+	steps, err := mapToScriptSteps(stepsList)
+	if err != nil {
+		return "", fmt.Errorf("invalid steps: %v", err)
+	}
 
 	var currentDB string
 	if p := ai.GetSessionPayload(ctx); p != nil {
@@ -127,7 +132,7 @@ func (a *DataAdminAgent) toolCreateScript(ctx context.Context, args map[string]a
 		Name:        name,
 		Description: description,
 		Database:    currentDB,
-		Steps:       []ai.ScriptStep{},
+		Steps:       steps,
 	}
 
 	// Persist the new script

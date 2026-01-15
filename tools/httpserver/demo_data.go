@@ -15,7 +15,7 @@ import (
 // Demo Data Structures
 
 type UserProfile struct {
-	ID        string `json:"id"`
+	ID        string `json:"user_id"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 	Email     string `json:"email"`
@@ -58,12 +58,29 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 	comparer := func(a, b string) int {
 		return cmp.Compare(a, b)
 	}
+	intComparer := func(a, b int) int {
+		return cmp.Compare(a, b)
+	}
 
 	// 1. Create Stores
 	userStore, err := database.NewBtree[string, UserProfile](ctx, opts, "users", trans, comparer)
 	if err != nil {
 		trans.Rollback(ctx)
 		return fmt.Errorf("failed to open users store: %v", err)
+	}
+
+	// Create users_by_age store for secondary index
+	usersByAgeOpts := sop.StoreOptions{
+		Name:                     "users_by_age",
+		SlotLength:               2000,
+		IsUnique:                 false, // Allow duplicate ages
+		IsValueDataInNodeSegment: true,
+		Description:              "Index of users by age. Key=Age. Value=User ID. IMPORTANT: The field name in this store is 'Value'. To join with users, use ON: {'Value':'user_id'}.",
+	}
+	userByAgeStore, err := database.NewBtree[int, string](ctx, opts, "users_by_age", trans, intComparer, usersByAgeOpts)
+	if err != nil {
+		trans.Rollback(ctx)
+		return fmt.Errorf("failed to open users_by_age store: %v", err)
 	}
 
 	productStore, err := database.NewBtree[string, Product](ctx, opts, "products", trans, comparer)
@@ -100,6 +117,11 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 		if ok, err := userStore.Add(ctx, user.ID, user); err != nil || !ok {
 			trans.Rollback(ctx)
 			return fmt.Errorf("failed to add user: %v", err)
+		}
+		// Add to secondary index
+		if ok, err := userByAgeStore.Add(ctx, user.Age, user.ID); err != nil || !ok {
+			trans.Rollback(ctx)
+			return fmt.Errorf("failed to add user to age index: %v", err)
 		}
 	}
 

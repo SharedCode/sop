@@ -163,9 +163,19 @@
             <span style="cursor:pointer; font-size: 20px;" onclick="closeAddStoreModal()">&times;</span>
         </div>
         <div class="modal-body">
-            <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
-                <label style="margin-bottom: 0; white-space: nowrap;">Store Name:</label>
-                <input type="text" id="new-store-name" style="flex: 1; box-sizing: border-box;">
+            <div style="margin-bottom: 10px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label style="margin-bottom: 0; white-space: nowrap;">Store Name:</label>
+                    <input type="text" id="new-store-name" oninput="checkStoreNameConflict()" style="flex: 1; box-sizing: border-box;">
+                </div>
+                <div id="store-name-hint" style="font-size: 11px; color: #ff9800; margin-top: 4px; display: none; text-align: right;"></div>
+            </div>
+            <div id="target-ec-container" style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
+                <label style="margin-bottom: 0; white-space: nowrap;">Target Data File:</label>
+                <select id="new-store-target-ec" onchange="onTargetECChange(this.value)" style="flex: 1; padding: 8px; border-radius: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                    <option value="">Default (Auto-named)</option>
+                    <!-- Options injected dynamically -->
+                </select>
             </div>
             <div id="key-type-container" style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
                 <label style="margin-bottom: 0; white-space: nowrap;">Key Type:</label>
@@ -470,6 +480,111 @@
     </div>
 </div>
 
+<!-- Add Database Modal -->
+<div id="add-database-modal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span>Add New Database</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="closeAddDatabaseModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="margin: 0; white-space: nowrap;">Database Name <span style="color:red">*</span></label>
+                    <input type="text" id="new-db-name" placeholder="my_db" style="width: 160px;">
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                    <label style="margin: 0; white-space: nowrap;">Type</label>
+                    <select id="new-db-type" onchange="toggleNewDbConnectionField()" style="flex: 1;">
+                        <option value="standalone">Standalone</option>
+                        <option value="clustered">Clustered</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Data Path <span style="color:red">*</span></label>
+                <input type="text" id="new-db-path" placeholder="/var/lib/sop/data">
+            </div>
+            <div class="form-group" id="new-db-conn-group" style="display: none;">
+                <label>Redis Connection URL</label>
+                <input type="text" id="new-db-conn" placeholder="localhost:6379">
+                <small>For Clustered mode.</small>
+            </div>
+            
+            <div style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                <label style="cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="new-db-advanced-toggle" onchange="toggleNewDbAdvancedOptions()"> 
+                    <strong>Advanced Mode</strong> (Erasure Coding, Store Folders)
+                </label>
+
+                <div id="new-db-advanced-options" style="display: none; margin-top: 10px; background: var(--input-bg); padding: 10px; border-radius: 4px; border: 1px solid var(--border-color);">
+                    <!-- Registry Files Section -->
+                    <div style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                        <label style="font-weight: bold; margin-bottom: 10px; display: block; color: var(--text-color);">Registry Files</label>
+                        
+                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 5px;">
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <label style="white-space: nowrap; margin-bottom: 0;">Hash Mod:</label>
+                                <input type="number" id="new-db-registry-hash-mod" placeholder="Default (0)" min="{{.MinHashMod}}" max="{{.MaxHashMod}}" style="width: 60px;">
+                            </div>
+
+                            <div style="display: flex; align-items: center; gap: 5px; flex: 1;">
+                                <label style="white-space: nowrap; margin-bottom: 0;">Stores Folder(s):</label>
+                                <input type="text" id="new-db-stores-folders" placeholder="/path/to/folder1, /path/to/folder2" style="flex: 1;">
+                            </div>
+                        </div>
+                        <small style="display: block; color: var(--text-muted);">Specify up to two folders. One for no replication, two for Active/Passive replication.</small>
+                    </div>
+
+                    <!-- Data Files Section -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <label style="font-weight: bold; margin: 0; color: var(--text-color);">Data Files</label>
+                            <button onclick="addNewDbECItem()" title="Add Data File Entry" style="cursor: pointer; background: transparent; border: none; font-size: 1.2em; color: var(--text-color); padding: 0 5px;">+</button>
+                        </div>
+                        
+                        <div id="new-db-ec-container">
+                            <!-- Helper Text -->
+                            <p style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 10px;">
+                                Configure one or more Data File partitions.
+                            </p>
+                            <!-- Dynamic list of EC items added here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        <div class="modal-footer">
+            <button onclick="createNewDatabase()" class="btn-success">Create Database</button>
+            <button onclick="closeAddDatabaseModal()" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Database Modal -->
+<div id="delete-database-modal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <div class="modal-header" style="background: var(--danger-bg); color: white;">
+            <span>Delete Database</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="closeDeleteDatabaseModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <p>Are you sure you want to delete the database: <strong id="delete-db-target-name"></strong>?</p>
+            <p style="color: var(--danger-bg); font-size: 0.9em;">This action cannot be undone. All data in this database will be lost.</p>
+            
+            <div class="form-group" style="margin-top: 15px;">
+                <label>Type the database name to confirm:</label>
+                <input type="text" id="delete-db-confirm-input" placeholder="Database Name">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="confirmDeleteDatabase()" class="btn-danger" id="btn-confirm-delete-db" disabled>Delete Database</button>
+            <button onclick="closeDeleteDatabaseModal()" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <div id="cel-modal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -524,6 +639,38 @@
     </div>
 </div>
 
+<!-- Uninstall System Modal -->
+<div id="uninstall-system-modal" class="modal">
+    <div class="modal-content" style="max-width: 450px;">
+        <div class="modal-header" style="background: var(--danger-bg); color: white;">
+            <span>Uninstall System</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="closeUninstallModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <p><strong>Warning:</strong> You are about to uninstall the SOP Data Manager configuration.</p>
+            <p>This will reset the server to its initial state, allowing you to re-configure it (e.g., for a different environment like Prod/QA).</p>
+            
+            <div style="background: rgba(255,0,0,0.1); padding: 10px; border-left: 3px solid var(--danger-bg); margin-top: 15px;">
+                <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="uninstall-delete-data" style="margin-top: 4px;"> 
+                    <div>
+                        <strong>Delete All Data?</strong><br>
+                        <span style="font-size: 0.9em; color: var(--text-color);">Check this to permanently delete all managed databases and registry files from disk. <br><span style="color: var(--danger-bg);">Cannot be undone.</span></span>
+                    </div>
+                </label>
+            </div>
+            
+            <p style="font-size: 0.9em; margin-top: 15px; color: var(--text-muted);">
+                After uninstalling, the page will reload and the Setup Wizard will appear.
+            </p>
+        </div>
+        <div class="modal-footer">
+            <button onclick="confirmUninstallSystem()" class="btn-danger">Uninstall / Reset</button>
+            <button onclick="closeUninstallModal()" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Cancel</button>
+        </div>
+    </div>
+</div>
+
 <!-- Setup Wizard Modal -->
 <div id="setup-wizard">
     <div class="wizard-container">
@@ -538,46 +685,79 @@
             <div class="progress-dot" id="dot-3"></div>
         </div>
 
-        <!-- Step 1: System Configuration -->
+        <!-- Step 1: Create First Database (Formerly Step 2) -->
         <div class="wizard-step active" id="step-1">
-            <h3>1. System Configuration</h3>
-            <p>Where should the System Registry be stored?</p>
-            <div class="form-group">
-                <label>Registry Path</label>
-                <input type="text" id="setup-reg-path" placeholder="/var/lib/sop/registry" value="/tmp/sop_data/registry">
-                <small>This folder will store system metadata.</small>
-            </div>
-            <div class="form-group">
-                <label>Server Port</label>
-                <input type="number" id="setup-port" value="9092">
-            </div>
-        </div>
-
-        <!-- Step 2: Create First Database -->
-        <div class="wizard-step" id="step-2">
-            <h3>2. Create Your First Database</h3>
+            <h3>1. Create Your First Database</h3>
             <p>Let's create a place for your data.</p>
-            <div class="form-group">
-                <label>Database Name</label>
-                <input type="text" id="setup-db-name" placeholder="MyFirstDB" value="dev_db">
+            
+            <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="margin: 0; white-space: nowrap;">Database Name</label>
+                    <input type="text" id="setup-db-name" placeholder="MyFirstDB" value="dev_db" style="width: 140px;">
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                    <label style="margin: 0; white-space: nowrap;">Data Path</label>
+                    <input type="text" id="setup-db-path" placeholder="/var/lib/sop/data" value="/tmp/sop_data/db" style="flex: 1;">
+                </div>
             </div>
-            <div class="form-group">
-                <label>Data Path</label>
-                <input type="text" id="setup-db-path" placeholder="/var/lib/sop/data" value="/tmp/sop_data/db">
+
+            <div style="display: flex; gap: 10px; margin-bottom: 10px; align-items: center; min-height: 32px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <label style="margin: 0; white-space: nowrap;" title="App Operation Mode: Standalone (Single Instance) or Clustered (Multiple Instances sharing Data).">Mode</label>
+                    <select id="setup-db-type" onchange="toggleSetupConnectionField('db')" style="width: 120px;">
+                        <option value="standalone">Standalone</option>
+                        <option value="clustered">Clustered</option>
+                    </select>
+                </div>
+                 <div id="setup-conn-group-db" style="display: none; align-items: center; gap: 8px; flex: 1;">
+                    <label style="margin: 0; white-space: nowrap;">Redis URL</label>
+                    <input type="text" id="setup-db-conn" placeholder="localhost:6379" style="flex: 1;">
+                </div>
             </div>
-            <div class="form-group">
-                <label>Type</label>
-                <select id="setup-db-type" onchange="toggleSetupConnectionField()">
-                    <option value="filesystem">Filesystem (Standard)</option>
-                    <option value="cassandra">Cassandra</option>
-                    <option value="redis">Redis</option>
-                </select>
+            
+            <!-- Advanced User DB Options -->
+             <div style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                <label style="cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="setup-db-advanced-toggle" onchange="toggleSetupAdvancedOptions('db')"> 
+                    <strong>Advanced Mode</strong> (Erasure Coding, Hash Mod)
+                </label>
+                <div id="setup-db-advanced-options" style="display: none; margin-top: 10px; padding-left: 10px; border-left: 2px solid var(--border-color);">
+                    <!-- Registry Files Section -->
+                    <div style="margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                        <label style="font-weight: bold; margin-bottom: 10px; display: block; color: var(--text-color);">Registry Files</label>
+
+                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 5px;">
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <label style="white-space: nowrap; margin-bottom: 0;">Hash Mod:</label>
+                                <input type="number" id="setup-db-registry-hash-mod" placeholder="Default (0)" min="{{.MinHashMod}}" max="{{.MaxHashMod}}" style="width: 60px;">
+                            </div>
+
+                            <div style="display: flex; align-items: center; gap: 5px; flex: 1;">
+                                <label style="white-space: nowrap; margin-bottom: 0;">Stores Folder(s):</label>
+                                <input type="text" id="setup-db-stores-folders" placeholder="/path/one, /path/two" style="flex: 1;">
+                            </div>
+                        </div>
+                        <small style="display: block; color: var(--text-muted);">Specify up to two folders. One for no replication, two for Active/Passive replication.</small>
+                    </div>
+
+                    <!-- Data Files Section -->
+                    <div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <label style="font-weight: bold; margin: 0; color: var(--text-color);">Data Files</label>
+                            <button onclick="addSetupDbECItem()" title="Add Data File Entry" style="cursor: pointer; background: transparent; border: none; font-size: 1.2em; color: var(--text-color); padding: 0 5px;">+</button>
+                        </div>
+                        
+                         <div id="setup-db-ec-container" style="max-height: 200px; overflow-y: auto; padding-right: 5px;">
+                             <!-- Helper Text -->
+                             <p style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 10px;">
+                                 Configure one or more Data File partitions.
+                             </p>
+                             <!-- Dynamic Setup Wizard EC items -->
+                         </div>
+                    </div>
+                </div>
             </div>
-            <div class="form-group" id="setup-conn-group" style="display: none;">
-                <label>Connection URL</label>
-                <input type="text" id="setup-db-conn" placeholder="localhost:6379">
-                <small>For Redis/Cassandra clusters.</small>
-            </div>
+
             <div class="form-group" style="margin-top: 15px;">
                 <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                     <input type="checkbox" id="setup-populate-demo" style="width: auto;">
@@ -589,10 +769,128 @@
             </div>
         </div>
 
+        <!-- Step 2: System Configuration (Formerly Step 1) -->
+        <div class="wizard-step" id="step-2">
+            <h3>2. System Configuration</h3>
+            <p>Configure the System Database used for internal metadata, scripts, and eventual RBAC.</p>
+            
+            <!-- Row 1: Mode and Redis URL -->
+            <div style="display: flex; gap: 20px; margin-bottom: 10px; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label style="margin: 0; white-space: nowrap;" title="App Operation Mode: Standalone (Single Instance) or Clustered (Multiple Instances sharing Data).">Mode</label>
+                    <select id="setup-sys-type" onchange="toggleSetupConnectionField('sys')" style="width: 120px;">
+                        <option value="standalone">Standalone</option>
+                        <option value="clustered">Clustered</option>
+                    </select>
+                </div>
+                 <div id="setup-conn-group-sys" style="display: none; align-items: center; gap: 8px; flex: 1;">
+                    <label style="margin: 0; white-space: nowrap;">Redis URL</label>
+                    <input type="text" id="setup-sys-conn" placeholder="localhost:6379" style="flex: 1;">
+                </div>
+            </div>
+
+            <!-- Row 2: System DB Path and Port -->
+            <div style="display: flex; gap: 20px; margin-bottom: 10px; align-items: center;">
+                <div id="setup-sys-path-group" style="display: flex; align-items: center; gap: 10px; flex: 1.5;">
+                    <label style="margin: 0; white-space: nowrap; min-width: 140px;">System Database Path</label>
+                    <input type="text" id="setup-reg-path" placeholder="/var/lib/sop/system_db" value="/tmp/sop_data/system_db" style="width: 100%; box-sizing: border-box;">
+                </div>
+                
+                 <div style="display: flex; align-items: center; gap: 10px;">
+                    <label style="margin: 0; white-space: nowrap;">Server Port</label>
+                    <input type="number" id="setup-port" value="8080" style="width: 80px;">
+                    <script>
+                        // Default to current port
+                        const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+                        if (currentPort) {
+                            document.getElementById('setup-port').value = currentPort;
+                        }
+                    </script>
+                </div>
+            </div>
+
+            <!-- Row 3: LLM API Key (Moved to Step 3) -->
+
+             <!-- Advanced Mode Toggle -->
+             <div style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                <label style="cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="setup-sys-advanced-toggle" onchange="toggleSetupAdvancedOptions('sys')"> 
+                    <strong>Advanced Mode</strong> (Registry Settings, Partitioning)
+                </label>
+                <div id="setup-sys-advanced-options" style="display: none; margin-top: 10px; padding-left: 10px; border-left: 2px solid var(--border-color);">
+                    
+                    <!-- Registry Files -->
+                     <div style="margin-bottom: 15px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px;">
+                        <label style="font-weight: bold; margin-bottom: 5px; display: block;">Registry Files</label>
+                        <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 5px;">
+                            <div style="display: flex; align-items: center; gap: 5px;">
+                                <label style="white-space: nowrap; margin-bottom: 0;">Hash Mod:</label>
+                                <input type="number" id="setup-sys-registry-hash-mod" placeholder="Default (0)" min="{{.MinHashMod}}" max="{{.MaxHashMod}}" style="width: 80px;">
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 5px; flex: 1;">
+                                <label style="white-space: nowrap; margin-bottom: 0;">Stores Folder(s):</label>
+                                <input type="text" id="setup-sys-stores-folders" placeholder="/path/one, /path/two" style="flex: 1;">
+                            </div>
+                        </div>
+                    </div>
+                
+                    <!-- Data Files (EC) -->
+                    <div>
+                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                             <label style="font-weight: bold; margin: 0; display: block;">Data Files (Partitioning)</label>
+                             <button onclick="addSetupSysECItem()" title="Add Data File Entry" style="cursor: pointer; background: transparent; border: none; font-size: 1.2em; color: var(--text-color); padding: 0 5px;">+</button>
+                         </div>
+                         <div id="setup-sys-ec-container" style="max-height: 200px; overflow-y: auto; padding-right: 5px;">
+                             <!-- Helper Text -->
+                              <p style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 5px;">
+                                 Configure Data File partitions (usually just one for System DB).
+                             </p>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Step 3: Review -->
         <div class="wizard-step" id="step-3">
             <h3>3. Ready to Go!</h3>
             <p>We are ready to initialize your environment.</p>
+
+           <div style="background: var(--pre-bg); padding: 10px; border-radius: 4px; font-size: 0.85em; margin-bottom: 15px; border: 1px solid var(--border-color);">
+                <strong>Environment Check:</strong>
+                <ul style="margin: 5px 0 5px 20px; padding: 0;">
+                    <li>
+                        <code>SOP_ROOT_PASSWORD</code>: 
+                        {{if .Env.SOP_ROOT_PASSWORD}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
+                        {{else}}
+                            <span style="color: var(--text-muted);">Not Set</span>
+                        {{end}}
+                    </li>
+                    <li>
+                        <code>GEMINI_API_KEY</code>: 
+                        {{if .Env.GEMINI_API_KEY}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span> <span style="color: var(--text-muted);">(Will be used if input below is empty)</span>
+                        {{else}}
+                            <span style="color: var(--text-muted);">Not Set</span>
+                        {{end}}
+                    </li>
+                </ul>
+                <div style="margin-top: 5px; color: var(--text-muted); font-size: 0.9em;">
+                    Set these in your OS environment (e.g. <code>.bash_profile</code>) to configure automatically.
+                </div>
+            </div>
+
+            <!-- LLM API Key -->
+            <div style="margin-bottom: 15px;">
+                <label style="display: block; margin-bottom: 5px; font-weight: bold;">LLM API Key (Optional)</label>
+                <div style="display: flex; gap: 10px;">
+                     <input type="password" id="setup-llm-api-key" placeholder="Enter Gemini API Key (leaves empty to use trial key)" style="flex: 1;">
+                     <a href="https://aistudio.google.com/app/apikey" target="_blank" class="secondary-btn" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; height: 38px; box-sizing: border-box;">Get Key</a>
+                </div>
+                <small style="color: var(--text-muted);">Required for AI Assistant. Leave empty to use the built-in trial key.</small>
+            </div>
+
             <div id="setup-summary" style="background: var(--pre-bg); padding: 15px; border-radius: 4px; font-family: monospace; margin-bottom: 15px;">
                 <!-- Summary populated by JS -->
             </div>
@@ -607,5 +905,30 @@
 </div>
 {{template "modals" .}}
 {{template "scripts" .}}
+<div id="environments-modal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <div class="modal-header">
+            <span>Environments</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="document.getElementById('environments-modal').style.display='none'">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div id="env-list-container" style="max-height: 300px; overflow-y: auto; margin-bottom: 15px;">
+                <!-- List injected here -->
+            </div>
+            
+            <div style="border-top: 1px solid var(--border-color); padding-top: 15px;">
+                <label style="font-weight: bold; font-size: 12px; margin-bottom: 5px; display: block;">Create New Environment:</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="text" id="new-env-name" placeholder="Name (e.g. production)" style="flex: 1; padding: 6px; box-sizing: border-box; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); border-radius: 4px;">
+                    <button onclick="createEnvironment()" style="padding: 6px 12px; cursor: pointer;">Create & Switch</button>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="document.getElementById('environments-modal').style.display='none'" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Close</button>
+        </div>
+    </div>
+</div>
+
 </body>
 </html>

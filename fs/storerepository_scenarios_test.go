@@ -535,7 +535,7 @@ func TestStoreRepository_GetRegistryHashModValue_InvalidNumber(t *testing.T) {
 	sr, _ := NewStoreRepository(ctx, rt, nil, mocks.NewMockClient(), 0)
 
 	// Write an invalid integer into the registry hash mod file.
-	if err := os.WriteFile(filepath.Join(base, registryHashModValueFilename), []byte("not-a-number"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(base, RegistryHashModValueFilename), []byte("not-a-number"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 

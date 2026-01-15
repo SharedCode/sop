@@ -17,6 +17,67 @@ SOP exposes its B-Tree engine directly to the script system. This effectively cr
 *   **No Parsing Overhead**: Unlike SQL statements that require complex parsing and query planning at runtime, SOP scripts are pre-structured units of work.
 *   **System Database**: Scripts are persisted in a dedicated **SystemDB**, a robust SOP B-Tree store. This ensures your "programs" are durable, transactional, and available across server restarts.
 
+## Tools Reference
+
+The SOP AI Agent exposes a comprehensive set of tools for managing scripts and data.
+
+### Script Management
+
+| Tool | Description | Arguments |
+| :--- | :--- | :--- |
+| `list_scripts` | Lists all available scripts. | `()` |
+| `save_script` | Saves a full script definition (create or overwrite). Use this to persist a script after drafting or when importing a valid JSON script definition. | `(name: string, description: string, steps: list<object>)` |
+| `get_script_details` | Retrieves the definition of a specific script. | `(name: string)` |
+| `save_step` | Appends a new step to a specific script. | `(script: string, ...step_def)` |
+| `insert_step` | Inserts a step into a script at a specific index. | `(script: string, index: number, type: string, description: string, name: string, ...params)` |
+| `delete_step` | Deletes a step from a script. | `(script: string, index: number)` |
+| `update_step` | Updates an existing step in a script. | `(script: string, index: number, description: string, name: string, ...params)` |
+| `reorder_steps` | Moves a step to a new position. | `(script: string, from_index: number, to_index: number)` |
+| `add_step_from_last` | Adds the last executed tool call as a new step. | `(script: string, index: number, position: string, description: string, name: string)` |
+| `refactor_last_interaction` | Refactors the immediate past interaction into a new script. | `(mode: string, name: string)` |
+
+### Data Operations
+
+| Tool | Description | Arguments |
+| :--- | :--- | :--- |
+| `list_databases` | Lists all available databases. | `()` |
+| `list_stores` | Lists all stores in the current database. | `(database: string (optional))` |
+| `select` | Standard data retrieval with filtering and sorting. | `(store: string, filter: object, limit: number, skip: number, order_by: list, fields: list)` |
+| `add` | Inserts a single record. | `(store: string, key: any, value: any)` |
+| `update` | Updates a single record. | `(store: string, key: any, value: any)` |
+| `delete` | Removes a single record. | `(store: string, key: any)` |
+| `execute_script` | Executes a raw, multi-step programmatic script (JSON execution plan). | `(script: list<op>)` |
+
+## Session Commands
+
+When interacting with the AI Assistant interactively (e.g., in the web console), you can use slash commands to manage your session, data, and draft scripts manually. This gives you a full CLI experience.
+
+### Data Operations (CLI)
+
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `/select` | `/select <store> [limit=N]` | List top N records from a store. Defaults to limit=10. |
+| `/add` | `/add <store> <key> <value>` | Add or update a record in the store. Value can be a JSON string or plain text. |
+| `/update` | `/update <store> <key> <value>` | Update an existing record. Fails if key not found. |
+| `/delete_record` | `/delete_record <store> <key>` | Delete a specific record from the store. |
+
+### Script Management (CLI)
+
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `/create` | `/create <name> [goal]` | Start recording a new script draft. |
+| `/list` | `/list [--category <cat>]` | Lists all available scripts. |
+| `/show` | `/show <name> [--json] `--category <cat>` | Displays the content of a saved script. |
+| `/save` | `/save` | Saves the current draft to the System DB. |
+| `/save_as` | `/save_as <name>` | Saves the last executed tool call as a new script immediately. |
+| `/delete` | `/delete <name>` | Deletes a saved script. |
+| `/step` | `/step <instruction>` | Adds a step to the current draft. If text follows, it adds a prompt step. If empty, it adds the last executed command. |
+| `/insert_step` | `/insert_step <script> <idx>` | Inserts the last executed command into an *existing* script. |
+| `/update_step` | `/update_step <idx> <instruction>` | Updates the instruction of a specific step in current draft. |
+| `/delete_step` | `/delete_step <idx>` | Removes a specific step from current draft. |
+| `/reorder_steps` | `/reorder_steps <old> <new>` | Moves a step from one position to another in current draft. |
+| `/refine` | `/refine [instruction]` | Uses AI to improve a script draft. |
+
 ## Atomic Lego Blocks: The Foundation of Safe Scripting
 
 To enable the LLM to generate scripts with "fine-grained agility" and control, we have exposed a set of **Atomic Lego Blocks**. These are highly optimized, safe, and versatile functions that the LLM can assemble to perform complex logic without writing raw code.
@@ -105,19 +166,6 @@ The script system uses a stable JSON schema acting as a mini-SDK. Each step now 
 *   **`loop`**: Iterate over lists or data fetched from B-Trees.
 *   **`fetch`**: High-performance data retrieval directly from SOP B-Trees.
 *   **`say`**: Output information to the user.
-
-## Commands Reference
-
-*   `/create <name> [category]`
-*   `/step [instruction]`
-*   `/save`
-*   `/run <name> [args]`
-*   `/list`
-*   `/delete <name>`
-
-*   **`save_step`**: Appends a new step to an existing script. This allows the AI to "compose" a program step-by-step, thinking through the logic as it goes.
-*   **`save_script`**: Overwrites a script entirely (bulk save).
-*   **`insert_step` / `update_step`**: Fine-grained editing of existing logic.
 
 ## Advanced Orchestration
 

@@ -37,7 +37,7 @@ func Test_FastForward_InvalidRegHashMod_ReturnsError(t *testing.T) {
 	GlobalReplicationDetails.FailedToReplicate = true
 
 	// Create invalid reghashmod file on active side
-	if err := os.WriteFile(filepath.Join(active, registryHashModValueFilename), []byte("abc"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(active, RegistryHashModValueFilename), []byte("abc"), 0o644); err != nil {
 		t.Fatalf("seed bad reghashmod: %v", err)
 	}
 

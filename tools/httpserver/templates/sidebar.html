@@ -2,7 +2,14 @@
 <div id="sidebar">
     <div style="flex: 1; overflow-y: auto;">
         <div id="database-section" style="display: none; margin-bottom: 12px;">
-            <h2 style="margin-bottom: 7px;">Databases</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px;">
+                <h2 style="margin: 0;">Databases</h2>
+                <button onclick="showAddDatabaseModal()" title="Add Database" style="background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                    </svg>
+                </button>
+            </div>
             <select id="database-select" onchange="selectDatabase(this.value)" style="width: 100%; padding: 5px;">
                 <option>Loading...</option>
             </select>
@@ -21,8 +28,17 @@
         
         <hr style="margin: 12px 0; border: 0; border-top: 1px solid var(--border-color);">
         
+        
         <div id="db-options-section" style="display: none;">
-            <h3 style="margin-bottom: 7px;">Database Options</h3>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px;">
+                <h3 style="margin: 0;">Database Options</h3>
+                <button onclick="showDeleteDatabaseModal()" title="Delete Current Database" style="background: none; border: none; color: var(--text-color); cursor: pointer; padding: 2px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                    </svg>
+                </button>
+            </div>
             <div id="db-options-content" style="font-size: 12px; color: var(--text-muted); overflow-x: auto;">
                 Loading...
             </div>
@@ -30,7 +46,13 @@
     </div>
     
     <!-- Sidebar Footer -->
-    <div style="padding-top: 10px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; align-items: center;">
+    <div style="padding-top: 10px; border-top: 1px solid var(--border-color); display: flex; justify-content: flex-end; align-items: center; gap: 10px;">
+        <button onclick="showEnvironmentsManager()" title="Manage Environments" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                 <!-- HDD/Server Icon -->
+                 <path d="M1 4.5A2.5 2.5 0 0 1 3.5 2h9A2.5 2.5 0 0 1 15 4.5v1A2.5 2.5 0 0 1 12.5 8h-9A2.5 2.5 0 0 1 1 5.5v-1zM3.5 3a1.5 1.5 0 0 0-1.5 1.5v1a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-1a1.5 1.5 0 0 0-1.5-1.5h-9zM1 10.5A2.5 2.5 0 0 1 3.5 8h9a2.5 2.5 0 0 1 2.5 2.5v1a2.5 2.5 0 0 1-2.5 2.5h-9a2.5 2.5 0 0 1-2.5-2.5v-1zm1.5 1a1.5 1.5 0 0 0-1.5 1.5v1a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-1a1.5 1.5 0 0 0-1.5-1.5h-9z"/>
+            </svg>
+        </button>
         <button onclick="showPreferences()" title="Preferences" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px;">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>

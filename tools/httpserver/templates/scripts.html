@@ -5,6 +5,118 @@
         return false; // Let default handler run
     };
 
+    /* --- Global Modal Helpers --- */
+    let _confirmCallback = null;
+    let _alertCallback = null;
+
+    function showAlert(message, callback) {
+        document.getElementById('global-alert-message').textContent = message;
+        _alertCallback = callback;
+        document.getElementById('global-alert-modal').style.display = 'flex';
+        // Focus OK button for usability
+        setTimeout(() => document.getElementById('global-alert-modal').querySelector('button').focus(), 50);
+    }
+
+    function closeGlobalAlert() {
+        document.getElementById('global-alert-modal').style.display = 'none';
+        if (_alertCallback) {
+            _alertCallback();
+            _alertCallback = null;
+        }
+    }
+
+    function showConfirm(message, onConfirm, onCancel, title="Confirm") {
+        document.getElementById('global-confirm-title').textContent = title;
+        document.getElementById('global-confirm-message').textContent = message;
+        
+        const okBtn = document.getElementById('global-confirm-ok-btn');
+        const cancelBtn = document.getElementById('global-confirm-cancel-btn');
+
+        // Remove old listeners to avoid stacking
+        const newOk = okBtn.cloneNode(true);
+        okBtn.parentNode.replaceChild(newOk, okBtn);
+        
+        const newCancel = cancelBtn.cloneNode(true);
+        cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+        newOk.onclick = function() {
+            document.getElementById('global-confirm-modal').style.display = 'none';
+            if (onConfirm) onConfirm();
+        };
+
+        newCancel.onclick = function() {
+            document.getElementById('global-confirm-modal').style.display = 'none';
+            if (onCancel) onCancel();
+        };
+
+        document.getElementById('global-confirm-modal').style.display = 'flex';
+        setTimeout(() => newOk.focus(), 50);
+    }
+
+    function closeGlobalConfirm() {
+        document.getElementById('global-confirm-modal').style.display = 'none';
+    }
+
+    function confirmAsync(message, title="Confirm") {
+        return new Promise((resolve) => {
+            showConfirm(message, () => resolve(true), () => resolve(false), title);
+        });
+    }
+    
+    // Override native alert (optional, but safer to rename usages explicitly first)
+    // window.alert = function(msg) { showAlert(msg); };
+
+    // Escape Key Handler for Modals
+    document.addEventListener('keydown', function(event) {
+        if (event.key === "Escape") {
+            const modals = [
+                'add-modal', 
+                'column-modal', 
+                'confirm-modal', 
+                'global-alert-modal',
+                'global-confirm-modal',
+                'preferences-modal', 
+                'script-modal', 
+                'add-store-modal',
+                'store-details-modal',
+                'cel-modal',
+                'delete-env-modal',
+                'setup-wizard',
+                'add-database-modal',
+                'delete-database-modal',
+                'environments-modal',
+                'switch-env-modal'
+            ];
+            
+            let closedAny = false;
+            modals.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.style.display !== 'none' && el.style.display !== '') {
+                    // Specific close functions handling
+                    if (id === 'add-modal') closeAdd();
+                    else if (id === 'global-alert-modal') closeGlobalAlert();
+                    else if (id === 'global-confirm-modal') closeGlobalConfirm();
+                    else if (id === 'preferences-modal') closePreferences();
+                    else if (id === 'script-modal') closeScriptModal();
+                    else if (id === 'add-store-modal') closeAddStoreModal();
+                    else if (id === 'store-details-modal') closeStoreDetailsModal();
+                    else if (id === 'cel-modal') closeCelModal();
+                    else if (id === 'setup-wizard') closeSetupWizard();
+                    else if (id === 'delete-env-modal') closeDeleteEnvModal();
+                    else if (id === 'add-database-modal') closeAddDatabaseModal();
+                    else if (id === 'delete-database-modal') closeDeleteDatabaseModal();
+                    else if (id === 'environments-modal') closeEnvironmentsManager();
+                    else if (id === 'switch-env-modal') closeSwitchEnvModal();
+                    else el.style.display = 'none'; // Default fallback
+                    
+                    closedAny = true;
+                }
+            });
+            
+            // If no modal was closed, maybe close other things?
+        }
+    });
+
     let currentDatabase = null;
     let currentStore = null;
     let firstKey = null;
@@ -12,6 +124,8 @@
     let currentStoreInfo = null;
     let currentItemKey = null;
     
+    const CURRENT_CONFIG_FILE = "{{ .ConfigFile }}";
+
     // Environment Flags
     // ALLOW_INVALID_MAP_KEY: If true, allows saving a store with Map Key type without
     // requiring an Index Specification or CEL Expression. Controlled by SOP_ALLOW_INVALID_MAP_KEY env var.
@@ -47,7 +161,7 @@
             userDBs.forEach(db => {
                 const opt = document.createElement('option');
                 opt.value = db.name;
-                opt.textContent = db.name + (db.mode === 'clustered' ? ' (Clustered)' : '');
+                opt.textContent = db.name;
                 select.appendChild(opt);
             });
 
@@ -89,11 +203,11 @@
             document.getElementById('database-select').innerHTML = '<option>Error loading databases</option>';
         });
 
-    function selectDatabase(name, forceRefresh = false, storeToSelect = null) {
+    async function selectDatabase(name, forceRefresh = false, storeToSelect = null) {
         if (!forceRefresh && currentDatabase === name) return;
 
         // Check for unsaved changes
-        if (!closeDetail()) {
+        if (!await closeDetail()) {
             // Revert selection
             const select = document.getElementById('database-select');
             if (select && currentDatabase) {
@@ -221,14 +335,16 @@
         return !hasSchema;
     }
 
-    function selectStore(name, element, force = false) {
+    async function selectStore(name, element, force = false) {
         if (currentStore === name && !force) return;
 
         // Close detail panel as it may be showing data from previous store
-        if (!closeDetail()) return;
+        if (!await closeDetail()) return;
 
         currentStore = name;
         columnWidths = []; // Reset column widths
+        loadColumnPreferences(); // Load saved column settings
+        columnsInitialized = false;
         
         // Highlight active
         document.querySelectorAll('#sidebar li').forEach(el => el.classList.remove('active'));
@@ -308,7 +424,7 @@
         if (name === null) return; // User cancelled prompt
         
         if (name.trim().toLowerCase() !== currentStore.toLowerCase()) {
-            alert("Store name does not match. Deletion cancelled.");
+            showAlert("Store name does not match. Deletion cancelled.");
             return;
         }
 
@@ -329,7 +445,7 @@
         })
         .then(data => {
             if (data.status === 'ok') {
-                alert("Store deleted successfully.");
+                showAlert("Store deleted successfully.");
                 currentStore = null;
                 document.getElementById('current-store-title').textContent = "Select a Store";
                 
@@ -345,10 +461,10 @@
                 // Refresh list
                 selectDatabase(currentDatabase, true);
             } else {
-                alert("Error: " + (data.error || "Unknown error"));
+                showAlert("Error: " + (data.error || "Unknown error"));
             }
         })
-        .catch(err => alert("Error: " + err));
+        .catch(err => showAlert("Error: " + err));
     }
 
     function buildSearchUI(info) {
@@ -487,6 +603,40 @@
     let allDetectedColumns = []; // List of all columns detected in currentItems
     let showSelectionColumn = false; // Toggle for checkbox column
     let selectedItems = new Set(); // Set of keys selected for deletion
+    let columnsInitialized = false; // Flag to trigger auto-column-hiding once per store load
+
+    // --- Column Persistence ---
+    function saveColumnPreferences() {
+        if (!currentDatabase || !currentStore) return;
+        const key = `sop_cols_${currentDatabase}_${currentStore}`;
+        if (userSelectedColumns) {
+            localStorage.setItem(key, JSON.stringify(Array.from(userSelectedColumns)));
+        } else {
+            localStorage.removeItem(key);
+        }
+        localStorage.setItem(`sop_cols_show_select_${currentDatabase}_${currentStore}`, showSelectionColumn);
+    }
+
+    function loadColumnPreferences() {
+        userSelectedColumns = null;
+        showSelectionColumn = false;
+        if (!currentDatabase || !currentStore) return;
+        
+        const key = `sop_cols_${currentDatabase}_${currentStore}`;
+        const stored = localStorage.getItem(key);
+        if (stored) {
+            try {
+                userSelectedColumns = new Set(JSON.parse(stored));
+            } catch (e) {
+                console.error("Failed to load column prefs", e);
+            }
+        }
+        
+        const storedSelect = localStorage.getItem(`sop_cols_show_select_${currentDatabase}_${currentStore}`);
+        if (storedSelect !== null) {
+            showSelectionColumn = (storedSelect === 'true');
+        }
+    }
 
     function toggleSelection(checkbox) {
         const key = checkbox.getAttribute('data-key');
@@ -592,7 +742,7 @@
         loadItems('current', firstKey);
         
         if (failCount > 0) {
-            alert(`Deleted ${successCount} items. Failed to delete ${failCount} items.`);
+            showAlert(`Deleted ${successCount} items. Failed to delete ${failCount} items.`);
         }
     }
 
@@ -697,6 +847,55 @@
 
         // Store all detected columns for the selector
         allDetectedColumns = cols;
+
+        // --- Auto-Initialize Columns (Responsive Heuristic) ---
+        if (!userSelectedColumns && !columnsInitialized && cols.length > 5) {
+             const screenWidth = window.innerWidth;
+             // If smaller than 1600px, we limit columns.
+             if (screenWidth < 1600) {
+                 const limit = screenWidth < 1000 ? 4 : 7;
+                 
+                 const importantFields = new Set();
+                 // 1. Index Fields
+                 if (typeof currentStoreInfo !== 'undefined' && currentStoreInfo && currentStoreInfo.indexSpec && Array.isArray(currentStoreInfo.indexSpec.index_fields)) {
+                     currentStoreInfo.indexSpec.index_fields.forEach(f => importantFields.add(f.field_name));
+                 }
+                 // 2. Explicit Key/Value overrides
+                 importantFields.add("Key");
+                 importantFields.add("Value");
+                 
+                 const priority = ['id', 'name', 'title', 'type', 'status', 'email', 'date', 'created', 'updated', 'user'];
+                 
+                 const significant = [];
+                 const others = [];
+                 
+                 cols.forEach(c => {
+                     if (importantFields.has(c)) {
+                         significant.push(c);
+                         return;
+                     }
+                     const lower = c.toLowerCase();
+                     if (priority.some(p => lower.includes(p))) {
+                         significant.push(c);
+                     } else {
+                         others.push(c);
+                     }
+                 });
+                 
+                 let autoCols = [...significant];
+                 for (const o of others) {
+                     if (autoCols.length >= limit) break;
+                     autoCols.push(o);
+                 }
+                 
+                 // If we filtered anything out, apply it as the default preference
+                 if (autoCols.length < cols.length) {
+                      userSelectedColumns = new Set(autoCols);
+                      saveColumnPreferences(); // Persist this auto-setting so it doesn't jump around
+                 }
+             }
+             columnsInitialized = true;
+        }
 
         // Filter based on user selection
         if (userSelectedColumns) {
@@ -857,22 +1056,29 @@
             userSelectedColumns = selected;
         }
         
+        saveColumnPreferences(); // Save to local storage
         renderGrid(currentItems);
         document.getElementById('column-modal').style.display = 'none';
     }
 
     function loadItems(action = 'first', refKey = null, keepPanel = false) {
-        if (!currentStore || !currentDatabase) return;
+        if (!currentStore || !currentDatabase) return Promise.resolve([]);
 
         const btn = document.getElementById('btn-save');
         if (btn && !btn.disabled) {
-             if (!confirm("You have unsaved changes. Loading new items will discard them. Continue?")) {
-                 return Promise.reject("Cancelled by user");
-             }
-             // User confirmed discard. Force close to reset state.
-             closeDetail(true);
-             keepPanel = false;
+             return new Promise((resolve, reject) => {
+                 showConfirm("You have unsaved changes. Loading new items will discard them. Continue?", () => {
+                     closeDetail(true);
+                     _performLoadItems(action, refKey, false).then(resolve).catch(reject);
+                 }, () => {
+                     reject("Cancelled by user");
+                 }, "Unsaved Changes");
+             });
         }
+        return _performLoadItems(action, refKey, keepPanel);
+    }
+
+    function _performLoadItems(action, refKey, keepPanel) {
 
         // Check if panel is open to preserve it
         const panel = document.getElementById('detail-panel');
@@ -1108,7 +1314,7 @@
         msg += "Tool: " + toolName;
         // The summary often contains the full args which IS the instruction for execute_script
         // msg += "\n(Full instructions are not yet available.)";
-        alert(msg);
+        showAlert(msg);
     }
 
     function renderScriptView(script) {
@@ -1448,7 +1654,7 @@
                 input.value = JSON.stringify(json);
                 updateStepField(currentEditingStepIdx, 'args', input.value);
             } catch(e) {
-                alert("Invalid JSON: " + e.message);
+                showAlert("Invalid JSON: " + e.message);
                 return;
             }
         }
@@ -1525,7 +1731,7 @@
             try {
                 steps[idx].args = JSON.parse(value);
             } catch (e) {
-                alert("Invalid JSON for arguments");
+                showAlert("Invalid JSON for arguments");
                 return;
             }
         } else {
@@ -1541,7 +1747,7 @@
         const category = catInput ? catInput.value : 'general';
         
         if (!name) {
-            alert("Script must have a name to run.");
+            showAlert("Script must have a name to run.");
             return;
         }
 
@@ -1743,10 +1949,11 @@
     }
 
     function deleteScriptStep(idx) {
-        if(!confirm("Delete this step?")) return;
-        const steps = getStepsFromDOM();
-        steps.splice(idx, 1);
-        saveStepsToDOM(steps);
+        showConfirm("Delete this step?", () => {
+            const steps = getStepsFromDOM();
+            steps.splice(idx, 1);
+            saveStepsToDOM(steps);
+        }, null, "Delete Step");
     }
 
     function moveScriptStepUp(idx) {
@@ -1765,7 +1972,7 @@
 
     // --- End Script Visualizer ---
 
-    function showDetail(row, item, autoOpen = true) {
+    async function showDetail(row, item, autoOpen = true) {
         console.log("showDetail called. Store:", currentStore); // Debug
         
         // Check for unsaved changes if panel is open
@@ -1775,7 +1982,7 @@
         if (wasOpen) {
              const btn = document.getElementById('btn-save');
              if (btn && !btn.disabled) {
-                 if (!confirm("You have unsaved changes. Are you sure you want to discard them?")) {
+                 if (!await confirmAsync("You have unsaved changes. Are you sure you want to discard them?", "Unsaved Changes")) {
                      return;
                  }
              }
@@ -1839,7 +2046,7 @@
             });
             keyStr = JSON.stringify(orderedKey, null, 2);
         } else {
-            keyStr = item.key;
+            keyStr = String(item.key);
         }
         
         // Debug Info on UI
@@ -2007,7 +2214,7 @@
             try {
                 newVal = JSON.parse(valText);
             } catch (e) {
-                alert("Invalid JSON in Value field");
+                showAlert("Invalid JSON in Value field");
                 return;
             }
         }
@@ -2063,7 +2270,7 @@
             const msg = "Update failed: " + err.message + "\n\n" +
                         "Another user may have modified this record (Swarm conflict).\n" +
                         "Please refresh the data to see the latest changes.";
-            alert(msg);
+            showAlert(msg);
             btn.style.opacity = '1';
             markItemDirty(); // Re-enable so user can try again
         });
@@ -2074,7 +2281,7 @@
         
         // Check if Read-Only (No Index Spec AND No CEL)
         if (isStoreReadOnly(currentStoreInfo)) {
-            alert("Deletion is disabled for stores without an Index Specification or CEL Expression.");
+            showAlert("Deletion is disabled for stores without an Index Specification or CEL Expression.");
             return;
         }
 
@@ -2139,7 +2346,7 @@
             });
         })
         .catch(err => {
-            alert("Delete failed: " + err.message);
+            showAlert("Delete failed: " + err.message);
         });
     }
 
@@ -2379,7 +2586,7 @@
                 try {
                     obj = JSON.parse(textarea.value);
                 } catch {
-                    alert("Invalid JSON or Primitive value, cannot switch to Form view.");
+                    showAlert("Invalid JSON or Primitive value, cannot switch to Form view.");
                     document.getElementById('add-key-mode-toggle').checked = true;
                     return;
                 }
@@ -2397,7 +2604,7 @@
                     container.appendChild(div);
                 });
             } else {
-                alert("Value is not an object, cannot use Form view.");
+                showAlert("Value is not an object, cannot use Form view.");
                 document.getElementById('add-key-mode-toggle').checked = true;
             }
         }
@@ -2435,7 +2642,7 @@
                 try {
                     obj = JSON.parse(textarea.value);
                 } catch {
-                    alert("Invalid JSON, cannot switch to Form view.");
+                    showAlert("Invalid JSON, cannot switch to Form view.");
                     document.getElementById('add-value-mode-toggle').checked = true;
                     return;
                 }
@@ -2455,7 +2662,7 @@
                 });
             } else {
                 // Primitive value?
-                alert("Value is not an object, cannot use Form view.");
+                showAlert("Value is not an object, cannot use Form view.");
                 document.getElementById('add-value-mode-toggle').checked = true;
                 renderAddValueJson(textarea ? textarea.value : '');
             }
@@ -2479,7 +2686,7 @@
         document.getElementById('add-modal').style.display = 'none';
     }
 
-    function addItem() {
+    async function addItem() {
         if (!currentStore) return;
 
         let key, val;
@@ -2506,7 +2713,7 @@
                 try {
                     key = JSON.parse(keyText);
                 } catch (e) {
-                    alert("Invalid JSON in Key field: " + e.message);
+                    showAlert("Invalid JSON in Key field: " + e.message);
                     return;
                 }
             } else {
@@ -2535,7 +2742,7 @@
                 try {
                     val = JSON.parse(valText);
                 } catch (e) {
-                    alert("Invalid JSON in Value field: " + e.message);
+                    showAlert("Invalid JSON in Value field: " + e.message);
                     return;
                 }
             } else if (valText.startsWith('"') && valText.endsWith('"')) {
@@ -2543,7 +2750,7 @@
                  try {
                     val = JSON.parse(valText);
                  } catch (e) {
-                    alert("Invalid JSON string: " + e.message);
+                    showAlert("Invalid JSON string: " + e.message);
                     return;
                  }
             } else {
@@ -2564,7 +2771,7 @@
         // 1. Check IndexSpecification Requirements (Critical)
         if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
             if (typeof key !== 'object' || key === null) {
-                alert("Error: This store requires a structured key (JSON object) to match its Index Specification.");
+                showAlert("Error: This store requires a structured key (JSON object) to match its Index Specification.");
                 return;
             }
             
@@ -2576,7 +2783,7 @@
             });
 
             if (missingIndexFields.length > 0) {
-                alert(`Error: The key is missing required index fields:\n${missingIndexFields.join(', ')}\n\nThese fields are required for the database comparer to function.`);
+                showAlert(`Error: The key is missing required index fields:\n${missingIndexFields.join(', ')}\n\nThese fields are required for the database comparer to function.`);
                 return;
             }
         }
@@ -2590,7 +2797,7 @@
                 const missing = sampleFields.filter(k => !newFields.includes(k));
                 
                 if (missing.length > 0) {
-                    if (!confirm(`Warning: The key is missing the following fields found in other items:\n${missing.join(', ')}\n\nThis might cause sorting or retrieval issues.\nDo you want to proceed?`)) {
+                    if (!await confirmAsync(`Warning: The key is missing the following fields found in other items:\n${missing.join(', ')}\n\nThis might cause sorting or retrieval issues.\nDo you want to proceed?`, "Key Structure Warning")) {
                         return;
                     }
                 }
@@ -2599,7 +2806,7 @@
             const sampleType = typeof sampleKey;
             const newType = typeof key;
             if (sampleType !== newType) {
-                 if (!confirm(`Warning: Key type mismatch.\nExpected: ${sampleType}\nGot: ${newType}\n\nDo you want to proceed?`)) {
+                 if (!await confirmAsync(`Warning: Key type mismatch.\nExpected: ${sampleType}\nGot: ${newType}\n\nDo you want to proceed?`, "Type Mismatch")) {
                     return;
                 }
             }
@@ -2630,15 +2837,15 @@
             }
         })
         .catch(err => {
-            alert("Add failed: " + err.message);
+            showAlert("Add failed: " + err.message);
         });
     }
     document.getElementById('detail-resizer').style.display = 'none';
     
-    function closeDetail(force = false) {
+    async function closeDetail(force = false) {
         const btn = document.getElementById('btn-save');
         if (!force && btn && !btn.disabled) {
-            if (!confirm("You have unsaved changes. Are you sure you want to discard them?")) {
+            if (!await confirmAsync("You have unsaved changes. Are you sure you want to discard them?", "Unsaved Changes")) {
                 return false;
             }
         }
@@ -3718,7 +3925,7 @@
         }
     }
 
-    function drillDownToScript(scriptName) {
+    async function drillDownToScript(scriptName) {
         // Parse Category if present (e.g. "finance.compute_monthly")
         let searchName = scriptName;
         let searchCategory = null;
@@ -3735,7 +3942,7 @@
         // Check for unsaved changes before starting navigation
         const btn = document.getElementById('btn-save');
         if (btn && !btn.disabled) {
-             if (!confirm("You have unsaved changes. Navigating to script will discard them. Continue?")) {
+             if (!await confirmAsync("You have unsaved changes. Navigating to script will discard them. Continue?", "Unsaved Changes")) {
                  return;
              }
         }
@@ -3839,16 +4046,16 @@
 
                     } else {
                         document.body.style.cursor = originalCursor;
-                        alert("Script found but key mismatch? Found: " + JSON.stringify(item.key));
+                        showAlert("Script found but key mismatch? Found: " + JSON.stringify(item.key));
                     }
                 } else {
                     document.body.style.cursor = originalCursor;
-                    alert("Script not found: " + scriptName);
+                    showAlert("Script not found: " + scriptName);
                 }
             })
             .catch(err => {
                 document.body.style.cursor = originalCursor;
-                alert("Error fetching script: " + err.message);
+                showAlert("Error fetching script: " + err.message);
             });
     }
 
@@ -4502,7 +4709,7 @@
     function copyGeneratedCode() {
         const content = document.getElementById('generated-code-content').textContent;
         navigator.clipboard.writeText(content).then(() => {
-            alert("Code copied to clipboard!");
+            showAlert("Code copied to clipboard!");
         });
     }
 
@@ -4709,7 +4916,7 @@
             
         } catch (e) {
             console.error("Error in showEditStore:", e);
-            alert("Error showing store details: " + e.message);
+            showAlert("Error showing store details: " + e.message);
         }
     }
 
@@ -4791,11 +4998,11 @@
                 proceedUnlock();
             })
             .catch(err => {
-                alert("Error: " + err.message);
+                showAlert("Error: " + err.message);
             });
         } catch (e) {
             console.error("Error in unlockAdminFields:", e);
-            alert("Error unlocking: " + e.message);
+            showAlert("Error unlocking: " + e.message);
         }
     }
 
@@ -4804,7 +5011,7 @@
             const isEmptyStore = currentStoreInfo && currentStoreInfo.count === 0;
 
             if (!isEmptyStore) {
-                 alert("WARNING: You are about to modify the schema (Index/CEL) of a non-empty store.\n\nThis is an advanced operation. Ensure you understand the implications on existing data.");
+                 showAlert("WARNING: You are about to modify the schema (Index/CEL) of a non-empty store.\n\nThis is an advanced operation. Ensure you understand the implications on existing data.");
             }
     
             // --- Key/Value Structure (Only editable if empty) ---
@@ -4914,7 +5121,7 @@
             
         } catch (e) {
             console.error("Error in proceedUnlock:", e);
-            alert("Error unlocking: " + e.message);
+            showAlert("Error unlocking: " + e.message);
         }
     }
 
@@ -5007,7 +5214,7 @@
              try {
                 seedValue = generateSeedValueJSON();
              } catch (e) {
-                alert(e.message);
+                showAlert(e.message);
                 return;
              }
         }
@@ -5065,13 +5272,13 @@
             // Refresh store info
             selectDatabase(currentDatabase, true, name);
             if (data && data.warning) {
-                alert('Store updated successfully.\n\nWARNING: ' + data.warning);
+                showAlert('Store updated successfully.\n\nWARNING: ' + data.warning);
             } else {
-                alert('Store updated successfully.');
+                showAlert('Store updated successfully.');
             }
         })
         .catch(err => {
-            alert("Error updating store: " + err.message);
+            showAlert("Error updating store: " + err.message);
         });
     }
 
@@ -5081,6 +5288,30 @@
 
         document.getElementById('add-store-modal').style.display = 'flex';
         document.querySelector('#add-store-modal .modal-header span').textContent = 'Add New Store';
+
+        // populate EC targets
+        const targetSelect = document.getElementById('new-store-target-ec');
+        targetSelect.innerHTML = '<option value="">Default (Auto-named)</option>';
+        
+        if (currentDatabase) {
+             fetch(`/api/db/options?database=${encodeURIComponent(currentDatabase)}`)
+                .then(res => res.json())
+                .then(opts => {
+                    if (opts.erasure_config) {
+                        Object.keys(opts.erasure_config).forEach(key => {
+                             // Skip empty key as it doubles with Default if logic overlaps, 
+                             // but explicit empty key in config is valid.
+                             if (key === "") return; 
+                             
+                             const opt = document.createElement('option');
+                             opt.value = key;
+                             opt.textContent = key;
+                             targetSelect.appendChild(opt);
+                        });
+                    }
+                })
+                .catch(console.error);
+        }
 
         // Reset Button
         const footer = document.querySelector('#add-store-modal .modal-footer');
@@ -5830,7 +6061,7 @@
                 const hasCEL = celExpression && celExpression.trim() !== "";
                 
                 if (!hasIndex && !hasCEL) {
-                    alert("Map Key type requires an Index Specification OR a CEL Expression.");
+                    showAlert("Map Key type requires an Index Specification OR a CEL Expression.");
                     return;
                 }
             }
@@ -5855,7 +6086,7 @@
         }
 
         if (!name) {
-            alert("Store name is required");
+            showAlert("Store name is required");
             return;
         }
 
@@ -5946,7 +6177,7 @@
 
         /*
         if (seedKey === null || (typeof seedKey === 'string' && seedKey === '') || (typeof seedKey === 'object' && Object.keys(seedKey).length === 0)) {
-             alert("Initial Item Key is required.");
+             showAlert("Initial Item Key is required.");
              return;
         }
         */
@@ -5954,7 +6185,7 @@
         try {
             seedValue = generateSeedValueJSON();
         } catch (e) {
-            alert(e.message);
+            showAlert(e.message);
             return;
         }
 
@@ -5964,14 +6195,14 @@
             
             // 1. Validate Key Type
             if (type !== 'map') {
-                alert("Streaming stores must use a Map key type.");
+                showAlert("Streaming stores must use a Map key type.");
                 return;
             }
 
             // 2. Validate Value Type
             const valType = document.getElementById('new-store-value-type').value;
             if (valType !== 'blob') {
-                alert("Streaming stores must use 'Blob' (Byte Array) as the value type.");
+                showAlert("Streaming stores must use 'Blob' (Byte Array) as the value type.");
                 return;
             }
 
@@ -5993,18 +6224,18 @@
             });
 
             if (!hasChunkIndex || chunkIndexType !== 'int') {
-                alert("Streaming stores must have a 'ChunkIndex' field of type 'int' in the Key.");
+                showAlert("Streaming stores must have a 'ChunkIndex' field of type 'int' in the Key.");
                 return;
             }
             if (otherFieldCount < 1) {
-                alert("Streaming stores must have at least one other field in the Key (besides ChunkIndex).");
+                showAlert("Streaming stores must have at least one other field in the Key (besides ChunkIndex).");
                 return;
             }
 
             // 4. Validate Index Spec
             const indexRows = document.querySelectorAll('.index-field-row');
             if (indexRows.length === 0) {
-                alert("Streaming stores must have an Index defined.");
+                showAlert("Streaming stores must have an Index defined.");
                 return;
             }
 
@@ -6012,16 +6243,19 @@
             const lastIndexField = lastIndexRow.querySelector('.index-field-select').value;
 
             if (lastIndexField !== 'ChunkIndex') {
-                alert("For Streaming stores, 'ChunkIndex' must be the LAST field in the Index.");
+                showAlert("For Streaming stores, 'ChunkIndex' must be the LAST field in the Index.");
                 return;
             }
             
             // Ensure at least one other field is indexed (ChunkIndex + Other = 2+)
             if (indexRows.length < 2) {
-                 alert("Streaming stores must index both the ChunkIndex and the identifier field(s).");
+                 showAlert("Streaming stores must index both the ChunkIndex and the identifier field(s).");
                  return;
             }
         }
+
+        // Check for Targeted EC
+        // const ecTarget = document.getElementById('new-store-target-ec').value || "";
 
         const payload = {
             database: currentDatabase,
@@ -6061,11 +6295,11 @@
                 // Refresh store list and select the new store
                 selectDatabase(currentDatabase, true, name);
             } else {
-                alert("Error: " + (data.error || "Unknown error"));
+                showAlert("Error: " + (data.error || "Unknown error"));
             }
         })
         .catch(err => {
-            alert("Error: " + err.message);
+            showAlert("Error: " + err.message);
         });
     }
 
@@ -6309,13 +6543,13 @@
             // Refresh store info
             currentStoreInfo.celExpression = celExpr;
             if (data && data.warning) {
-                alert('CEL Expression updated successfully.\n\nWARNING: ' + data.warning);
+                showAlert('CEL Expression updated successfully.\n\nWARNING: ' + data.warning);
             } else {
-                alert('CEL Expression updated successfully.');
+                showAlert('CEL Expression updated successfully.');
             }
         })
         .catch(err => {
-            alert("Error updating CEL Expression: " + err);
+            showAlert("Error updating CEL Expression: " + err);
         });
     }
 
@@ -6446,24 +6680,88 @@
     // Setup Wizard Logic
     let currentWizardStep = 1;
 
-    function toggleSetupConnectionField() {
-        const type = document.getElementById('setup-db-type').value;
-        const group = document.getElementById('setup-conn-group');
-        const input = document.getElementById('setup-db-conn');
+    function toggleSetupConnectionField(mode) {
+        // mode: 'db' or 'sys'
+        const typeId = mode === 'sys' ? 'setup-sys-type' : 'setup-db-type';
+        const groupId = mode === 'sys' ? 'setup-conn-group-sys' : 'setup-conn-group-db';
+        const inputId = mode === 'sys' ? 'setup-sys-conn' : 'setup-db-conn';
         
-        if (type === 'redis') {
-            group.style.display = 'block';
-            input.placeholder = 'localhost:6379';
-        } else if (type === 'cassandra') {
-            group.style.display = 'block';
-            input.placeholder = 'localhost:9042';
+        const type = document.getElementById(typeId).value;
+        const group = document.getElementById(groupId);
+        const input = document.getElementById(inputId);
+        
+        if (type === 'clustered') {
+            group.style.display = 'flex';
+            if(input) input.placeholder = 'localhost:6379';
         } else {
             group.style.display = 'none';
         }
     }
 
+    function toggleSetupAdvancedOptions(mode) {
+        const checkboxId = mode === 'sys' ? 'setup-sys-advanced-toggle' : 'setup-db-advanced-toggle';
+        const optionsId = mode === 'sys' ? 'setup-sys-advanced-options' : 'setup-db-advanced-options';
+        
+        const chk = document.getElementById(checkboxId);
+        const opts = document.getElementById(optionsId);
+        
+        if (chk && opts) {
+            opts.style.display = chk.checked ? 'block' : 'none';
+        }
+
+        if (mode === 'db') {
+            const isChecked = chk.checked;
+            // Toggle Logic for Setup
+            const pathGroup = document.getElementById('setup-db-path').parentElement;
+            const storesFoldersInput = document.getElementById('setup-db-stores-folders');
+            const dataPathInput = document.getElementById('setup-db-path');
+            
+            if (isChecked) {
+                pathGroup.style.display = 'none';
+                 if (dataPathInput.value && !storesFoldersInput.value) {
+                    storesFoldersInput.value = dataPathInput.value;
+                }
+            } else {
+                pathGroup.style.display = 'flex'; 
+                if (storesFoldersInput.value) {
+                    const firstPath = storesFoldersInput.value.split(',')[0].trim();
+                    if (firstPath) dataPathInput.value = firstPath;
+                }
+            }
+        } else if (mode === 'sys') {
+             const isChecked = chk.checked;
+             const storesFoldersInput = document.getElementById('setup-sys-stores-folders');
+             const dataPathInput = document.getElementById('setup-reg-path');
+             const pathGroup = document.getElementById('setup-sys-path-group');
+
+             if (isChecked) {
+                  if (pathGroup) pathGroup.style.display = 'none';
+                  if (dataPathInput && storesFoldersInput && dataPathInput.value && !storesFoldersInput.value) {
+                    storesFoldersInput.value = dataPathInput.value;
+                }
+             } else {
+                 if (pathGroup) pathGroup.style.display = 'flex';
+                 if (dataPathInput && storesFoldersInput && storesFoldersInput.value) {
+                     const firstPath = storesFoldersInput.value.split(',')[0].trim();
+                     if (firstPath) dataPathInput.value = firstPath;
+                 }
+             }
+        }
+    }
+
     function showSetupWizard() {
         document.getElementById('setup-wizard').style.display = 'flex';
+        
+        // Initialize User DB EC Container if empty
+        const container = document.getElementById('setup-db-ec-container');
+        if (container && container.children.length <= 1) { // 1 is helper text
+             // Clear existing entries (keep p tag if possible, or just rebuild)
+             // The p tag is inside. Let's just append if no .ec-entry exist
+             if (container.querySelectorAll('.ec-entry').length === 0) {
+                 addSetupDbECItem();
+             }
+        }
+        
         updateWizardStep();
     }
 
@@ -6487,28 +6785,37 @@
 
         // Populate Summary on Step 3
         if (currentWizardStep === 3) {
-            const regPath = document.getElementById('setup-reg-path').value;
-            const port = document.getElementById('setup-port').value;
+            // User DB Config (Step 1)
             const dbName = document.getElementById('setup-db-name').value;
             const dbPath = document.getElementById('setup-db-path').value;
             const dbType = document.getElementById('setup-db-type').value;
             const dbConn = document.getElementById('setup-db-conn').value;
             const populateDemo = document.getElementById('setup-populate-demo').checked;
+            
+            // System Config (Step 2)
+            const regPath = document.getElementById('setup-reg-path').value;
+            const port = document.getElementById('setup-port').value;
+            
+            let sysType = document.getElementById('setup-sys-type').value;
+            let sysConn = document.getElementById('setup-sys-conn').value;
+
+            // Check if Data Files (EC) configured
+            const dbErasureConfigs = collectEcConfigs('setup-db-ec-container');
+            const ecSummary = dbErasureConfigs ? `${dbErasureConfigs.length} entries configured` : 'None';
 
             let summaryHtml = `
-                <strong>System Registry:</strong> ${regPath}<br>
-                <strong>Port:</strong> ${port}<br>
-                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
-                <strong>New Database:</strong> ${dbName}<br>
+                <strong>User Database:</strong> ${dbName}<br>
                 <strong>Path:</strong> ${dbPath}<br>
-                <strong>Type:</strong> ${dbType}<br>
+                <strong>Type:</strong> ${dbType} ${dbType === 'clustered' ? `(${dbConn})` : ''}<br>
+                <strong>Data Files (EC):</strong> ${ecSummary}<br>
+                <strong>Demo Data:</strong> ${populateDemo ? 'Yes' : 'No'}<br>
+                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
+                <strong>System Database:</strong> ${regPath}<br>
+                <strong>Port:</strong> ${port}<br>
+                <strong>Type:</strong> ${sysType} ${sysType === 'clustered' ? `(${sysConn})` : ''}<br>
+                <strong>Configuration:</strong> System Defaults applied<br>
             `;
-
-            if (dbType !== 'filesystem' && dbConn) {
-                summaryHtml += `<strong>Connection:</strong> ${dbConn}<br>`;
-            }
-
-            summaryHtml += `<strong>Demo Data:</strong> ${populateDemo ? 'Yes' : 'No'}`;
+            
             document.getElementById('setup-summary').innerHTML = summaryHtml;
         }
     }
@@ -6516,16 +6823,85 @@
     function wizardNext() {
         if (currentWizardStep < 3) {
             // Validation
-            if (currentWizardStep === 1) {
-                const path = document.getElementById('setup-reg-path').value;
-                if (!path) return alert("Please enter a registry path");
-                // Validate path via API
+            if (currentWizardStep === 1) { // Was 2: User DB
+                const name = document.getElementById('setup-db-name').value;
+                const path = document.getElementById('setup-db-path').value;
+                if (!name || !path) return showAlert("Database Name and Path are required");
+                // TODO: Validate DB path?
+                
+                // Auto-populate System DB Manual Fields from User DB
+                document.getElementById('setup-sys-type').value = document.getElementById('setup-db-type').value;
+                document.getElementById('setup-sys-conn').value = document.getElementById('setup-db-conn').value;
+                document.getElementById('setup-sys-registry-hash-mod').value = document.getElementById('setup-db-registry-hash-mod').value;
+                
+                // Helper to replace last segment with 'system_db'
+                const replaceLastSegment = (path) => {
+                    if (!path) return "/tmp/sop_data/system_db";
+                    const isWin = path.includes('\\');
+                    const sep = isWin ? '\\' : '/';
+                    // Split, remove last, add system_db
+                    // Handle trailing slash
+                    let parts = path.split(sep).filter(p => p.length > 0);
+                    if (parts.length > 0) parts.pop();
+                    parts.push('system_db');
+                    return (path.startsWith(sep) ? sep : '') + parts.join(sep);
+                };
+
+                const dbStores = document.getElementById('setup-db-stores-folders').value;
+                if (dbStores) {
+                    const paths = dbStores.split(',').map(s => s.trim());
+                    const sysPaths = paths.map(p => replaceLastSegment(p));
+                    document.getElementById('setup-sys-stores-folders').value = sysPaths.join(', ');
+                }
+                
+                const dbPath = document.getElementById('setup-db-path').value;
+                if (dbPath) {
+                    document.getElementById('setup-reg-path').value = replaceLastSegment(dbPath);
+                }
+
+                toggleSetupConnectionField('sys');
+
+                // Auto-populate System DB EC Container from User DB (Max 4)
+                 const dbErasureConfigs = collectEcConfigs('setup-db-ec-container');
+                 const sysContainer = document.getElementById('setup-sys-ec-container');
+                 // Clear existing EC entries (keep helper text)
+                 sysContainer.querySelectorAll('.ec-entry').forEach(e => e.remove());
+
+                 if (dbErasureConfigs && dbErasureConfigs.length > 0) {
+                     const limit = 4;
+                     const toAdd = dbErasureConfigs.slice(0, limit);
+                     toAdd.forEach(item => {
+                         addErasureConfigRow('setup-sys-ec-container');
+                         const newEntry = sysContainer.lastElementChild;
+                         if (newEntry) {
+                             newEntry.querySelector('.ec-key').value = item.key;
+                             newEntry.querySelector('.ec-data').value = item.data_chunks;
+                             newEntry.querySelector('.ec-parity').value = item.parity_chunks;
+                             if (item.base_paths) {
+                                  // Copy base paths directly without modification (User Request)
+                                  const sysBasePaths = item.base_paths;
+                                  newEntry.querySelector('.ec-paths').value = sysBasePaths.join(', ');
+                             }
+                         }
+                     });
+                 } else {
+                     // Ensure at least one empty row if none exists ? 
+                     // No, user might not want EC. But generally System DB might need it if matched.
+                     if (sysContainer.querySelectorAll('.ec-entry').length === 0) {
+                        addErasureConfigRow('setup-sys-ec-container');
+                     }
+                 }
+
+            } else if (currentWizardStep === 2) { // Was 1: System Config
+                 const path = document.getElementById('setup-reg-path').value;
+                 if (!path) return showAlert("Please enter a system database path");
+                 // Validate path via API
                 fetch('/api/validate-path', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({path: path})
                 }).then(res => {
-                    if (!res.ok) return alert("Invalid path");
+                    if (!res.ok) return showAlert("Invalid path");
                     currentWizardStep++;
                     updateWizardStep();
                 });
@@ -6546,52 +6922,103 @@
     }
 
     function finishSetup() {
-        const regPath = document.getElementById('setup-reg-path').value;
-        const port = parseInt(document.getElementById('setup-port').value);
+        // Collect DB Settings
         const dbName = document.getElementById('setup-db-name').value;
         const dbPath = document.getElementById('setup-db-path').value;
         const dbType = document.getElementById('setup-db-type').value;
         const dbConn = document.getElementById('setup-db-conn').value;
         const populateDemo = document.getElementById('setup-populate-demo').checked;
+        const dbHashMod = document.getElementById('setup-db-registry-hash-mod').value;
+        const dbErasureConfigs = collectEcConfigs('setup-db-ec-container');
+
+        // Collect System Settings
+        const regPath = document.getElementById('setup-reg-path').value;
+        const port = parseInt(document.getElementById('setup-port').value);
+        const llmApiKey = document.getElementById('setup-llm-api-key').value.trim();
+
+        // Determine Final System DB Config
+        let sysType = document.getElementById('setup-sys-type').value;
+        let sysConn = document.getElementById('setup-sys-conn').value;
+        let sysHashMod = document.getElementById('setup-sys-registry-hash-mod').value;
+        let sysStoresFoldersRaw = document.getElementById('setup-sys-stores-folders').value.trim();
+        let sysErasureConfigs = [];
+        
+        // Collect from manual container
+        const manualConfigs = collectEcConfigs('setup-sys-ec-container');
+        if (manualConfigs) sysErasureConfigs = manualConfigs;
 
         const nextBtn = document.getElementById('wizard-next');
         nextBtn.disabled = true;
         nextBtn.textContent = "Setting up...";
 
-        // 1. Save Config
+        // Construct Payloads
+        const sysConfigPayload = {
+            registry_path: regPath,
+            port: port,
+            llm_api_key: llmApiKey,
+            type: sysType,
+            conn_url: sysConn,
+            registry_hash_mod: sysHashMod ? parseInt(sysHashMod) : 0,
+            stores_folders: sysStoresFoldersRaw ? sysStoresFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null
+        };
+        
+        if (sysErasureConfigs.length > 0) {
+            sysConfigPayload.erasure_configs = sysErasureConfigs;
+        }
+
+        const dbStoresFoldersRaw = document.getElementById('setup-db-stores-folders').value.trim();
+        const dbConfigPayload = {
+            name: dbName,
+            path: dbPath,
+            type: dbType,
+            connection: dbConn,
+            populate_demo: populateDemo,
+            stores_folders: dbStoresFoldersRaw ? dbStoresFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
+            registry_hash_mod: dbHashMod ? parseInt(dbHashMod) : 0
+        };
+
+        if (dbErasureConfigs) {
+            dbConfigPayload.erasure_configs = dbErasureConfigs;
+        }
+
+        // 1. Save Config (Initializes System DB)
         fetch('/api/config/save', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                registry_path: regPath,
-                port: port
-            })
+            body: JSON.stringify(sysConfigPayload)
         })
         .then(res => {
-            if (!res.ok) throw new Error("Failed to save config");
+            if (!res.ok) throw new Error("Failed to save config / init System DB");
             
-            // 2. Init Database
+            // 2. Init User Database
             return fetch('/api/db/init', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    name: dbName,
-                    path: dbPath,
-                    type: dbType,
-                    connection: dbConn,
-                    populate_demo: populateDemo
-                })
+                body: JSON.stringify(dbConfigPayload)
             });
         })
-        .then(res => {
-            if (!res.ok) throw new Error("Failed to initialize database");
+        .then(async res => {
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error("Failed to initialize user database: " + text);
+            }
             
-            // 3. Reload
-            alert("Setup Complete! Reloading...");
-            window.location.reload();
+            // 3. Reload/Redirect
+            // Explicitly hide wizard to ensure user sees progress/result
+            document.getElementById('setup-wizard').style.display = 'none';
+
+            const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+            if (port && port != parseInt(currentPort)) {
+                 const hostname = window.location.hostname;
+                 const newUrl = `${window.location.protocol}//${hostname}:${port}`;
+                 showAlert(`Setup Complete! IMPORTANT: You changed the port to ${port}. Please RESTART the server manually, then open: ${newUrl}`, null);
+            } else {            
+                showAlert("Setup Complete! Reloading...", () => window.location.reload());
+            }
         })
         .catch(err => {
-            alert("Error: " + err.message);
+            console.error(err);
+            showAlert("Error: " + err.message);
             nextBtn.disabled = false;
             nextBtn.textContent = "Finish";
         });
@@ -6671,5 +7098,542 @@
 
     // Apply preferences on load
     document.addEventListener('DOMContentLoaded', applyPreferences);
+
+    // --- Uninstall / Reset System ---
+    function showUninstallModal() {
+        document.getElementById('uninstall-delete-data').checked = false;
+        document.getElementById('uninstall-system-modal').style.display = 'block';
+    }
+
+    function closeUninstallModal() {
+        document.getElementById('uninstall-system-modal').style.display = 'none';
+    }
+
+    function confirmUninstallSystem() {
+        const deleteData = document.getElementById('uninstall-delete-data').checked;
+        
+        fetch('/api/system/uninstall', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                delete_data: deleteData
+            })
+        })
+        .then(res => {
+            if (!res.ok) return res.text().then(t => { throw new Error(t) });
+            return res.json();
+        })
+        .then(() => {
+            showAlert('System uninstalled/reset successfully. Reloading...', () => location.reload());
+        })
+        .catch(err => {
+            showAlert('Failed to uninstall system: ' + err.message);
+        });
+    }
+
+    // --- Erasure Config Helpers ---
+    
+    function addErasureConfigRow(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        
+        const div = document.createElement('div');
+        div.className = 'ec-entry';
+        div.style.border = '1px dashed var(--border-color)';
+        div.style.padding = '10px';
+        div.style.marginBottom = '10px';
+        div.style.position = 'relative';
+        
+        div.innerHTML = `
+            <span style="position: absolute; right: 5px; top: 5px; cursor: pointer; color: var(--danger-bg); font-weight: bold;" onclick="removeECItem(this)">&times;</span>
+            <div style="margin-bottom: 5px; display: flex; align-items: center; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <label style="font-size: 0.9em;">Key:</label>
+                    <input type="text" class="ec-key" placeholder="store_group_1" style="width: 160px; font-size: 0.9em;">
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <label style="white-space: nowrap; margin-bottom: 0; font-size: 0.9em;">EC:</label>
+                    <label style="margin-bottom: 0; font-size: 0.8em;">Data:</label>
+                    <input type="number" class="ec-data" min="0" style="width: 40px; flex: none; font-size: 0.9em;">
+                    <label style="margin-bottom: 0; font-size: 0.8em;">Parity:</label>
+                    <input type="number" class="ec-parity" min="0" style="width: 40px; flex: none; font-size: 0.9em;">
+                </div>
+            </div>
+            <input type="text" class="ec-paths" placeholder="/mnt/d1, /mnt/d2..." style="width: 100%; box-sizing: border-box; font-size: 0.9em;">
+        `;
+        container.appendChild(div);
+    }
+
+    function removeECItem(span) {
+        const entry = span.closest('.ec-entry');
+        if (entry) {
+             entry.remove();
+        }
+    }
+    
+    function addNewDbECItem() {
+        addErasureConfigRow('new-db-ec-container');
+    }
+    
+    function addSetupDbECItem() {
+        addErasureConfigRow('setup-db-ec-container');
+    }
+
+    function addSetupSysECItem() {
+        addErasureConfigRow('setup-sys-ec-container');
+    }
+
+    function collectEcConfigs(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return null;
+        
+        const entries = container.querySelectorAll('.ec-entry');
+        if (entries.length === 0) return null;
+        
+        const configs = [];
+        entries.forEach(entry => {
+             const key = entry.querySelector('.ec-key').value.trim();
+             const data = parseInt(entry.querySelector('.ec-data').value);
+             const parity = parseInt(entry.querySelector('.ec-parity').value);
+             const pathsRaw = entry.querySelector('.ec-paths').value.trim();
+             
+             if (!isNaN(data) && !isNaN(parity)) {
+                 const item = {
+                     key: key,
+                     data_chunks: data,
+                     parity_chunks: parity,
+                     base_paths: [] // Initialize as empty array
+                 };
+                 if (pathsRaw) {
+                     item.base_paths = pathsRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0);
+                     // Debug Alert
+                     // alert(`Collected Paths for ${key}: ${item.base_paths.join(', ')}`);
+                 }
+                 configs.push(item);
+             }
+        });
+        
+        return configs.length > 0 ? configs : null;
+    }
+
+    // --- Database Management Functions ---
+
+    function showAddDatabaseModal() {
+        document.getElementById('new-db-name').value = '';
+        document.getElementById('new-db-path').value = '';
+        document.getElementById('new-db-type').value = 'standalone';
+        document.getElementById('new-db-conn').value = '';
+        document.getElementById('new-db-conn-group').style.display = 'none';
+        
+        // Reset Advanced
+        document.getElementById('new-db-advanced-toggle').checked = false;
+        document.getElementById('new-db-advanced-options').style.display = 'none';
+        document.getElementById('new-db-stores-folders').value = '';
+        document.getElementById('new-db-registry-hash-mod').value = '';
+
+        // Reset EC Container
+        const ecContainer = document.getElementById('new-db-ec-container');
+        if (ecContainer) {
+            ecContainer.innerHTML = '';
+            addNewDbECItem(); // Add one default
+        }
+
+        // Reset visibility
+        document.getElementById('new-db-path').parentElement.style.display = 'flex';
+        
+        document.getElementById('add-database-modal').style.display = 'block';
+    }
+
+    function closeAddDatabaseModal() {
+        document.getElementById('add-database-modal').style.display = 'none';
+    }
+
+    function toggleNewDbConnectionField() {
+        const type = document.getElementById('new-db-type').value;
+        const group = document.getElementById('new-db-conn-group');
+        group.style.display = type === 'clustered' ? 'block' : 'none';
+    }
+
+    function toggleNewDbAdvancedOptions() {
+        const isChecked = document.getElementById('new-db-advanced-toggle').checked;
+        document.getElementById('new-db-advanced-options').style.display = isChecked ? 'block' : 'none';
+        
+        // Hide/Show Data Path
+        const pathGroup = document.getElementById('new-db-path').parentElement;
+        const storesFoldersInput = document.getElementById('new-db-stores-folders');
+        const dataPathInput = document.getElementById('new-db-path');
+        
+        if (isChecked) {
+            pathGroup.style.display = 'none';
+            // Sync Data Path -> Stores Folders
+            if (dataPathInput.value && !storesFoldersInput.value) {
+                storesFoldersInput.value = dataPathInput.value;
+            }
+        } else {
+            pathGroup.style.display = 'flex';
+             // Sync Stores Folders -> Data Path (Take first item)
+             if (storesFoldersInput.value) {
+                 const firstPath = storesFoldersInput.value.split(',')[0].trim();
+                 if (firstPath) dataPathInput.value = firstPath;
+             }
+        }
+    }
+
+    function createNewDatabase() {
+        const name = document.getElementById('new-db-name').value.trim();
+        const path = document.getElementById('new-db-path').value.trim();
+        const type = document.getElementById('new-db-type').value;
+        const conn = document.getElementById('new-db-conn').value.trim();
+        
+        // Advanced
+        const storesFoldersRaw = document.getElementById('new-db-stores-folders').value.trim();
+        const registryHashMod = document.getElementById('new-db-registry-hash-mod').value;
+        
+        // EC Configs
+        const erasureConfigs = collectEcConfigs('new-db-ec-container');
+
+        if (!name) {
+            showAlert('Database Name is required');
+            return;
+        }
+        if (!path) {
+            showAlert('Data Path is required');
+            return;
+        }
+        if (type === 'clustered' && !conn) {
+             showAlert('Connection URL is required for Clustered mode');
+             return;
+        }
+
+        const payload = {
+            name: name,
+            path: path,
+            type: type,
+            conn_url: conn,
+            stores_folders: storesFoldersRaw ? storesFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
+            registry_hash_mod: registryHashMod ? parseInt(registryHashMod) : 0
+        };
+
+        if (erasureConfigs) {
+            payload.erasure_configs = erasureConfigs;
+        }
+
+        fetch('/api/databases', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(res => {
+            if (!res.ok) return res.text().then(t => { throw new Error(t) });
+            return res.json();
+        })
+        .then(() => {
+            closeAddDatabaseModal();
+            location.reload(); 
+        })
+        .catch(err => {
+            showAlert('Failed to create database: ' + err.message);
+        });
+    }
+
+    function showDeleteDatabaseModal() {
+        if (!currentDatabase) return;
+        
+        document.getElementById('delete-db-target-name').textContent = currentDatabase;
+        document.getElementById('delete-db-confirm-input').value = '';
+        document.getElementById('btn-confirm-delete-db').disabled = true;
+        
+        // Setup input listener
+        const input = document.getElementById('delete-db-confirm-input');
+        input.onkeyup = function() {
+             const btn = document.getElementById('btn-confirm-delete-db');
+             btn.disabled = (this.value !== currentDatabase);
+        };
+
+        document.getElementById('delete-database-modal').style.display = 'block';
+    }
+
+    function closeDeleteDatabaseModal() {
+        document.getElementById('delete-database-modal').style.display = 'none';
+    }
+
+    function confirmDeleteDatabase() {
+        if (!currentDatabase) return;
+
+        fetch(`/api/databases?name=${encodeURIComponent(currentDatabase)}`, {
+            method: 'DELETE'
+        })
+        .then(res => {
+            if (!res.ok) return res.text().then(t => { throw new Error(t) });
+            return res.json();
+        })
+        .then(() => {
+            closeDeleteDatabaseModal();
+            localStorage.removeItem('sop_current_database');
+            location.reload();
+        })
+        .catch(err => {
+            showAlert('Failed to delete database: ' + err.message);
+        });
+    }
+    // --- Environment / Registry Sets Manager ---
+
+    function showEnvironmentsManager() {
+        fetch('/api/config/sets')
+            .then(res => res.json())
+            .then(sets => {
+                const container = document.getElementById('env-list-container');
+                container.innerHTML = '';
+                
+                if (!sets || sets.length === 0) {
+                     container.innerHTML = '<div style="padding: 10px; text-align: center; color: var(--text-muted);">No configurations found.</div>';
+                } else {
+                     const ul = document.createElement('ul');
+                     ul.style.listStyle = 'none';
+                     ul.style.padding = '0';
+                     ul.style.margin = '0';
+                     
+                     sets.forEach(set => {
+                         const li = document.createElement('li');
+                         li.style.padding = '8px';
+                         li.style.borderBottom = '1px solid var(--border-color)';
+                         li.style.display = 'flex';
+                         li.style.justifyContent = 'space-between';
+                         li.style.alignItems = 'center';
+                         
+                         const isCurrent = (set === CURRENT_CONFIG_FILE) || (set === "config.json" && !CURRENT_CONFIG_FILE);
+
+                         const span = document.createElement('span');
+                         span.textContent = set + (isCurrent ? " (Active)" : "");
+                         span.style.fontWeight = 'bold';
+                         if (isCurrent) span.style.color = '#2ecc71'; // Green active
+                         
+                         // Actions
+                         const actions = document.createElement('div');
+                         actions.style.display = 'flex';
+                         actions.style.gap = '0px';
+                         
+                         if (!isCurrent) {
+                             const switchBtn = document.createElement('button');
+                             switchBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="m11.596 8.697-6.363 3.692c-.54.313-1.233-.066-1.233-.697V4.308c0-.63.692-1.01 1.233-.696l6.363 3.692a.802.802 0 0 1 0 1.393z"/></svg>';
+                             switchBtn.style.padding = '4px 8px';
+                             switchBtn.style.cursor = 'pointer';
+                             switchBtn.style.background = 'none';
+                             switchBtn.style.border = 'none';
+                             switchBtn.style.color = 'var(--text-color)';
+                             switchBtn.title = "Switch to this environment";
+                             switchBtn.onclick = () => switchEnvironment(set);
+                             actions.appendChild(switchBtn);
+                         } else {
+                             // Active Environment Actions
+                             const resetBtn = document.createElement('button');
+                             resetBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>';
+                             resetBtn.style.padding = '4px 8px';
+                             resetBtn.style.cursor = 'pointer';
+                             resetBtn.style.background = 'none'; // Transparent
+                             resetBtn.style.color = 'var(--warning-text)'; // Orangeish for caution
+                             resetBtn.style.border = 'none';
+                             resetBtn.title = "Reset/Delete this active environment (Uninstall)";
+                             resetBtn.onclick = () => uninstallSystem();
+                             actions.appendChild(resetBtn);
+                         }
+
+                         const deleteBtn = document.createElement('button');
+                         deleteBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>';
+                         deleteBtn.style.padding = '4px 8px';
+                         deleteBtn.style.cursor = 'pointer';
+                         deleteBtn.style.background = 'none';
+                         deleteBtn.style.color = 'var(--text-color)';
+                         deleteBtn.style.border = 'none';
+                         
+                         // Prevent deleting the active config
+                         if (isCurrent) {
+                             deleteBtn.disabled = true;
+                             deleteBtn.style.opacity = '0.3';
+                             deleteBtn.style.cursor = 'not-allowed';
+                             deleteBtn.title = "Cannot delete active configuration (Use Reset)";
+                         } else {
+                             deleteBtn.onclick = () => deleteEnvironment(set);
+                         }
+                         
+                         actions.appendChild(deleteBtn);
+                         
+                         li.appendChild(span);
+                         li.appendChild(actions);
+                         ul.appendChild(li);
+                     });
+                     container.appendChild(ul);
+                }
+                
+                document.getElementById('environments-modal').style.display = 'block';
+            })
+            .catch(err => showAlert("Failed to load environments: " + err));
+    }
+
+    function closeEnvironmentsManager() {
+        document.getElementById('environments-modal').style.display = 'none';
+    }
+
+    function createEnvironment() {
+        const nameInput = document.getElementById('new-env-name');
+        const name = nameInput.value.trim();
+        if (!name) return;
+
+        fetch('/api/config/sets/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: name })
+        })
+        .then(async res => {
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || res.statusText);
+            }
+            return res.json();
+        })
+        .then(data => {
+            showAlert("Created and Switched to " + name);
+            location.reload(); // Reload to start Setup Wizard
+        })
+        .catch(err => showAlert("Error: " + err));
+    }
+
+    function switchEnvironment(filename) {
+        document.getElementById('switch-env-msg').textContent = `Switch configuration to '${filename}'? The page will reload.`;
+        
+        const btn = document.getElementById('switch-env-confirm-btn');
+        btn.onclick = function() {
+            performSwitchEnvironment(filename);
+        };
+        
+        document.getElementById('switch-env-modal').style.display = 'flex';
+    }
+
+    function closeSwitchEnvModal() {
+        document.getElementById('switch-env-modal').style.display = 'none';
+    }
+
+    function performSwitchEnvironment(filename) {
+        // UI Feedback
+        const btn = document.getElementById('switch-env-confirm-btn');
+        const originalText = btn.textContent;
+        btn.textContent = "Switching...";
+        btn.disabled = true;
+
+        fetch('/api/config/sets/switch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: filename })
+        })
+        .then(async res => {
+            if (!res.ok) {
+                 const text = await res.text();
+                 throw new Error(text || res.statusText);
+            }
+            return res.json();
+        })
+        .then(() => {
+             location.reload();
+        })
+        .catch(err => {
+            showAlert("Error switching: " + err);
+            btn.textContent = originalText;
+            btn.disabled = false;
+        });
+    }
+    
+    let envToDelete = null;
+
+    function deleteEnvironment(filename) {
+        envToDelete = filename;
+        document.getElementById('delete-env-msg').textContent = `Are you sure you want to delete the environment configuration '${filename}'?`;
+        document.getElementById('delete-env-data-check').checked = false;
+        
+        // Setup confirm button
+        const btn = document.getElementById('delete-env-confirm-btn');
+        btn.onclick = function() {
+            performDeleteEnvironment(filename);
+        };
+        
+        document.getElementById('delete-env-modal').style.display = 'flex';
+        // Focus cancel for safety
+        // setTimeout(() => document.querySelector('#delete-env-modal button').focus(), 50); 
+    }
+
+    function closeDeleteEnvModal() {
+        document.getElementById('delete-env-modal').style.display = 'none';
+        envToDelete = null;
+    }
+
+    function performDeleteEnvironment(filename) {
+        const deleteData = document.getElementById('delete-env-data-check').checked;
+        
+        // UI Feedback
+        const btn = document.getElementById('delete-env-confirm-btn');
+        const originalText = btn.textContent;
+        btn.textContent = "Deleting...";
+        btn.disabled = true;
+
+        fetch('/api/config/sets/delete', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ filename: filename, delete_data: deleteData })
+        })
+        .then(async res => {
+             if (!res.ok) {
+                 const text = await res.text();
+                 throw new Error(text || res.statusText);
+             }
+             return res.json();
+        })
+        .then(() => {
+             closeDeleteEnvModal();
+             showEnvironmentsManager(); // Refresh list
+        })
+        .catch(err => {
+             showAlert("Error deleting: " + err);
+             btn.textContent = originalText;
+             btn.disabled = false;
+        });
+    }
+
+    function onTargetECChange(val) {
+        const nameInput = document.getElementById('new-store-name');
+        if (val && val !== "") {
+            nameInput.value = val;
+            nameInput.disabled = true;
+            nameInput.title = "Store Name must match the Data File Key";
+        } else {
+            nameInput.disabled = false;
+            nameInput.value = "";
+            nameInput.title = "";
+        }
+    }
 </script>
 {{end}}
+
+    function checkStoreNameConflict() {
+        const nameInput = document.getElementById('new-store-name');
+        const typedName = nameInput.value.trim();
+        const targetSelect = document.getElementById('new-store-target-ec');
+        const hintDiv = document.getElementById('store-name-hint');
+        
+        let matchFound = false;
+        
+        if (targetSelect && typedName !== "") {
+            for (let i = 0; i < targetSelect.options.length; i++) {
+                const optVal = targetSelect.options[i].value;
+                if (optVal && optVal !== "" && optVal === typedName) {
+                    matchFound = true;
+                    break;
+                }
+            }
+        }
+
+        if (matchFound) {
+            hintDiv.style.display = 'block';
+            hintDiv.textContent = "Note: Matches a Data File key. This Store will be mapped to that partition.";
+        } else {
+            hintDiv.style.display = 'none';
+        }
+    }
