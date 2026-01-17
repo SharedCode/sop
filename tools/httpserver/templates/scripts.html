@@ -125,15 +125,21 @@
     let currentItemKey = null;
     
     const CURRENT_CONFIG_FILE = "{{ .ConfigFile }}";
+    // SYSTEM_DB_PATH Removed
 
     // Environment Flags
     // ALLOW_INVALID_MAP_KEY: If true, allows saving a store with Map Key type without
     // requiring an Index Specification or CEL Expression. Controlled by SOP_ALLOW_INVALID_MAP_KEY env var.
     const ALLOW_INVALID_MAP_KEY = {{ .AllowInvalidMapKey }};
+    const IS_ENTERPRISE = {{ .IsEnterprise }};
+    const SYSTEM_DB_NAME = "{{ .SystemDBName }}";
     let currentItems = [];
     let currentKeyColumnWidth = '45%';
     let columnWidths = [];
     let availableDatabases = [];
+
+    // Fetch System Env Vars (Async)
+    // Removed SYSTEM_DB_PATH fetching logic
 
     // Load Databases on Start
     fetch('/api/databases')
@@ -173,14 +179,35 @@
                     select.appendChild(separator);
                 }
 
+
                 systemDBs.forEach(db => {
                     const opt = document.createElement('option');
                     opt.value = db.name;
-                    opt.textContent = "⚠️ " + db.name + " (System)";
-                    opt.className = "option-system";
-                    // Inline style for better compatibility across browsers/OS
-                    opt.style.color = "var(--danger-bg)"; 
-                    opt.style.fontWeight = "bold";
+                    
+                    let displayName = db.name;
+                    
+                    // Apply special styling to all System Databases (identified by flag, not name)
+                    if (db.is_system) {
+                         let icon = "⚠️";
+                         let suffix = "";
+                        
+                         if (IS_ENTERPRISE) {
+                             suffix = " ⓔ";
+                             // Green color for Enterprise
+                             opt.style.color = "#155724"; // Dark Green
+                         } else {
+                             // Standard System Red
+                             opt.style.color = "var(--danger-bg)"; 
+                         }
+                        
+                         opt.textContent = icon + " " + displayName + suffix;
+                         opt.className = "option-system";
+                         opt.style.fontWeight = "bold";
+                    } else {
+                         // Fallback (should not happen in this loop, but safe)
+                         opt.textContent = displayName;
+                    }
+                    
                     select.appendChild(opt);
                 });
             }
@@ -1453,7 +1480,18 @@
         if (type === 'ask' && step.prompt) fullSummary = step.prompt;
         else if (step.args && step.args.prompt) fullSummary = step.args.prompt;
         else if (step.args && step.args.query) fullSummary = step.args.query;
-        else if (step.args && Object.keys(step.args).length > 0) fullSummary = JSON.stringify(step.args);
+        else if (step.args && Object.keys(step.args).length > 0) {
+            if (typeof step.args === 'string') {
+                try {
+                    const parsed = JSON.parse(step.args);
+                    fullSummary = JSON.stringify(parsed, null, 2);
+                } catch (e) {
+                    fullSummary = step.args;
+                }
+            } else {
+                fullSummary = JSON.stringify(step.args, null, 2);
+            }
+        }
         else fullSummary = '';
 
         let summary = '';
@@ -3670,6 +3708,11 @@
         // Auto-flatten records if they contain SOP internal fields (key, value, etc)
         // This makes the output much cleaner for Joins and raw Store scans.
         if (type === 'record') {
+            // Heuristic to detect Script Instructions (which are technically records but should be viewed as JSON/Code)
+            if (records.length > 0 && (records[0].op || records[0].command) && records[0].args) {
+                format = 'json';
+            }
+
             records = records.map(r => {
                 const flat = Object.assign({}, r);
                 ['key', 'value', 'right_key', 'right_value'].forEach(field => {
@@ -4734,6 +4777,9 @@
     function showEditStore() {
         try {
             if (!currentStoreInfo) return;
+
+            // Fetch stores for potential relationships
+            fetchRelationStores();
             
             const modal = document.getElementById('add-store-modal');
             if (modal) {
@@ -4752,6 +4798,16 @@
             const descInput = document.getElementById('new-store-description');
             if (descInput) descInput.value = currentStoreInfo.description || '';
             
+            // Clear relationships UI (re-extraction from text requires parsing, for now we just show text)
+            // But we can let them add NEW relationships
+            const relList = document.getElementById('relationship-list');
+            if (relList) relList.innerHTML = ''; 
+            
+            // Populate relationships if present
+            if (currentStoreInfo.relations) {
+                populateRelationshipUI(currentStoreInfo.relations);
+            }
+
             // Ensure count is treated as number
             const isEmptyStore = (currentStoreInfo.count === 0);
             console.log("showEditStore: currentStoreInfo.count=", currentStoreInfo.count, "isEmptyStore=", isEmptyStore);
@@ -5172,6 +5228,9 @@
         let seedValue = null;
         const seedContainer = document.getElementById('seed-data-container');
         
+        // Collect Relations
+        const relations = getRelationshipsFromUI();
+
         if (seedContainer.style.display !== 'none') {
              // Reuse logic from saveNewStore (simplified duplication for now)
              if (type === 'map') {
@@ -5234,6 +5293,7 @@
             isCacheTTL: isCacheTTL,
             seedKey: seedKey,
             seedValue: seedValue,
+            relations: relations,
             adminToken: window.currentAdminToken || ""
         };
 
@@ -5285,6 +5345,9 @@
     function showAddStore() {
         // currentStoreInfo = null; // Do not clear this, as it breaks Edit Store if we cancel Add
         window.currentAdminToken = null;
+        
+        // Fetch stores for potential relationships
+        fetchRelationStores();
 
         document.getElementById('add-store-modal').style.display = 'flex';
         document.querySelector('#add-store-modal .modal-header span').textContent = 'Add New Store';
@@ -5325,6 +5388,7 @@
         document.getElementById('new-store-name').disabled = false;
         document.getElementById('new-store-description').value = '';
         document.getElementById('new-store-description').disabled = false;
+        document.getElementById('relationship-list').innerHTML = ''; // Clear relationships
 
         // Reset Key Type
         document.getElementById('new-store-key-type').value = 'string';
@@ -6272,6 +6336,7 @@
             data_size: dataSize,
             cache_duration: cacheDuration,
             is_cache_ttl: isCacheTTL,
+            relations: getRelationshipsFromUI(),
             seed_key: seedKey,
             seed_value: seedValue,
             adminToken: window.currentAdminToken || ""
@@ -6749,6 +6814,48 @@
         }
     }
 
+    function toggleManualEnterpriseBrain() {
+        const toggle = document.getElementById('setup-sys-use-manual-enterprise');
+        const input = document.getElementById('setup-reg-path');
+        const advToggle = document.getElementById('setup-sys-advanced-toggle');
+        
+        if (toggle && input) {
+            const advContainer = advToggle ? advToggle.closest('div') : null;
+
+            if (toggle.checked) {
+                // Visual Highlight for "Connected" State
+                input.style.borderColor = '#6f42c1'; 
+                input.style.boxShadow = '0 0 0 2px rgba(111, 66, 193, 0.2)';
+                
+                // Hide Advanced Mode Container
+                if (advContainer) advContainer.style.display = 'none';
+                
+                // Ensure options are strictly closed/reset logic
+                if (advToggle) {
+                    advToggle.checked = false;
+                    const opts = document.getElementById('setup-sys-advanced-options');
+                    if (opts) opts.style.display = 'none';
+                }
+
+                // If value is default /tmp..., maybe clear it to encourage entry?
+                if (input.value.startsWith('/tmp/sop_data')) {
+                    // input.value = ""; 
+                }
+                input.focus();
+            } else {
+                 input.style.borderColor = ''; 
+                 input.style.boxShadow = '';
+                 
+                 // Show Advanced Mode
+                 if (advContainer) advContainer.style.display = 'block';
+            }
+        }
+    }
+
+    function toggleEnterpriseBrain() {
+        // Legacy function, kept for safety if referenced elsewhere, but effectively superseded by toggleManualEnterpriseBrain
+    }
+
     function showSetupWizard() {
         document.getElementById('setup-wizard').style.display = 'flex';
         
@@ -6761,6 +6868,10 @@
                  addSetupDbECItem();
              }
         }
+        
+        // Ensure UI state matches Defaults (Clustered)
+        toggleSetupConnectionField('db');
+        toggleSetupConnectionField('sys');
         
         updateWizardStep();
     }
@@ -6855,7 +6966,12 @@
                 }
                 
                 const dbPath = document.getElementById('setup-db-path').value;
-                if (dbPath) {
+                // Only auto-populate if NOT using Enterprise Brain (Auto or Manual)
+                const entToggle = document.getElementById('setup-sys-use-enterprise');
+                const manualEntToggle = document.getElementById('setup-sys-use-manual-enterprise');
+                const isUsingEnterprise = (entToggle && entToggle.checked) || (manualEntToggle && manualEntToggle.checked);
+                
+                if (dbPath && !isUsingEnterprise) {
                     document.getElementById('setup-reg-path').value = replaceLastSegment(dbPath);
                 }
 
@@ -6893,19 +7009,38 @@
                  }
 
             } else if (currentWizardStep === 2) { // Was 1: System Config
+                 const manualEntToggle = document.getElementById('setup-sys-use-manual-enterprise');
+                 const isShared = manualEntToggle && manualEntToggle.checked;
                  const path = document.getElementById('setup-reg-path').value;
+                 
                  if (!path) return showAlert("Please enter a system database path");
-                 // Validate path via API
-                fetch('/api/validate-path', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({path: path})
-                }).then(res => {
-                    if (!res.ok) return showAlert("Invalid path");
-                    currentWizardStep++;
-                    updateWizardStep();
-                });
-                return;
+
+                 // If Shared Brain (Reuse Existing): Strict Validation
+                 if (isShared) {
+                    fetch(`/api/config/validate-path?path=${encodeURIComponent(path)}`, {
+                        method: 'GET',
+                        headers: {'Content-Type': 'application/json'}
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (!data.exists) return showAlert("Path does not exist on server.");
+                        if (!data.isDir) return showAlert("Path is not a directory.");
+                        // Must have valid system DB files
+                        if (!data.hasDBOptions) return showAlert("Invalid Shared System DB: 'dboptions.json' not found.");
+                        if (!data.hasRegHashMod) return showAlert("Invalid Shared System DB: Registry config 'reghashmod.txt' not found.");
+
+                        currentWizardStep++;
+                        updateWizardStep();
+                    })
+                    .catch(err => showAlert("Validation error: " + err));
+                    return;
+                 }
+                 
+                 // If NOT Shared Brain (Create New): Skip validation, User handles "Advanced" or Default
+                 // We don't block for writability here (let Init fail if so), effectively restoring old behavior.
+                 currentWizardStep++;
+                 updateWizardStep();
+                 return;
             }
             currentWizardStep++;
             updateWizardStep();
@@ -6919,6 +7054,48 @@
             currentWizardStep--;
             updateWizardStep();
         }
+    }
+
+    function wizardCancel() {
+        if(confirm("Are you sure you want to cancel the setup process? Any unsaved changes will be lost.")) {
+            document.getElementById('setup-wizard').style.display = 'none';
+            resetSetupForm();
+        }
+    }
+
+    function resetSetupForm() {
+        // Reset Inputs to Defaults
+        document.getElementById('setup-db-name').value = 'dev_db';
+        document.getElementById('setup-db-path').value = '/tmp/sop_data/db';
+        document.getElementById('setup-db-stores-folders').value = '';
+        
+        const dbEcContainer = document.getElementById('setup-db-ec-container');
+        if (dbEcContainer) {
+            dbEcContainer.innerHTML = `
+             <p style="font-size: 0.85em; color: var(--text-muted); margin-top: 0px; margin-bottom: 0px;">
+                 Configure one or more partitions for Erasure Coding driven redundancy & optimal parallel IO.
+             </p>`;
+        }
+
+        document.getElementById('setup-sys-stores-folders').value = '';
+        document.getElementById('setup-sys-registry-hash-mod').value = '';
+        document.getElementById('setup-db-registry-hash-mod').value = '';
+        
+        const sysEcContainer = document.getElementById('setup-sys-ec-container');
+        if (sysEcContainer) {
+            sysEcContainer.innerHTML = `
+             <p style="font-size: 0.85em; color: var(--text-muted); margin-top: 0px; margin-bottom: 0px;">
+                 Configure one or more partitions for Erasure Coding driven redundancy & optimal parallel IO.
+             </p>`;
+        }
+        
+        // Reset Checkboxes
+        const manualEntToggle = document.getElementById('setup-sys-use-manual-enterprise');
+        if (manualEntToggle) manualEntToggle.checked = false;
+        
+        // Reset Step
+        currentWizardStep = 1;
+        updateWizardStep();
     }
 
     function finishSetup() {
@@ -6946,6 +7123,15 @@
         // Collect from manual container
         const manualConfigs = collectEcConfigs('setup-sys-ec-container');
         if (manualConfigs) sysErasureConfigs = manualConfigs;
+
+        // If "Use Shared Brain" is checked, ignore System DB advanced inputs (Erasure, Stores, HashMod)
+        // to prevent overwriting existing configuration with dirty/empty form data.
+        const manualEntToggle = document.getElementById('setup-sys-use-manual-enterprise');
+        if (manualEntToggle && manualEntToggle.checked) {
+            sysErasureConfigs = [];
+            sysStoresFoldersRaw = "";
+            sysHashMod = null;
+        }
 
         const nextBtn = document.getElementById('wizard-next');
         nextBtn.disabled = true;
@@ -6987,8 +7173,11 @@
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(sysConfigPayload)
         })
-        .then(res => {
-            if (!res.ok) throw new Error("Failed to save config / init System DB");
+        .then(async res => {
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error("Failed to save config / init System DB: " + text);
+            }
             
             // 2. Init User Database
             return fetch('/api/db/init', {
@@ -7006,6 +7195,7 @@
             // 3. Reload/Redirect
             // Explicitly hide wizard to ensure user sees progress/result
             document.getElementById('setup-wizard').style.display = 'none';
+            resetSetupForm();
 
             const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
             if (port && port != parseInt(currentPort)) {
@@ -7141,7 +7331,7 @@
         div.className = 'ec-entry';
         div.style.border = '1px dashed var(--border-color)';
         div.style.padding = '10px';
-        div.style.marginBottom = '10px';
+        div.style.marginBottom = '0px';
         div.style.position = 'relative';
         
         div.innerHTML = `
@@ -7288,6 +7478,7 @@
         // Advanced
         const storesFoldersRaw = document.getElementById('new-db-stores-folders').value.trim();
         const registryHashMod = document.getElementById('new-db-registry-hash-mod').value;
+        const populateDemo = document.getElementById('new-db-populate-demo').checked;
         
         // EC Configs
         const erasureConfigs = collectEcConfigs('new-db-ec-container');
@@ -7310,6 +7501,7 @@
             path: path,
             type: type,
             conn_url: conn,
+            populate_demo: populateDemo,
             stores_folders: storesFoldersRaw ? storesFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
             registry_hash_mod: registryHashMod ? parseInt(registryHashMod) : 0
         };
@@ -7562,6 +7754,14 @@
 
     function closeDeleteEnvModal() {
         document.getElementById('delete-env-modal').style.display = 'none';
+        
+        // Reset button state for next usage
+        const btn = document.getElementById('delete-env-confirm-btn');
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = "Confirm Delete";
+        }
+        
         envToDelete = null;
     }
 
@@ -7609,8 +7809,6 @@
             nameInput.title = "";
         }
     }
-</script>
-{{end}}
 
     function checkStoreNameConflict() {
         const nameInput = document.getElementById('new-store-name');
@@ -7637,3 +7835,149 @@
             hintDiv.style.display = 'none';
         }
     }
+
+    // --- Relationship Builder Functions ---
+
+    let availableStoresForRel = [];
+
+    function fetchRelationStores() {
+        if (!currentDatabase) return;
+        fetch(`/api/stores?database=${encodeURIComponent(currentDatabase)}`)
+            .then(res => res.json())
+            .then(stores => {
+                availableStoresForRel = stores || [];
+                // Update any existing dropdowns
+                document.querySelectorAll('.rel-target-store').forEach(select => {
+                    const currentVal = select.value;
+                    populateRelStoreSelect(select);
+                    if (currentVal) select.value = currentVal;
+                });
+            })
+            .catch(console.error);
+    }
+
+    function populateRelStoreSelect(select) {
+        select.innerHTML = '<option value="">-- Target Store --</option>';
+        availableStoresForRel.forEach(store => {
+            // Exclude current store if editing, if we know it
+            const currentName = document.getElementById('new-store-name').value;
+            if (store !== currentName) {
+                const opt = document.createElement('option');
+                opt.value = store;
+                opt.textContent = store;
+                select.appendChild(opt);
+            }
+        });
+    }
+
+    function addRelationshipRow() {
+        const container = document.getElementById('relationship-list');
+        const div = document.createElement('div');
+        div.className = 'rel-row';
+        div.style.display = 'flex';
+        div.style.gap = '5px';
+        div.style.alignItems = 'center';
+        
+        div.innerHTML = `
+            <div style="flex: 1;">
+                <input type="text" class="rel-source-field" placeholder="Local Fields (comma-sep)" style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);">
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted);">ref</div>
+            <div style="flex: 1;">
+                 <select class="rel-target-store" style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);"></select>
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted);">.</div>
+            <div style="flex: 1;">
+                <input type="text" class="rel-target-field" placeholder="Target Fields (comma-sep)" style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);">
+            </div>
+            <button onclick="this.parentElement.remove();" style="border: none; background: none; color: var(--danger-bg); cursor: pointer; font-weight: bold; padding: 0 4px;" title="Remove">×</button>
+        `;
+        
+        container.appendChild(div);
+        
+        const select = div.querySelector('.rel-target-store');
+        
+        if (availableStoresForRel.length === 0) {
+             fetchRelationStores(); 
+             setTimeout(() => populateRelStoreSelect(select), 500);
+        } else {
+            populateRelStoreSelect(select);
+        }
+    }
+
+
+
+    function getRelationshipsFromUI() {
+        const rels = [];
+        document.querySelectorAll('.rel-row').forEach(row => {
+            const src = row.querySelector('.rel-source-field').value.trim();
+            const store = row.querySelector('.rel-target-store').value;
+            const tgt = row.querySelector('.rel-target-field').value.trim();
+
+            if (src && store && tgt) {
+                // Split by comma for multi-field support
+                const srcFields = src.split(',').map(s => s.trim()).filter(s => s !== "");
+                const tgtFields = tgt.split(',').map(s => s.trim()).filter(s => s !== "");
+                
+                if (srcFields.length > 0 && tgtFields.length > 0) {
+                    rels.push({
+                        source_fields: srcFields,
+                        target_store: store,
+                        target_fields: tgtFields
+                    });
+                }
+            }
+        });
+        return rels;
+    }
+
+    function populateRelationshipUI(relations) {
+        if (!relations || !Array.isArray(relations)) return;
+        
+        // Ensure availableStoresForRel is populated
+        if (availableStoresForRel.length === 0) fetchRelationStores();
+
+        relations.forEach(rel => {
+            const container = document.getElementById('relationship-list');
+            const div = document.createElement('div');
+            div.className = 'rel-row';
+            div.style.display = 'flex';
+            div.style.gap = '5px';
+            div.style.alignItems = 'center';
+            
+            // Handle legacy single-field struct (backward compat)
+            let src = "";
+            if (rel.source_fields && rel.source_fields.length > 0) src = rel.source_fields.join(', ');
+            else if (rel.source_field) src = rel.source_field;
+
+            let tgt = "";
+            if (rel.target_fields && rel.target_fields.length > 0) tgt = rel.target_fields.join(', ');
+            else if (rel.target_field) tgt = rel.target_field;
+            
+            div.innerHTML = `
+                <div style="flex: 1;">
+                    <input type="text" class="rel-source-field" value="${src}" placeholder="Local Fields (comma-sep)" style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);">
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted);">ref</div>
+                <div style="flex: 1;">
+                     <select class="rel-target-store" style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);"></select>
+                </div>
+                <div style="font-size: 11px; color: var(--text-muted);">.</div>
+                <div style="flex: 1;">
+                    <input type="text" class="rel-target-field" value="${tgt}" placeholder="Target Fields (comma-sep)" style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);">
+                </div>
+                <button onclick="this.parentElement.remove();" style="border: none; background: none; color: var(--danger-bg); cursor: pointer; font-weight: bold; padding: 0 4px;" title="Remove">×</button>
+            `;
+            
+            container.appendChild(div);
+            
+            const select = div.querySelector('.rel-target-store');
+            // Wait for fetch if needed
+            setTimeout(() => {
+                populateRelStoreSelect(select);
+                select.value = rel.target_store;
+            }, 500);
+        });
+    }
+</script>
+{{end}}

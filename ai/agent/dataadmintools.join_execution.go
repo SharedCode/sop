@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 )
 
 // ensurePlan selects the execution strategy using simple schema analysis.
@@ -154,7 +155,16 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 					lVal := getField(jc.currentL, lField)
 					rVal := getField(rItem, rField)
 
+					// Robust Equality Check aligned with dataadmintools.utils.go matchesKey capabilities
+					// But implemented inline for Join speed
 					if fmt.Sprintf("%v", lVal) != fmt.Sprintf("%v", rVal) {
+						// Double check numeric formats (e.g. 1.0 vs 1)
+						fL, okL := coerceToFloatFull(lVal)
+						fR, okR := coerceToFloatFull(rVal)
+						if okL && okR && fL == fR {
+							continue // Match!
+						}
+
 						match = false
 						break
 					}
@@ -454,4 +464,25 @@ func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
 	}
 
 	return &OrderedMap{m: newMap, keys: newKeys}
+}
+
+// Helper for Join Numeric Coercion
+func coerceToFloatFull(v any) (float64, bool) {
+	switch val := v.(type) {
+	case int:
+		return float64(val), true
+	case int32:
+		return float64(val), true
+	case int64:
+		return float64(val), true
+	case float32:
+		return float64(val), true
+	case float64:
+		return val, true
+	case string:
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f, true
+		}
+	}
+	return 0, false
 }

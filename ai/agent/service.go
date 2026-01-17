@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"reflect"
 	"sort"
 	"strings"
 
@@ -90,12 +89,17 @@ func (s *Service) Open(ctx context.Context) error {
 		return nil
 	}
 
-	// Look up the database in the known databases
-	if dbOpts, ok := s.databases[p.CurrentDB]; ok {
-		db := database.NewDatabase(dbOpts)
+	// Check if configured System DB matches
+	var dbToOpen *database.Database
+	if (p.CurrentDB == "system" || p.CurrentDB == "SystemDB") && s.systemDB != nil {
+		dbToOpen = s.systemDB
+	} else if dbOpts, ok := s.databases[p.CurrentDB]; ok {
+		dbToOpen = database.NewDatabase(dbOpts)
+	}
 
+	if dbToOpen != nil {
 		// Start transaction
-		tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+		tx, err := dbToOpen.BeginTransaction(ctx, sop.ForWriting)
 		if err != nil {
 			return fmt.Errorf("failed to begin transaction on database '%s': %w", p.CurrentDB, err)
 		}
@@ -325,15 +329,43 @@ func (s *Service) GetLastToolInstructions() string {
 
 	// Debug: Log what we are retrieving
 	if script, ok := targetStep.Args["script"]; ok {
-		log.Debug(fmt.Sprintf("Service.GetLastToolInstructions: Retrieving script. Type: %T, Value: %+v", script, script))
+		// Try to unmarshal if it's a string to log it as a JSON object instead of a string
+		if scriptStr, ok := script.(string); ok {
+			var scriptJSON interface{}
+			if err := json.Unmarshal([]byte(scriptStr), &scriptJSON); err == nil {
+				log.Debug("Service.GetLastToolInstructions: Retrieving script", "script", scriptJSON)
+			} else {
+				log.Debug("Service.GetLastToolInstructions: Retrieving script", "script", script)
+			}
+		} else {
+			log.Debug("Service.GetLastToolInstructions: Retrieving script", "script", script)
+		}
 	} else {
-		log.Debug(fmt.Sprintf("Service.GetLastToolInstructions: Retrieving command '%s' without script. Args keys: %v", targetStep.Command, reflect.ValueOf(targetStep.Args).MapKeys()))
+		keys := make([]string, 0, len(targetStep.Args))
+		for k := range targetStep.Args {
+			keys = append(keys, k)
+		}
+		log.Debug(fmt.Sprintf("Service.GetLastToolInstructions: Retrieving command '%s' without script. Args keys: %v", targetStep.Command, keys))
 	}
 
-	// Reconstruct the tool call structure
+	// Reconstruct the tool call structure with unmarshaled script if present
+	args := make(map[string]any)
+	for k, v := range targetStep.Args {
+		args[k] = v
+	}
+
+	if script, ok := args["script"]; ok {
+		if scriptStr, ok := script.(string); ok {
+			var scriptJSON interface{}
+			if err := json.Unmarshal([]byte(scriptStr), &scriptJSON); err == nil {
+				args["script"] = scriptJSON
+			}
+		}
+	}
+
 	toolCall := map[string]any{
 		"tool": targetStep.Command,
-		"args": targetStep.Args,
+		"args": args,
 	}
 
 	b, _ := json.MarshalIndent(toolCall, "", "  ")
@@ -348,7 +380,11 @@ func (s *Service) RecordStep(ctx context.Context, step ai.ScriptStep) {
 		if script, ok := step.Args["script"]; ok {
 			log.Debug(fmt.Sprintf("Service.RecordStep: Recording script. Type: %T, Value: %+v", script, script))
 		} else {
-			log.Debug(fmt.Sprintf("Service.RecordStep: Recording command '%s' without script. Args keys: %v", step.Command, reflect.ValueOf(step.Args).MapKeys()))
+			keys := make([]string, 0, len(step.Args))
+			for k := range step.Args {
+				keys = append(keys, k)
+			}
+			log.Debug(fmt.Sprintf("Service.RecordStep: Recording command '%s' without script. Args keys: %v", step.Command, keys))
 		}
 	}
 

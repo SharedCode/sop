@@ -74,11 +74,11 @@ type Config struct {
 	// LLMApiKey is the default API key for AI Agents (e.g. Gemini).
 	LLMApiKey string `json:"llm_api_key,omitempty"`
 
-	// Legacy/CLI fields
-	DatabasePath string
-	Mode         string
-	ConfigFile   string
-	RedisURL     string
+	// Legacy/CLI fields - Ignored in JSON to keep config clean
+	DatabasePath string `json:"-"`
+	Mode         string `json:"-"`
+	ConfigFile   string `json:"-"`
+	RedisURL     string `json:"-"`
 }
 
 //go:embed templates/*
@@ -89,6 +89,8 @@ var loadedAgents = make(map[string]ai.Agent[map[string]any])
 
 // Version is the application version, set at build time via -ldflags
 var Version = "dev"
+
+const SystemDBName = "System"
 
 func main() {
 
@@ -195,6 +197,7 @@ func main() {
 	http.HandleFunc("/api/config/sets/create", handleCreateRegistrySet)
 	http.HandleFunc("/api/config/sets/switch", handleSwitchRegistrySet)
 	http.HandleFunc("/api/config/sets/delete", handleDeleteRegistrySet)
+	http.HandleFunc("/api/system/env", handleGetSystemEnv)
 
 	// Initialize Agents
 	initAgents()
@@ -263,7 +266,7 @@ func loadConfig(path string) error {
 			config.SystemDB.Path = configDir
 		}
 		if config.SystemDB.Name == "" {
-			config.SystemDB.Name = "System"
+			config.SystemDB.Name = SystemDBName
 		}
 		if config.SystemDB.Mode == "" {
 			config.SystemDB.Mode = config.Mode
@@ -276,31 +279,25 @@ func loadConfig(path string) error {
 }
 
 func getSystemDBOptions() (sop.DatabaseOptions, error) {
-	if config.SystemDB == nil {
-		// Fallback if no config file was loaded OR if it's nil (Implicit System DB)
-		// This fallback is crucial for backward compatibility with config files that don't specify system_db.
-		// However, for "New Empty Environments", we might want this to return an error or special state?
-		// But in Go backend, we often need *some* system DB to function.
-
-		// For now, we return the implicit default (cwd).
-		// If the Wizard hasn't run yet, this folder (cwd) might not contain a registry.
-		// That's okay, SOP will handle "registry not found" errors if we try to use it.
-
-		cwd, _ := os.Getwd()
-		opts := sop.DatabaseOptions{
-			Type:          sop.Standalone,
-			StoresFolders: []string{cwd},
-		}
-		if config.Mode == "clustered" {
-			opts.Type = sop.Clustered
-			opts.CacheType = sop.Redis
-			opts.RedisConfig = &sop.RedisCacheConfig{
-				Address: config.RedisURL,
-			}
-		}
-		return opts, nil
+	// 1. If explicitly configured in config.json, use it.
+	if config.SystemDB != nil {
+		return getDBOptionsFromConfig(config.SystemDB)
 	}
-	return getDBOptionsFromConfig(config.SystemDB)
+
+	// 2. Fallback to default (cwd)
+	cwd, _ := os.Getwd()
+	opts := sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{cwd},
+	}
+	if config.Mode == "clustered" {
+		opts.Type = sop.Clustered
+		opts.CacheType = sop.Redis
+		opts.RedisConfig = &sop.RedisCacheConfig{
+			Address: config.RedisURL,
+		}
+	}
+	return opts, nil
 }
 
 func getDBOptionsFromConfig(db *DatabaseConfig) (sop.DatabaseOptions, error) {
@@ -338,38 +335,34 @@ func getDBOptionsFromConfig(db *DatabaseConfig) (sop.DatabaseOptions, error) {
 }
 
 func getDBOptions(dbName string) (sop.DatabaseOptions, error) {
-	var db *DatabaseConfig
 	if dbName == "" {
 		if len(config.Databases) > 0 {
-			db = &config.Databases[0]
+			// Return options for the first database
+			return getDBOptionsFromConfig(&config.Databases[0])
 		}
+		// If no databases, falls through to error or should we return SystemDB?
+		// Stick to current behavior: likely error if no default found here.
 	} else {
-		// Check System DB first
-		if config.SystemDB != nil {
-			sysName := config.SystemDB.Name
-			if sysName == "" {
-				sysName = "system"
-			}
-			if dbName == sysName {
-				db = config.SystemDB
-			}
+		// 1. Check if it explicitly matches the Configured System DB Name
+		if config.SystemDB != nil && config.SystemDB.Name == dbName {
+			return getDBOptionsFromConfig(config.SystemDB)
 		}
 
-		if db == nil {
-			for i := range config.Databases {
-				if config.Databases[i].Name == dbName {
-					db = &config.Databases[i]
-					break
-				}
+		// 2. Check for System Database
+		// Delegated to getSystemDBOptions to handle default/env configuration
+		if dbName == SystemDBName {
+			return getSystemDBOptions()
+		}
+
+		// 3. Check User Databases
+		for i := range config.Databases {
+			if config.Databases[i].Name == dbName {
+				return getDBOptionsFromConfig(&config.Databases[i])
 			}
 		}
 	}
 
-	if db == nil {
-		return sop.DatabaseOptions{}, fmt.Errorf("database '%s' not found", dbName)
-	}
-
-	return getDBOptionsFromConfig(db)
+	return sop.DatabaseOptions{}, fmt.Errorf("database '%s' not found", dbName)
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
@@ -396,6 +389,17 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Check if SystemDB path matches SYSTEM_DB_PATH environment variable (Enterprise Mode)
+	isEnterprise := false
+	if sysDBPath := os.Getenv("SYSTEM_DB_PATH"); sysDBPath != "" && config.SystemDB != nil {
+		// Compare absolute paths to be safe
+		absSysDB, err1 := filepath.Abs(config.SystemDB.Path)
+		absEnv, err2 := filepath.Abs(sysDBPath)
+		if err1 == nil && err2 == nil && absSysDB == absEnv {
+			isEnterprise = true
+		}
+	}
+
 	data := map[string]any{
 		"Version": Version,
 		"Mode":    config.Mode,
@@ -403,12 +407,15 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		// to have an Index Specification or CEL Expression. This is useful for testing.
 		"AllowInvalidMapKey": os.Getenv("SOP_ALLOW_INVALID_MAP_KEY") == "true",
 		"HasDemo":            hasDemo,
+		"IsEnterprise":       isEnterprise,
+		"SystemDBName":       SystemDBName,
 		"ConfigFile":         config.ConfigFile,
 		"MinHashMod":         fs.MinimumModValue,
 		"MaxHashMod":         fs.MaximumModValue,
 		"Env": map[string]bool{
 			"SOP_ROOT_PASSWORD": os.Getenv("SOP_ROOT_PASSWORD") != "",
 			"GEMINI_API_KEY":    os.Getenv("GEMINI_API_KEY") != "",
+			"SYSTEM_DB_PATH":    os.Getenv("SYSTEM_DB_PATH") != "",
 		},
 	}
 	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
@@ -429,7 +436,7 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 		if config.SystemDB != nil {
 			sysDB := *config.SystemDB
 			if sysDB.Name == "" {
-				sysDB.Name = "system"
+				sysDB.Name = SystemDBName
 			}
 			sysDB.IsSystem = true
 			dbs = append(dbs, sysDB)
@@ -450,7 +457,7 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 			}
 
 			dbs = append(dbs, DatabaseConfig{
-				Name:     "System (Implicit)",
+				Name:     SystemDBName,
 				Path:     implicitPath,
 				Mode:     config.Mode,
 				IsSystem: true,
@@ -481,9 +488,15 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if found == -1 && config.SystemDB != nil && config.SystemDB.Name == name {
-			isSystem = true
-			dbPath = config.SystemDB.Path
+		if found == -1 && config.SystemDB != nil {
+			sysName := config.SystemDB.Name
+			if sysName == "" {
+				sysName = SystemDBName
+			}
+			if sysName == name {
+				isSystem = true
+				dbPath = config.SystemDB.Path
+			}
 		}
 
 		if found == -1 && !isSystem {
@@ -491,15 +504,9 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Cleanup B-Trees using options from disk
-		// We ignore errors here because if the options file is missing/corrupt, we can't cleanup,
-		// but we still want to remove the database entry and folder.
-		if cleanOpts, err := database.GetOptions(context.Background(), dbPath); err == nil {
-			if err := database.RemoveBtrees(context.Background(), cleanOpts); err != nil {
-				log.Warn(fmt.Sprintf("Cleanup: Failed to remove B-Trees (some metadata may persist): %v", err))
-			}
-		} else {
-			log.Warn(fmt.Sprintf("Cleanup: Could not load database options (skipping B-Tree cleanup): %v", err))
+		// Delete the database.
+		if err := database.Remove(context.Background(), dbPath); err != nil {
+			log.Warn(fmt.Sprintf("Cleanup: Failed to remove database (some metadata may persist): %v", err))
 		}
 
 		// Remove from config
@@ -515,19 +522,6 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 			saveConfigFile()
 		}
 
-		// Delete Data on Disk
-		if dbPath != "" {
-			// Basic security check: don't delete root or /tmp directly (though users might have subfolders in /tmp)
-			// Also avoid deleting the current working directory if it happens to be the DB path.
-			absPath, _ := filepath.Abs(dbPath)
-			cwd, _ := os.Getwd()
-			if absPath == cwd {
-				log.Warn("Skipping os.RemoveAll for database path because it is the current working directory.")
-			} else {
-				os.RemoveAll(dbPath)
-			}
-		}
-
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 		return
 	}
@@ -541,6 +535,7 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 			Connection      string   `json:"conn_url"`
 			StoresFolders   []string `json:"stores_folders"`
 			RegistryHashMod int      `json:"registry_hash_mod"`
+			PopulateDemo    bool     `json:"populate_demo"`
 			ErasureConfigs  []struct {
 				Key          string   `json:"key"`
 				DataChunks   int      `json:"data_chunks"`
@@ -557,6 +552,10 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 		if req.Name == "" || req.Path == "" {
 			http.Error(w, "Name and Path are required", http.StatusBadRequest)
 			return
+		}
+
+		if req.RegistryHashMod == 0 {
+			req.RegistryHashMod = fs.MinimumModValue
 		}
 
 		// Prepare Options
@@ -605,6 +604,12 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		tx.Commit(ctx)
+
+		if req.PopulateDemo {
+			if err := PopulateDemoData(ctx, options); err != nil {
+				log.Error("Failed to populate demo data: " + err.Error())
+			}
+		}
 
 		// 3. Update Config
 		newDB := DatabaseConfig{
@@ -883,6 +888,7 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 		// isValueActivelyPersisted is used by the UI to determine if the Data Size is "Big".
 		"isValueActivelyPersisted": si.IsValueDataActivelyPersisted,
 		"cacheDuration":            int(si.CacheConfig.ValueDataCacheDuration.Minutes()),
+		"relations":                si.Relations,
 	}
 
 	if !si.IsPrimitiveKey {
@@ -975,21 +981,22 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Database      string  `json:"database"`
-		StoreName     string  `json:"storeName"`
-		CelExpression string  `json:"celExpression"`
-		Description   string  `json:"description"`
-		IndexSpec     *string `json:"indexSpec"`
-		KeyType       string  `json:"keyType"` // "map" or "primitive" (string, int, etc)
-		SeedKey       any     `json:"seedKey"`
-		SeedValue     any     `json:"seedValue"`
-		AdminToken    string  `json:"adminToken"`
-		SlotLength    int     `json:"slotLength"`
-		IsUnique      bool    `json:"isUnique"`
-		DataSize      int     `json:"dataSize"` // 0=Small, 1=Medium, 2=Big
-		CacheDuration int     `json:"cacheDuration"`
-		IsCacheTTL    bool    `json:"isCacheTTL"`
-		ValueType     string  `json:"valueType"`
+		Database      string         `json:"database"`
+		StoreName     string         `json:"storeName"`
+		CelExpression string         `json:"celExpression"`
+		Description   string         `json:"description"`
+		IndexSpec     *string        `json:"indexSpec"`
+		KeyType       string         `json:"keyType"` // "map" or "primitive" (string, int, etc)
+		SeedKey       any            `json:"seedKey"`
+		SeedValue     any            `json:"seedValue"`
+		AdminToken    string         `json:"adminToken"`
+		SlotLength    int            `json:"slotLength"`
+		IsUnique      bool           `json:"isUnique"`
+		DataSize      int            `json:"dataSize"` // 0=Small, 1=Medium, 2=Big
+		CacheDuration int            `json:"cacheDuration"`
+		IsCacheTTL    bool           `json:"isCacheTTL"`
+		ValueType     string         `json:"valueType"`
+		Relations     []sop.Relation `json:"relations"`
 	}
 
 	// We need to handle IndexSpec as a string (JSON) or object.
@@ -1062,6 +1069,7 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 
 	// Update Description (Allowed for all stores)
 	si.Description = req.Description
+	si.Relations = req.Relations
 
 	// Compute StoreOptions based on DataSize
 	// 0=Small, 1=Medium, 2=Big
@@ -1264,14 +1272,10 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 	if req.KeyType != "" {
 		isPrimitive := req.KeyType != "map"
 		if si.IsPrimitiveKey != isPrimitive {
-			// Allow Key Type change ONLY if store is empty
-			if si.Count == 0 {
-				si.IsPrimitiveKey = isPrimitive
-				structuralChange = true
-			} else {
-				http.Error(w, "Cannot change Key Type of a non-empty store. Please delete and recreate the store if you need to change its structure.", http.StatusBadRequest)
-				return
-			}
+			// We allow Key Type metadata change even on non-empty stores as it is a hint for bindings.
+			// It does not affect the physical B-Tree structure in Go.
+			si.IsPrimitiveKey = isPrimitive
+			structuralChange = true
 		}
 	}
 

@@ -132,6 +132,18 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 	isUpdateLeft := action == "update_left"
 	updateValues, _ := args["update_values"].(map[string]any)
 
+	// Consistency with toolUpdate: Allow loose arguments to define update values
+	if isUpdateLeft && len(updateValues) == 0 {
+		updateValues = CleanArgs(args,
+			"database", "right_database",
+			"left_store", "right_store",
+			"left_join_fields", "right_join_fields",
+			"fields",
+			"join_type", "limit", "action",
+			"update_values", "order_by",
+		)
+	}
+
 	if leftStoreName == "" || rightStoreName == "" {
 		return "", fmt.Errorf("both left_store and right_store are required")
 	}
@@ -1117,7 +1129,9 @@ func (jp *JoinProcessor) computeDisplayKeys() {
 		clean := f
 		lowerF := strings.ToLower(f)
 		// Strip prefixes
-		prefixes := []string{"left.", "right.", "a.", "b.", "left_", "right_"}
+		// We DO NOT strip "a." and "b." because they are used as explicit references in 'project' steps.
+		// If we strip them, downstream tools looking for "a.field" will fail.
+		prefixes := []string{"left.", "right.", "left_", "right_"}
 		if jp.leftStoreName != "" {
 			prefixes = append(prefixes, strings.ToLower(jp.leftStoreName)+".")
 		}

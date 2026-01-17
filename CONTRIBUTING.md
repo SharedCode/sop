@@ -23,9 +23,13 @@ Thank you for your interest in contributing to Scalable Objects Persistence (SOP
     *   Submit a Pull Request (PR) to the `master` branch.
 
 3.  **Testing**:
-    *   **Unit Tests**: Run `go test ./...` for fast feedback.
-    *   **Integration Tests**: Critical for verifying backend interactions.
-        *   For `incfs` (Hybrid backend), you must run:
+    *   **Unit Tests**: Run `run_all_tests.sh` bash shell script for quick feedback.
+    *   **Stress & Integration Tests**: Critical for verifying backend interactions.
+        *   For `infs` (In File System), you must run:
+            ```bash
+            go test -v -tags=stress -count=1 ./infs/stresstests/...
+            ```
+        *   For `incfs` (Hybrid Cassandra & File System), you must run:
             ```bash
             export SOP_RUN_INCFS_IT=1
             go test -v -tags=integration -count=1 ./incfs/integrationtests/...
@@ -35,9 +39,10 @@ Thank you for your interest in contributing to Scalable Objects Persistence (SOP
 ## Code Structure & Guidelines
 
 *   **Public vs. Internal**:
-    *   Public packages (e.g., `incfs`, `streamingdata`) are the user-facing API.
-    *   Internal packages (e.g., `internal/inredck`) contain implementation details that should not be exposed.
-    *   See [ARCHITECTURE.md](ARCHITECTURE.md) for more details on why `inredck` is internal.
+    *   **Primary Public Packages**: `infs` (In File System), `jsondb` (JSON Document Store), `database` (Helpers) & `tools/httpserver` Data Manager RESTful web service & SPA WebUI. These represent the core user-facing APIs & Tools.
+    *   **Secondary**: `incfs` (In Cassandra & File System) is now considered secondary.
+    *   **Internal Packages**: Packages under `internal/` (e.g., `internal/inredck`) contain implementation details that should not be exposed.
+    *   See [ARCHITECTURE.md](ARCHITECTURE.md) for more details on the architecture.
 
 *   **Style**: Follow standard Go idioms and formatting (`gofmt`).
 

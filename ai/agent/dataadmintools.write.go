@@ -49,12 +49,7 @@ func (a *DataAdminAgent) toolAdd(ctx context.Context, args map[string]any) (stri
 		value = v
 	} else {
 		// If "value" is not explicitly provided, try to construct it from other arguments
-		valMap := make(map[string]any)
-		for k, v := range args {
-			if k != "store" && k != "key" && k != "database" && k != "action" {
-				valMap[k] = v
-			}
-		}
+		valMap := CleanArgs(args, "store", "key", "database", "action")
 		if len(valMap) > 0 {
 			value = valMap
 		}
@@ -205,12 +200,7 @@ func (a *DataAdminAgent) toolUpdate(ctx context.Context, args map[string]any) (s
 		value = v
 	} else {
 		// If "value" is not explicitly provided, try to construct it from other arguments
-		valMap := make(map[string]any)
-		for k, v := range args {
-			if k != "store" && k != "key" && k != "database" && k != "action" {
-				valMap[k] = v
-			}
-		}
+		valMap := CleanArgs(args, "store", "key", "database", "action")
 		if len(valMap) > 0 {
 			value = valMap
 		}

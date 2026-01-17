@@ -34,8 +34,8 @@ type Product struct {
 }
 
 type Order struct {
-	ID          string      `json:"id"`
-	UserID      string      `json:"user_id"`
+	ID string `json:"id"`
+	// UserID removed for normalization. Relationship managed via users_orders store.
 	OrderDate   time.Time   `json:"order_date"`
 	TotalAmount float64     `json:"total_amount"`
 	Status      string      `json:"status"`
@@ -63,7 +63,23 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 	}
 
 	// 1. Create Stores
-	userStore, err := database.NewBtree[string, UserProfile](ctx, opts, "users", trans, comparer)
+	userStoreOpts := sop.StoreOptions{
+		Name:                     "users",
+		IsValueDataInNodeSegment: true,
+		Relations: []sop.Relation{
+			{
+				SourceFields: []string{"age"},
+				TargetStore:  "users_by_age",
+				TargetFields: []string{"Key"},
+			},
+			{
+				SourceFields: []string{"user_id"},
+				TargetStore:  "users_orders",
+				TargetFields: []string{"key"},
+			},
+		},
+	}
+	userStore, err := database.NewBtree[string, UserProfile](ctx, opts, "users", trans, comparer, userStoreOpts)
 	if err != nil {
 		trans.Rollback(ctx)
 		return fmt.Errorf("failed to open users store: %v", err)
@@ -72,10 +88,16 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 	// Create users_by_age store for secondary index
 	usersByAgeOpts := sop.StoreOptions{
 		Name:                     "users_by_age",
-		SlotLength:               2000,
 		IsUnique:                 false, // Allow duplicate ages
 		IsValueDataInNodeSegment: true,
-		Description:              "Index of users by age. Key=Age. Value=User ID. IMPORTANT: The field name in this store is 'Value'. To join with users, use ON: {'Value':'user_id'}.",
+		Description:              "Index of users by age. Key=Age. Value=User ID.",
+		Relations: []sop.Relation{
+			{
+				SourceFields: []string{"Value"},
+				TargetStore:  "users",
+				TargetFields: []string{"user_id"},
+			},
+		},
 	}
 	userByAgeStore, err := database.NewBtree[int, string](ctx, opts, "users_by_age", trans, intComparer, usersByAgeOpts)
 	if err != nil {
@@ -83,16 +105,58 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 		return fmt.Errorf("failed to open users_by_age store: %v", err)
 	}
 
-	productStore, err := database.NewBtree[string, Product](ctx, opts, "products", trans, comparer)
+	productStoreOpts := sop.StoreOptions{
+		Name:                     "products",
+		IsValueDataInNodeSegment: true,
+		// Default is 2000 if not specified.
+		//SlotLength: 2000,
+	}
+	productStore, err := database.NewBtree[string, Product](ctx, opts, "products", trans, comparer, productStoreOpts)
 	if err != nil {
 		trans.Rollback(ctx)
 		return fmt.Errorf("failed to open products store: %v", err)
 	}
 
-	orderStore, err := database.NewBtree[string, Order](ctx, opts, "orders", trans, comparer)
+	orderStoreOpts := sop.StoreOptions{
+		Name: "orders",
+		Relations: []sop.Relation{
+			{
+				SourceFields: []string{"id"},
+				TargetStore:  "users_orders",
+				TargetFields: []string{"value"},
+			},
+		},
+	}
+	orderStore, err := database.NewBtree[string, Order](ctx, opts, "orders", trans, comparer, orderStoreOpts)
 	if err != nil {
 		trans.Rollback(ctx)
 		return fmt.Errorf("failed to open orders store: %v", err)
+	}
+
+	// Create users_orders link table
+	usersOrdersOpts := sop.StoreOptions{
+		Name:                     "users_orders",
+		IsUnique:                 false, // 1 user -> many orders
+		IsValueDataInNodeSegment: true,  // Optimize for speed
+		Description:              "Link table: UserID -> OrderID",
+		Relations: []sop.Relation{
+			{
+				SourceFields: []string{"key"},
+				TargetStore:  "users",
+				TargetFields: []string{"user_id"},
+			},
+			{
+				SourceFields: []string{"value"},
+				TargetStore:  "orders",
+				TargetFields: []string{"id"},
+			},
+		},
+	}
+	// Key = UserID, Value = OrderID
+	usersOrdersStore, err := database.NewBtree[string, string](ctx, opts, "users_orders", trans, comparer, usersOrdersOpts)
+	if err != nil {
+		trans.Rollback(ctx)
+		return fmt.Errorf("failed to open users_orders store: %v", err)
 	}
 
 	// 2. Generate Users
@@ -174,8 +238,8 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 		}
 
 		order := Order{
-			ID:          uuid.NewString(),
-			UserID:      user.ID,
+			ID: uuid.NewString(),
+			// UserID removed
 			OrderDate:   time.Now().Add(-time.Duration(rand.Intn(30*24)) * time.Hour), // Past 30 days
 			TotalAmount: total,
 			Status:      []string{"Pending", "Shipped", "Delivered", "Cancelled"}[rand.Intn(4)],
@@ -185,6 +249,12 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 		if ok, err := orderStore.Add(ctx, order.ID, order); err != nil || !ok {
 			trans.Rollback(ctx)
 			return fmt.Errorf("failed to add order: %v", err)
+		}
+
+		// Add link to users_orders
+		if ok, err := usersOrdersStore.Add(ctx, user.ID, order.ID); err != nil || !ok {
+			trans.Rollback(ctx)
+			return fmt.Errorf("failed to add users_orders link: %v", err)
 		}
 	}
 

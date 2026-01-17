@@ -78,6 +78,10 @@ func handleExecuteScript(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
+	// Inject ScriptRecorder into context so executed steps are recorded in session state
+	// This enables /last-tool to work after running a script.
+	ctx = context.WithValue(ctx, ai.CtxKeyScriptRecorder, agentSvc)
+
 	// Set headers for streaming
 	w.Header().Set("Content-Type", "application/x-ndjson")
 	w.Header().Set("Transfer-Encoding", "chunked")

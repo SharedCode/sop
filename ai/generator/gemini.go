@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 
 	"github.com/sharedcode/sop/ai"
@@ -73,8 +72,8 @@ func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions
 	}
 
 	// URL encode the API key to be safe
-	safeKey := url.QueryEscape(g.apiKey)
-	apiURL := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", g.model, safeKey)
+	// safeKey := url.QueryEscape(g.apiKey) // Key moved to header
+	apiURL := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", g.model)
 
 	reqBody := geminiRequest{
 		Contents: []geminiContent{
@@ -92,6 +91,7 @@ func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions
 		return ai.GenOutput{}, fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", g.apiKey)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

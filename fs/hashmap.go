@@ -105,7 +105,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 
 		// Guardrail: avoid unbounded growth or accidental infinite loops.
 		if i > 1000 {
-			return result, fmt.Errorf("reached the maximum numer of segment files (1000), can't create another one")
+			return result, fmt.Errorf("reached the maximum count of segment files (1000), can't create another one")
 		}
 
 		// Compute the target segment filename for this iteration.

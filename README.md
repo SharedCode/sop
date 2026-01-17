@@ -6,6 +6,8 @@
 
 It combines a high-performance **Polyglot Storage Engine** (ACID B-trees, Caching, Erasure Coding) with a versatile **AI Scripting & Computing Engine**.
 
+SOP is **"Relational Capable"**, achieving the structural elegance of the Relational Model (Joins, ACID) while advancing beyond traditional SQL engines by integrating Swarm computing and deep AI capabilities directly into the core.
+
 This architecture allows SOP to be packaged into diverse applications:
 *   **AI Kit / Platform**: Adopt the AI Assistant into any domain using the versatile Scripting "engine".
 *   **Embedded Systems**: A powerful combination of an embedded database and a scripting/compute engine.

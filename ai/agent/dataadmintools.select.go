@@ -126,18 +126,13 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 		valueMatch = v
 	} else if v, ok := args["value_match"]; ok {
 		valueMatch = v
+	} else if v, ok := args["filter"]; ok {
+		valueMatch = v
 	} else {
 		// If "value" is not explicitly provided, check if there are other args that are not reserved
 		// This allows "select(store='users', age=30)" style
-		valMap := make(map[string]any)
-		for k, v := range args {
-			if strings.HasPrefix(k, "_") {
-				continue
-			}
-			if k != "store" && k != "key" && k != "key_match" && k != "database" && k != "fields" && k != "limit" && k != "action" && k != "update_values" && k != "value_match" && k != "order_by" {
-				valMap[k] = v
-			}
-		}
+		valMap := CleanArgs(args, "store", "key", "key_match", "database", "fields", "limit", "action", "update_values", "value_match", "order_by", "filter")
+
 		if len(valMap) > 0 {
 			valueMatch = valMap
 		}

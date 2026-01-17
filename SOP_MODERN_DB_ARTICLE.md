@@ -28,12 +28,21 @@ With SOP, **there is no migration**. You simply change the topology.
 *   **The Swarm**: By enabling "Clustered" mode, SOP instances (including the Data Manager UI) coordinate via Redis. They form a **swarm** where every node can read and write with full ACID transactional integrity.
 *   **Unified Management**: The Data Manager's new **Registry Switcher** allows you to toggle between your local "sandbox" and your production "swarm" in a single click. You can manage your personal data and your enterprise cluster from the same beautiful interface.
 
+## Beyond Relational: A Structural Evolution
+
+SOP has always been defined by its optimal performance, lightweight footprint, and Swarm computing capabilities limited only by hardware. But we have now achieved a structural milestone: **SOP is fully "Relational Capable"—and then some.**
+
+We didn't just copy the Relational Model; we advanced it.
+*   **Structural Elegance without the Baggage**: We adopted the *relevant* strengths of the Relational Model—specifically the power of Join operations and structured data modeling—removing the inherent weaknesses (scalability bottlenecks, rigid schemas) of traditional SQL engines.
+*   **The Scripting Engine**: Our AI-Scripting Engine represents a progression from the SQL engines of today. Powered by **Just-In-Time (JIT) compiled** scripts, it delivers bare-metal performance while enabling complex logic. Unlike rigid query languages, our scripting dialect is **Object Oriented and Traits-Based**. This is amplified by our **Automated RESTful Service**, which enables automatic access to scripts for clients without the need to author new APIs. SOP is effectively **Infrastructure as a Service (IaaS)**—providing the connectivity infrastructure automatically. It is the **totality** of SOP and the AI Kit working in concert that creates this powerful, highly extensible capability.
+*   **The Best of Both Worlds**: By marrying the "right" relational structures with SOP's exclusive advancements in Storage Engines and Compute Platforms, we offer a system that doesn't just store data—it *understands* relationships while retaining the raw power of a distributed Swarm.
+
 ## Architecture: Flat, Modular, Serverless
 
 The true innovation of SOP lies in its architecture. It rejects the "Central Server" monolith in favor of a **Library-as-a-Database** model.
 
 1.  **Flat**: There is no hierarchy. The Data Manager UI is just another peer in the network. It doesn't "command" the database; it participates in it.
-2.  **Modular**: You pick the backend that fits. Filesystem for speed? Cassandra for hybrid cloud storage? In-memory for Standalone/Embedded apps or for testing? SOP abstracts it all.
+2.  **Modular**: You pick the backend that fits. Filesystem for speed? Cassandra for hybrid cloud storage? In-memory orchestration for Standalone/Embedded apps or for testing? SOP abstracts it all.
 3.  **Serverless Form**: The database lives where your code lives. This reduces latency, simplifies deployment, and eliminates the single point of failure that plagues traditional RDBMS architectures.
 
 ## A New Standard for Data Management

@@ -17,6 +17,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/model"
 	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/fs"
 )
 
 // handleListRegistrySets returns a list of JSON config files in the current directory.
@@ -154,6 +155,9 @@ func handleSwitchRegistrySet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Re-initialize agents to pick up new database configuration
+	initAgents()
+
 	// Force update ConfigFile tracker
 	config.ConfigFile = req.Filename
 
@@ -220,6 +224,21 @@ func handleDeleteRegistrySet(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Registry Set deleted successfully"})
 }
 
+// handleGetSystemEnv returns environment variables related to System DB configuration
+func handleGetSystemEnv(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	envPath := os.Getenv("SYSTEM_DB_PATH")
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"system_db_path": envPath,
+	})
+}
+
 // handleSaveConfig writes the provided configuration to the specified file path.
 func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -282,6 +301,10 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 					folderSet[sf] = struct{}{}
 				}
 			}
+		}
+
+		if req.RegistryHashMod == 0 {
+			req.RegistryHashMod = fs.MinimumModValue
 		}
 
 		sysOpts := sop.DatabaseOptions{
@@ -392,7 +415,7 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 
 		// 2. Update Config
 		config.SystemDB = &DatabaseConfig{
-			Name:     "SystemDB",
+			Name:     SystemDBName,
 			Path:     req.RegistryPath,
 			IsSystem: true,
 			Mode:     req.Type,
@@ -499,6 +522,13 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	if req.RegistryHashMod == 0 {
+		req.RegistryHashMod = fs.MinimumModValue
+	}
+
+	log.Info(fmt.Sprintf("InitUserDB: Path='%s', Name='%s', StoresFolders=%v", req.Path, req.Name, storeFolders))
+
 	options := sop.DatabaseOptions{
 		StoresFolders:        storeFolders,
 		RegistryHashModValue: req.RegistryHashMod,
@@ -673,10 +703,21 @@ func handleValidatePath(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Check for System DB artifacts
+	hasDBOptions := false
+	hasRegHashMod := false
+	if isDir {
+		hasDBOptions, hasRegHashMod = database.IsDatabasePath(path)
+		// Debug Validation
+		log.Info(fmt.Sprintf("ValidatePath: Path='%s', DBOptions=%v, RegHashMod=%v", path, hasDBOptions, hasRegHashMod))
+	}
+
 	json.NewEncoder(w).Encode(map[string]any{
-		"exists":   exists,
-		"isDir":    isDir,
-		"writable": writable,
+		"exists":        exists,
+		"isDir":         isDir,
+		"writable":      writable,
+		"hasDBOptions":  hasDBOptions,
+		"hasRegHashMod": hasRegHashMod,
 	})
 }
 

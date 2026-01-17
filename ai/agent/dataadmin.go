@@ -152,8 +152,19 @@ func (a *DataAdminAgent) Open(ctx context.Context) error {
 	// If CurrentDB is set, start a transaction
 	if p.CurrentDB != "" {
 		dbName := p.CurrentDB
-		// If CurrentDB is a string, look it up in the known databases
-		if dbOpts, ok := a.databases[dbName]; ok {
+
+		log.Debug(fmt.Sprintf("DataAdminAgent.Open: Checking DB '%s', SystemDB available: %v", dbName, a.systemDB != nil))
+
+		// Check for system DB
+		if (dbName == "system" || dbName == "SystemDB") && a.systemDB != nil {
+			if p.Transaction == nil {
+				tx, err := a.systemDB.BeginTransaction(ctx, sop.ForWriting)
+				if err != nil {
+					return fmt.Errorf("failed to begin transaction on system database: %w", err)
+				}
+				p.Transaction = tx
+			}
+		} else if dbOpts, ok := a.databases[dbName]; ok {
 			db := database.NewDatabase(dbOpts)
 			if p.Transaction == nil {
 				tx, err := db.BeginTransaction(ctx, sop.ForWriting)
@@ -297,8 +308,15 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 						// Try to open store to get schema info
 						if storeAccessor, err := jsondb.OpenStore(ctx, db.Config(), s, tx); err == nil {
 							info := storeAccessor.GetStoreInfo()
-							if info.Description != "" {
-								schemaInfo += fmt.Sprintf(" [%s]", info.Description)
+							// if info.Description != "" {
+							// 	schemaInfo += fmt.Sprintf(" [%s]", info.Description)
+							// }
+							if len(info.Relations) > 0 {
+								var rels []string
+								for _, r := range info.Relations {
+									rels = append(rels, fmt.Sprintf("[%s] -> %s([%s])", strings.Join(r.SourceFields, ", "), r.TargetStore, strings.Join(r.TargetFields, ", ")))
+								}
+								schemaInfo += fmt.Sprintf(" (Relations: %s)", strings.Join(rels, "; "))
 							}
 							if info.MapKeyIndexSpecification != "" {
 								schemaInfo += fmt.Sprintf(" (Key Schema: %s)", info.MapKeyIndexSpecification)
@@ -313,7 +331,7 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 	}
 
 	// Append instructions
-	toolsDef += `
+	defaultInst := `
 IMPORTANT:
 - The 'select' tool returns the raw data string. You MUST include this raw data in your final response.
 - When filtering with 'select', use MongoDB-style operators ($eq, $ne, $gt, $gte, $lt, $lte) for comparisons. Example: {"age": {"$gt": 18}}.
@@ -322,7 +340,15 @@ IMPORTANT:
 - If no index exists, explain that SOP only supports sorting by Key.
 - For complex queries involving joins or multiple steps, use the 'execute_script' tool. The 'script' argument MUST be a valid JSON array of instruction objects (e.g. [{"op": "...", "args": {...}}]).
 - When using 'execute_script', the 'script' argument MUST be a valid JSON array of instruction objects. Do NOT leave it empty.
+- Join Strategy:
+  - Use 'inner' (default) when the query implies "intersection" or strict matching (e.g. "Find orders for user X").
+  - Use 'left' (Left Outer Join) when the query implies "optional" relationships (e.g. "List users and their orders, if any").
+  - Use 'right' or 'full' only if explicitly requested or logically required to preserve the "right" side or "both" sides.
+- Contextual Projection:
+  - When joining entities, ALWAYS project identifying fields (e.g. Name, Email) from the parent/source entity alongside the child data in the final result.
+  - Do NOT return orphaned child records without their parent's context if the user filtered by the parent.
 `
+	toolsDef += a.getSystemInstructions(defaultInst)
 	fullPrompt := toolsDef + "\n" + query
 
 	// Obfuscate Prompt if enabled

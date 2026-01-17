@@ -642,7 +642,9 @@ func (s *Service) runStepFetch(ctx context.Context, step ai.ScriptStep, scope ma
 		// 1. Resolve Database
 		if step.Database != "" {
 			// Use Service configuration for resolution
-			if opts, ok := s.databases[step.Database]; ok {
+			if (step.Database == "system" || step.Database == "SystemDB") && s.systemDB != nil {
+				db = s.systemDB
+			} else if opts, ok := s.databases[step.Database]; ok {
 				db = database.NewDatabase(opts)
 			} else {
 				return fmt.Errorf("database '%s' not found in agent configuration", step.Database)
@@ -896,8 +898,10 @@ func (e *ServiceToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinitio
 }
 
 func (s *Service) executeScript(ctx context.Context, script *ai.Script, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
-	// Remove ScriptRecorder from context during execution to ensure tools execute instead of recording
-	ctx = context.WithValue(ctx, ai.CtxKeyScriptRecorder, nil)
+	// ScriptRecorder must be preserved in context so that tools executed by the script
+	// are recorded in the session state (Session.LastStep / Session.LastInteractionToolCalls).
+	// This ensures commands like /last-tool work correctly after script execution.
+	// ctx = context.WithValue(ctx, ai.CtxKeyScriptRecorder, nil)
 
 	// Ensure we have a tool executor
 	if ctx.Value(ai.CtxKeyExecutor) == nil {

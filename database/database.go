@@ -43,6 +43,11 @@ func getOptionFromLookup(filename string) *DatabaseOptions {
 	}
 	return nil
 }
+func removeOptionToLookup(filename string) {
+	locker.Lock()
+	defer locker.Unlock()
+	delete(databaseOptionsLookup, filename)
+}
 func isOptionInLookup(filename string) bool {
 	opts := getOptionFromLookup(filename)
 	return opts != nil && !opts.IsEmpty()
@@ -129,6 +134,19 @@ func Setup(ctx context.Context, opts sop.DatabaseOptions) (DatabaseOptions, erro
 
 	setOptionToLookup(fileName, &opts)
 	return opts, nil
+}
+
+// IsDatabasePath returns true (hasDBOptions), true (hasRegHashMod) if folder path has necessary ingredients of a SOP DB.
+func IsDatabasePath(path string) (bool, bool) {
+	var hasDBOptions bool
+	var hasRegHashMod bool
+	if _, err := os.Stat(filepath.Join(path, databaseOptionsFilename)); err == nil {
+		hasDBOptions = true
+	}
+	if _, err := os.Stat(filepath.Join(path, fs.RegistryHashModValueFilename)); err == nil {
+		hasRegHashMod = true
+	}
+	return hasDBOptions, hasRegHashMod
 }
 
 // GetOptions reads the database options from the specified folder.
@@ -348,6 +366,31 @@ func RemoveBtrees(ctx context.Context, config sop.DatabaseOptions) error {
 		}
 	}
 	return nil
+}
+
+// Remove deletes the database(Btrees, options and reghashmod file) from the folder.
+func Remove(ctx context.Context, dbPath string) error {
+	opts, err := GetOptions(ctx, dbPath)
+	if err != nil {
+		return err
+	}
+	err = RemoveBtrees(ctx, opts)
+	if err != nil {
+		return err
+	}
+
+	// Remove from Options lookup.
+	filename := filepath.Join(dbPath, databaseOptionsFilename)
+	removeOptionToLookup(filename)
+
+	// Also avoid deleting the current working directory if it happens to be the DB path.
+	absPath, _ := filepath.Abs(dbPath)
+	cwd, _ := os.Getwd()
+	if absPath == cwd {
+		return fmt.Errorf("Skipping os.RemoveAll for database path because it is the current working directory.")
+	} else {
+		return os.RemoveAll(dbPath)
+	}
 }
 
 // ReinstateFailedDrives asks the replication tracker to reinstate failed passive targets.

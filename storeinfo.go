@@ -48,6 +48,16 @@ type StoreInfo struct {
 
 	// IsPrimitiveKey hints the Python binding which JSON B-Tree to instantiate on open.
 	IsPrimitiveKey bool `json:"is_primitive_key"`
+
+	// Relations describes foreign key relationships to other stores.
+	Relations []Relation `json:"relations,omitempty"`
+}
+
+// Relation describes a foreign key relationship to another store.
+type Relation struct {
+	SourceFields []string `json:"source_fields"`
+	TargetStore  string   `json:"target_store"`
+	TargetFields []string `json:"target_fields"`
 }
 
 // StoreCacheConfig declares cache durations and TTL flags for store artifacts.
@@ -215,13 +225,13 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 		MapKeyIndexSpecification:     si.MapKeyIndexSpecification,
 		CELexpression:                si.CELexpression,
 		IsPrimitiveKey:               si.IsPrimitiveKey,
+		Relations:                    si.Relations,
 	}
 }
 
 // IsEmpty reports whether the StoreInfo has zero values; an empty StoreInfo means the B-Tree does not yet exist.
 func (s StoreInfo) IsEmpty() bool {
-	var zero StoreInfo
-	return s == zero
+	return s.Name == "" && s.SlotLength == 0
 }
 
 // IsCompatible reports whether two StoreInfo configurations are compatible for merge/attach semantics.

@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/jsondb"
 )
 
 // RunnerSession holds the state for the current agent execution session,
@@ -60,6 +62,121 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 			return "No tool instructions found.", true, nil
 		}
 		return fmt.Sprintf("Last Tool Instructions\n```json\n%s\n```", instructions), true, nil
+	}
+
+	// /list_databases
+	if query == "/list_databases" {
+		var names []string
+		for k := range s.databases {
+			names = append(names, k)
+		}
+		sort.Strings(names)
+
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("Databases: %s", strings.Join(names, ", ")))
+
+		if s.systemDB != nil {
+			sb.WriteString("\nSystem Database: system")
+		}
+
+		return sb.String(), true, nil
+	}
+
+	// /list_stores [database]
+	if strings.HasPrefix(query, "/list_stores") {
+		args := strings.Fields(strings.TrimPrefix(query, "/list_stores"))
+		var dbName string
+		if len(args) > 0 {
+			dbName = args[0]
+		}
+		// Default to current DB if not specified
+		if dbName == "" {
+			if s.session.CurrentDB != "" {
+				dbName = s.session.CurrentDB
+			} else if p := ai.GetSessionPayload(ctx); p != nil {
+				dbName = p.CurrentDB
+			}
+		}
+
+		var db *database.Database
+		if dbName != "" {
+			if (dbName == "system" || dbName == "SystemDB") && s.systemDB != nil {
+				db = s.systemDB
+			} else if opts, ok := s.databases[dbName]; ok {
+				db = database.NewDatabase(opts)
+			}
+		}
+
+		if db == nil {
+			var keys []string
+			for k := range s.databases {
+				keys = append(keys, k)
+			}
+			return fmt.Sprintf("Error: Database not found or not selected. Requested: '%s', Available: %v", dbName, keys), true, nil
+		}
+
+		// Need transaction
+		var tx sop.Transaction
+		// Use session transaction if available and matches DB
+		if s.session.Transaction != nil && s.session.CurrentDB == dbName {
+			tx = s.session.Transaction
+		} else if p := ai.GetSessionPayload(ctx); p != nil && p.Transaction != nil && p.CurrentDB == dbName {
+			if t, ok := p.Transaction.(sop.Transaction); ok {
+				tx = t
+			}
+		}
+
+		var autoCommit bool
+		if tx == nil {
+			var err error
+			tx, err = db.BeginTransaction(ctx, sop.ForReading)
+			if err != nil {
+				return fmt.Sprintf("Error: Failed to begin transaction: %v", err), true, nil
+			}
+			autoCommit = true
+		}
+
+		stores, err := tx.GetPhasedTransaction().GetStores(ctx)
+		if err != nil {
+			if autoCommit {
+				tx.Rollback(ctx)
+			}
+			return fmt.Sprintf("Error: Failed to list stores: %v", err), true, nil
+		}
+		sort.Strings(stores)
+
+		// Enrich with brief schema info
+		var descriptions []string
+		var dbOpts sop.DatabaseOptions
+		var hasOpts bool
+		if dbName != "system" {
+			dbOpts, hasOpts = s.databases[dbName]
+		}
+
+		for _, sName := range stores {
+			desc := sName
+			if hasOpts {
+				s, err := jsondb.OpenStore(ctx, dbOpts, sName, tx)
+				if err == nil {
+					if ok, _ := s.First(ctx); ok {
+						k, _ := s.GetCurrentKey()
+						v, _ := s.GetCurrentValue(ctx)
+						flat := flattenItem(k, v)
+						schema := inferSchema(flat)
+						desc = fmt.Sprintf("%s schema=%s", sName, formatSchema(schema))
+					}
+				}
+			}
+			descriptions = append(descriptions, desc)
+		}
+
+		if autoCommit {
+			if err := tx.Commit(ctx); err != nil {
+				return fmt.Sprintf("Error: Failed to commit transaction: %v", err), true, nil
+			}
+		}
+
+		return fmt.Sprintf("Stores in '%s':\n%s", dbName, strings.Join(descriptions, "\n")), true, nil
 	}
 
 	// Script Drafting Commands

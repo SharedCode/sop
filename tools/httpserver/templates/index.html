@@ -344,9 +344,23 @@
                 <!-- Content injected dynamically by JS -->
             </div>
 
-            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+            <!-- Relationships Builder -->
+            <div style="margin-bottom: 10px; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; background: var(--bg-color);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <label style="font-weight: bold; font-size: 12px; margin: 0;">Relationships (Foreign Keys):</label>
+                    <button onclick="addRelationshipRow()" style="font-size: 11px; padding: 2px 6px; cursor: pointer;">+ Add Relationship</button>
+                </div>
+                <div id="relationship-list" style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 5px;">
+                    <!-- Rows injected here -->
+                </div>
+                <div style="font-size: 10px; color: var(--text-muted); font-style: italic;">
+                    Adding relationships automatically updates the Description field below, helping the AI understand how to Join data.
+                </div>
+            </div>
+
+            <div style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 15px;">
                 <label style="margin-bottom: 0; white-space: nowrap;">Description:</label>
-                <input type="text" id="new-store-description" style="flex: 1; box-sizing: border-box; padding: 5px; border: 1px solid var(--input-border); border-radius: 3px; background-color: var(--input-bg); color: var(--text-color);">
+                <textarea id="new-store-description" style="flex: 1; min-height: 60px; box-sizing: border-box; padding: 5px; border: 1px solid var(--input-border); border-radius: 3px; background-color: var(--input-bg); color: var(--text-color); font-family: sans-serif;"></textarea>
             </div>
 
             <div id="new-store-cel-expression" style="margin-bottom: 10px;">
@@ -512,6 +526,16 @@
             </div>
             
             <div style="margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                <div class="form-group" style="margin-bottom: 0px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="new-db-populate-demo" style="width: auto;">
+                        <span>Populate with Demo Data (E-commerce)</span>
+                    </label>
+                    <small style="display: block; margin-top: 2px; margin-left: 22px; color: var(--text-muted);">
+                        Creates 'users', 'products', and 'orders' stores with sample data.
+                    </small>
+                </div>
+
                 <label style="cursor: pointer; user-select: none;">
                     <input type="checkbox" id="new-db-advanced-toggle" onchange="toggleNewDbAdvancedOptions()"> 
                     <strong>Advanced Mode</strong> (Erasure Coding, Store Folders)
@@ -545,8 +569,8 @@
                         
                         <div id="new-db-ec-container">
                             <!-- Helper Text -->
-                            <p style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 10px;">
-                                Configure one or more Data File partitions.
+                            <p style="font-size: 0.85em; color: var(--text-muted); margin-top: 0px; margin-bottom: 0px;">
+                                Configure one or more partitions for Erasure Coding driven redundancy & optimal parallel IO.
                             </p>
                             <!-- Dynamic list of EC items added here -->
                         </div>
@@ -705,8 +729,8 @@
                 <div style="display: flex; align-items: center; gap: 8px;">
                     <label style="margin: 0; white-space: nowrap;" title="App Operation Mode: Standalone (Single Instance) or Clustered (Multiple Instances sharing Data).">Mode</label>
                     <select id="setup-db-type" onchange="toggleSetupConnectionField('db')" style="width: 120px;">
-                        <option value="standalone">Standalone</option>
                         <option value="clustered">Clustered</option>
+                        <option value="standalone">Standalone</option>
                     </select>
                 </div>
                  <div id="setup-conn-group-db" style="display: none; align-items: center; gap: 8px; flex: 1;">
@@ -749,8 +773,8 @@
                         
                          <div id="setup-db-ec-container" style="max-height: 200px; overflow-y: auto; padding-right: 5px;">
                              <!-- Helper Text -->
-                             <p style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 10px;">
-                                 Configure one or more Data File partitions.
+                             <p style="font-size: 0.85em; color: var(--text-muted); margin-top: 0px; margin-bottom: 0px;">
+                                 Configure one or more partitions for Erasure Coding driven redundancy & optimal parallel IO.
                              </p>
                              <!-- Dynamic Setup Wizard EC items -->
                          </div>
@@ -758,7 +782,7 @@
                 </div>
             </div>
 
-            <div class="form-group" style="margin-top: 15px;">
+            <div class="form-group" style="margin-top: 15px; margin-bottom: 0px;">
                 <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
                     <input type="checkbox" id="setup-populate-demo" style="width: auto;">
                     <span>Populate with Demo Data (E-commerce)</span>
@@ -779,8 +803,8 @@
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <label style="margin: 0; white-space: nowrap;" title="App Operation Mode: Standalone (Single Instance) or Clustered (Multiple Instances sharing Data).">Mode</label>
                     <select id="setup-sys-type" onchange="toggleSetupConnectionField('sys')" style="width: 120px;">
-                        <option value="standalone">Standalone</option>
                         <option value="clustered">Clustered</option>
+                        <option value="standalone">Standalone</option>
                     </select>
                 </div>
                  <div id="setup-conn-group-sys" style="display: none; align-items: center; gap: 8px; flex: 1;">
@@ -790,13 +814,22 @@
             </div>
 
             <!-- Row 2: System DB Path and Port -->
-            <div style="display: flex; gap: 20px; margin-bottom: 10px; align-items: center;">
-                <div id="setup-sys-path-group" style="display: flex; align-items: center; gap: 10px; flex: 1.5;">
-                    <label style="margin: 0; white-space: nowrap; min-width: 140px;">System Database Path</label>
-                    <input type="text" id="setup-reg-path" placeholder="/var/lib/sop/system_db" value="/tmp/sop_data/system_db" style="width: 100%; box-sizing: border-box;">
+            <div style="display: flex; gap: 20px; margin-bottom: 10px; align-items: start;">
+                <div id="setup-sys-path-group" style="display: flex; flex-direction: column; gap: 5px; flex: 1.5;">
+                    <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                        <label style="margin: 0; white-space: nowrap; min-width: 140px;">System Database Path</label>
+                        <input type="text" id="setup-reg-path" placeholder="/var/lib/sop/system_db" value="/tmp/sop_data/system_db" style="width: 100%; box-sizing: border-box;">
+                    </div>
+                    <div id="setup-sys-manual-enterprise-group" style="display: flex; align-items: center; gap: 5px; margin-top: 5px; font-size: 0.9em; margin-bottom: 5px;">
+                         <input type="checkbox" id="setup-sys-use-manual-enterprise" onchange="toggleManualEnterpriseBrain()">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2" style="color: var(--text-muted);"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
+                         <label for="setup-sys-use-manual-enterprise" style="cursor: pointer; color: var(--text-color);">
+                             Use <strong>Shared Brain</strong> (Connect to existing System DB)
+                         </label>
+                     </div>
                 </div>
                 
-                 <div style="display: flex; align-items: center; gap: 10px;">
+                 <div style="display: flex; align-items: center; gap: 10px; margin-top: 5px;">
                     <label style="margin: 0; white-space: nowrap;">Server Port</label>
                     <input type="number" id="setup-port" value="8080" style="width: 80px;">
                     <script>
@@ -843,7 +876,7 @@
                          <div id="setup-sys-ec-container" style="max-height: 200px; overflow-y: auto; padding-right: 5px;">
                              <!-- Helper Text -->
                               <p style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 5px;">
-                                 Configure Data File partitions (usually just one for System DB).
+                                 Configure partitions (usually just one for System DB).
                              </p>
                          </div>
                     </div>
@@ -875,6 +908,17 @@
                             <span style="color: var(--text-muted);">Not Set</span>
                         {{end}}
                     </li>
+                    <li>
+                        <code>SYSTEM_DB_PATH</code>: 
+                        {{if .Env.SYSTEM_DB_PATH}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
+                        {{else}}
+                            <span style="color: var(--text-muted);">Not Set</span>
+                        {{end}}
+                        <div style="font-size: 0.85em; color: var(--text-muted); margin-top: 2px;">
+                            Defines the file path for the System Database (e.g., <code>/var/lib/sop/system.db</code>). When configured, it enables the "Enterprise Brains" visual cue in the interface.
+                        </div>
+                    </li>
                 </ul>
                 <div style="margin-top: 5px; color: var(--text-muted); font-size: 0.9em;">
                     Set these in your OS environment (e.g. <code>.bash_profile</code>) to configure automatically.
@@ -898,6 +942,7 @@
         </div>
 
         <div class="wizard-footer">
+            <button id="wizard-cancel" onclick="wizardCancel()" style="margin-right: auto; background-color: var(--danger-bg); color: white; border: none;">Cancel</button>
             <button id="wizard-prev" onclick="wizardPrev()" style="visibility: hidden;">Back</button>
             <button id="wizard-next" onclick="wizardNext()" class="primary-btn">Next</button>
         </div>

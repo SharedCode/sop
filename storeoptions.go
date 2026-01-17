@@ -38,6 +38,8 @@ type StoreOptions struct {
 	MapKeyIndexSpecification string
 	// IsPrimitiveKey hints Python bindings which JSON B-Tree type to instantiate during Open.
 	IsPrimitiveKey bool
+	// Relations describes foreign key-like relationships.
+	Relations []Relation
 }
 
 // ValueDataSize categorizes the expected size of Value data to guide configuration helpers.

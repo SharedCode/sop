@@ -498,6 +498,11 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 		return serializeResult(val)
 	}
 
+	// Priority 2.5: Check for 'result' variable (Common AI convention)
+	if val, ok := scriptCtx.Variables["result"]; ok {
+		return serializeResult(val)
+	}
+
 	// Priority 3: Check the last instruction's result variable (Fallback for simple scripts)
 	if len(script) > 0 {
 		lastInstr := script[len(script)-1]
@@ -527,6 +532,13 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 			if val, ok := scriptCtx.Variables[lastInstr.ResultVar]; ok {
 				return serializeResult(val)
 			}
+		}
+	}
+
+	// Priority 4: Fallback to the last updated variable (e.g. if script ends with commit_tx)
+	if scriptCtx.LastUpdatedVar != "" {
+		if val, ok := scriptCtx.Variables[scriptCtx.LastUpdatedVar]; ok {
+			return serializeResult(val)
 		}
 	}
 
@@ -1251,7 +1263,8 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 	}
 
 	if create {
-		return jsondb.CreateStore(ctx, db.Config(), storeName, tx)
+		// If Scripts store is not available yet, we will create the Script store here.
+		return jsondb.CreateObjectStore(ctx, db.Config(), storeName, tx)
 	}
 	return jsondb.OpenStore(ctx, db.Config(), storeName, tx)
 }
@@ -1374,6 +1387,9 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 		item, _ := itemAny.(map[string]any)
 
 		if filter != nil {
+			// Debugging schema validation issues
+			fmt.Printf("DEBUG: Scan Filter Check. ItemType=%T Item=%+v\n", itemAny, item)
+
 			match, err := e.evaluateCondition(item, filter.(map[string]any))
 			if err != nil {
 				// Log error but continue? Or fail?
@@ -1412,22 +1428,75 @@ func (e *ScriptEngine) evaluateCondition(item any, condition any) (bool, error) 
 
 	// Simple Map Match
 	if matchMap, ok := condition.(map[string]any); ok {
+		// Validating fields against schema in item
+		// If item is map[string]any, we can check if keys in condition exist in item.
+		// However, item might be partial if projected?
+		// Typically filtering happens before projection, so item should be full.
+		if itemMap, ok := item.(map[string]any); ok {
+			for k := range matchMap {
+				if _, exists := itemMap[k]; !exists {
+					// Check for fuzzy match
+					if suggested := findSimilarKey(k, itemMap); suggested != "" {
+						return false, fmt.Errorf("field '%s' not found in item. Did you mean '%s'?", k, suggested)
+					}
+					// If no fuzzy match, it might be a valid non-existent field (evaluates to non-match usually),
+					// BUT for LLM correctness, explicitly failing on hallucinated fields is better.
+					// Unless condition operator is $exists: false?
+					// matchMap is key -> condition for that key.
+					// Let's assume strict schema enforcement for now to guide LLM.
+					return false, fmt.Errorf("field '%s' not found in item. Available fields: %v", k, getKeys(itemMap))
+				}
+			}
+		}
+
 		return matchesMap(item, matchMap), nil
 	}
 
 	return false, fmt.Errorf("unsupported filter condition type")
 }
 
+func getKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func findSimilarKey(target string, m map[string]any) string {
+	// Simple fuzzy match: case insensitive or contains
+	targetLower := strings.ToLower(target)
+	for k := range m {
+		if strings.ToLower(k) == targetLower {
+			return k
+		}
+		if strings.Contains(strings.ToLower(k), targetLower) || strings.Contains(targetLower, strings.ToLower(k)) {
+			return k
+		}
+	}
+	return ""
+}
+
 // Reuse the logic from pipeline for Filter, Sort, Project, Limit
 // But adapt to take 'any' input which is expected to be []map[string]any
 
 func (e *ScriptEngine) Filter(ctx context.Context, input any, args map[string]any) (any, error) {
+	conditionRaw := args["condition"]
+	if conditionRaw == nil {
+		return input, nil
+	}
+
 	if cursor, ok := input.(ScriptCursor); ok {
-		return &FilterCursor{
-			source: cursor,
-			filter: args,
-			engine: e,
-		}, nil
+		if condMap, ok := conditionRaw.(map[string]any); ok {
+			return &FilterCursor{
+				source: cursor,
+				filter: condMap,
+				engine: e,
+			}, nil
+		}
+		// Fallback for non-map execution if needed, or error
+		return nil, fmt.Errorf("cursor filter currently passes map conditions only")
 	}
 
 	var list []any
@@ -1913,6 +1982,9 @@ func (e *ScriptEngine) JoinRight(ctx context.Context, input any, args map[string
 		args["right_alias"] = alias
 	}
 
+	// Set 'type' to 'right' to force Right Outer Join logic in Join()
+	args["type"] = "right"
+
 	return e.Join(ctx, input, args)
 }
 
@@ -1989,6 +2061,16 @@ func (e *ScriptEngine) Inspect(ctx context.Context, args map[string]any) (any, e
 	}
 
 	si := store.GetStoreInfo()
+
+	// Auto-Infer Schema from first record
+	var schema map[string]string
+	if ok, _ := store.First(ctx); ok {
+		k, _ := store.GetCurrentKey()
+		v, _ := store.GetCurrentValue(ctx)
+		flat := flattenItem(k, v)
+		schema = inferSchema(flat)
+	}
+
 	return map[string]any{
 		"name":                          si.Name,
 		"count":                         si.Count,
@@ -1997,6 +2079,7 @@ func (e *ScriptEngine) Inspect(ctx context.Context, args map[string]any) (any, e
 		"is_value_data_in_node_segment": si.IsValueDataInNodeSegment,
 		"leaf_load_balancing":           si.LeafLoadBalancing,
 		"description":                   si.Description,
+		"schema":                        schema,
 	}, nil
 }
 
@@ -2602,6 +2685,10 @@ func matchesMap(item any, condition map[string]any) bool {
 			if isOperator {
 				for op, opVal := range ops {
 					switch op {
+					case "$eq":
+						if compare(itemVal, opVal) != 0 {
+							return false
+						}
 					case "$gt":
 						if compare(itemVal, opVal) <= 0 {
 							return false

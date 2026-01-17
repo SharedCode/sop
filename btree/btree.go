@@ -87,6 +87,13 @@ func New[TK Ordered, TV any](storeInfo *sop.StoreInfo, si *StoreInterface[TK, TV
 	if storeInfo.IsEmpty() {
 		return nil, fmt.Errorf("can't create a b-tree with empty StoreInfo parameter")
 	}
+
+	// Detect Key IsPrimitiveKey type accurately.
+	var zero TK
+	if any(zero) != nil {
+		storeInfo.IsPrimitiveKey = IsPrimitive[TK]()
+	}
+
 	var b3 = Btree[TK, TV]{
 		StoreInfo:          storeInfo,
 		storeInterface:     si,

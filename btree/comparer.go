@@ -162,6 +162,21 @@ func Compare(anyX, anyY any) int {
 			}
 		}
 		return cmp.Compare(lenX, lenY)
+	case []float32:
+		x1, _ := anyX.([]float32)
+		y1, _ := anyY.([]float32)
+		lenX := len(x1)
+		lenY := len(y1)
+		minLen := lenX
+		if lenY < minLen {
+			minLen = lenY
+		}
+		for i := 0; i < minLen; i++ {
+			if c := cmp.Compare(x1[i], y1[i]); c != 0 {
+				return c
+			}
+		}
+		return cmp.Compare(lenX, lenY)
 	default:
 		if anyX == nil && anyY == nil {
 			return 0
@@ -363,6 +378,23 @@ func CoerceComparer(anyX any) func(x, y any) int {
 			}
 			return cmp.Compare(lenX, lenY)
 		}
+	case []float32:
+		return func(x, y any) int {
+			x1, _ := x.([]float32)
+			y1, _ := y.([]float32)
+			lenX := len(x1)
+			lenY := len(y1)
+			minLen := lenX
+			if lenY < minLen {
+				minLen = lenY
+			}
+			for i := 0; i < minLen; i++ {
+				if c := cmp.Compare(x1[i], y1[i]); c != 0 {
+					return c
+				}
+			}
+			return cmp.Compare(lenX, lenY)
+		}
 	default:
 		return func(x, y any) int {
 			if x == nil && y == nil {
@@ -383,5 +415,20 @@ func CoerceComparer(anyX any) func(x, y any) int {
 			s2 := fmt.Sprintf("%v", y)
 			return cmp.Compare(s1, s2)
 		}
+	}
+}
+
+// IsPrimitive returns true if data type is primitive type.
+func IsPrimitive[TK any]() bool {
+	var zero TK
+	if any(zero) == nil {
+		return false
+	}
+	switch any(zero).(type) {
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, uintptr, float32,
+		float64, string, uuid.UUID, sop.UUID, time.Time,[]byte, []string, []int, []float64, []float32:
+		return true
+	default:
+		return false
 	}
 }

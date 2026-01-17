@@ -173,3 +173,44 @@ go test -v ./ai/agent -run TestProjectLimitOrdering
 
 ---
 **End of Handover Document**
+
+---
+
+## 4. System Database & "Enterprise Brain"
+
+The **System Database** is a dedicated SOP database used to store internal metadata, configuration, and the Agent's own operating manual.
+
+### "Self-Correcting" Storage (`llm_instructions`)
+The Agent does not rely solely on hardcoded prompts. It fetches tool usage instructions from a B-Tree store named `llm_instructions` located within the System DB.
+*   **Structure:** Simple Key-Value B-Tree (`string` -> `string`).
+*   **Key:** Tool Name (e.g., `"execute_script"`).
+*   **Value:** Complete instruction text/prompt.
+*   **Seeding:** On server startup (`tools/httpserver/main.ai.go`), the system checks if instructions exist. If not, it seeds them with defaults hardcoded in the binary.
+*   **Self-Correction:** The Agent has a tool `update_instruction` that allows it to rewrite these entries, effectively updating its own "brain" persistently.
+
+### Setup Wizard Configuration
+The Setup Wizard (`tools/httpserver/templates/index.html`) supports three configuration modes for the System DB:
+1.  **Enterprise Brain (Managed):**
+    *   Triggered if `SYSTEM_DB_PATH` environment variable is set.
+    *   UI locks the path field and displays a badge.
+    *   Ensures all instances share the same "corporate brain".
+2.  **Custom Existing DB:**
+    *   User manually enters a path to an existing System DB.
+3.  **Local Environment:**
+    *   Default behavior. Creates a new System DB alongside the User DB (e.g., `.../sop_data/system_db`).
+
+**Configuration Default:**
+*   **Mode:** Defaults to **Clustered** (Redis-backed) to support embedded/k8s scaling scenarios, though "Standalone" is available for simpler local tests.
+
+---
+
+## 5. Scaling Strategy (Vector Store)
+
+### Current State: Key-Value Lookup
+Currently, the Agent retrieves instructions using **Exact Match** lookup from the `llm_instructions` B-Tree. This is efficient for the current set of tools (~20-50).
+
+### Vector Store Integration (`ai/vector`)
+A sophisticated **Transactional Vector Store** (IVF-based) is implemented in the codebase but is **not currently auto-scaling**.
+*   **Status:** "Opt-in" / "Up in the air".
+*   **Usage:** Must be explicitly enabled in the Agent configuration (`vector_store: true`).
+*   **Gap:** There is currently **no auto-migration logic** that transitions from the KV store to the Vector Store when the instruction set grows too large. This "auto-scale to RAG" feature is planned but not implemented.

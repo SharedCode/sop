@@ -29,6 +29,15 @@ func mapToScriptSteps(list []any) ([]ai.ScriptStep, error) {
 			if err := json.Unmarshal(b, &step); err != nil {
 				return nil, fmt.Errorf("failed to unmarshal step: %v", err)
 			}
+
+			// Validation: Ensure valid type and command
+			if step.Type == "" {
+				step.Type = "command" // Default to command if unspecified
+			}
+			if step.Type == "command" && step.Command == "" {
+				return nil, fmt.Errorf("invalid step: 'command' is required for steps of type 'command'")
+			}
+
 			steps = append(steps, step)
 		} else {
 			return nil, fmt.Errorf("invalid step format (expected object)")
@@ -61,6 +70,18 @@ func matchesKey(itemKey, filterKey any) (bool, string) {
 			for k, v := range mFilter {
 				itemVal, exists := mItem[k]
 
+				// Fallback: Case-insensitive key lookup (AI UX improvement)
+				// If the exact key isn't found, try finding a key differing only in case.
+				if !exists {
+					for mk, mv := range mItem {
+						if strings.EqualFold(mk, k) {
+							itemVal = mv
+							exists = true
+							break
+						}
+					}
+				}
+
 				// Check for operator map
 				if opMap, ok := v.(map[string]any); ok {
 					// Check if it is an operator map (keys start with $)
@@ -87,7 +108,8 @@ func matchesKey(itemKey, filterKey any) (bool, string) {
 
 				// Simple equality check. For nested objects, this might need recursion.
 				// But for now, we assume flat keys or strict equality on values.
-				if !exists || btree.Compare(itemVal, v) != 0 {
+				alignedV := alignType(v, itemVal)
+				if !exists || btree.Compare(itemVal, alignedV) != 0 {
 					return false, ""
 				}
 			}
@@ -907,7 +929,40 @@ func flattenItem(key any, value any) map[string]any {
 			result[k] = v
 		}
 	} else {
+		// Attempt to flatten structs via JSON to respect struct tags
 		if value != nil {
+			isStruct := false
+			// Simple heuristics (or just try json)
+			// We only want to do this for things that look like structs, not primitives
+			switch value.(type) {
+			case int, int64, float64, string, bool:
+				// Primitives: Just set as "value"
+			default:
+				isStruct = true
+			}
+
+			if isStruct {
+				b, err := json.Marshal(value)
+				if err == nil {
+					var m map[string]any
+					if err := json.Unmarshal(b, &m); err == nil {
+						for k, v := range m {
+							result[k] = v
+						}
+						// If successfully flattened, we don't necessarily need "value" key,
+						// but 'renderItem' logic might rely on 'value' field availability.
+						// However, getField looks at root too.
+						// Let's store strict value as well for reference?
+						// "value" key collision risk if struct has "value" field.
+						// The original code did result["value"] = value.
+						// If we flattened, we did valid expansion.
+						// We should NOT set result["value"] if we flattened, to avoid shadowing if possible,
+						// OR we set it so tools inspecting the object as a whole can see strict types?
+						// Let's err on side of just flattening.
+						return result
+					}
+				}
+			}
 			result["value"] = value
 		}
 	}
@@ -1235,4 +1290,25 @@ func renderItem(key any, val any, fields any) any {
 		}
 	}
 	return &resultMap
+}
+
+// CleanArgs extracts non-reserved arguments from a map.
+// It skips keys starting with "_" and any key in the reserved list.
+func CleanArgs(args map[string]any, reserved ...string) map[string]any {
+	out := make(map[string]any)
+	reservedMap := make(map[string]struct{})
+	for _, r := range reserved {
+		reservedMap[r] = struct{}{}
+	}
+
+	for k, v := range args {
+		if strings.HasPrefix(k, "_") {
+			continue
+		}
+		if _, ok := reservedMap[k]; ok {
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }
