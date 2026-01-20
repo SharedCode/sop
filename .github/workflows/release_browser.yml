@@ -43,7 +43,7 @@ jobs:
           GOARCH: ${{ matrix.arch }}
         run: |
           cd tools/httpserver
-          go build -o ../../sop-httpserver-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} main.go
+          go build -o ../../sop-httpserver-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }} .
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
