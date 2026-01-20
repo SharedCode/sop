@@ -81,6 +81,7 @@ func TestUpsertBatchCentroidPopulation(t *testing.T) {
 		UsageMode: ai.Dynamic,
 		TransactionOptions: sop.TransactionOptions{
 			StoresFolders: []string{tmpDir},
+			CacheType:     sop.InMemory,
 		},
 	})
 	if err != nil {

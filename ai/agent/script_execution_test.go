@@ -413,7 +413,7 @@ func TestScriptRecording_SelectTwice(t *testing.T) {
 		Responses: []string{
 			// Step 1
 			`{"tool": "select", "args": {"database": "` + filepath.Base(tmpDir) + `", "store": "employees", "limit": 2}}`,
-			// Step 2
+			// Step 2 (Action)
 			`{"tool": "select", "args": {"database": "` + filepath.Base(tmpDir) + `", "store": "employees", "limit": 3}}`,
 		},
 	}
@@ -870,12 +870,12 @@ func TestToolScriptAddStepFromLast_MetaToolExclusion(t *testing.T) {
 		t.Fatalf("Expected lastToolCall to be 'list_databases', got %v", agent.lastToolCall)
 	}
 
-	// 3. Execute "script_add_step_from_last"
+	// 3. Execute "add_step_from_last"
 	// This should NOT update lastToolCall, so it should add "list_databases" to the script
 	addArgs := map[string]any{
 		"script": "test_script",
 	}
-	_, err := agent.Execute(ctx, "script_add_step_from_last", addArgs)
+	_, err := agent.Execute(ctx, "add_step_from_last", addArgs)
 	if err != nil {
 		t.Fatalf("Failed to add step: %v", err)
 	}
@@ -894,9 +894,9 @@ func TestToolScriptAddStepFromLast_MetaToolExclusion(t *testing.T) {
 		t.Errorf("Expected step command 'list_databases', got '%s'", loadedScript.Steps[0].Command)
 	}
 
-	// 5. Verify lastToolCall is STILL "list_databases" (or at least not "script_add_step_from_last")
-	if agent.lastToolCall.Command == "script_add_step_from_last" {
-		t.Error("lastToolCall was updated to 'script_add_step_from_last', which is wrong")
+	// 5. Verify lastToolCall is STILL "list_databases" (or at least not "add_step_from_last")
+	if agent.lastToolCall.Command == "add_step_from_last" {
+		t.Error("lastToolCall was updated to 'add_step_from_last', which is wrong")
 	}
 }
 
@@ -929,14 +929,14 @@ func TestToolScriptUpdateStep(t *testing.T) {
 	store.Save(ctx, "general", "update_test_script", &script)
 	tx.Commit(ctx)
 
-	// 2. Execute "script_update_step" to change command to "print" and msg to "world"
+	// 2. Execute "update_step" to change command to "print" and msg to "world"
 	updateArgs := map[string]any{
 		"script":  "update_test_script",
 		"index":   0.0, // 0-based index
 		"command": "print",
 		"args":    map[string]any{"msg": "world"},
 	}
-	_, err := agent.Execute(ctx, "script_update_step", updateArgs)
+	_, err := agent.Execute(ctx, "update_step", updateArgs)
 	if err != nil {
 		t.Fatalf("Failed to update step: %v", err)
 	}

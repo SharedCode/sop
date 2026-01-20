@@ -25,7 +25,10 @@ func TestOptimizeRollingVersion(t *testing.T) {
 	ctx := context.Background()
 
 	// 2. Insert Item (Version 0)
-	tx1, _ := database.BeginTransaction(ctx, db, sop.ForWriting)
+	tx1, err := database.BeginTransaction(ctx, db, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction #1 failed: %v", err)
+	}
 
 	// Call Open directly
 	cfg := Config{
@@ -36,7 +39,10 @@ func TestOptimizeRollingVersion(t *testing.T) {
 		},
 		Cache: sop.GetL2Cache(sop.TransactionOptions{CacheType: db.CacheType}),
 	}
-	idx1, _ := Open[map[string]any](ctx, tx1, "rolling_test", cfg)
+	idx1, err := Open[map[string]any](ctx, tx1, "rolling_test", cfg)
+	if err != nil {
+		t.Fatalf("Open #1 failed: %v", err)
+	}
 
 	item := ai.Item[map[string]any]{
 		ID:      "item1",
@@ -49,8 +55,14 @@ func TestOptimizeRollingVersion(t *testing.T) {
 	tx1.Commit(ctx)
 
 	// 3. Optimize #1 (Moves to Version 1)
-	tx2, _ := database.BeginTransaction(ctx, db, sop.ForWriting)
-	idx2, _ := Open[map[string]any](ctx, tx2, "rolling_test", cfg)
+	tx2, err := database.BeginTransaction(ctx, db, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction #2 failed: %v", err)
+	}
+	idx2, err := Open[map[string]any](ctx, tx2, "rolling_test", cfg)
+	if err != nil {
+		t.Fatalf("Open #2 failed: %v", err)
+	}
 	if err := idx2.Optimize(ctx); err != nil {
 		t.Fatalf("Optimize #1 failed: %v", err)
 	}

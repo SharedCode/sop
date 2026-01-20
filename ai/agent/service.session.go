@@ -16,42 +16,6 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-// RunnerSession holds the state for the current agent execution session,
-// including script drafting and transaction management.
-type RunnerSession struct {
-	Playback              bool // True if a script is currently being executed
-	AutoSave              bool // If true, the draft is saved to DB after every step
-	CurrentScript         *ai.Script
-	CurrentScriptCategory string // Category for the script being drafted
-	Transaction           sop.Transaction
-	CurrentDB             string         // The database the transaction is bound to
-	Variables             map[string]any // Session-scoped variables (e.g. cached stores)
-	LastStep              *ai.ScriptStep
-	// LastInteractionSteps tracks the number of steps added/executed in the last user interaction.
-	LastInteractionSteps int
-	// LastInteractionToolCalls buffers the tool calls from the last interaction for refactoring.
-	LastInteractionToolCalls []ai.ScriptStep
-
-	// PendingRefinement holds the proposed changes for a script from /script refine
-	PendingRefinement *RefinementProposal
-}
-
-// RefinementProposal holds the proposed changes for a script.
-type RefinementProposal struct {
-	ScriptName     string
-	Category       string
-	OriginalScript ai.Script
-	NewScript      ai.Script
-	Description    string   // The new summary description
-	NewParams      []string // List of new parameters
-	Replacements   []string // Human readable list of replacements
-}
-
-// NewRunnerSession creates a new runner session.
-func NewRunnerSession() *RunnerSession {
-	return &RunnerSession{}
-}
-
 // handleSessionCommand processes session-related commands like /create, /save, /step, etc.
 // Returns (response, handled, error)
 func (s *Service) handleSessionCommand(ctx context.Context, query string, db *database.Database) (string, bool, error) {

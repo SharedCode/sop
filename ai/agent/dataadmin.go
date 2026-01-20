@@ -199,6 +199,9 @@ func (a *DataAdminAgent) Search(ctx context.Context, query string, limit int) ([
 
 // Ask processes a query and returns a response.
 func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+	// Refresh tools to ensure latest instructions from llm_knowledge are used
+	a.registerTools()
+
 	// cfg := ai.NewAskConfig(opts...)
 
 	// Determine Generator to use (Dynamic Switching)
@@ -289,6 +292,11 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 		}
 	}
 
+	// Inject Learned Knowledge (Contextual)
+	if knowledge := RetrieveLLMKnowledge(ctx, a.systemDB); knowledge != "" {
+		toolsDef += "\nContext Section (Learned Knowledge):\n" + knowledge
+	}
+
 	// Inject Current Database Schema/Stores
 	if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
 		var db *database.Database
@@ -308,9 +316,16 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 						// Try to open store to get schema info
 						if storeAccessor, err := jsondb.OpenStore(ctx, db.Config(), s, tx); err == nil {
 							info := storeAccessor.GetStoreInfo()
-							// if info.Description != "" {
-							// 	schemaInfo += fmt.Sprintf(" [%s]", info.Description)
-							// }
+							// SAMPLE SCHEMA (SCALABILITY: Only 1st item)
+							if ok, _ := storeAccessor.First(ctx); ok {
+								if key, err := storeAccessor.GetCurrentKey(); err == nil {
+									if val, err := storeAccessor.GetCurrentValue(ctx); err == nil {
+										flat := flattenItem(key, val)
+										sMap := inferSchema(flat)
+										schemaInfo += fmt.Sprintf(" %s", formatSchema(sMap))
+									}
+								}
+							}
 							if len(info.Relations) > 0 {
 								var rels []string
 								for _, r := range info.Relations {
@@ -347,6 +362,21 @@ IMPORTANT:
 - Contextual Projection:
   - When joining entities, ALWAYS project identifying fields (e.g. Name, Email) from the parent/source entity alongside the child data in the final result.
   - Do NOT return orphaned child records without their parent's context if the user filtered by the parent.
+
+SELF-CORRECTION & LEARNING:
+- **Decision Protocol (Context vs Research)**:
+  1. **Analyze Context**: Do you have all necessary schemas, definitions, and rules in the current prompt to answer the user?
+  2. **If YES**: Proceed immediately. Do NOT run 'manage_knowledge' needlessly.
+  3. **If NO**: Check the "Additional Knowledge Categories" list. If a category is relevant (e.g. user asks about 'Q3 targets' and you see 'sales_targets'), THEN run 'manage_knowledge(action=list, ...)' to fetch it.
+  4. **Ambiguity**: If a term is ambiguous (e.g. 'active user') and you lack a definition, consult the 'term' or domain-specific category.
+
+- **Categorization Rule**: When saving new knowledge, do NOT dump everything into 'term'. Create specific namespaces.
+  - GOOD: namespace="finance", key="fiscal_year_start"
+  - BAD: namespace="term", key="finance_fiscal_year_start"
+- **Schema Corrections**: If you discover a schema discrepancy (e.g., 'total_amount' vs 'total'), ALWAYS use namespace="schema".
+- **General Logic**: Use "memory" or "term" only for general instructions or glossary definitions.
+- Example: manage_knowledge(namespace="finance", key="q1_definition", value="Jan-Mar", action="upsert").
+- This allows you to remember this for future queries (e.g., "Find active users").
 `
 	toolsDef += a.getSystemInstructions(defaultInst)
 	fullPrompt := toolsDef + "\n" + query
@@ -501,13 +531,13 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 		}
 	}
 
-	// Save as Last Tool Call (for script recording/refactoring)
+	// Save as Last Tool Call (for script drafting/refactoring)
 	// We clone args to avoid mutation issues
-	// BUT: If the tool is "script_add_step_from_last", we should NOT overwrite the last tool call yet!
+	// BUT: If the tool is "add_step_from_last", we should NOT overwrite the last tool call yet!
 	// We need to let it run using the *previous* last tool call.
 	// So we defer the update of lastToolCall until AFTER execution, OR we skip it for meta-tools.
 
-	isMetaTool := toolName == "script_add_step_from_last"
+	isMetaTool := toolName == "add_step_from_last"
 
 	savedArgs := deepCopyMap(args)
 
@@ -520,15 +550,15 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 	}
 
 	// Notify Recorder (Service) if available
-	// This ensures that the Service knows about the tool execution for /last-tool and recording
+	// This ensures that the Service knows about the tool execution for /last-tool and drafting
 	if recorder, ok := ctx.Value(ai.CtxKeyScriptRecorder).(ai.ScriptRecorder); ok {
 		// Debug: Check script content
 		if script, ok := savedArgs["script"]; ok {
-			log.Debug(fmt.Sprintf("Recording script step. Type: %T, Value: %+v", script, script))
+			log.Debug(fmt.Sprintf("Drafting script step. Type: %T, Value: %+v", script, script))
 		}
 
 		// We record it even if it's a meta-tool, because from the Service's perspective, it's an action.
-		// However, for "script_add_step_from_last", the user might want to see the *previous* tool.
+		// However, for "add_step_from_last", the user might want to see the *previous* tool.
 		// But strictly speaking, "last-tool" should show the LAST executed tool.
 		recorder.RecordStep(ctx, ai.ScriptStep{
 			Type:    "command",

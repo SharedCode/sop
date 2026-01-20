@@ -47,7 +47,12 @@ The core of the **Computing Platform**. It allows you to define complex, multi-s
 
 See [ai/agent/README.md](ai/agent/README.md) for full documentation on Scripts, Swarm Computing, and the Tool Registry.
 
-### 3. Generators & Embedders (`ai/generator`, `ai/embed`)
+### 3. Memory Architecture (SOP Unique Design)
+The SOP Agent is equipped with a dual-memory system that leverages the Database Engine itself:
+*   **Short-Term Memory (Session Context)**: Uses `RunnerSession` / `ConversationThread` to track **Topics** and **Goals**. Unlike standard chat history (flat list), this structured approach allows the Agent to maintain distinct threads of thought and switch contexts without hallucinating via a rigorous "Executive Function".
+*   **Long-Term Memory (System Knowledge)**: Uses a persistent, transactional B-Tree (`llm_knowledge`). The Agent "learns" by performing ACID transactions against its own mind. This **B-Tree Powerhouse** approach ensures that knowledge is scalable, ordered, and corruption-free, unlike brittle JSON/Vector-only memory systems.
+
+### 4. Generators & Embedders (`ai/generator`, `ai/embed`)
 Interfaces for connecting to AI models:
 *   **Generators**: Connect to LLMs like OpenAI, Gemini, or local Ollama instances.
 *   **Embedders**: Convert text to vectors. Includes a "Simple" keyword-based embedder (for testing) and an "Agent Embedder" (for semantic understanding).
@@ -66,10 +71,10 @@ A transactional, embedded text search engine.
 *   **Usage**: Ideal for "Search this wiki" or "Filter by text" features alongside Vector Search.
 
 ### 6. Script System (`ai/SCRIPTS.md`)
-A "Natural Language Programming" engine.
-*   **Compiled Instructions**: Turns natural language intent into deterministic, high-performance SOP programs.
-*   **Mini-SDK**: A stable JSON schema (`ask`, `set`, `if`, `loop`, `fetch`) for scripting complex logic.
-*   **Bare Metal Performance**: Executes loops and data fetches directly in Go, using the LLM only for reasoning.
+A unique **Hybrid Execution** engine that runs inside the Agent.
+*   **Explicit Execution**: No magic, no guessing. The engine executes scripts line-by-line, exactly as defined.
+*   **Hybrid Workflows**: Seamlessly mixes **Deterministic Code** (`loop`, `fetch` tables) with **Non-Deterministic AI** (`ask` "Analyze this data").
+*   **Optimization**: Deterministic steps run at bare-metal Go speed; AI steps are invoked only when explicit reasoning is required.
 *   [Read the full documentation](SCRIPTS.md).
 
 ### 7. AI Assistant (Interactive Mode)

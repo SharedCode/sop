@@ -3,31 +3,17 @@ package btree
 import (
 	"fmt"
 	"testing"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/sharedcode/sop"
 )
 
-// Copied from btree/comparer.go
-func IsPrimitive[TK any]() bool {
-	var zero TK
-	if any(zero) == nil {
-		return false
-	}
-	switch any(zero).(type) {
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, uintptr, float32,
-		float64, string, uuid.UUID, sop.UUID, time.Time, []byte, []string, []int, []float64, []float32:
-		return true
-	default:
-		return false
-	}
-}
-
 // Simulated Btree New function logic
 func NewSimulated[TK any](si *sop.StoreInfo) {
-	// The problematic line in btree.go
-	si.IsPrimitiveKey = IsPrimitive[TK]()
+	// Detect Key IsPrimitiveKey type accurately.
+	var zero TK
+	if any(zero) != nil {
+		si.IsPrimitiveKey = IsPrimitive[TK]()
+	}
 }
 
 func TestPrimitiveOverwrite(t *testing.T) {

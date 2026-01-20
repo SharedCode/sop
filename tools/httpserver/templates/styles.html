@@ -140,7 +140,8 @@
         .wizard-step { display: none; }
         .wizard-step.active { display: block; }
         .wizard-header { margin-bottom: 20px; text-align: center; }
-        .wizard-footer { margin-top: 30px; display: flex; justify-content: space-between; }
+        .wizard-footer { margin-top: 30px; display: flex; justify-content: space-between; gap: 3px; }
+        .wizard-footer button { padding: 9px 17px; }
         .wizard-progress { display: flex; gap: 5px; justify-content: center; margin-bottom: 20px; }
         .progress-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border-color); }
         .progress-dot.active { background: var(--active-bg); }
@@ -449,6 +450,83 @@
             justify-content: flex-end;
             gap: 10px;
             flex-shrink: 0;
+        }
+
+        /* Custom Database Dropdown (Chip Style) */
+        .db-chip {
+            display: flex;
+            align-items: center;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px; /* Chip/Pill shape */
+            padding: 6px 12px;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s ease;
+            font-size: 14px;
+            color: var(--text-color);
+        }
+        .db-chip:hover {
+            background: var(--hover-bg);
+            border-color: var(--active-bg);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .db-chip-icon {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 8px;
+            color: var(--text-color);
+        }
+        .db-dropdown-menu {
+            position: absolute;
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+            z-index: 1000;
+            display: none;
+            max-height: 300px;
+            overflow-y: auto;
+            width: 100%; /* Match container */
+            top: 100%;
+            left: 0;
+            margin-top: 6px;
+            padding: 4px;
+        }
+        .db-dropdown-menu.show {
+            display: block;
+            animation: fadeIn 0.1s ease-out;
+        }
+        .db-option {
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            font-size: 14px;
+            color: var(--text-color);
+            border-radius: 8px;
+            margin-bottom: 2px;
+        }
+        .db-option:hover {
+            background: var(--hover-bg);
+        }
+        .db-option.active {
+            background: var(--active-bg);
+            color: var(--active-text);
+        }
+        .db-option-icon {
+            margin-right: 8px;
+            width: 18px;
+            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
         }
 </style>
 {{end}}

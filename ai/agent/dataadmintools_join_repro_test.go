@@ -144,13 +144,13 @@ func TestToolJoin_WithAlias(t *testing.T) {
 
 	// Create Left Store (Departments)
 	leftStoreName := "departments"
-	if _, err := core_database.NewBtree[string, any](ctx, dbOpts, leftStoreName, tx, nil, sop.StoreOptions{Name: leftStoreName, SlotLength: 10}); err != nil {
+	if _, err := core_database.NewBtree[string, any](ctx, dbOpts, leftStoreName, tx, nil, sop.StoreOptions{Name: leftStoreName, SlotLength: 10, IsPrimitiveKey: true}); err != nil {
 		t.Fatalf("NewBtree left failed: %v", err)
 	}
 
 	// Create Right Store (Employees)
 	rightStoreName := "employees"
-	if _, err := core_database.NewBtree[string, any](ctx, dbOpts, rightStoreName, tx, nil, sop.StoreOptions{Name: rightStoreName, SlotLength: 10}); err != nil {
+	if _, err := core_database.NewBtree[string, any](ctx, dbOpts, rightStoreName, tx, nil, sop.StoreOptions{Name: rightStoreName, SlotLength: 10, IsPrimitiveKey: true}); err != nil {
 		t.Fatalf("NewBtree right failed: %v", err)
 	}
 
@@ -168,10 +168,14 @@ func TestToolJoin_WithAlias(t *testing.T) {
 	rightStore, _ := jsondb.OpenStore(ctx, dbOpts, rightStoreName, tx)
 
 	// Dept: {id: 1, name: "Engineering"}
-	leftStore.Add(ctx, map[string]any{"id": 1}, map[string]any{"name": "Engineering", "region": "APAC"})
+	if _, err := leftStore.Add(ctx, "dept1", map[string]any{"name": "Engineering", "region": "APAC"}); err != nil {
+		t.Fatalf("Left Add failed: %v", err)
+	}
 
 	// Emp: {id: 101, name: "John", dept_id: 1}
-	rightStore.Add(ctx, map[string]any{"id": 101}, map[string]any{"emp_name": "John", "dept_id": 1, "region": "APAC"})
+	if _, err := rightStore.Add(ctx, "emp101", map[string]any{"emp_name": "John", "dept_id": 1, "region": "APAC"}); err != nil {
+		t.Fatalf("Right Add failed: %v", err)
+	}
 
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Commit failed: %v", err)
@@ -196,7 +200,7 @@ func TestToolJoin_WithAlias(t *testing.T) {
 		"left_join_fields":  []string{"region"},
 		"right_join_fields": []string{"region"},
 		"fields": []string{
-			"a.region",
+			"a.region AS region",
 			"b.emp_name AS employee",
 		},
 	}

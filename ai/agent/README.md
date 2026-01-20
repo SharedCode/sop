@@ -37,11 +37,25 @@ Tools are no longer hardcoded strings. They are defined in a structured `Registr
 *   **Definition**: Tools have a Name, Description, Argument Schema, and a Go Handler function.
 *   **Discovery**: Agents can dynamically list and inspect available tools to generate their system prompts.
 
-### 5. Explicit Transaction Management
+### 6. Explicit Transaction Management
 While automatic transaction wrapping (Saga Pattern) is recommended for most cases, you can still manage transactions explicitly using the `manage_transaction` tool. This is useful when:
 *   **Minimizing Lock Time**: You want to perform heavy AI processing or external API calls *outside* of a transaction, and only wrap the database writes.
 *   **Multiple Transactions**: A single script needs to perform multiple independent commits.
 *   **Inherited Context**: You are running a script without a specific `database` field and want to control the transaction on the inherited database connection.
+
+### 7. Dual-Layer Memory Architecture
+The agent is designed with a cognitive memory model that separates transient context from persistent knowledge.
+
+#### Short-Term Memory (Context)
+*   **Implementation**: `RunnerSession` (`ai/agent/memory_shortterm.go`).
+*   **Behavior**: Stores the active conversation history (`History`), temporary variables (`Variables`), and the current database transaction (`Transaction`).
+*   **Scope**: Bound to the WebSocket session. It is volatile and disappears when the user disconnects.
+
+#### Long-Term Memory (Knowledge)
+*   **Implementation**: `KnowledgeStore` (`ai/agent/memory_longterm.go`).
+*   **Storage**: A dedicated B-Tree named `llm_knowledge` inside the System Database.
+*   **Behavior**: Stores learned instructions, domain terms, and tool overrides.
+*   **Self-Correction**: The agent uses the `getToolInstruction` hook to fetch tool documentation from this store *before* registration. This allows the agent to essentially "rewrite its own manual" persistenty.
 
 ---
 

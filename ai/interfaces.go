@@ -36,6 +36,9 @@ const (
 type ResultStreamer interface {
 	// BeginArray starts a JSON array output.
 	BeginArray()
+	// SetMetadata sets metadata for the result (e.g. headers, record counts).
+	// Should be called before the first WriteItem.
+	SetMetadata(meta map[string]any)
 	// WriteItem writes a single item to the output (e.g. an element of an array).
 	WriteItem(item any)
 	// EndArray ends the JSON array output.

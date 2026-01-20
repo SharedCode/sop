@@ -53,6 +53,12 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions
 	var b3 btree.BtreeInterface[TK, TV]
 	var err error
 
+	// Fix for regression: Explicitly set IsPrimitiveKey if not set, to match legacy behavior
+	// where common.NewBtree used to auto-detect it. This ensures compatibility with existing stores.
+	if !so.IsPrimitiveKey && btree.IsPrimitive[TK]() {
+		so.IsPrimitiveKey = true
+	}
+
 	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
 		if ct.HandleReplicationRelatedError != nil {
 			b3, err = infs.NewBtreeWithReplication[TK, TV](ctx, so, t, comparer)
@@ -91,13 +97,13 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, 
 	}
 
 	// 1. Open Centroids Store (Versioned)
-	centroids, err := newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(name(centroidsSuffix+suffix), true, 100, centroidsDesc, sop.SmallData, ""), trans, func(a, b int) int { return a - b })
+	centroids, err := newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(name(centroidsSuffix+suffix), true, btree.DefaultSlotLength, centroidsDesc, sop.SmallData, ""), trans, func(a, b int) int { return a - b })
 	if err != nil {
 		return nil, err
 	}
 
 	// 2. Open Vectors Store (Versioned)
-	vectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(name(vectorsSuffix+suffix), true, 1000, vectorsDesc, sop.SmallData, ""), trans, compositeKeyComparer)
+	vectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(name(vectorsSuffix+suffix), true, btree.DefaultSlotLength, vectorsDesc, sop.SmallData, ""), trans, compositeKeyComparer)
 	if err != nil {
 		return nil, err
 	}
@@ -112,13 +118,13 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, 
 		}
 		return 0
 	}
-	content, err := newBtree[ai.ContentKey, string](ctx, sop.ConfigureStore(name(dataSuffix), true, 1000, dataDesc, contentSize, ""), trans, contentComparer)
+	content, err := newBtree[ai.ContentKey, string](ctx, sop.ConfigureStore(name(dataSuffix), true, btree.DefaultSlotLength, dataDesc, contentSize, ""), trans, contentComparer)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Open Lookup Store (Versioned)
-	lookup, err := newBtree[int, string](ctx, sop.ConfigureStore(name(lookupSuffix+suffix), true, 1000, lookupDesc, sop.SmallData, ""), trans, func(a, b int) int { return a - b })
+	lookup, err := newBtree[int, string](ctx, sop.ConfigureStore(name(lookupSuffix+suffix), true, btree.DefaultSlotLength, lookupDesc, sop.SmallData, ""), trans, func(a, b int) int { return a - b })
 	if err != nil {
 		return nil, err
 	}
@@ -128,7 +134,7 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, 
 	// Once optimized (version > 0), TempVectors is retired.
 	var tempVectors btree.BtreeInterface[string, []float32]
 	if version == 0 && !skipTempVectors {
-		tempVectors, err = newBtree[string, []float32](ctx, sop.ConfigureStore(name(tempVectorsSuffix), true, 1000, tempVectorsDesc, sop.SmallData, ""), trans, func(a, b string) int {
+		tempVectors, err = newBtree[string, []float32](ctx, sop.ConfigureStore(name(tempVectorsSuffix), true, btree.DefaultSlotLength, tempVectorsDesc, sop.SmallData, ""), trans, func(a, b string) int {
 			if a < b {
 				return -1
 			}

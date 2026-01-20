@@ -477,10 +477,6 @@ func (a *DataAdminAgent) toolManageTransaction(ctx context.Context, args map[str
 		return "", fmt.Errorf("action is required")
 	}
 
-	if _, ok := ctx.Value(ai.CtxKeyScriptRecorder).(ai.ScriptRecorder); ok {
-		return fmt.Sprintf("Transaction action '%s' recorded as script step. (Skipped execution during recording)", action), nil
-	}
-
 	switch action {
 	case "begin":
 		// Check if transaction exists for this database

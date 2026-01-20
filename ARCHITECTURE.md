@@ -196,6 +196,21 @@ SOP is designed to run in two distinct modes, catering to different scale requir
 *   **Use Case**: Desktop apps, CLI tools, local AI vector stores.
 *   **Pros**: Zero external dependencies, maximum single-node performance.
 
+## AI & Agent Architecture
+
+SOP introduces a novel architecture for AI Agents, distinguishing itself from standard "RAG" or "Chatbot" implementations by leveraging the B-Tree as the central nervous system.
+
+### 1. The "Powerhouse" B-Tree Memory
+Unlike systems that rely on vector databases or flat text files for memory, SOP treats **Memory as a Database System**.
+*   **Long-Term Memory (LTM)**: Stored in a dedicated **ACID-compliant B-Tree** (`llm_knowledge`). This ensures that the Agent's knowledge base is transactional, ordered, and scalable ($O(\log N)$ retrieval). The Agent can safely update its own mind (Self-Learning) without corruption.
+*   **Short-Term Memory (STM)**: Implemented as **Structured Threads** (`ConversationThread`), not a flat list of tokens. This gives the Agent "Executive Function"—the ability to track topics, manage context switches, and maintain a rigorous "Train of Thought" separate from the raw chat history.
+
+### 2. Hybrid Scripting Engine (Explicit Execution)
+The SOP Scripting Engine (`ai/agent`) follows a unique **"Explicit Execution"** design pattern.
+*   **No "Magic" Compilation**: The engine is "dumb and obedient." It does not try to guess user intent or "compile away" interaction steps.
+*   **Hybrid Flow**: Scripts naturally mix **Deterministic Commands** (e.g., `scan`, `filter`) with **Probabilistic Reasoning** (e.g., `ask`).
+*   **Run-Loop Scripting**: The Agent can pause a deterministic workflow to ask the LLM for guidance ("Analyze these results"), and then resume execution based on the LLM's structured response. This allows for essentially infinite complexity in agentic behaviors without the fragility of pure-LLM loops.
+
 ## Backend Comparison: Isolation & Concurrency
 
 When choosing a backend, it is crucial to understand how they handle isolation, locking, and multi-tenancy. Both backends support high concurrency, but their locking scopes differ.

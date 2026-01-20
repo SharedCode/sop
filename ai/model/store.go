@@ -52,10 +52,7 @@ func (s *btreeModelStore) openStore(ctx context.Context) (btree.BtreeInterface[M
 
 	// Prefix the store name with the domain name to allow multiple stores in the same folder.
 	storeName := s.name
-	slotLength := 500
-	if s.name == "scripts" {
-		slotLength = 2000
-	}
+	slotLength := btree.DefaultSlotLength
 	so := sop.ConfigureStore(storeName, true, slotLength, "AI Models Registry", sop.MediumData, "")
 
 	// Use jsondb.IndexSpecification to generating the MapKeyIndexSpecification JSON string.

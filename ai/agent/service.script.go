@@ -51,6 +51,11 @@ func (s *Service) PlayScript(ctx context.Context, name string, category string, 
 		return fmt.Errorf("missing required parameters: %v", missingParams)
 	}
 
+	// Reset LastInteractionToolCalls for this execution so /last-tool reflects this run
+	if s.session != nil {
+		s.session.LastInteractionToolCalls = []ai.ScriptStep{}
+	}
+
 	var scopeMu sync.RWMutex
 
 	// Handle Database Switching for Script
@@ -62,8 +67,6 @@ func (s *Service) PlayScript(ctx context.Context, name string, category string, 
 
 	// Check for NDJSON request
 	useNDJSON, _ := ctx.Value(CtxKeyUseNDJSON).(bool)
-	// Force set NDJSON to true for now, as we want to default to NDJSON streaming
-	useNDJSON = true
 
 	// Determine flush policy (Default: true)
 	shouldFlush := true
@@ -80,6 +83,7 @@ func (s *Service) PlayScript(ctx context.Context, name string, category string, 
 		fmt.Fprint(w, "[\n") // Start JSON array
 	}
 	streamer.SetFlush(shouldFlush)
+	streamer.SetSuppressStepStart(true)
 	scriptCtx = context.WithValue(scriptCtx, CtxKeyJSONStreamer, streamer)
 
 	if script.Database != "" && !script.Portable {

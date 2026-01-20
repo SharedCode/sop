@@ -86,7 +86,7 @@ func (di *domainIndex[T]) openArch(ctx context.Context, tx sop.Transaction, ver 
 
 func (di *domainIndex[T]) openSysStore(ctx context.Context, tx sop.Transaction) (btree.BtreeInterface[string, int64], error) {
 	sysStoreName := fmt.Sprintf("%s%s", di.name, sysConfigSuffix)
-	return newBtree[string, int64](ctx, sop.ConfigureStore(sysStoreName, true, 1000, sysConfigDesc, sop.SmallData, ""), tx, func(a, b string) int {
+	return newBtree[string, int64](ctx, sop.ConfigureStore(sysStoreName, true, btree.DefaultSlotLength, sysConfigDesc, sop.SmallData, ""), tx, func(a, b string) int {
 		if a < b {
 			return -1
 		}
@@ -282,7 +282,7 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 			return 0, err
 		}
 
-		newLookup, err := newBtree[int, string](ctx, sop.ConfigureStore(di.name+lookupSuffix+suffix, true, 1000, lookupDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
+		newLookup, err := newBtree[int, string](ctx, sop.ConfigureStore(di.name+lookupSuffix+suffix, true, btree.DefaultSlotLength, lookupDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 		if err != nil {
 			if rbErr := tx.Rollback(ctx); rbErr != nil {
 				return 0, fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -467,7 +467,7 @@ func (di *domainIndex[T]) phase2(ctx context.Context, currentVersion int64, suff
 			return nil, err
 		}
 
-		newLookup, err := newBtree[int, string](ctx, sop.ConfigureStore(di.name+lookupSuffix+suffix, true, 1000, lookupDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
+		newLookup, err := newBtree[int, string](ctx, sop.ConfigureStore(di.name+lookupSuffix+suffix, true, btree.DefaultSlotLength, lookupDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 		if err != nil {
 			if rbErr := tx.Rollback(ctx); rbErr != nil {
 				return nil, fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -556,7 +556,7 @@ func (di *domainIndex[T]) phase2(ctx context.Context, currentVersion int64, suff
 			return nil, err
 		}
 
-		newCentroids, err := newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, 100, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
+		newCentroids, err := newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, btree.DefaultSlotLength, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 		if err != nil {
 			if rbErr := tx.Rollback(ctx); rbErr != nil {
 				return nil, fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -604,7 +604,7 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 				return err
 			}
 
-			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, 1000, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
+			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, btree.DefaultSlotLength, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
 			if err != nil {
 				if rbErr := tx.Rollback(ctx); rbErr != nil {
 					return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -614,7 +614,7 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 
 			var newCentroids btree.BtreeInterface[int, ai.Centroid]
 			if di.config.UsageMode == ai.DynamicWithVectorCountTracking {
-				newCentroids, err = newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, 100, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
+				newCentroids, err = newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, btree.DefaultSlotLength, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 				if err != nil {
 					if rbErr := tx.Rollback(ctx); rbErr != nil {
 						return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -767,7 +767,7 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 				break
 			}
 
-			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, 1000, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
+			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, btree.DefaultSlotLength, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
 			if err != nil {
 				if rbErr := tx.Rollback(ctx); rbErr != nil {
 					return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -777,7 +777,7 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 
 			var newCentroids btree.BtreeInterface[int, ai.Centroid]
 			if di.config.UsageMode == ai.DynamicWithVectorCountTracking {
-				newCentroids, err = newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, 100, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
+				newCentroids, err = newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, btree.DefaultSlotLength, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 				if err != nil {
 					if rbErr := tx.Rollback(ctx); rbErr != nil {
 						return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)

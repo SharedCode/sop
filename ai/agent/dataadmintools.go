@@ -55,6 +55,7 @@ Operations:
 - if(condition, then, else)
 - loop(condition, body)
 - call_script(name, params)
+- select(store, key, value, fields, limit, order_by, action, update_values) -> list (high-level tool integration)
 - return(value) -> stops execution and returns value
 
 Example Pipeline Join:
@@ -70,6 +71,17 @@ Example Pipeline Join:
   {"op": "commit_tx", "args": {"transaction": "tx1"}}
 ]
 Note: 'scan' and 'join' return full objects. To select specific fields or renamed columns, you MUST add a 'project' step.`
+
+const (
+	SelectInstruction = "Selects data from a store. Arguments: store (string), key (any, optional), value (any, optional), fields (list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias'], ['a.*', 'b.name AS employee']), limit (number, optional), order_by (string, optional, e.g. 'field desc'), action (string, optional: 'delete', 'update'), update_values (map, optional)."
+
+	JoinInstruction = "Joins data from two stores. Arguments: left_store (string), right_store (string), left_join_fields (list<string>), right_join_fields (list<string>), join_type (string, optional: 'inner', 'left', 'right'), fields (list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias'], ['a.*', 'b.name AS employee']), limit (number, optional), order_by (string, optional), action (string, optional: 'delete_left', 'update_left'), update_values (map, optional)."
+
+	AddInstruction               = "Adds data to a store."
+	UpdateInstruction            = "Updates data in a store."
+	DeleteInstruction            = "Deletes data from a store."
+	ManageTransactionInstruction = "Manages transactions (begin, commit, rollback)."
+)
 
 // registerTools registers all available tools for the DataAdminAgent.
 func (a *DataAdminAgent) registerTools() {
@@ -94,18 +106,21 @@ func (a *DataAdminAgent) registerTools() {
 	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new script or block.", "(mode: string, name: string)", a.toolRefactorScript)
 
 	// High-Level Tools
-	a.registry.Register("select", "Selects data from a store. Arguments: store (string), key (any, optional), value (any, optional), fields (list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias'], ['a.*', 'b.name AS employee']), limit (number, optional), order_by (string, optional, e.g. 'field desc'), action (string, optional: 'delete', 'update'), update_values (map, optional).", "(store: string, ...)", a.toolSelect)
-	a.registry.RegisterHidden("join", "Joins data from two stores. Arguments: left_store (string), right_store (string), left_join_fields (list<string>), right_join_fields (list<string>), join_type (string, optional: 'inner', 'left', 'right'), fields (list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias'], ['a.*', 'b.name AS employee']), limit (number, optional), order_by (string, optional), action (string, optional: 'delete_left', 'update_left'), update_values (map, optional).", "(left_store: string, right_store: string, ...)", a.toolJoin)
-	a.registry.Register("add", "Adds data to a store.", "(store: string, key: any, value: any)", a.toolAdd)
-	a.registry.Register("update", "Updates data in a store.", "(store: string, key: any, value: any)", a.toolUpdate)
-	a.registry.Register("delete", "Deletes data from a store.", "(store: string, key: any)", a.toolDelete)
-	a.registry.Register("manage_transaction", "Manages transactions (begin, commit, rollback).", "(action: string)", a.toolManageTransaction)
+	a.registry.Register("select", a.getToolInstruction("select", SelectInstruction), "(store: string, ...)", a.toolSelect)
+	a.registry.RegisterHidden("join", a.getToolInstruction("join", JoinInstruction), "(left_store: string, right_store: string, ...)", a.toolJoin)
+	a.registry.Register("add", a.getToolInstruction("add", AddInstruction), "(store: string, key: any, value: any)", a.toolAdd)
+	a.registry.Register("update", a.getToolInstruction("update", UpdateInstruction), "(store: string, key: any, value: any)", a.toolUpdate)
+	a.registry.Register("delete", a.getToolInstruction("delete", DeleteInstruction), "(store: string, key: any)", a.toolDelete)
+	a.registry.Register("manage_transaction", a.getToolInstruction("manage_transaction", ManageTransactionInstruction), "(action: string)", a.toolManageTransaction)
 
 	// The Core Engine
 	a.registry.Register("execute_script", a.getToolInstruction("execute_script", ExecuteScriptInstruction), "(script: Array<{op: string, args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
 
 	// Self-Correction Tools
-	a.registry.Register("manage_knowledge", "Manages the AI's long-term knowledge base. Use this to save or retrieve learned information about tools, business terms, schemas, or general memory. Namespaces: 'tool' (tool instructions), 'term' (business terms), 'schema' (database schemas), 'memory' (general). Action: 'upsert' or 'delete'.", "(namespace: string, key: string, value: string, action: string)", a.toolManageKnowledge)
+	a.registry.Register("manage_knowledge", "Manages the AI's long-term knowledge base. Use this to save, retrieve, or list learned information. Namespaces organize knowledge (e.g. 'term', 'tool', 'finance', 'project_alpha'). Action: 'upsert', 'delete', 'read', 'list'. For 'list', key is ignored.", "(namespace: string, key: string, value: string, action: string)", a.toolManageKnowledge)
+
+	// Conversation Management
+	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", "(summary: string, topic_label: string)", a.toolConcludeTopic)
 }
 func (a *DataAdminAgent) getToolInstruction(toolName, defaultInst string) string {
 	if a.systemDB == nil {
@@ -122,14 +137,15 @@ func (a *DataAdminAgent) getToolInstruction(toolName, defaultInst string) string
 
 	// Open the store
 	// Use core.OpenBtree to access raw B-Tree store
-	store, err := core.OpenBtree[string, string](context.Background(), a.systemDB.Options(), "llm_knowledge", tx, nil)
+	// Refactored to use KnowledgeKey and v2 store
+	store, err := core.OpenBtree[KnowledgeKey, string](context.Background(), a.systemDB.Options(), "llm_knowledge", tx, nil)
 	if err != nil {
 		// This is expected if the store hasn't been created yet or isn't compatible
 		return defaultInst
 	}
 
 	// Look up the instruction using the "tool" namespace
-	found, err := store.Find(context.Background(), "tool:"+toolName, false)
+	found, err := store.Find(context.Background(), KnowledgeKey{Category: "tool", Name: toolName}, false)
 	if err != nil || !found {
 		return defaultInst
 	}
@@ -139,6 +155,11 @@ func (a *DataAdminAgent) getToolInstruction(toolName, defaultInst string) string
 		return defaultInst
 	}
 	return val
+}
+
+// toolConcludeTopic is a placeholder. The actual logic requires Session access and is handled/overridden in Service.
+func (a *DataAdminAgent) toolConcludeTopic(ctx context.Context, args map[string]interface{}) (string, error) {
+	return "Topic concluded.", nil
 }
 
 func (a *DataAdminAgent) getSystemInstructions(defaultInst string) string {
@@ -154,13 +175,13 @@ func (a *DataAdminAgent) getSystemInstructions(defaultInst string) string {
 	defer tx.Rollback(context.Background())
 
 	// Open the store
-	store, err := core.OpenBtree[string, string](context.Background(), a.systemDB.Options(), "llm_knowledge", tx, nil)
+	store, err := core.OpenBtree[KnowledgeKey, string](context.Background(), a.systemDB.Options(), "llm_knowledge", tx, nil)
 	if err != nil {
 		return defaultInst
 	}
 
 	// Look up the instruction using the "memory" namespace
-	found, err := store.Find(context.Background(), "memory:system_prompt", false)
+	found, err := store.Find(context.Background(), KnowledgeKey{Category: "memory", Name: "system_prompt"}, false)
 	if err != nil || !found {
 		return defaultInst
 	}
@@ -308,53 +329,82 @@ func (a *DataAdminAgent) toolManageKnowledge(ctx context.Context, args map[strin
 	}
 
 	// Validate namespace
-	if namespace != "tool" && namespace != "term" && namespace != "schema" && namespace != "memory" {
-		return "", fmt.Errorf("invalid namespace '%s'. Must be one of: tool, term, schema, memory", namespace)
+	if namespace == "" {
+		return "", fmt.Errorf("namespace is required")
 	}
-
-	fullKey := namespace + ":" + key
 
 	// Start a read-write transaction
 	tx, err := a.systemDB.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		return "", fmt.Errorf("failed to start transaction: %w", err)
 	}
-	// Use manual commit/rollback
 	defer func() {
 		if tx.HasBegun() {
 			tx.Rollback(ctx)
 		}
 	}()
 
-	// Open the store
-	store, err := core.OpenBtree[string, string](ctx, a.systemDB.Options(), "llm_knowledge", tx, nil)
+	// Open the Knowledge Store
+	ks, err := OpenKnowledgeStore(ctx, tx, a.systemDB.Options())
 	if err != nil {
-		return "", fmt.Errorf("failed to open llm_knowledge store: %w", err)
+		return "", fmt.Errorf("failed to open knowledge store: %w", err)
 	}
 
 	var resultMsg string
 
 	if action == "delete" {
-		if ok, err := store.Remove(ctx, fullKey); err != nil {
-			return "", fmt.Errorf("failed to remove key '%s': %w", fullKey, err)
+		if ok, err := ks.Remove(ctx, namespace, key); err != nil {
+			return "", fmt.Errorf("failed to remove key '%s/%s': %w", namespace, key, err)
 		} else if !ok {
-			return fmt.Sprintf("Key '%s' not found, nothing to delete.", fullKey), nil
+			return fmt.Sprintf("Key '%s/%s' not found, nothing to delete.", namespace, key), nil
 		}
-		resultMsg = fmt.Sprintf("Successfully removed knowledge for '%s'.", fullKey)
+		resultMsg = fmt.Sprintf("Successfully removed knowledge for '%s/%s'.", namespace, key)
+	} else if action == "read" || action == "get" {
+		val, found, err := ks.Get(ctx, namespace, key)
+		if err != nil {
+			return "", fmt.Errorf("failed to read key '%s/%s': %w", namespace, key, err)
+		} else if !found {
+			return fmt.Sprintf("Key '%s/%s' not found.", namespace, key), nil
+		}
+		resultMsg = fmt.Sprintf("Knowledge '%s/%s':\n%s", namespace, key, val)
+	} else if action == "list" {
+		// List all keys in the namespace
+		items, err := ks.ListContent(ctx, namespace)
+		if err != nil {
+			return "", fmt.Errorf("failed to list knowledge: %w", err)
+		}
+
+		var sb strings.Builder
+		sb.WriteString(fmt.Sprintf("Keys in namespace '%s':\n", namespace))
+
+		if len(items) == 0 {
+			sb.WriteString("(No keys found)")
+		} else {
+			// Sort keys for deterministic output? ListContent comes from B-Tree so it might be sorted by name already if ListContent iterates.
+			// Actually the map iteration order is random. We should probably return a sorted list from ListContent or sort here.
+			// Let's just iterate the map, random order is fine for LLM usually, but sorted is better.
+			// ListContent in knowledge.go iterates B-Tree so keys are read in order, but put into map.
+			// Optimization: ListContent should probably return sorted slice.
+			// For now, let's just dump.
+			for k, v := range items {
+				// Truncate value
+				shortVal := v
+				if len(shortVal) > 50 {
+					shortVal = shortVal[:47] + "..."
+				}
+				sb.WriteString(fmt.Sprintf("- %s: %s\n", k, shortVal))
+			}
+		}
+		resultMsg = sb.String()
 	} else {
 		// Default to upsert
 		if value == "" {
 			return "", fmt.Errorf("argument 'value' is required for upsert action")
 		}
-		if ok, err := store.Upsert(ctx, fullKey, value); err != nil {
-			return "", fmt.Errorf("failed to upsert knowledge for '%s': %w", fullKey, err)
-		} else if !ok {
-			// fallback if upsert returns false for some reason, though usually it returns true or error
-			if _, err := store.Add(ctx, fullKey, value); err != nil {
-				return "", fmt.Errorf("failed to add knowledge for '%s': %w", fullKey, err)
-			}
+		if err := ks.Upsert(ctx, namespace, key, value); err != nil {
+			return "", fmt.Errorf("failed to upsert knowledge for '%s/%s': %w", namespace, key, err)
 		}
-		resultMsg = fmt.Sprintf("Successfully saved knowledge for '%s'.", fullKey)
+		resultMsg = fmt.Sprintf("Successfully saved knowledge for '%s/%s'.", namespace, key)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

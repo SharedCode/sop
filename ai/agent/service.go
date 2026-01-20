@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	log "log/slog"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/obfuscation"
+	sopdb "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/search"
 )
 
@@ -26,6 +28,8 @@ type Service struct {
 	pipeline          []PipelineStep
 	registry          map[string]ai.Agent[map[string]any]
 	EnableObfuscation bool
+	// Feature Flags
+	EnableHistoryInjection bool
 
 	// Session State
 	session *RunnerSession
@@ -37,15 +41,107 @@ var _ ai.ScriptRecorder = (*Service)(nil)
 // NewService creates a new agent service for a specific domain.
 func NewService(domain ai.Domain[map[string]any], systemDB *database.Database, databases map[string]sop.DatabaseOptions, generator ai.Generator, pipeline []PipelineStep, registry map[string]ai.Agent[map[string]any], enableObfuscation bool) *Service {
 	return &Service{
-		domain:            domain,
-		systemDB:          systemDB,
-		databases:         databases,
-		generator:         generator,
-		pipeline:          pipeline,
-		registry:          registry,
-		EnableObfuscation: enableObfuscation,
-		session:           NewRunnerSession(),
+		domain:                 domain,
+		systemDB:               systemDB,
+		databases:              databases,
+		generator:              generator,
+		pipeline:               pipeline,
+		registry:               registry,
+		EnableObfuscation:      enableObfuscation,
+		EnableHistoryInjection: false, // Default to OFF for simple machine mode (can be enabled via config)
+		session:                NewRunnerSession(),
 	}
+}
+
+// SetFeature allows toggling of agent features at runtime.
+func (s *Service) SetFeature(feature string, enabled bool) {
+	switch feature {
+	case "history_injection":
+		s.EnableHistoryInjection = enabled
+	case "obfuscation":
+		s.EnableObfuscation = enabled
+	}
+}
+
+// TopicAssessment is the structure returned by the generic router.
+type TopicAssessment struct {
+	IsNewTopic    bool   `json:"is_new_topic"`
+	TopicUUID     string `json:"topic_uuid,omitempty"` // If not new, the UUID of the existing graph
+	NewTopicLabel string `json:"new_topic_label,omitempty"`
+	Reasoning     string `json:"reasoning"`
+}
+
+// identifyTopic determines if the query belongs to an existing conversation graph or starts a new one.
+func (s *Service) identifyTopic(ctx context.Context, query string) (*TopicAssessment, error) {
+	if s.session.Memory == nil || len(s.session.Memory.Threads) == 0 {
+		return &TopicAssessment{IsNewTopic: true, Reasoning: "No history exists."}, nil
+	}
+
+	// Prepare list of recent topics
+	var summaries []string
+	for i := len(s.session.Memory.Order) - 1; i >= 0; i-- {
+		id := s.session.Memory.Order[i]
+		thread := s.session.Memory.Threads[id]
+		// Get last interaction
+		lastMsg := ""
+		if len(thread.Exchanges) > 0 {
+			lastMsg = thread.Exchanges[len(thread.Exchanges)-1].Content
+			if len(lastMsg) > 50 {
+				lastMsg = lastMsg[:50] + "..."
+			}
+		}
+		statusSuffix := ""
+		if thread.Status == "concluded" {
+			statusSuffix = " [CONCLUDED]"
+		}
+		summaries = append(summaries, fmt.Sprintf("- ID: %s | Label: %s%s | Last Msg: %s", thread.ID, thread.Label, statusSuffix, lastMsg))
+	}
+	topicsBlock := strings.Join(summaries, "\n")
+
+	prompt := fmt.Sprintf(`You are a conversation manager. Analyze the User Query and decide if it is a follow-up to an existing topic or a new topic.
+Existing Topics (Most Recent First):
+%s
+
+User Query: "%s"
+
+Instructions:
+1. If the query strictly refers to the context of a previous topic (e.g. "change it to blue", "what about the other one?"), select that Topic ID.
+2. If the query starts a completely new subject, mark as New Topic.
+3. Provide a JSON response.
+
+Format:
+{
+  "is_new_topic": true/false,
+  "topic_uuid": "UUID-STRING",
+  "new_topic_label": "Short Label if new",
+  "reasoning": "Short explanation"
+}
+`, topicsBlock, query)
+
+	// Combine instructions into the prompt since GenOptions doesn't support SystemPrompt
+	fullPrompt := "Answer in strict JSON.\n" + prompt
+
+	output, err := s.generator.Generate(ctx, fullPrompt, ai.GenOptions{
+		Temperature: 0.1, // Deterministic
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Sanitize JSON
+	jsonStr := strings.TrimSpace(output.Text)
+	jsonStr = strings.TrimPrefix(jsonStr, "```json")
+	jsonStr = strings.TrimPrefix(jsonStr, "```")
+	jsonStr = strings.TrimSuffix(jsonStr, "```")
+
+	var assessment TopicAssessment
+	if err := json.Unmarshal([]byte(jsonStr), &assessment); err != nil {
+		// Fallback if JSON fails
+		log.Warn("Failed to parse topic assessment JSON", "error", err, "response", output.Text)
+		return &TopicAssessment{IsNewTopic: true, Reasoning: "JSON parse failure"}, nil
+	}
+
+	return &assessment, nil
 }
 
 // Open initializes the agent service.
@@ -112,6 +208,16 @@ func (s *Service) Open(ctx context.Context) error {
 
 // Close cleans up the agent service.
 func (s *Service) Close(ctx context.Context) error {
+	// We no longer clear the Memory here to support cross-request short-term memory (Conversation Graphs).
+	// The LRU limit (20 items) prevents unbounded growth.
+	if s.session != nil {
+		s.session.Variables = nil
+		s.session.CurrentScript = nil
+		// s.session.LastStep = nil // Preserved for /last-tool
+		// s.session.LastInteractionToolCalls = nil // Preserved for /last-tool
+		s.session.PendingRefinement = nil
+	}
+
 	p := ai.GetSessionPayload(ctx)
 	if p == nil || p.Transaction == nil {
 		return nil
@@ -378,13 +484,13 @@ func (s *Service) RecordStep(ctx context.Context, step ai.ScriptStep) {
 	// Debug: Log what we are recording
 	if step.Type == "command" {
 		if script, ok := step.Args["script"]; ok {
-			log.Debug(fmt.Sprintf("Service.RecordStep: Recording script. Type: %T, Value: %+v", script, script))
+			log.Debug(fmt.Sprintf("Service.RecordStep: Drafting script. Type: %T, Value: %+v", script, script))
 		} else {
 			keys := make([]string, 0, len(step.Args))
 			for k := range step.Args {
 				keys = append(keys, k)
 			}
-			log.Debug(fmt.Sprintf("Service.RecordStep: Recording command '%s' without script. Args keys: %v", step.Command, keys))
+			log.Debug(fmt.Sprintf("Service.RecordStep: Drafting command '%s' without script. Args keys: %v", step.Command, keys))
 		}
 	}
 
@@ -397,7 +503,7 @@ func (s *Service) RecordStep(ctx context.Context, step ai.ScriptStep) {
 	// Always capture the last step for potential manual addition
 	s.session.LastStep = &step
 
-	// If we are actively recording a script, append the step
+	// If we are actively drafting a script, append the step
 	if s.session.CurrentScript != nil {
 		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, step)
 		log.Debug("Service.RecordStep: Appended step to CurrentScript", "script_name", s.session.CurrentScript.Name, "step_count", len(s.session.CurrentScript.Steps))
@@ -436,8 +542,236 @@ func (s *Service) saveScript(ctx context.Context, script ai.Script) error {
 	return tx.Commit(ctx)
 }
 
+func (s *Service) getLLMKnowledge(ctx context.Context) string {
+	if s.systemDB == nil {
+		return ""
+	}
+	// Use a short-lived read transaction
+	tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		return ""
+	}
+	defer tx.Rollback(ctx)
+
+	var sb strings.Builder
+
+	// Open Knowledge Store
+	ks, err := OpenKnowledgeStore(ctx, tx, s.systemDB.Options())
+	if err != nil {
+		return ""
+	}
+
+	// SCALABILITY FIX: Instead of loading everything, we only load "Core" namespaces.
+	// We load 'memory' (General instructions) and 'term' (Business glossary).
+	// Other namespaces (like 'schema' or domain-specifics) must be requested by the agent via tools.
+
+	namespacesToLoad := []string{"memory", "term"}
+
+	// SCALABILITY FIX 2: Load Semantic Memory namespaces
+	semanticNamespaces := []string{"vocabulary", "rule", "correction"}
+
+	// Add current DB domain if applicable
+	if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
+		// e.g. "finance" for "finance_db"
+		// Simple heuristic: usage of db name as namespace
+		namespacesToLoad = append(namespacesToLoad, p.CurrentDB)
+	}
+
+	sb.WriteString("\n[Global Instructions/Knowledge]\n")
+
+	for _, ns := range namespacesToLoad {
+		// ListContent is optimized to only scan the namespace
+		items, _ := ks.ListContent(ctx, ns)
+		if len(items) > 0 {
+			for k, v := range items {
+				// Format: "term:EBITDA: ..."
+				sb.WriteString(fmt.Sprintf("%s:%s:\n%s\n\n", ns, k, v))
+			}
+		}
+	}
+
+	// [Semantic Memory Injection]
+	// We explicitly format these for the LLM to use as rules, rather than raw dumps.
+	didHeader := false
+	for _, ns := range semanticNamespaces {
+		items, _ := ks.ListContent(ctx, ns)
+		if len(items) > 0 {
+			if !didHeader {
+				sb.WriteString("\n[Semantic Memory & Rules]\n(You MUST apply these mappings and rules when interpreting queries)\n")
+				didHeader = true
+			}
+			for k, v := range items {
+				// Try to parse JSON for cleaner display, otherwise fallback to raw
+				var parsed map[string]any
+				if err := json.Unmarshal([]byte(v), &parsed); err == nil {
+					// Format based on namespace
+					if ns == "vocabulary" {
+						target, _ := parsed["target"].(string)
+						desc, _ := parsed["description"].(string)
+						sb.WriteString(fmt.Sprintf("- Term '%s' -> Maps to field: '%s' (%s)\n", k, target, desc))
+					} else if ns == "rule" {
+						cond, _ := parsed["condition"].(string)
+						desc, _ := parsed["description"].(string)
+						sb.WriteString(fmt.Sprintf("- Rule '%s': Apply condition \"%s\" (%s)\n", k, cond, desc))
+					} else if ns == "correction" {
+						instr, _ := parsed["instruction"].(string)
+						sb.WriteString(fmt.Sprintf("- Correction '%s': %s\n", k, instr))
+					} else {
+						sb.WriteString(fmt.Sprintf("- %s:%s: %s\n", ns, k, v))
+					}
+				} else {
+					// Fallback for non-JSON strings
+					sb.WriteString(fmt.Sprintf("- %s:%s: %s\n", ns, k, v))
+				}
+			}
+		}
+	}
+
+	// Add tip about how to get more
+	sb.WriteString("Note: Extended knowledge (schemas, other domains) is available via 'manage_knowledge' tool (action='read' or search).\n")
+
+	return sb.String()
+}
+
+func (s *Service) getDomainKnowledge(ctx context.Context, dbName string) string {
+	if dbName == "" || dbName == "system" || dbName == "SystemDB" {
+		return ""
+	}
+	opts, ok := s.databases[dbName]
+	if !ok {
+		return ""
+	}
+	// Temporarily open DB? Or assuming it's accessible.
+	// database.NewDatabase(opts) creates a handler.
+	db := database.NewDatabase(opts)
+
+	// Use a short-lived read transaction
+	tx, err := db.BeginTransaction(ctx, sop.NoCheck)
+	if err != nil {
+		return ""
+	}
+	defer tx.Rollback(ctx)
+
+	store, err := sopdb.OpenBtree[string, string](ctx, db.Options(), "domain_knowledge", tx, nil)
+	if err != nil {
+		return ""
+	}
+
+	var sb strings.Builder
+	if ok, err := store.First(ctx); ok && err == nil {
+		sb.WriteString(fmt.Sprintf("\n[Domain Knowledge (%s)]\n", dbName))
+		for {
+			item := store.GetCurrentKey()
+			k := item.Key
+			v, _ := store.GetCurrentValue(ctx)
+			sb.WriteString(fmt.Sprintf("%s:\n%s\n\n", k, v))
+
+			if ok, _ := store.Next(ctx); !ok {
+				break
+			}
+		}
+	}
+	return sb.String()
+}
+
+func (s *Service) getToolInfo(ctx context.Context, toolName string) (string, error) {
+	if s.systemDB == nil {
+		return "", fmt.Errorf("system DB not available")
+	}
+	tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+
+	store, err := sopdb.OpenBtree[KnowledgeKey, string](ctx, s.systemDB.Options(), "llm_knowledge", tx, nil)
+	if err != nil {
+		return "", err
+	}
+
+	if found, err := store.Find(ctx, KnowledgeKey{Category: "tool", Name: toolName}, false); found && err == nil {
+		val, err := store.GetCurrentValue(ctx)
+		if err != nil {
+			return "", err
+		}
+		return val, nil
+	}
+	return "", fmt.Errorf("tool info for '%s' not found", toolName)
+}
+
+// registerTools sets up the tools available to the LLM.
+func (s *Service) registerTools() {
+	if s.registry == nil {
+		return
+	}
+	// We inject `conclude_topic` by directly defining it in the interface.
+	// Since s.registry is map[string]ai.Agent (where ai.Agent is an interface),
+	// this approach (editing registry from service) assumes Service *owns* the orchestration.
+	// However, `ai.Agent` interface expects `Execute` method.
+	// We need a wrapper.
+
+	// Create a wrapper agent for ad-hoc service tools
+	s.registry["conclude_topic"] = &AdHocAgent{
+		Name: "conclude_topic",
+		Handler: func(ctx context.Context, args map[string]interface{}) (string, error) {
+			return s.handleConcludeTopic(ctx, args)
+		},
+	}
+}
+
+// AdHocAgent implements ai.Agent for simple function wrappers
+type AdHocAgent struct {
+	Name    string
+	Handler func(ctx context.Context, args map[string]interface{}) (string, error)
+}
+
+// Implement ai.Agent[map[string]any] interface
+func (a *AdHocAgent) Open(ctx context.Context) error  { return nil }
+func (a *AdHocAgent) Close(ctx context.Context) error { return nil }
+func (a *AdHocAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
+	return nil, nil
+}
+func (a *AdHocAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+	return "", nil
+}
+
+// Implement ToolProvider interface
+func (a *AdHocAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	if toolName == a.Name {
+		return a.Handler(ctx, args)
+	}
+	return "", fmt.Errorf("unknown tool: %s", toolName)
+}
+
+// handleConcludeTopic implements the session-aware topic conclusion.
+func (s *Service) handleConcludeTopic(ctx context.Context, args map[string]interface{}) (string, error) {
+	summary, _ := args["summary"].(string)
+	label, _ := args["topic_label"].(string)
+
+	if summary == "" {
+		return "", fmt.Errorf("summary is required")
+	}
+
+	if s.session.Memory == nil || len(s.session.Memory.CurrentThreadID) == 0 {
+		return "No active topic to conclude.", nil
+	}
+
+	thread := s.session.Memory.GetCurrentThread()
+	if thread == nil {
+		return "Current topic not found.", nil
+	}
+
+	thread.Conclusion = summary
+	thread.Status = "concluded"
+	if label != "" {
+		thread.Label = label
+	}
+
+	return fmt.Sprintf("Topic '%s' concluded. Summary saved: %s", thread.Label, summary), nil
+}
+
 func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
-	// Ensure statelessness for non-playback sessions (Interactive & Recording)
+	// Ensure statelessness for non-playback sessions (Interactive & Drafting)
 	defer func() {
 		if s.GetSessionMode() != SessionModePlayback && s.session.Transaction != nil {
 			// Rollback if not committed (safety)
@@ -529,7 +863,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	ctx = context.WithValue(ctx, ai.CtxKeyScriptRecorder, s)
 
 	// Capture "ask" step for potential manual addition
-	// We do this BEFORE handling /record or /play so those commands themselves aren't captured as "ask" steps
+	// We do this BEFORE handling /create or /play so those commands themselves aren't captured as "ask" steps
 	// We explicitly exclude "last-tool" and any slash commands from being recorded as user intent.
 	if !strings.HasPrefix(query, "/") && query != "last-tool" {
 		s.RecordStep(ctx, ai.ScriptStep{
@@ -538,17 +872,17 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		})
 	}
 
-	// Handle Session Commands (Scripts, Recording, etc.)
+	// Handle Session Commands (Scripts, Drafting, etc.)
 	if resp, handled, err := s.handleSessionCommand(ctx, query, db); handled {
 		return resp, err
 	}
 
-	// If we are recording, we do NOT want to execute the query against the LLM if it's a transaction command
+	// If we are drafting, we do NOT want to execute the query against the LLM if it's a transaction command
 	// that was handled by the tool but skipped execution.
 	// However, the tool execution happens inside the LLM loop (or via direct tool call if we supported that).
 	// Since we are using an LLM, we must let it run.
 	// But wait, if the user says "begin transaction", the LLM will call the tool.
-	// The tool will see the recorder and return "Recorded...".
+	// The tool will see the recorder and return "recorded...".
 	// The LLM will then see that output and likely say "I have recorded the transaction start".
 	// This is fine.
 
@@ -570,7 +904,42 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		return resp, err
 	}
 
+	// Ensure tools are registered (session specific registration)
+	s.registerTools()
+
+	// 0.5 Topic Identification / Routing (STM)
+	var topicAssessment *TopicAssessment
+	// Only run identification if we have history AND history injection is enabled.
+	// If injection is disabled, we must not send history summaries to the LLM (side-channel leak).
+	if s.EnableHistoryInjection && s.session.Memory != nil {
+		// Only run identification if we have history
+		assessment, err := s.identifyTopic(ctx, query)
+		if err != nil {
+			log.Warn("Topic identification failed, defaulting to new topic", "error", err)
+			topicAssessment = &TopicAssessment{IsNewTopic: true}
+		} else {
+			topicAssessment = assessment
+		}
+
+		// Apply STM Logic: Promote existing thread if identified
+		if !topicAssessment.IsNewTopic && topicAssessment.TopicUUID != "" {
+			topicID, err := sop.ParseUUID(topicAssessment.TopicUUID)
+			if err == nil {
+				s.session.Memory.PromoteThread(topicID)
+			}
+		}
+	} else {
+		// Initialize memory if missing (defensive)
+		s.session.Memory = NewShortTermMemory()
+		topicAssessment = &TopicAssessment{IsNewTopic: true}
+	}
+
 	// 1. Search for context
+	// We must ensure that s.Search(term) does not return "User1, User2" from previous run.
+	// Since Search uses s.domain, and we inject a mock domain or real one:
+	// If the domain is just a vector store, it returns unrelated text.
+	// But if the "history" or "recent output" is being indexed...
+
 	hits, err := s.Search(ctx, query, 10)
 	if err != nil {
 		return "", fmt.Errorf("retrieval failed: %w", err)
@@ -583,15 +952,107 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		systemPrompt, _ = s.domain.Prompt(ctx, "system")
 	}
 
-	// If obfuscation is enabled, we should obfuscate the context too.
-	// This ensures that if the vector store returns real names, they are hidden from the LLM.
-	if s.EnableObfuscation {
-		contextText = obfuscation.GlobalObfuscator.ObfuscateText(contextText)
+	// 2a. Inject LLM Knowledge (Lifecycle "On Init" simulation)
+	if known := s.getLLMKnowledge(ctx); known != "" {
+		systemPrompt = fmt.Sprintf("%s\n\n%s", systemPrompt, known)
 	}
 
-	fullPrompt := fmt.Sprintf("%s\n\nContext:\n%s\n\nUser Query: %s", systemPrompt, contextText, query)
-	if s.EnableObfuscation {
+	// 2b. Inject Domain Knowledge (Lifecycle "On Init" simulation)
+	currentDBName := ""
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		currentDBName = p.CurrentDB
+	} else {
+		currentDBName = s.session.CurrentDB
 	}
+	if forcedDBName != "" {
+		currentDBName = forcedDBName
+	}
+	if domainKnown := s.getDomainKnowledge(ctx, currentDBName); domainKnown != "" {
+		systemPrompt = fmt.Sprintf("%s\n\n%s", systemPrompt, domainKnown)
+	}
+
+	// 2c. Tool Usage Hint for Knowledge Retrieval
+	systemPrompt = fmt.Sprintf("%s\n\n[Tool Usage Note]\nYou can use the tool \"gettoolinfo\" with argument \"tool\" (e.g., \"gettoolinfo('execute_script')\") to get detailed usage instructions for any tool if you are unsure about its parameters or behavior.", systemPrompt)
+
+	// [Managed Conversation Protocol]
+	conversationProtocol := `
+[Conversation Management]
+You are capable of managing the conversation flow.
+- A "Conversation Thread" tracks the current topic.
+- When an issue is resolved, or a significant sub-task is completed, and you are ready to switch context, use the 'conclude_topic(summary, topic_label)' tool.
+- This helps cleaner context management.
+`
+	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, conversationProtocol)
+
+	// [Active Learning Protocol]
+	learningProtocol := `
+[Active Learning & Refinement Protocol]
+You are a self-correcting agent. If the user corrects your output, provides a definition, or establishes a preference (e.g., "Use 'Client' instead of 'User'", "Always check X before Y"):
+1. ACKNOWLEDGE the correction.
+2. IMMEDIATELY use the 'manage_knowledge' tool to save this rule for future consistency.
+   - For synonyms/renaming: Use namespace="vocabulary", key="term_name", value={"target": "preferred_term", "type": "synonym"}.
+   - For logic/process rules: Use namespace="rule", key="rule_name", value={"condition": "context description", "instruction": "the rule content"}.
+   - For fixing mistakes: Use namespace="correction", key="error_name", value={"error": "what you did wrong", "fix": "what to do instead"}.
+3. CONFIRM to the user that this has been memorized.
+   Example: "I have updated my knowledge base: 'Cost' will now be interpreted as 'TotalAmount'."
+`
+	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, learningProtocol)
+
+	// [Regression Fix]
+	// If EnableHistoryInjection is false, we should also ensure that formatContext
+	// didn't accidentally include history-like artifacts if they were in the "hits".
+	// But more importantly, check if we accidentally appended historyText anyway.
+	var historyText string
+	if s.EnableHistoryInjection && s.session.Memory != nil && len(s.session.Memory.Order) > 0 {
+		var historyBuilder strings.Builder
+		// Iterate through threads in order
+		for _, threadID := range s.session.Memory.Order {
+			thread, ok := s.session.Memory.Threads[threadID]
+			if !ok {
+				continue
+			}
+
+			// Format Header
+			historyBuilder.WriteString(fmt.Sprintf("\n--- Conversation Thread: %s ---\n", thread.Label))
+			if thread.Category != "" {
+				historyBuilder.WriteString(fmt.Sprintf("Category: %s\n", thread.Category))
+			}
+			if thread.ContextNotes != "" {
+				historyBuilder.WriteString(fmt.Sprintf("Context: %s\n", thread.ContextNotes))
+			}
+
+			// Format Body (Exchanges)
+			historyBuilder.WriteString(fmt.Sprintf("Root: %s\n", thread.RootPrompt))
+			for _, interaction := range thread.Exchanges {
+				roleName := "User"
+				if interaction.Role == RoleAssistant {
+					roleName = "Assistant"
+				} else if interaction.Role == RoleSystem {
+					roleName = "System"
+				}
+				historyBuilder.WriteString(fmt.Sprintf("%s: %s\n", roleName, interaction.Content))
+			}
+
+			// Format Conclusion
+			if thread.Conclusion != "" {
+				historyBuilder.WriteString(fmt.Sprintf("Conclusion: %s\n", thread.Conclusion))
+			}
+			historyBuilder.WriteString("--------------------------------\n")
+		}
+
+		historyText = historyBuilder.String()
+		if historyText != "" {
+			historyText = "\n\n[Existing Conversation Threads]\n" + historyText
+		}
+	}
+
+	fullPrompt := fmt.Sprintf("%s\n\nContext:\n%s%s\n\nUser Query: %s", systemPrompt, contextText, historyText, query)
+	if s.EnableObfuscation {
+		// Log?
+	}
+
+	// DEBUG: Log the full prompt to understand context contamination
+	log.Info("Service.Ask: Full Prompt", "prompt", fullPrompt)
 
 	// 3. Determine Generator
 	gen := s.generator
@@ -640,7 +1101,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	// Check for Raw Tool Call (from DataAdmin or similar generators)
 	if output.Raw != nil {
 		if _, err := json.Marshal(output.Raw); err == nil {
-			// REMOVED: Recording Logic for Raw Tool Call
+			// REMOVED: Drafting Logic for Raw Tool Call
 			toolRecorded = true
 		}
 	}
@@ -788,6 +1249,42 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 					return "", fmt.Errorf("tool execution failed: %w", err)
 				}
 
+				// [Fix] Update Memory Context (Prevent Amnesia on Tool Execution)
+				// We must record the interaction even if it was a direct tool execution.
+				if s.session.Memory != nil {
+					thread := s.session.Memory.GetCurrentThread()
+					// If new topic or no thread active, create one
+					if topicAssessment.IsNewTopic || thread == nil {
+						newID := sop.NewUUID()
+						newThread := &ConversationThread{
+							ID:     newID,
+							Label:  topicAssessment.NewTopicLabel,
+							Status: "active",
+						}
+						if newThread.Label == "" {
+							newThread.Label = "Conversation"
+						}
+						// Capture Root Prompt
+						newThread.RootPrompt = query
+
+						s.session.Memory.AddThread(newThread)
+						s.session.Memory.PromoteThread(newID)
+						thread = newThread
+					}
+
+					thread.Exchanges = append(thread.Exchanges, Interaction{
+						Role:      RoleUser,
+						Content:   query,
+						Timestamp: time.Now().Unix(),
+					})
+
+					thread.Exchanges = append(thread.Exchanges, Interaction{
+						Role:      RoleAssistant,
+						Content:   fmt.Sprintf("Tool '%s' executed.\nResult: %s", toolCall.Tool, result),
+						Timestamp: time.Now().Unix(),
+					})
+				}
+
 				return result, nil
 			}
 
@@ -812,6 +1309,59 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		}
 		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, *s.session.LastStep)
 	}
+
+	// Update Session Memory (Structured)
+	// We rely on the TopicAssessment performed at the start of the request.
+
+	// If assessment said New Topic, we create one.
+	// If assessment said Existing Topic, PromoteThread was already called, so CurrentThreadID is set.
+
+	var currentThread *ConversationThread
+
+	// Defensive check: If IdentifyTopic selected a thread that doesn't exist (hallucination?), force new.
+	if !topicAssessment.IsNewTopic && topicAssessment.TopicUUID != "" {
+		currentThread = s.session.Memory.GetCurrentThread()
+		// If nil, it means the ID was invalid or not found, fall back to new.
+	}
+
+	if currentThread == nil {
+		newThreadID := sop.NewUUID()
+		label := "New Topic"
+		if topicAssessment.NewTopicLabel != "" {
+			label = topicAssessment.NewTopicLabel
+		} else if len(query) > 0 {
+			label = query[:min(len(query), 20)] + "..."
+		}
+
+		newThread := &ConversationThread{
+			ID:         newThreadID,
+			RootPrompt: query,
+			Label:      label,
+			Category:   "General",
+			Exchanges:  make([]Interaction, 0),
+			Status:     "active",
+		}
+		s.session.Memory.AddThread(newThread)
+		currentThread = newThread
+	}
+
+	// Add User Interaction
+	currentThread.Exchanges = append(currentThread.Exchanges, Interaction{
+		Role:      RoleUser,
+		Content:   query,
+		Timestamp: time.Now().Unix(),
+	})
+
+	// Add Assistant Interaction
+	assistantContent := finalText
+	if toolRecorded {
+		assistantContent = fmt.Sprintf("(Tool Execution) %s", finalText)
+	}
+	currentThread.Exchanges = append(currentThread.Exchanges, Interaction{
+		Role:      RoleAssistant,
+		Content:   assistantContent,
+		Timestamp: time.Now().Unix(),
+	})
 
 	return finalText, nil
 }

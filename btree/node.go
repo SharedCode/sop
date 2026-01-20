@@ -62,6 +62,9 @@ type Node[TK Ordered, TV any] struct {
 	indexOfNode int
 }
 
+// Default Slot Length is 2000.
+const DefaultSlotLength = 2000
+
 // GetID returns the node's UUID.
 func (n *Node[TK, TV]) GetID() sop.UUID {
 	return n.ID

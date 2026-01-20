@@ -515,9 +515,18 @@
                     </select>
                 </div>
             </div>
-            <div class="form-group">
+            <div class="form-group" id="new-db-code-path-group">
                 <label>Data Path <span style="color:red">*</span></label>
-                <input type="text" id="new-db-path" placeholder="/var/lib/sop/data">
+                <div style="display: flex; gap: 10px; align-items: center;">
+                    <input type="text" id="new-db-path" placeholder="/var/lib/sop/data" style="flex: 1;">
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px; margin-top: 5px; font-size: 0.9em;">
+                     <input type="checkbox" id="new-db-use-shared" onchange="toggleNewDbShared()">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2" style="color: var(--text-muted);"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
+                     <label for="new-db-use-shared" style="cursor: pointer; color: var(--text-color);">
+                         Use <strong>Shared DB</strong> (Existing Data)
+                     </label>
+                 </div>
             </div>
             <div class="form-group" id="new-db-conn-group" style="display: none;">
                 <label>Redis Connection URL</label>
@@ -595,7 +604,16 @@
         </div>
         <div class="modal-body">
             <p>Are you sure you want to delete the database: <strong id="delete-db-target-name"></strong>?</p>
-            <p style="color: var(--danger-bg); font-size: 0.9em;">This action cannot be undone. All data in this database will be lost.</p>
+            
+            <div style="background: rgba(255,0,0,0.1); padding: 10px; border-left: 3px solid var(--danger-bg); margin-top: 15px; margin-bottom: 15px;">
+                <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; user-select: none;">
+                    <input type="checkbox" id="delete-db-data-check" style="margin-top: 4px;" checked> 
+                    <div>
+                        <strong>Delete Data Files?</strong><br>
+                        <span style="font-size: 0.9em; color: var(--text-color);">Uncheck this to keep the data folder on disk (e.g. for other environments).</span>
+                    </div>
+                </label>
+            </div>
             
             <div class="form-group" style="margin-top: 15px;">
                 <label>Type the database name to confirm:</label>
@@ -674,14 +692,26 @@
             <p><strong>Warning:</strong> You are about to uninstall the SOP Data Manager configuration.</p>
             <p>This will reset the server to its initial state, allowing you to re-configure it (e.g., for a different environment like Prod/QA).</p>
             
-            <div style="background: rgba(255,0,0,0.1); padding: 10px; border-left: 3px solid var(--danger-bg); margin-top: 15px;">
-                <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; user-select: none;">
-                    <input type="checkbox" id="uninstall-delete-data" style="margin-top: 4px;"> 
-                    <div>
-                        <strong>Delete All Data?</strong><br>
-                        <span style="font-size: 0.9em; color: var(--text-color);">Check this to permanently delete all managed databases and registry files from disk. <br><span style="color: var(--danger-bg);">Cannot be undone.</span></span>
-                    </div>
-                </label>
+            <div style="margin-top: 15px; display: flex; flex-direction: column; gap: 10px;">
+                <div style="background: rgba(255,0,0,0.1); padding: 10px; border-left: 3px solid var(--danger-bg);">
+                    <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; user-select: none;">
+                        <input type="checkbox" id="uninstall-delete-user-dbs" style="margin-top: 4px;" checked> 
+                        <div>
+                            <strong>Delete User Data?</strong><br>
+                            <span style="font-size: 0.9em; color: var(--text-color);">Permanently delete all managed User Databases.</span>
+                        </div>
+                    </label>
+                </div>
+                
+                <div style="background: rgba(255,0,0,0.1); padding: 10px; border-left: 3px solid var(--danger-bg);">
+                    <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; user-select: none;">
+                        <input type="checkbox" id="uninstall-delete-system-db" style="margin-top: 4px;"> 
+                        <div>
+                            <strong>Delete System DB (Shared Brain)?</strong><br>
+                            <span style="font-size: 0.9em; color: var(--text-color);">Delete the shared registry. <span style="color: var(--danger-bg);">Check only if you want to wipe the shared environment.</span></span>
+                        </div>
+                    </label>
+                </div>
             </div>
             
             <p style="font-size: 0.9em; margin-top: 15px; color: var(--text-muted);">
@@ -712,15 +742,24 @@
         <!-- Step 1: Create First Database (Formerly Step 2) -->
         <div class="wizard-step active" id="step-1">
             <h3>1. Create Your First Database</h3>
-            <p>Let's create a place for your data.</p>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                <p style="margin: 0;">Let's create a place for your data.</p>
+                <div id="setup-db-manual-group" style="display: flex; align-items: center; gap: 5px; font-size: 0.9em;">
+                     <input type="checkbox" id="setup-db-use-manual" onchange="toggleManualUserDB()">
+                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-share-2" style="color: var(--text-muted);"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/></svg>
+                     <label for="setup-db-use-manual" style="cursor: pointer; color: var(--text-color);">
+                         Use <strong>Shared User DB</strong> (Existing Data)
+                     </label>
+                 </div>
+            </div>
             
             <div style="display: flex; gap: 10px; margin-bottom: 10px;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <label style="margin: 0; white-space: nowrap;">Database Name</label>
+                <div id="setup-db-name-container" style="display: flex; align-items: center; gap: 8px;">
+                    <label id="setup-db-name-label" style="margin: 0; white-space: nowrap;">Database Name</label>
                     <input type="text" id="setup-db-name" placeholder="MyFirstDB" value="dev_db" style="width: 140px;">
                 </div>
-                <div style="display: flex; align-items: center; gap: 8px; flex: 1;">
-                    <label style="margin: 0; white-space: nowrap;">Data Path</label>
+                <div id="setup-db-path-container" style="display: flex; align-items: center; gap: 8px; flex: 1;">
+                    <label id="setup-db-path-label" style="margin: 0; white-space: nowrap;">Data Path</label>
                     <input type="text" id="setup-db-path" placeholder="/var/lib/sop/data" value="/tmp/sop_data/db" style="flex: 1;">
                 </div>
             </div>
@@ -953,7 +992,7 @@
 <div id="environments-modal" class="modal">
     <div class="modal-content" style="max-width: 500px;">
         <div class="modal-header">
-            <span>Environments</span>
+            <span>Environment Manager</span>
             <span style="cursor:pointer; font-size: 20px;" onclick="document.getElementById('environments-modal').style.display='none'">&times;</span>
         </div>
         <div class="modal-body">

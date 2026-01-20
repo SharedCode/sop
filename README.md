@@ -53,6 +53,13 @@ sop-cli httpserver
 go run ./tools/httpserver
 ```
 
+## Articles & Deep Dives
+*   **[Beyond RAG: The Self-Correcting Enterprise AI](SELF_CORRECTING_AI_ARTICLE.md)** - How SOP turns user corrections into permanent system intelligence.
+    *   **New**: Describes "Relational Intelligence" — how the AI reads the graph structure of your stores to perform perfect joins without hallucination.
+*   **[SOP vs Modern Database Architecture](SOP_MODERN_DB_ARTICLE.md)** - A deep dive into B-Tree cursors, Zero-Copy Streaming, and Native Joins.
+*   **[Programming with SOP](PROGRAMMING_WITH_SOP_ARTICLE.md)** - A conceptual guide to building applications on the SOP platform.
+*   **[Scalability & Limits](SCALABILITY.md)** - Understanding the theoretical and practical limits of the system.
+
 ## 🚀 Getting Started
 
 **[Download & Installation Guide](GETTING_STARTED.md)**: The fastest way to get up and running with SOP.

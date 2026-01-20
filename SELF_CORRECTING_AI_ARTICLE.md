@@ -67,3 +67,36 @@ We are moving beyond "Chatbots" to "**Adaptive Systems**."
 With SOP's new Self-Correcting Intelligence, your documentation is no longer a static wiki that goes out of date. It is a living database, curated by the AI itself, growing smarter with every query, every error, and every correction.
 
 **Your database shouldn't just store your data. It should store the knowledge of how to use it.**
+
+## Evolution: The "Intelligent Librarian" Update (January 2026)
+
+We realized that "Goldfish Memory" wasn't the only problem. The other problem was **"The Encyclopedia Problem"**. If you give an AI *all* the knowledge at once, it gets confused (and the context window explodes). If you give it nothing, it makes things up (hallucinations).
+
+We've solved this with three new mechanisms introduced in the `DataAdminAgent` architecture.
+
+### 1. The "Peek-Ahead" Schema Injection
+Previously, the AI had to *guess* field names (e.g., hallucinating `total` instead of `total_amount`). 
+Now, before the conversation starts, the Agent performs a millisecond **"Peek" operation** (`storeAccessor.First()`). It grabs a real sample record, infers the schema (e.g., `id: string, active: boolean`), and injects this "Ground Truth" directly into the system prompt.
+*   **Result:** Zero hallucinations on field names. The AI knows your data structure before you ask.
+
+### 2. The "Table of Contents" (Meta-Cognition)
+We cannot load every rule into the prompt. Instead, we now inject a **dynamic list of available knowledge categories** (namespaces).
+*   *Old Way:* "I don't know about 'Q3 targets'."
+*   *New Way:* The AI sees `[finance, sales_targets, hr_policies]` in its context. When asked about "Q3 targets", it sees the `sales_targets` category and **proactively** decides: *"I should read the 'sales_targets' chapter before answering."*
+
+### 3. The "Decision Protocol"
+The AI has been taught a strict flowchart:
+1.  **Context Check**: "Do I have the answer right here?" -> **React Fast.**
+2.  **Ambiguity Check**: "Is this term undefined?" -> **Consult the Library.**
+    *   It executes `manage_knowledge(action='list', namespace='finance')` completely autonomously to fetch the rules it needs.
+
+This turns the AI from a passive responder into a **proactive researcher**, capable of navigating gigabytes of institutional knowledge without overloading the context window.
+
+### 4. Relational Intelligence (The Graph Awareness)
+Beyond just field names ("schema"), the Agent now perceives the **relationships** between stores.
+*   **The Context**: During the "Peek" phase, the Agent also reads the Store Registry's relational metadata.
+*   **The Injection**: It sees: `- orders {id: string...} (Relations: [user_id] -> users([id]))`
+*   **The Impact**: When you ask "Show me orders for Alice", the Agent **instantly** knows:
+    1.  I need to find Alice in `users`.
+    2.  I *must* use `user_id` to join with `orders`.
+    3.  It generates the correct JSON join instruction on the first try, avoiding "guessing" how tables are linked.

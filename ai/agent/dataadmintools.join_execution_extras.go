@@ -42,6 +42,10 @@ type RightOuterJoinStoreCursor struct {
 	on         map[string]any // {RightField: LeftField} (Inverted ON)
 	ctx        context.Context
 	engine     *ScriptEngine // Added to support Temp Store creation
+	rightAlias string        // Alias for Right Store items
+
+	// Option to suppress matches (producing Anti-Join behavior: only unmatched Right items)
+	suppressMatches bool
 
 	// Internal State
 	rightIter      bool
@@ -238,6 +242,14 @@ func (c *RightOuterJoinStoreCursor) Next(ctx context.Context) (any, bool, error)
 
 		c.matchIdx = 0
 
+		// Anti-Join / Full Join Support:
+		// If we are suppressing matches (finding orphans only), and we found matches,
+		// we skip this Right record entirely.
+		if c.suppressMatches && len(c.matches) > 0 {
+			c.matches = nil // Clear matches
+			continue
+		}
+
 		// 5. If No Matches -> Emit Right Item (Left is Null)
 		if len(c.matches) == 0 {
 			merged := c.merge(nil, c.rightKey, c.rightVal)
@@ -290,23 +302,28 @@ func (c *RightOuterJoinStoreCursor) merge(lItem any, rKey, rVal any) any {
 		}
 	}
 
-	// 2. Add Right Fields (Overwrite on collision for standard Join behavior if not prefixed)
-	// But in Right Join, we typically want all fields.
-	// Since we don't have explicit Alias configuration here in this simple cursor, we rely on Source Prefixes if present.
-	// NOTE: In dataadmintools.atomic.go, we might interpret JoinRight as having a "store" or "alias".
-	// But this cursor doesn't know about it unless passed.
-	// Let's assume standard overwrite or "Right." logic if collision?
-
-	// Let's implement simple overwrite for now, mirroring basic map merge.
-	// If the user wants aliasing, they should have aliased the inputs or used 'project'.
-
-	if om, ok := rFlat.(*OrderedMap); ok {
-		for k, v := range om.m {
-			newMap[k] = v
+	// 2. Add Right Fields
+	// Fix: Respect rightAlias if provided (Flatten with Dot Notation to match stageJoin)
+	if c.rightAlias != "" {
+		if om, ok := rFlat.(*OrderedMap); ok {
+			for k, v := range om.m {
+				newMap[c.rightAlias+"."+k] = v
+			}
+		} else if m, ok := rFlat.(map[string]any); ok {
+			for k, v := range m {
+				newMap[c.rightAlias+"."+k] = v
+			}
 		}
-	} else if m, ok := rFlat.(map[string]any); ok {
-		for k, v := range m {
-			newMap[k] = v
+	} else {
+		// Overwrite behavior (Standard)
+		if om, ok := rFlat.(*OrderedMap); ok {
+			for k, v := range om.m {
+				newMap[k] = v
+			}
+		} else if m, ok := rFlat.(map[string]any); ok {
+			for k, v := range m {
+				newMap[k] = v
+			}
 		}
 	}
 

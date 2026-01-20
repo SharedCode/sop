@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"sync"
 	"text/template"
@@ -53,6 +54,10 @@ func (s *JSONStreamer) SetFlush(flush bool) {
 	s.shouldFlush = flush
 }
 
+func (s *JSONStreamer) SetSuppressStepStart(suppress bool) {
+	s.suppressStepStart = suppress
+}
+
 func NewJSONStreamer(w io.Writer) *JSONStreamer {
 	return &JSONStreamer{
 		w:     w,
@@ -94,7 +99,6 @@ func (s *JSONStreamer) Write(step StepExecutionResult) {
 	}
 	s.first = false
 
-	// Marshal the step
 	bytes, _ := json.MarshalIndent(step, "  ", "  ")
 	fmt.Fprint(s.w, string(bytes))
 	if s.shouldFlush {
@@ -127,18 +131,27 @@ type StepStreamer struct {
 	command   string
 	prompt    string
 	stepIndex int
+	metadata  map[string]any
+}
+
+func (ss *StepStreamer) SetMetadata(meta map[string]any) {
+	ss.metadata = meta
 }
 
 func (ss *StepStreamer) writeHeader() {
-	if ss.parent.suppressStepStart {
-		return
-	}
-
 	ss.parent.mu.Lock()
 	defer ss.parent.mu.Unlock()
 
+	// Check suppression flag on parent
+	if ss.parent.suppressStepStart {
+		// If metadata is present (e.g. columns), we must write the header to include it.
+		// Otherwise, suppress wrapper for records/results to keep output clean.
+		if len(ss.metadata) == 0 && (ss.stepType == "record" || ss.stepType == "tool_result") {
+			return
+		}
+	}
+
 	if ss.parent.isNDJSON {
-		// Emit step_start event
 		res := StepExecutionResult{
 			Type:      "step_start",
 			Command:   ss.command,
@@ -147,6 +160,7 @@ func (ss *StepStreamer) writeHeader() {
 		}
 		b, _ := json.Marshal(res)
 		fmt.Fprintln(ss.parent.w, string(b))
+
 		if f, ok := ss.parent.w.(Flusher); ok {
 			f.Flush()
 		}
@@ -165,27 +179,56 @@ func (ss *StepStreamer) writeHeader() {
 	if ss.prompt != "" {
 		fmt.Fprintf(ss.parent.w, `,"prompt":%q`, ss.prompt)
 	}
+	if len(ss.metadata) > 0 {
+		b, _ := json.Marshal(ss.metadata)
+		fmt.Fprintf(ss.parent.w, `,"metadata":%s`, string(b))
+	}
 	fmt.Fprint(ss.parent.w, `,"result":`)
 }
 
 func (ss *StepStreamer) BeginArray() {
-	if !ss.used {
-		ss.writeHeader()
-		ss.used = true
-	}
-	if ss.parent.isNDJSON {
-		return
-	}
-	ss.parent.mu.Lock()
-	defer ss.parent.mu.Unlock()
-	fmt.Fprint(ss.parent.w, "[")
+	// Lazy Start: Do nothing here.
+	// We wait for the first WriteItem to detect columns.
+	// OR if EndArray is called without items, we handle empty array there.
+
+	// Exception: NDJSON might need immediate handling if supported?
+	// Existing NDJSON logic in BeginArray: if ss.parent.isNDJSON return.
+	// So safe to do nothing for JSON streamer.
 }
 
 func (ss *StepStreamer) WriteItem(item any) {
 	if !ss.used {
+		// Auto-detect columns if not set
+		if ss.metadata == nil {
+			ss.metadata = make(map[string]any)
+		}
+		if _, ok := ss.metadata["columns"]; !ok {
+			var cols []string
+			if m, ok := item.(map[string]any); ok {
+				for k := range m {
+					cols = append(cols, k)
+				}
+				sort.Strings(cols)
+			} else if om, ok := item.(OrderedMap); ok {
+				cols = om.keys
+			} else if om, ok := item.(*OrderedMap); ok {
+				cols = om.keys
+			}
+
+			if len(cols) > 0 {
+				ss.metadata["columns"] = cols
+			}
+		}
+
 		ss.writeHeader()
 		ss.used = true
+
+		// Start Array
+		ss.parent.mu.Lock()
+		fmt.Fprint(ss.parent.w, "[")
+		ss.parent.mu.Unlock()
 	}
+
 	ss.parent.mu.Lock()
 	defer ss.parent.mu.Unlock()
 
@@ -215,6 +258,19 @@ func (ss *StepStreamer) EndArray() {
 	if ss.parent.isNDJSON {
 		return
 	}
+
+	if !ss.used {
+		// Empty results case
+		// Write Header
+		ss.writeHeader()
+		ss.used = true
+		// Write Empty Array
+		ss.parent.mu.Lock()
+		fmt.Fprint(ss.parent.w, "[]")
+		ss.parent.mu.Unlock()
+		return
+	}
+
 	ss.parent.mu.Lock()
 	defer ss.parent.mu.Unlock()
 	fmt.Fprint(ss.parent.w, "]")
@@ -270,7 +326,7 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.ScriptStep, scope map[
 	prompt := step.Prompt
 	prompt = s.resolveTemplate(prompt, scope, scopeMu)
 
-	// Only print prompt if NOT using streamer (legacy mode)
+	// Only print prompt if NOT using streamer (standard output mode)
 	if ctx.Value(CtxKeyJSONStreamer) == nil {
 		msg := fmt.Sprintf("> %s\n", prompt)
 		sb.WriteString(msg)
@@ -284,36 +340,12 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.ScriptStep, scope map[
 		opts = append(opts, ai.WithDatabase(db))
 	}
 
-	// Check for compiled mode
-	// If the script is compiled (has explicit commands), we skip "ask" steps because
-	// the logic assumes the commands replace the need for asking the LLM.
-	// HOWEVER, for hybrid scripts or explicit "ask" steps in a compiled script,
-	// we might want to allow it.
-	// The current logic: if isCompiled is true, we SKIP the ask step.
-	// This means "ask" steps are ignored in compiled scripts.
-	// If the user wants to force an ask in a compiled script, they should use a different type or flag?
-	// Or maybe we should only skip if the ask was the *source* of the commands (which we don't track here).
-	// For now, let's keep the behavior but document it: "ask" steps are skipped if "command" steps exist.
-	if isCompiled, ok := ctx.Value("is_compiled").(bool); ok && isCompiled {
-		// But wait! If the user explicitly added an "ask" step to a compiled script (e.g. for analysis),
-		// we shouldn't skip it.
-		// The "is_compiled" flag was likely intended for "playback of recorded sessions" where
-		// the "ask" was the user input and the "command" was the result.
-		// In that case, we only want to run the command.
-		// But if we are running a "programmed" script that mixes both, this logic is flawed.
-		// Let's refine: We skip "ask" ONLY if it doesn't have an OutputVariable that is used later?
-		// Or maybe we should trust the script definition.
-		// If the script has BOTH "ask" and "command" steps, it's likely a recording.
-		// In a recording, "ask" is the trigger, "command" is the action. We replay the action.
-		// So skipping "ask" is correct for REPLAY.
-		// But for "Hybrid" scripts?
-		// Let's assume for now that if it's a REST call, we might want the LLM to run if it's an "ask".
-		// But if it's a recording, we don't.
-		// How to distinguish?
-		// Maybe we can check if the "ask" has a corresponding "command" immediately following it?
-		// For now, I will leave it as is to preserve existing "Replay" behavior.
-		return nil
-	}
+	// SOP Design Principle: Explicit Control
+	// An 'ask' step in a script is an imperative instruction to query the LLM.
+	// It is never skipped unless explicitly overridden by an external "replay" context
+	// (e.g. recovering session history).
+	// This ensures the script engine remains "dumb and obedient," allowing complex
+	// agentic workflows (Setup -> Ask -> Act) to function reliably.
 
 	resp, err := s.Ask(ctx, prompt, opts...)
 	if err != nil {
@@ -393,6 +425,15 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 		} else {
 			resolvedArgs[k] = v
 		}
+	}
+
+	// Capture step for /last-tool support
+	if s.session != nil {
+		recordedStep := step
+		recordedStep.Args = resolvedArgs
+		s.session.LastInteractionToolCalls = append(s.session.LastInteractionToolCalls, recordedStep)
+		// Also update LastStep for robustness (some logic checks LastStep)
+		s.session.LastStep = &recordedStep
 	}
 
 	// Execute Tool
@@ -480,7 +521,7 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 				resultAny = json.RawMessage(resp)
 			}
 
-			// Emit as single result (legacy behavior for non-list outputs)
+			// Emit as single result (default behavior for non-list outputs)
 			// But maybe we should still wrap in step_start?
 			// Let's emit header + 1 record
 			log.Debug("runStepCommand: Emitting fallback step_start", "index", stepIndex)
@@ -494,7 +535,7 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 				Record: resultAny,
 			})
 		} else {
-			// Fallback to string builder if no streamer (legacy mode)
+			// Fallback to string builder if no streamer (standard output mode)
 			msg := fmt.Sprintf("%s\n", resp)
 			sb.WriteString(msg)
 			if w != nil {
@@ -833,10 +874,10 @@ func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope m
 		// 2. Create Suppressed Streamer for Child
 		// We share the mutex and writer to ensure thread safety
 		childStreamer := &JSONStreamer{
-			w:                 streamer.w,
-			mu:                streamer.mu, // Share the mutex pointer
-			first:             streamer.first,
-			isNDJSON:          streamer.isNDJSON,
+			w:  streamer.w,
+			mu: streamer.mu, // Share the mutex pointer
+			// first:             streamer.first,
+			// isNDJSON:          streamer.isNDJSON, // Always NDJSON
 			shouldFlush:       streamer.shouldFlush,
 			suppressStepStart: true, // Suppress child step events
 		}
@@ -874,6 +915,19 @@ type ServiceToolExecutor struct {
 }
 
 func (e *ServiceToolExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	// Handle "gettoolinfo" explicitly as it's a meta-tool served by Service from LLM Knowledge
+	if toolName == "gettoolinfo" {
+		targetTool, _ := args["tool"].(string)
+		if targetTool == "" {
+			// Try "tool_name" or just looking for the first string arg if not named standardly
+			targetTool, _ = args["tool_name"].(string)
+		}
+		if targetTool == "" {
+			return "", fmt.Errorf("tool argument required for gettoolinfo")
+		}
+		return e.s.getToolInfo(ctx, targetTool)
+	}
+
 	for _, agent := range e.s.registry {
 		if provider, ok := agent.(ToolProvider); ok {
 			resp, err := provider.Execute(ctx, toolName, args)
@@ -909,16 +963,18 @@ func (s *Service) executeScript(ctx context.Context, script *ai.Script, scope ma
 		ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
 	}
 
-	// Detect compiled mode (if any step is a command)
-	// We treat a script as "compiled" (replay mode) if it contains "command" steps.
-	// This causes "ask" steps to be skipped during execution, assuming they were just the triggers for the commands.
-	// TODO: Allow a flag to force execution of "ask" steps even in compiled scripts (e.g. for hybrid agents).
+	// Explicit Execution Mode:
+	// In SOP Architecture, scripts are explicit execution plans.
+	// There is no implicit "inference" or "compilation" based on content.
+	// If a script contains mixing of 'ask' (LLM) and 'command' (Deterministic) steps,
+	// they are executed exactly as defined. This allows for "Hybrid Scripts" that
+	// can reason, act, and reason again within a single run-loop.
+	//
+	// The 'isCompiled' flag is only used for explicit external replay mechanisms
+	// (like restoring session state), never guessed from script content.
 	isCompiled := false
-	for _, step := range script.Steps {
-		if step.Type == "command" {
-			isCompiled = true
-			break
-		}
+	if v, ok := ctx.Value("force_compile_mode").(bool); ok {
+		isCompiled = v
 	}
 	ctx = context.WithValue(ctx, "is_compiled", isCompiled)
 

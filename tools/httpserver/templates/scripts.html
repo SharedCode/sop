@@ -133,10 +133,31 @@
     const ALLOW_INVALID_MAP_KEY = {{ .AllowInvalidMapKey }};
     const IS_ENTERPRISE = {{ .IsEnterprise }};
     const SYSTEM_DB_NAME = "{{ .SystemDBName }}";
+    
+    // Dropdown Logic for Enterprise Mode
+    function toggleDbDropdown() {
+        const menu = document.getElementById('db-dropdown-menu');
+        if (menu.style.display === 'block') {
+            menu.style.display = 'none';
+        } else {
+            menu.style.display = 'block';
+        }
+    }
+
+    // Close Dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+        const chip = document.getElementById('db-chip');
+        const menu = document.getElementById('db-dropdown-menu');
+        if (chip && menu && !chip.contains(event.target) && !menu.contains(event.target)) {
+            menu.style.display = 'none';
+        }
+    });
+
     let currentItems = [];
     let currentKeyColumnWidth = '45%';
     let columnWidths = [];
     let availableDatabases = [];
+    const CHIP_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14a2.5 2.5 0 0 1-2.5 2.5v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0zm-.5 3A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 11.5 3h-7zM5 6.5A1.5 1.5 0 0 1 6.5 5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3z"/></svg>`;
 
     // Fetch System Env Vars (Async)
     // Removed SYSTEM_DB_PATH fetching logic
@@ -146,9 +167,10 @@
         .then(res => res.json())
         .then(databases => {
             availableDatabases = databases;
-            const select = document.getElementById('database-select');
-            select.innerHTML = '';
+            
             if (!databases || databases.length === 0) {
+                const select = document.getElementById('database-select');
+                select.innerHTML = '';
                 const opt = document.createElement('option');
                 opt.textContent = "No databases found";
                 select.appendChild(opt);
@@ -156,7 +178,6 @@
                 return;
             }
             
-            // Show database switcher only if we have multiple databases
             if (databases.length > 1) {
                 document.getElementById('database-section').style.display = 'block';
             }
@@ -164,65 +185,120 @@
             const userDBs = databases.filter(db => !db.is_system);
             const systemDBs = databases.filter(db => db.is_system);
 
-            userDBs.forEach(db => {
-                const opt = document.createElement('option');
-                opt.value = db.name;
-                opt.textContent = db.name;
-                select.appendChild(opt);
-            });
-
-            if (systemDBs.length > 0) {
-                if (userDBs.length > 0) {
-                    const separator = document.createElement('option');
-                    separator.disabled = true;
-                    separator.textContent = "──────────";
-                    select.appendChild(separator);
+            if (IS_ENTERPRISE) {
+                // Enterprise Mode: Use Chip UI
+                document.getElementById('database-select').style.display = 'none';
+                document.getElementById('enterprise-db-container').style.display = 'block';
+                
+                const menu = document.getElementById('db-dropdown-menu');
+                menu.innerHTML = '';
+                
+                // Add User DBs
+                userDBs.forEach(db => {
+                    const item = document.createElement('div');
+                    item.className = 'db-option';
+                    item.textContent = db.name;
+                    item.onclick = function() {
+                        selectDatabase(db.name);
+                        document.getElementById('db-chip-label').textContent = db.name;
+                        // User DB: Hide Icon
+                        const icon = document.getElementById('db-chip-icon');
+                        if (icon) icon.style.display = 'none';
+                        toggleDbDropdown();
+                    };
+                    menu.appendChild(item);
+                });
+                
+                if (userDBs.length > 0 && systemDBs.length > 0) {
+                    const sep = document.createElement('div');
+                     sep.style.borderTop = "1px solid var(--border-color)";
+                     sep.style.margin = "4px 0";
+                     menu.appendChild(sep);
                 }
-
-
+                
+                // Add System DBs
                 systemDBs.forEach(db => {
+                    const item = document.createElement('div');
+                    item.className = 'db-option';
+                    item.style.fontWeight = "bold";
+                    // item.style.display = "flex"; // Ensure flex via CSS or inline for icon alignment
+                    item.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;">${CHIP_ICON_SVG} ${db.name}</span>`;
+                    item.onclick = function() {
+                        selectDatabase(db.name);
+                        document.getElementById('db-chip-label').textContent = db.name;
+                         // Toggle icon based on type (System)
+                        const icon = document.getElementById('db-chip-icon');
+                        if (icon) icon.style.display = 'inline';
+                        toggleDbDropdown();
+                    };
+                    menu.appendChild(item);
+                });
+                
+            } else {
+                 // Standard Mode: Use <select>
+                 document.getElementById('database-select').style.display = 'block';
+                 document.getElementById('enterprise-db-container').style.display = 'none';
+                 
+                const select = document.getElementById('database-select');
+                select.innerHTML = '';
+
+                userDBs.forEach(db => {
                     const opt = document.createElement('option');
                     opt.value = db.name;
-                    
-                    let displayName = db.name;
-                    
-                    // Apply special styling to all System Databases (identified by flag, not name)
-                    if (db.is_system) {
-                         let icon = "⚠️";
-                         let suffix = "";
-                        
-                         if (IS_ENTERPRISE) {
-                             suffix = " ⓔ";
-                             // Green color for Enterprise
-                             opt.style.color = "#155724"; // Dark Green
-                         } else {
-                             // Standard System Red
-                             opt.style.color = "var(--danger-bg)"; 
-                         }
-                        
-                         opt.textContent = icon + " " + displayName + suffix;
-                         opt.className = "option-system";
-                         opt.style.fontWeight = "bold";
-                    } else {
-                         // Fallback (should not happen in this loop, but safe)
-                         opt.textContent = displayName;
-                    }
-                    
+                    opt.textContent = db.name;
                     select.appendChild(opt);
                 });
+
+                if (systemDBs.length > 0) {
+                    if (userDBs.length > 0) {
+                        const separator = document.createElement('option');
+                        separator.disabled = true;
+                        separator.textContent = "──────────";
+                        select.appendChild(separator);
+                    }
+                    systemDBs.forEach(db => {
+                        const opt = document.createElement('option');
+                        opt.value = db.name;
+                         // Standard System Red
+                        opt.style.color = "var(--danger-bg)"; 
+                        opt.textContent = "⚠️ " + db.name;
+                        opt.className = "option-system";
+                        opt.style.fontWeight = "bold";
+                        select.appendChild(opt);
+                    });
+                }
             }
 
-            // Select logic with persistence
+            // Persistence Logic
             const savedDB = localStorage.getItem('sop_current_database');
             const targetDB = databases.find(d => d.name === savedDB);
+            
+            let finalDBVal = null;
 
             if (targetDB) {
-                 select.value = targetDB.name;
-                 selectDatabase(targetDB.name);
+                finalDBVal = targetDB.name;
             } else if (userDBs.length > 0) {
-                selectDatabase(userDBs[0].name);
+                finalDBVal = userDBs[0].name;
             } else if (systemDBs.length > 0) {
-                selectDatabase(systemDBs[0].name);
+                finalDBVal = systemDBs[0].name;
+            }
+            
+            if (finalDBVal) {
+                 selectDatabase(finalDBVal);
+                 // Update UI States
+                 if (IS_ENTERPRISE) {
+                     let label = finalDBVal;
+                     const finalDB = databases.find(d => d.name === finalDBVal);
+                     document.getElementById('db-chip-label').textContent = label;
+                     
+                     // Toggle Icon for Initial Load
+                     const icon = document.getElementById('db-chip-icon');
+                     if (icon) {
+                         icon.style.display = (finalDB && finalDB.is_system) ? 'inline' : 'none';
+                     }
+                 } else {
+                     document.getElementById('database-select').value = finalDBVal;
+                 }
             }
         })
         .catch(err => {
@@ -6852,9 +6928,120 @@
         }
     }
 
+    function toggleManualUserDB() {
+        const toggle = document.getElementById('setup-db-use-manual');
+        const input = document.getElementById('setup-db-path');
+        const inputContainer = document.getElementById('setup-db-path-container');
+        const inputLabel = document.getElementById('setup-db-path-label');
+        
+        const nameInput = document.getElementById('setup-db-name');
+        const nameContainer = document.getElementById('setup-db-name-container');
+
+        const advToggle = document.getElementById('setup-db-advanced-toggle');
+        const demoToggle = document.getElementById('setup-populate-demo'); 
+
+        if (toggle) {
+            const advContainer = advToggle ? advToggle.closest('div') : null;
+
+            if (toggle.checked) {
+                // Shared Mode:
+                // 1. Hide Name Input (User provides full path to existing DB)
+                if (nameContainer) nameContainer.style.display = 'none';
+
+                // 2. Ensure Path input is visible and highlighted
+                if (inputContainer) inputContainer.style.display = 'flex';
+                // Adjust Label
+                if (inputLabel) inputLabel.innerText = "User DB Path";
+                // Adjust Input
+                if (input) {
+                    input.placeholder = "/path/to/existing/db_folder";
+                    // If default value (parent dir), clear it so user enters full path
+                    if (input.value === "/tmp/sop_data/db" || input.value === "") {
+                         input.value = "";
+                    }
+                    input.focus();
+                }
+
+                // Hide Advanced Mode Container
+                if (advContainer) advContainer.style.display = 'none';
+                
+                // Disable Populating Demo Data
+                if (demoToggle) {
+                    demoToggle.checked = false;
+                    demoToggle.disabled = true;
+                    demoToggle.parentElement.title = "Cannot populate demo data when using shared/existing DB.";
+                }
+                
+                if (advToggle) {
+                    advToggle.checked = false;
+                    const opts = document.getElementById('setup-db-advanced-options');
+                    if (opts) opts.style.display = 'none';
+                }
+
+            } else {
+                 // Standalone/New Mode:
+                 // 1. Show Name Input
+                 if (nameContainer) nameContainer.style.display = 'flex';
+
+                 // 2. Show Path Input (as Parent Directory)
+                 if (inputContainer) inputContainer.style.display = 'flex';
+                 // Revert Label
+                 if (inputLabel) inputLabel.innerText = "Data Path";
+                 
+                 // Revert Value if needed? 
+                 // If user typed a custom shared path, we leave it? 
+                 // Or revert to default parent? 
+                 // Generally safer to leave it or reset to default if empt.
+                 if (input && input.value === "") {
+                     input.value = "/tmp/sop_data/db";
+                 }
+                 
+                 // Show Advanced Mode
+                 if (advContainer) advContainer.style.display = 'block';
+
+                 if (demoToggle) {
+                    demoToggle.disabled = false;
+                    demoToggle.parentElement.title = "";
+                }
+            }
+        }
+    }
+
     function toggleEnterpriseBrain() {
         // Legacy function, kept for safety if referenced elsewhere, but effectively superseded by toggleManualEnterpriseBrain
     }
+
+    // Auto-update DB Path based on Name
+    document.addEventListener('DOMContentLoaded', () => {
+        const setupDbNameInput = document.getElementById('setup-db-name');
+        const setupDbPathInput = document.getElementById('setup-db-path');
+        
+        if (setupDbNameInput && setupDbPathInput) {
+            setupDbNameInput.addEventListener('input', function() {
+                const currentName = this.value.trim();
+                const currentPath = setupDbPathInput.value.trim();
+                
+                // Simple heuristic to update basename only if it looks like a standard unix path
+                const lastSlash = currentPath.lastIndexOf('/');
+                if (lastSlash !== -1) {
+                     const basePath = currentPath.substring(0, lastSlash + 1);
+                     setupDbPathInput.value = basePath + (currentName || 'db');
+                }
+            });
+        }
+
+        // Auto-sync Store Folders (Advanced) back to Data Path (Simple)
+        const setupDbStoresInput = document.getElementById('setup-db-stores-folders');
+        if (setupDbStoresInput && setupDbPathInput) {
+            setupDbStoresInput.addEventListener('input', function() {
+                 const raw = this.value;
+                 const firstPath = raw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0)[0];
+                 if (firstPath) {
+                     setupDbPathInput.value = firstPath;
+                 }
+            });
+        }
+    });
 
     function showSetupWizard() {
         document.getElementById('setup-wizard').style.display = 'flex';
@@ -7017,7 +7204,7 @@
 
                  // If Shared Brain (Reuse Existing): Strict Validation
                  if (isShared) {
-                    fetch(`/api/config/validate-path?path=${encodeURIComponent(path)}`, {
+                    fetch(`/api/config/validate-path?path=${encodeURIComponent(path)}&t=${Date.now()}`, {
                         method: 'GET',
                         headers: {'Content-Type': 'application/json'}
                     })
@@ -7058,8 +7245,29 @@
 
     function wizardCancel() {
         if(confirm("Are you sure you want to cancel the setup process? Any unsaved changes will be lost.")) {
-            document.getElementById('setup-wizard').style.display = 'none';
-            resetSetupForm();
+            // Check if we are in a newly created environment (so we perform silent cleanup)
+            const urlParams = new URLSearchParams(window.location.search);
+            const isNewEnv = urlParams.get('new_env') === 'true';
+
+            if (isNewEnv) {
+                 // Silent Delete: user is abandoning the fresh env they just claimed
+                 const payload = {
+                     filename: CURRENT_CONFIG_FILE,
+                     delete_data: false
+                 };
+                 fetch('/api/config/environments/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).then(() => {
+                    // Remove param and reload to reset state to default/empty
+                    window.location.href = "/";
+                });
+            } else {
+                // Just close the wizard for existing envs
+                document.getElementById('setup-wizard').style.display = 'none';
+                resetSetupForm();
+            }
         }
     }
 
@@ -7092,6 +7300,9 @@
         // Reset Checkboxes
         const manualEntToggle = document.getElementById('setup-sys-use-manual-enterprise');
         if (manualEntToggle) manualEntToggle.checked = false;
+
+        const manualDBToggle = document.getElementById('setup-db-use-manual');
+        if (manualDBToggle) manualDBToggle.checked = false;
         
         // Reset Step
         currentWizardStep = 1;
@@ -7100,13 +7311,42 @@
 
     function finishSetup() {
         // Collect DB Settings
-        const dbName = document.getElementById('setup-db-name').value;
-        const dbPath = document.getElementById('setup-db-path').value;
+        let dbName = document.getElementById('setup-db-name').value;
+        let dbPath = document.getElementById('setup-db-path').value;
+        
+        const manualDBToggle = document.getElementById('setup-db-use-manual');
+        if (manualDBToggle && manualDBToggle.checked) {
+             // If manual/shared, user entered FULL PATH in the PATH field
+             // We need to split it into path (parent) and name (folder)
+             let cleanPath = dbPath;
+             while (cleanPath.length > 0 && (cleanPath.endsWith('/') || cleanPath.endsWith('\\'))) {
+                 cleanPath = cleanPath.slice(0, -1);
+             }
+             
+             // Find last separator
+             const idxSlash = cleanPath.lastIndexOf('/');
+             const idxBackslash = cleanPath.lastIndexOf('\\');
+             const idx = Math.max(idxSlash, idxBackslash);
+
+             if (idx >= 0) {
+                 dbName = cleanPath.substring(idx + 1);
+                 dbPath = cleanPath.substring(0, idx);
+                 // If path is empty (e.g. /name), make it /
+                 if (dbPath === "") dbPath = "/";
+             } else {
+                 // No separator? Assume it's just a name in current dir? 
+                 // Or treat as relative path.
+                 dbName = cleanPath;
+                 dbPath = ".";
+             }
+        }
+
         const dbType = document.getElementById('setup-db-type').value;
         const dbConn = document.getElementById('setup-db-conn').value;
         const populateDemo = document.getElementById('setup-populate-demo').checked;
         const dbHashMod = document.getElementById('setup-db-registry-hash-mod').value;
         const dbErasureConfigs = collectEcConfigs('setup-db-ec-container');
+        const dbStoresFoldersRaw = document.getElementById('setup-db-stores-folders').value.trim();
 
         // Collect System Settings
         const regPath = document.getElementById('setup-reg-path').value;
@@ -7133,9 +7373,25 @@
             sysHashMod = null;
         }
 
+        // If "Use Shared User DB" is checked, ignore User DB advanced inputs
+        // const manualDBToggle = document.getElementById('setup-db-use-manual'); // Already declared above
+        let finalDbErasureConfigs = dbErasureConfigs;
+        let finalDbStoresFoldersRaw = dbStoresFoldersRaw;
+        let finalDbHashMod = dbHashMod;
+
+        if (manualDBToggle && manualDBToggle.checked) {
+             finalDbErasureConfigs = [];
+             finalDbStoresFoldersRaw = "";
+             finalDbHashMod = null;
+        }
+
         const nextBtn = document.getElementById('wizard-next');
         nextBtn.disabled = true;
         nextBtn.textContent = "Setting up...";
+
+        console.log("DEBUG: wizard payload", {
+            dbName, dbPath, dbStoresFoldersRaw
+        });
 
         // Construct Payloads
         const sysConfigPayload = {
@@ -7145,26 +7401,27 @@
             type: sysType,
             conn_url: sysConn,
             registry_hash_mod: sysHashMod ? parseInt(sysHashMod) : 0,
-            stores_folders: sysStoresFoldersRaw ? sysStoresFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null
+            stores_folders: sysStoresFoldersRaw ? sysStoresFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
+            use_shared_brain: manualEntToggle ? manualEntToggle.checked : false
         };
         
         if (sysErasureConfigs.length > 0) {
             sysConfigPayload.erasure_configs = sysErasureConfigs;
         }
 
-        const dbStoresFoldersRaw = document.getElementById('setup-db-stores-folders').value.trim();
         const dbConfigPayload = {
             name: dbName,
             path: dbPath,
             type: dbType,
             connection: dbConn,
             populate_demo: populateDemo,
-            stores_folders: dbStoresFoldersRaw ? dbStoresFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
-            registry_hash_mod: dbHashMod ? parseInt(dbHashMod) : 0
+            stores_folders: finalDbStoresFoldersRaw ? finalDbStoresFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
+            registry_hash_mod: finalDbHashMod ? parseInt(finalDbHashMod) : 0,
+            use_shared_db: manualDBToggle ? manualDBToggle.checked : false
         };
 
-        if (dbErasureConfigs) {
-            dbConfigPayload.erasure_configs = dbErasureConfigs;
+        if (finalDbErasureConfigs) {
+            dbConfigPayload.erasure_configs = finalDbErasureConfigs;
         }
 
         // 1. Save Config (Initializes System DB)
@@ -7291,7 +7548,8 @@
 
     // --- Uninstall / Reset System ---
     function showUninstallModal() {
-        document.getElementById('uninstall-delete-data').checked = false;
+        if(document.getElementById('uninstall-delete-user-dbs')) document.getElementById('uninstall-delete-user-dbs').checked = true;
+        if(document.getElementById('uninstall-delete-system-db')) document.getElementById('uninstall-delete-system-db').checked = false;
         document.getElementById('uninstall-system-modal').style.display = 'block';
     }
 
@@ -7300,13 +7558,15 @@
     }
 
     function confirmUninstallSystem() {
-        const deleteData = document.getElementById('uninstall-delete-data').checked;
+        const deleteUserDBs = document.getElementById('uninstall-delete-user-dbs').checked;
+        const deleteSystemDB = document.getElementById('uninstall-delete-system-db').checked;
         
         fetch('/api/system/uninstall', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                delete_data: deleteData
+                delete_user_dbs: deleteUserDBs,
+                delete_system_db: deleteSystemDB
             })
         })
         .then(res => {
@@ -7469,6 +7729,45 @@
         }
     }
 
+    function toggleNewDbShared() {
+        const toggle = document.getElementById('new-db-use-shared');
+        const input = document.getElementById('new-db-path');
+        const advToggle = document.getElementById('new-db-advanced-toggle');
+        const demoToggle = document.getElementById('new-db-populate-demo');
+
+        if (toggle && input) {
+            const advContainer = advToggle ? advToggle.closest('div') : null;
+
+            if (toggle.checked) {
+                input.style.borderColor = '#6f42c1'; 
+                input.style.boxShadow = '0 0 0 2px rgba(111, 66, 193, 0.2)';
+                
+                // Disable Demo and Advanced for Shared
+                if (demoToggle) {
+                     demoToggle.checked = false;
+                     demoToggle.disabled = true;
+                }
+                if (advToggle) {
+                    advToggle.checked = false;
+                    // Force hide section
+                    const evt = new Event('change');
+                    advToggle.dispatchEvent(evt);
+                }
+                if (advContainer) advContainer.style.display = 'none';
+
+                input.focus();
+            } else {
+                 input.style.borderColor = ''; 
+                 input.style.boxShadow = '';
+                 
+                 if (demoToggle) demoToggle.disabled = false;
+                 // Re-show advanced container if desired, but user manually toggles advanced
+                 // We just unhide the label/container that holds the checkbox
+                 if (advContainer) advContainer.style.display = 'block';
+            }
+        }
+    }
+
     function createNewDatabase() {
         const name = document.getElementById('new-db-name').value.trim();
         const path = document.getElementById('new-db-path').value.trim();
@@ -7479,6 +7778,7 @@
         const storesFoldersRaw = document.getElementById('new-db-stores-folders').value.trim();
         const registryHashMod = document.getElementById('new-db-registry-hash-mod').value;
         const populateDemo = document.getElementById('new-db-populate-demo').checked;
+        const useShared = document.getElementById('new-db-use-shared').checked;
         
         // EC Configs
         const erasureConfigs = collectEcConfigs('new-db-ec-container');
@@ -7503,10 +7803,18 @@
             conn_url: conn,
             populate_demo: populateDemo,
             stores_folders: storesFoldersRaw ? storesFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
-            registry_hash_mod: registryHashMod ? parseInt(registryHashMod) : 0
+            registry_hash_mod: registryHashMod ? parseInt(registryHashMod) : 0,
+            use_shared_db: useShared
         };
 
-        if (erasureConfigs) {
+        if (useShared) {
+            // When sharing, ignore advanced options
+             payload.stores_folders = null;
+             payload.registry_hash_mod = 0;
+             payload.erasure_configs = null;
+             // Ensure population is off
+             payload.populate_demo = false;
+        } else if (erasureConfigs) {
             payload.erasure_configs = erasureConfigs;
         }
 
@@ -7533,6 +7841,7 @@
         
         document.getElementById('delete-db-target-name').textContent = currentDatabase;
         document.getElementById('delete-db-confirm-input').value = '';
+        document.getElementById('delete-db-data-check').checked = true; // Default to true
         document.getElementById('btn-confirm-delete-db').disabled = true;
         
         // Setup input listener
@@ -7551,8 +7860,10 @@
 
     function confirmDeleteDatabase() {
         if (!currentDatabase) return;
+        
+        const deleteData = document.getElementById('delete-db-data-check').checked;
 
-        fetch(`/api/databases?name=${encodeURIComponent(currentDatabase)}`, {
+        fetch(`/api/databases?name=${encodeURIComponent(currentDatabase)}&delete_data=${deleteData}`, {
             method: 'DELETE'
         })
         .then(res => {
@@ -7571,14 +7882,14 @@
     // --- Environment / Registry Sets Manager ---
 
     function showEnvironmentsManager() {
-        fetch('/api/config/sets')
+        fetch('/api/config/environments')
             .then(res => res.json())
             .then(sets => {
                 const container = document.getElementById('env-list-container');
                 container.innerHTML = '';
                 
                 if (!sets || sets.length === 0) {
-                     container.innerHTML = '<div style="padding: 10px; text-align: center; color: var(--text-muted);">No configurations found.</div>';
+                     container.innerHTML = '<div style="padding: 10px; text-align: center; color: var(--text-muted);">No environments found.</div>';
                 } else {
                      const ul = document.createElement('ul');
                      ul.style.listStyle = 'none';
@@ -7671,7 +7982,7 @@
         const name = nameInput.value.trim();
         if (!name) return;
 
-        fetch('/api/config/sets/create', {
+        fetch('/api/config/environments/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: name })
@@ -7684,8 +7995,8 @@
             return res.json();
         })
         .then(data => {
-            showAlert("Created and Switched to " + name);
-            location.reload(); // Reload to start Setup Wizard
+            // Reload with flag so we know we own this file for abandonment logic
+            window.location.href = "/?new_env=true"; 
         })
         .catch(err => showAlert("Error: " + err));
     }
@@ -7712,7 +8023,7 @@
         btn.textContent = "Switching...";
         btn.disabled = true;
 
-        fetch('/api/config/sets/switch', {
+        fetch('/api/config/environments/switch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ filename: filename })
@@ -7739,7 +8050,14 @@
     function deleteEnvironment(filename) {
         envToDelete = filename;
         document.getElementById('delete-env-msg').textContent = `Are you sure you want to delete the environment configuration '${filename}'?`;
-        document.getElementById('delete-env-data-check').checked = false;
+        
+        // Reset checkboxes to default safe state
+        if(document.getElementById('delete-env-user-dbs-check')) {
+            document.getElementById('delete-env-user-dbs-check').checked = true;
+        }
+        if(document.getElementById('delete-env-system-db-check')) {
+            document.getElementById('delete-env-system-db-check').checked = false;
+        }
         
         // Setup confirm button
         const btn = document.getElementById('delete-env-confirm-btn');
@@ -7766,7 +8084,8 @@
     }
 
     function performDeleteEnvironment(filename) {
-        const deleteData = document.getElementById('delete-env-data-check').checked;
+        const deleteUserDBs = document.getElementById('delete-env-user-dbs-check').checked;
+        const deleteSystemDB = document.getElementById('delete-env-system-db-check').checked;
         
         // UI Feedback
         const btn = document.getElementById('delete-env-confirm-btn');
@@ -7774,10 +8093,14 @@
         btn.textContent = "Deleting...";
         btn.disabled = true;
 
-        fetch('/api/config/sets/delete', {
+        fetch('/api/config/environments/delete', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ filename: filename, delete_data: deleteData })
+             body: JSON.stringify({ 
+                 filename: filename, 
+                 delete_user_dbs: deleteUserDBs,
+                 delete_system_db: deleteSystemDB
+            })
         })
         .then(async res => {
              if (!res.ok) {

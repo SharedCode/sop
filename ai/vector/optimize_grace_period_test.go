@@ -11,6 +11,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/btree"
 	core_database "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/infs"
 )
@@ -83,10 +84,10 @@ func TestOptimize_GracePeriod(t *testing.T) {
 	// Let's try to use `btree.New` with the transaction.
 
 	// We need to match the store configuration used in Optimize.
-	// It uses `sop.ConfigureStore(..., true, 1000, ...)`
+	// It uses `sop.ConfigureStore(..., true, btree.DefaultSlotLength, ...)`
 
 	// Create the "failed" lookup store
-	_, err = infs.NewBtree[int, string](context.Background(), sop.ConfigureStore(lookupName, true, 1000, "lookup", sop.SmallData, ""), tx2, func(a, b int) int { return a - b })
+	_, err = infs.NewBtree[int, string](context.Background(), sop.ConfigureStore(lookupName, true, btree.DefaultSlotLength, "lookup", sop.SmallData, ""), tx2, func(a, b int) int { return a - b })
 	if err != nil {
 		t.Fatalf("Failed to create simulation store: %v", err)
 	}

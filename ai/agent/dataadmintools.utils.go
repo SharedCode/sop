@@ -361,103 +361,16 @@ func reorderItem(item any, fields []string, indexSpec *jsondb.IndexSpecification
 }
 
 func filterFields(item map[string]any, fields []string) any {
-	// log.Debug("filterFields called", "fields", fields)
-	if len(fields) == 0 {
-		return item
-	}
-
-	// Helper to parse "field AS alias"
-	aliasRe := regexp.MustCompile(`(?i)\s+as\s+`)
-	parseFieldAlias := func(field string) (string, string) {
-		if loc := aliasRe.FindStringIndex(field); loc != nil {
-			source := strings.TrimSpace(field[:loc[0]])
-			alias := strings.TrimSpace(field[loc[1]:])
-			return source, alias
-		}
-		return field, field
-	}
-
-	// 0. Always execute Flat Mode (Tabular Output)
-	// We no longer enforce Key/Value structure for UI compatibility.
-	// The result is a flat record based on the projection fields.
-
-	// Flat Mode: Return primitives directly in OrderedMap
-	out := &OrderedMap{
-		m:    make(map[string]any),
-		keys: make([]string, 0, len(fields)),
-	}
-
-	for _, f := range fields {
-		source, alias := parseFieldAlias(f)
-
-		// 1. Try direct lookup first (most common for flat join results)
-		val, ok := item[source]
-
-		// 2. If not found, check if it's a "key" or "value" access on a Store Item wrapper
-		if !ok {
-			if source == "key" {
-				val, ok = item["key"]
-			} else if source == "value" {
-				val, ok = item["value"]
-			}
-		}
-
-		// 3. If still not found, try to dig into Key/Value wrappers if they exist
-		// This supports "name" mapping to "value.name" implicitly
-		if !ok {
-			// Check Value map
-			if vMap, isMap := item["value"].(map[string]any); isMap {
-				// Try exact match
-				if v, found := vMap[source]; found {
-					val = v
-					ok = true
-				} else {
-					// Try case-insensitive? (Maybe later)
-				}
-			}
-			// Check Key map (Composite Key)
-			if !ok {
-				if kMap, isMap := item["key"].(map[string]any); isMap {
-					if v, found := kMap[source]; found {
-						val = v
-						ok = true
-					}
-				}
-			}
-		}
-
-		// 4. Nested Dot Notation (e.g. "address.city", "left.name")
-		if !ok && strings.Contains(source, ".") {
-			parts := strings.SplitN(source, ".", 2)
-			root := parts[0]
-			path := parts[1]
-
-			// Resolve root
-			var rootObj any
-			if rVal, rOk := item[root]; rOk {
-				rootObj = rVal
-			} else if root == "key" {
-				rootObj, _ = item["key"]
-			} else if root == "value" {
-				rootObj, _ = item["value"]
-			}
-
-			// Dig
-			if rootObj != nil {
-				if rootMap, isMap := rootObj.(map[string]any); isMap {
-					val, ok = rootMap[path]
-				} else if rootOm, isOm := rootObj.(*OrderedMap); isOm {
-					val, ok = rootOm.m[path]
-				}
-			}
-		}
-
-		if ok {
-			out.keys = append(out.keys, alias)
-			out.m[alias] = val
-		}
-	}
-	return out
+	// filterFields is a legacy/simplified wrapper.
+	// We now delegate to the robust renderItem logic which handles:
+	// 1. Wildcard expansion (e.g. "a.*")
+	// 2. Deep flattening (Key/Value merging)
+	// 3. Aliasing ("field AS alias")
+	// 4. Scoped filtering ("left.name")
+	//
+	// We pass 'nil' as the key and 'item' as the value because 'item' is typically
+	// already a merged/flattened map from a previous cursor step.
+	return renderItem(nil, item, fields)
 }
 
 func mergeMap(original, updates map[string]any) map[string]any {
@@ -581,6 +494,20 @@ func extractVal(key any, val any, field string) any {
 					if strings.EqualFold(k, stripped) {
 						return v
 					}
+				}
+			}
+
+			// Key Wrapper Check (recurse into "key" if present)
+			if kWrapper, ok := m["key"]; ok {
+				if kVal := extractVal(nil, kWrapper, field); kVal != nil {
+					return kVal
+				}
+			}
+
+			// Value Wrapper Check (recurse into "value" if present)
+			if vWrapper, ok := m["value"]; ok {
+				if vVal := extractVal(nil, vWrapper, field); vVal != nil {
+					return vVal
 				}
 			}
 
@@ -1256,10 +1183,23 @@ func renderItem(key any, val any, fields any) any {
 						// If we are projecting "users.*" (customPrefix="users."), and we find "users.age",
 						// we want the output key to be "age".
 						k = k[len(customPrefix):]
+					} else if !strings.Contains(k, ".") {
+						// Heuristic: If we are looking for a specific alias (e.g. "users.*")
+						// and the key is a root key (no dots), assume it belongs to this alias.
+						// This fixes cases where storage returns flat objects for aliased joins.
+						include = true
 					}
 				}
 
 				if include {
+					// EXCLUDE "value" system field from wildcard expansion.
+					// It is often an artifact of flattening and redundant (e.g. duplicate of ID).
+					// User can still explicitly request it.
+					// Exception: If "value" is the ONLY field, keep it (e.g. primitive int/string).
+					if k == "value" && len(flatKeys) > 1 {
+						continue
+					}
+
 					// Don't overwrite existing explicit explicit aliased fields (precedence)
 					// Actually, in projection lists, order matters.
 					resultMap.m[k] = v

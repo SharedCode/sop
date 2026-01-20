@@ -172,17 +172,37 @@ go test -v ./ai/agent -run TestProjectLimitOrdering
 *   **"Right." Prefix**: The Join operation (Right Join) currently prefixes fields from the "Right" store with `Right.`. The `project` step is often needed to rename these to cleaner names (e.g., `Right.name` -> `employee_name`).
 
 ---
-**End of Handover Document**
+
+## 8. Memory Architecture
+
+The system implements a distinct separation between transient context and persistent knowledge.
+
+### Short-Term Memory (Session Context)
+*   **Implementation**: `RunnerSession` struct in `ai/agent/memory_shortterm.go` (and `service.session.go`).
+*   **Scope**: Transient. Exists only for the duration of the current user session (WebSocket connection).
+*   **Components**:
+    *   **History**: A transcript of the conversation (User/Assistant messages).
+    *   **Variables**: A generic map[`string`]any for storing session-scoped objects (e.g., active specific DB transactions `tx1`, result streams `stream_cursor`).
+    *   **Transaction**: The current active global transaction (if any).
+    *   **CurrentScript**: Buffer for script lines being drafted before execution.
+
+### Long-Term Memory (System Knowledge)
+*   **Implementation**: `llm_knowledge` B-Tree store in the `system` database. Managed via `KnowledgeStore` in `ai/agent/memory_longterm.go`.
+*   **Scope**: Persistent. Survives server restarts and spans across sessions/users.
+*   **Structure**: Uses a composite key (`Category`, `Name`).
+*   **Mechanism**:
+    *   **Dynamic Instruction Loading**: The `DataAdminAgent` uses `getToolInstruction` (`ai/agent/dataadmintools.go`) to look up tool descriptions in the knowledge store (Category: "tool") before registering them. This allows the agent's behavior (prompts) to be patched or improved without recompiling the code.
+    *   **Self-Correction**: The `manage_knowledge` tool exposes this B-Tree to the agent, allowing it to save new terms, definitions, or instructions (Self-learning loop).
 
 ---
 
-## 4. System Database & "Enterprise Brain"
+## 9. System Database & Deployment
 
 The **System Database** is a dedicated SOP database used to store internal metadata, configuration, and the Agent's own operating manual.
 
-### "Self-Correcting" Storage (`llm_instructions`)
-The Agent does not rely solely on hardcoded prompts. It fetches tool usage instructions from a B-Tree store named `llm_instructions` located within the System DB.
-*   **Structure:** Simple Key-Value B-Tree (`string` -> `string`).
+### "Self-Correcting" Storage (`llm_knowledge`)
+The Agent does not rely solely on hardcoded prompts. It fetches tool usage instructions from a B-Tree store named `llm_knowledge` located within the System DB.
+*   **Structure:** Composite Key B-Tree (`Category`, `Name` -> `Content`).
 *   **Key:** Tool Name (e.g., `"execute_script"`).
 *   **Value:** Complete instruction text/prompt.
 *   **Seeding:** On server startup (`tools/httpserver/main.ai.go`), the system checks if instructions exist. If not, it seeds them with defaults hardcoded in the binary.
@@ -204,10 +224,10 @@ The Setup Wizard (`tools/httpserver/templates/index.html`) supports three config
 
 ---
 
-## 5. Scaling Strategy (Vector Store)
+## 10. Scaling Strategy (Vector Store)
 
-### Current State: Key-Value Lookup
-Currently, the Agent retrieves instructions using **Exact Match** lookup from the `llm_instructions` B-Tree. This is efficient for the current set of tools (~20-50).
+### Current State: B-Tree Lookup
+Currently, the Agent retrieves instructions using **Exact Match** lookup from the `llm_knowledge` B-Tree. This is efficient for the current set of tools (~20-50).
 
 ### Vector Store Integration (`ai/vector`)
 A sophisticated **Transactional Vector Store** (IVF-based) is implemented in the codebase but is **not currently auto-scaling**.

@@ -177,6 +177,11 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 	}
 
 	emitter := NewResultEmitter(ctx)
+	if len(fields) > 0 {
+		emitter.SetColumns(fields)
+	}
+	emitter.Start()
+
 	count := 0
 
 	var startKey any

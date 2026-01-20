@@ -43,7 +43,7 @@ func getOptionFromLookup(filename string) *DatabaseOptions {
 	}
 	return nil
 }
-func removeOptionToLookup(filename string) {
+func removeOptionFromLookup(filename string) {
 	locker.Lock()
 	defer locker.Unlock()
 	delete(databaseOptionsLookup, filename)
@@ -305,11 +305,12 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, config sop.Database
 	} else {
 		opts = sop.StoreOptions{
 			Name:                     name,
-			SlotLength:               2000,
+			SlotLength:               btree.DefaultSlotLength,
 			IsUnique:                 true,
 			IsValueDataInNodeSegment: true,
 			LeafLoadBalancing:        false,
 			Description:              "General purpose B-Tree created via Database",
+			IsPrimitiveKey:           btree.IsPrimitive[TK](),
 		}
 	}
 
@@ -381,7 +382,7 @@ func Remove(ctx context.Context, dbPath string) error {
 
 	// Remove from Options lookup.
 	filename := filepath.Join(dbPath, databaseOptionsFilename)
-	removeOptionToLookup(filename)
+	removeOptionFromLookup(filename)
 
 	// Also avoid deleting the current working directory if it happens to be the DB path.
 	absPath, _ := filepath.Abs(dbPath)

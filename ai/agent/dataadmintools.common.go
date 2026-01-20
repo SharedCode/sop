@@ -364,12 +364,20 @@ func NewResultEmitter(ctx context.Context) *ResultEmitter {
 		re.buffer = &BufferingStreamer{}
 		re.streamer = re.buffer
 	}
-	re.streamer.BeginArray()
+	// re.streamer.BeginArray() // Delayed start
 	return re
+}
+
+func (re *ResultEmitter) Start() {
+	re.streamer.BeginArray()
 }
 
 func (re *ResultEmitter) Emit(item any) {
 	re.streamer.WriteItem(item)
+}
+
+func (re *ResultEmitter) SetColumns(cols []string) {
+	re.streamer.SetMetadata(map[string]any{"columns": cols})
 }
 
 func (re *ResultEmitter) Finalize() string {
@@ -385,8 +393,9 @@ type BufferingStreamer struct {
 	Items []any
 }
 
-func (bs *BufferingStreamer) BeginArray() {}
-func (bs *BufferingStreamer) EndArray()   {}
+func (bs *BufferingStreamer) BeginArray()                     {}
+func (bs *BufferingStreamer) EndArray()                       {}
+func (bs *BufferingStreamer) SetMetadata(meta map[string]any) {}
 func (bs *BufferingStreamer) WriteItem(item any) {
 	bs.Items = append(bs.Items, item)
 }
@@ -400,6 +409,10 @@ type FilteringStreamer struct {
 
 func (fs *FilteringStreamer) BeginArray() {
 	fs.wrapped.BeginArray()
+}
+
+func (fs *FilteringStreamer) SetMetadata(meta map[string]any) {
+	fs.wrapped.SetMetadata(meta)
 }
 
 func (fs *FilteringStreamer) WriteItem(item any) {

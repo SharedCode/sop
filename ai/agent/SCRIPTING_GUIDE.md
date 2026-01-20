@@ -4,6 +4,17 @@
 
 This guide describes the **Object-Oriented Scripting Language** used by the Data Admin Agent to interact with SOP databases. This language allows the LLM to compose complex workflows, optimize queries, and manage transactions programmatically.
 
+## SOP Scripting Philosophy: Explicit & Hybrid
+
+SOP introduces a novel **Hybrid Execution Model** that rejects the industry standard "compile-then-run" approach for Agents. 
+
+1.  **Dumb & Obedient Engine**: The Script Runner executes instructions exactly as written. It **never** guesses intent or attempts to "compile away" interaction steps.
+    *   If a script has an `ask` step, it **will** query the LLM.
+    *   If a script has a `command` step, it **will** execute the deterministic function.
+2.  **Hybrid Workflow**: This allows for scripts that interleave deterministic high-speed operations with high-level reasoning.
+    *   *Pattern*: **Setup** (Commands) -> **Reason** (Ask LLM) -> **Act** (Commands).
+    *   This "Scripting in the Run-Loop" enables agents to perform complex analysis on data they have just retrieved, within a single atomic session.
+
 ## Core Concepts
 
 The scripting engine is based on **Traits** and **Capabilities**. The LLM acts as a "Query Optimizer," choosing the best combination of operations based on the capabilities of the underlying objects.

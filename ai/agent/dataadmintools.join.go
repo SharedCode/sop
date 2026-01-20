@@ -118,6 +118,15 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 	joinType, _ := args["join_type"].(string)
 	if joinType == "" {
 		joinType = "inner"
+	} else {
+		joinType = strings.ToLower(strings.TrimSpace(joinType))
+		if strings.Contains(joinType, "outer") {
+			joinType = strings.ReplaceAll(joinType, " outer", "")
+		}
+		if strings.Contains(joinType, "join") {
+			joinType = strings.ReplaceAll(joinType, " join", "")
+		}
+		joinType = strings.TrimSpace(joinType)
 	}
 	limit := 10.0
 	if l, ok := args["limit"]; ok {
@@ -338,6 +347,11 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 	}
 
 	emitter := NewResultEmitter(ctx)
+	// For Join, columns depends on projection.
+	if len(fields) > 0 {
+		emitter.SetColumns(fields)
+	}
+	emitter.Start()
 
 	jp := &JoinProcessor{
 		ctx:             ctx,

@@ -81,7 +81,10 @@ func TestOptimizeCleansUpSoftDeletedItems(t *testing.T) {
 
 	// 4. Run Optimize
 	t4, _ := core_database.BeginTransaction(ctx, db, sop.ForWriting)
-	store, _ = vector.Open[map[string]any](ctx, t4, "cleanup_test", cfg)
+	store, err = vector.Open[map[string]any](ctx, t4, "cleanup_test", cfg)
+	if err != nil {
+		t.Fatalf("Open failed (4): %v", err)
+	}
 
 	if err := store.Optimize(ctx); err != nil {
 		t.Fatalf("Optimize failed: %v", err)
@@ -89,8 +92,14 @@ func TestOptimizeCleansUpSoftDeletedItems(t *testing.T) {
 
 	// 5. Verify Physical Deletion
 	t5, _ := core_database.BeginTransaction(ctx, db, sop.ForWriting)
-	store, _ = vector.Open[map[string]any](ctx, t5, "cleanup_test", cfg)
-	contentStore, _ = store.Content(ctx)
+	store, err = vector.Open[map[string]any](ctx, t5, "cleanup_test", cfg)
+	if err != nil {
+		t.Fatalf("Open failed (5): %v", err)
+	}
+	contentStore, err = store.Content(ctx)
+	if err != nil {
+		t.Fatalf("Content failed: %v", err)
+	}
 
 	if found, _ := contentStore.Find(ctx, ai.ContentKey{ItemID: id}, false); found {
 		t.Errorf("Item should have been physically deleted from Content after Optimize")

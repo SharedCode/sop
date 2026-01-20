@@ -49,7 +49,7 @@ type Config struct {
 // It verifies that the database configuration matches the persisted state.
 func Open[T any](ctx context.Context, trans sop.Transaction, domain string, cfg Config) (ai.VectorStore[T], error) {
 	sysStoreName := fmt.Sprintf("%s%s", domain, sysConfigSuffix)
-	sysStore, err := newBtree[string, int64](ctx, sop.ConfigureStore(sysStoreName, true, 1000, sysConfigDesc, sop.SmallData, ""), trans, func(a, b string) int {
+	sysStore, err := newBtree[string, int64](ctx, sop.ConfigureStore(sysStoreName, true, btree.DefaultSlotLength, sysConfigDesc, sop.SmallData, ""), trans, func(a, b string) int {
 		if a < b {
 			return -1
 		}
@@ -807,7 +807,7 @@ func (di *domainIndex[T]) Lookup(ctx context.Context) (btree.BtreeInterface[int,
 	return arch.Lookup, nil
 }
 
-// Version returns the current version number of the Vector store. This version changes 
+// Version returns the current version number of the Vector store. This version changes
 // when Optimize method completes its task and new set of Vector index is in place.
 func (di *domainIndex[T]) Version(ctx context.Context) (int64, error) {
 	return di.getActiveVersion(ctx)

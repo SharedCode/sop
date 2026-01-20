@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,7 +16,7 @@ import (
 // Demo Data Structures
 
 type UserProfile struct {
-	ID        string `json:"user_id"`
+	// ID removed to avoid split brain with Key
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 	Email     string `json:"email"`
@@ -25,7 +26,7 @@ type UserProfile struct {
 }
 
 type Product struct {
-	ID          string  `json:"id"`
+	// ID removed
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
 	Category    string  `json:"category"`
@@ -34,7 +35,7 @@ type Product struct {
 }
 
 type Order struct {
-	ID string `json:"id"`
+	// ID removed
 	// UserID removed for normalization. Relationship managed via users_orders store.
 	OrderDate   time.Time   `json:"order_date"`
 	TotalAmount float64     `json:"total_amount"`
@@ -70,10 +71,10 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 			{
 				SourceFields: []string{"age"},
 				TargetStore:  "users_by_age",
-				TargetFields: []string{"Key"},
+				TargetFields: []string{"key"},
 			},
 			{
-				SourceFields: []string{"user_id"},
+				SourceFields: []string{"key"},
 				TargetStore:  "users_orders",
 				TargetFields: []string{"key"},
 			},
@@ -81,8 +82,16 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 	}
 	userStore, err := database.NewBtree[string, UserProfile](ctx, opts, "users", trans, comparer, userStoreOpts)
 	if err != nil {
-		trans.Rollback(ctx)
-		return fmt.Errorf("failed to open users store: %v", err)
+		if strings.Contains(err.Error(), "exists") {
+			userStore, err = database.OpenBtree[string, UserProfile](ctx, opts, "users", trans, comparer)
+			if err != nil {
+				trans.Rollback(ctx)
+				return fmt.Errorf("failed to open existing users store: %v", err)
+			}
+		} else {
+			trans.Rollback(ctx)
+			return fmt.Errorf("failed to create users store: %v", err)
+		}
 	}
 
 	// Create users_by_age store for secondary index
@@ -93,16 +102,24 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 		Description:              "Index of users by age. Key=Age. Value=User ID.",
 		Relations: []sop.Relation{
 			{
-				SourceFields: []string{"Value"},
+				SourceFields: []string{"value"},
 				TargetStore:  "users",
-				TargetFields: []string{"user_id"},
+				TargetFields: []string{"key"},
 			},
 		},
 	}
 	userByAgeStore, err := database.NewBtree[int, string](ctx, opts, "users_by_age", trans, intComparer, usersByAgeOpts)
 	if err != nil {
-		trans.Rollback(ctx)
-		return fmt.Errorf("failed to open users_by_age store: %v", err)
+		if strings.Contains(err.Error(), "exists") {
+			userByAgeStore, err = database.OpenBtree[int, string](ctx, opts, "users_by_age", trans, intComparer)
+			if err != nil {
+				trans.Rollback(ctx)
+				return fmt.Errorf("failed to open existing users_by_age store: %v", err)
+			}
+		} else {
+			trans.Rollback(ctx)
+			return fmt.Errorf("failed to create users_by_age store: %v", err)
+		}
 	}
 
 	productStoreOpts := sop.StoreOptions{
@@ -113,15 +130,23 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 	}
 	productStore, err := database.NewBtree[string, Product](ctx, opts, "products", trans, comparer, productStoreOpts)
 	if err != nil {
-		trans.Rollback(ctx)
-		return fmt.Errorf("failed to open products store: %v", err)
+		if strings.Contains(err.Error(), "exists") {
+			productStore, err = database.OpenBtree[string, Product](ctx, opts, "products", trans, comparer)
+			if err != nil {
+				trans.Rollback(ctx)
+				return fmt.Errorf("failed to open existing products store: %v", err)
+			}
+		} else {
+			trans.Rollback(ctx)
+			return fmt.Errorf("failed to create products store: %v", err)
+		}
 	}
 
 	orderStoreOpts := sop.StoreOptions{
 		Name: "orders",
 		Relations: []sop.Relation{
 			{
-				SourceFields: []string{"id"},
+				SourceFields: []string{"key"},
 				TargetStore:  "users_orders",
 				TargetFields: []string{"value"},
 			},
@@ -129,8 +154,16 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 	}
 	orderStore, err := database.NewBtree[string, Order](ctx, opts, "orders", trans, comparer, orderStoreOpts)
 	if err != nil {
-		trans.Rollback(ctx)
-		return fmt.Errorf("failed to open orders store: %v", err)
+		if strings.Contains(err.Error(), "exists") {
+			orderStore, err = database.OpenBtree[string, Order](ctx, opts, "orders", trans, comparer)
+			if err != nil {
+				trans.Rollback(ctx)
+				return fmt.Errorf("failed to open existing orders store: %v", err)
+			}
+		} else {
+			trans.Rollback(ctx)
+			return fmt.Errorf("failed to create orders store: %v", err)
+		}
 	}
 
 	// Create users_orders link table
@@ -143,24 +176,35 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 			{
 				SourceFields: []string{"key"},
 				TargetStore:  "users",
-				TargetFields: []string{"user_id"},
+				TargetFields: []string{"key"},
 			},
 			{
 				SourceFields: []string{"value"},
 				TargetStore:  "orders",
-				TargetFields: []string{"id"},
+				TargetFields: []string{"key"},
 			},
 		},
 	}
 	// Key = UserID, Value = OrderID
 	usersOrdersStore, err := database.NewBtree[string, string](ctx, opts, "users_orders", trans, comparer, usersOrdersOpts)
 	if err != nil {
-		trans.Rollback(ctx)
-		return fmt.Errorf("failed to open users_orders store: %v", err)
+		if strings.Contains(err.Error(), "exists") {
+			usersOrdersStore, err = database.OpenBtree[string, string](ctx, opts, "users_orders", trans, comparer)
+			if err != nil {
+				trans.Rollback(ctx)
+				return fmt.Errorf("failed to open existing users_orders store: %v", err)
+			}
+		} else {
+			trans.Rollback(ctx)
+			return fmt.Errorf("failed to create users_orders store: %v", err)
+		}
 	}
 
 	// 2. Generate Users
-	users := make([]UserProfile, 0, 50)
+	users := make([]struct {
+		ID      string
+		Profile UserProfile
+	}, 0, 50)
 	firstNames := []string{"James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Elizabeth"}
 	lastNames := []string{"Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Rodriguez", "Martinez"}
 	countries := []string{"USA", "Canada", "UK", "Germany", "France", "Australia", "Japan"}
@@ -168,8 +212,9 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 	for i := 0; i < 50; i++ {
 		fn := firstNames[rand.Intn(len(firstNames))]
 		ln := lastNames[rand.Intn(len(lastNames))]
+		userID := uuid.NewString()
+
 		user := UserProfile{
-			ID:        uuid.NewString(),
 			FirstName: fn,
 			LastName:  ln,
 			Email:     fmt.Sprintf("%s.%s@example.com", fn, ln),
@@ -177,20 +222,26 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 			Age:       18 + rand.Intn(60),
 			Gender:    []string{"Male", "Female"}[rand.Intn(2)],
 		}
-		users = append(users, user)
-		if ok, err := userStore.Add(ctx, user.ID, user); err != nil || !ok {
+		users = append(users, struct {
+			ID      string
+			Profile UserProfile
+		}{userID, user})
+		if ok, err := userStore.Add(ctx, userID, user); err != nil || !ok {
 			trans.Rollback(ctx)
 			return fmt.Errorf("failed to add user: %v", err)
 		}
 		// Add to secondary index
-		if ok, err := userByAgeStore.Add(ctx, user.Age, user.ID); err != nil || !ok {
+		if ok, err := userByAgeStore.Add(ctx, user.Age, userID); err != nil || !ok {
 			trans.Rollback(ctx)
 			return fmt.Errorf("failed to add user to age index: %v", err)
 		}
 	}
 
 	// 3. Generate Products
-	products := make([]Product, 0, 20)
+	products := make([]struct {
+		ID   string
+		Item Product
+	}, 0, 20)
 
 	productNames := map[string][]string{
 		"Electronics": {"Smartphone", "Laptop", "Headphones", "Smart Watch", "Tablet"},
@@ -202,16 +253,19 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 
 	for cat, names := range productNames {
 		for _, name := range names {
+			prodID := uuid.NewString()
 			prod := Product{
-				ID:          uuid.NewString(),
 				Name:        name,
 				Description: fmt.Sprintf("High quality %s", name),
 				Category:    cat,
 				Price:       float64(10 + rand.Intn(990)),
 				Stock:       rand.Intn(100),
 			}
-			products = append(products, prod)
-			if ok, err := productStore.Add(ctx, prod.ID, prod); err != nil || !ok {
+			products = append(products, struct {
+				ID   string
+				Item Product
+			}{prodID, prod})
+			if ok, err := productStore.Add(ctx, prodID, prod); err != nil || !ok {
 				trans.Rollback(ctx)
 				return fmt.Errorf("failed to add product: %v", err)
 			}
@@ -231,14 +285,15 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 			item := OrderItem{
 				ProductID: prod.ID,
 				Quantity:  qty,
-				Price:     prod.Price,
+				Price:     prod.Item.Price,
 			}
 			items = append(items, item)
-			total += float64(qty) * prod.Price
+			total += float64(qty) * prod.Item.Price
 		}
 
+		orderID := uuid.NewString()
+
 		order := Order{
-			ID: uuid.NewString(),
 			// UserID removed
 			OrderDate:   time.Now().Add(-time.Duration(rand.Intn(30*24)) * time.Hour), // Past 30 days
 			TotalAmount: total,
@@ -246,13 +301,13 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 			Items:       items,
 		}
 
-		if ok, err := orderStore.Add(ctx, order.ID, order); err != nil || !ok {
+		if ok, err := orderStore.Add(ctx, orderID, order); err != nil || !ok {
 			trans.Rollback(ctx)
 			return fmt.Errorf("failed to add order: %v", err)
 		}
 
 		// Add link to users_orders
-		if ok, err := usersOrdersStore.Add(ctx, user.ID, order.ID); err != nil || !ok {
+		if ok, err := usersOrdersStore.Add(ctx, user.ID, orderID); err != nil || !ok {
 			trans.Rollback(ctx)
 			return fmt.Errorf("failed to add users_orders link: %v", err)
 		}

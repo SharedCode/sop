@@ -77,7 +77,26 @@ You can modify data directly.
 
 ---
 
-## 3. Script Management (Automation)
+## 4. Memory & Learning
+
+The Assistant has two types of memory. Knowing the difference helps you control it better.
+
+### Short-Term Memory (The "Session")
+This is the "Working Memory". It remembers what you just said, the results of the last query, and the active transaction.
+*   **Duration**: Lasts until you refresh the page or disconnect.
+*   **Usage**: "Refine that last query", "Use the ID from the previous result".
+
+### Long-Term Memory (The "System Knowledge")
+This is the "Brain". It remembers facts, terms, and instructions forever.
+*   **Storage**: Stored in a special B-Tree in the System Database.
+*   **Teaching**: You can teach the agent new things that it will remember next time.
+    *   **"Remember that 'EBITDA' means 'Earnings Before Interest...'"**
+    *   **"Save this instruction: Always use the 'users' store when I say 'clients'."**
+*   **Self-Correction**: If the agent consistently makes a mistake using a tool, you can correct it, and it can save that correction to its long-term memory to avoid the mistake in the future.
+
+---
+
+## 5. Script Management (Automation)
 
 Scripts allow you to record a sequence of actions and replay them later. This is "Natural Language Programming."
 

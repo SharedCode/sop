@@ -198,6 +198,7 @@ type JoinRightCursor struct {
 	fallbackList []any // fallback: in-memory list
 	fallbackIdx  int
 	closed       bool
+	bloomFilter  *BloomFilter // Optimization: Bloom Filter for Right Store Keys
 }
 
 func (jc *JoinRightCursor) Next(ctx context.Context) (any, bool, error) {
@@ -378,6 +379,8 @@ type ScriptEngine struct {
 	ResolveDatabase func(name string) (Database, error)
 	FunctionHandler func(ctx context.Context, name string, args map[string]any) (any, error)
 	LastResult      any
+	ReturnValue     any
+	HasReturned     bool
 	StoreOpener     func(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (jsondb.StoreAccessor, error)
 }
 
@@ -591,6 +594,7 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 
 		// 3. Create Step Closure
 		step := func(ctx context.Context, e *ScriptEngine) error {
+			fmt.Printf("DEBUG: Executing Instruction %d: %s\n", i, instr.Op)
 			// Resolve Args
 			args := make(map[string]any)
 			for k, resolver := range argResolvers {
@@ -1270,6 +1274,7 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 }
 
 func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, error) {
+	fmt.Printf("DEBUG: Scan Called with args: %+v\n", args)
 	storeName, _ := args["store"].(string) // Variable name
 	storeName = e.resolveVarName(storeName)
 	store, ok := e.Context.Stores[storeName]
@@ -1286,6 +1291,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 	startKey := args["start_key"]
 	prefix := args["prefix"]
 	filter := args["filter"]
+	fmt.Printf("DEBUG: Scan Filter extracted: %+v\n", filter)
 	stream, _ := args["stream"].(bool)
 
 	var okIter bool
@@ -1325,6 +1331,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 	if err != nil {
 		return nil, err
 	}
+	fmt.Printf("DEBUG: Scan Store '%s' okIter=%v\n", storeName, okIter)
 
 	if !okIter {
 		if stream {
@@ -1389,6 +1396,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 		if filter != nil {
 			// Debugging schema validation issues
 			fmt.Printf("DEBUG: Scan Filter Check. ItemType=%T Item=%+v\n", itemAny, item)
+			fmt.Printf("DEBUG: Scan Filter=%+v\n", filter)
 
 			match, err := e.evaluateCondition(item, filter.(map[string]any))
 			if err != nil {
@@ -1624,6 +1632,37 @@ func (lc *ListCursor) Close() error {
 	return nil
 }
 
+// MultiCursor chains multiple cursors.
+type MultiCursor struct {
+	cursors []ScriptCursor
+	current int
+}
+
+func (mc *MultiCursor) Next(ctx context.Context) (any, bool, error) {
+	for mc.current < len(mc.cursors) {
+		item, ok, err := mc.cursors[mc.current].Next(ctx)
+		if err != nil {
+			return nil, false, err
+		}
+		if ok {
+			return item, true, nil
+		}
+		// Current cursor exhausted, move to next
+		mc.current++
+	}
+	return nil, false, nil
+}
+
+func (mc *MultiCursor) Close() error {
+	var firstErr error
+	for _, c := range mc.cursors {
+		if err := c.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
+}
+
 // handleInto checks for 'into' argument and drains cursor/list to a store.
 func (e *ScriptEngine) handleInto(ctx context.Context, input any, args map[string]any) (any, error) {
 	intoStoreName, _ := args["into"].(string)
@@ -1717,6 +1756,15 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	joinType, _ := args["type"].(string)
 	if joinType == "" {
 		joinType = "inner"
+	} else {
+		joinType = strings.ToLower(strings.TrimSpace(joinType))
+		if strings.Contains(joinType, "outer") {
+			joinType = strings.ReplaceAll(joinType, " outer", "")
+		}
+		if strings.Contains(joinType, "join") {
+			joinType = strings.ReplaceAll(joinType, " join", "")
+		}
+		joinType = strings.TrimSpace(joinType)
 	}
 
 	on, _ := args["on"].(map[string]any)
@@ -1750,10 +1798,75 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	// Check if Right is a Store
 	rightStore, isRightStore := e.Context.Stores[rightVar]
 
+	rightAlias, _ := args["right_alias"].(string) // Extract alias if present
+
 	log.Debug("Join", "RightVar", rightVar, "IsStore", isRightStore, "JoinType", joinType)
 
 	var result any
 	var err error
+
+	// --- FULL OUTER JOIN SUPPORT ---
+	if joinType == "full" && isRightStore {
+		// Materialize Left Input locally (needed for Right Anti-Join part)
+		var leftList []any
+		if lc, ok := leftCursor.(*ListCursor); ok {
+			leftList = lc.items
+		} else {
+			// Drain if not already a list
+			for {
+				item, ok, err := leftCursor.Next(ctx)
+				if err != nil {
+					return nil, err
+				}
+				if !ok {
+					break
+				}
+				leftList = append(leftList, item)
+			}
+			// Reset leftCursor to a ListCursor over the same data for the Left Join part
+			leftCursor = &ListCursor{items: leftList}
+		}
+
+		// Invert ON clause: {LeftKey: RightKey} -> {RightKey: LeftKey}
+		invertedOn := make(map[string]any)
+		for k, v := range on {
+			invertedOn[fmt.Sprintf("%v", v)] = k
+		}
+
+		alias := rightVar
+		if a, ok := args["right_alias"].(string); ok && a != "" {
+			alias = a
+		} else if a, ok := args["store"].(string); ok && a != "" {
+			alias = strings.TrimPrefix(a, "@")
+		} else if a, ok := args["right_dataset"].(string); ok && a != "" {
+			alias = strings.TrimPrefix(a, "@")
+		}
+
+		// 1. Left Join (Standard)
+		leftJoinCursor := &JoinRightCursor{
+			left:           leftCursor,
+			right:          rightStore,
+			joinType:       "left",
+			on:             on,
+			ctx:            ctx,
+			engine:         e,
+			rightStoreName: alias,
+		}
+
+		// 2. Right Anti-Join (Suppressed Matches)
+		rightAntiJoinCursor := &RightOuterJoinStoreCursor{
+			rightStore:      rightStore,
+			leftList:        leftList,
+			on:              invertedOn,
+			ctx:             ctx,
+			engine:          e,
+			rightAlias:      rightAlias,
+			suppressMatches: true,
+		}
+
+		multi := &MultiCursor{cursors: []ScriptCursor{leftJoinCursor, rightAntiJoinCursor}}
+		return e.handleInto(ctx, multi, args)
+	}
 
 	// --- RIGHT OUTER JOIN SUPPORT (Swapped Left Join) ---
 	if joinType == "right" {
@@ -1782,6 +1895,7 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 				on:         invertedOn,
 				ctx:        ctx,
 				engine:     e,
+				rightAlias: rightAlias, // Pass alias
 			}, nil
 		} else {
 			// Right Side is Value: Use In-Memory stageJoin with swapped arguments
@@ -1818,7 +1932,10 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 
 			// Call stageJoin(Driver=Right, Lookup=Left, Type=Left)
 			// This effectively processes: For each Right, Match Left. If no Match, emit Right.
-			result, err = e.stageJoin(rightList, leftList, "left", invertedOn)
+			// Reverse Join: "Right" (Left arg) is Driver. "Left" (Right arg) is Lookup/Merged.
+			// If collision, "Left" field gets Prefixed. "Right" field stays Naked.
+			// Ideally we want to prefix Left with "Left" or "a".
+			result, err = e.stageJoin(rightList, leftList, "left", invertedOn, "Left")
 		}
 
 		if err == nil {
@@ -1897,7 +2014,7 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		}
 	}
 
-	result, err = e.stageJoin(leftList, rightList, joinType, on)
+	result, err = e.stageJoin(leftList, rightList, joinType, on, rightVar)
 	if err == nil {
 		// Handle Into (Wait, result is []any. We need to support handleInto for List too)
 		return e.handleInto(ctx, result, args)
@@ -1905,12 +2022,18 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	return result, err
 }
 
-func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[string]any) ([]any, error) {
+func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[string]any, rightAlias string) ([]any, error) {
 	var results []any
+	if rightAlias == "" {
+		rightAlias = "Right"
+	}
+
+	// Track matched Right indices for Full Join
+	matchedRight := make(map[int]bool)
 
 	for _, lItem := range left {
 		matched := false
-		for _, rItem := range right {
+		for rIdx, rItem := range right {
 			match := true
 			for lField, rFieldRaw := range on {
 				rField := fmt.Sprintf("%v", rFieldRaw)
@@ -1924,6 +2047,9 @@ func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[stri
 
 			if match {
 				matched = true
+				if joinType == "full" {
+					matchedRight[rIdx] = true
+				}
 				merged := make(map[string]any)
 
 				if m, ok := lItem.(map[string]any); ok {
@@ -1942,25 +2068,62 @@ func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[stri
 
 				if m, ok := rItem.(map[string]any); ok {
 					for k, v := range m {
-						merged[k] = v
+						if _, exists := merged[k]; exists {
+							merged[rightAlias+"."+k] = v
+						} else {
+							merged[k] = v
+						}
 					}
 				} else if om, ok := rItem.(*OrderedMap); ok && om != nil {
 					for k, v := range om.m {
-						merged[k] = v
+						if _, exists := merged[k]; exists {
+							merged[rightAlias+"."+k] = v
+						} else {
+							merged[k] = v
+						}
 					}
 				} else if om, ok := rItem.(OrderedMap); ok {
 					for k, v := range om.m {
-						merged[k] = v
+						if _, exists := merged[k]; exists {
+							merged[rightAlias+"."+k] = v
+						} else {
+							merged[k] = v
+						}
 					}
 				}
 
 				results = append(results, merged)
 			}
 		}
-		if !matched && joinType == "left" {
+		if !matched && (joinType == "left" || joinType == "full") {
 			results = append(results, lItem)
 		}
 	}
+
+	if joinType == "full" {
+		for i, rItem := range right {
+			if !matchedRight[i] {
+				// Emit unmatched right item (Left is null)
+				// Respect aliasing for consistency?
+				merged := make(map[string]any)
+				if m, ok := rItem.(map[string]any); ok {
+					for k, v := range m {
+						// Since "Left" is missing, we decide if we use alias or not.
+						// In match case: merged[rightAlias+"."+k] = v (if collision).
+						// Here, no collision. So standard is output raw k.
+						// BUT if user expects "B.id", they might be disappointed.
+						// Let's stick to raw k for now, consistent with "no match in Left".
+						// Actually, better: if rightAlias is set explicitly, we could honor it?
+						// But existing code only honors it if collision `matched[k]`.
+						// So we keep raw k.
+						merged[k] = v
+					}
+				}
+				results = append(results, merged)
+			}
+		}
+	}
+
 	return results, nil
 }
 
@@ -1981,9 +2144,6 @@ func (e *ScriptEngine) JoinRight(ctx context.Context, input any, args map[string
 	if alias, ok := args["alias"]; ok {
 		args["right_alias"] = alias
 	}
-
-	// Set 'type' to 'right' to force Right Outer Join logic in Join()
-	args["type"] = "right"
 
 	return e.Join(ctx, input, args)
 }
@@ -2107,7 +2267,11 @@ func (e *ScriptEngine) stageFilter(input []any, args map[string]any) ([]any, err
 	// Simple Map Match
 	if matchMap, ok := conditionRaw.(map[string]any); ok {
 		for _, item := range input {
-			if matchesMap(item, matchMap) {
+			match, err := e.evaluateCondition(item, matchMap)
+			if err != nil {
+				return nil, err
+			}
+			if match {
 				output = append(output, item)
 			}
 		}
@@ -2671,6 +2835,7 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 func matchesMap(item any, condition map[string]any) bool {
 	for k, v := range condition {
 		itemVal := getField(item, k)
+		fmt.Printf("DEBUG: matchesMap Check Key=%s, CondVal=%v, ItemVal=%v\n", k, v, itemVal)
 
 		// Check for operators map
 		if ops, ok := v.(map[string]any); ok {
@@ -2776,6 +2941,23 @@ func getField(itemObj any, field string) any {
 		}
 	}
 
+	// Reverse Alias Lookup: Request "name", Match "users.name" if unique
+	// This mimics SQL unqualified column resolution.
+	if !strings.Contains(field, ".") {
+		var candidate any
+		count := 0
+		suffix := "." + field
+		for k, v := range item {
+			if strings.HasSuffix(k, suffix) {
+				candidate = v
+				count++
+			}
+		}
+		if count == 1 {
+			return candidate
+		}
+	}
+
 	// Check for key field (alias or direct)
 	if field == "key" {
 		if v, ok := item["key"]; ok {
@@ -2802,6 +2984,25 @@ func getField(itemObj any, field string) any {
 		if v, ok := keyMap[field]; ok {
 			return v
 		}
+	}
+
+	// Helper: Reconstruct object from flattened dot-notation keys
+	// e.g. Request "orders", Input has "orders.id", "orders.total" -> Return map
+	reconstructed := make(map[string]any)
+	prefix := field + "."
+	hasReconstructed := false
+
+	for k, v := range item {
+		if strings.HasPrefix(k, prefix) {
+			suffix := k[len(prefix):]
+			if suffix != "" {
+				reconstructed[suffix] = v
+				hasReconstructed = true
+			}
+		}
+	}
+	if hasReconstructed {
+		return reconstructed
 	}
 
 	return nil

@@ -68,6 +68,7 @@ func (m *MockStore) Next(ctx context.Context) (bool, error) {
 		m.currentIndex++
 		return true, nil
 	}
+	m.currentIndex = len(m.Items)
 	return false, nil
 }
 
@@ -79,6 +80,7 @@ func (m *MockStore) Previous(ctx context.Context) (bool, error) {
 		m.currentIndex--
 		return true, nil
 	}
+	m.currentIndex = -1
 	return false, nil
 }
 

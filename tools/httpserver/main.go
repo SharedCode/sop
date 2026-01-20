@@ -90,7 +90,7 @@ var loadedAgents = make(map[string]ai.Agent[map[string]any])
 // Version is the application version, set at build time via -ldflags
 var Version = "dev"
 
-const SystemDBName = "System"
+const SystemDBName = "system"
 
 func main() {
 
@@ -193,10 +193,10 @@ func main() {
 	http.HandleFunc("/api/db/init", handleInitDatabase)
 	http.HandleFunc("/api/config/validate-path", handleValidatePath)
 	http.HandleFunc("/api/system/uninstall", handleUninstallSystem)
-	http.HandleFunc("/api/config/sets", handleListRegistrySets)
-	http.HandleFunc("/api/config/sets/create", handleCreateRegistrySet)
-	http.HandleFunc("/api/config/sets/switch", handleSwitchRegistrySet)
-	http.HandleFunc("/api/config/sets/delete", handleDeleteRegistrySet)
+	http.HandleFunc("/api/config/environments", handleListEnvironments)
+	http.HandleFunc("/api/config/environments/create", handleCreateEnvironment)
+	http.HandleFunc("/api/config/environments/switch", handleSwitchEnvironment)
+	http.HandleFunc("/api/config/environments/delete", handleDeleteEnvironment)
 	http.HandleFunc("/api/system/env", handleGetSystemEnv)
 
 	// Initialize Agents
@@ -471,6 +471,9 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 	// DELETE: Remove Database
 	if r.Method == http.MethodDelete {
 		name := r.URL.Query().Get("name")
+		deleteDataStr := r.URL.Query().Get("delete_data")
+		deleteData := deleteDataStr != "false" // Default to true if not specified or "true"
+
 		if name == "" {
 			http.Error(w, "Database name is required", http.StatusBadRequest)
 			return
@@ -505,8 +508,12 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Delete the database.
-		if err := database.Remove(context.Background(), dbPath); err != nil {
-			log.Warn(fmt.Sprintf("Cleanup: Failed to remove database (some metadata may persist): %v", err))
+		if deleteData {
+			if err := database.Remove(r.Context(), dbPath); err != nil {
+				log.Warn(fmt.Sprintf("Cleanup: Failed to remove database (some metadata may persist): %v", err))
+			}
+		} else {
+			log.Info(fmt.Sprintf("Database '%s' removed from config only. Data at '%s' preserved.", name, dbPath))
 		}
 
 		// Remove from config
@@ -536,6 +543,7 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 			StoresFolders   []string `json:"stores_folders"`
 			RegistryHashMod int      `json:"registry_hash_mod"`
 			PopulateDemo    bool     `json:"populate_demo"`
+			UseSharedDB     bool     `json:"use_shared_db"`
 			ErasureConfigs  []struct {
 				Key          string   `json:"key"`
 				DataChunks   int      `json:"data_chunks"`
@@ -556,6 +564,46 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 
 		if req.RegistryHashMod == 0 {
 			req.RegistryHashMod = fs.MinimumModValue
+		}
+
+		// Sanitize paths
+		req.Path = sanitizePath(req.Path)
+		for i, sf := range req.StoresFolders {
+			req.StoresFolders[i] = sanitizePath(sf)
+		}
+
+		// Check for existing DB files to determine state (Shared vs New)
+		dbOptionsPath := filepath.Join(req.Path, "dboptions.json")
+		_, errOpts := os.Stat(dbOptionsPath)
+		hasDBOptions := !os.IsNotExist(errOpts)
+
+		shouldSetup := true
+
+		if req.UseSharedDB {
+			// User wants to reuse existing DB
+			if hasDBOptions {
+				shouldSetup = false
+				log.Info(fmt.Sprintf("Shared User DB detected at '%s'. Reusing...", req.Path))
+
+				// Check Write Permissions
+				testFile := filepath.Join(req.Path, ".sop_write_test")
+				if f, err := os.Create(testFile); err != nil {
+					http.Error(w, fmt.Sprintf("User DB path exists but is not writable: %v", err), http.StatusBadRequest)
+					return
+				} else {
+					f.Close()
+					os.Remove(testFile)
+				}
+			} else {
+				http.Error(w, fmt.Sprintf("Shared User DB selected but 'dboptions.json' is missing in '%s'.", req.Path), http.StatusBadRequest)
+				return
+			}
+		} else {
+			// New DB requested
+			if hasDBOptions {
+				http.Error(w, fmt.Sprintf("Destination path '%s' already contains a 'dboptions.json'. Enable 'Shared Mode' to reuse it or choose a clean path.", req.Path), http.StatusBadRequest)
+				return
+			}
 		}
 
 		// Prepare Options
@@ -580,32 +628,35 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		// 1. Setup Database
-		ctx := context.Background()
-		if _, err := database.Setup(ctx, options); err != nil {
-			http.Error(w, "Failed to setup database: "+err.Error(), http.StatusInternalServerError)
-			return
+		ctx := r.Context()
+
+		if shouldSetup {
+			// 1. Setup Database
+			if _, err := database.Setup(ctx, options); err != nil {
+				http.Error(w, "Failed to setup database: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			// 2. Initialize Registry (Create dummy store)
+			tx, err := database.BeginTransaction(ctx, options, sop.ForWriting)
+			if err != nil {
+				http.Error(w, "Failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			comparer := func(a, b string) int {
+				return cmp.Compare(a, b)
+			}
+
+			if _, err = database.NewBtree[string, string](ctx, options, "system_check", tx, comparer); err != nil {
+				tx.Rollback(ctx)
+				http.Error(w, "Failed to initialize registry: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			tx.Commit(ctx)
 		}
 
-		// 2. Initialize Registry (Create dummy store)
-		tx, err := database.BeginTransaction(ctx, options, sop.ForWriting)
-		if err != nil {
-			http.Error(w, "Failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		comparer := func(a, b string) int {
-			return cmp.Compare(a, b)
-		}
-
-		if _, err = database.NewBtree[string, string](ctx, options, "system_check", tx, comparer); err != nil {
-			tx.Rollback(ctx)
-			http.Error(w, "Failed to initialize registry: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		tx.Commit(ctx)
-
-		if req.PopulateDemo {
+		if req.PopulateDemo && shouldSetup {
 			if err := PopulateDemoData(ctx, options); err != nil {
 				log.Error("Failed to populate demo data: " + err.Error())
 			}
