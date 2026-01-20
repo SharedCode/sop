@@ -244,7 +244,7 @@ func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 		s.IsValueDataActivelyPersisted == b.IsValueDataActivelyPersisted &&
 		s.IsValueDataGloballyCached == b.IsValueDataGloballyCached &&
 		s.LeafLoadBalancing == b.LeafLoadBalancing &&
-		s.IsPrimitiveKey == b.IsPrimitiveKey &&
+		//s.IsPrimitiveKey == b.IsPrimitiveKey &&
 		s.MapKeyIndexSpecification == b.MapKeyIndexSpecification &&
 		s.CELexpression == b.CELexpression
 }
