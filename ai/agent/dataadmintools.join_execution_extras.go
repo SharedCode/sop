@@ -43,6 +43,7 @@ type RightOuterJoinStoreCursor struct {
 	ctx        context.Context
 	engine     *ScriptEngine // Added to support Temp Store creation
 	rightAlias string        // Alias for Right Store items
+	leftAlias  string        // Alias for Left Store items
 
 	// Option to suppress matches (producing Anti-Join behavior: only unmatched Right items)
 	suppressMatches bool
@@ -284,50 +285,68 @@ func (c *RightOuterJoinStoreCursor) merge(lItem any, rKey, rVal any) any {
 
 	// Consolidate into Map
 	newMap := make(map[string]any)
+	var newKeys []string
 
-	// 1. Add Left Fields (if exists)
+	// 1. Add Left Fields (with Alias)
 	if lItem != nil {
+		var lMap map[string]any
+		var lKeys []string
+
 		if om, ok := lItem.(*OrderedMap); ok && om != nil {
-			for k, v := range om.m {
-				newMap[k] = v
-			}
+			lMap = om.m
+			lKeys = om.keys
 		} else if om, ok := lItem.(OrderedMap); ok {
-			for k, v := range om.m {
-				newMap[k] = v
-			}
+			lMap = om.m
+			lKeys = om.keys
 		} else if m, ok := lItem.(map[string]any); ok && m != nil {
-			for k, v := range m {
+			lMap = m
+			for k := range m {
+				lKeys = append(lKeys, k)
+			}
+			sort.Strings(lKeys)
+		}
+
+		for _, k := range lKeys {
+			v := lMap[k]
+			if c.leftAlias != "" {
+				key := c.leftAlias + "." + k
+				newMap[key] = v
+				newKeys = append(newKeys, key)
+			} else {
+				// No alias -> Naked
 				newMap[k] = v
+				newKeys = append(newKeys, k)
 			}
 		}
 	}
 
-	// 2. Add Right Fields
-	// Fix: Respect rightAlias if provided (Flatten with Dot Notation to match stageJoin)
-	if c.rightAlias != "" {
-		if om, ok := rFlat.(*OrderedMap); ok {
-			for k, v := range om.m {
-				newMap[c.rightAlias+"."+k] = v
-			}
-		} else if m, ok := rFlat.(map[string]any); ok {
-			for k, v := range m {
-				newMap[c.rightAlias+"."+k] = v
-			}
+	// 2. Add Right Fields (Driver)
+	var rMap map[string]any
+	var rKeys []string
+
+	if om, ok := rFlat.(*OrderedMap); ok {
+		rMap = om.m
+		rKeys = om.keys
+	} else if m, ok := rFlat.(map[string]any); ok {
+		rMap = m
+		for k := range m {
+			rKeys = append(rKeys, k)
 		}
-	} else {
-		// Overwrite behavior (Standard)
-		if om, ok := rFlat.(*OrderedMap); ok {
-			for k, v := range om.m {
-				newMap[k] = v
-			}
-		} else if m, ok := rFlat.(map[string]any); ok {
-			for k, v := range m {
-				newMap[k] = v
-			}
+		sort.Strings(rKeys)
+	}
+
+	for _, k := range rKeys {
+		v := rMap[k]
+		if c.rightAlias != "" {
+			key := c.rightAlias + "." + k
+			newMap[key] = v
+			newKeys = append(newKeys, key)
+		} else {
+			// No alias -> Naked
+			newMap[k] = v
+			newKeys = append(newKeys, k)
 		}
 	}
 
-	// Result is unordered map since we mixed them.
-	// If ordering matters, we need logic similar to JoinRightCursor.
-	return newMap
+	return &OrderedMap{m: newMap, keys: newKeys}
 }

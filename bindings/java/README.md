@@ -14,7 +14,7 @@ SOP bindings for Java allow you to use the high-performance SOP storage engine d
 SOP includes a powerful **Data Management Suite** that provides **full CRUD** capabilities for your B-Tree stores. It goes beyond simple viewing, offering a complete GUI for inspecting, searching, and managing your data at scale.
 
 *   **Web UI**: A modern, responsive interface for browsing B-Trees, managing stores, and visualizing data.
-*   **AI Assistant**: Integrated directly into the UI, the AI Assistant can help you write queries, explain data structures, and even generate code snippets.
+*   **AI Copilot**: Integrated directly into the UI, the AI Copilot can help you write queries, explain data structures, and even generate code snippets.
 *   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
 
 To launch the Data Manager, you can use the Go toolchain or look for provided binaries:
@@ -159,16 +159,16 @@ If database(s) are configured in **standalone mode**, ensure that the http serve
 
 If **clustered**, no worries, as SOP takes care of Redis-based coordination with other apps and/or SOP HTTP Servers managing databases using SOP in clustered mode.
 
-## AI Assistant & Scripts
+## AI Copilot & Scripts
 
-The SOP Data Manager includes a built-in **AI Assistant** that allows you to interact with your data using natural language and automate workflows using **Scripts**.
+The SOP Data Manager includes a built-in **AI Copilot** that allows you to interact with your data using natural language and automate workflows using **Scripts**.
 
 ### 1. Launch the Assistant
 Start the server:
 ```bash
 sop-httpserver
 ```
-Open your browser to `http://localhost:8080` and click the **AI Assistant** floating widget.
+Open your browser to `http://localhost:8080` and click the **AI Copilot** floating widget.
 
 ### 2. Natural Language Commands
 You can ask the assistant to perform tasks or query data:

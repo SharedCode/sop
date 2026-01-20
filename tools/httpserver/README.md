@@ -26,7 +26,7 @@ go build -o sop-manager ./tools/httpserver
 - **Database Configuration View**: Inspect critical database settings directly from the UI, including Erasure Coding parameters, Redis configuration, and Cache types.
 - **CEL Expression Editor**: Integrated editor for defining and testing Common Expression Language (CEL) scripts for custom sorting logic.
 - **Bulk Operations**: Select multiple items in the grid for batch deletion.
-- **Natural Language SQL**: Execute complex Selects, Joins, and CRUD operations using plain English via the AI Assistant.
+- **Natural Language SQL**: Execute complex Selects, Joins, and CRUD operations using plain English via the AI Copilot.
 - **Mobile Optimized**: Fully responsive design with touch-friendly controls and a fullscreen AI assistant for managing data on the go.
 
 ## The Power of the SOP Data Manager: From Embedded to Enterprise
@@ -55,7 +55,7 @@ In a large-scale enterprise environment, the SOP Data Manager shines as a statel
 ### Environment Variables
 
 - `SOP_ALLOW_INVALID_MAP_KEY`: Set to `true` to bypass the validation that requires Map Key types to have an Index Specification or CEL Expression. This is primarily for testing purposes.
-- `GEMINI_API_KEY`: **Required for AI Assistant**. The API key for Google Gemini Pro. You can obtain one from [Google AI Studio](https://aistudio.google.com/).
+- `GEMINI_API_KEY`: **Required for AI Copilot**. The API key for Google Gemini Pro. You can obtain one from [Google AI Studio](https://aistudio.google.com/).
 - `OPENAI_API_KEY`: Optional. The API key for OpenAI (ChatGPT) if you prefer to use GPT models.
 - `SOP_ROOT_PASSWORD`: Optional. Sets the admin password for protected operations (like schema updates). Overrides the `root_password` in `config.json`.
 
@@ -70,11 +70,11 @@ The Data Manager provides a comprehensive interface for managing your B-Tree sto
     *   *Note*: For populated stores, structural fields (Key/Value types) are locked to prevent data corruption. You can still edit the Description and Cache settings.
 *   **Delete Store**: Select a store, then click the **Trash** icon in the main header. You will be asked to type the store name to confirm deletion.
 
-### 2. AI Assistant & Scripts
+### 2. AI Copilot & Scripts
 
-The built-in AI Assistant allows you to interact with your data using natural language and automate tasks using Scripts.
+The built-in AI Copilot allows you to interact with your data using natural language and automate tasks using Scripts.
 
-*   **Open Assistant**: Click the floating chat button in the bottom-left corner.
+*   **Open Copilot**: Click the floating chat button in the bottom-left corner.
 *   **Natural Language SQL**: Perform complex queries without writing code.
     *   *Select*: "Find all users where Age > 25 and City is 'Seattle'."
     *   *Join*: "Join 'Users' and 'Orders' on 'UserID' and show me the top 5 spenders."
@@ -94,7 +94,7 @@ The built-in AI Assistant allows you to interact with your data using natural la
 
 ### 3. Advanced Queries (SQL Joins & Scripts as Views)
 
-The AI Assistant supports complex queries that mimic SQL operations, even though SOP is a NoSQL Key-Value store. It achieves high performance by leveraging the underlying B-Tree structure.
+The AI Copilot supports complex queries that mimic SQL operations, even though SOP is a NoSQL Key-Value store. It achieves high performance by leveraging the underlying B-Tree structure.
 
 *   **Inner Join & Prefix Queries**: Ask the assistant to join two stores.
     *   *Command*: "Join 'Users' and 'Orders' on 'UserID'."
@@ -238,7 +238,7 @@ Typical results on a modern laptop (M1/M2/M3 Mac):
 
 The SOP Data Manager includes a built-in **Setup Wizard** that can populate your database with a sample E-commerce dataset (Users, Products, Orders).
 
-This dataset is perfect for exploring the **AI Assistant** capabilities:
+This dataset is perfect for exploring the **AI Copilot** capabilities:
 1.  **Natural Language Queries**: "Show me all users from France"
 2.  **Joins**: "Find orders for user 'James Smith'"
 3.  **Scripts**: Create reusable workflows for complex reporting.

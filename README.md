@@ -9,9 +9,9 @@ It combines a high-performance **Polyglot Storage Engine** (ACID B-trees, Cachin
 SOP is **"Relational Capable"**, achieving the structural elegance of the Relational Model (Joins, ACID) while advancing beyond traditional SQL engines by integrating Swarm computing and deep AI capabilities directly into the core.
 
 This architecture allows SOP to be packaged into diverse applications:
-*   **AI Kit / Platform**: Adopt the AI Assistant into any domain using the versatile Scripting "engine".
+*   **AI Kit / Platform**: Adopt the AI Copilot into any domain using the versatile Scripting "engine".
 *   **Embedded Systems**: A powerful combination of an embedded database and a scripting/compute engine.
-*   **Personal AI Assistant**: A web-based, privacy-focused assistant for personal data.
+*   **Personal AI Copilot**: A web-based, privacy-focused assistant for personal data.
 *   **Enterprise Database**: Scalable, ACID-compliant storage for business-critical applications.
 *   **Big Data / Media**: High-performance storage for media libraries (e.g., Hollywood production databases).
 *   **Swarm Computing**: Future-ready foundation for map-reduce and swarm architectures.
@@ -20,7 +20,7 @@ Available for **Go**, **Python**, **Java**, **C#**, and **Rust**.
 
 ## SOP Data Manager & AI Suite
 
-SOP allows you to interact with your data using the **SOP Data Manager**—a web-based console that features a powerful **SQL-like** query engine and an **AI Assistant**.
+SOP allows you to interact with your data using the **SOP Data Manager**—a web-based console that features a powerful **SQL-like** query engine and an **AI Copilot**.
 
 ### Data Manager
 *   **Visual Management**: Inspect B-Trees, manage Stores (Key-Value, Vector, Model), and view System Logs.
@@ -29,8 +29,8 @@ SOP allows you to interact with your data using the **SOP Data Manager**—a web
     *   **JOIN**: Perform high-performance connections between stores (e.g., `Join 'Users' and 'Orders'`).
     *   **CRUD**: Insert, Update, and Delete records via a query interface.
 
-### AI Assistant & Scripts
-The Data Manager includes an integrated AI Assistant that supports **Natural Language Programming**.
+### AI Copilot & Scripts
+The Data Manager includes an integrated AI Copilot that supports **Natural Language Programming**.
 *   **Natural Language Queries**: Ask "Show me all active users" or "Join users with their last order", and the system acts on it.
 *   **Script Drafting**:
     *   **Draft**: Type `/create my_script` to start a draft.
@@ -181,7 +181,7 @@ See the [API Cookbook](COOKBOOK.md#interoperability-note-go-vs-other-languages) 
 SOP now includes a powerful **SOP Data Manager** that provides **full CRUD** capabilities for your B-Tree stores. It goes beyond simple viewing, offering a complete GUI for inspecting, searching, and managing your data at scale.
 
 *   **Web UI**: A modern, responsive interface for browsing B-Trees, managing stores, and visualizing data.
-*   **AI Assistant**: Integrated directly into the UI, the AI Assistant can help you write queries (including SQL-like Joins), explain data structures, and even generate code snippets.
+*   **AI Copilot**: Integrated directly into the UI, the AI Copilot can help you write queries (including SQL-like Joins), explain data structures, and even generate code snippets.
 *   **Natural Language SQL**: Perform complex Selects, Joins, and CRUD operations using plain English.
 *   **Streaming Architecture**: Results from Agents and Scripts are streamed in real-time, enabling **Scripts as Views** and efficient handling of large datasets with minimal memory footprint.
 *   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
@@ -398,7 +398,7 @@ See more details here that describe further, the different qualities & attribute
 Before I go, I would like to say, SOP is a green field, totally new. What is being shipped in V2 is just the start of this new product. We are barely scratching the surface of what can be done that will help storage management at super scale. SOP is a super computing enabler. The way its architecture was laid out, independent features and together, they are meant to give us the best/most efficient performance & IO of a group of computers (cluster), network & their storage, that can possibly give us.
 
 ## High level features/usability articles about SOP
-- [**New!** AI Assistant: A "Local Expert" for your Data](AI_ASSISTANT.md) - How we built a secure, RAG-based agent into the SOP Data Manager.
+- [**New!** AI Copilot: A "Local Expert" for your Data](AI_COPILOT.md) - How we built a secure, RAG-based agent into the SOP Data Manager.
 - [SOP: The Modern Database Library](SOP_MODERN_DB_ARTICLE.md) - Why "Database-as-a-Library" is the future of cloud-native storage.
 
 See the entire list & details here: https://github.com/sharedcode/sop/blob/master/README2.md#high-level-features-articles-about-sop

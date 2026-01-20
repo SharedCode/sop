@@ -1,6 +1,6 @@
 # SOP Demo Walkthrough
 
-This guide will walk you through the key features of the SOP Data Manager, from initial setup to using the AI Assistant.
+This guide will walk you through the key features of the SOP Data Manager, from initial setup to using the AI Copilot.
 
 ## Prerequisites
 
@@ -46,9 +46,9 @@ Once the page reloads, you will see the **Dashboard**.
 
 ---
 
-## Step 3: AI Assistant (Chat with Your Data)
+## Step 3: AI Copilot (Chat with Your Data)
 
-The **AI Assistant** allows you to query your database using natural language. It converts your questions into deterministic database scripts.
+The **AI Copilot** allows you to query your database using natural language. It converts your questions into deterministic database scripts.
 
 1.  **Open Chat**:
     *   Click the **Chat Icon** in the bottom-left corner.

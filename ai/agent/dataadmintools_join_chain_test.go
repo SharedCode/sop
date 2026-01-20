@@ -1,70 +1,70 @@
 package agent
 
 import (
-"context"
-"encoding/json"
-"testing"
+	"context"
+	"encoding/json"
+	"testing"
 
-"github.com/sharedcode/sop"
-"github.com/sharedcode/sop/ai"
-"github.com/sharedcode/sop/ai/database"
-core_database "github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/database"
+	core_database "github.com/sharedcode/sop/database"
 )
 
 func TestToolJoin_Chained_InnerThenRight(t *testing.T) {
-// Scenario: (Users INNER JOIN Orders) RIGHT JOIN Feedbacks
-// Users: 1 (Alice), 2 (Bob)
-// Orders: 101 (User 1), 102 (User 1). User 2 has no orders.
-// Feedbacks: F1 (Order 101 - Good), F2 (Order 999 - Orphan/External)
+	// Scenario: (Users INNER JOIN Orders) RIGHT JOIN Feedbacks
+	// Users: 1 (Alice), 2 (Bob)
+	// Orders: 101 (User 1), 102 (User 1). User 2 has no orders.
+	// Feedbacks: F1 (Order 101 - Good), F2 (Order 999 - Orphan/External)
 
-// Expected Result:
-// 1. (U join O) -> { (U1, O101), (U1, O102) }
-// 2. (Result1 right join F) ->
-//    - F1 matches O101 -> { F1, U1, O101 }
-//    - F2 matches O999 -> No Match -> { F2, null, null }
+	// Expected Result:
+	// 1. (U join O) -> { (U1, O101), (U1, O102) }
+	// 2. (Result1 right join F) ->
+	//    - F1 matches O101 -> { F1, U1, O101 }
+	//    - F2 matches O999 -> No Match -> { F2, null, null }
 
-// 1. Setup DB
-tmpDir := t.TempDir()
-dbOpts := sop.DatabaseOptions{
-Type:          sop.Clustered,
-StoresFolders: []string{tmpDir},
-CacheType:     sop.InMemory,
-}
-sysDB := database.NewDatabase(dbOpts)
+	// 1. Setup DB
+	tmpDir := t.TempDir()
+	dbOpts := sop.DatabaseOptions{
+		Type:          sop.Clustered,
+		StoresFolders: []string{tmpDir},
+		CacheType:     sop.InMemory,
+	}
+	sysDB := database.NewDatabase(dbOpts)
 
-ctx := context.Background()
-tx, err := core_database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
-if err != nil {
-t.Fatalf("BeginTransaction failed: %v", err)
-}
+	ctx := context.Background()
+	tx, err := core_database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
 
-// Create Stores
-users, _ := core_database.NewBtree[string, any](ctx, dbOpts, "users_chain", tx, nil)
-users.Add(ctx, "u1", map[string]any{"uid": 1.0, "name": "Alice"})
-users.Add(ctx, "u2", map[string]any{"uid": 2.0, "name": "Bob"})
+	// Create Stores
+	users, _ := core_database.NewBtree[string, any](ctx, dbOpts, "users_chain", tx, nil)
+	users.Add(ctx, "u1", map[string]any{"uid": 1.0, "name": "Alice"})
+	users.Add(ctx, "u2", map[string]any{"uid": 2.0, "name": "Bob"})
 
-orders, _ := core_database.NewBtree[string, any](ctx, dbOpts, "orders_chain", tx, nil)
-orders.Add(ctx, "o1", map[string]any{"oid": 101.0, "uid": 1.0, "item": "Book"})
-orders.Add(ctx, "o2", map[string]any{"oid": 102.0, "uid": 1.0, "item": "Pen"})
+	orders, _ := core_database.NewBtree[string, any](ctx, dbOpts, "orders_chain", tx, nil)
+	orders.Add(ctx, "o1", map[string]any{"oid": 101.0, "uid": 1.0, "item": "Book"})
+	orders.Add(ctx, "o2", map[string]any{"oid": 102.0, "uid": 1.0, "item": "Pen"})
 
-feedbacks, _ := core_database.NewBtree[string, any](ctx, dbOpts, "feedbacks_chain", tx, nil)
-feedbacks.Add(ctx, "f1", map[string]any{"fid": "F1", "oid": 101.0, "msg": "Great"})
-feedbacks.Add(ctx, "f2", map[string]any{"fid": "F2", "oid": 999.0, "msg": "Unknown"})
+	feedbacks, _ := core_database.NewBtree[string, any](ctx, dbOpts, "feedbacks_chain", tx, nil)
+	feedbacks.Add(ctx, "f1", map[string]any{"fid": "F1", "oid": 101.0, "msg": "Great"})
+	feedbacks.Add(ctx, "f2", map[string]any{"fid": "F2", "oid": 999.0, "msg": "Unknown"})
 
-if err := tx.Commit(ctx); err != nil {
-t.Fatalf("Commit failed: %v", err)
-}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
 
-// 2. Prepare Agent
-agentCfg := Config{ID: "test_admin"}
-agent := &DataAdminAgent{
-Config:    agentCfg,
-databases: map[string]sop.DatabaseOptions{"test_db": dbOpts},
-systemDB:  sysDB,
-}
+	// 2. Prepare Agent
+	agentCfg := Config{ID: "test_admin"}
+	agent := &DataAdminAgent{
+		Config:    agentCfg,
+		databases: map[string]sop.DatabaseOptions{"test_db": dbOpts},
+		systemDB:  sysDB,
+	}
 
-// 3. Script
-scriptJSON := `[
+	// 3. Script
+	scriptJSON := `[
 {"op": "open_db", "args": {"name": "test_db"}, "result_var": "test_db"},
 {"op": "begin_tx", "args": {"database": "test_db", "mode": "read"}, "result_var": "tx"},
 
@@ -81,114 +81,114 @@ scriptJSON := `[
 {"op": "commit_tx", "args": {"transaction": "tx"}}
 ]`
 
-sessionPayload := &ai.SessionPayload{CurrentDB: "test_db"}
-ctx = context.WithValue(ctx, "session_payload", sessionPayload)
+	sessionPayload := &ai.SessionPayload{CurrentDB: "test_db"}
+	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
-resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
-if err != nil {
-t.Fatalf("Script failed: %v", err)
-}
+	resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
+	if err != nil {
+		t.Fatalf("Script failed: %v", err)
+	}
 
-t.Logf("Response: %s", resp)
+	t.Logf("Response: %s", resp)
 
-// 4. Validate
-var results []map[string]any
-if err := json.Unmarshal([]byte(resp), &results); err != nil {
-t.Fatalf("Parse error: %v", err)
-}
+	// 4. Validate
+	var results []map[string]any
+	if err := json.Unmarshal([]byte(resp), &results); err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
 
-if len(results) != 2 {
-t.Fatalf("Expected 2 results, got %d", len(results))
-}
+	if len(results) != 2 {
+		t.Fatalf("Expected 2 results, got %d", len(results))
+	}
 
-resultMap := make(map[string]map[string]any)
-for _, r := range results {
-fid := r["fid"].(string)
-resultMap[fid] = r
-}
+	resultMap := make(map[string]map[string]any)
+	for _, r := range results {
+		fid := r["fid"].(string)
+		resultMap[fid] = r
+	}
 
-// Check F1 (Matched)
-if r, ok := resultMap["F1"]; !ok {
-t.Error("Missing F1")
-} else {
-if r["name"] != "Alice" {
-t.Errorf("F1 should map to Alice, got %v", r["name"])
-}
-if r["s_orders.item"] != "Book" {
-t.Errorf("F1 should map to Book, got %v", r["s_orders.item"])
-}
-}
+	// Check F1 (Matched)
+	if r, ok := resultMap["F1"]; !ok {
+		t.Error("Missing F1")
+	} else {
+		if r["name"] != "Alice" {
+			t.Errorf("F1 should map to Alice, got %v", r["name"])
+		}
+		if r["item"] != "Book" {
+			t.Errorf("F1 should map to Book, got %v", r["item"])
+		}
+	}
 
-// Check F2 (Unmatched)
-if r, ok := resultMap["F2"]; !ok {
-t.Error("Missing F2")
-} else {
-if r["name"] != nil {
-t.Errorf("F2 should have nil name, got %v", r["name"])
-}
-if r["s_orders.item"] != nil {
-t.Errorf("F2 should have nil item, got %v", r["s_orders.item"])
-}
-if r["msg"] != "Unknown" {
-t.Errorf("F2 msg mismatch")
-}
-}
+	// Check F2 (Unmatched)
+	if r, ok := resultMap["F2"]; !ok {
+		t.Error("Missing F2")
+	} else {
+		if r["name"] != nil {
+			t.Errorf("F2 should have nil name, got %v", r["name"])
+		}
+		if r["s_orders.item"] != nil {
+			t.Errorf("F2 should have nil item, got %v", r["s_orders.item"])
+		}
+		if r["msg"] != "Unknown" {
+			t.Errorf("F2 msg mismatch")
+		}
+	}
 }
 
 func TestToolJoin_Chained_InnerThenLeft(t *testing.T) {
-// Scenario: (Users INNER JOIN Orders) LEFT JOIN Details
-// Users: u1, u2, u3
-// Orders: o1(u1), o2(u2). u3 has no orders.
-// Details: d1(o1). o2 has no details.
+	// Scenario: (Users INNER JOIN Orders) LEFT JOIN Details
+	// Users: u1, u2, u3
+	// Orders: o1(u1), o2(u2). u3 has no orders.
+	// Details: d1(o1). o2 has no details.
 
-// Expected Result:
-// 1. (Users join Orders) -> { (u1, o1), (u2, o2) } (u3 dropped implicit inner)
-// 2. (... left join Details) ->
-//    - o1 matches d1 -> { u1, o1, d1 }
-//    - o2 matches nothing -> { u2, o2, null }
+	// Expected Result:
+	// 1. (Users join Orders) -> { (u1, o1), (u2, o2) } (u3 dropped implicit inner)
+	// 2. (... left join Details) ->
+	//    - o1 matches d1 -> { u1, o1, d1 }
+	//    - o2 matches nothing -> { u2, o2, null }
 
-// 1. Setup DB
-tmpDir := t.TempDir()
-dbOpts := sop.DatabaseOptions{
-Type:          sop.Clustered,
-StoresFolders: []string{tmpDir},
-CacheType:     sop.InMemory,
-}
-sysDB := database.NewDatabase(dbOpts)
+	// 1. Setup DB
+	tmpDir := t.TempDir()
+	dbOpts := sop.DatabaseOptions{
+		Type:          sop.Clustered,
+		StoresFolders: []string{tmpDir},
+		CacheType:     sop.InMemory,
+	}
+	sysDB := database.NewDatabase(dbOpts)
 
-ctx := context.Background()
-tx, err := core_database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
-if err != nil {
-t.Fatalf("BeginTransaction failed: %v", err)
-}
+	ctx := context.Background()
+	tx, err := core_database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
 
-// Create Stores
-users, _ := core_database.NewBtree[string, any](ctx, dbOpts, "users_chain_l", tx, nil)
-users.Add(ctx, "u1", map[string]any{"uid": 1.0, "name": "Alice"})
-users.Add(ctx, "u2", map[string]any{"uid": 2.0, "name": "Bob"})
-users.Add(ctx, "u3", map[string]any{"uid": 3.0, "name": "Charlie"})
+	// Create Stores
+	users, _ := core_database.NewBtree[string, any](ctx, dbOpts, "users_chain_l", tx, nil)
+	users.Add(ctx, "u1", map[string]any{"uid": 1.0, "name": "Alice"})
+	users.Add(ctx, "u2", map[string]any{"uid": 2.0, "name": "Bob"})
+	users.Add(ctx, "u3", map[string]any{"uid": 3.0, "name": "Charlie"})
 
-orders, _ := core_database.NewBtree[string, any](ctx, dbOpts, "orders_chain_l", tx, nil)
-orders.Add(ctx, "o1", map[string]any{"oid": 101.0, "uid": 1.0, "title": "Book"})
-orders.Add(ctx, "o2", map[string]any{"oid": 102.0, "uid": 2.0, "title": "Pen"})
+	orders, _ := core_database.NewBtree[string, any](ctx, dbOpts, "orders_chain_l", tx, nil)
+	orders.Add(ctx, "o1", map[string]any{"oid": 101.0, "uid": 1.0, "title": "Book"})
+	orders.Add(ctx, "o2", map[string]any{"oid": 102.0, "uid": 2.0, "title": "Pen"})
 
-details, _ := core_database.NewBtree[string, any](ctx, dbOpts, "details_chain_l", tx, nil)
-details.Add(ctx, "d1", map[string]any{"did": "D1", "oid": 101.0, "info": "Hardcover"})
+	details, _ := core_database.NewBtree[string, any](ctx, dbOpts, "details_chain_l", tx, nil)
+	details.Add(ctx, "d1", map[string]any{"did": "D1", "oid": 101.0, "info": "Hardcover"})
 
-if err := tx.Commit(ctx); err != nil {
-t.Fatalf("Commit failed: %v", err)
-}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
 
-// 2. Prepare Agent
-agentCfg := Config{ID: "test_admin_left"}
-agent := &DataAdminAgent{
-Config:    agentCfg,
-databases: map[string]sop.DatabaseOptions{"test_db": dbOpts},
-systemDB:  sysDB,
-}
+	// 2. Prepare Agent
+	agentCfg := Config{ID: "test_admin_left"}
+	agent := &DataAdminAgent{
+		Config:    agentCfg,
+		databases: map[string]sop.DatabaseOptions{"test_db": dbOpts},
+		systemDB:  sysDB,
+	}
 
-// 3. Script
-scriptJSON := `[
+	// 3. Script
+	scriptJSON := `[
 {"op": "open_db", "args": {"name": "test_db"}, "result_var": "test_db"},
 {"op": "begin_tx", "args": {"database": "test_db", "mode": "read"}, "result_var": "tx"},
 
@@ -205,65 +205,64 @@ scriptJSON := `[
 {"op": "commit_tx", "args": {"transaction": "tx"}}
 ]`
 
-sessionPayload := &ai.SessionPayload{CurrentDB: "test_db"}
-ctx = context.WithValue(ctx, "session_payload", sessionPayload)
+	sessionPayload := &ai.SessionPayload{CurrentDB: "test_db"}
+	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
-resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
-if err != nil {
-t.Fatalf("Script failed: %v", err)
-}
+	resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
+	if err != nil {
+		t.Fatalf("Script failed: %v", err)
+	}
 
-t.Logf("Response: %s", resp)
+	t.Logf("Response: %s", resp)
 
-// 4. Validate
-var results []map[string]any
-if err := json.Unmarshal([]byte(resp), &results); err != nil {
-t.Fatalf("Parse error: %v", err)
-}
+	// 4. Validate
+	var results []map[string]any
+	if err := json.Unmarshal([]byte(resp), &results); err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
 
-// Expect 2 records
-if len(results) != 2 {
-t.Errorf("Expected 2 records, got %d", len(results))
-}
+	// Expect 2 records
+	if len(results) != 2 {
+		t.Errorf("Expected 2 records, got %d", len(results))
+	}
 
-// Find Alice (should have details)
-var alice map[string]any
-var bob map[string]any
-for _, r := range results {
-if r["name"] == "Alice" {
-alice = r
-} else if r["name"] == "Bob" {
-bob = r
-}
-}
+	// Find Alice (should have details)
+	var alice map[string]any
+	var bob map[string]any
+	for _, r := range results {
+		if r["name"] == "Alice" {
+			alice = r
+		} else if r["name"] == "Bob" {
+			bob = r
+		}
+	}
 
-if alice == nil {
-t.Error("Alice not found (Inner Join failure?)")
-} else {
-// Use "D1" as value or "s_details.info"
-// The key from details is d1. The on field is oid.
-// Value is map{"did":"D1", "oid":101, "info":"Hardcover"}
-// If we didn't specify alias, it might be prefixed with "details_chain_l." or "Right."
-// However, script alias "left" logic might default to using Store Name as prefix.
-// Let's check keys available
-// t.Logf("Alice Keys: %v", alice)
-if alice["s_details.info"] != "Hardcover" {
-// Try fallback
-if alice["info"] != "Hardcover" {
-t.Errorf("Alice missing details: %v", alice)
-}
-}
-}
+	if alice == nil {
+		t.Error("Alice not found (Inner Join failure?)")
+	} else {
+		// Use "D1" as value or "s_details.info"
+		// The key from details is d1. The on field is oid.
+		// Value is map{"did":"D1", "oid":101, "info":"Hardcover"}
+		// If we didn't specify alias, it might be prefixed with "details_chain_l." or "Right."
+		// However, script alias "left" logic might default to using Store Name as prefix.
+		// Let's check keys available
+		// t.Logf("Alice Keys: %v", alice)
+		if alice["s_details.info"] != "Hardcover" {
+			// Try fallback
+			if alice["info"] != "Hardcover" {
+				t.Errorf("Alice missing details: %v", alice)
+			}
+		}
+	}
 
-if bob == nil {
-t.Error("Bob not found (Inner Join failure?)")
-} else {
-if val, ok := bob["s_details.info"]; ok && val != nil {
-t.Errorf("Bob should not have details, got: %v", val)
+	if bob == nil {
+		t.Error("Bob not found (Inner Join failure?)")
+	} else {
+		if val, ok := bob["s_details.info"]; ok && val != nil {
+			t.Errorf("Bob should not have details, got: %v", val)
+		}
+	}
 }
-}
-}
-
 
 func TestToolJoin_Full(t *testing.T) {
 	// Scenario: Full Join A(1,2) and B(2,3)
@@ -335,33 +334,37 @@ func TestToolJoin_Full(t *testing.T) {
 	if len(results) != 3 {
 		t.Fatalf("Expected 3 results, got %d. Results: %v", len(results), results)
 	}
-    
-    foundA1 := false
-    foundMatch := false
-    foundB3 := false
-    
-    for _, r := range results {
-        idA, _ := r["id"].(float64)
-        idB, _ := r["B.id"].(float64)
-        
-        if idA == 1 && r["B.id"] == nil {
-            foundA1 = true
-        }
-        if idA == 2 && idB == 2 {
-            foundMatch = true
-        }
-        // Check B3. RightOuterJoinStoreCursor uses alias for key if provided.
-        // We provided right_alias="B".
-        // So B3 fields: "B.id": 3.0, "B.val": "B3". "id": nil.
-        
-        if r["id"] == nil && r["B.id"] == 3.0 {
-             foundB3 = true
-        }
-    }
-    
-    if !foundA1 { t.Error("Missing A1 (Left Only)") }
-    if !foundMatch { t.Error("Missing A2-B2 (Match)") }
-    if !foundB3 { 
-        t.Error("Missing B3 (Right Only). Dump:", results)
-    }
+
+	foundA1 := false
+	foundMatch := false
+	foundB3 := false
+
+	for _, r := range results {
+		idA, _ := r["id"].(float64)
+		idB, _ := r["B.id"].(float64)
+
+		if idA == 1 && r["B.id"] == nil {
+			foundA1 = true
+		}
+		if idA == 2 && idB == 2 {
+			foundMatch = true
+		}
+		// Check B3. RightOuterJoinStoreCursor uses alias for key if provided.
+		// We provided right_alias="B".
+		// So B3 fields: "B.id": 3.0, "B.val": "B3". "id": nil.
+
+		if idA == 3.0 {
+			foundB3 = true
+		}
+	}
+
+	if !foundA1 {
+		t.Error("Missing A1 (Left Only)")
+	}
+	if !foundMatch {
+		t.Error("Missing A2-B2 (Match)")
+	}
+	if !foundB3 {
+		t.Error("Missing B3 (Right Only). Dump:", results)
+	}
 }

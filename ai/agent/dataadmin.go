@@ -199,6 +199,10 @@ func (a *DataAdminAgent) Search(ctx context.Context, query string, limit int) ([
 
 // Ask processes a query and returns a response.
 func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+	// Reset session context for each new Ask interaction to prevent variable leakage from previous queries.
+	// This ensures that variables like 'output' or 'result' do not carry over stale data.
+	a.sessionContext = NewScriptContext()
+
 	// Refresh tools to ensure latest instructions from llm_knowledge are used
 	a.registerTools()
 

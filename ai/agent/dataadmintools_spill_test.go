@@ -136,7 +136,15 @@ func TestJoinRight_SpillToDisk(t *testing.T) {
 		}
 		count++
 
-		m := item.(map[string]any)
+		var m map[string]any
+		if om, ok := item.(*OrderedMap); ok {
+			m = om.m
+		} else if om, ok := item.(OrderedMap); ok {
+			m = om.m
+		} else {
+			m = item.(map[string]any)
+		}
+
 		// Verify join correctness
 		rName := m["name"]
 		lDesc := m["desc"]

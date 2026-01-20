@@ -1,6 +1,6 @@
-# AI Assistant Scripts: Natural Language Programming
+# AI Copilot Scripts: Natural Language Programming
 
-The SOP AI Assistant includes a powerful **Script System** that transforms your AI chat sessions into a "Natural Language Programming" environment. It allows you to draft, refine, and execute complex workflows that combine the flexibility of LLMs with the performance of compiled code.
+The SOP AI Copilot includes a powerful **Script System** that transforms your AI chat sessions into a "Natural Language Programming" environment. It allows you to draft, refine, and execute complex workflows that combine the flexibility of LLMs with the performance of compiled code.
 
 ## Concept: "Compiled Instructions"
 
@@ -19,7 +19,7 @@ SOP exposes its B-Tree engine directly to the script system. This effectively cr
 
 ## Tools Reference
 
-The SOP AI Agent exposes a comprehensive set of tools for managing scripts and data.
+The SOP AI Copilot exposes a comprehensive set of tools for managing scripts and data.
 
 ### Script Management
 
@@ -50,7 +50,7 @@ The SOP AI Agent exposes a comprehensive set of tools for managing scripts and d
 
 ## Session Commands
 
-When interacting with the AI Assistant interactively (e.g., in the web console), you can use slash commands to manage your session, data, and draft scripts manually. This gives you a full CLI experience.
+When interacting with the AI Copilot interactively (e.g., in the web console), you can use slash commands to manage your session, data, and draft scripts manually. This gives you a full CLI experience.
 
 ### Data Operations (CLI)
 
@@ -91,6 +91,15 @@ To enable the LLM to generate scripts with "fine-grained agility" and control, w
 *   **`toFloat(val)`**: A robust type converter that safely extracts numerical values from various input types (strings, ints, floats) for mathematical operations.
 *   **`Scan(store, options)`**: The fundamental B-Tree traversal block. It supports forward/backward iteration, prefix matching, and range queries, serving as the engine for `SELECT * FROM ... WHERE ...` style operations.
 *   **`JoinRightCursor(left_store, right_store, join_key)`**: A specialized cursor that efficiently performs a Right Outer Join between two B-Trees. It iterates through the 'Right' store and performs optimized lookups in the 'Left' store, handling missing matches gracefully.
+
+### Variable Resolution & Join Semantics
+
+When using operations like `Join` or `Project`, the script engine manages variable scope intelligently.
+
+*   **Automatic Aliasing**: When joining on a Store Variable (e.g. a store opened with `scan`), the engine automatically sets the alias to the Store Name (e.g. `users`). This allows for intuitive projections like `{"users.*": 1}` without needing to manually specify an alias.
+*   **Strict vs. Loose Resolution**:
+    *   **Strict Mode** (Internal): Variables are fully qualified (e.g., `storeName.fieldName`). This avoids ambiguity and is how the engine defaults when handling Store Variables.
+    *   **Loose Mode** (External): In your scripts (where ambiguity is low), you can refer to fields directly (e.g. `age` instead of `users.age`). The engine resolves this to the correct source automatically. To force a specific source or handle name collisions, use the strict `storeName.field` syntax.
 
 **Why this matters:**
 Instead of asking the LLM to "write a Python script to filter users," we ask it to "generate a JSON structure using `matchesMap`." This ensures:

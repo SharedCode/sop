@@ -192,6 +192,7 @@ type JoinRightCursor struct {
 
 	// Dataset info for prefixing
 	rightStoreName string
+	leftStoreName  string
 
 	// Legacy / Runtime State
 	useFallback  bool  // optimization: materialization fallback
@@ -492,7 +493,9 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	// But assuming we add a 'return' OP, we would look for that.
 
 	// Priority 1: Check for 'output' variable (Explicit override)
-	if val, ok := scriptCtx.Variables["output"]; ok {
+	// We only return it if it is non-nil, because some operations (like commit_tx) might use 'output'
+	// as a dummy variable but return nil, shadowing the actual result in 'final_result'.
+	if val, ok := scriptCtx.Variables["output"]; ok && val != nil {
 		return serializeResult(val)
 	}
 
@@ -594,7 +597,6 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 
 		// 3. Create Step Closure
 		step := func(ctx context.Context, e *ScriptEngine) error {
-			fmt.Printf("DEBUG: Executing Instruction %d: %s\n", i, instr.Op)
 			// Resolve Args
 			args := make(map[string]any)
 			for k, resolver := range argResolvers {
@@ -843,8 +845,6 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 }
 
 func serializeResult(val any) (string, error) {
-	// log.Debug("serializeResult called", "type", fmt.Sprintf("%T", val), "val", val)
-
 	if cursor, ok := val.(ScriptCursor); ok {
 		var results []any
 		defer cursor.Close()
@@ -880,6 +880,14 @@ func serializeResult(val any) (string, error) {
 				itemMap = om.m
 			}
 
+			// Friendly Output Strategy:
+			// If we have a map, we apply "Smart Collapsing" to strip unique prefixes (e.g. s_orders.id -> id).
+			// This implements the "Friendliness" requirement at the last mile.
+			if itemMap != nil {
+				// collapseUniqueKeys modifies map in place and returns it
+				itemObj = collapseUniqueKeys(itemMap)
+			}
+
 			var item any = itemObj
 			// Apply top-level field ordering
 			if itemMap != nil && len(orderedFields) > 0 {
@@ -908,6 +916,28 @@ func serializeResult(val any) (string, error) {
 		}
 
 		val = results
+	}
+
+	// Friendly Output: Collapse unique keys for cleaner JSON
+	if list, ok := val.([]any); ok {
+		for i, itemObj := range list {
+			var itemMap map[string]any
+			if m, ok := itemObj.(map[string]any); ok {
+				itemMap = m
+			} else if om, ok := itemObj.(*OrderedMap); ok && om != nil {
+				itemMap = om.m
+			} else if om, ok := itemObj.(OrderedMap); ok {
+				itemMap = om.m
+			}
+
+			if itemMap != nil {
+				// collapseUniqueKeys modifies in-place
+				collapsed := collapseUniqueKeys(itemMap)
+				// Replace with vanilla map to ensure JSON marshaling uses the new keys (and skips deleted ones)
+				// This sidesteps checking if it was OrderedMap with stale keys.
+				list[i] = collapsed
+			}
+		}
 	}
 
 	bytes, err := json.MarshalIndent(val, "", "  ")
@@ -1798,7 +1828,22 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	// Check if Right is a Store
 	rightStore, isRightStore := e.Context.Stores[rightVar]
 
-	rightAlias, _ := args["right_alias"].(string) // Extract alias if present
+	// Determine Aliases
+	rightAlias, _ := args["right_alias"].(string)
+	if rightAlias == "" {
+		if a, ok := args["store"].(string); ok && a != "" {
+			rightAlias = strings.TrimPrefix(a, "@")
+		} else if a, ok := args["right_dataset"].(string); ok && a != "" {
+			rightAlias = strings.TrimPrefix(a, "@")
+		} else if isRightStore && rightStore != nil {
+			// Prefer Store Name as alias over variable name to support natural projection (e.g. "users.*")
+			rightAlias = rightStore.GetStoreInfo().Name
+		} else {
+			rightAlias = rightVar
+		}
+	}
+
+	leftAlias, _ := args["left_alias"].(string)
 
 	log.Debug("Join", "RightVar", rightVar, "IsStore", isRightStore, "JoinType", joinType)
 
@@ -1833,15 +1878,6 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 			invertedOn[fmt.Sprintf("%v", v)] = k
 		}
 
-		alias := rightVar
-		if a, ok := args["right_alias"].(string); ok && a != "" {
-			alias = a
-		} else if a, ok := args["store"].(string); ok && a != "" {
-			alias = strings.TrimPrefix(a, "@")
-		} else if a, ok := args["right_dataset"].(string); ok && a != "" {
-			alias = strings.TrimPrefix(a, "@")
-		}
-
 		// 1. Left Join (Standard)
 		leftJoinCursor := &JoinRightCursor{
 			left:           leftCursor,
@@ -1850,7 +1886,8 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 			on:             on,
 			ctx:            ctx,
 			engine:         e,
-			rightStoreName: alias,
+			rightStoreName: rightAlias,
+			leftStoreName:  leftAlias,
 		}
 
 		// 2. Right Anti-Join (Suppressed Matches)
@@ -1896,6 +1933,7 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 				ctx:        ctx,
 				engine:     e,
 				rightAlias: rightAlias, // Pass alias
+				leftAlias:  leftAlias,
 			}, nil
 		} else {
 			// Right Side is Value: Use In-Memory stageJoin with swapped arguments
@@ -1930,12 +1968,37 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 				return nil, fmt.Errorf("right input must be a list of items")
 			}
 
-			// Call stageJoin(Driver=Right, Lookup=Left, Type=Left)
-			// This effectively processes: For each Right, Match Left. If no Match, emit Right.
-			// Reverse Join: "Right" (Left arg) is Driver. "Left" (Right arg) is Lookup/Merged.
-			// If collision, "Left" field gets Prefixed. "Right" field stays Naked.
-			// Ideally we want to prefix Left with "Left" or "a".
-			result, err = e.stageJoin(rightList, leftList, "left", invertedOn, "Left")
+			// 2. Scan Right, Probe Left (Swapped)
+			// Arguments: Left=RightList, Right=LeftList
+			// This effectively executes a Left Join where Driver is Right.
+			// Result keys: "rightAlias.k" (Driver) and "leftAlias.k" (Probed)
+			// Swapped Aliases mapping:
+			// Left List came from leftCursor -> use leftAlias
+			// Right List came from input var -> use rightAlias
+
+			// We pass: left=rightList (alias=rightAlias), right=leftList (alias=leftAlias)
+			// The stageJoin signature is (left, right, type, on, rightAlias, leftAlias)
+			// Wait, if we swap lists, we must match aliases to the list content.
+			// stageJoin calls the first list "Left" and second list "Right" for iteration logic.
+			// But for key prefixing, we want:
+			// Items from first list (rightList) -> prefix with rightAlias
+			// Items from second list (leftList) -> prefix with leftAlias
+			//
+			// stageJoin implementation:
+			// merged[leftAlias+"."+k] = v  (where v is from first list argument)
+			// merged[rightAlias+"."+k] = v (where v is from second list argument)
+
+			// So we must pass: leftAlias=rightAlias, rightAlias=leftAlias
+			lAlias := leftAlias
+			if lAlias == "" {
+				lAlias = "Left"
+			}
+			rAlias := rightAlias
+			if rAlias == "" {
+				rAlias = "Right"
+			}
+			// stageJoin(driverList, probeList, ..., probeAlias, driverAlias)
+			result, err = e.stageJoin(rightList, leftList, "left", invertedOn, lAlias, rAlias)
 		}
 
 		if err == nil {
@@ -1956,16 +2019,7 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 
 	if useLookupJoin {
 		// Use JoinRightCursor for optimized lookup join (or adaptive fallback)
-		// Extract store name/alias from args if possible, or fallback to variable name
-		alias := rightVar
-		if a, ok := args["right_alias"].(string); ok && a != "" {
-			alias = a
-		} else if a, ok := args["store"].(string); ok && a != "" {
-			alias = strings.TrimPrefix(a, "@")
-		} else if a, ok := args["right_dataset"].(string); ok && a != "" {
-			alias = strings.TrimPrefix(a, "@")
-		}
-
+		// Alias is already resolved
 		cursor := &JoinRightCursor{
 			left:           leftCursor,
 			right:          rightStore,
@@ -1973,7 +2027,7 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 			on:             on,
 			ctx:            ctx,
 			engine:         e,
-			rightStoreName: alias,
+			rightStoreName: rightAlias, // Use resolved alias
 		}
 
 		return e.handleInto(ctx, cursor, args)
@@ -2014,7 +2068,7 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		}
 	}
 
-	result, err = e.stageJoin(leftList, rightList, joinType, on, rightVar)
+	result, err = e.stageJoin(leftList, rightList, joinType, on, rightAlias, leftAlias)
 	if err == nil {
 		// Handle Into (Wait, result is []any. We need to support handleInto for List too)
 		return e.handleInto(ctx, result, args)
@@ -2022,10 +2076,13 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	return result, err
 }
 
-func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[string]any, rightAlias string) ([]any, error) {
+func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[string]any, rightAlias string, leftAlias string) ([]any, error) {
 	var results []any
 	if rightAlias == "" {
 		rightAlias = "Right"
+	}
+	if leftAlias == "" {
+		leftAlias = "Left"
 	}
 
 	// Track matched Right indices for Full Join
@@ -2054,41 +2111,29 @@ func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[stri
 
 				if m, ok := lItem.(map[string]any); ok {
 					for k, v := range m {
-						merged[k] = v
+						merged[leftAlias+"."+k] = v
 					}
 				} else if om, ok := lItem.(*OrderedMap); ok && om != nil {
 					for k, v := range om.m {
-						merged[k] = v
+						merged[leftAlias+"."+k] = v
 					}
 				} else if om, ok := lItem.(OrderedMap); ok {
 					for k, v := range om.m {
-						merged[k] = v
+						merged[leftAlias+"."+k] = v
 					}
 				}
 
 				if m, ok := rItem.(map[string]any); ok {
 					for k, v := range m {
-						if _, exists := merged[k]; exists {
-							merged[rightAlias+"."+k] = v
-						} else {
-							merged[k] = v
-						}
+						merged[rightAlias+"."+k] = v
 					}
 				} else if om, ok := rItem.(*OrderedMap); ok && om != nil {
 					for k, v := range om.m {
-						if _, exists := merged[k]; exists {
-							merged[rightAlias+"."+k] = v
-						} else {
-							merged[k] = v
-						}
+						merged[rightAlias+"."+k] = v
 					}
 				} else if om, ok := rItem.(OrderedMap); ok {
 					for k, v := range om.m {
-						if _, exists := merged[k]; exists {
-							merged[rightAlias+"."+k] = v
-						} else {
-							merged[k] = v
-						}
+						merged[rightAlias+"."+k] = v
 					}
 				}
 

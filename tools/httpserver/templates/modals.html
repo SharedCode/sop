@@ -105,14 +105,14 @@
             <div style="margin-bottom: 15px;">
                 <label class="form-label" style="display:block; margin-bottom:5px;">Mobile Experience</label>
                 <select id="pref-mobile-mode" class="form-input" style="width: 100%;">
-                    <option value="app">App Mode (AI Only)</option>
-                    <option value="hybrid">Hybrid Mode (AI Default + Desktop)</option>
-                    <option value="desktop">Desktop Mode (Manual AI)</option>
+                    <option value="app">App Mode (Copilot Only)</option>
+                    <option value="hybrid">Hybrid Mode (Copilot Default + Desktop)</option>
+                    <option value="desktop">Desktop Mode (Manual Copilot)</option>
                 </select>
                 <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">
-                    <strong>App Mode:</strong> Turns the site into a dedicated AI Assistant app on mobile. Desktop UI is hidden.<br>
-                    <strong>Hybrid Mode:</strong> Opens AI Assistant by default on mobile, but allows minimizing to access the desktop UI.<br>
-                    <strong>Desktop Mode:</strong> Standard web view. AI Assistant must be opened manually.
+                    <strong>App Mode:</strong> Turns the site into a dedicated AI Copilot app on mobile. Desktop UI is hidden.<br>
+                    <strong>Hybrid Mode:</strong> Opens AI Copilot by default on mobile, but allows minimizing to access the desktop UI.<br>
+                    <strong>Desktop Mode:</strong> Standard web view. AI Copilot must be opened manually.
                 </div>
             </div>
         </div>
@@ -140,7 +140,7 @@
 <div id="chat-widget" class="chat-widget">
     <div class="chat-header">
         <div style="display: flex; align-items: center; gap: 8px;">
-            <span>AI Assistant</span>
+            <span>AI Copilot</span>
             <select id="provider-select" style="padding: 2px; border-radius: 3px; border: 1px solid #ccc; font-size: 11px; font-weight: normal; color: #333;" onclick="event.stopPropagation()" title="Select AI Partner">
                 <option value="">Gemini (Default)</option>
                 <option value="ollama">Ollama (Local AI)</option>
@@ -161,7 +161,7 @@
     </div>
     <div id="chat-history">
         <div class="chat-message ai">
-            Hello! I am your SOP Data Assistant. I can help you query your data using natural language.<br><br>
+            Hello! I am your SOP Data Copilot. I can help you query your data using natural language.<br><br>
             {{if .HasDemo}}
             <strong>Try these examples (if you loaded the Demo Data):</strong>
             <ul>
@@ -203,7 +203,7 @@
     <div class="resize-handle resize-handle-sw" data-dir="sw"></div>
 </div>
 
-<button id="chat-toggle-btn" class="chat-toggle-btn" title="Open AI Assistant (Left-click to Open, Right-click to Drag)">
+<button id="chat-toggle-btn" class="chat-toggle-btn" title="Open AI Copilot (Left-click to Open, Right-click to Drag)">
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
     </svg>

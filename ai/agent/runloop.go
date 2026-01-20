@@ -21,7 +21,7 @@ func RunLoop(ctx context.Context, agent ai.Agent[map[string]any], r io.Reader, w
 		prompt = "User> "
 	}
 	if assistantName == "" {
-		assistantName = "AI Assistant"
+		assistantName = "AI Copilot"
 	}
 
 	for {

@@ -396,6 +396,16 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 		// Check for existing System DB files to determine if this is a "Shared Brain" / Reuse scenario
 		hasDBOptions, hasRegHashMod := database.IsDatabasePath(req.RegistryPath)
 
+		// Relaxation: Check 'system_db' subfolder if not found in root
+		if !hasDBOptions {
+			subPath := filepath.Join(req.RegistryPath, "system_db")
+			if exists, mod := database.IsDatabasePath(subPath); exists {
+				req.RegistryPath = subPath
+				hasDBOptions = true
+				hasRegHashMod = mod
+			}
+		}
+
 		shouldSetup := true
 
 		if req.UseSharedBrain {
@@ -687,6 +697,28 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 	_, errOpts := os.Stat(dbOptionsPath)
 	hasDBOptions := !os.IsNotExist(errOpts)
 
+	// Relaxation for User DB Reuse: Check "db" subfolder if root is missing options and user requested reuse
+	if req.UseSharedDB && !hasDBOptions {
+		subDBPath := filepath.Join(req.Path, "db")
+		if _, err := os.Stat(filepath.Join(subDBPath, "dboptions.json")); err == nil {
+			req.Path = subDBPath
+			hasDBOptions = true
+			log.Info(fmt.Sprintf("Relaxed User DB Path: '%s' -> '%s'", filepath.Dir(req.Path), req.Path))
+
+			// Also update the storeFolders if they were just set to default root
+			// Logic above was: storeFolders = []string{req.Path}
+			// But req.Path changed.
+			// Re-synch only if it was indeed just the path.
+			// However, storeFolders might contain other drives.
+			// For simplicity in this common case (single folder user DB), we assume the user meant the subfolder for the main store.
+			// But strictly speaking, if we shift the path, we might need to shift the first element of StoreFolders.
+			if len(storeFolders) > 0 && storeFolders[0] == filepath.Dir(req.Path) {
+				storeFolders[0] = req.Path
+				options.StoresFolders = storeFolders
+			}
+		}
+	}
+
 	shouldSetup := true
 
 	if req.UseSharedDB {
@@ -858,6 +890,15 @@ func handleValidatePath(w http.ResponseWriter, r *http.Request) {
 	hasRegHashMod := false
 	if isDir {
 		hasDBOptions, hasRegHashMod = database.IsDatabasePath(path)
+
+		// Relaxation: Check 'system_db' subfolder
+		if !hasDBOptions {
+			if exists, mod := database.IsDatabasePath(filepath.Join(path, "system_db")); exists {
+				hasDBOptions = true
+				hasRegHashMod = mod
+			}
+		}
+
 		// Debug Validation
 		log.Info(fmt.Sprintf("ValidatePath: Path='%s', DBOptions=%v, RegHashMod=%v", path, hasDBOptions, hasRegHashMod))
 	}

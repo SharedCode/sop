@@ -1026,7 +1026,7 @@ You are a self-correcting agent. If the user corrects your output, provides a de
 			for _, interaction := range thread.Exchanges {
 				roleName := "User"
 				if interaction.Role == RoleAssistant {
-					roleName = "Assistant"
+					roleName = "Copilot"
 				} else if interaction.Role == RoleSystem {
 					roleName = "System"
 				}

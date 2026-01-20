@@ -621,12 +621,23 @@ func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
 	}
 
 	// Merge
-	newKeys := make([]string, len(lKeys))
-	copy(newKeys, lKeys)
+	// STRICT Strategy: Use Aliases if available. No hybrid.
+	newKeys := make([]string, 0, len(lKeys))
 	newMap := make(map[string]any)
 
-	for k, v := range lMap {
-		newMap[k] = v
+	// Add Left Keys (Prefixed)
+	if jc.leftStoreName != "" {
+		for _, k := range lKeys {
+			key := jc.leftStoreName + "." + k
+			newMap[key] = lMap[k]
+			newKeys = append(newKeys, key)
+		}
+	} else {
+		// No alias -> Naked
+		for _, k := range lKeys {
+			newMap[k] = lMap[k]
+			newKeys = append(newKeys, k)
+		}
 	}
 
 	if rMap != nil {
@@ -645,31 +656,14 @@ func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
 		for _, k := range rKeys {
 			val := rMap[k]
 
-			// Check for collision in the map constructed so far
-			_, collision := newMap[k]
-
 			if jc.rightStoreName != "" {
-				// Strategy: Smart Prefixing with Alias
-
-				// 1. Always inject the aliased key (e.g. "b.name")
-				aliasedKey := jc.rightStoreName + "." + k
-				newMap[aliasedKey] = val
-				newKeys = append(newKeys, aliasedKey)
-
-				// 2. DO NOT inject naked key if valid alias is provided.
-				// This prevents pollution of the naked namespace which belongs to the Left Store.
-				// Users must use the alias (e.g. "b.name") to access Right Store fields.
-				// This fixes issues where "a.*" (Left Wildcard) would accidental pick up Right fields.
+				key := jc.rightStoreName + "." + k
+				newMap[key] = val
+				newKeys = append(newKeys, key)
 			} else {
-				// Strategy: Legacy "Right." Prefixing
-				if collision {
-					finalKey := "Right." + k
-					newMap[finalKey] = val
-					newKeys = append(newKeys, finalKey)
-				} else {
-					newMap[k] = val
-					newKeys = append(newKeys, k)
-				}
+				// No alias -> Naked
+				newMap[k] = val
+				newKeys = append(newKeys, k)
 			}
 		}
 	}

@@ -5,9 +5,9 @@
 The `sop/ai` package is the **SOP AI Kit** — a versatile **AI Platform** that transforms SOP from a storage engine into a complete **Computing Platform**.
 
 It enables you to build:
-*   **Domain-Specific AI Assistants**: Adapt the Scripting engine to any vertical (Finance, Healthcare, Media).
+*   **Domain-Specific AI Copilots**: Adapt the Scripting engine to any vertical (Finance, Healthcare, Media).
 *   **Embedded Applications**: Combine the database + scripting engine for powerful edge devices.
-*   **Personal AI Assistants**: Privacy-first, web-based assistants.
+*   **Personal AI Copilots**: Privacy-first, web-based assistants.
 *   **Enterprise AI Systems**: Acid-compliant RAG and autonomous agents.
 
 It provides a complete toolkit for building local, privacy-first AI applications backed by the power of SOP's B-Tree storage engine.
@@ -77,12 +77,12 @@ A unique **Hybrid Execution** engine that runs inside the Agent.
 *   **Optimization**: Deterministic steps run at bare-metal Go speed; AI steps are invoked only when explicit reasoning is required.
 *   [Read the full documentation](SCRIPTS.md).
 
-### 7. AI Assistant (Interactive Mode)
+### 7. AI Copilot (Interactive Mode)
 A conversational interface for interacting with your data and building scripts.
 *   **Natural Language Queries**: "Select all users where role is admin".
 *   **CRUD Operations**: Add, update, and delete records using plain English.
 *   **Script Recording**: Teach the assistant workflows by doing them step-by-step.
-*   [Read the User Guide](AI_ASSISTANT_USAGE.md).
+*   [Read the User Guide](AI_COPILOT_USAGE.md).
 
 ## Standards & Compatibility
 

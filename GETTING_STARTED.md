@@ -59,7 +59,7 @@ On your first visit, you will see the **Setup Wizard**.
 
 ### Explore the Data
 *   **Browse Stores**: Click on "user", "product", or "order" in the sidebar to see the data.
-*   **AI Assistant**: Click the chat icon (bottom-left). Try asking:
+*   **AI Copilot**: Click the chat icon (bottom-left). Try asking:
     *   *"Show me the top 5 most expensive products"*
     *   *"Find all users who live in New York"*
 
@@ -126,4 +126,4 @@ Now that your server is running, you can write code to interact with it. SOP is 
 
 *   **[Architecture Guide](ARCHITECTURE.md)**: Learn how SOP works under the hood.
 *   **[Workflows](WORKFLOWS.md)**: Best practices for scaling from local dev to production swarms.
-*   **[AI Assistant Guide](ai/README.md)**: Learn how to build AI-powered applications with SOP.
+*   **[AI Copilot Guide](ai/README.md)**: Learn how to build AI-powered applications with SOP.

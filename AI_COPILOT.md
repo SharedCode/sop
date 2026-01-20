@@ -1,13 +1,13 @@
-# Building a "Local Expert" AI: Embedding an Intelligent Assistant into SOP Data Manager
+# Building a "Local Expert" AI: Embedding an Intelligent Copilot into SOP Data Manager
 
-I'm excited to share a major update to the **SOP Data Manager**, the GUI tool for our Scalable Objects Persistence (SOP) engine. We've moved beyond simple CRUD operations and integrated a fully context-aware **AI Assistant** directly into the workflow.
+I'm excited to share a major update to the **SOP Data Manager**, the GUI tool for our Scalable Objects Persistence (SOP) engine. We've moved beyond simple CRUD operations and integrated a fully context-aware **AI Copilot** directly into the workflow.
 
 This isn't just a chatbot overlay; it's a **ReAct (Reasoning + Acting) Agent** deeply integrated with the database backend, designed to act as a "Local Expert" for your data.
 
 ## The Problem: Context Switching
 Managing complex NoSQL data often involves jumping between a GUI to view items and a terminal to run queries or scripts. You might see a record, wonder "how many other records have this specific field value?", and have to switch context to write a script to find out.
 
-## The Solution: A Floating, Context-Aware Assistant
+## The Solution: A Floating, Context-Aware Copilot
 We've refactored the UI to introduce a persistent, **floating AI widget**.
 *   **Always Available**: It floats above your data grid, draggable and resizable, so you never lose sight of the data you're analyzing.
 *   **Tool-Equipped**: The AI isn't hallucinating answers. It has access to real backend tools:

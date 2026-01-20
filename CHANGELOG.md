@@ -6,7 +6,7 @@
     - **IndexSpecification**: Now strictly defines the fields used for indexing and optimization.
     - **Backward Compatibility**: Existing data stores where `IndexSpecification` contained the CEL expression are automatically detected and supported. No manual migration is required.
     - **Benefit**: This separation allows for cleaner metadata and enables the "Dual-Mode" architecture where native Go comparers and dynamic CEL expressions can coexist and interoperate seamlessly.
-- **AI Assistant & Chat**:
+- **AI Copilot & Chat**:
     - **Structured Execution Results**: Enhanced the Script Execution Engine to emit structured events for every execution step (`step_start`, `record`, `outputs`). This ensures consistent real-time feedback for long-running scripts.
     - **Step Visibility**: The Chat interface and Script Runner now clearly demarcate each step (e.g., "**Step 1:** select"), providing better observability into the agent's reasoning process.
     - **Execution Indexing**: Implemented robust step indexing propagation to track progress across complex control flows and streamed results.

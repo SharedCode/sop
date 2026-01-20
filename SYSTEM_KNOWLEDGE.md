@@ -79,7 +79,7 @@ The tool descriptions here are the **source of truth** for the LLM.
 *   **`select` / `join`**:
     *   `fields` argument spec: `list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias']`.
 
-### `ai/AI_ASSISTANT_USAGE.md`
+### `ai/AI_COPILOT_USAGE.md`
 User-facing documentation. We generally do *not* put internal prompt instructions here, keeping it clean for the end-user.
 
 ---

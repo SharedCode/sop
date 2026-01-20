@@ -1,15 +1,15 @@
-# AI Assistant User Guide
+# AI Copilot User Guide
 
-The SOP AI Assistant is a powerful, conversational interface for interacting with your SOP databases. It allows you to query data, perform CRUD operations, and automate complex workflows using natural language.
+The SOP AI Copilot is a powerful, conversational interface for interacting with your SOP databases. It allows you to query data, perform CRUD operations, and automate complex workflows using natural language.
 
 ## Core Philosophy: Stateless vs. Stateful
 
-To ensure system stability and prevent "dangling transactions," the Assistant operates in two distinct modes:
+To ensure system stability and prevent "dangling transactions," the Copilot operates in two distinct modes:
 
 1.  **Stateless (Interactive & Recording)**: Every prompt is an independent unit of work.
-    *   If you ask "Select all users", the Assistant opens a transaction, reads the data, and **immediately closes** the transaction.
+    *   If you ask "Select all users", the Copilot opens a transaction, reads the data, and **immediately closes** the transaction.
     *   This applies even when **Recording**. Each step you record is executed and committed immediately.
-2.  **Stateful (Playback)**: When **Playing a Script**, the Assistant can maintain a transaction across multiple steps.
+2.  **Stateful (Playback)**: When **Playing a Script**, the Copilot can maintain a transaction across multiple steps.
     *   This allows scripts to perform complex, multi-step atomic operations (e.g., "Transfer funds: Debit A, Credit B").
     *   If any step fails, the entire script transaction can be rolled back.
 
@@ -17,7 +17,7 @@ To ensure system stability and prevent "dangling transactions," the Assistant op
 
 ## 1. Natural Language Data Access
 
-You can ask the Assistant to retrieve data using plain English. It translates your intent into optimized B-Tree lookups.
+You can ask the Copilot to retrieve data using plain English. It translates your intent into optimized B-Tree lookups.
 
 ### Listing Resources
 *   **"Show me all databases"** -> Lists available databases.
@@ -77,22 +77,30 @@ You can modify data directly.
 
 ---
 
-## 4. Memory & Learning
+## 4. Memory & Learning: The Self-Correcting Copilot
 
-The Assistant has two types of memory. Knowing the difference helps you control it better.
+The AI is designed to evolve. It possesses two distinct types of memory, allowing it to adapt to your specific environment and business logic over time.
 
-### Short-Term Memory (The "Session")
-This is the "Working Memory". It remembers what you just said, the results of the last query, and the active transaction.
-*   **Duration**: Lasts until you refresh the page or disconnect.
-*   **Usage**: "Refine that last query", "Use the ID from the previous result".
+### Short-Term Memory ( The "Session" Context)
+This is the **Working Memory**. It holds the immediate context of your current conversation, active transaction, and recent query results.
+
+*   **Duration**: Ephemeral. Cleared when you refresh or start a new session.
+*   **Capabilities**:
+    *   **"Peek-Ahead" Schema Awareness**: Before answering, the AI "peeks" at your real data to learn field names and types (e.g., seeing that `status` is an `int`, not a `string`). This prevents halogenations about your schema.
+    *   **Conversational Continuity**: "Refine that last query", "Use the ID from the previous result".
+*   **Privacy**: Session data is isolated. It doesn't leak into the global brain unless explicitly saved.
 
 ### Long-Term Memory (The "System Knowledge")
-This is the "Brain". It remembers facts, terms, and instructions forever.
-*   **Storage**: Stored in a special B-Tree in the System Database.
-*   **Teaching**: You can teach the agent new things that it will remember next time.
-    *   **"Remember that 'EBITDA' means 'Earnings Before Interest...'"**
-    *   **"Save this instruction: Always use the 'users' store when I say 'clients'."**
-*   **Self-Correction**: If the agent consistently makes a mistake using a tool, you can correct it, and it can save that correction to its long-term memory to avoid the mistake in the future.
+This is the **Enterprise Brain**. It persists facts, business rules, and corrections across all sessions and users. It effectively turns the AI into a "Self-Correcting" system.
+
+*   **Storage**: Rules are stored in the `llm_instructions` B-Tree in the `SystemDB`. They are transactional and durable.
+*   **The "Intelligent Librarian"**: The AI doesn't load *everything* at once. It maintains a "Table of Contents" (namespaces like `finance`, `hr`, `schema`) and dynamically fetches the relevant rules only when needed.
+*   **How to Teach (Self-Correction)**:
+    1.  **Direct Instruction**: "Remember that 'EBITDA' means 'Earnings Before Interest...'"
+    2.  **Correction**: If the AI fails (e.g., queries `status="Active"`), correct it: *"Status is an integer! 1=Active."* The AI will then **update its own instructions** to ensure it never makes that mistake again.
+    3.  **Explicit Rules**: "Save this instruction in the 'finance' category: Fiscal year starts in April."
+
+**Why this matters**: You don't need to write perfect prompts every time. If the AI gets it wrong, you fix it once, and it stays fixed—for you and your team.
 
 ---
 
@@ -146,19 +154,19 @@ When defining scripts manually (or asking the Assistant to edit them), you can m
 
 ```text
 User: /record onboard_user
-Assistant: Recording started for script 'onboard_user'.
+Copilot: Recording started for script 'onboard_user'.
 
 User: Add a user to 'users' with key 'new_guy' and status 'pending'.
-Assistant: Added user 'new_guy'. (Step recorded)
+Copilot: Added user 'new_guy'. (Step recorded)
 
 User: Add a log entry to 'audit_logs' saying "User new_guy created".
-Assistant: Added log entry. (Step recorded)
+Copilot: Added log entry. (Step recorded)
 
 User: /stop
-Assistant: Recording stopped. Script 'onboard_user' saved with 2 steps.
+Copilot: Recording stopped. Script 'onboard_user' saved with 2 steps.
 
 User: /play onboard_user
-Assistant: Executing 'onboard_user'...
+Copilot: Executing 'onboard_user'...
 1. Added user...
 2. Added log entry...
 Done.

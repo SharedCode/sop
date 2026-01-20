@@ -1087,7 +1087,10 @@ func renderItem(key any, val any, fields any) any {
 	}
 
 	if shouldFlatten {
-		return flattenItem(key, val)
+		// New Strategy: Collapse Unique Prefixes
+		// 1. Flatten into "Strict Map" (Aliased)
+		flat := flattenItem(key, val)
+		return collapseUniqueKeys(flat)
 	}
 
 	// Parse fields using the common helper if not already parsed
@@ -1099,7 +1102,9 @@ func renderItem(key any, val any, fields any) any {
 	}
 
 	if len(pFields) == 0 {
-		return flattenItem(key, val)
+		// New Strategy: Collapse Unique Prefixes
+		flat := flattenItem(key, val)
+		return collapseUniqueKeys(flat)
 	}
 
 	// 2. Projection Mode
@@ -1251,4 +1256,46 @@ func CleanArgs(args map[string]any, reserved ...string) map[string]any {
 		out[k] = v
 	}
 	return out
+}
+
+// collapseUniqueKeys implements the "Smart Collapsing" logic.
+// It iterates through the map, identifies unique suffixes (e.g. "id" from "users.id"),
+// and creates non-prefixed entry if the suffix is unique across the map.
+func collapseUniqueKeys(m map[string]any) map[string]any {
+	// 1. Analyze frequency of suffixes
+	suffixCount := make(map[string]int)
+
+	for k := range m {
+		suffix := k
+		if idx := strings.Index(k, "."); idx != -1 {
+			suffix = k[idx+1:]
+		}
+		// Only count valid identifiers (simple check)
+		if suffix != "" {
+			suffixCount[suffix]++
+		}
+	}
+
+	// 2. Add keys
+	// We operate in place since flattenItem already gave us a fresh map
+	for k, v := range m {
+		// Only alias keys (with dot) are candidates for collapsing
+		if idx := strings.Index(k, "."); idx != -1 {
+			suffix := k[idx+1:]
+
+			// Criteria:
+			// 1. Suffix is unique across all keys (count == 1)
+			// 2. The key doesn't already exist (though count==1 implies it, unless it's the SAME key which is impossible for dot vs no-dot)
+			if suffixCount[suffix] == 1 {
+				// Safety check: Don't overwrite existing
+				if _, exists := m[suffix]; !exists {
+					m[suffix] = v
+					// STRIP STRATEGY: Remove the verbose prefixed key to keep output friendly (non-redundant)
+					delete(m, k)
+				}
+			}
+		}
+	}
+
+	return m
 }

@@ -184,7 +184,7 @@ func main() {
 	// 3. Interactive Loop
 	assistantName := cfg.AssistantName
 	if assistantName == "" {
-		assistantName = "AI Assistant"
+		assistantName = "AI Copilot"
 	}
 	fmt.Printf("\n%s:\n", assistantName)
 	fmt.Println(cfg.Description)
