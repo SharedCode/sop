@@ -68,3 +68,37 @@ class Database(BaseDatabase):
         from .langchain import SOPVectorStore
         return SOPVectorStore(ctx, self, name, embedding, **kwargs)
 
+    def remove_model_store(self, ctx: context.Context, name: str) -> None:
+        """
+        Removes a Model Store.
+
+        Args:
+            ctx (context.Context): The context.
+            name (str): The name of the Model Store.
+
+        Raises:
+            Exception: If the Model Store cannot be removed.
+        """
+        self._ensure_database_created(ctx)
+        # Action RemoveModelStore (Action 9)
+        res = call_go.manage_database(ctx.id, DatabaseAction.RemoveModelStore.value, str(self.id), name)
+        if res is not None:
+            raise Exception(res)
+
+    def remove_vector_store(self, ctx: context.Context, name: str) -> None:
+        """
+        Removes a Vector Store.
+
+        Args:
+            ctx (context.Context): The context.
+            name (str): The name of the Vector Store.
+
+        Raises:
+            Exception: If the Vector Store cannot be removed.
+        """
+        self._ensure_database_created(ctx)
+        # Action RemoveVectorStore (Action 10)
+        res = call_go.manage_database(ctx.id, DatabaseAction.RemoveVectorStore.value, str(self.id), name)
+        if res is not None:
+            raise Exception(res)
+

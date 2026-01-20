@@ -18,6 +18,11 @@ def main():
     # 2. Initialize Context & Database
     ctx = Context()
     db_path = "data/logging_demo_db"
+
+    # Cleanup previous run if exists
+    if os.path.exists(db_path):
+        import shutil
+        shutil.rmtree(db_path)
     
     print(f"Opening database at {db_path}...")
     # This operation will generate logs on the Go side
