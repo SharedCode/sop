@@ -173,6 +173,12 @@
 			"problemMatcher": [
 				"$go"
 			]
+		},
+		{
+			"label": "Build Release Packages",
+			"type": "shell",
+			"command": "./build_release.sh",
+			"group": "build"
 		}
 	]
 }

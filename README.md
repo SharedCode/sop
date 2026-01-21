@@ -1,33 +1,89 @@
-# Scalable Objects Persistence (SOP) Library
+# Scalable Objects Persistence (SOP) Data & Compute Platform
 
 [![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions) [![CI](https://github.com/SharedCode/sop/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/sop/actions/workflows/go.yml) [![codecov](https://codecov.io/gh/SharedCode/sop/branch/master/graph/badge.svg)](https://app.codecov.io/github/SharedCode/sop) [![Go Reference](https://pkg.go.dev/badge/github.com/sharedcode/sop.svg)](https://pkg.go.dev/github.com/sharedcode/sop) [![Go Report Card](https://goreportcard.com/badge/github.com/sharedcode/sop)](https://goreportcard.com/report/github.com/sharedcode/sop)
 
-**SOP (Scalable Objects Persistence)** is a Universal **Computing Platform** and **AI Kit**.
+**SOP** is a comprehensive **Data & Compute Platform** designed for the modern enterprise and high-performance applications.
 
-It combines a high-performance **Polyglot Storage Engine** (ACID B-trees, Caching, Erasure Coding) with a versatile **AI Scripting & Computing Engine**.
+At its core, SOP is not just a traditional code library; it is a **Distributed Computing Framework** that powers **Swarm Computing**—the efficient, coordinated management of data and compute across clusters and embedded systems. SOP enables applications to effortlessly scale from a single device to a massive, distributed "swarm" of intelligent nodes.
 
-SOP is **"Relational Capable"**, achieving the structural elegance of the Relational Model (Joins, ACID) while advancing beyond traditional SQL engines by integrating Swarm computing and deep AI capabilities directly into the core.
+### The SOP Ecosystem
 
-This architecture allows SOP to be packaged into diverse applications:
-*   **AI Kit / Platform**: Adopt the AI Copilot into any domain using the versatile Scripting "engine".
-*   **Embedded Systems**: A powerful combination of an embedded database and a scripting/compute engine.
-*   **Personal AI Copilot**: A web-based, privacy-focused assistant for personal data.
-*   **Enterprise Database**: Scalable, ACID-compliant storage for business-critical applications.
-*   **Big Data / Media**: High-performance storage for media libraries (e.g., Hollywood production databases).
-*   **Swarm Computing**: Future-ready foundation for map-reduce and swarm architectures.
+Packed inside the library is everything you need to build next-generation distributed systems:
+*   **Swarm Computing Engine**: A framework for distributed coordination, allowing applications to act as coherent parts of a greater whole.
+*   **Polyglot Storage Engine**: An ACID-compliant B-Tree storage system with Caching and Erasure Coding, optimized for performance.
+*   **AI Scripting & Computing Engine**: A versatile runtime that allows for creating intelligent, self-correcting workflows.
 
-Available for **Go**, **Python**, **Java**, **C#**, and **Rust**.
+## Installation & Distribution
+
+SOP is designed to be accessible regardless of your preferred technology stack. There are two primary ways to get the **SOP Platform Suite**, which includes both the **SOP Code Library** and the **Platform Tools** (Data Manager, Script VDE, AI Copilot).
+
+### Option 1: Language Packages
+Best for developers who want to integrate SOP directly into their application code. Installing the package for your language automatically includes the Data Manager (`sop-httpserver`) and CLI tools.
+
+| Language | Installation | Description |
+| :--- | :--- | :--- |
+| **Python** | `pip install sop4py` | Full Python bindings with Data Manager & AI Scripts. |
+| **Go** | `go get github.com/sharedcode/sop` | The core native library for maximum performance. |
+| **C#** | `dotnet add package Sop` |  Complete .NET Core integration. |
+| **Java** | *Maven/Gradle* | (Coming Soon) Full JVM support. |
+| **Rust** | `cargo add sop` | (Coming Soon) High-performance Rust bindings. |
+
+### Option 2: Standalone Binary (GitHub Releases)
+Best for infrastructure administrators, DevOps, or "Data-First" users who want to set up the management console immediately. You can download the `sop-httpserver` executable directly from our **[GitHub Releases Page](https://github.com/SharedCode/sop/releases)**.
+
+*   **Universal Manager**: The standalone binary acts as a central console to manage databases created by *any* language binding (Python, C#, Go, etc.).
+*   **Zero-Dependency**: No language runtimes (Python/DotNet) required to run the tool itself.
+
+---
+
+## Development Workflows: Code-First vs. Data-First
+
+The SOP Platform empowers you to choose the starting point that fits your style. Both approaches are **equally powerful** and allow you to manage your databases using the SOP library. It is simply a matter of preference where you begin.
+
+### 1. Code-First Approach
+*Start in your IDE.*
+
+In this workflow, you use the **SOP Code Library** to define your data structures and logic programmatically.
+1.  **Define & Run**: You write code to define B-Tree stores, transaction logic, and data types (Go, Python, C#, etc.). When your app runs, SOP creates the necessary structures on disk.
+2.  **Manage Later**: You can then launch the **Data Manager** to inspect, query, and visualize the data your application has created. This is perfect for developers who prefer to stay in code and treat the database as an embedded component.
+
+### 2. Data-First Approach
+*Start in the Visual Tool.*
+
+In this workflow, you start with the **Data Manager** to define your schema and data beforehand.
+1.  **Visual Design**: Use the **Data Manager's Visual Tools** to create Databases, define Stores, and optionally populate initial datasets or manage content.
+2.  **Consume in Code**: Your application code simply "opens" these pre-existing stores. This allows you to define the schema and indices (data/schema first) before a single line of business logic is written.
+
+### The Complementary Cycle
+These workflows are not mutually exclusive—they represent a full lifecycle.
+*   **Start in App -> Continue in Manager**: Build your app, then use the Data Manager to inspect production data, debug issues, or analyze performance.
+*   **Start in Manager -> Consume in App**: Prototype a schema or populate a test dataset visually, then hand it off to developers to build the application logic.
+
+SOP ensures seamless interoperability regardless of where you begin.
 
 ## SOP Data Manager & AI Suite
 
 SOP allows you to interact with your data using the **SOP Data Manager**—a web-based console that features a powerful **SQL-like** query engine and an **AI Copilot**.
 
-### Data Manager
-*   **Visual Management**: Inspect B-Trees, manage Stores (Key-Value, Vector, Model), and view System Logs.
+### Data Manager Capabilities
+*   **Visual Management**: Inspect B-Trees, manage Stores (Key-Value, Vector, Model), and explore the System DB.
+*   **Environment Manager**: Switch between environments (Dev, QA, Prod) instantly. Configurations (including the list of databases and connection details) are stored in portable **JSON files**.
+*   **Shared Intelligence**: Manage permissions and connections to share databases across the network, allowing different teams to collaborate on the same "System Knowledge" base.
 *   **SQL Capabilities**: Perform familiar SQL operations directly on your NoSQL B-Trees:
     *   **SELECT / SCAN**: Filter data using rich criteria (`$gt`, `$regex`, `$in`).
     *   **JOIN**: Perform high-performance connections between stores (e.g., `Join 'Users' and 'Orders'`).
     *   **CRUD**: Insert, Update, and Delete records via a query interface.
+
+### Storage Distribution (Data Files)
+The Configuration JSON allows you to control exactly where your data is stored on disk via the **Erasure Configs (Data Files)** list.
+*   **Key-Based Routing**: If you provide a `Key`, only stores matches that key will be allocated to that specific storage tier (e.g., specific drives or paths).
+*   **Global Fallback**: If the `Key` is left **empty**, that entry becomes the **Global Fallback**. Any store that doesn't match a specific key will automatically be allocated using this "catch-all" configuration.
+
+### The System Database (SystemDB)
+All SOP environments come with a built-in **SystemDB**. Far from just a log repository, this is the "brain" of the platform that stores:
+*   **Scripts**: Your automation workflows and compiled functions.
+*   **LLM Knowledge**: Standard B-Tree stores containing domain knowledge. Modeled like a "Model Store" (Category + Name keys), we use deterministic lookups to avoid the high false-positive rates found in Vector similarity search.
+*   **(Future) RBAC**: Role-Based Access Control configurations for multi-user security.
 
 ### AI Copilot & Scripts
 The Data Manager includes an integrated AI Copilot that supports **Natural Language Programming**.
@@ -46,11 +102,8 @@ The Data Manager includes an integrated AI Copilot that supports **Natural Langu
 
 To launch the Data Manager:
 ```bash
-# Using the CLI tool (if installed)
-sop-cli httpserver
-
-# Or running directly from source
-go run ./tools/httpserver
+# Data Manager is included in your language binding installation
+sop-httpserver
 ```
 
 ## Articles & Deep Dives
@@ -59,6 +112,7 @@ go run ./tools/httpserver
 *   **[SOP vs Modern Database Architecture](SOP_MODERN_DB_ARTICLE.md)** - A deep dive into B-Tree cursors, Zero-Copy Streaming, and Native Joins.
 *   **[Programming with SOP](PROGRAMMING_WITH_SOP_ARTICLE.md)** - A conceptual guide to building applications on the SOP platform.
 *   **[Scalability & Limits](SCALABILITY.md)** - Understanding the theoretical and practical limits of the system.
+*   **[Swarm Computing](SWARM_COMPUTING.md)** - Learn how SOP enables distributed, coordinated computing without a central brain.
 
 ## 🚀 Getting Started
 

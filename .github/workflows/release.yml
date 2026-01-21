@@ -24,19 +24,23 @@ jobs:
       - name: Install Cross-Compilation Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-mingw-w64
+          sudo apt-get install -y gcc-mingw-w64 zip
           sudo snap install zig --classic --beta
 
-      - name: Build All Artifacts (Binaries & Bindings)
+      - name: Build Bundles (via build_release.sh)
         run: |
-          cd bindings/main
-          # Set version
+          chmod +x build_release.sh
+          # Set version env var so build_release.sh uses it
           export SOP_VERSION=${{ github.ref_name }}
-          # Run the master build script
-          ./build.sh
-          cd ../..
+          # This script orchestrates the build and bundling
+          ./build_release.sh
 
-      - name: Package Python
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+            python-version: '3.10'
+
+      - name: Package Python Wheel
         run: |
           cd bindings/python
           pip install build wheel
@@ -49,10 +53,9 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Package C#
+      - name: Package C# NuGet
         run: |
           cd bindings/csharp/Sop
-          # Update version in csproj
           sed -i 's/<Version>1.0.0<\/Version>/<Version>${{ github.ref_name }}<\/Version>/' Sop.csproj
           dotnet pack -c Release -o ../../../release/
           cd ../../..
@@ -63,92 +66,20 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Package Java
+      - name: Package Java JAR
         run: |
           cd bindings/java
-          # Update version in pom.xml
           mvn versions:set -DnewVersion=${{ github.ref_name }}
           mvn package -DskipTests
           cp target/*.jar ../../release/
           cd ../..
-
-      - name: Create Platform Bundles
-        run: |
-          mkdir -p bundles
-          
-          # --- macOS ARM64 ---
-          mkdir -p bundles/macos-arm64/libs
-          # Note: build.sh outputs sop-httpserver-darwin-arm64
-          cp release/sop-httpserver-darwin-arm64 bundles/macos-arm64/sop-manager
-          chmod +x bundles/macos-arm64/sop-manager
-          cp bindings/python/sop/libjsondb_arm64darwin.dylib bundles/macos-arm64/libs/libjsondb.dylib
-          # Include Language Packages
-          mkdir -p bundles/macos-arm64/python && cp release/*.whl bundles/macos-arm64/python/
-          mkdir -p bundles/macos-arm64/java && cp release/*.jar bundles/macos-arm64/java/
-          mkdir -p bundles/macos-arm64/dotnet && cp release/*.nupkg bundles/macos-arm64/dotnet/
-          # Zip
-          cd bundles/macos-arm64 && zip -r ../../release/sop-bundle-macos-arm64.zip . && cd ../..
-
-          # --- macOS AMD64 ---
-          mkdir -p bundles/macos-amd64/libs
-          cp release/sop-httpserver-darwin-amd64 bundles/macos-amd64/sop-manager
-          chmod +x bundles/macos-amd64/sop-manager
-          cp bindings/python/sop/libjsondb_amd64darwin.dylib bundles/macos-amd64/libs/libjsondb.dylib
-          # Include Language Packages
-          mkdir -p bundles/macos-amd64/python && cp release/*.whl bundles/macos-amd64/python/
-          mkdir -p bundles/macos-amd64/java && cp release/*.jar bundles/macos-amd64/java/
-          mkdir -p bundles/macos-amd64/dotnet && cp release/*.nupkg bundles/macos-amd64/dotnet/
-          # Zip
-          cd bundles/macos-amd64 && zip -r ../../release/sop-bundle-macos-amd64.zip . && cd ../..
-
-          # --- Linux AMD64 ---
-          mkdir -p bundles/linux-amd64/libs
-          cp release/sop-httpserver-linux-amd64 bundles/linux-amd64/sop-manager
-          chmod +x bundles/linux-amd64/sop-manager
-          cp bindings/python/sop/libjsondb_amd64linux.so bundles/linux-amd64/libs/libjsondb.so
-          # Include Language Packages
-          mkdir -p bundles/linux-amd64/python && cp release/*.whl bundles/linux-amd64/python/
-          mkdir -p bundles/linux-amd64/java && cp release/*.jar bundles/linux-amd64/java/
-          mkdir -p bundles/linux-amd64/dotnet && cp release/*.nupkg bundles/linux-amd64/dotnet/
-          # Zip
-          cd bundles/linux-amd64 && zip -r ../../release/sop-bundle-linux-amd64.zip . && cd ../..
-
-          # --- Linux ARM64 ---
-          mkdir -p bundles/linux-arm64/libs
-          cp release/sop-httpserver-linux-arm64 bundles/linux-arm64/sop-manager
-          chmod +x bundles/linux-arm64/sop-manager
-          cp bindings/python/sop/libjsondb_arm64linux.so bundles/linux-arm64/libs/libjsondb.so
-          # Include Language Packages
-          mkdir -p bundles/linux-arm64/python && cp release/*.whl bundles/linux-arm64/python/
-          mkdir -p bundles/linux-arm64/java && cp release/*.jar bundles/linux-arm64/java/
-          mkdir -p bundles/linux-arm64/dotnet && cp release/*.nupkg bundles/linux-arm64/dotnet/
-          # Zip
-          cd bundles/linux-arm64 && zip -r ../../release/sop-bundle-linux-arm64.zip . && cd ../..
-
-          # --- Windows AMD64 ---
-          mkdir -p bundles/windows-amd64/libs
-          cp release/sop-httpserver-windows-amd64.exe bundles/windows-amd64/sop-manager.exe
-          cp bindings/python/sop/libjsondb_amd64windows.dll bundles/windows-amd64/libs/libjsondb.dll
-          # Include Language Packages
-          mkdir -p bundles/windows-amd64/python && cp release/*.whl bundles/windows-amd64/python/
-          mkdir -p bundles/windows-amd64/java && cp release/*.jar bundles/windows-amd64/java/
-          mkdir -p bundles/windows-amd64/dotnet && cp release/*.nupkg bundles/windows-amd64/dotnet/
-          # Zip
-          cd bundles/windows-amd64 && zip -r ../../release/sop-bundle-windows-amd64.zip . && cd ../..
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            release/sop-bundle-macos-arm64.zip
-            release/sop-bundle-macos-amd64.zip
-            release/sop-bundle-linux-amd64.zip
-            release/sop-bundle-linux-arm64.zip
-            release/sop-bundle-windows-amd64.zip
-            release/*.whl
-            release/*.nupkg
-            release/*.jar
+            release/*
           draft: false
           prerelease: false
           generate_release_notes: true

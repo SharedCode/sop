@@ -5,7 +5,7 @@ This guide will walk you through the key features of the SOP Data Manager, from 
 ## Prerequisites
 
 Ensure the SOP Database Server is running.
-- **Run Locally**: `./sop-manager` (or `go run tools/httpserver/main.go` for developers)
+- **Run Locally**: `./sop-httpserver` (or `go run tools/httpserver/main.go` for developers)
 - **Access**: Open your browser to [http://localhost:8080](http://localhost:8080)
 
 ---
@@ -105,7 +105,8 @@ You can now manage multiple databases directly from the UI.
 3.  **Type**: Choose `Standalone` or `Clustered`.
 4.  **Advanced Mode**: Toggle this to configure:
     *   **Stores Folders**: Specify multiple paths for data striping.
-    *   **Erasure Coding**: Configure Data Chunks and Parity Chunks for high availability.
+    *   **Erasure Coding (Data Files)**: Configure Data Chunks and Parity Chunks for high availability.
+        *   **Pro Tip (The "Catch-All" Bucket)**: When defining Erasure configs, leaving the `Key` field **empty** tells SOP to use this configuration as the **Global Fallback**. Any store that doesn't match a specific key rule will automatically be stored using this configuration. This is the simplest way to ensure all your data is protected without micro-managing every store.
 
 ### Deleting a Database
 1.  Select the database you want to delete from the dropdown.

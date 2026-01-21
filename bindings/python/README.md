@@ -26,21 +26,6 @@ SOP is designed for high-throughput, low-latency scenarios, making it suitable f
 *   **Direct I/O**: SOP bypasses OS page caches where appropriate to offer consistent, raw disk performance.
 *   **Parallelism**: The underlying Go engine utilizes highly concurrent goroutines for managing B-Tree nodes and vector indexes.
 
-## SOP Data Management Suite
-
-SOP includes a powerful **Data Management Suite** that provides **full CRUD** capabilities for your B-Tree stores. It goes beyond simple viewing, offering a complete GUI for inspecting, searching, and managing your data at scale.
-
-*   **Web UI**: A modern, responsive interface for browsing B-Trees, managing stores, and visualizing data.
-*   **AI Copilot**: Integrated directly into the UI, the AI Copilot can help you write queries, explain data structures, and even generate code snippets.
-*   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
-
-To launch the Data Manager, you can use the Go toolchain or look for provided binaries:
-
-```bash
-# From the root of the repository
-go run ./tools/httpserver
-```
-
 ## SOP AI Kit
 
 The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data platform.
@@ -68,7 +53,11 @@ pip install sop4py
 
 SOP includes a powerful **Data Management Suite** that provides **full CRUD** capabilities for your B-Tree stores. It goes beyond simple viewing, offering a complete GUI for inspecting, searching, and managing your data at scale.
 
-To launch it, simply run:
+*   **Web UI**: A modern, responsive interface for browsing B-Trees, managing stores, and visualizing data.
+*   **AI Copilot**: Integrated directly into the UI, the AI Copilot can help you write queries, explain data structures, and even generate code snippets.
+*   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
+
+To launch the Data Manager simply run:
 
 ```bash
 sop-httpserver

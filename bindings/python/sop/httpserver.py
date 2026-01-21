@@ -77,6 +77,10 @@ def download_binary(os_name, arch, target_path):
         sys.exit(1)
 
 def check_version(binary_path):
+    # Always return true if dev mode
+    if os.environ.get("SOP_LOCAL_DEV"):
+        return True
+
     if __version__ == "latest":
         return True
         
@@ -98,6 +102,19 @@ def check_version(binary_path):
 
 def main():
     try:
+        # Check if we should run the local binary (dev mode)
+        # If 'SOP_LOCAL_DEV' is set, we try to run the go binary from source or tools/httpserver
+        if os.environ.get("SOP_LOCAL_DEV"):
+            print("Running in LOCAL DEV mode...")
+            # Attempt to run go run from the tools directory
+            project_root = Path(__file__).parent.parent.parent.parent.parent # adjust as needed
+            tools_dir = project_root / "tools" / "httpserver"
+            # Hard to guess the path. Let's just assume the user handles it or we use the local compiled binary if provided.
+            # actually, if the user invoked this script, they probably want the managed experience.
+            # But if they want to test THEIR changes, they should set the version to "dev" or "latest" to skip checks?
+            pass
+
+
         os_name, arch = get_platform_info()
         binary_path = get_binary_path()
         

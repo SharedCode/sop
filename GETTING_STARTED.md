@@ -5,6 +5,10 @@ Welcome to **Scalable Objects Persistence (SOP)**! This guide will take you from
 ## 1. Download & Installation
 
 ### Step 1: Download the Bundle
+*(For Python, C#, Java, Rust Developers, or Standalone Server Usage)*
+
+**Note for Go Developers:** You do not need to download this bundle. SOP is a native Go library. You can simply `go get` the package (see [Developing with SOP](#3-developing-with-sop) below) and compile your application.
+
 Go to the [Releases Page](https://github.com/SharedCode/sop/releases) and download the **Platform Bundle** for your operating system:
 
 *   **macOS (Apple Silicon)**: `sop-bundle-macos-arm64.zip`
@@ -17,7 +21,7 @@ Unzip the downloaded file. You will see a folder structure like this:
 
 ```text
 sop-bundle/
-├── sop-manager          # The Database Server & UI
+├── sop-httpserver       # The Database Server & UI
 ├── libs/                # Shared libraries (for C/Rust)
 ├── python/              # Python package (.whl)
 ├── java/                # Java library (.jar)
@@ -29,12 +33,12 @@ Open a terminal in this folder and run:
 
 **macOS / Linux:**
 ```bash
-chmod +x sop-manager
-./sop-manager
+chmod +x sop-httpserver
+./sop-httpserver
 ```
 
 **Windows:**
-Double-click `sop-manager.exe` or run it from PowerShell.
+Double-click `sop-httpserver.exe` or run it from PowerShell.
 
 ---
 
@@ -68,6 +72,34 @@ On your first visit, you will see the **Setup Wizard**.
 ## 3. Developing with SOP
 
 Now that your server is running, you can write code to interact with it. SOP is **polyglot**, meaning you can access the same data from Go, Python, C#, or Java.
+
+### Go (Native)
+1.  **Install**:
+    ```bash
+    go get github.com/sharedcode/sop
+    ```
+2.  **Code**:
+    ```go
+    import (
+        "context"
+        "github.com/sharedcode/sop"
+        "github.com/sharedcode/sop/database"
+    )
+
+    // Open Database (Standalone)
+    db, _ := database.Open(sop.DatabaseOptions{
+        Type: sop.Standalone, 
+        StoresFolders: []string{"./data"},
+    })
+
+    // Transaction & Store
+    tx, _ := db.BeginTransaction(ctx, sop.ForWriting)
+    store, _ := tx.GetStore("users")
+
+    // Add Item
+    store.Add(ctx, "user_999", "Alice")
+    tx.Commit(ctx)
+    ```
 
 ### Python
 1.  **Install**:
