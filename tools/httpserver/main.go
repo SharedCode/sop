@@ -87,9 +87,6 @@ var content embed.FS
 var config Config
 var loadedAgents = make(map[string]ai.Agent[map[string]any])
 
-// Version is the application version, set at build time via -ldflags
-var Version = "dev"
-
 const SystemDBName = "system"
 
 func main() {
@@ -114,7 +111,7 @@ func main() {
 	flag.Parse()
 
 	if showVersion {
-		fmt.Printf("SOP Data Manager v%s\n", Version)
+		fmt.Printf("SOP Data Manager v%s\n", sop.Version)
 		os.Exit(0)
 	}
 
@@ -204,7 +201,7 @@ func main() {
 
 	// Start Server
 	addr := fmt.Sprintf(":%d", config.Port)
-	log.Info(fmt.Sprintf("SOP Data Manager v%s running at http://localhost%s", Version, addr))
+	log.Info(fmt.Sprintf("SOP Data Manager v%s running at http://localhost%s", sop.Version, addr))
 	for _, db := range config.Databases {
 		log.Debug(fmt.Sprintf("Database '%s': %s (%s)", db.Name, db.Path, db.Mode))
 	}
@@ -401,7 +398,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]any{
-		"Version": Version,
+		"Version": sop.Version,
 		"Mode":    config.Mode,
 		// AllowInvalidMapKey is a flag to bypass the validation that requires Map Key types
 		// to have an Index Specification or CEL Expression. This is useful for testing.

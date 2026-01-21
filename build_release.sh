@@ -28,6 +28,27 @@ set -e
 # 3. Run the server directly:
 #    ./sop-httpserver
 #
+
+# Read version from version file
+if [ -f VERSION ]; then
+  SOP_VERSION=$(cat VERSION | tr -d '[:space:]')
+fi
+
+VERSION=${SOP_VERSION:-"1.0.0-beta"}
+OUTPUT_DIR="release"
+#
+# ------------------------------------------
+# How to Unpack, Install & Run (from .tar.gz):
+# ------------------------------------------
+# 1. Unpack the bundle:
+#    tar -xzf release/sop-bundle-darwin-amd64-*.tar.gz
+#
+# 2. Enter the directory:
+#    cd sop-bundle-darwin-amd64-*
+#
+# 3. Run the server directly:
+#    ./sop-httpserver
+#
 # 4. (Optional) Install (to ~/.sop):
 #    ./install.sh
 #    # specific Usage instructions printed on success, likely adding to PATH

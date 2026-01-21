@@ -11,6 +11,8 @@ import (
 type StoreInfo struct {
 	// Name is the short store name.
 	Name string `json:"name" minLength:"1" maxLength:"128"`
+	// Version allows versioning of the store info payload for future upgrades.
+	Version string `json:"version"`
 	// SlotLength is the number of items per node.
 	SlotLength int `json:"slot_length" min:"2" max:"10000"`
 	// IsUnique enforces uniqueness on the key of key/value items.
@@ -212,6 +214,7 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 
 	return &StoreInfo{
 		Name:                         si.Name,
+		Version:                      Version,
 		SlotLength:                   si.SlotLength,
 		IsUnique:                     si.IsUnique,
 		Description:                  si.Description,
