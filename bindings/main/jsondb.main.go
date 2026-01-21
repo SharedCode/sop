@@ -739,9 +739,9 @@ func manageDatabase(ctxID C.longlong, action C.int, targetID *C.char, payload *C
 // BtreeOptions is used to package the Btree StoreInfo.
 type BtreeOptions struct {
 	Name                         string               `json:"name" minLength:"1" maxLength:"128"`
-	SlotLength                   int                  `json:"slot_length" min:"2" max:"10000"`
+	SlotLength                   int                  `json:"slot_length" min:"2" max:"20000"`
 	IsUnique                     bool                 `json:"is_unique"`
-	Description                  string               `json:"description" maxLength:"500"`
+	Description                  string               `json:"description" maxLength:"1000"`
 	IsValueDataInNodeSegment     bool                 `json:"is_value_data_in_node_segment"`
 	IsValueDataActivelyPersisted bool                 `json:"is_value_data_actively_persisted"`
 	IsValueDataGloballyCached    bool                 `json:"is_value_data_globally_cached"`
