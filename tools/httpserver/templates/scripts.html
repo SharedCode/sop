@@ -177,9 +177,31 @@
 
                 document.getElementById('database-section').style.display = 'block';
                 
+                // Disable UI elements when no databases exist
+                const btnAddDb = document.getElementById('btn-add-database');
+                if(btnAddDb) {
+                    btnAddDb.style.opacity = '0.3';
+                    btnAddDb.style.pointerEvents = 'none';
+                }
+                const btnAddStore = document.getElementById('btn-add-store');
+                if(btnAddStore) {
+                    btnAddStore.style.opacity = '0.3';
+                    btnAddStore.style.pointerEvents = 'none';
+                }
+                const btnChat = document.getElementById('chat-toggle-btn');
+                if(btnChat) {
+                    btnChat.style.display = 'none';
+                }
+                
                 // Check if we should suppress the wizard (e.g. redirected after cancel)
                 if (sessionStorage.getItem('sop_suppress_wizard_once')) {
                     sessionStorage.removeItem('sop_suppress_wizard_once');
+
+                    // Check if we also need to open the Environment Manager (Post-Cancel)
+                    if (sessionStorage.getItem('sop_open_env_manager')) {
+                        sessionStorage.removeItem('sop_open_env_manager');
+                        showEnvironmentsManager();
+                    }
                     return;
                 }
                 
@@ -7256,16 +7278,32 @@
     function wizardCancel() {
         // Fallback to native confirm if custom modal fails or to ensure basic functionality
         if (confirm("Are you sure you want to cancel the setup process? Any unsaved changes will be lost.")) {
-             // Suppress the wizard from appearing immediately after the the reload
-             sessionStorage.setItem('sop_suppress_wizard_once', 'true');
              
-             // Reload to root to reset state and clear any query params (like new_env)
-             window.location.href = "/";
-             window.location.reload();
+             let promise = Promise.resolve();
 
-            // Just close the wizard for existing envs
-            document.getElementById('setup-wizard').style.display = 'none';
-            resetSetupForm();             
+             // Determine target config: Use current if known, otherwise fallback to default 'config.json'
+             // to mimic initial server startup behavior (auto-loading default config).
+             let targetConfig = "config.json";
+             if (typeof CURRENT_CONFIG_FILE !== 'undefined' && CURRENT_CONFIG_FILE && CURRENT_CONFIG_FILE.trim() !== "") {
+                 targetConfig = CURRENT_CONFIG_FILE;
+             }
+
+             promise = fetch('/api/config/environments/switch', {
+                 method: 'POST',
+                 headers: { 'Content-Type': 'application/json' },
+                 body: JSON.stringify({ filename: targetConfig })
+             })
+             .catch(err => console.error("Error reverting environment:", err));
+
+             promise.finally(() => {
+                 // Suppress the wizard from appearing immediately after the the reload
+                 sessionStorage.setItem('sop_suppress_wizard_once', 'true');
+                 // Flag to open Environment Manager after reload
+                 sessionStorage.setItem('sop_open_env_manager', 'true');
+                 
+                 // Reload to root to reset state and clear any query params (like new_env)
+                 window.location.href = "/";
+             });
         }
     }
 
