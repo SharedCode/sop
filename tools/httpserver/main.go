@@ -607,13 +607,33 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Prepare Options
+		// Prepare Options
 		options := sop.DatabaseOptions{
-			StoresFolders:        []string{req.Path},
 			RegistryHashModValue: req.RegistryHashMod,
 		}
-		// Append additional folders if provided
+		// If explicit Stores Folders provided (Advanced Mode), use them.
+		// Otherwise use the Data Path (Simple Mode).
 		if len(req.StoresFolders) > 0 {
-			options.StoresFolders = append(options.StoresFolders, req.StoresFolders...)
+			options.StoresFolders = req.StoresFolders
+		} else {
+			options.StoresFolders = []string{req.Path}
+		}
+
+		// Set Database Type and Cache Config
+		if req.Type == "clustered" {
+			options.Type = sop.Clustered
+			options.CacheType = sop.Redis
+			if req.Connection != "" {
+				options.RedisConfig = &sop.RedisCacheConfig{
+					URL: req.Connection,
+				}
+			} else {
+				http.Error(w, "Redis Connection URL is required for Clustered mode", http.StatusBadRequest)
+				return
+			}
+		} else {
+			options.Type = sop.Standalone
+			options.CacheType = sop.InMemory
 		}
 
 		// Set Erasure Config if provided
@@ -653,7 +673,14 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "Failed to initialize registry: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
+
 			tx.Commit(ctx)
+
+			// Clean up the dummy store (best effort)
+			if err := database.RemoveBtree(ctx, options, "system_check"); err != nil {
+				// It's okay if this fails, it's just a clean up.
+				log.Warn(fmt.Sprintf("Cleanup: Failed to remove init store 'system_check': %v", err))
+			}
 		}
 
 		if req.PopulateDemo && shouldSetup {

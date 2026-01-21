@@ -88,7 +88,12 @@ func Setup(ctx context.Context, opts sop.DatabaseOptions) (DatabaseOptions, erro
 	fileName := filepath.Join(folder, databaseOptionsFilename)
 
 	if isOptionInLookup(fileName) {
-		return DatabaseOptions{}, fmt.Errorf("database %s already setup", fileName)
+		// Check if file physically exists to detect stale cache (e.g. manual deletion)
+		if _, err := os.Stat(fileName); os.IsNotExist(err) {
+			removeOptionFromLookup(fileName)
+		} else {
+			return DatabaseOptions{}, fmt.Errorf("database %s already setup", fileName)
+		}
 	}
 
 	// Check if exists in the first folder
@@ -380,18 +385,31 @@ func Remove(ctx context.Context, dbPath string) error {
 		return err
 	}
 
-	// Remove from Options lookup.
-	filename := filepath.Join(dbPath, databaseOptionsFilename)
-	removeOptionFromLookup(filename)
-
-	// Also avoid deleting the current working directory if it happens to be the DB path.
-	absPath, _ := filepath.Abs(dbPath)
-	cwd, _ := os.Getwd()
-	if absPath == cwd {
-		return fmt.Errorf("Skipping os.RemoveAll for database path because it is the current working directory.")
-	} else {
-		return os.RemoveAll(dbPath)
+	// Collect all folders to remove: the primary dbPath + any replicated folders.
+	foldersToRemove := make(map[string]struct{})
+	foldersToRemove[dbPath] = struct{}{}
+	for _, f := range opts.StoresFolders {
+		foldersToRemove[f] = struct{}{}
 	}
+
+	cwd, _ := os.Getwd()
+
+	for folder := range foldersToRemove {
+		// Remove from Options lookup.
+		filename := filepath.Join(folder, databaseOptionsFilename)
+		removeOptionFromLookup(filename)
+
+		// Also avoid deleting the current working directory if it happens to be the DB path.
+		absPath, _ := filepath.Abs(folder)
+		if absPath == cwd {
+			return fmt.Errorf("Skipping os.RemoveAll for database path '%s' because it is the current working directory.", folder)
+		} else {
+			if err := os.RemoveAll(folder); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // ReinstateFailedDrives asks the replication tracker to reinstate failed passive targets.

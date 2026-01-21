@@ -4916,6 +4916,16 @@
                 populateRelationshipUI(currentStoreInfo.relations);
             }
 
+            // Disable Target Data File Dropdown in Edit Mode
+            const targetSelect = document.getElementById('new-store-target-ec');
+            if (targetSelect) {
+                 // Try to set current value if available in store info (not always preserved in lightweight struct)
+                 // If not preserved, it likely defaults to empty/default.
+                 // Ideally we should know which partition it belongs to.
+                 // For now, we simply disable it so user can't screw it up.
+                 targetSelect.disabled = true;
+            }
+
             // Ensure count is treated as number
             const isEmptyStore = (currentStoreInfo.count === 0);
             console.log("showEditStore: currentStoreInfo.count=", currentStoreInfo.count, "isEmptyStore=", isEmptyStore);
@@ -5462,7 +5472,8 @@
 
         // populate EC targets
         const targetSelect = document.getElementById('new-store-target-ec');
-        targetSelect.innerHTML = '<option value="">Default (Auto-named)</option>';
+        targetSelect.innerHTML = '<option value="">Default("")</option>';
+        targetSelect.disabled = false;
         
         if (currentDatabase) {
              fetch(`/api/db/options?database=${encodeURIComponent(currentDatabase)}`)
@@ -7154,10 +7165,13 @@
         if (currentWizardStep < 3) {
             // Validation
             if (currentWizardStep === 1) { // Was 2: User DB
+                // Unified Validation
+                const err = validateDbForm('setup-db');
+                if (err) return showAlert(err);
+
                 const name = document.getElementById('setup-db-name').value;
                 const path = document.getElementById('setup-db-path').value;
-                if (!name || !path) return showAlert("Database Name and Path are required");
-                // TODO: Validate DB path?
+                // if (!name || !path) return showAlert("Database Name and Path are required"); // Replaced by validateDbForm
                 
                 // Auto-populate System DB Manual Fields from User DB
                 document.getElementById('setup-sys-type').value = document.getElementById('setup-db-type').value;
@@ -7635,7 +7649,7 @@
             <div style="margin-bottom: 5px; display: flex; align-items: center; gap: 10px;">
                 <div style="display: flex; align-items: center; gap: 5px;">
                     <label style="font-size: 0.9em;">Key:</label>
-                    <input type="text" class="ec-key" placeholder="store_group_1" style="width: 160px; font-size: 0.9em;">
+                    <input type="text" class="ec-key" placeholder="Empty = Default" title="Leave empty to use as the default configuration." style="width: 160px; font-size: 0.9em;">
                 </div>
                 <div style="display: flex; align-items: center; gap: 5px;">
                     <label style="white-space: nowrap; margin-bottom: 0; font-size: 0.9em;">EC:</label>
@@ -7704,6 +7718,32 @@
 
     // --- Database Management Functions ---
 
+    // Shared Validation Logic for DB Forms (Setup Wizard Phase 1 & Add Database Modal)
+    function validateDbForm(prefix) {
+        const name = document.getElementById(`${prefix}-name`).value.trim();
+        const path = document.getElementById(`${prefix}-path`).value.trim();
+        const type = document.getElementById(`${prefix}-type`).value;
+        const conn = document.getElementById(`${prefix}-conn`).value.trim();
+        
+        // Advanced Toggle
+        const advToggle = document.getElementById(`${prefix}-advanced-toggle`); // setup-db-advanced-toggle or new-db-advanced-toggle
+        const isAdvanced = advToggle ? advToggle.checked : false;
+        
+        const storesFolders = document.getElementById(`${prefix}-stores-folders`).value.trim();
+
+        if (!name) return "Database Name is required";
+        
+        if (isAdvanced) {
+            if (!storesFolders) return "Stores Folders are required in Advanced Mode";
+        } else {
+            if (!path) return "Data Path is required";
+        }
+
+        if (type === 'clustered' && !conn) return "Redis URL is required for Clustered mode";
+
+        return null; // Valid
+    }
+
     // ESC Key Handler for Modals (Global)
     document.addEventListener('keydown', function(event) {
         if (event.key === "Escape") {
@@ -7737,9 +7777,11 @@
     function showAddDatabaseModal() {
         document.getElementById('new-db-name').value = '';
         document.getElementById('new-db-path').value = '';
-        document.getElementById('new-db-type').value = 'standalone';
-        document.getElementById('new-db-conn').value = '';
-        document.getElementById('new-db-conn-group').style.display = 'none';
+        
+        // Default to Clustered
+        document.getElementById('new-db-type').value = 'clustered';
+        document.getElementById('new-db-conn').value = 'localhost:6379';
+        document.getElementById('new-db-conn-group').style.display = 'flex'; // Was 'none' or 'block' depending on CSS, but flex is safer for alignment
         
         // Reset Advanced
         document.getElementById('new-db-advanced-toggle').checked = false;
@@ -7755,7 +7797,8 @@
         }
 
         // Reset visibility
-        document.getElementById('new-db-path').parentElement.style.display = 'flex';
+        document.getElementById('new-db-path').parentElement.style.display = 'flex'; // Actually parent is div with inputs
+        document.getElementById('new-db-path').parentElement.parentElement.style.display = 'flex'; // Ensure form group logic is reset if hidden by advanced
         
         document.getElementById('add-database-modal').style.display = 'block';
     }
@@ -7767,26 +7810,29 @@
     function toggleNewDbConnectionField() {
         const type = document.getElementById('new-db-type').value;
         const group = document.getElementById('new-db-conn-group');
-        group.style.display = type === 'clustered' ? 'block' : 'none';
+        // Assuming row layout is flex, block works but flex keeps alignment
+        group.style.display = type === 'clustered' ? 'flex' : 'none';
     }
 
     function toggleNewDbAdvancedOptions() {
         const isChecked = document.getElementById('new-db-advanced-toggle').checked;
         document.getElementById('new-db-advanced-options').style.display = isChecked ? 'block' : 'none';
         
-        // Hide/Show Data Path
-        const pathGroup = document.getElementById('new-db-path').parentElement;
+        // Toggle Visibility of Data Path ONLY (Parent of Input)
+        const pathContainer = document.getElementById('new-db-path').parentElement;
+        if (pathContainer) {
+            pathContainer.style.display = isChecked ? 'none' : 'flex';
+        }
+
         const storesFoldersInput = document.getElementById('new-db-stores-folders');
         const dataPathInput = document.getElementById('new-db-path');
         
         if (isChecked) {
-            pathGroup.style.display = 'none';
-            // Sync Data Path -> Stores Folders
-            if (dataPathInput.value && !storesFoldersInput.value) {
+             // Sync Data Path -> Stores Folders
+             if (dataPathInput.value && !storesFoldersInput.value) {
                 storesFoldersInput.value = dataPathInput.value;
             }
         } else {
-            pathGroup.style.display = 'flex';
              // Sync Stores Folders -> Data Path (Take first item)
              if (storesFoldersInput.value) {
                  const firstPath = storesFoldersInput.value.split(',')[0].trim();
@@ -7836,31 +7882,36 @@
 
     function createNewDatabase() {
         const name = document.getElementById('new-db-name').value.trim();
-        const path = document.getElementById('new-db-path').value.trim();
+        let path = document.getElementById('new-db-path').value.trim();
         const type = document.getElementById('new-db-type').value;
         const conn = document.getElementById('new-db-conn').value.trim();
         
         // Advanced
         const storesFoldersRaw = document.getElementById('new-db-stores-folders').value.trim();
+        
+        // Auto-fill path from stores if missing (Advanced Mode convenience)
+        if (!path && storesFoldersRaw) {
+             const parts = storesFoldersRaw.split(/[\n,]+/);
+             if (parts.length > 0 && parts[0].trim().length > 0) {
+                 path = parts[0].trim();
+             }
+        }
+
         const registryHashMod = document.getElementById('new-db-registry-hash-mod').value;
         const populateDemo = document.getElementById('new-db-populate-demo').checked;
-        const useShared = document.getElementById('new-db-use-shared').checked;
+        const useShared = document.getElementById('new-db-use-shared').checked; // Checkbox check
         
         // EC Configs
         const erasureConfigs = collectEcConfigs('new-db-ec-container');
+        
+        // Unified Validation
+        const err = validateDbForm('new-db');
+        if (err) {
+            showAlert(err);
+            return;
+        }
 
-        if (!name) {
-            showAlert('Database Name is required');
-            return;
-        }
-        if (!path) {
-            showAlert('Data Path is required');
-            return;
-        }
-        if (type === 'clustered' && !conn) {
-             showAlert('Connection URL is required for Clustered mode');
-             return;
-        }
+        const isAdvanced = document.getElementById('new-db-advanced-toggle').checked;
 
         const payload = {
             name: name,
@@ -7868,8 +7919,8 @@
             type: type,
             conn_url: conn,
             populate_demo: populateDemo,
-            stores_folders: storesFoldersRaw ? storesFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
-            registry_hash_mod: registryHashMod ? parseInt(registryHashMod) : 0,
+            stores_folders: (isAdvanced && storesFoldersRaw) ? storesFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
+            registry_hash_mod: (isAdvanced && registryHashMod) ? parseInt(registryHashMod) : 0,
             use_shared_db: useShared
         };
 
@@ -7880,7 +7931,7 @@
              payload.erasure_configs = null;
              // Ensure population is off
              payload.populate_demo = false;
-        } else if (erasureConfigs) {
+        } else if (isAdvanced && erasureConfigs) {
             payload.erasure_configs = erasureConfigs;
         }
 
@@ -8188,14 +8239,29 @@
 
     function onTargetECChange(val) {
         const nameInput = document.getElementById('new-store-name');
+        const hint = document.getElementById('store-name-hint');
+        const saveBtn = document.querySelector('#add-store-modal .btn-success');
+        
         if (val && val !== "") {
+            // Target Selected: "Slotted" mode.
+            // Store name MUST match the EC Config Name / Data File Name to be slotted correctly.
             nameInput.value = val;
             nameInput.disabled = true;
-            nameInput.title = "Store Name must match the Data File Key";
+            nameInput.title = "Store Name is locked to match the Target Data File.";
+            if (hint) hint.style.display = 'none';
+            if (saveBtn) saveBtn.disabled = false;
         } else {
+            // Default: Standard mode.
+            // User can name the store freely.
             nameInput.disabled = false;
             nameInput.value = "";
-            nameInput.title = "";
+            nameInput.title = "Enter a unique name for the store.";
+            if (hint) hint.style.display = 'none';
+            if (saveBtn) saveBtn.disabled = false;
+            if (nameInput.offsetParent !== null) {
+                // strict focus only if visible to avoid jumpiness
+                nameInput.focus();
+            }
         }
     }
 
@@ -8204,24 +8270,29 @@
         const typedName = nameInput.value.trim();
         const targetSelect = document.getElementById('new-store-target-ec');
         const hintDiv = document.getElementById('store-name-hint');
+        const saveBtn = document.querySelector('#add-store-modal .btn-success');
         
+        // Reset valid state
+        if (hintDiv) hintDiv.style.display = 'none';
+        if (saveBtn) saveBtn.disabled = false;
+
         let matchFound = false;
         
-        if (targetSelect && typedName !== "") {
+        if (targetSelect) {
             for (let i = 0; i < targetSelect.options.length; i++) {
                 const optVal = targetSelect.options[i].value;
                 if (optVal && optVal !== "" && optVal === typedName) {
+                    // Match found! Auto-select it in the dropdown
+                    targetSelect.value = optVal;
                     matchFound = true;
                     break;
                 }
             }
-        }
-
-        if (matchFound) {
-            hintDiv.style.display = 'block';
-            hintDiv.textContent = "Note: Matches a Data File key. This Store will be mapped to that partition.";
-        } else {
-            hintDiv.style.display = 'none';
+            
+            // If no match found, ensure dropdown is on Default
+            if (!matchFound) {
+                targetSelect.value = "";
+            }
         }
     }
 

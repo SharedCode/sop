@@ -278,3 +278,77 @@ func TestDatabase_Setup_Errors(t *testing.T) {
 		t.Error("Expected error for empty StoresFolders, got nil")
 	}
 }
+
+func TestDatabase_Setup_ManualDeletion(t *testing.T) {
+	storagePath := t.TempDir()
+	opts := sop.DatabaseOptions{
+		StoresFolders: []string{storagePath},
+	}
+
+	ctx := context.Background()
+
+	// 1. First Setup
+	_, err := database.Setup(ctx, opts)
+	if err != nil {
+		t.Fatalf("First setup failed: %v", err)
+	}
+
+	// 2. Verify "Already Setup" error if we try again immediately
+	_, err = database.Setup(ctx, opts)
+	if err == nil {
+		t.Fatalf("Expected error for second setup, got nil")
+	}
+
+	// 3. Manually delete the file (simulate external deletion)
+	optionsFile := filepath.Join(storagePath, "dboptions.json")
+	if err := os.Remove(optionsFile); err != nil {
+		t.Fatalf("Failed to remove file: %v", err)
+	}
+
+	// 4. Try Setup again - Should succeed now (with fix)
+	_, err = database.Setup(ctx, opts)
+	if err != nil {
+		t.Fatalf("Setup after manual deletion failed: %v", err)
+	}
+}
+
+func TestDatabase_Remove_Replicated(t *testing.T) {
+// Setup folders for replication
+basePath := t.TempDir()
+folder1 := filepath.Join(basePath, "node1")
+folder2 := filepath.Join(basePath, "node2")
+
+opts := sop.DatabaseOptions{
+StoresFolders: []string{folder1, folder2},
+CacheType:     sop.InMemory,
+}
+
+ctx := context.Background()
+
+// 1. Setup
+if _, err := database.Setup(ctx, opts); err != nil {
+t.Fatalf("Setup failed: %v", err)
+}
+
+// Verify folders exist
+if _, err := os.Stat(folder1); os.IsNotExist(err) {
+t.Errorf("Folder1 should exist after setup")
+}
+if _, err := os.Stat(folder2); os.IsNotExist(err) {
+t.Errorf("Folder2 should exist after setup")
+}
+
+// 2. Remove
+// We pass folder1 as the "dbPath" (primary)
+if err := database.Remove(ctx, folder1); err != nil {
+t.Fatalf("Remove failed: %v", err)
+}
+
+// 3. Verify BOTH are gone
+if _, err := os.Stat(folder1); !os.IsNotExist(err) {
+t.Errorf("Folder1 should be deleted")
+}
+if _, err := os.Stat(folder2); !os.IsNotExist(err) {
+t.Errorf("Folder2 should be deleted")
+}
+}
