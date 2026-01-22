@@ -66,32 +66,41 @@
     // Override native alert (optional, but safer to rename usages explicitly first)
     // window.alert = function(msg) { showAlert(msg); };
 
-    // Escape Key Handler for Modals
+    // Escape Key Handler for Modals (KeyDown)
     document.addEventListener('keydown', function(event) {
         if (event.key === "Escape") {
             const modals = [
-                'add-modal', 
-                'column-modal', 
-                'confirm-modal', 
+                // Topmost Priority
                 'global-alert-modal',
                 'global-confirm-modal',
+                'confirm-modal', 
+                
+                // Specific Modals
                 'preferences-modal', 
                 'script-modal', 
                 'add-store-modal',
                 'store-details-modal',
                 'cel-modal',
+                'column-modal', 
+                'add-modal', 
+                
+                // Environment/DB Managers
                 'delete-env-modal',
-                'setup-wizard',
                 'add-database-modal',
                 'delete-database-modal',
                 'environments-modal',
                 'switch-env-modal'
+                // NOTE: setup-wizard moved to keyup handler to prevent confirmation dialog conflict
             ];
             
-            let closedAny = false;
-            modals.forEach(id => {
+            for (const id of modals) {
                 const el = document.getElementById(id);
+                // check if the element exists and is visible (display matching flex or block)
                 if (el && el.style.display !== 'none' && el.style.display !== '') {
+                    
+                    event.preventDefault(); 
+                    event.stopImmediatePropagation();
+
                     // Specific close functions handling
                     if (id === 'add-modal') closeAdd();
                     else if (id === 'global-alert-modal') closeGlobalAlert();
@@ -101,7 +110,6 @@
                     else if (id === 'add-store-modal') closeAddStoreModal();
                     else if (id === 'store-details-modal') closeStoreDetailsModal();
                     else if (id === 'cel-modal') closeCelModal();
-                    else if (id === 'setup-wizard') closeSetupWizard();
                     else if (id === 'delete-env-modal') closeDeleteEnvModal();
                     else if (id === 'add-database-modal') closeAddDatabaseModal();
                     else if (id === 'delete-database-modal') closeDeleteDatabaseModal();
@@ -109,11 +117,25 @@
                     else if (id === 'switch-env-modal') closeSwitchEnvModal();
                     else el.style.display = 'none'; // Default fallback
                     
-                    closedAny = true;
+                    return; // Stop processing other modals
                 }
-            });
-            
-            // If no modal was closed, maybe close other things?
+            }
+        }
+    });
+
+    // Dedicated KeyUp Listener for Setup Wizard (prevents double-triggering confirmation)
+    document.addEventListener('keyup', function(event) {
+        if (event.key === "Escape") {
+            const wizard = document.getElementById('setup-wizard');
+            if (wizard && wizard.style.display !== 'none' && wizard.style.display !== '') {
+                // Ensure no other modal is covering it (simple check)
+                 if(document.getElementById('global-alert-modal').style.display === 'flex') return;
+                 if(document.getElementById('global-confirm-modal').style.display === 'flex') return;
+                 
+                 event.preventDefault();
+                 event.stopImmediatePropagation();
+                 wizardCancel();
+            }
         }
     });
 
@@ -675,6 +697,7 @@
         btn.style.border = 'none';
         btn.style.cursor = 'pointer';
         btn.style.fontSize = '1.2em';
+        btn.style.color = 'var(--key-color)';
         toolbar.appendChild(btn);
 
         // Add Enter key support for simple search input
@@ -1056,7 +1079,7 @@
              if (columnWidths[index]) style = `style="width: ${columnWidths[index]}"`;
              
              // Determine class: th-key for index columns, th-val for others
-             const headerClass = indexFieldSet.has(col) ? 'th-key' : 'th-val';
+             const headerClass = (indexFieldSet.has(col) || col === 'Key') ? 'th-key' : 'th-val';
              
              html += `<th class="${headerClass}" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
         });
@@ -1536,7 +1559,7 @@
                             <label class="form-label">Execution Output (NDJSON Stream)</label>
                             <button onclick="document.getElementById('script-output-content').innerHTML = ''; document.getElementById('script-execution-output').style.display = 'none';" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 12px;" title="Clear Output">Clear</button>
                         </div>
-                        <div id="script-output-content" style="background: #1e1e1e; color: #d4d4d4; padding: 10px; font-family: monospace; border-radius: 4px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-size: 12px;"></div>
+                        <div id="script-output-content" style="background: var(--console-bg); color: var(--console-text); padding: 10px; font-family: monospace; border-radius: 4px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-size: 12px;"></div>
                     </div>
                 </div>
             </div>
@@ -2264,7 +2287,7 @@
 
         viewer.innerHTML = `
             <div style="margin-bottom: 0px; display: flex; align-items: flex-start; gap: 8px;">
-                <strong style="margin-top: 5px;">Key:</strong>
+                <strong style="margin-top: 5px; color: var(--key-color);">Key:</strong>
                 <pre class="pre-block" title="${keyStr.replace(/"/g, '&quot;')}" style="margin: 0; flex: 1; padding: 4px; overflow: hidden; height: 38px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: pre-wrap; word-break: break-all;">${keyStr.replace(/\n/g, ' ')}</pre>
             </div>
             <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
@@ -7297,35 +7320,41 @@
         }
     }
 
+    let wizardCancelLocked = false;
     function wizardCancel() {
-        // Fallback to native confirm if custom modal fails or to ensure basic functionality
-        if (confirm("Are you sure you want to cancel the setup process? Any unsaved changes will be lost.")) {
-             
-             let promise = Promise.resolve();
-
-             // Determine target config: Use current if known, otherwise fallback to default 'config.json'
-             // to mimic initial server startup behavior (auto-loading default config).
-             let targetConfig = "config.json";
-             if (typeof CURRENT_CONFIG_FILE !== 'undefined' && CURRENT_CONFIG_FILE && CURRENT_CONFIG_FILE.trim() !== "") {
-                 targetConfig = CURRENT_CONFIG_FILE;
-             }
-
-             promise = fetch('/api/config/environments/switch', {
-                 method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
-                 body: JSON.stringify({ filename: targetConfig })
-             })
-             .catch(err => console.error("Error reverting environment:", err));
-
-             promise.finally(() => {
-                 // Suppress the wizard from appearing immediately after the the reload
-                 sessionStorage.setItem('sop_suppress_wizard_once', 'true');
-                 // Flag to open Environment Manager after reload
-                 sessionStorage.setItem('sop_open_env_manager', 'true');
+        if (wizardCancelLocked) return;
+        wizardCancelLocked = true;
+        
+        console.log("Wizard Cancel triggered");
+        
+        // Use a small delay to allow the stack to clear, but ensure we don't block recursively
+        // NOTE: Removed setTimeout as it decouples the native confirm from the user interaction event
+        try {
+            if (confirm("Are you sure you want to cancel the setup process? Any unsaved changes will be lost.")) {
                  
-                 // Reload to root to reset state and clear any query params (like new_env)
-                 window.location.href = "/";
-             });
+                 let promise = Promise.resolve();
+
+                 let targetConfig = "config.json";
+                 if (typeof CURRENT_CONFIG_FILE !== 'undefined' && CURRENT_CONFIG_FILE && CURRENT_CONFIG_FILE.trim() !== "") {
+                     targetConfig = CURRENT_CONFIG_FILE;
+                 }
+
+                 promise = fetch('/api/config/environments/switch', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ filename: targetConfig })
+                 })
+                 .catch(err => console.error("Error reverting environment:", err));
+
+                 promise.finally(() => {
+                     sessionStorage.setItem('sop_suppress_wizard_once', 'true');
+                     sessionStorage.setItem('sop_open_env_manager', 'true');
+                     window.location.href = "/";
+                 });
+            }
+        } finally {
+            // Unlock immediately after the confirm dialog returns
+            wizardCancelLocked = false;
         }
     }
 
@@ -7817,35 +7846,7 @@
         return null; // Valid
     }
 
-    // ESC Key Handler for Modals (Global)
-    document.addEventListener('keydown', function(event) {
-        if (event.key === "Escape") {
-            // Close Setup Wizard
-            const wizard = document.getElementById('setup-wizard');
-            if (wizard && (wizard.style.display === 'flex' || wizard.style.display === 'block')) {
-                 wizardCancel();
-                 return;
-            }
 
-            // Close Add Database Modal
-            const addDbModal = document.getElementById('add-database-modal');
-            if (addDbModal && (addDbModal.style.display === 'block' || addDbModal.style.display === 'flex')) {
-                closeAddDatabaseModal();
-                return;
-            }
-
-            // Close Global Alert/Confirm if open
-            if(document.getElementById('global-alert-modal') && document.getElementById('global-alert-modal').style.display === 'flex') {
-                closeGlobalAlert();
-                return;
-            }
-            if(document.getElementById('global-confirm-modal') && document.getElementById('global-confirm-modal').style.display === 'flex') {
-                // Cancel confirm
-                const cancelBtn = document.getElementById('global-confirm-cancel-btn');
-                if(cancelBtn) cancelBtn.click();
-            }
-        }
-    });
 
     function showAddDatabaseModal() {
         document.getElementById('new-db-name').value = '';

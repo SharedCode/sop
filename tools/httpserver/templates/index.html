@@ -168,7 +168,7 @@
                     <label style="margin-bottom: 0; white-space: nowrap;">Store Name:</label>
                     <input type="text" id="new-store-name" oninput="checkStoreNameConflict()" style="flex: 1; box-sizing: border-box;">
                 </div>
-                <div id="store-name-hint" style="font-size: 11px; color: #ff9800; margin-top: 4px; display: none; text-align: right;"></div>
+                <div id="store-name-hint" style="font-size: 11px; color: var(--text-orange); margin-top: 4px; display: none; text-align: right;"></div>
             </div>
             <div id="target-ec-container" style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
                 <label style="margin-bottom: 0; white-space: nowrap;">Target Data File:</label>
@@ -405,7 +405,7 @@
                         <span>Is Unique</span>
                     </label>
                 </div>
-                <div id="slot-length-warning" style="font-size: 11px; margin-top: -5px; margin-bottom: 10px; color: #ffcc00; display: none;"></div>
+                <div id="slot-length-warning" style="font-size: 11px; margin-top: -5px; margin-bottom: 10px; color: var(--text-orange); display: none;"></div>
 
                 <div id="cache-options-container" style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 10px;">
                     <label style="display:block; margin-bottom: 5px; font-weight: bold;">Caching Configuration:</label>
@@ -430,7 +430,7 @@
             </div>
         </div>
         <div class="modal-footer">
-            <button id="btn-unlock-admin" onclick="unlockAdminFields()" style="display:none; margin-right: auto; background: #ffc107; color: black; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Unlock Admin</button>
+            <button id="btn-unlock-admin" onclick="unlockAdminFields()" style="display:none; margin-right: auto; background: var(--btn-warning-bg); color: var(--btn-warning-text); border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Unlock Admin</button>
             <button onclick="saveNewStore()" class="btn-success">Create</button>
             <button onclick="closeAddStoreModal()" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Cancel</button>
         </div>
@@ -483,7 +483,7 @@
             </div>
 
             <!-- Migration Warning -->
-            <div id="detail-store-migration-warning" style="grid-column: 1 / -1; display: none; padding: 10px; background: rgba(255, 193, 7, 0.1); border: 1px solid var(--warning-text); border-radius: 4px; color: var(--warning-text);">
+            <div id="detail-store-migration-warning" style="grid-column: 1 / -1; display: none; padding: 10px; background: var(--warning-bg); border: 1px solid var(--warning-border); border-radius: 4px; color: var(--warning-text);">
                 <strong>⚠️ Recommendation:</strong> This store lacks an Index Specification or CEL Expression. 
                 We recommend migrating to a new store with a defined schema to enable full management capabilities (Add/Delete) and ensure data integrity.
             </div>
