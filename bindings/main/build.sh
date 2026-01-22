@@ -20,7 +20,7 @@ export GOARCH=amd64
 if [ "$(uname)" == "Linux" ]; then
     export CC="zig cc -target x86_64-macos"
     export CGO_CFLAGS="-fno-stack-protector"
-    export CGO_LDFLAGS="-L${SDKROOT}/usr/lib -F${SDKROOT}/System/Library/Frameworks -Wl,-undefined,dynamic_lookup"
+    export CGO_LDFLAGS="-Wl,-undefined,dynamic_lookup"
 else
     unset CC
 fi
@@ -71,7 +71,7 @@ export GOARCH=arm64
 if [ "$(uname)" == "Linux" ]; then
     export CC="zig cc -target aarch64-macos"
     export CGO_CFLAGS="-fno-stack-protector"
-    export CGO_LDFLAGS="-L${SDKROOT}/usr/lib -F${SDKROOT}/System/Library/Frameworks -Wl,-undefined,dynamic_lookup"
+    export CGO_LDFLAGS="-Wl,-undefined,dynamic_lookup"
 else
     unset CC
 fi
