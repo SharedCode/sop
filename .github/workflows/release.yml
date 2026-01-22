@@ -30,9 +30,9 @@ jobs:
       - name: Build Bundles (via build_release.sh)
         run: |
           chmod +x build_release.sh
-          # Set version env var so build_release.sh uses it
+          # Set version env var so build_release.sh and bindings scripts use it
           export SOP_VERSION=${{ github.ref_name }}
-          # This script orchestrates the build and bundling
+          # This script orchestrates the build and bundling of the SOP Data Manager Installers
           ./build_release.sh
 
       - name: Setup Python
@@ -40,10 +40,12 @@ jobs:
         with:
             python-version: '3.10'
 
-      - name: Package Python Wheel
+      - name: Package Python Wheel (Language Binding)
         run: |
           cd bindings/python
+          # Ensure pip wheel build tools are available
           pip install build wheel
+          # Build the wheel - this relies on the shared libs built by build_release.sh earlier
           python3 -m build
           cp dist/*.whl ../../release/
           cd ../..
@@ -53,18 +55,21 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Package C# NuGet
+      - name: Package C# NuGet (Language Binding)
         run: |
           cd bindings/csharp/Sop
+          # Update version in csproj to match tag
           sed -i 's/<Version>1.0.0<\/Version>/<Version>${{ github.ref_name }}<\/Version>/' Sop.csproj
+          # Build NuGet package - relies on shared libs in runtimes/ folder (populated by build_release.sh/build.sh)
           dotnet pack -c Release -o ../../../release/
           cd ../../..
+
 
       - name: Setup Java
         uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Package Java JAR
         run: |
