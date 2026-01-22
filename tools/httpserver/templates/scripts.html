@@ -6928,10 +6928,11 @@
                 }
              } else {
                  if (pathGroup) pathGroup.style.display = 'flex';
-                 if (dataPathInput && storesFoldersInput && storesFoldersInput.value) {
-                     const firstPath = storesFoldersInput.value.split(',')[0].trim();
-                     if (firstPath) dataPathInput.value = firstPath;
-                 }
+                 // Do not overwrite dataPathInput from stores folders when disabling advanced mode for System DB
+                 // if (dataPathInput && storesFoldersInput && storesFoldersInput.value) {
+                 //     const firstPath = storesFoldersInput.value.split(',')[0].trim();
+                 //     if (firstPath) dataPathInput.value = firstPath;
+                 // }
              }
         }
     }
@@ -7195,11 +7196,15 @@
                 };
 
                 const dbStores = document.getElementById('setup-db-stores-folders').value;
+                // Disabling auto-population of hidden system stores from user db stores
+                // This prevents invisible fields from overriding the manual system path entered by the user
+                /* 
                 if (dbStores) {
                     const paths = dbStores.split(',').map(s => s.trim());
                     const sysPaths = paths.map(p => replaceLastSegment(p));
                     document.getElementById('setup-sys-stores-folders').value = sysPaths.join(', ');
                 }
+                */
                 
                 const dbPath = document.getElementById('setup-db-path').value;
                 // Only auto-populate if NOT using Enterprise Brain (Auto or Manual)
@@ -7208,7 +7213,7 @@
                 const isUsingEnterprise = (entToggle && entToggle.checked) || (manualEntToggle && manualEntToggle.checked);
                 
                 if (dbPath && !isUsingEnterprise) {
-                    document.getElementById('setup-reg-path').value = replaceLastSegment(dbPath);
+                    // document.getElementById('setup-reg-path').value = replaceLastSegment(dbPath); // Disabling aggressive auto-fill
                 }
 
                 toggleSetupConnectionField('sys');
@@ -7367,6 +7372,10 @@
         let dbName = document.getElementById('setup-db-name').value;
         let dbPath = document.getElementById('setup-db-path').value;
         
+        // --- explicit validation ---
+        if (!dbName || !dbName.trim()) return showAlert("Database Name is required");
+        if (!dbPath || !dbPath.trim()) return showAlert("Database Path is required");
+        
         const manualDBToggle = document.getElementById('setup-db-use-manual');
         if (manualDBToggle && manualDBToggle.checked) {
              // If manual/shared, user entered FULL PATH in the PATH field
@@ -7394,44 +7403,89 @@
              }
         }
 
+        // 1. Determine User DB Settings (Simple vs Advanced)
+        const dbAdvToggle = document.getElementById('setup-db-advanced-toggle');
+        const isDbAdvanced = dbAdvToggle && dbAdvToggle.checked;
+        
+        let finalDbStoresFoldersRaw = null;
+        let finalDbHashMod = 0;
+        let finalDbErasureConfigs = [];
+        
+        if (isDbAdvanced) {
+             finalDbStoresFoldersRaw = document.getElementById('setup-db-stores-folders').value.trim();
+             // In advanced mode, the single "dbPath" is ignored or derived from first store? 
+             // To pass validation, we ensure dbPath reflects the first store
+             if (!finalDbStoresFoldersRaw) return showAlert("In Advanced Mode, at least one Store Folder is required for User DB.");
+             dbPath = finalDbStoresFoldersRaw.split(/[\n,]+/).map(s=>s.trim())[0];
+             
+             finalDbHashMod = document.getElementById('setup-db-registry-hash-mod').value;
+             finalDbErasureConfigs = collectEcConfigs('setup-db-ec-container') || [];
+        } else {
+             // Simple Mode: Use the explicit simple input
+             dbPath = document.getElementById('setup-db-path').value.trim();
+             if (!dbPath) return showAlert("Database Path is required");
+             // Reset advanced fields
+             finalDbStoresFoldersRaw = "";
+             finalDbHashMod = 0;
+             finalDbErasureConfigs = [];
+        }
+
         const dbType = document.getElementById('setup-db-type').value;
         const dbConn = document.getElementById('setup-db-conn').value;
         const populateDemo = document.getElementById('setup-populate-demo').checked;
-        const dbHashMod = document.getElementById('setup-db-registry-hash-mod').value;
-        const dbErasureConfigs = collectEcConfigs('setup-db-ec-container');
-        const dbStoresFoldersRaw = document.getElementById('setup-db-stores-folders').value.trim();
 
-        // Collect System Settings
-        const regPath = document.getElementById('setup-reg-path').value;
+        // 2. Determine System DB Settings (Simple vs Advanced)
         const port = parseInt(document.getElementById('setup-port').value);
         const llmApiKey = document.getElementById('setup-llm-api-key').value.trim();
+        if (!port || isNaN(port) || port < 1 || port > 65535) return showAlert("Invalid Server Port (1-65535)");
+        
+        const sysAdvToggle = document.getElementById('setup-sys-advanced-toggle');
+        const isSysAdvanced = sysAdvToggle && sysAdvToggle.checked;
 
-        // Determine Final System DB Config
+        let regPath = null;
         let sysType = document.getElementById('setup-sys-type').value;
         let sysConn = document.getElementById('setup-sys-conn').value;
-        let sysHashMod = document.getElementById('setup-sys-registry-hash-mod').value;
-        let sysStoresFoldersRaw = document.getElementById('setup-sys-stores-folders').value.trim();
+        
+        let sysHashMod = 0;
+        let sysStoresFoldersRaw = null;
         let sysErasureConfigs = [];
         
-        // Collect from manual container
-        const manualConfigs = collectEcConfigs('setup-sys-ec-container');
-        if (manualConfigs) sysErasureConfigs = manualConfigs;
+        if (isSysAdvanced) {
+            sysStoresFoldersRaw = document.getElementById('setup-sys-stores-folders').value.trim();
+            if (!sysStoresFoldersRaw) return showAlert("In Advanced Mode, at least one Store Folder is required for System DB.");
+            
+            // Derive regPath for backend compatibility (base path)
+            regPath = sysStoresFoldersRaw.split(/[\n,]+/).map(s=>s.trim())[0];
+            
+            sysHashMod = document.getElementById('setup-sys-registry-hash-mod').value;
+            const manualConfigs = collectEcConfigs('setup-sys-ec-container');
+            if (manualConfigs) sysErasureConfigs = manualConfigs;
+        } else {
+            // Simple Mode: Use explicit simple input
+            regPath = document.getElementById('setup-reg-path').value.trim();
+            if (!regPath) return showAlert("System Database Path is required");
+            
+            // Reset advanced fields
+            sysStoresFoldersRaw = "";
+            sysHashMod = 0;
+            sysErasureConfigs = [];
+        }
+        
+        // Prevent collision
+        const normalize = (p) => p.trim().replace(/[/\\]+$/, "");
+        if (normalize(dbPath) === normalize(regPath)) {
+            return showAlert("User Database Path and System Database Path cannot be the same.");
+        }
 
-        // If "Use Shared Brain" is checked, ignore System DB advanced inputs (Erasure, Stores, HashMod)
-        // to prevent overwriting existing configuration with dirty/empty form data.
+        // Shared Brain/DB Overrides (if checking "Connect to Existing")
         const manualEntToggle = document.getElementById('setup-sys-use-manual-enterprise');
         if (manualEntToggle && manualEntToggle.checked) {
+            // If connecting to existing, we use regPath (simple) but ensure advanced config is ignored
             sysErasureConfigs = [];
             sysStoresFoldersRaw = "";
             sysHashMod = null;
         }
-
-        // If "Use Shared User DB" is checked, ignore User DB advanced inputs
-        // const manualDBToggle = document.getElementById('setup-db-use-manual'); // Already declared above
-        let finalDbErasureConfigs = dbErasureConfigs;
-        let finalDbStoresFoldersRaw = dbStoresFoldersRaw;
-        let finalDbHashMod = dbHashMod;
-
+        
         if (manualDBToggle && manualDBToggle.checked) {
              finalDbErasureConfigs = [];
              finalDbStoresFoldersRaw = "";
@@ -7443,7 +7497,7 @@
         nextBtn.textContent = "Setting up...";
 
         console.log("DEBUG: wizard payload", {
-            dbName, dbPath, dbStoresFoldersRaw
+            dbName, dbPath, dbStoresFoldersRaw: finalDbStoresFoldersRaw, regPath, sysStoresFoldersRaw
         });
 
         // Construct Payloads
@@ -7694,7 +7748,11 @@
         if (entries.length === 0) return null;
         
         const configs = [];
+        let validationError = null;
+
         entries.forEach(entry => {
+             if (validationError) return;
+
              const key = entry.querySelector('.ec-key').value.trim();
              const data = parseInt(entry.querySelector('.ec-data').value);
              const parity = parseInt(entry.querySelector('.ec-parity').value);
@@ -7708,13 +7766,25 @@
                      base_paths: [] // Initialize as empty array
                  };
                  if (pathsRaw) {
-                     item.base_paths = pathsRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0);
-                     // Debug Alert
-                     // alert(`Collected Paths for ${key}: ${item.base_paths.join(', ')}`);
+                     // Updated split regex to include spaces ([\n,\s]+) to handle space-separated paths
+                     item.base_paths = pathsRaw.split(/[\n,\s]+/).map(s => s.trim()).filter(s => s.length > 0);
                  }
+
+                 // Validate count matches Data + Parity (User Request: Finish must error if mismatch)
+                 const requiredCount = data + parity;
+                 if (item.base_paths.length !== requiredCount) {
+                     validationError = `Erasure Config Error for '${key}':\nRequired Paths: ${requiredCount} (${data} Data + ${parity} Parity)\nFound Paths: ${item.base_paths.length}\n\nPlease check your path separators (space, comma, or newline).`;
+                     return;
+                 }
+
                  configs.push(item);
              }
         });
+
+        if (validationError) {
+            alert(validationError);
+            throw new Error(validationError);
+        }
         
         return configs.length > 0 ? configs : null;
     }
@@ -7885,56 +7955,66 @@
 
     function createNewDatabase() {
         const name = document.getElementById('new-db-name').value.trim();
-        let path = document.getElementById('new-db-path').value.trim();
         const type = document.getElementById('new-db-type').value;
         const conn = document.getElementById('new-db-conn').value.trim();
-        
-        // Advanced
-        const storesFoldersRaw = document.getElementById('new-db-stores-folders').value.trim();
-        
-        // Auto-fill path from stores if missing (Advanced Mode convenience)
-        if (!path && storesFoldersRaw) {
-             const parts = storesFoldersRaw.split(/[\n,]+/);
-             if (parts.length > 0 && parts[0].trim().length > 0) {
-                 path = parts[0].trim();
-             }
-        }
-
-        const registryHashMod = document.getElementById('new-db-registry-hash-mod').value;
+        const useShared = document.getElementById('new-db-use-shared').checked;
         const populateDemo = document.getElementById('new-db-populate-demo').checked;
-        const useShared = document.getElementById('new-db-use-shared').checked; // Checkbox check
+
+        // Determine Mode
+        const isAdvanced = document.getElementById('new-db-advanced-toggle').checked;
+
+        let path = document.getElementById('new-db-path').value.trim();
+        let storesFoldersRaw = null;
+        let registryHashMod = 0;
+        let erasureConfigs = null;
+
+        if (useShared) {
+             // Shared Database Logic
+             // We use path, but ignore stores/EC
+             storesFoldersRaw = null;
+             registryHashMod = 0;
+             erasureConfigs = null;
+        } else if (isAdvanced) {
+             // Advanced Mode
+             storesFoldersRaw = document.getElementById('new-db-stores-folders').value.trim();
+             const modVal = document.getElementById('new-db-registry-hash-mod').value;
+             registryHashMod = modVal ? parseInt(modVal) : 0;
+             erasureConfigs = collectEcConfigs('new-db-ec-container');
+             
+             // If stores defined, ensure path is populated for top-level reference
+             // (Backfill in case backend uses it as a fallback)
+             if (storesFoldersRaw && !path) {
+                 const first = storesFoldersRaw.split(/[\n,]+/)[0];
+                 if (first) path = first.trim();
+             }
+        } else {
+             // Simple Mode
+             // Use path as is
+             // Force clear advanced fields to prevent hidden inputs from bleeding into payload
+             storesFoldersRaw = null;
+             registryHashMod = 0;
+             erasureConfigs = null;
+        }
         
-        // EC Configs
-        const erasureConfigs = collectEcConfigs('new-db-ec-container');
-        
-        // Unified Validation
+        // Unified Validation (Reads from DOM)
         const err = validateDbForm('new-db');
         if (err) {
             showAlert(err);
             return;
         }
 
-        const isAdvanced = document.getElementById('new-db-advanced-toggle').checked;
-
         const payload = {
             name: name,
             path: path,
             type: type,
             conn_url: conn,
-            populate_demo: populateDemo,
-            stores_folders: (isAdvanced && storesFoldersRaw) ? storesFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
-            registry_hash_mod: (isAdvanced && registryHashMod) ? parseInt(registryHashMod) : 0,
+            populate_demo: useShared ? false : populateDemo,
+            stores_folders: storesFoldersRaw ? storesFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
+            registry_hash_mod: registryHashMod,
             use_shared_db: useShared
         };
 
-        if (useShared) {
-            // When sharing, ignore advanced options
-             payload.stores_folders = null;
-             payload.registry_hash_mod = 0;
-             payload.erasure_configs = null;
-             // Ensure population is off
-             payload.populate_demo = false;
-        } else if (isAdvanced && erasureConfigs) {
+        if (erasureConfigs && erasureConfigs.length > 0) {
             payload.erasure_configs = erasureConfigs;
         }
 

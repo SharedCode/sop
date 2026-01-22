@@ -488,6 +488,14 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 
 		if shouldSetup {
 			if _, err := database.Setup(r.Context(), sysOpts); err != nil {
+				// Rollback: If setup failed and we were creating a NEW DB (not using shared),
+				// we should clean up the potentially partially created files to allow retries.
+				if !req.UseSharedBrain {
+					log.Warn(fmt.Sprintf("Setup failed. Rolling back/cleaning up path: %s", req.RegistryPath))
+					if rmErr := os.RemoveAll(req.RegistryPath); rmErr != nil {
+						log.Error(fmt.Sprintf("Failed to rollback/cleanup path %s: %v", req.RegistryPath, rmErr))
+					}
+				}
 				http.Error(w, fmt.Sprintf("Failed to setup system registry: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -1116,11 +1124,18 @@ func collectAllConfiguredPaths(excludeDBName string) []string {
 	var paths []string
 
 	// System DB
-	if config.SystemDB != nil && config.SystemDB.Path != "" && config.SystemDB.Name != excludeDBName && excludeDBName != SystemDBName {
-		paths = append(paths, config.SystemDB.Path)
-		paths = append(paths, config.SystemDB.StoresFolders...)
-		for _, ec := range config.SystemDB.ErasureConfigs {
-			paths = append(paths, ec.BasePaths...)
+	// Check if we should include System DB paths.
+	// We include them ONLY if we are NOT currently editing the System DB.
+	includeSystemDB := (excludeDBName != SystemDBName)
+
+	if includeSystemDB && config.SystemDB != nil && config.SystemDB.Path != "" {
+		// Double check: if the configured name matches the exclusion name, skip it.
+		if config.SystemDB.Name != excludeDBName {
+			paths = append(paths, config.SystemDB.Path)
+			paths = append(paths, config.SystemDB.StoresFolders...)
+			for _, ec := range config.SystemDB.ErasureConfigs {
+				paths = append(paths, ec.BasePaths...)
+			}
 		}
 	}
 
