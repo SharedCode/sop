@@ -20,7 +20,12 @@ export GOARCH=amd64
 if [ "$(uname)" == "Linux" ]; then
     export CC="zig cc -target x86_64-macos"
     export CGO_CFLAGS="-fno-stack-protector"
-    # export CGO_LDFLAGS="-Wl,-undefined,dynamic_lookup" # Moved to ldflags
+    
+    # Hack: Create a dummy libresolv to satisfy the linker's file check.
+    # We use -undefined dynamic_lookup so the content doesn't verify, just existence.
+    mkdir -p libs
+    touch libs/libresolv.dylib
+    export CGO_LDFLAGS="-L$(pwd)/libs"
 else
     unset CC
 fi
@@ -71,7 +76,11 @@ export GOARCH=arm64
 if [ "$(uname)" == "Linux" ]; then
     export CC="zig cc -target aarch64-macos"
     export CGO_CFLAGS="-fno-stack-protector"
-    # export CGO_LDFLAGS="-Wl,-undefined,dynamic_lookup" # Moved to ldflags
+    
+    # Use the same dummy lib hack
+    mkdir -p libs
+    touch libs/libresolv.dylib
+    export CGO_LDFLAGS="-L$(pwd)/libs"
 else
     unset CC
 fi
