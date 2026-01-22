@@ -74,12 +74,18 @@ cd bindings/main
 # Ensure script is executable
 chmod +x build.sh
 
-# We run the build.sh. If it fails due to missing cross-compilers, we proceed with what we have.
-# The user might only be able to build native bundles.
+# We run the build.sh. If it fails due to missing cross-compilers, we fail if in strict mode (CI),
+# otherwise we warn and proceed (for local dev convenience).
 if ./build.sh; then
     echo "Bindings build successful."
 else
-    echo "Bindings build had errors (likely missing cross-compilers). Proceeding with available artifacts..."
+    echo "Bindings build failed."
+    # Fail hard in CI environments to prevent broken releases
+    if [ "$CI" == "true" ] || [ "$GITHUB_ACTIONS" == "true" ]; then
+        echo "Error: Aborting release build due to compilation errors."
+        exit 1
+    fi
+    echo "Proceeding with available artifacts (Local Dev Mode)..."
 fi
 cd "$SOP_ROOT"
 
