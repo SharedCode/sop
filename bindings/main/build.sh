@@ -20,11 +20,11 @@ export GOARCH=amd64
 if [ "$(uname)" == "Linux" ]; then
     export CC="zig cc -target x86_64-macos"
     export CGO_CFLAGS="-fno-stack-protector"
-    export CGO_LDFLAGS="-Wl,-undefined,dynamic_lookup"
+    # export CGO_LDFLAGS="-Wl,-undefined,dynamic_lookup" # Moved to ldflags
 else
     unset CC
 fi
-go build -tags netgo -ldflags "-w" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib *.go
+go build -tags "netgo,osusergo" -ldflags "-w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib *.go
 go build -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin.a *.go
 cp ../python/sop/libjsondb_amd64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_amd64darwin.h ../csharp/Sop/
@@ -71,12 +71,12 @@ export GOARCH=arm64
 if [ "$(uname)" == "Linux" ]; then
     export CC="zig cc -target aarch64-macos"
     export CGO_CFLAGS="-fno-stack-protector"
-    export CGO_LDFLAGS="-Wl,-undefined,dynamic_lookup"
+    # export CGO_LDFLAGS="-Wl,-undefined,dynamic_lookup" # Moved to ldflags
 else
     unset CC
 fi
 go build -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_arm64darwin.a *.go
-go build -tags netgo -ldflags "-w" -buildmode=c-shared -o ../python/sop/libjsondb_arm64darwin.dylib *.go
+go build -tags "netgo,osusergo" -ldflags "-w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_arm64darwin.dylib *.go
 cp ../python/sop/libjsondb_arm64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_arm64darwin.h ../csharp/Sop/
 # Java Packaging (JNA)
