@@ -80,45 +80,27 @@ func handleCreateEnvironment(w http.ResponseWriter, r *http.Request) {
 		filename += ".json"
 	}
 
-	// Create minimal config structure
-	newConfig := Config{
-		Port:      8080,
-		Databases: []DatabaseConfig{},
-	}
-
-	// Use O_EXCL to ensure atomic create-if-not-exists.
-	// This prevents race conditions where two clients try to create "dev" at the same time.
-	// The winner gets the file, the loser gets an error.
-	f, err := os.OpenFile(filename, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0666)
-	if err != nil {
-		if os.IsExist(err) {
-			http.Error(w, "Environment already exists. Please choose a different name.", http.StatusConflict)
-		} else {
-			http.Error(w, fmt.Sprintf("Failed to create config file: %v", err), http.StatusInternalServerError)
-		}
-		return
-	}
-	defer f.Close()
-
-	encoder := json.NewEncoder(f)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(newConfig); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to write config: %v", err), http.StatusInternalServerError)
+	// Check conflict
+	if _, err := os.Stat(filename); err == nil {
+		http.Error(w, "Environment already exists. Please choose a different name.", http.StatusConflict)
 		return
 	}
 
-	// Switch to it immediately
-	if err := loadConfig(filename); err != nil {
-		http.Error(w, fmt.Sprintf("Created but failed to switch: %v", err), http.StatusInternalServerError)
-		return
+	// Initialize config in MEMORY ONLY.
+	// We do NOT write to disk yet to avoid creating empty "abandoned" files if the user cancels the wizard.
+	config = Config{
+		Port:       8080,
+		Databases:  []DatabaseConfig{},
+		ConfigFile: filename,
 	}
-	// Explicitly set the config file path in global state
-	config.ConfigFile = filename
+
+	// Reload agents (will be empty)
+	initAgents()
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":  "ok",
-		"message": "Environment created and active",
+		"message": "Environment prepared (in-memory) and active",
 		"file":    filename,
 	})
 }
@@ -319,6 +301,56 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// VALIDATION START
+	{
+		newPaths := []string{}
+		// Deduplication Map (Key: Absolute Path)
+		// This prevents "Internal Path Conflict" if RegistryPath matches a StoresFolder,
+		// or if multiple identical paths are provided (e.g. EC partitions).
+		seenPaths := make(map[string]struct{})
+
+		addPath := func(p string) {
+			if p == "" {
+				return
+			}
+			// Use Absolute Path for deduplication to catch "/tmp/db" vs "/tmp/db/"
+			abs, err := filepath.Abs(p)
+			if err != nil {
+				// Fallback to raw string if Abs fails, though validatePathSafety will likely catch it later
+				abs = p
+			}
+			if _, exists := seenPaths[abs]; !exists {
+				seenPaths[abs] = struct{}{}
+				newPaths = append(newPaths, p)
+			}
+		}
+
+		if req.RegistryPath != "" {
+			addPath(req.RegistryPath)
+		}
+		for _, sf := range req.StoresFolders {
+			addPath(sf)
+		}
+
+		if req.ErasureConfig != nil {
+			for _, bp := range req.ErasureConfig.BasePaths {
+				addPath(bp)
+			}
+		}
+		for _, ec := range req.ErasureConfigs {
+			for _, bp := range ec.BasePaths {
+				addPath(bp)
+			}
+		}
+
+		alreadyConfigured := collectAllConfiguredPaths(SystemDBName)
+		if err := validatePathSafety(newPaths, alreadyConfigured); err != nil {
+			http.Error(w, fmt.Sprintf("Path Safety Error: %v", err), http.StatusBadRequest)
+			return
+		}
+	}
+	// VALIDATION END
+
 	// Update global config
 	if req.Port > 0 {
 		config.Port = req.Port
@@ -355,10 +387,12 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 		if req.Type == "clustered" {
 			sysOpts.Type = sop.Clustered
 			sysOpts.CacheType = sop.Redis
-			if req.ConnectionURL != "" {
-				sysOpts.RedisConfig = &sop.RedisCacheConfig{
-					Address: req.ConnectionURL,
-				}
+			redisUrl := req.ConnectionURL
+			if redisUrl == "" {
+				redisUrl = "localhost:6379"
+			}
+			sysOpts.RedisConfig = &sop.RedisCacheConfig{
+				Address: redisUrl,
 			}
 		} else {
 			sysOpts.Type = sop.Standalone
@@ -521,6 +555,27 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 			IsSystem: true,
 			Mode:     req.Type,
 		}
+
+		// Persist Erasure Coding settings
+		var ecs []ErasureConfigEntry
+		if req.ErasureConfig != nil && req.ErasureConfig.DataChunks > 0 {
+			ecs = append(ecs, ErasureConfigEntry{
+				Key:          "",
+				DataChunks:   req.ErasureConfig.DataChunks,
+				ParityChunks: req.ErasureConfig.ParityChunks,
+				BasePaths:    req.ErasureConfig.BasePaths,
+			})
+		}
+		for _, val := range req.ErasureConfigs {
+			ecs = append(ecs, ErasureConfigEntry{
+				Key:          val.Key,
+				DataChunks:   val.DataChunks,
+				ParityChunks: val.ParityChunks,
+				BasePaths:    val.BasePaths,
+			})
+		}
+		config.SystemDB.ErasureConfigs = ecs
+
 		if config.SystemDB.Mode == "" {
 			config.SystemDB.Mode = "standalone"
 		}
@@ -623,6 +678,46 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// VALIDATION START
+	{
+		newPaths := []string{}
+		// Deduplication logic for User DB (same as System DB fix)
+		seenPaths := make(map[string]struct{})
+
+		addPath := func(p string) {
+			if p == "" {
+				return
+			}
+			abs, err := filepath.Abs(p)
+			if err != nil {
+				abs = p
+			}
+			if _, exists := seenPaths[abs]; !exists {
+				seenPaths[abs] = struct{}{}
+				newPaths = append(newPaths, p)
+			}
+		}
+
+		if req.Path != "" {
+			addPath(req.Path)
+		}
+		for _, sf := range req.StoresFolders {
+			addPath(sf)
+		}
+		for _, ec := range req.ErasureConfigs {
+			for _, bp := range ec.BasePaths {
+				addPath(bp)
+			}
+		}
+
+		alreadyConfigured := collectAllConfiguredPaths(req.Name)
+		if err := validatePathSafety(newPaths, alreadyConfigured); err != nil {
+			http.Error(w, fmt.Sprintf("Path Safety Error: %v", err), http.StatusBadRequest)
+			return
+		}
+	}
+	// VALIDATION END
+
 	if req.Path == "" || req.Name == "" {
 		http.Error(w, "Database path and name are required", http.StatusBadRequest)
 		return
@@ -679,10 +774,12 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 	if req.Type == "clustered" {
 		options.Type = sop.Clustered
 		options.CacheType = sop.Redis
-		if req.Connection != "" {
-			options.RedisConfig = &sop.RedisCacheConfig{
-				Address: req.Connection,
-			}
+		redisUrl := req.Connection
+		if redisUrl == "" {
+			redisUrl = "localhost:6379"
+		}
+		options.RedisConfig = &sop.RedisCacheConfig{
+			Address: redisUrl,
 		}
 	} else {
 		options.Type = sop.Standalone
@@ -807,6 +904,18 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 		StoresFolders: req.StoresFolders,
 		Mode:          "standalone", // Default to standalone for now
 	}
+
+	// Persist Erasure Coding settings
+	var ecs []ErasureConfigEntry
+	for _, val := range req.ErasureConfigs {
+		ecs = append(ecs, ErasureConfigEntry{
+			Key:          val.Key,
+			DataChunks:   val.DataChunks,
+			ParityChunks: val.ParityChunks,
+			BasePaths:    val.BasePaths,
+		})
+	}
+	newDB.ErasureConfigs = ecs
 
 	if req.Type == "clustered" {
 		newDB.Mode = "clustered"
@@ -999,4 +1108,116 @@ func sanitizePath(p string) string {
 
 	// 4. Final trim in case stripping left whitespace
 	return strings.TrimSpace(p)
+}
+
+// collectAllConfiguredPaths gathers all paths currently in use by the system and other databases,
+// excluding the database currently being edited/added (by name).
+func collectAllConfiguredPaths(excludeDBName string) []string {
+	var paths []string
+
+	// System DB
+	if config.SystemDB != nil && config.SystemDB.Path != "" && config.SystemDB.Name != excludeDBName && excludeDBName != SystemDBName {
+		paths = append(paths, config.SystemDB.Path)
+		paths = append(paths, config.SystemDB.StoresFolders...)
+		for _, ec := range config.SystemDB.ErasureConfigs {
+			paths = append(paths, ec.BasePaths...)
+		}
+	}
+
+	// User DBs
+	for _, db := range config.Databases {
+		if db.Name == excludeDBName {
+			continue
+		}
+		if db.Path != "" {
+			paths = append(paths, db.Path)
+		}
+		paths = append(paths, db.StoresFolders...)
+		for _, ec := range db.ErasureConfigs {
+			paths = append(paths, ec.BasePaths...)
+		}
+	}
+	return paths
+}
+
+// validatePathSafety checks for conflicts between a set of new paths and existing system paths.
+// Policy: Strict Isolation.
+// We do NOT allow different databases to share the same physical paths (e.g. EC drives).
+// Sharing drives creates a Single Point of Failure (SPOF) where one drive failure
+// could panic/degrade multiple databases simultaneously.
+// This function detects:
+// 1. Internal conflicts (e.g. store folder inside db folder in the new set)
+// 2. External conflicts (e.g. new db folder inside existing system db folder)
+func validatePathSafety(newPaths []string, existingPaths []string) error {
+	// Clean and filter new paths
+	cleanNew := make([]string, 0, len(newPaths))
+	for _, np := range newPaths {
+		if np == "" {
+			continue
+		}
+		abs, err := filepath.Abs(np)
+		if err != nil {
+			return fmt.Errorf("invalid path '%s': %v", np, err)
+		}
+		cleanNew = append(cleanNew, abs)
+	}
+
+	// Clean and filter existing paths
+	cleanExisting := make([]string, 0, len(existingPaths))
+	for _, ep := range existingPaths {
+		if ep == "" {
+			continue
+		}
+		abs, err := filepath.Abs(ep)
+		if err == nil {
+			cleanExisting = append(cleanExisting, abs)
+		}
+	}
+
+	// 1. Check Internal Conflicts (within the new set)
+	for i := 0; i < len(cleanNew); i++ {
+		for j := i + 1; j < len(cleanNew); j++ {
+			if conflict, msg := isPathConflict(cleanNew[i], cleanNew[j]); conflict {
+				return fmt.Errorf("internal path conflict: %s", msg)
+			}
+		}
+	}
+
+	// 2. Check External Conflicts (new vs existing)
+	for _, np := range cleanNew {
+		for _, ep := range cleanExisting {
+			if conflict, msg := isPathConflict(np, ep); conflict {
+				return fmt.Errorf("conflict with existing path: %s", msg)
+			}
+		}
+	}
+
+	return nil
+}
+
+func isPathConflict(pathA, pathB string) (bool, string) {
+	if pathA == pathB {
+		return true, fmt.Sprintf("paths are identical (Strict Isolation Policy): '%s'", pathA)
+	}
+
+	// Ensure trailing separator for prefix check to avoid /tmp matching /tmp2
+	pathASep := pathA
+	if !strings.HasSuffix(pathASep, string(os.PathSeparator)) {
+		pathASep += string(os.PathSeparator)
+	}
+	pathBSep := pathB
+	if !strings.HasSuffix(pathBSep, string(os.PathSeparator)) {
+		pathBSep += string(os.PathSeparator)
+	}
+
+	// Check if A is inside B
+	if strings.HasPrefix(pathASep, pathBSep) {
+		return true, fmt.Sprintf("'%s' is inside '%s'", pathA, pathB)
+	}
+	// Check if B is inside A
+	if strings.HasPrefix(pathBSep, pathASep) {
+		return true, fmt.Sprintf("'%s' contains '%s'", pathA, pathB)
+	}
+
+	return false, ""
 }

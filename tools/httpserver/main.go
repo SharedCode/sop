@@ -31,6 +31,14 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
+// ErasureConfigEntry defines a single EC zone configuration
+type ErasureConfigEntry struct {
+	Key          string   `json:"key"`
+	DataChunks   int      `json:"data_chunks"`
+	ParityChunks int      `json:"parity_chunks"`
+	BasePaths    []string `json:"base_paths"`
+}
+
 // DatabaseConfig holds configuration for a single SOP database
 type DatabaseConfig struct {
 	Name          string   `json:"name"`
@@ -41,12 +49,7 @@ type DatabaseConfig struct {
 	IsSystem      bool     `json:"is_system,omitempty"`
 
 	// ErasureConfigs stores a list of EC configurations.
-	ErasureConfigs []struct {
-		Key          string   `json:"key"`
-		DataChunks   int      `json:"data_chunks"`
-		ParityChunks int      `json:"parity_chunks"`
-		BasePaths    []string `json:"base_paths"`
-	} `json:"erasure_configs,omitempty"`
+	ErasureConfigs []ErasureConfigEntry `json:"erasure_configs,omitempty"`
 
 	// EnableObfuscation specifies if this database should be obfuscated when accessed by AI tools.
 	// This allows per-database granular control.
@@ -799,26 +802,35 @@ func handleUpdateDatabase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply Update
-	var newConfigs []struct {
-		Key          string   `json:"key"`
-		DataChunks   int      `json:"data_chunks"`
-		ParityChunks int      `json:"parity_chunks"`
-		BasePaths    []string `json:"base_paths"`
-	}
+	var newConfigs []ErasureConfigEntry
 
 	for _, ec := range req.ErasureConfigs {
-		newConfigs = append(newConfigs, struct {
-			Key          string   `json:"key"`
-			DataChunks   int      `json:"data_chunks"`
-			ParityChunks int      `json:"parity_chunks"`
-			BasePaths    []string `json:"base_paths"`
-		}{
+		newConfigs = append(newConfigs, ErasureConfigEntry{
 			Key:          ec.Key,
 			DataChunks:   ec.DataChunks,
 			ParityChunks: ec.ParityChunks,
 			BasePaths:    ec.BasePaths,
 		})
 	}
+
+	// VALIDATION START
+	{
+		targetDB := config.Databases[dbIdx]
+		proposedPaths := []string{}
+		if targetDB.Path != "" {
+			proposedPaths = append(proposedPaths, targetDB.Path)
+		}
+		proposedPaths = append(proposedPaths, targetDB.StoresFolders...)
+		for _, ec := range newConfigs {
+			proposedPaths = append(proposedPaths, ec.BasePaths...)
+		}
+
+		if err := validatePathSafety(proposedPaths, collectAllConfiguredPaths(req.Name)); err != nil {
+			http.Error(w, fmt.Sprintf("Path Safety Error: %v", err), http.StatusBadRequest)
+			return
+		}
+	}
+	// VALIDATION END
 
 	config.Databases[dbIdx].ErasureConfigs = newConfigs
 

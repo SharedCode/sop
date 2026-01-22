@@ -1188,12 +1188,14 @@ func renderItem(key any, val any, fields any) any {
 						// If we are projecting "users.*" (customPrefix="users."), and we find "users.age",
 						// we want the output key to be "age".
 						k = k[len(customPrefix):]
-					} else if !strings.Contains(k, ".") {
-						// Heuristic: If we are looking for a specific alias (e.g. "users.*")
-						// and the key is a root key (no dots), assume it belongs to this alias.
-						// This fixes cases where storage returns flat objects for aliased joins.
-						include = true
+						// Ensure we don't accidentally match empty string if prefix matches exact key?
+						if k == "" {
+							include = false
+						}
 					}
+					// Removed heuristic that matches un-dotted keys for custom aliases.
+					// This prevents "users.*" from grabbing naked keys like "key" which might belong to the Left unaliased side.
+					// if !strings.Contains(k, ".") { include = true }
 				}
 
 				if include {

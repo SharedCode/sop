@@ -6876,7 +6876,10 @@
         
         if (type === 'clustered') {
             group.style.display = 'flex';
-            if(input) input.placeholder = 'localhost:6379';
+            if(input) {
+                input.placeholder = 'localhost:6379';
+                if (!input.value) input.value = 'localhost:6379';
+            }
         } else {
             group.style.display = 'none';
         }
