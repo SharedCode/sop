@@ -24,7 +24,7 @@ if [ "$(uname)" == "Linux" ]; then
 else
     unset CC
 fi
-go build -ldflags "-w" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib *.go
+go build -tags netgo -ldflags "-w" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib *.go
 go build -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin.a *.go
 cp ../python/sop/libjsondb_amd64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_amd64darwin.h ../csharp/Sop/
@@ -76,7 +76,7 @@ else
     unset CC
 fi
 go build -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_arm64darwin.a *.go
-go build -ldflags "-w" -buildmode=c-shared -o ../python/sop/libjsondb_arm64darwin.dylib *.go
+go build -tags netgo -ldflags "-w" -buildmode=c-shared -o ../python/sop/libjsondb_arm64darwin.dylib *.go
 cp ../python/sop/libjsondb_arm64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_arm64darwin.h ../csharp/Sop/
 # Java Packaging (JNA)

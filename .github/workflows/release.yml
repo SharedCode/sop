@@ -25,7 +25,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-mingw-w64 zip
-          sudo snap install zig --classic --beta
+          sudo snap install zig --classic --channel=0.13/stable
 
       - name: Build Bundles (via build_release.sh)
         run: |
