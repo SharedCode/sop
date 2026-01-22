@@ -21,11 +21,18 @@ if [ "$(uname)" == "Linux" ]; then
     export CC="zig cc -target x86_64-macos"
     export CGO_CFLAGS="-fno-stack-protector"
     
-    # Hack: Create a dummy libresolv to satisfy the linker's file check.
+    # Hack: Create a dummy libresolv & Framework stubs to satisfy the linker.
     # We use -undefined dynamic_lookup so the content doesn't verify, just existence.
     mkdir -p libs
     touch libs/libresolv.dylib
-    export CGO_LDFLAGS="-L$(pwd)/libs"
+    
+    # Stub frameworks (CoreFoundation, Security)
+    mkdir -p libs/CoreFoundation.framework
+    touch libs/CoreFoundation.framework/CoreFoundation
+    mkdir -p libs/Security.framework
+    touch libs/Security.framework/Security
+
+    export CGO_LDFLAGS="-L$(pwd)/libs -F$(pwd)/libs"
 else
     unset CC
 fi
@@ -80,7 +87,14 @@ if [ "$(uname)" == "Linux" ]; then
     # Use the same dummy lib hack
     mkdir -p libs
     touch libs/libresolv.dylib
-    export CGO_LDFLAGS="-L$(pwd)/libs"
+    
+    # Stub frameworks (CoreFoundation, Security)
+    mkdir -p libs/CoreFoundation.framework
+    touch libs/CoreFoundation.framework/CoreFoundation
+    mkdir -p libs/Security.framework
+    touch libs/Security.framework/Security
+
+    export CGO_LDFLAGS="-L$(pwd)/libs -F$(pwd)/libs"
 else
     unset CC
 fi
