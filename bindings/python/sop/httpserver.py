@@ -51,8 +51,8 @@ def download_binary(os_name, arch, target_path):
     if __version__ == "latest":
         base_url = f"https://github.com/{GITHUB_REPO}/releases/latest/download"
     else:
-        # Use a prefixed tag to distinguish from the main Go project releases (e.g. v5.2)
-        tag = f"sop4py-v{__version__}"
+        # Use the standard release tag format for the Unified Release (e.g. v2.2.4)
+        tag = f"v{__version__}"
         base_url = f"https://github.com/{GITHUB_REPO}/releases/download/{tag}"
 
     filename = f"{BINARY_NAME}-{os_name}-{arch}"

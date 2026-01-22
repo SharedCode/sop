@@ -97,8 +97,8 @@ public static class SopServer
 
     private static async Task DownloadBinary(string version, string os, string arch, string targetPath)
     {
-        // Use the Sop4CS release tag format
-        string tag = $"Sop4CS-v{version}"; 
+        // Use the standard release tag format for Unified Release (e.g. v2.2.4)
+        string tag = $"v{version}"; 
         
         string baseUrl = $"https://github.com/{GithubRepo}/releases/download/{tag}";
         string filename = $"{BinaryName}-{os}-{arch}";

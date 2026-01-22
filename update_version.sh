@@ -50,6 +50,10 @@ echo "Updated $WORKSPACE_ROOT/bindings/csharp/VERSION"
 # Pattern: version = "X.Y.Z"
 replace_in_file "$WORKSPACE_ROOT/bindings/python/pyproject.toml" "version = \"$CURRENT_VERSION\"" "version = \"$NEW_VERSION\""
 
+# 3b. Update Python (__init__.py)
+# Pattern: __version__="X.Y.Z"
+replace_in_file "$WORKSPACE_ROOT/bindings/python/sop/__init__.py" "__version__=\"$CURRENT_VERSION\"" "__version__=\"$NEW_VERSION\""
+
 # 4. Update Rust (Cargo.toml)
 # Pattern: version = "X.Y.Z"
 replace_in_file "$WORKSPACE_ROOT/bindings/rust/Cargo.toml" "version = \"$CURRENT_VERSION\"" "version = \"$NEW_VERSION\""
