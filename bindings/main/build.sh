@@ -21,16 +21,19 @@ if [ "$(uname)" == "Linux" ]; then
     export CC="zig cc -target x86_64-macos"
     export CGO_CFLAGS="-fno-stack-protector"
     
-    # Hack: Create a dummy libresolv & Framework stubs to satisfy the linker.
-    # We use -undefined dynamic_lookup so the content doesn't verify, just existence.
+    # Hack: Compiling real dummy dylibs to satisfy Zig/LLD linker checks.
+    # Empty files fail TBD parsing; we need actual Mach-O binaries.
     mkdir -p libs
-    touch libs/libresolv.dylib
+    echo "void dummy() {}" > libs/dummy.c
     
-    # Stub frameworks (CoreFoundation, Security)
+    # Compile dependencies using the cross-compiler
+    $CC -shared -Wl,-install_name,@rpath/libresolv.dylib -o libs/libresolv.dylib libs/dummy.c
+    
     mkdir -p libs/CoreFoundation.framework
-    touch libs/CoreFoundation.framework/CoreFoundation
+    $CC -shared -Wl,-install_name,@rpath/CoreFoundation.framework/CoreFoundation -o libs/CoreFoundation.framework/CoreFoundation libs/dummy.c
+    
     mkdir -p libs/Security.framework
-    touch libs/Security.framework/Security
+    $CC -shared -Wl,-install_name,@rpath/Security.framework/Security -o libs/Security.framework/Security libs/dummy.c
 
     export CGO_LDFLAGS="-L$(pwd)/libs -F$(pwd)/libs"
 else
@@ -86,13 +89,15 @@ if [ "$(uname)" == "Linux" ]; then
     
     # Use the same dummy lib hack
     mkdir -p libs
-    touch libs/libresolv.dylib
+    echo "void dummy() {}" > libs/dummy.c
     
-    # Stub frameworks (CoreFoundation, Security)
+    $CC -shared -Wl,-install_name,@rpath/libresolv.dylib -o libs/libresolv.dylib libs/dummy.c
+    
     mkdir -p libs/CoreFoundation.framework
-    touch libs/CoreFoundation.framework/CoreFoundation
+    $CC -shared -Wl,-install_name,@rpath/CoreFoundation.framework/CoreFoundation -o libs/CoreFoundation.framework/CoreFoundation libs/dummy.c
+    
     mkdir -p libs/Security.framework
-    touch libs/Security.framework/Security
+    $CC -shared -Wl,-install_name,@rpath/Security.framework/Security -o libs/Security.framework/Security libs/dummy.c
 
     export CGO_LDFLAGS="-L$(pwd)/libs -F$(pwd)/libs"
 else
