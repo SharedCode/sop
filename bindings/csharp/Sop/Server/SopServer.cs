@@ -133,6 +133,19 @@ public static class SopServer
                     CreateNoWindow = true
                 };
                 Process.Start(chmod)?.WaitForExit();
+
+                // On macOS, remove the quarantine attribute
+                if (os == "darwin")
+                {
+                    var xattr = new ProcessStartInfo
+                    {
+                        FileName = "xattr",
+                        Arguments = $"-d com.apple.quarantine \"{targetPath}\"",
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    Process.Start(xattr)?.WaitForExit();
+                }
             }
             catch
             {

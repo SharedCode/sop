@@ -69,6 +69,14 @@ def download_binary(os_name, arch, target_path):
         # Make executable
         st = os.stat(target_path)
         os.chmod(target_path, st.st_mode | stat.S_IEXEC)
+
+        # On macOS, remove the quarantine attribute (since we downloaded it)
+        if sys.platform == "darwin":
+            try:
+                subprocess.run(["xattr", "-d", "com.apple.quarantine", str(target_path)], 
+                               check=False, capture_output=True)
+            except Exception:
+                pass
         
     except Exception as e:
         print(f"Error downloading binary: {e}")
