@@ -4,6 +4,18 @@ I'm excited to share a major update to the **SOP Data Manager**, the GUI tool fo
 
 This isn't just a chatbot overlay; it's a **ReAct (Reasoning + Acting) Agent** deeply integrated with the database backend, designed to act as a "Local Expert" for your data.
 
+> **Important**: The AI Copilot requires an LLM API Key (e.g., Gemini, OpenAI) to function. You must provide your own key in the "Environment Configuration" settings. If no key is supplied, the AI Copilot features will be disabled.
+
+### 🔌 New: "No-LLM" Production Mode
+SOP recognizes that **Production Environments** often have strict security policies that forbid external API calls (Air-gapped) or require zero external dependencies.
+
+We have introduced a **Direct Command Interface** that works entirely offline:
+*   **Slash Commands**: You can bypass the LLM entirely by using slash commands (e.g., `/select database=users`).
+*   **Zero Dependencies**: This mode requires NO internet connection and NO API Key.
+*   **Full Power**: You get access to the exact same backend tools (`select`, `run_script`, `manage_knowledge`) that the Agent uses, but driven manually by you.
+
+This confirms our philosophy: **The AI is a helper, but the robust machinery underneath is yours to command.**
+
 ## The Problem: Context Switching
 Managing complex NoSQL data often involves jumping between a GUI to view items and a terminal to run queries or scripts. You might see a record, wonder "how many other records have this specific field value?", and have to switch context to write a script to find out.
 

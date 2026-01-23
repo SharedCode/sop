@@ -31,6 +31,11 @@ func (a *DataAdminAgent) toolAdd(ctx context.Context, args map[string]any) (stri
 		dbName = p.CurrentDB
 	}
 
+	// Policy Check: Check RESTRICTED access to systemDB via generic tools
+	if dbName == "system" {
+		return "", fmt.Errorf("direct modification of 'system' database via generic tools (add) is restricted; use specific tools (e.g. manage_knowledge, save_step) instead")
+	}
+
 	if dbName != "" {
 		if dbName == "system" && a.systemDB != nil {
 			db = a.systemDB
@@ -180,6 +185,11 @@ func (a *DataAdminAgent) toolUpdate(ctx context.Context, args map[string]any) (s
 	dbName, _ := args["database"].(string)
 	if dbName == "" {
 		dbName = p.CurrentDB
+	}
+
+	// Policy Check: Check RESTRICTED access to systemDB via generic tools
+	if dbName == "system" {
+		return "", fmt.Errorf("direct modification of 'system' database via generic tools (update) is restricted; use specific tools (e.g. manage_knowledge, save_step) instead")
 	}
 
 	if dbName != "" {
@@ -333,6 +343,11 @@ func (a *DataAdminAgent) toolDelete(ctx context.Context, args map[string]any) (s
 	dbName, _ := args["database"].(string)
 	if dbName == "" {
 		dbName = p.CurrentDB
+	}
+
+	// Policy Check: Check RESTRICTED access to systemDB via generic tools
+	if dbName == "system" {
+		return "", fmt.Errorf("direct modification of 'system' database via generic tools (delete) is restricted; use specific tools (e.g. manage_knowledge, save_step) instead")
 	}
 
 	if dbName != "" {

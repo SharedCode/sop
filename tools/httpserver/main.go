@@ -300,6 +300,16 @@ func getSystemDBOptions() (sop.DatabaseOptions, error) {
 	return opts, nil
 }
 
+// IsSystemDB checks if the given database name corresponds to the System Database.
+func IsSystemDB(name string) bool {
+	// Check against configured SystemDB name if available
+	if config.SystemDB != nil && config.SystemDB.Name == name {
+		return true
+	}
+	// Check known system name.
+	return name == SystemDBName
+}
+
 func getDBOptionsFromConfig(db *DatabaseConfig) (sop.DatabaseOptions, error) {
 	// Try to load from disk first
 	if loadedOpts, err := database.GetOptions(context.Background(), db.Path); err == nil {
@@ -1086,35 +1096,24 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 		Relations     []sop.Relation `json:"relations"`
 	}
 
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Error("Failed to decode JSON", "error", err)
+		http.Error(w, fmt.Sprintf("Invalid JSON body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	// Hardening: Prevent modifying stores in System DB
+	if IsSystemDB(req.Database) {
+		http.Error(w, "Access Denied: Modifying store configuration in the System DB is not allowed.", http.StatusForbidden)
+		return
+	}
+
 	// We need to handle IndexSpec as a string (JSON) or object.
 	// Since the frontend sends it as a JSON string (via JSON.stringify), we should decode it as string first,
 	// OR fix the frontend to send it as an object.
 	// The frontend sends: indexSpec: JSON.stringify(...) -> which is a string.
 	// So req.IndexSpec should be *string.
-	// BUT, si.MapKeyIndexSpecification is sop.IndexSpecification (struct).
-	// So we need to unmarshal the string into the struct.
 
-	// Let's use a custom struct for decoding to handle the string vs object ambiguity if needed,
-	// or just stick to string if frontend sends string.
-	// Frontend: indexSpec = JSON.stringify({ index_fields: fields }); -> String.
-
-	// Wait, if we change req.IndexSpec to *string, we need to unmarshal it.
-	// The current code has `IndexSpec *string`.
-	// And it does `si.MapKeyIndexSpecification = *req.IndexSpec`.
-	// This is a TYPE MISMATCH. si.MapKeyIndexSpecification is likely a struct, not a string.
-	// Let's check sop.StoreInfo definition.
-
-	// Assuming sop.StoreInfo.MapKeyIndexSpecification is sop.IndexSpecification (struct).
-	// If req.IndexSpec is *string, we cannot assign it directly.
-	// The code I read earlier showed:
-	// si.MapKeyIndexSpecification = *req.IndexSpec
-	// This implies si.MapKeyIndexSpecification is a string?
-	// Let's check `storeinfo.go`.
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
 
 	if req.StoreName == "" {
 		http.Error(w, "Store name is required", http.StatusBadRequest)
@@ -2052,6 +2051,12 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Hardening: Prevent adding stores to System DB
+	if IsSystemDB(req.Database) {
+		http.Error(w, "Access Denied: Creating new stores in the System DB is not allowed.", http.StatusForbidden)
+		return
+	}
+
 	if req.StoreName == "" {
 		http.Error(w, "Store name is required", http.StatusBadRequest)
 		return
@@ -2320,6 +2325,12 @@ func handleDeleteStore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Hardening: Prevent deleting stores from System DB
+	if IsSystemDB(req.Database) {
+		http.Error(w, "Access Denied: Deleting stores from the System DB is not allowed.", http.StatusForbidden)
+		return
+	}
+
 	if req.StoreName == "" {
 		http.Error(w, "Store name is required", http.StatusBadRequest)
 		return
@@ -2365,6 +2376,15 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
+	}
+
+	// Hardening: Prevent manual modification of critical System DB stores
+	// Users should not manually add items to llm_knowledge as it is managed by the AI/System
+	if IsSystemDB(req.Database) && req.StoreName == "llm_knowledge" {
+		if op == "add" {
+			http.Error(w, "Access Denied: The 'llm_knowledge' store is managed by the system. Manual additions are restricted.", http.StatusForbidden)
+			return
+		}
 	}
 
 	ctx := r.Context()

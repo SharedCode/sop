@@ -313,42 +313,42 @@ func TestDatabase_Setup_ManualDeletion(t *testing.T) {
 }
 
 func TestDatabase_Remove_Replicated(t *testing.T) {
-// Setup folders for replication
-basePath := t.TempDir()
-folder1 := filepath.Join(basePath, "node1")
-folder2 := filepath.Join(basePath, "node2")
+	// Setup folders for replication
+	basePath := t.TempDir()
+	folder1 := filepath.Join(basePath, "node1")
+	folder2 := filepath.Join(basePath, "node2")
 
-opts := sop.DatabaseOptions{
-StoresFolders: []string{folder1, folder2},
-CacheType:     sop.InMemory,
-}
+	opts := sop.DatabaseOptions{
+		StoresFolders: []string{folder1, folder2},
+		CacheType:     sop.InMemory,
+	}
 
-ctx := context.Background()
+	ctx := context.Background()
 
-// 1. Setup
-if _, err := database.Setup(ctx, opts); err != nil {
-t.Fatalf("Setup failed: %v", err)
-}
+	// 1. Setup
+	if _, err := database.Setup(ctx, opts); err != nil {
+		t.Fatalf("Setup failed: %v", err)
+	}
 
-// Verify folders exist
-if _, err := os.Stat(folder1); os.IsNotExist(err) {
-t.Errorf("Folder1 should exist after setup")
-}
-if _, err := os.Stat(folder2); os.IsNotExist(err) {
-t.Errorf("Folder2 should exist after setup")
-}
+	// Verify folders exist
+	if _, err := os.Stat(folder1); os.IsNotExist(err) {
+		t.Errorf("Folder1 should exist after setup")
+	}
+	if _, err := os.Stat(folder2); os.IsNotExist(err) {
+		t.Errorf("Folder2 should exist after setup")
+	}
 
-// 2. Remove
-// We pass folder1 as the "dbPath" (primary)
-if err := database.Remove(ctx, folder1); err != nil {
-t.Fatalf("Remove failed: %v", err)
-}
+	// 2. Remove
+	// We pass folder1 as the "dbPath" (primary)
+	if err := database.Remove(ctx, folder1); err != nil {
+		t.Fatalf("Remove failed: %v", err)
+	}
 
-// 3. Verify BOTH are gone
-if _, err := os.Stat(folder1); !os.IsNotExist(err) {
-t.Errorf("Folder1 should be deleted")
-}
-if _, err := os.Stat(folder2); !os.IsNotExist(err) {
-t.Errorf("Folder2 should be deleted")
-}
+	// 3. Verify BOTH are gone
+	if _, err := os.Stat(folder1); !os.IsNotExist(err) {
+		t.Errorf("Folder1 should be deleted")
+	}
+	if _, err := os.Stat(folder2); !os.IsNotExist(err) {
+		t.Errorf("Folder2 should be deleted")
+	}
 }

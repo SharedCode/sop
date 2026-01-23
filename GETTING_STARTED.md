@@ -19,6 +19,8 @@ Go to the [Releases Page](https://github.com/SharedCode/sop/releases) and downlo
 ### Step 2: Extract & Run
 Unzip the downloaded file. You will see a folder structure like this:
 
+> **AI Usage Note**: To use the AI Copilot features, you must supply your own LLM API Key (e.g., from Google AI Studio or OpenAI). The system does not come with a pre-configured trial key. You can enter your key in the "Environment Configuration" after starting the server.
+
 ```text
 sop-bundle/
 ├── sop-httpserver       # The Database Server & UI

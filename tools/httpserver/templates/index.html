@@ -57,7 +57,7 @@
     <div class="toolbar" id="toolbar" style="display:none;">
         <input type="text" id="search-input" placeholder="Search keys...">
         <button onclick="loadItems('search')" title="Search for items in the store based on the key or index fields.">Search</button>
-        <button onclick="showAdd()" class="btn-success" title="Add a new item to the store.">Add Item</button>
+        <button id="btn-add-item" onclick="showAdd()" class="btn-success" title="Add a new item to the store.">Add Item</button>
         <button onclick="showColumnSelector()" title="Select columns to display.">Columns</button>
     </div>
 
@@ -348,7 +348,7 @@
             <div style="margin-bottom: 10px; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; background: var(--bg-color);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                     <label style="font-weight: bold; font-size: 12px; margin: 0;">Relationships (Foreign Keys):</label>
-                    <button onclick="addRelationshipRow()" style="font-size: 11px; padding: 2px 6px; cursor: pointer;">+ Add Relationship</button>
+                    <button id="btn-add-relationship" onclick="addRelationshipRow()" style="font-size: 11px; padding: 2px 6px; cursor: pointer;">+ Add Relationship</button>
                 </div>
                 <div id="relationship-list" style="display: flex; flex-direction: column; gap: 5px; margin-bottom: 5px;">
                     <!-- Rows injected here -->
@@ -431,7 +431,7 @@
         </div>
         <div class="modal-footer">
             <button id="btn-unlock-admin" onclick="unlockAdminFields()" style="display:none; margin-right: auto; background: var(--btn-warning-bg); color: var(--btn-warning-text); border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">Unlock Admin</button>
-            <button onclick="saveNewStore()" class="btn-success">Create</button>
+            <button id="btn-save-new-store" onclick="saveNewStore()" class="btn-success">Create</button>
             <button onclick="closeAddStoreModal()" style="background: var(--sidebar-bg); color: var(--text-color); border: 1px solid var(--border-color);">Cancel</button>
         </div>
     </div>

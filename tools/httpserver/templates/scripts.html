@@ -375,6 +375,19 @@
 
         currentDatabase = name;
         localStorage.setItem('sop_current_database', name);
+
+        // Hardening: Hide Add Store button for System DB / System DBs
+        const dbObj = availableDatabases.find(d => d.name === name);
+        const btnAddStore = document.getElementById('btn-add-store');
+        if (btnAddStore) {
+            // Check implicit system names too just in case is_system missing
+            if ((dbObj && dbObj.is_system) || name === 'system' || name === 'system_db') {
+                 btnAddStore.style.display = 'none';
+            } else {
+                 btnAddStore.style.display = 'inline-block';
+            }
+        }
+
         currentStore = null;
         document.getElementById('store-list').innerHTML = '<li>Loading...</li>';
         document.getElementById('current-store-title').textContent = 'Select a Store';
@@ -509,7 +522,17 @@
 
         // Show Delete Button
         const deleteBtn = document.getElementById('btn-delete-store');
-        deleteBtn.style.display = 'inline-block';
+        
+        // Hardening: Disable delete for System DB
+        const dbObj = availableDatabases.find(d => d.name === currentDatabase);
+        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+        
+        if (isSystem) {
+            deleteBtn.style.display = 'none';
+        } else {
+            deleteBtn.style.display = 'inline-block';
+        }
+        
         deleteBtn.title = `Delete store '${name}'`;
 
         // Show Code Button
@@ -540,9 +563,16 @@
                 // Toggle Edit/View buttons based on count
                 // NOTE: We now use the Edit button for ALL stores (populated or empty).
                 // The Edit modal handles read-only fields for populated stores.
-                editBtn.style.display = 'inline-block';
-                editBtn.title = `Edit Store Metadata for '${name}'`;
-                viewBtn.style.display = 'none'; // Hide the old read-only view button
+                // However, for System DB, we force Read-Only View.
+                if (isSystem) {
+                    editBtn.style.display = 'none';
+                    viewBtn.style.display = 'inline-block';
+                    viewBtn.title = `View Store Metadata for '${name}' (Read-Only)`;
+                } else {
+                    editBtn.style.display = 'inline-block';
+                    editBtn.title = `Edit Store Metadata for '${name}'`;
+                    viewBtn.style.display = 'none';
+                }
                 
                 /*
                 if (info.count > 0) {
@@ -727,24 +757,36 @@
         const isReadOnly = isStoreReadOnly(info);
 
         if (info.description !== "AI Models Registry" && !isReadOnly) {
-            const addBtn = document.createElement('button');
-            addBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>`;
-            addBtn.title = "Add a new item to the store.";
-            addBtn.onclick = () => showAdd();
-            // addBtn.classList.add('btn-success'); // Removing class to strip background
-            addBtn.style.marginLeft = '0px';
-            addBtn.tabIndex = 0;
-            addBtn.id = 'btn-add-item';
-             // Add Item icon styling (Green Icon)
-            addBtn.style.padding = '4px 8px';
-            addBtn.style.background = 'none';
-            addBtn.style.border = 'none';
-            addBtn.style.cursor = 'pointer';
-            addBtn.style.fontSize = '1.4em';
-            addBtn.style.color = '#28a745'; // Green color for Add
-            addBtn.style.display = 'flex';
-            addBtn.style.alignItems = 'center';
-            toolbar.appendChild(addBtn);
+            // Hardening: Prevent adding items to llm_knowledge in System DB
+            // Determine if current DB is System DB using the flag from API
+            const currentDbObj = availableDatabases.find(db => db.name === currentDatabase);
+            const isSystemDB = currentDbObj ? currentDbObj.is_system : false;
+
+            let allowAdd = true;
+            if (currentStore === 'llm_knowledge' && isSystemDB) {
+                allowAdd = false;
+            }
+
+            if (allowAdd) {
+                const addBtn = document.createElement('button');
+                addBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>`;
+                addBtn.title = "Add a new item to the store.";
+                addBtn.onclick = () => showAdd();
+                // addBtn.classList.add('btn-success'); // Removing class to strip background
+                addBtn.style.marginLeft = '0px';
+                addBtn.tabIndex = 0;
+                addBtn.id = 'btn-add-item';
+                 // Add Item icon styling (Green Icon)
+                addBtn.style.padding = '4px 8px';
+                addBtn.style.background = 'none';
+                addBtn.style.border = 'none';
+                addBtn.style.cursor = 'pointer';
+                addBtn.style.fontSize = '1.4em';
+                addBtn.style.color = '#28a745'; // Green color for Add
+                addBtn.style.display = 'flex';
+                addBtn.style.alignItems = 'center';
+                toolbar.appendChild(addBtn);
+            }
         } else if (isReadOnly) {
             const warning = document.createElement('span');
             warning.textContent = "⚠️ Read-Only (No Index/CEL)";
@@ -4905,9 +4947,14 @@
      *    - EXCEPTION: Index Spec and CEL can be edited IF AND ONLY IF they are currently missing.
      *    - Description and Cache Duration are always editable.
      */
-    function showEditStore() {
+    function showEditStore(forceReadOnly = false) {
         try {
             if (!currentStoreInfo) return;
+
+            // Determine if Read-Only Mode (System DB)
+            const dbObj = availableDatabases.find(d => d.name === currentDatabase);
+            const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+            const isReadOnlyMode = forceReadOnly || isSystem;
 
             // Fetch stores for potential relationships
             fetchRelationStores();
@@ -4916,7 +4963,7 @@
             if (modal) {
                 modal.style.display = 'flex';
                 const header = modal.querySelector('.modal-header span');
-                if (header) header.textContent = 'Edit Store Metadata';
+                if (header) header.textContent = isReadOnlyMode ? 'View Store Metadata (Read-Only)' : 'Edit Store Metadata';
             }
             
             // Populate fields
@@ -4927,8 +4974,17 @@
             }
             
             const descInput = document.getElementById('new-store-description');
-            if (descInput) descInput.value = currentStoreInfo.description || '';
+            if (descInput) {
+                descInput.value = currentStoreInfo.description || '';
+                descInput.disabled = isReadOnlyMode;
+            }
             
+            // Button Save Visibility
+            const saveBtn = document.getElementById('btn-save-new-store');
+            if (saveBtn) {
+                saveBtn.style.display = isReadOnlyMode ? 'none' : 'block';
+            }
+
             // Clear relationships UI (re-extraction from text requires parsing, for now we just show text)
             // But we can let them add NEW relationships
             const relList = document.getElementById('relationship-list');
@@ -4936,8 +4992,14 @@
             
             // Populate relationships if present
             if (currentStoreInfo.relations) {
-                populateRelationshipUI(currentStoreInfo.relations);
+                populateRelationshipUI(currentStoreInfo.relations, isReadOnlyMode);
             }
+
+            // Relation Add Button
+            const addRelBtn = document.getElementById('btn-add-relationship');
+            if (addRelBtn) addRelBtn.style.display = isReadOnlyMode ? 'none' : 'inline-block';
+            
+            // ... Rest of Logic ...
 
             // Disable Target Data File Dropdown in Edit Mode
             const targetSelect = document.getElementById('new-store-target-ec');
@@ -4953,27 +5015,27 @@
             const isEmptyStore = (currentStoreInfo.count === 0);
             console.log("showEditStore: currentStoreInfo.count=", currentStoreInfo.count, "isEmptyStore=", isEmptyStore);
     
-            // Key Type (Read-Only unless empty)
+            // Key Type (Read-Only unless empty, or forced Read-Only)
             const keyType = document.getElementById('new-store-key-type');
             if (keyType) {
                 keyType.value = currentStoreInfo.keyType || 'string';
-                keyType.disabled = !isEmptyStore;
+                keyType.disabled = isReadOnlyMode || !isEmptyStore;
             }
             
             const keyIsArray = document.getElementById('new-store-key-is-array');
             if (keyIsArray) {
                 keyIsArray.checked = currentStoreInfo.keyIsArray || false;
-                keyIsArray.disabled = !isEmptyStore;
+                keyIsArray.disabled = isReadOnlyMode || !isEmptyStore;
             }
             
             // Trigger visibility and populate fields
             if (typeof toggleIndexSpec === 'function') toggleIndexSpec();
             
             if (keyType && keyType.value === 'map') {
-                 if (typeof populateKeyFieldsAndIndexSpec === 'function') populateKeyFieldsAndIndexSpec(currentStoreInfo);
+                 if (typeof populateKeyFieldsAndIndexSpec === 'function') populateKeyFieldsAndIndexSpec(currentStoreInfo, isReadOnlyMode);
                  
-                 if (!isEmptyStore) {
-                     // Default: Disable all structural fields
+                 if (!isEmptyStore || isReadOnlyMode) {
+                     // Disable all structural fields
                      if (typeof disableKeyAndIndexFields === 'function') disableKeyAndIndexFields();
                  } else {
                      // Empty Store: Enable everything
@@ -4991,17 +5053,17 @@
                  }
             }
     
-            // Value Type (Read-Only unless empty)
+            // Value Type (Read-Only unless empty, or forced Read-Only)
             const valType = document.getElementById('new-store-value-type');
             if (valType) {
                 valType.value = currentStoreInfo.valueType || 'string';
-                valType.disabled = !isEmptyStore;
+                valType.disabled = isReadOnlyMode || !isEmptyStore;
             }
             
             const valIsArray = document.getElementById('new-store-value-is-array');
             if (valIsArray) {
                 valIsArray.checked = currentStoreInfo.valueIsArray || false;
-                valIsArray.disabled = !isEmptyStore;
+                valIsArray.disabled = isReadOnlyMode || !isEmptyStore;
             }
 
             if (typeof toggleValueSpec === 'function') toggleValueSpec();
@@ -5010,13 +5072,13 @@
             const slotLength = document.getElementById('new-store-slot-length');
             if (slotLength) {
                 slotLength.value = currentStoreInfo.slotLength || 2000;
-                slotLength.disabled = !isEmptyStore;
+                slotLength.disabled = isReadOnlyMode || !isEmptyStore;
             }
             
             const isUnique = document.getElementById('new-store-is-unique');
             if (isUnique) {
                 isUnique.checked = currentStoreInfo.isUnique !== false;
-                isUnique.disabled = !isEmptyStore;
+                isUnique.disabled = isReadOnlyMode || !isEmptyStore;
             }
             
             // Infer Data Size from IsValueInNode & IsValueDataActivelyPersisted
@@ -5032,13 +5094,13 @@
             const dataSizeInput = document.getElementById('new-store-data-size');
             if (dataSizeInput) {
                 dataSizeInput.value = dataSize;
-                dataSizeInput.disabled = !isEmptyStore;
+                dataSizeInput.disabled = isReadOnlyMode || !isEmptyStore;
             }
             
             const cacheDuration = document.getElementById('new-store-cache-duration');
             if (cacheDuration) {
                 cacheDuration.value = currentStoreInfo.cacheDuration || 0;
-                cacheDuration.disabled = false; // Always editable
+                cacheDuration.disabled = isReadOnlyMode; // Only editable if not Read-Only mode
             }
     
             // Infer Streaming Mode
@@ -5054,7 +5116,7 @@
             const streamingInput = document.getElementById('new-store-is-streaming');
             if (streamingInput) {
                 streamingInput.checked = isStreaming;
-                streamingInput.disabled = !isEmptyStore;
+                streamingInput.disabled = isReadOnlyMode || !isEmptyStore;
             }
     
             // Enable Advanced Mode to show all fields
@@ -5068,8 +5130,9 @@
             // Show Unlock Button for non-empty stores to allow Admin override for Index/CEL
             const unlockBtn = document.getElementById('btn-unlock-admin');
             if (unlockBtn) {
-                // We allow Admin override for any non-empty store that uses Map keys (Index/CEL supported)
-                if (!isEmptyStore && !currentStoreInfo.isPrimitiveKey) {
+                if (isReadOnlyMode) {
+                    unlockBtn.style.display = 'none';
+                } else if (!isEmptyStore && !currentStoreInfo.isPrimitiveKey) {
                     unlockBtn.style.display = 'inline-block';
                 } else {
                     unlockBtn.style.display = 'none';
@@ -5077,8 +5140,9 @@
             }
             
             // Show Seed Data (relevant for empty store)
+            // Hide if Read-Only Mode
             const seedContainer = document.getElementById('seed-data-container');
-            if (seedContainer) seedContainer.style.display = isEmptyStore ? 'block' : 'none';
+            if (seedContainer) seedContainer.style.display = (isEmptyStore && !isReadOnlyMode) ? 'block' : 'none';
             if (isEmptyStore) {
                 if (typeof populateSeedDataUI === 'function') populateSeedDataUI();
             }
@@ -5324,7 +5388,7 @@
 
     function showStoreDetails() {
         // Redirect to Edit Store (which now handles Read-Only/Edit hybrid view)
-        showEditStore();
+        showEditStore(true);
     }
 
     /* 
@@ -8475,7 +8539,7 @@
         return rels;
     }
 
-    function populateRelationshipUI(relations) {
+    function populateRelationshipUI(relations, isReadOnly = false) {
         if (!relations || !Array.isArray(relations)) return;
         
         // Ensure availableStoresForRel is populated
@@ -8500,19 +8564,18 @@
             
             div.innerHTML = `
                 <div style="flex: 1;">
-                    <input type="text" class="rel-source-field" value="${src}" placeholder="Local Fields (comma-sep)" style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);">
+                    <input type="text" class="rel-source-field" value="${src}" placeholder="Local Fields (comma-sep)" ${isReadOnly ? 'disabled' : ''} style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);">
                 </div>
                 <div style="font-size: 11px; color: var(--text-muted);">ref</div>
                 <div style="flex: 1;">
-                     <select class="rel-target-store" style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);"></select>
+                     <select class="rel-target-store" ${isReadOnly ? 'disabled' : ''} style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);"></select>
                 </div>
                 <div style="font-size: 11px; color: var(--text-muted);">.</div>
                 <div style="flex: 1;">
-                    <input type="text" class="rel-target-field" value="${tgt}" placeholder="Target Fields (comma-sep)" style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);">
+                    <input type="text" class="rel-target-field" value="${tgt}" placeholder="Target Fields (comma-sep)" ${isReadOnly ? 'disabled' : ''} style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);">
                 </div>
-                <button onclick="this.parentElement.remove();" style="border: none; background: none; color: var(--danger-bg); cursor: pointer; font-weight: bold; padding: 0 4px;" title="Remove">×</button>
+                ${!isReadOnly ? `<button onclick="this.parentElement.remove();" style="border: none; background: none; color: var(--danger-bg); cursor: pointer; font-weight: bold; padding: 0 4px;" title="Remove">×</button>` : ''}
             `;
-            
             container.appendChild(div);
             
             const select = div.querySelector('.rel-target-store');

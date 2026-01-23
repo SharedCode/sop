@@ -55,53 +55,67 @@ func (a *DataAdminAgent) SetGenerator(gen ai.Generator) {
 // NewDataAdminAgent creates a new instance of DataAdminAgent.
 func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, systemDB *database.Database) *DataAdminAgent {
 	// Initialize the "Brain" (Generator)
-	// Logic ported from ai/generator/dataadmin.go
-	provider := os.Getenv("AI_PROVIDER")
-	geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
-	openAIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
-
-	if provider == "" {
-		if openAIKey != "" {
-			provider = "chatgpt"
-		} else if geminiKey != "" {
-			provider = "gemini"
-		}
-	}
+	// Priority:
+	// 1. Configuration passed (from UI/JSON)
+	// 2. Environment Variables (Legacy/Docker override)
 
 	var gen ai.Generator
 	var err error
 
-	if provider == "chatgpt" && openAIKey != "" {
-		model := os.Getenv("OPENAI_MODEL")
-		if model == "" {
-			model = "gpt-4o"
+	// 1. Try Config First
+	if cfg.Generator.Type != "" {
+		gen, err = generator.New(cfg.Generator.Type, cfg.Generator.Options)
+		if err != nil {
+			log.Error(fmt.Sprintf("Failed to initialize generator from config (Type: %s): %v", cfg.Generator.Type, err))
 		}
-		gen, err = generator.New("chatgpt", map[string]any{
-			"api_key": openAIKey,
-			"model":   model,
-		})
-	} else if (provider == "gemini" || provider == "local" || provider == "") && geminiKey != "" {
-		model := os.Getenv("GEMINI_MODEL")
-		if model == "" {
-			model = "gemini-2.5-pro"
+	}
+
+	// 2. Fallback to Environment Variables if Config failed or was empty
+	if gen == nil {
+		provider := os.Getenv("AI_PROVIDER")
+		geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
+		openAIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+
+		if provider == "" {
+			if openAIKey != "" {
+				provider = "chatgpt"
+			} else if geminiKey != "" {
+				provider = "gemini"
+			}
 		}
-		gen, err = generator.New("gemini", map[string]any{
-			"api_key": geminiKey,
-			"model":   model,
-		})
-	} else if provider == "ollama" {
-		model := os.Getenv("OLLAMA_MODEL")
-		if model == "" {
-			model = "llama3"
+
+		if provider == "chatgpt" && openAIKey != "" {
+			model := os.Getenv("OPENAI_MODEL")
+			if model == "" {
+				model = "gpt-4o"
+			}
+			gen, err = generator.New("chatgpt", map[string]any{
+				"api_key": openAIKey,
+				"model":   model, // "model" is the correct key for OpenAI generator options
+			})
+		} else if (provider == "gemini" || provider == "local" || provider == "") && geminiKey != "" {
+			model := os.Getenv("GEMINI_MODEL")
+			if model == "" {
+				model = "gemini-2.5-pro"
+			}
+			gen, err = generator.New("gemini", map[string]any{
+				"api_key": geminiKey,
+				"model":   model,
+			})
+		} else if provider == "ollama" {
+			model := os.Getenv("OLLAMA_MODEL")
+			if model == "" {
+				model = "llama3"
+			}
+			host := os.Getenv("OLLAMA_HOST")
+			if host == "" {
+				host = "http://localhost:11434"
+			}
+			gen, err = generator.New("ollama", map[string]any{
+				"base_url": host,
+				"model":    model,
+			})
 		}
-		host := os.Getenv("OLLAMA_HOST")
-		if host == "" {
-			host = "http://localhost:11434"
-		}
-		gen, err = generator.New("ollama", map[string]any{
-			"base_url": host,
-			"model":    model,
-		})
 	}
 
 	if err != nil {
@@ -109,12 +123,14 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 	}
 
 	agent := &DataAdminAgent{
-		Config:          cfg,
-		brain:           gen,
-		databases:       databases,
-		systemDB:        systemDB,
-		geminiKey:       geminiKey,
-		openAIKey:       openAIKey,
+		Config:    cfg,
+		brain:     gen,
+		databases: databases,
+		systemDB:  systemDB,
+		// API Keys are less relevant now that we use the Generator interface mostly,
+		// but we keep them empty or fill them if we really need them for direct calls later.
+		// geminiKey:       geminiKey,
+		// openAIKey:       openAIKey,
 		sessionContext:  NewScriptContext(),
 		compiledScripts: make(map[string]CachedScript),
 	}
@@ -206,9 +222,8 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 	// Refresh tools to ensure latest instructions from llm_knowledge are used
 	a.registerTools()
 
-	// cfg := ai.NewAskConfig(opts...)
-
 	// Determine Generator to use (Dynamic Switching)
+	// We do this BEFORE slash commands now to allow fallback logic
 	gen := a.brain
 	if providerOverride, ok := ctx.Value(ai.CtxKeyProvider).(string); ok && providerOverride != "" {
 		var err error
@@ -259,8 +274,38 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 		}
 	}
 
+	// Handle Direct Tool Invocations (Slash Commands)
+	// This allows using tools even if the LLM is disabled (no API Key)
+	if strings.HasPrefix(strings.TrimSpace(query), "/") {
+		cmdLine := strings.TrimSpace(query)[1:] // Remove leading slash
+
+		// Parse command line respecting quotes: tool_name key="value with spaces"
+		toolName, args, err := parseSlashCommand(cmdLine)
+		if err == nil && toolName != "" {
+			// Execute straight away
+			res, execErr := a.Execute(ctx, toolName, args)
+
+			// Fallback Logic:
+			// If execution failed AND we have an LLM, maybe the user meant a natural language query starting with /
+			// or the parser was too naive. We delegate to the Brain.
+			if execErr != nil {
+				if gen != nil {
+					log.Warn("Slash command failed locally, falling back to LLM", "tool", toolName, "error", execErr)
+					// Proceed to LLM flow below...
+				} else {
+					// No Brain to save us. Die.
+					return fmt.Sprintf("Error executing command '%s' (and no AI Copilot available to interpret it): %v", toolName, execErr), nil
+				}
+			} else {
+				return res, nil
+			}
+		}
+	}
+
+	// cfg := ai.NewAskConfig(opts...)
+
 	if gen == nil {
-		return "Error: No AI Provider configured. Set GEMINI_API_KEY or OPENAI_API_KEY.", nil
+		return "⚠️ **AI Copilot Disabled**: No valid API Key found.\n\nPlease go to **Environment Settings** (HDD icon in bottom left) -> **LLM API Key** to configure your Google Gemini or OpenAI key.", nil
 	}
 
 	// 1. Construct System Prompt with Tools

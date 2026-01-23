@@ -10,65 +10,49 @@ import (
 )
 
 func TestRepro_RegistryCacheIsolation(t *testing.T) {
-	// 1. Setup shared Cache (representing one Redis instance)
-	cache := mocks.NewMockClient()
+	// Scratchpad test, commented out to avoid build errors.
+	/*
+		// 1. Setup shared Cache (representing one Redis instance)
+		cache := mocks.NewMockClient()
 
-	// 2. Setup Environment 1 (Path A) and 2 (Path B)
-	// Both use the SAME cache instance.
+		// 2. Setup Environment 1 (Path A) and 2 (Path B)
+		// Both use the SAME cache instance.
 
-	// We need valid replication trackers.
-	// Since we are in 'fs' package, we can access private struct fields if needed,
-	// or use the constructor if available.
+		// We need valid replication trackers.
+		// Since we are in 'fs' package, we can access private struct fields if needed,
+		// or use the constructor if available.
 
-	// Emulate /mnt/ver1
-	ctx := context.Background()
+		// Emulate /mnt/ver1
+		ctx := context.Background()
 
-	// Basic RT setup
-	rt1 := &replicationTracker{
-		replicate:         false,
-		storesBaseFolders: []string{"/mnt/ver1"},
-		activeFolder:      "/mnt/ver1",
-	}
+		// Basic RT setup
+		rt1 := &replicationTracker{
+			replicate:         false,
+			storesBaseFolders: []string{"/mnt/ver1"},
+			// activeFolder:      "/mnt/ver1",
+		}
 
-	rt2 := &replicationTracker{
-		replicate:         false,
-		storesBaseFolders: []string{"/mnt/ver2"},
-		activeFolder:      "/mnt/ver2",
-	}
+		rt2 := &replicationTracker{
+			replicate:         false,
+			storesBaseFolders: []string{"/mnt/ver2"},
+			// activeFolder:      "/mnt/ver2",
+		}
 
-	// Create Registries
-	reg1 := NewRegistry(true, 10, rt1, cache)
-	reg2 := NewRegistry(true, 10, rt2, cache)
+		// Create Registries
+		reg1 := NewRegistry(true, 10, rt1, cache)
+		reg2 := NewRegistry(true, 10, rt2, cache)
 
-	// 4. Add items to both
-	u1 := sop.NewUUID()
-	h1 := sop.Handle{LogicalID: u1, PhysicalAddress: 100}
+		// 4. Add items to both
+		u1 := sop.NewUUID()
+		h1 := sop.Handle{LogicalID: u1, PhysicalAddress: 100}
 
-	u2 := sop.NewUUID()
-	h2 := sop.Handle{LogicalID: u2, PhysicalAddress: 200}
+		u2 := sop.NewUUID()
+		h2 := sop.Handle{LogicalID: u2, PhysicalAddress: 200}
 
-	// Payload
-	p1 := []sop.RegistryPayload[sop.Handle]{{IDs: []sop.Handle{h1}, CacheDuration: time.Hour}}
-	p2 := []sop.RegistryPayload[sop.Handle]{{IDs: []sop.Handle{h2}, CacheDuration: time.Hour}}
-
-	// We use 'Add' but we expect errors from hashmap because underlying files don't exist?
-	// registryOnDisk.Add calls hashmap.add which calls file operations.
-	// To avoid actual file IO errors or requirement to create folders,
-	// we might need to mock internal behavior or just ensure folders exist.
-	// But the Cache part happens *after* disk write.
-	// If disk write fails, it returns error.
-
-	// Let's optimize: We only care about Cache collision.
-	// We can manually populate the cache?
-	// Or we can assume Add might fail on disk but maybe succeed on cache?
-	// registryOnDisk.Add: "if err := r.hashmap.add(...); err != nil { return err }"
-	// So we need disk write to succeed.
-
-	// Mocking is hard here without touching file system.
-	// Better to use "StoreRepository" test which purely tests the Namespacing of StoreInfo.
-	// The Registry test uses UUIDs which we know are unique.
-	// The user Is complaining about "all keys got lost".
-	// StoreRepository manages the "Store" keys.
+		// Payload
+		p1 := []sop.RegistryPayload[sop.Handle]{{IDs: []sop.Handle{h1}, CacheDuration: time.Hour}}
+		p2 := []sop.RegistryPayload[sop.Handle]{{IDs: []sop.Handle{h2}, CacheDuration: time.Hour}}
+	*/
 }
 
 func TestRepro_StoreRepositoryIsolation(t *testing.T) {
@@ -79,8 +63,10 @@ func TestRepro_StoreRepositoryIsolation(t *testing.T) {
 	dir1 := t.TempDir()
 	dir2 := t.TempDir()
 
-	rt1 := &replicationTracker{storesBaseFolders: []string{dir1}, activeFolder: dir1}
-	rt2 := &replicationTracker{storesBaseFolders: []string{dir2}, activeFolder: dir2}
+	// Replication tracker expects 2 folders to toggle between.
+	// For isolation test, we can use the same folder or just dummy for 2nd one.
+	rt1 := &replicationTracker{storesBaseFolders: []string{dir1, dir1}}
+	rt2 := &replicationTracker{storesBaseFolders: []string{dir2, dir2}}
 
 	// We need a ManageStore or nil (it creates default).
 	// Default ManageStore uses real filesystem.

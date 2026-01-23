@@ -1301,3 +1301,66 @@ func collapseUniqueKeys(m map[string]any) map[string]any {
 
 	return m
 }
+
+// parseSlashCommand parses a command string like "tool_name key1=value1 key2=\"value with spaces\""
+func parseSlashCommand(input string) (string, map[string]any, error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", nil, nil
+	}
+
+	// Simple state machine to parse input
+	var parts []string
+	var current strings.Builder
+	inQuote := false
+	escape := false
+
+	for _, r := range input {
+		if escape {
+			current.WriteRune(r)
+			escape = false
+			continue
+		}
+
+		if r == '\\' {
+			escape = true
+			continue
+		}
+
+		if r == '"' {
+			inQuote = !inQuote
+			continue
+		}
+
+		if r == ' ' && !inQuote {
+			if current.Len() > 0 {
+				parts = append(parts, current.String())
+				current.Reset()
+			}
+		} else {
+			current.WriteRune(r)
+		}
+	}
+	if current.Len() > 0 {
+		parts = append(parts, current.String())
+	}
+
+	if len(parts) == 0 {
+		return "", nil, nil
+	}
+
+	toolName := parts[0]
+	args := make(map[string]any)
+
+	for _, part := range parts[1:] {
+		// Split on first =
+		idx := strings.Index(part, "=")
+		if idx > 0 {
+			key := part[:idx]
+			val := part[idx+1:]
+			args[key] = val
+		}
+	}
+
+	return toolName, args, nil
+}
