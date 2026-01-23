@@ -234,3 +234,27 @@ A sophisticated **Transactional Vector Store** (IVF-based) is implemented in the
 *   **Status:** "Opt-in" / "Up in the air".
 *   **Usage:** Must be explicitly enabled in the Agent configuration (`vector_store: true`).
 *   **Gap:** There is currently **no auto-migration logic** that transitions from the KV store to the Vector Store when the instruction set grows too large. This "auto-scale to RAG" feature is planned but not implemented.
+
+---
+
+## 11. Coding Standards & Guidelines
+
+To ensure maintainability and professional code quality, adhere to the following strict guidelines when refactoring or adding new code.
+
+### File Size Limits
+*   **Maximum Lines per File:** **750 lines**.
+*   **Action:** If a file exceeds or approaches this limit, refactor immediately by extracting logical components into separate files (e.g., helpers, handlers, types) or sub-packages.
+
+### Commenting Style
+*   **Objective**: Comments must be purely technical and descriptive.
+*   **Focus**: Explain **what** the code does, **why** a specific complex logic is used, and the **flow** of execution.
+*   **Prohibited**:
+    *   Do **not** write apologetic or explanatory narratives about mistakes (e.g., "We made a mistake here previously...").
+    *   Do **not** include "obsolete drama" or conversational meta-commentary.
+    *   Do **not** state "This is a workaround" without a technical reason.
+*   **Example (Good)**: `// Collect all target paths to validate isolation and permissions.`
+*   **Example (Bad)**: `// Sorry, we used to deduplicate here but that caused a bug so now we blindly append...`
+
+### Modularity
+*   **Function Size**: Functions must **not exceed 500 lines**.
+*   **Strategy**: Decompose complex logic into named sub-functions with clear, single responsibilities. Use helper functions to keep the main flow readable.

@@ -1,0 +1,42 @@
+I can certainly help you build a "Director" script to automate the creation of this demo video.
+
+Since SOP Data Manager has a Web UI, we can use Playwright (which you already use for tests) to:
+
+Drive the Browser: automatically clicking buttons, typing prompts, and navigating the wizard.
+Record Video: Capture the browser viewport pixel-perfectly.
+Sync Narration: We can pause execution at key moments to allow the Voiceover to finish before moving to the next action.
+For the "Download & Terminal" section, since Playwright only controls the browser, I will include a "simulated terminal" segment in the script that types out the commands in a realistic way (using Python's sys.stdout), which you can capture with a standard screen recorder, or we can focus the automation on the rich Web UI part.
+
+Here is a complete automation suite.
+
+Step 1: Install Dependencies
+You will need gTTS (Google Text-to-Speech) for the placeholder audio, and ffmpeg (usually installed) to combine them.
+
+(Mutagen is used to check audio file duration for syncing).
+
+Step 2: Create the Director Script
+I'll create scripts/produce_demo.py. This script acts as the "Director". It launches the app, starts recording, talks through the features, and executes the actions.
+
+Created produce_demo.py
+
+Yes, it is definitely possible to automate this!
+
+I have created a starter script for you in produce_demo.py that demonstrates how to build this "Video Factory".
+
+How it works:
+"Director" Engine: It uses Playwright to drive the browser (Setup Wizard, AI Copilot, etc.) and records the session to a .webm video file.
+Narrator: It uses a Text-to-Speech library (gTTS is suggested/mocked in the script) to "speak" the narration.
+Synchronization: The script types text slowly (like a human) and sleeps for the duration of the narration lines, ensuring the video matches the audio timing.
+Prerequisites to run this:
+You will need to install a few python libraries and have ffmpeg (optional, for final assembly):
+
+What you need to customize:
+The script I generated contains placeholder selectors (like #start-wizard-btn, textarea[name='prompt']). You will need to inspect your actual Web UI (Right-click -> Inspect) and update the selectors in produce_demo.py to match your real IDs/Classes.
+
+Regarding the "Download & Unpack" part:
+Playwright is specialized for the Web Browser parts (Setup Wizard, AI Copilot).
+To automate the Terminal part (downloading, unzipping, chmod), you have two options:
+
+Separate Recording: Record that part manually with QuickTime/OBS and stitch it to the beginning.
+Terminal Recorder: Use a tool like asciinema or terminalizer to script a "fake" terminal session that types out the commands for you.
+If you specifically want "Gemini" generated audio (instead of the standard Google Translate voice), you would just swap the gTTS call in the search_webpage function with a call to the Vertex AI API (if you have an active GCP project).

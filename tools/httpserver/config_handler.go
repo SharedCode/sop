@@ -14,8 +14,6 @@ import (
 	"unicode"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/model"
 	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/fs"
 )
@@ -239,624 +237,7 @@ func handleGetSystemEnv(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleSaveConfig writes the provided configuration to the specified file path.
-func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
-	log.Info("TRACE: handleSaveConfig called")
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		RegistryPath    string   `json:"registry_path"`
-		StoresFolders   []string `json:"stores_folders"`
-		Port            int      `json:"port"`
-		Type            string   `json:"type"`     // standalone|clustered
-		ConnectionURL   string   `json:"conn_url"` // Redis
-		RegistryHashMod int      `json:"registry_hash_mod"`
-		LLMApiKey       string   `json:"llm_api_key"`
-		UseSharedBrain  bool     `json:"use_shared_brain"`
-		ErasureConfig   *struct {
-			DataChunks   int      `json:"data_chunks"`
-			ParityChunks int      `json:"parity_chunks"`
-			BasePaths    []string `json:"base_paths"`
-		} `json:"erasure_config"`
-		ErasureConfigs []struct {
-			Key          string   `json:"key"`
-			DataChunks   int      `json:"data_chunks"`
-			ParityChunks int      `json:"parity_chunks"`
-			BasePaths    []string `json:"base_paths"`
-		} `json:"erasure_configs"`
-		// Optional: Initialize User DBs in the same atomic transaction
-		Databases []struct {
-			Name            string   `json:"name"`
-			Path            string   `json:"path"`
-			Type            string   `json:"type"`
-			Connection      string   `json:"connection"`
-			PopulateDemo    bool     `json:"populate_demo"`
-			RegistryHashMod int      `json:"registry_hash_mod"`
-			StoresFolders   []string `json:"stores_folders"`
-			UseSharedDB     bool     `json:"use_shared_db"`
-			ErasureConfigs  []struct {
-				Key          string   `json:"key"`
-				DataChunks   int      `json:"data_chunks"`
-				ParityChunks int      `json:"parity_chunks"`
-				BasePaths    []string `json:"base_paths"`
-			} `json:"erasure_configs"`
-		} `json:"databases"`
-	}
-
-	// Debug: Dump raw body
-	bodyBytes, _ := io.ReadAll(r.Body)
-	log.Debug(fmt.Sprintf("RAW INIT DB PAYLOAD: %s", string(bodyBytes)))
-
-	// Refill body for decoder
-	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	// Debug hex dump to find source of corruption
-	if req.RegistryPath != "" {
-		log.Info(fmt.Sprintf("DEBUG-PATH-HEX (SaveConfig): RegistryPath='%s', Hex=%x", req.RegistryPath, []byte(req.RegistryPath)))
-	}
-
-	// Sanitize paths
-	req.RegistryPath = sanitizePath(req.RegistryPath)
-	for i, sf := range req.StoresFolders {
-		req.StoresFolders[i] = sanitizePath(sf)
-	}
-	if req.ErasureConfig != nil {
-		for i, bp := range req.ErasureConfig.BasePaths {
-			req.ErasureConfig.BasePaths[i] = sanitizePath(bp)
-		}
-	}
-	for i := range req.ErasureConfigs {
-		for j, bp := range req.ErasureConfigs[i].BasePaths {
-			req.ErasureConfigs[i].BasePaths[j] = sanitizePath(bp)
-		}
-	}
-
-	// Sanitize User DBs
-	for i := range req.Databases {
-		req.Databases[i].Path = sanitizePath(req.Databases[i].Path)
-		for j, sf := range req.Databases[i].StoresFolders {
-			req.Databases[i].StoresFolders[j] = sanitizePath(sf)
-		}
-		for j := range req.Databases[i].ErasureConfigs {
-			for k, bp := range req.Databases[i].ErasureConfigs[j].BasePaths {
-				req.Databases[i].ErasureConfigs[j].BasePaths[k] = sanitizePath(bp)
-			}
-		}
-	}
-
-	// VALIDATE ERASURE CODING ISOLATION (MOVED UP FOR SAFETY)
-	// We must strictly ensure isolation before any further processing to prevent side effects.
-	checkErasureIsolation := func(basePaths []string, data, parity int, context string) error {
-		if len(basePaths) != data+parity {
-			return fmt.Errorf("%s: BasePaths count (%d) must equal DataChunks + ParityChunks (%d)", context, len(basePaths), data+parity)
-		}
-		seen := make(map[string]struct{})
-		for _, p := range basePaths {
-			abs, err := filepath.Abs(p)
-			if err != nil {
-				abs = p
-			}
-			if _, exists := seen[abs]; exists {
-				return fmt.Errorf("%s: BasePaths must be unique for isolation. Duplicate path found: %s", context, p)
-			}
-			seen[abs] = struct{}{}
-		}
-		return nil
-	}
-
-	if req.ErasureConfig != nil {
-		if err := checkErasureIsolation(req.ErasureConfig.BasePaths, req.ErasureConfig.DataChunks, req.ErasureConfig.ParityChunks, "Erasure Config (GlobalSystem)"); err != nil {
-			log.Error(fmt.Sprintf("Erasure Isolation Error (GlobalSystem): %v", err))
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-	}
-	for _, ec := range req.ErasureConfigs {
-		if err := checkErasureIsolation(ec.BasePaths, ec.DataChunks, ec.ParityChunks, fmt.Sprintf("Erasure Config (System Key: %s)", ec.Key)); err != nil {
-			log.Error(fmt.Sprintf("Erasure Isolation Error (System Key %s): %v", ec.Key, err))
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-	}
-	// User DBs EC Checks
-	for dbIdx, db := range req.Databases {
-		for _, ec := range db.ErasureConfigs {
-			if err := checkErasureIsolation(ec.BasePaths, ec.DataChunks, ec.ParityChunks, fmt.Sprintf("Erasure Config (UserDB[%d] '%s' Key: %s)", dbIdx, db.Name, ec.Key)); err != nil {
-				log.Error(fmt.Sprintf("Erasure Isolation Error (UserDB '%s' Key %s): %v", db.Name, ec.Key, err))
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-		}
-	}
-
-	// VALIDATION START
-	{
-		newPaths := []string{}
-		// Deduplication Map (Key: Absolute Path)
-		// This prevents "Internal Path Conflict" if RegistryPath matches a StoresFolder,
-		// or if multiple identical paths are provided (e.g. EC partitions).
-		seenPaths := make(map[string]struct{})
-
-		addPath := func(p string) {
-			if p == "" {
-				return
-			}
-			// Use Absolute Path for deduplication to catch "/tmp/db" vs "/tmp/db/"
-			abs, err := filepath.Abs(p)
-			if err != nil {
-				// Fallback to raw string if Abs fails, though validatePathSafety will likely catch it later
-				abs = p
-			}
-			if _, exists := seenPaths[abs]; !exists {
-				seenPaths[abs] = struct{}{}
-				newPaths = append(newPaths, p)
-			}
-		}
-
-		if req.RegistryPath != "" {
-			addPath(req.RegistryPath)
-		}
-		for _, sf := range req.StoresFolders {
-			addPath(sf)
-		}
-
-		if req.ErasureConfig != nil {
-			for _, bp := range req.ErasureConfig.BasePaths {
-				addPath(bp)
-			}
-		}
-		for _, ec := range req.ErasureConfigs {
-			for _, bp := range ec.BasePaths {
-				addPath(bp)
-			}
-		}
-
-		// Add User DBs paths to the safety check
-		for _, db := range req.Databases {
-			if db.Path != "" {
-				addPath(db.Path)
-			}
-			for _, sf := range db.StoresFolders {
-				addPath(sf)
-			}
-			for _, ec := range db.ErasureConfigs {
-				for _, bp := range ec.BasePaths {
-					addPath(bp)
-				}
-			}
-		}
-
-		alreadyConfigured := collectAllConfiguredPaths(SystemDBName)
-		if err := validatePathSafety(newPaths, alreadyConfigured); err != nil {
-			http.Error(w, fmt.Sprintf("Path Safety Error: %v", err), http.StatusBadRequest)
-			return
-		}
-	}
-	// VALIDATION END
-
-	// Update global config
-	if req.Port > 0 {
-		config.Port = req.Port
-	}
-	if req.LLMApiKey != "" {
-		config.LLMApiKey = req.LLMApiKey
-	}
-
-	shouldSetup := false
-
-	// Initialize SystemDB if RegistryPath provided (Setup Wizard)
-	if req.RegistryPath != "" {
-		// 1. Setup SystemDB on disk
-		// Deduplicate paths: RegistryPath + StoresFolders
-		storeFolders := []string{req.RegistryPath}
-		folderSet := map[string]struct{}{req.RegistryPath: {}}
-
-		if len(req.StoresFolders) > 0 {
-			for _, sf := range req.StoresFolders {
-				if _, exists := folderSet[sf]; !exists {
-					storeFolders = append(storeFolders, sf)
-					folderSet[sf] = struct{}{}
-				}
-			}
-		}
-
-		if req.RegistryHashMod == 0 {
-			req.RegistryHashMod = fs.MinimumModValue
-		}
-
-		sysOpts := sop.DatabaseOptions{
-			StoresFolders:        storeFolders,
-			RegistryHashModValue: req.RegistryHashMod,
-		}
-
-		if req.Type == "clustered" {
-			sysOpts.Type = sop.Clustered
-			sysOpts.CacheType = sop.Redis
-			redisUrl := req.ConnectionURL
-			if redisUrl == "" {
-				redisUrl = "localhost:6379"
-			}
-			sysOpts.RedisConfig = &sop.RedisCacheConfig{
-				Address: redisUrl,
-			}
-		} else {
-			sysOpts.Type = sop.Standalone
-		}
-
-		if req.ErasureConfig != nil && req.ErasureConfig.DataChunks > 0 {
-			sysOpts.ErasureConfig = map[string]sop.ErasureCodingConfig{
-				"default": {
-					DataShardsCount:             req.ErasureConfig.DataChunks,
-					ParityShardsCount:           req.ErasureConfig.ParityChunks,
-					BaseFolderPathsAcrossDrives: req.ErasureConfig.BasePaths,
-				},
-			}
-		}
-
-		// Support multiple partitions (max 4 usually)
-		if len(req.ErasureConfigs) > 0 {
-			if sysOpts.ErasureConfig == nil {
-				sysOpts.ErasureConfig = make(map[string]sop.ErasureCodingConfig)
-			}
-			for _, ec := range req.ErasureConfigs {
-				// Handle explicit empty string set by user as "" (two double quotes)
-				key := ec.Key
-				if key == "\"\"" {
-					key = ""
-				}
-				sysOpts.ErasureConfig[key] = sop.ErasureCodingConfig{
-					DataShardsCount:             ec.DataChunks,
-					ParityShardsCount:           ec.ParityChunks,
-					BaseFolderPathsAcrossDrives: ec.BasePaths,
-				}
-			}
-		}
-
-		// Check for existing System DB files to determine if this is a "Shared Brain" / Reuse scenario
-		hasDBOptions, hasRegHashMod := database.IsDatabasePath(req.RegistryPath)
-
-		// Relaxation: Check 'system_db' subfolder if not found in root
-		if !hasDBOptions {
-			subPath := filepath.Join(req.RegistryPath, "system_db")
-			if exists, mod := database.IsDatabasePath(subPath); exists {
-				req.RegistryPath = subPath
-				hasDBOptions = true
-				hasRegHashMod = mod
-			}
-		}
-
-		shouldSetup = true
-
-		if req.UseSharedBrain {
-			// User wants to explicitly reuse an existing DB
-			if hasDBOptions && hasRegHashMod {
-				shouldSetup = false
-				log.Info(fmt.Sprintf("Shared Brain detected at '%s'. Reusing...", req.RegistryPath))
-
-				// 1. Check Write Permissions
-				testFile := filepath.Join(req.RegistryPath, ".sop_write_test")
-				if f, err := os.Create(testFile); err != nil {
-					http.Error(w, fmt.Sprintf("System DB path exists but is not writable: %v", err), http.StatusBadRequest)
-					return
-				} else {
-					f.Close()
-					os.Remove(testFile)
-				}
-
-				// 2. Load existing options to ensure sysOpts matches the on-disk DB
-				// This prevents using default HashMod (1) if the DB was created with something else.
-				dbOptionsPath := filepath.Join(req.RegistryPath, "dboptions.json")
-				existingOptsBytes, err := os.ReadFile(dbOptionsPath)
-				if err == nil {
-					var existingOpts sop.DatabaseOptions
-					if err := json.Unmarshal(existingOptsBytes, &existingOpts); err == nil {
-						sysOpts = existingOpts
-						log.Info("Loaded existing Database Options from disk.")
-					} else {
-						log.Warn(fmt.Sprintf("Failed to parse existing dboptions.json: %v", err))
-					}
-				}
-			} else {
-				// Missing files
-				http.Error(w, fmt.Sprintf("Shared Brain selected but System DB files (dboptions.json, reghashmod.txt) are missing in '%s'.", req.RegistryPath), http.StatusBadRequest)
-				return
-			}
-		} else {
-			// User wants to create a NEW DB
-			if hasDBOptions || hasRegHashMod {
-				// Files exist -> Conflict
-				http.Error(w, fmt.Sprintf("Destination path '%s' already contains System DB files. Enable 'Use Shared Brain' to reuse it or choose a clean path.", req.RegistryPath), http.StatusBadRequest)
-				return
-			}
-			// intended behavior: shouldSetup remains true
-		}
-
-		if shouldSetup {
-			log.Info(fmt.Sprintf("TRACE: Executing database.Setup for SystemDB at '%s'", req.RegistryPath))
-			if _, err := database.Setup(r.Context(), sysOpts); err != nil {
-				// Rollback: If setup failed and we were creating a NEW DB (not using shared),
-				// we should clean up the potentially partially created files to allow retries.
-				if !req.UseSharedBrain {
-					log.Warn(fmt.Sprintf("Setup failed. Rolling back/cleaning up path: %s", req.RegistryPath))
-					if rmErr := os.RemoveAll(req.RegistryPath); rmErr != nil {
-						log.Error(fmt.Sprintf("Failed to rollback/cleanup path %s: %v", req.RegistryPath, rmErr))
-					}
-				}
-				http.Error(w, fmt.Sprintf("Failed to setup system registry: %v", err), http.StatusInternalServerError)
-				return
-			}
-		}
-
-		// Auto-Create "Scripts" Store for AI Agents
-		func() {
-			ctx := r.Context()
-			// Open transaction to create the store
-			trans, err := database.BeginTransaction(ctx, sysOpts, sop.ForWriting)
-			if err != nil {
-				log.Error(fmt.Sprintf("Failed to begin transaction for scripts store creation: %v", err))
-				return
-			}
-			// Use model.New(...) which uses the standard AI Model Store logic.
-			// Calling List will trigger openStore() which calls newBtree() to create it if missing.
-			ms := model.New("scripts", trans)
-			if _, err := ms.List(ctx, ""); err != nil {
-				// Log but don't fail, it might just be empty or initial setup nuance
-				log.Info(fmt.Sprintf("Initialized 'scripts' store check: %v", err))
-			}
-
-			// Seed "demo_loop" script
-			demoLoop := ai.Script{
-				Name:        "demo_loop",
-				Description: "Demonstrates loops and variables",
-				Steps: []ai.ScriptStep{
-					{
-						Type:     "set",
-						Variable: "items",
-						Value:    "apple\nbanana\ncherry",
-					},
-					{
-						Type:     "loop",
-						List:     "items",
-						Iterator: "fruit",
-						Steps: []ai.ScriptStep{
-							{
-								Type:    "say",
-								Message: "Processing {{.fruit}}...",
-							},
-							{
-								Type:   "ask",
-								Prompt: "What color is {{.fruit}}? (Answer in 1 word)",
-							},
-						},
-					},
-				},
-			}
-			if err := ms.Save(ctx, "general", "demo_loop", demoLoop); err != nil {
-				log.Error(fmt.Sprintf("Failed to seed demo_loop script: %v", err))
-			} else {
-				log.Info("Seeded 'demo_loop' script into System DB.")
-			}
-
-			if err := trans.Commit(ctx); err != nil {
-				log.Error(fmt.Sprintf("Failed to commit scripts store creation: %v", err))
-			}
-		}()
-
-		// 2. Update Config
-		config.SystemDB = &DatabaseConfig{
-			Name:     SystemDBName,
-			Path:     req.RegistryPath,
-			IsSystem: true,
-			Mode:     req.Type,
-		}
-
-		// Persist Erasure Coding settings
-		var ecs []ErasureConfigEntry
-		if req.ErasureConfig != nil && req.ErasureConfig.DataChunks > 0 {
-			ecs = append(ecs, ErasureConfigEntry{
-				Key:          "",
-				DataChunks:   req.ErasureConfig.DataChunks,
-				ParityChunks: req.ErasureConfig.ParityChunks,
-				BasePaths:    req.ErasureConfig.BasePaths,
-			})
-		}
-		for _, val := range req.ErasureConfigs {
-			ecs = append(ecs, ErasureConfigEntry{
-				Key:          val.Key,
-				DataChunks:   val.DataChunks,
-				ParityChunks: val.ParityChunks,
-				BasePaths:    val.BasePaths,
-			})
-		}
-		config.SystemDB.ErasureConfigs = ecs
-
-		if config.SystemDB.Mode == "" {
-			config.SystemDB.Mode = "standalone"
-		}
-		if req.Type == "clustered" {
-			if req.ConnectionURL != "" {
-				config.SystemDB.RedisURL = req.ConnectionURL
-			} else {
-				config.SystemDB.RedisURL = "localhost:6379"
-			}
-		}
-	}
-
-	// 2.5 Setup User DBs (if requested)
-	// Track created paths for atomic rollback
-	var createdUserDBPaths []string
-
-	for i, udb := range req.Databases {
-		if udb.Path == "" {
-			continue
-		}
-		log.Info(fmt.Sprintf("TRACE: Initializing User DB [%d] '%s' at '%s'", i, udb.Name, udb.Path))
-
-		// Construct Options
-		storeFolders := []string{udb.Path}
-		seen := make(map[string]struct{})
-		seen[udb.Path] = struct{}{}
-		for _, folder := range udb.StoresFolders {
-			if _, exists := seen[folder]; !exists {
-				storeFolders = append(storeFolders, folder)
-				seen[folder] = struct{}{}
-			}
-		}
-
-		if udb.RegistryHashMod == 0 {
-			udb.RegistryHashMod = fs.MinimumModValue
-		}
-
-		uOpts := sop.DatabaseOptions{
-			StoresFolders:        storeFolders,
-			RegistryHashModValue: udb.RegistryHashMod,
-		}
-		// Erasure Configs for User DB
-		if len(udb.ErasureConfigs) > 0 {
-			uOpts.ErasureConfig = make(map[string]sop.ErasureCodingConfig)
-			for _, ec := range udb.ErasureConfigs {
-				key := ec.Key
-				if key == "\"\"" {
-					key = ""
-				}
-				uOpts.ErasureConfig[key] = sop.ErasureCodingConfig{
-					DataShardsCount:             ec.DataChunks,
-					ParityShardsCount:           ec.ParityChunks,
-					BaseFolderPathsAcrossDrives: ec.BasePaths,
-				}
-			}
-		}
-		if udb.Type == "clustered" {
-			uOpts.Type = sop.Clustered
-			uOpts.CacheType = sop.Redis
-			rURL := udb.Connection
-			if rURL == "" {
-				rURL = "localhost:6379"
-			}
-			uOpts.RedisConfig = &sop.RedisCacheConfig{Address: rURL}
-		} else {
-			uOpts.Type = sop.Standalone
-		}
-
-		// Setup on Disk
-		ctx := r.Context()
-		shouldSetupUser := !udb.UseSharedDB
-		if shouldSetupUser {
-			if _, err := database.Setup(ctx, uOpts); err != nil {
-				// ATOMICITY: Rollback EVERYTHING
-				log.Error(fmt.Sprintf("Failed to setup User DB [%d] '%s': %v", i, udb.Name, err))
-
-				// 1. Rollback previously created User DBs in this batch
-				for _, createdPath := range createdUserDBPaths {
-					log.Warn(fmt.Sprintf("Rolling back User DB at '%s'", createdPath))
-					os.RemoveAll(createdPath)
-				}
-
-				// 2. Rollback System DB if we just created it
-				if shouldSetup && !req.UseSharedBrain {
-					log.Warn(fmt.Sprintf("Rolling back System DB at '%s' due to User DB setup failure.", req.RegistryPath))
-					if rbErr := os.RemoveAll(req.RegistryPath); rbErr != nil {
-						log.Error(fmt.Sprintf("Failed to rollback System DB: %v", rbErr))
-					}
-				}
-
-				http.Error(w, fmt.Sprintf("User DB '%s' setup failed: %v. All changes rolled back.", udb.Name, err), http.StatusInternalServerError)
-				return
-			}
-			createdUserDBPaths = append(createdUserDBPaths, udb.Path)
-
-			// Initialize Registry
-			if udb.PopulateDemo {
-				if err := PopulateDemoData(ctx, uOpts); err != nil {
-					log.Error(fmt.Sprintf("Failed to populate demo data for User DB: %v", err))
-				}
-			} else {
-				// Force Init
-				func() {
-					tx, err := database.BeginTransaction(ctx, uOpts, sop.ForWriting)
-					if err == nil {
-						// Open dummy to init
-						comparer := func(a, b string) int { return cmp.Compare(a, b) }
-						database.NewBtree[string, string](ctx, uOpts, "system_check", tx, comparer)
-						tx.Commit(ctx)
-					}
-				}()
-			}
-		}
-
-		// Add to Interface Config
-		var ecs []ErasureConfigEntry
-		for _, val := range udb.ErasureConfigs {
-			ecs = append(ecs, ErasureConfigEntry{
-				Key:          val.Key,
-				DataChunks:   val.DataChunks,
-				ParityChunks: val.ParityChunks,
-				BasePaths:    val.BasePaths,
-			})
-		}
-
-		newDB := DatabaseConfig{
-			Name:           udb.Name,
-			Path:           udb.Path,
-			StoresFolders:  udb.StoresFolders,
-			Mode:           "standalone",
-			ErasureConfigs: ecs,
-		}
-		if udb.Type == "clustered" {
-			newDB.Mode = "clustered"
-			newDB.RedisURL = udb.Connection
-			if newDB.RedisURL == "" {
-				newDB.RedisURL = "localhost:6379"
-			}
-		}
-		config.Databases = append(config.Databases, newDB)
-	}
-
-	// Ensure PageSize is set
-	if config.PageSize == 0 {
-		config.PageSize = 40
-	}
-
-	if config.ConfigFile == "" {
-		config.ConfigFile = "config.json"
-	}
-
-	// Ensure directory exists
-	dir := filepath.Dir(config.ConfigFile)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to create directory: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Write config file
-	f, err := os.Create(config.ConfigFile)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to create config file: %v", err), http.StatusInternalServerError)
-		return
-	}
-	defer f.Close()
-
-	encoder := json.NewEncoder(f)
-	encoder.SetIndent("", "    ")
-	if err := encoder.Encode(config); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to write config file: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Reload agents to reflect configuration changes
-	initAgents()
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Configuration saved successfully"})
-}
+// handleSaveConfig implementation moved to config_save_handler.go
 
 // handleUpdateLLMConfig updates the LLM API Key in the configuration.
 func handleUpdateLLMConfig(w http.ResponseWriter, r *http.Request) {
@@ -1012,6 +393,13 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 		if err := validatePathSafety(newPaths, alreadyConfigured); err != nil {
 			log.Error(fmt.Sprintf("TRACE: Validation Failed (PathSafety): %v", err))
 			http.Error(w, fmt.Sprintf("Path Safety Error: %v", err), http.StatusBadRequest)
+			return
+		}
+
+		// Check Write Permissions for ALL paths provided
+		if err := validateWritePermissions(newPaths); err != nil {
+			log.Error(fmt.Sprintf("TRACE: Validation Failed (WritePermissions): %v", err))
+			http.Error(w, fmt.Sprintf("Write Permission Error: %v", err), http.StatusBadRequest)
 			return
 		}
 		log.Info("TRACE: Safety Validation Passed")
@@ -1488,16 +876,7 @@ func validatePathSafety(newPaths []string, existingPaths []string) error {
 		}
 	}
 
-	// 1. Check Internal Conflicts (within the new set)
-	for i := 0; i < len(cleanNew); i++ {
-		for j := i + 1; j < len(cleanNew); j++ {
-			if conflict, msg := isPathConflict(cleanNew[i], cleanNew[j]); conflict {
-				return fmt.Errorf("internal path conflict: %s", msg)
-			}
-		}
-	}
-
-	// 2. Check External Conflicts (new vs existing)
+	// 1. Check External Conflicts (new vs existing)
 	for _, np := range cleanNew {
 		for _, ep := range cleanExisting {
 			if conflict, msg := isPathConflict(np, ep); conflict {
@@ -1506,20 +885,33 @@ func validatePathSafety(newPaths []string, existingPaths []string) error {
 		}
 	}
 
+	// 2. Check Internal Conflicts (within the new set)
+	for i := 0; i < len(cleanNew); i++ {
+		for j := i + 1; j < len(cleanNew); j++ {
+			if conflict, msg := isPathConflict(cleanNew[i], cleanNew[j]); conflict {
+				return fmt.Errorf("internal path conflict: %s", msg)
+			}
+		}
+	}
+
 	return nil
 }
 
 func isPathConflict(pathA, pathB string) (bool, string) {
-	if pathA == pathB {
-		return true, fmt.Sprintf("paths are identical (Strict Isolation Policy): '%s'", pathA)
+	// Case-Insensitive Check for robustness (Mac/Windows)
+	pathALower := strings.ToLower(pathA)
+	pathBLower := strings.ToLower(pathB)
+
+	if pathALower == pathBLower {
+		return true, fmt.Sprintf("paths are identical: '%s'", pathA)
 	}
 
 	// Ensure trailing separator for prefix check to avoid /tmp matching /tmp2
-	pathASep := pathA
+	pathASep := pathALower
 	if !strings.HasSuffix(pathASep, string(os.PathSeparator)) {
 		pathASep += string(os.PathSeparator)
 	}
-	pathBSep := pathB
+	pathBSep := pathBLower
 	if !strings.HasSuffix(pathBSep, string(os.PathSeparator)) {
 		pathBSep += string(os.PathSeparator)
 	}
@@ -1530,7 +922,7 @@ func isPathConflict(pathA, pathB string) (bool, string) {
 	}
 	// Check if B is inside A
 	if strings.HasPrefix(pathBSep, pathASep) {
-		return true, fmt.Sprintf("'%s' contains '%s'", pathA, pathB)
+		return true, fmt.Sprintf("'%s' is inside '%s'", pathB, pathA)
 	}
 
 	return false, ""
@@ -1559,6 +951,46 @@ func saveConfig() error {
 	encoder.SetIndent("", "    ")
 	if err := encoder.Encode(config); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
+	}
+	return nil
+}
+
+// validateWritePermissions checks if the application can write to the specified paths
+// by attempting to create a temporary file in the target directory or its first existing ancestor.
+func validateWritePermissions(paths []string) error {
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		// Find first existing ancestor
+		dir := p
+		for {
+			info, err := os.Stat(dir)
+			if err == nil {
+				if !info.IsDir() {
+					return fmt.Errorf("path '%s' exists but is not a directory", dir)
+				}
+				// Try creating a temp file in this directory
+				testFile, err := os.CreateTemp(dir, ".sop_perm_check_")
+				if err != nil {
+					return fmt.Errorf("write permission denied for path '%s' (checked ancestor '%s'): %v", p, dir, err)
+				}
+				testFile.Close()
+				os.Remove(testFile.Name())
+				break
+			} else if os.IsNotExist(err) {
+				// Move up
+				parent := filepath.Dir(dir)
+				if parent == dir {
+					// Hit root or cannot go up
+					return fmt.Errorf("path '%s' or its ancestors do not exist or are inaccessible", p)
+				}
+				dir = parent
+			} else {
+				// Other error (permission to stat?)
+				return fmt.Errorf("cannot access path '%s': %v", dir, err)
+			}
+		}
 	}
 	return nil
 }

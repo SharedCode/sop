@@ -7543,12 +7543,17 @@
         let sysStoresFoldersRaw = null;
         let sysErasureConfigs = [];
         
+        let validationRegPath = "";
+
         if (isSysAdvanced) {
             sysStoresFoldersRaw = document.getElementById('setup-sys-stores-folders').value.trim();
             if (!sysStoresFoldersRaw) return showAlert("In Advanced Mode, at least one Store Folder is required for System DB.");
             
-            // Derive regPath for backend compatibility (base path)
-            regPath = sysStoresFoldersRaw.split(/[\n,]+/).map(s=>s.trim())[0];
+            // In Advanced Mode, we send specific stores folders. Sending registry_path as well causes a conflict in the backend validation.
+            // So we set regPath to empty string for the payload.
+            regPath = "";
+            // Use the first folder for client-side collision validation
+            validationRegPath = sysStoresFoldersRaw.split(/[\n,]+/).map(s=>s.trim())[0];
             
             sysHashMod = document.getElementById('setup-sys-registry-hash-mod').value;
             const manualConfigs = collectEcConfigs('setup-sys-ec-container');
@@ -7557,6 +7562,7 @@
             // Simple Mode: Use explicit simple input
             regPath = document.getElementById('setup-reg-path').value.trim();
             if (!regPath) return showAlert("System Database Path is required");
+            validationRegPath = regPath;
             
             // Reset advanced fields
             sysStoresFoldersRaw = "";
@@ -7566,7 +7572,7 @@
         
         // Prevent collision
         const normalize = (p) => p.trim().replace(/[/\\]+$/, "");
-        if (normalize(dbPath) === normalize(regPath)) {
+        if (normalize(dbPath) === normalize(validationRegPath)) {
             return showAlert("User Database Path and System Database Path cannot be the same.");
         }
 
@@ -7593,60 +7599,80 @@
             dbName, dbPath, dbStoresFoldersRaw: finalDbStoresFoldersRaw, regPath, sysStoresFoldersRaw
         });
 
-        // Construct Payloads
-        const sysConfigPayload = {
+        // --- Helper to Convert Frontend EC Config to SOP Backend Map ---
+        const convertToSopEcMap = (arr) => {
+             const m = {};
+             if (!arr || arr.length === 0) return null;
+             arr.forEach(item => {
+                 let key = item.key || "default";
+                 if (key === '""') key = "";
+                 m[key] = {
+                     data_shards_count: item.data_chunks,
+                     parity_shards_count: item.parity_chunks,
+                     base_folder_paths_across_drives: item.base_paths
+                 };
+             });
+             return m;
+        };
+
+        // --- Construct System Options (sop.DatabaseOptions) ---
+        const systemOptions = {
+            type: sysType === 'clustered' ? 1 : 0, // sop.DatabaseType Enum (0=Standalone, 1=Clustered)
+            cache_type: sysType === 'clustered' ? 1 : 0,
+            registry_hash_mod: sysHashMod ? parseInt(sysHashMod) : 0,
+            stores_folders: sysStoresFoldersRaw ? sysStoresFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null
+        };
+        if (sysType === 'clustered') {
+             systemOptions.redis_config = { address: sysConn || "localhost:6379" };
+        }
+        const sysEcMap = convertToSopEcMap(sysErasureConfigs);
+        if (sysEcMap) {
+            systemOptions.erasure_config = sysEcMap;
+        }
+
+        // --- Construct User Options (sop.DatabaseOptions) ---
+        const userOptions = {
+            type: dbType === 'clustered' ? 1 : 0,
+            cache_type: dbType === 'clustered' ? 1 : 0,
+            registry_hash_mod: finalDbHashMod ? parseInt(finalDbHashMod) : 0,
+            stores_folders: finalDbStoresFoldersRaw ? finalDbStoresFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null
+        };
+        if (dbType === 'clustered') {
+             userOptions.redis_config = { address: dbConn || "localhost:6379" };
+        }
+        const userEcMap = convertToSopEcMap(finalDbErasureConfigs);
+        if (userEcMap) {
+            userOptions.erasure_config = userEcMap;
+        }
+
+        const userDBRequest = {
+            name: dbName,
+            path: dbPath,
+            use_shared_db: manualDBToggle ? manualDBToggle.checked : false,
+            populate_demo: populateDemo,
+            options: userOptions
+        };
+
+        // --- Construct Main Payload ---
+        const finalPayload = {
             registry_path: regPath,
             port: port,
             llm_api_key: llmApiKey,
-            type: sysType,
-            conn_url: sysConn,
-            registry_hash_mod: sysHashMod ? parseInt(sysHashMod) : 0,
-            stores_folders: sysStoresFoldersRaw ? sysStoresFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
-            use_shared_brain: manualEntToggle ? manualEntToggle.checked : false
-        };
-        
-        if (sysErasureConfigs.length > 0) {
-            sysConfigPayload.erasure_configs = sysErasureConfigs;
-        }
-
-        const dbConfigPayload = {
-            name: dbName,
-            path: dbPath,
-            type: dbType,
-            connection: dbConn,
-            populate_demo: populateDemo,
-            stores_folders: finalDbStoresFoldersRaw ? finalDbStoresFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null,
-            registry_hash_mod: finalDbHashMod ? parseInt(finalDbHashMod) : 0,
-            use_shared_db: manualDBToggle ? manualDBToggle.checked : false
+            use_shared_brain: manualEntToggle ? manualEntToggle.checked : false,
+            system_options: systemOptions,
+            databases: [ userDBRequest ]
         };
 
-        if (finalDbErasureConfigs) {
-            dbConfigPayload.erasure_configs = finalDbErasureConfigs;
-        }
-
-        // 1. Save Config (Initializes System DB)
+        // 1. Single Atomic Save & Setup Call
         fetch('/api/config/save', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(sysConfigPayload)
+            body: JSON.stringify(finalPayload)
         })
         .then(async res => {
             if (!res.ok) {
                 const text = await res.text();
                 throw new Error("Failed to save config / init System DB: " + text);
-            }
-            
-            // 2. Init User Database
-            return fetch('/api/db/init', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(dbConfigPayload)
-            });
-        })
-        .then(async res => {
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error("Failed to initialize user database: " + text);
             }
             
             // 3. Reload/Redirect
