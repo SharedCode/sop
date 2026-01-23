@@ -1114,7 +1114,6 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 	// The frontend sends: indexSpec: JSON.stringify(...) -> which is a string.
 	// So req.IndexSpec should be *string.
 
-
 	if req.StoreName == "" {
 		http.Error(w, "Store name is required", http.StatusBadRequest)
 		return
