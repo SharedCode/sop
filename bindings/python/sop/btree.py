@@ -83,6 +83,16 @@ class IndexSpecification:
 
 
 @dataclass
+class Relation:
+    """
+    Describes a foreign key relationship to another store.
+    """
+    source_fields: List[str]
+    target_store: str
+    target_fields: List[str]
+
+
+@dataclass
 class BtreeOptions:
     """
     Configuration options for creating or opening a B-Tree store.
@@ -100,6 +110,7 @@ class BtreeOptions:
     cache_config: CacheConfig = None
     is_primitive_key: bool = True
     leaf_load_balancing: bool = False
+    relations: List[Relation] = None
 
     def set_index_specification(self, spec: IndexSpecification):
         if spec:

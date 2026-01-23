@@ -149,28 +149,55 @@ Let's list all products.
             }
 ```
 
-## Step 7: Link Stores (Relations for AI)
+## Step 7: Modeling Relations
 
-In SOP, we don't use typical RDBMS foreign keys. We use **Link Stores** (tables with Composite Keys) to map relationships efficiently. This "flat" topology is critical for building schemas that AI Agents can easily navigate using simple tool calls.
+In SOP, **Relations Metadata** is the primary way to link stores. Link Stores are reserved for complex Many-to-Many scenarios.
 
-**Example**: Mapping Suppliers to Products (Many-to-Many).
+### 1. Logical Relations (Metadata)
+Register relations in `BTreeOptions`. This tells the system how to link records (e.g., Product's `supplier_id` -> Supplier's `id`).
 
 ```java
             try (Transaction trans = db.beginTransaction(ctx)) {
-                // Link Store: Key="SupplierID:ProductID", Value=Placeholder (or metadata like "active")
-                // We create a separate B-Tree just for this relationship.
-                BTree<String, String> links = BTree.create(ctx, "supplier_products", trans, null, String.class, String.class);
+                // Products Store with Metadata pointing to Suppliers
+                BTreeOptions opts = new BTreeOptions();
+                opts.relations = Arrays.asList(
+                    new Relation(
+                        Arrays.asList("supplier_id"), // Source field in Products
+                        "suppliers",                  // Target Store
+                        Arrays.asList("id")           // Target field in Suppliers
+                    )
+                );
                 
-                // Add Links: Supplier 's1' supplies 'p1' and 'p2'
-                // The key format "ParentID:ChildID" allows efficient prefix scanning.
-                links.add("s1:p1", "active");
-                links.add("s1:p2", "active");
-                
+                // Create the store with options
+                BTree<String, Product> products = BTree.create(ctx, "products", trans, opts, String.class, Product.class);
                 trans.commit();
             }
 ```
 
-This structure allows you (or an AI agent) to find all products for `s1` by simply scanning the `supplier_products` store for keys starting with `"s1:"`.
+**Benefit:**
+This metadata allows the system to auto-resolve lookups for 1:1, 1:N, and N:1 relationships automatically.
+
+### 2. Link Stores (Many-to-Many)
+For **Many-to-Many** relationships (e.g., Doctors <-> Patients, where valid links are many on both sides), use a **Link Store**.
+
+*   **Store: Doctors**: Key=`DoctorID`
+*   **Store: Patients**: Key=`PatientID`
+*   **Store: Doctor_Patients**: Key=`DoctorID:PatientID`
+
+```java
+            try (Transaction trans = db.beginTransaction(ctx)) {
+                // Link Store: Key="DoctorID:PatientID"
+                BTree<String, String> links = BTree.create(ctx, "doctor_patients", trans, null, String.class, String.class);
+                
+                // Add Link
+                links.add("d1:p100", "");
+                trans.commit();
+            }
+```
+
+**Summary:**
+*   Use **Metadata** for standard Foreign Key relationships.
+*   Use **Link Stores** only for Many-to-Many mapping tables.
 
 ## Step 8: Scaling to Clustered Mode
 

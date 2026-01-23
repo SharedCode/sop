@@ -462,32 +462,44 @@ for t in threads:
     t.join()
 ```
 
-## 5. Modeling Relations (The "Link Store" Pattern)
+## 5. Modeling Relations
 
-SOP is a transaction Key-Value store. To model relations (like "User has many Orders") efficiently, specifically for AI Agents, use the **Link Store** pattern.
+SOP uses **Relations Metadata** to define connections between stores. This metadata is sufficient for the Join Tool and AI Agents to navigate most relationships (One-to-One, One-to-Many, Many-to-One).
 
-Instead of embedding a list of 10,000 Order IDs inside a User object (which is slow and confusing for LLMs), create a separate B-Tree just for the links.
-
-### Schema Strategy
-1.  **Store: Users**: Key=`UserID`, Value=`Profile`
-2.  **Store: Orders**: Key=`OrderID`, Value=`OrderDetails`
-3.  **Store: User_Orders**: Key=`UserID:OrderID` (Composite String), Value=`Empty`
-
-### AI Benefit
-This structure allows an LLM to "think" in steps:
-1.  "I need to find orders for User X."
-2.  "I will query the `User_Orders` table for keys starting with `X:`"
-3.  "I will then fetch the `Orders`."
-
-This is cleaner than asking an LLM to write a complex SQL JOIN or parse a massive JSON array.
+### 1. Logical Relations (Metadata)
+You should always register relations in `BtreeOptions` when a store contains foreign keys. 
 
 ```python
-# Create the Link Store
+from sop.btree import BtreeOptions, Relation
+
+# Register: 'orders.user_id' -> 'users.id'
+opts = BtreeOptions(
+    relations=[
+        Relation(
+            source_fields=["user_id"],
+            target_store="users",
+            target_fields=["id"]
+        )
+    ]
+)
+order_store = db.new_btree(ctx, "orders", t, options=opts)
+```
+
+**Benefit:**
+The metadata allows the system to resolve lookups automatically using the indexed fields on the records.
+
+### 2. Link Stores (Many-to-Many)
+For **Many-to-Many** relationships (e.g., Students <-> Classes), you need a dedicated **Link Store** because neither entity holds a unique pointer to the other.
+
+*   **Store: Students**: Key=`StudentID`
+*   **Store: Classes**: Key=`ClassID`
+*   **Store: Student_Classes**: Key=`StudentID:ClassID`
+
+```python
+# Create the Link Store for M:N mapping
 with db.begin_transaction(ctx) as t:
-    link_store = db.new_btree(ctx, "user_orders", t)
+    link_store = db.new_btree(ctx, "student_classes", t)
     
-    # Add a link (User 123 -> Order ABC)
-    # Using a separator like ":" creates a natural hierarchy
-    link_store.add(ctx, sop.Item(key="user_123:order_abc", value=""))
-    link_store.add(ctx, sop.Item(key="user_123:order_xyz", value=""))
+    # Add a link (Student 123 -> Class ABC)
+    link_store.add(ctx, sop.Item(key="s123:cABC", value=""))
 ```

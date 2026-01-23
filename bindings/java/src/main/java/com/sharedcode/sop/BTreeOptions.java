@@ -1,5 +1,6 @@
 package com.sharedcode.sop;
 
+import java.util.List;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,6 +23,9 @@ public class BTreeOptions {
 
     @JsonProperty("index_specification")
     public String indexSpecification = "";
+
+    @JsonProperty("relations")
+    public List<Relation> relations;
 
     @JsonIgnore
     public void setIndexSpecification(IndexSpecification spec) {

@@ -91,6 +91,12 @@ public class BtreeOptions
         set => IndexSpecification = value != null ? JsonSerializer.Deserialize<IndexSpecification>(value) : null;
     }
 
+    /// <summary>
+    /// Metadata describing foreign key relationships.
+    /// </summary>
+    [JsonPropertyName("relations")]
+    public List<Relation> Relations { get; set; }
+
     [JsonPropertyName("transaction_id")]
     public string TransactionId { get; set; }
     

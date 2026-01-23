@@ -122,6 +122,7 @@ class Program
             Console.WriteLine("14. Large Complex Data Generation (for Data Management Console)");
             Console.WriteLine("15. Clustered mode with Erasure Config Demo");
             Console.WriteLine("16. Full Replication Config Demo");
+            Console.WriteLine("17. Relational Intelligence (Metadata Relations)");
             Console.WriteLine("0. Exit");
             Console.WriteLine("=================");
 
@@ -190,6 +191,9 @@ class Program
                     break;
                 case "16":
                     FullReplicationConfigDemo.Run();
+                    break;
+                case "17":
+                    RelationsDemo.Run();
                     break;
                 default:
                     Console.WriteLine("Invalid selection.");
