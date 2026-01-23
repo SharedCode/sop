@@ -34,6 +34,8 @@ The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data 
 *   **RAG Agents**: Build Retrieval-Augmented Generation applications with ease.
 *   **Scripts**: A functional AI runtime for drafting, refining, and executing complex workflows (Hybrid Execution Model).
 
+> **Important**: To use the AI Copilot features (e.g., in the Data Manager), you must configure your LLM API Key (e.g., Google Gemini). Set the `SOP_LLM_API_KEY` environment variable or add `"llm_api_key"` to your `config.json`. See the [Main README](../../README.md#ai-copilot-configuration) for details.
+
 See [ai/README.md](../../ai/README.md) for a deep dive into the AI capabilities.
 
 ## Documentation

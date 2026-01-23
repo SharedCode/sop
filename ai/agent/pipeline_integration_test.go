@@ -19,9 +19,9 @@ import (
 
 func TestServiceIntegration_LastTool(t *testing.T) {
 	// 1. Setup LLM
-	apiKey := os.Getenv("GEMINI_API_KEY")
+	apiKey := os.Getenv("LLM_API_KEY")
 	if apiKey == "" {
-		t.Skip("GEMINI_API_KEY not set")
+		t.Skip("LLM_API_KEY not set")
 	}
 
 	// Use a known working model

@@ -75,7 +75,33 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 		provider := os.Getenv("AI_PROVIDER")
 		geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
 		openAIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+		llmKey := strings.TrimSpace(os.Getenv("LLM_API_KEY"))
 
+		// Support unified LLM_API_KEY
+		if llmKey != "" {
+			// Auto-Correction: If user chose Gemini but provided an OpenAI key (sk-...), switch to ChatGPT
+			if provider == "gemini" && strings.HasPrefix(llmKey, "sk-") {
+				log.Warn("Configuration mismatch: Provider is 'gemini' but LLM_API_KEY is an OpenAI key (sk-...). Switching to 'chatgpt'.")
+				provider = "chatgpt"
+			}
+
+			// If provider is explicitly set, use LLM_API_KEY for that provider
+			if provider == "chatgpt" && openAIKey == "" {
+				openAIKey = llmKey
+			} else if provider == "gemini" && geminiKey == "" {
+				geminiKey = llmKey
+			} else if provider == "" {
+				// Ambiguous case: Guess provider based on key format or default
+				if strings.HasPrefix(llmKey, "sk-") {
+					provider = "chatgpt"
+					openAIKey = llmKey
+				} else {
+					// Fallback to Gemini (Google API keys usually start with AIza...)
+					provider = "gemini"
+					geminiKey = llmKey
+				}
+			}
+		}
 		if provider == "" {
 			if openAIKey != "" {
 				provider = "chatgpt"

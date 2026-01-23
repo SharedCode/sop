@@ -98,6 +98,15 @@ SOP allows you to interact with your data using the **SOP Data Manager**—a web
 *   **Visual Management**: Inspect B-Trees, manage Stores (Key-Value, Vector, Model), and explore the System DB.
 *   **Environment Manager**: Switch between environments (Dev, QA, Prod) instantly. Configurations (including the list of databases and connection details) are stored in portable **JSON files**.
 *   **Shared Intelligence**: Manage permissions and connections to share databases across the network, allowing different teams to collaborate on the same "System Knowledge" base.
+
+### Designing for AI: The "Link Store" Pattern
+SOP is not just a storage engine; it is designed to be the "Long Term Memory" for AI Agents.
+When building databases for LLMs, avoid complex nested objects. Instead, embrace the **Link Store Pattern** (Many-to-Many Tables).
+*   **Store A**: `Users`
+*   **Store B**: `Orders`
+*   **Store C**: `User_Orders` (Links UserID to OrderID)
+
+This structure allows AI Agents to navigate data using simple "Chain of Thought" reasoning steps (e.g., "First find the User ID, then look up their Orders in the Link Store") rather than struggling to generate complex SQL Joins. The SOP Data Manager provides first-class support for visualizing and debugging these relationships.
 *   **SQL Capabilities**: Perform familiar SQL operations directly on your NoSQL B-Trees:
     *   **SELECT / SCAN**: Filter data using rich criteria (`$gt`, `$regex`, `$in`).
     *   **JOIN**: Perform high-performance connections between stores (e.g., `Join 'Users' and 'Orders'`).

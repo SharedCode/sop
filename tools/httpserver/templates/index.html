@@ -842,7 +842,7 @@
         <!-- Step 2: System Configuration (Formerly Step 1) -->
         <div class="wizard-step" id="step-2">
             <h3>2. System Configuration</h3>
-            <p>Configure the System Database used for internal metadata, scripts, and eventual RBAC.</p>
+            <p style="font-size: 14px;">Configure the System Database used for internal metadata, scripts, and eventual RBAC.</p>
             
             <!-- Row 1: Mode and Redis URL -->
             <div style="display: flex; gap: 20px; margin-bottom: 10px; align-items: center;">
@@ -933,58 +933,109 @@
         <!-- Step 3: Review -->
         <div class="wizard-step" id="step-3">
             <h3>3. Ready to Go!</h3>
-            <p>We are ready to initialize your environment.</p>
+            <p style="font-size: 14px;">We are ready to initialize your environment.</p>
 
            <div style="background: var(--pre-bg); padding: 10px; border-radius: 4px; font-size: 0.85em; margin-bottom: 15px; border: 1px solid var(--border-color);">
                 <strong>Environment Check:</strong>
-                <ul style="margin: 5px 0 5px 20px; padding: 0;">
-                    <li>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px 20px; margin: 10px 0;">
+                    <!-- Row 1 -->
+                    <div>
                         <code>SOP_ROOT_PASSWORD</code>: 
                         {{if .Env.SOP_ROOT_PASSWORD}}
                             <span style="color: var(--success-color); font-weight: bold;">Detected</span>
                         {{else}}
                             <span style="color: var(--text-muted);">Not Set</span>
                         {{end}}
-                    </li>
-                    <li>
-                        <code>GEMINI_API_KEY</code>: 
-                        {{if .Env.GEMINI_API_KEY}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span> <span style="color: var(--text-muted);">(Will be used if input below is empty)</span>
+                    </div>
+                    <div>
+                        <code>LLM_API_KEY</code>: 
+                        {{if .Env.LLM_API_KEY}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
                         {{else}}
                             <span style="color: var(--text-muted);">Not Set</span>
                         {{end}}
-                    </li>
-                    <li>
+                    </div>
+                    
+                    <!-- Row 2 -->
+                    <div>
+                        <code>GEMINI_API_KEY</code>: 
+                        {{if .Env.GEMINI_API_KEY}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
+                        {{else}}
+                            <span style="color: var(--text-muted);">Not Set</span>
+                        {{end}}
+                    </div>
+                    <div>
+                        <code>OPENAI_API_KEY</code>: 
+                        {{if .Env.OPENAI_API_KEY}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
+                        {{else}}
+                            <span style="color: var(--text-muted);">Not Set</span>
+                        {{end}}
+                    </div>
+                </div>
+
+                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border-color);">
+                    <div>
                         <code>SYSTEM_DB_PATH</code>: 
                         {{if .Env.SYSTEM_DB_PATH}}
                             <span style="color: var(--success-color); font-weight: bold;">Detected</span>
                         {{else}}
                             <span style="color: var(--text-muted);">Not Set</span>
                         {{end}}
-                        <div style="font-size: 0.85em; color: var(--text-muted); margin-top: 2px;">
-                            Defines the file path for the System Database (e.g., <code>/var/lib/sop/system.db</code>). When configured, it enables the "Enterprise Brains" visual cue in the interface.
-                        </div>
-                    </li>
-                </ul>
-                <div style="margin-top: 5px; color: var(--text-muted); font-size: 0.9em;">
-                    Set these in your OS environment (e.g. <code>.bash_profile</code>) to configure automatically.
+                    </div>
+                    <div style="font-size: 0.85em; color: var(--text-muted); margin-top: 2px;">
+                        Defines the file path for the System Database (e.g., <code>/var/lib/sop/system.db</code>). When configured, it enables the "Enterprise Brains" visual cue in the interface.
+                    </div>
                 </div>
+                
+                <!-- Advanced LLM Documentation -->
+                <div style="margin-top: 15px; margin-bottom: 0px; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden;">
+                    <div style="background: var(--pre-bg); padding: 8px 12px; font-weight: bold; font-size: 12px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="document.getElementById('llm-docs-content').style.display = document.getElementById('llm-docs-content').style.display === 'none' ? 'block' : 'none'">
+                        <span>Advanced: Manage LLM Providers via Bash/Env</span>
+                        <span>▼</span>
+                    </div>
+                    <div id="llm-docs-content" style="display: none; padding: 12px; font-size: 12px; line-height: 1.5; background: var(--bg-color);">
+                        <p style="margin-top: 0;">SOP supports multiple LLM providers. You can switch between them by setting environment variables in your shell configuration (<code>~/.bash_profile</code>, <code>~/.zshrc</code>).</p>
+                        
+                        <div style="background: var(--sidebar-bg); padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; font-family: monospace; white-space: pre-wrap; margin-bottom: 10px; color: var(--text-color);">
+# 1. Unified Key (Auto-detects based on prefix)
+export LLM_API_KEY="sk-..."    # Uses OpenAI
+export LLM_API_KEY="AIza..."   # Uses Gemini
+
+# 2. Specific Provider Keys
+export GEMINI_API_KEY="AIza..."
+export OPENAI_API_KEY="sk-..."
+
+# 3. Explicit Model Selection (Optional)
+export GEMINI_MODEL="gemini-1.5-pro"
+export OPENAI_MODEL="gpt-4-turbo"
+</div>
+                        <p style="margin-bottom: 0; color: var(--text-muted);">Restart the server after changing these variables.</p>
+                    </div>
+                </div>
+
             </div>
 
             <!-- LLM API Key -->
             <div style="margin-bottom: 15px;">
                 <label style="display: block; margin-bottom: 5px; font-weight: bold;">LLM API Key (Optional)</label>
                 <div style="display: flex; gap: 10px;">
-                     <input type="password" id="setup-llm-api-key" placeholder="Enter Gemini API Key (leaves empty to use trial key)" style="flex: 1;">
-                     <a href="https://aistudio.google.com/app/apikey" target="_blank" class="secondary-btn" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; height: 38px; box-sizing: border-box;">Get Key</a>
+                     <input type="password" id="setup-llm-api-key" placeholder="Enter LLM API Key (Start with 'sk-' for OpenAI, otherwise Gemini)" style="flex: 1;">
                 </div>
-                <small style="color: var(--text-muted);">Required for AI Copilot. Leave empty to use the built-in trial key.</small>
+                <div style="margin-top: 5px; font-size: 11px;">
+                    Get Key: 
+                    <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--active-bg);">Google Gemini</a> | 
+                    <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--active-bg);">OpenAI GPT</a>
+                </div>
+                <small style="color: var(--text-muted); display: block; margin-top: 5px;">Required for AI Copilot. Leave empty if you have LLM api key set in environment.</small>
             </div>
 
             <div id="setup-summary" style="background: var(--pre-bg); padding: 15px; border-radius: 4px; font-family: monospace; margin-bottom: 15px;">
                 <!-- Summary populated by JS -->
             </div>
-            <p>Click "Finish" to create the configuration and initialize the databases.</p>
+            <p style="font-size: 14px;">Click "Finish" to create the configuration and initialize the databases.</p>
         </div>
 
         <div class="wizard-footer">

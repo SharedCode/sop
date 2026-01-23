@@ -269,8 +269,8 @@ We have a dedicated integration test harness for verifying the full RAG pipeline
 
 **How to Run**:
 ```bash
-# Ensure GEMINI_API_KEY is set
-export GEMINI_API_KEY="your_key_here"
+# Ensure LLM_API_KEY is set
+export LLM_API_KEY="your_key_here"
 
 # Run the specific test
 go test -v ./ai/agent -run TestServiceIntegration_LastTool

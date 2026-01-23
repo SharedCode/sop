@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/sharedcode/sop/ai"
 )
@@ -22,7 +23,13 @@ func init() {
 	Register("gemini", func(cfg map[string]any) (ai.Generator, error) {
 		apiKey, _ := cfg["api_key"].(string)
 		if apiKey == "" {
-			apiKey = os.Getenv("GEMINI_API_KEY")
+			apiKey = os.Getenv("LLM_API_KEY")
+			if apiKey == "" {
+				apiKey = os.Getenv("GEMINI_API_KEY")
+			}
+		}
+		if strings.HasPrefix(apiKey, "sk-") {
+			return nil, fmt.Errorf("detected OpenAI API key (starts with 'sk-') but generator type is 'gemini'. Please check your configuration")
 		}
 		model, _ := cfg["model"].(string)
 		if model == "" {
@@ -67,7 +74,7 @@ type geminiResponse struct {
 func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	if g.apiKey == "" || g.apiKey == "YOUR_API_KEY" {
 		return ai.GenOutput{
-			Text: fmt.Sprintf("[Gemini Stub] Missing API Key. Please set GEMINI_API_KEY environment variable. Would send: %q", prompt),
+			Text: fmt.Sprintf("[Gemini Stub] Missing API Key. Please set LLM_API_KEY or GEMINI_API_KEY environment variable. Would send: %q", prompt),
 		}, nil
 	}
 

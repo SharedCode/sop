@@ -22,7 +22,10 @@ func init() {
 	Register("chatgpt", func(cfg map[string]any) (ai.Generator, error) {
 		apiKey, _ := cfg["api_key"].(string)
 		if apiKey == "" {
-			apiKey = os.Getenv("OPENAI_API_KEY")
+			apiKey = os.Getenv("LLM_API_KEY")
+			if apiKey == "" {
+				apiKey = os.Getenv("OPENAI_API_KEY")
+			}
 		}
 		model, _ := cfg["model"].(string)
 		if model == "" {
@@ -69,7 +72,7 @@ type openAIResponse struct {
 // Generate sends a prompt to the ChatGPT API and returns the generated text.
 func (g *chatgpt) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	if g.apiKey == "" {
-		return ai.GenOutput{}, fmt.Errorf("missing OpenAI API Key. Please set OPENAI_API_KEY environment variable")
+		return ai.GenOutput{}, fmt.Errorf("missing OpenAI API Key. Please set LLM_API_KEY or OPENAI_API_KEY environment variable")
 	}
 
 	url := "https://api.openai.com/v1/chat/completions"

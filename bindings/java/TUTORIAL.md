@@ -149,7 +149,30 @@ Let's list all products.
             }
 ```
 
-## Step 7: Scaling to Clustered Mode
+## Step 7: Link Stores (Relations for AI)
+
+In SOP, we don't use typical RDBMS foreign keys. We use **Link Stores** (tables with Composite Keys) to map relationships efficiently. This "flat" topology is critical for building schemas that AI Agents can easily navigate using simple tool calls.
+
+**Example**: Mapping Suppliers to Products (Many-to-Many).
+
+```java
+            try (Transaction trans = db.beginTransaction(ctx)) {
+                // Link Store: Key="SupplierID:ProductID", Value=Placeholder (or metadata like "active")
+                // We create a separate B-Tree just for this relationship.
+                BTree<String, String> links = BTree.create(ctx, "supplier_products", trans, null, String.class, String.class);
+                
+                // Add Links: Supplier 's1' supplies 'p1' and 'p2'
+                // The key format "ParentID:ChildID" allows efficient prefix scanning.
+                links.add("s1:p1", "active");
+                links.add("s1:p2", "active");
+                
+                trans.commit();
+            }
+```
+
+This structure allows you (or an AI agent) to find all products for `s1` by simply scanning the `supplier_products` store for keys starting with `"s1:"`.
+
+## Step 8: Scaling to Clustered Mode
 
 To switch to **Clustered Mode** (multiple app instances sharing data via Redis):
 

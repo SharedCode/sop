@@ -461,3 +461,33 @@ for i in range(5):
 for t in threads:
     t.join()
 ```
+
+## 5. Modeling Relations (The "Link Store" Pattern)
+
+SOP is a transaction Key-Value store. To model relations (like "User has many Orders") efficiently, specifically for AI Agents, use the **Link Store** pattern.
+
+Instead of embedding a list of 10,000 Order IDs inside a User object (which is slow and confusing for LLMs), create a separate B-Tree just for the links.
+
+### Schema Strategy
+1.  **Store: Users**: Key=`UserID`, Value=`Profile`
+2.  **Store: Orders**: Key=`OrderID`, Value=`OrderDetails`
+3.  **Store: User_Orders**: Key=`UserID:OrderID` (Composite String), Value=`Empty`
+
+### AI Benefit
+This structure allows an LLM to "think" in steps:
+1.  "I need to find orders for User X."
+2.  "I will query the `User_Orders` table for keys starting with `X:`"
+3.  "I will then fetch the `Orders`."
+
+This is cleaner than asking an LLM to write a complex SQL JOIN or parse a massive JSON array.
+
+```python
+# Create the Link Store
+with db.begin_transaction(ctx) as t:
+    link_store = db.new_btree(ctx, "user_orders", t)
+    
+    # Add a link (User 123 -> Order ABC)
+    # Using a separator like ":" creates a natural hierarchy
+    link_store.add(ctx, sop.Item(key="user_123:order_abc", value=""))
+    link_store.add(ctx, sop.Item(key="user_123:order_xyz", value=""))
+```

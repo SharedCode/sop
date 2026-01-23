@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageId>Sop4CS</PackageId>
-    <Version>2.2.4</Version>
+    <Version>2.2.5</Version>
     <Authors>Gerardo Recinto</Authors>
     <Description>Scalable Objects Persistence (SOP) - High-performance transactional storage engine.</Description>
     <PackageTags>database;btree;vector;storage;transactional</PackageTags>

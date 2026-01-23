@@ -230,7 +230,104 @@ func main() {
 }
 ```
 
-## 5. Managing Stores (Create, Open, Delete)
+## 5. Database & Store Creation: Best Practices
+
+While SOP automatically creates database files on first use, explicitly managing your schema setup is recommended for production apps.
+
+### Understanding the Hierarchy
+1.  **Database**: A logical container (Folder on disk or Redis Namespace).
+2.  **Store (B-Tree)**: A collection of Key-Value pairs (Table).
+3.  **Item**: A single record.
+
+### Creating a Database
+SOP follows a "lazy creation" pattern. 
+*   **Configuration**: You define `sop.DatabaseOptions` to point to a path (e.g., `/var/lib/sop/data`).
+*   **Instantiation**: `database.NewDatabase(opts)` prepares the Go object.
+*   **Physical Creation**: The data folders are only created when you open a Transaction and create your first Store.
+
+### Designing Stores for Clarity
+When creating stores, especially for AI usage, use descriptive names.
+*   **Good**: `users`, `products`, `active_orders`
+*   **Bad**: `store1`, `u_table`, `data`
+
+```go
+// Example: Explicit Store Creation with Options
+func SetupSchema(ctx context.Context, db *database.Database) error {
+    t, _ := db.BeginTransaction(ctx, sop.ForWriting)
+
+    // 1. Users Store: Simple String Key
+    database.NewBtree[string, User](ctx, db, "users", t, nil)
+
+    // 2. Orders Store: UUID Key
+    database.NewBtree[uuid.UUID, Order](ctx, db, "orders", t, nil)
+    
+    // 3. Products Store: Custom Configuration 
+    // (e.g., Small slot length for very large items)
+    opts := sop.StoreOptions{
+        SlotLength: 500, 
+    }
+    database.NewBtree[string, Product](ctx, db, "products", t, nil, opts)
+
+    return t.Commit(ctx)
+}
+```
+
+## 6. Modeling Relations for AI Agents (The Link Store Pattern)
+
+SOP is a Key-Value store, not a Relational DB. However, relating data is critical. The "Link Store" pattern is the standard way to model relationships (One-to-Many, Many-to-Many) in a way that is **highly performant** and **AI-Understandable**.
+
+### The Problem with Embedding
+Putting a list of `OrderIDs` inside a `User` struct works for small apps but breaks at specific scale (e.g., a power user with 50k orders). It also confuses LLMs ("Which table do I join?").
+
+### The Solution: Link Stores
+Create a dedicated B-Tree to hold the relationship. The key is usually a Composite Key.
+
+**Schema Example: E-Commerce**
+1.  `users` Store: (UserID -> Profile)
+2.  `orders` Store: (OrderID -> OrderDetails)
+3.  `user_orders` **Link Store**: (UserID + OrderID -> Empty/Metadata)
+
+#### Benefits for LLMs
+When an LLM (like GPT-4 or Claude 3) sees this schema, it intuitively understands how to generate tool calls:
+*   "Show me John's orders" -> `GenericList("user_orders", prefix="JohnUUID")`
+*   "Get details for order 123" -> `GenericGet("orders", "123")`
+
+This is much easier for an agent than generating a complex SQL `JOIN` or filtering a massive `orders` table by a secondary index.
+
+### Go Implementation
+
+```go
+// 1. Define the Link Key (Composite)
+// Ordering matters! Put the "Parent" ID first to allow prefix scanning.
+type UserOrderLink struct {
+    UserID    string    `json:"user_id"`
+    OrderID   string    `json:"order_id"`
+    DateCreated int64   `json:"date_created"` // Optional: Add sortable fields to key
+}
+
+// 2. Create the Link Store
+// Key: UserOrderLink, Value: string (or empty struct)
+linkStore, _ := database.NewBtree[UserOrderLink, string](ctx, db, "user_orders", trans, nil)
+
+// 3. Add a Relationship
+link := UserOrderLink{UserID: "u1", OrderID: "o1", DateCreated: time.Now().Unix()}
+linkStore.Add(ctx, link, "")
+
+// 4. Query Relations (Find all orders for User u1)
+// We scan the B-Tree for keys starting with "u1"
+// Note: SOP's Find functions support generic comparison logic.
+```
+
+### Why "Link Stores" are Tool-Friendly
+If you expose a generic `ListKeys(storeName, filter)` tool to your AI Agent:
+1.  **Agent Action**: `ListKeys("user_orders", {user_id: "u1"})`
+2.  **SOP Action**: Efficient B-Tree Range Scan.
+3.  **Result**: List of Order IDs.
+4.  **Agent Action**: `BatchGet("orders", [id1, id2...])`
+
+This "Two-Step Lookup" is the standard pattern for high-performance NoSQL systems and aligns perfectly with the "Chain of Thought" reasoning of modern AI models.
+
+## 7. Managing Stores (Create, Open, Delete)
 
 SOP provides standalone functions for managing the lifecycle of B-Tree stores.
 
@@ -264,7 +361,7 @@ func ManageStores(ctx context.Context, db *database.Database) error {
 }
 ```
 
-## Connecting to Multiple Redis Clusters
+## 8. Connecting to Multiple Redis Clusters
 
 SOP supports connecting to different Redis clusters (or databases) within the same application by configuring `RedisConfig` in `DatabaseOptions`.
 
@@ -308,7 +405,7 @@ func main() {
 }
 ```
 
-## 3. Streaming Large Data (Video Library Pattern)
+## 9. Advanced Pattern: Video Streaming Library
 
 For storing large objects (BLOBs) like videos, images, or large documents, SOP recommends a **Split-Store Pattern**. This keeps your metadata store fast and lightweight while efficiently managing large binary data in a dedicated store.
 

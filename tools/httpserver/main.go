@@ -537,6 +537,8 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 		// Save Config
 		if config.ConfigFile != "" {
 			saveConfigFile()
+			// Re-initialize agents to drop the deleted database
+			initAgents()
 		}
 
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -737,6 +739,8 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 
 		if config.ConfigFile != "" {
 			saveConfigFile()
+			// Re-initialize agents to pick up the new database
+			initAgents()
 		}
 
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
