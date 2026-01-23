@@ -22,6 +22,10 @@ mkdir -p "$BIN_DIR"
 # Copy Binary
 echo "Copying binary..."
 cp "sop-httpserver" "$BIN_DIR/$EXECUTABLE_NAME"
+# Remove Quarantine Attribute on macOS to allow execution
+if [ "$(uname)" == "Darwin" ]; then
+    xattr -d com.apple.quarantine "$BIN_DIR/$EXECUTABLE_NAME" 2>/dev/null || true
+fi
 chmod +x "$BIN_DIR/$EXECUTABLE_NAME"
 
 # Create Initial Config if not exists

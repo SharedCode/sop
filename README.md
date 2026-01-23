@@ -28,6 +28,34 @@ Best for developers who want to integrate SOP directly into their application co
 | **Java** | *Maven/Gradle* | (Coming Soon) Full JVM support. |
 | **Rust** | `cargo add sop` | (Coming Soon) High-performance Rust bindings. |
 
+## AI Copilot Configuration
+
+The **SOP Data Manager** includes an embedded AI Copilot powered by LLMs (like Google Gemini). To use the Copilot features, you must configure your API key.
+
+### Setting the API Key
+
+You can provide the API Key via an environment variable or the configuration file.
+
+**Option 1: Environment Variable (Recommended)**
+Set the `SOP_LLM_API_KEY` variable in your shell or `.env` file before launching the application.
+
+```bash
+export SOP_LLM_API_KEY="your-api-key-here"
+```
+
+**Option 2: Config File**
+Add the `llm_api_key` field to your `config.json` file.
+
+```json
+{
+  "llm_api_key": "your-api-key-here",
+  "port": 8080
+}
+```
+
+*Note: The Copilot requires an active internet connection to communicate with the LLM provider.*
+
+
 ### Option 2: Standalone Binary (GitHub Releases)
 Best for infrastructure administrators, DevOps, or "Data-First" users who want to set up the management console immediately. You can download the `sop-httpserver` executable directly from our **[GitHub Releases Page](https://github.com/SharedCode/sop/releases)**.
 

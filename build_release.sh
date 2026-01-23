@@ -48,9 +48,13 @@ OUTPUT_DIR="release"
 #
 # 3. Run the server directly:
 #    ./sop-httpserver
+#    # Note for macOS users: If you see "Unknown Developer" warning,
+#    # run: xattr -d com.apple.quarantine sop-httpserver
+#    # OR Right-click > Open
 #
 # 4. (Optional) Install (to ~/.sop):
 #    ./install.sh
+#    # Note for macOS users: If denied, run: xattr -d com.apple.quarantine install.sh
 #    # specific Usage instructions printed on success, likely adding to PATH
 #
 # 5. Uninstall:
@@ -163,6 +167,7 @@ create_bundle() {
     cp README.md "$BUNDLE_DIR/"
     cp scripts/install.sh "$BUNDLE_DIR/" 2>/dev/null || true
     cp scripts/uninstall.sh "$BUNDLE_DIR/" 2>/dev/null || true
+    chmod +x "$BUNDLE_DIR/install.sh" "$BUNDLE_DIR/uninstall.sh" 2>/dev/null || true
     
     # 6. Archive
     cd "$OUTPUT_DIR"
