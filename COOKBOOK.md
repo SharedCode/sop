@@ -13,6 +13,7 @@ When using SOP in Go, you have two primary ways to interact with the database. *
     *   **Pros**: Strongly typed (e.g., `NewBtree[string, UserProfile]`), idiomatic Go code.
     *   **Interoperability**: **High**. Because SOP stores data as JSON, a Go struct can be read by Python as a dictionary (and vice versa).
     *   **Note**: If you need complex custom sorting across languages (e.g., "Sort by Age DESC, then Name ASC"), you should use `IndexSpecification`. While Direct Go can support this, `jsondb` makes it easier to configure.
+    *   **Data Manager Compliance**: To make your Go-based stores fully compatible with the Data Manager (UI) for CRUD operations, providing a `MapKeyIndexSpecification` in `StoreOptions` is the only requirement. This tells the UI which fields exist and how to sort them, allowing you to keep using idiomatic Go structs & Generics while getting full UI support.
 
 2.  **`jsondb` Package (Interop-Friendly)**:
     *   **Best for**: Scenarios requiring dynamic keys or complex `IndexSpecification` sorting rules shared across languages.
@@ -258,8 +259,14 @@ func SetupSchema(ctx context.Context, db *database.Database) error {
     // 1. Users Store: Simple String Key
     database.NewBtree[string, User](ctx, db, "users", t, nil)
 
-    // 2. Orders Store: UUID Key
-    database.NewBtree[uuid.UUID, Order](ctx, db, "orders", t, nil)
+    // 2. Orders Store: UUID Key + Relation Metadata
+    // We explicitly tell SOP that 'user_id' in this store points to 'id' in 'users'.
+    orderOpts := sop.StoreOptions{
+        Relations: []sop.Relation{
+            {SourceFields: []string{"user_id"}, TargetStore: "users", TargetFields: []string{"id"}},
+        },
+    }
+    database.NewBtree[uuid.UUID, Order](ctx, db, "orders", t, nil, orderOpts)
     
     // 3. Products Store: Custom Configuration 
     // (e.g., Small slot length for very large items)
@@ -272,60 +279,37 @@ func SetupSchema(ctx context.Context, db *database.Database) error {
 }
 ```
 
-## 6. Modeling Relations for AI Agents (The Link Store Pattern)
+## 6. Modeling Relations
 
-SOP is a Key-Value store, not a Relational DB. However, relating data is critical. The "Link Store" pattern is the standard way to model relationships (One-to-Many, Many-to-Many) in a way that is **highly performant** and **AI-Understandable**.
+SOP uses **Relations Metadata** to define connections between stores. This metadata is sufficient for the Join Tool and AI Agents to navigate most relationships (One-to-One, One-to-Many, Many-to-One).
 
-### The Problem with Embedding
-Putting a list of `OrderIDs` inside a `User` struct works for small apps but breaks at specific scale (e.g., a power user with 50k orders). It also confuses LLMs ("Which table do I join?").
+### 1. Relations (Metadata)
+Use `StoreOptions.Relations` to register Foreign Keys. This allows the system to resolve lookups automatically using the indexed fields.
 
-### The Solution: Link Stores
-Create a dedicated B-Tree to hold the relationship. The key is usually a Composite Key.
+**Use Case:**
+*   **1** (User) <-> **Many** (Orders): `Order` has `UserID`. The system uses this field to link the records.
+*   **Many** (Orders) <-> **1** (User): `Order` has `UserID`. Lookup is direct.
 
-**Schema Example: E-Commerce**
-1.  `users` Store: (UserID -> Profile)
-2.  `orders` Store: (OrderID -> OrderDetails)
-3.  `user_orders` **Link Store**: (UserID + OrderID -> Empty/Metadata)
+*See Section 5 for the code example.*
 
-#### Benefits for LLMs
-When an LLM (like GPT-4 or Claude 3) sees this schema, it intuitively understands how to generate tool calls:
-*   "Show me John's orders" -> `GenericList("user_orders", prefix="JohnUUID")`
-*   "Get details for order 123" -> `GenericGet("orders", "123")`
+### 2. Link Stores (Many-to-Many)
+For **Many-to-Many** relationships (e.g., Students <-> Classes, where one Student has many Classes and one Class has many Students), you need a dedicated **Link Store**.
 
-This is much easier for an agent than generating a complex SQL `JOIN` or filtering a massive `orders` table by a secondary index.
+Since neither entity holds the foreign key of the other exclusively, a separate store (e.g., `student_classes`) is required to bridge them.
 
-### Go Implementation
+**How it works:**
+1.  **Main Stores**: `students`, `classes`
+2.  **Link Store**: `student_classes` (Key: `StudentID:ClassID` or `ClassID:StudentID`)
 
-```go
-// 1. Define the Link Key (Composite)
-// Ordering matters! Put the "Parent" ID first to allow prefix scanning.
-type UserOrderLink struct {
-    UserID    string    `json:"user_id"`
-    OrderID   string    `json:"order_id"`
-    DateCreated int64   `json:"date_created"` // Optional: Add sortable fields to key
-}
+### Recommendations
+1.  **Always define Relations Metadata**: It costs nothing and makes your app "AI-Ready".
+2.  **Use Link Stores for M:N**: Only create explicit link stores when modeling complex Many-to-Many graphs.
 
-// 2. Create the Link Store
-// Key: UserOrderLink, Value: string (or empty struct)
-linkStore, _ := database.NewBtree[UserOrderLink, string](ctx, db, "user_orders", trans, nil)
-
-// 3. Add a Relationship
-link := UserOrderLink{UserID: "u1", OrderID: "o1", DateCreated: time.Now().Unix()}
-linkStore.Add(ctx, link, "")
-
-// 4. Query Relations (Find all orders for User u1)
-// We scan the B-Tree for keys starting with "u1"
-// Note: SOP's Find functions support generic comparison logic.
-```
-
-### Why "Link Stores" are Tool-Friendly
-If you expose a generic `ListKeys(storeName, filter)` tool to your AI Agent:
-1.  **Agent Action**: `ListKeys("user_orders", {user_id: "u1"})`
-2.  **SOP Action**: Efficient B-Tree Range Scan.
-3.  **Result**: List of Order IDs.
-4.  **Agent Action**: `BatchGet("orders", [id1, id2...])`
-
-This "Two-Step Lookup" is the standard pattern for high-performance NoSQL systems and aligns perfectly with the "Chain of Thought" reasoning of modern AI models.
+### Code Examples (Metadata)
+*   **Go (Native)**: [examples/relations_demo/main.go](examples/relations_demo/main.go)
+*   **Python**: [bindings/python/sop/examples/relations_demo.py](bindings/python/sop/examples/relations_demo.py)
+*   **Java**: [bindings/java/src/main/java/com/sharedcode/sop/examples/BTreeRelations.java](bindings/java/src/main/java/com/sharedcode/sop/examples/BTreeRelations.java)
+*   **C#**: `Sop.CLI` > Relations Demo
 
 ## 7. Managing Stores (Create, Open, Delete)
 

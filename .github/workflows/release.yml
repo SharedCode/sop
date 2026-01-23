@@ -21,11 +21,10 @@ jobs:
         with:
           go-version: '1.24'
 
-      - name: Install Cross-Compilation Tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-mingw-w64 zip
-          sudo snap install zig --classic --beta
+      # NOTE: We do NOT install cross-compilation tools (Zig, MinGW) on the host runner anymore.
+      # The build_release.sh script detects Docker (available on GitHub Actions) and runs the build
+      # inside a container (defined in bindings/Dockerfile.build), which has all these tools pre-installed.
+      # This ensures the release artifacts are built in a consistent, "clean room" environment.
 
       - name: Build Bundles (via build_release.sh)
         run: |

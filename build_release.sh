@@ -72,26 +72,48 @@ rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
 
 # Step 1: Build Core Binaries & Shared Libraries
-# Rely on bindings/main/build.sh
 echo "Building Core Bindings and Binaries..."
-cd bindings/main
-# Ensure script is executable
-chmod +x build.sh
 
-# We run the build.sh. If it fails due to missing cross-compilers, we fail if in strict mode (CI),
-# otherwise we warn and proceed (for local dev convenience).
-if ./build.sh; then
-    echo "Bindings build successful."
-else
-    echo "Bindings build failed."
-    # Fail hard in CI environments to prevent broken releases
-    if [ "$CI" == "true" ] || [ "$GITHUB_ACTIONS" == "true" ]; then
-        echo "Error: Aborting release build due to compilation errors."
+# Check if Docker is available to use the robust build environment
+if command -v docker &> /dev/null; then
+    echo "Docker detected. Using robust, reproducible build environment (bindings/build_in_docker.sh)..."
+    # Ensure execute permissions (handle CWD being either root or specific)
+    # Assume script is run from SOP_ROOT if finding this file
+    if [ -f "bindings/build_in_docker.sh" ]; then
+        chmod +x bindings/build_in_docker.sh
+        if ./bindings/build_in_docker.sh; then
+            echo "Docker build successful."
+        else
+            echo "Docker build failed."
+            exit 1
+        fi
+    else
+        echo "Error: bindings/build_in_docker.sh not found in current directory $(pwd)"
         exit 1
     fi
-    echo "Proceeding with available artifacts (Local Dev Mode)..."
+else
+    echo "Docker not found. Falling back to local toolchain (Host OS)..."
+    echo "WARNING: Binaries built locally may rely on your system's specific 'glibc' version and might not run on older Linux systems."
+    
+    cd bindings/main
+    # Ensure script is executable
+    chmod +x build.sh
+
+    # We run the build.sh. If it fails due to missing cross-compilers, we fail if in strict mode (CI),
+    # otherwise we warn and proceed (for local dev convenience).
+    if ./build.sh; then
+        echo "Bindings build successful."
+    else
+        echo "Bindings build failed."
+        # Fail hard in CI environments to prevent broken releases
+        if [ "$CI" == "true" ] || [ "$GITHUB_ACTIONS" == "true" ]; then
+            echo "Error: Aborting release build due to compilation errors."
+            exit 1
+        fi
+        echo "Proceeding with available artifacts (Local Dev Mode)..."
+    fi
+    cd "$SOP_ROOT"
 fi
-cd "$SOP_ROOT"
 
 # Function to Create Platform Bundle
 create_bundle() {

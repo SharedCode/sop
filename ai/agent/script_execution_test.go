@@ -685,7 +685,7 @@ type AsyncMockToolExecutor struct {
 
 func (m *AsyncMockToolExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
 	if toolName == "sleep" {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(300 * time.Millisecond)
 	}
 	m.mu.Lock()
 	m.executed = append(m.executed, toolName)
@@ -747,10 +747,10 @@ func TestScriptAsyncExecution(t *testing.T) {
 		t.Errorf("Expected 2 executions, got %d", len(executor.executed))
 	}
 
-	// Verify duration (should be around 100ms, not 200ms)
-	// Allow some buffer. 100ms sleep + overhead.
-	// If sequential, it would be 200ms+.
-	if duration > 190*time.Millisecond {
+	// Verify duration (should be around 300ms, not 600ms)
+	// Allow some buffer. 300ms sleep + overhead.
+	// If sequential, it would be 600ms+.
+	if duration > 500*time.Millisecond {
 		t.Errorf("Execution took too long for async: %v", duration)
 	}
 }

@@ -466,8 +466,33 @@ func (jp *JoinProcessor) analyzeRightStore() error {
 				}
 			}
 
+			// Check Relations (Relational Intelligence)
+			if !isKey {
+				leftInfo := jp.leftStore.GetStoreInfo()
+				// Scan relations on the Left Store Source
+				for _, rel := range leftInfo.Relations {
+					if rel.TargetStore == jp.rightStoreName {
+						for _, tf := range rel.TargetFields {
+							if strings.EqualFold(tf, field) {
+								// Found a relation pointing to this field on the Right Store.
+								// If the Right Store is primitive (which we imply by !isKey for this field), we treat it as the Key.
+								// We map the user's field (e.g. "id") to the internal "key".
+								isKey = true
+								actualName = "key"
+								log.Info(fmt.Sprintf("Join: Relational Intelligence mapped right field '%s' to 'key' via metadata.", field))
+								break
+							}
+						}
+					}
+					if isKey {
+						break
+					} // Found
+				}
+			}
+
 			if isKey {
 				jp.rightKeyFields = append(jp.rightKeyFields, field)
+
 				jp.rightKeyFieldMap[field] = actualName
 				rightKeySampleVals[field] = extractVal(rKey.Key, nil, actualName)
 			} else {
