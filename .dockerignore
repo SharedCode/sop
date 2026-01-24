@@ -21,11 +21,11 @@ bindings/python/.venv
 bindings/rust/target
 
 # Generated Binaries
-httpserver
-httpserver_test
-main
-server
-sop_server
+/httpserver
+/httpserver_test
+/main
+/server
+/sop_server
 tools/httpserver/httpserver
 tools/httpserver/sop_server
 
