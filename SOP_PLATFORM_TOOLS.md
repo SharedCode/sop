@@ -1,15 +1,22 @@
 # SOP Platform Tools: Accelerating Productivity on a Proven Foundation
 
-**Date:** January 22, 2026
-**Status:** Initial Release (Powered by the SOP Storage Engine)
+**Date:** January 23, 2026
+**Status:** Official Release v2.2.6 (Now Available for Download)
 
 ---
 
 The **SOP Storage Engine & Framework** has long been our standard for General Purpose Availability (GPA)—iterated, hardened, and running in production environments. It is the reliable bedrock of our data infrastructure.
 
-Today, we are introducing the **SOP Platform Tools**—a productivity layer built directly atop this robust engine.
+Today, we are proud to announce the official release of the **SOP Platform Tools**—a productivity layer built directly atop this robust engine, now available as a downloadable suite for **Go, C#, Java, and Python**.
 
-Crucially, we are not labeling these tools as "Beta" or "Trial" because they rest on the solid foundation of the SOP Framework. This is a **First Release** focused entirely on enabling **Productivity**: visualizing data, integrating AI agents, and scripting complex workflows. While the interface is new, the engine driving every transaction is time-tested and bulletproof.
+Crucially, we are not labeling these tools as "Beta" or "Trial" because they rest on the solid foundation of the SOP Framework. This is a **Major Release** focused entirely on enabling **Productivity**: visualizing data, integrating AI agents, and scripting complex workflows. While the interface and tooling are new, the engine driving every transaction is time-tested and bulletproof.
+
+## Multi-Language Support
+This release brings full parity and verification across our primary ecosystems. Whether you are building high-performance backend services or data-intensive analytics pipelines, the tools are native to your workflow:
+*   **C# / .NET**: Full integration via Nuget, including the `Sop.CLI` toolset.
+*   **Python**: Native wheels for data science and scripting integration.
+*   **Java**: Maven artifacts for enterprise application compatibility.
+*   **Go**: The reference implementation and core performance standard.
 
 The promise of Artificial Intelligence has always been stuck behind a specific barrier: **Reliability**.
 
