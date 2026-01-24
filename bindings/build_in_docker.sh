@@ -14,8 +14,10 @@ docker build -t sop-bindings-builder -f "$REPO_ROOT/bindings/Dockerfile.build" "
 
 # If on macOS, we will skip macOS builds in Docker and run them locally later
 if [ "$(uname)" = "Darwin" ]; then
+    echo "Host is macOS (Darwin). Skipping macOS build inside Docker."
     SKIP_MACOS_ENV="-e SKIP_MACOS=1"
 else
+    echo "Host is NOT macOS ($(uname)). Including macOS build inside Docker."
     SKIP_MACOS_ENV=""
 fi
 
