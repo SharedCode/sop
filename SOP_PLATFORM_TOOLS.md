@@ -5,7 +5,7 @@
 
 ---
 
-The **SOP Storage Engine & Framework** has long been our standard for General Purpose Availability (GPA)—iterated, hardened, and running in production environments. It is the reliable bedrock of our data infrastructure.
+The **SOP Storage Engine & Framework** has long been our standard for General Public Availability (GPA)—iterated, hardened, and running in production environments. It is the reliable bedrock of our data infrastructure.
 
 Today, we are proud to announce the official release of the **SOP Platform Tools**—a productivity layer built directly atop this robust engine, now available as a downloadable suite for **Go, C#, Java, and Python**.
 
