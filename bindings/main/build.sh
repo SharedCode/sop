@@ -14,6 +14,8 @@ fi
 
 if [ -z "$SKIP_MACOS" ]; then
 echo "Building AMD64 darwin"
+# Clean potential env vars that force coverage
+unset GOFLAGS
 
 export GOOS=darwin
 export GOARCH=amd64
@@ -39,8 +41,9 @@ if [ "$(uname)" == "Linux" ]; then
 else
     unset CC
 fi
-go build -tags "netgo,osusergo,ignore_test_helpers" -ldflags "-w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib .
-go build -tags "ignore_test_helpers" -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin.a .
+# Added -s to strip symbol table, helps with zig linking
+go build -tags "netgo,osusergo,ignore_test_helpers" -ldflags "-s -w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib .
+go build -tags "ignore_test_helpers" -ldflags "-s -w" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin.a .
 cp ../python/sop/libjsondb_amd64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_amd64darwin.h ../csharp/Sop/
 # For testing in Examples.
