@@ -9,9 +9,9 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release:
-    name: Build and Release
-    runs-on: ubuntu-latest
+  build-macos:
+    name: Build Native (macOS)
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -21,31 +21,92 @@ jobs:
         with:
           go-version: '1.24'
 
-      # NOTE: We do NOT install cross-compilation tools (Zig, MinGW) on the host runner anymore.
-      # The build_release.sh script detects Docker (available on GitHub Actions) and runs the build
-      # inside a container (defined in bindings/Dockerfile.build), which has all these tools pre-installed.
-      # This ensures the release artifacts are built in a consistent, "clean room" environment.
-
-      - name: Build Bundles (via build_release.sh)
+      - name: Build macOS binaries
         run: |
           chmod +x build_release.sh
-          # Set version env var so build_release.sh and bindings scripts use it
+          # Only build macos parts
+          export ONLY_MACOS=1
           export SOP_VERSION=${{ github.ref_name }}
-          # This script orchestrates the build and bundling of the SOP Data Manager Installers
           ./build_release.sh
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libs-macos
+          path: |
+            bindings/python/sop/*.dylib
+            bindings/python/sop/*.h
+            bindings/csharp/Sop/*.dylib
+            bindings/csharp/Sop/*.h
+            bindings/java/src/main/resources/darwin-*/*.dylib
+            release/sop-httpserver-darwin-*
+
+  build-linux-windows:
+    name: Build Native (Linux & Windows)
+    runs-on: ubuntu-l    t
+                 - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build Linux and Windows binaries
+        run: |
+          chmod +x build_release.sh
+          # Skip macos parts (built in separate job)
+          export SKIP_MACOS=1
+          export SOP_VERSION=${{ github.ref_name }}
+          ./build_release.sh
+
+      - name: Upload Linux/Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: libs-linux-win
+          path: |
+            bindings/python/sop/*.so
+            bindings/python/sop/*.dll
+            bindings/python/sop/*.h
+            bindings/csharp/Sop/*.so
+            bindings/csharp/Sop/*.dll
+            bindings/csharp/Sop/*.h
+            bindings/java/src/main/resources/linux-*/*.so
+            bindings/java/src/main/resources/win32-*/*.dll
+            release/sop-httpserver-linux-*
+            release/sop-httpserver-windows-*
+
+  package-and-release:
+    name: Package and Release
+    needs: [build-macos, build-linux-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download macOS Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: libs-macos
+          # Default path is current working directory, preserving structure
+
+      - name: Download Linux/Windows Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: libs-linux-win
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-            python-version: '3.10'
+          python-version: '3.10'
 
-      - name: Package Python Wheel (Language Binding)
+      - name: Package Python Wheel
         run: |
           cd bindings/python
-          # Ensure pip wheel build tools are available
           pip install build wheel
-          # Build the wheel - this relies on the shared libs built by build_release.sh earlier
           python3 -m build
+          # Ensure release dir exists
+          mkdir -p ../../release
           cp dist/*.whl ../../release/
           cd ../..
 
@@ -54,15 +115,13 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
-      - name: Package C# NuGet (Language Binding)
+      - name: Package C# NuGet
         run: |
           cd bindings/csharp/Sop
-          # Update version in csproj to match tag
           sed -i 's/<Version>1.0.0<\/Version>/<Version>${{ github.ref_name }}<\/Version>/' Sop.csproj
-          # Build NuGet package - relies on shared libs in runtimes/ folder (populated by build_release.sh/build.sh)
+          mkdir -p ../../../release
           dotnet pack -c Release -o ../../../release/
           cd ../../..
-
 
       - name: Setup Java
         uses: actions/setup-java@v3
@@ -75,6 +134,7 @@ jobs:
           cd bindings/java
           mvn versions:set -DnewVersion=${{ github.ref_name }}
           mvn package -DskipTests
+          mkdir -p ../../release
           cp target/*.jar ../../release/
           cd ../..
 
