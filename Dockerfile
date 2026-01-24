@@ -9,10 +9,13 @@ WORKDIR /app
 
 # Copy go.mod and go.sum first to leverage Docker cache
 COPY go.mod go.sum ./
-RUN go mod download
 
 # Copy the rest of your application code and tests
 COPY . .
+
+# Download dependencies
+# Moved after COPY . . because go.mod references local module ./infs
+RUN go mod download
 
 # Create the data path folder & the env var.
 RUN mkdir -p /var/lib/sop
