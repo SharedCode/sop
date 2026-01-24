@@ -41,9 +41,9 @@ if [ "$(uname)" == "Linux" ]; then
 else
     unset CC
 fi
-# Added -s to strip symbol table, helps with zig linking
-go build -tags "netgo,osusergo,ignore_test_helpers" -ldflags "-s -w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib .
-go build -tags "ignore_test_helpers" -ldflags "-s -w" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin.a .
+# Removed -s as zig cc does not support -x (which go adds with -s)
+go build -tags "netgo,osusergo,ignore_test_helpers" -ldflags "-w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib .
+go build -tags "ignore_test_helpers" -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin.a .
 cp ../python/sop/libjsondb_amd64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_amd64darwin.h ../csharp/Sop/
 # For testing in Examples.
