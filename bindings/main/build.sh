@@ -20,7 +20,25 @@ unset GOFLAGS
 export GOOS=darwin
 export GOARCH=amd64
 if [ "$(uname)" == "Linux" ]; then
-    export CC="zig cc -target x86_64-macos"
+    # Create a wrapper for Zig to handle Go's linker flags that Zig/LLD doesn't recognize
+    cat <<EOF > zig-cc-macos.sh
+#!/bin/bash
+args=()
+for arg in "\$@"; do
+    if [ "\$arg" == "-x" ]; then
+        # Check if -x is passed (Strip local symbols). 
+        # Zig/LLD might complain about bare -x, convert to -Wl,-x or ignore.
+        # Verified: -Wl,-x works with clang/lld
+        args+=("-Wl,-x")
+    else
+        args+=("\$arg")
+    fi
+done
+exec zig cc -target x86_64-macos "\${args[@]}"
+EOF
+    chmod +x zig-cc-macos.sh
+    export CC="$(pwd)/zig-cc-macos.sh"
+    
     export CGO_CFLAGS="-fno-stack-protector"
     
     # Hack: Compiling real dummy dylibs to satisfy Zig/LLD linker checks.
@@ -41,9 +59,9 @@ if [ "$(uname)" == "Linux" ]; then
 else
     unset CC
 fi
-# Removed -s as zig cc does not support -x (which go adds with -s)
-go build -tags "netgo,osusergo,ignore_test_helpers" -ldflags "-w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib .
-go build -tags "ignore_test_helpers" -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin.a .
+# Restore -s (strip) to prevent _runtime.covctrs errors, handled by wrapper
+go build -tags "netgo,osusergo,ignore_test_helpers" -ldflags "-s -w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib .
+go build -tags "ignore_test_helpers" -ldflags "-s -w" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin.a .
 cp ../python/sop/libjsondb_amd64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_amd64darwin.h ../csharp/Sop/
 # For testing in Examples.
