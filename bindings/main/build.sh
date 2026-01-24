@@ -25,7 +25,6 @@ export GOARCH=amd64
 if [ "$(uname)" == "Linux" ]; then
     export CC="zig cc -target x86_64-macos"
     export CGO_CFLAGS="-fno-stack-protector"
-    # Don't use SDKROOT paths on Linux as they don't exist/conflict with Zig's internal sysroot
     export CGO_LDFLAGS="-Wl,-undefined,dynamic_lookup"
 else
     unset CC
@@ -79,7 +78,6 @@ export GOARCH=arm64
 if [ "$(uname)" == "Linux" ]; then
     export CC="zig cc -target aarch64-macos"
     export CGO_CFLAGS="-fno-stack-protector"
-    # Don't use SDKROOT paths on Linux as they don't exist/conflict with Zig's internal sysroot
     export CGO_LDFLAGS="-Wl,-undefined,dynamic_lookup"
 else
     unset CC
