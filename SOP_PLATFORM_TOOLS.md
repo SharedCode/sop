@@ -7,7 +7,7 @@
 
 The **SOP Storage Engine & Framework** has long been our standard for General Public Availability (GPA)—iterated, hardened, and running in production environments. It is the reliable bedrock of our data infrastructure.
 
-Today, we are proud to announce the official release of the **SOP Platform Tools**—a productivity layer built directly atop this robust engine, now available as a downloadable suite for **Go, C#, Java, and Python**.
+Today, we are proud to announce the official release of the **SOP Platform Tools**—a productivity layer built directly atop this robust engine, now available as a downloadable suite for **Go, C#, Java, Python, and Rust**.
 
 Crucially, we are not labeling these tools as "Beta" or "Trial" because they rest on the solid foundation of the SOP Framework. This is a **Major Release** focused entirely on enabling **Productivity**: visualizing data, integrating AI agents, and scripting complex workflows. While the interface and tooling are new, the engine driving every transaction is time-tested and bulletproof.
 
@@ -16,6 +16,7 @@ This release brings full parity and verification across our primary ecosystems. 
 *   **C# / .NET**: Full integration via Nuget, including the `Sop.CLI` toolset.
 *   **Python**: Native wheels for data science and scripting integration.
 *   **Java**: Maven artifacts for enterprise application compatibility.
+*   **Rust**: Native crates for high-performance systems programming.
 *   **Go**: The reference implementation and core performance standard.
 
 The promise of Artificial Intelligence has always been stuck behind a specific barrier: **Reliability**.

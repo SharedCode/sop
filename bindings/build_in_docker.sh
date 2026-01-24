@@ -13,7 +13,7 @@ echo "Building Docker image for SOP bindings..."
 docker build -t sop-bindings-builder -f "$REPO_ROOT/bindings/Dockerfile.build" "$REPO_ROOT"
 
 # If on macOS, we will skip macOS builds in Docker and run them locally later
-if [ "$(uname)" == "Darwin" ]; then
+if [ "$(uname)" = "Darwin" ]; then
     SKIP_MACOS_ENV="-e SKIP_MACOS=1"
 else
     SKIP_MACOS_ENV=""

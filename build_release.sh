@@ -185,6 +185,15 @@ create_bundle() {
     cp bindings/java/pom.xml "$BUNDLE_DIR/java/" 2>/dev/null || true
     cp -r bindings/java/src "$BUNDLE_DIR/java/" 2>/dev/null || true
 
+    # 4b. Rust Bindings
+    echo "  - Adding Rust Bindings..."
+    mkdir -p "$BUNDLE_DIR/rust"
+    cp bindings/rust/README.md "$BUNDLE_DIR/rust/" 2>/dev/null || true
+    cp bindings/rust/Cargo.toml "$BUNDLE_DIR/rust/" 2>/dev/null || true
+    cp bindings/rust/build.rs "$BUNDLE_DIR/rust/" 2>/dev/null || true
+    cp -r bindings/rust/src "$BUNDLE_DIR/rust/" 2>/dev/null || true
+    cp -r bindings/rust/lib "$BUNDLE_DIR/rust/" 2>/dev/null || true
+
     # 5. READMEs & Scripts
     cp README.md "$BUNDLE_DIR/"
     cp scripts/install.sh "$BUNDLE_DIR/" 2>/dev/null || true
