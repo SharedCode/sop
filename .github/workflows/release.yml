@@ -43,8 +43,9 @@ jobs:
 
   build-linux-windows:
     name: Build Native (Linux & Windows)
-    runs-on: ubuntu-l    t
-                 - name: Checkout code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Go
