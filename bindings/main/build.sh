@@ -39,8 +39,8 @@ if [ "$(uname)" == "Linux" ]; then
 else
     unset CC
 fi
-go build -tags "netgo,osusergo" -ldflags "-w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib .
-go build -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin.a .
+go build -tags "netgo,osusergo,ignore_test_helpers" -ldflags "-w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_amd64darwin.dylib .
+go build -tags "ignore_test_helpers" -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64darwin.a .
 cp ../python/sop/libjsondb_amd64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_amd64darwin.h ../csharp/Sop/
 # For testing in Examples.
@@ -65,8 +65,8 @@ echo "Building AMD64 windows"
 export GOOS=windows
 export GOARCH=amd64
 export CC=x86_64-w64-mingw32-gcc
-go build -buildmode=c-shared -o ../python/sop/libjsondb_amd64windows.dll .
-go build -buildmode=c-archive -o ../rust/lib/libjsondb_amd64windows.a .
+go build -tags "ignore_test_helpers" -buildmode=c-shared -o ../python/sop/libjsondb_amd64windows.dll .
+go build -tags "ignore_test_helpers" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64windows.a .
 cp ../python/sop/libjsondb_amd64windows.dll ../csharp/Sop/
 cp ../python/sop/libjsondb_amd64windows.h ../csharp/Sop/
 # Java Packaging (JNA)
@@ -103,8 +103,8 @@ if [ "$(uname)" == "Linux" ]; then
 else
     unset CC
 fi
-go build -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_arm64darwin.a .
-go build -tags "netgo,osusergo" -ldflags "-w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_arm64darwin.dylib .
+go build -tags "ignore_test_helpers" -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_arm64darwin.a .
+go build -tags "netgo,osusergo,ignore_test_helpers" -ldflags "-w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_arm64darwin.dylib .
 cp ../python/sop/libjsondb_arm64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_arm64darwin.h ../csharp/Sop/
 # Java Packaging (JNA)
@@ -122,8 +122,8 @@ echo "Building AMD64 linux"
 export GOOS=linux
 export GOARCH=amd64
 export CC="zig cc -target x86_64-linux-gnu"
-go build -buildmode=c-archive -o ../rust/lib/libjsondb_amd64linux.a .
-go build -buildmode=c-shared -o ../python/sop/libjsondb_amd64linux.so .
+go build -tags "ignore_test_helpers" -buildmode=c-archive -o ../rust/lib/libjsondb_amd64linux.a .
+go build -tags "ignore_test_helpers" -buildmode=c-shared -o ../python/sop/libjsondb_amd64linux.so .
 cp ../python/sop/libjsondb_amd64linux.so ../csharp/Sop/
 cp ../python/sop/libjsondb_amd64linux.h ../csharp/Sop/
 # Java Packaging (JNA)
@@ -139,8 +139,8 @@ echo "Building ARM64 linux"
 export GOOS=linux
 export GOARCH=arm64
 export CC="zig cc -target aarch64-linux-gnu"
-go build -buildmode=c-shared -o ../python/sop/libjsondb_arm64linux.so .
-go build -buildmode=c-archive -o ../rust/lib/libjsondb_arm64linux.a .
+go build -tags "ignore_test_helpers" -buildmode=c-shared -o ../python/sop/libjsondb_arm64linux.so .
+go build -tags "ignore_test_helpers" -buildmode=c-archive -o ../rust/lib/libjsondb_arm64linux.a .
 # Java Packaging (JNA)
 mkdir -p ../java/src/main/resources/linux-aarch64
 cp ../python/sop/libjsondb_arm64linux.so ../java/src/main/resources/linux-aarch64/libjsondb.so
