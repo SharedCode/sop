@@ -21,24 +21,25 @@ export GOOS=darwin
 export GOARCH=amd64
 if [ "$(uname)" == "Linux" ]; then
     # Create a wrapper for Zig to handle Go's linker flags that Zig/LLD doesn't recognize
-    cat <<EOF > zig-cc-macos.sh
+    cat <<EOF > zig-cc-wrapper.sh
 #!/bin/bash
 args=()
 for arg in "\$@"; do
     if [ "\$arg" == "-x" ]; then
         # Check if -x is passed (Strip local symbols). 
-        # Zig/LLD might complain about bare -x, convert to -Wl,-x or ignore.
-        # Verified: -Wl,-x works with clang/lld
-        args+=("-Wl,-x")
+        # Zig/LLD (via Clang driver) might reject -x or -Wl,-x on some targets.
+        # We simply ignore it to allow the link to proceed.
+        # We rely on -w (passed to Go) and -Wl,-S (passed by Go for -w?) to handle stripping.
+        :
     else
         args+=("\$arg")
     fi
 done
-exec zig cc -target x86_64-macos "\${args[@]}"
+exec zig cc "\${args[@]}"
 EOF
-    chmod +x zig-cc-macos.sh
-    export CC="$(pwd)/zig-cc-macos.sh"
-    
+    chmod +x zig-cc-wrapper.sh
+    export CC="$(pwd)/zig-cc-wrapper.sh -target x86_64-macos"
+
     export CGO_CFLAGS="-fno-stack-protector"
     
     # Hack: Compiling real dummy dylibs to satisfy Zig/LLD linker checks.
@@ -105,7 +106,7 @@ echo "Building ARM64 darwin"
 export GOOS=darwin
 export GOARCH=arm64
 if [ "$(uname)" == "Linux" ]; then
-    export CC="zig cc -target aarch64-macos"
+    export CC="$(pwd)/zig-cc-wrapper.sh -target aarch64-macos"
     export CGO_CFLAGS="-fno-stack-protector"
     
     # Use the same dummy lib hack
@@ -124,8 +125,8 @@ if [ "$(uname)" == "Linux" ]; then
 else
     unset CC
 fi
-go build -tags "ignore_test_helpers" -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_arm64darwin.a .
-go build -tags "netgo,osusergo,ignore_test_helpers" -ldflags "-w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_arm64darwin.dylib .
+go build -tags "ignore_test_helpers" -ldflags "-s -w" -buildmode=c-archive -o ../rust/lib/libjsondb_arm64darwin.a .
+go build -tags "netgo,osusergo,ignore_test_helpers" -ldflags "-s -w -extldflags -Wl,-undefined,dynamic_lookup" -buildmode=c-shared -o ../python/sop/libjsondb_arm64darwin.dylib .
 cp ../python/sop/libjsondb_arm64darwin.dylib ../csharp/Sop/
 cp ../python/sop/libjsondb_arm64darwin.h ../csharp/Sop/
 # Java Packaging (JNA)

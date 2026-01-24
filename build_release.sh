@@ -178,6 +178,12 @@ create_bundle() {
     cp bindings/csharp/README.md "$BUNDLE_DIR/dotnet/" 2>/dev/null || true
     cp -r bindings/csharp/Sop "$BUNDLE_DIR/dotnet/" 2>/dev/null || true
     
+    # Include Examples (Sop.CLI)
+    echo "  - Adding C# Examples (Sop.CLI)..."
+    cp -r bindings/csharp/Sop.CLI "$BUNDLE_DIR/dotnet/" 2>/dev/null || true
+    # Clean build artifacts to keep bundle small
+    rm -rf "$BUNDLE_DIR/dotnet/Sop.CLI/bin" "$BUNDLE_DIR/dotnet/Sop.CLI/obj" "$BUNDLE_DIR/dotnet/Sop.CLI/sop_data_*"
+    
     # 4. Java Bindings
     echo "  - Adding Java Bindings..."
     mkdir -p "$BUNDLE_DIR/java"
@@ -193,6 +199,7 @@ create_bundle() {
     cp bindings/rust/build.rs "$BUNDLE_DIR/rust/" 2>/dev/null || true
     cp -r bindings/rust/src "$BUNDLE_DIR/rust/" 2>/dev/null || true
     cp -r bindings/rust/lib "$BUNDLE_DIR/rust/" 2>/dev/null || true
+    cp -r bindings/rust/examples "$BUNDLE_DIR/rust/" 2>/dev/null || true
 
     # 5. READMEs & Scripts
     cp README.md "$BUNDLE_DIR/"
