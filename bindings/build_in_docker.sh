@@ -13,11 +13,13 @@ echo "Building Docker image for SOP bindings..."
 docker build -t sop-bindings-builder -f "$REPO_ROOT/bindings/Dockerfile.build" "$REPO_ROOT"
 
 # If on macOS, we will skip macOS builds in Docker and run them locally later
-if [ "$(uname)" = "Darwin" ]; then
-    echo "Host is macOS (Darwin). Skipping macOS build inside Docker."
+if [ -n "$SKIP_MACOS" ] || [ "$(uname)" = "Darwin" ]; then
+    echo "Skipping macOS build inside Docker (requested or host is macOS)."
     SKIP_MACOS_ENV="-e SKIP_MACOS=1"
 else
-    echo "Host is NOT macOS ($(uname)). Including macOS build inside Docker."
+    echo "Host is NOT macOS ($(uname)) and SKIP_MACOS is not set. Assuming cross-compilation needed."
+    # WARNING: This path will fail for macOS targets due to libresolv issues.
+    # It is recommended to always set SKIP_MACOS=1 on Linux hosts if you don't have a perfect SDK setup.
     SKIP_MACOS_ENV=""
 fi
 

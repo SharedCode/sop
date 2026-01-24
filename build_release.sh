@@ -76,20 +76,56 @@ echo "Building Core Bindings and Binaries..."
 
 # Check if Docker is available to use the robust build environment
 if command -v docker &> /dev/null; then
-    echo "Docker detected. Using robust, reproducible build environment (bindings/build_in_docker.sh)..."
-    # Ensure execute permissions (handle CWD being either root or specific)
-    # Assume script is run from SOP_ROOT if finding this file
-    if [ -f "bindings/build_in_docker.sh" ]; then
-        chmod +x bindings/build_in_docker.sh
-        if ./bindings/build_in_docker.sh; then
-            echo "Docker build successful."
+    # Detect OS to determine build strategy
+    HOST_OS=$(uname -s)
+    
+    # If running on macOS, we use the local toolchain for Mac binaries (native is best)
+    # and Docker for Linux/Windows cross-compilation (if needed, or just let Docker handle those).
+    # However, your request is to strict-split: "if mac, only mac. if linux, linux and windows".
+    
+    if [ "$HOST_OS" == "Darwin" ]; then
+        echo "Host is macOS. Building for macOS locally..."
+        # Force local build for Mac, skip Docker for Mac target
+        # But wait, local build.sh tries to build ALL targets unless restricted.
+        # We should set ONLY_MACOS=1 if we want strict separation, 
+        # OR we can just run build.sh locally which handles Mac natively.
+        
+        # NOTE: If you want the script to handle EVERYTHING on Mac, we just run local build.
+        # But if you want Docker involved for Linux builds on Mac, that's a hybrid.
+        # Based on your prompt: "if mac, only mac".
+        export ONLY_MACOS=1
+        cd bindings/main
+        chmod +x build.sh
+        ./build.sh
+        cd ../..
+        
+    elif [ "$HOST_OS" == "Linux" ]; then
+        echo "Host is Linux. Using Docker for robust Linux/Windows build..."
+        # We explicitly tell the internal Docker script to SKIP macos
+        # by passing the env var into the container.
+        export SKIP_MACOS=1
+        
+        if [ -f "bindings/build_in_docker.sh" ]; then
+            chmod +x bindings/build_in_docker.sh
+            # The build_in_docker.sh script needs to respect SKIP_MACOS env var
+            # We must ensure it passes it through to the docker run command.
+            if ./bindings/build_in_docker.sh; then
+                echo "Docker build successful (Linux/Windows only)."
+            else
+                echo "Docker build failed."
+                exit 1
+            fi
         else
-            echo "Docker build failed."
+            echo "Error: bindings/build_in_docker.sh not found"
             exit 1
         fi
     else
-        echo "Error: bindings/build_in_docker.sh not found in current directory $(pwd)"
-        exit 1
+        # Fallback for Windows host or other
+        echo "Host is $HOST_OS. Attempting local build..."
+        cd bindings/main
+        chmod +x build.sh
+        ./build.sh
+        cd ../..
     fi
 else
     echo "Docker not found. Falling back to local toolchain (Host OS)..."
