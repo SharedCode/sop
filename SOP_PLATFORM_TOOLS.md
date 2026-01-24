@@ -1,7 +1,7 @@
 # SOP Platform Tools: Accelerating Productivity on a Proven Foundation
 
 **Date:** January 23, 2026
-**Status:** Official Release v2.2.6 (Now Available for Download)
+**Status:** Official Release v2.2.7 (Now Available for Download)
 
 ---
 
@@ -11,8 +11,8 @@ Today, we are proud to announce the official release of the **SOP Platform Tools
 
 Crucially, we are not labeling these tools as "Beta" or "Trial" because they rest on the solid foundation of the SOP Framework. This is a **Major Release** focused entirely on enabling **Productivity**: visualizing data, integrating AI agents, and scripting complex workflows. While the interface and tooling are new, the engine driving every transaction is time-tested and bulletproof.
 
-## Multi-Language Support
-This release brings full parity and verification across our primary ecosystems. Whether you are building high-performance backend services or data-intensive analytics pipelines, the tools are native to your workflow:
+## Unified Ecosystem & Multi-Language Support
+This release brings full parity and verification across our primary ecosystems, synchronized under a **Unified Versioning** strategy. Whether you are building high-performance backend services or data-intensive analytics pipelines, the tools are native to your workflow and share a consistent API surface:
 *   **C# / .NET**: Full integration via Nuget, including the `Sop.CLI` toolset.
 *   **Python**: Native wheels for data science and scripting integration.
 *   **Java**: Maven artifacts for enterprise application compatibility.
@@ -79,9 +79,11 @@ To support this advanced architecture, complexity must be managed. We are introd
 *   **Database Management:** Effortlessly attach User Databases and System Databases to your environments.
 *   **One-Click Demo:** Spin up a fully populated eCommerce Demo Database to test drive the system immediately.
 
-### Data Manager
-The Data Manager interface has been recently overhauled to support "Relational Intelligence" workflows.
+### Data Manager & Visual Script Studio
+The Data Manager interface has been overhauled to serve as a command center for your data, supporting "Relational Intelligence" and flexible development workflows (**Code-First** or **Data-First**).
+*   **Visual Script Studio:** A complete in-browser IDE for authoring and managing automation scripts.
 *   **Schema Awareness:** The system now understands the relationships between your Stores (tables).
+*   **SOP AI Copilot:** A built-in assistant that translates natural language intent into precise system actions, featuring self-correction capabilities.
 *   **Natural Language Mining:** You can type complex requests like *"Find all customers who bought 'Electronics' in the last month and spent over $500"*, and the system generates the precise multi-step execution script.
 
 ## The API Innovation: Rich Storage Layer
@@ -90,6 +92,10 @@ Under the hood, we've exposed powerful new API capabilities that leverage the st
 *   **Advanced Joins:** Optimized `join` operations that function effectively even on non-indexed fields (though indexes are preferred).
 *   **Complex Filtering:** Support for nested conditions and advanced operators (`$in`, `$gt`, etc.) within the scripting layer.
 *   **Scripting Engine:** A Turing-complete JSON-based scripting language that allows the creation of complex data pipelines (Filter -> Project -> Join -> Sort) that run close to the data.
+
+## Deployment Made Simple
+*   **Zero-Config Bundle**: Get started immediately with a pre-configured release bundle containing the Data Manager, Server, and CLI tools.
+*   **Universal Installers**: Streamlined installers for macOS, Linux, and Windows.
 
 ## The Road Ahead
 
