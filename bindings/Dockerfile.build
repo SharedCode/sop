@@ -15,7 +15,20 @@ RUN curl -L https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz |
 
 WORKDIR /app
 
-# Copy source code
+# 1. Download Modules First (Better Layer Caching)
+COPY go.mod go.sum ./
+COPY adapters/cassandra/go.mod adapters/cassandra/go.sum ./adapters/cassandra/
+COPY adapters/redis/go.mod adapters/redis/go.sum ./adapters/redis/
+COPY ai/go.mod ai/go.sum ./ai/
+COPY incfs/go.mod ./incfs/
+COPY infs/go.mod ./infs/
+COPY jsondb/go.mod ./jsondb/
+COPY search/go.mod ./search/
+# ... add other nested modules if necessary ...
+
+RUN go mod download
+
+# 2. Copy Source Code
 COPY . .
 
 # Download dependencies
