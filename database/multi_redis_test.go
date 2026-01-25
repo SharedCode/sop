@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -17,7 +18,8 @@ func TestMultiRedisConnections(t *testing.T) {
 
 	// Database 1 connecting to Redis 1 (e.g. localhost:6379 DB 0)
 	db1Config := sop.DatabaseOptions{
-		CacheType: sop.Redis,
+		CacheType:     sop.Redis,
+		StoresFolders: []string{filepath.Join(t.TempDir(), "db1")},
 		RedisConfig: &sop.RedisCacheConfig{
 			Address:  "localhost:6379",
 			Password: "",
@@ -27,7 +29,8 @@ func TestMultiRedisConnections(t *testing.T) {
 
 	// Database 2 connecting to Redis 2 (e.g. localhost:6379 DB 1)
 	db2Config := sop.DatabaseOptions{
-		CacheType: sop.Redis,
+		CacheType:     sop.Redis,
+		StoresFolders: []string{filepath.Join(t.TempDir(), "db2")},
 		RedisConfig: &sop.RedisCacheConfig{
 			Address:  "localhost:6379",
 			Password: "",
@@ -37,7 +40,8 @@ func TestMultiRedisConnections(t *testing.T) {
 
 	// Database 3 connecting to Redis 3 (e.g. localhost:6379 DB 2) using URL
 	db3Config := sop.DatabaseOptions{
-		CacheType: sop.Redis,
+		CacheType:     sop.Redis,
+		StoresFolders: []string{filepath.Join(t.TempDir(), "db3")},
 		RedisConfig: &sop.RedisCacheConfig{
 			URL: "redis://localhost:6379/2",
 		},
@@ -84,8 +88,14 @@ func TestMultiRedisConnections(t *testing.T) {
 	}
 
 	// Verify DB1 has its value
-	trans1Read, _ := BeginTransaction(ctx, db1Config, sop.ForReading)
-	store1Read, _ := NewBtree[string, string](ctx, db1Config, "store1", trans1Read, nil)
+	trans1Read, err := BeginTransaction(ctx, db1Config, sop.ForReading)
+	if err != nil {
+		t.Fatalf("Failed to begin transaction for DB1 read: %v", err)
+	}
+	store1Read, err := OpenBtree[string, string](ctx, db1Config, "store1", trans1Read, nil)
+	if err != nil {
+		t.Fatalf("Failed to open store1: %v", err)
+	}
 	found, err := store1Read.Find(ctx, "key1", false)
 	if err != nil {
 		t.Fatalf("Failed to find in store1: %v", err)
@@ -104,8 +114,14 @@ func TestMultiRedisConnections(t *testing.T) {
 	trans1Read.Commit(ctx)
 
 	// Verify DB2 has its value
-	trans2Read, _ := BeginTransaction(ctx, db2Config, sop.ForReading)
-	store2Read, _ := NewBtree[string, string](ctx, db2Config, "store2", trans2Read, nil)
+	trans2Read, err := BeginTransaction(ctx, db2Config, sop.ForReading)
+	if err != nil {
+		t.Fatalf("Failed to begin transaction for DB2 read: %v", err)
+	}
+	store2Read, err := OpenBtree[string, string](ctx, db2Config, "store2", trans2Read, nil)
+	if err != nil {
+		t.Fatalf("Failed to open store2: %v", err)
+	}
 	found, err = store2Read.Find(ctx, "key1", false)
 	if err != nil {
 		t.Fatalf("Failed to find in store2: %v", err)
@@ -144,8 +160,14 @@ func TestMultiRedisConnections(t *testing.T) {
 	}
 
 	// Verify DB3 has its value
-	trans3Read, _ := BeginTransaction(ctx, db3Config, sop.ForReading)
-	store3Read, _ := NewBtree[string, string](ctx, db3Config, "store3", trans3Read, nil)
+	trans3Read, err := BeginTransaction(ctx, db3Config, sop.ForReading)
+	if err != nil {
+		t.Fatalf("Failed to begin transaction for DB3 read: %v", err)
+	}
+	store3Read, err := OpenBtree[string, string](ctx, db3Config, "store3", trans3Read, nil)
+	if err != nil {
+		t.Fatalf("Failed to open store3: %v", err)
+	}
 	found, err = store3Read.Find(ctx, "key1", false)
 	if err != nil {
 		t.Fatalf("Failed to find in store3: %v", err)

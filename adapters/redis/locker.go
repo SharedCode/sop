@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/sharedcode/sop"
 )
 
@@ -42,36 +43,70 @@ func (c client) Lock(ctx context.Context, duration time.Duration, lockKeys []*so
 	if err != nil {
 		return false, sop.NilUUID, err
 	}
-	for _, lk := range lockKeys {
-		// Try to set the lock using SetNX
-		set, err := conn.Client.SetNX(ctx, lk.Key, lk.LockID.String(), duration).Result()
-		if err != nil {
+
+	// 1. Pipeline SetNX for all keys
+	pipe := conn.Client.Pipeline()
+	setCmds := make([]*redis.BoolCmd, len(lockKeys))
+	for i, lk := range lockKeys {
+		setCmds[i] = pipe.SetNX(ctx, lk.Key, lk.LockID.String(), duration)
+	}
+
+	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+		return false, sop.NilUUID, err
+	}
+
+	// 2. Identify failed locks
+	var failedIndices []int
+	for i, cmd := range setCmds {
+		set, err := cmd.Result()
+		if err != nil && err != redis.Nil {
 			return false, sop.NilUUID, err
 		}
 		if set {
-			lk.IsLockOwner = true
+			lockKeys[i].IsLockOwner = true
+		} else {
+			failedIndices = append(failedIndices, i)
+		}
+	}
+
+	// 3. If everything succeeded, we are done
+	if len(failedIndices) == 0 {
+		return true, sop.NilUUID, nil
+	}
+
+	// 4. For failed locks, pipeline Get to check ownership
+	pipe = conn.Client.Pipeline()
+	getCmds := make([]*redis.StringCmd, len(failedIndices))
+	for i, idx := range failedIndices {
+		getCmds[i] = pipe.Get(ctx, lockKeys[idx].Key)
+	}
+
+	// We ignore Exec error here as individual command errors (like Nil) are handled below
+	_, _ = pipe.Exec(ctx)
+
+	for i, cmd := range getCmds {
+		idx := failedIndices[i]
+		readItem, err := cmd.Result()
+		if err != nil {
+			if err == redis.Nil {
+				// Lock was released/expired in the interim; we failed to acquire it
+				// and now it's gone. Strictly implies we don't own it.
+				return false, sop.NilUUID, nil
+			}
+			return false, sop.NilUUID, err
+		}
+
+		if readItem == lockKeys[idx].LockID.String() {
+			// We already own it
+			lockKeys[idx].IsLockOwner = true
 			continue
 		}
 
-		// If failed to set, check if we already own it
-		found, readItem, err := c.Get(ctx, lk.Key)
-		if err != nil {
-			return false, sop.NilUUID, err
-		}
-		if found {
-			if readItem == lk.LockID.String() {
-				// We already own it.
-				lk.IsLockOwner = true
-				continue
-			}
-			// Owned by someone else
-			id, _ := sop.ParseUUID(readItem)
-			return false, id, nil
-		}
-		// If not found (expired between SetNX and Get?), return false to let caller retry.
-		return false, sop.NilUUID, nil
+		// Owned by someone else
+		id, _ := sop.ParseUUID(readItem)
+		return false, id, nil
 	}
-	// Successfully locked.
+
 	return true, sop.NilUUID, nil
 }
 
@@ -95,27 +130,51 @@ func (c client) DualLock(ctx context.Context, duration time.Duration, lockKeys [
 
 // IsLocked reports whether all provided lock keys are currently owned by this process.
 func (c client) IsLocked(ctx context.Context, lockKeys []*sop.LockKey) (bool, error) {
+	if len(lockKeys) == 0 {
+		return true, nil
+	}
+	conn, err := c.getConnection()
+	if err != nil {
+		return false, err
+	}
+
+	pipe := conn.Client.Pipeline()
+	cmds := make([]*redis.StringCmd, len(lockKeys))
+	for i, lk := range lockKeys {
+		cmds[i] = pipe.Get(ctx, lk.Key)
+	}
+
+	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+		// If pipeline fails completely (e.g. connection error), return error
+		return false, err
+	}
+
 	r := true
 	var lastErr error
-	for _, lk := range lockKeys {
-		found, readItem, err := c.Get(ctx, lk.Key)
-		if !found || err != nil {
+
+	for i, cmd := range cmds {
+		lk := lockKeys[i]
+		readItem, err := cmd.Result()
+
+		if err != nil {
+			// Key not found or other error
 			lk.IsLockOwner = false
 			r = false
-			if err != nil {
+			if err != redis.Nil {
 				lastErr = err
 			}
 			continue
 		}
-		// Item found in Redis has different value, means key is locked by a different kind of function.
+
 		if readItem != lk.LockID.String() {
 			lk.IsLockOwner = false
 			r = false
 			continue
 		}
+
 		lk.IsLockOwner = true
 	}
-	// Is locked = true.
+
 	return r, lastErr
 }
 
@@ -124,33 +183,35 @@ func (c client) IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bo
 	if len(lockKeyNames) == 0 {
 		return false, nil
 	}
-	for _, lkn := range lockKeyNames {
-		found, _, err := c.Get(ctx, lkn)
-		if !found || err != nil {
-			return false, err
-		}
-		// Item found in Redis means other process has a lock on it.
+	conn, err := c.getConnection()
+	if err != nil {
+		return false, err
 	}
-	return true, nil
+
+	// Exists returns the number of keys that exist
+	n, err := conn.Client.Exists(ctx, lockKeyNames...).Result()
+	if err != nil {
+		return false, err
+	}
+
+	// Returns true only if ALL keys exist
+	return n == int64(len(lockKeyNames)), nil
 }
 
 // Unlock releases the provided lock keys, deleting only those owned by this process.
 func (c client) Unlock(ctx context.Context, lockKeys []*sop.LockKey) error {
-	var lastErr error
+	var keysToDelete []string
 	for _, lk := range lockKeys {
-		if !lk.IsLockOwner {
-			continue
-		}
-		// Delete lock key if we own it.
-		if found, err := c.Delete(ctx, []string{lk.Key}); !found || err != nil {
-			// Ignore if key not in cache, not an issue.
-			if err == nil {
-				continue
-			}
-			lastErr = err
+		if lk.IsLockOwner {
+			keysToDelete = append(keysToDelete, lk.Key)
 		}
 	}
-	return lastErr
+	if len(keysToDelete) == 0 {
+		return nil
+	}
+	// Delete batch
+	_, err := c.Delete(ctx, keysToDelete)
+	return err
 }
 
 // CreateLockKeysForIDs builds lock keys from (name, lockID) tuples, applying the lock namespace prefix.
