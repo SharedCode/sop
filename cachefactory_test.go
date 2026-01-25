@@ -100,6 +100,9 @@ func (m *mockL2Cache) IsRestarted(ctx context.Context) bool { return false }
 func (m *mockL2Cache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	return nil
 }
+func (m *mockL2Cache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	return nil
+}
 func (m *mockL2Cache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return false, nil
 }

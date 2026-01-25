@@ -37,6 +37,9 @@ func (m mockCacheWarn) GetEx(ctx context.Context, k string, d time.Duration) (bo
 func (m mockCacheWarn) SetStruct(context.Context, string, interface{}, time.Duration) error {
 	return errors.New("fail setstruct")
 }
+func (m mockCacheWarn) SetStructs(context.Context, []string, []interface{}, time.Duration) error {
+	return errors.New("fail setstructs")
+}
 func (m mockCacheWarn) GetStruct(ctx context.Context, k string, tgt interface{}) (bool, error) {
 	return m.inner.GetStruct(ctx, k, tgt)
 }

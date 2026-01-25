@@ -21,6 +21,9 @@ type setErrCache struct{ sop.L2Cache }
 func (s setErrCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	return fmt.Errorf("setstruct fail")
 }
+func (s setErrCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	return fmt.Errorf("setstruct fail")
+}
 
 // missAlwaysCache forces GetStruct to miss regardless of prior SetStruct calls;
 // used to simulate the second get after a set also missing, triggering the
@@ -29,6 +32,11 @@ type missAlwaysCache struct{ sop.L2Cache }
 
 func (m missAlwaysCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return false, nil
+}
+
+func (m missAlwaysCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	results := make([]bool, len(keys))
+	return results, nil
 }
 
 type deleteErrCache struct{ sop.L2Cache }
@@ -566,6 +574,18 @@ func (a alterSetCache) SetStruct(ctx context.Context, key string, value interfac
 		return a.L2Cache.SetStruct(ctx, key, fake, expiration)
 	}
 	return a.L2Cache.SetStruct(ctx, key, value, expiration)
+}
+func (a alterSetCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	newValues := make([]interface{}, len(values))
+	for i, v := range values {
+		if lr, ok := v.(*lockRecord); ok {
+			// Change the LockID to a different UUID.
+			newValues[i] = &lockRecord{LockID: sop.NewUUID(), Action: lr.Action}
+		} else {
+			newValues[i] = v
+		}
+	}
+	return a.L2Cache.SetStructs(ctx, keys, newValues, expiration)
 }
 
 func Test_ItemActionTracker_Lock_SetThenGet_MismatchConflict(t *testing.T) {

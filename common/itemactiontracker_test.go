@@ -484,7 +484,12 @@ func buildTracker(name string) (*itemActionTracker[PersonKey, Person], *sop.Stor
 
 func Test_ItemActionTracker_Lock_CompatibilityAndConflicts(t *testing.T) {
 	ctx := context.Background()
-	tracker, _ := buildTracker("iat_lock")
+	freshCache := mocks.NewMockClient()
+	freshBlobs := mocks.NewMockBlobStore()
+	so := sop.StoreOptions{Name: "iat_lock", SlotLength: 8, IsValueDataInNodeSegment: false, IsValueDataGloballyCached: true}
+	si := sop.NewStoreInfo(so)
+	tl := newTransactionLogger(mocks.NewMockTransactionLog(), true)
+	tracker := newItemActionTracker[PersonKey, Person](si, freshCache, freshBlobs, tl)
 
 	// Prepare one item tracked with getAction
 	idGet := sop.NewUUID()

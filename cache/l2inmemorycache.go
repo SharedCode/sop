@@ -110,6 +110,15 @@ func (c *L2InMemoryCache) SetStruct(ctx context.Context, key string, value inter
 	return nil
 }
 
+func (c *L2InMemoryCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	for i, key := range keys {
+		if err := c.SetStruct(ctx, key, values[i], expiration); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *L2InMemoryCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	// log.Debug("entered GetStruct")
 	val, ok := c.data.load(key)

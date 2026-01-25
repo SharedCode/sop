@@ -195,6 +195,37 @@ func (c client) SetStruct(ctx context.Context, key string, value interface{}, ex
 	return nil
 }
 
+// SetStructs upserts multiple struct values under the given keys in a single round trip (pipelined).
+func (c client) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	conn, err := c.getConnection()
+	if err != nil {
+		return err
+	}
+	if len(keys) != len(values) {
+		return fmt.Errorf("keys and values length mismatch")
+	}
+	// No caching if expiration < 0.
+	if expiration < 0 {
+		return nil
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+
+	pipe := conn.Client.Pipeline()
+	for i, key := range keys {
+		ba, err := encoding.DefaultMarshaler.Marshal(values[i])
+		if err != nil {
+			return fmt.Errorf("redis setstructs marshal failed for key %s: %w", key, err)
+		}
+		pipe.Set(ctx, key, ba, expiration)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("redis setstructs failed: %w", err)
+	}
+	return nil
+}
+
 // GetStruct retrieves a struct value and unmarshals it into target.
 func (c client) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	conn, err := c.getConnection()

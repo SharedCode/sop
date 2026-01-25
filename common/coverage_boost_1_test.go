@@ -611,6 +611,9 @@ func (c lockThenIsLockedFalseCache) GetEx(ctx context.Context, key string, expir
 func (c lockThenIsLockedFalseCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	return c.inner.SetStruct(ctx, key, value, expiration)
 }
+func (c lockThenIsLockedFalseCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	return c.inner.SetStructs(ctx, keys, values, expiration)
+}
 func (c lockThenIsLockedFalseCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return c.inner.GetStruct(ctx, key, target)
 }
@@ -685,6 +688,9 @@ func (c lockErrorCache) GetEx(ctx context.Context, key string, expiration time.D
 }
 func (c lockErrorCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	return c.inner.SetStruct(ctx, key, value, expiration)
+}
+func (c lockErrorCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	return c.inner.SetStructs(ctx, keys, values, expiration)
 }
 func (c lockErrorCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return c.inner.GetStruct(ctx, key, target)

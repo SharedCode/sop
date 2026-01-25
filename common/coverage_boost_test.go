@@ -724,6 +724,14 @@ func (m missAfterSetCache) SetStruct(ctx context.Context, k string, v interface{
 	_, _ = m.base.Delete(ctx, []string{k})
 	return nil
 }
+func (m missAfterSetCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	if err := m.base.SetStructs(ctx, keys, values, expiration); err != nil {
+		return err
+	}
+	// Immediately remove the structs so the follow-up GetStructs cannot find them.
+	_, _ = m.base.Delete(ctx, keys)
+	return nil
+}
 func (m missAfterSetCache) GetStruct(ctx context.Context, k string, tgt interface{}) (bool, error) {
 	return m.base.GetStruct(ctx, k, tgt)
 }

@@ -235,6 +235,9 @@ func (c *cacheIsLockedFalse) Ping(ctx context.Context) error { return c.base.Pin
 func (c *cacheIsLockedFalse) SetStruct(ctx context.Context, key string, v interface{}, exp time.Duration) error {
 	return c.base.SetStruct(ctx, key, v, exp)
 }
+func (c *cacheIsLockedFalse) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	return c.base.SetStructs(ctx, keys, values, expiration)
+}
 func (c *cacheIsLockedFalse) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return c.base.GetStruct(ctx, key, target)
 }

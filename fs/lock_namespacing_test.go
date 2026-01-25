@@ -136,6 +136,9 @@ func (c *capturingMockCache) GetStructs(ctx context.Context, keys []string, targ
 func (c *capturingMockCache) SetStruct(ctx context.Context, key string, value interface{}, duration time.Duration) error {
 	return c.mock.SetStruct(ctx, key, value, duration)
 }
+func (c *capturingMockCache) SetStructs(ctx context.Context, keys []string, values []interface{}, duration time.Duration) error {
+	return c.mock.SetStructs(ctx, keys, values, duration)
+}
 func (c *capturingMockCache) Delete(ctx context.Context, keys []string) (bool, error) {
 	return c.mock.Delete(ctx, keys)
 }

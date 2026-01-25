@@ -100,6 +100,9 @@ func (m *mockCacheHashmap) Ping(ctx context.Context) error { return m.base.Ping(
 func (m *mockCacheHashmap) SetStruct(ctx context.Context, key string, v interface{}, exp time.Duration) error {
 	return m.base.SetStruct(ctx, key, v, exp)
 }
+func (m *mockCacheHashmap) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	return m.base.SetStructs(ctx, keys, values, expiration)
+}
 func (m *mockCacheHashmap) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	return m.base.GetStruct(ctx, key, target)
 }

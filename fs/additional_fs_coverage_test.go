@@ -188,6 +188,9 @@ func (m *lockFailingCache) Ping(ctx context.Context) error { return nil }
 func (m *lockFailingCache) SetStruct(ctx context.Context, k string, v interface{}, d time.Duration) error {
 	return m.base.SetStruct(ctx, k, v, d)
 }
+func (m *lockFailingCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	return m.base.SetStructs(ctx, keys, values, expiration)
+}
 func (m *lockFailingCache) GetStruct(ctx context.Context, k string, v interface{}) (bool, error) {
 	return m.base.GetStruct(ctx, k, v)
 }

@@ -330,55 +330,96 @@ func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context) error
 // lock the tracked items in Redis in preparation to finalize the transaction commit.
 // This should work in combination of optimistic locking.
 func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Duration) error {
+	var keys []string
+	var uuids []sop.UUID
 	for uuid, cachedItem := range t.items {
 		if cachedItem.Action == addAction {
 			continue
 		}
-		var readItem lockRecord
-		if found, err := t.cache.GetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &readItem); !found || err != nil {
-			if err != nil {
-				return err
+		keys = append(keys, t.cache.FormatLockKey(uuid.String()))
+		uuids = append(uuids, uuid)
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	targets := make([]interface{}, len(keys))
+	for i := range targets {
+		targets[i] = &lockRecord{}
+	}
+	found, err := t.cache.GetStructs(ctx, keys, targets, 0)
+	if err != nil {
+		return err
+	}
+
+	var verifyKeys []string
+	var verifyUUIDs []sop.UUID
+	var verifyTargets []interface{}
+	var setKeys []string
+	var setValues []interface{}
+
+	for i, uuid := range uuids {
+		cachedItem := t.items[uuid]
+		if found[i] {
+			readItem := *(targets[i].(*lockRecord))
+			if readItem.LockID == cachedItem.LockID {
+				continue
 			}
-			// Item does not exist, upsert it.
-			if err := t.cache.SetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &(cachedItem.lockRecord), duration); err != nil {
-				return err
+			if readItem.Action == getAction && cachedItem.Action == getAction {
+				continue
 			}
-			// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
-			if found, err := t.cache.GetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &readItem); !found || err != nil {
-				if err != nil {
-					return err
-				}
+			return fmt.Errorf("lock(item: %v) call detected conflict", uuid.String())
+		}
+		// Item does not exist, upsert it.
+		setKeys = append(setKeys, keys[i])
+		rec := cachedItem.lockRecord
+		setValues = append(setValues, &rec)
+
+		verifyKeys = append(verifyKeys, keys[i])
+		verifyUUIDs = append(verifyUUIDs, uuid)
+		verifyTargets = append(verifyTargets, &lockRecord{})
+	}
+
+	if len(setKeys) > 0 {
+		if err := t.cache.SetStructs(ctx, setKeys, setValues, duration); err != nil {
+			return err
+		}
+	}
+
+	if len(verifyKeys) == 0 {
+		return nil
+	}
+
+	// Use a 2nd "get" to ensure we "won" the lock attempt & fail if not.
+	foundVerify, err := t.cache.GetStructs(ctx, verifyKeys, verifyTargets, 0)
+	if err != nil {
+		return err
+	}
+
+	for i, uuid := range verifyUUIDs {
+		cachedItem := t.items[uuid]
+		readItem := *(verifyTargets[i].(*lockRecord))
+		if !foundVerify[i] {
+			return fmt.Errorf("lock(item: %v) call can't attain a lock in Redis", uuid.String())
+		}
+		if readItem.LockID != cachedItem.LockID {
+			if readItem.Action == getAction && cachedItem.Action == getAction {
+				continue
+			}
+			if readItem.LockID.IsNil() {
 				return fmt.Errorf("lock(item: %v) call can't attain a lock in Redis", uuid.String())
-			} else if readItem.LockID != cachedItem.LockID {
-				if readItem.Action == getAction && cachedItem.Action == getAction {
-					continue
-				}
-				if readItem.LockID.IsNil() {
-					return fmt.Errorf("lock(item: %v) call can't attain a lock in Redis", uuid.String())
-				}
-				return fmt.Errorf("lock(item: %v) call detected conflict", uuid.String())
 			}
-			// We got the item locked, ensure we can unlock it.
-			cachedItem.isLockOwner = true
-			t.items[uuid] = cachedItem
-			continue
+			return fmt.Errorf("lock(item: %v) call detected conflict", uuid.String())
 		}
-		// Item found in Redis.
-		if readItem.LockID == cachedItem.LockID {
-			continue
-		}
-		// Lock compatibility check.
-		if readItem.Action == getAction && cachedItem.Action == getAction {
-			continue
-		}
-		return fmt.Errorf("lock(item: %v) call detected conflict", uuid.String())
+		// We got the item locked, ensure we can unlock it.
+		cachedItem.isLockOwner = true
+		t.items[uuid] = cachedItem
 	}
 	return nil
 }
 
 // unlock will attempt to unlock or delete all tracked items from redis.
 func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context) error {
-	var lastErr error
+	keys := make([]string, 0, len(t.items))
 	for uuid, cachedItem := range t.items {
 		if cachedItem.Action == addAction {
 			continue
@@ -386,11 +427,13 @@ func (t *itemActionTracker[TK, TV]) unlock(ctx context.Context) error {
 		if !cachedItem.isLockOwner {
 			continue
 		}
-		if found, err := t.cache.Delete(ctx, []string{t.cache.FormatLockKey(uuid.String())}); !found || err != nil {
-			if err != nil {
-				lastErr = err
-			}
-		}
+		keys = append(keys, t.cache.FormatLockKey(uuid.String()))
 	}
-	return lastErr
+	if len(keys) == 0 {
+		return nil
+	}
+	if _, err := t.cache.Delete(ctx, keys); err != nil {
+		return err
+	}
+	return nil
 }

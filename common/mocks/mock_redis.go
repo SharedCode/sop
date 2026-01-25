@@ -72,6 +72,15 @@ func (m *mockRedis) SetStruct(ctx context.Context, key string, value interface{}
 	return nil
 }
 
+func (m *mockRedis) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	for i, key := range keys {
+		if err := m.SetStruct(ctx, key, values[i], expiration); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (m *mockRedis) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	ba, ok := m.lookup[key]
 	if !ok {

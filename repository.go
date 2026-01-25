@@ -175,6 +175,8 @@ type L2Cache interface {
 
 	// SetStruct upserts a struct value under a key.
 	SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error
+	// SetStructs upserts multiple struct values under the given keys in a single round trip (pipelined).
+	SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error
 	// GetStruct fetches a struct value; first return indicates success (false for not found or error).
 	GetStruct(ctx context.Context, key string, target interface{}) (bool, error)
 	// GetStructEx fetches a struct value with TTL/sliding expiration semantics.

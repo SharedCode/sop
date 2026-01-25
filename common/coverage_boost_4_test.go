@@ -247,6 +247,17 @@ func (z zeroSetCache) SetStruct(ctx context.Context, key string, value interface
 	}
 	return z.L2Cache.SetStruct(ctx, key, value, expiration)
 }
+func (z zeroSetCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	newValues := make([]interface{}, len(values))
+	for i, v := range values {
+		if lr, ok := v.(*lockRecord); ok {
+			// Store with zero UUID
+			v = &lockRecord{LockID: sop.NilUUID, Action: lr.Action}
+		}
+		newValues[i] = v
+	}
+	return z.L2Cache.SetStructs(ctx, keys, newValues, expiration)
+}
 
 func Test_ItemActionTracker_Lock_RegetNilLockID_Error(t *testing.T) {
 	ctx := context.Background()

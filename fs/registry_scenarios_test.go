@@ -75,6 +75,9 @@ func (c *cacheGetError) Ping(ctx context.Context) error { return nil }
 func (c *cacheGetError) SetStruct(ctx context.Context, k string, v interface{}, d time.Duration) error {
 	return c.base.SetStruct(ctx, k, v, d)
 }
+func (c *cacheGetError) SetStructs(ctx context.Context, keys []string, values []interface{}, duration time.Duration) error {
+	return c.base.SetStructs(ctx, keys, values, duration)
+}
 func (c *cacheGetError) GetStruct(ctx context.Context, k string, v interface{}) (bool, error) {
 	if !c.tripped {
 		c.tripped = true

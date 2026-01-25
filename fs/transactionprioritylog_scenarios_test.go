@@ -338,6 +338,9 @@ func (c *alwaysLockFailCache) Ping(ctx context.Context) error { return nil }
 func (c *alwaysLockFailCache) SetStruct(ctx context.Context, k string, v interface{}, d time.Duration) error {
 	return c.mocksCache.SetStruct(ctx, k, v, d)
 }
+func (c *alwaysLockFailCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	return c.mocksCache.SetStructs(ctx, keys, values, expiration)
+}
 func (c *alwaysLockFailCache) GetStruct(ctx context.Context, k string, v interface{}) (bool, error) {
 	return c.mocksCache.GetStruct(ctx, k, v)
 }

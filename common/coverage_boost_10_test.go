@@ -70,6 +70,12 @@ func (c secondGetMissCache) GetStruct(ctx context.Context, key string, target in
 	return false, nil
 }
 
+func (c secondGetMissCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, duration time.Duration) ([]bool, error) {
+	results := make([]bool, len(keys))
+	// Return false for all to simulate miss
+	return results, nil
+}
+
 func Test_ItemActionTracker_Lock_SecondGet_NotFound_ReturnsError(t *testing.T) {
 	ctx := context.Background()
 	base := mocks.NewMockClient()

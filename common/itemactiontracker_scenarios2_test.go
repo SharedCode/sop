@@ -45,6 +45,14 @@ func (f *flakyCache) SetStruct(ctx context.Context, key string, value interface{
 	}
 	return f.base.SetStruct(ctx, key, value, expiration)
 }
+func (f *flakyCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	for _, key := range keys {
+		if key == f.targetKey {
+			f.triggerOnce = true
+		}
+	}
+	return f.base.SetStructs(ctx, keys, values, expiration)
+}
 func (f *flakyCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	if key == f.targetKey && f.triggerOnce {
 		// Consume the one-shot trigger and report miss.
@@ -58,7 +66,21 @@ func (f *flakyCache) GetStructEx(ctx context.Context, key string, target interfa
 	return f.base.GetStructEx(ctx, key, target, expiration)
 }
 func (f *flakyCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
-	return f.base.GetStructs(ctx, keys, targets, expiration)
+	results, err := f.base.GetStructs(ctx, keys, targets, expiration)
+	if err != nil {
+		return results, err
+	}
+	if f.triggerOnce {
+		// If triggered, verify if any key matches targetKey
+		for i, k := range keys {
+			if k == f.targetKey {
+				// Found the key to flake on
+				f.triggerOnce = false
+				results[i] = false
+			}
+		}
+	}
+	return results, nil
 }
 func (f *flakyCache) Delete(ctx context.Context, keys []string) (bool, error) {
 	return f.base.Delete(ctx, keys)
@@ -153,6 +175,9 @@ func (e *errLockCache) GetEx(ctx context.Context, key string, expiration time.Du
 func (e *errLockCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
 	return e.base.SetStruct(ctx, key, value, expiration)
 }
+func (e *errLockCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	return e.base.SetStructs(ctx, keys, values, expiration)
+}
 func (e *errLockCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	if key == e.targetKey {
 		return false, fmt.Errorf("early getstruct failure")
@@ -163,6 +188,11 @@ func (e *errLockCache) GetStructEx(ctx context.Context, key string, target inter
 	return e.base.GetStructEx(ctx, key, target, expiration)
 }
 func (e *errLockCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	for _, k := range keys {
+		if k == e.targetKey {
+			return nil, fmt.Errorf("early getstruct failure")
+		}
+	}
 	return e.base.GetStructs(ctx, keys, targets, expiration)
 }
 func (e *errLockCache) Delete(ctx context.Context, keys []string) (bool, error) {
@@ -303,6 +333,14 @@ func (e *errCache) SetStruct(ctx context.Context, key string, value interface{},
 		return errors.New("redis setstruct failure")
 	}
 	return e.base.SetStruct(ctx, key, value, expiration)
+}
+func (e *errCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+	for _, key := range keys {
+		if key == e.valueKey {
+			return errors.New("redis setstructs failure")
+		}
+	}
+	return e.base.SetStructs(ctx, keys, values, expiration)
 }
 func (e *errCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
 	if key == e.valueKey {
