@@ -130,6 +130,9 @@ func (c *capturingMockCache) GetStruct(ctx context.Context, key string, target i
 func (c *capturingMockCache) GetStructEx(ctx context.Context, key string, target interface{}, duration time.Duration) (bool, error) {
 	return c.mock.GetStructEx(ctx, key, target, duration)
 }
+func (c *capturingMockCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	return c.mock.GetStructs(ctx, keys, targets, expiration)
+}
 func (c *capturingMockCache) SetStruct(ctx context.Context, key string, value interface{}, duration time.Duration) error {
 	return c.mock.SetStruct(ctx, key, value, duration)
 }

@@ -194,6 +194,9 @@ func (m *lockFailingCache) GetStruct(ctx context.Context, k string, v interface{
 func (m *lockFailingCache) GetStructEx(ctx context.Context, k string, v interface{}, d time.Duration) (bool, error) {
 	return m.base.GetStructEx(ctx, k, v, d)
 }
+func (m *lockFailingCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	return m.base.GetStructs(ctx, keys, targets, expiration)
+}
 func (m *lockFailingCache) Delete(ctx context.Context, ks []string) (bool, error) {
 	return m.base.Delete(ctx, ks)
 }

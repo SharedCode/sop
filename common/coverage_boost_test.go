@@ -730,6 +730,9 @@ func (m missAfterSetCache) GetStruct(ctx context.Context, k string, tgt interfac
 func (m missAfterSetCache) GetStructEx(ctx context.Context, k string, tgt interface{}, d time.Duration) (bool, error) {
 	return m.base.GetStructEx(ctx, k, tgt, d)
 }
+func (m missAfterSetCache) GetStructs(ctx context.Context, k []string, tgt []interface{}, d time.Duration) ([]bool, error) {
+	return m.base.GetStructs(ctx, k, tgt, d)
+}
 func (m missAfterSetCache) Delete(ctx context.Context, ks []string) (bool, error) {
 	return m.base.Delete(ctx, ks)
 }

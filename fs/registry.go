@@ -142,23 +142,29 @@ func (r *registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPaylo
 	for _, storeLids := range storesLids {
 		handles := make([]sop.Handle, 0, len(storeLids.IDs))
 		lids := make([]sop.UUID, 0, len(storeLids.IDs))
+
+		keys := make([]string, len(storeLids.IDs))
+		targets := make([]interface{}, len(storeLids.IDs))
+		handleTargets := make([]sop.Handle, len(storeLids.IDs))
 		for i := range storeLids.IDs {
-			h := sop.Handle{}
-			var err error
-			var found bool
-			if storeLids.IsCacheTTL {
-				found, err = r.l2Cache.GetStructEx(ctx, storeLids.IDs[i].String(), &h, storeLids.CacheDuration)
-			} else {
-				found, err = r.l2Cache.GetStruct(ctx, storeLids.IDs[i].String(), &h)
-			}
-			if !found || err != nil {
-				if err != nil {
-					log.Warn(fmt.Sprintf("Registry Get (redis getstruct) failed, details: %v", err))
-				}
+			keys[i] = storeLids.IDs[i].String()
+			targets[i] = &handleTargets[i]
+		}
+		var duration time.Duration
+		if storeLids.IsCacheTTL {
+			duration = storeLids.CacheDuration
+		}
+		found, err := r.l2Cache.GetStructs(ctx, keys, targets, duration)
+		if err != nil {
+			log.Warn(fmt.Sprintf("Registry Get (redis getstructs) failed, details: %v", err))
+		}
+
+		for i := range storeLids.IDs {
+			if err != nil || !found[i] {
 				lids = append(lids, storeLids.IDs[i])
 				continue
 			}
-			handles = append(handles, h)
+			handles = append(handles, handleTargets[i])
 		}
 
 		if len(lids) == 0 {

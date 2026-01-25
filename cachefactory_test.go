@@ -106,6 +106,9 @@ func (m *mockL2Cache) GetStruct(ctx context.Context, key string, target interfac
 func (m *mockL2Cache) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error) {
 	return false, nil
 }
+func (m *mockL2Cache) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	return make([]bool, len(keys)), nil
+}
 func (m *mockL2Cache) Delete(ctx context.Context, keys []string) (bool, error) { return true, nil }
 func (m *mockL2Cache) Ping(ctx context.Context) error                          { return nil }
 func (m *mockL2Cache) FormatLockKey(k string) string                           { return k }

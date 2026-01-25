@@ -179,6 +179,10 @@ type L2Cache interface {
 	GetStruct(ctx context.Context, key string, target interface{}) (bool, error)
 	// GetStructEx fetches a struct value with TTL/sliding expiration semantics.
 	GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error)
+	// GetStructs fetches multiple struct values with optional TTL/sliding expiration semantics.
+	// If expiration > 0, it behaves like GetStructEx for each key (pipelined).
+	// If expiration <= 0, it behaves like GetStruct but batched (e.g. MGET).
+	GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error)
 	// Delete removes objects by keys; returns whether all keys were deleted.
 	Delete(ctx context.Context, keys []string) (bool, error)
 	// Ping checks connectivity to the cache backend.

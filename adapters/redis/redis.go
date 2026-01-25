@@ -249,6 +249,77 @@ func (c client) GetStructEx(ctx context.Context, key string, target interface{},
 	return r, err
 }
 
+// GetStructs fetches multiple struct values with optional TTL/sliding expiration semantics.
+func (c client) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	if len(keys) != len(targets) {
+		return nil, fmt.Errorf("keys and targets length mismatch")
+	}
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	conn, err := c.getConnection()
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]bool, len(keys))
+
+	if expiration <= 0 {
+		vals, err := conn.Client.MGet(ctx, keys...).Result()
+		if err != nil {
+			return nil, fmt.Errorf("redis mget failed: %w", err)
+		}
+		for i, v := range vals {
+			if v == nil {
+				results[i] = false
+				continue
+			}
+			var ba []byte
+			switch s := v.(type) {
+			case string:
+				ba = []byte(s)
+			case []byte:
+				ba = s
+			default:
+				results[i] = false
+				continue
+			}
+			if err := encoding.DefaultMarshaler.Unmarshal(ba, targets[i]); err != nil {
+				return nil, fmt.Errorf("unmarshal failed for key %s: %w", keys[i], err)
+			}
+			results[i] = true
+		}
+		return results, nil
+	}
+
+	pipe := conn.Client.Pipeline()
+	cmds := make([]*redis.StringCmd, len(keys))
+	for i, k := range keys {
+		cmds[i] = pipe.GetEx(ctx, k, expiration)
+	}
+	_, _ = pipe.Exec(ctx)
+
+	for i, cmd := range cmds {
+		err := cmd.Err()
+		if err == nil {
+			ba, err := cmd.Bytes()
+			if err != nil {
+				results[i] = false
+				continue
+			}
+			if err := encoding.DefaultMarshaler.Unmarshal(ba, targets[i]); err != nil {
+				return nil, fmt.Errorf("unmarshal failed for key %s: %w", keys[i], err)
+			}
+			results[i] = true
+		} else if err == redis.Nil {
+			results[i] = false
+		} else {
+			return nil, fmt.Errorf("pipeline getex failed for key %s: %w", keys[i], err)
+		}
+	}
+	return results, nil
+}
+
 // Delete removes keys and returns whether the operation completed without backend errors.
 func (c client) Delete(ctx context.Context, keys []string) (bool, error) {
 	conn, err := c.getConnection()

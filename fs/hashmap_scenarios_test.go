@@ -106,6 +106,9 @@ func (m *mockCacheHashmap) GetStruct(ctx context.Context, key string, target int
 func (m *mockCacheHashmap) GetStructEx(ctx context.Context, key string, target interface{}, exp time.Duration) (bool, error) {
 	return m.base.GetStructEx(ctx, key, target, exp)
 }
+func (m *mockCacheHashmap) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	return m.base.GetStructs(ctx, keys, targets, expiration)
+}
 func (m *mockCacheHashmap) Delete(ctx context.Context, keys []string) (bool, error) {
 	return m.base.Delete(ctx, keys)
 }

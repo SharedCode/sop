@@ -57,6 +57,9 @@ func (f *flakyCache) GetStructEx(ctx context.Context, key string, target interfa
 	// Delegate; not used in this test scenario.
 	return f.base.GetStructEx(ctx, key, target, expiration)
 }
+func (f *flakyCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	return f.base.GetStructs(ctx, keys, targets, expiration)
+}
 func (f *flakyCache) Delete(ctx context.Context, keys []string) (bool, error) {
 	return f.base.Delete(ctx, keys)
 }
@@ -158,6 +161,9 @@ func (e *errLockCache) GetStruct(ctx context.Context, key string, target interfa
 }
 func (e *errLockCache) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error) {
 	return e.base.GetStructEx(ctx, key, target, expiration)
+}
+func (e *errLockCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	return e.base.GetStructs(ctx, keys, targets, expiration)
 }
 func (e *errLockCache) Delete(ctx context.Context, keys []string) (bool, error) {
 	return e.base.Delete(ctx, keys)
@@ -310,6 +316,9 @@ func (e *errCache) GetStructEx(ctx context.Context, key string, target interface
 		return false, errors.New("redis getstructex failure")
 	}
 	return e.base.GetStructEx(ctx, key, target, expiration)
+}
+func (e *errCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	return e.base.GetStructs(ctx, keys, targets, expiration)
 }
 func (e *errCache) Delete(ctx context.Context, keys []string) (bool, error) {
 	return e.base.Delete(ctx, keys)

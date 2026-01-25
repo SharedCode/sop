@@ -344,6 +344,9 @@ func (c *alwaysLockFailCache) GetStruct(ctx context.Context, k string, v interfa
 func (c *alwaysLockFailCache) GetStructEx(ctx context.Context, k string, v interface{}, d time.Duration) (bool, error) {
 	return c.mocksCache.GetStructEx(ctx, k, v, d)
 }
+func (c *alwaysLockFailCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	return c.mocksCache.GetStructs(ctx, keys, targets, expiration)
+}
 func (c *alwaysLockFailCache) Delete(ctx context.Context, ks []string) (bool, error) {
 	return c.mocksCache.Delete(ctx, ks)
 }

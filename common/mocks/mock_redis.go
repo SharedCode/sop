@@ -87,6 +87,18 @@ func (m *mockRedis) GetStructEx(ctx context.Context, key string, target interfac
 	return m.GetStruct(ctx, key, target)
 }
 
+func (m *mockRedis) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	found := make([]bool, len(keys))
+	for i, key := range keys {
+		ok, err := m.GetStruct(ctx, key, targets[i])
+		if err != nil {
+			return nil, err
+		}
+		found[i] = ok
+	}
+	return found, nil
+}
+
 // Delete removes keys from both string and struct maps.
 func (m *mockRedis) Delete(ctx context.Context, keys []string) (bool, error) {
 	deletedAny := false

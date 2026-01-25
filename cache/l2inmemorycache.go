@@ -155,6 +155,24 @@ func (c *L2InMemoryCache) GetStructEx(ctx context.Context, key string, target in
 	return true, nil
 }
 
+func (c *L2InMemoryCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	found := make([]bool, len(keys))
+	for i, key := range keys {
+		var err error
+		var ok bool
+		if expiration > 0 {
+			ok, err = c.GetStructEx(ctx, key, targets[i], expiration)
+		} else {
+			ok, err = c.GetStruct(ctx, key, targets[i])
+		}
+		if err != nil {
+			return nil, err
+		}
+		found[i] = ok
+	}
+	return found, nil
+}
+
 func (c *L2InMemoryCache) Delete(ctx context.Context, keys []string) (bool, error) {
 	for _, k := range keys {
 		c.data.delete(k)

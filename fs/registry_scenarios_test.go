@@ -89,6 +89,13 @@ func (c *cacheGetError) GetStructEx(ctx context.Context, k string, v interface{}
 	}
 	return c.base.GetStructEx(ctx, k, v, d)
 }
+func (c *cacheGetError) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	if !c.tripped {
+		c.tripped = true
+		return nil, fmt.Errorf("induced getstructs error")
+	}
+	return c.base.GetStructs(ctx, keys, targets, expiration)
+}
 func (c *cacheGetError) Delete(ctx context.Context, ks []string) (bool, error) {
 	return c.base.Delete(ctx, ks)
 }

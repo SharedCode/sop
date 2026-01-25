@@ -241,6 +241,9 @@ func (c *cacheIsLockedFalse) GetStruct(ctx context.Context, key string, target i
 func (c *cacheIsLockedFalse) GetStructEx(ctx context.Context, key string, target interface{}, exp time.Duration) (bool, error) {
 	return c.base.GetStructEx(ctx, key, target, exp)
 }
+func (c *cacheIsLockedFalse) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	return c.base.GetStructs(ctx, keys, targets, expiration)
+}
 func (c *cacheIsLockedFalse) Delete(ctx context.Context, keys []string) (bool, error) {
 	return c.base.Delete(ctx, keys)
 }

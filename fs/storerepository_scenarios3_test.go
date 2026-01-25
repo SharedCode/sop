@@ -43,6 +43,9 @@ func (m mockCacheWarn) GetStruct(ctx context.Context, k string, tgt interface{})
 func (m mockCacheWarn) GetStructEx(ctx context.Context, k string, tgt interface{}, d time.Duration) (bool, error) {
 	return m.inner.GetStructEx(ctx, k, tgt, d)
 }
+func (m mockCacheWarn) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+	return m.inner.GetStructs(ctx, keys, targets, expiration)
+}
 func (m mockCacheWarn) Delete(context.Context, []string) (bool, error) {
 	return false, errors.New("fail delete")
 }
