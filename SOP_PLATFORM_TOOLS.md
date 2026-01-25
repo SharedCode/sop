@@ -79,8 +79,12 @@ To support this advanced architecture, complexity must be managed. We are introd
 *   **Database Management:** Effortlessly attach User Databases and System Databases to your environments.
 *   **One-Click Demo:** Spin up a fully populated eCommerce Demo Database to test drive the system immediately.
 
-### Data Manager & Visual Script Studio
-The Data Manager interface has been overhauled to serve as a command center for your data, supporting "Relational Intelligence" and flexible development workflows (**Code-First** or **Data-First**).
+### Data Manager & RESTful API HTTP Server
+The Data Manager is a complete data management suite that empowers developers and administrators to control their data infrastructure with unprecedented ease. It combines a beautiful, modern **Graphical User Interface (GUI)** for managing diverse databases and B-Tree stores with a powerful **SOP AI Copilot** that bridges the gap between intent and action.
+
+*   **RESTful API Server:** Provides a standardized, high-performance HTTP interface for executing scripts, managing stores, and performing CRUD operations across any language that speaks HTTP.
+*   **Visual Management GUI:** A stunning, intuitive interface for managing stores & their data, managing environments, and visualizing data structures across multiple clustered or local databases.
+*   **Natural Language & SQL Capabilities:** Simply type intents like *"Create a new store"* or complex SQL-like queries such as *"Select * From Users Where Age > 25"*, and the AI Copilot executes them instantly.
 *   **Visual Script Studio:** A complete in-browser IDE for authoring and managing automation scripts.
 *   **Schema Awareness:** The system now understands the relationships between your Stores (tables).
 *   **SOP AI Copilot:** A built-in assistant that translates natural language intent into precise system actions, featuring self-correction capabilities.

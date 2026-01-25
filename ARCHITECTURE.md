@@ -60,6 +60,50 @@ These packages are intended for direct use by consumers of the library:
 *   **Modifying Internal Packages**: If you are contributing to `internal/inredck`, be aware that changes here can affect both `incfs` and `streamingdata`. Always run the full integration test suite (`SOP_RUN_INCFS_IT=1`) after modifications.
 *   **New Features**: New public features should generally be exposed via `incfs` or `streamingdata`, delegating to internal packages for the heavy lifting.
 
+## Consistency & Caching Architecture
+
+SOP employs a multi-tiered caching strategy designed to balance high performance with strict consistency, preventing stale reads even in high-throughput scenarios.
+
+### The Stale Read Challenge
+
+In a distributed system with local caching (L1), a common risk is **Local Staleness**:
+1.  Transaction A on Host 1 updates Node X.
+2.  Transaction B on Host 2 reads Node X from its local L1 cache.
+3.  Host 2's L1 cache might still hold the old version of Node X, leading to a "Stale Read."
+
+### The SOP Solution: Indirect Synchronization (The "Pheromone" Approach)
+
+SOP solves this by utilizing a technique inspired by **Swarm Intelligence "Pheromone" algorithms**. Instead of synchronizing the bulky data (L1 Cache) across the swarm, we only synchronize the tiny navigational signals (Registry Handles).
+
+1.  **Registry as Authority**: The Registry maps a Virtual ID (UUID) to a Physical Handle (Version + Physical ID). This mapping resides in the **L2 Cache (Redis)** or the persistent Registry file.
+2.  **The "Check-First" Flow**:
+    *   **Step 1**: When a transaction requests a Node by its Virtual ID, it **always** queries the Registry (L2) first.
+    *   **Step 2**: The Registry returns the *current* Physical ID (e.g., `NodeID_v2`).
+    *   **Step 3**: The transaction *then* checks the L1 cache for `NodeID_v2`.
+    *   **Step 4**:
+        *   **Hit**: If `NodeID_v2` is in L1, it is returned (Fast).
+        *   **Miss**: If not, it is fetched from the Blob Store.
+3.  **Why Staleness is Impossible**:
+    *   If Host 1 updates Node X to `v2`, the Registry is updated to point Node X -> `NodeID_v2`.
+    *   Host 2's L1 cache might still have `NodeID_v1`.
+    *   When Host 2 requests Node X, the Registry tells it: "The current node is `NodeID_v2`."
+    *   Host 2 looks for `NodeID_v2` in L1. It won't find it (or will find the correct new data). It will *never* accidentally return `NodeID_v1` because the Registry handle didn't ask for it.
+
+> **Swarm Architecture Benefit**: This design eliminates the need for stressful messaging, broadcast invalidations, or heavy L1-L2 synchronization protocols. We intentionally **do not cache Registry Handles in L1**. By forcing this "tiny" indirect synchronization via the Registry (acting like a minimal pheromone trail), SOP allows the swarm to operate in a lightweight manner without the overhead of heavy cache coherence traffic.
+
+### ACID Enforcement: The "Theory of Relativity" Approach
+
+While the "Pheromone" synchronization ensures access to fresh data, SOP guarantees strict **ACID** compliance through a rigorous **Two-Points-in-Time** validation mechanism during the commit phase, effectively enforcing a "Theory of Relativity" for transactions.
+
+Most distributed systems compromise on consistency to achieve speed, settling for "Eventual Consistency" (loosey-goosey state). SOP refuses this compromise.
+
+1.  **Point A (Read Time)**: When the transaction acts (reads/writes), it captures the specific **Version** of every artifact involved.
+2.  **Point B (Commit Time)**: During **Phase 2 Commit**, the system re-verifies these versions against the Registry (Source of Truth).
+
+If the version at Point B matches the version at Point A, it proves that **"Time Stood Still"** for that transaction relative to the data it touched. No other actor interfered with the state. This mechanism guarantees **Snapshot Isolation** and strictly serializable behavior without the heavy locking overhead of traditional relational databases.
+
+**The Result**: State-of-the-Art performance with enterprise-grade ACID guarantees. SOP delivers the speed of "Eventual Consistency" systems while strictly enforcing the correctness of a traditional RDBMS.
+
 ## Component Interaction & Backends
 
 SOP supports two primary backends, each with a distinct architecture for handling metadata and data.

@@ -10,7 +10,7 @@ At its core, SOP is not just a traditional code library; it is a **Distributed C
 
 Packed inside the library is everything you need to build next-generation distributed systems:
 *   **Swarm Computing Engine**: A framework for distributed coordination, allowing applications to act as coherent parts of a greater whole.
-*   **Polyglot Storage Engine**: An ACID-compliant B-Tree storage system with Caching and Erasure Coding, optimized for performance.
+*   **Polyglot Storage Engine**: An ACID-compliant B-Tree storage system with Caching and Erasure Coding, optimized for performance. [Read the Architecture Whitepaper](SOP_ARCHITECTURE_WHITEPAPER.md).
 *   **AI Scripting & Computing Engine**: A versatile runtime that allows for creating intelligent, self-correcting workflows.
 
 ## Installation & Distribution
