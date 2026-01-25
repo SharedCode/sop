@@ -94,6 +94,7 @@ func TestFakeAgentGeneration(t *testing.T) {
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{
 		CurrentDB: "mydb",
 	})
+	adminAgent.Open(ctx)
 
 	// Initialize script store
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)

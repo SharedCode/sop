@@ -14,8 +14,9 @@ func TestDataAdminAgent_Ask_SlashCommand(t *testing.T) {
 		EnableObfuscation: false,
 	}
 	agent := NewDataAdminAgent(cfg, nil, nil)
-
 	ctx := context.Background()
+	agent.Open(ctx)
+
 	// Inject session payload which is required by Execute
 	payload := &ai.SessionPayload{
 		CurrentDB: "system",

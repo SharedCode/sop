@@ -93,7 +93,7 @@ func handleCreateEnvironment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Reload agents (will be empty)
-	initAgents()
+	initAgents(r.Context())
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -142,7 +142,7 @@ func handleSwitchEnvironment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Re-initialize agents to pick up new database configuration
-	initAgents()
+	initAgents(r.Context())
 
 	// Force update ConfigFile tracker
 	config.ConfigFile = req.Filename
@@ -269,7 +269,7 @@ func handleUpdateLLMConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Reload agents to reflect configuration changes
-	initAgents()
+	initAgents(r.Context())
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "LLM API Key updated successfully"})
@@ -647,7 +647,7 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Reload agents to reflect configuration changes
-	initAgents()
+	initAgents(r.Context())
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Database initialized successfully"})

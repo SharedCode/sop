@@ -255,7 +255,7 @@ func TestToolSelect_ScriptView(t *testing.T) {
 		databases: map[string]sop.DatabaseOptions{"testdb": dbOpts},
 		systemDB:  systemDB,
 	}
-	agent.registerTools()
+	agent.registerTools(context.Background())
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "testdb"})
 
 	// Query: Select name from 'active_users'

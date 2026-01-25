@@ -4,7 +4,14 @@ This document defines the structured Knowledge Schema used by the AI Agent to st
 
 ## 1. The Structure
 
-All semantic knowledge is stored in the `llm_knowledge` B-Tree using specific **Namespaces** (Categories). The `Value` of each entry MUST be a valid JSON string adhering to the schemas below.
+All semantic knowledge is stored in the configured **Knowledge Store** (default name: `llm_knowledge`) within the System Database. The name of this B-Tree is configurable via the `agent.KnowledgeStore` constant.
+
+**Storage Location & Scoping**:
+The physical location of this knowledge depends on the connection string of the System Database provided to the Agent.
+- **Global Knowledge**: Connect all agents to a single System DB.
+- **Domain/Environment Knowledge**: Connect agents to specific System DBs (e.g., `sys_dev`, `sys_finance`) to isolate rules.
+
+The `Value` of each entry MUST be a valid JSON string adhering to the schemas below.
 
 ### Namespace: `vocabulary`
 **Purpose**: Maps user-specific terms, synonyms, or domain slang to actual database fields or store names.

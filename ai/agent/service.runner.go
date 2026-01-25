@@ -683,7 +683,7 @@ func (s *Service) runStepFetch(ctx context.Context, step ai.ScriptStep, scope ma
 		// 1. Resolve Database
 		if step.Database != "" {
 			// Use Service configuration for resolution
-			if (step.Database == "system" || step.Database == "SystemDB") && s.systemDB != nil {
+			if step.Database == SystemDBName && s.systemDB != nil {
 				db = s.systemDB
 			} else if opts, ok := s.databases[step.Database]; ok {
 				db = database.NewDatabase(opts)

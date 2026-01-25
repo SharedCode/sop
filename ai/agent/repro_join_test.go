@@ -150,7 +150,14 @@ func TestJoinRightReproduction(t *testing.T) {
 		StoresFolders: []string{"/tmp/sysdb_repro"},
 	})
 
+	execCtx := context.WithValue(ctx, "session_payload", &ai.SessionPayload{
+		CurrentDB: "mydb",
+	})
+
 	adminAgent := agent.NewDataAdminAgent(cfg, databases, sysDB)
+	if err := adminAgent.Open(execCtx); err != nil {
+		t.Fatalf("Failed to open agent: %v", err)
+	}
 
 	// Actually, let's use the exact script structure from the user logs.
 	scriptSteps := []any{
@@ -170,10 +177,6 @@ func TestJoinRightReproduction(t *testing.T) {
 		map[string]any{"op": "limit", "args": map[string]any{"limit": 7}, "input_var": "stream", "result_var": "output"},
 		map[string]any{"op": "commit_tx", "args": map[string]any{"transaction": "tx"}},
 	}
-
-	execCtx := context.WithValue(ctx, "session_payload", &ai.SessionPayload{
-		CurrentDB: "mydb",
-	})
 
 	fmt.Println("Executing Script...")
 	res, err := adminAgent.Execute(execCtx, "execute_script", map[string]any{

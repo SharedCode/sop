@@ -27,6 +27,7 @@ func TestToolSelect_OrderBy(t *testing.T) {
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
+	agent.Open(ctx)
 
 	// Create Store and Data using sopdb directly
 	t2, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)

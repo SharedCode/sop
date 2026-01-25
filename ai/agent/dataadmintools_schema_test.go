@@ -33,9 +33,10 @@ func TestToolListStores_SchemaEnrichment(t *testing.T) {
 	// Need to initialize generic registry if NewDataAdminAgent doesn't do it properly for all tools.
 	// But NewDataAdminAgent does initialize registry.
 	agent := NewDataAdminAgent(Config{}, dbs, nil)
+	ctx := context.Background()
+	agent.Open(ctx)
 
 	// 3. Populate Data directly
-	ctx := context.Background()
 
 	// Create DB helper
 	db := database.NewDatabase(opts)

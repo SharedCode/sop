@@ -67,6 +67,14 @@ Located in `ai/agent/dataadmintools.utils.go`.
 *   **`renderItem`**: Takes `key`, `val` (or a joined map) and the parsed fields. It constructs an `OrderedMap` to ensure the JSON output matches the requested field order.
 *   **Wildcard Expansion**: Inside `renderItem`, if a field source ends in `*` (e.g., `a.*`), it calls `flattenItem` to get all available keys and filters them based on the prefix (Scope).
 
+### Internal Data Representation: **"Always Prefixed"**
+To resolve ambiguities in Joins and Projections, the system now enforces a strict **Namespaced Internal Representation**.
+*   **Storage**: B-Trees store raw objects (un-prefixed field names like `name`, `id`).
+*   **Pipeline (`scan`)**: The `scan` operation serves as the **Presentation Adapter**. It automatically prefixes all fields with the store name (e.g., `{"name": "Alice"}` becomes `{"users.name": "Alice"}`).
+*   **Pipeline Flow**: All downstream operations (`join`, `project`, `filter` *after scan*) see fully qualified keys.
+*   **Output (`renderItem`)**: The projection layer is responsible for stripping these prefixes for the final user output, unless aliases are used to preserve them.
+*   **Filtering**: Note that `scan` filtering usually happens *before* this prefixing (using the store's local schema), but downstream filters must use the prefixed names.
+
 ---
 
 ## 4. Documentation & LLM Instructions

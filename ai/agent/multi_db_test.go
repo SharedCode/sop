@@ -63,6 +63,9 @@ func TestMultiDBScriptExecution(t *testing.T) {
 		"db2": dbOpts2,
 	}, systemDB)
 
+	ctx = context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{CurrentDB: "db1"})
+	daAgent.Open(ctx)
+
 	// 3. Define Script
 	script := ai.Script{
 		Name: "multidb_script",

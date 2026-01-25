@@ -1182,6 +1182,18 @@ func renderItem(key any, val any, fields any) any {
 						include = true
 					}
 				} else if customPrefix != "" {
+					// Smart Heuristic:
+					// If we find ANY key that matches the prefix (e.g. "orders.id"), then we know "orders" is present as a namespaced entity.
+					// In that case, we should NOT grab un-dotted keys, because they likely belong to a different (Left) store.
+					// We only fall back to grabbing un-dotted keys if there are NO prefixed matches (meaning the requested alias is likely the Left/Flat store).
+					hasPrefixMatch := false
+					for _, checkK := range flatKeys {
+						if strings.HasPrefix(checkK, customPrefix) {
+							hasPrefixMatch = true
+							break
+						}
+					}
+
 					if strings.HasPrefix(k, customPrefix) {
 						include = true
 						// UX Improvement: Strip the prefix from the output key
@@ -1193,9 +1205,13 @@ func renderItem(key any, val any, fields any) any {
 							include = false
 						}
 					}
-					// Removed heuristic that matches un-dotted keys for custom aliases.
-					// This prevents "users.*" from grabbing naked keys like "key" which might belong to the Left unaliased side.
-					// if !strings.Contains(k, ".") { include = true }
+					// Restore heuristic that matches un-dotted keys for custom aliases.
+					// This is necessary because in many pipelines (like scan -> join), the left-most store's fields are NOT prefixed.
+					// So if the user does scan("users") -> project("users.*"), we must assume un-dotted fields belong to "users".
+					// EDIT: Only apply this if we didn't find a strong signal (prefix match) elsewhere.
+					if !hasPrefixMatch && !strings.Contains(k, ".") {
+						include = true
+					}
 				}
 
 				if include {

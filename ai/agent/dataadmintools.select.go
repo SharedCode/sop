@@ -208,13 +208,13 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 			if isDesc {
 				// Use the new optimized FindInDescendingOrder
 				_, err = store.FindInDescendingOrder(ctx, startKey)
-				k, _ := store.GetCurrentKey()
+				k := store.GetCurrentKey()
 				if k != nil {
 					ok = true
 				}
 			} else {
 				_, err = store.FindOne(ctx, startKey, true)
-				k, _ := store.GetCurrentKey()
+				k := store.GetCurrentKey()
 				if k != nil {
 					ok = true
 				}
@@ -236,7 +236,7 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 
 	// Iterate
 	for ok {
-		k, _ := store.GetCurrentKey()
+		k := store.GetCurrentKey()
 		if k == nil {
 			break
 		}

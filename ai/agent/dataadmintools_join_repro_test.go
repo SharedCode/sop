@@ -303,6 +303,7 @@ func TestToolJoin_StoreNamePrefix(t *testing.T) {
 	// Register DB
 	agent.databases["default"] = dbOpts
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "default"})
+	agent.Open(ctx)
 
 	// Execute Join
 	args := map[string]any{
@@ -388,6 +389,7 @@ func TestToolJoin_ReproUserScenario(t *testing.T) {
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
+	agent.Open(ctx)
 
 	// Create Stores and Data
 	t2, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)

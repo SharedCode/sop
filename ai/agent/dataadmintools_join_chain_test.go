@@ -340,7 +340,14 @@ func TestToolJoin_Full(t *testing.T) {
 	foundB3 := false
 
 	for _, r := range results {
-		idA, _ := r["id"].(float64)
+		// Helper to look up ID from various possible keys (due to prefixing/collapsing behavior)
+		var idA float64
+		if v, ok := r["id"]; ok && v != nil {
+			idA, _ = v.(float64)
+		} else if v, ok := r["s_a.id"]; ok && v != nil {
+			idA, _ = v.(float64)
+		}
+
 		idB, _ := r["B.id"].(float64)
 
 		if idA == 1 && r["B.id"] == nil {

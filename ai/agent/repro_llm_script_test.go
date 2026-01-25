@@ -15,7 +15,7 @@ func TestRepro_LLMScript(t *testing.T) {
 	agent := &DataAdminAgent{
 		registry: NewRegistry(),
 	}
-	agent.registerTools()
+	agent.registerTools(context.Background())
 
 	// 2. Mock Data
 	// Left Store: "department"

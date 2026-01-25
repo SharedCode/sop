@@ -92,6 +92,7 @@ func TestReproJoinCollision(t *testing.T) {
 		CurrentDB: "default",
 	}
 	ctx = context.WithValue(ctx, "session_payload", payload)
+	ag.Open(ctx)
 
 	// 4. Execute
 	args := map[string]any{"script": script}

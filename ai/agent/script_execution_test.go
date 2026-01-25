@@ -124,7 +124,7 @@ func TestScriptExecution_SelectTwice(t *testing.T) {
 	}
 	// Ensure registry is initialized and tools are registered
 	adminAgent.registry = NewRegistry()
-	adminAgent.registerTools()
+	adminAgent.registerTools(context.Background())
 	// Inject databases into agent
 	dbName := filepath.Base(tmpDir)
 	dbs := map[string]sop.DatabaseOptions{dbName: dbOpts}
@@ -429,7 +429,7 @@ func TestScriptRecording_SelectTwice(t *testing.T) {
 		brain:    mockGen,
 		registry: NewRegistry(),
 	}
-	adminAgent.registerTools()
+	adminAgent.registerTools(context.Background())
 
 	_ = map[string]ai.Agent[map[string]any]{
 		"sql_admin": adminAgent,
@@ -849,6 +849,7 @@ func TestToolScriptAddStepFromLast_MetaToolExclusion(t *testing.T) {
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
+	agent.Open(ctx)
 
 	// 1. Create a Script
 	// We don't have a direct tool for creating script in registry yet (it's usually done via recording),
@@ -916,6 +917,9 @@ func TestToolScriptUpdateStep(t *testing.T) {
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
+	if err := agent.Open(ctx); err != nil {
+		t.Fatalf("Failed to open agent: %v", err)
+	}
 
 	// 1. Create a Script with 1 step
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)

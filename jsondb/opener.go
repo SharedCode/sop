@@ -18,7 +18,7 @@ type StoreAccessor interface {
 	Previous(ctx context.Context) (bool, error)
 	FindOne(ctx context.Context, key any, first bool) (bool, error)
 	FindInDescendingOrder(ctx context.Context, key any) (bool, error)
-	GetCurrentKey() (any, error)
+	GetCurrentKey() any
 	GetCurrentValue(ctx context.Context) (any, error)
 	Add(ctx context.Context, key any, value any) (bool, error)
 	Update(ctx context.Context, key any, value any) (bool, error)
@@ -93,9 +93,8 @@ func (s *primitiveStore) FindInDescendingOrder(ctx context.Context, key any) (bo
 	}
 	return s.btree.FindInDescendingOrder(ctx, k)
 }
-func (s *primitiveStore) GetCurrentKey() (any, error) {
-	k := s.btree.GetCurrentKey()
-	return k.Key, nil
+func (s *primitiveStore) GetCurrentKey() any {
+	return s.btree.GetCurrentKey().Key
 }
 func (s *primitiveStore) GetCurrentValue(ctx context.Context) (any, error) {
 	return s.btree.GetCurrentValue(ctx)
@@ -149,8 +148,8 @@ func (s *jsonStore) FindInDescendingOrder(ctx context.Context, key any) (bool, e
 	}
 	return s.btree.FindInDescendingOrder(ctx, k)
 }
-func (s *jsonStore) GetCurrentKey() (any, error) {
-	return s.btree.BtreeInterface.GetCurrentKey().Key, nil
+func (s *jsonStore) GetCurrentKey() any {
+	return s.btree.BtreeInterface.GetCurrentKey().Key
 }
 func (s *jsonStore) GetCurrentValue(ctx context.Context) (any, error) {
 	return s.btree.BtreeInterface.GetCurrentValue(ctx)

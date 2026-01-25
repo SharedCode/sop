@@ -64,7 +64,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 
 		var db *database.Database
 		if dbName != "" {
-			if (dbName == "system" || dbName == "SystemDB") && s.systemDB != nil {
+			if dbName == SystemDBName && s.systemDB != nil {
 				db = s.systemDB
 			} else if opts, ok := s.databases[dbName]; ok {
 				db = database.NewDatabase(opts)
@@ -123,7 +123,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 				s, err := jsondb.OpenStore(ctx, dbOpts, sName, tx)
 				if err == nil {
 					if ok, _ := s.First(ctx); ok {
-						k, _ := s.GetCurrentKey()
+						k := s.GetCurrentKey()
 						v, _ := s.GetCurrentValue(ctx)
 						flat := flattenItem(k, v)
 						schema := inferSchema(flat)

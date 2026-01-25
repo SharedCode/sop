@@ -21,18 +21,18 @@ type KnowledgeKey struct {
 	Name     string
 }
 
-// KnowledgeStore manages the AI's long-term knowledge base.
-type KnowledgeStore struct {
+// KnowledgeBase manages the AI's long-term knowledge base.
+type KnowledgeBase struct {
 	store btree.BtreeInterface[KnowledgeKey, string]
 }
 
 // OpenKnowledgeStore opens the knowledge store using the provided transaction.
-func OpenKnowledgeStore(ctx context.Context, trans sop.Transaction, dbOpts sop.DatabaseOptions) (*KnowledgeStore, error) {
+func OpenKnowledgeStore(ctx context.Context, trans sop.Transaction, dbOpts sop.DatabaseOptions) (*KnowledgeBase, error) {
 	if trans == nil {
 		return nil, fmt.Errorf("transaction is required")
 	}
 
-	storeName := "llm_knowledge"
+	storeName := KnowledgeStore
 
 	// Define comparer (Required for composite key)
 	comparer := func(a, b KnowledgeKey) int {
@@ -71,11 +71,11 @@ func OpenKnowledgeStore(ctx context.Context, trans sop.Transaction, dbOpts sop.D
 		return nil, fmt.Errorf("failed to open knowledge store: %w", err)
 	}
 
-	return &KnowledgeStore{store: store}, nil
+	return &KnowledgeBase{store: store}, nil
 }
 
 // Upsert saves a piece of knowledge.
-func (ks *KnowledgeStore) Upsert(ctx context.Context, category, name, value string) error {
+func (ks *KnowledgeBase) Upsert(ctx context.Context, category, name, value string) error {
 	key := KnowledgeKey{Category: category, Name: name}
 	ok, err := ks.store.Upsert(ctx, key, value)
 	if err != nil {
@@ -90,7 +90,7 @@ func (ks *KnowledgeStore) Upsert(ctx context.Context, category, name, value stri
 }
 
 // Get retrieves a piece of knowledge.
-func (ks *KnowledgeStore) Get(ctx context.Context, category, name string) (string, bool, error) {
+func (ks *KnowledgeBase) Get(ctx context.Context, category, name string) (string, bool, error) {
 	key := KnowledgeKey{Category: category, Name: name}
 	// BtreeInterface uses Find, not FindOne
 	found, err := ks.store.Find(ctx, key, false)
@@ -105,14 +105,14 @@ func (ks *KnowledgeStore) Get(ctx context.Context, category, name string) (strin
 }
 
 // Remove deletes a piece of knowledge.
-func (ks *KnowledgeStore) Remove(ctx context.Context, category, name string) (bool, error) {
+func (ks *KnowledgeBase) Remove(ctx context.Context, category, name string) (bool, error) {
 	key := KnowledgeKey{Category: category, Name: name}
 	return ks.store.Remove(ctx, key)
 }
 
 // ListContent returns all items map[Name]Content for a category.
 // Optimized to stop early once outside the category.
-func (ks *KnowledgeStore) ListContent(ctx context.Context, category string) (map[string]string, error) {
+func (ks *KnowledgeBase) ListContent(ctx context.Context, category string) (map[string]string, error) {
 	result := make(map[string]string)
 
 	if ok, err := ks.store.First(ctx); ok && err == nil {
@@ -141,7 +141,7 @@ func (ks *KnowledgeStore) ListContent(ctx context.Context, category string) (map
 }
 
 // ListCategories returns a list of all unique categories in the knowledge base.
-func (ks *KnowledgeStore) ListCategories(ctx context.Context) ([]string, error) {
+func (ks *KnowledgeBase) ListCategories(ctx context.Context) ([]string, error) {
 	categories := make(map[string]bool)
 
 	if ok, err := ks.store.First(ctx); ok && err == nil {

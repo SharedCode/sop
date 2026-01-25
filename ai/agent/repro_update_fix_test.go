@@ -28,9 +28,11 @@ func TestReproScriptUpdateCorruption(t *testing.T) {
 	// Verify NewDataAdminAgent signature
 	// func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, systemDB *database.Database) *DataAdminAgent
 	agent := NewDataAdminAgent(Config{}, nil, sysDB)
+	ctx := context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{CurrentDB: "system"})
+	agent.Open(ctx)
 
 	// 3. Create the script (Preparation)
-	ctx := context.Background()
+	ctx = context.Background()
 
 	// Direct DB access helper
 	// We need to create the 'scripts' store in the Transaction if it doesn't exist?

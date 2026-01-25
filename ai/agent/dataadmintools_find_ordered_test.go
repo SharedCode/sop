@@ -56,6 +56,7 @@ func TestFindNearest_Ordering(t *testing.T) {
 	// Ensure no transaction is carried over
 	payload := &ai.SessionPayload{CurrentDB: "testdb", Transaction: nil}
 	ctx = context.WithValue(ctx, "session_payload", payload)
+	agent.Open(ctx)
 
 	// 3. Execute FindNearest
 	args := map[string]any{

@@ -139,7 +139,7 @@ func TestJoinPipeline_ExplicitInto(t *testing.T) {
 	ok, err = temp2.First(ctx)
 	for ok && err == nil {
 		count++
-		k, _ := temp2.GetCurrentKey()
+		k := temp2.GetCurrentKey()
 		v, _ := temp2.GetCurrentValue(ctx)
 		t.Logf("Final Result: %v = %v", k, v)
 		ok, err = temp2.Next(ctx)

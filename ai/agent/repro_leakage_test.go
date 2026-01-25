@@ -144,6 +144,9 @@ func TestRepro_Leakage_StateCleaning(t *testing.T) {
 		Name: "Repro",
 	}, databases, systemDB)
 
+	ctx = context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
+	svc.Open(ctx)
+
 	svc.SetGenerator(mockBrain)
 	// svc.SetFeature("history_injection", false) // Cannot access directly, assuming default or ignoring.
 
@@ -242,6 +245,7 @@ func TestAliasProjection_JoinRight(t *testing.T) {
 		ID:   "repro-agent-alias",
 		Name: "ReproAlias",
 	}, databases, systemDB)
+	svc.Open(ctx)
 	svc.SetGenerator(mockBrain)
 
 	payload := &ai.SessionPayload{CurrentDB: "dev_db"}

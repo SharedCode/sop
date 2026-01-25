@@ -113,7 +113,7 @@ func TestToolJoin_Chained_ABCD(t *testing.T) {
 			"input_var": "res1",
 			"args": {
 				"with": "storeC",
-				"on": {"id": "id"},
+				"on": {"B.id": "id"},
 				"type": "inner"
 			},
 			"result_var": "res2"
@@ -128,7 +128,7 @@ func TestToolJoin_Chained_ABCD(t *testing.T) {
 			"input_var": "res2",
 			"args": {
 				"with": "storeD",
-				"on": {"id": "id"},
+				"on": {"C.id": "id"},
 				"type": "inner"
 			},
 			"result_var": "final"

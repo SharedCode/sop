@@ -68,6 +68,7 @@ func TestServiceIntegration_LastTool(t *testing.T) {
 	// But NewFromConfig creates a new agent.
 	// Let's use NewDataAdminAgent directly to inject the generator easily.
 	coreAgent := agent.NewDataAdminAgent(coreCfg, databases, sysDB)
+	coreAgent.Open(ctx)
 	coreAgent.SetGenerator(gen)
 	registry["sql_core"] = coreAgent
 

@@ -156,7 +156,7 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 	}
 
 	if dbName != "" {
-		if dbName == "system" && a.systemDB != nil {
+		if dbName == SystemDBName && a.systemDB != nil {
 			db = a.systemDB
 		} else if opts, ok := a.databases[dbName]; ok {
 			db = database.NewDatabase(opts)
@@ -245,8 +245,8 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 			var neighbors []map[string]any
 
 			// 1. Check if we are at a valid item (this is the "Current" neighbor, usually >= key)
-			k, err := store.GetCurrentKey()
-			if err == nil && k != nil {
+			k := store.GetCurrentKey()
+			if k != nil {
 				v, _ := store.GetCurrentValue(ctx)
 
 				// Format key if it's a map and we have an index spec
@@ -264,7 +264,7 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 			if k != nil {
 				// We are at some item. Try to peek previous.
 				if ok, _ := store.Previous(ctx); ok {
-					k2, _ := store.GetCurrentKey()
+					k2 := store.GetCurrentKey()
 					v2, _ := store.GetCurrentValue(ctx)
 
 					// Format key if it's a map and we have an index spec
@@ -284,7 +284,7 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 				// We are at End.
 				if ok, _ := store.Previous(ctx); ok {
 					// This is the Last item (Previous neighbor)
-					k2, _ := store.GetCurrentKey()
+					k2 := store.GetCurrentKey()
 					v2, _ := store.GetCurrentValue(ctx)
 
 					// Format key if it's a map and we have an index spec
@@ -331,7 +331,7 @@ func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any,
 		return "[]", nil
 	}
 
-	k, _ := store.GetCurrentKey()
+	k := store.GetCurrentKey()
 	v, _ := store.GetCurrentValue(ctx)
 
 	// Format Output using common helper

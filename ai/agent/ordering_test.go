@@ -55,6 +55,10 @@ func TestExecuteScriptOrdering(t *testing.T) {
 	databases["mydb"] = dbOpts
 	sysDB := database.NewDatabase(sop.DatabaseOptions{StoresFolders: []string{"/tmp/sysdb_ord"}})
 	adminAgent := agent.NewDataAdminAgent(cfg, databases, sysDB)
+	execCtx := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "mydb"})
+	if err := adminAgent.Open(execCtx); err != nil {
+		t.Fatalf("Failed to open agent: %v", err)
+	}
 
 	scriptSteps := []any{
 		map[string]any{"op": "open_db", "args": map[string]any{"name": "mydb"}, "result_var": "db"},
@@ -66,7 +70,6 @@ func TestExecuteScriptOrdering(t *testing.T) {
 		map[string]any{"op": "commit_tx", "args": map[string]any{"transaction": "tx"}},
 	}
 
-	execCtx := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "mydb"})
 	res, err := adminAgent.Execute(execCtx, "execute_script", map[string]any{"script": scriptSteps})
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)

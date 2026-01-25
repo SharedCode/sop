@@ -92,11 +92,11 @@ func (m *MockStore) FindInDescendingOrder(ctx context.Context, key any) (bool, e
 	return m.FindOne(ctx, key, true)
 }
 
-func (m *MockStore) GetCurrentKey() (any, error) {
+func (m *MockStore) GetCurrentKey() any {
 	if !m.started || m.currentIndex < 0 || m.currentIndex >= len(m.Items) {
-		return nil, nil // Return nil if no current item
+		return nil // Return nil if no current item
 	}
-	return m.Items[m.currentIndex].Key, nil
+	return m.Items[m.currentIndex].Key
 }
 
 func (m *MockStore) GetCurrentValue(ctx context.Context) (any, error) {

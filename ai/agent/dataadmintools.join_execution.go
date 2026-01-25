@@ -107,10 +107,7 @@ func (jc *JoinRightCursor) buildBloomFilter(count int64) {
 	}
 
 	for ok {
-		k, err := jc.right.GetCurrentKey() // Only need Key
-		if err != nil {
-			break
-		}
+		k := jc.right.GetCurrentKey() // Only need Key
 
 		// 3. Extract Join Key(s) from Right Record Key/Value
 		// Challenge: The join condition might be on Value fields.
@@ -213,10 +210,7 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 			count := 0
 
 			for scanIter && count < limit {
-				k, err := jc.right.GetCurrentKey()
-				if err != nil {
-					return nil, false, fmt.Errorf("join materialization error (Key): %w", err)
-				}
+				k := jc.right.GetCurrentKey()
 				v, err := jc.right.GetCurrentValue(ctx)
 				if err != nil {
 					return nil, false, fmt.Errorf("join materialization error (Value): %w", err)
@@ -295,7 +289,7 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 				// 4. Stream the rest
 				for scanIter {
 					// Get Current
-					k, _ := jc.right.GetCurrentKey()
+					k := jc.right.GetCurrentKey()
 					v, _ := jc.right.GetCurrentValue(ctx)
 					item := renderItem(k, v, nil)
 
@@ -457,10 +451,7 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 
 		// Scan
 		for {
-			k, err := jc.right.GetCurrentKey()
-			if err != nil {
-				return nil, false, fmt.Errorf("join scan error (Key): %w", err)
-			}
+			k := jc.right.GetCurrentKey()
 			if k == nil {
 				break
 			}
@@ -755,17 +746,9 @@ func (t *tempStoreWrapper) FindInDescendingOrder(ctx context.Context, key any) (
 	}
 	return t.BtreeInterface.FindInDescendingOrder(ctx, kStr)
 }
-func (t *tempStoreWrapper) GetCurrentKey() (any, error) {
-	// Return the FULL RECORD as the Key, so checking key fields works
-	// Or return the map from the value?
-	// Join logic expects Key to match what it iterates.
-	// The Value is what we MERGE.
-	// If we return Map as Key, Logic checks `k[field]`.
-	val, err := t.BtreeInterface.GetCurrentValue(context.Background())
-	if err != nil {
-		return nil, err
-	}
-	return val, nil
+func (t *tempStoreWrapper) GetCurrentKey() any {
+	// Return the actual B-Tree key (generated string)
+	return t.BtreeInterface.GetCurrentKey().Key
 }
 func (t *tempStoreWrapper) GetCurrentValue(ctx context.Context) (any, error) {
 	return t.BtreeInterface.GetCurrentValue(ctx)

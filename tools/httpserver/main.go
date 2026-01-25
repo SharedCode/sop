@@ -200,7 +200,7 @@ func main() {
 	http.HandleFunc("/api/system/env", handleGetSystemEnv)
 
 	// Initialize Agents
-	initAgents()
+	initAgents(context.Background())
 
 	// Start Server
 	addr := fmt.Sprintf(":%d", config.Port)
@@ -278,10 +278,10 @@ func loadConfig(path string) error {
 	return nil
 }
 
-func getSystemDBOptions() (sop.DatabaseOptions, error) {
+func getSystemDBOptions(ctx context.Context) (sop.DatabaseOptions, error) {
 	// 1. If explicitly configured in config.json, use it.
 	if config.SystemDB != nil {
-		return getDBOptionsFromConfig(config.SystemDB)
+		return getDBOptionsFromConfig(ctx, config.SystemDB)
 	}
 
 	// 2. Fallback to default (cwd)
@@ -310,9 +310,9 @@ func IsSystemDB(name string) bool {
 	return name == SystemDBName
 }
 
-func getDBOptionsFromConfig(db *DatabaseConfig) (sop.DatabaseOptions, error) {
+func getDBOptionsFromConfig(ctx context.Context, db *DatabaseConfig) (sop.DatabaseOptions, error) {
 	// Try to load from disk first
-	if loadedOpts, err := database.GetOptions(context.Background(), db.Path); err == nil {
+	if loadedOpts, err := database.GetOptions(ctx, db.Path); err == nil {
 		// Override with runtime config if necessary (e.g. Redis address from flags)
 		if db.Mode == "clustered" {
 			loadedOpts.Type = sop.Clustered
@@ -344,30 +344,30 @@ func getDBOptionsFromConfig(db *DatabaseConfig) (sop.DatabaseOptions, error) {
 	return opts, nil
 }
 
-func getDBOptions(dbName string) (sop.DatabaseOptions, error) {
+func getDBOptions(ctx context.Context, dbName string) (sop.DatabaseOptions, error) {
 	if dbName == "" {
 		if len(config.Databases) > 0 {
 			// Return options for the first database
-			return getDBOptionsFromConfig(&config.Databases[0])
+			return getDBOptionsFromConfig(ctx, &config.Databases[0])
 		}
 		// If no databases, falls through to error or should we return SystemDB?
 		// Stick to current behavior: likely error if no default found here.
 	} else {
 		// 1. Check if it explicitly matches the Configured System DB Name
 		if config.SystemDB != nil && config.SystemDB.Name == dbName {
-			return getDBOptionsFromConfig(config.SystemDB)
+			return getDBOptionsFromConfig(ctx, config.SystemDB)
 		}
 
 		// 2. Check for System Database
 		// Delegated to getSystemDBOptions to handle default/env configuration
 		if dbName == SystemDBName {
-			return getSystemDBOptions()
+			return getSystemDBOptions(ctx)
 		}
 
 		// 3. Check User Databases
 		for i := range config.Databases {
 			if config.Databases[i].Name == dbName {
-				return getDBOptionsFromConfig(&config.Databases[i])
+				return getDBOptionsFromConfig(ctx, &config.Databases[i])
 			}
 		}
 	}
@@ -386,7 +386,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	hasDemo := false
 	ctx := r.Context()
 	for _, dbCfg := range config.Databases {
-		if dbOpts, err := getDBOptionsFromConfig(&dbCfg); err == nil {
+		if dbOpts, err := getDBOptionsFromConfig(ctx, &dbCfg); err == nil {
 			// Use a lightweight check if possible, or just try to open a transaction
 			// Since we just added StoreExists to Database, we can use it if we had a Database object.
 			// But here we have DatabaseOptions.
@@ -538,7 +538,7 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 		if config.ConfigFile != "" {
 			saveConfigFile()
 			// Re-initialize agents to drop the deleted database
-			initAgents()
+			initAgents(r.Context())
 		}
 
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -740,7 +740,7 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 		if config.ConfigFile != "" {
 			saveConfigFile()
 			// Re-initialize agents to pick up the new database
-			initAgents()
+			initAgents(r.Context())
 		}
 
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -859,7 +859,7 @@ func handleListStores(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	dbName := r.URL.Query().Get("database")
 	ctx := r.Context()
-	dbOpts, err := getDBOptions(dbName)
+	dbOpts, err := getDBOptions(ctx, dbName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -885,7 +885,7 @@ func handleListStores(w http.ResponseWriter, r *http.Request) {
 func handleGetDBOptions(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	dbName := r.URL.Query().Get("database")
-	dbOpts, err := getDBOptions(dbName)
+	dbOpts, err := getDBOptions(r.Context(), dbName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -952,7 +952,7 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	dbOpts, err := getDBOptions(dbName)
+	dbOpts, err := getDBOptions(ctx, dbName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -1124,7 +1124,7 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	dbOpts, err := getDBOptions(req.Database)
+	dbOpts, err := getDBOptions(ctx, req.Database)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -1430,7 +1430,7 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	dbOpts, err := getDBOptions(dbName)
+	dbOpts, err := getDBOptions(ctx, dbName)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -1795,7 +1795,7 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	dbOpts, err := getDBOptions(req.Database)
+	dbOpts, err := getDBOptions(ctx, req.Database)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -2066,7 +2066,7 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	dbOpts, err := getDBOptions(req.Database)
+	dbOpts, err := getDBOptions(ctx, req.Database)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -2339,7 +2339,7 @@ func handleDeleteStore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbOpts, err := getDBOptions(req.Database)
+	dbOpts, err := getDBOptions(r.Context(), req.Database)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -2391,7 +2391,7 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 	}
 
 	ctx := r.Context()
-	dbOpts, err := getDBOptions(req.Database)
+	dbOpts, err := getDBOptions(ctx, req.Database)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

@@ -96,10 +96,10 @@ func TestManyJoinsBehavior(t *testing.T) {
 		{"op": "scan", "args": map[string]any{"store": "t1", "stream": true}, "result_var": "s1"},
 
 		{"op": "join_right", "args": map[string]any{"store": "t2", "on": map[string]any{"next_id": "key"}}, "input_var": "s1", "result_var": "s2"},
-		{"op": "join_right", "args": map[string]any{"store": "t3", "on": map[string]any{"next_id": "key"}}, "input_var": "s2", "result_var": "s3"},
-		{"op": "join_right", "args": map[string]any{"store": "t4", "on": map[string]any{"next_id": "key"}}, "input_var": "s3", "result_var": "s4"},
-		{"op": "join_right", "args": map[string]any{"store": "t5", "on": map[string]any{"next_id": "key"}}, "input_var": "s4", "result_var": "s5"},
-		{"op": "join_right", "args": map[string]any{"store": "t6", "on": map[string]any{"next_id": "key"}}, "input_var": "s5", "result_var": "s6"},
+		{"op": "join_right", "args": map[string]any{"store": "t3", "on": map[string]any{"t2.next_id": "key"}}, "input_var": "s2", "result_var": "s3"},
+		{"op": "join_right", "args": map[string]any{"store": "t4", "on": map[string]any{"t3.next_id": "key"}}, "input_var": "s3", "result_var": "s4"},
+		{"op": "join_right", "args": map[string]any{"store": "t5", "on": map[string]any{"t4.next_id": "key"}}, "input_var": "s4", "result_var": "s5"},
+		{"op": "join_right", "args": map[string]any{"store": "t6", "on": map[string]any{"t5.next_id": "key"}}, "input_var": "s5", "result_var": "s6"},
 
 		{"op": "limit", "args": map[string]any{"limit": 10}, "input_var": "s6", "result_var": "final"},
 

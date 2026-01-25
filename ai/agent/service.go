@@ -19,6 +19,14 @@ import (
 	"github.com/sharedcode/sop/search"
 )
 
+const (
+	// KnowledgeStore is the name of the B-tree store used to persist learned rules, vocabulary, and corrections.
+	// This store resides in the System Database configured for the agent.
+	KnowledgeStore = "llm_knowledge"
+	// KnowledgeRefreshDuration is the interval at which the agent refreshes its local view of the persistent knowledge.
+	KnowledgeRefreshDuration = 5 * time.Minute
+)
+
 // Service is a generic agent service that operates on any Domain.
 type Service struct {
 	domain            ai.Domain[map[string]any]
@@ -33,6 +41,9 @@ type Service struct {
 
 	// Session State
 	session *RunnerSession
+
+	// Refresh Tracker
+	lastKnowledgeRefresh map[string]time.Time
 }
 
 // Check that Service implements ScriptRecorder
@@ -50,6 +61,7 @@ func NewService(domain ai.Domain[map[string]any], systemDB *database.Database, d
 		EnableObfuscation:      enableObfuscation,
 		EnableHistoryInjection: false, // Default to OFF for simple machine mode (can be enabled via config)
 		session:                NewRunnerSession(),
+		lastKnowledgeRefresh:   make(map[string]time.Time),
 	}
 }
 
@@ -187,7 +199,7 @@ func (s *Service) Open(ctx context.Context) error {
 
 	// Check if configured System DB matches
 	var dbToOpen *database.Database
-	if (p.CurrentDB == "system" || p.CurrentDB == "SystemDB") && s.systemDB != nil {
+	if p.CurrentDB == SystemDBName && s.systemDB != nil {
 		dbToOpen = s.systemDB
 	} else if dbOpts, ok := s.databases[p.CurrentDB]; ok {
 		dbToOpen = database.NewDatabase(dbOpts)
@@ -633,47 +645,6 @@ func (s *Service) getLLMKnowledge(ctx context.Context) string {
 	return sb.String()
 }
 
-func (s *Service) getDomainKnowledge(ctx context.Context, dbName string) string {
-	if dbName == "" || dbName == "system" || dbName == "SystemDB" {
-		return ""
-	}
-	opts, ok := s.databases[dbName]
-	if !ok {
-		return ""
-	}
-	// Temporarily open DB? Or assuming it's accessible.
-	// database.NewDatabase(opts) creates a handler.
-	db := database.NewDatabase(opts)
-
-	// Use a short-lived read transaction
-	tx, err := db.BeginTransaction(ctx, sop.NoCheck)
-	if err != nil {
-		return ""
-	}
-	defer tx.Rollback(ctx)
-
-	store, err := sopdb.OpenBtree[string, string](ctx, db.Options(), "domain_knowledge", tx, nil)
-	if err != nil {
-		return ""
-	}
-
-	var sb strings.Builder
-	if ok, err := store.First(ctx); ok && err == nil {
-		sb.WriteString(fmt.Sprintf("\n[Domain Knowledge (%s)]\n", dbName))
-		for {
-			item := store.GetCurrentKey()
-			k := item.Key
-			v, _ := store.GetCurrentValue(ctx)
-			sb.WriteString(fmt.Sprintf("%s:\n%s\n\n", k, v))
-
-			if ok, _ := store.Next(ctx); !ok {
-				break
-			}
-		}
-	}
-	return sb.String()
-}
-
 func (s *Service) getToolInfo(ctx context.Context, toolName string) (string, error) {
 	if s.systemDB == nil {
 		return "", fmt.Errorf("system DB not available")
@@ -684,7 +655,7 @@ func (s *Service) getToolInfo(ctx context.Context, toolName string) (string, err
 	}
 	defer tx.Rollback(ctx)
 
-	store, err := sopdb.OpenBtree[KnowledgeKey, string](ctx, s.systemDB.Options(), "llm_knowledge", tx, nil)
+	store, err := sopdb.OpenBtree[KnowledgeKey, string](ctx, s.systemDB.Options(), KnowledgeStore, tx, nil)
 	if err != nil {
 		return "", err
 	}
@@ -957,19 +928,9 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		systemPrompt = fmt.Sprintf("%s\n\n%s", systemPrompt, known)
 	}
 
-	// 2b. Inject Domain Knowledge (Lifecycle "On Init" simulation)
-	currentDBName := ""
-	if p := ai.GetSessionPayload(ctx); p != nil {
-		currentDBName = p.CurrentDB
-	} else {
-		currentDBName = s.session.CurrentDB
-	}
-	if forcedDBName != "" {
-		currentDBName = forcedDBName
-	}
-	if domainKnown := s.getDomainKnowledge(ctx, currentDBName); domainKnown != "" {
-		systemPrompt = fmt.Sprintf("%s\n\n%s", systemPrompt, domainKnown)
-	}
+	// 2b. Inject KnowledgeBase (Lifecycle "On Init" simulation)
+	// Knowledge scoping (Global vs Domain-Specific) is handled implicitly by the System DB connection.
+	// getLLMKnowledge loads relevant namespaces (memory, term, schema) from that DB.
 
 	// 2c. Tool Usage Hint for Knowledge Retrieval
 	systemPrompt = fmt.Sprintf("%s\n\n[Tool Usage Note]\nYou can use the tool \"gettoolinfo\" with argument \"tool\" (e.g., \"gettoolinfo('execute_script')\") to get detailed usage instructions for any tool if you are unsure about its parameters or behavior.", systemPrompt)

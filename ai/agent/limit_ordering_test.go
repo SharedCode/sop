@@ -97,6 +97,7 @@ func TestProjectLimitOrdering(t *testing.T) {
 
 	payload := &ai.SessionPayload{CurrentDB: "default"}
 	ctx = context.WithValue(ctx, "session_payload", payload)
+	ag.Open(ctx)
 
 	args := map[string]any{"script": script}
 	b, _ := json.Marshal(args)

@@ -28,7 +28,9 @@ func TestRepro_SchemaValidation(t *testing.T) {
 	agent := NewDataAdminAgent(Config{}, dbs, nil)
 
 	// 2. Prepare Data
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
+	agent.Open(ctx)
+
 	// Populate directly
 	db := database.NewDatabase(opts)
 	tx, err := db.BeginTransaction(ctx, sop.ForWriting)

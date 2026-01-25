@@ -113,6 +113,8 @@ func TestReproLoadFailedError(t *testing.T) {
 	// Create DataAdminAgent
 	daAgent := NewDataAdminAgent(Config{}, map[string]sop.DatabaseOptions{"testdb": dbOpts}, systemDB)
 	daAgent.SetGenerator(gen)
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "testdb"})
+	daAgent.Open(ctx)
 
 	registry := map[string]ai.Agent[map[string]any]{
 		"sql_admin": daAgent,

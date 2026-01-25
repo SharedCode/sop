@@ -48,6 +48,12 @@ func TestReproSlowJoin(t *testing.T) {
 		t.Fatalf("Failed to begin transaction: %v", err)
 	}
 
+	// Initialize Agent with Transaction and Tools
+	payload.Transaction = tx
+	if err := agent.Open(ctx); err != nil {
+		t.Fatalf("Failed to open agent: %v", err)
+	}
+
 	// 2. Create Stores & Populate
 	t.Log("Creating and populating stores...")
 

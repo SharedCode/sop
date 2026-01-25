@@ -157,6 +157,8 @@ func TestScript_Transactions(t *testing.T) {
 		Name: "Data Admin",
 	}
 	dataAdmin := NewDataAdminAgent(cfg, databases, sysDB)
+	ctx = context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{CurrentDB: "system"})
+	dataAdmin.Open(ctx)
 	registry["data_admin"] = dataAdmin
 
 	svc := NewService(nil, sysDB, databases, nil, nil, registry, false)

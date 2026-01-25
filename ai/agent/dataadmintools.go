@@ -84,7 +84,8 @@ const (
 )
 
 // registerTools registers all available tools for the DataAdminAgent.
-func (a *DataAdminAgent) registerTools() {
+func (a *DataAdminAgent) registerTools(ctx context.Context) {
+	log.Debug("DataAdminAgent.registerTools: Starting registration...")
 	if a.registry == nil {
 		a.registry = NewRegistry()
 	}
@@ -106,15 +107,15 @@ func (a *DataAdminAgent) registerTools() {
 	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new script or block.", "(mode: string, name: string)", a.toolRefactorScript)
 
 	// High-Level Tools
-	a.registry.Register("select", a.getToolInstruction("select", SelectInstruction), "(store: string, ...)", a.toolSelect)
-	a.registry.RegisterHidden("join", a.getToolInstruction("join", JoinInstruction), "(left_store: string, right_store: string, ...)", a.toolJoin)
-	a.registry.Register("add", a.getToolInstruction("add", AddInstruction), "(store: string, key: any, value: any)", a.toolAdd)
-	a.registry.Register("update", a.getToolInstruction("update", UpdateInstruction), "(store: string, key: any, value: any)", a.toolUpdate)
-	a.registry.Register("delete", a.getToolInstruction("delete", DeleteInstruction), "(store: string, key: any)", a.toolDelete)
-	a.registry.Register("manage_transaction", a.getToolInstruction("manage_transaction", ManageTransactionInstruction), "(action: string)", a.toolManageTransaction)
+	a.registry.Register("select", a.getToolInstruction(ctx, "select", SelectInstruction), "(store: string, ...)", a.toolSelect)
+	a.registry.RegisterHidden("join", a.getToolInstruction(ctx, "join", JoinInstruction), "(left_store: string, right_store: string, ...)", a.toolJoin)
+	a.registry.Register("add", a.getToolInstruction(ctx, "add", AddInstruction), "(store: string, key: any, value: any)", a.toolAdd)
+	a.registry.Register("update", a.getToolInstruction(ctx, "update", UpdateInstruction), "(store: string, key: any, value: any)", a.toolUpdate)
+	a.registry.Register("delete", a.getToolInstruction(ctx, "delete", DeleteInstruction), "(store: string, key: any)", a.toolDelete)
+	a.registry.Register("manage_transaction", a.getToolInstruction(ctx, "manage_transaction", ManageTransactionInstruction), "(action: string)", a.toolManageTransaction)
 
 	// The Core Engine
-	a.registry.Register("execute_script", a.getToolInstruction("execute_script", ExecuteScriptInstruction), "(script: Array<{op: string, args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
+	a.registry.Register("execute_script", a.getToolInstruction(ctx, "execute_script", ExecuteScriptInstruction), "(script: Array<{op: string, args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
 
 	// Self-Correction Tools
 	a.registry.Register("manage_knowledge", "Manages the AI's long-term knowledge base. Use this to save, retrieve, or list learned information. Namespaces organize knowledge (e.g. 'term', 'tool', 'finance', 'project_alpha'). Action: 'upsert', 'delete', 'read', 'list'. For 'list', key is ignored.", "(namespace: string, key: string, value: string, action: string)", a.toolManageKnowledge)
@@ -122,35 +123,36 @@ func (a *DataAdminAgent) registerTools() {
 	// Conversation Management
 	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", "(summary: string, topic_label: string)", a.toolConcludeTopic)
 }
-func (a *DataAdminAgent) getToolInstruction(toolName, defaultInst string) string {
+func (a *DataAdminAgent) getToolInstruction(ctx context.Context, toolName, defaultInst string) string {
 	if a.systemDB == nil {
 		return defaultInst
 	}
 
 	// Start a read-only transaction
-	tx, err := a.systemDB.BeginTransaction(context.Background(), sop.ForReading)
+	tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
 	if err != nil {
-		log.Warn("Failed to start transaction for llm_knowledge", "error", err)
+		log.Warn("Failed to start transaction for "+KnowledgeStore, "error", err)
 		return defaultInst
 	}
-	defer tx.Rollback(context.Background())
+	defer tx.Rollback(ctx)
 
 	// Open the store
-	// Use core.OpenBtree to access raw B-Tree store
-	// Refactored to use KnowledgeKey and v2 store
-	store, err := core.OpenBtree[KnowledgeKey, string](context.Background(), a.systemDB.Options(), "llm_knowledge", tx, nil)
+	// We use the raw B-Tree accessor (core.OpenBtree) to bypass higher-level abstractions
+	// and access the KnowledgeKey composite key structure directly.
+	store, err := core.OpenBtree[KnowledgeKey, string](ctx, a.systemDB.Options(), KnowledgeStore, tx, nil)
 	if err != nil {
 		// This is expected if the store hasn't been created yet or isn't compatible
 		return defaultInst
 	}
 
 	// Look up the instruction using the "tool" namespace
-	found, err := store.Find(context.Background(), KnowledgeKey{Category: "tool", Name: toolName}, false)
+	found, err := store.Find(ctx, KnowledgeKey{Category: "tool", Name: toolName}, false)
 	if err != nil || !found {
 		return defaultInst
 	}
 
-	val, err := store.GetCurrentValue(context.Background())
+	val, err := store.GetCurrentValue(ctx)
+
 	if err != nil {
 		return defaultInst
 	}
@@ -161,32 +163,31 @@ func (a *DataAdminAgent) getToolInstruction(toolName, defaultInst string) string
 func (a *DataAdminAgent) toolConcludeTopic(ctx context.Context, args map[string]interface{}) (string, error) {
 	return "Topic concluded.", nil
 }
-
-func (a *DataAdminAgent) getSystemInstructions(defaultInst string) string {
+func (a *DataAdminAgent) getSystemInstructions(ctx context.Context, defaultInst string) string {
 	if a.systemDB == nil {
 		return defaultInst
 	}
 
 	// Start a read-only transaction
-	tx, err := a.systemDB.BeginTransaction(context.Background(), sop.ForReading)
+	tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
 	if err != nil {
 		return defaultInst
 	}
-	defer tx.Rollback(context.Background())
+	defer tx.Rollback(ctx)
 
 	// Open the store
-	store, err := core.OpenBtree[KnowledgeKey, string](context.Background(), a.systemDB.Options(), "llm_knowledge", tx, nil)
+	store, err := core.OpenBtree[KnowledgeKey, string](ctx, a.systemDB.Options(), KnowledgeStore, tx, nil)
 	if err != nil {
 		return defaultInst
 	}
 
 	// Look up the instruction using the "memory" namespace
-	found, err := store.Find(context.Background(), KnowledgeKey{Category: "memory", Name: "system_prompt"}, false)
+	found, err := store.Find(ctx, KnowledgeKey{Category: "memory", Name: "system_prompt"}, false)
 	if err != nil || !found {
 		return defaultInst
 	}
 
-	val, err := store.GetCurrentValue(context.Background())
+	val, err := store.GetCurrentValue(ctx)
 	if err != nil {
 		return defaultInst
 	}
@@ -292,7 +293,7 @@ func (a *DataAdminAgent) toolListStores(ctx context.Context, args map[string]any
 			s, err := jsondb.OpenStore(ctx, dbOpts, sName, tx)
 			if err == nil {
 				if ok, _ := s.First(ctx); ok {
-					k, _ := s.GetCurrentKey()
+					k := s.GetCurrentKey()
 					v, _ := s.GetCurrentValue(ctx)
 					flat := flattenItem(k, v)
 					schema := inferSchema(flat)

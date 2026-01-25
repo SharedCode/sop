@@ -107,7 +107,7 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 7. Reload Agents
-	initAgents()
+	initAgents(r.Context())
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Configuration saved successfully"})

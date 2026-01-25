@@ -27,6 +27,7 @@ func TestToolJoin_OrderBy_LeftStoreDirection(t *testing.T) {
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
+	agent.Open(ctx)
 
 	// Create Stores and Data
 	t2, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)

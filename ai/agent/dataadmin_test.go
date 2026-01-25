@@ -13,6 +13,7 @@ func TestDataAdminAgent_Registry(t *testing.T) {
 		EnableObfuscation: false,
 	}
 	agent := NewDataAdminAgent(cfg, nil, nil)
+	agent.registerTools(context.Background())
 
 	// Test Registry Listing
 	tools := agent.registry.List()
@@ -40,6 +41,7 @@ func TestDataAdminAgent_Execute(t *testing.T) {
 		"test_db": {},
 	}
 	agent := NewDataAdminAgent(cfg, dbs, nil)
+	agent.registerTools(context.Background())
 
 	// Setup Context with Payload
 	payload := &ai.SessionPayload{

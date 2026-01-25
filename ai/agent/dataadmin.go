@@ -72,72 +72,72 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 
 	// 2. Fallback to Environment Variables if Config failed or was empty
 	if gen == nil {
-		provider := os.Getenv("AI_PROVIDER")
-		geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY"))
-		openAIKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
-		llmKey := strings.TrimSpace(os.Getenv("LLM_API_KEY"))
+		provider := os.Getenv(EnvAIProvider)
+		geminiKey := strings.TrimSpace(os.Getenv(EnvGeminiAPIKey))
+		openAIKey := strings.TrimSpace(os.Getenv(EnvOpenAIAPIKey))
+		llmKey := strings.TrimSpace(os.Getenv(EnvLLMAPIKey))
 
 		// Support unified LLM_API_KEY
 		if llmKey != "" {
 			// Auto-Correction: If user chose Gemini but provided an OpenAI key (sk-...), switch to ChatGPT
-			if provider == "gemini" && strings.HasPrefix(llmKey, "sk-") {
+			if provider == ProviderGemini && strings.HasPrefix(llmKey, "sk-") {
 				log.Warn("Configuration mismatch: Provider is 'gemini' but LLM_API_KEY is an OpenAI key (sk-...). Switching to 'chatgpt'.")
-				provider = "chatgpt"
+				provider = ProviderChatGPT
 			}
 
 			// If provider is explicitly set, use LLM_API_KEY for that provider
-			if provider == "chatgpt" && openAIKey == "" {
+			if provider == ProviderChatGPT && openAIKey == "" {
 				openAIKey = llmKey
-			} else if provider == "gemini" && geminiKey == "" {
+			} else if provider == ProviderGemini && geminiKey == "" {
 				geminiKey = llmKey
 			} else if provider == "" {
 				// Ambiguous case: Guess provider based on key format or default
 				if strings.HasPrefix(llmKey, "sk-") {
-					provider = "chatgpt"
+					provider = ProviderChatGPT
 					openAIKey = llmKey
 				} else {
 					// Fallback to Gemini (Google API keys usually start with AIza...)
-					provider = "gemini"
+					provider = ProviderGemini
 					geminiKey = llmKey
 				}
 			}
 		}
 		if provider == "" {
 			if openAIKey != "" {
-				provider = "chatgpt"
+				provider = ProviderChatGPT
 			} else if geminiKey != "" {
-				provider = "gemini"
+				provider = ProviderGemini
 			}
 		}
 
-		if provider == "chatgpt" && openAIKey != "" {
-			model := os.Getenv("OPENAI_MODEL")
+		if provider == ProviderChatGPT && openAIKey != "" {
+			model := os.Getenv(EnvOpenAIModel)
 			if model == "" {
-				model = "gpt-4o"
+				model = DefaultModelOpenAI
 			}
-			gen, err = generator.New("chatgpt", map[string]any{
+			gen, err = generator.New(ProviderChatGPT, map[string]any{
 				"api_key": openAIKey,
 				"model":   model, // "model" is the correct key for OpenAI generator options
 			})
-		} else if (provider == "gemini" || provider == "local" || provider == "") && geminiKey != "" {
-			model := os.Getenv("GEMINI_MODEL")
+		} else if (provider == ProviderGemini || provider == ProviderLocal || provider == "") && geminiKey != "" {
+			model := os.Getenv(EnvGeminiModel)
 			if model == "" {
-				model = "gemini-2.5-pro"
+				model = DefaultModelGemini
 			}
-			gen, err = generator.New("gemini", map[string]any{
+			gen, err = generator.New(ProviderGemini, map[string]any{
 				"api_key": geminiKey,
 				"model":   model,
 			})
-		} else if provider == "ollama" {
-			model := os.Getenv("OLLAMA_MODEL")
+		} else if provider == ProviderOllama {
+			model := os.Getenv(EnvOllamaModel)
 			if model == "" {
-				model = "llama3"
+				model = DefaultModelOllama
 			}
-			host := os.Getenv("OLLAMA_HOST")
+			host := os.Getenv(EnvOllamaHost)
 			if host == "" {
-				host = "http://localhost:11434"
+				host = DefaultHost
 			}
-			gen, err = generator.New("ollama", map[string]any{
+			gen, err = generator.New(ProviderOllama, map[string]any{
 				"base_url": host,
 				"model":    model,
 			})
@@ -151,6 +151,7 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 	agent := &DataAdminAgent{
 		Config:    cfg,
 		brain:     gen,
+		registry:  NewRegistry(),
 		databases: databases,
 		systemDB:  systemDB,
 		// API Keys are less relevant now that we use the Generator interface mostly,
@@ -160,7 +161,10 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 		sessionContext:  NewScriptContext(),
 		compiledScripts: make(map[string]CachedScript),
 	}
-	agent.registerTools()
+	// Tools are registered dynamically in Open() or Ask() to ensure context propagation
+	// context.Background() is used here to ensure tools are available even if Open() is not called or context context is missing
+	agent.registerTools(context.Background())
+
 	return agent
 }
 
@@ -188,17 +192,15 @@ func (a *DataAdminAgent) SetVerbose(v bool) {
 // Open initializes the agent's resources.
 func (a *DataAdminAgent) Open(ctx context.Context) error {
 	p := ai.GetSessionPayload(ctx)
-	if p == nil {
-		return nil
-	}
+
 	// If CurrentDB is set, start a transaction
-	if p.CurrentDB != "" {
+	if p != nil && p.CurrentDB != "" {
 		dbName := p.CurrentDB
 
 		log.Debug(fmt.Sprintf("DataAdminAgent.Open: Checking DB '%s', SystemDB available: %v", dbName, a.systemDB != nil))
 
 		// Check for system DB
-		if (dbName == "system" || dbName == "SystemDB") && a.systemDB != nil {
+		if dbName == SystemDBName && a.systemDB != nil {
 			if p.Transaction == nil {
 				tx, err := a.systemDB.BeginTransaction(ctx, sop.ForWriting)
 				if err != nil {
@@ -219,6 +221,10 @@ func (a *DataAdminAgent) Open(ctx context.Context) error {
 			return fmt.Errorf("database '%s' not found in agent configuration", dbName)
 		}
 	}
+
+	// Register tools now that we have a context (and potentially transactions)
+	a.registerTools(ctx)
+
 	return nil
 }
 
@@ -246,7 +252,7 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 	a.sessionContext = NewScriptContext()
 
 	// Refresh tools to ensure latest instructions from llm_knowledge are used
-	a.registerTools()
+	a.registerTools(ctx)
 
 	// Determine Generator to use (Dynamic Switching)
 	// We do this BEFORE slash commands now to allow fallback logic
@@ -256,38 +262,38 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 		var tempGen ai.Generator
 
 		switch providerOverride {
-		case "gemini":
+		case ProviderGemini:
 			if a.geminiKey != "" {
-				model := os.Getenv("GEMINI_MODEL")
+				model := os.Getenv(EnvGeminiModel)
 				if model == "" {
-					model = "gemini-2.5-pro"
+					model = DefaultModelGemini
 				}
-				tempGen, err = generator.New("gemini", map[string]any{
+				tempGen, err = generator.New(ProviderGemini, map[string]any{
 					"api_key": a.geminiKey,
 					"model":   model,
 				})
 			}
-		case "chatgpt":
+		case ProviderChatGPT:
 			if a.openAIKey != "" {
-				model := os.Getenv("OPENAI_MODEL")
+				model := os.Getenv(EnvOpenAIModel)
 				if model == "" {
-					model = "gpt-4o"
+					model = DefaultModelOpenAI
 				}
-				tempGen, err = generator.New("chatgpt", map[string]any{
+				tempGen, err = generator.New(ProviderChatGPT, map[string]any{
 					"api_key": a.openAIKey,
 					"model":   model,
 				})
 			}
-		case "ollama":
-			model := os.Getenv("OLLAMA_MODEL")
+		case ProviderOllama:
+			model := os.Getenv(EnvOllamaModel)
 			if model == "" {
-				model = "llama3"
+				model = DefaultModelOllama
 			}
-			host := os.Getenv("OLLAMA_HOST")
+			host := os.Getenv(EnvOllamaHost)
 			if host == "" {
-				host = "http://localhost:11434"
+				host = DefaultHost
 			}
-			tempGen, err = generator.New("ollama", map[string]any{
+			tempGen, err = generator.New(ProviderOllama, map[string]any{
 				"base_url": host,
 				"model":    model,
 			})
@@ -375,7 +381,7 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 	// Inject Current Database Schema/Stores
 	if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
 		var db *database.Database
-		if p.CurrentDB == "system" {
+		if p.CurrentDB == SystemDBName {
 			db = a.systemDB
 		} else if dbOpts, ok := a.databases[p.CurrentDB]; ok {
 			db = database.NewDatabase(dbOpts)
@@ -393,7 +399,8 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 							info := storeAccessor.GetStoreInfo()
 							// SAMPLE SCHEMA (SCALABILITY: Only 1st item)
 							if ok, _ := storeAccessor.First(ctx); ok {
-								if key, err := storeAccessor.GetCurrentKey(); err == nil {
+								key := storeAccessor.GetCurrentKey()
+								if key != nil {
 									if val, err := storeAccessor.GetCurrentValue(ctx); err == nil {
 										flat := flattenItem(key, val)
 										sMap := inferSchema(flat)
@@ -453,7 +460,7 @@ SELF-CORRECTION & LEARNING:
 - Example: manage_knowledge(namespace="finance", key="q1_definition", value="Jan-Mar", action="upsert").
 - This allows you to remember this for future queries (e.g., "Find active users").
 `
-	toolsDef += a.getSystemInstructions(defaultInst)
+	toolsDef += a.getSystemInstructions(ctx, defaultInst)
 	fullPrompt := toolsDef + "\n" + query
 
 	// Obfuscate Prompt if enabled
@@ -672,7 +679,7 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 		newPayload.CurrentDB = dbName
 		// If switching DB, we cannot use the existing transaction
 		newPayload.Transaction = nil
-		ctx = context.WithValue(ctx, "session_payload", &newPayload)
+		ctx = context.WithValue(ctx, SessionPayloadKey, &newPayload)
 	}
 
 	if !dbFound && toolName != "list_databases" && toolName != "list_scripts" && toolName != "get_script_details" {
@@ -688,6 +695,13 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 	if toolDef, ok := a.registry.Get(toolName); ok {
 		return toolDef.Handler(ctx, args)
 	}
+
+	// Dump registry keys if tool not found (Debug)
+	var keys []string
+	for _, t := range a.registry.List() {
+		keys = append(keys, t.Name)
+	}
+	log.Debug(fmt.Sprintf("Tool '%s' not found. Available tools: %v", toolName, keys))
 
 	// Check if it's a script
 	if a.systemDB != nil {
@@ -741,7 +755,7 @@ func (a *DataAdminAgent) runScript(ctx context.Context, script ai.Script, args m
 			}
 		}
 		if dbName == "" {
-			dbName = "system" // fallback
+			dbName = SystemDBName // fallback
 		}
 
 		db, err := a.resolveDatabase(dbName)
@@ -773,7 +787,7 @@ func (a *DataAdminAgent) runScript(ctx context.Context, script ai.Script, args m
 			newPayload.Transactions[dbName] = tx
 			newPayload.Transaction = tx           // Legacy field for tools that don't support multi-db yet
 			newPayload.ExplicitTransaction = true // Prevent tools from auto-committing
-			ctx = context.WithValue(ctx, "session_payload", &newPayload)
+			ctx = context.WithValue(ctx, SessionPayloadKey, &newPayload)
 		}
 	}
 
@@ -806,7 +820,7 @@ func (a *DataAdminAgent) runScript(ctx context.Context, script ai.Script, args m
 					if p.CurrentDB != step.Database {
 						newPayload.Transaction = nil
 					}
-					stepCtx = context.WithValue(ctx, "session_payload", &newPayload)
+					stepCtx = context.WithValue(ctx, SessionPayloadKey, &newPayload)
 				}
 			}
 
@@ -867,7 +881,7 @@ func (a *DataAdminAgent) runScriptRaw(ctx context.Context, script ai.Script, arg
 					if p.CurrentDB != step.Database {
 						newPayload.Transaction = nil
 					}
-					stepCtx = context.WithValue(ctx, "session_payload", &newPayload)
+					stepCtx = context.WithValue(ctx, SessionPayloadKey, &newPayload)
 				}
 			}
 

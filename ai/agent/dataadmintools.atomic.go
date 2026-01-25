@@ -60,6 +60,7 @@ type SpecProvider interface {
 // StoreCursor wraps a StoreAccessor to provide a ScriptCursor.
 type StoreCursor struct {
 	store     jsondb.StoreAccessor
+	storeName string // Add StoreName to support prefixing
 	indexSpec *jsondb.IndexSpecification
 	ctx       context.Context
 	limit     int
@@ -97,7 +98,7 @@ func (sc *StoreCursor) Next(ctx context.Context) (any, bool, error) {
 		// Scan already positioned the cursor at the first element
 		sc.started = true
 		// Check if current position is valid
-		k, _ := sc.store.GetCurrentKey()
+		k := sc.store.GetCurrentKey()
 		if k == nil {
 			return nil, false, nil
 		}
@@ -114,7 +115,7 @@ func (sc *StoreCursor) Next(ctx context.Context) (any, bool, error) {
 	}
 
 	for ok {
-		k, _ := sc.store.GetCurrentKey()
+		k := sc.store.GetCurrentKey()
 		v, _ := sc.store.GetCurrentValue(ctx)
 
 		// Prefix Check
@@ -143,6 +144,19 @@ func (sc *StoreCursor) Next(ctx context.Context) (any, bool, error) {
 				}
 				continue
 			}
+		}
+
+		// Architecture Enforcement: Always Prefix Internal Items
+		// We modify the item (map[string]any) to include the "storeName." prefix for all keys.
+		// "renderItem" logic will strip this later if appropriate.
+		// StoreName needs to be available in StoreCursor.
+		if m, ok := item.(map[string]any); ok && sc.storeName != "" {
+			prefixed := make(map[string]any, len(m))
+			for k, val := range m {
+				// Avoid double prefixing if somehow already prefixed (unlikely for raw store)
+				prefixed[sc.storeName+"."+k] = val
+			}
+			item = prefixed
 		}
 
 		sc.count++
@@ -496,17 +510,17 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	// We only return it if it is non-nil, because some operations (like commit_tx) might use 'output'
 	// as a dummy variable but return nil, shadowing the actual result in 'final_result'.
 	if val, ok := scriptCtx.Variables["output"]; ok && val != nil {
-		return serializeResult(val)
+		return serializeResult(ctx, val)
 	}
 
 	// Priority 2: Check for 'final_result' variable (Deprecated: Standard convention for query chains)
 	if val, ok := scriptCtx.Variables["final_result"]; ok {
-		return serializeResult(val)
+		return serializeResult(ctx, val)
 	}
 
 	// Priority 2.5: Check for 'result' variable (Common AI convention)
 	if val, ok := scriptCtx.Variables["result"]; ok {
-		return serializeResult(val)
+		return serializeResult(ctx, val)
 	}
 
 	// Priority 3: Check the last instruction's result variable (Fallback for simple scripts)
@@ -527,16 +541,16 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 
 					// Let's rely on Context variables.
 					if v, found := scriptCtx.Variables[varName]; found {
-						return serializeResult(v)
+						return serializeResult(ctx, v)
 					}
 				}
-				return serializeResult(val)
+				return serializeResult(ctx, val)
 			}
 		}
 
 		if lastInstr.ResultVar != "" {
 			if val, ok := scriptCtx.Variables[lastInstr.ResultVar]; ok {
-				return serializeResult(val)
+				return serializeResult(ctx, val)
 			}
 		}
 	}
@@ -544,7 +558,7 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	// Priority 4: Fallback to the last updated variable (e.g. if script ends with commit_tx)
 	if scriptCtx.LastUpdatedVar != "" {
 		if val, ok := scriptCtx.Variables[scriptCtx.LastUpdatedVar]; ok {
-			return serializeResult(val)
+			return serializeResult(ctx, val)
 		}
 	}
 
@@ -844,7 +858,7 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 	}
 }
 
-func serializeResult(val any) (string, error) {
+func serializeResult(ctx context.Context, val any) (string, error) {
 	if cursor, ok := val.(ScriptCursor); ok {
 		var results []any
 		defer cursor.Close()
@@ -863,7 +877,7 @@ func serializeResult(val any) (string, error) {
 		*/
 
 		for {
-			itemObj, ok, err := cursor.Next(context.Background())
+			itemObj, ok, err := cursor.Next(ctx)
 			if err != nil {
 				return "", fmt.Errorf("failed to read cursor: %v", err)
 			}
@@ -1305,11 +1319,21 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 
 func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, error) {
 	fmt.Printf("DEBUG: Scan Called with args: %+v\n", args)
-	storeName, _ := args["store"].(string) // Variable name
-	storeName = e.resolveVarName(storeName)
-	store, ok := e.Context.Stores[storeName]
+	storeVarName, _ := args["store"].(string) // Variable name
+	storeVarName = e.resolveVarName(storeVarName)
+	store, ok := e.Context.Stores[storeVarName]
 	if !ok {
-		return nil, fmt.Errorf("store variable '%s' not found", storeName)
+		return nil, fmt.Errorf("store variable '%s' not found", storeVarName)
+	}
+
+	// Determine logical Store Name for prefixing
+	// 1. If we can get the underlying store name from StoreInfo, use that.
+	// 2. Fallback to variable name (might be "users_store" instead of "users").
+	// Ideally, we want the "business name" of the table.
+	storeName := storeVarName
+	info := store.GetStoreInfo()
+	if info.Name != "" {
+		storeName = info.Name
 	}
 
 	limit, _ := args["limit"].(float64)
@@ -1329,7 +1353,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 
 	// Inspect store for IndexSpecification
 	var indexSpec *jsondb.IndexSpecification
-	info := store.GetStoreInfo()
+	info = store.GetStoreInfo()
 	if info.MapKeyIndexSpecification != "" {
 		var spec jsondb.IndexSpecification
 		if err := json.Unmarshal([]byte(info.MapKeyIndexSpecification), &spec); err == nil {
@@ -1368,6 +1392,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 			// Return empty cursor
 			return &StoreCursor{
 				store:     store,
+				storeName: storeName, // Pass store name
 				indexSpec: indexSpec,
 				ctx:       ctx,
 				limit:     int(limit),
@@ -1387,6 +1412,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 	if stream {
 		return &StoreCursor{
 			store:     store,
+			storeName: storeName, // Pass store name
 			indexSpec: indexSpec,
 			ctx:       ctx,
 			limit:     int(limit),
@@ -1401,7 +1427,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 	var results []map[string]any
 	count := 0
 	for okIter && count < int(limit) {
-		k, _ := store.GetCurrentKey()
+		k := store.GetCurrentKey()
 		v, _ := store.GetCurrentValue(ctx)
 
 		// Prefix Check
@@ -1443,6 +1469,15 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 				}
 				continue
 			}
+		}
+
+		// Architecture Enforcement: Always Prefix Internal Items (Buffered Mode)
+		if storeName != "" {
+			prefixed := make(map[string]any, len(item))
+			for k, val := range item {
+				prefixed[storeName+"."+k] = val
+			}
+			item = prefixed
 		}
 
 		results = append(results, item)
@@ -2270,7 +2305,7 @@ func (e *ScriptEngine) Inspect(ctx context.Context, args map[string]any) (any, e
 	// Auto-Infer Schema from first record
 	var schema map[string]string
 	if ok, _ := store.First(ctx); ok {
-		k, _ := store.GetCurrentKey()
+		k := store.GetCurrentKey()
 		v, _ := store.GetCurrentValue(ctx)
 		flat := flattenItem(k, v)
 		schema = inferSchema(flat)
@@ -2668,8 +2703,8 @@ func (e *ScriptEngine) GetCurrentKey(ctx context.Context, args map[string]any) (
 	if !ok {
 		return nil, fmt.Errorf("store variable '%s' not found", storeName)
 	}
-	k, err := store.GetCurrentKey()
-	return k, err
+	k := store.GetCurrentKey()
+	return k, nil
 }
 
 func (e *ScriptEngine) GetCurrentValue(ctx context.Context, args map[string]any) (any, error) {

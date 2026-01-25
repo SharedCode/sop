@@ -52,10 +52,16 @@ The agent is designed with a cognitive memory model that separates transient con
 *   **Scope**: Bound to the WebSocket session. It is volatile and disappears when the user disconnects.
 
 #### Long-Term Memory (Knowledge)
-*   **Implementation**: `KnowledgeStore` (`ai/agent/memory_longterm.go`).
-*   **Storage**: A dedicated B-Tree named `llm_knowledge` inside the System Database.
+*   **Implementation**: `KnowledgeBase` (`ai/agent/memory_longterm.go`).
+*   **Storage**: A dedicated B-Tree named `llm_knowledge` (configurable via `agent.KnowledgeStore` constant) inside the **System Database**.
 *   **Behavior**: Stores learned instructions, domain terms, and tool overrides.
-*   **Self-Correction**: The agent uses the `getToolInstruction` hook to fetch tool documentation from this store *before* registration. This allows the agent to essentially "rewrite its own manual" persistenty.
+*   **Architecture & Flexibility**:
+    *   **User-Driven Design**: The scoping of the knowledge base is entirely up to the user's infrastructure design.
+    *   **Global Knowledge**: You can use a single, shared "System Database" across your entire enterprise to create a global "Corporate Brain" (one `llm_knowledge` store for everyone).
+    *   **Domain-Specific**: Alternatively, you can provision separate System Databases for different domains (e.g., `sys_finance`, `sys_legal`). This creates isolated "Expert Copilots" with deep, specialized knowledge that doesn't leak into other domains.
+    *   **Environment Isolation**: Each environment (Dev, Staging, Prod) can have its own System DB. This allows developers to test new rules or vocabulary in Dev without affecting Production knowledge.
+    *   **Sharing**: To share a knowledge base between agents or services, simply configure them to connect to the same System Database.
+*   **Self-Correction**: The agent uses the `getToolInstruction` hook to fetch tool documentation from this store *before* registration. This allows the agent to essentially "rewrite its own manual" persistently.
 
 ---
 

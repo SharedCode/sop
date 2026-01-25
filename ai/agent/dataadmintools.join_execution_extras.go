@@ -181,10 +181,7 @@ func (c *RightOuterJoinStoreCursor) Next(ctx context.Context) (any, bool, error)
 		}
 
 		// 3. Get Current Right Item
-		k, err := c.rightStore.GetCurrentKey()
-		if err != nil {
-			return nil, false, err
-		}
+		k := c.rightStore.GetCurrentKey()
 		v, err := c.rightStore.GetCurrentValue(c.ctx)
 		if err != nil {
 			return nil, false, err
@@ -214,10 +211,7 @@ func (c *RightOuterJoinStoreCursor) Next(ctx context.Context) (any, bool, error)
 			ok, err := c.tempStore.FindOne(c.ctx, lookupKey, true)
 			if err == nil && ok {
 				for {
-					k, err := c.tempStore.GetCurrentKey()
-					if err != nil {
-						break
-					}
+					k := c.tempStore.GetCurrentKey()
 
 					// Check if key still matches
 					kStr, isStr := k.(string)

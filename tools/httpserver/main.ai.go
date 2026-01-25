@@ -108,7 +108,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	// Validate Database if provided
 	if req.Database != "" {
-		if _, err := getDBOptions(req.Database); err != nil {
+		if _, err := getDBOptions(r.Context(), req.Database); err != nil {
 			msg := fmt.Sprintf("Invalid database '%s': %v", req.Database, err)
 			log.Info("Response: Invalid Database", "error", msg)
 			sendEvent("error", msg)
@@ -130,7 +130,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := context.Background()
+	ctx := r.Context()
 	// Pass provider override via context
 	if req.Provider != "" {
 		ctx = context.WithValue(ctx, ai.CtxKeyProvider, req.Provider)
@@ -159,7 +159,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// Populate all known DBs from config
 	databases := make(map[string]any)
 	for _, dbCfg := range config.Databases {
-		if opts, err := getDBOptions(dbCfg.Name); err == nil {
+		if opts, err := getDBOptions(r.Context(), dbCfg.Name); err == nil {
 			databases[dbCfg.Name] = opts
 		}
 	}
@@ -169,7 +169,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		// But getDBOptions(req.Database) should have covered it if it's valid.
 		// If it's not in config.Databases but getDBOptions works (e.g. dynamic?), add it.
 		if _, exists := databases[req.Database]; !exists {
-			if opts, err := getDBOptions(req.Database); err == nil {
+			if opts, err := getDBOptions(r.Context(), req.Database); err == nil {
 				databases[req.Database] = opts
 			}
 		}
@@ -417,12 +417,11 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	sendEvent("content", response)
 }
 
-func initAgents() {
-	loadAgent("sql_admin", "ai/data/sql_admin_pipeline.json")
+func initAgents(ctx context.Context) {
+	loadAgent(ctx, "sql_admin", "ai/data/sql_admin_pipeline.json")
 }
 
-func seedDefaultScripts(db *aidb.Database) {
-	ctx := context.Background()
+func seedDefaultScripts(ctx context.Context, db *aidb.Database) {
 	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		log.Error(fmt.Sprintf("Failed to begin transaction for seeding scripts: %v", err))
@@ -482,8 +481,7 @@ func seedDefaultScripts(db *aidb.Database) {
 }
 
 // seedLLMKnowledge initializes the system instruction/knowledge store.
-func seedLLMKnowledge(db *aidb.Database) {
-	ctx := context.Background()
+func seedLLMKnowledge(ctx context.Context, db *aidb.Database) {
 	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		log.Error(fmt.Sprintf("Failed to begin transaction for seeding knowledge: %v", err))
@@ -554,7 +552,9 @@ func seedLLMKnowledge(db *aidb.Database) {
 	tx.Commit(ctx)
 }
 
-func loadAgent(key, configPath string) {
+func loadAgent(ctx context.Context, key, configPath string) {
+	// ctx is passed in
+
 	// Try to find the file in common locations
 	pathsToTry := []string{
 		configPath,
@@ -618,13 +618,13 @@ func loadAgent(key, configPath string) {
 	log.Debug(fmt.Sprintf("Initializing AI Agent: %s (%s)...", cfg.Name, cfg.ID))
 
 	// Initialize System DB
-	sysOpts, err := getSystemDBOptions()
+	sysOpts, err := getSystemDBOptions(ctx)
 	var sysDB *aidb.Database
 	if err == nil {
 		sysDB = aidb.NewDatabase(sysOpts)
 		// Seed default scripts for testing
-		seedDefaultScripts(sysDB)
-		seedLLMKnowledge(sysDB)
+		seedDefaultScripts(ctx, sysDB)
+		seedLLMKnowledge(ctx, sysDB)
 	} else {
 		log.Debug(fmt.Sprintf("System DB not available for agent %s: %v", cfg.ID, err))
 	}
@@ -642,7 +642,7 @@ func loadAgent(key, configPath string) {
 		// and loop variable reuse might be an issue in older Go versions, though fixed in 1.22.
 		// Safe to just pass address.
 		d := dbCfg
-		opts, err := getDBOptionsFromConfig(&d)
+		opts, err := getDBOptionsFromConfig(ctx, &d)
 		if err == nil {
 			// Calculate Obfuscation Flag based on Global Mode and Per-DB Config
 			switch globalObfMode {
@@ -674,7 +674,7 @@ func loadAgent(key, configPath string) {
 				agentCfg.StoragePath = absPath
 			}
 		}
-		svc, err := agent.NewFromConfig(context.Background(), agentCfg, agent.Dependencies{
+		svc, err := agent.NewFromConfig(ctx, agentCfg, agent.Dependencies{
 			AgentRegistry: registry,
 			SystemDB:      sysDB,
 			Databases:     databases,
@@ -726,7 +726,7 @@ func loadAgent(key, configPath string) {
 	}
 
 	// Initialize the main agent
-	mainAgent, err := agent.NewFromConfig(context.Background(), *cfg, agent.Dependencies{
+	mainAgent, err := agent.NewFromConfig(ctx, *cfg, agent.Dependencies{
 		AgentRegistry: registry,
 		SystemDB:      sysDB,
 		Databases:     databases,
