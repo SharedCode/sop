@@ -127,6 +127,10 @@ func (c getStructErrCache2) GetStruct(ctx context.Context, key string, target in
 	return false, fmt.Errorf("cache get error")
 }
 
+func (c getStructErrCache2) GetStructs(ctx context.Context, keys []string, targets []interface{}, duration time.Duration) ([]bool, error) {
+	return nil, fmt.Errorf("cache get error")
+}
+
 func Test_ItemActionTracker_CheckTrackedItems_Propagates_Error(t *testing.T) {
 	ctx := context.Background()
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "iat_chk_err", SlotLength: 2})

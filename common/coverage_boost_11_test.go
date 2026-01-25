@@ -124,6 +124,10 @@ func (g getErrCache) GetStruct(ctx context.Context, key string, target interface
 	return false, fmt.Errorf("getstruct err")
 }
 
+func (g getErrCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, duration time.Duration) ([]bool, error) {
+	return nil, fmt.Errorf("getstruct err")
+}
+
 func Test_ItemActionTracker_CheckTrackedItems_Error_And_GetCompat(t *testing.T) {
 	ctx := context.Background()
 

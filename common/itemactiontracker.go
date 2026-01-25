@@ -280,19 +280,40 @@ func (t *itemActionTracker[TK, TV]) hasTrackedItems() bool {
 // Returns nil if there are no tracked items or no conflict, otherwise returns an error.
 func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context) error {
 	var lastErr error
+	var keys []string
+	var targets []interface{}
+	var uuids []sop.UUID
+
 	for uuid, cachedItem := range t.items {
 		if cachedItem.Action == addAction {
 			continue
 		}
-		var readItem lockRecord
-		if found, err := t.cache.GetStruct(ctx, t.cache.FormatLockKey(uuid.String()), &readItem); !found || err != nil {
+		uuids = append(uuids, uuid)
+		keys = append(keys, t.cache.FormatLockKey(uuid.String()))
+		targets = append(targets, &lockRecord{})
+	}
+
+	if len(keys) == 0 {
+		return nil
+	}
+
+	found, err := t.cache.GetStructs(ctx, keys, targets, 0)
+	if err != nil {
+		return err
+	}
+
+	for i, uuid := range uuids {
+		cachedItem := t.items[uuid]
+		if !found[i] {
 			cachedItem.isLockOwner = false
-			lastErr = err
+			t.items[uuid] = cachedItem
 			continue
 		}
+		readItem := *(targets[i].(*lockRecord))
 		// Item found in Redis.
 		if readItem.LockID == cachedItem.LockID {
 			cachedItem.isLockOwner = true
+			t.items[uuid] = cachedItem
 			continue
 		}
 		// Lock compatibility check.
@@ -300,6 +321,7 @@ func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context) error
 			continue
 		}
 		cachedItem.isLockOwner = false
+		t.items[uuid] = cachedItem
 		lastErr = fmt.Errorf("lock(item: %v) call detected conflict", uuid.String())
 	}
 	return lastErr
