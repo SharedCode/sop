@@ -3,6 +3,8 @@ package agent
 import (
 	"fmt"
 	"sort"
+
+	"github.com/google/uuid"
 )
 
 // inferSchema inspects a map and returns a simplified type definition (e.g. {"id": "string", "age": "number"}).
@@ -18,9 +20,14 @@ func inferType(v any) string {
 	if v == nil {
 		return "null"
 	}
-	switch v.(type) {
+	switch val := v.(type) {
 	case string:
+		if _, err := uuid.Parse(val); err == nil {
+			return "uuid"
+		}
 		return "string"
+	case uuid.UUID:
+		return "uuid"
 	case int, int64, int32, float64, float32:
 		return "number"
 	case bool:

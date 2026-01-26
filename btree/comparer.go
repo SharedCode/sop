@@ -87,9 +87,9 @@ func Compare(anyX, anyY any) int {
 		y1, _ := anyY.(string)
 		return cmp.Compare(x1, y1)
 	case uuid.UUID:
-		x1, _ := anyX.(sop.UUID)
-		y1, _ := anyY.(sop.UUID)
-		return x1.Compare(y1)
+		x1, _ := anyX.(uuid.UUID)
+		y1, _ := anyY.(uuid.UUID)
+		return bytes.Compare(x1[:], y1[:])
 	case sop.UUID:
 		x1, _ := anyX.(sop.UUID)
 		y1, _ := anyY.(sop.UUID)
@@ -288,9 +288,9 @@ func CoerceComparer(anyX any) func(x, y any) int {
 		}
 	case uuid.UUID:
 		return func(x, y any) int {
-			x1, _ := x.(sop.UUID)
-			y1, _ := y.(sop.UUID)
-			return x1.Compare(y1)
+			x1, _ := x.(uuid.UUID)
+			y1, _ := y.(uuid.UUID)
+			return bytes.Compare(x1[:], y1[:])
 		}
 	case sop.UUID:
 		return func(x, y any) int {

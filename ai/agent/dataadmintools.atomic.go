@@ -23,6 +23,30 @@ type Database interface {
 	Config() sop.DatabaseOptions
 }
 
+func (e *ScriptEngine) getStore(name string) (jsondb.StoreAccessor, bool) {
+	if s, ok := e.Context.Stores[name]; ok {
+		return s, true
+	}
+	for k, s := range e.Context.Stores {
+		if strings.EqualFold(k, name) {
+			return s, true
+		}
+	}
+	return nil, false
+}
+
+func (e *ScriptEngine) getDatabase(name string) (Database, bool) {
+	if d, ok := e.Context.Databases[name]; ok {
+		return d, true
+	}
+	for k, d := range e.Context.Databases {
+		if strings.EqualFold(k, name) {
+			return d, true
+		}
+	}
+	return nil, false
+}
+
 // ScriptInstruction represents a single operation in the script.
 type ScriptInstruction struct {
 	Op        string         `json:"op"`         // Operation name
@@ -849,6 +873,12 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 	case "return":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			if val, ok := args["value"]; ok {
+				// If return value is a variable name, resolve it using ScriptContext
+				if strVal, ok := val.(string); ok && e.Context != nil && e.Context.Variables != nil {
+					if v, found := e.Context.Variables[strVal]; found {
+						return v, nil
+					}
+				}
 				return val, nil
 			}
 			return nil, nil
@@ -1089,9 +1119,10 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 
 // --- Operations ---
 
-// resolveVarName strips the optional '@' prefix from a variable name.
+// resolveVarName strips the optional '@' or '$' prefix from a variable name.
 func (e *ScriptEngine) resolveVarName(name string) string {
-	return strings.TrimPrefix(name, "@")
+	name = strings.TrimPrefix(name, "@")
+	return strings.TrimPrefix(name, "$")
 }
 
 func (e *ScriptEngine) OpenDB(args map[string]any) (Database, error) {
@@ -1111,7 +1142,7 @@ func (e *ScriptEngine) BeginTx(ctx context.Context, args map[string]any) (sop.Tr
 	modeStr, _ := args["mode"].(string)
 
 	var db Database
-	if dbObj, ok := e.Context.Databases[dbName]; ok {
+	if dbObj, ok := e.getDatabase(dbName); ok {
 		db = dbObj
 	} else {
 		// Try to resolve by name if not a variable
@@ -1268,7 +1299,7 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 	if dbName != "" {
 		// Explicit database argument
 		var found bool
-		db, found = e.Context.Databases[dbName]
+		db, found = e.getDatabase(dbName)
 		if !found {
 			if e.ResolveDatabase != nil {
 				var err error
@@ -1318,10 +1349,10 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 }
 
 func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, error) {
-	fmt.Printf("DEBUG: Scan Called with args: %+v\n", args)
+	// fmt.Printf("DEBUG: Scan Called with args: %+v\n", args)
 	storeVarName, _ := args["store"].(string) // Variable name
 	storeVarName = e.resolveVarName(storeVarName)
-	store, ok := e.Context.Stores[storeVarName]
+	store, ok := e.getStore(storeVarName)
 	if !ok {
 		return nil, fmt.Errorf("store variable '%s' not found", storeVarName)
 	}
@@ -1345,7 +1376,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 	startKey := args["start_key"]
 	prefix := args["prefix"]
 	filter := args["filter"]
-	fmt.Printf("DEBUG: Scan Filter extracted: %+v\n", filter)
+	// fmt.Printf("DEBUG: Scan Filter extracted: %+v\n", filter)
 	stream, _ := args["stream"].(bool)
 
 	var okIter bool
@@ -1385,7 +1416,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("DEBUG: Scan Store '%s' okIter=%v\n", storeName, okIter)
+	// fmt.Printf("DEBUG: Scan Store '%s' okIter=%v\n", storeName, okIter)
 
 	if !okIter {
 		if stream {
@@ -1861,7 +1892,7 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	}
 
 	// Check if Right is a Store
-	rightStore, isRightStore := e.Context.Stores[rightVar]
+	rightStore, isRightStore := e.getStore(rightVar)
 
 	// Determine Aliases
 	rightAlias, _ := args["right_alias"].(string)
@@ -2253,7 +2284,7 @@ func (e *ScriptEngine) Update(ctx context.Context, input any, args map[string]an
 	}
 
 	storeName, _ := args["store"].(string)
-	store, ok := e.Context.Stores[storeName]
+	store, ok := e.getStore(storeName)
 	if !ok {
 		return nil, fmt.Errorf("store variable '%s' not found", storeName)
 	}
@@ -2285,7 +2316,7 @@ func (e *ScriptEngine) Delete(ctx context.Context, input any, args map[string]an
 	}
 
 	storeName, _ := args["store"].(string)
-	store, ok := e.Context.Stores[storeName]
+	store, ok := e.getStore(storeName)
 	if !ok {
 		return nil, fmt.Errorf("store variable '%s' not found", storeName)
 	}
@@ -2295,7 +2326,7 @@ func (e *ScriptEngine) Delete(ctx context.Context, input any, args map[string]an
 
 func (e *ScriptEngine) Inspect(ctx context.Context, args map[string]any) (any, error) {
 	storeName, _ := args["store"].(string)
-	store, ok := e.Context.Stores[storeName]
+	store, ok := e.getStore(storeName)
 	if !ok {
 		return nil, fmt.Errorf("store variable '%s' not found", storeName)
 	}
@@ -2637,7 +2668,7 @@ func (e *ScriptEngine) CallFunction(ctx context.Context, args map[string]any) (a
 
 func (e *ScriptEngine) First(ctx context.Context, args map[string]any) (bool, error) {
 	storeName, _ := args["store"].(string)
-	store, ok := e.Context.Stores[storeName]
+	store, ok := e.getStore(storeName)
 	if !ok {
 		return false, fmt.Errorf("store variable '%s' not found", storeName)
 	}
@@ -2646,7 +2677,7 @@ func (e *ScriptEngine) First(ctx context.Context, args map[string]any) (bool, er
 
 func (e *ScriptEngine) Last(ctx context.Context, args map[string]any) (bool, error) {
 	storeName, _ := args["store"].(string)
-	store, ok := e.Context.Stores[storeName]
+	store, ok := e.getStore(storeName)
 	if !ok {
 		return false, fmt.Errorf("store variable '%s' not found", storeName)
 	}
@@ -2655,7 +2686,7 @@ func (e *ScriptEngine) Last(ctx context.Context, args map[string]any) (bool, err
 
 func (e *ScriptEngine) Next(ctx context.Context, args map[string]any) (bool, error) {
 	storeName, _ := args["store"].(string)
-	store, ok := e.Context.Stores[storeName]
+	store, ok := e.getStore(storeName)
 	if !ok {
 		return false, fmt.Errorf("store variable '%s' not found", storeName)
 	}
@@ -2664,7 +2695,7 @@ func (e *ScriptEngine) Next(ctx context.Context, args map[string]any) (bool, err
 
 func (e *ScriptEngine) Previous(ctx context.Context, args map[string]any) (bool, error) {
 	storeName, _ := args["store"].(string)
-	store, ok := e.Context.Stores[storeName]
+	store, ok := e.getStore(storeName)
 	if !ok {
 		return false, fmt.Errorf("store variable '%s' not found", storeName)
 	}
@@ -2673,7 +2704,7 @@ func (e *ScriptEngine) Previous(ctx context.Context, args map[string]any) (bool,
 
 func (e *ScriptEngine) Find(ctx context.Context, args map[string]any) (bool, error) {
 	storeName, _ := args["store"].(string)
-	store, ok := e.Context.Stores[storeName]
+	store, ok := e.getStore(storeName)
 	if !ok {
 		return false, fmt.Errorf("store variable '%s' not found", storeName)
 	}
@@ -2688,7 +2719,7 @@ func (e *ScriptEngine) Find(ctx context.Context, args map[string]any) (bool, err
 
 func (e *ScriptEngine) Add(ctx context.Context, args map[string]any) (any, error) {
 	storeName, _ := args["store"].(string)
-	store, ok := e.Context.Stores[storeName]
+	store, ok := e.getStore(storeName)
 	if !ok {
 		return nil, fmt.Errorf("store variable '%s' not found", storeName)
 	}
@@ -2699,7 +2730,7 @@ func (e *ScriptEngine) Add(ctx context.Context, args map[string]any) (any, error
 
 func (e *ScriptEngine) GetCurrentKey(ctx context.Context, args map[string]any) (any, error) {
 	storeName, _ := args["store"].(string)
-	store, ok := e.Context.Stores[storeName]
+	store, ok := e.getStore(storeName)
 	if !ok {
 		return nil, fmt.Errorf("store variable '%s' not found", storeName)
 	}
@@ -2709,7 +2740,7 @@ func (e *ScriptEngine) GetCurrentKey(ctx context.Context, args map[string]any) (
 
 func (e *ScriptEngine) GetCurrentValue(ctx context.Context, args map[string]any) (any, error) {
 	storeName, _ := args["store"].(string)
-	store, ok := e.Context.Stores[storeName]
+	store, ok := e.getStore(storeName)
 	if !ok {
 		return nil, fmt.Errorf("store variable '%s' not found", storeName)
 	}

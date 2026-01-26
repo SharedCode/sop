@@ -222,21 +222,6 @@ func handleDeleteEnvironment(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Environment deleted successfully"})
 }
 
-// handleGetSystemEnv returns environment variables related to System DB configuration
-func handleGetSystemEnv(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	envPath := os.Getenv("SYSTEM_DB_PATH")
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"system_db_path": envPath,
-	})
-}
-
 // handleSaveConfig implementation moved to config_save_handler.go
 
 // handleUpdateLLMConfig updates the LLM API Key in the configuration.

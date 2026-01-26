@@ -39,7 +39,7 @@ func TestToolSelect_WithFilter(t *testing.T) {
 		SlotLength:     10,
 		IsPrimitiveKey: false, // JSON keys
 	}
-	if _, err := sopdb.NewBtree[string, any](ctx, dbOpts, storeName, tx, nil, storeOpts); err != nil {
+	if _, err := sopdb.NewBtree[any, any](ctx, dbOpts, storeName, tx, nil, storeOpts); err != nil {
 		t.Fatalf("NewBtree failed: %v", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -200,7 +200,7 @@ func TestToolSelect_WithAlias(t *testing.T) {
 		SlotLength:     10,
 		IsPrimitiveKey: false,
 	}
-	if _, err := sopdb.NewBtree[string, any](ctx, dbOpts, storeName, tx, nil, storeOpts); err != nil {
+	if _, err := sopdb.NewBtree[any, any](ctx, dbOpts, storeName, tx, nil, storeOpts); err != nil {
 		t.Fatalf("NewBtree failed: %v", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

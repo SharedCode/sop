@@ -56,9 +56,6 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 		return fmt.Errorf("failed to begin transaction: %v", err)
 	}
 
-	comparer := func(a, b string) int {
-		return cmp.Compare(a, b)
-	}
 	intComparer := func(a, b int) int {
 		return cmp.Compare(a, b)
 	}
@@ -80,10 +77,10 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 			},
 		},
 	}
-	userStore, err := database.NewBtree[string, UserProfile](ctx, opts, "users", trans, comparer, userStoreOpts)
+	userStore, err := database.NewBtree[uuid.UUID, UserProfile](ctx, opts, "users", trans, nil, userStoreOpts)
 	if err != nil {
 		if strings.Contains(err.Error(), "exists") {
-			userStore, err = database.OpenBtree[string, UserProfile](ctx, opts, "users", trans, comparer)
+			userStore, err = database.OpenBtree[uuid.UUID, UserProfile](ctx, opts, "users", trans, nil)
 			if err != nil {
 				trans.Rollback(ctx)
 				return fmt.Errorf("failed to open existing users store: %v", err)
@@ -108,10 +105,10 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 			},
 		},
 	}
-	userByAgeStore, err := database.NewBtree[int, string](ctx, opts, "users_by_age", trans, intComparer, usersByAgeOpts)
+	userByAgeStore, err := database.NewBtree[int, uuid.UUID](ctx, opts, "users_by_age", trans, intComparer, usersByAgeOpts)
 	if err != nil {
 		if strings.Contains(err.Error(), "exists") {
-			userByAgeStore, err = database.OpenBtree[int, string](ctx, opts, "users_by_age", trans, intComparer)
+			userByAgeStore, err = database.OpenBtree[int, uuid.UUID](ctx, opts, "users_by_age", trans, intComparer)
 			if err != nil {
 				trans.Rollback(ctx)
 				return fmt.Errorf("failed to open existing users_by_age store: %v", err)
@@ -128,10 +125,10 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 		// Default is 2000 if not specified.
 		//SlotLength: 2000,
 	}
-	productStore, err := database.NewBtree[string, Product](ctx, opts, "products", trans, comparer, productStoreOpts)
+	productStore, err := database.NewBtree[uuid.UUID, Product](ctx, opts, "products", trans, nil, productStoreOpts)
 	if err != nil {
 		if strings.Contains(err.Error(), "exists") {
-			productStore, err = database.OpenBtree[string, Product](ctx, opts, "products", trans, comparer)
+			productStore, err = database.OpenBtree[uuid.UUID, Product](ctx, opts, "products", trans, nil)
 			if err != nil {
 				trans.Rollback(ctx)
 				return fmt.Errorf("failed to open existing products store: %v", err)
@@ -152,10 +149,10 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 			},
 		},
 	}
-	orderStore, err := database.NewBtree[string, Order](ctx, opts, "orders", trans, comparer, orderStoreOpts)
+	orderStore, err := database.NewBtree[uuid.UUID, Order](ctx, opts, "orders", trans, nil, orderStoreOpts)
 	if err != nil {
 		if strings.Contains(err.Error(), "exists") {
-			orderStore, err = database.OpenBtree[string, Order](ctx, opts, "orders", trans, comparer)
+			orderStore, err = database.OpenBtree[uuid.UUID, Order](ctx, opts, "orders", trans, nil)
 			if err != nil {
 				trans.Rollback(ctx)
 				return fmt.Errorf("failed to open existing orders store: %v", err)
@@ -186,10 +183,10 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 		},
 	}
 	// Key = UserID, Value = OrderID
-	usersOrdersStore, err := database.NewBtree[string, string](ctx, opts, "users_orders", trans, comparer, usersOrdersOpts)
+	usersOrdersStore, err := database.NewBtree[uuid.UUID, uuid.UUID](ctx, opts, "users_orders", trans, nil, usersOrdersOpts)
 	if err != nil {
 		if strings.Contains(err.Error(), "exists") {
-			usersOrdersStore, err = database.OpenBtree[string, string](ctx, opts, "users_orders", trans, comparer)
+			usersOrdersStore, err = database.OpenBtree[uuid.UUID, uuid.UUID](ctx, opts, "users_orders", trans, nil)
 			if err != nil {
 				trans.Rollback(ctx)
 				return fmt.Errorf("failed to open existing users_orders store: %v", err)
@@ -202,7 +199,7 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 
 	// 2. Generate Users
 	users := make([]struct {
-		ID      string
+		ID      uuid.UUID
 		Profile UserProfile
 	}, 0, 50)
 	firstNames := []string{"James", "Mary", "John", "Patricia", "Robert", "Jennifer", "Michael", "Linda", "William", "Elizabeth"}
@@ -212,7 +209,7 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 	for i := 0; i < 50; i++ {
 		fn := firstNames[rand.Intn(len(firstNames))]
 		ln := lastNames[rand.Intn(len(lastNames))]
-		userID := uuid.NewString()
+		userID := uuid.New()
 
 		user := UserProfile{
 			FirstName: fn,
@@ -223,7 +220,7 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 			Gender:    []string{"Male", "Female"}[rand.Intn(2)],
 		}
 		users = append(users, struct {
-			ID      string
+			ID      uuid.UUID
 			Profile UserProfile
 		}{userID, user})
 		if ok, err := userStore.Add(ctx, userID, user); err != nil || !ok {
@@ -239,7 +236,7 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 
 	// 3. Generate Products
 	products := make([]struct {
-		ID   string
+		ID   uuid.UUID
 		Item Product
 	}, 0, 20)
 
@@ -253,7 +250,7 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 
 	for cat, names := range productNames {
 		for _, name := range names {
-			prodID := uuid.NewString()
+			prodID := uuid.New()
 			prod := Product{
 				Name:        name,
 				Description: fmt.Sprintf("High quality %s", name),
@@ -262,7 +259,7 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 				Stock:       rand.Intn(100),
 			}
 			products = append(products, struct {
-				ID   string
+				ID   uuid.UUID
 				Item Product
 			}{prodID, prod})
 			if ok, err := productStore.Add(ctx, prodID, prod); err != nil || !ok {
@@ -283,7 +280,7 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 			prod := products[rand.Intn(len(products))]
 			qty := 1 + rand.Intn(3)
 			item := OrderItem{
-				ProductID: prod.ID,
+				ProductID: prod.ID.String(),
 				Quantity:  qty,
 				Price:     prod.Item.Price,
 			}
@@ -291,7 +288,7 @@ func PopulateDemoData(ctx context.Context, opts sop.DatabaseOptions) error {
 			total += float64(qty) * prod.Item.Price
 		}
 
-		orderID := uuid.NewString()
+		orderID := uuid.New()
 
 		order := Order{
 			// UserID removed

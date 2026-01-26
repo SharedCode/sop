@@ -38,7 +38,7 @@ func OpenStore(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string
 	}
 
 	if isPrimitiveKey {
-		store, err := database.OpenBtreeCursor[string, any](ctx, dbOpts, storeName, tx, nil)
+		store, err := database.OpenBtreeCursor[any, any](ctx, dbOpts, storeName, tx, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -52,7 +52,7 @@ func OpenStore(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string
 	return &jsonStore{btree: store}, nil
 }
 
-// CreateObjectStore creates a new B-Tree store with string Key and any Value types.
+// CreateObjectStore creates a new B-Tree store with default generic Key and Value types.
 func CreateObjectStore(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (StoreAccessor, error) {
 	// For now, default to primitive string key for simplicity or auto-detect?
 	// The OpenStore logic detects phase transaction stores.
@@ -62,7 +62,7 @@ func CreateObjectStore(ctx context.Context, dbOpts sop.DatabaseOptions, storeNam
 		IsUnique:       false,
 		IsPrimitiveKey: true,
 	}
-	store, err := database.NewBtree[string, any](ctx, dbOpts, storeName, tx, nil, opts)
+	store, err := database.NewBtree[any, any](ctx, dbOpts, storeName, tx, nil, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func CreateObjectStore(ctx context.Context, dbOpts sop.DatabaseOptions, storeNam
 }
 
 type primitiveStore struct {
-	btree btree.BtreeInterface[string, any]
+	btree btree.BtreeInterface[any, any]
 }
 
 func (s *primitiveStore) First(ctx context.Context) (bool, error) { return s.btree.First(ctx) }
@@ -80,18 +80,10 @@ func (s *primitiveStore) Previous(ctx context.Context) (bool, error) {
 	return s.btree.Previous(ctx)
 }
 func (s *primitiveStore) FindOne(ctx context.Context, key any, first bool) (bool, error) {
-	k, ok := key.(string)
-	if !ok {
-		return false, fmt.Errorf("key must be a string for primitive store")
-	}
-	return s.btree.Find(ctx, k, first)
+	return s.btree.Find(ctx, key, first)
 }
 func (s *primitiveStore) FindInDescendingOrder(ctx context.Context, key any) (bool, error) {
-	k, ok := key.(string)
-	if !ok {
-		return false, fmt.Errorf("key must be a string for primitive store")
-	}
-	return s.btree.FindInDescendingOrder(ctx, k)
+	return s.btree.FindInDescendingOrder(ctx, key)
 }
 func (s *primitiveStore) GetCurrentKey() any {
 	return s.btree.GetCurrentKey().Key

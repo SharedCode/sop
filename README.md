@@ -34,7 +34,7 @@ The **SOP Data Manager** includes an embedded AI Copilot powered by LLMs (like G
 
 ### Setting the API Key
 
-You can provide the API Key via an environment variable or the configuration file.
+You can provide the API Key via an environment variable or the configuration file. For a detailed guide on using the conversational interface, case sensitivity rules, and query examples, please refer to the [AI Copilot User Guide](ai/AI_COPILOT_USAGE.md).
 
 **Option 1: Environment Variable (Recommended)**
 Set the `SOP_LLM_API_KEY` variable in your shell or `.env` file before launching the application.

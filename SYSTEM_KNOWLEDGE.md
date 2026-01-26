@@ -219,8 +219,8 @@ The Agent does not rely solely on hardcoded prompts. It fetches tool usage instr
 ### Setup Wizard Configuration
 The Setup Wizard (`tools/httpserver/templates/index.html`) supports three configuration modes for the System DB:
 1.  **Enterprise Brain (Managed):**
-    *   Triggered if `SYSTEM_DB_PATH` environment variable is set.
-    *   UI locks the path field and displays a badge.
+    *   Activated when a System DB is detected in the active configuration (whether from config file, environment, or manual selection).
+    *   UI displays a "Chip/Brain" icon to indicate that the instance is connected to a shared system intelligence.
     *   Ensures all instances share the same "corporate brain".
 2.  **Custom Existing DB:**
     *   User manually enters a path to an existing System DB.
@@ -245,7 +245,37 @@ A sophisticated **Transactional Vector Store** (IVF-based) is implemented in the
 
 ---
 
-## 11. Coding Standards & Guidelines
+## 11. AI Feedback Loop (Implemented Jan 2026)
+
+A fully functional feedback mechanism ("Thumb Up/Thumb Down") has been integrated into the `scripts.html` UI and the backend (Jan 24-25, 2026). This system enables the storage of user feedback on AI responses to improve future performance (RLHF/RAG).
+
+### 11.1 Architecture
+
+*   **Frontend (`tools/httpserver/templates/scripts.html`)**:
+    *   Intercepts clicks on feedback buttons (Thumbs Up/Down).
+    *   Constructs a payload containing the `UserContent` (Query) and `AIResponse`.
+    *   Sends a `POST` request to `/api/ai/feedback`.
+    *   Visual feedback (turning icons green/red) is handled locally.
+
+*   **Backend (`tools/httpserver/main.ai.go`)**:
+    *   **Endpoint**: `handleAIFeedback`.
+    *   **Storage Strategy**: Hybrid (B-Tree + Vector Store).
+        *   **Raw Data**: The full JSON object corresponds to `llm_feedback` B-Tree in the `system` database. This is the System of Record.
+        *   **Semantic Index**: Incoming queries are embedded using `embed.NewSimple` (Hashing Embedder, 384 dim) and stored in the `llm_feedback` Vector Store.
+    *   **Transactionality**: Both operations share a single ACID transaction (`database.BeginTransaction`).
+
+### 11.2 Current Limitations & Roadmap
+
+1.  **Embeddings**: Currently uses a hashing embedder (deterministic but not semantic).
+    *   *Next Step*: Replace with a semantic model (e.g., OpenAI/BERT) in `ai/embed`.
+2.  **Retrieval (RAG)**: Data is stored but not queried.
+    *   *Next Step*: Update `sql_admin` agent to query `llm_feedback` vectors for similar past queries before generating answers.
+3.  **Policy Enforcement**:
+    *   *Next Step*: Convert negative feedback clusters into "Do Not" policies injected into the system prompt.
+
+---
+
+## 12. Coding Standards & Guidelines
 
 To ensure maintainability and professional code quality, adhere to the following strict guidelines when refactoring or adding new code.
 
@@ -266,3 +296,18 @@ To ensure maintainability and professional code quality, adhere to the following
 ### Modularity
 *   **Function Size**: Functions must **not exceed 500 lines**.
 *   **Strategy**: Decompose complex logic into named sub-functions with clear, single responsibilities. Use helper functions to keep the main flow readable.
+
+---
+
+## 8. Type System & Inference Strategy (Updated Jan 2026)
+
+### Type Erasure & Flexible Binding
+*   **No Explicit Persistence**: We deliberately **removed** `KeyTypeName` and `ValueTypeName` from `StoreInfo`. Storing Go type names proved brittle and unnecessary given the multi-language nature of SOP.
+*   **Late Binding**: The system relies on **runtime type inference** rather than persisted metadata.
+*   **Sampling Strategy**: The "Data Manager" UI determines the display type for a Store by **sampling the first item** in the B-Tree.
+    *   This logic is centralized in `sop.InferType` (`types.go`).
+    *   It handles `UUID` (sop/native/string), `time.Time`, and primitives.
+
+### Supported Primitives
+*   The system intentionally supports a rich set of primitives (int, float, string, UUID, time) matching `btree/comparer.go`.
+*   **Exclusion**: Single `byte` or `char` types are **not** supported as B-Tree keys, as they are deemed unnecessary for persistence use cases. Use `string` or `[]byte` (Blob) instead.

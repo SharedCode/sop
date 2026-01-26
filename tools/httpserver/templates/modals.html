@@ -155,11 +155,21 @@
                 <option value="json">JSON</option>
                 <option value="table">Table</option>
             </select>
+            
+            <!-- Global Feedback Controls (Hidden until next release) -->
+            <!--
+            <div id="header-feedback-controls" style="display: none; align-items: center; margin-left: 8px; gap: 6px; border-left: 1px solid var(--border-color); padding-left: 8px;">
+                 <span class="feedback-btn" id="header-fb-up" title="Helpful" onclick="handleHeaderFeedback('positive')" style="cursor: pointer; opacity: 0.7; font-size: 13px;">👍</span>
+                 <span class="feedback-btn" id="header-fb-down" title="Not Helpful" onclick="handleHeaderFeedback('negative')" style="cursor: pointer; opacity: 0.7; font-size: 13px;">👎</span>
+                 <span class="feedback-btn" id="header-fb-teach" title="Teach the Agent" onclick="handleHeaderTeach()" style="cursor: pointer; opacity: 0.7; font-size: 11px; display: flex; align-items: center; gap: 2px;">🎓 Train</span>
+            </div>
+            -->
+
             <!-- Hidden Agent Select (Hardcoded to sql_admin) -->
             <input type="hidden" id="agent-select" value="sql_admin">
         </div>
         <div class="chat-controls">
-            <button class="reset-btn" onclick="resetChatPosition()" title="Reset Position" style="font-size: 14px;">&#x21ba;</button>
+            <button class="reset-btn" onclick="resetChatPosition(true)" title="Reset Position" style="font-size: 14px;">&#x21ba;</button>
             <button class="minimize-btn" onclick="toggleChatWidget()">_</button>
         </div>
     </div>
@@ -170,7 +180,7 @@
             <strong>Try these examples (if you loaded the Demo Data):</strong>
             <ul>
                 <li>"Show me all users sorted by Age descending"</li>
-                <li>"Find orders for user with first_name 'John' with total amount > 500"</li>
+                <li>"Find orders for users with first_name 'John' with total amount > 500"</li>
                 <li>"List products in 'Electronics' category"</li>
                 <li>"Create a script named 'expensive_orders' to find orders over $1000"</li>
             </ul>

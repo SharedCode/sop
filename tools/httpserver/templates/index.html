@@ -975,20 +975,6 @@
                         {{end}}
                     </div>
                 </div>
-
-                <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid var(--border-color);">
-                    <div>
-                        <code>SYSTEM_DB_PATH</code>: 
-                        {{if .Env.SYSTEM_DB_PATH}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
-                        {{else}}
-                            <span style="color: var(--text-muted);">Not Set</span>
-                        {{end}}
-                    </div>
-                    <div style="font-size: 0.85em; color: var(--text-muted); margin-top: 2px;">
-                        Defines the file path for the System Database (e.g., <code>/var/lib/sop/system.db</code>). When configured, it enables the "Enterprise Brains" visual cue in the interface.
-                    </div>
-                </div>
                 
                 <!-- Advanced LLM Documentation -->
                 <div style="margin-top: 15px; margin-bottom: 0px; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden;">

@@ -23,6 +23,10 @@ const (
 	// KnowledgeStore is the name of the B-tree store used to persist learned rules, vocabulary, and corrections.
 	// This store resides in the System Database configured for the agent.
 	KnowledgeStore = "llm_knowledge"
+	// MRUKnowledgeStore is the name of the store that tracks "active" or "relevant" knowledge categories/items.
+	// This acts as a Working Memory Index, telling the agent what to pre-load from Long Term Memory.
+	// Keys are "{Category}/{Name}" or just "{Category}", Values are Timestamps/Scores.
+	MRUKnowledgeStore = "mru_knowledge"
 	// KnowledgeRefreshDuration is the interval at which the agent refreshes its local view of the persistent knowledge.
 	KnowledgeRefreshDuration = 5 * time.Minute
 )

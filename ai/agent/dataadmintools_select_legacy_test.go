@@ -57,7 +57,7 @@ func TestToolSelect_LegacyOrderedOutput(t *testing.T) {
 	}
 
 	// Note: We use NewBtree directly to bypass some of the jsondb helpers that might auto-populate MapKeyIndexSpecification
-	if _, err := sopdb.NewBtree[string, any](ctx, dbOpts, storeName, tx, nil, storeOpts); err != nil {
+	if _, err := sopdb.NewBtree[any, any](ctx, dbOpts, storeName, tx, nil, storeOpts); err != nil {
 		t.Fatalf("NewBtree failed: %v", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

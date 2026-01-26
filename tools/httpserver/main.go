@@ -13,7 +13,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"sort"
 	"strconv"
@@ -186,6 +185,7 @@ func main() {
 	http.HandleFunc("/api/store/item/delete", handleDeleteItem)
 	http.HandleFunc("/api/admin/validate", handleValidateAdminToken)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
+	http.HandleFunc("/api/ai/feedback", handleAIFeedback)
 	http.HandleFunc("/api/scripts/execute", withAuth(handleExecuteScript))
 
 	// Configuration Endpoints
@@ -197,7 +197,7 @@ func main() {
 	http.HandleFunc("/api/config/environments/create", handleCreateEnvironment)
 	http.HandleFunc("/api/config/environments/switch", handleSwitchEnvironment)
 	http.HandleFunc("/api/config/environments/delete", handleDeleteEnvironment)
-	http.HandleFunc("/api/system/env", handleGetSystemEnv)
+	http.HandleFunc("/api/config/llm/update", handleUpdateLLMConfig)
 
 	// Initialize Agents
 	initAgents(context.Background())
@@ -399,15 +399,12 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check if SystemDB path matches SYSTEM_DB_PATH environment variable (Enterprise Mode)
-	isEnterprise := false
-	if sysDBPath := os.Getenv("SYSTEM_DB_PATH"); sysDBPath != "" && config.SystemDB != nil {
-		// Compare absolute paths to be safe
-		absSysDB, err1 := filepath.Abs(config.SystemDB.Path)
-		absEnv, err2 := filepath.Abs(sysDBPath)
-		if err1 == nil && err2 == nil && absSysDB == absEnv {
-			isEnterprise = true
-		}
+	// Check if SystemDB exists (Formalize System DB as "Brains")
+	// We treat any System DB (Explicit or Implicit) as an "Enterprise Brain" to show the Chip UI/Icon.
+	isEnterprise := config.SystemDB != nil
+	if !isEnterprise && len(config.Databases) > 0 {
+		// Implicit System DB exists if there are user databases
+		isEnterprise = true
 	}
 
 	data := map[string]any{
@@ -425,7 +422,6 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		"Env": map[string]bool{
 			"SOP_ROOT_PASSWORD": os.Getenv("SOP_ROOT_PASSWORD") != "",
 			"GEMINI_API_KEY":    os.Getenv("GEMINI_API_KEY") != "",
-			"SYSTEM_DB_PATH":    os.Getenv("SYSTEM_DB_PATH") != "",
 		},
 	}
 	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
@@ -894,54 +890,7 @@ func handleGetDBOptions(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(dbOpts)
 }
 
-func inferType(v any) (string, bool) {
-	if v == nil {
-		return "string", false
-	}
-
-	// Handle JSON number (float64) which might be int
-	if f, ok := v.(float64); ok {
-		if float64(int64(f)) == f {
-			return "int", false
-		}
-		return "float64", false
-	}
-
-	switch v.(type) {
-	case string:
-		return "string", false
-	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
-		return "int", false
-	case float32:
-		return "float64", false
-	case bool:
-		return "bool", false
-	}
-
-	val := reflect.ValueOf(v)
-	kind := val.Kind()
-
-	if kind == reflect.Map {
-		return "map", false
-	}
-
-	if kind == reflect.Slice || kind == reflect.Array {
-		// Check for byte slice -> blob
-		if val.Type().Elem().Kind() == reflect.Uint8 {
-			return "blob", false // Blob is treated as a type, not array of bytes
-		}
-		// Otherwise it's an array of something
-		if val.Len() > 0 {
-			elem := val.Index(0).Interface()
-			t, _ := inferType(elem)
-			return t, true
-		}
-		return "string", true
-	}
-
-	return "string", false
-}
-
+// handleGetStoreInfo handles retrieval of store metadata.
 func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	storeName := r.URL.Query().Get("name")
@@ -1011,11 +960,11 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 		if ok, _ := store.First(ctx); ok {
 			k := store.GetCurrentKey().Key
 			response["sampleKey"] = k
-			keyType, keyIsArray = inferType(k)
+			keyType, keyIsArray = sop.InferType(k)
 
 			if v, err := store.GetCurrentValue(ctx); err == nil {
 				response["sampleValue"] = v
-				valueType, valueIsArray = inferType(v)
+				valueType, valueIsArray = sop.InferType(v)
 			}
 		}
 	} else {
@@ -1637,6 +1586,13 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Fallback guessing if empty store or unknown type
+		if _, err := uuid.Parse(kStr); err == nil {
+			// It looks like a UUID, so return it as uuid.UUID
+			// This matches jsondb behavior where we infer type from string format
+			u, _ := uuid.Parse(kStr)
+			return u
+		}
+
 		var i int
 		if _, err := fmt.Sscanf(kStr, "%d", &i); err == nil {
 			// Check if the original string was actually just digits

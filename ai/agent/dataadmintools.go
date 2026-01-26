@@ -21,7 +21,7 @@ Important:
 1. Inspect Schema First: Use 'list_stores' to discover stores and their schema, use field names when referencing, e.g. writing projection fields, filtering logic.
 2. Inspect the "relations" fields of the store schemas to determine the correct join logic and optimized access paths.
 3. When joining using a Secondary Index or KV store, respect the field names in the 'Relation'. If a Relation maps '[Value]' to 'target_id', use 'Value' in your 'on' clause (e.g. {"on": {"Value": "target_id"}}). Do not assume the source has the target's field name.
-4. 'scan' and 'join' return full objects. To select specific fields or renamed columns, you MUST add a 'project' step. If the user asks for "all entities" (e.g. "all users"), prioritize projecting "store.*" (e.g. ["users.*"]) to return all fields of that entity.
+4. 'scan' and 'join' return full objects. To select specific fields or renamed columns, you MUST add a 'project' step. The 'fields' list defines the EXACT order of keys in the output JSON. You MUST respect the user's requested SELECT clause order. If the user asks for "all entities" (e.g. "all users"), prioritize projecting "store.*" (e.g. ["users.*"]).
 5. For large datasets, prefer using 'limit' to avoid memory exhaustion.
 6. Store names are sometimes entity's plural form or singular form, e.g. user entity stored in users store.
 7. Field names sometimes use underscore('_') separator instead of space(' '), e.g. - "total amount" as field name is "total_amount".
@@ -48,7 +48,7 @@ Operations:
 - map_merge(map1, map2) -> map
 - sort(input, fields) -> list
 - filter(input, condition) -> cursor/list
-- project(input, fields) -> cursor/list (fields: list<string> ['field', 'field AS alias', 'a.*'] (PREFERRED), or map {alias: field} (no ordering guaranteed))
+- project(input, fields) -> cursor/list (fields: list<string> ['field', 'field AS alias', 'a.*'] (PREFERRED). Order is guaranteed and critical for SELECT queries., or map {alias: field} (no ordering guaranteed))
 - limit(input, limit) -> cursor/list
 - join(input, with, type, on) -> cursor/list
 - join_right(input, store, type, on) -> cursor/list (Pipeline alias for join)
@@ -73,9 +73,9 @@ Example Pipeline Join:
 Note: 'scan' and 'join' return full objects. To select specific fields or renamed columns, you MUST add a 'project' step.`
 
 const (
-	SelectInstruction = "Selects data from a store. Arguments: store (string), key (any, optional), value (any, optional), fields (list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias'], ['a.*', 'b.name AS employee']), limit (number, optional), order_by (string, optional, e.g. 'field desc'), action (string, optional: 'delete', 'update'), update_values (map, optional)."
+	SelectInstruction = "Selects data from a store. Arguments: store (string), key (any, optional), value (any, optional), fields (list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias'], ['a.*', 'b.name AS employee']. The order of this list is respected in the output.), limit (number, optional), order_by (string, optional, e.g. 'field desc'), action (string, optional: 'delete', 'update'), update_values (map, optional)."
 
-	JoinInstruction = "Joins data from two stores. Arguments: left_store (string), right_store (string), left_join_fields (list<string>), right_join_fields (list<string>), join_type (string, optional: 'inner', 'left', 'right'), fields (list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias'], ['a.*', 'b.name AS employee']), limit (number, optional), order_by (string, optional), action (string, optional: 'delete_left', 'update_left'), update_values (map, optional)."
+	JoinInstruction = "Joins data from two stores. Arguments: left_store (string), right_store (string), left_join_fields (list<string>), right_join_fields (list<string>), join_type (string, optional: 'inner', 'left', 'right'), fields (list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias'], ['a.*', 'b.name AS employee']. The order of this list is respected in the output.), limit (number, optional), order_by (string, optional), action (string, optional: 'delete_left', 'update_left'), update_values (map, optional)."
 
 	AddInstruction               = "Adds data to a store."
 	UpdateInstruction            = "Updates data in a store."
@@ -91,6 +91,7 @@ func (a *DataAdminAgent) registerTools(ctx context.Context) {
 	}
 
 	a.registry.Register("list_databases", "Lists all available databases.", "()", a.toolListDatabases)
+	// a.registry.Register("switch_database", "Switches the active database context for the AI and the user UI.", "(database: string)", a.toolSwitchDatabase)
 	a.registry.Register("list_stores", "Lists all stores in the current or specified database.", "(database: string)", a.toolListStores)
 
 	// Script Management
@@ -118,7 +119,7 @@ func (a *DataAdminAgent) registerTools(ctx context.Context) {
 	a.registry.Register("execute_script", a.getToolInstruction(ctx, "execute_script", ExecuteScriptInstruction), "(script: Array<{op: string, args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
 
 	// Self-Correction Tools
-	a.registry.Register("manage_knowledge", "Manages the AI's long-term knowledge base. Use this to save, retrieve, or list learned information. Namespaces organize knowledge (e.g. 'term', 'tool', 'finance', 'project_alpha'). Action: 'upsert', 'delete', 'read', 'list'. For 'list', key is ignored.", "(namespace: string, key: string, value: string, action: string)", a.toolManageKnowledge)
+	a.registry.Register("manage_knowledge", "Manages the AI's long-term knowledge base. Use this to save, retrieve, or list learned information. Namespaces organize knowledge (e.g. 'term', 'tool', 'finance', 'project_alpha'). Action: 'upsert', 'delete', 'read', 'list'. For 'list', key is ignored.", "(namespace: string, action: string, key?: string, value?: string)", a.toolManageKnowledge)
 
 	// Conversation Management
 	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", "(summary: string, topic_label: string)", a.toolConcludeTopic)
@@ -175,23 +176,95 @@ func (a *DataAdminAgent) getSystemInstructions(ctx context.Context, defaultInst 
 	}
 	defer tx.Rollback(ctx)
 
-	// Open the store
+	// Open the Knowledge Config Store to check what categories we should load
+	// We use a simple String Key (Category Name) -> String Value (Priority/Metadata) store?
+	// Or we can just reuse the generic BTree logic if we have a simple store wrapper.
+	// We'll trust that the store exists. If not, we skip dynamic loading.
+
+	// 1. Base Prompt (Static or from 'memory/system_prompt')
+	baseInst := defaultInst
 	store, err := core.OpenBtree[KnowledgeKey, string](ctx, a.systemDB.Options(), KnowledgeStore, tx, nil)
-	if err != nil {
+	if err == nil {
+		found, err := store.Find(ctx, KnowledgeKey{Category: "memory", Name: "system_prompt"}, false)
+		if err == nil && found {
+			if val, err := store.GetCurrentValue(ctx); err == nil {
+				baseInst = val
+			}
+		}
+	} else {
+		// If main store fails, just return default
 		return defaultInst
 	}
 
-	// Look up the instruction using the "memory" namespace
-	found, err := store.Find(ctx, KnowledgeKey{Category: "memory", Name: "system_prompt"}, false)
-	if err != nil || !found {
-		return defaultInst
+	// 2. Load MRU / Active Knowledge
+	// We open the MRU store to see what "Categories" or "Items" are marked as active.
+	// MRU Store: Key = Category (string), Value = Timestamp (string/int)
+	// For now, we assume simple string->string map where Key is the Category to load.
+
+	categoriesToLoad := make(map[string]bool)
+	// Always load core categories
+	categoriesToLoad["data_generation"] = true
+	categoriesToLoad["store_rules"] = true
+	categoriesToLoad["policy"] = true
+	categoriesToLoad["recipes"] = true
+
+	mruStore, err := core.OpenBtree[string, string](ctx, a.systemDB.Options(), MRUKnowledgeStore, tx, nil)
+	if err == nil {
+		// Iterate all keys in MRU store
+		if ok, err := mruStore.First(ctx); ok && err == nil {
+			for {
+				cat := mruStore.GetCurrentKey().Key
+				categoriesToLoad[cat] = true
+				if ok, err := mruStore.Next(ctx); !ok || err != nil {
+					break
+				}
+			}
+		}
 	}
 
-	val, err := store.GetCurrentValue(ctx)
-	if err != nil {
-		return defaultInst
+	var sb strings.Builder
+	sb.WriteString(baseInst)
+	sb.WriteString("\n\n### Loaded Knowledge:\n")
+
+	// Convert map to sorted slice for consistent prompt caching
+	var sortedCats []string
+	for c := range categoriesToLoad {
+		sortedCats = append(sortedCats, c)
 	}
-	return val
+	sort.Strings(sortedCats)
+
+	for _, cat := range sortedCats {
+		// Use Range API
+		// We want all keys where Category == cat.
+		// B-Tree is ordered by Category then Name.
+		// So we seek to {Category: cat, Name: ""} and iterate until Category changes.
+
+		startKey := KnowledgeKey{Category: cat, Name: ""}
+
+		if found, err := store.Find(ctx, startKey, true); err == nil && found {
+			// Iterate
+			for {
+				// GetCurrentKey returns just the Item (with Key inside), no error in signature
+				item := store.GetCurrentKey()
+				k := item.Key
+
+				if k.Category != cat {
+					break // Done with this category
+				}
+
+				val, err := store.GetCurrentValue(ctx)
+				if err == nil {
+					sb.WriteString(fmt.Sprintf("- [%s] %s: %s\n", cat, k.Name, val))
+				}
+
+				if ok, err := store.Next(ctx); err != nil || !ok {
+					break
+				}
+			}
+		}
+	}
+
+	return sb.String()
 }
 
 func (a *DataAdminAgent) toolListDatabases(ctx context.Context, args map[string]any) (string, error) {
@@ -322,16 +395,18 @@ func (a *DataAdminAgent) toolManageKnowledge(ctx context.Context, args map[strin
 	value, _ := args["value"].(string)
 	action, _ := args["action"].(string)
 
-	if namespace == "" || key == "" {
-		return "", fmt.Errorf("arguments 'namespace' and 'key' are required")
+	namespace = strings.TrimSpace(namespace)
+	key = strings.TrimSpace(key)
+	action = strings.ToLower(strings.TrimSpace(action))
+
+	if namespace == "" {
+		return "", fmt.Errorf("argument 'namespace' is required")
 	}
 	if action == "" {
 		action = "upsert" // Default
 	}
-
-	// Validate namespace
-	if namespace == "" {
-		return "", fmt.Errorf("namespace is required")
+	if action != "list" && key == "" {
+		return "", fmt.Errorf("argument 'key' is required for action '%s'", action)
 	}
 
 	// Start a read-write transaction
@@ -413,4 +488,37 @@ func (a *DataAdminAgent) toolManageKnowledge(ctx context.Context, args map[strin
 	}
 
 	return resultMsg, nil
+}
+
+func (a *DataAdminAgent) toolSwitchDatabase(ctx context.Context, args map[string]any) (string, error) {
+	dbName, _ := args["database"].(string)
+	if dbName == "" {
+		return "", fmt.Errorf("argument 'database' is required")
+	}
+
+	exists := false
+	if dbName == "system" && a.systemDB != nil {
+		exists = true
+	} else {
+		_, exists = a.databases[dbName]
+	}
+
+	if !exists {
+		var names []string
+		for k := range a.databases {
+			names = append(names, k)
+		}
+		if a.systemDB != nil {
+			names = append(names, "system")
+		}
+		sort.Strings(names)
+		return "", fmt.Errorf("database '%s' not found. Available: %v", dbName, names)
+	}
+
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		p.CurrentDB = dbName
+		p.Transaction = nil
+	}
+
+	return fmt.Sprintf("Active database context switched to '%s'.", dbName), nil
 }

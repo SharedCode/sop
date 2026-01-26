@@ -346,6 +346,8 @@ func TestToolJoin_Full(t *testing.T) {
 			idA, _ = v.(float64)
 		} else if v, ok := r["s_a.id"]; ok && v != nil {
 			idA, _ = v.(float64)
+		} else if v, ok := r["store_a.id"]; ok && v != nil {
+			idA, _ = v.(float64)
 		}
 
 		idB, _ := r["B.id"].(float64)

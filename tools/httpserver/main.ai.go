@@ -11,13 +11,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent"
 	aidb "github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/embed"
 	_ "github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/obfuscation"
+	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/jsondb"
 )
@@ -221,6 +226,12 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		sendEvent("error", msg)
 		return
 	}
+
+	// Detect Database Switch
+	// if payload.CurrentDB != "" && payload.CurrentDB != req.Database {
+	// 	log.Info("Agent switched database", "from", req.Database, "to", payload.CurrentDB)
+	// 	sendEvent("switch_database", payload.CurrentDB)
+	// }
 
 	// Process the response from LLM as returned by the agent.
 	text := strings.TrimSpace(response)
@@ -549,6 +560,20 @@ func seedLLMKnowledge(ctx context.Context, db *aidb.Database) {
 	}
 	log.Info("Seeded/Updated 'execute_script' instruction.")
 
+	// Seed User Defined Knowledge from knowledge_seed.go
+	for _, entry := range UserDefinedKnowledge {
+		k := agent.KnowledgeKey{Category: entry.Category, Name: entry.Name}
+		if _, err := store.Upsert(ctx, k, entry.Content); err != nil {
+			log.Error("Failed to seed user knowledge", "category", entry.Category, "name", entry.Name, "error", err)
+			// Continue or fail? If one fails, others might too if it's a DB issue.
+			// But since we are in a transaction, if we continue and commit, it might be partial?
+			// Actually Upsert returns error if IO fails.
+			// Let's log error but try to continue.
+		} else {
+			log.Info("Seeded/Updated user knowledge", "category", entry.Category, "name", entry.Name)
+		}
+	}
+
 	tx.Commit(ctx)
 }
 
@@ -789,4 +814,145 @@ func injectAPIKey(cfg *agent.Config, apiKey string) {
 
 func (e *DefaultToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
 	return nil, nil
+}
+
+func handleAIFeedback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		MsgID       string `json:"msgId"`
+		Type        string `json:"type"` // positive, negative
+		AIContent   string `json:"ai_content"`
+		UserContent string `json:"user_content"`
+		Database    string `json:"database"`
+		Agent       string `json:"agent"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid body", http.StatusBadRequest)
+		return
+	}
+
+	log.Info("AI Feedback Received", "msgId", req.MsgID, "type", req.Type)
+
+	ctx := r.Context()
+
+	// 1. Get System DB Options
+	// We store feedback in the 'system' database to be global across user sessions/databases
+	opts, err := getDBOptions(ctx, "system")
+	if err != nil {
+		log.Error("Failed to get system db options", "error", err)
+		http.Error(w, "System DB error", http.StatusInternalServerError)
+		return
+	}
+
+	// 2. Begin Transaction
+	trans, err := database.BeginTransaction(ctx, opts, sop.ForWriting)
+	if err != nil {
+		log.Error("Failed to begin transaction", "error", err)
+		http.Error(w, "DB trans error", http.StatusInternalServerError)
+		return
+	}
+	// Ensure rollback if not committed
+	defer trans.Rollback(ctx)
+
+	// 3. Open Store "llm_feedback"
+	storeName := "llm_feedback"
+	// Simple string comparer
+	comparer := func(a, b string) int { return strings.Compare(a, b) }
+
+	// Configure store (auto-create if missing)
+	so := sop.ConfigureStore(storeName, true, btree.DefaultSlotLength, "LLM Feedback Store", sop.SmallData, "")
+
+	store, err := database.NewBtree[string, string](ctx, opts, storeName, trans, comparer, so)
+	if err != nil {
+		log.Error("Failed to open feedback store", "error", err)
+		http.Error(w, "Store open error", http.StatusInternalServerError)
+		return
+	}
+
+	// 4. Create Payload
+	id := uuid.New().String()
+	payload := map[string]any{
+		"id":           id,
+		"msg_id":       req.MsgID,
+		"type":         req.Type,
+		"ai_content":   req.AIContent,
+		"user_content": req.UserContent,
+		"database":     req.Database,
+		"agent":        req.Agent,
+		"timestamp":    time.Now().Format(time.RFC3339),
+	}
+
+	valBytes, _ := json.Marshal(payload)
+	val := string(valBytes)
+
+	// 5. Save (Add new record) to B-Tree
+	if ok, err := store.Add(ctx, id, val); err != nil {
+		log.Error("Failed to save feedback", "error", err)
+		http.Error(w, "Save error", http.StatusInternalServerError)
+		return
+	} else if !ok {
+		// Collision? Retry or just fail (UUID collision unlikely)
+		http.Error(w, "Save failed (collision)", http.StatusInternalServerError)
+		return
+	}
+
+	// 6. Vectorize & Save to Vector Store (if user content is present)
+	if req.UserContent != "" {
+		// Create Embedder (Simple Hash for now, ideally use Agent's Embedder)
+		// 384 dimensions is good balance
+		embedder := embed.NewSimple("simple_hash", 384, nil)
+
+		vecs, err := embedder.EmbedTexts(ctx, []string{req.UserContent})
+		if err != nil {
+			log.Warn("Failed to embed user content", "error", err)
+			// Don't fail the request, just skip vectorization
+		} else if len(vecs) > 0 {
+			var to sop.TransactionOptions
+			opts.CopyTo(&to)
+
+			vecConfig := vector.Config{
+				TransactionOptions: to,
+				ContentSize:        sop.SmallData,
+				UsageMode:          ai.DynamicWithVectorCountTracking,
+			}
+
+			// Open Vector Store (Domain: "llm_feedback")
+			vecStore, err := vector.Open[string](ctx, trans, "llm_feedback", vecConfig)
+			if err != nil {
+				log.Error("Failed to open vector store", "error", err)
+				http.Error(w, "Vector store open error", http.StatusInternalServerError)
+				return
+			}
+
+			item := ai.Item[string]{
+				ID:      id,
+				Vector:  vecs[0],
+				Payload: val, // Store full payload for easy retrieval during search
+			}
+
+			if err := vecStore.Upsert(ctx, item); err != nil {
+				log.Error("Failed to upsert vector", "error", err)
+				http.Error(w, "Vector upsert error", http.StatusInternalServerError)
+				return
+			}
+			log.Info("Feedback Vectorized", "id", id)
+		}
+	}
+
+	// 7. Commit
+	if err := trans.Commit(ctx); err != nil {
+		log.Error("Failed to commit feedback", "error", err)
+		http.Error(w, "Commit error", http.StatusInternalServerError)
+		return
+	}
+
+	log.Info("Feedback Saved", "id", id)
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "id": id})
 }

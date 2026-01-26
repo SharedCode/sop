@@ -451,128 +451,135 @@ func convertToString(v any) any {
 	return fmt.Sprintf("%v", v)
 }
 
+// GetField extracts a field from a given source object (Map, OrderedMap, or JSON String).
+// It supports case-insensitive lookups, dot-notation stripping, Key/Value recursion, and suffix matching.
+func GetField(source any, field string) any {
+	if source == nil {
+		return nil
+	}
+
+	// Unwrap OrderedMap
+	switch s := source.(type) {
+	case *OrderedMap:
+		if s != nil {
+			source = s.m
+		}
+	case OrderedMap:
+		source = s.m
+	}
+
+	switch m := source.(type) {
+	case map[string]any:
+		if field == "*" {
+			return m
+		}
+		// 1. Exact Match
+		if v, ok := m[field]; ok {
+			return v
+		}
+
+		// Prepare for fuzzy search
+		var stripped string
+		var dotSuffix string
+
+		// Dot-Notation setup
+		if idx := strings.Index(field, "."); idx > 0 {
+			stripped = field[idx+1:]
+			// 2. Stripped exact match
+			if v, ok := m[stripped]; ok {
+				return v
+			}
+		}
+		dotSuffix = "." + field
+
+		// Single-pass iteration for all fuzzy searches to avoid multiple map traversals
+		var matchStripped any
+		var matchSuffix any
+
+		for k, v := range m {
+			// 3. Case-insensitive fallback (Highest Priority fuzzy)
+			if strings.EqualFold(k, field) {
+				return v
+			}
+
+			// 4. Case-insensitive stripped fallback (High Priority fuzzy)
+			if stripped != "" && matchStripped == nil {
+				if strings.EqualFold(k, stripped) {
+					matchStripped = v
+					// Do not return yet; exact fold match might exist later in the map
+				}
+			}
+
+			// 7. Suffix Match (Lowest Priority fuzzy - captured here but used last)
+			if matchSuffix == nil && strings.HasSuffix(k, dotSuffix) {
+				matchSuffix = v
+			}
+		}
+
+		if matchStripped != nil {
+			return matchStripped
+		}
+
+		// 5. Key Wrapper Check (recurse into "key" if present)
+		if kWrapper, ok := m["key"]; ok {
+			if kVal := GetField(kWrapper, field); kVal != nil {
+				return kVal
+			}
+		}
+
+		// 6. Value Wrapper Check (recurse into "value" if present)
+		if vWrapper, ok := m["value"]; ok {
+			if vVal := GetField(vWrapper, field); vVal != nil {
+				return vVal
+			}
+		}
+
+		// Return suffix match if nothing else found
+		if matchSuffix != nil {
+			return matchSuffix
+		}
+
+	case string:
+		// 2. JSON String
+		// Quick check for JSON-like start without allocation
+		isJSON := false
+		for i := 0; i < len(m); i++ {
+			c := m[i]
+			if c == ' ' || c == '\t' || c == '\r' || c == '\n' {
+				continue
+			}
+			if c == '{' {
+				isJSON = true
+			}
+			break
+		}
+
+		if isJSON {
+			var decoded map[string]any
+			if err := json.Unmarshal([]byte(m), &decoded); err == nil {
+				return GetField(decoded, field)
+			}
+		}
+	}
+	return nil
+}
+
 // extractVal extracts a value from a key or value map/json.
 func extractVal(key any, val any, field string) any {
 	if field == "key" {
 		return key
 	}
 
-	check := func(source any) any {
-		if source == nil {
-			return nil
-		}
-		// Handle OrderedMap
-		if om, ok := source.(*OrderedMap); ok && om != nil {
-			source = om.m
-		} else if om, ok := source.(OrderedMap); ok {
-			source = om.m
-		}
-		// 1. Map
-		if m, ok := source.(map[string]any); ok {
-			if field == "*" {
-				return m
-			}
-			if v, ok := m[field]; ok {
-				return v
-			}
-			// Case-insensitive fallback
-			for k, v := range m {
-				if strings.EqualFold(k, field) {
-					return v
-				}
-			}
-
-			// Dot-Notation Fallback (e.g. "a.name" -> "name" if "a.name" is missing)
-			// This allows referring to "a.name" even if the map only has "name" (unaliased Left side)
-			if idx := strings.Index(field, "."); idx > 0 {
-				stripped := field[idx+1:]
-				if v, ok := m[stripped]; ok {
-					return v
-				}
-				// Case-insensitive fallback for stripped
-				for k, v := range m {
-					if strings.EqualFold(k, stripped) {
-						return v
-					}
-				}
-			}
-
-			// Key Wrapper Check (recurse into "key" if present)
-			if kWrapper, ok := m["key"]; ok {
-				if kVal := extractVal(nil, kWrapper, field); kVal != nil {
-					return kVal
-				}
-			}
-
-			// Value Wrapper Check (recurse into "value" if present)
-			if vWrapper, ok := m["value"]; ok {
-				if vVal := extractVal(nil, vWrapper, field); vVal != nil {
-					return vVal
-				}
-			}
-
-			// Reverse Fallback / Suffix Match
-			// If we asked for "name" but map only has "b.name" (aliased), and "name" is unique (suffix match).
-			// This enables selecting un-aliased names when storage is strictly aliased.
-			dotSuffix := "." + field
-			for k, v := range m {
-				if strings.HasSuffix(k, dotSuffix) {
-					// We found a candidate e.g. "b.name" for "name"
-					// TODO: Should we check for ambiguity? (e.g. "a.name" and "b.name" both exist)
-					// SQL standard says "Ambiguous". For now, we pick the first one we find to allow progress.
-					// Or we could check if there are multiple.
-					return v
-				}
-			}
-		}
-		// 2. JSON String
-		if s, ok := source.(string); ok && strings.HasPrefix(strings.TrimSpace(s), "{") {
-			var m map[string]any
-			if err := json.Unmarshal([]byte(s), &m); err == nil {
-				if field == "*" {
-					return m
-				}
-				if v, ok := m[field]; ok {
-					return v
-				}
-				// Case-insensitive fallback
-				for k, v := range m {
-					if strings.EqualFold(k, field) {
-						return v
-					}
-				}
-
-				// Dot-Notation Fallback
-				if idx := strings.Index(field, "."); idx > 0 {
-					stripped := field[idx+1:]
-					if v, ok := m[stripped]; ok {
-						return v
-					}
-					// Case-insensitive fallback for stripped
-					for k, v := range m {
-						if strings.EqualFold(k, stripped) {
-							return v
-						}
-					}
-				}
-
-				// Reverse Fallback / Suffix Match for JSON too
-				dotSuffix := "." + field
-				for k, v := range m {
-					if strings.HasSuffix(k, dotSuffix) {
-						return v
-					}
-				}
-			}
-		}
-		return nil
-	}
-
-	if v := check(key); v != nil {
+	if v := GetField(key, field); v != nil {
 		return v
 	}
-	if v := check(val); v != nil {
+	if v := GetField(val, field); v != nil {
 		return v
+	}
+
+	// Fallback logic for primitive values if "Value" or "value" is requested
+	if strings.EqualFold(field, "value") {
+		return val
 	}
 	return nil
 }
@@ -920,18 +927,24 @@ func parseProjectionFields(input any) []ProjectionField {
 				if len(f) == len(p) {
 					return f + "*"
 				}
+				// FIX: Do NOT strip the prefix for simple fields yet.
+				// We need the full source path (e.g. "users.name") to extract the value correctly during projection.
+				// The cleanName function is used for Dst (Alias) calculation when no explicit alias is given.
+				// If we strip "users." from "users.name", the Alias becomes "name", which is correct.
+				// BUT if we use cleanName on Src below, it breaks data extraction.
+				// Wait, this cleanName is ONLY called for the ELSE block of alias checking (implicit alias).
+				// So dst = cleanName(f) is correct: we want "name" from "users.name".
 				return f[len(p):]
 			}
 		}
+
 		// Also stripping "Department." if table alias expansion happened?
-		// User reported "Department.region".
-		// Let's rely on standard SQL behavior: usually "TableName.Column"
-		// If we encounter "TableName.Column", should we strip TableName?
-		// Only if user didn't ask for it specifically?
-		// If input is "a.region", loop below handles "a." stripping.
-		// If input was "region" but system expanded it to "Department.region".
 		// We should probably strip ANY prefix if it looks like Table.Col
 		if idx := strings.Index(f, "."); idx > 0 {
+			// Special handling for wildcards: don't strip if it ends in .*
+			if strings.HasSuffix(f, ".*") {
+				return f
+			}
 			return f[idx+1:]
 		}
 		return f
@@ -1379,4 +1392,81 @@ func parseSlashCommand(input string) (string, map[string]any, error) {
 	}
 
 	return toolName, args, nil
+}
+
+// CompareLoose performs a loose comparison of two values, handling mixed numeric types.
+// It leverages btree.Compare for strict same-type comparisons but promotes mixed numeric types
+// to float64 for correct relational ordering (e.g., 9 < 10.0).
+func CompareLoose(a any, b any) int {
+	// 1. Try strict comparison first if types match?
+	// Actually no, primitive vs float mismatch is mostly what we care about.
+	// But let's check for "IsNumber" on both sides.
+
+	isNumA := isNumber(a)
+	isNumB := isNumber(b)
+
+	if isNumA && isNumB {
+		fA, _ := coerceToFloatFull(a)
+		fB, _ := coerceToFloatFull(b)
+		if fA < fB {
+			return -1
+		} else if fA > fB {
+			return 1
+		}
+		return 0
+	} else if isNumA && !isNumB {
+		// Number vs String/Other -> Fallback to string
+	} else if !isNumA && isNumB {
+		// String/Other vs Number -> Fallback to string
+	}
+
+	// Default to btree.Compare (which does strict type match or string fallback)
+	return btree.Compare(a, b)
+}
+
+func isNumber(v any) bool {
+	switch v.(type) {
+	case int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64:
+		return true
+	}
+	return false
+}
+
+// Helper for Join Numeric Coercion (Exposed here or duplicate from join_execution if private)
+// Since it was private in join_execution, we'll redefine/ensure it is available.
+// Actually, let's just use a simple one here.
+func coerceToFloatFull(v any) (float64, bool) {
+	switch val := v.(type) {
+	case int:
+		return float64(val), true
+	case int8:
+		return float64(val), true
+	case int16:
+		return float64(val), true
+	case int32:
+		return float64(val), true
+	case int64:
+		return float64(val), true
+	case uint:
+		return float64(val), true
+	case uint8:
+		return float64(val), true
+	case uint16:
+		return float64(val), true
+	case uint32:
+		return float64(val), true
+	case uint64:
+		return float64(val), true
+	case float32:
+		return float64(val), true
+	case float64:
+		return val, true
+	case string:
+		if f, err := strconv.ParseFloat(val, 64); err == nil {
+			return f, true
+		}
+	}
+	return 0, false
 }

@@ -147,7 +147,6 @@
     let currentItemKey = null;
     
     const CURRENT_CONFIG_FILE = "{{ .ConfigFile }}";
-    // SYSTEM_DB_PATH Removed
 
     // Environment Flags
     // ALLOW_INVALID_MAP_KEY: If true, allows saving a store with Map Key type without
@@ -181,184 +180,189 @@
     let availableDatabases = [];
     const CHIP_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14a2.5 2.5 0 0 1-2.5 2.5v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0zm-.5 3A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 11.5 3h-7zM5 6.5A1.5 1.5 0 0 1 6.5 5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3z"/></svg>`;
 
-    // Fetch System Env Vars (Async)
-    // Removed SYSTEM_DB_PATH fetching logic
-
     // Load Databases on Start
-    fetch('/api/databases')
-        .then(res => res.json())
-        .then(databases => {
-            availableDatabases = databases;
-            
-            if (!databases || databases.length === 0) {
-                const select = document.getElementById('database-select');
-                select.innerHTML = '';
-                const opt = document.createElement('option');
-                opt.textContent = "No databases found";
-                select.appendChild(opt);
-
-                document.getElementById('database-section').style.display = 'block';
+    // Refactored into a reusable function to support dynamic database switching
+    window.reloadDatabases = function(autoSelect = true) {
+        return fetch('/api/databases')
+            .then(res => res.json())
+            .then(databases => {
+                availableDatabases = databases;
                 
-                // Disable UI elements when no databases exist
-                const btnAddDb = document.getElementById('btn-add-database');
-                if(btnAddDb) {
-                    btnAddDb.style.opacity = '0.3';
-                    btnAddDb.style.pointerEvents = 'none';
-                }
-                const btnAddStore = document.getElementById('btn-add-store');
-                if(btnAddStore) {
-                    btnAddStore.style.opacity = '0.3';
-                    btnAddStore.style.pointerEvents = 'none';
-                }
-                const btnChat = document.getElementById('chat-toggle-btn');
-                if(btnChat) {
-                    btnChat.style.display = 'none';
-                }
-                
-                // Check if we should suppress the wizard (e.g. redirected after cancel)
-                if (sessionStorage.getItem('sop_suppress_wizard_once')) {
-                    sessionStorage.removeItem('sop_suppress_wizard_once');
+                if (!databases || databases.length === 0) {
+                    const select = document.getElementById('database-select');
+                    select.innerHTML = '';
+                    const opt = document.createElement('option');
+                    opt.textContent = "No databases found";
+                    select.appendChild(opt);
 
-                    // Check if we also need to open the Environment Manager (Post-Cancel)
-                    if (sessionStorage.getItem('sop_open_env_manager')) {
-                        sessionStorage.removeItem('sop_open_env_manager');
-                        showEnvironmentsManager();
+                    document.getElementById('database-section').style.display = 'block';
+                    
+                    // Disable UI elements when no databases exist
+                    const btnAddDb = document.getElementById('btn-add-database');
+                    if(btnAddDb) {
+                        btnAddDb.style.opacity = '0.3';
+                        btnAddDb.style.pointerEvents = 'none';
                     }
+                    const btnAddStore = document.getElementById('btn-add-store');
+                    if(btnAddStore) {
+                        btnAddStore.style.opacity = '0.3';
+                        btnAddStore.style.pointerEvents = 'none';
+                    }
+                    const btnChat = document.getElementById('chat-toggle-btn');
+                    if(btnChat) {
+                        btnChat.style.display = 'none';
+                    }
+                    
+                    // Check if we should suppress the wizard (e.g. redirected after cancel)
+                    if (sessionStorage.getItem('sop_suppress_wizard_once')) {
+                        sessionStorage.removeItem('sop_suppress_wizard_once');
+
+                        // Check if we also need to open the Environment Manager (Post-Cancel)
+                        if (sessionStorage.getItem('sop_open_env_manager')) {
+                            sessionStorage.removeItem('sop_open_env_manager');
+                            showEnvironmentsManager();
+                        }
+                        return;
+                    }
+                    
+                    showSetupWizard();
                     return;
                 }
                 
-                showSetupWizard();
-                return;
-            }
-            
-            if (databases.length > 1) {
-                document.getElementById('database-section').style.display = 'block';
-            }
-
-            const userDBs = databases.filter(db => !db.is_system);
-            const systemDBs = databases.filter(db => db.is_system);
-
-            if (IS_ENTERPRISE) {
-                // Enterprise Mode: Use Chip UI
-                document.getElementById('database-select').style.display = 'none';
-                document.getElementById('enterprise-db-container').style.display = 'block';
-                
-                const menu = document.getElementById('db-dropdown-menu');
-                menu.innerHTML = '';
-                
-                // Add User DBs
-                userDBs.forEach(db => {
-                    const item = document.createElement('div');
-                    item.className = 'db-option';
-                    item.textContent = db.name;
-                    item.onclick = function() {
-                        selectDatabase(db.name);
-                        document.getElementById('db-chip-label').textContent = db.name;
-                        // User DB: Hide Icon
-                        const icon = document.getElementById('db-chip-icon');
-                        if (icon) icon.style.display = 'none';
-                        toggleDbDropdown();
-                    };
-                    menu.appendChild(item);
-                });
-                
-                if (userDBs.length > 0 && systemDBs.length > 0) {
-                    const sep = document.createElement('div');
-                     sep.style.borderTop = "1px solid var(--border-color)";
-                     sep.style.margin = "4px 0";
-                     menu.appendChild(sep);
+                if (databases.length > 1) {
+                    document.getElementById('database-section').style.display = 'block';
                 }
-                
-                // Add System DBs
-                systemDBs.forEach(db => {
-                    const item = document.createElement('div');
-                    item.className = 'db-option';
-                    item.style.fontWeight = "bold";
-                    // item.style.display = "flex"; // Ensure flex via CSS or inline for icon alignment
-                    item.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;">${CHIP_ICON_SVG} ${db.name}</span>`;
-                    item.onclick = function() {
-                        selectDatabase(db.name);
-                        document.getElementById('db-chip-label').textContent = db.name;
-                         // Toggle icon based on type (System)
-                        const icon = document.getElementById('db-chip-icon');
-                        if (icon) icon.style.display = 'inline';
-                        toggleDbDropdown();
-                    };
-                    menu.appendChild(item);
-                });
-                
-            } else {
-                 // Standard Mode: Use <select>
-                 document.getElementById('database-select').style.display = 'block';
-                 document.getElementById('enterprise-db-container').style.display = 'none';
-                 
-                const select = document.getElementById('database-select');
-                select.innerHTML = '';
 
-                userDBs.forEach(db => {
-                    const opt = document.createElement('option');
-                    opt.value = db.name;
-                    opt.textContent = db.name;
-                    select.appendChild(opt);
-                });
+                const userDBs = databases.filter(db => !db.is_system);
+                const systemDBs = databases.filter(db => db.is_system);
 
-                if (systemDBs.length > 0) {
-                    if (userDBs.length > 0) {
-                        const separator = document.createElement('option');
-                        separator.disabled = true;
-                        separator.textContent = "──────────";
-                        select.appendChild(separator);
+                if (IS_ENTERPRISE) {
+                    // Enterprise Mode: Use Chip UI
+                    document.getElementById('database-select').style.display = 'none';
+                    document.getElementById('enterprise-db-container').style.display = 'block';
+                    
+                    const menu = document.getElementById('db-dropdown-menu');
+                    menu.innerHTML = '';
+                    
+                    // Add User DBs
+                    userDBs.forEach(db => {
+                        const item = document.createElement('div');
+                        item.className = 'db-option';
+                        item.textContent = db.name;
+                        item.onclick = function() {
+                            selectDatabase(db.name);
+                            document.getElementById('db-chip-label').textContent = db.name;
+                            // User DB: Hide Icon
+                            const icon = document.getElementById('db-chip-icon');
+                            if (icon) icon.style.display = 'none';
+                            toggleDbDropdown();
+                        };
+                        menu.appendChild(item);
+                    });
+                    
+                    if (userDBs.length > 0 && systemDBs.length > 0) {
+                        const sep = document.createElement('div');
+                         sep.style.borderTop = "1px solid var(--border-color)";
+                         sep.style.margin = "4px 0";
+                         menu.appendChild(sep);
                     }
+                    
+                    // Add System DBs
                     systemDBs.forEach(db => {
+                        const item = document.createElement('div');
+                        item.className = 'db-option';
+                        item.style.fontWeight = "bold";
+                        // item.style.display = "flex"; // Ensure flex via CSS or inline for icon alignment
+                        item.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;">${CHIP_ICON_SVG} ${db.name}</span>`;
+                        item.onclick = function() {
+                            selectDatabase(db.name);
+                            document.getElementById('db-chip-label').textContent = db.name;
+                             // Toggle icon based on type (System)
+                            const icon = document.getElementById('db-chip-icon');
+                            if (icon) icon.style.display = 'inline';
+                            toggleDbDropdown();
+                        };
+                        menu.appendChild(item);
+                    });
+                    
+                } else {
+                     // Standard Mode: Use <select>
+                     document.getElementById('database-select').style.display = 'block';
+                     document.getElementById('enterprise-db-container').style.display = 'none';
+                     
+                    const select = document.getElementById('database-select');
+                    select.innerHTML = '';
+
+                    userDBs.forEach(db => {
                         const opt = document.createElement('option');
                         opt.value = db.name;
-                         // Standard System Red
-                        opt.style.color = "var(--danger-bg)"; 
-                        opt.textContent = "⚠️ " + db.name;
-                        opt.className = "option-system";
-                        opt.style.fontWeight = "bold";
+                        opt.textContent = db.name;
                         select.appendChild(opt);
                     });
+
+                    if (systemDBs.length > 0) {
+                        if (userDBs.length > 0) {
+                            const separator = document.createElement('option');
+                            separator.disabled = true;
+                            separator.textContent = "──────────";
+                            select.appendChild(separator);
+                        }
+                        systemDBs.forEach(db => {
+                            const opt = document.createElement('option');
+                            opt.value = db.name;
+                             // Standard System Red
+                            opt.style.color = "var(--danger-bg)"; 
+                            opt.textContent = "⚠️ " + db.name;
+                            opt.className = "option-system";
+                            opt.style.fontWeight = "bold";
+                            select.appendChild(opt);
+                        });
+                    }
                 }
-            }
 
-            // Persistence Logic
-            const savedDB = localStorage.getItem('sop_current_database');
-            const targetDB = databases.find(d => d.name === savedDB);
-            
-            let finalDBVal = null;
+                if (autoSelect) {
+                    // Persistence Logic
+                    const savedDB = localStorage.getItem('sop_current_database');
+                    const targetDB = databases.find(d => d.name === savedDB);
+                    
+                    let finalDBVal = null;
 
-            if (targetDB) {
-                finalDBVal = targetDB.name;
-            } else if (userDBs.length > 0) {
-                finalDBVal = userDBs[0].name;
-            } else if (systemDBs.length > 0) {
-                finalDBVal = systemDBs[0].name;
-            }
-            
-            if (finalDBVal) {
-                 selectDatabase(finalDBVal);
-                 // Update UI States
-                 if (IS_ENTERPRISE) {
-                     let label = finalDBVal;
-                     const finalDB = databases.find(d => d.name === finalDBVal);
-                     document.getElementById('db-chip-label').textContent = label;
-                     
-                     // Toggle Icon for Initial Load
-                     const icon = document.getElementById('db-chip-icon');
-                     if (icon) {
-                         icon.style.display = (finalDB && finalDB.is_system) ? 'inline' : 'none';
-                     }
-                 } else {
-                     document.getElementById('database-select').value = finalDBVal;
-                 }
-            }
-        })
-        .catch(err => {
-            console.error(err);
-            document.getElementById('database-select').innerHTML = '<option>Error loading databases</option>';
-            document.getElementById('database-section').style.display = 'block';
-        });
+                    if (targetDB) {
+                        finalDBVal = targetDB.name;
+                    } else if (userDBs.length > 0) {
+                        finalDBVal = userDBs[0].name;
+                    } else if (systemDBs.length > 0) {
+                        finalDBVal = systemDBs[0].name;
+                    }
+                    
+                    if (finalDBVal) {
+                         selectDatabase(finalDBVal);
+                         // Update UI States
+                         if (IS_ENTERPRISE) {
+                             let label = finalDBVal;
+                             const finalDB = databases.find(d => d.name === finalDBVal);
+                             document.getElementById('db-chip-label').textContent = label;
+                             
+                             // Toggle Icon for Initial Load
+                             const icon = document.getElementById('db-chip-icon');
+                             if (icon) {
+                                 icon.style.display = (finalDB && finalDB.is_system) ? 'inline' : 'none';
+                             }
+                         } else {
+                             document.getElementById('database-select').value = finalDBVal;
+                         }
+                    }
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                document.getElementById('database-select').innerHTML = '<option>Error loading databases</option>';
+                document.getElementById('database-section').style.display = 'block';
+            });
+    };
+
+    // Initial Load
+    reloadDatabases(true);
 
     async function selectDatabase(name, forceRefresh = false, storeToSelect = null) {
         if (!forceRefresh && currentDatabase === name) return;
@@ -379,9 +383,12 @@
         // Hardening: Hide Add Store button for System DB / System DBs
         const dbObj = availableDatabases.find(d => d.name === name);
         const btnAddStore = document.getElementById('btn-add-store');
+        // Define isSystemDB locally so we can reuse it in the store listing
+        const isSystemDB = (dbObj && dbObj.is_system) || name === 'system' || name === 'system_db';
+
         if (btnAddStore) {
             // Check implicit system names too just in case is_system missing
-            if ((dbObj && dbObj.is_system) || name === 'system' || name === 'system_db') {
+            if (isSystemDB) {
                  btnAddStore.style.display = 'none';
             } else {
                  btnAddStore.style.display = 'inline-block';
@@ -410,6 +417,18 @@
                     return;
                 }
                 stores.forEach(store => {
+                    if (isSystemDB) {
+                        // Hide internal vector store components
+                        if (store.endsWith('_sys_config') ||
+                            store.endsWith('_lku') ||
+                            store.endsWith('_centroids') ||
+                            store.endsWith('_vecs') ||
+                            store.endsWith('_tmp_vecs') ||
+                            store.endsWith('_data')) {
+                            return;
+                        }
+                    }
+
                     const li = document.createElement('li');
                     li.textContent = store.charAt(0).toUpperCase() + store.slice(1);
                     li.onclick = () => selectStore(store, li);
@@ -489,6 +508,15 @@
     function isStoreReadOnly(info) {
         if (!info) return true;
         
+        // Check System DB status
+        const dbObj = availableDatabases && currentDatabase ? availableDatabases.find(d => d.name === currentDatabase) : null;
+        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+
+        // Protected Stores
+        const storeName = info.name || currentStore;
+        if (storeName === 'llm_feedback') return true;
+        if (isSystem && storeName === 'llm_knowledge') return true;
+
         const hasIndex = info.indexSpec && info.indexSpec.index_fields && info.indexSpec.index_fields.length > 0;
         const hasCel = !!info.celExpression;
         const isPrimitiveMetadata = info.isPrimitiveKey;
@@ -523,11 +551,12 @@
         // Show Delete Button
         const deleteBtn = document.getElementById('btn-delete-store');
         
-        // Hardening: Disable delete for System DB
+        // Hardening: Disable delete for System DB and protected stores
         const dbObj = availableDatabases.find(d => d.name === currentDatabase);
         const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+        const isProtectedStore = (name === 'llm_feedback' || name === 'llm_knowledge');
         
-        if (isSystem) {
+        if (isSystem || isProtectedStore) {
             deleteBtn.style.display = 'none';
         } else {
             deleteBtn.style.display = 'inline-block';
@@ -763,7 +792,8 @@
             const isSystemDB = currentDbObj ? currentDbObj.is_system : false;
 
             let allowAdd = true;
-            if (currentStore === 'llm_knowledge' && isSystemDB) {
+            // llm_feedback is always read-only, llm_knowledge is read-only in system DBs
+            if (currentStore === 'llm_feedback' || (currentStore === 'llm_knowledge' && isSystemDB)) {
                 allowAdd = false;
             }
 
@@ -789,8 +819,18 @@
             }
         } else if (isReadOnly) {
             const warning = document.createElement('span');
-            warning.textContent = "⚠️ Read-Only (No Index/CEL)";
-            warning.title = "This store does not have an explicit Index Specification or CEL Expression. Adding or deleting items is disabled because the key structure is not strictly defined. Please migrate to a new store with a defined schema.";
+            
+            // Determine reason for Read-Only to show correct message
+            const r_dbObj = availableDatabases.find(db => db.name === currentDatabase);
+            const r_isSystem = r_dbObj ? r_dbObj.is_system : false;
+            if (currentStore === 'llm_feedback' || (currentStore === 'llm_knowledge' && r_isSystem)) {
+                warning.textContent = "⚠️ Read-Only (System Managed)";
+                warning.title = "This store is managed by the system. Manual additions/deletions are restricted to ensure stability.";
+            } else {
+                warning.textContent = "⚠️ Read-Only (No Index/CEL)";
+                warning.title = "This store does not have an explicit Index Specification or CEL Expression. Adding or deleting items is disabled because the key structure is not strictly defined. Please migrate to a new store with a defined schema.";
+            }
+
             warning.style.marginLeft = '10px';
             warning.style.color = 'var(--warning-text)';
             warning.style.fontSize = '12px';
@@ -1182,12 +1222,22 @@
         const list = document.getElementById('column-list');
         list.innerHTML = '';
 
+        // Check read-only status for "Enable Selection / Bulk Delete"
+        let isReadOnly = false;
+        if (currentStore === 'llm_feedback' || (isSystemDB && currentStore === 'llm_knowledge')) {
+             isReadOnly = true;
+        }
+
         // Special Option: Selection Checkbox
         const divSelect = document.createElement('div');
         divSelect.style.marginBottom = '10px';
         divSelect.style.paddingBottom = '10px';
         divSelect.style.borderBottom = '1px solid var(--border-color)';
-        divSelect.innerHTML = `<label><input type="checkbox" id="col-show-selection" ${showSelectionColumn ? 'checked' : ''}> <strong>Enable Selection / Bulk Delete</strong></label>`;
+        if (isReadOnly) {
+             divSelect.innerHTML = `<label><input type="checkbox" id="col-show-selection" disabled title="Bulk operations are disabled for this read-only store."> <strong>Enable Selection / Bulk Delete (Disabled)</strong></label>`;
+        } else {
+             divSelect.innerHTML = `<label><input type="checkbox" id="col-show-selection" ${showSelectionColumn ? 'checked' : ''}> <strong>Enable Selection / Bulk Delete</strong></label>`;
+        }
         list.appendChild(divSelect);
 
         if (allDetectedColumns.length === 0) {
@@ -2353,7 +2403,7 @@
                 </button>
                 
                 <!-- Delete Button (Icon) -->
-                <button onclick="deleteItem()" title="Delete this item from the store" style="background: none; border: none; padding: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-color);">
+                <button id="btn-delete" onclick="deleteItem()" title="Delete this item from the store" style="background: none; border: none; padding: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-color);">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                         <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
                         <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
@@ -2367,13 +2417,24 @@
         // No, Value updates are allowed.
         
         // However, if the store is Read-Only (No Index Specs/CEL), we should disable Delete button here too.
-        const isReadOnly = isStoreReadOnly(currentStoreInfo);
+        let isReadOnly = isStoreReadOnly(currentStoreInfo);
         
         if (isReadOnly) {
-            const delBtn = viewer.querySelector('.btn-danger');
+            // Disable Save Button (if forced Read-Only by System restrictions or protected store)
+            if (isSystemDB || currentStore === 'llm_feedback') {
+                 const saveBtn = document.getElementById('btn-save');
+                 if (saveBtn) {
+                     saveBtn.disabled = true;
+                     saveBtn.title = "This store is read-only.";
+                     saveBtn.style.opacity = '0.5';
+                     saveBtn.style.cursor = 'not-allowed';
+                 }
+            }
+
+            const delBtn = document.getElementById('btn-delete') || viewer.querySelector('.btn-danger');
             if (delBtn) {
                 delBtn.disabled = true;
-                delBtn.title = "Deletion is disabled for stores without an Index Specification or CEL Expression.";
+                delBtn.title = (isSystemDB || currentStore === 'llm_feedback') ? "This store is read-only." : "Deletion is disabled for stores without an Index Specification or CEL Expression.";
                 delBtn.style.opacity = '0.5';
                 delBtn.style.cursor = 'not-allowed';
             }
@@ -3269,7 +3330,20 @@
         document.getElementById(`tab-${tabName}`).classList.add('active');
     }
 
-    function resetChatPosition() {
+    function saveChatState() {
+        const widget = document.getElementById('chat-widget');
+        if (!widget) return;
+        
+        const state = {
+            width: widget.style.width,
+            height: widget.style.height,
+            left: widget.style.left,
+            top: widget.style.top
+        };
+        localStorage.setItem('sop_chat_state', JSON.stringify(state));
+    }
+
+    function resetChatPosition(forceDefault) {
         const widget = document.getElementById('chat-widget');
         
         // Mobile Detection: Check width or user agent
@@ -3289,8 +3363,42 @@
 
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
-        const width = 480;
-        const height = 500;
+        
+        // Clear state if forced
+        if (forceDefault) {
+            localStorage.removeItem('sop_chat_state');
+        }
+
+        // Attempt to load saved state (unless forced)
+        if (!forceDefault) {
+            const savedStateJson = localStorage.getItem('sop_chat_state');
+            if (savedStateJson) {
+                try {
+                    const state = JSON.parse(savedStateJson);
+                    if (state.width && state.height && state.left && state.top) {
+                        widget.style.width = state.width;
+                        widget.style.height = state.height;
+                        widget.style.left = state.left;
+                        widget.style.top = state.top;
+                        widget.style.right = 'auto';
+                        widget.style.bottom = 'auto';
+                        
+                        // Basic bounds check (optional but good)
+                        const rect = widget.getBoundingClientRect();
+                        if (rect.left > viewportWidth - 50) widget.style.left = (viewportWidth - rect.width - 20) + 'px';
+                        if (rect.top > viewportHeight - 50) widget.style.top = (viewportHeight - rect.height - 20) + 'px';
+                        
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Failed to load chat state", e);
+                }
+            }
+        }
+
+        // Defaults (matches CSS)
+        const width = 550;
+        const height = 555;
         
         widget.style.width = width + 'px';
         widget.style.height = height + 'px';
@@ -3382,6 +3490,7 @@
             if (isDragging) {
                 isDragging = false;
                 document.body.style.cursor = 'default';
+                saveChatState();
             }
         });
 
@@ -3451,6 +3560,7 @@
             if (isResizing) {
                 isResizing = false;
                 document.body.style.cursor = 'default';
+                saveChatState();
             }
         });
     });
@@ -3511,6 +3621,91 @@
     let chatAbortController = null;
     let chatHistory = [];
     let historyIndex = -1;
+    let currentAiMsgId = null;
+
+    function updateHeaderFeedbackVisibility(visible) {
+        const el = document.getElementById('header-feedback-controls');
+        if (el) el.style.display = visible ? 'flex' : 'none';
+        
+        // Reset visual state
+        if (visible) {
+             ['header-fb-up', 'header-fb-down', 'header-fb-teach'].forEach(id => {
+                const btn = document.getElementById(id);
+                if(btn) {
+                    btn.style.opacity = '0.7'; 
+                    btn.style.pointerEvents = 'auto';
+                    btn.style.transform = 'none';
+                }
+             });
+        }
+    }
+
+    async function handleHeaderFeedback(type) {
+        if (!currentAiMsgId) return;
+        
+        const btnId = type === 'positive' ? 'header-fb-up' : 'header-fb-down';
+        const btn = document.getElementById(btnId);
+        
+        if (btn) {
+            btn.style.opacity = '1';
+            btn.style.transform = 'scale(1.2)';
+        }
+        
+        const siblingId = type === 'positive' ? 'header-fb-down' : 'header-fb-up';
+        const sibling = document.getElementById(siblingId);
+        if (sibling) {
+            sibling.style.pointerEvents = 'none';
+            sibling.style.opacity = '0.3';
+        }
+
+        // Gather Context
+        const aiMsgEl = document.getElementById(currentAiMsgId);
+        // Use innerText to get visual text, or textContent for raw. 
+        // innerText is better for "what the user saw"
+        const aiContent = aiMsgEl ? aiMsgEl.innerText : "";
+        
+        // Attempt to find User Query
+        let userContent = "";
+        let prev = aiMsgEl ? aiMsgEl.previousElementSibling : null;
+        while(prev) {
+            // Simple heuristic to find the user message bubble
+            // Adjust class check based on your actual DOM structure if needed
+            if (prev.classList.contains('user-message') || (prev.innerText && prev.innerText.trim().length > 0)) {
+                 userContent = prev.innerText;
+                 break;
+            }
+            prev = prev.previousElementSibling;
+        }
+
+        try {
+            await fetch('/api/ai/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    msgId: currentAiMsgId,
+                    type: type,
+                    ai_content: aiContent,
+                    user_content: userContent,
+                    database: currentDatabase || "system",
+                    agent: "sql_admin"
+                })
+            });
+            console.log(`Feedback ${type} sent for msg ${currentAiMsgId}`);
+        } catch (e) {
+            console.error("Failed to send feedback", e);
+        }
+    }
+
+    function handleHeaderTeach() {
+        if (!currentAiMsgId) return;
+        const msgEl = document.getElementById(currentAiMsgId);
+        if (!msgEl) return;
+        
+        // Use text content, maybe stripping "Error:" prefix if present?
+        // Note: innerText preserves newlines as they are rendered
+        handleTeach(currentAiMsgId, msgEl.innerText);
+    }
+
 
     function jsonToCSV(input) {
         try {
@@ -3713,6 +3908,8 @@
     }
 
     async function sendChatMessage() {
+        updateHeaderFeedbackVisibility(false);
+        currentAiMsgId = null;
         const input = document.getElementById('chat-input');
         const sendBtn = document.getElementById('chat-send-btn');
         
@@ -3818,6 +4015,12 @@
                                 // Start new content block
                                 const msgDiv = document.createElement('div');
                                 msgDiv.className = 'chat-message ai';
+                                
+                                // Set ID for feedback
+                                const msgId = 'msg-' + generateUUID();
+                                msgDiv.id = msgId;
+                                currentAiMsgId = msgId;
+
                                 currentContentSpan = document.createElement('span');
                                 msgDiv.appendChild(currentContentSpan);
                                 document.getElementById('chat-history').appendChild(msgDiv);
@@ -3825,12 +4028,54 @@
                                 document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
                             }
                             
+                            // Check for Client-Side Action Patterns
+                            let textPayload = String(event.payload);
+                            const switchDbRegex = /\[\[SWITCH_DATABASE:\s*([a-zA-Z0-9_-]+)\]\]/;
+                            const match = textPayload.match(switchDbRegex);
+                            
+                            if (match) {
+                                const newDbName = match[1];
+                                console.log("Detected Client-Side Switch DB Action:", newDbName);
+
+                                // 1. Reload the DB List (in case it's a new DB) - Don't auto-select
+                                if (typeof reloadDatabases === 'function') {
+                                    await reloadDatabases(false);
+                                }
+
+                                // 2. Execute switch logic (sets global var, saves to localStorage, fetches stores)
+                                await selectDatabase(newDbName, true);
+                                
+                                // 3. Visual Sync (redundant but safe)
+                                // Standard Mode
+                                const dbSelect = document.getElementById('database-select');
+                                if (dbSelect) dbSelect.value = newDbName;
+                                
+                                // Enterprise Mode
+                                const chipLabel = document.getElementById('db-chip-label');
+                                if (chipLabel) chipLabel.textContent = newDbName;
+                                
+                                // Update Icon if System DB (Enterprise)
+                                const dbObj = availableDatabases.find(d => d.name === newDbName);
+                                const icon = document.getElementById('db-chip-icon');
+                                if (icon) {
+                                    icon.style.display = (dbObj && dbObj.is_system) ? 'inline' : 'none';
+                                }
+
+                                // Remove the tag from display
+                                textPayload = textPayload.replace(match[0], '');
+                                
+                                // Fix: If the message is empty after removing the tag, provide a default confirmation
+                                if (!textPayload.trim()) {
+                                    textPayload = `Switched database context to **${newDbName}**.`;
+                                }
+                            }
+
                             // For now basic accumulation, markdown later?
                             // If event.payload is the whole response (as per our backend right now), just set it.
                             // If we switch to token streaming, we append.
                             // Backend emits entire string for now.
                             // Handle Markdown
-                            const markdownHtml = marked.parse(String(event.payload));
+                            const markdownHtml = marked.parse(textPayload);
                             currentContentSpan.innerHTML += markdownHtml;
                             document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
                         } 
@@ -3844,6 +4089,27 @@
                         else if (event.type === 'tool_call') {
                             flushRecords();
                             appendChatMessage('ai', '🛠️ Calling Tool: ' + event.payload.tool);
+                            currentContentSpan = null;
+                        }
+                        else if (event.type === 'switch_database') {
+                            flushRecords();
+                            const newDbName = event.payload;
+                            appendChatMessage('ai', `🔄 Switching active database context to '${newDbName}'...`);
+                            
+                            // 1. Trigger the UI switch immediately.
+                            // This updates 'currentDatabase' global var and refreshes sidebar/store list.
+                            await selectDatabase(newDbName, true);
+
+                            // 2. IMPORTANT: We do NOT need to wait for selectDatabase to finish before processing next lines,
+                            // BUT if the agent is about to send us data (like 'record' events or 'content' about stores),
+                            // we want the UI state to be consistent. 
+                            // The selectDatabase call updates 'currentDatabase' synchronously at the start, 
+                            // so subsequent fetch calls (if any from user action) will use the new DB.
+                            
+                            // Re-sync the sidebar dropdown if it exists to match visual state
+                            const dbSelect = document.getElementById('database-select');
+                            if (dbSelect) dbSelect.value = newDbName;
+
                             currentContentSpan = null;
                         }
                         else if (event.type === 'error') {
@@ -3874,6 +4140,9 @@
         } finally {
              chatAbortController = null;
              if (sendBtn) sendBtn.textContent = 'Send';
+             if (currentAiMsgId) {
+                 updateHeaderFeedbackVisibility(true);
+             }
         }
     }
 
@@ -4042,6 +4311,14 @@
     function handleChatKeydown(e) {
         const input = document.getElementById('chat-input');
         
+        // Custom Handler for Cmd+Left to go to start of text (User Request)
+        if (e.key === 'ArrowLeft' && e.metaKey) {
+            e.preventDefault();
+            input.setSelectionRange(0, 0);
+            input.scrollTop = 0;
+            return;
+        }
+
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             sendChatMessage();
@@ -4410,7 +4687,9 @@
         const history = document.getElementById('chat-history');
         const div = document.createElement('div');
         div.className = `chat-message ${role}`;
-        div.id = 'msg-' + generateUUID();
+        const msgId = 'msg-' + generateUUID();
+        div.id = msgId;
+        if (role === 'ai') currentAiMsgId = msgId;
         
         // Simple markdown-like parsing for code blocks
         if (text.includes('```')) {
@@ -4418,6 +4697,7 @@
         }
         
         div.innerHTML = text.replace(/\n/g, '<br>');
+
         history.appendChild(div);
         
         console.log("Message appended to history. History child count:", history.children.length); // Debug Log
@@ -4428,6 +4708,35 @@
         });
         
         return div.id;
+    }
+
+    function handleFeedback(e, msgId, type) {
+        // Visual feedback
+        const btn = e.target;
+        btn.style.opacity = '1';
+        btn.style.transform = 'scale(1.2)';
+        
+        // Disable siblings
+        const siblings = btn.parentElement.querySelectorAll('.feedback-btn');
+        siblings.forEach(s => {
+            s.style.pointerEvents = 'none';
+            if (s !== btn) s.style.opacity = '0.3';
+        });
+
+        // Send feedback to server (Mock for now)
+        fetch('/api/ai/feedback', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ msgId, type }) 
+        }).catch(err => console.log('Feedback API not implemented yet, but UI updated.'));
+    }
+
+    function handleTeach(msgId, originalText) {
+        const input = document.getElementById('chat-input');
+        // Extract a summary or just reference it
+        const summary = originalText.length > 50 ? originalText.substring(0, 50) + "..." : originalText;
+        input.value = `Regarding your previous answer about "${summary}":\n\n[Correction/Teaching]: `;
+        input.focus();
     }
 
     // Hook into showDetail to ensure we see the details tab
@@ -5018,7 +5327,13 @@
             // Key Type (Read-Only unless empty, or forced Read-Only)
             const keyType = document.getElementById('new-store-key-type');
             if (keyType) {
-                keyType.value = currentStoreInfo.keyType || 'string';
+                let typeToSet = currentStoreInfo.keyType || 'string';
+                
+                if (!currentStoreInfo.isPrimitiveKey) {
+                    typeToSet = 'map';
+                }
+                
+                keyType.value = typeToSet;
                 keyType.disabled = isReadOnlyMode || !isEmptyStore;
             }
             

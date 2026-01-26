@@ -307,6 +307,11 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, config sop.Database
 	if len(options) > 0 {
 		opts = options[0]
 		opts.Name = name
+		// Reset IsPrimitiveKey to true if TK is primitive.
+		// This is needed because IsPrimitiveKey is false by default in StoreOptions.
+		if !opts.IsPrimitiveKey {
+			opts.IsPrimitiveKey = btree.IsPrimitive[TK]()
+		}
 	} else {
 		opts = sop.StoreOptions{
 			Name:                     name,

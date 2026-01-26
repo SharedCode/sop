@@ -38,6 +38,27 @@ The `select` tool is powerful and supports filtering and field selection.
 *   **Exact Match**: "Find the user with key 'user_123'."
 *   **Nearest Match**: "Find the user closest to 'user_125'." (Useful for finding range boundaries).
 
+## Querying Rules & Expectations
+
+To ensure accurate results, it's important to understand how the AI Copilot and API interpret your queries, particularly regarding case sensitivity.
+
+### Schema Names (Case-Insensitive)
+Field names and JSON keys are **Case-Insensitive**.
+*   Querying for `field: "Name"` will successfully match a field named `name`, `NAME`, or `Name`.
+*   This flexibility allows you to ask natural questions without needing to know the exact capitalization of the schema.
+*   **Note**: While the query engine is flexible, the returned data will preserve the original casing stored in the database.
+
+### Data Values (Case-Sensitive)
+Actual data values used in comparisons are **Case-Sensitive**.
+*   **Search**: Searching for `role: "Admin"` will **NOT** match a record where the role is `"admin"`.
+*   **Joins**: When joining two stores, the values in the joining fields must match exactly (e.g., ID `"u123"` will not join with `"U123"`).
+*   **Best Practice**: Ensure your query values match the case of the data stored in the database.
+
+### Entity Names (Case-Insensitive)
+Names of Databases, Stores, and Scripts are **Case-Insensitive**.
+*   You can refer to your store as 'Users', 'users', or 'USERS', and the Copilot will find the correct one.
+*   **Note**: In the rare case where two stores have the same name but different casing (e.g. `users` and `USERS`), the system prefers the exact match.
+
 ### Efficient Query Scenarios
 
 SOP is a high-performance database that uses B-Trees. To get the maximum speed (especially on large datasets), structure your questions to leverage the Index (Key) structure.
@@ -169,5 +190,25 @@ User: /play onboard_user
 Copilot: Executing 'onboard_user'...
 1. Added user...
 2. Added log entry...
-Done.
-```
+
+---
+
+## 6. Mobile & Small Device Support ("Pocket Admin")
+
+The SOP AI Copilot is designed with a **Mobile-First** responsiveness philosophy, turning your smartphone or tablet into a full-featured "Pocket Admin" console.
+
+### Optimized UI
+The chat interface automatically adapts to smaller screens:
+*   **Data Grids**: Collapse gracefully or allow horizontal scrolling without breaking the layout.
+*   **Action Chips**: Suggested actions and database selectors are touch-friendly.
+*   **Visual Feedback**: Loading states and success confirmations are designed for quick visual scanning on small screens.
+
+### Full-Featured Management
+You are not limited to "read-only" views on mobile. You can perform **all** system operations via chat:
+*   **Switch Databases**: Tap the database selector or simply say "Switch to the 'finance' database" to instantly jump contexts.
+*   **Run Complex Queries**: "Find all users joined today" works just as well on a phone as on a desktop.
+*   **Execute Scripts**: Trigger complex backend jobs (e.g., "Run end-of-day reconciliation") with a single message while commuting.
+*   **Data Rescue**: Need to fix a record urgently? "Update user '123', set status to 'active'" allows for emergency interventions from anywhere.
+
+The Copilot essentially acts as a highly capable CLI (Command Line Interface) wrapped in a chat bubble, ensuring you have full control over your infrastructure without needing a laptop.
+

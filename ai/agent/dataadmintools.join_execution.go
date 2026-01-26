@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"strconv"
+	"strings"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
@@ -162,8 +162,8 @@ func (jc *JoinRightCursor) buildBloomFilter(count int64) {
 				// So for Composite keys, we can just Bloom the PRIMARY (first) join field.
 
 				primaryField := jc.plan.PrefixFields[0]
-				// Find value in kMap
-				if val, exists := kMap[primaryField]; exists {
+				// Find value in kMap (use getField for case-insensitivity)
+				if val := getField(kMap, primaryField); val != nil {
 					joinKeyStr = fmt.Sprintf("%v", val)
 				}
 			}
@@ -506,8 +506,8 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 					}
 				}
 			} else {
-				// Primitive Key assumes Ascending? Or check store info?
-				// Primitive stores usually default to Ascending.
+				// Primitive Key Comparison
+				// Updated to use CompareLoose which handles mixed numeric types (int/float).
 				var targetVal any
 				for lField, rFieldRaw := range jc.on {
 					if fmt.Sprintf("%v", rFieldRaw) == "key" {
@@ -515,7 +515,10 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 						break
 					}
 				}
-				if fmt.Sprintf("%v", k) > fmt.Sprintf("%v", targetVal) {
+
+				// Check "Current > Target" to see if we passed the match range.
+				// (Assuming Ascending Order for Primitives)
+				if CompareLoose(k, targetVal) > 0 {
 					stop = true
 				}
 			}
@@ -617,9 +620,10 @@ func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
 	newMap := make(map[string]any)
 
 	// Add Left Keys (Prefixed)
-	if jc.leftStoreName != "" {
+	cleanLeftAlias := strings.TrimSpace(jc.leftStoreName)
+	if cleanLeftAlias != "" {
 		for _, k := range lKeys {
-			key := jc.leftStoreName + "." + k
+			key := cleanLeftAlias + "." + strings.TrimSpace(k)
 			newMap[key] = lMap[k]
 			newKeys = append(newKeys, key)
 		}
@@ -647,8 +651,9 @@ func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
 		for _, k := range rKeys {
 			val := rMap[k]
 
-			if jc.rightStoreName != "" {
-				key := jc.rightStoreName + "." + k
+			cleanRightAlias := strings.TrimSpace(jc.rightStoreName)
+			if cleanRightAlias != "" {
+				key := cleanRightAlias + "." + strings.TrimSpace(k)
 				newMap[key] = val
 				newKeys = append(newKeys, key)
 			} else {
@@ -663,25 +668,7 @@ func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
 }
 
 // Helper for Join Numeric Coercion
-func coerceToFloatFull(v any) (float64, bool) {
-	switch val := v.(type) {
-	case int:
-		return float64(val), true
-	case int32:
-		return float64(val), true
-	case int64:
-		return float64(val), true
-	case float32:
-		return float64(val), true
-	case float64:
-		return val, true
-	case string:
-		if f, err := strconv.ParseFloat(val, 64); err == nil {
-			return f, true
-		}
-	}
-	return 0, false
-}
+// Moved to dataadmintools.utils.go as coerceToFloatFull to be shared
 
 // generateTempKey creates a comparable string key for the temp store
 func (jc *JoinRightCursor) generateTempKey(item map[string]any) string {
@@ -702,7 +689,7 @@ func (jc *JoinRightCursor) generateTempKey(item map[string]any) string {
 		rKeyRaw := jc.on[lKey]
 		rKey := fmt.Sprintf("%v", rKeyRaw)
 
-		val := item[rKey]
+		val := getField(item, rKey)
 		// Use simple string representation
 		if sb != "" {
 			sb += "|"

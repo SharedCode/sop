@@ -228,3 +228,34 @@ This turns your SOP server into a programmable application server where business
     *The system fetches 1000 users from the B-Tree (in milliseconds), loops through them in Go, and only uses the LLM to decide VIP status.*
 
 In other words, we have turned the AI chatbot into an **IDE**, where users or data administrators can create and execute compiled program units, akin to Stored Procedures but with the reasoning power of an LLM.
+
+## Performance Best Practices
+
+Since SOP Scripts are executed by the compiled engine (often serving high-throughput REST API requests), optimizing your scripts is critical for system scalability.
+
+### Field Access Optimization (DataAdmin Tools)
+
+The `GetField` utility (used in `select`, `join`, `filter` operations) is highly optimized but has different performance characteristics based on how you reference fields.
+
+**1. Prefer Exact Field Names (O(1) - Fastest)**
+*   **Behavior**: Direct hash map lookup. Nanosecond-level performance (~18ns).
+*   **Recommendation**: Always use the **case-sensitive** field name as defined in your database.
+    *   ✅ `filter: { "FirstName": "John" }` (If DB has "FirstName")
+    *   ❌ `filter: { "firstname": "John" }` (Triggers fuzzy search)
+
+**2. Case-Insensitive / Fuzzy Lookups (O(N) - Slower)**
+*   **Behavior**: Linear scan of all fields in the record. Performance degrades as record size (number of fields) grows (~1300ns for 100 fields).
+*   **Use Case**: User-facing queries where input casing is unpredictable.
+*   **Mechanism**: The engine performs a single-pass optimized scan to check for:
+    *   Case-Insensitive match (e.g., `Field` == `field`)
+    *   Dot-Notation aliases (e.g., `a.name` -> `name`)
+    *   Suffix matches (e.g., `b.name` -> `name`)
+
+**3. Avoid JSON Strings for High-Volume Data**
+*   **Behavior**: If your fields are stored as serialized JSON strings (e.g. `Value` = `"{...}"`), the engine must parse the JSON string on every access.
+*   **Performance**: ~200x slower than operating on native Maps.
+*   **Recommendation**: Store structural data as Maps/Objects in SOP, not as JSON strings strings within a String field.
+
+### Summary
+For **system-to-system integrations** or **REST API endpoints**, always ensure your script payloads use **Exact Field Names**. Reserve fuzzy matching for ad-hoc human queries via the Chat interface.
+

@@ -52,7 +52,7 @@ func TestToolSelect_OrderedOutput(t *testing.T) {
 		MapKeyIndexSpecification: string(idxSpecBytes),
 	}
 
-	if _, err := sopdb.NewBtree[string, any](ctx, dbOpts, storeName, tx, nil, storeOpts); err != nil {
+	if _, err := sopdb.NewBtree[any, any](ctx, dbOpts, storeName, tx, nil, storeOpts); err != nil {
 		t.Fatalf("NewBtree failed: %v", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

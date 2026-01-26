@@ -67,19 +67,5 @@ func (id UUID) Split() (uint64, uint64) {
 
 // Compare compares two UUIDs and returns -1 if x < y, 1 if x > y, and 0 if they are equal.
 func (x UUID) Compare(y UUID) int {
-	xHigh, xLow := x.Split()
-	yHigh, yLow := y.Split()
-	if xHigh < yHigh {
-		return -1
-	}
-	if yHigh < xHigh {
-		return 1
-	}
-	if xLow < yLow {
-		return -1
-	}
-	if yLow < xLow {
-		return 1
-	}
-	return 0
+	return bytes.Compare(x[:], y[:])
 }

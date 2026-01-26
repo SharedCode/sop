@@ -160,6 +160,7 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 		return nil, err
 	}
 	ns := sop.NewStoreInfo(si)
+
 	if len(stores) == 0 || stores[0].IsEmpty() {
 		// Add to store repository if store not found.
 		if ns.RootNodeID.IsNil() {
