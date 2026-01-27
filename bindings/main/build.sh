@@ -131,7 +131,7 @@ cp ../python/sop/libjsondb_arm64linux.h ../csharp/Sop/
 
 # Build Browser
 echo "Building sop-httpserver for linux/arm64..."
-CGO_ENABLED=0 go build -ldflags "-X main.Version=$VERSION" -o $RELEASE_DIR/sop-httpserver-linux-amd64 ../../tools/httpserver
+CGO_ENABLED=0 go build -ldflags "-X main.Version=$VERSION" -o $RELEASE_DIR/sop-httpserver-linux-arm64 ../../tools/httpserver
 fi
 
 echo "Build complete."
