@@ -6,10 +6,10 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sop.context import Context
 from sop.database import Database, DatabaseType, DatabaseOptions
-from sop.transaction import TransactionMode
+from sop.transaction import TransactionMode, RedisCacheConfig
 from sop.btree import Item
 from sop.cassandra import Cassandra
-from sop.redis import Redis
+# from sop.redis import Redis
 
 def main():
     ctx = Context()
@@ -69,12 +69,12 @@ def main():
     try:
         # Initialize connections (assuming localhost)
         Cassandra.initialize({"cluster_hosts": ["localhost"], "consistency": 1})
-        Redis.initialize("redis://localhost:6379")
-
+        
         # We can omit type=DatabaseType.Clustered because keyspace implies it.
         db_clustered = Database(DatabaseOptions(
             keyspace=keyspace_name, 
             stores_folders=[path_clustered],
+            redis_config=RedisCacheConfig(url="redis://localhost:6379"),
             type=DatabaseType.Clustered
         ))
         
@@ -91,13 +91,11 @@ def main():
         print(f"Check Cassandra keyspace '{keyspace_name}' to see the Registry tables.")
         
         Cassandra.close()
-        Redis.close()
         
     except Exception as e:
         print(f"Skipping Clustered test (requires Cassandra/Redis): {e}")
         try:
             Cassandra.close()
-            Redis.close()
         except:
             pass
 

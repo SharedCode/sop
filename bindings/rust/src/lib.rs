@@ -31,7 +31,9 @@ mod redis;
 
 pub use context::Context;
 pub use transaction::Transaction;
-pub use database::{Database, DatabaseOptions, DatabaseType, L2CacheType};
+pub use database::{
+    Database, DatabaseOptions, DatabaseType, L2CacheType, RedisConfig, ErasureCodingConfig
+};
 pub use btree::{Btree, BtreeOptions, Item, PagingInfo, IndexSpecification, IndexFieldSpecification};
 pub use vector_store::{VectorStore, VectorItem, VectorQueryOptions, VectorSearchResult};
 pub use model_store::ModelStore;

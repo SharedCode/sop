@@ -80,14 +80,15 @@ The built-in AI Copilot allows you to interact with your data using natural lang
     *   *Join*: "Join 'Users' and 'Orders' on 'UserID' and show me the top 5 spenders."
     *   *CRUD*: "Add a new user named 'John Doe' with age 30." or "Delete the record with key 'user_123'."
 *   **Record Script**: Tell the assistant to record your actions.
-    *   *Command*: "Record a script named 'MyScript' to find users in New York."
+    *   *Command*: "/script new MyScript" (then perform actions).
     *   The assistant will generate the steps and save them to the `SystemDB`.
+    *   *Stop*: "/script stop"
 *   **Play Script**: Execute a saved script.
-    *   *Command*: "Play script 'MyScript'."
+    *   *Command*: "/script run MyScript"
     *   The assistant will execute the recorded steps and display the results.
 *   **Parameterized Scripts (Beta)**: You can now record scripts with placeholders and pass values at runtime.
-    *   *Record*: "Record a script 'FindUser' that finds a user by 'UserID'."
-    *   *Play*: "Play script 'FindUser' with UserID='123'."
+    *   *Record*: "/script new FindUser" (then find user by 'UserID').
+    *   *Play*: "/script run FindUser UserID='123'"
 *   **View Script Steps**:
     *   If the assistant returns a script trace, it will be displayed as an interactive tree view in the chat.
     *   You can also view raw script data in the **SystemDB** (see below).

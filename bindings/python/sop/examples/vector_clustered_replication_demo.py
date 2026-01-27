@@ -9,16 +9,16 @@ import uuid
 from sop import Context
 from sop.ai import Database, Item, DatabaseType
 from sop.database import DatabaseOptions
-from sop.transaction import TransactionMode, ErasureCodingConfig
-from sop.redis import Redis
+from sop.transaction import TransactionMode, ErasureCodingConfig, RedisCacheConfig
+# from sop.redis import Redis
 
 def main():
     print("Attempting to connect to Redis (localhost:6379)...")
-    try:
-        Redis.initialize("redis://localhost:6379")
-    except Exception as e:
-        print(f"Skipping Clustered Replication Demo: Could not connect to Redis. Error: {e}")
-        return
+    # try:
+    #     Redis.initialize("redis://localhost:6379")
+    # except Exception as e:
+    #     print(f"Skipping Clustered Replication Demo: Could not connect to Redis. Error: {e}")
+    #     return
 
     # Define paths
     active_path = os.path.abspath("vec_clus_repl_active")
@@ -33,7 +33,7 @@ def main():
         try:
             ctx = Context()
             # Redis is already initialized above
-            db = Database(DatabaseOptions(stores_folders=[active_path], type=DatabaseType.Clustered))
+            db = Database(DatabaseOptions(stores_folders=[active_path], type=DatabaseType.Clustered, redis_config=RedisCacheConfig(url="redis://localhost:6379")))
             db.remove_btree(ctx, "demo_store_clus_repl")
         except:
             pass
@@ -66,7 +66,8 @@ def main():
     db = Database(DatabaseOptions(
         type=DatabaseType.Clustered, # <--- Clustered Mode
         erasure_config={"": ec_config},
-        stores_folders=[active_path, passive_path]
+        stores_folders=[active_path, passive_path],
+        redis_config=RedisCacheConfig(url="redis://localhost:6379")
     ))
     
     print("\n--- Explicit Transaction (Clustered + Replicated) ---")
@@ -112,7 +113,7 @@ def main():
         for p in [active_path, passive_path] + shard_paths:
             if os.path.exists(p):
                 shutil.rmtree(p)
-        Redis.close()
+        # Redis.close()
         print("Demo completed.")
 
 if __name__ == "__main__":

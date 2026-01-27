@@ -31,10 +31,6 @@ public class CassandraDemo {
             Cassandra.initialize(config);
             System.out.println("Cassandra initialized successfully.");
 
-            System.out.println("Initializing Redis connection...");
-            Redis.initialize("redis://localhost:6379");
-            System.out.println("Redis initialized successfully.");
-
             // Create Clustered Database
             try (Context ctx = new Context()) {
                 String dbPath = "sop_data_cassandra_demo";
@@ -44,6 +40,11 @@ public class CassandraDemo {
                 DatabaseOptions dbOpts = new DatabaseOptions();
                 dbOpts.stores_folders = Collections.singletonList(dbPath);
                 dbOpts.keyspace = "sop_test";
+                
+                dbOpts.redis_config = new DatabaseOptions.RedisConfig();
+                dbOpts.redis_config.address = "localhost:6379";
+                dbOpts.redis_config.db = 0;
+                
                 // Type 1 is Clustered, but for Cassandra we might need to ensure it's set correctly if it differs.
                 // In C# example it doesn't explicitly set Type, but DatabaseOptions defaults might be different.
                 // However, if Keyspace is set, SOP usually infers or requires Clustered/Cassandra mode.
@@ -54,7 +55,7 @@ public class CassandraDemo {
                 // 1. Insert
                 System.out.println("Starting Write Transaction...");
                 try (Transaction trans = db.beginTransaction(ctx)) {
-                    BTree<String, String> btree = db.newBtree(ctx, "cassandra_btree", trans, null, String.class, String.class);
+                    BTree<String, String> btree = db.newBtree(ctx, "cassandra_btree_java", trans, null, String.class, String.class);
                     
                     System.out.println("Adding item 'key1'...");
                     btree.add(new Item<>("key1", "value1"));
@@ -66,7 +67,7 @@ public class CassandraDemo {
                 // 2. Read
                 System.out.println("Starting Read Transaction...");
                 try (Transaction trans = db.beginTransaction(ctx, TransactionMode.ForReading)) {
-                    BTree<String, String> btree = db.openBtree(ctx, "cassandra_btree", trans, String.class, String.class);
+                    BTree<String, String> btree = db.openBtree(ctx, "cassandra_btree_java", trans, String.class, String.class);
                     
                     if (btree.find("key1")) {
                         List<Item<String, String>> items = btree.getValues(Collections.singletonList(new Item<>("key1", null)));

@@ -9,17 +9,17 @@ import uuid
 from sop import Context
 from sop.ai import Database, Item, DatabaseType
 from sop.database import DatabaseOptions
-from sop.transaction import TransactionMode, ErasureCodingConfig
-from sop.redis import Redis
+from sop.transaction import TransactionMode, ErasureCodingConfig, RedisCacheConfig
+# from sop.redis import Redis
 
 def main():
     # Open Redis Connection (Required for Replication/Locking)
     print("Attempting to connect to Redis (localhost:6379)...")
-    try:
-        Redis.initialize("redis://localhost:6379")
-    except Exception as e:
-        print(f"Skipping Replication Demo: Could not connect to Redis. Error: {e}")
-        return
+    # try:
+    #     Redis.initialize("redis://localhost:6379")
+    # except Exception as e:
+    #     print(f"Skipping Replication Demo: Could not connect to Redis. Error: {e}")
+    #     return
 
     # Define paths for Active/Passive replication
     active_path = "vector_repl_active_db"
@@ -52,9 +52,10 @@ def main():
     # Initialize Database with Replication Config
     # Note: We pass the Active path as the primary storage path, but also provide the full config.
     db = Database(DatabaseOptions(
-        type=DatabaseType.Standalone,
+        type=DatabaseType.Clustered,
         erasure_config={"": ec_config}, # Default config
-        stores_folders=[active_path, passive_path]
+        stores_folders=[active_path, passive_path],
+        redis_config=RedisCacheConfig(url="redis://localhost:6379")
     ))
     
     # --- 1. Explicit Transaction with Replication ---

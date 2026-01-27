@@ -9,9 +9,8 @@ import logging
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sop.context import Context
-from sop.database import Database, DatabaseOptions, DatabaseType
+from sop.database import Database, DatabaseOptions, DatabaseType, RedisCacheConfig
 from sop.btree import Item
-from sop.redis import Redis
 from sop import Logger, LogLevel
 
 def worker(ctx, db, store_name, thread_id, items_per_thread):
@@ -58,14 +57,15 @@ def main():
     db_path = "data/concurrent_demo_py"
     
     store_name = "concurrent_tree"
-    Redis.initialize("redis://localhost:6379")
+    # Redis.initialize("redis://localhost:6379")
     
     Logger.configure(LogLevel.Warn)
     
     ctx = Context()
     db = Database(DatabaseOptions(
         stores_folders=[db_path],
-        type=DatabaseType.Clustered
+        type=DatabaseType.Clustered, 
+        redis_config=RedisCacheConfig(url="redis://localhost:6379")
     ))
     
     # 1. Setup
@@ -121,7 +121,7 @@ def main():
     t_read.commit(ctx)
 
     db.remove_btree(ctx, store_name)
-    Redis.close()
+    # Redis.close()
 
 if __name__ == "__main__":
     main()

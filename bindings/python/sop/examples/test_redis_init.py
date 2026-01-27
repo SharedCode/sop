@@ -1,36 +1,35 @@
 import sys
 import os
+import shutil
 
 # Add parent directory to path to import sop
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from sop.redis import Redis
+from sop.database import Database, DatabaseOptions, DatabaseType
+from sop.transaction import RedisCacheConfig
 
 def main():
-    print("Initializing Redis Connection...")
-    # Assuming a local redis is running, or just testing the binding call.
-    # If no redis is running, this might fail or log a warning depending on Go implementation.
-    # The Go implementation uses redis.ParseURL, so it should at least validate the URL.
+    print("Testing Redis Configuration via DatabaseOptions...")
     
-    try:
-        Redis.initialize("redis://localhost:6379/0")
-        print("Redis initialized successfully.")
-    except Exception as e:
-        print(f"Failed to initialize Redis: {e}")
-        # If it fails due to connection refused, that's expected if no redis is running,
-        # but we want to ensure the binding call works.
-        if "connection refused" in str(e):
-            print("Connection refused (expected if Redis is not running). Binding works.")
-        else:
-            # If it's another error, re-raise
-            pass
-
-    print("Closing Redis Connection...")
-    try:
-        Redis.close()
-        print("Redis closed successfully.")
-    except Exception as e:
-        print(f"Failed to close Redis: {e}")
+    path = "data/test_redis_config"
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    
+    # Verify we can configure Redis without global Redis.initialize
+    config = RedisCacheConfig(url="redis://localhost:6379/0")
+    print(f"Created RedisCacheConfig with URL: {config.url}")
+    
+    options = DatabaseOptions(
+        keyspace="test_ks",
+        redis_config=config,
+        stores_folders=[path],
+        type=DatabaseType.Clustered
+    )
+    
+    print("DatabaseOptions created successfully with Redis config.")
+    # Validating that we are NOT calling Redis.initialize()
+    
+    print("Success.")
 
 if __name__ == "__main__":
     main()

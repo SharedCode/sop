@@ -21,6 +21,23 @@ public class DatabaseOptions {
     @JsonProperty("cache_type")
     public int cache_type;
 
+    @JsonProperty("redis_config")
+    public RedisConfig redis_config;
+
+    public static class RedisConfig {
+        @JsonProperty("address")
+        public String address;
+        
+        @JsonProperty("password")
+        public String password;
+        
+        @JsonProperty("db")
+        public int db;
+
+        @JsonProperty("url")
+        public String url;
+    }
+
     public static class ErasureCodingConfig {
         @JsonProperty("data_shards")
         public int data_shards;

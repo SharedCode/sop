@@ -1,4 +1,4 @@
-use sop::{Context, Database, DatabaseOptions, CassandraConfig, CassandraAuthenticator, open_cassandra_connection, close_cassandra_connection, open_redis_connection, close_redis_connection};
+use sop::{Context, Database, DatabaseOptions, CassandraConfig, CassandraAuthenticator, open_cassandra_connection, close_cassandra_connection, RedisConfig};
 use std::fs;
 use std::path::Path;
 
@@ -26,14 +26,6 @@ fn main() {
     }
     println!("Cassandra initialized successfully.");
 
-    println!("Initializing Redis connection...");
-    if let Err(e) = open_redis_connection("redis://localhost:6379") {
-        eprintln!("Failed to initialize Redis: {}", e);
-        let _ = close_cassandra_connection();
-        return;
-    }
-    println!("Redis initialized successfully.");
-
     // Create Clustered Database
     let ctx = Context::new();
     let db_path = "data/cassandra_demo";
@@ -45,6 +37,12 @@ fn main() {
     let db = Database::new(&ctx, DatabaseOptions {
         stores_folders: Some(vec![db_path.to_string()]),
         keyspace: Some("sop_test".to_string()),
+        redis_config: Some(RedisConfig {
+            address: Some("localhost:6379".to_string()),
+            password: None,
+            db: 0,
+            url: None,
+        }),
         ..Default::default()
     }).unwrap();
 
@@ -52,7 +50,7 @@ fn main() {
     println!("Starting Write Transaction...");
     {
         let trans = db.begin_transaction(&ctx).unwrap();
-        let btree = db.open_btree::<String, String>(&ctx, "cassandra_btree", &trans, None).unwrap();
+        let btree = db.new_btree::<String, String>(&ctx, "cassandra_btree", &trans, None).unwrap();
         
         println!("Adding item 'key1'...");
         btree.add(&ctx, "key1".to_string(), "value1".to_string()).unwrap();
@@ -78,7 +76,6 @@ fn main() {
         trans.commit(&ctx).unwrap();
     }
 
-    let _ = close_redis_connection();
     let _ = close_cassandra_connection();
 
     println!("--- End of Cassandra Demo ---");

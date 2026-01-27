@@ -9,7 +9,7 @@ from . import context
 from . import transaction
 from .btree import Btree, BtreeOptions, IndexSpecification
 from .search import Index
-from .transaction import DatabaseType, DatabaseOptions
+from .transaction import DatabaseType, DatabaseOptions, RedisCacheConfig
 
 
 class DatabaseAction(Enum):

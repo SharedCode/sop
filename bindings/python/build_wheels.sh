@@ -1,6 +1,20 @@
 #!/bin/bash
 set -e
 
+# Create a temporary virtual environment for the build process
+# This avoids "externally-managed-environment" errors on modern macOS/Linux
+if [ ! -d ".build_venv" ]; then
+    echo "Creating build virtual environment..."
+    python3 -m venv .build_venv
+fi
+
+echo "Activating build environment..."
+source .build_venv/bin/activate
+
+# Ensure build tools are installed inside the virtual environment
+echo "Installing build tools..."
+pip install --upgrade build wheel setuptools
+
 # Clean dist
 rm -rf dist/ build/ *.egg-info
 
@@ -40,6 +54,7 @@ platforms=(
     "manylinux_2_17_x86_64"
     "manylinux_2_17_aarch64"
     "win_amd64"
+    "win_arm64"
 )
 
 for plat in "${platforms[@]}"; do

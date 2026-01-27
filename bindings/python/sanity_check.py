@@ -11,7 +11,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from sop import context, transaction, btree
 from sop.ai import Database, DatabaseType, Item as VectorItem
 from sop.database import DatabaseOptions
-from sop.redis import Redis
+from sop.transaction import RedisCacheConfig
+# from sop.redis import Redis
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -20,8 +21,9 @@ logger = logging.getLogger(__name__)
 def main():
     logger.info("Starting Sanity Check...")
 
-    # Initialize Redis connection
-    Redis.initialize("redis://localhost:6379")
+    # Initialize Redis connection via DatabaseOptions later
+    # Redis.initialize("redis://localhost:6379")
+    redis_config = RedisCacheConfig(url="redis://localhost:6379")
     
     # Initialize Cassandra connection
 
@@ -37,7 +39,7 @@ def main():
     if not os.path.exists(store_path):
         os.makedirs(store_path)
     
-    options = DatabaseOptions(stores_folders=[store_path], type=DatabaseType.Standalone)
+    options = DatabaseOptions(stores_folders=[store_path], type=DatabaseType.Standalone, redis_config=redis_config)
     db = Database(options)
 
     logger.info("Initializing Transaction...")

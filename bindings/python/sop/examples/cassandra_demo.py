@@ -7,10 +7,9 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sop.context import Context
 from sop.database import Database, DatabaseOptions, DatabaseType
-from sop.transaction import TransactionMode
+from sop.transaction import TransactionMode, RedisCacheConfig
 from sop.btree import Item
 from sop.cassandra import Cassandra
-from sop.redis import Redis
 
 def main():
     print("--- Cassandra & Redis Demo ---")
@@ -30,10 +29,6 @@ def main():
         Cassandra.initialize(config)
         print("Cassandra initialized successfully.")
 
-        print("Initializing Redis connection...")
-        Redis.initialize("redis://localhost:6379")
-        print("Redis initialized successfully.")
-
         # Create Cassandra-backed Database
         ctx = Context()
         db_path = "data/cassandra_demo"
@@ -46,7 +41,8 @@ def main():
         # but explicit is fine too. The C# example removed it, so we can rely on keyspace.
         db = Database(DatabaseOptions(
             stores_folders=[db_path],
-            keyspace="sop_test"
+            keyspace="sop_test",
+            redis_config=RedisCacheConfig(url="redis://localhost:6379")
         ))
 
         # 1. Insert
@@ -90,10 +86,6 @@ def main():
         print(f"Operation failed: {e}")
     finally:
         print("Closing connections...")
-        try:
-            Redis.close()
-        except:
-            pass
         try:
             Cassandra.close()
         except:

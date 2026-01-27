@@ -97,7 +97,12 @@ For managing multiple environments (e.g., Dev, Staging, Prod), create a `config.
       "mode": "clustered",
       "redis": "redis-prod:6379"
     }
-  ]
+  ],
+  "system_db": {
+      "name": "system",
+      "path": "./data/sop_system",
+      "mode": "standalone"
+  }
 }
 ```
 
@@ -130,9 +135,9 @@ You can ask the assistant to perform tasks or query data:
 Scripts allow you to record a sequence of actions and replay them later. This is a "Natural Language Programming" system where the LLM compiles your intent into a high-performance script.
 
 **Step 1: Record**
-Type `/record my_workflow` in the chat.
+Type `/script new <name>` in the chat.
 ```
-/record daily_check
+/script new daily_check
 ```
 
 **Step 2: Perform Actions**
@@ -145,13 +150,13 @@ Count the number of active users.
 **Step 3: Stop**
 Save the script.
 ```
-/stop
+/script stop
 ```
 
 **Step 4: Replay**
 Execute the script instantly. The system runs the compiled steps without invoking the LLM again.
 ```
-/play daily_check
+/script run daily_check
 ```
 
 ### 4. Passing Parameters
@@ -160,7 +165,7 @@ You can make scripts dynamic by using parameters.
 *   **Edit**: You can edit the script JSON to use templates like `{{.user_id}}`.
 *   **Play**: Pass values at runtime.
     ```
-    /play user_audit user_id=456
+    /script run user_audit user_id=456
     ```
 
 ### 5. Remote Execution
@@ -172,7 +177,7 @@ import requests
 response = requests.post(
     "http://localhost:8080/api/ai/chat",
     json={
-        "message": "/play user_audit user_id=999",
+        "message": "/script run user_audit user_id=999",
         "agent": "sql_admin"
     }
 )

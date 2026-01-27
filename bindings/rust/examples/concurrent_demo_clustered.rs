@@ -1,4 +1,4 @@
-use sop::{Context, Database, DatabaseOptions, Item, L2CacheType, DatabaseType, open_redis_connection, close_redis_connection};
+use sop::{Context, Database, DatabaseOptions, Item, L2CacheType, DatabaseType, RedisConfig};
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -8,14 +8,7 @@ fn main() {
     println!("Demonstrating multi-threaded access without client-side locks.");
     println!("This runs in Clustered mode (Redis required).");
 
-    // 1. Initialize Redis
-    // Ensure you have a Redis server running at localhost:6379
-    if let Err(e) = open_redis_connection("redis://localhost:6379") {
-        eprintln!("Failed to connect to Redis: {}", e);
-        return;
-    }
-
-    // 2. Initialize Context
+    // 1. Initialize Context
     let ctx = Arc::new(Context::new());
     if let Some(err) = ctx.error() {
         eprintln!("Error creating context: {}", err);
@@ -27,6 +20,12 @@ fn main() {
     let data_folder = "data/sop_data_concurrent_clustered";
     options.stores_folders = Some(vec![data_folder.to_string()]);
     options.db_type = DatabaseType::Clustered;
+    options.redis_config = Some(RedisConfig {
+        address: Some("localhost:6379".to_string()),
+        password: None,
+        db: 0,
+        url: None,
+    });
     // In clustered mode, we typically use Redis for L2 cache as well, or InMemory if preferred.
     // The C# example doesn't explicitly set cache type, so it defaults to InMemory or Redis depending on config.
     // Let's use Redis for cache too.
@@ -169,9 +168,4 @@ fn main() {
     
     trans.commit(&ctx).unwrap();
     db.remove_btree(&ctx, "concurrent_tree").unwrap();
-
-    // 6. Close Redis Connection
-    if let Err(e) = close_redis_connection() {
-        eprintln!("Error closing Redis connection: {}", e);
-    }
 }

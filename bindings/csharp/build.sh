@@ -40,7 +40,7 @@ sed_i "s|<Version>.*</Version>|<Version>$VERSION</Version>|g" "$SCRIPT_DIR/Sop.C
 # 1. Check for Native Libraries (Assumed to be pre-built)
 echo "Checking for Native Libraries..."
 MISSING_LIBS=0
-for lib in "libjsondb_amd64darwin.dylib" "libjsondb_arm64darwin.dylib" "libjsondb_amd64linux.so" "libjsondb_arm64linux.so" "libjsondb_amd64windows.dll"; do
+for lib in "libjsondb_amd64darwin.dylib" "libjsondb_arm64darwin.dylib" "libjsondb_amd64linux.so" "libjsondb_arm64linux.so" "libjsondb_amd64windows.dll" "libjsondb_arm64windows.dll"; do
     if [ ! -f "$SCRIPT_DIR/Sop/$lib" ]; then
         echo "Error: Missing $lib in $SCRIPT_DIR/Sop/"
         MISSING_LIBS=1

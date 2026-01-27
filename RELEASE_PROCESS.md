@@ -99,6 +99,39 @@ git push origin v2.2.5
 *   Users `pip install sop4py` -> Get native performance immediately.
 *   Users run `python -m sop.httpserver` -> Script finds `v2.2.5` tag on GitHub -> Downloads matching server binary -> Launches UI.
 
+## 3. Alternative Workflow: CI-Driven Publishing (Recommended)
+
+Instead of building wheels and nuget packages locally (which requires setting up complex cross-compilation toolchains for Linux/Windows/macOS), you can leverage the GitHub Actions pipeline to build "perfect" artifacts for you.
+
+**Why this is better:**
+1.  **Guaranteed Clean Build**: The CI environment builds the native engine from scratch for all platforms (Linux, Windows, macOS).
+2.  **Identical Artifacts**: The wheels and NuGet packages on PyPI/NuGet.org will exactly match the ones attached to the GitHub Release.
+3.  **Full Metadata**: The CI build process ensures READMEs, licenses, and auxiliary scripts (like `sop-httpserver` auto-downloader) are correctly packed.
+
+### The CI-First Steps:
+
+1.  **Bump Version**: Run `./update_version.sh <version>` and commit the changes locally.
+2.  **Tag & Push**: Run `git tag v<version>` and `git push origin v<version>`.
+    *   This triggers the `release.yml` workflow on GitHub.
+3.  **Wait for CI**: Go to the Actions tab on GitHub and wait for the "Release SOP Data Manager" workflow to complete.
+4.  **Download Artifacts**:
+    *   Go to the new **Release** page on GitHub.
+    *   Download the `.whl` (Python) and `.nupkg` (C#) files from the "Assets" section.
+5.  **Publish**:
+    *   **Python**: `twine upload sop4py-*.whl`
+    *   **C# (Library)**: `dotnet nuget push Sop.*.nupkg --source https://api.nuget.org/v3/index.json`
+    *   **C# (CLI Tool)**: The CI currently only produces the `Sop4CS` library. To release the CLI tool (`Sop4CS.CLI`), you must build/pack it locally.
+        *   *Prerequisite*: Run `./bindings/build_in_docker.sh` and `./bindings/build_local_macos.sh` to generate the native libraries.
+        *   Run the `./bindings/csharp/build.sh` to build the dotnet nuget packages for Sop4CS & Sop4CS.CLI. Or do below:
+        *   Then pack and push:
+            ```bash
+            cd bindings/csharp/Sop.CLI
+            dotnet pack -c Release
+            dotnet nuget push bin/Release/Sop4CS.CLI.*.nupkg --source ...
+            ```
+
+*Note: The `sop-httpserver` logic works exactly the same way. When a user installs these packages and runs the server command, it will automatically download the correct standalone server binary from the GitHub Release version that matches the package version.*
+
 ## 3. Versioning Strategy
 
 We adhere to **Strict Version Parity**. All artifacts (Shared Libs, EXE, Python Wheel, Java JAR, NuGet) must share the exact same version number (e.g., `v2.2.4`) as the Git Tag.

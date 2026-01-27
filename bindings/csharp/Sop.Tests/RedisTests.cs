@@ -1,42 +1,52 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using Xunit;
 
 namespace Sop.Tests;
 
-public class RedisTests
+public class RedisTests : IDisposable
 {
-    [Fact]
-    public void TestRedisInitialization()
+    private readonly List<string> _testDirs = new List<string>();
+
+    public void Dispose()
     {
-        // Assuming a local redis is running, or just testing the binding call.
-        // If no redis is running, this might fail or log a warning depending on Go implementation.
-        
-        try
+        foreach (var dir in _testDirs)
         {
-            Redis.Initialize("redis://localhost:6379/0");
-            // If successful, great.
-        }
-        catch (SopException e)
-        {
-            // If it fails due to connection refused, that's expected if no redis is running.
-            if (!e.Message.Contains("connection refused") && !e.Message.Contains("connect: connection refused"))
+            if (Directory.Exists(dir))
             {
-                // If it's another error, re-throw
-                throw;
+                try { Directory.Delete(dir, true); } catch { }
             }
         }
+    }
 
-        try
+    [Fact]
+    public void TestRedisConfigInDatabaseOptions()
+    {
+        // This test verifies that we can pass RedisConfig via DatabaseOptions
+        // replacing the deprecated global Redis.Initialize.
+        
+        string path = Path.Combine(Path.GetTempPath(), $"sop_redis_test_{Guid.NewGuid()}");
+        _testDirs.Add(path);
+
+        using var ctx = new Context();
+
+        var dbOptions = new DatabaseOptions
         {
-            Redis.Close();
-        }
-        catch (SopException e)
-        {
-             // Ignore close errors if init failed
-             if (!e.Message.Contains("connection refused"))
-             {
-                 throw;
-             }
-        }
+            StoresFolders = new List<string> { path },
+            // Using Clustered type typically triggers Redis usage
+            Type = (int)DatabaseType.Clustered, 
+            RedisConfig = new RedisConfig 
+            { 
+                Address = "localhost:6379",
+                Password = "",
+                DB = 0
+            }
+        };
+
+        // We check if we can instantiate without crashing. 
+        // Actual connection might fail if no Redis is running, but the binding logic is what we test here.
+        var db = new Database(dbOptions);
+        Assert.NotNull(db);
     }
 }

@@ -74,6 +74,34 @@ impl<'de> Deserialize<'de> for L2CacheType {
     }
 }
 
+/// Configuration for Redis connection.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct RedisConfig {
+    /// The address of the Redis server.
+    #[serde(rename = "address", skip_serializing_if = "Option::is_none")]
+    pub address: Option<String>,
+    /// The password for the Redis server.
+    #[serde(rename = "password", skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    /// The database index.
+    #[serde(rename = "db")]
+    pub db: i32,
+    /// The connection URL.
+    #[serde(rename = "url", skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+/// Configuration for erasure coding.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ErasureCodingConfig {
+    /// The number of data shards.
+    #[serde(rename = "data_shards")]
+    pub data_shards: i32,
+    /// The number of parity shards.
+    #[serde(rename = "parity_shards")]
+    pub parity_shards: i32,
+}
+
 /// Options for creating a database.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DatabaseOptions {
@@ -89,6 +117,12 @@ pub struct DatabaseOptions {
     /// The type of database.
     #[serde(rename = "type")]
     pub db_type: DatabaseType,
+    /// The Redis configuration.
+    #[serde(rename = "redis_config", skip_serializing_if = "Option::is_none")]
+    pub redis_config: Option<RedisConfig>,
+    /// The erasure coding configuration.
+    #[serde(rename = "erasure_config", skip_serializing_if = "Option::is_none")]
+    pub erasure_config: Option<std::collections::HashMap<String, ErasureCodingConfig>>,
 }
 
 impl Default for DatabaseOptions {
@@ -98,6 +132,8 @@ impl Default for DatabaseOptions {
             keyspace: None,
             cache_type: L2CacheType::InMemory,
             db_type: DatabaseType::Standalone,
+            redis_config: None,
+            erasure_config: None,
         }
     }
 }

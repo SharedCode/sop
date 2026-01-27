@@ -1,19 +1,21 @@
 import sys
 import os
+import shutil
 import uuid
 
 # Add parent directory to path to import sop
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from sop.context import Context
-from sop.database import Cassandra, Database, DatabaseOptions, DatabaseType
-from sop.transaction import TransactionMode
-from sop import Redis, Item
+from sop.database import Database, DatabaseOptions, DatabaseType
+from sop.cassandra import Cassandra
+from sop.transaction import TransactionMode, RedisCacheConfig
+from sop import Item
 
 def main():
     # Initialize Global Connections
-    print("Initializing Redis Connection...")
-    Redis.initialize("redis://localhost:6379/0")
+    # print("Initializing Redis Connection...")
+    # Redis.initialize("redis://localhost:6379/0")
 
     print("Initializing Cassandra Connection...")
     Cassandra.initialize({
@@ -33,9 +35,15 @@ def main():
         # CREATE KEYSPACE db1 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
         # CREATE KEYSPACE db2 WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
         
+        path1 = "data/tenant1"
+        if os.path.exists(path1):
+            shutil.rmtree(path1)
+
         db1 = Database(DatabaseOptions(
             type=DatabaseType.Clustered,
-            keyspace="db1"
+            keyspace="db1",
+            redis_config=RedisCacheConfig(url="redis://localhost:6379/0"),
+            stores_folders=[path1]
         ))
         
         print("Tenant 1: Starting transaction...")
@@ -47,9 +55,15 @@ def main():
 
         # Tenant 2
         print("Connecting to Tenant 2 (Keyspace: db2)...")
+        path2 = "data/tenant2"
+        if os.path.exists(path2):
+            shutil.rmtree(path2)
+
         db2 = Database(DatabaseOptions(
             type=DatabaseType.Clustered,
-            keyspace="db2"
+            keyspace="db2",
+            redis_config=RedisCacheConfig(url="redis://localhost:6379/0"),
+            stores_folders=[path2]
         ))
         
         print("Tenant 2: Starting transaction...")
@@ -92,9 +106,7 @@ def main():
 
     finally:
         print("Closing Cassandra Connection...")
-        CassandraDatabase.close()
-        print("Closing Redis Connection...")
-        Redis.close()
+        Cassandra.close()
 
 if __name__ == "__main__":
     main()

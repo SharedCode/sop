@@ -6,7 +6,7 @@ import time
 from sop.ai import Database, Item, DatabaseType, Model
 from sop.database import DatabaseOptions
 from sop import Context, TransactionMode
-from sop.transaction import ErasureCodingConfig
+from sop.transaction import ErasureCodingConfig, RedisCacheConfig
 from sop.redis import Redis
 
 # Ensure we can import sop
@@ -15,13 +15,12 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 class TestSOPAI(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.redis_available = False
+        cls.redis_available = True
         # Open Redis connection globally for the tests
         try:
-            # ro = RedisOptions()
-            # Redis.initialize(ro)
-            Redis.initialize("redis://localhost:6379")
-            cls.redis_available = True
+            # We skip explicit initialization check and let tests fail if Redis is down
+            # or rely on local setup
+             pass
         except Exception as e:
             print(f"Warning: Failed to connect to Redis: {e}")
             # We continue, but clustered tests might fail
@@ -87,7 +86,8 @@ class TestSOPAI(unittest.TestCase):
         path = self.create_temp_dir("vec_clustered")
         
         ctx = Context()
-        vdb = Database(DatabaseOptions(stores_folders=[path], type=DatabaseType.Clustered))
+        red_conf = RedisCacheConfig(url="redis://localhost:6379")
+        vdb = Database(DatabaseOptions(stores_folders=[path], type=DatabaseType.Clustered, redis_config=red_conf))
         
         # Transaction 1: Upsert
         tx1 = vdb.begin_transaction(ctx)
@@ -175,7 +175,8 @@ class TestSOPAI(unittest.TestCase):
         vdb = Database(DatabaseOptions(
             type=DatabaseType.Clustered,
             erasure_config={"": ec_config},
-            stores_folders=[path, path_passive]
+            stores_folders=[path, path_passive],
+            redis_config=RedisCacheConfig(url="redis://localhost:6379")
         ))
         
         # Transaction 1: Upsert

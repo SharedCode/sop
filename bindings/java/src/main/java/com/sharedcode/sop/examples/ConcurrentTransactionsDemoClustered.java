@@ -23,14 +23,6 @@ public class ConcurrentTransactionsDemoClustered {
             e.printStackTrace();
         }
 
-        // Initialize Redis for Clustered mode
-        try {
-            Redis.initialize("redis://localhost:6379");
-        } catch (Exception ex) {
-            System.out.println("Failed to connect to Redis: " + ex.getMessage());
-            return;
-        }
-
         System.out.println("--- Concurrent Transactions Demo (Clustered) ---");
         System.out.println("Demonstrating multi-threaded access without client-side locks.");
         System.out.println("SOP handles ACID transactions, conflict detection, and merging.");
@@ -44,6 +36,9 @@ public class ConcurrentTransactionsDemoClustered {
             DatabaseOptions dbOpts = new DatabaseOptions();
             dbOpts.stores_folders = Collections.singletonList(dbPath);
             dbOpts.type = DatabaseType.Clustered;
+            dbOpts.redis_config = new DatabaseOptions.RedisConfig();
+            dbOpts.redis_config.address = "localhost:6379";
+            dbOpts.redis_config.db = 0;
 
             Database db = new Database(dbOpts);
 

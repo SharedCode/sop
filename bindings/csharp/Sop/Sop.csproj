@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <PackageId>Sop4CS</PackageId>
-    <Version>2.3.2</Version>
+    <Version>2.3.3</Version>
     <Authors>Gerardo Recinto</Authors>
     <Description>Scalable Objects Persistence (SOP) - High-performance transactional storage engine.</Description>
     <PackageTags>database;btree;vector;storage;transactional</PackageTags>
@@ -45,6 +45,11 @@
     <None Include="libjsondb_arm64linux.so" Link="runtimes/linux-arm64/native/libjsondb.so">
       <Pack>true</Pack>
       <PackagePath>runtimes/linux-arm64/native/libjsondb.so</PackagePath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="libjsondb_arm64windows.dll" Link="runtimes/win-arm64/native/libjsondb.dll">
+      <Pack>true</Pack>
+      <PackagePath>runtimes/win-arm64/native/libjsondb.dll</PackagePath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

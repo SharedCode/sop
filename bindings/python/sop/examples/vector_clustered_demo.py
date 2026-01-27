@@ -9,8 +9,7 @@ import uuid
 from sop import Context
 from sop.ai import Database, Item, DatabaseType
 from sop.database import DatabaseOptions
-from sop.transaction import TransactionMode
-from sop.redis import Redis
+from sop.transaction import TransactionMode, RedisCacheConfig
 
 def main():
     db_path = os.path.abspath("vector_clustered_demo_db")
@@ -21,8 +20,9 @@ def main():
             # Try to clean up properly using SOP API to ensure Redis is also cleaned
             ctx = Context()
             # We need to initialize Redis first for RemoveBtree to work in Clustered mode
-            Redis.initialize("redis://localhost:6379")
-            db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Clustered))
+            # Redis.initialize("redis://localhost:6379")
+            redis_conf = RedisCacheConfig(url="redis://localhost:6379")
+            db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Clustered, redis_config=redis_conf))
             db.remove_btree(ctx, "demo_store_clustered")
         except:
             # If it fails (e.g. corrupted, or Redis not available yet), ignore and proceed to force delete
@@ -50,17 +50,15 @@ def main():
         return
 
     # Ensure Redis is initialized for the main logic
-    try:
-         Redis.initialize("redis://localhost:6379")
-    except:
-         pass
+    # Redis configuration will be passed via DatabaseOptions
+    redis_conf = RedisCacheConfig(url="redis://localhost:6379")
 
     try:
         print(f"Initializing SOP Vector Database (Clustered) at '{db_path}'...")
         ctx = Context()
         # Note: In Clustered mode, we typically use a shared storage path or distributed file system,
         # but for this demo we use a local path.
-        db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Clustered))
+        db = Database(DatabaseOptions(stores_folders=[db_path], type=DatabaseType.Clustered, redis_config=redis_conf))
 
         # --- 1. Explicit Transaction ---
         print("\n--- 1. Explicit Transaction ---")
@@ -94,7 +92,7 @@ def main():
         print(f"An error occurred: {e}")
     finally:
         print("Closing Redis connection...")
-        Redis.close()
+        # Redis.close()
         
         # Clean up
         if os.path.exists(db_path):
