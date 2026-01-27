@@ -239,6 +239,9 @@ create_bundle() {
 
     # 5. READMEs & Scripts
     cp README.md "$BUNDLE_DIR/"
+    mkdir -p "$BUNDLE_DIR/docs"
+    cp docs/installation/DATA_MANAGER_SETUP.md "$BUNDLE_DIR/docs/" 2>/dev/null || true
+    cp docs/installation/LANGUAGE_BINDINGS.md "$BUNDLE_DIR/docs/" 2>/dev/null || true
     cp scripts/install.sh "$BUNDLE_DIR/" 2>/dev/null || true
     cp scripts/uninstall.sh "$BUNDLE_DIR/" 2>/dev/null || true
     chmod +x "$BUNDLE_DIR/install.sh" "$BUNDLE_DIR/uninstall.sh" 2>/dev/null || true

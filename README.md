@@ -113,10 +113,19 @@ This structure allows AI Agents to navigate data using simple "Chain of Thought"
     *   **JOIN**: Perform high-performance connections between stores (e.g., `Join 'Users' and 'Orders'`).
     *   **CRUD**: Insert, Update, and Delete records via a query interface.
 
-### Storage Distribution (Data Files)
-The Configuration JSON allows you to control exactly where your data is stored on disk via the **Erasure Configs (Data Files)** list.
-*   **Key-Based Routing**: If you provide a `Key`, only stores matches that key will be allocated to that specific storage tier (e.g., specific drives or paths).
-*   **Global Fallback**: If the `Key` is left **empty**, that entry becomes the **Global Fallback**. Any store that doesn't match a specific key will automatically be allocated using this "catch-all" configuration.
+### Storage Distribution & Redundancy
+SOP separates the storage responsibilities into two distinct layers, each tunable via the configuration:
+
+1.  **Registry / System Data (Stores Folders)**:
+    *   **Configuration**: `StoresFolders` (List of paths).
+    *   **Mechanism**: Active/Passive Redundancy.
+    *   **Behavior**: You typically provide 2 paths (on different drives). SOP writes to the Active drive. If it fails, the system automatically fails over to the Passive drive to ensure the Registry and System DB remain accessible.
+
+2.  **User Data Files (Erasure Coding)**:
+    *   **Configuration**: `ErasureConfigs` (Map of Keys to EC settings).
+    *   **Mechanism**: Sharding & Parity (Striping).
+    *   **Behavior**: Large data files (User B-Trees, Blobs) are split into chunks (Shards) and distributed across multiple drives. This provides both **Parallel I/O (High IOPS)** and **Fault Tolerance** (e.g., surviving a drive failure via parity reconstruction).
+    *   **Key-Based Routing**: You can assign specific stores to specific storage tiers (e.g., "fast-ssd-pool" vs "archive-hdd-pool") using the configuration keys.
 
 ### The System Database (SystemDB)
 All SOP environments come with a built-in **SystemDB**. Far from just a log repository, this is the "brain" of the platform that stores:

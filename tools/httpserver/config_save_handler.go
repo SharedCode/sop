@@ -15,6 +15,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	aidb "github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/model"
 	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/fs"
@@ -375,6 +376,12 @@ func setupSystemDB(ctx context.Context, req *SaveConfigRequest) (*DatabaseConfig
 		}
 		ms.Save(ctx, "general", "demo_loop", demoLoop)
 		trans.Commit(ctx)
+	}()
+
+	// Auto-Create LLM Knowledge (System DB only)
+	func() {
+		db := aidb.NewDatabase(sysOpts)
+		seedLLMKnowledge(ctx, db)
 	}()
 
 	// Construct Config

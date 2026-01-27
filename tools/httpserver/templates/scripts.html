@@ -25,12 +25,17 @@
         }
     }
 
-    function showConfirm(message, onConfirm, onCancel, title="Confirm") {
+    let _confirmKeyHandler = null;
+
+    function showConfirm(message, onConfirm, onCancel, title="Confirm", okText="OK", cancelText="Cancel") {
         document.getElementById('global-confirm-title').textContent = title;
         document.getElementById('global-confirm-message').textContent = message;
         
         const okBtn = document.getElementById('global-confirm-ok-btn');
         const cancelBtn = document.getElementById('global-confirm-cancel-btn');
+
+        okBtn.textContent = okText;
+        cancelBtn.textContent = cancelText;
 
         // Remove old listeners to avoid stacking
         const newOk = okBtn.cloneNode(true);
@@ -39,15 +44,38 @@
         const newCancel = cancelBtn.cloneNode(true);
         cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
 
-        newOk.onclick = function() {
+        const cleanup = () => {
             document.getElementById('global-confirm-modal').style.display = 'none';
+            if (_confirmKeyHandler) {
+                document.removeEventListener('keydown', _confirmKeyHandler, true);
+                _confirmKeyHandler = null;
+            }
+        };
+
+        newOk.onclick = function() {
+            cleanup();
             if (onConfirm) onConfirm();
         };
 
         newCancel.onclick = function() {
-            document.getElementById('global-confirm-modal').style.display = 'none';
+            cleanup();
             if (onCancel) onCancel();
         };
+
+        // Keyboard handling
+        if (_confirmKeyHandler) document.removeEventListener('keydown', _confirmKeyHandler, true);
+        _confirmKeyHandler = function(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                newCancel.click();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                newOk.click();
+            }
+        };
+        document.addEventListener('keydown', _confirmKeyHandler, true);
 
         document.getElementById('global-confirm-modal').style.display = 'flex';
         setTimeout(() => newOk.focus(), 50);
@@ -55,12 +83,83 @@
 
     function closeGlobalConfirm() {
         document.getElementById('global-confirm-modal').style.display = 'none';
+        if (_confirmKeyHandler) {
+            document.removeEventListener('keydown', _confirmKeyHandler, true);
+            _confirmKeyHandler = null;
+        }
     }
 
     function confirmAsync(message, title="Confirm") {
         return new Promise((resolve) => {
             showConfirm(message, () => resolve(true), () => resolve(false), title);
         });
+    }
+    
+    let _promptKeyHandler = null;
+
+    function showPrompt(message, onConfirm, onCancel, title="Prompt", placeholder="", okText="OK", cancelText="Cancel") {
+         document.getElementById('global-prompt-title').textContent = title;
+         document.getElementById('global-prompt-message').textContent = message;
+         
+         const input = document.getElementById('global-prompt-input');
+         input.value = "";
+         input.placeholder = placeholder;
+         
+         const okBtn = document.getElementById('global-prompt-ok-btn');
+         const cancelBtn = document.getElementById('global-prompt-cancel-btn');
+
+         okBtn.textContent = okText;
+         cancelBtn.textContent = cancelText;
+
+         // Remove old listeners
+         const newOk = okBtn.cloneNode(true);
+         okBtn.parentNode.replaceChild(newOk, okBtn);
+         
+         const newCancel = cancelBtn.cloneNode(true);
+         cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+         const cleanup = () => {
+             document.getElementById('global-prompt-modal').style.display = 'none';
+             if (_promptKeyHandler) {
+                 document.removeEventListener('keydown', _promptKeyHandler, true);
+                 _promptKeyHandler = null;
+             }
+         };
+
+         newOk.onclick = function() {
+             const val = input.value;
+             cleanup();
+             if (onConfirm) onConfirm(val);
+         };
+
+         newCancel.onclick = function() {
+             cleanup();
+             if (onCancel) onCancel();
+         };
+
+        // Keyboard handling
+        if (_promptKeyHandler) document.removeEventListener('keydown', _promptKeyHandler, true);
+        _promptKeyHandler = function(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                newCancel.click();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                newOk.click();
+            }
+        };
+        document.addEventListener('keydown', _promptKeyHandler, true);
+
+        document.getElementById('global-prompt-modal').style.display = 'flex';
+        setTimeout(() => input.focus(), 50);
+    }
+    
+    function promptAsync(message, title="Prompt") {
+         return new Promise((resolve) => {
+             showPrompt(message, (val) => resolve(val), () => resolve(null), title);
+         });
     }
     
     // Override native alert (optional, but safer to rename usages explicitly first)
@@ -636,13 +735,14 @@
     function deleteStore() {
         if (!currentStore) return;
         
-        const name = prompt(`Please type the store name '${currentStore}' to confirm deletion:`);
-        if (name === null) return; // User cancelled prompt
-        
-        if (name.trim().toLowerCase() !== currentStore.toLowerCase()) {
-            showAlert("Store name does not match. Deletion cancelled.");
-            return;
-        }
+        promptAsync(`Please type the store name '${currentStore}' to confirm deletion:`, "Delete Store")
+        .then(name => {
+            if (name === null) return; // User cancelled prompt
+            
+            if (name.trim().toLowerCase() !== currentStore.toLowerCase()) {
+                showAlert("Store name does not match. Deletion cancelled.");
+                return;
+            }
 
         fetch('/api/store/delete', {
             method: 'POST',
@@ -680,7 +780,10 @@
                 showAlert("Error: " + (data.error || "Unknown error"));
             }
         })
-        .catch(err => showAlert("Error: " + err));
+        .catch(err => {
+            showAlert("Failed to delete store: " + err.message);
+        });
+        });
     }
 
     function buildSearchUI(info) {
@@ -2557,9 +2660,13 @@
             return;
         }
 
-        showConfirm("Are you sure you want to delete this item?", () => {
-            performDelete();
-        });
+        showConfirm(
+            "Are you sure you want to delete this item?", 
+            () => { performDelete(); }, 
+            null, 
+            "Confirm Deletion", 
+            "Delete"
+        );
     }
 
     function performDelete() {
@@ -2622,89 +2729,7 @@
         });
     }
 
-    let currentConfirmHandler = null;
 
-    function closeConfirmModal() {
-        document.getElementById('confirm-modal').style.display = 'none';
-        if (currentConfirmHandler) {
-            document.removeEventListener('keydown', currentConfirmHandler, true);
-            currentConfirmHandler = null;
-        }
-    }
-
-    function showConfirm(message, onConfirm) {
-        const modal = document.getElementById('confirm-modal');
-        const msgEl = document.getElementById('confirm-message');
-        const okBtn = document.getElementById('confirm-ok');
-        const cancelBtn = document.getElementById('confirm-cancel');
-
-        msgEl.textContent = message;
-        modal.style.display = 'flex';
-
-        // Setup click handlers
-        okBtn.onclick = () => {
-            closeConfirmModal();
-            onConfirm();
-        };
-        cancelBtn.onclick = () => {
-            closeConfirmModal();
-        };
-
-        // Remove existing handler if any (safety)
-        if (currentConfirmHandler) {
-            document.removeEventListener('keydown', currentConfirmHandler, true);
-        }
-
-        // Define new handler
-        currentConfirmHandler = function(e) {
-            const isTab = e.key === 'Tab';
-            const isEscape = e.key === 'Escape';
-            const isLeft = e.key === 'ArrowLeft';
-            const isRight = e.key === 'ArrowRight';
-            const isEnter = e.key === 'Enter';
-
-            if (isEscape) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                closeConfirmModal();
-                return;
-            }
-
-            if (isTab || isLeft || isRight) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                
-                const activeEl = document.activeElement;
-                
-                // Toggle logic:
-                // If on Cancel -> Go to OK
-                // If on OK -> Go to Cancel
-                // If anywhere else -> Go to Cancel (Safe default)
-                if (activeEl === cancelBtn) {
-                    okBtn.focus();
-                } else {
-                    cancelBtn.focus();
-                }
-            }
-            
-            if (isEnter) {
-                e.preventDefault();
-                e.stopImmediatePropagation();
-                // Trigger click on the focused element if it's one of our buttons
-                if (document.activeElement === okBtn || document.activeElement === cancelBtn) {
-                    document.activeElement.click();
-                }
-            }
-        };
-
-        // Add key handler
-        document.addEventListener('keydown', currentConfirmHandler, true);
-
-        // Force focus to Cancel button
-        requestAnimationFrame(() => {
-            cancelBtn.focus();
-        });
-    }
 
     function showAdd() {
         const modal = document.getElementById('add-modal');
@@ -7530,6 +7555,20 @@
         const nextBtn = document.getElementById('wizard-next');
         nextBtn.textContent = currentWizardStep === 3 ? 'Finish' : 'Next';
 
+        // Update Help Link based on Step
+        const helpLink = document.getElementById('wizard-help-link');
+        if (helpLink) {
+            if (currentWizardStep === 3) {
+                // Step 3: Language Bindings (Integration)
+                helpLink.href = "https://github.com/sharedcode/sop/blob/main/docs/installation/LANGUAGE_BINDINGS.md";
+                helpLink.title = "Read the Integration Tutorial";
+            } else {
+                // Step 1 & 2: Setup/Config Concepts
+                helpLink.href = "https://github.com/sharedcode/sop/blob/main/docs/installation/DATA_MANAGER_SETUP.md";
+                helpLink.title = "Read the Setup Guide";
+            }
+        }
+
         // Populate Summary on Step 3
         if (currentWizardStep === 3) {
             // User DB Config (Step 1)
@@ -7705,12 +7744,10 @@
         wizardCancelLocked = true;
         
         console.log("Wizard Cancel triggered");
-        
-        // Use a small delay to allow the stack to clear, but ensure we don't block recursively
-        // NOTE: Removed setTimeout as it decouples the native confirm from the user interaction event
-        try {
-            if (confirm("Are you sure you want to cancel the setup process? Any unsaved changes will be lost.")) {
-                 
+
+        confirmAsync("Are you sure you want to cancel the setup process? Any unsaved changes will be lost.", "Cancel Setup")
+        .then(isConfirmed => {
+             if (isConfirmed) {
                  let promise = Promise.resolve();
 
                  let targetConfig = "config.json";
@@ -7730,11 +7767,14 @@
                      sessionStorage.setItem('sop_open_env_manager', 'true');
                      window.location.href = "/";
                  });
-            }
-        } finally {
-            // Unlock immediately after the confirm dialog returns
+             } else {
+                 wizardCancelLocked = false;
+             }
+        })
+        .catch(err => {
+            console.error(err);
             wizardCancelLocked = false;
-        }
+        });
     }
 
     function resetSetupForm() {
@@ -8216,7 +8256,7 @@
         });
 
         if (validationError) {
-            alert(validationError);
+            showAlert(validationError);
             throw new Error(validationError);
         }
         

@@ -54,13 +54,26 @@ SOP features a unique optimization for handling large data (e.g., media files, G
     *   `IsValueDataActivelyPersisted`: **True**.
     *   Use the `streamingdata` package for objects > 1MB.
 
-## Erasure Coding (EC)
+## Physical Storage & Redundancy
 
-SOP supports Erasure Coding for fault tolerance on the filesystem layer.
+SOP utilizes a dual-layer approach to storage configuration to distinctively handle system-critical metadata vs. high-volume data.
 
-*   **Config**: `ErasureCodingConfig` (passed during Store creation).
-*   **Recommendation**: Use for production deployments where disk failure is a concern.
-*   **Overhead**: Adds CPU overhead for encoding/decoding but saves storage compared to full replication.
+### 1. Registry Redundancy (StoresFolders)
+The `StoresFolders` option (found in `DatabaseOptions` or global config) defines the root partitions for the **Database Registry** and **System Tables**.
+*   **Purpose**: Ensures the "Brain" of the system survives a drive failure.
+*   **Mechanism**: Active/Passive Failover.
+*   **Configuration**: Provide 2 paths (e.g., `["/disk1/sop_reg", "/disk2/sop_reg"]`).
+    *   **Active**: `/disk1/sop_reg` accepts all writes.
+    *   **Passive**: `/disk2/sop_reg` takes over if the Active path becomes inaccessible.
+
+### 2. Data Striping & Reliability (Erasure Coding)
+For the actual B-Trees and BLOB data (User Data), SOP uses Erasure Coding.
+*   **Purpose**: providing **Data Striping** (High IOPS via parallel I/O) and **Reliability** (Software RAID).
+*   **Mechanism**: Reed-Solomon Erasure Coding.
+*   **Config**: `ErasureCodingConfig` (passed during Store creation or via global Map).
+*   **Recommendation**:
+    *   **Production**: Use at least 2 Data + 1 Parity Shard across 3 physical drives.
+    *   **Benefits**: Survived single-drive failure; reads/writes are parallelized across drives for speed.
 
 ## Batch Size
 

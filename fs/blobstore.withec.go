@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"os"
+	"path/filepath"
 	"sync/atomic"
 
 	"github.com/sharedcode/sop"
@@ -340,7 +341,9 @@ func (b *BlobStoreWithEC) RemoveStore(ctx context.Context, blobStoreName string)
 
 	var lastErr error
 	for _, folderPath := range baseFolderPathsAcrossDrives {
-		if err := b.fileIO.RemoveAll(ctx, folderPath); err != nil {
+		// Needs to delete the store folder relative to the base folder path.
+		path := filepath.Join(folderPath, blobStoreName)
+		if err := b.fileIO.RemoveAll(ctx, path); err != nil {
 			// Just capture the last error, but attempt to delete from all EC drive paths provided not to leak storage.
 			lastErr = err
 		}

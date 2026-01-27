@@ -265,4 +265,17 @@
     </div>
 </div>
 
+<!-- Generic Prompt Modal -->
+<div id="global-prompt-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--overlay-bg); justify-content:center; align-items:center; z-index:9999;">
+    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:400px; max-width:90%; box-shadow: 0 4px 12px rgba(0,0,0,0.2); border: 1px solid var(--border-color); display: flex; flex-direction: column;">
+        <h3 id="global-prompt-title" style="margin-top:0; font-size: 1.2rem;">Prompt</h3>
+        <p id="global-prompt-message" style="margin: 15px 0 10px 0; word-wrap: break-word; line-height: 1.5;"></p>
+        <input type="text" id="global-prompt-input" style="padding: 8px; margin-bottom: 20px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); border-radius: 4px; width: 100%; box-sizing: border-box;">
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button id="global-prompt-cancel-btn" style="padding: 8px 16px; background: transparent; color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer;">Cancel</button>
+            <button id="global-prompt-ok-btn" style="padding: 8px 16px; background:var(--button-bg); color:var(--button-text); border:none; border-radius: 4px; cursor: pointer;">OK</button>
+        </div>
+    </div>
+</div>
+
 {{end}}
