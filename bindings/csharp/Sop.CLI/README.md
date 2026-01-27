@@ -166,9 +166,16 @@ For managing multiple environments (e.g., Dev, Staging, Prod), create a `config.
       "mode": "clustered",
       "redis": "redis-prod:6379"
     }
-  ]
+  ],
+  "system_db": {
+      "name": "system",
+      "path": "./data/sop_system",
+      "mode": "standalone"
+  }
 }
 ```
+
+> **Note**: This example shows the structure of `system_db`, but it is best to let the **Data Manager Setup Wizard** create and populate it automatically on first launch. The Wizard ensures that essential stores (like `Script` and `llm_knowledge`) are correctly initialized for the AI Copilot.
 
 Run with: `sop-cli httpserver -config config.json`
 

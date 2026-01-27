@@ -96,3 +96,25 @@ Access the UI at `http://localhost:8080`.
 *   **Safe Schema Updates**: Admins can securely unlock and modify Index/CEL expressions on live stores.
 
 For more details, see the [SOP Data Manager Documentation](tools/httpserver/README.md).
+
+## Troubleshooting & Best Practices
+
+### Clustered Mode: Data Deletion
+
+When running SOP in **Clustered Mode** (using Redis + Disk Storage), it is critical to maintain synchronization between the persistent data on disk and the ephemeral locks/cache in Redis.
+
+**Recommended Practice:**
+*   Always use the SOP API (e.g., `RemoveBtree`, `DeleteDatabase`, or `RemoveStore`) to delete data.
+*   These methods automatically handle the cleanup of both the physical files on disk and the corresponding entries in Redis (cache keys, locks, registry entries).
+
+**Manual Deletion (Development Only):**
+If you must delete the data files manually (e.g., during local development or a hard reset):
+1.  **Stop all Applications**: Ensure no SOP processes (services, CLI, Data Manager) are running.
+2.  **Delete Files**: Remove the store folders/files from the disk.
+3.  **Flush Redis**: You **MUST** run `FLUSHALL` on your Redis instance immediately after deleting the files.
+    ```bash
+    redis-cli flushall
+    ```
+
+**Why this is necessary**:
+Redis maintains locks and cached metadata with a default timeout (typically 15 minutes). If you delete the files but leave the Redis keys active, any new application instance you start will see "ghost" locks or stale metadata, preventing it from recreating the stores or acquiring locks until the timeout expires.

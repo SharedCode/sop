@@ -101,6 +101,38 @@ sop-httpserver
 **Usage**: By default, it opens on `http://localhost:8080`.
 **Arguments**: You can pass standard flags, e.g., `sop-httpserver -port 9090 -database ./my_data`.
 
+### Multiple Databases Configuration (Recommended)
+
+For managing multiple environments (e.g., Dev, Staging, Prod), create a `config.json`:
+
+```json
+{
+  "port": 8080,
+  "databases": [
+    {
+      "name": "Local Development",
+      "path": "./data/dev_db",
+      "mode": "standalone"
+    },
+    {
+      "name": "Production Cluster",
+      "path": "/mnt/data/prod",
+      "mode": "clustered",
+      "redis": "redis-prod:6379"
+    }
+  ],
+  "system_db": {
+      "name": "system",
+      "path": "./data/sop_system",
+      "mode": "standalone"
+  }
+}
+```
+
+> **Note**: This example shows the structure of `system_db`, but it is best to let the **Data Manager Setup Wizard** create and populate it automatically on first launch. The Wizard ensures that essential stores (like `Script` and `llm_knowledge`) are correctly initialized for the AI Copilot.
+
+Run with: `sop-httpserver -config config.json`
+
 ## AI Copilot & Scripts
 
 The SOP Data Manager includes a built-in **AI Copilot** that allows you to interact with your data using natural language and automate workflows using **Scripts**.
