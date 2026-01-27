@@ -46,6 +46,7 @@ jobs:
             bindings/csharp/Sop/*.h
             bindings/java/src/main/resources/darwin-*/*.dylib
             release/sop-httpserver-darwin-*
+            release/sop-bundle-darwin-*.tar.gz
 
   build-linux-windows:
     name: Build Native (Linux & Windows)
@@ -82,6 +83,8 @@ jobs:
             bindings/java/src/main/resources/win32-*/*.dll
             release/sop-httpserver-linux-*
             release/sop-httpserver-windows-*
+            release/sop-bundle-linux-*.tar.gz
+            release/sop-bundle-windows-*.zip
 
   package-and-release:
     name: Package and Release
