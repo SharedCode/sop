@@ -132,6 +132,25 @@ cp ../python/sop/libjsondb_arm64linux.h ../csharp/Sop/
 # Build Browser
 echo "Building sop-httpserver for linux/arm64..."
 CGO_ENABLED=0 go build -ldflags "-X main.Version=$VERSION" -o $RELEASE_DIR/sop-httpserver-linux-arm64 ../../tools/httpserver
+
+echo "Building ARM64 windows"
+
+export GOOS=windows
+export GOARCH=arm64
+# Use Zig for Windows ARM64 cross-compilation as it's often more available/reliable than aarch64-mingw
+export CC="zig cc -target aarch64-windows-gnu"
+# Added -s to strip symbol table
+go build -ldflags "-w" -buildmode=c-shared -o ../python/sop/libjsondb_arm64windows.dll *.go
+go build -ldflags "-w" -buildmode=c-archive -o ../rust/lib/libjsondb_arm64windows.a *.go
+cp ../python/sop/libjsondb_arm64windows.dll ../csharp/Sop/
+cp ../python/sop/libjsondb_arm64windows.h ../csharp/Sop/
+# Java Packaging (JNA)
+mkdir -p ../java/src/main/resources/win32-aarch64
+cp ../python/sop/libjsondb_arm64windows.dll ../java/src/main/resources/win32-aarch64/libjsondb.dll
+
+# Build Browser
+echo "Building sop-httpserver for windows/arm64..."
+CGO_ENABLED=0 go build -ldflags "-X main.Version=$VERSION" -o $RELEASE_DIR/sop-httpserver-windows-arm64.exe ../../tools/httpserver
 fi
 
 echo "Build complete."

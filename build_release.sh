@@ -262,9 +262,11 @@ create_bundle darwin amd64 "darwin-amd64"
 create_bundle linux amd64 "linux-amd64"
 create_bundle linux arm64 "linux-arm64"
 create_bundle windows amd64 "windows-amd64"
+create_bundle windows arm64 "windows-arm64"
 
 echo "Release Packaging Complete."
 ls -lh $OUTPUT_DIR/*.{tar.gz,zip} 2>/dev/null || echo "No bundles created."
 
 
 
+ls -R release
