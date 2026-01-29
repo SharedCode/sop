@@ -41,9 +41,15 @@ func (a *DataAdminAgent) toolListScripts(ctx context.Context, args map[string]an
 		return "", fmt.Errorf("failed to open scripts store: %w", err)
 	}
 
-	names, err := store.List(ctx, "general")
+	// Extract optional category
+	category, _ := args["category"].(string)
+	if category == "" {
+		category = "general"
+	}
+
+	names, err := store.List(ctx, category)
 	if err != nil {
-		return "", fmt.Errorf("failed to list scripts: %w", err)
+		return "", fmt.Errorf("failed to list scripts in category '%s': %w", category, err)
 	}
 
 	if len(names) == 0 {
@@ -87,14 +93,19 @@ func (a *DataAdminAgent) toolGetScriptDetails(ctx context.Context, args map[stri
 		return "", fmt.Errorf("failed to open scripts store: %w", err)
 	}
 
+	category, _ := args["category"].(string)
+	if category == "" {
+		category = "general"
+	}
+
 	var script ai.Script
-	if err := store.Load(ctx, "general", name, &script); err != nil {
-		return "", fmt.Errorf("failed to load script '%s': %w", name, err)
+	if err := store.Load(ctx, category, name, &script); err != nil {
+		return "", fmt.Errorf("failed to load script '%s' from category '%s': %w", name, category, err)
 	}
 
 	// Format details
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Script: %s\n", script.Name))
+	sb.WriteString(fmt.Sprintf("Script: %s\n", name))
 	if script.Description != "" {
 		sb.WriteString(fmt.Sprintf("Description: %s\n", script.Description))
 	}
@@ -129,7 +140,6 @@ func (a *DataAdminAgent) toolCreateScript(ctx context.Context, args map[string]a
 	}
 
 	script := ai.Script{
-		Name:        name,
 		Description: description,
 		Database:    currentDB,
 		Steps:       steps,
@@ -221,7 +231,6 @@ func (a *DataAdminAgent) toolSaveScript(ctx context.Context, args map[string]any
 	}
 
 	script := ai.Script{
-		Name:        name,
 		Description: description,
 		Database:    currentDB,
 		Steps:       steps,

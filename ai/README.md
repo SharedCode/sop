@@ -81,7 +81,7 @@ A unique **Hybrid Execution** engine that runs inside the Agent.
 A conversational interface for interacting with your data and building scripts.
 *   **Natural Language Queries**: "Select all users where role is admin".
 *   **CRUD Operations**: Add, update, and delete records using plain English.
-*   **Script Recording**: Teach the assistant workflows by doing them step-by-step.
+*   **Script Drafting**: Teach the assistant workflows by defining them step-by-step.
 *   [Read the User Guide](AI_COPILOT_USAGE.md).
 
 ## Standards & Compatibility

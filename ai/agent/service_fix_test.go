@@ -29,7 +29,6 @@ func TestService_ExecuteScript_StringDB(t *testing.T) {
 		t.Fatalf("Failed to open model store: %v", err)
 	}
 	script := ai.Script{
-		Name:  "test_script",
 		Steps: []ai.ScriptStep{{Type: "say", Message: "Hello"}},
 	}
 	if err := store.Save(ctx, "general", "test_script", script); err != nil {

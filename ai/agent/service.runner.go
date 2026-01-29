@@ -417,14 +417,10 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.ScriptStep, scope map[
 func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder) error {
 	w, _ := ctx.Value(ai.CtxKeyWriter).(io.Writer)
 
-	// Resolve templates in Args
+	// Resolve templates in Args (Recursive)
 	resolvedArgs := make(map[string]any)
 	for k, v := range step.Args {
-		if strVal, ok := v.(string); ok {
-			resolvedArgs[k] = s.resolveTemplate(strVal, scope, scopeMu)
-		} else {
-			resolvedArgs[k] = v
-		}
+		resolvedArgs[k] = s.resolveDeep(v, scope, scopeMu)
 	}
 
 	// Capture step for /last-tool support
@@ -1163,4 +1159,25 @@ func (s *Service) resolveTemplate(tmplStr string, scope map[string]any, scopeMu 
 		}
 	}
 	return tmplStr
+}
+
+func (s *Service) resolveDeep(v any, scope map[string]any, scopeMu *sync.RWMutex) any {
+	switch val := v.(type) {
+	case string:
+		return s.resolveTemplate(val, scope, scopeMu)
+	case map[string]any:
+		newMap := make(map[string]any)
+		for k, subVal := range val {
+			newMap[k] = s.resolveDeep(subVal, scope, scopeMu)
+		}
+		return newMap
+	case []any:
+		newSlice := make([]any, len(val))
+		for i, subVal := range val {
+			newSlice[i] = s.resolveDeep(subVal, scope, scopeMu)
+		}
+		return newSlice
+	default:
+		return v
+	}
 }

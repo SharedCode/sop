@@ -65,7 +65,7 @@ When interacting with the AI Copilot interactively (e.g., in the web console), y
 
 | Command | Usage | Description |
 | :--- | :--- | :--- |
-| `/create` | `/create <name> [goal]` | Start recording a new script draft. |
+| `/create` | `/create <name> [goal]` | Start a new script draft. |
 | `/list` | `/list [--category <cat>]` | Lists all available scripts. |
 | `/show` | `/show <name> [--json] `--category <cat>` | Displays the content of a saved script. |
 | `/save` | `/save` | Saves the current draft to the System DB. |
@@ -137,7 +137,7 @@ When you ask the AI to "Find users in California", it runs a tool. If you then t
 
 ## Workflow: Drafting & Execution
 
-We have replaced "Record & Play" with a more robust **Drafting** workflow. This allows you to construct scripts intentionally, avoiding the noise of conversation.
+We provide a robust **Drafting** workflow. This allows you to construct scripts intentionally, avoiding the noise of conversation.
 
 ### 1. Drafting a Script
 *   **Start**: `/create <name> [category] [--autosave]` initiates a draft.
@@ -151,6 +151,140 @@ We have replaced "Record & Play" with a more robust **Drafting** workflow. This 
 *   **Run**: `/run <name> [param=value ...]` executes the script.
     *   **Parameters**: Pass variables like `region=US` or `limit=10`.
     *   **Context**: The script runs in the context of your current database session unless specified otherwise.
+
+### 3. Parameterization
+SOP supports a "Concrete to Abstract" workflow. You construct scripts using real, hardcoded values (which makes them easy to test), and then "abstract" those values into variables.
+
+#### The Parameterize Command
+Use `/script parameterize` to perform a smart find-and-replace that turns hardcoded values into template variables.
+
+**Syntax:** `/script parameterize <script_name> <param_name> <concrete_value>`
+
+**Example Workflow:**
+1.  **Draft with Concrete Value**:
+    ```bash
+    # Test a command with a real name
+    /scan store="users" query={"first_name": "John"}
+    
+    # Save it as a script
+    /script save_as find_user
+    ```
+2.  **Parameterize**:
+    ```bash
+    # Replace "John" with {{.username}}
+    /script parameterize find_user username "John"
+    ```
+3.  **Run with Argument**:
+    ```bash
+    /run find_user username="Mary"
+    ```
+
+### Advanced Parameterization
+
+#### Multiple Steps
+The parameterization engine is comprehensive. When you run `/script parameterize`, it iterates through **every step** in your script sequence. If the concrete value ("John") appears in Step 1, Step 5, and Step 10, *all* of them will be updated to use the `{{.username}}` variable. This ensures consistency across complex workflows.
+
+#### Nested Scripts (Sub-Scripts) and Modular Reuse
+One of the most powerful features of SOP Scripts is composition—scripts calling other scripts. The parameterization tool handles this seamlessly by modifying the **Call Site** (the parent), avoiding any changes to the Child Script.
+
+**Why is this important?**
+If the tool modified the Child Script to use your specific variable name, that Child Script would become "polluted" and non-reusable. By modifying only the *arguments passed* by the Parent, the Child Script remains a comprehensive, generic tool.
+
+**Example: The "Send Email" Pattern (Step-by-Step)**
+
+Here is how you can wire up a native function call into a reusable script using just the chat commands.
+
+1.  **Start a Draft**:
+    `> /create NotifyBoss`
+
+2.  **Test the Action (Concrete)**:
+    First, run the native command with real data to make sure it works.
+    `> /run SendEmail recipient="boss@company.com" subject="Urgent" body="The server is unstable."`
+    *(System executes the Go function and sends the email)*
+
+3.  **Add to Script**:
+    Add the last executed command as a step in your draft.
+    `> /step`
+
+4.  **Save the Script**:
+    `> /save`
+
+5.  **Parameterize**:
+    Convert the hardcoded email into a variable.
+    `> /script parameterize NotifyBoss admin_email "boss@company.com"`
+
+6.  **Run the Reusable Script**:
+    Now you can run the script with any email address.
+    `> /run NotifyBoss admin_email="manager@company.com"`
+
+This workflow is powerful because you rely on **compiled system primitives** (like `SendEmail`) while keeping the business logic (who to notify, when, and why) in flexible, high-level scripts.
+
+#### AI-Assisted Refinement
+Alternatively, you can ask the AI to identify and create parameters for you.
+```bash
+/script refine find_user "Convert the hardcoded name into a required 'username' parameter."
+/script refine apply
+```
+
+## Case Study: Two Paths to Automation
+
+There are two primary ways to construct complex automation in SOP. Both are valid, but they serve different user personas and workflow styles.
+
+### Method 1: Bottom-Up (Parameter-First Design)
+*Best for: Engineers implementing well-understood systems or familiar patterns.*
+
+In this approach, you are building something you have done before or understand deeply. Because the requirements are clear, you can skip the prototype and jump straight to defining the abstract structure with parameters upfront.
+
+**Scenario**: User Onboarding (Create Account -> Send Email)
+
+1.  **Draft `create_account`**:
+    *   You write the script directly or draft it knowing arguments are needed.
+    *   Command: `/create create_account`
+    *   Step: `/add store=users key={{.username}} value={"role": "staff"}`
+2.  **Draft `send_email`**:
+    *   Command: `/create send_email`
+    *   Step: `/email_send to={{.address}} body="Welcome!"`
+3.  **Draft `onboard_employee`**:
+    *   Command: `/create onboard_employee`
+    *   Step: `/run_script name=create_account username={{.user_id}}`
+    *   Step: `/run_script name=send_email address={{.user_email}}`
+
+**Pros**: Cleanest code, highly modular, "Correct by construction".
+**Cons**: Slower, requires mental modeling of variables before they exist.
+
+### Method 2: Top-Down (Concrete-First Design)
+*Best for: Engineers capturing "Mature Requirements" via prototyping.*
+
+In this approach, you are exploring a new domain or clarifying end-user needs. By building the workflow interactively with **real, hardcoded data**, you and your team can validate the behavior and "nail down the details" of the logic. Once the prototype is approved, you convert it into a polished product.
+
+**Scenario**: User Onboarding
+
+1.  **Do the work (Concrete)**:
+    *   You interact with the bot to onboard a real test user, "John Doe".
+    *   `> Create an account for John Doe.` (Bot runs tool)
+    *   `> Send a welcome email to john@example.com.` (Bot runs tool)
+2.  **Save as Script**:
+    *   `> /script save_as onboard_workflow`
+    *   *State:* You now have a working, modular script. It has multiple steps. It is not a monolith. But currently, it only works for "John Doe".
+3.  **Refactoring & Parameterization (The Final Polish)**:
+    *   Now you use the AI to turn this concrete instance into a generic abstract tool.
+    *   `> /script refine onboard_workflow "Convert 'John Doe' to a parameter 'user_id' and the email to 'user_email'."`
+    *   *System Action:* The AI analyzes the script tree, finds all instances of the hardcoded strings (even inside JSON arguments), and replaces them with variables `{{.user_id}}` and `{{.user_email}}`.
+    *   **Pro Tip**: If doing this manually via `/script parameterize`, always parameterize the **most specific (longest) values first**. For example, parameterize `john@example.com` *before* `john`, otherwise you might accidentally break the email address (becoming `{{.user_id}}@example.com`).
+
+4.  **Result**:
+    *   You have the **exact same artifact** as Method 1: A modular, parameterized script ready for production.
+
+**Pros**: Extremely fast, ensures requirements are met before abstraction.
+**Cons**: Requires a final "refactoring" pass.
+
+### Convergence: Equivalent Outcomes
+It is important to note that **neither method is superior**. They are simply different entry points to the same destination.
+
+*   **Result 1 (Bottom-Up)**: A parameterized script `onboard_employee` calling valid tools.
+*   **Result 2 (Top-Down)**: A parameterized script `onboard_workflow` calling valid tools.
+
+The choice depends on the **Novelty of the Task**: Do you know exactly what to build (Method 1), or do you need to discover the perfect workflow through prototyping (Method 2)? Both lead to high-quality, reusable automation.
 
 ## Script Schema (The "Language")
 
@@ -195,7 +329,7 @@ Because scripts are stored in the persistent SystemDB, they are instantly availa
 
 ```bash
 curl -X POST http://localhost:8080/api/ai/chat \
-  -d '{"message": "/play daily_report date=2025-01-01", "agent": "sql_admin"}'
+  -d '{"message": "/run daily_report date=2025-01-01", "agent": "sql_admin"}'
 ```
 
 This turns your SOP server into a programmable application server where business logic can be defined via chat and executed via REST.
@@ -223,13 +357,79 @@ This turns your SOP server into a programmable application server where business
     ```
 2.  **Execute**:
     ```
-    /play process_users
+    /run process_users
     ```
     *The system fetches 1000 users from the B-Tree (in milliseconds), loops through them in Go, and only uses the LLM to decide VIP status.*
 
 In other words, we have turned the AI chatbot into an **IDE**, where users or data administrators can create and execute compiled program units, akin to Stored Procedures but with the reasoning power of an LLM.
 
-## Performance Best Practices
+## Native Function Call Integration
+
+SOP Scripts can invoke native Go functions that have been registered in the system. This allows scripts to perform side effects like sending emails, calling external APIs, or performing complex calculations that are best handled by compiled code.
+
+### How to Register a New API
+
+To expose a new Go function to the script engine (like `SendEmail`), follow the **Registry Pattern**.
+
+**1. Define and Register the Function**
+
+Create a Go file (e.g., `scripts/email.go`) and use the `init()` function to register your handler.
+
+```go
+package scripts
+
+import (
+    "context"
+    "fmt"
+)
+
+// 1. Register on init
+func init() {
+    Register("SendEmail", SendEmailWrapper)
+}
+
+// 2. Create the Wrapper (Adapter)
+// This adapts specific Go types to the generic script interface.
+func SendEmailWrapper(ctx context.Context, args map[string]any) (any, error) {
+    // Extract and cast arguments
+    recipient, _ := args["recipient"].(string)
+    subject, _ := args["subject"].(string)
+    body, _ := args["body"].(string)
+
+    if recipient == "" {
+        return nil, fmt.Errorf("recipient is required")
+    }
+
+    // Call your business logic
+    return nil, SendEmail(recipient, subject, body)
+}
+```
+
+**2. Result**
+The function `SendEmail` is now immediately available to the script engine. The system automatically routes `call_script` commands to this registry if no database script is found.
+
+### Example: Calling It From a Script
+
+Once registered, you can invoke it using a standard `call_script` step:
+
+```json
+{
+  "name": "notify_user",
+  "steps": [
+    {
+      "type": "call_script",
+      "name": "SendEmail",
+      "params": {
+        "recipient": "user@example.com",
+        "subject": "Hello from SOP",
+        "body": "This is a notification triggered by an AI script."
+      }
+    }
+  ]
+}
+```
+
+This functionality bridges the gap between the dynamic scripting environment and the robust backend logic.
 
 Since SOP Scripts are executed by the compiled engine (often serving high-throughput REST API requests), optimizing your scripts is critical for system scalability.
 

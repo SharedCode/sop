@@ -50,7 +50,6 @@ func TestReproScriptUpdateCorruption(t *testing.T) {
 
 	scriptName := "test_corruption"
 	script := ai.Script{
-		Name: scriptName,
 		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",

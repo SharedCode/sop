@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -74,4 +75,135 @@ func TestToolJoin_ProjectionOrder_WithFieldsString(t *testing.T) {
 	if !(regionIdx < deptIdx && deptIdx < empIdx) {
 		t.Fatalf("Projection order not preserved. Expected region then department then employee. Got: %s", res)
 	}
+}
+
+func TestToolJoin_ProjectionOrder_Complex_Wildcard(t *testing.T) {
+	// 1. Setup DB
+	ctx := context.Background()
+	dbPath := "test_proj_order_complex"
+	os.RemoveAll(dbPath)
+	defer os.RemoveAll(dbPath)
+
+	dbOpts := sop.DatabaseOptions{
+		StoresFolders: []string{dbPath},
+		CacheType:     sop.InMemory,
+	}
+	db := database.NewDatabase(dbOpts)
+	tx, _ := db.BeginTransaction(ctx, sop.ForWriting)
+
+	// 2. Populate Stores
+	users, err := sopdb.NewBtree[string, any](ctx, dbOpts, "users", tx, nil, sop.StoreOptions{Name: "users", SlotLength: 10, IsPrimitiveKey: true})
+	if err != nil {
+		t.Fatalf("Setup users failed: %v", err)
+	}
+	users.Add(ctx, "u1", map[string]any{"name": "Alice", "age": 30, "city": "NY"})
+
+	orders, err := sopdb.NewBtree[string, any](ctx, dbOpts, "orders", tx, nil, sop.StoreOptions{Name: "orders", SlotLength: 10, IsPrimitiveKey: true})
+	if err != nil {
+		t.Fatalf("Setup orders failed: %v", err)
+	}
+	orders.Add(ctx, "o1", map[string]any{"user_id": "u1", "amount": 100})
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		t.Fatalf("Setup Commit failed: %v", err)
+	}
+
+	// 3. Script Execution
+	agent := &DataAdminAgent{
+		Config: Config{ID: "test_admin"},
+		databases: map[string]sop.DatabaseOptions{
+			"dev_db": dbOpts,
+		},
+	}
+
+	// Helper
+	runScriptHelper := func(t *testing.T, script []map[string]any, name string, check func(string)) {
+		scriptJSON, _ := json.Marshal(script)
+		res, err := agent.toolExecuteScript(ctx, map[string]any{"script": string(scriptJSON)})
+		if err != nil {
+			t.Fatalf("%s: Script failed: %v", name, err)
+		}
+		t.Logf("%s Result: %s", name, res)
+		check(res)
+	}
+
+	// CASE 1: users.* first
+	script1 := []map[string]any{
+		{"op": "open_db", "args": map[string]any{"name": "dev_db"}, "result_var": "db"},
+		{"op": "begin_tx", "args": map[string]any{"database": "db", "mode": "read"}, "result_var": "tx"},
+		{"op": "open_store", "args": map[string]any{"name": "users", "transaction": "tx"}, "result_var": "users"},
+		{"op": "open_store", "args": map[string]any{"name": "orders", "transaction": "tx"}, "result_var": "orders"},
+		{"op": "scan", "args": map[string]any{"store": "orders"}, "result_var": "orders_scan"},
+		{"op": "join_right",
+			"args": map[string]any{
+				"store": "users",
+				"on":    map[string]any{"orders.user_id": "key"},
+			},
+			"input_var":  "orders_scan",
+			"result_var": "joined",
+		},
+		{"op": "project",
+			"args": map[string]any{
+				"fields": []string{"users.*", "orders.amount as Amount"},
+			},
+			"input_var":  "joined",
+			"result_var": "result",
+		},
+		{"op": "return", "args": map[string]any{"value": "result"}},
+	}
+
+	runScriptHelper(t, script1, "CASE 1 (users.*, Amount)", func(res string) {
+		// Expect 'name' (from users.*) BEFORE 'Amount'
+		// Note: 'Amount' (A) < 'name' (n) alphabetically.
+		// If sorted, Amount would be first.
+		// If preserving projection, users.* (name) should be first.
+		idxName := strings.Index(res, "\"name\"")
+		idxAmount := strings.Index(res, "\"Amount\"")
+
+		if idxName == -1 || idxAmount == -1 {
+			t.Fatalf("Missing keys: %s", res)
+		}
+		if idxName > idxAmount {
+			t.Errorf("CASE 1 FAIL: Expected 'users.*' (name) before 'Amount'. Got: %s", res)
+		}
+	})
+
+	// CASE 2: Amount first
+	script2 := []map[string]any{
+		{"op": "open_db", "args": map[string]any{"name": "dev_db"}, "result_var": "db"},
+		{"op": "begin_tx", "args": map[string]any{"database": "db", "mode": "read"}, "result_var": "tx"},
+		{"op": "open_store", "args": map[string]any{"name": "users", "transaction": "tx"}, "result_var": "users"},
+		{"op": "open_store", "args": map[string]any{"name": "orders", "transaction": "tx"}, "result_var": "orders"},
+		{"op": "scan", "args": map[string]any{"store": "orders"}, "result_var": "orders_scan"},
+		{"op": "join_right",
+			"args": map[string]any{
+				"store": "users",
+				"on":    map[string]any{"orders.user_id": "key"},
+			},
+			"input_var":  "orders_scan",
+			"result_var": "joined",
+		},
+		{"op": "project",
+			"args": map[string]any{
+				"fields": []string{"orders.amount as Amount", "users.*"},
+			},
+			"input_var":  "joined",
+			"result_var": "result",
+		},
+		{"op": "return", "args": map[string]any{"value": "result"}},
+	}
+
+	runScriptHelper(t, script2, "CASE 2 (Amount, users.*)", func(res string) {
+		// Expect 'Amount' BEFORE 'name'
+		idxName := strings.Index(res, "\"name\"")
+		idxAmount := strings.Index(res, "\"Amount\"")
+
+		if idxName == -1 || idxAmount == -1 {
+			t.Fatalf("Missing keys: %s", res)
+		}
+		if idxAmount > idxName {
+			t.Errorf("CASE 2 FAIL: Expected 'Amount' before 'users.*' (name). Got: %s", res)
+		}
+	})
 }

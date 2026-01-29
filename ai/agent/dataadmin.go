@@ -364,7 +364,7 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 								}
 								argsSchema = fmt.Sprintf("(%s)", strings.Join(params, ", "))
 							}
-							toolsDef += fmt.Sprintf("- %s: %s %s\n", script.Name, script.Description, argsSchema)
+							toolsDef += fmt.Sprintf("- %s: %s %s\n", name, script.Description, argsSchema)
 						}
 					}
 				}
@@ -441,6 +441,9 @@ IMPORTANT:
   - Use 'inner' (default) when the query implies "intersection" or strict matching (e.g. "Find orders for user X").
   - Use 'left' (Left Outer Join) when the query implies "optional" relationships (e.g. "List users and their orders, if any").
   - Use 'right' or 'full' only if explicitly requested or logically required to preserve the "right" side or "both" sides.
+- Field Naming in Scripts:
+  - NEVER use generic aliases like "l", "r", "left", "right" unless you explicitly defined them.
+  - Always use the Store Name as prefix (e.g. "users.age") or the explicit Alias defined in the 'join' step (e.g. "u.age").
 - Contextual Projection:
   - When joining entities, ALWAYS project identifying fields (e.g. Name, Email) from the parent/source entity alongside the child data in the final result.
   - Do NOT return orphaned child records without their parent's context if the user filtered by the parent.
@@ -725,7 +728,7 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 				var script ai.Script
 				if err := store.Load(ctx, "general", toolName, &script); err == nil {
 					// Found script! Execute it.
-					return a.runScript(ctx, script, args)
+					return a.runScript(ctx, toolName, script, args)
 				}
 			}
 		}
@@ -734,9 +737,9 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 	return "", fmt.Errorf("unknown tool: %s", toolName)
 }
 
-func (a *DataAdminAgent) runScript(ctx context.Context, script ai.Script, args map[string]any) (string, error) {
+func (a *DataAdminAgent) runScript(ctx context.Context, name string, script ai.Script, args map[string]any) (string, error) {
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Running script '%s'...\n", script.Name))
+	sb.WriteString(fmt.Sprintf("Running script '%s'...\n", name))
 
 	// Scope for template resolution
 	scope := make(map[string]any)

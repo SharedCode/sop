@@ -77,9 +77,9 @@ func TestService_StepCommand_UsesLastStep(t *testing.T) {
 
 	// Start a script draft
 	svc.session.CurrentScript = &ai.Script{
-		Name:  "test_script",
 		Steps: []ai.ScriptStep{},
 	}
+	svc.session.CurrentScriptName = "test_script"
 
 	// 2. Execute /step command via handleSessionCommand
 	ctx := context.Background()

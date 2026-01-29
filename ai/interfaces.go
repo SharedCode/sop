@@ -393,7 +393,6 @@ type ModelStore interface {
 
 // Script represents a recorded sequence of user interactions or a programmed script.
 type Script struct {
-	Name        string   `json:"name"`
 	Description string   `json:"description"`
 	Parameters  []string `json:"parameters"`         // Input parameters for the script
 	Database    string   `json:"database,omitempty"` // Database to run the script against

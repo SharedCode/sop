@@ -46,7 +46,7 @@ Now that we have a "function", we test it immediately.
 
 **1. Seed Test Data**
 ```text
-/tool add store="orders" key="user_123" value=[{"id": 1, "date": "2024-01-01", "total": 600}]
+/add store="orders" key="user_123" value=[{"id": 1, "date": "2024-01-01", "total": 600}]
 ```
 
 **2. Run the Script**

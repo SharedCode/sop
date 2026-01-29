@@ -24,7 +24,6 @@ func TestScript_Play_Nested_Execution(t *testing.T) {
 	// 2. Define Child Script: "echo_msg"
 	// It simply "says" the message.
 	childScript := ai.Script{
-		Name:       "echo_msg",
 		Parameters: []string{"msg"},
 		Steps: []ai.ScriptStep{
 			{
@@ -37,7 +36,6 @@ func TestScript_Play_Nested_Execution(t *testing.T) {
 	// 3. Define Parent Script: "greet_user"
 	// It takes "user" and calls "echo_msg" with "Hello {{.user}}"
 	parentScript := ai.Script{
-		Name:       "greet_user",
 		Parameters: []string{"user"},
 		Steps: []ai.ScriptStep{
 			{

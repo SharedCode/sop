@@ -455,7 +455,6 @@ func seedDefaultScripts(ctx context.Context, db *aidb.Database) {
 
 	// Create demo_loop script
 	demoLoop := ai.Script{
-		Name:        "demo_loop",
 		Description: "Demonstrates loops and variables",
 		Steps: []ai.ScriptStep{
 			{
@@ -877,7 +876,7 @@ func handleAIFeedback(w http.ResponseWriter, r *http.Request) {
 	// 4. Create Payload
 	id := uuid.New().String()
 	payload := map[string]any{
-		"id":           id,
+		// "id" removed - it is the Key
 		"msg_id":       req.MsgID,
 		"type":         req.Type,
 		"ai_content":   req.AIContent,

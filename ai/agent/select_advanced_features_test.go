@@ -232,7 +232,6 @@ func TestToolSelect_ScriptView(t *testing.T) {
 	scriptStore, _ := systemDB.OpenModelStore(ctx, "scripts", tx)
 
 	script := ai.Script{
-		Name: "active_users",
 		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",

@@ -68,7 +68,6 @@ func TestMultiDBScriptExecution(t *testing.T) {
 
 	// 3. Define Script
 	script := ai.Script{
-		Name: "multidb_script",
 		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
@@ -93,7 +92,7 @@ func TestMultiDBScriptExecution(t *testing.T) {
 	{
 		tx, _ := systemDB.BeginTransaction(ctx, sop.ForWriting)
 		store, _ := systemDB.OpenModelStore(ctx, "scripts", tx)
-		store.Save(ctx, "general", script.Name, &script)
+		store.Save(ctx, "general", "multidb_script", &script)
 		tx.Commit(ctx)
 	}
 

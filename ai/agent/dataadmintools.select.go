@@ -59,7 +59,7 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 				if err := scriptStore.Load(ctx, "general", storeName, &script); err == nil {
 					sysTx.Commit(ctx)
 					// Found Script! Execute it.
-					return a.executeScriptView(ctx, script, args)
+					return a.executeScriptView(ctx, storeName, script, args)
 				}
 			}
 			sysTx.Rollback(ctx)

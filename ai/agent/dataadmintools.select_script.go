@@ -7,16 +7,16 @@ import (
 	"github.com/sharedcode/sop/ai"
 )
 
-func (a *DataAdminAgent) executeScriptView(ctx context.Context, script ai.Script, args map[string]any) (string, error) {
+func (a *DataAdminAgent) executeScriptView(ctx context.Context, name string, script ai.Script, args map[string]any) (string, error) {
 	// For a "View" script, we expect it to have exactly one step which is a "select" command.
 	if len(script.Steps) == 0 {
-		return "", fmt.Errorf("script '%s' is empty", script.Name)
+		return "", fmt.Errorf("script '%s' is empty", name)
 	}
 
 	// Let's handle the simple case: Single Select Step
 	step := script.Steps[0]
 	if step.Type != "command" || step.Command != "select" {
-		return "", fmt.Errorf("script '%s' is not a simple select view (first step is %s:%s)", script.Name, step.Type, step.Command)
+		return "", fmt.Errorf("script '%s' is not a simple select view (first step is %s:%s)", name, step.Type, step.Command)
 	}
 
 	// Merge Args

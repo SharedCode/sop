@@ -88,7 +88,6 @@ func TestHandleExecuteScript(t *testing.T) {
 	// 3. Create a Test Script
 	ctx := context.Background()
 	script := ai.Script{
-		Name:        "test_script",
 		Description: "A test script",
 		Parameters:  []string{"name"},
 		Steps: []ai.ScriptStep{

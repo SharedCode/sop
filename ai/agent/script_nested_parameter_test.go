@@ -25,7 +25,6 @@ func TestScriptParameterization_Nested(t *testing.T) {
 	// Step 1: Call "Find Employees" with dept="Sales"
 	scriptName := "audit_department"
 	parentScript := ai.Script{
-		Name: scriptName,
 		Steps: []ai.ScriptStep{
 			{
 				Type:       "script",
@@ -41,7 +40,7 @@ func TestScriptParameterization_Nested(t *testing.T) {
 	// Save Parent Script
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
-	store.Save(ctx, "general", scriptName, parentScript)
+	store.Save(ctx, "general", scriptName, &parentScript)
 	tx.Commit(ctx)
 
 	// 3. Initialize Service

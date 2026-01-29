@@ -342,5 +342,5 @@ func (c *RightOuterJoinStoreCursor) merge(lItem any, rKey, rVal any) any {
 		}
 	}
 
-	return &OrderedMap{m: newMap, keys: newKeys}
+	return &OrderedMap{m: newMap, keys: newKeys, isImplicit: true}
 }

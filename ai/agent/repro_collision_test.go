@@ -73,6 +73,7 @@ func TestReproJoinCollision(t *testing.T) {
 			"on":    map[string]any{"department": "department", "region": "region"},
 			"store": "b",
 			"type":  "inner",
+			"alias": "b",
 		}, "input_var": "stream", "result_var": "stream"},
 		{"op": "project", "args": map[string]any{
 			"fields": []any{

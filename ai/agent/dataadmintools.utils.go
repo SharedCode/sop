@@ -263,8 +263,9 @@ func (o OrderedKey) MarshalJSON() ([]byte, error) {
 }
 
 type OrderedMap struct {
-	m    map[string]any
-	keys []string
+	m          map[string]any
+	keys       []string
+	isImplicit bool // If true, this order is an artifact of operations (like Join) and can be collapsed/flattened.
 }
 
 func (o OrderedMap) MarshalJSON() ([]byte, error) {
@@ -1301,11 +1302,13 @@ func collapseUniqueKeys(m map[string]any) map[string]any {
 		if idx := strings.Index(k, "."); idx != -1 {
 			suffix = k[idx+1:]
 		}
-		// Only count valid identifiers (simple check)
+		// Only count valid identifiers
 		if suffix != "" {
 			suffixCount[suffix]++
 		}
 	}
+
+	// fmt.Printf("DEBUG: Suffix Counts for keys %v: %v\n", getKeys(m), suffixCount)
 
 	// 2. Add keys
 	// We operate in place since flattenItem already gave us a fresh map

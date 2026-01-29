@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -19,6 +20,14 @@ import (
 // handleSessionCommand processes session-related commands like /create, /save, /step, etc.
 // Returns (response, handled, error)
 func (s *Service) handleSessionCommand(ctx context.Context, query string, db *database.Database) (string, bool, error) {
+	// /script <subcommand> (Alias support)
+	if strings.HasPrefix(query, "/script ") {
+		subQuery := strings.TrimSpace(strings.TrimPrefix(query, "/script "))
+		if subQuery != "" {
+			return s.handleSessionCommand(ctx, "/"+subQuery, db)
+		}
+	}
+
 	// Handle last-tool command (support both "last-tool" and "/last-tool")
 	if query == "last-tool" || query == "/last-tool" {
 		instructions := s.GetLastToolInstructions()
@@ -192,10 +201,10 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		}
 
 		s.session.CurrentScript = &ai.Script{
-			Name:     name,
 			Database: currentDB,
 			Steps:    []ai.ScriptStep{},
 		}
+		s.session.CurrentScriptName = name
 		s.session.CurrentScriptCategory = category
 		s.session.AutoSave = autoSave
 
@@ -278,8 +287,9 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 
 		// Optimization: If autosave is enabled, the script is already saved.
 		if s.session.AutoSave {
-			msg := fmt.Sprintf("Script '%s' is up-to-date (autosave enabled). Drafting ended.", s.session.CurrentScript.Name)
+			msg := fmt.Sprintf("Script '%s' is up-to-date (autosave enabled). Drafting ended.", s.session.CurrentScriptName)
 			s.session.CurrentScript = nil
+			s.session.CurrentScriptName = ""
 			s.session.CurrentScriptCategory = ""
 			s.session.AutoSave = false
 			return msg, true, nil
@@ -289,10 +299,11 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 			return fmt.Sprintf("Error saving script: %v", err), true, nil
 		}
 
-		msg := fmt.Sprintf("Script '%s' saved successfully with %d steps. Drafting ended.", s.session.CurrentScript.Name, len(s.session.CurrentScript.Steps))
+		msg := fmt.Sprintf("Script '%s' saved successfully with %d steps. Drafting ended.", s.session.CurrentScriptName, len(s.session.CurrentScript.Steps))
 
 		// Clear the draft after saving
 		s.session.CurrentScript = nil
+		s.session.CurrentScriptName = ""
 		s.session.CurrentScriptCategory = ""
 		s.session.AutoSave = false // Reset autosave flag
 
@@ -345,12 +356,20 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		tx.Commit(ctx)
 
 		if showJson {
-			b, _ := json.MarshalIndent(script, "", "  ")
+			// Wrap to include name in display
+			display := struct {
+				Name string `json:"name"`
+				ai.Script
+			}{
+				Name:   name,
+				Script: script,
+			}
+			b, _ := json.MarshalIndent(display, "", "  ")
 			return fmt.Sprintf("```json\n%s\n```", string(b)), true, nil
 		}
 
 		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("Script: %s (Category: %s)\n", script.Name, category))
+		sb.WriteString(fmt.Sprintf("Script: %s (Category: %s)\n", name, category))
 		if script.Description != "" {
 			sb.WriteString(fmt.Sprintf("Description: %s\n", script.Description))
 		}
@@ -396,7 +415,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 	// /parameterize <name> <param_name> <value_to_replace> [--category <cat>]
 	// Replaces hardcoded values in a script with parameters.
 	if strings.HasPrefix(query, "/parameterize ") {
-		args := strings.Fields(strings.TrimPrefix(query, "/parameterize "))
+		args := parseCLIArgs(strings.TrimPrefix(query, "/parameterize "))
 		scriptDB := s.getScriptDB()
 		if scriptDB == nil {
 			return "Error: No database configured", true, nil
@@ -501,7 +520,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 	}
 
 	if strings.HasPrefix(query, "/run ") {
-		parts := strings.Fields(strings.TrimPrefix(query, "/run "))
+		parts := parseCLIArgs(strings.TrimPrefix(query, "/run "))
 		if len(parts) == 0 {
 			return "Error: Script name required", true, nil
 		}
@@ -1213,7 +1232,7 @@ func (s *Service) saveDraft(ctx context.Context) error {
 		return fmt.Errorf("store open failed: %w", err)
 	}
 
-	if err := store.Save(ctx, s.session.CurrentScriptCategory, s.session.CurrentScript.Name, *s.session.CurrentScript); err != nil {
+	if err := store.Save(ctx, s.session.CurrentScriptCategory, s.session.CurrentScriptName, *s.session.CurrentScript); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Errorf("save failed: %w", err)
 	}
@@ -1221,4 +1240,62 @@ func (s *Service) saveDraft(ctx context.Context) error {
 		return fmt.Errorf("commit failed: %w", err)
 	}
 	return nil
+}
+
+// parseCLIArgs parses a command line string into arguments, respecting quotes.
+func parseCLIArgs(input string) []string {
+	var args []string
+	var current strings.Builder
+	var inQuote rune
+	var escaped bool
+	var inToken bool
+
+	for _, r := range input {
+		if escaped {
+			current.WriteRune(r)
+			escaped = false
+			inToken = true
+			continue
+		}
+
+		if r == '\\' {
+			escaped = true
+			inToken = true
+			continue
+		}
+
+		if inQuote != 0 {
+			if r == inQuote {
+				inQuote = 0
+			} else {
+				current.WriteRune(r)
+			}
+			inToken = true
+			continue
+		}
+
+		if r == '"' || r == '\'' {
+			inQuote = r
+			inToken = true
+			continue
+		}
+
+		if unicode.IsSpace(r) {
+			if inToken {
+				args = append(args, current.String())
+				current.Reset()
+				inToken = false
+			}
+			continue
+		}
+
+		current.WriteRune(r)
+		inToken = true
+	}
+
+	if inToken {
+		args = append(args, current.String())
+	}
+
+	return args
 }

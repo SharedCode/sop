@@ -15,9 +15,9 @@ Create a new Maven project and add the `sop-java` dependency (assuming you have 
 ```xml
 <dependencies>
     <dependency>
-        <groupId>com.sharedcode</groupId>
-        <artifactId>sop-java</artifactId>
-        <version>1.0-SNAPSHOT</version>
+        <groupId>io.github.sharedcode</groupId>
+        <artifactId>sop4j</artifactId>
+        <version>2.3.3</version>
     </dependency>
 </dependencies>
 ```

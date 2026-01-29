@@ -11,7 +11,7 @@ At its core, SOP is not just a traditional code library; it is a **Distributed C
 Packed inside the library is everything you need to build next-generation distributed systems:
 *   **Swarm Computing Engine**: A framework for distributed coordination, allowing applications to act as coherent parts of a greater whole.
 *   **Polyglot Storage Engine**: An ACID-compliant B-Tree storage system with Caching and Erasure Coding, optimized for performance. [Read the Architecture Whitepaper](SOP_ARCHITECTURE_WHITEPAPER.md).
-*   **AI Scripting & Computing Engine**: A versatile runtime that allows for creating intelligent, self-correcting workflows.
+*   **AI Scripting & Computing Engine**: A versatile runtime that allows for creating intelligent, self-correcting workflows. See [Platform Tools & Relational Intelligence](SOP_PLATFORM_TOOLS.md).
 
 ## Installation & Distribution
 
@@ -304,7 +304,7 @@ The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data 
 
 *   **Vector Store**: Native support for storing and searching high-dimensional vectors.
 *   **RAG Agents**: Build Retrieval-Augmented Generation applications with ease.
-*   **Scripts**: A functional AI runtime for recording and replaying complex workflows.
+*   **Scripts**: A functional AI runtime for drafting and executing complex workflows.
 
 See [ai/README.md](ai/README.md) for a deep dive into the AI capabilities.
 

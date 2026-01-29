@@ -1704,22 +1704,11 @@
         return `
             <div id="value-form" class="script-view-container">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
-                        <label class="form-label" style="margin-bottom: 0;">Name</label>
-                        <input type="text" class="value-input form-input" data-key="name" value="${escapeHtml(name)}" oninput="document.getElementById('btn-save').disabled=false;" style="flex: 1;">
-                    </div>
-                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                    <div class="form-group" style="display: flex; flex-direction: row; align-items: center; gap: 8px;">
                         <label class="form-label" style="margin-bottom: 0;" title="Description">Desc</label>
                         <input type="text" class="value-input form-input" data-key="description" value="${escapeHtml(desc)}" oninput="document.getElementById('btn-save').disabled=false;" style="flex: 1;">
                     </div>
-                </div>
-                
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 0px;">
-                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
-                         <label class="form-label" style="margin-bottom: 0;">Category</label>
-                         <input type="text" class="value-input form-input" data-key="category" value="${escapeHtml(cat)}" oninput="document.getElementById('btn-save').disabled=false;" style="flex: 1;">
-                    </div>
-                    <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
+                    <div class="form-group" style="display: flex; flex-direction: row; align-items: center; gap: 8px;">
                          <label class="form-label" style="margin-bottom: 0;">Context</label>
                          <select class="value-input form-input" data-key="database" onchange="document.getElementById('btn-save').disabled=false;" style="flex: 1;">
                             ${dbOptions}
@@ -2105,10 +2094,14 @@
     }
 
     async function runScriptInEditor() {
-        const nameInput = document.querySelector('input[data-key="name"]');
-        const catInput = document.querySelector('input[data-key="category"]');
-        const name = nameInput ? nameInput.value : '';
-        const category = catInput ? catInput.value : 'general';
+        let name = '';
+        let category = 'general';
+
+        if (currentItemKey && typeof currentItemKey === 'object') {
+            // Check for both capitalized (Go default) and lowercase (custom JSON tag) property names
+            name = currentItemKey.Name || currentItemKey.name || '';
+            category = currentItemKey.Category || currentItemKey.category || 'general';
+        }
         
         if (!name) {
             showAlert("Script must have a name to run.");
@@ -4335,13 +4328,56 @@
 
     function handleChatKeydown(e) {
         const input = document.getElementById('chat-input');
-        
-        // Custom Handler for Cmd+Left to go to start of text (User Request)
-        if (e.key === 'ArrowLeft' && e.metaKey) {
-            e.preventDefault();
-            input.setSelectionRange(0, 0);
-            input.scrollTop = 0;
-            return;
+
+        // --- CUSTOM NAVIGATION (Cmd/Ctrl + Arrows) ---
+        // Supports macOS (Meta/Command) and Windows/Linux (Control)
+        if (e.metaKey || e.ctrlKey) {
+            const val = input.value;
+            const start = input.selectionStart;
+
+            if (e.key === 'ArrowUp') {
+                // Command+Up: Go to Top
+                e.preventDefault();
+                input.setSelectionRange(0, 0);
+                input.scrollTop = 0;
+                return;
+            }
+            if (e.key === 'ArrowDown') {
+                // Command+Down: Go to Bottom
+                e.preventDefault();
+                input.setSelectionRange(val.length, val.length);
+                input.scrollTop = input.scrollHeight;
+                return;
+            }
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                // Find start of current line (look backward from cursor-1)
+                const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+                if (start > lineStart) {
+                    // Go to start of line
+                    input.setSelectionRange(lineStart, lineStart);
+                } else {
+                    // Already at start of line -> Go to Top
+                    input.setSelectionRange(0, 0);
+                    input.scrollTop = 0;
+                }
+                return;
+            }
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                // Find end of current line
+                let lineEnd = val.indexOf('\n', start);
+                if (lineEnd === -1) lineEnd = val.length;
+                if (start < lineEnd) {
+                    // Go to end of line
+                    input.setSelectionRange(lineEnd, lineEnd);
+                } else {
+                    // Already at end of line -> Go to Bottom
+                    input.setSelectionRange(val.length, val.length);
+                    input.scrollTop = input.scrollHeight;
+                }
+                return;
+            }
         }
 
         if (e.key === 'Enter' && !e.shiftKey) {
@@ -4853,12 +4889,15 @@
         checkImports(keySample);
         checkImports(valSample);
         
-        if (needsTime || needsUUID) {
-            code += `import (\n`;
-            if (needsTime) code += `    "time"\n`;
-            if (needsUUID) code += `    "github.com/google/uuid"\n`;
-            code += `)\n\n`;
-        }
+        code += `import (\n`;
+        code += `    "context"\n`;
+        code += `    "fmt"\n`;
+        if (needsTime) code += `    "time"\n`;
+        if (needsUUID) code += `    "github.com/google/uuid"\n`;
+        code += `    "github.com/sharedcode/sop"\n`;
+        code += `    "github.com/sharedcode/sop/btree"\n`;
+        code += `    "github.com/sharedcode/sop/database"\n`;
+        code += `)\n\n`;
 
         if (mode === 'struct') {
             // Key Struct
@@ -4882,6 +4921,35 @@
             if (valSample) code += `    "sampleValue": ${JSON.stringify(valSample)},\n`;
             code += `}\n`;
         }
+
+        if (mode === 'struct') {
+            code += `// Usage Example:\n`;
+            code += `func example() {\n`;
+            code += `    // 1. Configuration\n`;
+            code += `    opts := sop.DatabaseOptions{\n`;
+            code += `        Type:          sop.Standalone,\n`;
+            code += `        StoresFolders: []string{"./db_data"},\n`;
+            code += `    }\n\n`;
+            code += `    // 2. Begin Transaction\n`;
+            code += `    ctx := context.Background()\n`;
+            code += `    // Note: You must open the transaction on the database manager.\n`;
+            code += `    trans, err := database.BeginTransaction(ctx, opts, sop.ForReading)\n`;
+            code += `    if err != nil {\n`;
+            code += `        panic(err)\n`;
+            code += `    }\n`;
+            code += `    defer trans.Rollback(ctx)\n\n`;
+            code += `    // 3. Open Store\n`;
+            code += `    // database.OpenBtree ensures type-safe access using the generated Key/Value structs.\n`;
+            code += `    store, err := database.OpenBtree[${name}Key, ${name}Value](ctx, opts, "${currentStore}", trans, nil)\n`;
+            code += `    if err != nil {\n`;
+            code += `        panic(err)\n`;
+            code += `    }\n\n`;
+            code += `    // 4. Use Store\n`;
+            code += `    // store.FindOne(ctx, key, true)\n`;
+            code += `    fmt.Printf("Store opened with %d items.\\n", store.Count())\n`;
+            code += `}\n`;
+        }
+
         return code;
     }
 

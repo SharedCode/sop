@@ -24,7 +24,6 @@ func TestScript_Play_ArgumentParsing_Correct(t *testing.T) {
 	ctx := context.Background()
 	scriptName := "test_script_args"
 	script := ai.Script{
-		Name:       scriptName,
 		Parameters: []string{"table", "role", "limit"},
 		Steps: []ai.ScriptStep{
 			{
@@ -37,7 +36,7 @@ func TestScript_Play_ArgumentParsing_Correct(t *testing.T) {
 	// Save Script
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
-	store.Save(ctx, "general", scriptName, script)
+	store.Save(ctx, "general", scriptName, &script)
 	tx.Commit(ctx)
 
 	// 3. Initialize Service

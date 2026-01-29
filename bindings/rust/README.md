@@ -17,7 +17,7 @@ SOP includes a powerful **Data Management Suite** that provides **full CRUD** ca
 *   **AI Copilot**: Integrated directly into the UI, the AI Copilot can help you write queries, explain data structures, and even generate code snippets.
 *   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
 
-To launch the Data Manager, you can use the Go toolchain or look for provided binaries:
+To launch the Data Manager, download the all-in-one single-file installer from [SOP Releases](https://github.com/SharedCode/sop/releases). Alternatively, you can use the Go toolchain:
 
 ```bash
 # From the root of the repository
@@ -33,6 +33,43 @@ The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data 
 *   **Scripts**: A functional AI runtime for drafting, refining, and executing complex workflows (Hybrid Execution Model).
 
 See [ai/README.md](../../ai/README.md) for a deep dive into the AI capabilities.
+
+## Executing SOP Scripts
+
+SOP Scripts allow you to execute complex workflows on the server side, similar to Stored Procedures.
+Currently, scripts are executed via the SOP HTTP API Server.
+
+Example using `reqwest`:
+
+```rust
+use std::collections::HashMap;
+use serde_json::json;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let client = reqwest::Client::new();
+    
+    let args = json!({
+        "user_id": 999
+    });
+
+    let body = json!({
+        "name": "user_audit",
+        "category": "general",
+        "args": args
+    });
+
+    let res = client.post("http://localhost:8080/api/scripts/execute")
+        .json(&body)
+        .send()
+        .await?;
+
+    let text = res.text().await?;
+    println!("Response: {}", text);
+
+    Ok(())
+}
+```
 
 ## Prerequisites
 

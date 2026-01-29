@@ -14,7 +14,9 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/model"
 	"github.com/sharedcode/sop/jsondb"
+	"github.com/sharedcode/sop/scripts"
 )
 
 // Database interface for script execution
@@ -553,23 +555,8 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 
 		// If last instruction is specifically a "return" or "output" op (hypothetically)
 		if lastInstr.Op == "return" {
-			// If arguments has "value", return it
-			if val, ok := lastInstr.Args["value"]; ok {
-				// We need to resolve the value if it's a variable reference
-				if sVal, ok := val.(string); ok && strings.HasPrefix(sVal, "@") {
-					varName := strings.TrimPrefix(sVal, "@") // Basic variable resolution
-					// Handle @variable syntax slightly better if needed, but Engine does it.
-					// However, at this point, we are outside engine execution loop.
-					// The engine should have surely resolved it if we had a return op.
-					// But our engine is simple: it executes list of steps.
-
-					// Let's rely on Context variables.
-					if v, found := scriptCtx.Variables[varName]; found {
-						return serializeResult(ctx, v)
-					}
-				}
-				return serializeResult(ctx, val)
-			}
+			// The return op already resolved the value and stored it in LastResult
+			return serializeResult(ctx, engine.LastResult)
 		}
 
 		if lastInstr.ResultVar != "" {
@@ -873,12 +860,21 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 	case "return":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			if val, ok := args["value"]; ok {
-				// If return value is a variable name, resolve it using ScriptContext
+				// HISTORICAL NOTE (Jan 2026):
+				// We must resolve variables here because the caller (toolExecuteScript) no longer
+				// performs post-execution unpacking. If we simply return 'val', we risk returning
+				// the literal string "@my_var" instead of the JSON object it points to.
+				// This logic ensures parity with how arguments are resolved in other operations.
+
+				// Resolve variable using engine's standardized name resolution (handles @ prefixes etc)
 				if strVal, ok := val.(string); ok && e.Context != nil && e.Context.Variables != nil {
-					if v, found := e.Context.Variables[strVal]; found {
+					varName := e.resolveVarName(strVal)
+					// If the resolved name exists in variables, return the UNWRAPPED object.
+					if v, found := e.Context.Variables[varName]; found {
 						return v, nil
 					}
 				}
+				// If not a variable, return the literal value.
 				return val, nil
 			}
 			return nil, nil
@@ -889,6 +885,8 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 }
 
 func serializeResult(ctx context.Context, val any) (string, error) {
+	alreadyCollapsed := false
+
 	if cursor, ok := val.(ScriptCursor); ok {
 		var results []any
 		defer cursor.Close()
@@ -914,14 +912,30 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 			if !ok {
 				break
 			}
-
 			var itemMap map[string]any
-			if m, ok := itemObj.(map[string]any); ok {
-				itemMap = m
-			} else if om, ok := itemObj.(*OrderedMap); ok && om != nil {
-				itemMap = om.m
+			// Preserve OrderedMap structure for explicit projections
+			isOrdered := false
+			if om, ok := itemObj.(*OrderedMap); ok {
+				if !om.isImplicit {
+					isOrdered = true
+				} else {
+					itemMap = om.m
+				}
 			} else if om, ok := itemObj.(OrderedMap); ok {
-				itemMap = om.m
+				if !om.isImplicit {
+					isOrdered = true
+				} else {
+					itemMap = om.m
+				}
+			}
+
+			if !isOrdered {
+				if m, ok := itemObj.(map[string]any); ok {
+					itemMap = m
+				}
+			} else {
+				// Ensure itemMap is nil so subsequent logic skips it
+				itemMap = nil
 			}
 
 			// Friendly Output Strategy:
@@ -960,26 +974,56 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 		}
 
 		val = results
+		alreadyCollapsed = true
 	}
 
-	// Friendly Output: Collapse unique keys for cleaner JSON
-	if list, ok := val.([]any); ok {
-		for i, itemObj := range list {
-			var itemMap map[string]any
-			if m, ok := itemObj.(map[string]any); ok {
-				itemMap = m
-			} else if om, ok := itemObj.(*OrderedMap); ok && om != nil {
-				itemMap = om.m
-			} else if om, ok := itemObj.(OrderedMap); ok {
-				itemMap = om.m
+	if !alreadyCollapsed {
+		// Friendly Output: Collapse unique keys for cleaner JSON
+		var list []any
+		if l, ok := val.([]any); ok {
+			list = l
+		} else if lMap, ok := val.([]map[string]any); ok {
+			list = make([]any, len(lMap))
+			for i, v := range lMap {
+				list[i] = v
 			}
+			val = list
+		}
 
-			if itemMap != nil {
-				// collapseUniqueKeys modifies in-place
-				collapsed := collapseUniqueKeys(itemMap)
-				// Replace with vanilla map to ensure JSON marshaling uses the new keys (and skips deleted ones)
-				// This sidesteps checking if it was OrderedMap with stale keys.
-				list[i] = collapsed
+		if list != nil {
+			for i, itemObj := range list {
+				var itemMap map[string]any
+				// Preserve OrderedMap structure
+				isOrdered := false
+				if om, ok := itemObj.(*OrderedMap); ok {
+					if !om.isImplicit {
+						isOrdered = true
+					} else {
+						itemMap = om.m
+					}
+				} else if om, ok := itemObj.(OrderedMap); ok {
+					if !om.isImplicit {
+						isOrdered = true
+					} else {
+						itemMap = om.m
+					}
+				}
+
+				if !isOrdered {
+					if itemMap == nil {
+						if m, ok := itemObj.(map[string]any); ok {
+							itemMap = m
+						}
+					}
+				}
+
+				if itemMap != nil {
+					// collapseUniqueKeys modifies in-place
+					collapsed := collapseUniqueKeys(itemMap)
+					// Replace with vanilla map to ensure JSON marshaling uses the new keys (and skips deleted ones)
+					// This sidesteps checking if it was OrderedMap with stale keys.
+					list[i] = collapsed
+				}
 			}
 		}
 	}
@@ -1482,8 +1526,8 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 
 		if filter != nil {
 			// Debugging schema validation issues
-			fmt.Printf("DEBUG: Scan Filter Check. ItemType=%T Item=%+v\n", itemAny, item)
-			fmt.Printf("DEBUG: Scan Filter=%+v\n", filter)
+			// fmt.Printf("DEBUG: Scan Filter Check. ItemType=%T Item=%+v\n", itemAny, item)
+			// fmt.Printf("DEBUG: Scan Filter=%+v\n", filter)
 
 			match, err := e.evaluateCondition(item, filter.(map[string]any))
 			if err != nil {
@@ -1875,6 +1919,38 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		}
 	}
 
+	// Rewriting ON keys if they use variable names referring to Stores
+	// This maps user aliases (variables) to system aliases (Store Names) expected in the data
+	if on != nil {
+		newOn := make(map[string]any)
+		changed := false
+		for k, v := range on {
+			parts := strings.SplitN(k, ".", 2)
+			if len(parts) == 2 {
+				prefix := parts[0]
+				if val, ok := e.Context.Variables[prefix]; ok {
+					// Variable exists
+					var realName string
+					if s, ok := val.(jsondb.StoreAccessor); ok {
+						realName = s.GetStoreInfo().Name
+					}
+
+					// If we found a real store name and it differs from the prefix
+					if realName != "" && realName != prefix {
+						newKey := realName + "." + parts[1]
+						newOn[newKey] = v
+						changed = true
+						continue
+					}
+				}
+			}
+			newOn[k] = v
+		}
+		if changed {
+			on = newOn
+		}
+	}
+
 	// Prepare Left Cursor
 	var leftCursor ScriptCursor
 	if lc, ok := input.(ScriptCursor); ok {
@@ -1897,13 +1973,20 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	// Determine Aliases
 	rightAlias, _ := args["right_alias"].(string)
 	if rightAlias == "" {
-		if a, ok := args["store"].(string); ok && a != "" {
+		rightAlias, _ = args["alias"].(string)
+	}
+	if rightAlias == "" {
+		// Fix: Prefer Store Name as alias over variable name to support natural projection (e.g. "users.*")
+		// If we are joining a Store, the default alias should be the Store Name (e.g. "users"), not the variable name ("users_store").
+		if isRightStore && rightStore != nil {
+			rightAlias = rightStore.GetStoreInfo().Name
+			if rightAlias == "" {
+				rightAlias = rightVar
+			}
+		} else if a, ok := args["store"].(string); ok && a != "" {
 			rightAlias = strings.TrimPrefix(a, "@")
 		} else if a, ok := args["right_dataset"].(string); ok && a != "" {
 			rightAlias = strings.TrimPrefix(a, "@")
-		} else if isRightStore && rightStore != nil {
-			// Prefer Store Name as alias over variable name to support natural projection (e.g. "users.*")
-			rightAlias = rightStore.GetStoreInfo().Name
 		} else {
 			rightAlias = rightVar
 		}
@@ -2499,6 +2582,14 @@ func (e *ScriptEngine) stageUpdate(ctx context.Context, input []any, store jsond
 		}
 
 		key := item["key"]
+		if key == nil {
+			// Fallback: Check for Aliased Key (e.g. "users.key") using Store Info
+			// This handles cases where input comes from a Join.
+			if info := store.GetStoreInfo(); info.Name != "" {
+				key = item[info.Name+".key"]
+			}
+		}
+
 		// Merge values
 		currentVal := item["value"]
 		var newVal any
@@ -2532,6 +2623,13 @@ func (e *ScriptEngine) stageDelete(ctx context.Context, input []any, store jsond
 
 	for _, itemObj := range input {
 		key := getField(itemObj, "key")
+		if key == nil {
+			// Fallback: Check for Aliased Key (e.g. "users.key") using Store Info
+			if info := store.GetStoreInfo(); info.Name != "" {
+				key = getField(itemObj, info.Name+".key")
+			}
+		}
+
 		if _, err := store.Remove(ctx, key); err != nil {
 			return nil, err
 		}
@@ -2806,6 +2904,12 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 		return nil, fmt.Errorf("script name required")
 	}
 
+	// Check Native Scripts Registry first
+	if fn, found := scripts.Get(scriptName); found {
+		params, _ := args["params"].(map[string]any)
+		return fn(ctx, params)
+	}
+
 	if a.systemDB == nil {
 		return nil, fmt.Errorf("system database not available")
 	}
@@ -2821,12 +2925,17 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 		return nil, fmt.Errorf("failed to open scripts store: %v", err)
 	}
 
-	found, err := funcStore.FindOne(ctx, scriptName, true)
+	category, _ := args["category"].(string)
+	if category == "" {
+		category = "user"
+	}
+
+	found, err := funcStore.FindOne(ctx, model.ModelKey{Category: category, Name: scriptName}, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to find script: %v", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("script '%s' not found", scriptName)
+		return nil, fmt.Errorf("script '%s/%s' not found", category, scriptName)
 	}
 
 	val, err := funcStore.GetCurrentValue(ctx)
@@ -2946,7 +3055,7 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 func matchesMap(item any, condition map[string]any) bool {
 	for k, v := range condition {
 		itemVal := getField(item, k)
-		fmt.Printf("DEBUG: matchesMap Check Key=%s, CondVal=%v, ItemVal=%v\n", k, v, itemVal)
+		// fmt.Printf("DEBUG: matchesMap Check Key=%s, CondVal=%v, ItemVal=%v\n", k, v, itemVal)
 
 		// Check for operators map
 		if ops, ok := v.(map[string]any); ok {
@@ -3226,9 +3335,17 @@ func sanitizeScript(script []ScriptInstruction) []ScriptInstruction {
 
 		// 2. JOIN Op: Normalize "type"
 		if instr.Op == "join" || instr.Op == "join_right" {
+			// Rewrite Op to standard "join"
+			// If it was explicitly "join_right", force type to right_outer (unless overridden)
+			isExplicitRight := instr.Op == "join_right"
+			instr.Op = "join"
+
 			if t, ok := instr.Args["type"].(string); ok {
 				instr.Args["type"] = strings.ToLower(strings.TrimSpace(t))
+			} else if isExplicitRight {
+				instr.Args["type"] = "right_outer"
 			}
+
 			// Default to inner if missing
 			if _, ok := instr.Args["type"]; !ok {
 				instr.Args["type"] = "inner"
@@ -3280,6 +3397,37 @@ func sanitizeScript(script []ScriptInstruction) []ScriptInstruction {
 						}
 					}
 				}
+			}
+
+			// 4. Normalize "on" clause (Casing)
+			// LLMs often output "Value" or "Key" (Title Case) instead of "value" or "key".
+			// We normalize them here to lowercase so that:
+			// 1. Direct lookups work (if field is literally "value")
+			// 2. Reverse Alias lookups work (getField checks suffix ".value" which is case-sensitive)
+			if onMap, ok := instr.Args["on"].(map[string]any); ok {
+				newOn := make(map[string]any)
+				for k, v := range onMap {
+					// Fix Left Field (Key in the map)
+					newK := k
+					// We only touch "Key" and "Value" specifically, to avoid breaking case-sensitive custom fields.
+					if strings.EqualFold(k, "Value") {
+						newK = "value"
+					} else if strings.EqualFold(k, "Key") {
+						newK = "key"
+					}
+
+					// Fix Right Field (Value in the map)
+					newV := v
+					if vStr, ok := v.(string); ok {
+						if strings.EqualFold(vStr, "Value") {
+							newV = "value"
+						} else if strings.EqualFold(vStr, "Key") {
+							newV = "key"
+						}
+					}
+					newOn[newK] = newV
+				}
+				instr.Args["on"] = newOn
 			}
 		}
 	}

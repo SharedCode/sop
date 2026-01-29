@@ -18,7 +18,7 @@ SOP includes a powerful **Data Management Suite** that provides **full CRUD** ca
     > **Note**: The AI Copilot requires an LLM API Key (e.g., Google Gemini). Set the `SOP_LLM_API_KEY` environment variable before running the server.
 *   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
 
-To launch the Data Manager, you can use the Go toolchain or look for provided binaries:
+To launch the Data Manager, download the all-in-one single-file installer from [SOP Releases](https://github.com/SharedCode/sop/releases). Alternatively, you can use the Go toolchain:
 
 ```bash
 # From the root of the repository
@@ -34,6 +34,36 @@ The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data 
 *   **Scripts**: A functional AI runtime for drafting, refining, and executing complex workflows (Hybrid Execution Model).
 
 See [ai/README.md](../../ai/README.md) for a deep dive into the AI capabilities.
+
+## Executing SOP Scripts
+
+SOP Scripts allow you to execute complex workflows on the server side, similar to Stored Procedures.
+Currently, scripts are executed via the SOP HTTP API Server.
+
+Example:
+
+```java
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
+public class CallScript {
+    public static void main(String[] args) throws Exception {
+        String jsonBody = "{\"name\":\"user_audit\", \"category\":\"general\", \"args\":{\"user_id\":999}}";
+        
+        HttpClient client = HttpClient.newHttpClient();
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:8080/api/scripts/execute"))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+                .build();
+
+        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        System.out.println(response.body());
+    }
+}
+```
 
 ## Prerequisites
 

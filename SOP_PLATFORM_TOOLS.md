@@ -95,7 +95,89 @@ The Data Manager is a complete data management suite that empowers developers an
 Under the hood, we've exposed powerful new API capabilities that leverage the storage engine directly:
 *   **Advanced Joins:** Optimized `join` operations that function effectively even on non-indexed fields (though indexes are preferred).
 *   **Complex Filtering:** Support for nested conditions and advanced operators (`$in`, `$gt`, etc.) within the scripting layer.
-*   **Scripting Engine:** A Turing-complete JSON-based scripting language that allows the creation of complex data pipelines (Filter -> Project -> Join -> Sort) that run close to the data.
+*   **Query Explain Plans:** integrated `explain_join` tool to analyze and predict the execution strategy (Index Scan vs Full Scan) for join operations, providing transparency into performance.
+*   **Scripting Engine**: A Turing-complete JSON-based scripting language that allows the creation of complex data pipelines (Filter -> Project -> Join -> Sort) that run close to the data. Use the `POST /api/scripts/execute` endpoint to invoke these scripts from any language (Python, C#, Java, etc.), treating them like server-side Stored Procedures.
+*   **Intermediate Staging (Results Caching)**: Scripts can dynamically create "Temporary B-Trees" (using `open_store` with `create: true, transient: true`) to store the results of multi-stage queries. This allows you to materialize the output of a complex `join`, index it on the fly, and use it as a highly efficient source for subsequent `select` operations—mimicking the "Create Temp Table" pattern in SQL optimization.
+
+#### Example: Optimization with Temporary Stores
+This pattern is useful when you need to perform multiple heavy aggregations (e.g., `SUM`, `COUNT`) on a dataset and then join those results with another table. Instead of running the aggregation twice or doing a nested loop, you materialize it once.
+
+```json
+[
+  // 1. Create a Transient B-Tree (Automatically destroyed after script ends)
+  // We index by 'user_id' to enable fast O(1) lookups in the subsequent join.
+  { 
+    "op": "open_store", 
+    "args": { 
+      "name": "temp_high_spenders", 
+      "create": true, 
+      "transient": true, 
+      "key": "user_id", 
+      "value": "total_amount" 
+    } 
+  },
+
+  // 2. Select & Aggregate into the Temp Store
+  // We scan 'orders', aggregate by user, and filter.
+  // The 'save_to' argument directs the results into our B-Tree instead of returning them.
+  { 
+    "op": "select", 
+    "args": { 
+      "store": "orders", 
+      "fields": ["user_id", "sum(amount) as total_amount"], 
+      "group_by": "user_id",
+      "having": "total_amount > 1000",
+      "save_to": "temp_high_spenders"
+    } 
+  },
+
+  // 3. High-Performance Join
+  // Now we join 'users' with our small, indexed temp store.
+  // This uses an 'Index Join' strategy (O(N*logM)) which is significantly faster 
+  // than a memory-based Hash Join for large datasets.
+  { 
+    "op": "join", 
+    "args": { 
+      "left_store": "users",
+      "right_store": "temp_high_spenders", 
+      "on": {"id": "user_id"},
+      "fields": ["users.name", "users.email", "temp_high_spenders.total_amount"]
+    } 
+  }
+]
+```
+
+### Automatic Cleanup
+When using `transient: true`, the SOP Script Engine automatically tracks the lifecycle of the store. Upon the successful completion (or failure) of the script:
+1.  The B-Tree is closed.
+2.  The backing storage files (if any) are unlinked/deleted.
+3.  The store entry is removed from the Registry.
+
+This ensures that "scratchpad" data never pollutes the long-term storage or leaks capacity over time.
+
+## The Engine Evolution: Relational Intelligence
+
+SOP is not just a NoSQL store; it is a **progression from the RDBMS**.
+
+For decades, the "Relational Model" has been synonymous with the "SQL Table"—a rigid structure that bundles data storage, indexing, strict Foreign Key enforcement, and Triggers into a single black box. While convenient, these features often attribute to massive slowdowns in modern, high-throughput applications.
+
+SOP "cuts" the relational model to its core essence, removing the "Table" abstraction to expose the raw power of the **B-Tree**. By decoupling the data structure from the heavy constraints of a traditional RDBMS, we unlock innovations that were previously impossible.
+
+### 1. Removing the "Table" Bottleneck
+In an RDBMS, the B-Tree is an implementation detail hidden behind the table. In SOP, the B-Tree is the **first-class citizen**. This allows specific tuning that RDBMS engines hide from you:
+*   **Exposed `SlotLength`**: You have granular control over page allocations, allowing you to optimize memory usage and disk layouts based on the specific shape of your data.
+*   **Value Storage Control**: SOP exposes the `IsValueDataInNodeSegment` flag, allowing optimization based on use-case:
+        *   *Embed Values*: Keep small values inside the B-Tree node for single-seek data retrieval (fewer I/O ops).
+        *   *Separate Values*: Store heavy data in a separate segment. This keeps the B-Tree lightweight, enabling blazing fast key scans and filtering without polluting the CPU cache with heavy payloads.
+
+### 2. Built-in "Software RAID" & Chunking
+Building on top of these structural optimizations, SOP introduces a storage layer designed for massive scale:
+*   **Smart Chunking**: Large values are automatically chunked based on the B-Tree configuration knob.
+*   **Erasure Coding (Software RAID 5/6)**: Redundancy is handled by the software, **striping & redundancy** are achieved optimally together—a feat rarely possible in previous generations. SOP stripes data chunks across drives or nodes with configurable parity, eliminating the need for expensive hardware RAID controllers while providing higher durability than simple replication.
+
+This architecture is designed specifically to innovate beyond the mechanical limitations of today's RDBMS and first-generation NoSQL engines.
+
+> **A Hint for Database Vendors**: SOP is built to be the high-performance engine *under* your hood. We invite RDBMS and NoSQL vendors to adopt SOP as their pluggable storage layer. By building on top of SOP, you instantly gain Swarm Intelligence, Erasure Coding, and robust ACID transactions—allowing you to focus on your unique query languages and API features without reinventing the storage wheel.
 
 ## Deployment Made Simple
 *   **Zero-Config Bundle**: Get started immediately with a pre-configured release bundle containing the Data Manager, Server, and CLI tools.

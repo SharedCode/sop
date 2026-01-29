@@ -36,6 +36,8 @@ The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data 
 
 > **Important**: To use the AI Copilot features (e.g., in the Data Manager), you must configure your LLM API Key (e.g., Google Gemini). Set the `SOP_LLM_API_KEY` environment variable or add `"llm_api_key"` to your `config.json`. See the [Main README](../../README.md#ai-copilot-configuration) for details.
 
+For comprehensive details on the **SOP Platform Tools** (Scripting, Explain Plans, Self-Correcting Agents), please see the [Platform Tools Documentation](../../SOP_PLATFORM_TOOLS.md).
+
 See [ai/README.md](../../ai/README.md) for a deep dive into the AI capabilities.
 
 ## Documentation
@@ -64,6 +66,8 @@ To launch the Data Manager simply run:
 ```bash
 sop-httpserver
 ```
+
+Or download the all-in-one single-file installer (no Python/pip required) from [SOP Releases](https://github.com/SharedCode/sop/releases).
 
 ### Key Capabilities
 
@@ -170,20 +174,29 @@ You can make scripts dynamic by using parameters.
     /script run user_audit user_id=456
     ```
 
-### 5. Remote Execution
-You can trigger these scripts from your Python code via the REST API:
+### 5. Remote Execution (Stored Procedure Style)
+You can trigger these scripts from your Python code via the REST API. This is similar to calling a Stored Procedure where you pass the procedure name and arguments.
 
 ```python
 import requests
 
+# Execute the 'user_audit' script with parameters
 response = requests.post(
-    "http://localhost:8080/api/ai/chat",
+    "http://localhost:8080/api/scripts/execute",
     json={
-        "message": "/script run user_audit user_id=999",
-        "agent": "sql_admin"
+        "name": "user_audit",
+        "category": "general",
+        "args": {
+            "user_id": 999
+        }
     }
 )
-print(response.json())
+
+# The response is a JSON list of execution steps and results
+results = response.json()
+for step in results:
+    if "final_output" in step:
+        print("Result:", step["final_output"])
 ```
 
 ## Generating Sample Data

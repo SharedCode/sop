@@ -33,6 +33,39 @@ The `execute_script` tool accepts a JSON array of operations. This is the "Assem
     *   `join_right`: Performs a stream-based right outer join (returns combined objects).
     *   `project`: Filters and renames fields (CRITICAL for column selection).
     *   `limit`: Restricts the number of results.
+    *   `return`: Resolves a variable or literal value and serves it as the final result of the execution.
+    *   `explain_join`: Predicts execution strategy (Index Scan vs Full Scan) for performance debugging.
+
+### `return` Opcode Behavior Scope & Variable Resolution
+The `return` opcode is the designated exit mechanism for scripts. It has logic to ensure variables are returned as their underlying objects, not as literal strings.
+
+*   **Implementation**: Located in `ai/agent/dataadmintools.atomic.go`, inside `bindOperation`.
+*   **Resolution Logic**:
+    1.  **Input Check**: It takes an argument `value`.
+    2.  **Variable Resolution (Standardized)**: It calls `e.resolveVarName(strVal)`. This handles:
+        *   `@my_var` syntax (explicit variable reference).
+        *   `my_var` syntax (implicit variable reference).
+    3.  **Lookup**: It attempts to find the resolved name in `e.Context.Variables`.
+    4.  **Behavior**:
+        *   **Found**: Returns the actual helper object/map/list stored in the context (unwrapping it).
+        *   **Not Found**: Returns the literal input string (e.g., "status" if no variable named "status" exists).
+*   **Rationale**: This explicit resolution prevents regressions where `return "@data"` would simply return the string literal `"@data"` instead of the JSON object it points to.
+*   **Regression History**: In Jan 2026, a refactor inadvertently removed the post-execution unpacking logic. This was restored by embedding `resolveVarName` directly into the `return` opcode handler, ensuring atomic correctness within the engine itself rather than relying on the caller.
+
+### Self-Correction & Knowledge Management
+The agent possesses a specialized `manage_knowledge` tool that allows it to persist learned rules, vocabulary, and corrections across sessions.
+*   **Mechanism**: The `Service.Ask` loop (in `ai/agent/service.go`) includes a "System Prompt" (or "Active Learning Protocol") that instructs the LLM to use `manage_knowledge` whenever the user corrects it.
+*   **Storage**: Knowledge is stored in a `system` database under a `knowledge_base` store, partitioned by `namespace`.
+*   **Loop**:
+    1.  User corrects agent ("Use 'Client' not 'User'").
+    2.  Agent analyzes input, calls `manage_knowledge(namespace='vocabulary', ...)`
+    3.  Future prompts automatically retrieve this knowledge (via RAG or context injection) to prevent repeat errors.
+
+### Script Parameterization
+scripts serve as "Frozen Reasoning". To make them reusable, we support **Dynamic Parameterization**.
+*   **Syntax**: `$variable_name` (e.g., `{"key": "$user_id"}`) or `@variable_name` (explicit reference).
+*   **Mechanism**: The `execute_script` tool accepts an `args` map.
+*   **Verification**: The `TestScriptParameterizationWorkflow` ensures that parameters are correctly injected during execution, allowing a single script (e.g., "Find User Orders") to work for any user ID.
 
 ---
 
@@ -74,6 +107,37 @@ To resolve ambiguities in Joins and Projections, the system now enforces a stric
 *   **Pipeline Flow**: All downstream operations (`join`, `project`, `filter` *after scan*) see fully qualified keys.
 *   **Output (`renderItem`)**: The projection layer is responsible for stripping these prefixes for the final user output, unless aliases are used to preserve them.
 *   **Filtering**: Note that `scan` filtering usually happens *before* this prefixing (using the store's local schema), but downstream filters must use the prefixed names.
+
+### Detailed Prefixing Rules (Strict Architecture)
+
+To ensure consistency in complex Joins and Projections, the system adheres to a strict **Namespaced Data Model**. All data emerging from any Store operation (`Scan`, `Join`) MUST be prefixed. This allows downstream operations to unambiguously reference fields from any source, even in deep join chains.
+
+1.  **Universal Prefixing**:
+    *   **Rule**: Every field in the pipeline MUST be prefixed with its source namespace (Store Name or Alias).
+    *   **Example**: `{"id": "123"}` becomes `{"users.id": "123"}` immediately after reading from the store.
+    *   **Scope**: This applies to ALL downstream operations (`Project`, `Filter`, `Join ON`). Scripts must use `users.id` instead of `id`.
+
+2.  **Primitive Normalization**:
+    *   **Rule**: Even single-value primitive stores (e.g., `key=string`, `value=int`) are normalized into map structures using the standard fields `key` and `value`, which are then prefixed.
+    *   **Example**: A store `counts` (key=string, val=int) produces `{"counts.key": "visitors", "counts.value": 100}`.
+    *   **Rationale**: This treats primitives uniformly with complex objects, allowing constructs like `project ["counts.value"]`.
+
+3.  **Sanitization vs. Runtime Role**:
+    *   **Sanitization (Static)**: The `sanitizeScript` function attempts to canonicalize instructions where possible (e.g., normalizing `join_type`, inferring Aliases). However, because Alias resolution is often dynamic (dependent on variables), strict static rewriting of field names (e.g., rewriting `id` to `users.id` in `project`) is **not fully enforced** at the AST level.
+    *   **Runtime (Dynamic)**: The Runtime (`StoreCursor`) is the **System of Record** for prefixing. It guarantees that data is prefixed. The *Script Author* (LLM) is responsible for providing correctly prefixed field names in `project` and `join` clauses. The runtime enforces this contract by producing only prefixed data.
+
+4.  **Output Stream Normalization**:
+    *   **Rule**: `renderItem` (`dataadmintools.utils.go`) is the **sole** component authorized to strip prefixes.
+    *   **Logic**: It strips prefixes ONLY if:
+        a) The user aliased the field explicitly (`users.id AS id`).
+        b) Implementation heuristics detect a "Smart Strip" scenario (e.g., `project ["users.*"]` on a single-source result might strip `users.` for cleaner JSON).
+    *   **Smart Key Collapsing (Friendly Output)**:
+        *   **Context**: Results from operations like Joins are often `OrderedMap`s to preserve field sequence. By default, `OrderedMap` enforces valid, unique keys (often requiring prefixes).
+        *   **Feature**: We introduced an `isImplicit` flag on `OrderedMap`.
+        *   **Behavior**:
+            *   **Implicit (True)**: Maps created by the system (e.g., raw Join result) without explicit user projection. The serializer is allowed to "Collapse" keys (remove prefixes) if they are unique (e.g., `users.name` -> `name`).
+            *   **Explicit (False)**: Maps created by `project` or user-defined structs. The serializer MUST preserve keys exactly as defined (no collapsing), to honor the user's explicit choices.
+            *   **Fix**: This resolved regressions where Right Outer Joins were failing to collapse keys because they were incorrectly treated as explicit.
 
 ---
 
@@ -129,7 +193,10 @@ We implemented a **Just-In-Time (JIT) Planner** within the `JoinProcessor` (`ai/
 ### Hash Join vs. Lookup Join
 The Join Processor chooses between:
 1.  **Lookup Join (Preferred)**: Uses B-Tree `Find()` and `Next()`. Complexity: $O(M \times \log N)$.
+    *   **Bloom Filter Optimization**: If `Lookup` is selected and the Right store has >100 items, we build a **Bloom Filter** ($1\%$ false positive rate) to skip B-Tree lookups for non-existent keys.
 2.  **Hash Join (Fallback)**: Scans Right store completely into memory. Complexity: $O(M + N)$.
+    *   **Conditions**: Used when the `ON` clause does not match the **Index Prefix** of the Right Store (making lookups impossible).
+    *   **Memory Note**: Builds a `map[string][]Item`. Fast access, but high initialization cost for large stores.
 
 ### Optimization Logic
 1.  **Prefix Validation** (`validateIndexPrefix`):
@@ -311,3 +378,16 @@ To ensure maintainability and professional code quality, adhere to the following
 ### Supported Primitives
 *   The system intentionally supports a rich set of primitives (int, float, string, UUID, time) matching `btree/comparer.go`.
 *   **Exclusion**: Single `byte` or `char` types are **not** supported as B-Tree keys, as they are deemed unnecessary for persistence use cases. Use `string` or `[]byte` (Blob) instead.
+
+---
+
+## 9. Architecture Decisions & Tradeoffs
+
+### Script Identification Strategy (Jan 29, 2026)
+*   **Context**: The scripting engine supports nested scripts via the `call_script` instruction. Scripts are stored in a B-Tree with a composite key `{Category, Name}`.
+*   **Decision**: We chose to expose the `Category` parameter explicitly in the `call_script` instruction (and the `Script` execution context) rather than introducing a system-wide UUID for internal tracking.
+*   **Reasoning**:
+    1.  **Direct Mapping**: The runtime execution arguments (`category`, `name`) map 1:1 to the underlying physical storage key (`ModelKey{Category, Name}`).
+    2.  **Performance**: This avoids the need for a secondary index or lookup table that would be required to resolve a UUID to a physical storage location.
+    3.  **Readability**: Semantically, `call_script("backup", "system")` is more legible for human operators and LLM agents than `call_script("550e8400-e29b...")`.
+*   **Constraint**: This implies that strict renaming or moving of scripts across categories requires updating references in calling scripts, similar to file path changes.

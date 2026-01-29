@@ -19,9 +19,31 @@ func (jc *JoinRightCursor) ensurePlan() error {
 		return nil
 	}
 	jc.planReady = true
-	jc.plan = JoinPlan{Strategy: StrategyInMemory}
 
-	info := jc.right.GetStoreInfo()
+	// Extract Right Join Fields from the ON clause
+	// The ON clause is { "LeftField": "RightField" }
+	var rightFields []string
+	for _, v := range jc.on {
+		rightFields = append(rightFields, fmt.Sprintf("%v", v))
+	}
+
+	jc.plan, _ = AnalyzeJoinPlan(jc.right.GetStoreInfo(), rightFields)
+
+	// Post-Analysis Optimization: Bloom Filter
+	if jc.plan.Strategy == StrategyIndexSeek {
+		count := jc.right.GetStoreInfo().Count
+		if count > 100 {
+			jc.buildBloomFilter(count)
+		}
+	}
+
+	return nil
+}
+
+// AnalyzeJoinPlan analyzes the store schema and join fields to determine the best execution strategy.
+func AnalyzeJoinPlan(info sop.StoreInfo, rightFields []string) (JoinPlan, string) {
+	plan := JoinPlan{Strategy: StrategyInMemory}
+	var sb strings.Builder
 
 	// 1. Primitive vs Composite Check
 	isPrimitive := true
@@ -35,60 +57,99 @@ func (jc *JoinRightCursor) ensurePlan() error {
 		}
 		if err := json.Unmarshal([]byte(info.MapKeyIndexSpecification), &spec); err == nil {
 			for i, f := range spec.IndexFields {
-				jc.plan.IndexFields = append(jc.plan.IndexFields, f.FieldName)
+				plan.IndexFields = append(plan.IndexFields, f.FieldName)
 				if i == 0 {
 					if f.AscendingSortOrder != nil {
-						jc.plan.Ascending = *f.AscendingSortOrder
+						plan.Ascending = *f.AscendingSortOrder
 					} else {
-						jc.plan.Ascending = true
+						plan.Ascending = true
 					}
 				}
 			}
-			jc.plan.IsComposite = true
+			plan.IsComposite = true
 		}
 	}
 
+	sb.WriteString("## Execution Plan Analysis\n")
+	sb.WriteString(fmt.Sprintf("- **Store Type**: %s\n", func() string {
+		if isPrimitive {
+			return "Primitive (Key/Value)"
+		}
+		return "Composite (Complex Object with Index)"
+	}()))
+
+	if !isPrimitive {
+		sb.WriteString(fmt.Sprintf("- **Defined Index Fields**: `%v`\n", plan.IndexFields))
+	}
+	sb.WriteString(fmt.Sprintf("- **Requested Join Fields**: `%v`\n", rightFields))
+
 	// 2. Strategy Selection
 	if isPrimitive {
-		for _, rFieldRaw := range jc.on {
-			if fmt.Sprintf("%v", rFieldRaw) == "key" {
-				jc.plan.Strategy = StrategyIndexSeek
-				jc.plan.IsComposite = false
-				return nil
+		for _, f := range rightFields {
+			if f == "key" {
+				plan.Strategy = StrategyIndexSeek
+				plan.IsComposite = false
+				sb.WriteString("\n### Selected Strategy: **Index Seek (Fast)**\n")
+				sb.WriteString("Reasoning: Joining on primary 'key' of a primitive store. This is the optimal path.")
+				return plan, sb.String()
 			}
 		}
-	} else if len(jc.plan.IndexFields) > 0 {
+		sb.WriteString("\n### Selected Strategy: **Hash Join (High Cost)**\n")
+		sb.WriteString("Reasoning: You are joining on a Value field in a primitive store. Only the 'key' is indexed.\n")
+		sb.WriteString("Recommendation: If you need fast joins on this value, consider creating a Secondary Index store mapping `value -> key`.")
+		return plan, sb.String()
+	} else if len(plan.IndexFields) > 0 {
 		// Find Longest Common matching Prefix
-		for _, idxField := range jc.plan.IndexFields {
+		for _, idxField := range plan.IndexFields {
 			found := false
-			for _, rFieldRaw := range jc.on {
-				if fmt.Sprintf("%v", rFieldRaw) == idxField {
+			for _, rf := range rightFields {
+				// Exact match
+				if rf == idxField {
+					found = true
+					break
+				}
+				// Alias match: "store.field" == "field"
+				if strings.HasSuffix(rf, "."+idxField) {
 					found = true
 					break
 				}
 			}
 			if found {
-				jc.plan.PrefixFields = append(jc.plan.PrefixFields, idxField)
+				plan.PrefixFields = append(plan.PrefixFields, idxField)
 			} else {
 				break
 			}
 		}
 
-		if len(jc.plan.PrefixFields) > 0 {
-			jc.plan.Strategy = StrategyIndexSeek
+		if len(plan.PrefixFields) > 0 {
+			plan.Strategy = StrategyIndexSeek
+			sb.WriteString("\n### Selected Strategy: **Index Seek (Fast)**\n")
+			sb.WriteString(fmt.Sprintf("Reasoning: Join fields match the Index Prefix `%v`.\n", plan.PrefixFields))
+			sb.WriteString("Performance: $O(M \\log N)$. The system will perform efficient B-Tree lookups.")
+			return plan, sb.String()
+		} else {
+			sb.WriteString("\n### Selected Strategy: **Hash Join (High Cost)**\n")
+			sb.WriteString(fmt.Sprintf("Reasoning: The join fields `%v` do NOT match the start of the Index `%v`.\n", rightFields, plan.IndexFields))
 
-			// OPTIMIZATION: Build Bloom Filter if Right Store is large
-			// This avoids expensive FindOne/Seek operations for keys that don't exist.
-			count := jc.right.GetStoreInfo().Count
-			if count > 100 {
-				jc.buildBloomFilter(count)
-			}
+			// Diagnosis
+			missingPrefix := plan.IndexFields[0]
+			sb.WriteString("\n### Diagnosis: Broken Prefix\n")
+			sb.WriteString(fmt.Sprintf("The B-Tree index requires you to provide the first field **`%s`** to navigate the tree.\n", missingPrefix))
+			sb.WriteString("Without this field, we must scan the entire store into memory ($O(N)$) to find matches.")
 
-			return nil
+			// Recommendation
+			sb.WriteString("\n\n### Recommendation\n")
+			sb.WriteString(fmt.Sprintf("1. **Adjust Query**: precise your ON clause to include `%s`.\n", missingPrefix))
+			sb.WriteString("2. **Change Schema**: If you frequently join by these fields only, create a new Store with a different Index ordering.\n")
+
+			return plan, sb.String()
 		}
+	} else {
+		sb.WriteString("\n### Selected Strategy: **Hash Join (High Cost)**\n")
+		sb.WriteString("Reasoning: This Composite store has NO index specification defined in `CheckAttributes`. It behaves like a heap.\n")
+		sb.WriteString("Recommendation: Define a `MapKeyIndexSpecification` in the store creation to enable indexing.")
+		return plan, sb.String()
 	}
-
-	return nil
 }
 
 func (jc *JoinRightCursor) buildBloomFilter(count int64) {
@@ -664,7 +725,7 @@ func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
 		}
 	}
 
-	return &OrderedMap{m: newMap, keys: newKeys}
+	return &OrderedMap{m: newMap, keys: newKeys, isImplicit: true}
 }
 
 // Helper for Join Numeric Coercion

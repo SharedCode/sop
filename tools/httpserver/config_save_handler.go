@@ -365,7 +365,7 @@ func setupSystemDB(ctx context.Context, req *SaveConfigRequest) (*DatabaseConfig
 
 		// Seed demo
 		demoLoop := ai.Script{
-			Name: "demo_loop", Description: "Demonstrates loops",
+			Description: "Demonstrates loops",
 			Steps: []ai.ScriptStep{
 				{Type: "set", Variable: "items", Value: "apple\nbanana\ncherry"},
 				{Type: "loop", List: "items", Iterator: "fruit", Steps: []ai.ScriptStep{

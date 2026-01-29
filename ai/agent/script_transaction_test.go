@@ -46,7 +46,6 @@ func TestScript_Transactions(t *testing.T) {
 	// Script 1: Implicit Transaction (Auto-commit)
 	// Should succeed and persist data.
 	scriptImplicit := ai.Script{
-		Name:     "implicit_tx",
 		Database: userDBName,
 		Steps: []ai.ScriptStep{
 			{
@@ -64,7 +63,6 @@ func TestScript_Transactions(t *testing.T) {
 	// Script 2: Explicit Transaction (Commit)
 	// Should succeed and persist data.
 	scriptExplicitCommit := ai.Script{
-		Name:     "explicit_commit",
 		Database: userDBName,
 		Steps: []ai.ScriptStep{
 			{
@@ -92,7 +90,6 @@ func TestScript_Transactions(t *testing.T) {
 	// Script 3: Explicit Transaction (Rollback)
 	// Should NOT persist data.
 	scriptExplicitRollback := ai.Script{
-		Name:     "explicit_rollback",
 		Database: userDBName,
 		Steps: []ai.ScriptStep{
 			{
@@ -120,7 +117,6 @@ func TestScript_Transactions(t *testing.T) {
 	// Script 4: Uncommitted Explicit Transaction (Safety Rollback)
 	// Should NOT persist data because the session closer should rollback uncommitted explicit txs.
 	scriptUncommitted := ai.Script{
-		Name:     "uncommitted",
 		Database: userDBName,
 		Steps: []ai.ScriptStep{
 			{

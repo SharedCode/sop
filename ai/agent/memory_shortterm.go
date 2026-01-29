@@ -12,6 +12,7 @@ type RunnerSession struct {
 	Playback              bool // True if a script is currently being executed
 	AutoSave              bool // If true, the draft is saved to DB after every step
 	CurrentScript         *ai.Script
+	CurrentScriptName     string // Name of the script being drafted
 	CurrentScriptCategory string // Category for the script being drafted
 	Transaction           sop.Transaction
 	CurrentDB             string         // The database the transaction is bound to

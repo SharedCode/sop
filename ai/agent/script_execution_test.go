@@ -285,7 +285,6 @@ func TestScriptShow(t *testing.T) {
 
 	// Create a script manually
 	script := ai.Script{
-		Name: "test_script",
 		Steps: []ai.ScriptStep{
 			{Type: "ask", Prompt: "hello"},
 			{Type: "command", Command: "select", Args: map[string]any{"store": "users"}},
@@ -714,7 +713,6 @@ func TestScriptAsyncExecution(t *testing.T) {
 
 	// Define script with async steps
 	script := ai.Script{
-		Name: "async_test",
 		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
@@ -802,7 +800,6 @@ func TestScriptAsyncErrorPropagation(t *testing.T) {
 	// 1. Async sleep (should be cancelled)
 	// 2. Sync fail (should stop everything)
 	script := ai.Script{
-		Name: "error_test",
 		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
@@ -857,7 +854,6 @@ func TestToolScriptAddStepFromLast_MetaToolExclusion(t *testing.T) {
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
 	script := ai.Script{
-		Name:  "test_script",
 		Steps: []ai.ScriptStep{},
 	}
 	store.Save(ctx, "general", "test_script", &script)
@@ -925,7 +921,6 @@ func TestToolScriptUpdateStep(t *testing.T) {
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
 	script := ai.Script{
-		Name: "update_test_script",
 		Steps: []ai.ScriptStep{
 			{Type: "command", Command: "echo", Args: map[string]any{"msg": "hello"}},
 		},

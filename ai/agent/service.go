@@ -522,7 +522,7 @@ func (s *Service) RecordStep(ctx context.Context, step ai.ScriptStep) {
 	// If we are actively drafting a script, append the step
 	if s.session.CurrentScript != nil {
 		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, step)
-		log.Debug("Service.RecordStep: Appended step to CurrentScript", "script_name", s.session.CurrentScript.Name, "step_count", len(s.session.CurrentScript.Steps))
+		log.Debug("Service.RecordStep: Appended step to CurrentScript", "script_name", s.session.CurrentScriptName, "step_count", len(s.session.CurrentScript.Steps))
 	}
 
 	// Buffer tool calls for potential refactoring
@@ -537,7 +537,7 @@ func (s *Service) RefactorLastSteps(count int, mode string, name string) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (s *Service) saveScript(ctx context.Context, script ai.Script) error {
+func (s *Service) saveScript(ctx context.Context, name string, script ai.Script) error {
 	scriptDB := s.getScriptDB()
 	if scriptDB == nil {
 		return fmt.Errorf("script database not available")
@@ -551,7 +551,7 @@ func (s *Service) saveScript(ctx context.Context, script ai.Script) error {
 		tx.Rollback(ctx)
 		return err
 	}
-	if err := store.Save(ctx, "general", script.Name, &script); err != nil {
+	if err := store.Save(ctx, "general", name, &script); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Errorf("failed to save script: %w", err)
 	}

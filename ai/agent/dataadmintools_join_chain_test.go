@@ -103,7 +103,14 @@ func TestToolJoin_Chained_InnerThenRight(t *testing.T) {
 
 	resultMap := make(map[string]map[string]any)
 	for _, r := range results {
-		fid := r["fid"].(string)
+		var fid string
+		if v, ok := r["fid"]; ok {
+			fid = v.(string)
+		} else if v, ok := r["feedbacks_chain.fid"]; ok {
+			fid = v.(string)
+		} else {
+			t.Fatalf("Missing fid. Item: %+v", r)
+		}
 		resultMap[fid] = r
 	}
 
@@ -111,11 +118,19 @@ func TestToolJoin_Chained_InnerThenRight(t *testing.T) {
 	if r, ok := resultMap["F1"]; !ok {
 		t.Error("Missing F1")
 	} else {
-		if r["name"] != "Alice" {
-			t.Errorf("F1 should map to Alice, got %v", r["name"])
+		name := r["name"]
+		if name == nil {
+			name = r["users_chain.name"]
 		}
-		if r["item"] != "Book" {
-			t.Errorf("F1 should map to Book, got %v", r["item"])
+		if name != "Alice" {
+			t.Errorf("F1 should map to Alice, got %v", name)
+		}
+		item := r["item"]
+		if item == nil {
+			item = r["orders_chain.item"]
+		}
+		if item != "Book" {
+			t.Errorf("F1 should map to Book, got %v", item)
 		}
 	}
 
@@ -129,8 +144,12 @@ func TestToolJoin_Chained_InnerThenRight(t *testing.T) {
 		if r["s_orders.item"] != nil {
 			t.Errorf("F2 should have nil item, got %v", r["s_orders.item"])
 		}
-		if r["msg"] != "Unknown" {
-			t.Errorf("F2 msg mismatch")
+		msg := r["msg"]
+		if msg == nil {
+			msg = r["feedbacks_chain.msg"]
+		}
+		if msg != "Unknown" {
+			t.Errorf("F2 msg mismatch. Got %v", msg)
 		}
 	}
 }

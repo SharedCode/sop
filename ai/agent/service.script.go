@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -266,7 +267,6 @@ func (s *Service) scriptCreate(ctx context.Context, scriptDB *database.Database,
 	}
 
 	newScript := ai.Script{
-		Name:        name,
 		Description: description,
 		Database:    dbName,
 		Steps:       []ai.ScriptStep{},
@@ -326,7 +326,7 @@ func (s *Service) scriptShow(ctx context.Context, scriptDB *database.Database, a
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Script: %s\n", script.Name))
+	sb.WriteString(fmt.Sprintf("Script: %s\n", name))
 	if len(script.Parameters) > 0 {
 		sb.WriteString(fmt.Sprintf("Parameters: %v\n", script.Parameters))
 	}
@@ -416,7 +416,6 @@ func (s *Service) scriptSaveAs(ctx context.Context, scriptDB *database.Database,
 	}
 
 	newScript := ai.Script{
-		Name:  name,
 		Steps: []ai.ScriptStep{*s.session.LastStep},
 	}
 
@@ -673,21 +672,44 @@ func (s *Service) scriptParameters(ctx context.Context, scriptDB *database.Datab
 }
 
 func (s *Service) scriptParameterize(ctx context.Context, scriptDB *database.Database, args []string) (string, error) {
-	// /script parameterize <name> <param_name> <value_to_replace> [--category <cat>]
+	// /script parameterize <name> <param_name> <value_to_replace> [...] [--category <cat>]
 	if len(args) < 4 {
-		return "Usage: /script parameterize <name> <param_name> <value_to_replace> [--category <cat>]", nil
+		return "Usage: /script parameterize <name> <param1> <value1> [<param2> <value2>...] [--category <cat>]", nil
 	}
 	name := args[1]
-	paramName := args[2]
-	valueToReplace := args[3]
+
+	type replacePair struct {
+		Param string
+		Value string
+	}
+	var pairs []replacePair
 	category := "general"
 
-	for i := 4; i < len(args); i++ {
+	// Parse arguments for pairs and flags
+	for i := 2; i < len(args); i++ {
+		// Check for flags
 		if args[i] == "--category" && i+1 < len(args) {
 			category = args[i+1]
-			i++
+			i++ // Skip value
+			continue
 		}
+
+		// If not a flag, treat as param-value pair
+		if i+1 >= len(args) {
+			return fmt.Sprintf("Error: Missing value for parameter '%s'", args[i]), nil
+		}
+		pairs = append(pairs, replacePair{Param: args[i], Value: args[i+1]})
+		i++ // Skip value
 	}
+
+	if len(pairs) == 0 {
+		return "No parameters specified.", nil
+	}
+
+	// SORT: Longest values first (Maximal Munch) to prevent substring collisions
+	sort.Slice(pairs, func(i, j int) bool {
+		return len(pairs[i].Value) > len(pairs[j].Value)
+	})
 
 	tx, err := scriptDB.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
@@ -705,56 +727,90 @@ func (s *Service) scriptParameterize(ctx context.Context, scriptDB *database.Dat
 		return fmt.Sprintf("Error loading script: %v", err), nil
 	}
 
-	// 1. Add parameter to list if not exists
-	exists := false
-	for _, p := range script.Parameters {
-		if p == paramName {
-			exists = true
-			break
-		}
-	}
-	if !exists {
-		script.Parameters = append(script.Parameters, paramName)
-	}
+	totalCount := 0
 
-	// 2. Scan all steps and replace valueToReplace with {{.paramName}}
-	count := 0
-	templateVar := fmt.Sprintf("{{.%s}}", paramName)
+	// Apply all replacements in order
+	for _, pair := range pairs {
+		paramName := pair.Param
+		valueToReplace := pair.Value
+		pairCount := 0
 
-	for i := range script.Steps {
-		step := &script.Steps[i]
+		// 1. Scan all steps and replace valueToReplace with {{.paramName}}
+		templateVar := fmt.Sprintf("{{.%s}}", paramName)
 
-		// Helper to replace in string
-		replace := func(s string) string {
-			if strings.Contains(s, valueToReplace) {
-				count++
-				return strings.ReplaceAll(s, valueToReplace, templateVar)
+		for i := range script.Steps {
+			step := &script.Steps[i]
+
+			// Helper to replace in string
+			replace := func(s string) string {
+				if strings.Contains(s, valueToReplace) {
+					totalCount++
+					pairCount++
+					return strings.ReplaceAll(s, valueToReplace, templateVar)
+				}
+				return s
 			}
-			return s
-		}
 
-		step.Prompt = replace(step.Prompt)
-		step.Message = replace(step.Message)
-		step.Value = replace(step.Value)
-		step.Condition = replace(step.Condition)
-		step.List = replace(step.List)
+			step.Prompt = replace(step.Prompt)
+			step.Message = replace(step.Message)
+			step.Value = replace(step.Value)
+			step.Condition = replace(step.Condition)
+			step.List = replace(step.List)
 
-		// Replace in Args (recursive for maps?)
-		// For now, just top-level string args
-		for k, v := range step.Args {
-			if strVal, ok := v.(string); ok {
-				if strings.Contains(strVal, valueToReplace) {
-					step.Args[k] = strings.ReplaceAll(strVal, valueToReplace, templateVar)
-					count++
+			// Recursive helper for deep replacement
+			var deepReplace func(any) any
+			deepReplace = func(v any) any {
+				switch val := v.(type) {
+				case string:
+					if strings.Contains(val, valueToReplace) {
+						totalCount++
+						pairCount++
+						return strings.ReplaceAll(val, valueToReplace, templateVar)
+					}
+					return val
+				case map[string]any:
+					newMap := make(map[string]any)
+					for k, subV := range val {
+						newMap[k] = deepReplace(subV)
+					}
+					return newMap
+				case []any:
+					newSlice := make([]any, len(val))
+					for i, subV := range val {
+						newSlice[i] = deepReplace(subV)
+					}
+					return newSlice
+				default:
+					return v
+				}
+			}
+
+			// Replace in Args
+			for k, v := range step.Args {
+				step.Args[k] = deepReplace(v)
+			}
+
+			// Replace in ScriptArgs (for nested scripts)
+			for k, v := range step.ScriptArgs {
+				if strings.Contains(v, valueToReplace) {
+					step.ScriptArgs[k] = strings.ReplaceAll(v, valueToReplace, templateVar)
+					totalCount++
+					pairCount++
 				}
 			}
 		}
 
-		// Replace in ScriptArgs (for nested scripts)
-		for k, v := range step.ScriptArgs {
-			if strings.Contains(v, valueToReplace) {
-				step.ScriptArgs[k] = strings.ReplaceAll(v, valueToReplace, templateVar)
-				count++
+		// 2. Add parameter to list only if replacements were made and it doesn't already exist
+		if pairCount > 0 {
+			exists := false
+			for _, p := range script.Parameters {
+				if p == paramName {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				script.Parameters = append(script.Parameters, paramName)
 			}
 		}
 	}
@@ -765,7 +821,7 @@ func (s *Service) scriptParameterize(ctx context.Context, scriptDB *database.Dat
 	}
 	tx.Commit(ctx)
 
-	return fmt.Sprintf("Script '%s' parameterized. Replaced %d occurrences of '%s' with '{{.%s}}'. Parameter '%s' added.", name, count, valueToReplace, paramName, paramName), nil
+	return fmt.Sprintf("Script '%s' parameterized. Performed %d replacements across %d parameters.", name, totalCount, len(pairs)), nil
 }
 
 func (s *Service) scriptRefine(ctx context.Context, scriptDB *database.Database, args []string) (string, error) {

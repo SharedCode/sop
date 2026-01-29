@@ -46,7 +46,7 @@ SOP includes a powerful **SOP Data Manager** that provides **full CRUD** capabil
     > **Note**: To use the Copilot, you must set the `SOP_LLM_API_KEY` environment variable (e.g., for Gemini) before starting the server.
 *   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
 
-To launch the SOP Data Manager, you can use the Go toolchain or look for provided binaries:
+To launch the SOP Data Manager, download the all-in-one single-file installer from [SOP Releases](https://github.com/SharedCode/sop/releases). Alternatively, you can use the Go toolchain:
 
 ```bash
 # From the root of the repository
@@ -62,6 +62,35 @@ The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data 
 *   **Scripts**: A functional AI runtime for drafting, refining, and executing complex workflows (Hybrid Execution Model).
 
 See [ai/README.md](../../ai/README.md) for a deep dive into the AI capabilities.
+
+## Executing SOP Scripts
+
+SOP Scripts allow you to execute complex workflows on the server side, similar to Stored Procedures.
+Currently, scripts are executed via the SOP HTTP API Server.
+
+Example using `HttpClient`:
+
+```csharp
+using System;
+using System.Net.Http;
+using System.Text;
+using System.Threading.Tasks;
+
+class Program
+{
+    static async Task Main(string[] args)
+    {
+        using var client = new HttpClient();
+        var json = "{\"name\":\"user_audit\", \"category\":\"general\", \"args\":{\"user_id\":999}}";
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+        var response = await client.PostAsync("http://localhost:8080/api/scripts/execute", content);
+        var result = await response.Content.ReadAsStringAsync();
+        
+        Console.WriteLine(result);
+    }
+}
+```
 
 ## Performance & Big Data Management
 

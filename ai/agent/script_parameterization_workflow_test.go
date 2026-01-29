@@ -26,7 +26,6 @@ func TestScriptParameterizationWorkflow(t *testing.T) {
 	// Imagine the user recorded: "select * from employees where department = 'Sales'"
 	scriptName := "find_sales_employees"
 	originalScript := ai.Script{
-		Name: scriptName,
 		Steps: []ai.ScriptStep{
 			{
 				Type:    "command",
