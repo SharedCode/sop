@@ -301,4 +301,19 @@ In Clustered mode, SOP relies on Redis for transaction locking and coordination.
 
 This multi-layered approach ensures that SOP databases remain "rock solid" and self-healing, minimizing the need for manual administrative intervention.
 
+## Future Optimization Roadmap
+
+### Registry Partitioning: Scalable Clusters & Binary Search
+As SOP scales to handle **trillion to hundreds of trillions of items**, the current linear chaining of registry segment files (while effective and simple) presents an opportunity for optimization.
+
+*   **Current State**: Sequential allocation (Chaining). New segment files are added one by one (`registry-1`, `registry-2`...) as needed. Lookup is linear $O(N)$.
+*   **Proposed Future State**: Clustered Allocation & Binary Seach.
+    *   **Clustering**: Instead of allocating files singly, the system could pre-allocate "Clusters" of segment files.
+        *   **Tunable Size**: The cluster size (e.g., 10, 20, 30 files per cluster) would be configurable to match the deployment scale.
+    *   **Binary Search**: With a known, structured set of files, the registry lookup algorithm can switch from a sequential scan to a **Binary Search** across the file segments to locate the correct virtual ID bucket.
+*   **Impact**:
+    *   **Extreme Scale**: Enables management of storage at the **hundreds of trillions of items** level.
+    *   **Scalability**: Allows supporting thousands of segment files without the performance penalty of a linear scan.
+    *   **Throughput**: Reduces the "Worst Case" lookup from $O(N)$ file headers to $O(\log N)$, significantly conserving IOPS for these hyper-scale deployments.
+
 

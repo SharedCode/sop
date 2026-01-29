@@ -143,6 +143,48 @@ SOP automatically allocates additional segment files (e.g., `registry-1.reg`, `r
 *   **Example**: Storing **1 Billion items** with the default hashmod (250) will result in approximately **100 segment files** (1B / 10.7M).
 *   **Optimization**: For very large datasets, increasing `RegistryHashModValue` reduces the total file count, conserving OS file handles and simplifying backup operations.
 
+### Capacity Planning Table
+
+The following table estimates the storage capacity for a single Registry Segment File based on the `RegistryHashModValue`.
+
+**Assumptions**:
+*   **Block Size**: 4096 bytes
+*   **Items per Sector**: 62 (conservative estimate)
+*   **Slot Length**: 5,000 (High-density configuration)
+
+| Hash Mod Value | Segment File Size (Disk) | Estimated Capacity (Key/Value Pairs) |
+| :--- | :--- | :--- |
+| **250** (Default) | ~1 MB (`250 * 4096`) | **77,500,000** (77.5 Million) |
+| **500** | ~2 MB | **155,000,000** (155 Million) |
+| **10,000** | ~41 MB | **3,100,000,000** (3.1 Billion) |
+| **100,000** | ~410 MB | **31,000,000,000** (31 Billion) |
+| **400,000** | ~1.6 GB | **124,000,000,000** (124 Billion) |
+
+### Capacity Planning (Max Density)
+
+The following table portrays the theoretical maximums using a **Slot Length of 20,000** and a typical B-Tree **Load Factor of 68%**.
+
+**Assumptions**:
+*   **Items per Sector**: 62
+*   **Slot Length**: 20,000
+*   **Load Factor**: 68% (0.68)
+
+| Hash Mod Value | Segment File Size (Disk) | Estimated Capacity (Key/Value Pairs) |
+| :--- | :--- | :--- |
+| **250** (Default) | ~1 MB | **210,800,000** (210 Million) |
+| **500** | ~2 MB | **421,600,000** (421 Million) |
+| **10,000** | ~41 MB | **8,432,000,000** (8.4 Billion) |
+| **100,000** | ~410 MB | **84,320,000,000** (84.3 Billion) |
+| **400,000** | ~1.6 GB | **337,280,000,000** (337.2 Billion) |
+
+> **Note on Horizontal Scaling**: The capacity figures above apply to a **single** registry segment file. When a "sector" (which serves as a hash bucket) within a segment file becomes full, SOP automatically allocates a new segment file (e.g., `registry-2.reg`). The total capacity scales linearly with the number of files.
+> *   *Example*: If your usage requires 5 segment files, your total capacity is **5x** the figures shown in the table.
+>
+> **Performance Constraint**: It is recommended to limit the number of segment files to **5-10 at most**.
+> *   **Reasoning**: Segment files are traversed sequentially (like a linked list) when searching for a Virtual ID. Searching for an ID could require visiting up to N files in the worst case (where N is the number of segments).
+> *   **Warning**: If you use a small `RegistryHashModValue` for billions of items, the system will generate many segment files, causing registry lookups to consume excessive IOPS.
+> *   **Best Practice**: Fine-tune the `RegistryHashModValue` and B-Tree `SlotLength` to accommodate your target capacity within a minimal number of segment files.
+
 ### Alternative Optimization: Slot Length
 
 Instead of increasing `RegistryHashModValue`, you can also optimize for large datasets by increasing the B-Tree `SlotLength`.

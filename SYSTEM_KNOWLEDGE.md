@@ -391,3 +391,12 @@ To ensure maintainability and professional code quality, adhere to the following
     2.  **Performance**: This avoids the need for a secondary index or lookup table that would be required to resolve a UUID to a physical storage location.
     3.  **Readability**: Semantically, `call_script("backup", "system")` is more legible for human operators and LLM agents than `call_script("550e8400-e29b...")`.
 *   **Constraint**: This implies that strict renaming or moving of scripts across categories requires updating references in calling scripts, similar to file path changes.
+
+### Registry Partitioning (Chained Segments vs Binary Search)
+*   **Context**: The ID Registry (Virtual ID $\rightarrow$ Physical Location) is partitioned into "Segment Files" (buckets). When a bucket fills, it spills over to a new file, forming a logical linked list of file segments.
+*   **Decision**: We use a **Linear Search** across a small number of segment files (typically 1-5) rather than implementing a complex Binary Search or B-Tree across file segments.
+*   **Reasoning**:
+    1.  **Simplicity**: It drastically reduces implementation complexity (ACID compliance, file management).
+    2.  **Optimality via Config**: By allowing users to tune `RegistryHashModValue` (Bucket Count) and `SlotLength` (Bucket Density), we ensure that 99% of use cases fit entirely within **1 or 2 segment files**.
+    3.  **Cost/Benefit**: Moving to Binary Search would introduce $O(\log N)$ complexity for file management. Since $N$ (number of files) is kept small by design, the constant factor overhead of opening/seeking files dominates. Scanning 2 files linearly is faster and safer than managing a distributed index for 2 files.
+*   **Validation**: Even with a modest configuration (HashMod=400k, SlotLength=20k), a single 1.6GB segment file tracks **300+ Billion items**. Use cases requiring >1 Trillion items can simply use 4-5 segment files, keeping the linear penalty negligible ($O(5) \approx O(1)$).
