@@ -34,6 +34,7 @@ SOP automatically allocates new Registry Segments as needed. It is designed to h
 | Segments | Total Nodes (Handles) | Total Capacity (Items @ 20k Slots, 68% Load) |
 | :--- | :--- | :--- |
 | **1** | 49.5 Million | 673.2 Billion |
+| **10** | 495 Million | 6.73 Trillion |
 | **100** | 4.95 Billion | 67.3 Trillion |
 | **1,000** | 49.5 Billion | 673.2 Trillion |
 
