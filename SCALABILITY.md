@@ -8,11 +8,12 @@ SOP uses a **Registry** to map Logical IDs (UUIDs) to Physical Locations. This r
 
 ### The Math: Capacity Per Segment
 
-Using the default configuration constants:
+Using the max configuration constants and realistic load factors:
 *   **Registry Hash Mod**: `750,000` (Max blocks per segment file)
 *   **Block Size**: `4,096 bytes` (4KB)
-*   **Handles Per Block**: `66` (Number of ID records per 4KB block)
-*   **B-Tree Slot Length**: `10,000` (Max items per B-Tree Node)
+*   **Handles Per Block**: `66` (Max handles per sector)
+*   **B-Tree Slot Length**: `20,000` (Max items per B-Tree Node)
+*   **B-Tree Load Factor**: `68%` (Typical average occupancy)
 
 #### 1.1. Virtual IDs (Handles) Per Segment
 Each Registry Segment File can address:
@@ -21,22 +22,22 @@ $$ 750,000 \text{ blocks} \times 66 \text{ handles/block} = 49,500,000 \text{ Ha
 **Result**: A single 3GB Registry File can track **49.5 Million** unique B-Tree Nodes.
 
 #### 1.2. Total Items Per Segment
-If each Handle represents one B-Tree Node, and each Node holds up to 10,000 items:
-$$ 49,500,000 \text{ Nodes} \times 10,000 \text{ Items/Node} = 495,000,000,000 \text{ Items} $$
+If each Handle represents one B-Tree Node, and each Node holds up to 20,000 items @ 68% load:
+$$ 49,500,000 \text{ Nodes} \times (20,000 \times 0.68) \text{ Items/Node} = 673,200,000,000 \text{ Items} $$
 
-**Result**: A single Registry Segment can index **495 Billion Items**.
+**Result**: A single Registry Segment can index **673.2 Billion Items**.
 
 ### The Math: Horizontal Scaling
 
-SOP automatically allocates new Registry Segments as needed. It is designed to handle hundreds or thousands of segments.
+SOP automatically allocates new Registry Segments as needed. It is designed to handle high volume segments, BUT currently set to a limit of 1,000 to keep the logic simple.
 
-| Segments | Total Nodes (Handles) | Total Capacity (Items @ 10k Slots) |
+| Segments | Total Nodes (Handles) | Total Capacity (Items @ 20k Slots, 68% Load) |
 | :--- | :--- | :--- |
-| **1** | 49.5 Million | 495 Billion |
-| **100** | 4.95 Billion | 49.5 Trillion |
-| **1,000** | 49.5 Billion | 495 Trillion |
+| **1** | 49.5 Million | 673.2 Billion |
+| **100** | 4.95 Billion | 67.3 Trillion |
+| **1,000** | 49.5 Billion | 673.2 Trillion |
 
-**Conclusion**: With just 1,000 registry segments (a manageable number for any modern filesystem), SOP can address **Half a Quadrillion Items**. The limit is purely your disk space (Petabytes).
+**Conclusion**: With just 1,000 registry segments (a manageable number for any modern filesystem), SOP can address **Over Half a Quadrillion Items**. The limit is purely your disk space (Petabytes).
 
 ---
 

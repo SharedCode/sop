@@ -119,7 +119,7 @@ SOP separates the storage responsibilities into two distinct layers, each tunabl
 1.  **Registry / System Data (Stores Folders)**:
     *   **Configuration**: `StoresFolders` (List of paths).
     *   **Mechanism**: Active/Passive Redundancy.
-    *   **Behavior**: You typically provide 2 paths (on different drives). SOP writes to the Active drive. If it fails, the system automatically fails over to the Passive drive to ensure the Registry and System DB remain accessible.
+    *   **Behavior**: You typically provide 2 paths (on different drives). SOP writes to the Active drive. If it fails, the system automatically fails over to the Passive drive to ensure the Registry & the database remains fully operational.
 
 2.  **User Data Files (Erasure Coding)**:
     *   **Configuration**: `ErasureConfigs` (Map of Keys to EC settings).
@@ -202,8 +202,14 @@ For larger datasets, increasing `SlotLength` to **4,000** yields higher throughp
 
 *Recommendation: Start with a `SlotLength` of 2,000 for general use, and increase to 4,000+ for write-heavy workloads with large datasets.*
 
-> **Pro Tip for Massive Scale:**
-> For datasets reaching into the **hundreds of billions or trillions** of records, you can increase `SlotLength` up to **10,000**. This maximizes node density, allowing a single B-Tree to manage petabytes of data with minimal metadata overhead. See [Scalability & Limits](SCALABILITY.md) for the math.
+ **Pro Tip for Massive Scale:**
+ For datasets reaching into the **hundreds of billions or trillions** of records, you can increase `SlotLength` up to **20,000**. This maximizes node density, allowing a single B-Tree to manage massive amounts of data (calculated at **68% average load**):
+
+ | Hash Mod Value | Segment Size | Capacity (Key/Value Pairs) |
+ | :--- | :--- | :--- |
+ | **750,000** (Max) | ~3 GB | **673,200,000,000** (673.2 Billion) |
+
+ This enables managing petabytes of data with minimal metadata overhead. See [Scalability & Limits](SCALABILITY.md) for the full breakdown.
 
 ### Why this matters
 These benchmarks are running with **Full ACID Transaction** protection. Unlike simple Key-Value stores that optimize purely for random writes (often sacrificing order or safety), SOP provides a robust foundation for complex data access:

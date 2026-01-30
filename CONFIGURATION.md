@@ -165,17 +165,18 @@ The following table estimates the storage capacity for a single Registry Segment
 The following table portrays the theoretical maximums using a **Slot Length of 20,000** and a typical B-Tree **Load Factor of 68%**.
 
 **Assumptions**:
-*   **Items per Sector**: 62
+*   **Items per Sector**: 66 (Max handles per sector)
 *   **Slot Length**: 20,000
 *   **Load Factor**: 68% (0.68)
 
 | Hash Mod Value | Segment File Size (Disk) | Estimated Capacity (Key/Value Pairs) |
 | :--- | :--- | :--- |
-| **250** (Default) | ~1 MB | **210,800,000** (210 Million) |
-| **500** | ~2 MB | **421,600,000** (421 Million) |
-| **10,000** | ~41 MB | **8,432,000,000** (8.4 Billion) |
-| **100,000** | ~410 MB | **84,320,000,000** (84.3 Billion) |
-| **400,000** | ~1.6 GB | **337,280,000,000** (337.2 Billion) |
+| **250** (Default) | ~1 MB | **224,400,000** (224.4 Million) |
+| **500** | ~2 MB | **448,800,000** (448.8 Million) |
+| **10,000** | ~41 MB | **8,976,000,000** (8.97 Billion) |
+| **100,000** | ~410 MB | **89,760,000,000** (89.7 Billion) |
+| **400,000** | ~1.6 GB | **359,040,000,000** (359 Billion) |
+| **750,000** (Max) | ~3 GB | **673,200,000,000** (673.2 Billion) |
 
 > **Note on Horizontal Scaling**: The capacity figures above apply to a **single** registry segment file. When a "sector" (which serves as a hash bucket) within a segment file becomes full, SOP automatically allocates a new segment file (e.g., `registry-2.reg`). The total capacity scales linearly with the number of files.
 > *   *Example*: If your usage requires 5 segment files, your total capacity is **5x** the figures shown in the table.
