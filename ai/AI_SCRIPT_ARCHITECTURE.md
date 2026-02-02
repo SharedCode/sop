@@ -61,12 +61,15 @@ This design unlocked **Composability** and **Self-Documentation**.
 *   We can compose them into complex workflows (`process_payroll` calls `find_user` then `calculate_tax`).
 *   The runner (`runStepScript`) simply pushes a new stack frame and executes the child script, just like a function call in a programming language.
 
-### 2. Session Isolation
+### 2. Session Isolation (Refactored)
 To solve the state management nightmare, we strictly separated the **Recording Context** from the **Runtime Context**.
 
-*   **RunnerSession:** Holds the state of the *active* interaction (recording flags, current transaction).
-*   **Execution Context:** When a script runs, it spins up a fresh, isolated context (`scriptCtx`). It gets its own variable scope and its own transaction boundaries.
-*   **Payload Injection:** We pass dependencies (like the target Database) via the context payload, ensuring that a script running against `UserDB` cannot accidentally touch `SystemDB`.
+*   **ScriptExecutor (The Instance):** We moved away from shared `Context` maps to a robust `ScriptExecutor` struct. This instance holds:
+    *   **Variables (Mutex-protected):** Safe for parallel step execution.
+    *   **Transactions:** Scoped strictly to the script instance.
+    *   **Dependencies:** Injected at creation time.
+*   **Context Injection:** The `ScriptExecutor` is injected into the Go Context during execution, allowing generic tool signatures to retrieve their specific runtime instance safely.
+*   **Recording vs. Runtime:** The Recorder captures the *intent* (AST), while the Executor manages the *state* (Variables/TX). They never share memory directly.
 
 ### 3. Structured Streaming (The Heart & Soul)
 Finally, to solve the "Chatty" trap and enable scaling, we implemented the **JSON Streaming** pattern, the heart & soul of SOP's large data chunking extended to the AI space.

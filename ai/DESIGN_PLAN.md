@@ -84,6 +84,11 @@ Users should be able to define the "Shape" of their data.
 - [x] Hybrid Search (Vector + BM25).
 - [x] B-Tree Persistence.
 - [x] Basic Agent/Pipeline Architecture.
+- [ ] **Refactor Script Execution (Thread Safety)**[Priority High]:
+    - Move away from `context`-based state storage (current hotfix).
+    - Implement `ScriptExecutor` struct (Instance-based pattern) to hold variables, transactions, and mutexes.
+    - Bridges the `DataAdminAgent` singleton to ephemeral execution instances.
+    - Enables safe parallel step execution (`ParallelFor`).
 
 ### Phase 2: The Curator (Next Steps)
 - [ ] **Configurable ETL**: Add `ETLConfig` to define Curator steps.

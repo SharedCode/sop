@@ -16,7 +16,7 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/model"
 	"github.com/sharedcode/sop/jsondb"
-	"github.com/sharedcode/sop/scripts"
+	// "github.com/sharedcode/sop/scripts"
 )
 
 // Database interface for script execution
@@ -51,6 +51,7 @@ func (e *ScriptEngine) getDatabase(name string) (Database, bool) {
 
 // ScriptInstruction represents a single operation in the script.
 type ScriptInstruction struct {
+	Name      string         `json:"name"`       // User-defined name for the step
 	Op        string         `json:"op"`         // Operation name
 	Args      map[string]any `json:"args"`       // Arguments
 	InputVar  string         `json:"input_var"`  // Variable to use as input (optional)
@@ -81,6 +82,62 @@ type OrderedFieldsProvider interface {
 // SpecProvider allows cursors to expose IndexSpecifications for field ordering.
 type SpecProvider interface {
 	GetIndexSpecs() map[string]*jsondb.IndexSpecification
+}
+
+// DeferredCleanupCursor wraps a ScriptCursor and executes deferred functions on Close.
+type DeferredCleanupCursor struct {
+	source  ScriptCursor
+	cleanup []func(context.Context, *ScriptEngine) error
+	ctx     context.Context
+	engine  *ScriptEngine
+	closed  bool
+}
+
+func (d *DeferredCleanupCursor) Next(ctx context.Context) (any, bool, error) {
+	return d.source.Next(ctx)
+}
+
+func (d *DeferredCleanupCursor) Close() error {
+	if d.closed {
+		return nil
+	}
+	d.closed = true
+
+	// Close inner first
+	err := d.source.Close()
+
+	// Run deferred functions (LIFO)
+	for i := len(d.cleanup) - 1; i >= 0; i-- {
+		log.Debug("Executing deferred operation (from Cursor Close)", "index", i)
+		if ferr := d.cleanup[i](d.ctx, d.engine); ferr != nil {
+			log.Error("Deferred execution failed (from Cursor Close)", "error", ferr)
+			// We log but don't overwrite the original close error unless needed
+			if err == nil {
+				err = ferr
+			}
+		}
+	}
+	return err
+}
+
+// Implement Optional Interfaces (Proxying)
+// Note: We can only conditionally expose these via type assertions if we implement them.
+// But since DeferredCleanupCursor is a struct, we must implement them unconditionally
+// or lose them. We choose to implement them and check inner at runtime.
+// Ideally usage of 'source' interface would be broader.
+
+func (d *DeferredCleanupCursor) GetOrderedFields() []string {
+	if p, ok := d.source.(OrderedFieldsProvider); ok {
+		return p.GetOrderedFields()
+	}
+	return nil
+}
+
+func (d *DeferredCleanupCursor) GetIndexSpecs() map[string]*jsondb.IndexSpecification {
+	if p, ok := d.source.(SpecProvider); ok {
+		return p.GetIndexSpecs()
+	}
+	return nil
 }
 
 // StoreCursor wraps a StoreAccessor to provide a ScriptCursor.
@@ -142,8 +199,10 @@ func (sc *StoreCursor) Next(ctx context.Context) (any, bool, error) {
 
 	for ok {
 		k := sc.store.GetCurrentKey()
-		v, _ := sc.store.GetCurrentValue(ctx)
-
+		v, err := sc.store.GetCurrentValue(ctx)
+		if err != nil {
+			return nil, false, err
+		}
 		// Prefix Check
 		if sc.prefix != nil {
 			if kStr, isStr := k.(string); isStr {
@@ -423,6 +482,7 @@ type ScriptEngine struct {
 	ReturnValue     any
 	HasReturned     bool
 	StoreOpener     func(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (jsondb.StoreAccessor, error)
+	Deferred        []func(context.Context, *ScriptEngine) error
 }
 
 func NewScriptEngine(ctx *ScriptContext, dbResolver func(string) (Database, error)) *ScriptEngine {
@@ -456,18 +516,40 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	}
 
 	// Parse Script first to ensure it's valid and normalized
+	var rawSteps []map[string]any
 	var script []ScriptInstruction
+
 	if pStr, ok := scriptRaw.(string); ok {
-		if err := json.Unmarshal([]byte(pStr), &script); err != nil {
+		if err := json.Unmarshal([]byte(pStr), &rawSteps); err != nil {
 			return "", fmt.Errorf("failed to parse script JSON: %v", err)
 		}
 	} else if pSlice, ok := scriptRaw.([]any); ok {
 		bytes, _ := json.Marshal(pSlice)
-		if err := json.Unmarshal(bytes, &script); err != nil {
+		if err := json.Unmarshal(bytes, &rawSteps); err != nil {
 			return "", fmt.Errorf("failed to parse script array: %v", err)
 		}
 	} else {
 		return "", fmt.Errorf("script must be a JSON string or array")
+	}
+
+	// Normalize Steps (Support "command" alias for "op", and "type" aliases)
+	// This allows the LLM to use "type": "command", "command": "scan" format used in create_script
+	for _, step := range rawSteps {
+		// 1. Map 'command' -> 'op'
+		if _, hasOp := step["op"]; !hasOp {
+			if cmd, ok := step["command"].(string); ok && cmd != "" {
+				step["op"] = cmd
+			}
+		}
+
+		// 2. Handle 'type' nuances (if any specific type needs mapping)
+		// e.g. type="logic" might imply specialized handling, but for now we trust 'op'.
+	}
+
+	// Re-marshal to strict struct
+	bytes, _ := json.Marshal(rawSteps)
+	if err := json.Unmarshal(bytes, &script); err != nil {
+		return "", fmt.Errorf("failed to re-parse normalized script: %v", err)
 	}
 
 	// 1. Sanitize Script (Pre-Execution Cleanup)
@@ -488,11 +570,28 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 
 	// Initialize Engine
 	var scriptCtx *ScriptContext
-	if a.sessionContext != nil {
-		scriptCtx = a.sessionContext
-	} else {
-		scriptCtx = NewScriptContext()
+
+	// Use Request-Scoped ScriptContext
+	scriptCtx = getOrInitScriptContext(ctx)
+
+	// Clear return registers to avoid returning stale data from previous script runs in the same session
+	if scriptCtx.Variables != nil {
+		delete(scriptCtx.Variables, "output")
+		delete(scriptCtx.Variables, "final_result")
+		delete(scriptCtx.Variables, "result")
 	}
+
+	// CRITICAL FIX: Clear LastUpdatedVar from previous runs!
+	// Implicit scripts rely on LastUpdatedVar. If a previous script left a stale variable name here,
+	// and the current script uses implicit piping (which updates LastUpdatedVar via RefineScriptInstructions),
+	// we are fine.
+	// BUT, if the current script fails early or doesn't produce output steps (unlikely with Refine),
+	// we want to avoid falling back to the stale variable.
+	// More importantly, RefineScriptInstructions is a NEW fix. Before that fix, implicit scripts
+	// did NOT update LastUpdatedVar, which caused them to return Stale Data (the "Another Query" bug).
+	// We clear it here to ensure safety even if Refinement misses something.
+	scriptCtx.LastUpdatedVar = ""
+	// Note: We access a.sessionContext no more.
 
 	// Wrap resolver to handle default database from context
 	resolver := func(name string) (Database, error) {
@@ -535,17 +634,22 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	// Priority 1: Check for 'output' variable (Explicit override)
 	// We only return it if it is non-nil, because some operations (like commit_tx) might use 'output'
 	// as a dummy variable but return nil, shadowing the actual result in 'final_result'.
+	log.Debug("toolExecuteScript: Checking for return value candidates...")
+
 	if val, ok := scriptCtx.Variables["output"]; ok && val != nil {
+		log.Debug("toolExecuteScript: Returning 'output' variable")
 		return serializeResult(ctx, val)
 	}
 
 	// Priority 2: Check for 'final_result' variable (Deprecated: Standard convention for query chains)
 	if val, ok := scriptCtx.Variables["final_result"]; ok {
+		log.Debug("toolExecuteScript: Returning 'final_result' variable")
 		return serializeResult(ctx, val)
 	}
 
 	// Priority 2.5: Check for 'result' variable (Common AI convention)
 	if val, ok := scriptCtx.Variables["result"]; ok {
+		log.Debug("toolExecuteScript: Returning 'result' variable")
 		return serializeResult(ctx, val)
 	}
 
@@ -556,11 +660,13 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 		// If last instruction is specifically a "return" or "output" op (hypothetically)
 		if lastInstr.Op == "return" {
 			// The return op already resolved the value and stored it in LastResult
+			log.Debug("toolExecuteScript: Returning 'return' op result")
 			return serializeResult(ctx, engine.LastResult)
 		}
 
 		if lastInstr.ResultVar != "" {
 			if val, ok := scriptCtx.Variables[lastInstr.ResultVar]; ok {
+				log.Debug("toolExecuteScript: Returning last instruction result variable", "var", lastInstr.ResultVar)
 				return serializeResult(ctx, val)
 			}
 		}
@@ -569,10 +675,26 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	// Priority 4: Fallback to the last updated variable (e.g. if script ends with commit_tx)
 	if scriptCtx.LastUpdatedVar != "" {
 		if val, ok := scriptCtx.Variables[scriptCtx.LastUpdatedVar]; ok {
+			log.Debug("toolExecuteScript: Returning last updated variable", "var", scriptCtx.LastUpdatedVar)
 			return serializeResult(ctx, val)
 		}
 	}
 
+	// Priority 5: Fallback to implicit LastResult (e.g. if script ends with an expression or cursor)
+	if engine.LastResult != nil {
+		log.Debug("toolExecuteScript: Returning implicit LastResult")
+		return serializeResult(ctx, engine.LastResult)
+	}
+
+	// Priority 6: Detect explicit RETURN op that might have returned nil/empty
+	if len(script) > 0 {
+		if script[len(script)-1].Op == "return" {
+			log.Debug("toolExecuteScript: Explicit return detected, but result was nil/empty")
+			return serializeResult(ctx, engine.LastResult) // Might be "null"
+		}
+	}
+
+	log.Debug("toolExecuteScript: No result found, returning success message")
 	return "Script executed successfully.", nil
 }
 
@@ -597,9 +719,18 @@ func (e *ScriptEngine) Compile(script []ScriptInstruction) (CompiledScript, erro
 }
 
 func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
-	var steps []func(context.Context, *ScriptEngine) error
+	type compiledStep struct {
+		Name string
+		Op   string
+		Args map[string]any
+		Func func(context.Context, *ScriptEngine) error
+	}
+	var steps []compiledStep
 
-	for i, instr := range script {
+	for _, instr := range script {
+		// Capture loop variable
+		instr := instr
+
 		// 1. Pre-process Arguments (Template Parsing)
 		argResolvers := make(map[string]func(*ScriptEngine) any)
 		for k, v := range instr.Args {
@@ -617,11 +748,11 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 		// 2. Bind Operation
 		opFunc, err := bindOperation(instr.Op)
 		if err != nil {
-			return nil, fmt.Errorf("instruction %d: %v", i, err)
+			return nil, fmt.Errorf("instruction '%s': %v", instr.Op, err)
 		}
 
-		// 3. Create Step Closure
-		step := func(ctx context.Context, e *ScriptEngine) error {
+		// 3. Create Step Closure (Pure Logic)
+		stepFn := func(ctx context.Context, e *ScriptEngine) error {
 			// Resolve Args
 			args := make(map[string]any)
 			for k, resolver := range argResolvers {
@@ -668,13 +799,138 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 			}
 			return nil
 		}
-		steps = append(steps, step)
+		steps = append(steps, compiledStep{
+			Name: instr.Name,
+			Op:   instr.Op,
+			Args: instr.Args,
+			Func: stepFn,
+		})
 	}
 
 	return func(ctx context.Context, e *ScriptEngine) error {
-		for _, step := range steps {
-			if err := step(ctx, e); err != nil {
+		// Execute Deferred functions on exit
+		defer func() {
+			// Check if we are returning a Cursor that needs to own the deferred cleanup
+			var cursor ScriptCursor
+
+			// Check ReturnValue first
+			if sc, ok := e.ReturnValue.(ScriptCursor); ok {
+				cursor = sc
+			} else if sc, ok := e.LastResult.(ScriptCursor); ok {
+				// Fallback to LastResult if ReturnValue not set (implicit return)
+				cursor = sc
+			}
+
+			if cursor != nil && len(e.Deferred) > 0 {
+				log.Debug("Transferring deferred cleanup to returned cursor")
+
+				// Wrap the cursor
+				wrapper := &DeferredCleanupCursor{
+					source:  cursor,
+					cleanup: e.Deferred, // Transfer ownership
+					ctx:     ctx,
+					engine:  e,
+				}
+
+				// Identify which variable holds this cursor and update it?
+				// e.ReturnValue holds it.
+				if e.ReturnValue != nil {
+					e.ReturnValue = wrapper
+				}
+				// Also update LastResult if it matches, to be safe
+				if e.LastResult == cursor {
+					e.LastResult = wrapper
+				}
+
+				// CLEAR Deferred so they don't run now
+				e.Deferred = nil
+				return
+			}
+
+			// Run in LIFO order (like Go's defer)
+			for i := len(e.Deferred) - 1; i >= 0; i-- {
+				log.Debug("Executing deferred operation", "index", i)
+				if err := e.Deferred[i](ctx, e); err != nil {
+					log.Error("Deferred execution failed", "error", err)
+				}
+			}
+		}()
+
+		for i, step := range steps {
+			if e.HasReturned {
+				log.Debug("Script returned early", "step", i)
+				break
+			}
+			log.Debug("ExecuteStep", "step", i+1, "op", step.Op)
+
+			// Streaming Setup
+			var stepStreamer interface {
+				WriteItem(any)
+				Close()
+			}
+
+			if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+				isVerbose, _ := ctx.Value("verbose").(bool)
+
+				// System commands check
+				isSystemOp := false
+				switch step.Op {
+				case "open_db", "begin_tx", "commit_tx", "rollback_tx", "open_store":
+					isSystemOp = true
+				}
+
+				if isVerbose && !isSystemOp {
+					// We must force suppression OFF because this might be running inside a "tool execution" context
+					// where the runner automatically suppressed step events for the tool call.
+					// Since we ARE the script engine, we want those events.
+					streamer.SetSuppressStepStart(false)
+
+					// Determine Display Name
+					// Priority: 1. User-defined Step Name 2. Sub-script Name 3. Operation Name
+					displayName := step.Op
+					if step.Name != "" {
+						displayName = step.Name
+					} else if step.Op == "execute_script" {
+						if n, ok := step.Args["name"].(string); ok && n != "" {
+							displayName = n // Use the script name being executed
+						}
+					}
+
+					stepStreamer = streamer.StartStreamingStep("step_start", displayName, "", i+1)
+				}
+			}
+
+			// Run Step
+			if err := step.Func(ctx, e); err != nil {
+				log.Debug("ExecuteStep failed", "step", i+1, "err", err)
+				if stepStreamer != nil {
+					stepStreamer.Close()
+				}
 				return err
+			}
+
+			log.Debug("ExecuteStep success", "step", i+1, "lastResultType", fmt.Sprintf("%T", e.LastResult))
+
+			// Handle Result Streaming (Only for immediate values, NOT cursors)
+			if stepStreamer != nil {
+				result := e.LastResult
+				// Check if result is a Cursor (lazy) - if so, DO NOT stream here.
+				if _, ok := result.(ScriptCursor); !ok {
+					// Immediate Result (List, Map, Primitive)
+					if list, ok := result.([]any); ok {
+						for _, item := range list {
+							stepStreamer.WriteItem(item)
+						}
+					} else if list, ok := result.([]map[string]any); ok {
+						for _, item := range list {
+							stepStreamer.WriteItem(item)
+						}
+					} else if result != nil {
+						// log.Debug("Streaming immediate result", "val", result)
+						stepStreamer.WriteItem(result)
+					}
+				}
+				stepStreamer.Close()
 			}
 		}
 		return nil
@@ -790,6 +1046,59 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			return e.Inspect(ctx, args)
 		}, nil
+	case "defer":
+		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
+			// Extract command to defer
+			// We support simplified syntax where args IS the command, or args contains "command"
+			var cmdToDefer map[string]any
+
+			// 1. Check for nested "command" or "execute"
+			if cmd, ok := args["command"].(map[string]any); ok {
+				cmdToDefer = cmd
+			} else if cmd, ok := args["execute"].(map[string]any); ok {
+				cmdToDefer = cmd
+			} else {
+				// 2. Assume args is the command (flattened)
+				// Check for required "op"
+				if _, ok := args["op"].(string); ok {
+					cmdToDefer = args
+				} else {
+					return nil, fmt.Errorf("defer requires 'op' or nested 'command'")
+				}
+			}
+
+			// Compile the deferred command into a single-step function
+			// Re-use Compile logic or bind directly?
+			// We can use a recursive CompileScript call for robustness
+			script := []ScriptInstruction{
+				{
+					Op:   cmdToDefer["op"].(string),
+					Args: cmdToDefer,
+				},
+			}
+
+			// NOTE: We cannot call CompileScript purely here because we need `e` at runtime,
+			// but CompileScript returns a closure that takes `e`.
+			compiledCmd, err := CompileScript(script)
+			if err != nil {
+				return nil, fmt.Errorf("failed to compile deferred command: %v", err)
+			}
+
+			// Append checks
+			e.Deferred = append(e.Deferred, func(c context.Context, se *ScriptEngine) error {
+				// We must temporarily clear HasReturned because the deferred task itself
+				// is compiled using CompileScript, which checks HasReturned.
+				// Since we are now in the cleanup phase, the "return" that triggered this
+				// has already happened, and we need to execute regardless.
+				wasReturned := se.HasReturned
+				se.HasReturned = false
+				defer func() { se.HasReturned = wasReturned }()
+
+				return compiledCmd(c, se)
+			})
+
+			return "Deferred", nil
+		}, nil
 	case "assign":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, input any) (any, error) {
 			if val, ok := args["value"]; ok {
@@ -814,8 +1123,8 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 			return make([]any, 0), nil
 		}, nil
 	case "list_append":
-		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
-			return nil, e.ListAppend(ctx, args)
+		return func(ctx context.Context, e *ScriptEngine, args map[string]any, input any) (any, error) {
+			return e.ListAppend(ctx, input, args)
 		}, nil
 	case "map_merge":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
@@ -866,16 +1175,30 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 				// the literal string "@my_var" instead of the JSON object it points to.
 				// This logic ensures parity with how arguments are resolved in other operations.
 
-				// Resolve variable using engine's standardized name resolution (handles @ prefixes etc)
-				if strVal, ok := val.(string); ok && e.Context != nil && e.Context.Variables != nil {
-					varName := e.resolveVarName(strVal)
-					// If the resolved name exists in variables, return the UNWRAPPED object.
-					if v, found := e.Context.Variables[varName]; found {
-						return v, nil
+				// Helper to resolve a value (string or structure)
+				var resolve func(v any) any
+				resolve = func(v any) any {
+					if strVal, ok := v.(string); ok && e.Context != nil && e.Context.Variables != nil {
+						varName := e.resolveVarName(strVal)
+						if res, found := e.Context.Variables[varName]; found {
+							return res
+						}
 					}
+					if sliceVal, ok := v.([]any); ok {
+						newSlice := make([]any, len(sliceVal))
+						for i, item := range sliceVal {
+							newSlice[i] = resolve(item)
+						}
+						return newSlice
+					}
+					// TODO: Map support if needed
+					return v
 				}
-				// If not a variable, return the literal value.
-				return val, nil
+
+				res := resolve(val)
+				e.ReturnValue = res
+				e.HasReturned = true
+				return res, nil
 			}
 			return nil, nil
 		}, nil
@@ -885,6 +1208,17 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 }
 
 func serializeResult(ctx context.Context, val any) (string, error) {
+	// Handle non-serializable system types that can't be marshaled to JSON
+	if _, ok := val.(Database); ok {
+		return "Database object (success)", nil
+	}
+	if _, ok := val.(sop.Transaction); ok {
+		return "Transaction object (success)", nil
+	}
+	if _, ok := val.(jsondb.StoreAccessor); ok {
+		return "Store object (success)", nil
+	}
+
 	alreadyCollapsed := false
 
 	if cursor, ok := val.(ScriptCursor); ok {
@@ -897,12 +1231,25 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 			orderedFields = provider.GetOrderedFields()
 		}
 
-		/*
-			log.Debug("serializeResult: Consuming Cursor",
-				"cursorType", fmt.Sprintf("%T", cursor),
-				"hasOrderedFields", len(orderedFields) > 0,
-				"orderedFields", orderedFields)
-		*/
+		// Setup Streaming for Final Result (Cursor)
+		var resultStreamer interface {
+			WriteItem(any)
+			Close()
+			SetMetadata(map[string]any)
+		}
+
+		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok && streamer != nil {
+			// Ensure we are in "Result Mode" (suppress "Step ..." wrapper for the final output stream)
+			streamer.SetSuppressStepStart(true)
+			resultStreamer = streamer.StartStreamingStep("result_stream", "final_result", "", 0)
+
+			// Helper: Extract valid columns from ordered fields for metadata
+			if len(orderedFields) > 0 {
+				cols := make(map[string]any)
+				cols["columns"] = orderedFields
+				resultStreamer.SetMetadata(cols)
+			}
+		}
 
 		for {
 			itemObj, ok, err := cursor.Next(ctx)
@@ -912,6 +1259,10 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 			if !ok {
 				break
 			}
+			if itemObj == nil {
+				continue
+			}
+
 			var itemMap map[string]any
 			// Preserve OrderedMap structure for explicit projections
 			isOrdered := false
@@ -949,28 +1300,19 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 			var item any = itemObj
 			// Apply top-level field ordering
 			if itemMap != nil && len(orderedFields) > 0 {
-				// log.Debug("serializeResult calling filterFields", "orderedFields", orderedFields)
 				item = filterFields(itemMap, orderedFields)
-				/*
-					if om, ok := item.(*OrderedMap); ok {
-						log.Debug("serializeResult received OrderedMap", "keys", om.keys)
-					} else {
-						log.Debug("serializeResult received item", "type", fmt.Sprintf("%T", item))
-					}
-					// Debug log to trace what we actually got
-					if om, ok := item.(OrderedMap); ok {
-						b, _ := json.Marshal(om)
-						log.Debug("payload contents:", "Function", "serializeResult", "keys", om.keys, "json", string(b))
-					} else if om, ok := item.(*OrderedMap); ok {
-						b, _ := json.Marshal(om)
-						log.Debug("payload contents:", "Function", "serializeResult", "keys", om.keys, "json", string(b))
-					} else {
-						log.Debug("payload contents:", "Function", "serializeResult", "type", fmt.Sprintf("%T", item), "val", item)
-					}
-				*/
+			}
+
+			// Stream the Item
+			if resultStreamer != nil {
+				resultStreamer.WriteItem(item)
 			}
 
 			results = append(results, item)
+		}
+
+		if resultStreamer != nil {
+			resultStreamer.Close()
 		}
 
 		val = results
@@ -991,7 +1333,12 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 		}
 
 		if list != nil {
-			for i, itemObj := range list {
+			newList := make([]any, 0, len(list))
+			for _, itemObj := range list {
+				if itemObj == nil {
+					continue
+				}
+
 				var itemMap map[string]any
 				// Preserve OrderedMap structure
 				isOrdered := false
@@ -1017,14 +1364,17 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 					}
 				}
 
+				finalItem := itemObj
 				if itemMap != nil {
 					// collapseUniqueKeys modifies in-place
 					collapsed := collapseUniqueKeys(itemMap)
 					// Replace with vanilla map to ensure JSON marshaling uses the new keys (and skips deleted ones)
 					// This sidesteps checking if it was OrderedMap with stale keys.
-					list[i] = collapsed
+					finalItem = collapsed
 				}
+				newList = append(newList, finalItem)
 			}
+			val = newList
 		}
 	}
 
@@ -1114,7 +1464,7 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 	case "list_new":
 		result = make([]any, 0)
 	case "list_append":
-		err = e.ListAppend(ctx, instr.Args)
+		result, err = e.ListAppend(ctx, input, instr.Args)
 	case "map_merge":
 		result, err = e.MapMerge(ctx, instr.Args)
 	// Cursor / Store Operations
@@ -1582,7 +1932,8 @@ func (e *ScriptEngine) evaluateCondition(item any, condition any) (bool, error) 
 		// Typically filtering happens before projection, so item should be full.
 		if itemMap, ok := item.(map[string]any); ok {
 			for k := range matchMap {
-				if _, exists := itemMap[k]; !exists {
+				// Use resolveKey logic to check if field is accessible (supports smart prefixing)
+				if _, found := resolveKey(itemMap, k); !found {
 					// Check for fuzzy match
 					if suggested := findSimilarKey(k, itemMap); suggested != "" {
 						return false, fmt.Errorf("field '%s' not found in item. Did you mean '%s'?", k, suggested)
@@ -2333,12 +2684,6 @@ func (e *ScriptEngine) JoinRight(ctx context.Context, input any, args map[string
 		// note: Join() method above looks at "with" or "variables".
 	}
 
-	// FIX: Explicitly map 'alias' to 'right_alias' so the underlying Join operation usage
-	// of JoinRightCursor respects the user-defined alias.
-	if alias, ok := args["alias"]; ok {
-		args["right_alias"] = alias
-	}
-
 	return e.Join(ctx, input, args)
 }
 
@@ -2848,35 +3193,57 @@ func (e *ScriptEngine) GetCurrentValue(ctx context.Context, args map[string]any)
 
 // --- List / Map Operations ---
 
-func (e *ScriptEngine) ListAppend(ctx context.Context, args map[string]any) error {
+func (e *ScriptEngine) ListAppend(ctx context.Context, input any, args map[string]any) (any, error) {
 	listVar, _ := args["list"].(string)
 	item := args["item"]
-
-	list, ok := e.Context.Variables[listVar]
-	if !ok {
-		return fmt.Errorf("list variable '%s' not found", listVar)
+	if item == nil {
+		item = args["value"]
 	}
+
+	var list any
+	// Priority 1: Named Variable
+	if listVar != "" {
+		var ok bool
+		list, ok = e.Context.Variables[listVar]
+		if !ok {
+			return nil, fmt.Errorf("list variable '%s' not found", listVar)
+		}
+	} else {
+		// Priority 2: Input (Piping)
+		if input == nil {
+			return nil, fmt.Errorf("list variable not specified and no input provided")
+		}
+		list = input
+	}
+
+	var resultList []any
 
 	// Append
 	if l, ok := list.([]any); ok {
-		e.Context.Variables[listVar] = append(l, item)
+		// Create new slice to avoid side effects if we are piping (functional style) ???
+		// But usually we want side effects for list_append if variable is used.
+		// If variable used: modify in place (if possible/needed) or update variable
+		// If piped: return new list
+		// Let's always return new slice (copying header, sharing backing array is risky if capacity exceeded)
+		// Go append handles this.
+		resultList = append(l, item)
 	} else if l, ok := list.([]map[string]any); ok {
-		// If item is map, ok.
-		if m, ok := item.(map[string]any); ok {
-			e.Context.Variables[listVar] = append(l, m)
-		} else {
-			// Convert to []any? Or fail?
-			// Let's upgrade the list to []any
-			newList := make([]any, len(l))
-			for i, v := range l {
-				newList[i] = v
-			}
-			e.Context.Variables[listVar] = append(newList, item)
+		// Upgrade to []any to be safe
+		resultList = make([]any, len(l)+1)
+		for i, v := range l {
+			resultList[i] = v
 		}
+		resultList[len(l)] = item
 	} else {
-		return fmt.Errorf("variable '%s' is not a list", listVar)
+		return nil, fmt.Errorf("variable (or input) is not a list")
 	}
-	return nil
+
+	// Update variable if named
+	if listVar != "" {
+		e.Context.Variables[listVar] = resultList
+	}
+
+	return resultList, nil
 }
 
 func (e *ScriptEngine) MapMerge(ctx context.Context, args map[string]any) (map[string]any, error) {
@@ -2905,10 +3272,12 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 	}
 
 	// Check Native Scripts Registry first
-	if fn, found := scripts.Get(scriptName); found {
-		params, _ := args["params"].(map[string]any)
-		return fn(ctx, params)
-	}
+	/*
+		if fn, found := scripts.Get(scriptName); found {
+			params, _ := args["params"].(map[string]any)
+			return fn(ctx, params)
+		}
+	*/
 
 	if a.systemDB == nil {
 		return nil, fmt.Errorf("system database not available")
@@ -2957,11 +3326,22 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 	isAtomic := false
 	if len(stepsRaw) > 0 {
 		if firstStep, ok := stepsRaw[0].(map[string]any); ok {
-			if _, hasOp := firstStep["op"]; hasOp {
+			_, hasOp := firstStep["op"]
+			_, hasType := firstStep["type"]
+
+			// Heuristic: If "type" field is present, it follows the High-Level Script Schema (ScriptStep).
+			// If "op" field is present AND "type" is missing, it follows the Low-Level Atomic Schema (ScriptInstruction).
+			// We prioritize High-Level handling if "type" is detected, to support Legacy/High-Level scripts that might inadvertently have empty "op" fields or future schema convergences.
+			if hasOp && !hasType {
 				isAtomic = true
 			}
 		}
 	}
+
+	// DEBUG: Force non-atomic if strictly generic tool format?
+	// User might have added "op" accidentally? Or "type": "command" maps to "op"?
+	// If it has "command" AND "op", which wins?
+	// Currently "op" wins.
 
 	if isAtomic {
 		// Serialize to detect changes
@@ -3024,7 +3404,13 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 			return val, nil
 		}
 
-		return nil, nil
+		// Priority 1.5: Return explicit ReturnValue from engine if set (e.g. by 'return' op)
+		if engine.HasReturned {
+			return engine.ReturnValue, nil
+		}
+
+		// Priority 2: Return implicit LastResult
+		return engine.LastResult, nil
 	}
 
 	// Legacy Tool Script
@@ -3129,6 +3515,48 @@ func matchesMap(item any, condition map[string]any) bool {
 	return true
 }
 
+func resolveKey(m map[string]any, target string) (string, bool) {
+	// 1. Exact Match
+	if _, ok := m[target]; ok {
+		return target, true
+	}
+
+	// 2. Case-Insensitive Match
+	for k := range m {
+		if strings.EqualFold(k, target) {
+			return k, true
+		}
+	}
+
+	// 3. Unique Suffix Match (Reverse Alias): "field" -> "table.field"
+	// Also supports partial path matching: "user.name" -> "Left.user.name"
+	{
+		var candidate string
+		foundCount := 0
+		suffix := "." + strings.ToLower(target)
+		for k := range m {
+			kLower := strings.ToLower(k)
+			if strings.HasSuffix(kLower, suffix) {
+				candidate = k
+				foundCount++
+			}
+		}
+		if foundCount == 1 {
+			return candidate, true
+		}
+	}
+
+	// 4. Relaxed Alias Lookup: "table.field" -> "field"
+	if idx := strings.Index(target, "."); idx != -1 {
+		suffix := target[idx+1:]
+		if _, ok := m[suffix]; ok {
+			return suffix, true
+		}
+	}
+
+	return "", false
+}
+
 func getField(itemObj any, field string) any {
 	var item map[string]any
 	if m, ok := itemObj.(map[string]any); ok {
@@ -3141,41 +3569,8 @@ func getField(itemObj any, field string) any {
 		return nil
 	}
 
-	// Support "value.age" or just "age" (implicit value)
-	if v, ok := item[field]; ok {
-		return v
-	}
-
-	// Case-insensitive fallback (SQL behavior)
-	for k, v := range item {
-		if strings.EqualFold(k, field) {
-			return v
-		}
-	}
-
-	// Support relaxed aliased lookup (e.g. "a.name" -> "name") provided the alias didn't match
-	if idx := strings.Index(field, "."); idx != -1 {
-		suffix := field[idx+1:]
-		if v, ok := item[suffix]; ok {
-			return v
-		}
-	}
-
-	// Reverse Alias Lookup: Request "name", Match "users.name" if unique
-	// This mimics SQL unqualified column resolution.
-	if !strings.Contains(field, ".") {
-		var candidate any
-		count := 0
-		suffix := "." + field
-		for k, v := range item {
-			if strings.HasSuffix(k, suffix) {
-				candidate = v
-				count++
-			}
-		}
-		if count == 1 {
-			return candidate
-		}
+	if key, found := resolveKey(item, field); found {
+		return item[key]
 	}
 
 	// Check for key field (alias or direct)
@@ -3312,8 +3707,34 @@ func toFloat(v any) (float64, bool) {
 // sanitizeScript performs a pass over the script instructions to clean up common LLM errors.
 // This is the "Compiler/Linter" phase before execution.
 func sanitizeScript(script []ScriptInstruction) []ScriptInstruction {
+	// Track variable origins to support alias injection (VarName -> OriginStoreName)
+	varOrigins := make(map[string]string)
+
 	for i := range script {
 		instr := &script[i]
+
+		// Track Origins
+		if instr.Op == "scan" || instr.Op == "open_store" {
+			if store, ok := instr.Args["store"].(string); ok {
+				if rVar := instr.ResultVar; rVar != "" {
+					varOrigins[rVar] = store
+				}
+			} else if store, ok := instr.Args["name"].(string); ok {
+				// open_store uses 'name'
+				if rVar := instr.ResultVar; rVar != "" {
+					varOrigins[rVar] = store
+				}
+			}
+		} else if instr.Op == "filter" || instr.Op == "project" || instr.Op == "limit" || instr.Op == "sort" {
+			// Pass-through origin
+			if rVar := instr.ResultVar; rVar != "" {
+				if inputVar := instr.InputVar; inputVar != "" {
+					if origin, ok := varOrigins[inputVar]; ok {
+						varOrigins[rVar] = origin
+					}
+				}
+			}
+		}
 
 		// 1. PROJECT Op: Normalize "fields"
 		if instr.Op == "project" {
@@ -3349,6 +3770,13 @@ func sanitizeScript(script []ScriptInstruction) []ScriptInstruction {
 			// Default to inner if missing
 			if _, ok := instr.Args["type"]; !ok {
 				instr.Args["type"] = "inner"
+			}
+
+			// Inject Left Alias from Origin (Fixes nested key aliasing)
+			if _, hasAlias := instr.Args["left_alias"]; !hasAlias {
+				if origin, ok := varOrigins[instr.InputVar]; ok {
+					instr.Args["left_alias"] = origin
+				}
 			}
 
 			// 3. Infer Alias from Projection Usage (Heuristic)
@@ -3430,6 +3858,47 @@ func sanitizeScript(script []ScriptInstruction) []ScriptInstruction {
 				instr.Args["on"] = newOn
 			}
 		}
+
+		// 5. COMMIT Op: Convert to DEFER for Streaming Compatibility
+		// If explicit commit is detected at the end of a detailed script (scan/join usage),
+		// we rewrite it to 'defer' so the transaction outlives the script execution
+		// (allowing the runtime to consume the cursor).
+		if instr.Op == "commit_tx" {
+			// Heuristic: Check if this script has produced a cursor
+			hasCursorProducer := false
+			for j := 0; j < i; j++ {
+				prev := script[j]
+				if prev.Op == "scan" || prev.Op == "join" || prev.Op == "filter" {
+					hasCursorProducer = true
+					break
+				}
+			}
+
+			if hasCursorProducer {
+				// Rewrite to DEFER
+				// FROM: {"op": "commit_tx", "args": { "transaction": "tx" }}
+				// TO:   {"op": "defer", "args": { "command": { "op": "commit_tx", "transaction": "tx" } }}
+
+				cmdToDefer := make(map[string]any)
+				if instr.Args != nil {
+					for k, v := range instr.Args {
+						cmdToDefer[k] = v
+					}
+				}
+				cmdToDefer["op"] = "commit_tx"
+
+				instr.Op = "defer"
+				instr.Args = map[string]any{
+					"command": cmdToDefer,
+				}
+			}
+		}
 	}
 	return script
 }
+
+// RefineScriptInstructions explicitizes implicit variable chaining in the script.
+// It ensures every step writes to a variable and reads from the previous step's variable
+// if InputVar is missing. This fixes "Orphaned Cursor" issues where CommitTx fails to drain
+// implicit cursors because they aren't registered in the Variables map.
+// RefineScriptInstructions REMOVED (Moved to Save-Time Logic in script_refinement.go)

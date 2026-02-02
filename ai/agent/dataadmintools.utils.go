@@ -2,6 +2,7 @@ package agent
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -14,6 +15,50 @@ import (
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/jsondb"
 )
+
+const (
+	CtxKeyAtomicScriptContext = "_atomic_script_context"
+	CtxKeyAtomicLastResult    = "_atomic_last_result"
+)
+
+func getOrInitScriptContext(ctx context.Context) *ScriptContext {
+	p := ai.GetSessionPayload(ctx)
+	if p == nil {
+		// Fallback for context-less usage (should verify if this introduces shared state risk if the agent caches it)
+		// For now, return a new transient context if no payload.
+		// NOTE: In production, payload MUST exist for state persistence within a session.
+		return NewScriptContext()
+	}
+	if p.Variables == nil {
+		p.Variables = make(map[string]any)
+	}
+	if val, ok := p.Variables[CtxKeyAtomicScriptContext]; ok {
+		if sc, ok := val.(*ScriptContext); ok {
+			return sc
+		}
+	}
+	sc := NewScriptContext()
+	p.Variables[CtxKeyAtomicScriptContext] = sc
+	return sc
+}
+
+func getLastAtomicResult(ctx context.Context) any {
+	p := ai.GetSessionPayload(ctx)
+	if p == nil || p.Variables == nil {
+		return nil
+	}
+	return p.Variables[CtxKeyAtomicLastResult]
+}
+
+func setLastAtomicResult(ctx context.Context, res any) {
+	p := ai.GetSessionPayload(ctx)
+	if p != nil {
+		if p.Variables == nil {
+			p.Variables = make(map[string]any)
+		}
+		p.Variables[CtxKeyAtomicLastResult] = res
+	}
+}
 
 // mapToScriptSteps converts a generic slice of maps into []ai.ScriptStep.
 func mapToScriptSteps(list []any) ([]ai.ScriptStep, error) {
@@ -34,6 +79,15 @@ func mapToScriptSteps(list []any) ([]ai.ScriptStep, error) {
 			if step.Type == "" {
 				step.Type = "command" // Default to command if unspecified
 			}
+
+			// Compatibility: map 'op' to 'Command' if 'command' is missing
+			// This handles cases where the LLM or UI sends 'op' instead of 'command'.
+			if step.Command == "" {
+				if op, ok := m["op"].(string); ok && op != "" {
+					step.Command = op
+				}
+			}
+
 			if step.Type == "command" && step.Command == "" {
 				return nil, fmt.Errorf("invalid step: 'command' is required for steps of type 'command'")
 			}
@@ -427,11 +481,58 @@ func coerceToFloat(v any) float64 {
 	case float32:
 		return float64(val)
 	case string:
-		if f, err := strconv.ParseFloat(val, 64); err == nil {
+		// Clean common LLM artifacts like trailing semicolons
+		cleaned := strings.Trim(val, " \t\r\n;,")
+		if f, err := strconv.ParseFloat(cleaned, 64); err == nil {
 			return f
 		}
 	}
 	return 0
+}
+
+func coerceToStringSlice(v any) []string {
+	if v == nil {
+		return nil
+	}
+	switch val := v.(type) {
+	case []string:
+		return val
+	case []any:
+		s := make([]string, len(val))
+		for i, x := range val {
+			s[i] = fmt.Sprint(x)
+		}
+		return s
+	case string:
+		val = strings.TrimSpace(val)
+		if strings.HasPrefix(val, "[") {
+			var parts []any
+			if err := json.Unmarshal([]byte(val), &parts); err == nil {
+				s := make([]string, len(parts))
+				for i, x := range parts {
+					s[i] = fmt.Sprint(x)
+				}
+				return s
+			}
+		}
+		// Treat comma separated values as list
+		if strings.Contains(val, ",") {
+			parts := strings.Split(val, ",")
+			s := make([]string, 0, len(parts))
+			for _, p := range parts {
+				p = strings.TrimSpace(p)
+				if p != "" {
+					s = append(s, p)
+				}
+			}
+			return s
+		}
+		if val == "" {
+			return nil
+		}
+		return []string{val}
+	}
+	return nil
 }
 
 func convertToInt(v any) any {
@@ -540,6 +641,25 @@ func GetField(source any, field string) any {
 			return matchSuffix
 		}
 
+		// 8. New Logic: Unique Suffix Match (Reverse Alias)
+		// Request "field", Match "table.field"
+		if !strings.Contains(field, ".") {
+			var candidate any
+			foundCount := 0
+			suffix := "." + strings.ToLower(field)
+
+			for k, v := range m {
+				if strings.HasSuffix(strings.ToLower(k), suffix) {
+					candidate = v
+					foundCount++
+				}
+			}
+
+			if foundCount == 1 {
+				return candidate
+			}
+		}
+
 	case string:
 		// 2. JSON String
 		// Quick check for JSON-like start without allocation
@@ -576,6 +696,58 @@ func extractVal(key any, val any, field string) any {
 	}
 	if v := GetField(val, field); v != nil {
 		return v
+	}
+
+	// Fallback: Smart Suffix Match (Handling Join Aliases)
+	// If the user requests "users.name" but the data has "a.name" (system alias), we match it.
+	// We check if 'field' has a dot suffix that matches any key's dot suffix.
+	// We also support "naked" field requests (e.g. "name") matching prefixed keys (e.g. "users.name").
+	{
+		var suffix string
+		if dotIdx := strings.LastIndex(field, "."); dotIdx != -1 {
+			suffix = field[dotIdx:] // ".name"
+		} else {
+			suffix = "." + field // ".name"
+		}
+
+		// Helper to check map for suffix
+		checkMap := func(source any) any {
+			// Handle OrderedMap unwrapping
+			var m map[string]any
+			if om, ok := source.(*OrderedMap); ok {
+				m = om.m
+			} else if om, ok := source.(OrderedMap); ok {
+				m = om.m
+			} else if mp, ok := source.(map[string]any); ok {
+				m = mp
+			}
+
+			if m != nil {
+				// Priority 1: Exact Base Name Match (e.g. "name" matches "users.name")
+				// This handles cases where data is flat (un-prefixed) but query uses alias.
+				if len(suffix) > 1 {
+					if v, ok := m[suffix[1:]]; ok {
+						return v
+					}
+				}
+
+				// Priority 2: Suffix Match (e.g. "a.name" matches "users.name")
+				for k, v := range m {
+					if strings.HasSuffix(k, suffix) {
+						// Found a candidate
+						return v
+					}
+				}
+			}
+			return nil
+		}
+
+		if v := checkMap(key); v != nil {
+			return v
+		}
+		if v := checkMap(val); v != nil {
+			return v
+		}
 	}
 
 	// Fallback logic for primitive values if "Value" or "value" is requested
@@ -941,13 +1113,8 @@ func parseProjectionFields(input any) []ProjectionField {
 
 		// Also stripping "Department." if table alias expansion happened?
 		// We should probably strip ANY prefix if it looks like Table.Col
-		if idx := strings.Index(f, "."); idx > 0 {
-			// Special handling for wildcards: don't strip if it ends in .*
-			if strings.HasSuffix(f, ".*") {
-				return f
-			}
-			return f[idx+1:]
-		}
+		// (Jan 2026): Generic stripping disabled to allow "config.version" and "version" to coexist without collision.
+		// If user wants short names, they should use "AS" alias.
 		return f
 	}
 
@@ -1113,12 +1280,6 @@ func renderItem(key any, val any, fields any) any {
 		pFields = pf
 	} else {
 		pFields = parseProjectionFields(fields)
-	}
-
-	if len(pFields) == 0 {
-		// New Strategy: Collapse Unique Prefixes
-		flat := flattenItem(key, val)
-		return collapseUniqueKeys(flat)
 	}
 
 	// 2. Projection Mode
@@ -1335,67 +1496,6 @@ func collapseUniqueKeys(m map[string]any) map[string]any {
 }
 
 // parseSlashCommand parses a command string like "tool_name key1=value1 key2=\"value with spaces\""
-func parseSlashCommand(input string) (string, map[string]any, error) {
-	input = strings.TrimSpace(input)
-	if input == "" {
-		return "", nil, nil
-	}
-
-	// Simple state machine to parse input
-	var parts []string
-	var current strings.Builder
-	inQuote := false
-	escape := false
-
-	for _, r := range input {
-		if escape {
-			current.WriteRune(r)
-			escape = false
-			continue
-		}
-
-		if r == '\\' {
-			escape = true
-			continue
-		}
-
-		if r == '"' {
-			inQuote = !inQuote
-			continue
-		}
-
-		if r == ' ' && !inQuote {
-			if current.Len() > 0 {
-				parts = append(parts, current.String())
-				current.Reset()
-			}
-		} else {
-			current.WriteRune(r)
-		}
-	}
-	if current.Len() > 0 {
-		parts = append(parts, current.String())
-	}
-
-	if len(parts) == 0 {
-		return "", nil, nil
-	}
-
-	toolName := parts[0]
-	args := make(map[string]any)
-
-	for _, part := range parts[1:] {
-		// Split on first =
-		idx := strings.Index(part, "=")
-		if idx > 0 {
-			key := part[:idx]
-			val := part[idx+1:]
-			args[key] = val
-		}
-	}
-
-	return toolName, args, nil
-}
 
 // CompareLoose performs a loose comparison of two values, handling mixed numeric types.
 // It leverages btree.Compare for strict same-type comparisons but promotes mixed numeric types

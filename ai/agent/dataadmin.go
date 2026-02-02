@@ -15,6 +15,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/agent/parser"
 	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/obfuscation"
@@ -31,9 +32,6 @@ type DataAdminAgent struct {
 	systemDB     *database.Database
 	lastToolCall *ai.ScriptStep
 	service      *Service // Reference back to main service for cache invalidation
-
-	// Session State
-	sessionContext *ScriptContext
 
 	// Compiled Scripts Cache
 	compiledScripts   map[string]CachedScript
@@ -158,7 +156,6 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 		// but we keep them empty or fill them if we really need them for direct calls later.
 		// geminiKey:       geminiKey,
 		// openAIKey:       openAIKey,
-		sessionContext:  NewScriptContext(),
 		compiledScripts: make(map[string]CachedScript),
 	}
 	// Tools are registered dynamically in Open() or Ask() to ensure context propagation
@@ -247,9 +244,8 @@ func (a *DataAdminAgent) Search(ctx context.Context, query string, limit int) ([
 
 // Ask processes a query and returns a response.
 func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
-	// Reset session context for each new Ask interaction to prevent variable leakage from previous queries.
-	// This ensures that variables like 'output' or 'result' do not carry over stale data.
-	a.sessionContext = NewScriptContext()
+	// Note: We no longer reset 'a.sessionContext' here because it is now session-scoped via valid Context.
+	// If isolation is needed between Ask calls in the same session, the caller (Service) should manage the SessionPayload.
 
 	// Refresh tools to ensure latest instructions from llm_knowledge are used
 	a.registerTools(ctx)
@@ -312,7 +308,7 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 		cmdLine := strings.TrimSpace(query)[1:] // Remove leading slash
 
 		// Parse command line respecting quotes: tool_name key="value with spaces"
-		toolName, args, err := parseSlashCommand(cmdLine)
+		toolName, args, err := parser.ParseSlashCommand(cmdLine)
 		if err == nil && toolName != "" {
 			// Execute straight away
 			res, execErr := a.Execute(ctx, toolName, args)
@@ -321,12 +317,20 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 			// If execution failed AND we have an LLM, maybe the user meant a natural language query starting with /
 			// or the parser was too naive. We delegate to the Brain.
 			if execErr != nil {
-				if gen != nil {
-					log.Warn("Slash command failed locally, falling back to LLM", "tool", toolName, "error", execErr)
-					// Proceed to LLM flow below...
+				// Only fallback if the error indicates "unknown tool"
+				// If the tool IS known but failed (e.g. invalid args), we should return the error directly
+				// instead of confusing the LLM or user.
+				if strings.Contains(execErr.Error(), "unknown tool") {
+					if gen != nil {
+						log.Warn("Slash command failed locally (unknown tool), falling back to LLM", "tool", toolName, "error", execErr)
+						// Proceed to LLM flow below...
+					} else {
+						// No Brain to save us. Die.
+						return fmt.Sprintf("Error executing command '%s' (and no AI Copilot available to interpret it): %v", toolName, execErr), nil
+					}
 				} else {
-					// No Brain to save us. Die.
-					return fmt.Sprintf("Error executing command '%s' (and no AI Copilot available to interpret it): %v", toolName, execErr), nil
+					// Tool exists but execution failed. Return error.
+					return fmt.Sprintf("Error executing command '%s': %v", toolName, execErr), nil
 				}
 			} else {
 				return res, nil
@@ -442,7 +446,13 @@ IMPORTANT:
   - Use 'left' (Left Outer Join) when the query implies "optional" relationships (e.g. "List users and their orders, if any").
   - Use 'right' or 'full' only if explicitly requested or logically required to preserve the "right" side or "both" sides.
 - Field Naming in Scripts:
-  - NEVER use generic aliases like "l", "r", "left", "right" unless you explicitly defined them.
+  - STRICTLY FORBIDDEN: Do NOT use "right.*", "left.*", "l.*", or "r.*" in projection fields.
+  - Using "right.*" will fail. You MUST list specific fields (e.g. "orders.key", "users.name") or use the store name wildcard (e.g. "orders.*") if applicable.
+- Return Values:
+  - The 'return' command must refer to an EXPLICIT variable name defined in a previous step (e.g., 'result_var': "my_data" -> 'return {"value": "my_data"}').
+  - Do NOT assume a variable named 'final_result' exists unless you created it.
+
+
   - Always use the Store Name as prefix (e.g. "users.age") or the explicit Alias defined in the 'join' step (e.g. "u.age").
 - Contextual Projection:
   - When joining entities, ALWAYS project identifying fields (e.g. Name, Email) from the parent/source entity alongside the child data in the final result.
@@ -472,6 +482,14 @@ SELF-CORRECTION & LEARNING:
 - This allows you to remember this for future queries (e.g., "Find active users").
 `
 	toolsDef += a.getSystemInstructions(ctx, defaultInst)
+
+	// Enforce critical aliasing rules regardless of system prompt source
+	toolsDef += `
+CRITICAL ALIASING RULES:
+- STRICTLY FORBIDDEN: Do NOT use "right.*", "left.*", "l.*", or "r.*" in projection fields.
+- Using "right.*" will fail. You MUST list specific fields (e.g. "orders.key", "users.name") or use the store name wildcard (e.g. "orders.*") if applicable.
+`
+
 	fullPrompt := toolsDef + "\n" + query
 
 	// Obfuscate Prompt if enabled
@@ -498,20 +516,42 @@ SELF-CORRECTION & LEARNING:
 
 		text := strings.TrimSpace(resp.Text)
 
-		// Check for Tool Call
+		// Check for Tool Call OR Raw Script (Auto-Correction)
 		isToolCall := false
-		if strings.Contains(text, "\"tool\"") {
-			if strings.HasPrefix(text, "{") {
+		var cleanText string
+
+		// 1. Check for Markdown blocks
+		if start := strings.Index(text, "```"); start != -1 {
+			cleanText = text[start:]
+			// Try to remove standard delimiters
+			if strings.HasPrefix(cleanText, "```json") {
+				cleanText = strings.TrimPrefix(cleanText, "```json")
+			} else {
+				cleanText = strings.TrimPrefix(cleanText, "```")
+			}
+
+			// Remove trailing block (if any)
+			if end := strings.LastIndex(cleanText, "```"); end != -1 {
+				cleanText = cleanText[:end]
+			}
+			isToolCall = true
+
+		} else {
+			// 2. Fallback: Search for raw JSON start ({ or [)
+			idxOb := strings.Index(text, "{")
+			idxAr := strings.Index(text, "[")
+
+			if idxOb != -1 && (idxAr == -1 || idxOb < idxAr) {
+				cleanText = text[idxOb:]
 				isToolCall = true
-			} else if strings.HasPrefix(text, "```") {
+			} else if idxAr != -1 {
+				cleanText = text[idxAr:]
 				isToolCall = true
 			}
 		}
 
-		if isToolCall {
-			cleanText := strings.TrimPrefix(text, "```json")
-			cleanText = strings.TrimPrefix(cleanText, "```")
-			cleanText = strings.TrimSuffix(cleanText, "```")
+		// Verify it actually looks like a tool/script before trying to parse
+		if isToolCall && (strings.Contains(cleanText, "\"tool\"") || strings.Contains(cleanText, "\"op\"")) {
 			cleanText = strings.TrimSpace(cleanText)
 
 			type ToolCall struct {
@@ -521,8 +561,58 @@ SELF-CORRECTION & LEARNING:
 			var toolCalls []ToolCall
 
 			// Try unmarshal as array
-			if err := json.Unmarshal([]byte(cleanText), &toolCalls); err != nil {
-				// Try unmarshal as single object
+			if err := json.Unmarshal([]byte(cleanText), &toolCalls); err == nil {
+				// Check if it's actually a tool call (has "tool" field)
+				// If the LLM generates a script ([{"op":...}]) directly, unmarshal might succeed but Tool will be empty.
+				validToolCalls := true
+				if len(toolCalls) > 0 {
+					for _, tc := range toolCalls {
+						if tc.Tool == "" {
+							validToolCalls = false
+							break
+						}
+					}
+				}
+				if !validToolCalls || len(toolCalls) == 0 {
+					toolCalls = nil // Reset and try other formats
+				}
+			}
+
+			// If standard parsing failed, check for direct Script usage (Auto-Correction)
+			if len(toolCalls) == 0 {
+				var scriptSteps []any // Use []any instead of []map[string]any to match what toolExecuteScript accepts more easily
+				if err := json.Unmarshal([]byte(cleanText), &scriptSteps); err == nil && len(scriptSteps) > 0 {
+					// Check if it looks like a script (has "op")
+					// We need to inspect the elements
+					isScript := true
+					for _, step := range scriptSteps {
+						if m, ok := step.(map[string]any); ok {
+							if _, hasOp := m["op"]; !hasOp {
+								isScript = false
+								break
+							}
+						} else {
+							isScript = false
+							break
+						}
+					}
+
+					if isScript {
+						log.Info("Auto-detected raw script in LLM output. Wrapping in 'execute_script' tool.")
+						toolCalls = []ToolCall{
+							{
+								Tool: "execute_script",
+								Args: map[string]any{
+									"script": scriptSteps,
+								},
+							},
+						}
+					}
+				}
+			}
+
+			// Try unmarshal as single object (Legacy/Single Tool)
+			if len(toolCalls) == 0 {
 				var single ToolCall
 				if err2 := json.Unmarshal([]byte(cleanText), &single); err2 == nil && single.Tool != "" {
 					toolCalls = []ToolCall{single}
@@ -530,7 +620,8 @@ SELF-CORRECTION & LEARNING:
 			}
 
 			if len(toolCalls) > 0 {
-				if a.Config.Verbose {
+				isCtxVerbose, _ := ctx.Value("verbose").(bool)
+				if a.Config.Verbose || isCtxVerbose {
 					// Display Tool Instructions
 					if w, ok := ctx.Value(ai.CtxKeyWriter).(io.Writer); ok {
 						var prettyJSON bytes.Buffer
@@ -626,11 +717,11 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 
 	// Save as Last Tool Call (for script drafting/refactoring)
 	// We clone args to avoid mutation issues
-	// BUT: If the tool is "add_step_from_last", we should NOT overwrite the last tool call yet!
+	// BUT: If the tool is "save_last_step", we should NOT overwrite the last tool call yet!
 	// We need to let it run using the *previous* last tool call.
 	// So we defer the update of lastToolCall until AFTER execution, OR we skip it for meta-tools.
 
-	isMetaTool := toolName == "add_step_from_last"
+	isMetaTool := toolName == "save_last_step"
 
 	savedArgs := deepCopyMap(args)
 
@@ -651,7 +742,7 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 		}
 
 		// We record it even if it's a meta-tool, because from the Service's perspective, it's an action.
-		// However, for "add_step_from_last", the user might want to see the *previous* tool.
+		// However, for "save_last_step", the user might want to see the *previous* tool.
 		// But strictly speaking, "last-tool" should show the LAST executed tool.
 		recorder.RecordStep(ctx, ai.ScriptStep{
 			Type:    "command",
@@ -842,7 +933,7 @@ func (a *DataAdminAgent) runScript(ctx context.Context, name string, script ai.S
 				}
 				sb.WriteString(fmt.Sprintf("Step %d failed: %v\n", i+1, err))
 			} else {
-				sb.WriteString(fmt.Sprintf("Step %d: %s\n", i+1, res))
+				sb.WriteString(fmt.Sprintf("%s\n\n", res))
 			}
 		} else {
 			sb.WriteString(fmt.Sprintf("Skipping step %d (type '%s' not supported in tool execution)\n", i+1, step.Type))

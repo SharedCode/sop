@@ -163,21 +163,28 @@ func TestScriptExecution_SelectTwice(t *testing.T) {
 		Command: "manage_transaction",
 		Args:    map[string]any{"action": "begin"},
 	})
+	svc.Ask(ctx, "/step")
+
 	svc.RecordStep(ctx, ai.ScriptStep{
 		Type:    "command",
 		Command: "select",
 		Args:    map[string]any{"database": filepath.Base(tmpDir), "store": "employees", "limit": 2},
 	})
+	svc.Ask(ctx, "/step")
+
 	svc.RecordStep(ctx, ai.ScriptStep{
 		Type:    "command",
 		Command: "select",
 		Args:    map[string]any{"database": filepath.Base(tmpDir), "store": "employees", "limit": 3},
 	})
+	svc.Ask(ctx, "/step")
+
 	svc.RecordStep(ctx, ai.ScriptStep{
 		Type:    "command",
 		Command: "manage_transaction",
 		Args:    map[string]any{"action": "commit"},
 	})
+	svc.Ask(ctx, "/step")
 
 	// Stop recording (saves script)
 	resp, err := svc.Ask(ctx, "/save")
@@ -867,12 +874,12 @@ func TestToolScriptAddStepFromLast_MetaToolExclusion(t *testing.T) {
 		t.Fatalf("Expected lastToolCall to be 'list_databases', got %v", agent.lastToolCall)
 	}
 
-	// 3. Execute "add_step_from_last"
+	// 3. Execute "save_last_step"
 	// This should NOT update lastToolCall, so it should add "list_databases" to the script
 	addArgs := map[string]any{
 		"script": "test_script",
 	}
-	_, err := agent.Execute(ctx, "add_step_from_last", addArgs)
+	_, err := agent.Execute(ctx, "save_last_step", addArgs)
 	if err != nil {
 		t.Fatalf("Failed to add step: %v", err)
 	}
@@ -891,9 +898,9 @@ func TestToolScriptAddStepFromLast_MetaToolExclusion(t *testing.T) {
 		t.Errorf("Expected step command 'list_databases', got '%s'", loadedScript.Steps[0].Command)
 	}
 
-	// 5. Verify lastToolCall is STILL "list_databases" (or at least not "add_step_from_last")
-	if agent.lastToolCall.Command == "add_step_from_last" {
-		t.Error("lastToolCall was updated to 'add_step_from_last', which is wrong")
+	// 5. Verify lastToolCall is STILL "list_databases" (or at least not "save_last_step")
+	if agent.lastToolCall.Command == "save_last_step" {
+		t.Error("lastToolCall was updated to 'save_last_step', which is wrong")
 	}
 }
 

@@ -134,6 +134,9 @@ func (a *DataAdminAgent) toolCreateScript(ctx context.Context, args map[string]a
 		return "", fmt.Errorf("invalid steps: %v", err)
 	}
 
+	// Apply automatic refinements to make implicit conventions explicit
+	steps = RefineScriptSteps(steps)
+
 	var currentDB string
 	if p := ai.GetSessionPayload(ctx); p != nil {
 		currentDB = p.CurrentDB
@@ -224,6 +227,9 @@ func (a *DataAdminAgent) toolSaveScript(ctx context.Context, args map[string]any
 	if err != nil {
 		return "", fmt.Errorf("invalid steps: %v", err)
 	}
+
+	// Apply automatic refinements
+	steps = RefineScriptSteps(steps)
 
 	var currentDB string
 	if p := ai.GetSessionPayload(ctx); p != nil {

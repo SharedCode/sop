@@ -44,6 +44,16 @@ func (a *MockAgent) Execute(ctx context.Context, toolName string, args map[strin
 	return "", fmt.Errorf("unknown tool: %s", toolName)
 }
 
+func (a *MockAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{
+		{
+			Name:        "echo",
+			Description: "Echoes the message",
+			Schema:      `{"type": "object", "properties": {"msg": {"type": "string"}}, "required": ["msg"]}`,
+		},
+	}, nil
+}
+
 // GenericDomain is a placeholder.
 type GenericDomain struct{}
 
@@ -108,7 +118,7 @@ func TestHandleExecuteScript(t *testing.T) {
 	tx.Commit(ctx)
 
 	// 4. Create Request
-	reqBody := `{"name": "test_script", "args": {"name": "World"}}`
+	reqBody := `{"name": "test_script", "args": {"name": "World"}, "verbose": true}`
 	req, _ := http.NewRequest("POST", "/api/scripts/execute", strings.NewReader(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

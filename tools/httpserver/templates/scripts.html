@@ -2123,6 +2123,7 @@
                 body: JSON.stringify({
                     name: name,
                     category: category,
+                    verbose: true,
                     args: {} 
                 })
             });
@@ -2138,57 +2139,85 @@
             
             // State for rendering
             let currentTableRecords = [];
+            // Stream-Rendering State
+            let currentTableBody = null; 
+            let currentTableRowCount = 0;
+            const MAX_ROWS = 2500;
             
-            const flushRecords = () => {
+            const flushRecords = (finishStep = false) => {
                 if (currentTableRecords.length > 0) {
-                    // We can reuse renderDataResults if we can access it, or inline a simple table renderer
-                    // Since renderDataResults is in scope (global-ish), let's try to use it
-                    // But we need to adapt it to append to contentDiv instead of chat-history
-                     const container = document.createElement('div');
-                     container.className = 'chat-message ai-table-container';
-                     
-                     // Simple Table renderer reuse
-                     // We manually construct table for the editor output
-                     const records = currentTableRecords;
-                     if (records.length > 0) {
-                        const table = document.createElement('table');
-                        table.className = 'data-table';
-                        table.style.width = '100%';
-                        table.style.fontSize = '0.9em';
-                        
-                        // Headers
-                        const keys = Object.keys(records[0]);
-                        const thead = document.createElement('thead');
-                        const trHead = document.createElement('tr');
-                        keys.forEach(k => {
+                     // If we don't have an active table for this step, start one
+                     if (!currentTableBody) {
+                         const container = document.createElement('div');
+                         container.className = 'chat-message ai-table-container';
+                         
+                         const records = currentTableRecords;
+                         const table = document.createElement('table');
+                         table.className = 'data-table';
+                         table.style.width = '100%';
+                         table.style.fontSize = '0.9em';
+                         
+                         // Headers determined from first batch
+                         const keys = Object.keys(records[0]);
+                         const thead = document.createElement('thead');
+                         const trHead = document.createElement('tr');
+                         keys.forEach(k => {
                             const th = document.createElement('th');
                             th.textContent = k;
                             th.style.textAlign = 'left';
                             trHead.appendChild(th);
-                        });
-                        thead.appendChild(trHead);
-                        table.appendChild(thead);
-                        
-                        // Body
-                        const tbody = document.createElement('tbody');
-                        records.forEach(r => {
-                            const tr = document.createElement('tr');
-                            keys.forEach(k => {
-                                const td = document.createElement('td');
-                                let val = r[k];
-                                if (typeof val === 'object') val = JSON.stringify(val);
-                                td.textContent = String(val);
-                                tr.appendChild(td);
-                            });
-                            tbody.appendChild(tr);
-                        });
-                        table.appendChild(tbody);
-                        container.appendChild(table);
+                         });
+                         thead.appendChild(trHead);
+                         table.appendChild(thead);
+                         
+                         const tbody = document.createElement('tbody');
+                         table.appendChild(tbody);
+                         container.appendChild(table);
+                         contentDiv.appendChild(container);
+                         
+                         currentTableBody = tbody;
                      }
                      
-                     contentDiv.appendChild(container);
-                     currentTableRecords = [];
+                     // Append Buffered Rows
+                     const keys = Array.from(currentTableBody.parentElement.querySelectorAll('th')).map(th => th.textContent);
+                     
+                     for (const r of currentTableRecords) {
+                         if (currentTableRowCount >= MAX_ROWS) {
+                             if (currentTableRowCount === MAX_ROWS) {
+                                 const tr = document.createElement('tr');
+                                 const td = document.createElement('td');
+                                 td.colSpan = keys.length;
+                                 td.textContent = `... (Display truncated after ${MAX_ROWS} rows) ...`;
+                                 td.style.fontStyle = 'italic';
+                                 td.style.color = '#888';
+                                 td.style.padding = '10px';
+                                 tr.appendChild(td);
+                                 currentTableBody.appendChild(tr);
+                                 currentTableRowCount++;
+                             }
+                             continue;
+                         }
+                         
+                         const tr = document.createElement('tr');
+                         keys.forEach(k => {
+                            const td = document.createElement('td');
+                            let val = r[k];
+                            // Handle objects
+                            if (typeof val === 'object' && val !== null) val = JSON.stringify(val);
+                            td.textContent = (val === undefined || val === null) ? '' : String(val);
+                            tr.appendChild(td);
+                         });
+                         currentTableBody.appendChild(tr);
+                         currentTableRowCount++;
+                     }
+
                      contentDiv.scrollTop = contentDiv.scrollHeight;
+                     currentTableRecords = [];
+                }
+                
+                if (finishStep) {
+                    currentTableBody = null;
+                    currentTableRowCount = 0;
                 }
             };
 
@@ -2203,28 +2232,25 @@
                     if (!line.trim()) continue;
                     try {
                         const event = JSON.parse(line);
+                        // console.log('ScriptEvent:', event);
                         
                         if (event.type === 'step_start') {
-                            flushRecords();
+                            flushRecords(true);
                             const el = document.createElement('div');
                             el.style.marginTop = '10px';
                             el.style.borderBottom = '1px solid #444';
                             el.style.paddingBottom = '4px';
-                            // console.log("step_start event:", event); // Debug in console
                             const stepPrefix = (event.step_index !== undefined && event.step_index !== null) ? `Step ${event.step_index}` : 'Step';
-                            el.innerHTML = `<span style="color: #64b5f6;">▶ ${stepPrefix}: Executing</span> <code>${event.command || 'unknown'}</code>`; // Removed inline debug
-                            contentDiv.appendChild(el);
+                            // Clean format: "Step 1: command_name"
+                            el.innerHTML = `<span style="color: #64b5f6;">▶ ${stepPrefix}:</span> <code>${event.command || 'unknown'}</code>`; 
                             contentDiv.appendChild(el);
                         } else if (event.type === 'ask') {
-                            flushRecords();
+                            flushRecords(true);
                             const el = document.createElement('div');
                             el.style.marginTop = '10px';
                             el.style.borderBottom = '1px solid #444';
                             el.style.paddingBottom = '4px';
                             const stepPrefix = event.step_index ? `Step ${event.step_index}` : 'Step (No Index)';
-                            // Escape prompt to avoid HTML injection issues, though prompt is usually safe text.
-                            // But cleaner is setting textContent for the variable part.
-                            // However, using innerHTML for structure.
                             const promptSafe = (event.prompt || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                             el.innerHTML = `<span style="color: #64b5f6;">▶ ${stepPrefix} Ask:</span> "${promptSafe}"`;
                             contentDiv.appendChild(el);
@@ -2244,23 +2270,38 @@
                         } else if (event.type === 'record') {
                             const rec = event.record || event.result || event.payload;
                             if (rec) {
-                                currentTableRecords.push(rec);
+                                // Optimized: Stop buffering if we exceed MAX_ROWS, complement DOM truncation logic
+                                if (currentTableRowCount < MAX_ROWS) {
+                                    currentTableRecords.push(rec);
+                                    // Periodic flush to prevent huge memory buffer (Chunked Rendering)
+                                    if (currentTableRecords.length >= 100) {
+                                        flushRecords(false);
+                                    }
+                                } else if (currentTableRowCount === MAX_ROWS) {
+                                    // Buffer one last time to trigger the "truncated" row in flushRecords
+                                    currentTableRecords.push(rec);
+                                    flushRecords(false);
+                                } else {
+                                    // Just count it
+                                    currentTableRowCount++;
+                                }
                             }
                         } else if (event.type === 'error') {
-                            flushRecords();
+                            flushRecords(true);
                             const el = document.createElement('div');
                             el.style.color = '#e74c3c';
                             el.innerHTML = `<strong>Error:</strong> ${event.error}`;
                             contentDiv.appendChild(el);
                         } else {
                             // Fallback for other events
-                            flushRecords();
+                            flushRecords(true);
                             const el = document.createElement('div');
                             el.style.color = '#aaa';
                             el.textContent = JSON.stringify(event);
                             contentDiv.appendChild(el);
                         }
                         
+                        // Throttle scrolling if needed, but doing it here is fine for chunks
                         contentDiv.scrollTop = contentDiv.scrollHeight;
 
                     } catch (e) {
@@ -2273,7 +2314,8 @@
                     }
                 }
             }
-            flushRecords();
+
+            flushRecords(true);
             
             if (contentDiv) {
                 const end = document.createElement('div');
@@ -3974,7 +4016,8 @@
                     store: currentStore,
                     agent: agent,
                     provider: provider,
-                    format: format
+                    format: format,
+                    verbose: true
                 }),
                 signal: chatAbortController.signal
             });
@@ -4011,6 +4054,19 @@
                     if (!line.trim()) continue;
                     try {
                         const event = JSON.parse(line);
+
+                        // Normalize payload/data from mixed backend formats
+                        // StepExecutionResult uses 'record' or 'result' instead of 'payload'
+                        if (event.payload === undefined) {
+                            if (event.record !== undefined) event.payload = event.record;
+                            else if (event.result !== undefined) event.payload = event.result;
+                        }
+
+                        // Map 'result' type to 'content' if it acts like text output
+                        // This ensures command string outputs (like "Transaction committed") are shown
+                        if (event.type === 'result') {
+                            event.type = 'content';
+                        }
                         
                         // Helper to flush pending records before showing text or other content
                         const flushRecords = () => {
@@ -4027,6 +4083,9 @@
                         };
 
                         if (event.type === 'content') {
+                             // Ignore empty content to prevent empty UI bubbles
+                             if (!event.payload || String(event.payload).length === 0) continue;
+
                              flushRecords(); // Flush any data tables before showing new text analysis/headers
 
                              if (!currentContentSpan) {
@@ -4109,6 +4168,19 @@
                             appendChatMessage('ai', '🛠️ Calling Tool: ' + event.payload.tool);
                             currentContentSpan = null;
                         }
+                        else if (event.type === 'step_start') {
+                            flushRecords();
+                            let label = event.payload || event.command;
+                            const idx = event.step_index;
+                            if (label) {
+                                let prefix = '➡️ Step';
+                                if (idx) {
+                                    prefix += ' ' + idx;
+                                }
+                                appendChatMessage('ai', prefix + ': ' + label);
+                            }
+                            currentContentSpan = null;
+                        }
                         else if (event.type === 'switch_database') {
                             flushRecords();
                             const newDbName = event.payload;
@@ -4169,11 +4241,12 @@
         // This makes the output much cleaner for Joins and raw Store scans.
         if (type === 'record') {
             // Heuristic to detect Script Instructions (which are technically records but should be viewed as JSON/Code)
-            if (records.length > 0 && (records[0].op || records[0].command) && records[0].args) {
+            if (records.length > 0 && records[0] && (records[0].op || records[0].command) && records[0].args) {
                 format = 'json';
             }
 
             records = records.map(r => {
+                if (!r) return {}; // Safety for nulls
                 const flat = Object.assign({}, r);
                 ['key', 'value', 'right_key', 'right_value'].forEach(field => {
                      if (flat[field] !== undefined) {

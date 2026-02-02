@@ -228,10 +228,10 @@ func (s *Service) Close(ctx context.Context) error {
 	// The LRU limit (20 items) prevents unbounded growth.
 	if s.session != nil {
 		s.session.Variables = nil
-		s.session.CurrentScript = nil
+		// s.session.CurrentScript = nil // Preserved for drafting across interactions
 		// s.session.LastStep = nil // Preserved for /last-tool
 		// s.session.LastInteractionToolCalls = nil // Preserved for /last-tool
-		s.session.PendingRefinement = nil
+		// s.session.PendingRefinement = nil // Preserved for /script refine
 	}
 
 	p := ai.GetSessionPayload(ctx)
@@ -519,11 +519,8 @@ func (s *Service) RecordStep(ctx context.Context, step ai.ScriptStep) {
 	// Always capture the last step for potential manual addition
 	s.session.LastStep = &step
 
-	// If we are actively drafting a script, append the step
-	if s.session.CurrentScript != nil {
-		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, step)
-		log.Debug("Service.RecordStep: Appended step to CurrentScript", "script_name", s.session.CurrentScriptName, "step_count", len(s.session.CurrentScript.Steps))
-	}
+	// Note: Auto-recording to CurrentScript is disabled to prevent noise.
+	// Users must explicitly add steps using /step.
 
 	// Buffer tool calls for potential refactoring
 	if step.Type == "command" {

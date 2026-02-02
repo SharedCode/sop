@@ -271,6 +271,7 @@ func (s *Service) scriptCreate(ctx context.Context, scriptDB *database.Database,
 		Database:    dbName,
 		Steps:       []ai.ScriptStep{},
 	}
+	newScript.Steps = RefineScriptSteps(newScript.Steps)
 
 	if err := store.Save(ctx, category, name, newScript); err != nil {
 		tx.Rollback(ctx)
@@ -418,6 +419,7 @@ func (s *Service) scriptSaveAs(ctx context.Context, scriptDB *database.Database,
 	newScript := ai.Script{
 		Steps: []ai.ScriptStep{*s.session.LastStep},
 	}
+	newScript.Steps = RefineScriptSteps(newScript.Steps)
 
 	if err := store.Save(ctx, category, name, newScript); err != nil {
 		tx.Rollback(ctx)
@@ -525,6 +527,8 @@ func (s *Service) scriptStepAdd(ctx context.Context, scriptDB *database.Database
 		return "Error: Invalid position. Use top, bottom, before, or after.", nil
 	}
 
+	script.Steps = RefineScriptSteps(script.Steps)
+
 	if err := store.Save(ctx, category, name, script); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error saving script: %v", err), nil
@@ -567,6 +571,8 @@ func (s *Service) scriptStepDelete(ctx context.Context, scriptDB *database.Datab
 
 	// Remove step
 	script.Steps = append(script.Steps[:idx], script.Steps[idx+1:]...)
+
+	script.Steps = RefineScriptSteps(script.Steps)
 
 	if err := store.Save(ctx, category, name, script); err != nil {
 		tx.Rollback(ctx)
@@ -615,6 +621,8 @@ func (s *Service) scriptStepUpdate(ctx context.Context, scriptDB *database.Datab
 	// Update step
 	script.Steps[idx] = *s.session.LastStep
 
+	script.Steps = RefineScriptSteps(script.Steps)
+
 	if err := store.Save(ctx, category, name, script); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error saving script: %v", err), nil
@@ -658,6 +666,8 @@ func (s *Service) scriptParameters(ctx context.Context, scriptDB *database.Datab
 	}
 
 	script.Parameters = params
+
+	script.Steps = RefineScriptSteps(script.Steps)
 
 	if err := store.Save(ctx, category, name, script); err != nil {
 		tx.Rollback(ctx)
@@ -814,6 +824,8 @@ func (s *Service) scriptParameterize(ctx context.Context, scriptDB *database.Dat
 			}
 		}
 	}
+
+	script.Steps = RefineScriptSteps(script.Steps)
 
 	if err := store.Save(ctx, category, name, script); err != nil {
 		tx.Rollback(ctx)
@@ -1021,12 +1033,14 @@ func (s *Service) scriptRefineApply(ctx context.Context, scriptDB *database.Data
 		return fmt.Sprintf("Error starting transaction: %v", err), nil
 	}
 
-	// 1. Save Script
 	store, err := scriptDB.OpenModelStore(ctx, "scripts", tx)
 	if err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error opening scripts store: %v", err), nil
 	}
+
+	proposal.NewScript.Steps = RefineScriptSteps(proposal.NewScript.Steps)
+
 	if err := store.Save(ctx, proposal.Category, proposal.ScriptName, proposal.NewScript); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error saving script: %v", err), nil

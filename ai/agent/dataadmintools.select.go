@@ -90,7 +90,10 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 	}
 
 	// Parse Limit
-	limit, _ := args["limit"].(float64)
+	limit := 100.0
+	if l, ok := args["limit"]; ok {
+		limit = coerceToFloat(l)
+	}
 	if limit <= 0 {
 		limit = 100
 	}

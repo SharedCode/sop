@@ -161,12 +161,16 @@ func TestScript_Transactions(t *testing.T) {
 
 	// Helper to check if key exists
 	checkKey := func(key string, shouldExist bool) {
-		tx, err := userDB.BeginTransaction(ctx, sop.ForReading)
+		// Create a fresh DB instance to ensure we see changes committed by other instances (the agent)
+		// This simulates a real scenario where the verifier is a separate client
+		userDBChecker := database.NewDatabase(dbOpts)
+
+		tx, err := userDBChecker.BeginTransaction(ctx, sop.ForReading)
 		if err != nil {
 			t.Fatalf("CheckKey: BeginTransaction failed: %v", err)
 		}
 		// Use the same userDB object to open the store, to ensure consistency
-		store, err := userDB.OpenBtreeCursor(ctx, "employees", tx)
+		store, err := userDBChecker.OpenBtreeCursor(ctx, "employees", tx)
 		if err != nil {
 			tx.Rollback(ctx)
 			t.Fatalf("CheckKey: OpenBtreeCursor failed: %v", err)

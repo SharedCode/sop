@@ -1,5 +1,7 @@
 package agent
 
+import "github.com/sharedcode/sop/ai"
+
 const (
 	// SystemDBName is the name of the system database used for internal agent storage (scripts, history, etc).
 	SystemDBName = "system"
@@ -24,9 +26,9 @@ const (
 	ProviderLocal   = "local"
 
 	// Default Models
-	DefaultModelOpenAI = "gpt-4o"
-	DefaultModelGemini = "gemini-2.5-pro"
-	DefaultModelOllama = "llama3"
+	DefaultModelOpenAI = ai.DefaultModelOpenAI
+	DefaultModelGemini = ai.DefaultModelGemini
+	DefaultModelOllama = ai.DefaultModelOllama
 
 	// Session Keys
 	SessionPayloadKey = "session_payload"

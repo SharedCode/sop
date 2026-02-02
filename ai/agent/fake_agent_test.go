@@ -26,9 +26,9 @@ func TestFakeAgentGeneration(t *testing.T) {
 
 	// Try known valid models.
 	// We loop because model availability depends on the API key and region.
-	// gemini-2.5-pro seems to be the stable one in this environment.
+	// We prioritize the configured default.
 	envModel := os.Getenv("GEMINI_MODEL")
-	models := []string{envModel, "gemini-2.5-pro", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"}
+	models := []string{envModel, ai.DefaultModelGemini, "gemini-2.5-pro", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"}
 	var gen ai.Generator
 	var err error
 
@@ -118,7 +118,7 @@ func TestFakeAgentGeneration(t *testing.T) {
 	// 6. Verify Last Tool Call
 	fmt.Println("Verifying Last Tool Call...")
 
-	res, err := adminAgent.Execute(ctx, "script_add_step_from_last", map[string]any{
+	res, err := adminAgent.Execute(ctx, "save_last_step", map[string]any{
 		"script": "test_script",
 	})
 	if err != nil {

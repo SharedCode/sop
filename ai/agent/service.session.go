@@ -28,6 +28,39 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		}
 	}
 
+	// /switch_database <db_name>
+	// Switches the active database context ensuring deterministic behavior
+	if strings.HasPrefix(query, "/switch_database ") {
+		targetDB := strings.TrimSpace(strings.TrimPrefix(query, "/switch_database "))
+		if targetDB == "" {
+			return "Usage: /switch_database <db_name>", true, nil
+		}
+
+		// Check if DB exists
+		isValid := false
+		if targetDB == "system" && s.systemDB != nil {
+			isValid = true
+		} else {
+			_, isValid = s.databases[targetDB]
+		}
+
+		if !isValid {
+			return fmt.Sprintf("Error: Database '%s' not found.", targetDB), true, nil
+		}
+
+		// Check if already selected
+		currentDB := ""
+		if p := ai.GetSessionPayload(ctx); p != nil {
+			currentDB = p.CurrentDB
+		}
+
+		if currentDB == targetDB {
+			return fmt.Sprintf("Database '%s' is already selected.", targetDB), true, nil
+		}
+
+		return fmt.Sprintf("[[SWITCH_DATABASE: %s]]", targetDB), true, nil
+	}
+
 	// Handle last-tool command (support both "last-tool" and "/last-tool")
 	if query == "last-tool" || query == "/last-tool" {
 		instructions := s.GetLastToolInstructions()
@@ -50,6 +83,61 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 
 		if s.systemDB != nil {
 			sb.WriteString("\nSystem Database: system")
+		}
+
+		return sb.String(), true, nil
+	}
+
+	// /list_tools
+	if query == "/list_tools" {
+		var sb strings.Builder
+		sb.WriteString("### Available Tools\n\n")
+		sb.WriteString("Use these tools via slash(/) commands. Arguments can be positional (e.g. `/cmd arg1`) or named (e.g. `/cmd key=value`).\n\n")
+
+		sb.WriteString("**Session Commands**\n")
+		sb.WriteString("- `/create <name> [--category <cat>] [--autosave]`: Start drafting a new script.\n")
+		sb.WriteString("- `/step [instruction]`: Add the last tool call or a new instruction to the draft.\n")
+		sb.WriteString("- `/save`: Save the current draft.\n")
+		sb.WriteString("- `/show <name> [--json]`: Display a saved script.\n")
+		sb.WriteString("- `/parameterize <name> <param> <value>`: Replace hardcoded values with parameters.\n")
+		sb.WriteString("- `/refine <name> [feedback]`: Refine a script using AI.\n")
+		sb.WriteString("- `/save_as <name>`: Save the last executed tool as a script.\n")
+		sb.WriteString("- `/run <script> [args...]`: Execute a saved script.\n")
+		sb.WriteString("- `/list_databases`: List available databases.\n")
+		sb.WriteString("- `/switch_database <name>`: Switch active database.\n")
+		sb.WriteString("- `/list_stores [database]`: List stores in a database.\n")
+		sb.WriteString("- `/last-tool`: Show instructions for the last executed tool.\n")
+		sb.WriteString("- `/insert_step <name> <index> <type> <desc> <name> [params...]`: Insert a step.\n")
+		sb.WriteString("- `/delete_step <name> <index>`: Delete a step.\n")
+		sb.WriteString("- `/update_step <name> <index> <desc> <name> [params...]`: Update a step.\n")
+		sb.WriteString("- `/reorder_steps <name> <from> <to>`: Reorder steps.\n")
+		sb.WriteString("- `/delete <name>`: Delete a script.\n")
+		sb.WriteString("- `/select ...`: High-level select.\n")
+		sb.WriteString("- `/add ...`: High-level add.\n")
+		sb.WriteString("- `/update ...`: High-level update.\n")
+		sb.WriteString("- `/delete_record ...`: High-level delete record.\n")
+		sb.WriteString("\n**Agent Tools**\n")
+
+		// Delegate to the agent's tool execution to get its list
+
+		// Find the Data Admin agent in the registry
+		var adminAgent *DataAdminAgent
+		for _, a := range s.registry {
+			if da, ok := a.(*DataAdminAgent); ok {
+				adminAgent = da
+				break
+			}
+		}
+
+		if adminAgent != nil {
+			res, err := adminAgent.Execute(ctx, "list_tools", nil)
+			if err == nil {
+				sb.WriteString(res)
+			} else {
+				sb.WriteString(fmt.Sprintf("\n(Error listing agent tools: %v)\n", err))
+			}
+		} else {
+			sb.WriteString("\n(Data Admin Agent not found - other tools unavailable)\n")
 		}
 
 		return sb.String(), true, nil
@@ -208,7 +296,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		s.session.CurrentScriptCategory = category
 		s.session.AutoSave = autoSave
 
-		msg := fmt.Sprintf("Started drafting script '%s' (Category: %s).", name, category)
+		msg := fmt.Sprintf("Started drafting script '%s' (Category: %s).\nUse tools to explore data. When you are happy with a command, type '/step' to add it to the script.\nType '/step <instruction>' to add a manual step.\nType '/save' when finished.", name, category)
 		if autoSave {
 			msg += " [Auto-Save Enabled]"
 		}
@@ -649,32 +737,68 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		// Parse the JSON output from PlayScript and format it nicely
 		output := sb.String()
 		if strings.HasPrefix(strings.TrimSpace(output), "[") {
-			var results []map[string]any
+			var results []StepExecutionResult // Use strict type for better parsing
 			if err := json.Unmarshal([]byte(output), &results); err == nil {
-				// We want to return the actual execution results, not the wrapper.
-				// If there are multiple results (multiple records), we should return a list.
-				// If there is just one step outputting a list, return that list.
+				var report strings.Builder
 
-				var allRecords []any
+				// Group by Step Index
+				stepMap := make(map[int][]any)
+				var sortedSteps []int
 
 				for _, res := range results {
-					if val, ok := res["result"]; ok && val != nil {
-						// Flatten list results
-						if list, ok := val.([]any); ok {
-							allRecords = append(allRecords, list...)
-						} else {
-							allRecords = append(allRecords, val)
-						}
-					} else if errMsg, ok := res["error"]; ok {
-						// Return error string directly if it's an error result
-						return fmt.Sprintf("Error: %v", errMsg), true, nil
+					idx := res.StepIndex
+
+					// Init bucket if needed
+					if _, exists := stepMap[idx]; !exists {
+						stepMap[idx] = []any{}
+						sortedSteps = append(sortedSteps, idx)
+					}
+
+					// Get Content
+					if res.Record != nil {
+						stepMap[idx] = append(stepMap[idx], res.Record)
+					}
+					if res.Result != nil {
+						stepMap[idx] = append(stepMap[idx], res.Result)
+					}
+					if res.Error != "" {
+						stepMap[idx] = append(stepMap[idx], fmt.Sprintf("Error: %s", res.Error))
 					}
 				}
+				sort.Ints(sortedSteps)
 
-				if len(allRecords) > 0 {
-					// Encode as JSON string so main.ai.go detects it as data
-					b, _ := json.MarshalIndent(allRecords, "", "  ")
-					return string(b), true, nil
+				for _, idx := range sortedSteps {
+					items := stepMap[idx]
+					if len(items) == 0 {
+						continue
+					}
+
+					report.WriteString(fmt.Sprintf("Step %d Result\n\n", idx))
+
+					// If we only have 1 item and it's a list, treat it as the list of records
+					// If we have multiple items (streamed records), treat them as list of records
+
+					// Check if items are structured data that should be pretty printed
+					for i, item := range items {
+						// Special handling: if item is string representation of json (the Alien Format cause), try to parse it
+						if str, ok := item.(string); ok && (strings.HasPrefix(str, "{") || strings.HasPrefix(str, "[")) {
+							var nested any
+							if err := json.Unmarshal([]byte(str), &nested); err == nil {
+								item = nested
+							}
+						}
+
+						b, _ := json.MarshalIndent(item, "", "  ")
+						report.Write(b)
+						if i < len(items)-1 {
+							report.WriteString("\n")
+						}
+					}
+					report.WriteString("\n\n")
+				}
+
+				if report.Len() > 0 {
+					return report.String(), true, nil
 				}
 			}
 		}

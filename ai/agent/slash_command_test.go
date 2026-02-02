@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/agent/parser"
 )
 
 func TestDataAdminAgent_Ask_SlashCommand(t *testing.T) {
@@ -56,10 +57,20 @@ func TestParseSlashCommand(t *testing.T) {
 			wantTool: "tool",
 			wantArgs: map[string]string{"key": "nested \"quote\""},
 		},
+		{
+			input:    "create_script \"My New Script\"",
+			wantTool: "create_script",
+			wantArgs: map[string]string{"name": "My New Script"},
+		},
+		{
+			input:    "save_last_step \"MyScript\"",
+			wantTool: "save_last_step",
+			wantArgs: map[string]string{"script": "MyScript"},
+		},
 	}
 
 	for _, tt := range tests {
-		gotTool, gotArgs, err := parseSlashCommand(tt.input)
+		gotTool, gotArgs, err := parser.ParseSlashCommand(tt.input)
 		if err != nil {
 			t.Errorf("parseSlashCommand(%q) returned error: %v", tt.input, err)
 			continue

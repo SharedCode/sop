@@ -39,6 +39,20 @@ const (
 	ObfuscationAllDatabases ObfuscationMode = "all_databases"
 )
 
+// DirectFlushingWriter writes directly to the http.ResponseWriter and flushes
+type DirectFlushingWriter struct {
+	w http.ResponseWriter
+}
+
+func (d *DirectFlushingWriter) Write(p []byte) (n int, err error) {
+	d.w.Header().Set("Content-Type", "application/x-ndjson")
+	n, err = d.w.Write(p)
+	if f, ok := d.w.(http.Flusher); ok {
+		f.Flush()
+	}
+	return
+}
+
 func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -61,6 +75,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		Agent     string `json:"agent"`
 		Provider  string `json:"provider"`
 		Format    string `json:"format"`
+		Verbose   bool   `json:"verbose"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -140,6 +155,10 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if req.Provider != "" {
 		ctx = context.WithValue(ctx, ai.CtxKeyProvider, req.Provider)
 	}
+	// Pass Verbose flag
+	if req.Verbose {
+		ctx = context.WithValue(ctx, "verbose", true)
+	}
 	// Pass ToolExecutor via context
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &DefaultToolExecutor{Agents: loadedAgents})
 
@@ -204,6 +223,14 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	// Inject payload into context for Open/Close
 	ctx = context.WithValue(ctx, "session_payload", payload)
+
+	// Inject streaming writer so Agent commands (like /run) can stream directly
+	// bypassing the blocking Ask() return.
+	// We implement the Writer interface but ensure we flush.
+	// NOTE: This writes RAW bytes. The client must handle mixed content if Ask()
+	// also returns text. But usually if a command streams, it returns empty text.
+	streamWriter := &DirectFlushingWriter{w: w}
+	ctx = context.WithValue(ctx, ai.CtxKeyWriter, streamWriter)
 
 	// Initialize Agent Session (Transaction)
 	if err := agentSvc.Open(ctx); err != nil {
@@ -425,7 +452,9 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	//log.Debug("Response: Success (Text)", "response", response)
 
-	sendEvent("content", response)
+	if response != "" {
+		sendEvent("content", response)
+	}
 }
 
 func initAgents(ctx context.Context) {

@@ -916,7 +916,8 @@ func isPathConflict(pathA, pathB string) (bool, string) {
 // saveConfig writes the current configuration to the file specified in config.ConfigFile.
 func saveConfig() error {
 	if config.ConfigFile == "" {
-		config.ConfigFile = "config.json"
+		// Do not default to config.json. If no config file is specified, run in ephemeral mode.
+		return nil
 	}
 
 	// Ensure directory exists
