@@ -136,8 +136,8 @@ func TestToolJoin_RightOuterJoin(t *testing.T) {
 		t.Logf("Results: %+v", list)
 		t.Error("Missing Order 101")
 	} else {
-		if row["name"] != "Alice" {
-			t.Errorf("Order 101 should match Alice, got %v", row["name"])
+		if row["clients_rj.name"] != "Alice" {
+			t.Errorf("Order 101 should match Alice, got %v", row["clients_rj.name"])
 		}
 	}
 
@@ -145,8 +145,9 @@ func TestToolJoin_RightOuterJoin(t *testing.T) {
 	if row, ok := results[102]; !ok {
 		t.Error("Missing Order 102")
 	} else {
-		if row["name"] != nil {
-			t.Errorf("Order 102 should have nil name, got %v", row["name"])
+		// Now fields for left table should use clients_rj
+		if row["clients_rj.name"] != nil {
+			t.Errorf("Order 102 should have nil clients_rj.name, got %v", row["clients_rj.name"])
 		}
 		if row["desc"] != "Pen" {
 			t.Errorf("Order 102 desc mismatch: %v", row["desc"])

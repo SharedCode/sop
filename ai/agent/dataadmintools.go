@@ -128,6 +128,9 @@ func (a *DataAdminAgent) registerTools(ctx context.Context) {
 	// Conversation Management
 	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", "(summary: string, topic_label: string)", a.toolConcludeTopic)
 
+	// Communication Tools
+	a.registry.Register("send_email", "Sends an email.", "(to: string, subject: string, body: string)", a.toolSendEmail)
+
 	// Register Atomic Operations (Internal/Granular)
 	// a.registerAtomicTools()
 }

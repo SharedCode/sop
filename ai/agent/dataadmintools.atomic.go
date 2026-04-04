@@ -363,8 +363,10 @@ func (fc *FilterCursor) Next(ctx context.Context) (any, bool, error) {
 			return nil, false, err
 		}
 		if match {
+			log.Debug("FilterCursor match", "item", item)
 			return item, true, nil
 		}
+		log.Debug("FilterCursor mismatch", "filter", fc.filter, "item", item)
 	}
 }
 
@@ -401,6 +403,7 @@ func (pc *ProjectCursor) Next(ctx context.Context) (any, bool, error) {
 
 	// Use renderItem to handle projection, aliasing, and wildcard expansion
 	result := renderItem(nil, item, pc.fields)
+	log.Debug("ProjectCursor.Next", "item_in", item, "fields", pc.fields, "item_out", result)
 	return result, true, nil
 }
 
@@ -642,13 +645,13 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	}
 
 	// Priority 2: Check for 'final_result' variable (Deprecated: Standard convention for query chains)
-	if val, ok := scriptCtx.Variables["final_result"]; ok {
+	if val, ok := scriptCtx.Variables["final_result"]; ok && val != nil {
 		log.Debug("toolExecuteScript: Returning 'final_result' variable")
 		return serializeResult(ctx, val)
 	}
 
 	// Priority 2.5: Check for 'result' variable (Common AI convention)
-	if val, ok := scriptCtx.Variables["result"]; ok {
+	if val, ok := scriptCtx.Variables["result"]; ok && val != nil {
 		log.Debug("toolExecuteScript: Returning 'result' variable")
 		return serializeResult(ctx, val)
 	}
@@ -661,11 +664,14 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 		if lastInstr.Op == "return" {
 			// The return op already resolved the value and stored it in LastResult
 			log.Debug("toolExecuteScript: Returning 'return' op result")
+			if engine.LastResult == nil {
+				return "Script executed successfully.", nil
+			}
 			return serializeResult(ctx, engine.LastResult)
 		}
 
 		if lastInstr.ResultVar != "" {
-			if val, ok := scriptCtx.Variables[lastInstr.ResultVar]; ok {
+			if val, ok := scriptCtx.Variables[lastInstr.ResultVar]; ok && val != nil {
 				log.Debug("toolExecuteScript: Returning last instruction result variable", "var", lastInstr.ResultVar)
 				return serializeResult(ctx, val)
 			}
@@ -674,7 +680,7 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 
 	// Priority 4: Fallback to the last updated variable (e.g. if script ends with commit_tx)
 	if scriptCtx.LastUpdatedVar != "" {
-		if val, ok := scriptCtx.Variables[scriptCtx.LastUpdatedVar]; ok {
+		if val, ok := scriptCtx.Variables[scriptCtx.LastUpdatedVar]; ok && val != nil {
 			log.Debug("toolExecuteScript: Returning last updated variable", "var", scriptCtx.LastUpdatedVar)
 			return serializeResult(ctx, val)
 		}
@@ -684,14 +690,6 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	if engine.LastResult != nil {
 		log.Debug("toolExecuteScript: Returning implicit LastResult")
 		return serializeResult(ctx, engine.LastResult)
-	}
-
-	// Priority 6: Detect explicit RETURN op that might have returned nil/empty
-	if len(script) > 0 {
-		if script[len(script)-1].Op == "return" {
-			log.Debug("toolExecuteScript: Explicit return detected, but result was nil/empty")
-			return serializeResult(ctx, engine.LastResult) // Might be "null"
-		}
 	}
 
 	log.Debug("toolExecuteScript: No result found, returning success message")
@@ -848,9 +846,15 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 			}
 
 			// Run in LIFO order (like Go's defer)
-			for i := len(e.Deferred) - 1; i >= 0; i-- {
+			// We must Pop the task so that if the task involves running a compiled script,
+			// that script's own cleanup doesn't re-run the same task (recursion).
+			for len(e.Deferred) > 0 {
+				i := len(e.Deferred) - 1
+				task := e.Deferred[i]
+				e.Deferred = e.Deferred[:i] // Pop
+
 				log.Debug("Executing deferred operation", "index", i)
-				if err := e.Deferred[i](ctx, e); err != nil {
+				if err := task(ctx, e); err != nil {
 					log.Error("Deferred execution failed", "error", err)
 				}
 			}
@@ -1097,7 +1101,7 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 				return compiledCmd(c, se)
 			})
 
-			return "Deferred", nil
+			return nil, nil
 		}, nil
 	case "assign":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, input any) (any, error) {
@@ -1222,7 +1226,7 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 	alreadyCollapsed := false
 
 	if cursor, ok := val.(ScriptCursor); ok {
-		var results []any
+		results := make([]any, 0)
 		defer cursor.Close()
 
 		// Helper to force field order if provider available

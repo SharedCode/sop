@@ -287,6 +287,13 @@ func (ss *StepStreamer) Close() {
 		return
 	}
 
+	// If the streamer wasn't used, we haven't written the header (lazy).
+	// Therefore, we shouldn't write the footer '}' either, effectively skipping the step output.
+	if !ss.used {
+		ss.closed = true
+		return
+	}
+
 	fmt.Fprint(ss.parent.w, "}")
 	ss.closed = true
 }

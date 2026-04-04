@@ -309,6 +309,26 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 
 		// Parse command line respecting quotes: tool_name key="value with spaces"
 		toolName, args, err := parser.ParseSlashCommand(cmdLine)
+
+		// Handle built-in config commands
+		if err == nil && (toolName == "verbose" || toolName == "v") {
+			newState := !a.Config.Verbose
+			if pos, ok := args["_positional"].([]string); ok && len(pos) > 0 {
+				val := strings.ToLower(pos[0])
+				if val == "on" || val == "true" || val == "1" {
+					newState = true
+				} else if val == "off" || val == "false" || val == "0" {
+					newState = false
+				}
+			}
+			a.SetVerbose(newState)
+			status := "OFF"
+			if newState {
+				status = "ON"
+			}
+			return fmt.Sprintf("Verbose mode: **%s**", status), nil
+		}
+
 		if err == nil && toolName != "" {
 			// Execute straight away
 			res, execErr := a.Execute(ctx, toolName, args)

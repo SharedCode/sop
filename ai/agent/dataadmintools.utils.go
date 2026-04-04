@@ -1159,10 +1159,16 @@ func parseProjectionFields(input any) []ProjectionField {
 				alias = a
 			} else if a, ok := m["as"].(string); ok {
 				alias = a
+			} else if a, ok := m["Dst"].(string); ok {
+				// Support Dst/Src format explicitly
+				alias = a
 			}
 
 			if alias != "" {
 				if field, okF := m["field"].(string); okF {
+					return []ProjectionField{{Src: field, Dst: alias}}, true
+				} else if field, okS := m["Src"].(string); okS {
+					// Support Dst/Src format explicitly
 					return []ProjectionField{{Src: field, Dst: alias}}, true
 				}
 			}
