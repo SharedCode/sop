@@ -60,7 +60,7 @@ func TestReproScriptUpdateCorruption(t *testing.T) {
 		},
 	}
 
-	if err := store.Save(ctx, "general", scriptName, script); err != nil {
+	if err := store.Save(ctx, ai.DefaultScriptCategory, scriptName, script); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -94,7 +94,7 @@ func TestReproScriptUpdateCorruption(t *testing.T) {
 	}
 
 	var loadedScript ai.Script
-	err = store2.Load(ctx, "general", scriptName, &loadedScript)
+	err = store2.Load(ctx, ai.DefaultScriptCategory, scriptName, &loadedScript)
 	if err != nil {
 		// This is where "unexpected end of JSON input" would appear
 		t.Fatalf("Load failed (Data was corrupted?): %v", err)

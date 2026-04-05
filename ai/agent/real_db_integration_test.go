@@ -12,20 +12,20 @@ import (
 )
 
 func TestRealDBIntegration_JoinFlow(t *testing.T) {
+	tempDir := t.TempDir()
 	// Configure "dev_db"
 	ec := sop.ErasureCodingConfig{
 		DataShardsCount:             1,
 		ParityShardsCount:           1,
-		BaseFolderPathsAcrossDrives: []string{"/tmp/sop_data/db1", "/tmp/sop_data/db2"},
+		BaseFolderPathsAcrossDrives: []string{tempDir + "/db1", tempDir + "/db2"},
 	}
 
 	dbOpts := sop.DatabaseOptions{
-		StoresFolders: []string{"/tmp/sop_data/db"},
+		StoresFolders: []string{tempDir + "/db"},
 		Type:          sop.Clustered,
-		RedisConfig:   &sop.RedisCacheConfig{Address: "localhost:6379"},
+		RedisConfig:   nil,
 		ErasureConfig: map[string]sop.ErasureCodingConfig{"": ec},
 	}
-
 	databases := map[string]sop.DatabaseOptions{
 		"dev_db": dbOpts,
 	}

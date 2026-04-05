@@ -301,7 +301,7 @@ func TestScriptShow(t *testing.T) {
 	// Save script
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
-	store.Save(ctx, "general", "test_script", script)
+	store.Save(ctx, ai.DefaultScriptCategory, "test_script", script)
 	tx.Commit(ctx)
 
 	// Test /show
@@ -363,7 +363,7 @@ func TestScriptSaveAs(t *testing.T) {
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForReading)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
 	var script ai.Script
-	err = store.Load(ctx, "general", "my_saved_script", &script)
+	err = store.Load(ctx, ai.DefaultScriptCategory, "my_saved_script", &script)
 	tx.Commit(ctx)
 
 	if err != nil {
@@ -863,7 +863,7 @@ func TestToolScriptAddStepFromLast_MetaToolExclusion(t *testing.T) {
 	script := ai.Script{
 		Steps: []ai.ScriptStep{},
 	}
-	store.Save(ctx, "general", "test_script", &script)
+	store.Save(ctx, ai.DefaultScriptCategory, "test_script", &script)
 	tx.Commit(ctx)
 
 	// 2. Execute a "Real" Tool (e.g. list_databases)
@@ -888,7 +888,7 @@ func TestToolScriptAddStepFromLast_MetaToolExclusion(t *testing.T) {
 	tx, _ = sysDB.BeginTransaction(ctx, sop.ForReading)
 	store, _ = sysDB.OpenModelStore(ctx, "scripts", tx)
 	var loadedScript ai.Script
-	store.Load(ctx, "general", "test_script", &loadedScript)
+	store.Load(ctx, ai.DefaultScriptCategory, "test_script", &loadedScript)
 	tx.Commit(ctx)
 
 	if len(loadedScript.Steps) != 1 {
@@ -932,7 +932,7 @@ func TestToolScriptUpdateStep(t *testing.T) {
 			{Type: "command", Command: "echo", Args: map[string]any{"msg": "hello"}},
 		},
 	}
-	store.Save(ctx, "general", "update_test_script", &script)
+	store.Save(ctx, ai.DefaultScriptCategory, "update_test_script", &script)
 	tx.Commit(ctx)
 
 	// 2. Execute "update_step" to change command to "print" and msg to "world"
@@ -951,7 +951,7 @@ func TestToolScriptUpdateStep(t *testing.T) {
 	tx, _ = sysDB.BeginTransaction(ctx, sop.ForReading)
 	store, _ = sysDB.OpenModelStore(ctx, "scripts", tx)
 	var loadedScript ai.Script
-	store.Load(ctx, "general", "update_test_script", &loadedScript)
+	store.Load(ctx, ai.DefaultScriptCategory, "update_test_script", &loadedScript)
 	tx.Commit(ctx)
 
 	if len(loadedScript.Steps) != 1 {

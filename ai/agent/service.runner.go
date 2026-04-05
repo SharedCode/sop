@@ -755,7 +755,7 @@ func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope m
 
 	var script ai.Script
 	// Parse category from script name (e.g. "finance.compute_monthly")
-	targetCategory := "general"
+	targetCategory := ai.DefaultScriptCategory
 	scriptName := name
 	if idx := strings.Index(name, "."); idx > 0 {
 		targetCategory = name[:idx]
@@ -770,9 +770,9 @@ func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope m
 	// Try loading from target category
 	if err := store.Load(ctx, targetCategory, scriptName, &script); err != nil {
 		// If not found and we were looking in a specific category (not general), try general
-		if targetCategory != "general" {
-			if errFallback := store.Load(ctx, "general", scriptName, &script); errFallback == nil {
-				targetCategory = "general" // Found in general
+		if targetCategory != ai.DefaultScriptCategory {
+			if errFallback := store.Load(ctx, ai.DefaultScriptCategory, scriptName, &script); errFallback == nil {
+				targetCategory = ai.DefaultScriptCategory // Found in general
 				err = nil
 			}
 		}

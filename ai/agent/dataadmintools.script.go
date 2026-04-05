@@ -44,7 +44,7 @@ func (a *DataAdminAgent) toolListScripts(ctx context.Context, args map[string]an
 	// Extract optional category
 	category, _ := args["category"].(string)
 	if category == "" {
-		category = "general"
+		category = ai.DefaultScriptCategory
 	}
 
 	names, err := store.List(ctx, category)
@@ -95,7 +95,7 @@ func (a *DataAdminAgent) toolGetScriptDetails(ctx context.Context, args map[stri
 
 	category, _ := args["category"].(string)
 	if category == "" {
-		category = "general"
+		category = ai.DefaultScriptCategory
 	}
 
 	var script ai.Script
@@ -162,7 +162,7 @@ func (a *DataAdminAgent) toolCreateScript(ctx context.Context, args map[string]a
 			func (a *DataAdminAgent) updateScript(ctx context.Context, name string, updateFunc func(*ai.Script) error) error {
 			    ...
 				var script ai.Script
-				if err := store.Get(ctx, "general", name, &script); err != nil {
+				if err := store.Get(ctx, ai.DefaultScriptCategory, name, &script); err != nil {
 					return err
 				}
 		        ...
@@ -196,14 +196,14 @@ func (a *DataAdminAgent) toolCreateScript(ctx context.Context, args map[string]a
 	// The modelStore interface usually returns error if not found in SOP (if KeyNotFound).
 	// We can try to load into a dummy var.
 	var dummy ai.Script
-	err = store.Load(ctx, "general", name, &dummy)
+	err = store.Load(ctx, ai.DefaultScriptCategory, name, &dummy)
 	if err == nil {
 		return "", fmt.Errorf("script '%s' already exists", name)
 	}
 	// Warning: We are assuming error means Not Found. SOP might have specific error types.
 	// Ideally we check error type. But for now, assuming any error is good enough to proceed to Create.
 
-	if err := store.Save(ctx, "general", name, &script); err != nil {
+	if err := store.Save(ctx, ai.DefaultScriptCategory, name, &script); err != nil {
 		return "", fmt.Errorf("failed to save script: %w", err)
 	}
 
@@ -263,7 +263,7 @@ func (a *DataAdminAgent) toolSaveScript(ctx context.Context, args map[string]any
 		return "", fmt.Errorf("failed to open scripts store: %w", err)
 	}
 
-	if err := store.Save(ctx, "general", name, &script); err != nil {
+	if err := store.Save(ctx, ai.DefaultScriptCategory, name, &script); err != nil {
 		return "", fmt.Errorf("failed to save script: %w", err)
 	}
 
@@ -736,7 +736,7 @@ func (a *DataAdminAgent) updateScript(ctx context.Context, name string, updateFu
 	}
 
 	var script ai.Script
-	if err := store.Load(ctx, "general", name, &script); err != nil {
+	if err := store.Load(ctx, ai.DefaultScriptCategory, name, &script); err != nil {
 		return fmt.Errorf("failed to load script '%s': %w", name, err)
 	}
 
@@ -744,7 +744,7 @@ func (a *DataAdminAgent) updateScript(ctx context.Context, name string, updateFu
 		return err
 	}
 
-	if err := store.Save(ctx, "general", name, &script); err != nil {
+	if err := store.Save(ctx, ai.DefaultScriptCategory, name, &script); err != nil {
 		return fmt.Errorf("failed to save script '%s': %w", name, err)
 	}
 

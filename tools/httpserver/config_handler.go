@@ -768,6 +768,22 @@ func handleUninstallSystem(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "System uninstalled successfully"})
 }
 
+func resolveConfigRelativePath(p string) string {
+	if p == "" || filepath.IsAbs(p) {
+		return p
+	}
+	configFile := config.ConfigFile
+	// config.ConfigFile usually holds the full path the user provided or the one we loaded.
+	// But it could be just "config.json" if they ran from the same directory lacking a full path.
+	if configFile == "" {
+		configFile = "config.json"
+	}
+	if configDir, err := filepath.Abs(filepath.Dir(configFile)); err == nil {
+		return filepath.Join(configDir, p)
+	}
+	return p
+}
+
 // sanitizePath removes leading/trailing whitespace and non-graphic characters
 // to prevent "invisible" or garbage characters from creating bad folder names.
 func sanitizePath(p string) string {
@@ -787,7 +803,7 @@ func sanitizePath(p string) string {
 	p = strings.TrimRight(p, "|")
 
 	// 4. Final trim in case stripping left whitespace
-	return strings.TrimSpace(p)
+	return resolveConfigRelativePath(strings.TrimSpace(p))
 }
 
 // collectAllConfiguredPaths gathers all paths currently in use by the system and other databases,

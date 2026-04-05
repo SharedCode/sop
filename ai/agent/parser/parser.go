@@ -121,10 +121,7 @@ func ParseSlashCommand(input string) (string, map[string]any, error) {
 			if len(positional) > 2 && (toolName == "add" || toolName == "update") {
 				args["value"] = positional[2]
 			}
-		case "script_add_step_from_last": // Legacy mapping just in case
-			if len(positional) > 0 {
-				args["script"] = positional[0]
-			}
+		case "script_add_step_from_last", "add_step_from_last": // Legacy mapping just in case
 		}
 
 		args["_positional"] = positional

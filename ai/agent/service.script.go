@@ -187,7 +187,7 @@ func (s *Service) RunScript(ctx context.Context, name string, category string, a
 }
 
 func (s *Service) scriptList(ctx context.Context, scriptDB *database.Database, args []string) (string, error) {
-	category := "general"
+	category := ai.DefaultScriptCategory
 	for i := 1; i < len(args); i++ {
 		if args[i] == "--category" && i+1 < len(args) {
 			category = args[i+1]
@@ -222,7 +222,7 @@ func (s *Service) scriptCreate(ctx context.Context, scriptDB *database.Database,
 	}
 	name := args[1]
 	description := ""
-	category := "general"
+	category := ai.DefaultScriptCategory
 	force := false
 
 	for i := 2; i < len(args); i++ {
@@ -290,7 +290,7 @@ func (s *Service) scriptShow(ctx context.Context, scriptDB *database.Database, a
 		return "Usage: /script show <name> [--json] [--category <cat>]", nil
 	}
 	name := args[1]
-	category := "general"
+	category := ai.DefaultScriptCategory
 	showJSON := false
 
 	for i := 2; i < len(args); i++ {
@@ -355,7 +355,7 @@ func (s *Service) scriptDelete(ctx context.Context, scriptDB *database.Database,
 		return "Usage: /script delete <name> [--category <cat>]", nil
 	}
 	name := args[1]
-	category := "general"
+	category := ai.DefaultScriptCategory
 	if len(args) > 3 && args[2] == "--category" {
 		category = args[3]
 	}
@@ -390,7 +390,7 @@ func (s *Service) scriptSaveAs(ctx context.Context, scriptDB *database.Database,
 		return "Usage: /script save_as <name> [--category <cat>]", nil
 	}
 	name := args[1]
-	category := "general"
+	category := ai.DefaultScriptCategory
 	if len(args) > 3 && args[2] == "--category" {
 		category = args[3]
 	}
@@ -436,7 +436,7 @@ func (s *Service) scriptStep(ctx context.Context, scriptDB *database.Database, a
 	subCmd := args[1]
 	name := args[2]
 
-	category := "general"
+	category := ai.DefaultScriptCategory
 	var cleanArgs []string
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--category" && i+1 < len(args) {
@@ -637,7 +637,7 @@ func (s *Service) scriptParameters(ctx context.Context, scriptDB *database.Datab
 		return "Usage: /script parameters <name> <p1> <p2> ... [--category <cat>]", nil
 	}
 	name := args[1]
-	category := "general"
+	category := ai.DefaultScriptCategory
 	var params []string
 
 	for i := 2; i < len(args); i++ {
@@ -693,7 +693,7 @@ func (s *Service) scriptParameterize(ctx context.Context, scriptDB *database.Dat
 		Value string
 	}
 	var pairs []replacePair
-	category := "general"
+	category := ai.DefaultScriptCategory
 
 	// Parse arguments for pairs and flags
 	for i := 2; i < len(args); i++ {
@@ -852,7 +852,7 @@ func (s *Service) scriptRefine(ctx context.Context, scriptDB *database.Database,
 	}
 
 	name := args[1]
-	category := "general"
+	category := ai.DefaultScriptCategory
 	var instructionsParts []string
 
 	for i := 2; i < len(args); i++ {

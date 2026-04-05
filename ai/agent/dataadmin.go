@@ -45,6 +45,23 @@ type DataAdminAgent struct {
 	StoreOpener func(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (jsondb.StoreAccessor, error)
 }
 
+// Clone creates a new isolated instance of the agent sharing read-only components.
+func (a *DataAdminAgent) Clone() ai.Agent[map[string]any] {
+	return &DataAdminAgent{
+		Config:          a.Config,
+		brain:           a.brain,
+		registry:        a.registry, // Pointer to registry
+		databases:       a.databases,
+		systemDB:        a.systemDB,
+		lastToolCall:    nil,
+		service:         nil, // Caller should populate this
+		compiledScripts: make(map[string]CachedScript),
+		geminiKey:       a.geminiKey,
+		openAIKey:       a.openAIKey,
+		StoreOpener:     a.StoreOpener,
+	}
+}
+
 // SetGenerator sets the generator for the agent.
 func (a *DataAdminAgent) SetGenerator(gen ai.Generator) {
 	a.brain = gen
@@ -374,11 +391,11 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 		if err == nil {
 			store, err := a.systemDB.OpenModelStore(ctx, "scripts", tx)
 			if err == nil {
-				names, err := store.List(ctx, "general")
+				names, err := store.List(ctx, ai.DefaultScriptCategory)
 				if err == nil {
 					for _, name := range names {
 						var script ai.Script
-						if err := store.Load(ctx, "general", name, &script); err == nil {
+						if err := store.Load(ctx, ai.DefaultScriptCategory, name, &script); err == nil {
 							// Format args schema
 							argsSchema := "()"
 							if len(script.Parameters) > 0 {
@@ -465,9 +482,7 @@ IMPORTANT:
   - Use 'inner' (default) when the query implies "intersection" or strict matching (e.g. "Find orders for user X").
   - Use 'left' (Left Outer Join) when the query implies "optional" relationships (e.g. "List users and their orders, if any").
   - Use 'right' or 'full' only if explicitly requested or logically required to preserve the "right" side or "both" sides.
-- Field Naming in Scripts:
-  - STRICTLY FORBIDDEN: Do NOT use "right.*", "left.*", "l.*", or "r.*" in projection fields.
-  - Using "right.*" will fail. You MUST list specific fields (e.g. "orders.key", "users.name") or use the store name wildcard (e.g. "orders.*") if applicable.
+
 - Return Values:
   - The 'return' command must refer to an EXPLICIT variable name defined in a previous step (e.g., 'result_var': "my_data" -> 'return {"value": "my_data"}').
   - Do NOT assume a variable named 'final_result' exists unless you created it.
@@ -837,7 +852,7 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 			store, err := a.systemDB.OpenModelStore(ctx, "scripts", tx)
 			if err == nil {
 				var script ai.Script
-				if err := store.Load(ctx, "general", toolName, &script); err == nil {
+				if err := store.Load(ctx, ai.DefaultScriptCategory, toolName, &script); err == nil {
 					// Found script! Execute it.
 					return a.runScript(ctx, toolName, script, args)
 				}

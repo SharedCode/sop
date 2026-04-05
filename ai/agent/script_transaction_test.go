@@ -139,10 +139,10 @@ func TestScript_Transactions(t *testing.T) {
 	// Save Scripts
 	tx, _ = sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
-	store.Save(ctx, "general", "implicit_tx", scriptImplicit)
-	store.Save(ctx, "general", "explicit_commit", scriptExplicitCommit)
-	store.Save(ctx, "general", "explicit_rollback", scriptExplicitRollback)
-	store.Save(ctx, "general", "uncommitted", scriptUncommitted)
+	store.Save(ctx, ai.DefaultScriptCategory, "implicit_tx", scriptImplicit)
+	store.Save(ctx, ai.DefaultScriptCategory, "explicit_commit", scriptExplicitCommit)
+	store.Save(ctx, ai.DefaultScriptCategory, "explicit_rollback", scriptExplicitRollback)
+	store.Save(ctx, ai.DefaultScriptCategory, "uncommitted", scriptUncommitted)
 	tx.Commit(ctx)
 
 	// 3. Initialize Service

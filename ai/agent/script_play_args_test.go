@@ -36,7 +36,7 @@ func TestScript_Play_ArgumentParsing_Correct(t *testing.T) {
 	// Save Script
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
-	store.Save(ctx, "general", scriptName, &script)
+	store.Save(ctx, ai.DefaultScriptCategory, scriptName, &script)
 	tx.Commit(ctx)
 
 	// 3. Initialize Service

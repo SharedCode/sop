@@ -33,7 +33,7 @@ Operations:
 - commit_tx(transaction)
 - rollback_tx(transaction)
 - open_store(transaction, name) -> store
-- scan(store, limit, direction, start_key, prefix, filter, stream=true) -> cursor
+- scan(store, limit, direction ("asc" or "desc"), start_key, prefix, filter, stream=true) -> cursor
 - find(store, key, desc) -> bool
 - next(store) -> bool
 - previous(store) -> bool

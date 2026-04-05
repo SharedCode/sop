@@ -76,6 +76,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		Provider  string `json:"provider"`
 		Format    string `json:"format"`
 		Verbose   bool   `json:"verbose"`
+		SessionID string `json:"session_id"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -142,13 +143,43 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if a specific RAG Agent is requested
-	agentSvc, exists := loadedAgents[req.Agent]
+	blueprint, exists := loadedAgents[req.Agent]
 	if !exists {
 		msg := fmt.Sprintf("Agent '%s' is not initialized or not found.", req.Agent)
 		log.Info("Response: Agent Not Found", "error", msg)
 		sendEvent("error", msg)
 		return
 	}
+
+	var agentSvc ai.Agent[map[string]any]
+	if req.SessionID == "" {
+		req.SessionID = uuid.New().String() // Client lifecycle zero-day bootstrapping
+	}
+
+	activeSessionsMu.RLock()
+	sessionAgent, ok := activeSessions[req.SessionID]
+	activeSessionsMu.RUnlock()
+
+	if ok {
+		agentSvc = sessionAgent
+		log.Debug("Found active session for client", "session_id", req.SessionID)
+	} else {
+		if cloneable, ok := blueprint.(interface {
+			Clone() ai.Agent[map[string]any]
+		}); ok {
+			agentSvc = cloneable.Clone()
+			log.Debug("Cloned new pristine agent instance for session", "session_id", req.SessionID)
+		} else {
+			agentSvc = blueprint // Fallback if not cloneable
+		}
+		activeSessionsMu.Lock()
+		activeSessions[req.SessionID] = agentSvc
+		activeSessionsMu.Unlock()
+	}
+
+	// Always enforce uniqueness and tell the client their active session ID
+	// BEFORE long LLM wait so they can anchor to it immediately.
+	sendEvent("session_id", req.SessionID)
 
 	ctx := r.Context()
 	// Pass provider override via context
@@ -217,7 +248,8 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// Prepend context information to the message
 	fullMessage := req.Message
 	// Only prepend context if it's not a system command
-	if req.Database != "" && !strings.HasPrefix(req.Message, "/") {
+msgTrimmed := strings.TrimSpace(req.Message)
+if req.Database != "" && !strings.HasPrefix(msgTrimmed, "/") && msgTrimmed != "last-tool" && msgTrimmed != "last_tool" {
 		fullMessage = fmt.Sprintf("Current Database: %s\n%s", req.Database, req.Message)
 	}
 

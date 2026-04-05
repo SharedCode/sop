@@ -239,6 +239,7 @@
     });
 
     let currentDatabase = null;
+    let currentSessionID = "";
     let currentStore = null;
     let firstKey = null;
     let lastKey = null;
@@ -2123,7 +2124,7 @@
                 body: JSON.stringify({
                     name: name,
                     category: category,
-                    verbose: true,
+                    verbose: true, session_id: currentSessionID,
                     args: {} 
                 })
             });
@@ -4017,7 +4018,7 @@
                     agent: agent,
                     provider: provider,
                     format: format,
-                    verbose: true
+                    verbose: true, session_id: currentSessionID
                 }),
                 signal: chatAbortController.signal
             });
@@ -4201,6 +4202,9 @@
                             if (dbSelect) dbSelect.value = newDbName;
 
                             currentContentSpan = null;
+                        }
+                        else if (event.type === 'session_id') {
+                            currentSessionID = event.payload;
                         }
                         else if (event.type === 'error') {
                             flushRecords();

@@ -31,7 +31,7 @@ func TestService_ExecuteScript_StringDB(t *testing.T) {
 	script := ai.Script{
 		Steps: []ai.ScriptStep{{Type: "say", Message: "Hello"}},
 	}
-	if err := store.Save(ctx, "general", "test_script", script); err != nil {
+	if err := store.Save(ctx, ai.DefaultScriptCategory, "test_script", script); err != nil {
 		t.Fatalf("Failed to save script: %v", err)
 	}
 	if err := tx.Commit(ctx); err != nil {

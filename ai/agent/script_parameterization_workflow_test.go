@@ -50,7 +50,7 @@ func TestScriptParameterizationWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open store: %v", err)
 	}
-	if err := store.Save(ctx, "general", scriptName, originalScript); err != nil {
+	if err := store.Save(ctx, ai.DefaultScriptCategory, scriptName, originalScript); err != nil {
 		t.Fatalf("Failed to save script: %v", err)
 	}
 	tx.Commit(ctx)
@@ -75,7 +75,7 @@ func TestScriptParameterizationWorkflow(t *testing.T) {
 	tx, _ = sysDB.BeginTransaction(ctx, sop.ForReading)
 	store, _ = sysDB.OpenModelStore(ctx, "scripts", tx)
 	var updatedScript ai.Script
-	store.Load(ctx, "general", scriptName, &updatedScript)
+	store.Load(ctx, ai.DefaultScriptCategory, scriptName, &updatedScript)
 	tx.Commit(ctx)
 
 	// Check Parameters list

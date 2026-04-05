@@ -21,6 +21,7 @@ import (
 // Returns (response, handled, error)
 func (s *Service) handleSessionCommand(ctx context.Context, query string, db *database.Database) (string, bool, error) {
 	// /script <subcommand> (Alias support)
+	query = strings.TrimSpace(query)
 	if strings.HasPrefix(query, "/script ") {
 		subQuery := strings.TrimSpace(strings.TrimPrefix(query, "/script "))
 		if subQuery != "" {
@@ -62,7 +63,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 	}
 
 	// Handle last-tool command (support both "last-tool" and "/last-tool")
-	if query == "last-tool" || query == "/last-tool" {
+	if query == "last-tool" || query == "/last-tool" || query == "last_tool" || query == "/last_tool" {
 		instructions := s.GetLastToolInstructions()
 		if instructions == "" {
 			return "No tool instructions found.", true, nil
@@ -91,32 +92,35 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 	// /list_tools
 	if query == "/list_tools" {
 		var sb strings.Builder
-		sb.WriteString("### Available Tools\n\n")
-		sb.WriteString("Use these tools via slash(/) commands. Arguments can be positional (e.g. `/cmd arg1`) or named (e.g. `/cmd key=value`).\n\n")
+		sb.WriteString(`### Available Tools
 
-		sb.WriteString("**Session Commands**\n")
-		sb.WriteString("- `/create <name> [--category <cat>] [--autosave]`: Start drafting a new script.\n")
-		sb.WriteString("- `/step [instruction]`: Add the last tool call or a new instruction to the draft.\n")
-		sb.WriteString("- `/save`: Save the current draft.\n")
-		sb.WriteString("- `/show <name> [--json]`: Display a saved script.\n")
-		sb.WriteString("- `/parameterize <name> <param> <value>`: Replace hardcoded values with parameters.\n")
-		sb.WriteString("- `/refine <name> [feedback]`: Refine a script using AI.\n")
-		sb.WriteString("- `/save_as <name>`: Save the last executed tool as a script.\n")
-		sb.WriteString("- `/run <script> [args...]`: Execute a saved script.\n")
-		sb.WriteString("- `/list_databases`: List available databases.\n")
-		sb.WriteString("- `/switch_database <name>`: Switch active database.\n")
-		sb.WriteString("- `/list_stores [database]`: List stores in a database.\n")
-		sb.WriteString("- `/last-tool`: Show instructions for the last executed tool.\n")
-		sb.WriteString("- `/insert_step <name> <index> <type> <desc> <name> [params...]`: Insert a step.\n")
-		sb.WriteString("- `/delete_step <name> <index>`: Delete a step.\n")
-		sb.WriteString("- `/update_step <name> <index> <desc> <name> [params...]`: Update a step.\n")
-		sb.WriteString("- `/reorder_steps <name> <from> <to>`: Reorder steps.\n")
-		sb.WriteString("- `/delete <name>`: Delete a script.\n")
-		sb.WriteString("- `/select ...`: High-level select.\n")
-		sb.WriteString("- `/add ...`: High-level add.\n")
-		sb.WriteString("- `/update ...`: High-level update.\n")
-		sb.WriteString("- `/delete_record ...`: High-level delete record.\n")
-		sb.WriteString("\n**Agent Tools**\n")
+Use these tools via slash(/) commands. Arguments can be positional (e.g. ` + "`/cmd arg1`" + `) or named (e.g. ` + "`/cmd key=value`" + `).
+
+**Session Commands**
+- ` + "`/create <name> [--category <cat>] [--autosave]`" + `: Start drafting a new script.
+- ` + "`/step [instruction]`" + `: Add the last tool call or a new instruction to the draft.
+- ` + "`/save`" + `: Save the current draft.
+- ` + "`/show <name> [--json]`" + `: Display a saved script.
+- ` + "`/parameterize <name> <param> <value>`" + `: Replace hardcoded values with parameters.
+- ` + "`/refine <name> [feedback]`" + `: Refine a script using AI.
+- ` + "`/save_as <name>`" + `: Save the last executed tool as a script.
+- ` + "`/run <script> [args...]`" + `: Execute a saved script.
+- ` + "`/list_databases`" + `: List available databases.
+- ` + "`/switch_database <name>`" + `: Switch active database.
+- ` + "`/list_stores [database]`" + `: List stores in a database.
+- ` + "`/last-tool`" + `: Show instructions for the last executed tool.
+- ` + "`/insert_step <name> <index> <type> <desc> <name> [params...]`" + `: Insert a step.
+- ` + "`/delete_step <name> <index>`" + `: Delete a step.
+- ` + "`/update_step <name> <index> <desc> <name> [params...]`" + `: Update a step.
+- ` + "`/reorder_steps <name> <from> <to>`" + `: Reorder steps.
+- ` + "`/delete <name>`" + `: Delete a script.
+- ` + "`/select ...`" + `: High-level select.
+- ` + "`/add ...`" + `: High-level add.
+- ` + "`/update ...`" + `: High-level update.
+- ` + "`/delete_record ...`" + `: High-level delete record.
+
+**Agent Tools**
+`)
 
 		// Delegate to the agent's tool execution to get its list
 
@@ -250,7 +254,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 			return "Error: Script name required", true, nil
 		}
 		name := parts[0]
-		category := "general"
+		category := ai.DefaultScriptCategory
 		autoSave := false
 
 		for i := 1; i < len(parts); i++ {
@@ -408,7 +412,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 			return "Error: Script name required", true, nil
 		}
 		name := parts[0]
-		category := "general"
+		category := ai.DefaultScriptCategory
 		showJson := false
 
 		for i := 1; i < len(parts); i++ {
@@ -572,7 +576,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		}
 
 		var script ai.Script
-		if err := store.Load(ctx, "general", scriptName, &script); err != nil {
+		if err := store.Load(ctx, ai.DefaultScriptCategory, scriptName, &script); err != nil {
 			return fmt.Sprintf("Error loading script '%s': %v", scriptName, err), true, nil
 		}
 
@@ -600,7 +604,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 			}
 		}
 
-		if err := store.Save(ctx, "general", scriptName, &script); err != nil {
+		if err := store.Save(ctx, ai.DefaultScriptCategory, scriptName, &script); err != nil {
 			return fmt.Sprintf("Error saving script: %v", err), true, nil
 		}
 		tx.Commit(ctx)
@@ -613,7 +617,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 			return "Error: Script name required", true, nil
 		}
 		name := parts[0]
-		category := "general"
+		category := ai.DefaultScriptCategory
 		var rawArgs []string
 
 		for i := 1; i < len(parts); i++ {
@@ -812,7 +816,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 			return "Error: Script name required", true, nil
 		}
 		name := parts[0]
-		category := "general"
+		category := ai.DefaultScriptCategory
 
 		for i := 1; i < len(parts); i++ {
 			if parts[i] == "--category" && i+1 < len(parts) {
@@ -861,7 +865,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		}
 		name := parts[0]
 		idxStr := parts[1]
-		category := "general"
+		category := ai.DefaultScriptCategory
 
 		for i := 2; i < len(parts); i++ {
 			if parts[i] == "--category" && i+1 < len(parts) {
@@ -924,7 +928,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 
 		// Reconstruct instruction from remaining parts (and handle category flag if strictly needed, but let's assume default for simplicity with this signature)
 		// To be robust: Check for --category in parts first.
-		category := "general"
+		category := ai.DefaultScriptCategory
 		instructionParts := []string{}
 
 		skipNext := false
@@ -995,7 +999,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 		fromDefault := "-1"
 		toDefault := "-1"
 
-		category := "general"
+		category := ai.DefaultScriptCategory
 
 		// Parsing is tricky with mixed args.
 		// Expected: name from to [flags]
@@ -1294,7 +1298,7 @@ func (s *Service) handleSessionCommand(ctx context.Context, query string, db *da
 
 	if strings.HasPrefix(query, "/list") {
 		args := strings.Fields(query)
-		category := "general"
+		category := ai.DefaultScriptCategory
 		for i := 1; i < len(args); i++ {
 			if args[i] == "--category" && i+1 < len(args) {
 				category = args[i+1]

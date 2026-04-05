@@ -471,3 +471,12 @@ To ensure maintainability and professional code quality, adhere to the following
     2.  **Optimality via Config**: By allowing users to tune `RegistryHashModValue` (Bucket Count) and `SlotLength` (Bucket Density), we ensure that 99% of use cases fit entirely within **1 or 2 segment files**.
     3.  **Cost/Benefit**: Moving to Binary Search would introduce $O(\log N)$ complexity for file management. Since $N$ (number of files) is kept small by design, the constant factor overhead of opening/seeking files dominates. Scanning 2 files linearly is faster and safer than managing a distributed index for 2 files.
 *   **Validation**: Even with a modest configuration (HashMod=400k, SlotLength=20k), a single 1.6GB segment file tracks **300+ Billion items**. Use cases requiring >1 Trillion items can simply use 4-5 segment files, keeping the linear penalty negligible ($O(5) \approx O(1)$).
+
+### Script ModelStore vs JSONDB Query Strictness (April 2026)
+*   **Context**: The `scripts` B-Tree is instantiated using `model.ModelKey` as the generic key type structure. However, scripts data itself operates dynamically as `map[string]any`.
+*   **The Bug**: During a session refactor, the `jsondb.FindOne(...)` command for fetching a script was altered to pass a `map[string]any{"Category": category, "Name": scriptName}`. This silently failed (returned "not found") because SOP B-Tree's internal comparisons strictly enforce exact Go type matching.
+*   **The Fix**: **Runtime queries against explicitly typed B-Tree stores MUST use the exact struct type (`model.ModelKey`)**, even when using the dynamic `jsondb` interface to retrieve the values. E.g., `funcStore.FindOne(ctx, model.ModelKey{Category: cat, Name: name}, true)`.
+
+### Client-Side Typing vs. Storage-Side Erasure (The "Library Nightmare" Avoidance)
+*   **Client-Side**: Users are fully expected and encouraged to use strongly-typed definitions (Go structs, Java classes, C# records) within their own application domain code to interact with their data.
+*   **Storage-Side (SOP)**: SOP manages user data dynamically (as JSON / `map[string]any` via `jsondb`) **not** because the data is inherently unstructured, but to avoid the "library nightmare" of requiring a compiled copy of every user's custom struct inside the database engine itself. This strict decoupling (Type Erasure at the storage boundary) is what allows SOP to efficiently serve polyglot clients across language boundaries without becoming an unmaintainable dependency monolith.

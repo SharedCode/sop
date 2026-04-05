@@ -69,6 +69,42 @@ func NewService(domain ai.Domain[map[string]any], systemDB *database.Database, d
 	}
 }
 
+// Clone creates a new isolated instance of the agent sharing read-only components.
+func (s *Service) Clone() ai.Agent[map[string]any] {
+	clonedRegistry := make(map[string]ai.Agent[map[string]any])
+	for k, v := range s.registry {
+		if cloneable, ok := v.(interface {
+			Clone() ai.Agent[map[string]any]
+		}); ok {
+			clonedRegistry[k] = cloneable.Clone()
+		} else {
+			clonedRegistry[k] = v // shallow fallback
+		}
+	}
+
+	clone := &Service{
+		domain:                 s.domain,
+		systemDB:               s.systemDB,
+		databases:              s.databases,
+		generator:              s.generator,
+		pipeline:               s.pipeline,
+		registry:               clonedRegistry,
+		EnableObfuscation:      s.EnableObfuscation,
+		EnableHistoryInjection: s.EnableHistoryInjection,
+		session:                NewRunnerSession(),
+		lastKnowledgeRefresh:   make(map[string]time.Time),
+	}
+
+	// Inject back the service pointer to agents if they rely on it
+	for _, v := range clone.registry {
+		if da, ok := v.(*DataAdminAgent); ok {
+			da.service = clone
+		}
+	}
+
+	return clone
+}
+
 // SetFeature allows toggling of agent features at runtime.
 func (s *Service) SetFeature(feature string, enabled bool) {
 	switch feature {
@@ -548,7 +584,7 @@ func (s *Service) saveScript(ctx context.Context, name string, script ai.Script)
 		tx.Rollback(ctx)
 		return err
 	}
-	if err := store.Save(ctx, "general", name, &script); err != nil {
+	if err := store.Save(ctx, ai.DefaultScriptCategory, name, &script); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Errorf("failed to save script: %w", err)
 	}
@@ -756,7 +792,10 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	}()
 
 	// Clear buffer at start of Ask
-	s.session.LastInteractionToolCalls = []ai.ScriptStep{}
+	trimQ := strings.TrimSpace(query)
+	if trimQ != "last-tool" && trimQ != "/last-tool" && trimQ != "last_tool" && trimQ != "/last_tool" {
+		s.session.LastInteractionToolCalls = []ai.ScriptStep{}
+	}
 
 	cfg := ai.NewAskConfig(opts...)
 	var db *database.Database

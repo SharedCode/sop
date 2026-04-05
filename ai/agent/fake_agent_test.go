@@ -99,7 +99,7 @@ func TestFakeAgentGeneration(t *testing.T) {
 	// Initialize script store
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
-	store.Save(ctx, "general", "test_script", ai.Script{Name: "test_script", Steps: []ai.ScriptStep{}})
+	store.Save(ctx, ai.DefaultScriptCategory, "test_script", ai.Script{Name: "test_script", Steps: []ai.ScriptStep{}})
 	tx.Commit(ctx)
 
 	// 3. User Query
@@ -130,7 +130,7 @@ func TestFakeAgentGeneration(t *testing.T) {
 	tx, _ = sysDB.BeginTransaction(ctx, sop.ForReading)
 	store, _ = sysDB.OpenModelStore(ctx, "scripts", tx)
 	var m ai.Script
-	store.Load(ctx, "general", "test_script", &m)
+	store.Load(ctx, ai.DefaultScriptCategory, "test_script", &m)
 	tx.Commit(ctx)
 
 	if len(m.Steps) == 0 {
