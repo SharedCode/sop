@@ -69,6 +69,42 @@ func NewService(domain ai.Domain[map[string]any], systemDB *database.Database, d
 	}
 }
 
+// Clone creates a new isolated instance of the agent sharing read-only components.
+func (s *Service) Clone() ai.Agent[map[string]any] {
+	clonedRegistry := make(map[string]ai.Agent[map[string]any])
+	for k, v := range s.registry {
+		if cloneable, ok := v.(interface {
+			Clone() ai.Agent[map[string]any]
+		}); ok {
+			clonedRegistry[k] = cloneable.Clone()
+		} else {
+			clonedRegistry[k] = v // shallow fallback
+		}
+	}
+
+	clone := &Service{
+		domain:                 s.domain,
+		systemDB:               s.systemDB,
+		databases:              s.databases,
+		generator:              s.generator,
+		pipeline:               s.pipeline,
+		registry:               clonedRegistry,
+		EnableObfuscation:      s.EnableObfuscation,
+		EnableHistoryInjection: s.EnableHistoryInjection,
+		session:                NewRunnerSession(),
+		lastKnowledgeRefresh:   make(map[string]time.Time),
+	}
+
+	// Inject back the service pointer to agents if they rely on it
+	for _, v := range clone.registry {
+		if da, ok := v.(*DataAdminAgent); ok {
+			da.service = clone
+		}
+	}
+
+	return clone
+}
+
 // SetFeature allows toggling of agent features at runtime.
 func (s *Service) SetFeature(feature string, enabled bool) {
 	switch feature {
@@ -228,10 +264,10 @@ func (s *Service) Close(ctx context.Context) error {
 	// The LRU limit (20 items) prevents unbounded growth.
 	if s.session != nil {
 		s.session.Variables = nil
-		s.session.CurrentScript = nil
+		// s.session.CurrentScript = nil // Preserved for drafting across interactions
 		// s.session.LastStep = nil // Preserved for /last-tool
 		// s.session.LastInteractionToolCalls = nil // Preserved for /last-tool
-		s.session.PendingRefinement = nil
+		// s.session.PendingRefinement = nil // Preserved for /script refine
 	}
 
 	p := ai.GetSessionPayload(ctx)
@@ -519,11 +555,8 @@ func (s *Service) RecordStep(ctx context.Context, step ai.ScriptStep) {
 	// Always capture the last step for potential manual addition
 	s.session.LastStep = &step
 
-	// If we are actively drafting a script, append the step
-	if s.session.CurrentScript != nil {
-		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, step)
-		log.Debug("Service.RecordStep: Appended step to CurrentScript", "script_name", s.session.CurrentScriptName, "step_count", len(s.session.CurrentScript.Steps))
-	}
+	// Note: Auto-recording to CurrentScript is disabled to prevent noise.
+	// Users must explicitly add steps using /step.
 
 	// Buffer tool calls for potential refactoring
 	if step.Type == "command" {
@@ -551,7 +584,7 @@ func (s *Service) saveScript(ctx context.Context, name string, script ai.Script)
 		tx.Rollback(ctx)
 		return err
 	}
-	if err := store.Save(ctx, "general", name, &script); err != nil {
+	if err := store.Save(ctx, ai.DefaultScriptCategory, name, &script); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Errorf("failed to save script: %w", err)
 	}
@@ -759,7 +792,10 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	}()
 
 	// Clear buffer at start of Ask
-	s.session.LastInteractionToolCalls = []ai.ScriptStep{}
+	trimQ := strings.TrimSpace(query)
+	if trimQ != "last-tool" && trimQ != "/last-tool" && trimQ != "last_tool" && trimQ != "/last_tool" {
+		s.session.LastInteractionToolCalls = []ai.ScriptStep{}
+	}
 
 	cfg := ai.NewAskConfig(opts...)
 	var db *database.Database

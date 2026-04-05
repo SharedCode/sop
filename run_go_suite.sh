@@ -20,7 +20,7 @@ go run examples/interop_jsondb/main.go
 echo ""
 echo "[3/5] Running Interop Secondary Indexes Example..."
 echo "----------------------------------------"
-go run examples/interop_secondary_indexes/main.go
+go run examples/interop_indexes/main.go
 
 echo ""
 echo "[4/5] Running Swarm Standalone Example..."

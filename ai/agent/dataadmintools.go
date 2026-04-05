@@ -25,6 +25,7 @@ Important:
 5. For large datasets, prefer using 'limit' to avoid memory exhaustion.
 6. Store names are sometimes entity's plural form or singular form, e.g. user entity stored in users store.
 7. Field names sometimes use underscore('_') separator instead of space(' '), e.g. - "total amount" as field name is "total_amount".
+8. Group Atomic Operations: Partial or atomic data operations (scan, filter, join, project) should be grouped into a single 'execute_script' block. Do not create separate tool calls or script steps for these unless user interaction is required in between. This ensures transactional safety and performance.
 
 Operations:
 - open_db(name) -> db
@@ -32,7 +33,7 @@ Operations:
 - commit_tx(transaction)
 - rollback_tx(transaction)
 - open_store(transaction, name) -> store
-- scan(store, limit, direction, start_key, prefix, filter, stream=true) -> cursor
+- scan(store, limit, direction ("asc" or "desc"), start_key, prefix, filter, stream=true) -> cursor
 - find(store, key, desc) -> bool
 - next(store) -> bool
 - previous(store) -> bool
@@ -93,6 +94,7 @@ func (a *DataAdminAgent) registerTools(ctx context.Context) {
 	a.registry.Register("list_databases", "Lists all available databases.", "()", a.toolListDatabases)
 	// a.registry.Register("switch_database", "Switches the active database context for the AI and the user UI.", "(database: string)", a.toolSwitchDatabase)
 	a.registry.Register("list_stores", "Lists all stores in the current or specified database.", "(database: string)", a.toolListStores)
+	a.registry.Register("list_tools", "Lists all available tools and their usage instructions.", "()", a.toolListTools)
 
 	// Script Management
 	a.registry.Register("list_scripts", "Lists all available scripts.", "()", a.toolListScripts)
@@ -104,13 +106,14 @@ func (a *DataAdminAgent) registerTools(ctx context.Context) {
 	a.registry.Register("delete_step", "Delete a step from a script.", "(script: string, index: number)", a.toolScriptDeleteStep)
 	a.registry.Register("update_step", "Update a step in a script.", "(script: string, index: number, description: string, name: string, ...params)", a.toolScriptUpdateStep)
 	a.registry.Register("reorder_steps", "Move a step in a script to a new position.", "(script: string, from_index: number, to_index: number)", a.toolScriptReorderSteps)
-	a.registry.Register("add_step_from_last", "Add the last executed tool call as a new step to a script. If 'index' is not provided, it appends to the end. If 'index' is provided, it inserts 'after' that index by default, unless 'position' is set to 'before'.", "(script: string, index: number, position: string, description: string, name: string)", a.toolScriptAddStepFromLast)
+	a.registry.Register("save_last_step", "Add the last executed tool call as a new step to a script. If 'index' is not provided, it appends to the end. If 'index' is provided, it inserts 'after' that index by default, unless 'position' is set to 'before'.", "(script: string, index: number, position: string, description: string, name: string)", a.toolScriptAddStepFromLast)
 	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new script or block.", "(mode: string, name: string)", a.toolRefactorScript)
 
 	// High-Level Tools
 	a.registry.Register("select", a.getToolInstruction(ctx, "select", SelectInstruction), "(store: string, ...)", a.toolSelect)
 	a.registry.RegisterHidden("join", a.getToolInstruction(ctx, "join", JoinInstruction), "(left_store: string, right_store: string, ...)", a.toolJoin)
 	a.registry.Register("explain_join", "Predicts the execution strategy (Index Scan vs Full Scan) for a join operation. Useful for performance debugging.", "(right_store: string, on: map, database?: string)", a.toolExplainJoin)
+	// a.registry.Register("fetch", "Fetches raw key/value pairs from a store. Useful for diagnostics to see the actual B-Tree data. Supports optional direct key lookup, prefix scan, or filtering on Key fields.", "(store: string, key?: any, limit?: number, prefix?: string, filter?: map)", a.toolFetch)
 	a.registry.Register("add", a.getToolInstruction(ctx, "add", AddInstruction), "(store: string, key: any, value: any)", a.toolAdd)
 	a.registry.Register("update", a.getToolInstruction(ctx, "update", UpdateInstruction), "(store: string, key: any, value: any)", a.toolUpdate)
 	a.registry.Register("delete", a.getToolInstruction(ctx, "delete", DeleteInstruction), "(store: string, key: any)", a.toolDelete)
@@ -124,6 +127,12 @@ func (a *DataAdminAgent) registerTools(ctx context.Context) {
 
 	// Conversation Management
 	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", "(summary: string, topic_label: string)", a.toolConcludeTopic)
+
+	// Communication Tools
+	a.registry.Register("send_email", "Sends an email.", "(to: string, subject: string, body: string)", a.toolSendEmail)
+
+	// Register Atomic Operations (Internal/Granular)
+	// a.registerAtomicTools()
 }
 func (a *DataAdminAgent) getToolInstruction(ctx context.Context, toolName, defaultInst string) string {
 	if a.systemDB == nil {
@@ -266,6 +275,60 @@ func (a *DataAdminAgent) getSystemInstructions(ctx context.Context, defaultInst 
 	}
 
 	return sb.String()
+}
+
+func (a *DataAdminAgent) toolListTools(ctx context.Context, args map[string]any) (string, error) {
+	tools := a.registry.List()
+
+	// Sort tools by name for consistent output
+	sort.Slice(tools, func(i, j int) bool {
+		return tools[i].Name < tools[j].Name
+	})
+
+	var sb strings.Builder
+	// Note: Header is handled by the caller or omitted to allow clean concatenation
+	// But since this tool can be called independently by the agent, we should perhaps skip heavy headers if it's meant to be a simple list.
+	// However, the prompt says "it should display complete set". I'll just list them.
+
+	for _, t := range tools {
+		if t.Hidden {
+			continue
+		}
+
+		// Clean description
+		desc := strings.ReplaceAll(t.Description, "\n", " ")
+
+		// Simplify ArgsSchema for CLI display
+		// Convert "(arg1: type, arg2: type)" -> "arg1, arg2"
+		argsSchema := t.ArgsSchema
+		argsSchema = strings.TrimPrefix(argsSchema, "(")
+		argsSchema = strings.TrimSuffix(argsSchema, ")")
+
+		// Remove types (primitive heuristic)
+		var simpleArgs []string
+		if len(argsSchema) > 0 {
+			parts := strings.Split(argsSchema, ",")
+			for _, p := range parts {
+				// Get arg name
+				argName := strings.Split(p, ":")[0]
+				argName = strings.TrimSpace(argName)
+				if argName != "" {
+					simpleArgs = append(simpleArgs, "<"+argName+">")
+				}
+			}
+		}
+
+		prettyArgs := strings.Join(simpleArgs, " ")
+
+		cmdStr := fmt.Sprintf("/%s", t.Name)
+		if prettyArgs != "" {
+			cmdStr += " " + prettyArgs
+		}
+
+		sb.WriteString(fmt.Sprintf("- `%s`: %s\n", cmdStr, desc))
+	}
+
+	return sb.String(), nil
 }
 
 func (a *DataAdminAgent) toolListDatabases(ctx context.Context, args map[string]any) (string, error) {

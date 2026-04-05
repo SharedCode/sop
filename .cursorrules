@@ -1,0 +1,36 @@
+# SOP Project: AI Coding Guidelines & Architectural Constraints
+
+You are an AI assistant working on the SOP (Shared Open Platform) backend. SOP is a complex system involving a JSON-based Database (jsondb), B-Tree structures, and an embedded AI scripting engine.
+
+To prevent regressions and ensure architectural consistency, you **MUST MUST MUST** adhere to the following rules when modifying Go code in this workspace:
+
+## 1. Storage and Database Abstractions (CRITICAL)
+SOP has two primary ways to access the stored data. You must use the correct one to avoid runtime type mismatch panics:
+*   **System/Model Components (Scripts, Models, Classifiers, etc.):** ALWAYS use `db.OpenModelStore(ctx, "store_name", tx)`.
+    *   Keys are strictly typed Go structs (e.g., `model.ModelKey`).
+    *   Do not use raw JSON maps to query these stores.
+*   **Raw User Data (e.g., dynamic tables like "users", "orders"):** Use `jsondb.OpenStore(ctx, db.Config(), "store_name", tx)`.
+    *   Keys are raw maps expecting `map[string]any`. DO NOT pass structs to `FindOne` or `Add` when using `OpenStore`.
+
+## 2. The Scripting Engine (`atomic_engine.go`)
+*   The script engine interprets a JSON-based AST (Abstract Syntax Tree). 
+*   **Rule:** When adding new operations or editing existing ones in `atomic_engine.go`, prioritize mapping `args` to **strongly-typed structs** instead of relying heavily on `args["field"].(string)` which fail silently at runtime. 
+*   Operations must be registered in the compiler `bindOperation`.
+
+## 3. Querying & Naming Conventions
+*   Respect projected field names and prefixed columns. If a relational join maps `department.region`, do not map it out of scope implicitly.
+*   "scan" and "join" return full objects. You must use "project" steps if specific keys are needed in an API response or final scripted format.
+
+## 4. Testing Protocols
+*   Unit tests with mocks **hide JSON serialization and key-type errors**. 
+*   If you refactor anything interacting with `jsondb` or the AI Script Executor, **you must write or rely on End-to-End (E2E) integration tests**.
+*   Any script execution changes should ideally be tested via the Server API or using the real/ephemeral `jsondb` instance (e.g., `TestRealDBIntegration_JoinFlow`).
+
+## 5. Active Knowledge Refinement
+If the user corrects an architectural pattern, immediately update this file or use the `manage_knowledge` tool to capture standardizations around fields/types to prevent repeating errors across coding sessions.
+
+
+## 6. Context Resumption (ACTIVE_TASK)
+*   Before beginning work on a new or existing feature, you MUST check if an `ACTIVE_TASK.md` file exists in the workspace root.
+*   If it exists, read it immediately. You MUST also read any design documents or plans listed in its "Mandatory Reading" section before generating code or modifying architecture.
+*   Do not improvise design patterns if a design document dictates the approach.

@@ -187,7 +187,7 @@ func (s *Service) RunScript(ctx context.Context, name string, category string, a
 }
 
 func (s *Service) scriptList(ctx context.Context, scriptDB *database.Database, args []string) (string, error) {
-	category := "general"
+	category := ai.DefaultScriptCategory
 	for i := 1; i < len(args); i++ {
 		if args[i] == "--category" && i+1 < len(args) {
 			category = args[i+1]
@@ -222,7 +222,7 @@ func (s *Service) scriptCreate(ctx context.Context, scriptDB *database.Database,
 	}
 	name := args[1]
 	description := ""
-	category := "general"
+	category := ai.DefaultScriptCategory
 	force := false
 
 	for i := 2; i < len(args); i++ {
@@ -271,6 +271,7 @@ func (s *Service) scriptCreate(ctx context.Context, scriptDB *database.Database,
 		Database:    dbName,
 		Steps:       []ai.ScriptStep{},
 	}
+	newScript.Steps = RefineScriptSteps(newScript.Steps)
 
 	if err := store.Save(ctx, category, name, newScript); err != nil {
 		tx.Rollback(ctx)
@@ -289,7 +290,7 @@ func (s *Service) scriptShow(ctx context.Context, scriptDB *database.Database, a
 		return "Usage: /script show <name> [--json] [--category <cat>]", nil
 	}
 	name := args[1]
-	category := "general"
+	category := ai.DefaultScriptCategory
 	showJSON := false
 
 	for i := 2; i < len(args); i++ {
@@ -354,7 +355,7 @@ func (s *Service) scriptDelete(ctx context.Context, scriptDB *database.Database,
 		return "Usage: /script delete <name> [--category <cat>]", nil
 	}
 	name := args[1]
-	category := "general"
+	category := ai.DefaultScriptCategory
 	if len(args) > 3 && args[2] == "--category" {
 		category = args[3]
 	}
@@ -389,7 +390,7 @@ func (s *Service) scriptSaveAs(ctx context.Context, scriptDB *database.Database,
 		return "Usage: /script save_as <name> [--category <cat>]", nil
 	}
 	name := args[1]
-	category := "general"
+	category := ai.DefaultScriptCategory
 	if len(args) > 3 && args[2] == "--category" {
 		category = args[3]
 	}
@@ -418,6 +419,7 @@ func (s *Service) scriptSaveAs(ctx context.Context, scriptDB *database.Database,
 	newScript := ai.Script{
 		Steps: []ai.ScriptStep{*s.session.LastStep},
 	}
+	newScript.Steps = RefineScriptSteps(newScript.Steps)
 
 	if err := store.Save(ctx, category, name, newScript); err != nil {
 		tx.Rollback(ctx)
@@ -434,7 +436,7 @@ func (s *Service) scriptStep(ctx context.Context, scriptDB *database.Database, a
 	subCmd := args[1]
 	name := args[2]
 
-	category := "general"
+	category := ai.DefaultScriptCategory
 	var cleanArgs []string
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--category" && i+1 < len(args) {
@@ -525,6 +527,8 @@ func (s *Service) scriptStepAdd(ctx context.Context, scriptDB *database.Database
 		return "Error: Invalid position. Use top, bottom, before, or after.", nil
 	}
 
+	script.Steps = RefineScriptSteps(script.Steps)
+
 	if err := store.Save(ctx, category, name, script); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error saving script: %v", err), nil
@@ -567,6 +571,8 @@ func (s *Service) scriptStepDelete(ctx context.Context, scriptDB *database.Datab
 
 	// Remove step
 	script.Steps = append(script.Steps[:idx], script.Steps[idx+1:]...)
+
+	script.Steps = RefineScriptSteps(script.Steps)
 
 	if err := store.Save(ctx, category, name, script); err != nil {
 		tx.Rollback(ctx)
@@ -615,6 +621,8 @@ func (s *Service) scriptStepUpdate(ctx context.Context, scriptDB *database.Datab
 	// Update step
 	script.Steps[idx] = *s.session.LastStep
 
+	script.Steps = RefineScriptSteps(script.Steps)
+
 	if err := store.Save(ctx, category, name, script); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error saving script: %v", err), nil
@@ -629,7 +637,7 @@ func (s *Service) scriptParameters(ctx context.Context, scriptDB *database.Datab
 		return "Usage: /script parameters <name> <p1> <p2> ... [--category <cat>]", nil
 	}
 	name := args[1]
-	category := "general"
+	category := ai.DefaultScriptCategory
 	var params []string
 
 	for i := 2; i < len(args); i++ {
@@ -659,6 +667,8 @@ func (s *Service) scriptParameters(ctx context.Context, scriptDB *database.Datab
 
 	script.Parameters = params
 
+	script.Steps = RefineScriptSteps(script.Steps)
+
 	if err := store.Save(ctx, category, name, script); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error saving script: %v", err), nil
@@ -683,7 +693,7 @@ func (s *Service) scriptParameterize(ctx context.Context, scriptDB *database.Dat
 		Value string
 	}
 	var pairs []replacePair
-	category := "general"
+	category := ai.DefaultScriptCategory
 
 	// Parse arguments for pairs and flags
 	for i := 2; i < len(args); i++ {
@@ -815,6 +825,8 @@ func (s *Service) scriptParameterize(ctx context.Context, scriptDB *database.Dat
 		}
 	}
 
+	script.Steps = RefineScriptSteps(script.Steps)
+
 	if err := store.Save(ctx, category, name, script); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error saving script: %v", err), nil
@@ -840,7 +852,7 @@ func (s *Service) scriptRefine(ctx context.Context, scriptDB *database.Database,
 	}
 
 	name := args[1]
-	category := "general"
+	category := ai.DefaultScriptCategory
 	var instructionsParts []string
 
 	for i := 2; i < len(args); i++ {
@@ -1021,12 +1033,14 @@ func (s *Service) scriptRefineApply(ctx context.Context, scriptDB *database.Data
 		return fmt.Sprintf("Error starting transaction: %v", err), nil
 	}
 
-	// 1. Save Script
 	store, err := scriptDB.OpenModelStore(ctx, "scripts", tx)
 	if err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error opening scripts store: %v", err), nil
 	}
+
+	proposal.NewScript.Steps = RefineScriptSteps(proposal.NewScript.Steps)
+
 	if err := store.Save(ctx, proposal.Category, proposal.ScriptName, proposal.NewScript); err != nil {
 		tx.Rollback(ctx)
 		return fmt.Sprintf("Error saving script: %v", err), nil

@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -88,6 +89,8 @@ var content embed.FS
 
 var config Config
 var loadedAgents = make(map[string]ai.Agent[map[string]any])
+var activeSessions = make(map[string]ai.Agent[map[string]any])
+var activeSessionsMu sync.RWMutex
 
 const SystemDBName = "system"
 
@@ -117,16 +120,13 @@ func main() {
 		os.Exit(0)
 	}
 
-	// Load config from file if provided
-	if config.ConfigFile != "" {
+	if config.ConfigFile == "" {
+		config.ConfigFile = "config.json"
+	}
+
+	if _, err := os.Stat(config.ConfigFile); err == nil {
 		if err := loadConfig(config.ConfigFile); err != nil {
 			log.Error(fmt.Sprintf("Failed to load config file: %v", err))
-		}
-	} else {
-		// Try default config.json
-		if _, err := os.Stat("config.json"); err == nil {
-			config.ConfigFile = "config.json"
-			loadConfig("config.json")
 		}
 	}
 
@@ -274,7 +274,31 @@ func loadConfig(path string) error {
 		if config.SystemDB.RedisURL == "" {
 			config.SystemDB.RedisURL = config.RedisURL
 		}
+
+		// Resolve paths config-relative
+		config.SystemDB.Path = resolveConfigRelativePath(config.SystemDB.Path)
+		for i, p := range config.SystemDB.StoresFolders {
+			config.SystemDB.StoresFolders[i] = resolveConfigRelativePath(p)
+		}
+		for i, ec := range config.SystemDB.ErasureConfigs {
+			for j, bp := range ec.BasePaths {
+				config.SystemDB.ErasureConfigs[i].BasePaths[j] = resolveConfigRelativePath(bp)
+			}
+		}
 	}
+
+	for i := range config.Databases {
+		config.Databases[i].Path = resolveConfigRelativePath(config.Databases[i].Path)
+		for j, p := range config.Databases[i].StoresFolders {
+			config.Databases[i].StoresFolders[j] = resolveConfigRelativePath(p)
+		}
+		for j, ec := range config.Databases[i].ErasureConfigs {
+			for k, bp := range ec.BasePaths {
+				config.Databases[i].ErasureConfigs[j].BasePaths[k] = resolveConfigRelativePath(bp)
+			}
+		}
+	}
+
 	return nil
 }
 

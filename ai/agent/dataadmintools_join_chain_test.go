@@ -361,27 +361,33 @@ func TestToolJoin_Full(t *testing.T) {
 	for _, r := range results {
 		// Helper to look up ID from various possible keys (due to prefixing/collapsing behavior)
 		var idA float64
-		if v, ok := r["id"]; ok && v != nil {
+		if v, ok := r["store_a.id"]; ok && v != nil {
 			idA, _ = v.(float64)
-		} else if v, ok := r["s_a.id"]; ok && v != nil {
-			idA, _ = v.(float64)
-		} else if v, ok := r["store_a.id"]; ok && v != nil {
+		} else if v, ok := r["id"]; ok && v != nil {
 			idA, _ = v.(float64)
 		}
 
-		idB, _ := r["B.id"].(float64)
+		var idB float64
+		if v, ok := r["id"]; ok && v != nil {
+			// If store_a.id exists, it's A2-B2 match. So the main 'id' belongs to B.
+			if r["store_a.id"] != nil {
+				idB, _ = v.(float64)
+			} else {
+				// otherwise it's either A1 or B3.
+				// a1 is 'val' == "A1", b3 is 'val' == "B3"
+				if r["val"] == "B3" {
+					idB, _ = v.(float64)
+				}
+			}
+		}
 
-		if idA == 1 && r["B.id"] == nil {
+		if idA == 1.0 {
 			foundA1 = true
 		}
-		if idA == 2 && idB == 2 {
+		if idA == 2.0 && idB == 2.0 {
 			foundMatch = true
 		}
-		// Check B3. RightOuterJoinStoreCursor uses alias for key if provided.
-		// We provided right_alias="B".
-		// So B3 fields: "B.id": 3.0, "B.val": "B3". "id": nil.
-
-		if idA == 3.0 {
+		if idB == 3.0 {
 			foundB3 = true
 		}
 	}

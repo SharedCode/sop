@@ -25,7 +25,7 @@ func TestServiceIntegration_LastTool(t *testing.T) {
 	}
 
 	// Use a known working model
-	model := "gemini-2.5-pro"
+	model := ai.DefaultModelGemini
 	if envModel := os.Getenv("GEMINI_MODEL"); envModel != "" {
 		model = envModel
 	}

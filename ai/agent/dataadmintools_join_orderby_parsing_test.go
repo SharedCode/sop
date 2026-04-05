@@ -7,20 +7,20 @@ import (
 
 func TestParseOrderBy(t *testing.T) {
 	// Only Test Logic, not full ToolJoin call (which requires stores)
-	
+
 	orderBy := "a.f1 ASC, b.f2 DESC"
-	
+
 	isDesc := false
 	var rightSortFields []string
-	
+
 	parts := strings.Split(orderBy, ",")
 	firstPart := strings.TrimSpace(parts[0])
 	lowerFirst := strings.ToLower(firstPart)
-	
+
 	if strings.HasSuffix(lowerFirst, " desc") {
 		isDesc = true
 	}
-	
+
 	if len(parts) > 1 {
 		for _, p := range parts[1:] {
 			p = strings.TrimSpace(p)
@@ -29,7 +29,7 @@ func TestParseOrderBy(t *testing.T) {
 			}
 		}
 	}
-	
+
 	if isDesc {
 		t.Error("Expected isDesc=false for 'a.f1 ASC'")
 	}
@@ -54,7 +54,7 @@ func TestRightSortFieldParsing(t *testing.T) {
 	} else if strings.HasSuffix(lower, " asc") {
 		fieldName = spec[:len(spec)-4]
 	}
-	
+
 	if !desc {
 		t.Error("Expected desc=true")
 	}

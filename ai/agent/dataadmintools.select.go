@@ -49,14 +49,14 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 
 	// Check if storeName is a Script (View)
 	if a.systemDB != nil {
-		// Try to find script in "general" category (default)
+		// Try to find script in ai.DefaultScriptCategory category (default)
 		// We need a transaction for systemDB
 		sysTx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
 		if err == nil {
 			scriptStore, err := a.systemDB.OpenModelStore(ctx, "scripts", sysTx)
 			if err == nil {
 				var script ai.Script
-				if err := scriptStore.Load(ctx, "general", storeName, &script); err == nil {
+				if err := scriptStore.Load(ctx, ai.DefaultScriptCategory, storeName, &script); err == nil {
 					sysTx.Commit(ctx)
 					// Found Script! Execute it.
 					return a.executeScriptView(ctx, storeName, script, args)
@@ -90,7 +90,10 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 	}
 
 	// Parse Limit
-	limit, _ := args["limit"].(float64)
+	limit := 100.0
+	if l, ok := args["limit"]; ok {
+		limit = coerceToFloat(l)
+	}
 	if limit <= 0 {
 		limit = 100
 	}
@@ -102,11 +105,11 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 		lowerOrder := strings.ToLower(orderBy)
 		// Handle commas in "field desc, field2 asc"
 		lowerOrder = strings.ReplaceAll(lowerOrder, ",", " ")
-		if lowerOrder == "desc" {
+		if lowerOrder == "desc" || lowerOrder == "descending" {
 			isDesc = true
 		} else {
 			parts := strings.Fields(lowerOrder)
-			if len(parts) >= 2 && parts[1] == "desc" {
+			if len(parts) >= 2 && strings.HasPrefix(parts[1], "desc") {
 				isDesc = true
 			}
 		}

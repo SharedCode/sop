@@ -93,9 +93,7 @@ func TestStreamerModes(t *testing.T) {
 		// Ensure items are valid JSON objects (wrapped in our StepExecutionResult or indentation?)
 		// NewJSONStreamer uses `json.MarshalIndent`.
 		if !strings.Contains(output, `"record": "Item 1"`) { // Indented usually has space?
-			// marshal indent vs marshal
-			// NewJSONStreamer uses MarshalIndent in my restoration?
-			// Let's check the code I restored.
+			t.Errorf("Expected Item 1 wrapped in record")
 		}
 	})
 

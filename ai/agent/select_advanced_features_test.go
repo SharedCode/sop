@@ -244,7 +244,7 @@ func TestToolSelect_ScriptView(t *testing.T) {
 			},
 		},
 	}
-	if err := scriptStore.Save(ctx, "general", "active_users", script); err != nil {
+	if err := scriptStore.Save(ctx, ai.DefaultScriptCategory, "active_users", script); err != nil {
 		t.Fatalf("Failed to save script: %v", err)
 	}
 	tx.Commit(ctx)

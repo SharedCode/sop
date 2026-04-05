@@ -139,10 +139,10 @@ func TestScript_Transactions(t *testing.T) {
 	// Save Scripts
 	tx, _ = sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
-	store.Save(ctx, "general", "implicit_tx", scriptImplicit)
-	store.Save(ctx, "general", "explicit_commit", scriptExplicitCommit)
-	store.Save(ctx, "general", "explicit_rollback", scriptExplicitRollback)
-	store.Save(ctx, "general", "uncommitted", scriptUncommitted)
+	store.Save(ctx, ai.DefaultScriptCategory, "implicit_tx", scriptImplicit)
+	store.Save(ctx, ai.DefaultScriptCategory, "explicit_commit", scriptExplicitCommit)
+	store.Save(ctx, ai.DefaultScriptCategory, "explicit_rollback", scriptExplicitRollback)
+	store.Save(ctx, ai.DefaultScriptCategory, "uncommitted", scriptUncommitted)
 	tx.Commit(ctx)
 
 	// 3. Initialize Service
@@ -161,12 +161,16 @@ func TestScript_Transactions(t *testing.T) {
 
 	// Helper to check if key exists
 	checkKey := func(key string, shouldExist bool) {
-		tx, err := userDB.BeginTransaction(ctx, sop.ForReading)
+		// Create a fresh DB instance to ensure we see changes committed by other instances (the agent)
+		// This simulates a real scenario where the verifier is a separate client
+		userDBChecker := database.NewDatabase(dbOpts)
+
+		tx, err := userDBChecker.BeginTransaction(ctx, sop.ForReading)
 		if err != nil {
 			t.Fatalf("CheckKey: BeginTransaction failed: %v", err)
 		}
 		// Use the same userDB object to open the store, to ensure consistency
-		store, err := userDB.OpenBtreeCursor(ctx, "employees", tx)
+		store, err := userDBChecker.OpenBtreeCursor(ctx, "employees", tx)
 		if err != nil {
 			tx.Rollback(ctx)
 			t.Fatalf("CheckKey: OpenBtreeCursor failed: %v", err)

@@ -27,9 +27,12 @@ const CtxKeyUseNDJSON contextKey = "use_ndjson"
 const CtxKeyCurrentScriptCategory contextKey = "current_script_category"
 
 type StepExecutionResult struct {
-	Type      string `json:"type"`
-	Command   string `json:"command,omitempty"`
-	Prompt    string `json:"prompt,omitempty"`
+	Type    string `json:"type"`
+	Command string `json:"command,omitempty"`
+	Prompt  string `json:"prompt,omitempty"`
+	// Use Payload for generic message/label if needed, but Command/Prompt cover most.
+	// We might want to add "Name" explicitly if strictly needed,
+	// but currently the code equates Command field to the label.
 	StepIndex int    `json:"step_index"`
 	Result    any    `json:"result,omitempty"`
 	Record    any    `json:"record,omitempty"`
@@ -143,12 +146,9 @@ func (ss *StepStreamer) writeHeader() {
 	defer ss.parent.mu.Unlock()
 
 	// Check suppression flag on parent
-	if ss.parent.suppressStepStart {
-		// If metadata is present (e.g. columns), we must write the header to include it.
-		// Otherwise, suppress wrapper for records/results to keep output clean.
-		if len(ss.metadata) == 0 && (ss.stepType == "record" || ss.stepType == "tool_result") {
-			return
-		}
+	if ss.parent.suppressStepStart && ss.parent.isNDJSON {
+		// Suppress the step header for cleaner stream
+		return
 	}
 
 	if ss.parent.isNDJSON {
@@ -187,13 +187,10 @@ func (ss *StepStreamer) writeHeader() {
 }
 
 func (ss *StepStreamer) BeginArray() {
-	// Lazy Start: Do nothing here.
-	// We wait for the first WriteItem to detect columns.
-	// OR if EndArray is called without items, we handle empty array there.
-
-	// Exception: NDJSON might need immediate handling if supported?
-	// Existing NDJSON logic in BeginArray: if ss.parent.isNDJSON return.
-	// So safe to do nothing for JSON streamer.
+	// If it's a new result set (Step 2 vs Step 1), we must ensure we are in a state to write a new array.
+	// The problem is "writeHeader()" assumes we are writing "result": [ ... ].
+	// If Step 1 already wrote a result, Step 2 should be a separate "step_start" event.
+	// But StepStreamer is created PER step.
 }
 
 func (ss *StepStreamer) WriteItem(item any) {
@@ -223,10 +220,12 @@ func (ss *StepStreamer) WriteItem(item any) {
 		ss.writeHeader()
 		ss.used = true
 
-		// Start Array
-		ss.parent.mu.Lock()
-		fmt.Fprint(ss.parent.w, "[")
-		ss.parent.mu.Unlock()
+		if !ss.parent.isNDJSON {
+			// Start Array (Only for JSON Array mode)
+			ss.parent.mu.Lock()
+			fmt.Fprint(ss.parent.w, "[")
+			ss.parent.mu.Unlock()
+		}
 	}
 
 	ss.parent.mu.Lock()
@@ -288,6 +287,13 @@ func (ss *StepStreamer) Close() {
 		return
 	}
 
+	// If the streamer wasn't used, we haven't written the header (lazy).
+	// Therefore, we shouldn't write the footer '}' either, effectively skipping the step output.
+	if !ss.used {
+		ss.closed = true
+		return
+	}
+
 	fmt.Fprint(ss.parent.w, "}")
 	ss.closed = true
 }
@@ -304,8 +310,8 @@ func (s *Service) runStep(ctx context.Context, step ai.ScriptStep, scope map[str
 		return s.runStepIf(ctx, step, scope, scopeMu, sb, db)
 	case "loop":
 		return s.runStepLoop(ctx, step, scope, scopeMu, sb, db)
-	case "fetch":
-		return s.runStepFetch(ctx, step, scope, scopeMu, sb, db)
+	// case "fetch":
+	// 	return s.runStepFetch(ctx, step, scope, scopeMu, sb, db)
 	case "say", "print":
 		return s.runStepSay(ctx, step, scope, scopeMu, sb)
 	case "call_script", "script":
@@ -457,8 +463,14 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 		var stepStreamer *StepStreamer
 		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
 			stepIndex, _ := ctx.Value("step_index").(int)
-			log.Debug("runStepCommand: Got step_index", "index", stepIndex)
-			stepStreamer = streamer.StartStreamingStep("command", step.Command, "", stepIndex)
+			log.Debug("runStepCommand: StartStreamingStep", "index", stepIndex, "command", step.Command, "name", step.Name)
+
+			// Use Name if provided, otherwise Command
+			displayName := step.Command
+			if step.Name != "" {
+				displayName = step.Name
+			}
+			stepStreamer = streamer.StartStreamingStep("command", displayName, "", stepIndex)
 			ctx = context.WithValue(ctx, ai.CtxKeyResultStreamer, stepStreamer)
 		}
 
@@ -480,56 +492,86 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 
 		// Stream result if streamer is present (and wasn't used by tool)
 		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
-			var resultAny any = resp
+			isVerbose, _ := ctx.Value("verbose").(bool)
 
-			// Optimization/UX: If the result is a JSON array (list of records),
-			// we want to stream them individually or at least separate the command metadata from data.
-			// This matches the "Pattern 3" request: Header -> Row -> Row ...
+			// Low-level commands that should NOT be announced as steps (system details)
+			isSystemStep := false
+			switch step.Command {
+			case "open_db", "begin_tx", "commit_tx", "rollback_tx", "open_store":
+				isSystemStep = true
+			}
 
-			stepIndex, _ := ctx.Value("step_index").(int)
+			if !isSystemStep {
+				var resultAny any = resp
 
-			trimmed := strings.TrimSpace(resp)
-			if strings.HasPrefix(trimmed, "[") {
-				// Parse array
-				var list []json.RawMessage
-				if err := json.Unmarshal([]byte(trimmed), &list); err == nil {
-					// 1. Emit Step Header
+				stepIndex, _ := ctx.Value("step_index").(int)
+
+				// Determine Display Name (reused logic)
+				displayName := step.Command
+				if step.Name != "" {
+					displayName = step.Name
+				} else if step.Command == "execute_script" {
+					if n, ok := resolvedArgs["name"].(string); ok && n != "" {
+						displayName = n
+					}
+				}
+
+				// Optimization/UX: If the result is a JSON array (list of records),
+				// we want to stream them individually or at least separate the command metadata from data.
+				// This matches the "Pattern 3" request: Header -> Row -> Row ...
+				trimmed := strings.TrimSpace(resp)
+				if strings.HasPrefix(trimmed, "[") {
+					// Parse array
+					var list []json.RawMessage
+					if err := json.Unmarshal([]byte(trimmed), &list); err == nil {
+						// 1. Emit Step Header (only if verbose)
+						if isVerbose {
+							streamer.Write(StepExecutionResult{
+								Type:      "step_start",
+								Command:   displayName,
+								StepIndex: stepIndex,
+							})
+						}
+
+						// 2. Emit Records (only if verbose)
+						if isVerbose {
+							for _, item := range list {
+								streamer.Write(StepExecutionResult{
+									Type:      "record",
+									Record:    item,
+									StepIndex: stepIndex,
+								})
+							}
+						}
+						// Return nil here strictly for the List path which is a special display-optimized path
+						// (NOTE: This implies list results aren't captured in variables currently, preserving existing behavior)
+						return nil
+					}
+				}
+
+				// Fallback: Single Object or Primitive or Failed Array Parse
+				// Try to unmarshal if it looks like JSON object to avoid escaping
+				if strings.HasPrefix(trimmed, "{") {
+					resultAny = json.RawMessage(resp)
+				}
+
+				// Emit as single result (default behavior for non-list outputs)
+				// But maybe we should still wrap in step_start?
+				// Let's emit header + 1 record
+				log.Debug("runStepCommand: Emitting fallback step_start", "index", stepIndex)
+				if isVerbose {
 					streamer.Write(StepExecutionResult{
 						Type:      "step_start",
-						Command:   step.Command,
+						Command:   displayName,
 						StepIndex: stepIndex,
 					})
-
-					// 2. Emit Records
-					for _, item := range list {
-						streamer.Write(StepExecutionResult{
-							Type:   "record",
-							Record: item,
-						})
-					}
-					return nil
+					streamer.Write(StepExecutionResult{
+						Type:      "record",
+						Record:    resultAny,
+						StepIndex: stepIndex,
+					})
 				}
 			}
-
-			// Fallback: Single Object or Primitive or Failed Array Parse
-			// Try to unmarshal if it looks like JSON object to avoid escaping
-			if strings.HasPrefix(trimmed, "{") {
-				resultAny = json.RawMessage(resp)
-			}
-
-			// Emit as single result (default behavior for non-list outputs)
-			// But maybe we should still wrap in step_start?
-			// Let's emit header + 1 record
-			log.Debug("runStepCommand: Emitting fallback step_start", "index", stepIndex)
-			streamer.Write(StepExecutionResult{
-				Type:      "step_start",
-				Command:   step.Command,
-				StepIndex: stepIndex,
-			})
-			streamer.Write(StepExecutionResult{
-				Type:   "record",
-				Record: resultAny,
-			})
 		} else {
 			// Fallback to string builder if no streamer (standard output mode)
 			msg := fmt.Sprintf("%s\n", resp)
@@ -667,98 +709,6 @@ func (s *Service) runStepLoop(ctx context.Context, step ai.ScriptStep, scope map
 	return nil
 }
 
-func (s *Service) runStepFetch(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, currentDB *database.Database) error {
-	w, _ := ctx.Value(ai.CtxKeyWriter).(io.Writer)
-
-	resource := step.Resource
-	outVar := step.Variable // Fetch uses Variable for output in both schemas
-
-	if step.Source == "btree" && resource != "" {
-		var db *database.Database
-
-		// 1. Resolve Database
-		if step.Database != "" {
-			// Use Service configuration for resolution
-			if step.Database == SystemDBName && s.systemDB != nil {
-				db = s.systemDB
-			} else if opts, ok := s.databases[step.Database]; ok {
-				db = database.NewDatabase(opts)
-			} else {
-				return fmt.Errorf("database '%s' not found in agent configuration", step.Database)
-			}
-		} else {
-			// Use current context database
-			db = currentDB
-		}
-
-		if db == nil {
-			if ctx.Value(CtxKeyJSONStreamer) == nil {
-				msg := "Error: No database configured for fetch operation.\n"
-				sb.WriteString(msg)
-				if w != nil {
-					fmt.Fprint(w, msg)
-				}
-			}
-			return fmt.Errorf("no database provided")
-		}
-
-		// 2. Fetch Data
-		// Check if we have an active transaction in the session payload
-		var tx sop.Transaction
-		var err error
-
-		if p := ai.GetSessionPayload(ctx); p != nil && p.Transaction != nil {
-			if t, ok := p.Transaction.(sop.Transaction); ok {
-				tx = t
-			}
-		}
-
-		// If no active transaction, start a local one (Read-Only)
-		localTx := false
-		if tx == nil {
-			tx, err = db.BeginTransaction(ctx, sop.ForReading)
-			if err != nil {
-				return fmt.Errorf("failed to begin transaction: %w", err)
-			}
-			localTx = true
-		}
-
-		if localTx {
-			defer tx.Rollback(ctx)
-		}
-
-		store, err := db.OpenBtreeCursor(ctx, resource, tx)
-		if err != nil {
-			return fmt.Errorf("failed to open store '%s': %w", resource, err)
-		}
-
-		// 3. Iterate and Collect
-		var items []any
-		if ok, err := store.First(ctx); ok && err == nil {
-			for {
-				k := store.GetCurrentKey()
-				v, _ := store.GetCurrentValue(ctx)
-				items = append(items, fmt.Sprintf("%v: %v", k, v))
-				if ok, _ := store.Next(ctx); !ok {
-					break
-				}
-				if len(items) >= 10 {
-					break
-				}
-			}
-		}
-
-		if outVar != "" {
-			if scopeMu != nil {
-				scopeMu.Lock()
-				defer scopeMu.Unlock()
-			}
-			scope[outVar] = items
-		}
-	}
-	return nil
-}
-
 func (s *Service) runStepSay(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder) error {
 	w, _ := ctx.Value(ai.CtxKeyWriter).(io.Writer)
 
@@ -805,7 +755,7 @@ func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope m
 
 	var script ai.Script
 	// Parse category from script name (e.g. "finance.compute_monthly")
-	targetCategory := "general"
+	targetCategory := ai.DefaultScriptCategory
 	scriptName := name
 	if idx := strings.Index(name, "."); idx > 0 {
 		targetCategory = name[:idx]
@@ -820,9 +770,9 @@ func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope m
 	// Try loading from target category
 	if err := store.Load(ctx, targetCategory, scriptName, &script); err != nil {
 		// If not found and we were looking in a specific category (not general), try general
-		if targetCategory != "general" {
-			if errFallback := store.Load(ctx, "general", scriptName, &script); errFallback == nil {
-				targetCategory = "general" // Found in general
+		if targetCategory != ai.DefaultScriptCategory {
+			if errFallback := store.Load(ctx, ai.DefaultScriptCategory, scriptName, &script); errFallback == nil {
+				targetCategory = ai.DefaultScriptCategory // Found in general
 				err = nil
 			}
 		}
@@ -860,12 +810,16 @@ func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope m
 	// We emit the PARENT step start (Script Step) here, then create a suppressive streamer for children.
 	if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
 		stepIndex, _ := ctx.Value("step_index").(int)
+		isVerbose, _ := ctx.Value("verbose").(bool)
 
 		// 1. Emit Parent Step Start (The "Run Script" step)
 		// We use the script name as the command label
-		ss := streamer.StartStreamingStep("script", name, "", stepIndex)
-		ss.writeHeader()
-		// We do not close ss because the step persists while children run
+		// ONLY emit if verbose
+		if isVerbose {
+			ss := streamer.StartStreamingStep("script", name, "", stepIndex)
+			ss.writeHeader()
+			// We do not close ss because the step persists while children run
+		}
 
 		// 2. Create Suppressed Streamer for Child
 		// We share the mutex and writer to ensure thread safety

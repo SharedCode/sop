@@ -13,14 +13,27 @@
 *   **UI**: A web-based "Data Manager" tool (`tools/httpserver`), serving HTML templates and a WebSocket/Rest API.
 *   **AI Agent**: An intelligent agent (`ai/agent`) integrated into the Data Manager to convert Natural Language into database operations.
 
+## 2. Command Processing Rules
+
+The system has a hybrid command processing engine that prioritizes explicit tool invocations over Natural Language Understanding (NLU).
+
+### Slash Command Priority
+**Rule**: Any input starting with `/` (e.g., `/create`, `/run`, `/list_tools`) is treated as a **High Priority User Command**.
+*   **Behavior**:
+    1.  The system attempts to execute these as direct tool calls *locally*, bypassing the LLM.
+    2.  If the tool executes successfully, the result is returned immediately.
+    3.  **Fallback**: If (and only if) the tool execution fails with an "unknown tool" error, the system may treat it as a natural language query (e.g., "/msg hello") and pass it to the LLM. If the tool exists but fails (e.g., invalid arguments), the error is returned directly to the user to prevent hallucinated fixes.
+*   **Rationale**: This ensures deterministic execution of administrative commands and prevents the LLM from hallucinating output for valid system commands.
+
 ---
 
-## 2. AI Agent Architecture
+## 3. AI Agent Architecture
 
 The AI Agent is a "ReAct" (Reason + Act) style agent defined in `ai/agent/`.
 
 ### Tool Registry (`ai/agent/dataadmintools.go`)
 The agent exposes tools to the LLM via a registry.
+*   **`list_tools`**: Lists all available tools and usage in a Markdown table.
 *   **`select`**: High-level tool to query data.
 *   **`join`**: High-level tool to join two stores.
 *   **`execute_script`**: A low-level, powerful tool that executes a pipeline of atomic operations ("Lego Blocks").
@@ -35,6 +48,17 @@ The `execute_script` tool accepts a JSON array of operations. This is the "Assem
     *   `limit`: Restricts the number of results.
     *   `return`: Resolves a variable or literal value and serves it as the final result of the execution.
     *   `explain_join`: Predicts execution strategy (Index Scan vs Full Scan) for performance debugging.
+
+### Stateless Execution Principle (CRITICAL)
+**Design Mandate**: The Data Management Copilot operates on a **Stateless Execution Model**.
+*   **Definition**: While the *User Session* (chat history) is stateful, the *Script Execution* must be atomic and stateless. Each `execute_script` call starts with a fresh memory context.
+*   **Why**:
+    1.  **Safety**: Prevents "dangling transactions" (e.g., a `begin_tx` from 5 minutes ago holding DB locks).
+    2.  **Determinism**: Prevents "Variable Leakage" (e.g., a "Filter" command inadvertently filtering the dataset from a previous, unrelated query because `LastUpdatedVar` was stale).
+    3.  **Stability**: Ensures that re-running a script produces the exact same result, stripped of any ephemeral runtime artifacts.
+*   **Implementation**:
+    *   The `ScriptContext` is created fresh for each run (or explicitly cleared of legacy variables like `LastUpdatedVar`).
+    *   **Drafting over Macro**: We support "Drafting" (iterating on the *source code* of a script) but reject "Macro Recording" (relying on the *runtime state* of a previous step). The code is the source of truth, not the memory.
 
 ### `return` Opcode Behavior Scope & Variable Resolution
 The `return` opcode is the designated exit mechanism for scripts. It has logic to ensure variables are returned as their underlying objects, not as literal strings.
@@ -67,9 +91,48 @@ scripts serve as "Frozen Reasoning". To make them reusable, we support **Dynamic
 *   **Mechanism**: The `execute_script` tool accepts an `args` map.
 *   **Verification**: The `TestScriptParameterizationWorkflow` ensures that parameters are correctly injected during execution, allowing a single script (e.g., "Find User Orders") to work for any user ID.
 
+### Automatic Refinement
+To ensure scripts are maintainable and readable by humans (not just machines), the system applies "Automatic Refinement" when saving scripts.
+*   **Problem**: LLMs often generate minimal, implicit code (e.g., `begin_tx` without assigning it to a variable, followed by `open_store` assuming the last transaction). While the runtime supports this via conventions, the stored script becomes hard to debug.
+*   **Solution**: The `create_script` and `save_script` tools run a refinement pass (`RefineScriptSteps`) that:
+    1.  **Injects Defaults**: Explicitly adds `result_var: "tx"` to `begin_tx`, `result_var: "store_name"` to `open_store`, etc.
+    2.  **Explicit Wiring**: Adds `transaction: "tx"` to operations that require it if missing.
+*   **Result**: The stored JSON is self-documenting. A script created as `[{"begin_tx":{}}]` is saved as `[{"begin_tx":{"result_var": "tx"}}]`.
+
 ---
 
-## 3. Projection & Field Selection Logic (Critical Nuances)
+## 4. UI/Backend Communication Protocol (NDJSON Streaming)
+
+The Data Manager UI communicates with the backend via **Newline Delimited JSON (NDJSON)** streams over HTTP Chunked Transfer Encoding. This allows for real-time feedback, incremental table rendering, and long-running process monitoring.
+
+### 4.1. Protocol Basics
+*   **Endpoint**: `/api/scripts/execute` (and `/api/ai/chat`).
+*   **Content-Type**: `application/x-ndjson`.
+*   **Format**: Each line is a standalone JSON object representing an event.
+*   **Buffering**: The UI (`scripts.html`) buffers `record` events and only renders them when a control signal is received.
+
+### 4.2. Event Types & Control Flow
+The protocol defines specific event types that drive the frontend state machine:
+
+| Event Type | Payload Key | Description | UI Action |
+| :--- | :--- | :--- | :--- |
+| `step_start` | (metadata) | Marks the beginning of a script step. | **CONTROL SIGNAL**: Flushes any buffered records to the grid. Prints a "Step X: Executing..." header. |
+| `ask` | `prompt` | The script is requesting user input. | **CONTROL SIGNAL**: Flushes flushed records. Displays a prompt dialog. |
+| `error` | `error` | An error occurred. | **CONTROL SIGNAL**: Flushes records. Prints error in red. Stops processing? (Depends on `continueOnError`). |
+| `record` | `record` | A single data item (row). | **DATA SIGNAL**: Does **NOT** render immediately. Pushed to `currentTableRecords` buffer. |
+| `content` | `payload` | General text output (markdown). | **CONTROL SIGNAL**: Flushes records. Appends text to the output stream. |
+| `log` | `message` | Debug/Info log. | Converted to `content` (prefixed with `> *Log:*`). |
+
+### 4.3. The "Border Box" Issue (Troubleshooting)
+If the UI displays an empty "border box" or malformed table container at the end of a stream:
+*   **Cause**: This usually happens when the backend sends a final Control Signal (like `step_start` for a commit or cleanup step) which triggers a `flushRecords()`.
+*   **Mechanism**: If `currentTableRecords` is empty (because the previous step produced no output, or was already flushed), `flushRecords` *should* do nothing.
+*   **Bug Pattern**: However, if the backend sends a `step_start` for an internal operation (like `commit_tx`) that *has no output*, the UI might render a "Step Executing" header but no content, or worse, if the previous flush left a dangling container.
+*   **Resolution**: Ensure `step_start` events are only emitted for steps that are "meaningful" to the user, or ensure the UI can gracefully handle headers with no subsequent body. (Fixed in Jan 2026 by adding `verbose` filtering in the backend and fixing double-append bugs in the frontend).
+
+---
+
+## 5. Projection & Field Selection Logic (Critical Nuances)
 
 We have implemented sophisticated logic to handle SQL-style projections (`SELECT a.*, b.name AS employee`) within the NoSQL pipeline.
 
@@ -392,6 +455,14 @@ To ensure maintainability and professional code quality, adhere to the following
     3.  **Readability**: Semantically, `call_script("backup", "system")` is more legible for human operators and LLM agents than `call_script("550e8400-e29b...")`.
 *   **Constraint**: This implies that strict renaming or moving of scripts across categories requires updating references in calling scripts, similar to file path changes.
 
+### Streaming Execution Requirement (CRITICAL)
+*   **Mandate**: All script execution pathways, especially REST API clients and CLI tools, **MUST USE STREAMING**.
+*   **Reasoning**: Buffering large result sets (e.g., millions of records) causes server-side Out-Of-Memory (OOM) crashes.
+*   **Implementation**:
+    *   **NDJSON**: The standard output format is Newline Delimited JSON.
+    *   **Direct Access**: Handlers should bypass buffering layers (like `Ask()` returning string) and write directly to `http.ResponseWriter` using a flushing wrapper (e.g., `DirectFlushingWriter`).
+    *   **Chat vs Script Tab**: Even the Chat interface (`/run` command) must stream results to handle large ad-hoc queries safely.
+
 ### Registry Partitioning (Chained Segments vs Binary Search)
 *   **Context**: The ID Registry (Virtual ID $\rightarrow$ Physical Location) is partitioned into "Segment Files" (buckets). When a bucket fills, it spills over to a new file, forming a logical linked list of file segments.
 *   **Decision**: We use a **Linear Search** across a small number of segment files (typically 1-5) rather than implementing a complex Binary Search or B-Tree across file segments.
@@ -400,3 +471,12 @@ To ensure maintainability and professional code quality, adhere to the following
     2.  **Optimality via Config**: By allowing users to tune `RegistryHashModValue` (Bucket Count) and `SlotLength` (Bucket Density), we ensure that 99% of use cases fit entirely within **1 or 2 segment files**.
     3.  **Cost/Benefit**: Moving to Binary Search would introduce $O(\log N)$ complexity for file management. Since $N$ (number of files) is kept small by design, the constant factor overhead of opening/seeking files dominates. Scanning 2 files linearly is faster and safer than managing a distributed index for 2 files.
 *   **Validation**: Even with a modest configuration (HashMod=400k, SlotLength=20k), a single 1.6GB segment file tracks **300+ Billion items**. Use cases requiring >1 Trillion items can simply use 4-5 segment files, keeping the linear penalty negligible ($O(5) \approx O(1)$).
+
+### Script ModelStore vs JSONDB Query Strictness (April 2026)
+*   **Context**: The `scripts` B-Tree is instantiated using `model.ModelKey` as the generic key type structure. However, scripts data itself operates dynamically as `map[string]any`.
+*   **The Bug**: During a session refactor, the `jsondb.FindOne(...)` command for fetching a script was altered to pass a `map[string]any{"Category": category, "Name": scriptName}`. This silently failed (returned "not found") because SOP B-Tree's internal comparisons strictly enforce exact Go type matching.
+*   **The Fix**: **Runtime queries against explicitly typed B-Tree stores MUST use the exact struct type (`model.ModelKey`)**, even when using the dynamic `jsondb` interface to retrieve the values. E.g., `funcStore.FindOne(ctx, model.ModelKey{Category: cat, Name: name}, true)`.
+
+### Client-Side Typing vs. Storage-Side Erasure (The "Library Nightmare" Avoidance)
+*   **Client-Side**: Users are fully expected and encouraged to use strongly-typed definitions (Go structs, Java classes, C# records) within their own application domain code to interact with their data.
+*   **Storage-Side (SOP)**: SOP manages user data dynamically (as JSON / `map[string]any` via `jsondb`) **not** because the data is inherently unstructured, but to avoid the "library nightmare" of requiring a compiled copy of every user's custom struct inside the database engine itself. This strict decoupling (Type Erasure at the storage boundary) is what allows SOP to efficiently serve polyglot clients across language boundaries without becoming an unmaintainable dependency monolith.

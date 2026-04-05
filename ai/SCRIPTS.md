@@ -33,7 +33,7 @@ The SOP AI Copilot exposes a comprehensive set of tools for managing scripts and
 | `delete_step` | Deletes a step from a script. | `(script: string, index: number)` |
 | `update_step` | Updates an existing step in a script. | `(script: string, index: number, description: string, name: string, ...params)` |
 | `reorder_steps` | Moves a step to a new position. | `(script: string, from_index: number, to_index: number)` |
-| `add_step_from_last` | Adds the last executed tool call as a new step. | `(script: string, index: number, position: string, description: string, name: string)` |
+| `save_last_step` | Adds the last executed tool call as a new step. | `(script: string, index: number, position: string, description: string, name: string)` |
 | `refactor_last_interaction` | Refactors the immediate past interaction into a new script. | `(mode: string, name: string)` |
 
 ### Data Operations
@@ -132,8 +132,8 @@ SOP Scripts function as a hybrid engine, allowing you to mix **Intelligence** wi
     *   **Example**: `Scan(store="Users", query={"age": {"$gt": 18}})` -> *Runs in microseconds.*
 
 **The "Drafting" Power Move:**
-When you ask the AI to "Find users in California", it runs a tool. If you then type `/step`, you save that **Tool Step** to your script.
-*   **Result**: You used the LLM to *write* the code, but the final script runs as *pure code*.
+In Drafting Mode, nothing is recorded automatically. The chat is your scratchpad. When you ask the AI to "Find users in California", it runs a tool. If you are satisfied with the result, you type `/step` to explicitly commit that **Tool Step** to your script.
+*   **Result**: You used the LLM to *write* the code interactively, but the final script is a deliberate sequence of optimal steps.
 
 ## Workflow: Drafting & Execution
 
@@ -143,9 +143,11 @@ We provide a robust **Drafting** workflow. This allows you to construct scripts 
 *   **Start**: `/create <name> [category] [--autosave]` initiates a draft.
     *   **--autosave**: Optional. Automatically saves the script to the database after every `/step` command, ensuring no work is lost during long drafting sessions.
 *   **Add Logic**:
-    *   **Manual**: `/step <instruction>` adds a natural language instruction to the script.
-    *   **From History**: `/step` (with no args) adds the *last executed command* to the script. This allows you to test a command and then "commit" it to the script.
-*   **Save**: `/save` persists the draft to the SystemDB (useful as a final checkpoint or if auto-save is off).
+    *   **Explore**: Chat with the AI, run queries, test tools. These actions are *not* added to the script.
+    *   **Commit Step**:
+        *   `/step` (no args): Adds the *last executed command* to the script. Only use this when you are happy with the tool's behavior.
+        *   `/step <instruction>`: Adds a natural language instruction to the script (e.g. "Calculate the total").
+*   **Save**: `/save` persists the draft to the SystemDB and ends the session.
 
 ### 2. Execution
 *   **Run**: `/run <name> [param=value ...]` executes the script.

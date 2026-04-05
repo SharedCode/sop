@@ -26,9 +26,9 @@ func TestFakeAgentGeneration(t *testing.T) {
 
 	// Try known valid models.
 	// We loop because model availability depends on the API key and region.
-	// gemini-2.5-pro seems to be the stable one in this environment.
+	// We prioritize the configured default.
 	envModel := os.Getenv("GEMINI_MODEL")
-	models := []string{envModel, "gemini-2.5-pro", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"}
+	models := []string{envModel, ai.DefaultModelGemini, "gemini-2.5-pro", "gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"}
 	var gen ai.Generator
 	var err error
 
@@ -99,7 +99,7 @@ func TestFakeAgentGeneration(t *testing.T) {
 	// Initialize script store
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
-	store.Save(ctx, "general", "test_script", ai.Script{Name: "test_script", Steps: []ai.ScriptStep{}})
+	store.Save(ctx, ai.DefaultScriptCategory, "test_script", ai.Script{Name: "test_script", Steps: []ai.ScriptStep{}})
 	tx.Commit(ctx)
 
 	// 3. User Query
@@ -118,7 +118,7 @@ func TestFakeAgentGeneration(t *testing.T) {
 	// 6. Verify Last Tool Call
 	fmt.Println("Verifying Last Tool Call...")
 
-	res, err := adminAgent.Execute(ctx, "script_add_step_from_last", map[string]any{
+	res, err := adminAgent.Execute(ctx, "save_last_step", map[string]any{
 		"script": "test_script",
 	})
 	if err != nil {
@@ -130,7 +130,7 @@ func TestFakeAgentGeneration(t *testing.T) {
 	tx, _ = sysDB.BeginTransaction(ctx, sop.ForReading)
 	store, _ = sysDB.OpenModelStore(ctx, "scripts", tx)
 	var m ai.Script
-	store.Load(ctx, "general", "test_script", &m)
+	store.Load(ctx, ai.DefaultScriptCategory, "test_script", &m)
 	tx.Commit(ctx)
 
 	if len(m.Steps) == 0 {

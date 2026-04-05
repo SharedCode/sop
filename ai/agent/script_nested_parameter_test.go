@@ -40,7 +40,7 @@ func TestScriptParameterization_Nested(t *testing.T) {
 	// Save Parent Script
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
-	store.Save(ctx, "general", scriptName, &parentScript)
+	store.Save(ctx, ai.DefaultScriptCategory, scriptName, &parentScript)
 	tx.Commit(ctx)
 
 	// 3. Initialize Service
@@ -58,7 +58,7 @@ func TestScriptParameterization_Nested(t *testing.T) {
 	tx, _ = sysDB.BeginTransaction(ctx, sop.ForReading)
 	store, _ = sysDB.OpenModelStore(ctx, "scripts", tx)
 	var updatedScript ai.Script
-	store.Load(ctx, "general", scriptName, &updatedScript)
+	store.Load(ctx, ai.DefaultScriptCategory, scriptName, &updatedScript)
 	tx.Commit(ctx)
 
 	// Check Parameters

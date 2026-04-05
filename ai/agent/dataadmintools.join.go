@@ -71,48 +71,19 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 
 	// Parse Join Fields (support both single string and array)
 	var leftFields []string
-	if lf, ok := args["left_join_fields"].([]any); ok {
-		for _, v := range lf {
-			if s, ok := v.(string); ok {
-				leftFields = append(leftFields, s)
-			}
-		}
-	} else if lf, ok := args["left_join_fields"].([]string); ok {
-		leftFields = lf
+	if args["left_join_fields"] != nil {
+		leftFields = coerceToStringSlice(args["left_join_fields"])
 	}
 
 	var rightFields []string
-	if rf, ok := args["right_join_fields"].([]any); ok {
-		for _, v := range rf {
-			if s, ok := v.(string); ok {
-				rightFields = append(rightFields, s)
-			}
-		}
-	} else if rf, ok := args["right_join_fields"].([]string); ok {
-		rightFields = rf
+	if args["right_join_fields"] != nil {
+		rightFields = coerceToStringSlice(args["right_join_fields"])
 	}
 
 	// Parse Projection Fields
 	var fields []string
-	if f, ok := args["fields"]; ok {
-		if fSlice, ok := f.([]any); ok {
-			for _, v := range fSlice {
-				if s, ok := v.(string); ok {
-					fields = append(fields, s)
-				}
-			}
-		} else if fSlice, ok := f.([]string); ok {
-			fields = fSlice
-		} else if fStr, ok := f.(string); ok {
-			// Allow comma-separated fields list (e.g. "a.region, a.department, b.name as employee")
-			parts := strings.Split(fStr, ",")
-			for _, p := range parts {
-				p = strings.TrimSpace(p)
-				if p != "" {
-					fields = append(fields, p)
-				}
-			}
-		}
+	if args["fields"] != nil {
+		fields = coerceToStringSlice(args["fields"])
 	}
 
 	joinType, _ := args["join_type"].(string)
@@ -154,6 +125,50 @@ func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (str
 	}
 
 	if leftStoreName == "" || rightStoreName == "" {
+		// Detect if this is an Atomic Pipeline operation mis-routed to the Legacy Tool
+		// The Atomic Engine uses "with" instead of "right_store", and implies "input" from the pipeline.
+		_, hasWith := args["with"]
+		lastRes := getLastAtomicResult(ctx)
+		if hasWith && lastRes != nil {
+			log.Info("Delegating ambiguous 'join' to Atomic ScriptEngine (Pipeline Mode)", "with", args["with"])
+
+			// 1. Initialize Engine (reusing session context)
+			scriptCtx := getOrInitScriptContext(ctx)
+
+			resolver := func(name string) (Database, error) {
+				if name == "" || name == "@db" || name == "current" {
+					if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
+						name = p.CurrentDB
+					}
+				}
+				return a.resolveDatabase(name)
+			}
+			engine := NewScriptEngine(scriptCtx, resolver)
+			engine.StoreOpener = a.StoreOpener
+			engine.LastResult = lastRes
+
+			// 2. Execute Atomic Join
+			result, err := engine.Join(ctx, engine.LastResult, args)
+			if err != nil {
+				return "", fmt.Errorf("atomic join failed: %w", err)
+			}
+
+			// 3. Update State
+			setLastAtomicResult(ctx, result)
+			engine.LastResult = result
+
+			// 4. Handle result_var
+			resVar, _ := args["result_var"].(string)
+			if resVar != "" {
+				if engine.Context.Variables == nil {
+					engine.Context.Variables = make(map[string]any)
+				}
+				engine.Context.Variables[resVar] = result
+			}
+
+			return serializeResult(ctx, result)
+		}
+
 		return "", fmt.Errorf("both left_store and right_store are required")
 	}
 	if len(leftFields) == 0 {

@@ -51,8 +51,8 @@ func TestScript_Play_Nested_Execution(t *testing.T) {
 	// 4. Save Scripts
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
-	store.Save(ctx, "general", "echo_msg", childScript)
-	store.Save(ctx, "general", "greet_user", parentScript)
+	store.Save(ctx, ai.DefaultScriptCategory, "echo_msg", childScript)
+	store.Save(ctx, ai.DefaultScriptCategory, "greet_user", parentScript)
 	tx.Commit(ctx)
 
 	// 5. Initialize Service

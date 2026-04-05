@@ -36,7 +36,7 @@ func init() {
 			model = os.Getenv("GEMINI_MODEL")
 		}
 		if model == "" {
-			model = "gemini-pro"
+			model = ai.DefaultModelGemini
 		}
 		return &gemini{apiKey: apiKey, model: model}, nil
 	})

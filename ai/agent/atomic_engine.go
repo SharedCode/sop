@@ -14,9 +14,15 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/model"
 	"github.com/sharedcode/sop/jsondb"
-	"github.com/sharedcode/sop/scripts"
+)
+
+// Join Strategy Constants
+const (
+	StrategyUnset     = 0
+	StrategyIndexSeek = 1
+	StrategyInMemory  = 2
+	StrategyFullScan  = 3
 )
 
 // Database interface for script execution
@@ -51,6 +57,7 @@ func (e *ScriptEngine) getDatabase(name string) (Database, bool) {
 
 // ScriptInstruction represents a single operation in the script.
 type ScriptInstruction struct {
+	Name      string         `json:"name"`       // User-defined name for the step
 	Op        string         `json:"op"`         // Operation name
 	Args      map[string]any `json:"args"`       // Arguments
 	InputVar  string         `json:"input_var"`  // Variable to use as input (optional)
@@ -65,343 +72,6 @@ type ScriptContext struct {
 	Stores         map[string]jsondb.StoreAccessor
 	Databases      map[string]Database
 	LastUpdatedVar string // helper to track the prioritization of variable draining
-}
-
-// ScriptCursor represents a streaming iterator for script operations.
-type ScriptCursor interface {
-	Next(ctx context.Context) (any, bool, error)
-	Close() error
-}
-
-// OrderedFieldsProvider allows cursors to expose the list of fields in order.
-type OrderedFieldsProvider interface {
-	GetOrderedFields() []string
-}
-
-// SpecProvider allows cursors to expose IndexSpecifications for field ordering.
-type SpecProvider interface {
-	GetIndexSpecs() map[string]*jsondb.IndexSpecification
-}
-
-// StoreCursor wraps a StoreAccessor to provide a ScriptCursor.
-type StoreCursor struct {
-	store     jsondb.StoreAccessor
-	storeName string // Add StoreName to support prefixing
-	indexSpec *jsondb.IndexSpecification
-	ctx       context.Context
-	limit     int
-	count     int
-	filter    map[string]any
-	engine    *ScriptEngine
-	isDesc    bool
-	prefix    any
-	started   bool
-	closed    bool
-}
-
-func (sc *StoreCursor) GetIndexSpecs() map[string]*jsondb.IndexSpecification {
-	if sc.indexSpec != nil {
-		return map[string]*jsondb.IndexSpecification{
-			"key": sc.indexSpec,
-		}
-	}
-	return nil
-}
-
-func (sc *StoreCursor) Next(ctx context.Context) (any, bool, error) {
-	if sc.closed {
-		return nil, false, nil
-	}
-	if sc.limit > 0 && sc.count >= sc.limit {
-		return nil, false, nil
-	}
-
-	var ok bool
-	var err error
-
-	// Initial positioning is done in Scan, but we need to advance
-	if !sc.started {
-		// Scan already positioned the cursor at the first element
-		sc.started = true
-		// Check if current position is valid
-		k := sc.store.GetCurrentKey()
-		if k == nil {
-			return nil, false, nil
-		}
-		ok = true
-	} else {
-		if sc.isDesc {
-			ok, err = sc.store.Previous(ctx)
-		} else {
-			ok, err = sc.store.Next(ctx)
-		}
-		if err != nil {
-			return nil, false, err
-		}
-	}
-
-	for ok {
-		k := sc.store.GetCurrentKey()
-		v, _ := sc.store.GetCurrentValue(ctx)
-
-		// Prefix Check
-		if sc.prefix != nil {
-			if kStr, isStr := k.(string); isStr {
-				pStr := fmt.Sprintf("%v", sc.prefix)
-				if !strings.HasPrefix(kStr, pStr) {
-					return nil, false, nil // End of prefix range
-				}
-			}
-		}
-
-		// Filter Check
-		item := renderItem(k, v, nil)
-
-		if sc.filter != nil {
-			match, err := sc.engine.evaluateCondition(item, sc.filter)
-			if err != nil {
-				return nil, false, err
-			}
-			if !match {
-				if sc.isDesc {
-					ok, err = sc.store.Previous(ctx)
-				} else {
-					ok, err = sc.store.Next(ctx)
-				}
-				continue
-			}
-		}
-
-		// Architecture Enforcement: Always Prefix Internal Items
-		// We modify the item (map[string]any) to include the "storeName." prefix for all keys.
-		// "renderItem" logic will strip this later if appropriate.
-		// StoreName needs to be available in StoreCursor.
-		if m, ok := item.(map[string]any); ok && sc.storeName != "" {
-			prefixed := make(map[string]any, len(m))
-			for k, val := range m {
-				// Avoid double prefixing if somehow already prefixed (unlikely for raw store)
-				prefixed[sc.storeName+"."+k] = val
-			}
-			item = prefixed
-		}
-
-		sc.count++
-		return item, true, nil
-	}
-
-	return nil, false, nil
-}
-
-func (sc *StoreCursor) Close() error {
-	sc.closed = true
-	return nil
-}
-
-// Join Strategy Constants
-const (
-	StrategyUnset     = 0
-	StrategyIndexSeek = 1
-	StrategyInMemory  = 2
-	StrategyFullScan  = 3
-)
-
-type JoinPlan struct {
-	Strategy     int
-	IndexFields  []string // Ordered list of fields in the Index
-	PrefixFields []string // Fields from ON clause that match the Index Prefix
-	IsComposite  bool     // True if the Store uses a Map Key (Composite)
-	Ascending    bool     // True if the first prefix field is Ascending
-}
-
-// JoinRightCursor performs a streaming join with probing and scanning support.
-// It replaces both JoinCursor (Lookup) and NestedLoopJoinCursor (Scan).
-type JoinRightCursor struct {
-	left      ScriptCursor
-	right     jsondb.StoreAccessor
-	joinType  string
-	on        map[string]any
-	ctx       context.Context
-	engine    *ScriptEngine
-	currentL  any
-	matched   bool
-	rightIter bool
-
-	// Execution Plan
-	plan      JoinPlan
-	planReady bool
-
-	// Dataset info for prefixing
-	rightStoreName string
-	leftStoreName  string
-
-	// Legacy / Runtime State
-	useFallback  bool  // optimization: materialization fallback
-	fallbackList []any // fallback: in-memory list
-	fallbackIdx  int
-	closed       bool
-	bloomFilter  *BloomFilter // Optimization: Bloom Filter for Right Store Keys
-}
-
-func (jc *JoinRightCursor) Next(ctx context.Context) (any, bool, error) {
-	if jc.closed {
-		return nil, false, nil
-	}
-	val, ok, err := jc.NextOptimized(ctx)
-	if ok && err == nil {
-		// b, _ := json.Marshal(val)
-
-		// Attempt to inspect if the result is an OrderedMap
-		var fields []string
-		if om, isOm := val.(*OrderedMap); isOm {
-			fields = om.keys
-		} else if om, isOm := val.(OrderedMap); isOm {
-			fields = om.keys
-		} else if m, isM := val.(map[string]any); isM {
-			// standard map, extract keys but they won't be ordered
-			for k := range m {
-				fields = append(fields, k)
-			}
-			sort.Strings(fields)
-		}
-
-		// log.Debug("payload contents:",
-		// 	"Function", "JoinRightCursor.Next",
-		// 	"json", string(b),
-		// 	"fields_found_in_result", fields,
-		// )
-	}
-	return val, ok, err
-}
-
-func (jc *JoinRightCursor) Close() error {
-	jc.closed = true
-	return jc.left.Close()
-}
-
-// FilterCursor filters a stream.
-type FilterCursor struct {
-	source ScriptCursor
-	filter map[string]any
-	engine *ScriptEngine
-	closed bool
-}
-
-func (fc *FilterCursor) Next(ctx context.Context) (any, bool, error) {
-	if fc.closed {
-		return nil, false, nil
-	}
-	for {
-		item, ok, err := fc.source.Next(ctx)
-		if err != nil {
-			return nil, false, err
-		}
-		if !ok {
-			return nil, false, nil
-		}
-
-		match, err := fc.engine.evaluateCondition(item, fc.filter)
-		if err != nil {
-			return nil, false, err
-		}
-		if match {
-			return item, true, nil
-		}
-	}
-}
-
-func (fc *FilterCursor) Close() error {
-	fc.closed = true
-	return fc.source.Close()
-}
-
-func (fc *FilterCursor) GetOrderedFields() []string {
-	if provider, ok := fc.source.(OrderedFieldsProvider); ok {
-		return provider.GetOrderedFields()
-	}
-	return nil
-}
-
-// ProjectCursor projects fields from a stream.
-type ProjectCursor struct {
-	source ScriptCursor
-	fields []ProjectionField
-	closed bool
-}
-
-func (pc *ProjectCursor) Next(ctx context.Context) (any, bool, error) {
-	if pc.closed {
-		return nil, false, nil
-	}
-	item, ok, err := pc.source.Next(ctx)
-	if err != nil {
-		return nil, false, err
-	}
-	if !ok {
-		return nil, false, nil
-	}
-
-	// Use renderItem to handle projection, aliasing, and wildcard expansion
-	result := renderItem(nil, item, pc.fields)
-	return result, true, nil
-}
-
-func (pc *ProjectCursor) Close() error {
-	pc.closed = true
-	return pc.source.Close()
-}
-
-func (pc *ProjectCursor) GetOrderedFields() []string {
-	fields := make([]string, len(pc.fields))
-	for i, f := range pc.fields {
-		fields[i] = f.Dst
-	}
-	return fields
-}
-
-// LimitCursor limits a stream.
-type LimitCursor struct {
-	source ScriptCursor
-	limit  int
-	count  int
-	closed bool
-}
-
-func (lc *LimitCursor) GetIndexSpecs() map[string]*jsondb.IndexSpecification {
-	if provider, ok := lc.source.(SpecProvider); ok {
-		return provider.GetIndexSpecs()
-	}
-	return nil
-}
-
-func (lc *LimitCursor) GetOrderedFields() []string {
-	if provider, ok := lc.source.(OrderedFieldsProvider); ok {
-		return provider.GetOrderedFields()
-	}
-	return nil
-}
-
-func (lc *LimitCursor) Next(ctx context.Context) (any, bool, error) {
-	if lc.closed {
-		return nil, false, nil
-	}
-	if lc.count >= lc.limit {
-		return nil, false, nil
-	}
-	item, ok, err := lc.source.Next(ctx)
-	if err != nil {
-		return nil, false, err
-	}
-	if !ok {
-		return nil, false, nil
-	}
-
-	lc.count++
-	return item, true, nil
-}
-
-func (lc *LimitCursor) Close() error {
-	lc.closed = true
-	return lc.source.Close()
 }
 
 func NewScriptContext() *ScriptContext {
@@ -423,6 +93,7 @@ type ScriptEngine struct {
 	ReturnValue     any
 	HasReturned     bool
 	StoreOpener     func(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (jsondb.StoreAccessor, error)
+	Deferred        []func(context.Context, *ScriptEngine) error
 }
 
 func NewScriptEngine(ctx *ScriptContext, dbResolver func(string) (Database, error)) *ScriptEngine {
@@ -456,27 +127,41 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	}
 
 	// Parse Script first to ensure it's valid and normalized
+	var rawSteps []map[string]any
 	var script []ScriptInstruction
+
 	if pStr, ok := scriptRaw.(string); ok {
-		if err := json.Unmarshal([]byte(pStr), &script); err != nil {
+		if err := json.Unmarshal([]byte(pStr), &rawSteps); err != nil {
 			return "", fmt.Errorf("failed to parse script JSON: %v", err)
 		}
 	} else if pSlice, ok := scriptRaw.([]any); ok {
 		bytes, _ := json.Marshal(pSlice)
-		if err := json.Unmarshal(bytes, &script); err != nil {
+		if err := json.Unmarshal(bytes, &rawSteps); err != nil {
 			return "", fmt.Errorf("failed to parse script array: %v", err)
 		}
 	} else {
 		return "", fmt.Errorf("script must be a JSON string or array")
 	}
 
-	// 1. Sanitize Script (Pre-Execution Cleanup)
-	// This acts as a firewall against common LLM mistakes (wildcards, sloppy args)
+	for _, step := range rawSteps {
+
+		if _, hasOp := step["op"]; !hasOp {
+			if cmd, ok := step["command"].(string); ok && cmd != "" {
+				step["op"] = cmd
+			}
+		}
+
+	}
+
+	bytes, _ := json.Marshal(rawSteps)
+	if err := json.Unmarshal(bytes, &script); err != nil {
+		return "", fmt.Errorf("failed to re-parse normalized script: %v", err)
+	}
+
 	script = sanitizeScript(script)
 
-	// Stub Mode Check
 	if a.Config.StubMode {
-		// Log the NORMALIZED script for debugging
+
 		bytes, err := json.MarshalIndent(script, "", "  ")
 		if err != nil {
 			return "", fmt.Errorf("failed to marshal script for display: %v", err)
@@ -488,13 +173,17 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 
 	// Initialize Engine
 	var scriptCtx *ScriptContext
-	if a.sessionContext != nil {
-		scriptCtx = a.sessionContext
-	} else {
-		scriptCtx = NewScriptContext()
+
+	scriptCtx = getOrInitScriptContext(ctx)
+
+	if scriptCtx.Variables != nil {
+		delete(scriptCtx.Variables, "output")
+		delete(scriptCtx.Variables, "final_result")
+		delete(scriptCtx.Variables, "result")
 	}
 
-	// Wrap resolver to handle default database from context
+	scriptCtx.LastUpdatedVar = ""
+
 	resolver := func(name string) (Database, error) {
 		if name == "" || name == "@db" || name == "current" {
 			if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
@@ -507,16 +196,10 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 	engine := NewScriptEngine(scriptCtx, resolver)
 	engine.StoreOpener = a.StoreOpener
 	engine.FunctionHandler = func(c context.Context, name string, args map[string]any) (any, error) {
-		// Bridge to Agent's script execution
-		// We need to implement this properly, reusing opCallScript logic or similar
-		// For now, we can call a method on Agent if we expose it, or inline the logic.
-		// Since opCallScript is being moved to Engine, we can just call Engine.CallFunction?
-		// But Engine.CallFunction needs access to SystemDB.
-		// So we should pass SystemDB to Engine or handle it here.
+
 		return a.opCallScript(c, engine.Context, map[string]any{"name": name, "params": args})
 	}
 
-	// Execute
 	compiled, err := engine.Compile(script)
 	if err != nil {
 		return "", fmt.Errorf("compilation failed: %v", err)
@@ -525,54 +208,56 @@ func (a *DataAdminAgent) toolExecuteScript(ctx context.Context, args map[string]
 		return "", err
 	}
 
-	// Return Result
-	// Priority 0: Explicit 'return' instruction
-	// This should be handled during execution loop if we supported early exit.
-	// Since we execute the whole list, we check if the last instruction was a return or provided a return value?
-	// Actually, the engine.Execute loop doesn't handle 'return' control flow yet.
-	// But assuming we add a 'return' OP, we would look for that.
+	log.Debug("toolExecuteScript: Checking for return value candidates...")
 
-	// Priority 1: Check for 'output' variable (Explicit override)
-	// We only return it if it is non-nil, because some operations (like commit_tx) might use 'output'
-	// as a dummy variable but return nil, shadowing the actual result in 'final_result'.
 	if val, ok := scriptCtx.Variables["output"]; ok && val != nil {
+		log.Debug("toolExecuteScript: Returning 'output' variable")
 		return serializeResult(ctx, val)
 	}
 
-	// Priority 2: Check for 'final_result' variable (Deprecated: Standard convention for query chains)
-	if val, ok := scriptCtx.Variables["final_result"]; ok {
+	if val, ok := scriptCtx.Variables["final_result"]; ok && val != nil {
+		log.Debug("toolExecuteScript: Returning 'final_result' variable")
 		return serializeResult(ctx, val)
 	}
 
-	// Priority 2.5: Check for 'result' variable (Common AI convention)
-	if val, ok := scriptCtx.Variables["result"]; ok {
+	if val, ok := scriptCtx.Variables["result"]; ok && val != nil {
+		log.Debug("toolExecuteScript: Returning 'result' variable")
 		return serializeResult(ctx, val)
 	}
 
-	// Priority 3: Check the last instruction's result variable (Fallback for simple scripts)
 	if len(script) > 0 {
 		lastInstr := script[len(script)-1]
 
-		// If last instruction is specifically a "return" or "output" op (hypothetically)
 		if lastInstr.Op == "return" {
-			// The return op already resolved the value and stored it in LastResult
+
+			log.Debug("toolExecuteScript: Returning 'return' op result")
+			if engine.LastResult == nil {
+				return "Script executed successfully.", nil
+			}
 			return serializeResult(ctx, engine.LastResult)
 		}
 
 		if lastInstr.ResultVar != "" {
-			if val, ok := scriptCtx.Variables[lastInstr.ResultVar]; ok {
+			if val, ok := scriptCtx.Variables[lastInstr.ResultVar]; ok && val != nil {
+				log.Debug("toolExecuteScript: Returning last instruction result variable", "var", lastInstr.ResultVar)
 				return serializeResult(ctx, val)
 			}
 		}
 	}
 
-	// Priority 4: Fallback to the last updated variable (e.g. if script ends with commit_tx)
 	if scriptCtx.LastUpdatedVar != "" {
-		if val, ok := scriptCtx.Variables[scriptCtx.LastUpdatedVar]; ok {
+		if val, ok := scriptCtx.Variables[scriptCtx.LastUpdatedVar]; ok && val != nil {
+			log.Debug("toolExecuteScript: Returning last updated variable", "var", scriptCtx.LastUpdatedVar)
 			return serializeResult(ctx, val)
 		}
 	}
 
+	if engine.LastResult != nil {
+		log.Debug("toolExecuteScript: Returning implicit LastResult")
+		return serializeResult(ctx, engine.LastResult)
+	}
+
+	log.Debug("toolExecuteScript: No result found, returning success message")
 	return "Script executed successfully.", nil
 }
 
@@ -597,15 +282,23 @@ func (e *ScriptEngine) Compile(script []ScriptInstruction) (CompiledScript, erro
 }
 
 func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
-	var steps []func(context.Context, *ScriptEngine) error
+	type compiledStep struct {
+		Name string
+		Op   string
+		Args map[string]any
+		Func func(context.Context, *ScriptEngine) error
+	}
+	var steps []compiledStep
 
-	for i, instr := range script {
-		// 1. Pre-process Arguments (Template Parsing)
+	for _, instr := range script {
+
+		instr := instr
+
 		argResolvers := make(map[string]func(*ScriptEngine) any)
 		for k, v := range instr.Args {
 			val := v
 			if str, ok := val.(string); ok && strings.Contains(str, "{{") {
-				// Simple template parser: {{var.field}}
+
 				argResolvers[k] = func(e *ScriptEngine) any {
 					return e.resolveTemplate(str)
 				}
@@ -614,15 +307,13 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 			}
 		}
 
-		// 2. Bind Operation
 		opFunc, err := bindOperation(instr.Op)
 		if err != nil {
-			return nil, fmt.Errorf("instruction %d: %v", i, err)
+			return nil, fmt.Errorf("instruction '%s': %v", instr.Op, err)
 		}
 
-		// 3. Create Step Closure
-		step := func(ctx context.Context, e *ScriptEngine) error {
-			// Resolve Args
+		stepFn := func(ctx context.Context, e *ScriptEngine) error {
+
 			args := make(map[string]any)
 			for k, resolver := range argResolvers {
 				args[k] = resolver(e)
@@ -638,24 +329,21 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 					return fmt.Errorf("input variable '%s' not found", instr.InputVar)
 				}
 			} else {
-				// Implicit piping: Use result of last operation
+
 				input = e.LastResult
 			}
 
-			// Execute Operation
 			result, err := opFunc(ctx, e, args, input)
 			if err != nil {
 				return fmt.Errorf("operation '%s' failed: %v", instr.Op, err)
 			}
 
-			// Update LastResult for implicit piping
 			e.LastResult = result
 
-			// Store Result
 			if instr.ResultVar != "" {
 				e.Context.Variables[instr.ResultVar] = result
 				e.Context.LastUpdatedVar = instr.ResultVar
-				// Type Registration
+
 				if db, ok := result.(Database); ok {
 					e.Context.Databases[instr.ResultVar] = db
 				}
@@ -668,13 +356,129 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 			}
 			return nil
 		}
-		steps = append(steps, step)
+		steps = append(steps, compiledStep{
+			Name: instr.Name,
+			Op:   instr.Op,
+			Args: instr.Args,
+			Func: stepFn,
+		})
 	}
 
 	return func(ctx context.Context, e *ScriptEngine) error {
-		for _, step := range steps {
-			if err := step(ctx, e); err != nil {
+
+		defer func() {
+			// Check if we are returning a Cursor that needs to own the deferred cleanup
+			var cursor ScriptCursor
+
+			if sc, ok := e.ReturnValue.(ScriptCursor); ok {
+				cursor = sc
+			} else if sc, ok := e.LastResult.(ScriptCursor); ok {
+
+				cursor = sc
+			}
+
+			if cursor != nil && len(e.Deferred) > 0 {
+				log.Debug("Transferring deferred cleanup to returned cursor")
+
+				wrapper := &DeferredCleanupCursor{
+					source:  cursor,
+					cleanup: e.Deferred,
+					ctx:     ctx,
+					engine:  e,
+				}
+
+				if e.ReturnValue != nil {
+					e.ReturnValue = wrapper
+				}
+
+				if e.LastResult == cursor {
+					e.LastResult = wrapper
+				}
+
+				e.Deferred = nil
+				return
+			}
+
+			for len(e.Deferred) > 0 {
+				i := len(e.Deferred) - 1
+				task := e.Deferred[i]
+				e.Deferred = e.Deferred[:i]
+
+				log.Debug("Executing deferred operation", "index", i)
+				if err := task(ctx, e); err != nil {
+					log.Error("Deferred execution failed", "error", err)
+				}
+			}
+		}()
+
+		for i, step := range steps {
+			if e.HasReturned {
+				log.Debug("Script returned early", "step", i)
+				break
+			}
+			log.Debug("ExecuteStep", "step", i+1, "op", step.Op)
+
+			// Streaming Setup
+			var stepStreamer interface {
+				WriteItem(any)
+				Close()
+			}
+
+			if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+				isVerbose, _ := ctx.Value("verbose").(bool)
+
+				isSystemOp := false
+				switch step.Op {
+				case "open_db", "begin_tx", "commit_tx", "rollback_tx", "open_store":
+					isSystemOp = true
+				}
+
+				if isVerbose && !isSystemOp {
+
+					streamer.SetSuppressStepStart(false)
+
+					displayName := step.Op
+					if step.Name != "" {
+						displayName = step.Name
+					} else if step.Op == "execute_script" {
+						if n, ok := step.Args["name"].(string); ok && n != "" {
+							displayName = n
+						}
+					}
+
+					stepStreamer = streamer.StartStreamingStep("step_start", displayName, "", i+1)
+				}
+			}
+
+			if err := step.Func(ctx, e); err != nil {
+				log.Debug("ExecuteStep failed", "step", i+1, "err", err)
+				if stepStreamer != nil {
+					stepStreamer.Close()
+				}
 				return err
+			}
+
+			log.Debug("ExecuteStep success", "step", i+1, "lastResultType", fmt.Sprintf("%T", e.LastResult))
+
+			if stepStreamer != nil {
+				result := e.LastResult
+
+				if _, ok := result.(ScriptCursor); !ok {
+
+					if list, ok := result.([]any); ok {
+						for _, item := range list {
+							stepStreamer.WriteItem(item)
+						}
+					} else if list, ok := result.([]map[string]any); ok {
+						for _, item := range list {
+							stepStreamer.WriteItem(item)
+						}
+					} else if result != nil {
+
+						stepStreamer.WriteItem(result)
+					}
+				}
+				stepStreamer.Close()
 			}
 		}
 		return nil
@@ -682,40 +486,37 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 }
 
 func (e *ScriptEngine) resolveTemplate(tmpl string) any {
-	// Handle {{var.field}}
-	// Remove {{ and }}
+
 	trimmed := strings.TrimSuffix(strings.TrimPrefix(tmpl, "{{"), "}}")
 	parts := strings.Split(trimmed, ".")
 
 	var current any
 	var ok bool
 
-	// First part is variable name
 	if len(parts) > 0 {
 		current, ok = e.Context.Variables[parts[0]]
 		if !ok {
 			log.Debug("resolveTemplate var not found", "var", parts[0])
-			return tmpl // Return original if var not found? Or nil?
+			return tmpl
 		}
 	}
 
-	// Traverse fields
 	for _, part := range parts[1:] {
 		if currentMap, ok := current.(map[string]any); ok {
 			current, ok = currentMap[part]
 			if !ok {
-				// Try "value" wrapper if not found directly?
+
 				if valMap, ok := currentMap["value"].(map[string]any); ok {
 					current, ok = valMap[part]
 				}
 			}
 			if !ok {
 				log.Debug("resolveTemplate field not found", "field", part, "map", currentMap)
-				return nil // Field not found
+				return nil
 			}
 		} else {
 			log.Debug("resolveTemplate current is not a map", "current", current)
-			return nil // Not a map
+			return nil
 		}
 	}
 	log.Debug("resolveTemplate result", "tmpl", tmpl, "current", current)
@@ -790,6 +591,48 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			return e.Inspect(ctx, args)
 		}, nil
+	case "defer":
+		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
+			// Extract command to defer
+			// We support simplified syntax where args IS the command, or args contains "command"
+			var cmdToDefer map[string]any
+
+			if cmd, ok := args["command"].(map[string]any); ok {
+				cmdToDefer = cmd
+			} else if cmd, ok := args["execute"].(map[string]any); ok {
+				cmdToDefer = cmd
+			} else {
+
+				if _, ok := args["op"].(string); ok {
+					cmdToDefer = args
+				} else {
+					return nil, fmt.Errorf("defer requires 'op' or nested 'command'")
+				}
+			}
+
+			script := []ScriptInstruction{
+				{
+					Op:   cmdToDefer["op"].(string),
+					Args: cmdToDefer,
+				},
+			}
+
+			compiledCmd, err := CompileScript(script)
+			if err != nil {
+				return nil, fmt.Errorf("failed to compile deferred command: %v", err)
+			}
+
+			e.Deferred = append(e.Deferred, func(c context.Context, se *ScriptEngine) error {
+
+				wasReturned := se.HasReturned
+				se.HasReturned = false
+				defer func() { se.HasReturned = wasReturned }()
+
+				return compiledCmd(c, se)
+			})
+
+			return nil, nil
+		}, nil
 	case "assign":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, input any) (any, error) {
 			if val, ok := args["value"]; ok {
@@ -805,6 +648,10 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			return nil, e.Loop(ctx, args)
 		}, nil
+	case "call_script", "script":
+		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
+			return e.CallScript(ctx, args)
+		}, nil
 	case "call_function":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			return e.CallFunction(ctx, args)
@@ -814,8 +661,8 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 			return make([]any, 0), nil
 		}, nil
 	case "list_append":
-		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
-			return nil, e.ListAppend(ctx, args)
+		return func(ctx context.Context, e *ScriptEngine, args map[string]any, input any) (any, error) {
+			return e.ListAppend(ctx, input, args)
 		}, nil
 	case "map_merge":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
@@ -860,22 +707,31 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 	case "return":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			if val, ok := args["value"]; ok {
-				// HISTORICAL NOTE (Jan 2026):
-				// We must resolve variables here because the caller (toolExecuteScript) no longer
-				// performs post-execution unpacking. If we simply return 'val', we risk returning
-				// the literal string "@my_var" instead of the JSON object it points to.
-				// This logic ensures parity with how arguments are resolved in other operations.
 
-				// Resolve variable using engine's standardized name resolution (handles @ prefixes etc)
-				if strVal, ok := val.(string); ok && e.Context != nil && e.Context.Variables != nil {
-					varName := e.resolveVarName(strVal)
-					// If the resolved name exists in variables, return the UNWRAPPED object.
-					if v, found := e.Context.Variables[varName]; found {
-						return v, nil
+				// Helper to resolve a value (string or structure)
+				var resolve func(v any) any
+				resolve = func(v any) any {
+					if strVal, ok := v.(string); ok && e.Context != nil && e.Context.Variables != nil {
+						varName := e.resolveVarName(strVal)
+						if res, found := e.Context.Variables[varName]; found {
+							return res
+						}
 					}
+					if sliceVal, ok := v.([]any); ok {
+						newSlice := make([]any, len(sliceVal))
+						for i, item := range sliceVal {
+							newSlice[i] = resolve(item)
+						}
+						return newSlice
+					}
+
+					return v
 				}
-				// If not a variable, return the literal value.
-				return val, nil
+
+				res := resolve(val)
+				e.ReturnValue = res
+				e.HasReturned = true
+				return res, nil
 			}
 			return nil, nil
 		}, nil
@@ -885,10 +741,21 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 }
 
 func serializeResult(ctx context.Context, val any) (string, error) {
+
+	if _, ok := val.(Database); ok {
+		return "Database object (success)", nil
+	}
+	if _, ok := val.(sop.Transaction); ok {
+		return "Transaction object (success)", nil
+	}
+	if _, ok := val.(jsondb.StoreAccessor); ok {
+		return "Store object (success)", nil
+	}
+
 	alreadyCollapsed := false
 
 	if cursor, ok := val.(ScriptCursor); ok {
-		var results []any
+		results := make([]any, 0)
 		defer cursor.Close()
 
 		// Helper to force field order if provider available
@@ -897,12 +764,24 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 			orderedFields = provider.GetOrderedFields()
 		}
 
-		/*
-			log.Debug("serializeResult: Consuming Cursor",
-				"cursorType", fmt.Sprintf("%T", cursor),
-				"hasOrderedFields", len(orderedFields) > 0,
-				"orderedFields", orderedFields)
-		*/
+		// Setup Streaming for Final Result (Cursor)
+		var resultStreamer interface {
+			WriteItem(any)
+			Close()
+			SetMetadata(map[string]any)
+		}
+
+		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok && streamer != nil {
+
+			streamer.SetSuppressStepStart(true)
+			resultStreamer = streamer.StartStreamingStep("result_stream", "final_result", "", 0)
+
+			if len(orderedFields) > 0 {
+				cols := make(map[string]any)
+				cols["columns"] = orderedFields
+				resultStreamer.SetMetadata(cols)
+			}
+		}
 
 		for {
 			itemObj, ok, err := cursor.Next(ctx)
@@ -912,8 +791,12 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 			if !ok {
 				break
 			}
+			if itemObj == nil {
+				continue
+			}
+
 			var itemMap map[string]any
-			// Preserve OrderedMap structure for explicit projections
+
 			isOrdered := false
 			if om, ok := itemObj.(*OrderedMap); ok {
 				if !om.isImplicit {
@@ -934,43 +817,30 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 					itemMap = m
 				}
 			} else {
-				// Ensure itemMap is nil so subsequent logic skips it
+
 				itemMap = nil
 			}
 
-			// Friendly Output Strategy:
-			// If we have a map, we apply "Smart Collapsing" to strip unique prefixes (e.g. s_orders.id -> id).
-			// This implements the "Friendliness" requirement at the last mile.
 			if itemMap != nil {
-				// collapseUniqueKeys modifies map in place and returns it
+
 				itemObj = collapseUniqueKeys(itemMap)
 			}
 
 			var item any = itemObj
-			// Apply top-level field ordering
+
 			if itemMap != nil && len(orderedFields) > 0 {
-				// log.Debug("serializeResult calling filterFields", "orderedFields", orderedFields)
 				item = filterFields(itemMap, orderedFields)
-				/*
-					if om, ok := item.(*OrderedMap); ok {
-						log.Debug("serializeResult received OrderedMap", "keys", om.keys)
-					} else {
-						log.Debug("serializeResult received item", "type", fmt.Sprintf("%T", item))
-					}
-					// Debug log to trace what we actually got
-					if om, ok := item.(OrderedMap); ok {
-						b, _ := json.Marshal(om)
-						log.Debug("payload contents:", "Function", "serializeResult", "keys", om.keys, "json", string(b))
-					} else if om, ok := item.(*OrderedMap); ok {
-						b, _ := json.Marshal(om)
-						log.Debug("payload contents:", "Function", "serializeResult", "keys", om.keys, "json", string(b))
-					} else {
-						log.Debug("payload contents:", "Function", "serializeResult", "type", fmt.Sprintf("%T", item), "val", item)
-					}
-				*/
+			}
+
+			if resultStreamer != nil {
+				resultStreamer.WriteItem(item)
 			}
 
 			results = append(results, item)
+		}
+
+		if resultStreamer != nil {
+			resultStreamer.Close()
 		}
 
 		val = results
@@ -991,9 +861,14 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 		}
 
 		if list != nil {
-			for i, itemObj := range list {
+			newList := make([]any, 0, len(list))
+			for _, itemObj := range list {
+				if itemObj == nil {
+					continue
+				}
+
 				var itemMap map[string]any
-				// Preserve OrderedMap structure
+
 				isOrdered := false
 				if om, ok := itemObj.(*OrderedMap); ok {
 					if !om.isImplicit {
@@ -1017,14 +892,16 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 					}
 				}
 
+				finalItem := itemObj
 				if itemMap != nil {
-					// collapseUniqueKeys modifies in-place
+
 					collapsed := collapseUniqueKeys(itemMap)
-					// Replace with vanilla map to ensure JSON marshaling uses the new keys (and skips deleted ones)
-					// This sidesteps checking if it was OrderedMap with stale keys.
-					list[i] = collapsed
+
+					finalItem = collapsed
 				}
+				newList = append(newList, finalItem)
 			}
+			val = newList
 		}
 	}
 
@@ -1033,7 +910,7 @@ func serializeResult(ctx context.Context, val any) (string, error) {
 		return "", fmt.Errorf("failed to serialize result: %v", err)
 	}
 	resStr := string(bytes)
-	// log.Debug("payload contents:", "json", resStr[:min(len(resStr), 500)], "Function", "serializeResult")
+
 	return resStr, nil
 }
 
@@ -1098,7 +975,7 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 	case "inspect":
 		result, err = e.Inspect(ctx, instr.Args)
 	case "assign":
-		// Simple assignment or literal
+
 		if val, ok := instr.Args["value"]; ok {
 			result = val
 		} else {
@@ -1110,14 +987,14 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 		err = e.Loop(ctx, instr.Args)
 	case "call_script", "script":
 		result, err = e.CallScript(ctx, instr.Args)
-	// List / Map Operations (Memory)
+
 	case "list_new":
 		result = make([]any, 0)
 	case "list_append":
-		err = e.ListAppend(ctx, instr.Args)
+		result, err = e.ListAppend(ctx, input, instr.Args)
 	case "map_merge":
 		result, err = e.MapMerge(ctx, instr.Args)
-	// Cursor / Store Operations
+
 	case "first":
 		result, err = e.First(ctx, instr.Args)
 	case "last":
@@ -1146,7 +1023,7 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 
 	if instr.ResultVar != "" {
 		e.Context.Variables[instr.ResultVar] = result
-		// Also register specific types if needed
+
 		if db, ok := result.(Database); ok {
 			e.Context.Databases[instr.ResultVar] = db
 		}
@@ -1160,8 +1037,6 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 
 	return nil
 }
-
-// --- Operations ---
 
 // resolveVarName strips the optional '@' or '$' prefix from a variable name.
 func (e *ScriptEngine) resolveVarName(name string) string {
@@ -1181,7 +1056,7 @@ func (e *ScriptEngine) OpenDB(args map[string]any) (Database, error) {
 }
 
 func (e *ScriptEngine) BeginTx(ctx context.Context, args map[string]any) (sop.Transaction, error) {
-	dbName, _ := args["database"].(string) // Variable name of DB
+	dbName, _ := args["database"].(string)
 	dbName = e.resolveVarName(dbName)
 	modeStr, _ := args["mode"].(string)
 
@@ -1189,7 +1064,7 @@ func (e *ScriptEngine) BeginTx(ctx context.Context, args map[string]any) (sop.Tr
 	if dbObj, ok := e.getDatabase(dbName); ok {
 		db = dbObj
 	} else {
-		// Try to resolve by name if not a variable
+
 		if e.ResolveDatabase == nil {
 			return nil, fmt.Errorf("database resolver not configured")
 		}
@@ -1223,9 +1098,6 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 		return fmt.Errorf("transaction '%s' not found", txName)
 	}
 
-	// Trigger: Commit Transaction
-	// Action: Materialize all active cursors to ensure they are captured before transaction closes.
-
 	drain := func(name string, cursor ScriptCursor) error {
 		results := make([]any, 0)
 
@@ -1235,7 +1107,6 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 			specs = provider.GetIndexSpecs()
 		}
 
-		// Drain cursor
 		for {
 			itemObj, ok, err := cursor.Next(ctx)
 			if err != nil {
@@ -1254,7 +1125,6 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 				itemMap = om.m
 			}
 
-			// Apply ordering if specs available
 			if itemMap != nil && len(specs) > 0 {
 				for fieldName, spec := range specs {
 					if val, ok := itemMap[fieldName]; ok {
@@ -1271,7 +1141,6 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 		return nil
 	}
 
-	// Prioritize LastUpdatedVar to ensure downstream cursors (limit, etc) get first dibs on consuming shared inputs
 	if e.Context.LastUpdatedVar != "" {
 		if val, ok := e.Context.Variables[e.Context.LastUpdatedVar]; ok {
 			if cursor, ok := val.(ScriptCursor); ok {
@@ -1315,7 +1184,7 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 	var ok bool
 
 	if txName == "" {
-		// Try to find a default transaction
+
 		if len(e.Context.Transactions) == 1 {
 			for _, t := range e.Context.Transactions {
 				tx = t
@@ -1356,12 +1225,11 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 			}
 		}
 	} else {
-		// Implicit database resolution
-		// 1. Try mapping from transaction
+
 		if associatedDB, found := e.Context.TxToDB[tx]; found {
 			db = associatedDB
 		} else if len(e.Context.Databases) == 1 {
-			// 2. Fallback to single active database
+
 			for _, d := range e.Context.Databases {
 				db = d
 				break
@@ -1376,35 +1244,26 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 	create, _ := args["create"].(bool)
 
 	if e.StoreOpener != nil {
-		// Mock/Override doesn't standardized on Create yet?
-		// We assume StoreOpener handles it or we update signature?
-		// StoreOpener signature: func(ctx, opts, name, tx) (StoreAccessor, error)
-		// It doesn't take 'create' flag.
-		// We can't change signature easily as it might be used elsewhere?
-		// But e.StoreOpener is defined in this file.
+
 		return e.StoreOpener(ctx, db.Config(), storeName, tx)
 	}
 
 	if create {
-		// If Scripts store is not available yet, we will create the Script store here.
+
 		return jsondb.CreateObjectStore(ctx, db.Config(), storeName, tx)
 	}
 	return jsondb.OpenStore(ctx, db.Config(), storeName, tx)
 }
 
 func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, error) {
-	// fmt.Printf("DEBUG: Scan Called with args: %+v\n", args)
-	storeVarName, _ := args["store"].(string) // Variable name
+
+	storeVarName, _ := args["store"].(string)
 	storeVarName = e.resolveVarName(storeVarName)
 	store, ok := e.getStore(storeVarName)
 	if !ok {
 		return nil, fmt.Errorf("store variable '%s' not found", storeVarName)
 	}
 
-	// Determine logical Store Name for prefixing
-	// 1. If we can get the underlying store name from StoreInfo, use that.
-	// 2. Fallback to variable name (might be "users_store" instead of "users").
-	// Ideally, we want the "business name" of the table.
 	storeName := storeVarName
 	info := store.GetStoreInfo()
 	if info.Name != "" {
@@ -1416,17 +1275,16 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 		limit = 1000
 	}
 	direction, _ := args["direction"].(string)
-	isDesc := strings.ToLower(direction) == "desc" || strings.ToLower(direction) == "backward"
+	dirLower := strings.ToLower(direction)
+	isDesc := dirLower == "desc" || dirLower == "descending"
 	startKey := args["start_key"]
 	prefix := args["prefix"]
 	filter := args["filter"]
-	// fmt.Printf("DEBUG: Scan Filter extracted: %+v\n", filter)
+
 	stream, _ := args["stream"].(bool)
 
 	var okIter bool
 	var err error
-
-	// Inspect store for IndexSpecification
 	var indexSpec *jsondb.IndexSpecification
 	info = store.GetStoreInfo()
 	if info.MapKeyIndexSpecification != "" {
@@ -1436,7 +1294,6 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 		}
 	}
 
-	// Positioning
 	if startKey != nil {
 		if isDesc {
 			okIter, err = store.FindInDescendingOrder(ctx, startKey)
@@ -1460,18 +1317,17 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 	if err != nil {
 		return nil, err
 	}
-	// fmt.Printf("DEBUG: Scan Store '%s' okIter=%v\n", storeName, okIter)
 
 	if !okIter {
 		if stream {
-			// Return empty cursor
+
 			return &StoreCursor{
 				store:     store,
-				storeName: storeName, // Pass store name
+				storeName: storeName,
 				indexSpec: indexSpec,
 				ctx:       ctx,
 				limit:     int(limit),
-				started:   true, // Started but empty
+				started:   true,
 			}, nil
 		}
 		return []map[string]any{}, nil
@@ -1487,7 +1343,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 	if stream {
 		return &StoreCursor{
 			store:     store,
-			storeName: storeName, // Pass store name
+			storeName: storeName,
 			indexSpec: indexSpec,
 			ctx:       ctx,
 			limit:     int(limit),
@@ -1495,7 +1351,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 			engine:    e,
 			isDesc:    isDesc,
 			prefix:    prefix,
-			started:   false, // Not yet advanced past the first element (Scan positions at first)
+			started:   false,
 		}, nil
 	}
 
@@ -1505,7 +1361,6 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 		k := store.GetCurrentKey()
 		v, _ := store.GetCurrentValue(ctx)
 
-		// Prefix Check
 		if prefix != nil {
 			if kStr, isStr := k.(string); isStr {
 				pStr := fmt.Sprintf("%v", prefix)
@@ -1515,28 +1370,19 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 			}
 		}
 
-		// Filter Check (Push Down)
 		itemAny := renderItem(k, v, nil)
-		// Since renderItem returns any (possibly OrderedMap pointer), we cast to map if needed or keep as any
-		// But Scan Loop expects []map[string]any for results var?
-		// results is []map[string]any.
-		// renderItem with nil fields returns flattenItem result which is map[string]any.
 
 		item, _ := itemAny.(map[string]any)
 
 		if filter != nil {
-			// Debugging schema validation issues
-			// fmt.Printf("DEBUG: Scan Filter Check. ItemType=%T Item=%+v\n", itemAny, item)
-			// fmt.Printf("DEBUG: Scan Filter=%+v\n", filter)
 
 			match, err := e.evaluateCondition(item, filter.(map[string]any))
 			if err != nil {
-				// Log error but continue? Or fail?
-				// Fail for now
+
 				return nil, fmt.Errorf("filter evaluation failed: %v", err)
 			}
 			if !match {
-				// Skip this item
+
 				if isDesc {
 					okIter, _ = store.Previous(ctx)
 				} else {
@@ -1546,7 +1392,6 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 			}
 		}
 
-		// Architecture Enforcement: Always Prefix Internal Items (Buffered Mode)
 		if storeName != "" {
 			prefixed := make(map[string]any, len(item))
 			for k, val := range item {
@@ -1569,29 +1414,22 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 }
 
 func (e *ScriptEngine) evaluateCondition(item any, condition any) (bool, error) {
-	// CEL Filter
+
 	if _, ok := condition.(string); ok {
 		return false, fmt.Errorf("CEL filter expressions not supported yet")
 	}
 
-	// Simple Map Match
 	if matchMap, ok := condition.(map[string]any); ok {
-		// Validating fields against schema in item
-		// If item is map[string]any, we can check if keys in condition exist in item.
-		// However, item might be partial if projected?
-		// Typically filtering happens before projection, so item should be full.
+
 		if itemMap, ok := item.(map[string]any); ok {
 			for k := range matchMap {
-				if _, exists := itemMap[k]; !exists {
-					// Check for fuzzy match
+
+				if _, found := resolveKey(itemMap, k); !found {
+
 					if suggested := findSimilarKey(k, itemMap); suggested != "" {
 						return false, fmt.Errorf("field '%s' not found in item. Did you mean '%s'?", k, suggested)
 					}
-					// If no fuzzy match, it might be a valid non-existent field (evaluates to non-match usually),
-					// BUT for LLM correctness, explicitly failing on hallucinated fields is better.
-					// Unless condition operator is $exists: false?
-					// matchMap is key -> condition for that key.
-					// Let's assume strict schema enforcement for now to guide LLM.
+
 					return false, fmt.Errorf("field '%s' not found in item. Available fields: %v", k, getKeys(itemMap))
 				}
 			}
@@ -1602,32 +1440,6 @@ func (e *ScriptEngine) evaluateCondition(item any, condition any) (bool, error) 
 
 	return false, fmt.Errorf("unsupported filter condition type")
 }
-
-func getKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
-func findSimilarKey(target string, m map[string]any) string {
-	// Simple fuzzy match: case insensitive or contains
-	targetLower := strings.ToLower(target)
-	for k := range m {
-		if strings.ToLower(k) == targetLower {
-			return k
-		}
-		if strings.Contains(strings.ToLower(k), targetLower) || strings.Contains(targetLower, strings.ToLower(k)) {
-			return k
-		}
-	}
-	return ""
-}
-
-// Reuse the logic from pipeline for Filter, Sort, Project, Limit
-// But adapt to take 'any' input which is expected to be []map[string]any
 
 func (e *ScriptEngine) Filter(ctx context.Context, input any, args map[string]any) (any, error) {
 	conditionRaw := args["condition"]
@@ -1643,7 +1455,7 @@ func (e *ScriptEngine) Filter(ctx context.Context, input any, args map[string]an
 				engine: e,
 			}, nil
 		}
-		// Fallback for non-map execution if needed, or error
+
 		return nil, fmt.Errorf("cursor filter currently passes map conditions only")
 	}
 
@@ -1666,7 +1478,7 @@ func (e *ScriptEngine) Sort(ctx context.Context, input any, args map[string]any)
 	var list []any
 
 	if cursor, ok := input.(ScriptCursor); ok {
-		// Materialize
+
 		for {
 			item, ok, err := cursor.Next(ctx)
 			if err != nil {
@@ -1694,7 +1506,6 @@ func (e *ScriptEngine) Sort(ctx context.Context, input any, args map[string]any)
 func (e *ScriptEngine) Project(ctx context.Context, input any, args map[string]any) (any, error) {
 	log.Debug("Project input", "type", fmt.Sprintf("%T", input))
 
-	// Use common parsing logic
 	parsedFields := parseProjectionFields(args["fields"])
 
 	if cursor, ok := input.(ScriptCursor); ok {
@@ -1726,7 +1537,7 @@ func (e *ScriptEngine) Limit(ctx context.Context, input any, args map[string]any
 	limitVal, _ := args["limit"].(float64)
 	limit := int(limitVal)
 	if limit <= 0 {
-		limit = 1000 // Default?
+		limit = 1000
 	}
 
 	if cursor, ok := input.(ScriptCursor); ok {
@@ -1753,56 +1564,6 @@ func (e *ScriptEngine) Limit(ctx context.Context, input any, args map[string]any
 	return e.stageLimit(list, args)
 }
 
-// ListCursor wraps a slice of maps.
-type ListCursor struct {
-	items []any
-	index int
-}
-
-func (lc *ListCursor) Next(ctx context.Context) (any, bool, error) {
-	if lc.index >= len(lc.items) {
-		return nil, false, nil
-	}
-	item := lc.items[lc.index]
-	lc.index++
-	return item, true, nil
-}
-
-func (lc *ListCursor) Close() error {
-	return nil
-}
-
-// MultiCursor chains multiple cursors.
-type MultiCursor struct {
-	cursors []ScriptCursor
-	current int
-}
-
-func (mc *MultiCursor) Next(ctx context.Context) (any, bool, error) {
-	for mc.current < len(mc.cursors) {
-		item, ok, err := mc.cursors[mc.current].Next(ctx)
-		if err != nil {
-			return nil, false, err
-		}
-		if ok {
-			return item, true, nil
-		}
-		// Current cursor exhausted, move to next
-		mc.current++
-	}
-	return nil, false, nil
-}
-
-func (mc *MultiCursor) Close() error {
-	var firstErr error
-	for _, c := range mc.cursors {
-		if err := c.Close(); err != nil && firstErr == nil {
-			firstErr = err
-		}
-	}
-	return firstErr
-}
-
 // handleInto checks for 'into' argument and drains cursor/list to a store.
 func (e *ScriptEngine) handleInto(ctx context.Context, input any, args map[string]any) (any, error) {
 	intoStoreName, _ := args["into"].(string)
@@ -1810,24 +1571,18 @@ func (e *ScriptEngine) handleInto(ctx context.Context, input any, args map[strin
 		return input, nil
 	}
 
-	// Resolve store name
 	intoStoreName = e.resolveVarName(intoStoreName)
 
-	// Create/Open the store. We assume "create" is needed if explicit 'into' is used for a temp store.
-	// But it might be an existing store? Let's check if user requested create behavior.
-	// If it's a "temp" store for pipeline, we likely want to create it.
-	// Let's assume we create/open it.
 	store, err := e.OpenStore(ctx, map[string]any{"name": intoStoreName, "create": true})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open/create store '%s': %v", intoStoreName, err)
 	}
 
-	// Drain Input into Store
 	cursor, isCursor := input.(ScriptCursor)
 	list, isList := input.([]any)
 
 	if !isCursor && !isList {
-		// Try casting list of maps?
+
 		if lMap, ok := input.([]map[string]any); ok {
 			for _, v := range lMap {
 				list = append(list, v)
@@ -1842,11 +1597,7 @@ func (e *ScriptEngine) handleInto(ctx context.Context, input any, args map[strin
 
 	addToStore := func(item any) error {
 		count++
-		// Generate Key?
-		// We use a simple counter key or UUID?
-		// User didn't specify key field.
-		// "into" implies a table structure. We just dump items.
-		// Use UUID or simple sequence.
+
 		key := fmt.Sprintf("row_%d_%d", time.Now().UnixNano(), count)
 		_, err := store.Add(ctx, key, item)
 		return err
@@ -1874,21 +1625,13 @@ func (e *ScriptEngine) handleInto(ctx context.Context, input any, args map[strin
 		}
 	}
 
-	// Return the Store Accessor? Or just the name?
-	// The next step in pipeline would use `store: "temp1"`.
-	// ScriptInstruction returns result to ResultVar.
-	// If we return the store object, it gets put into generic var.
-	// But `Join` expects store name or variable with list/cursor.
-	// If `Join` gets a StoreAccessor variable, it doesn't handle it directly as Input.
-	// It handles it as `args["store"]`.
-	// So we should return the StoreAccessor, so user can say `result_var: "myStore"`.
 	return store, nil
 }
 
 func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any) (any, error) {
 	rightVar, _ := args["with"].(string)
 	if rightVar == "" {
-		// Try 'store' arg (alias for join_right)
+
 		rightVar, _ = args["store"].(string)
 	}
 	rightVar = e.resolveVarName(rightVar)
@@ -1919,8 +1662,6 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		}
 	}
 
-	// Rewriting ON keys if they use variable names referring to Stores
-	// This maps user aliases (variables) to system aliases (Store Names) expected in the data
 	if on != nil {
 		newOn := make(map[string]any)
 		changed := false
@@ -1935,7 +1676,6 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 						realName = s.GetStoreInfo().Name
 					}
 
-					// If we found a real store name and it differs from the prefix
 					if realName != "" && realName != prefix {
 						newKey := realName + "." + parts[1]
 						newOn[newKey] = v
@@ -1967,17 +1707,14 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		return nil, fmt.Errorf("input must be a list of items or a cursor")
 	}
 
-	// Check if Right is a Store
 	rightStore, isRightStore := e.getStore(rightVar)
 
-	// Determine Aliases
 	rightAlias, _ := args["right_alias"].(string)
 	if rightAlias == "" {
 		rightAlias, _ = args["alias"].(string)
 	}
 	if rightAlias == "" {
-		// Fix: Prefer Store Name as alias over variable name to support natural projection (e.g. "users.*")
-		// If we are joining a Store, the default alias should be the Store Name (e.g. "users"), not the variable name ("users_store").
+
 		if isRightStore && rightStore != nil {
 			rightAlias = rightStore.GetStoreInfo().Name
 			if rightAlias == "" {
@@ -1999,14 +1736,13 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	var result any
 	var err error
 
-	// --- FULL OUTER JOIN SUPPORT ---
 	if joinType == "full" && isRightStore {
 		// Materialize Left Input locally (needed for Right Anti-Join part)
 		var leftList []any
 		if lc, ok := leftCursor.(*ListCursor); ok {
 			leftList = lc.items
 		} else {
-			// Drain if not already a list
+
 			for {
 				item, ok, err := leftCursor.Next(ctx)
 				if err != nil {
@@ -2017,17 +1753,15 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 				}
 				leftList = append(leftList, item)
 			}
-			// Reset leftCursor to a ListCursor over the same data for the Left Join part
+
 			leftCursor = &ListCursor{items: leftList}
 		}
 
-		// Invert ON clause: {LeftKey: RightKey} -> {RightKey: LeftKey}
 		invertedOn := make(map[string]any)
 		for k, v := range on {
 			invertedOn[fmt.Sprintf("%v", v)] = k
 		}
 
-		// 1. Left Join (Standard)
 		leftJoinCursor := &JoinRightCursor{
 			left:           leftCursor,
 			right:          rightStore,
@@ -2039,7 +1773,6 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 			leftStoreName:  leftAlias,
 		}
 
-		// 2. Right Anti-Join (Suppressed Matches)
 		rightAntiJoinCursor := &RightOuterJoinStoreCursor{
 			rightStore:      rightStore,
 			leftList:        leftList,
@@ -2054,9 +1787,8 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		return e.handleInto(ctx, multi, args)
 	}
 
-	// --- RIGHT OUTER JOIN SUPPORT (Swapped Left Join) ---
 	if joinType == "right" {
-		// Invert ON clause: {LeftKey: RightKey} -> {RightKey: LeftKey}
+
 		invertedOn := make(map[string]any)
 		for k, v := range on {
 			invertedOn[fmt.Sprintf("%v", v)] = k
@@ -2070,25 +1802,22 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		}
 
 		if isRightStore {
-			// Right Side is Store: Use Streaming RightOuterJoinStoreCursor
-			// This scans the Right Store and probes the Left Cursor (which builds an index internally).
-			// We pass the Engine to allow creating temp stores if needed for spilling.
+
 			result, err = &RightOuterJoinStoreCursor{
 				rightStore: rightStore,
-				// Pass Cursor if list is not fully available, otherwise pass list
+
 				leftCursor: leftCursor,
 				leftList:   leftList,
 				on:         invertedOn,
 				ctx:        ctx,
 				engine:     e,
-				rightAlias: rightAlias, // Pass alias
+				rightAlias: rightAlias,
 				leftAlias:  leftAlias,
 			}, nil
 		} else {
-			// Right Side is Value: Use In-Memory stageJoin with swapped arguments
-			// We must materialize left side fully here if it wasn't already
+
 			if len(leftList) == 0 && leftCursor != nil {
-				// Drain cursor
+
 				for {
 					item, ok, err := leftCursor.Next(ctx)
 					if err != nil {
@@ -2101,7 +1830,6 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 				}
 			}
 
-			// Resolve Right List
 			rightInput, ok := e.Context.Variables[rightVar]
 			if !ok {
 				return nil, fmt.Errorf("right input variable '%s' not found", rightVar)
@@ -2117,27 +1845,6 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 				return nil, fmt.Errorf("right input must be a list of items")
 			}
 
-			// 2. Scan Right, Probe Left (Swapped)
-			// Arguments: Left=RightList, Right=LeftList
-			// This effectively executes a Left Join where Driver is Right.
-			// Result keys: "rightAlias.k" (Driver) and "leftAlias.k" (Probed)
-			// Swapped Aliases mapping:
-			// Left List came from leftCursor -> use leftAlias
-			// Right List came from input var -> use rightAlias
-
-			// We pass: left=rightList (alias=rightAlias), right=leftList (alias=leftAlias)
-			// The stageJoin signature is (left, right, type, on, rightAlias, leftAlias)
-			// Wait, if we swap lists, we must match aliases to the list content.
-			// stageJoin calls the first list "Left" and second list "Right" for iteration logic.
-			// But for key prefixing, we want:
-			// Items from first list (rightList) -> prefix with rightAlias
-			// Items from second list (leftList) -> prefix with leftAlias
-			//
-			// stageJoin implementation:
-			// merged[leftAlias+"."+k] = v  (where v is from first list argument)
-			// merged[rightAlias+"."+k] = v (where v is from second list argument)
-
-			// So we must pass: leftAlias=rightAlias, rightAlias=leftAlias
 			lAlias := leftAlias
 			if lAlias == "" {
 				lAlias = "Left"
@@ -2146,7 +1853,7 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 			if rAlias == "" {
 				rAlias = "Right"
 			}
-			// stageJoin(driverList, probeList, ..., probeAlias, driverAlias)
+
 			result, err = e.stageJoin(rightList, leftList, "left", invertedOn, lAlias, rAlias)
 		}
 
@@ -2156,19 +1863,13 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 		return result, err
 	}
 
-	// DECISION: Prefer Lookup Join (JoinRightCursor) for Stores
-	// We rely on JoinRightCursor's internal "Smart Mode":
-	// 1. It attempts to find a Key Field (Prefix Match) to do fast Lookups.
-	// 2. If it fails to identifying a Probe Key, it falls back to In-Memory Materialization.
-	// This covers both "Indexed Join" (Fast) and "Non-Indexed Join" (Safe, No Hang).
 	useLookupJoin := false
 	if isRightStore {
 		useLookupJoin = true
 	}
 
 	if useLookupJoin {
-		// Use JoinRightCursor for optimized lookup join (or adaptive fallback)
-		// Alias is already resolved
+
 		cursor := &JoinRightCursor{
 			left:           leftCursor,
 			right:          rightStore,
@@ -2176,13 +1877,12 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 			on:             on,
 			ctx:            ctx,
 			engine:         e,
-			rightStoreName: rightAlias, // Use resolved alias
+			rightStoreName: rightAlias,
 		}
 
 		return e.handleInto(ctx, cursor, args)
 	}
 
-	// Fallback to In-Memory Nested Loop Join (For Variables, not Stores)
 	rightInput, ok := e.Context.Variables[rightVar]
 	if !ok {
 		return nil, fmt.Errorf("right input variable '%s' not found", rightVar)
@@ -2204,7 +1904,7 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	if lc, ok := leftCursor.(*ListCursor); ok {
 		leftList = lc.items
 	} else {
-		// Drain cursor
+
 		for {
 			item, ok, err := leftCursor.Next(ctx)
 			if err != nil {
@@ -2219,7 +1919,7 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 
 	result, err = e.stageJoin(leftList, rightList, joinType, on, rightAlias, leftAlias)
 	if err == nil {
-		// Handle Into (Wait, result is []any. We need to support handleInto for List too)
+
 		return e.handleInto(ctx, result, args)
 	}
 	return result, err
@@ -2234,7 +1934,6 @@ func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[stri
 		leftAlias = "Left"
 	}
 
-	// Track matched Right indices for Full Join
 	matchedRight := make(map[int]bool)
 
 	for _, lItem := range left {
@@ -2297,19 +1996,11 @@ func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[stri
 	if joinType == "full" {
 		for i, rItem := range right {
 			if !matchedRight[i] {
-				// Emit unmatched right item (Left is null)
-				// Respect aliasing for consistency?
+
 				merged := make(map[string]any)
 				if m, ok := rItem.(map[string]any); ok {
 					for k, v := range m {
-						// Since "Left" is missing, we decide if we use alias or not.
-						// In match case: merged[rightAlias+"."+k] = v (if collision).
-						// Here, no collision. So standard is output raw k.
-						// BUT if user expects "B.id", they might be disappointed.
-						// Let's stick to raw k for now, consistent with "no match in Left".
-						// Actually, better: if rightAlias is set explicitly, we could honor it?
-						// But existing code only honors it if collision `matched[k]`.
-						// So we keep raw k.
+
 						merged[k] = v
 					}
 				}
@@ -2324,19 +2015,10 @@ func (e *ScriptEngine) stageJoin(left, right []any, joinType string, on map[stri
 // JoinRight is a pipeline-friendly alias for Join.
 // It expects the input to be the Left stream, and the 'store' argument to be the Right store.
 func (e *ScriptEngine) JoinRight(ctx context.Context, input any, args map[string]any) (any, error) {
-	// Map 'store' to 'with' for Join compatibility
-	// Also attempt to capture alias if provided in args (e.g. from SQL FROM clause)
+
 	if store, ok := args["store"]; ok {
 		args["with"] = store
-		// If we wanted to enforce alias passthrough, we assume "store" name is the default alias
-		// unless overridden by "alias" key.
-		// note: Join() method above looks at "with" or "variables".
-	}
 
-	// FIX: Explicitly map 'alias' to 'right_alias' so the underlying Join operation usage
-	// of JoinRightCursor respects the user-defined alias.
-	if alias, ok := args["alias"]; ok {
-		args["right_alias"] = alias
 	}
 
 	return e.Join(ctx, input, args)
@@ -2437,8 +2119,6 @@ func (e *ScriptEngine) Inspect(ctx context.Context, args map[string]any) (any, e
 	}, nil
 }
 
-// --- Stage Implementations (In-Memory) ---
-
 func (e *ScriptEngine) stageFilter(input []any, args map[string]any) ([]any, error) {
 	conditionRaw := args["condition"]
 	if conditionRaw == nil {
@@ -2447,7 +2127,6 @@ func (e *ScriptEngine) stageFilter(input []any, args map[string]any) ([]any, err
 
 	var output []any
 
-	// CEL Filter
 	if _, ok := conditionRaw.(string); ok {
 		for _, item := range input {
 			match, err := e.evaluateCondition(item, conditionRaw)
@@ -2458,7 +2137,6 @@ func (e *ScriptEngine) stageFilter(input []any, args map[string]any) ([]any, err
 		return output, nil
 	}
 
-	// Simple Map Match
 	if matchMap, ok := conditionRaw.(map[string]any); ok {
 		for _, item := range input {
 			match, err := e.evaluateCondition(item, matchMap)
@@ -2500,7 +2178,6 @@ func (e *ScriptEngine) stageSort(input []any, args map[string]any) ([]any, error
 			valA := getField(input[i], fieldName)
 			valB := getField(input[j], fieldName)
 
-			// Compare
 			cmp := compare(valA, valB)
 			if cmp != 0 {
 				if desc {
@@ -2516,7 +2193,7 @@ func (e *ScriptEngine) stageSort(input []any, args map[string]any) ([]any, error
 }
 
 func (e *ScriptEngine) stageProject(input []any, args map[string]any) ([]any, error) {
-	// Pre-parse fields for performance
+
 	fields := parseProjectionFields(args["fields"])
 
 	log.Debug("stageProject called", "input_len", len(input), "input_fields", fields)
@@ -2526,7 +2203,6 @@ func (e *ScriptEngine) stageProject(input []any, args map[string]any) ([]any, er
 		newItem := renderItem(nil, item, fields)
 		output = append(output, newItem)
 
-		// Log sample of what we are creating
 		if i == 0 {
 			if om, ok := newItem.(*OrderedMap); ok {
 				log.Debug("stageProject first item (OrderedMap)", "keys", om.keys)
@@ -2548,7 +2224,7 @@ func (e *ScriptEngine) stageLimit(input []any, args map[string]any) ([]any, erro
 	} else if l, ok := args["count"].(float64); ok {
 		limit = int(l)
 	} else {
-		// Default or error?
+
 		limit = 1000
 	}
 
@@ -2583,18 +2259,16 @@ func (e *ScriptEngine) stageUpdate(ctx context.Context, input []any, store jsond
 
 		key := item["key"]
 		if key == nil {
-			// Fallback: Check for Aliased Key (e.g. "users.key") using Store Info
-			// This handles cases where input comes from a Join.
+
 			if info := store.GetStoreInfo(); info.Name != "" {
 				key = item[info.Name+".key"]
 			}
 		}
 
-		// Merge values
 		currentVal := item["value"]
 		var newVal any
 		if currMap, ok := currentVal.(map[string]any); ok {
-			// Clone to avoid side effects?
+
 			newMap := make(map[string]any)
 			for k, v := range currMap {
 				newMap[k] = v
@@ -2604,13 +2278,13 @@ func (e *ScriptEngine) stageUpdate(ctx context.Context, input []any, store jsond
 			}
 			newVal = newMap
 		} else {
-			newVal = values // Overwrite if not a map?
+			newVal = values
 		}
 
 		if _, err := store.Update(ctx, key, newVal); err != nil {
 			return nil, err
 		}
-		// Update item in memory too
+
 		item["value"] = newVal
 	}
 	return input, nil
@@ -2624,7 +2298,7 @@ func (e *ScriptEngine) stageDelete(ctx context.Context, input []any, store jsond
 	for _, itemObj := range input {
 		key := getField(itemObj, "key")
 		if key == nil {
-			// Fallback: Check for Aliased Key (e.g. "users.key") using Store Info
+
 			if info := store.GetStoreInfo(); info.Name != "" {
 				key = getField(itemObj, info.Name+".key")
 			}
@@ -2636,8 +2310,6 @@ func (e *ScriptEngine) stageDelete(ctx context.Context, input []any, store jsond
 	}
 	return []any{}, nil
 }
-
-// --- Control Flow Operations ---
 
 func (e *ScriptEngine) If(ctx context.Context, args map[string]any) error {
 	conditionRaw, ok := args["condition"]
@@ -2678,7 +2350,7 @@ func (e *ScriptEngine) If(ctx context.Context, args map[string]any) error {
 }
 
 func (e *ScriptEngine) Loop(ctx context.Context, args map[string]any) error {
-	// ForEach loop over a list variable
+
 	collectionVar, _ := args["collection"].(string)
 	itemVar, _ := args["item_var"].(string)
 	if itemVar == "" {
@@ -2696,14 +2368,11 @@ func (e *ScriptEngine) Loop(ctx context.Context, args map[string]any) error {
 		return fmt.Errorf("failed to parse loop 'body': %v", err)
 	}
 
-	// Get Collection
 	collection, ok := e.Context.Variables[collectionVar]
 	if !ok {
 		return fmt.Errorf("collection variable '%s' not found", collectionVar)
 	}
 
-	// Iterate
-	// Support []map[string]any or []any
 	if list, ok := collection.([]map[string]any); ok {
 		for _, item := range list {
 			e.Context.Variables[itemVar] = item
@@ -2735,8 +2404,6 @@ func (e *ScriptEngine) CallFunction(ctx context.Context, args map[string]any) (a
 		return nil, fmt.Errorf("function handler not configured")
 	}
 
-	// Handle Parameters (Scoped Variable Injection)
-	// We save current values of variables that are being overwritten, and restore them after.
 	savedVars := make(map[string]any)
 	if params, ok := args["params"].(map[string]any); ok {
 		for k, v := range params {
@@ -2754,15 +2421,12 @@ func (e *ScriptEngine) CallFunction(ctx context.Context, args map[string]any) (a
 	}
 	res, err := e.FunctionHandler(ctx, functionName, params)
 
-	// Restore Variables
 	for k, v := range savedVars {
 		e.Context.Variables[k] = v
 	}
 
 	return res, err
 }
-
-// --- Cursor Operations ---
 
 func (e *ScriptEngine) First(ctx context.Context, args map[string]any) (bool, error) {
 	storeName, _ := args["store"].(string)
@@ -2846,37 +2510,50 @@ func (e *ScriptEngine) GetCurrentValue(ctx context.Context, args map[string]any)
 	return v, err
 }
 
-// --- List / Map Operations ---
-
-func (e *ScriptEngine) ListAppend(ctx context.Context, args map[string]any) error {
+func (e *ScriptEngine) ListAppend(ctx context.Context, input any, args map[string]any) (any, error) {
 	listVar, _ := args["list"].(string)
 	item := args["item"]
-
-	list, ok := e.Context.Variables[listVar]
-	if !ok {
-		return fmt.Errorf("list variable '%s' not found", listVar)
+	if item == nil {
+		item = args["value"]
 	}
 
-	// Append
-	if l, ok := list.([]any); ok {
-		e.Context.Variables[listVar] = append(l, item)
-	} else if l, ok := list.([]map[string]any); ok {
-		// If item is map, ok.
-		if m, ok := item.(map[string]any); ok {
-			e.Context.Variables[listVar] = append(l, m)
-		} else {
-			// Convert to []any? Or fail?
-			// Let's upgrade the list to []any
-			newList := make([]any, len(l))
-			for i, v := range l {
-				newList[i] = v
-			}
-			e.Context.Variables[listVar] = append(newList, item)
+	var list any
+
+	if listVar != "" {
+		var ok bool
+		list, ok = e.Context.Variables[listVar]
+		if !ok {
+			return nil, fmt.Errorf("list variable '%s' not found", listVar)
 		}
 	} else {
-		return fmt.Errorf("variable '%s' is not a list", listVar)
+
+		if input == nil {
+			return nil, fmt.Errorf("list variable not specified and no input provided")
+		}
+		list = input
 	}
-	return nil
+
+	var resultList []any
+
+	if l, ok := list.([]any); ok {
+
+		resultList = append(l, item)
+	} else if l, ok := list.([]map[string]any); ok {
+
+		resultList = make([]any, len(l)+1)
+		for i, v := range l {
+			resultList[i] = v
+		}
+		resultList[len(l)] = item
+	} else {
+		return nil, fmt.Errorf("variable (or input) is not a list")
+	}
+
+	if listVar != "" {
+		e.Context.Variables[listVar] = resultList
+	}
+
+	return resultList, nil
 }
 
 func (e *ScriptEngine) MapMerge(ctx context.Context, args map[string]any) (map[string]any, error) {
@@ -2904,12 +2581,6 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 		return nil, fmt.Errorf("script name required")
 	}
 
-	// Check Native Scripts Registry first
-	if fn, found := scripts.Get(scriptName); found {
-		params, _ := args["params"].(map[string]any)
-		return fn(ctx, params)
-	}
-
 	if a.systemDB == nil {
 		return nil, fmt.Errorf("system database not available")
 	}
@@ -2920,51 +2591,40 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 	}
 	defer sysTx.Rollback(ctx)
 
-	funcStore, err := jsondb.OpenStore(ctx, a.systemDB.Config(), "scripts", sysTx)
+	funcStore, err := a.systemDB.OpenModelStore(ctx, "scripts", sysTx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open scripts store: %v", err)
 	}
 
 	category, _ := args["category"].(string)
 	if category == "" {
-		category = "user"
+		category = ai.DefaultScriptCategory
 	}
 
-	found, err := funcStore.FindOne(ctx, model.ModelKey{Category: category, Name: scriptName}, true)
-	if err != nil {
-		return nil, fmt.Errorf("failed to find script: %v", err)
-	}
-	if !found {
-		return nil, fmt.Errorf("script '%s/%s' not found", category, scriptName)
-	}
-
-	val, err := funcStore.GetCurrentValue(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	funcMap, ok := val.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("invalid script format")
+	var funcMap map[string]any
+	if err := funcStore.Load(ctx, category, scriptName, &funcMap); err != nil {
+		return nil, fmt.Errorf("script '%s/%s' not found: %v", category, scriptName, err)
 	}
 
 	stepsRaw, ok := funcMap["steps"].([]any)
 	if !ok {
-		return nil, nil // Empty script
+		return nil, nil
 	}
 
-	// Detect Script Type (Legacy vs Atomic)
 	isAtomic := false
 	if len(stepsRaw) > 0 {
 		if firstStep, ok := stepsRaw[0].(map[string]any); ok {
-			if _, hasOp := firstStep["op"]; hasOp {
+			_, hasOp := firstStep["op"]
+			_, hasType := firstStep["type"]
+
+			if hasOp && !hasType {
 				isAtomic = true
 			}
 		}
 	}
 
 	if isAtomic {
-		// Serialize to detect changes
+
 		bytes, err := json.Marshal(stepsRaw)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal script steps: %v", err)
@@ -2973,7 +2633,6 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 		sum := sha256.Sum256(bytes)
 		currentHash := hex.EncodeToString(sum[:])
 
-		// Check Cache
 		a.compiledScriptsMu.RLock()
 		cachedEntry, cached := a.compiledScripts[scriptName]
 		a.compiledScriptsMu.RUnlock()
@@ -2991,7 +2650,6 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 				return nil, fmt.Errorf("failed to compile script '%s': %v", scriptName, err)
 			}
 
-			// Update Cache
 			a.compiledScriptsMu.Lock()
 			a.compiledScripts[scriptName] = CachedScript{Script: compiled, Hash: currentHash}
 			a.compiledScriptsMu.Unlock()
@@ -2999,8 +2657,6 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 			compiled = cachedEntry.Script
 		}
 
-		// Execute in CURRENT context (inherits variables, txs)
-		// Wrap resolver to handle default database from context
 		resolver := func(name string) (Database, error) {
 			if name == "" {
 				if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
@@ -3018,16 +2674,17 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 			return nil, err
 		}
 
-		// Return Result
-		// Priority 1: Check for 'output' variable (Explicit override)
 		if val, ok := engine.Context.Variables["output"]; ok {
 			return val, nil
 		}
 
-		return nil, nil
+		if engine.HasReturned {
+			return engine.ReturnValue, nil
+		}
+
+		return engine.LastResult, nil
 	}
 
-	// Legacy Tool Script
 	for _, step := range stepsRaw {
 		stepMap, _ := step.(map[string]any)
 		toolName, _ := stepMap["tool"].(string)
@@ -3048,388 +2705,4 @@ func (a *DataAdminAgent) opCallScript(ctx context.Context, scriptCtx *ScriptCont
 	}
 
 	return nil, nil
-}
-
-// --- Helper Functions ---
-
-func matchesMap(item any, condition map[string]any) bool {
-	for k, v := range condition {
-		itemVal := getField(item, k)
-		// fmt.Printf("DEBUG: matchesMap Check Key=%s, CondVal=%v, ItemVal=%v\n", k, v, itemVal)
-
-		// Check for operators map
-		if ops, ok := v.(map[string]any); ok {
-			isOperator := false
-			for op := range ops {
-				if strings.HasPrefix(op, "$") {
-					isOperator = true
-					break
-				}
-			}
-
-			if isOperator {
-				for op, opVal := range ops {
-					switch op {
-					case "$eq":
-						if compare(itemVal, opVal) != 0 {
-							return false
-						}
-					case "$gt":
-						if compare(itemVal, opVal) <= 0 {
-							return false
-						}
-					case "$gte":
-						if compare(itemVal, opVal) < 0 {
-							return false
-						}
-					case "$lt":
-						if compare(itemVal, opVal) >= 0 {
-							return false
-						}
-					case "$lte":
-						if compare(itemVal, opVal) > 0 {
-							return false
-						}
-					case "$ne":
-						if compare(itemVal, opVal) == 0 {
-							return false
-						}
-					case "$in":
-						found := false
-						if list, ok := opVal.([]any); ok {
-							for _, val := range list {
-								if compare(itemVal, val) == 0 {
-									found = true
-									break
-								}
-							}
-						}
-						if !found {
-							return false
-						}
-					case "$nin":
-						if list, ok := opVal.([]any); ok {
-							for _, val := range list {
-								if compare(itemVal, val) == 0 {
-									return false
-								}
-							}
-						}
-					}
-				}
-				continue
-			}
-		}
-
-		// Direct Equality check
-		if compare(itemVal, v) != 0 {
-			return false
-		}
-	}
-	return true
-}
-
-func getField(itemObj any, field string) any {
-	var item map[string]any
-	if m, ok := itemObj.(map[string]any); ok {
-		item = m
-	} else if om, ok := itemObj.(OrderedMap); ok {
-		item = om.m
-	} else if om, ok := itemObj.(*OrderedMap); ok && om != nil {
-		item = om.m
-	} else {
-		return nil
-	}
-
-	// Support "value.age" or just "age" (implicit value)
-	if v, ok := item[field]; ok {
-		return v
-	}
-
-	// Case-insensitive fallback (SQL behavior)
-	for k, v := range item {
-		if strings.EqualFold(k, field) {
-			return v
-		}
-	}
-
-	// Support relaxed aliased lookup (e.g. "a.name" -> "name") provided the alias didn't match
-	if idx := strings.Index(field, "."); idx != -1 {
-		suffix := field[idx+1:]
-		if v, ok := item[suffix]; ok {
-			return v
-		}
-	}
-
-	// Reverse Alias Lookup: Request "name", Match "users.name" if unique
-	// This mimics SQL unqualified column resolution.
-	if !strings.Contains(field, ".") {
-		var candidate any
-		count := 0
-		suffix := "." + field
-		for k, v := range item {
-			if strings.HasSuffix(k, suffix) {
-				candidate = v
-				count++
-			}
-		}
-		if count == 1 {
-			return candidate
-		}
-	}
-
-	// Check for key field (alias or direct)
-	if field == "key" {
-		if v, ok := item["key"]; ok {
-			return v
-		}
-	}
-
-	// Check inside key if it's a map (Composite Key support)
-	if keyMap, ok := item["key"].(map[string]any); ok {
-		if v, ok := keyMap[field]; ok {
-			return v
-		}
-	}
-
-	// Implicit check in "value" map
-	if valMap, ok := item["value"].(map[string]any); ok {
-		if v, ok := valMap[field]; ok {
-			return v
-		}
-	}
-
-	// Implicit check in "key" if it is a map (Composite Key)
-	if keyMap, ok := item["key"].(map[string]any); ok {
-		if v, ok := keyMap[field]; ok {
-			return v
-		}
-	}
-
-	// Helper: Reconstruct object from flattened dot-notation keys
-	// e.g. Request "orders", Input has "orders.id", "orders.total" -> Return map
-	reconstructed := make(map[string]any)
-	prefix := field + "."
-	hasReconstructed := false
-
-	for k, v := range item {
-		if strings.HasPrefix(k, prefix) {
-			suffix := k[len(prefix):]
-			if suffix != "" {
-				reconstructed[suffix] = v
-				hasReconstructed = true
-			}
-		}
-	}
-	if hasReconstructed {
-		return reconstructed
-	}
-
-	return nil
-}
-
-// Helper: Compare two values
-func compare(a, b any) int {
-	// Handle nil
-	if a == nil && b == nil {
-		return 0
-	}
-	if a == nil {
-		return -1
-	}
-	if b == nil {
-		return 1
-	}
-
-	// Handle Strings
-	sa, okA := a.(string)
-	sb, okB := b.(string)
-	if okA && okB {
-		if sa < sb {
-			return -1
-		}
-		if sa > sb {
-			return 1
-		}
-		return 0
-	}
-
-	// Handle Numbers
-	fa, okA := toFloat(a)
-	fb, okB := toFloat(b)
-	if okA && okB {
-		if fa < fb {
-			return -1
-		}
-		if fa > fb {
-			return 1
-		}
-		return 0
-	}
-
-	// Fallback to string representation
-	sa = fmt.Sprintf("%v", a)
-	sb = fmt.Sprintf("%v", b)
-	if sa < sb {
-		return -1
-	}
-	if sa > sb {
-		return 1
-	}
-	return 0
-}
-
-func toFloat(v any) (float64, bool) {
-	switch i := v.(type) {
-	case int:
-		return float64(i), true
-	case int64:
-		return float64(i), true
-	case float64:
-		return i, true
-	case float32:
-		return float64(i), true
-	case int32:
-		return float64(i), true
-	case int16:
-		return float64(i), true
-	case int8:
-		return float64(i), true
-	case uint:
-		return float64(i), true
-	case uint64:
-		return float64(i), true
-	case uint32:
-		return float64(i), true
-	case uint16:
-		return float64(i), true
-	case uint8:
-		return float64(i), true
-	}
-	return 0, false
-}
-
-// sanitizeScript performs a pass over the script instructions to clean up common LLM errors.
-// This is the "Compiler/Linter" phase before execution.
-func sanitizeScript(script []ScriptInstruction) []ScriptInstruction {
-	for i := range script {
-		instr := &script[i]
-
-		// 1. PROJECT Op: Normalize "fields"
-		if instr.Op == "project" {
-			if fieldsRaw, ok := instr.Args["fields"]; ok {
-				// Convert Maps/Sloppy lists to Clean List<ProjectionField>
-				// We reuse parseProjectionFields to do the heavy lifting
-				parsed := parseProjectionFields(fieldsRaw)
-
-				// Re-serialize back to a clean list of strings (or structured objects)
-				// Actually, the Engine expects "fields" to be consumable by parseProjectionFields again.
-				// But we can simplify it here to ensure it's normalized.
-
-				// Let's replace the raw args with the parsed struct slice?
-				// Engine uses: parsedFields := parseProjectionFields(args["fields"])
-				// So if we put []ProjectionField back into args["fields"], it works (parseProjectionFields handles it).
-				instr.Args["fields"] = parsed
-			}
-		}
-
-		// 2. JOIN Op: Normalize "type"
-		if instr.Op == "join" || instr.Op == "join_right" {
-			// Rewrite Op to standard "join"
-			// If it was explicitly "join_right", force type to right_outer (unless overridden)
-			isExplicitRight := instr.Op == "join_right"
-			instr.Op = "join"
-
-			if t, ok := instr.Args["type"].(string); ok {
-				instr.Args["type"] = strings.ToLower(strings.TrimSpace(t))
-			} else if isExplicitRight {
-				instr.Args["type"] = "right_outer"
-			}
-
-			// Default to inner if missing
-			if _, ok := instr.Args["type"]; !ok {
-				instr.Args["type"] = "inner"
-			}
-
-			// 3. Infer Alias from Projection Usage (Heuristic)
-			// If the user projects "b.name" from the result of this join (variable "b"),
-			// strongly imply that they expect the join to be aliased as "b".
-			if _, hasAlias := instr.Args["alias"]; !hasAlias {
-				if _, hasRightAlias := instr.Args["right_alias"]; !hasRightAlias {
-					// Check result var
-					resultVar := instr.ResultVar
-					if resultVar != "" {
-						// Look ahead for usage
-						for j := i + 1; j < len(script); j++ {
-							future := &script[j]
-							if future.Op == "project" && future.InputVar == resultVar {
-								// Check fields for prefix matching resultVar
-								// Note: fields might have been normalized to []ProjectionField already in step 1,
-								// BUT step 1 runs on the same pass.
-								// If future is ahead, it hasn't been processed by step 1 yet (loop is i, future is j).
-								// So we must handle raw or parsed fields.
-
-								var candidates []string
-								if fRaw, ok := future.Args["fields"]; ok {
-									p := parseProjectionFields(fRaw)
-									for _, field := range p {
-										candidates = append(candidates, field.Src)
-									}
-								}
-
-								// Check for prefix "resultVar."
-								prefix := resultVar + "."
-								found := false
-								for _, c := range candidates {
-									if strings.HasPrefix(c, prefix) {
-										found = true
-										break
-									}
-								}
-
-								if found {
-									// INFER ALIAS
-									// Inject alias into Current Instruction
-									instr.Args["alias"] = resultVar
-									break // Stop looking
-								}
-							}
-						}
-					}
-				}
-			}
-
-			// 4. Normalize "on" clause (Casing)
-			// LLMs often output "Value" or "Key" (Title Case) instead of "value" or "key".
-			// We normalize them here to lowercase so that:
-			// 1. Direct lookups work (if field is literally "value")
-			// 2. Reverse Alias lookups work (getField checks suffix ".value" which is case-sensitive)
-			if onMap, ok := instr.Args["on"].(map[string]any); ok {
-				newOn := make(map[string]any)
-				for k, v := range onMap {
-					// Fix Left Field (Key in the map)
-					newK := k
-					// We only touch "Key" and "Value" specifically, to avoid breaking case-sensitive custom fields.
-					if strings.EqualFold(k, "Value") {
-						newK = "value"
-					} else if strings.EqualFold(k, "Key") {
-						newK = "key"
-					}
-
-					// Fix Right Field (Value in the map)
-					newV := v
-					if vStr, ok := v.(string); ok {
-						if strings.EqualFold(vStr, "Value") {
-							newV = "value"
-						} else if strings.EqualFold(vStr, "Key") {
-							newV = "key"
-						}
-					}
-					newOn[newK] = newV
-				}
-				instr.Args["on"] = newOn
-			}
-		}
-	}
-	return script
 }

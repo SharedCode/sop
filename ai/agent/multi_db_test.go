@@ -92,7 +92,7 @@ func TestMultiDBScriptExecution(t *testing.T) {
 	{
 		tx, _ := systemDB.BeginTransaction(ctx, sop.ForWriting)
 		store, _ := systemDB.OpenModelStore(ctx, "scripts", tx)
-		store.Save(ctx, "general", "multidb_script", &script)
+		store.Save(ctx, ai.DefaultScriptCategory, "multidb_script", &script)
 		tx.Commit(ctx)
 	}
 

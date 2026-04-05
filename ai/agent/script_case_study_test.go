@@ -221,7 +221,7 @@ func saveScript(t *testing.T, ctx context.Context, db *database.Database, name s
 		tx.Rollback(ctx)
 		t.Fatal(err)
 	}
-	if err := store.Save(ctx, "general", name, s); err != nil {
+	if err := store.Save(ctx, ai.DefaultScriptCategory, name, s); err != nil {
 		tx.Rollback(ctx)
 		t.Fatal(err)
 	}
@@ -232,7 +232,7 @@ func loadScript(t *testing.T, ctx context.Context, db *database.Database, name s
 	tx, _ := db.BeginTransaction(ctx, sop.ForReading)
 	store, _ := db.OpenModelStore(ctx, "scripts", tx)
 	var s ai.Script
-	store.Load(ctx, "general", name, &s)
+	store.Load(ctx, ai.DefaultScriptCategory, name, &s)
 	tx.Commit(ctx)
 	return s
 }
