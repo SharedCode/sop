@@ -122,8 +122,8 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenDomainStore V1 failed: %v", err)
 	}
-	if arch1.TempVectors != nil {
-		t.Fatal("TempVectors should be nil in V1")
+	if arch1.TempVectors == nil {
+		t.Fatal("TempVectors should NOT be nil in V1")
 	}
 	if arch1.Vectors.Count() != 3 {
 		t.Errorf("Expected 3 vectors in V1, got %d", arch1.Vectors.Count())

@@ -130,10 +130,9 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, 
 	}
 
 	// 5. Open TempVectors Store (Shared)
-	// Only open TempVectors for version 0 (initial ingestion).
-	// Once optimized (version > 0), TempVectors is retired.
+	// Used as a buffer for Active Memory ingestion across all versions.
 	var tempVectors btree.BtreeInterface[string, []float32]
-	if version == 0 && !skipTempVectors {
+	if !skipTempVectors {
 		tempVectors, err = newBtree[string, []float32](ctx, sop.ConfigureStore(name(tempVectorsSuffix), true, btree.DefaultSlotLength, tempVectorsDesc, sop.SmallData, ""), trans, func(a, b string) int {
 			if a < b {
 				return -1

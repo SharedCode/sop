@@ -4,7 +4,7 @@ This document defines the structured Knowledge Schema used by the AI Agent to st
 
 ## 1. The Structure
 
-All semantic knowledge is stored in the configured **Knowledge Store** (default name: `llm_knowledge`) within the System Database. The name of this B-Tree is configurable via the `agent.KnowledgeStore` constant.
+All semantic knowledge is stored in the configured **Knowledge Store** (default name: `memory`) within the System Database. The name of this B-Tree is configurable via the `agent.KnowledgeStore` constant.
 
 **Storage Location & Scoping**:
 The physical location of this knowledge depends on the connection string of the System Database provided to the Agent.

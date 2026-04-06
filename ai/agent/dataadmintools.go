@@ -122,10 +122,7 @@ func (a *DataAdminAgent) registerTools(ctx context.Context) {
 	// The Core Engine
 	a.registry.Register("execute_script", a.getToolInstruction(ctx, "execute_script", ExecuteScriptInstruction), "(script: Array<{op: string, args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
 
-	// Self-Correction Tools
-	a.registry.Register("manage_knowledge", "Manages the AI's long-term knowledge base. Use this to save, retrieve, or list learned information. Namespaces organize knowledge (e.g. 'term', 'tool', 'finance', 'project_alpha'). Action: 'upsert', 'delete', 'read', 'list'. For 'list', key is ignored.", "(namespace: string, action: string, key?: string, value?: string)", a.toolManageKnowledge)
-
-	// Conversation Management
+		// Conversation Management
 	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", "(summary: string, topic_label: string)", a.toolConcludeTopic)
 
 	// Communication Tools
@@ -447,111 +444,6 @@ func (a *DataAdminAgent) toolListStores(ctx context.Context, args map[string]any
 		}
 	}
 	return fmt.Sprintf("Stores:\n%s", strings.Join(descriptions, "\n")), nil
-}
-
-func (a *DataAdminAgent) toolManageKnowledge(ctx context.Context, args map[string]any) (string, error) {
-	if a.systemDB == nil {
-		return "", fmt.Errorf("system database not available")
-	}
-
-	namespace, _ := args["namespace"].(string)
-	key, _ := args["key"].(string)
-	value, _ := args["value"].(string)
-	action, _ := args["action"].(string)
-
-	namespace = strings.TrimSpace(namespace)
-	key = strings.TrimSpace(key)
-	action = strings.ToLower(strings.TrimSpace(action))
-
-	if namespace == "" {
-		return "", fmt.Errorf("argument 'namespace' is required")
-	}
-	if action == "" {
-		action = "upsert" // Default
-	}
-	if action != "list" && key == "" {
-		return "", fmt.Errorf("argument 'key' is required for action '%s'", action)
-	}
-
-	// Start a read-write transaction
-	tx, err := a.systemDB.BeginTransaction(ctx, sop.ForWriting)
-	if err != nil {
-		return "", fmt.Errorf("failed to start transaction: %w", err)
-	}
-	defer func() {
-		if tx.HasBegun() {
-			tx.Rollback(ctx)
-		}
-	}()
-
-	// Open the Knowledge Store
-	ks, err := OpenKnowledgeStore(ctx, tx, a.systemDB.Options())
-	if err != nil {
-		return "", fmt.Errorf("failed to open knowledge store: %w", err)
-	}
-
-	var resultMsg string
-
-	if action == "delete" {
-		if ok, err := ks.Remove(ctx, namespace, key); err != nil {
-			return "", fmt.Errorf("failed to remove key '%s/%s': %w", namespace, key, err)
-		} else if !ok {
-			return fmt.Sprintf("Key '%s/%s' not found, nothing to delete.", namespace, key), nil
-		}
-		resultMsg = fmt.Sprintf("Successfully removed knowledge for '%s/%s'.", namespace, key)
-	} else if action == "read" || action == "get" {
-		val, found, err := ks.Get(ctx, namespace, key)
-		if err != nil {
-			return "", fmt.Errorf("failed to read key '%s/%s': %w", namespace, key, err)
-		} else if !found {
-			return fmt.Sprintf("Key '%s/%s' not found.", namespace, key), nil
-		}
-		resultMsg = fmt.Sprintf("Knowledge '%s/%s':\n%s", namespace, key, val)
-	} else if action == "list" {
-		// List all keys in the namespace
-		items, err := ks.ListContent(ctx, namespace)
-		if err != nil {
-			return "", fmt.Errorf("failed to list knowledge: %w", err)
-		}
-
-		var sb strings.Builder
-		sb.WriteString(fmt.Sprintf("Keys in namespace '%s':\n", namespace))
-
-		if len(items) == 0 {
-			sb.WriteString("(No keys found)")
-		} else {
-			// Sort keys for deterministic output? ListContent comes from B-Tree so it might be sorted by name already if ListContent iterates.
-			// Actually the map iteration order is random. We should probably return a sorted list from ListContent or sort here.
-			// Let's just iterate the map, random order is fine for LLM usually, but sorted is better.
-			// ListContent in knowledge.go iterates B-Tree so keys are read in order, but put into map.
-			// Optimization: ListContent should probably return sorted slice.
-			// For now, let's just dump.
-			for k, v := range items {
-				// Truncate value
-				shortVal := v
-				if len(shortVal) > 50 {
-					shortVal = shortVal[:47] + "..."
-				}
-				sb.WriteString(fmt.Sprintf("- %s: %s\n", k, shortVal))
-			}
-		}
-		resultMsg = sb.String()
-	} else {
-		// Default to upsert
-		if value == "" {
-			return "", fmt.Errorf("argument 'value' is required for upsert action")
-		}
-		if err := ks.Upsert(ctx, namespace, key, value); err != nil {
-			return "", fmt.Errorf("failed to upsert knowledge for '%s/%s': %w", namespace, key, err)
-		}
-		resultMsg = fmt.Sprintf("Successfully saved knowledge for '%s/%s'.", namespace, key)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	return resultMsg, nil
 }
 
 func (a *DataAdminAgent) toolSwitchDatabase(ctx context.Context, args map[string]any) (string, error) {

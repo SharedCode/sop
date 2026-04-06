@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"sort"
@@ -220,12 +221,27 @@ func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, it
 		}
 	}
 
-	// Increment count
+	// Increment count & Rolling Average (Prevent Cluster Drift)
 	if di.config.UsageMode == ai.DynamicWithVectorCountTracking && shouldIncrement {
 		if foundC, _ := arch.Centroids.Find(ctx, centroidID, false); foundC {
 			c, _ := arch.Centroids.GetCurrentValue(ctx)
+
+			// Compute Rolling Average to naturally shift the centroid toward new data points
+			n := float32(c.VectorCount)
+			if c.Vector == nil || len(c.Vector) == 0 {
+				c.Vector = make([]float32, len(vec))
+				copy(c.Vector, vec)
+			} else {
+				for i := 0; i < len(c.Vector) && i < len(vec); i++ {
+					c.Vector[i] = ((c.Vector[i] * n) + vec[i]) / (n + 1.0)
+				}
+			}
+
 			c.VectorCount++
 			arch.Centroids.UpdateCurrentValue(ctx, c)
+
+			// Keep cache in sync if initialized
+			di.addCentroidToCache(centroidID, c.Vector)
 		}
 	}
 
@@ -959,7 +975,9 @@ func (di *domainIndex[T]) addCentroidToCache(id int, vec []float32) {
 func (di *domainIndex[T]) isOptimizing(ctx context.Context) (bool, error) {
 	if di.config.Cache != nil {
 		lockKeyName := di.config.Cache.FormatLockKey(fmt.Sprintf("optimize_lock_%s", di.name))
-		return di.config.Cache.IsLockedByOthers(ctx, []string{lockKeyName})
+		locked, err := di.config.Cache.IsLockedByOthers(ctx, []string{lockKeyName})
+		slog.Warn("isOptimizing Check Cached", "domain", di.name, "locked", locked, "err", err)
+		return locked, err
 	}
 	if di.config.TransactionOptions.CacheType == sop.NoCache {
 		return false, nil
@@ -969,7 +987,9 @@ func (di *domainIndex[T]) isOptimizing(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 	lockKeyName := cache.FormatLockKey(fmt.Sprintf("optimize_lock_%s", di.name))
-	return cache.IsLockedByOthers(ctx, []string{lockKeyName})
+	locked, err := cache.IsLockedByOthers(ctx, []string{lockKeyName})
+	slog.Warn("isOptimizing Check L2 Cached", "domain", di.name, "locked", locked, "err", err)
+	return locked, err
 }
 
 func (di *domainIndex[T]) getActiveVersion(ctx context.Context) (int64, error) {
@@ -996,4 +1016,163 @@ func (di *domainIndex[T]) beginTransaction(ctx context.Context) (sop.Transaction
 		return nil, err
 	}
 	return t, nil
+}
+
+// SplitCentroid reorganizes an overloaded centroid by running localized 2-Means
+// clustering, creating two new centroids, and reassigning its vectors.
+func (di *domainIndex[T]) SplitCentroid(ctx context.Context, centroidID int) error {
+	if locked, err := di.isOptimizing(ctx); err != nil {
+		return err
+	} else if locked {
+		return fmt.Errorf("vector store is currently optimizing, read-only mode active")
+	}
+
+	version, err := di.getActiveVersion(ctx)
+	if err != nil {
+		return err
+	}
+
+	arch, err := di.getArchitecture(ctx, version)
+	if err != nil {
+		return err
+	}
+
+	// 1. Collect all vectors for this centroid
+	startKey := ai.VectorKey{CentroidID: centroidID, DistanceToCentroid: -1, ItemID: ""}
+	var items []ai.Item[T]
+	var keys []ai.VectorKey
+
+	if _, err := arch.Vectors.Find(ctx, startKey, true); err != nil {
+		return err
+	}
+
+	for {
+		vectorItem, err := arch.Vectors.GetCurrentItem(ctx)
+		if err != nil {
+			if os.IsNotExist(err) {
+				if ok, _ := arch.Vectors.Next(ctx); !ok {
+					break
+				}
+				continue
+			}
+			return err
+		}
+
+		key := vectorItem.Key
+		if compositeKeyComparer(key, startKey) < 0 {
+			if ok, err := arch.Vectors.Next(ctx); !ok || err != nil {
+				break
+			}
+			continue
+		}
+
+		if vectorItem.ID.IsNil() || vectorItem.Key.CentroidID != centroidID {
+			break
+		}
+
+		items = append(items, ai.Item[T]{
+			ID:     vectorItem.Key.ItemID,
+			Vector: *vectorItem.Value,
+		})
+		keys = append(keys, vectorItem.Key)
+
+		if ok, err := arch.Vectors.Next(ctx); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+	}
+
+	if len(items) < 2 {
+		return fmt.Errorf("centroid %d has %d vectors, not enough to split", centroidID, len(items))
+	}
+
+	// 2. Perform 2-Means Clustering using robust KMeans++
+	newCentroidsMap, err := ComputeCentroids(items, 2)
+	if err != nil {
+		return fmt.Errorf("kmeans failed: %w", err)
+	}
+
+	// 3. Create 2 New Centroids
+	newIDs := make([]int, 0, 2)
+	// We need 1 and 2 from ComputeCentroids
+	for i := 1; i <= 2; i++ {
+		if vec, exists := newCentroidsMap[i]; exists {
+			newID, err := di.AddCentroid(ctx, vec)
+			if err != nil {
+				return err
+			}
+			newIDs = append(newIDs, newID)
+		}
+	}
+
+	if len(newIDs) < 2 {
+		return fmt.Errorf("failed to generate 2 new centroids")
+	}
+
+	newCvecs := [][]float32{newCentroidsMap[1], newCentroidsMap[2]}
+
+	// 4. Reassign vectors
+	for i, item := range items {
+		oldKey := keys[i]
+
+		dist0 := euclideanDistance(item.Vector, newCvecs[0])
+		dist1 := euclideanDistance(item.Vector, newCvecs[1])
+
+		var newCID int
+		var dist float32
+		if dist0 < dist1 {
+			newCID = newIDs[0]
+			dist = dist0
+		} else {
+			newCID = newIDs[1]
+			dist = dist1
+		}
+
+		if found, _ := arch.Vectors.Find(ctx, oldKey, false); found {
+			if _, err := arch.Vectors.RemoveCurrentItem(ctx); err != nil {
+				return err
+			}
+		}
+
+		newKey := ai.VectorKey{CentroidID: newCID, DistanceToCentroid: dist, ItemID: oldKey.ItemID}
+		if _, err := arch.Vectors.Add(ctx, newKey, item.Vector); err != nil {
+			return err
+		}
+
+		contentKey := ai.ContentKey{ItemID: oldKey.ItemID}
+		if found, _ := arch.Content.Find(ctx, contentKey, false); found {
+			val, _ := arch.Content.GetCurrentValue(ctx)
+			updatedKey := ai.ContentKey{
+				ItemID:     oldKey.ItemID,
+				CentroidID: newCID,
+				Distance:   dist,
+				Version:    version,
+			}
+			if _, err := arch.Content.Upsert(ctx, updatedKey, val); err != nil {
+				return err
+			}
+		}
+
+		if di.config.UsageMode == ai.DynamicWithVectorCountTracking {
+			if foundC, _ := arch.Centroids.Find(ctx, newCID, false); foundC {
+				c, _ := arch.Centroids.GetCurrentValue(ctx)
+				c.VectorCount++
+				arch.Centroids.UpdateCurrentValue(ctx, c)
+			}
+		}
+	}
+
+	// 5. Delete Old Centroid
+	if found, _ := arch.Centroids.Find(ctx, centroidID, false); found {
+		if _, err := arch.Centroids.RemoveCurrentItem(ctx); err != nil {
+			return err
+		}
+	}
+
+	if di.centroidsCache != nil {
+		delete(di.centroidsCache, centroidID)
+	}
+
+	return nil
 }

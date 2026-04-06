@@ -829,13 +829,24 @@
             </div>
 
             <div class="form-group" style="margin-top: 15px; margin-bottom: 0px;">
-                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                    <input type="checkbox" id="setup-populate-demo" style="width: auto;">
-                    <span>Populate with Demo Data (E-commerce)</span>
-                </label>
-                <small style="display: block; margin-top: 5px; color: var(--text-muted);">
-                    Optional: Creates 'users', 'products', and 'orders' stores with sample data. Ideal for testing AI chat and scripts.
-                </small>
+                <label style="font-weight: bold; margin-bottom: 5px; display: block;">Expertise Examples for Pre-loading:</label>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="setup-populate-demo" style="width: auto;">
+                        <span>E-commerce Demo Data</span>
+                    </label>
+                    <small style="display: block; margin-top: -5px; color: var(--text-muted); padding-left: 24px;">
+                        Creates 'users', 'products', and 'orders' stores with sample data. Ideal for testing AI chat and scripts.
+                    </small>
+                    
+                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                        <input type="checkbox" id="setup-populate-medical" style="width: auto;">
+                        <span>Medical Expert (Nurse/Doctor) KB</span>
+                    </label>
+                    <small style="display: block; margin-top: -5px; color: var(--text-muted); padding-left: 24px;">
+                        Pre-loads a medical knowledge base index for diagnosing illnesses, reviewing medical history, and "doctor in the house" Q&A use-cases.
+                    </small>
+                </div>
             </div>
         </div>
 
@@ -1004,20 +1015,73 @@ export OPENAI_MODEL="gpt-4-turbo"
 
             </div>
 
-            <!-- LLM API Key -->
-            <div style="margin-bottom: 15px;">
-                <label style="display: block; margin-bottom: 5px; font-weight: bold;">LLM API Key (Optional)</label>
-                <div style="display: flex; gap: 10px;">
-                     <input type="password" id="setup-llm-api-key" placeholder="Enter LLM API Key (Start with 'sk-' for OpenAI, otherwise Gemini)" style="flex: 1;">
+            <!-- AI Engine Settings -->
+            <h4 style="margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">AI Engine Configuration</h4>
+            
+            <!-- Brain (Generator) Settings -->
+            <div style="margin-bottom: 15px; padding: 10px; background: var(--pre-bg); border-radius: 4px;">
+                <label style="display: block; font-weight: bold; margin-bottom: 8px;">LLM / Brain</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    <div>
+                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">Provider:</label>
+                        <select id="setup-brain-provider" style="width: 100%; padding: 4px;">
+                            <option value="">Auto / Default</option>
+                            <option value="gemini">Google Gemini</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="ollama">Ollama (Local)</option>
+                            <option value="anthropic">Anthropic</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">Model Name:</label>
+                        <input type="text" id="setup-brain-model" placeholder="e.g. gemma2, gpt-4o" style="width: 100%; padding: 4px;">
+                    </div>
                 </div>
-                <div style="margin-top: 5px; font-size: 11px;">
-                    Get Key: 
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--active-bg);">Google Gemini</a> | 
-                    <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--active-bg);">OpenAI GPT</a>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">Base URL (Local/Custom):</label>
+                        <input type="text" id="setup-brain-url" placeholder="e.g. http://localhost:11434" style="width: 100%; padding: 4px;">
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">API Key:</label>
+                        <input type="password" id="setup-brain-api-key" placeholder="Enter API Key" style="width: 100%; padding: 4px;">
+                    </div>
                 </div>
-                <small style="color: var(--text-muted); display: block; margin-top: 5px;">Required for AI Copilot. Leave empty if you have LLM api key set in environment.</small>
             </div>
 
+            <!-- Embedder Settings -->
+            <div style="margin-bottom: 15px; padding: 10px; background: var(--pre-bg); border-radius: 4px;">
+                <label style="display: block; font-weight: bold; margin-bottom: 8px;">Embedder (Vector Generator)</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    <div>
+                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">Provider:</label>
+                        <select id="setup-embedder-provider" style="width: 100%; padding: 4px;">
+                            <option value="">Same as Brain / Default</option>
+                            <option value="gemini">Google Gemini</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="ollama">Ollama (Local)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">Model Name:</label>
+                        <input type="text" id="setup-embedder-model" placeholder="e.g. nomic-embed-text" style="width: 100%; padding: 4px;">
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div>
+                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">Base URL (Local/Custom):</label>
+                        <input type="text" id="setup-embedder-url" placeholder="e.g. http://localhost:11434" style="width: 100%; padding: 4px;">
+                    </div>
+                    <div>
+                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">API Key:</label>
+                        <input type="password" id="setup-embedder-api-key" placeholder="Enter API Key" style="width: 100%; padding: 4px;">
+                    </div>
+                </div>
+            </div>
+            <div style="margin-bottom: 15px;">
+                <small style="color: var(--text-muted);">Get Keys: <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--active-bg);">Google Gemini</a> | <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--active-bg);">OpenAI</a></small><br/>
+                <small style="color: var(--text-muted);">Leave API Keys empty if set in the environment variables (e.g., GEMINI_API_KEY).</small>
+            </div>
             <div id="setup-summary" style="background: var(--pre-bg); padding: 15px; border-radius: 4px; font-family: monospace; margin-bottom: 15px;">
                 <!-- Summary populated by JS -->
             </div>
@@ -1041,6 +1105,23 @@ export OPENAI_MODEL="gpt-4-turbo"
 </div>
 {{template "modals" .}}
 {{template "scripts" .}}
+<div id="setup-loading-modal" class="modal" style="display: none; z-index: 10000; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); align-items: center; justify-content: center;">
+    <div style="background: var(--bg-color); padding: 40px; border-radius: 8px; text-align: center; border: 1px solid var(--border-color); width: 80%; max-width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; margin: auto; position: relative; top: 50%; transform: translateY(-50%);">
+        <h2 style="margin-top: 0; color: var(--text-color);">Initializing System</h2>
+        <p id="setup-loading-message" style="color: var(--text-muted); margin-bottom: 20px;">Creating databases and preparing environment...</p>
+        
+        <div style="width: 100%; background: var(--pre-bg); border-radius: 4px; height: 12px; overflow: hidden; margin-bottom: 10px; border: 1px solid var(--border-color);">
+            <div id="setup-progress-bar" style="width: 0%; height: 100%; background: var(--active-bg); transition: width 0.5s ease;"></div>
+        </div>
+        
+        <div id="setup-loading-details" style="font-family: monospace; font-size: 12px; color: var(--text-muted); text-align: left; height: 60px; overflow-y: hidden; width: 100%;">
+        </div>
+        <div style="margin-top: 20px; display: inline-block; width: 30px; height: 30px; border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: var(--active-bg); animation: spin 1s ease-in-out infinite;"></div>
+    </div>
+</div>
+<style>
+@keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
 <div id="environments-modal" class="modal">
     <div class="modal-content" style="max-width: 500px;">
         <div class="modal-header">

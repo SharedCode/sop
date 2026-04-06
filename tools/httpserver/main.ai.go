@@ -156,26 +156,20 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		req.SessionID = uuid.New().String() // Client lifecycle zero-day bootstrapping
 	}
 
-	activeSessionsMu.RLock()
-	sessionAgent, ok := activeSessions[req.SessionID]
-	activeSessionsMu.RUnlock()
-
-	if ok {
-		agentSvc = sessionAgent
-		log.Debug("Found active session for client", "session_id", req.SessionID)
-	} else {
+	agentSvc, sessionMu := activeSessions.GetOrCreate(req.SessionID, func() ai.Agent[map[string]any] {
 		if cloneable, ok := blueprint.(interface {
 			Clone() ai.Agent[map[string]any]
 		}); ok {
-			agentSvc = cloneable.Clone()
 			log.Debug("Cloned new pristine agent instance for session", "session_id", req.SessionID)
-		} else {
-			agentSvc = blueprint // Fallback if not cloneable
+			return cloneable.Clone()
 		}
-		activeSessionsMu.Lock()
-		activeSessions[req.SessionID] = agentSvc
-		activeSessionsMu.Unlock()
-	}
+		return blueprint // Fallback if not cloneable
+	})
+
+	// Uniqueness / creation has been safely handled.
+	// We MUST lock the agent before asking it anything, else concurrent requests on the same ID scramble it!
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
 
 	// Always enforce uniqueness and tell the client their active session ID
 	// BEFORE long LLM wait so they can anchor to it immediately.
@@ -248,8 +242,8 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// Prepend context information to the message
 	fullMessage := req.Message
 	// Only prepend context if it's not a system command
-msgTrimmed := strings.TrimSpace(req.Message)
-if req.Database != "" && !strings.HasPrefix(msgTrimmed, "/") && msgTrimmed != "last-tool" && msgTrimmed != "last_tool" {
+	msgTrimmed := strings.TrimSpace(req.Message)
+	if req.Database != "" && !strings.HasPrefix(msgTrimmed, "/") && msgTrimmed != "last-tool" && msgTrimmed != "last_tool" {
 		fullMessage = fmt.Sprintf("Current Database: %s\n%s", req.Database, req.Message)
 	}
 
@@ -634,6 +628,44 @@ func seedLLMKnowledge(ctx context.Context, db *aidb.Database) {
 		}
 	}
 
+	// Try to locate and seed compiled SOP documentation (produced by CI/CD)
+	baseKnowledge := "sop_base_knowledge.json"
+	// Also fallback check `../sop_base_knowledge.json` or `../../` in dev
+	pathsToTry := []string{
+		baseKnowledge,
+		filepath.Join("..", baseKnowledge),
+		filepath.Join("..", "..", baseKnowledge),
+	}
+	var data []byte
+	for _, p := range pathsToTry {
+		if d, err := os.ReadFile(p); err == nil {
+			data = d
+			break
+		}
+	}
+
+	if data != nil {
+		var chunks []struct {
+			Category string `json:"category"`
+			Title    string `json:"title"`
+			Content  string `json:"content"`
+		}
+		if err := json.Unmarshal(data, &chunks); err == nil {
+			seededCount := 0
+			for _, chunk := range chunks {
+				k := agent.KnowledgeKey{Category: chunk.Category, Name: chunk.Title}
+				if _, err := store.Upsert(ctx, k, chunk.Content); err != nil {
+					log.Error("Failed to seed base knowledge chunk", "category", chunk.Category, "name", chunk.Title, "error", err)
+				} else {
+					seededCount++
+				}
+			}
+			log.Info(fmt.Sprintf("Seeded %d pieces of base SOP architectural knowledge.", seededCount))
+		} else {
+			log.Error(fmt.Sprintf("Failed to Unmarshal base knowledge JSON: %v", err))
+		}
+	}
+
 	tx.Commit(ctx)
 }
 
@@ -676,10 +708,8 @@ func loadAgent(ctx context.Context, key, configPath string) {
 		}
 	}
 
-	// Apply Global LLM API Key if provided in HTTP Config
-	if config.LLMApiKey != "" {
-		injectAPIKey(cfg, config.LLMApiKey)
-	}
+	// Apply Global config (LLM API Key, text embedders, etc)
+	injectGlobalConfig(cfg, &config)
 
 	// Apply Global Obfuscation Mode if specified in HTTP Config
 	// We do NOT update the agent config anymore, instead we calculate the per-database flag below
@@ -850,16 +880,71 @@ func (e *DefaultToolExecutor) Execute(ctx context.Context, tool string, args map
 	return "", fmt.Errorf("tool '%s' not found or no executor available", tool)
 }
 
-func injectAPIKey(cfg *agent.Config, apiKey string) {
-	if cfg.Generator.Type == "gemini" {
+func injectGlobalConfig(cfg *agent.Config, globalCfg *Config) {
+	if cfg == nil || globalCfg == nil {
+		return
+	}
+
+	// 1. Brain Config
+	if globalCfg.BrainProvider != "" {
+		cfg.Generator.Type = globalCfg.BrainProvider
+		if cfg.Generator.Options == nil {
+			cfg.Generator.Options = make(map[string]any)
+		}
+		if globalCfg.BrainModel != "" {
+			cfg.Generator.Options["model"] = globalCfg.BrainModel
+		}
+		if globalCfg.BrainURL != "" {
+			cfg.Generator.Options["base_url"] = globalCfg.BrainURL
+		}
+		if globalCfg.BrainAPIKey != "" {
+			cfg.Generator.Options["api_key"] = globalCfg.BrainAPIKey
+		}
+	} else if cfg.Generator.Type == "gemini" && globalCfg.LLMApiKey != "" {
 		if cfg.Generator.Options == nil {
 			cfg.Generator.Options = make(map[string]any)
 		}
 		// Only override if not set (or should we strictly override?)
 		// Let's force override for now as the global config is likely the user's intent
-		cfg.Generator.Options["api_key"] = apiKey
+		cfg.Generator.Options["api_key"] = globalCfg.LLMApiKey
 	}
 
+	// 2. Embedder Config
+	if globalCfg.EmbedderProvider != "" {
+		cfg.Embedder.Type = globalCfg.EmbedderProvider
+		if cfg.Embedder.Options == nil {
+			cfg.Embedder.Options = make(map[string]any)
+		}
+		if globalCfg.EmbedderModel != "" {
+			cfg.Embedder.Options["model"] = globalCfg.EmbedderModel
+		}
+		if globalCfg.EmbedderURL != "" {
+			cfg.Embedder.Options["base_url"] = globalCfg.EmbedderURL
+		}
+		if globalCfg.EmbedderAPIKey != "" {
+			cfg.Embedder.Options["api_key"] = globalCfg.EmbedderAPIKey
+		}
+	} else {
+		// Legacy Fallback
+		if cfg.Embedder.Type == "gemini" && globalCfg.LLMApiKey != "" {
+			if cfg.Embedder.Options == nil {
+				cfg.Embedder.Options = make(map[string]any)
+			}
+			cfg.Embedder.Options["api_key"] = globalCfg.LLMApiKey
+		} else if cfg.Embedder.Type == "ollama" {
+			if globalCfg.OllamaEmbedderURL != "" || globalCfg.OllamaEmbedderModel != "" {
+				if cfg.Embedder.Options == nil {
+					cfg.Embedder.Options = make(map[string]any)
+				}
+				if globalCfg.OllamaEmbedderURL != "" {
+					cfg.Embedder.Options["base_url"] = globalCfg.OllamaEmbedderURL
+				}
+				if globalCfg.OllamaEmbedderModel != "" {
+					cfg.Embedder.Options["model"] = globalCfg.OllamaEmbedderModel
+				}
+			}
+		}
+	}
 	// Recursive injection
 	for i := range cfg.Agents {
 		// We need to take address of slice element to modify it
@@ -868,7 +953,7 @@ func injectAPIKey(cfg *agent.Config, apiKey string) {
 		// We can't easily recurse efficiently on value type slices in Go without pointers or rewriting the slice.
 		// cfg.Agents is []Config (values).
 		subCfg := &cfg.Agents[i]
-		injectAPIKey(subCfg, apiKey)
+		injectGlobalConfig(subCfg, globalCfg)
 	}
 }
 
@@ -1015,4 +1100,25 @@ func handleAIFeedback(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "id": id})
+}
+
+// handleCloseSession allows explicitly closing an active session.
+func handleCloseSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sessionID := r.URL.Query().Get("session_id")
+	if sessionID == "" {
+		http.Error(w, "query param session_id is required", http.StatusBadRequest)
+		return
+	}
+
+	activeSessions.Close(sessionID)
+	log.Info("Closed session explicitly", "session_id", sessionID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"success", "message":"Session closed successfully"}`))
 }

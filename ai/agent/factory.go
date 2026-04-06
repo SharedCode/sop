@@ -50,7 +50,10 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 		baseURL, _ := cfg.Embedder.Options["base_url"].(string)
 		model, _ := cfg.Embedder.Options["model"].(string)
 		emb = embed.NewOllama(baseURL, model)
-
+	case "gemini":
+		apiKey, _ := cfg.Embedder.Options["api_key"].(string)
+		model, _ := cfg.Embedder.Options["model"].(string)
+		emb = embed.NewGemini(apiKey, model)
 	default:
 		// Default: Simple Embedder with domain-specific synonyms
 		// We use a higher dimensionality (1024) to reduce collisions in the simple hash embedder

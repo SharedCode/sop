@@ -95,6 +95,7 @@ func (m *MockVectorStore) Query(ctx context.Context, vec []float32, k int, filte
 func (m *MockVectorStore) Count(ctx context.Context) (int64, error)                    { return 0, nil }
 func (m *MockVectorStore) AddCentroid(ctx context.Context, vec []float32) (int, error) { return 0, nil }
 func (m *MockVectorStore) Optimize(ctx context.Context) error                          { return nil }
+func (m *MockVectorStore) Consolidate(ctx context.Context) error                       { return nil }
 func (m *MockVectorStore) SetDeduplication(enabled bool)                               {}
 func (m *MockVectorStore) Centroids(ctx context.Context) (btree.BtreeInterface[int, ai.Centroid], error) {
 	return nil, nil
@@ -264,4 +265,9 @@ func TestService_Ask_NoObfuscation(t *testing.T) {
 	if result != "Some response with DB_123" {
 		t.Errorf("Expected raw response 'Some response with DB_123', got '%s'", result)
 	}
+}
+
+// SplitCentroid mocks the base method.
+func (m *MockVectorStore) SplitCentroid(ctx context.Context, centroidID int) error {
+	return nil
 }

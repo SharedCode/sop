@@ -2,7 +2,13 @@
 
 Welcome to the "Green Field" of AI development. 
 
-In this tutorial, we will build a privacy-first, local AI Expert System using the **SOP (Scalable Objects Persistence)** library. We will implement the **"Doctor & Nurse"** pattern—a dual-agent architecture that runs entirely on your machine (or cluster) with zero API fees.
+In this tutorial, we will build a real-world **RAG (Retrieval-Augmented Generation)** Expert System using the **SOP (Scalable Objects Persistence)** library powered by **Google Gemini**. We will accomplish this by implementing a **"Doctor & Nurse"** pattern.
+
+This acts as a full, live RAG pipeline:
+1. **Embedding Stage (Text-to-Vector)**: We use Gemini (`gemini-embedding-001`) to vectorize textual queries.
+2. **Retrieval**: We query the local SOP vector database securely using Hybrid Search (BM25 + Semantic Vector search).
+3. **Context-Aware Ranking (Active Memory)**: The BM25+Vector scoring algorithm evaluates the current `Active Memory` thread (what the user was just talking about). Matching documents get a mathematical multiplier to prioritize them, preventing the pipeline from "forgetting" the ongoing diagnosis context between prompts.
+4. **Generation**: We use the Gemini LLM as the main agent ("The Doctor") to reason over the retrieved documents and offer diagnosis.
 
 ## The Concept: Why Two Agents?
 
@@ -352,30 +358,32 @@ Now you can run your agent using the pre-populated database:
 
 ## Step 8: Running the Full Example
 
-We have included a complete, working example in the repository. You can build the tools, ingest the data, and run the "Doctor & Nurse" agents with a single script.
+We have included a complete, working example in the repository. You can build the tools, ingest the data, and run the "Doctor & Nurse" agents in an interactive terminal REPL using Google's Gemini Flash.
 
 ### 1. Run the Rebuild Script
-The `rebuild_doctor.sh` script performs the following:
-1.  **Builds** the `sop-etl` and `sop-ai` binaries.
-2.  **Cleans** up old data.
-3.  **Runs** the ETL workflow defined in `etl_workflow.json`.
-4.  **Runs** sanity tests.
+The `run_demo_gemini.sh` script performs the following:
+1.  **Sets** up API keys and dependencies.
+2.  **Cleans** up old data stores.
+3.  **Runs** the ETL workflow to index dataset symptoms via `go run...` with built-in Gemini Rate Limits retry logic.
+4.  **Automatically launches** the interactive doctor REPL.
 
 ```bash
-cd ai
-./rebuild_doctor.sh
+./run_demo_gemini.sh
 ```
 
-### 2. Chat with the Doctor
-Once the rebuild is complete, you can start the interactive agent loop:
+### 2. Or Chat with the Doctor Manually
+Once the knowledge base is built from the bash script above, you can start the interactive agent loop independently any time using:
 
 ```bash
-./sop-ai -config data/doctor_pipeline.json
+go run ai/cmd/demo_doctor/main.go
 ```
 
-**The script runs these sanity checks:**
-*   "I have a tummy hurt and feel hot" (Verifies "nurse" translation of "tummy hurt" -> "abdominal pain" and "hot" -> "fever")
-*   "I have a bad cough and a runny nose" (Verifies "doctor" detection of Common Cold symptoms)
+**What happens in the REPL:**
+*   You type: "I have a bad cough and a runny nose"
+*   The REPL leverages Gemini to embed your query.
+*   It performs Hybrid Search (Vector + BM25) across your local DB.
+*   The RRF engine scores result sets—multiplying and prioritizing matches mathematically bound to your **Active Memory** thread topics.
+*   The agent generates an educated medical diagnostic based on actual vector matches and its system instructions.
 
 ## Step 9: The Developer's Toolkit (Go API)
 

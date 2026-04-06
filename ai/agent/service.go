@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	log "log/slog"
@@ -22,7 +23,7 @@ import (
 const (
 	// KnowledgeStore is the name of the B-tree store used to persist learned rules, vocabulary, and corrections.
 	// This store resides in the System Database configured for the agent.
-	KnowledgeStore = "llm_knowledge"
+	KnowledgeStore = "memory"
 	// MRUKnowledgeStore is the name of the store that tracks "active" or "relevant" knowledge categories/items.
 	// This acts as a Working Memory Index, telling the agent what to pre-load from Long Term Memory.
 	// Keys are "{Category}/{Name}" or just "{Category}", Values are Timestamps/Scores.
@@ -42,6 +43,7 @@ type Service struct {
 	EnableObfuscation bool
 	// Feature Flags
 	EnableHistoryInjection bool
+	EnableActiveMemory     bool
 
 	// Session State
 	session *RunnerSession
@@ -108,6 +110,8 @@ func (s *Service) Clone() ai.Agent[map[string]any] {
 // SetFeature allows toggling of agent features at runtime.
 func (s *Service) SetFeature(feature string, enabled bool) {
 	switch feature {
+	case "active_memory":
+		s.EnableActiveMemory = enabled
 	case "history_injection":
 		s.EnableHistoryInjection = enabled
 	case "obfuscation":
@@ -366,29 +370,53 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 		return nil, fmt.Errorf("domain %s has no index configured: %w", s.domain.ID(), err)
 	}
 
-	// Vector Search
-	vectorHits, err := idx.Query(ctx, vecs[0], limit, nil)
-	if err != nil {
-		return nil, fmt.Errorf("vector query failed: %w", err)
-	}
-
-	// Text Search
-	textIdx, err := s.domain.TextIndex(ctx, tx)
-	var textHits []search.TextSearchResult
-	if err == nil && textIdx != nil {
-		textHits, err = textIdx.Search(ctx, query)
-		if err != nil {
-			// Log error but continue with vector results?
-			// For now, let's treat it as non-fatal if text index is missing or fails,
-			// but maybe we should log it.
-			log.Warn("Text search failed", "error", err)
-		}
-	}
-
 	// Hybrid Fusion (RRF)
+	var wg sync.WaitGroup
+	var vectorHits []ai.Hit[map[string]any]
+	var vecErr error
+	var textHits []search.TextSearchResult
+	var textErr error
+
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		// Vector Search
+		vectorHits, vecErr = idx.Query(ctx, vecs[0], limit, nil)
+	}()
+
+	go func() {
+		defer wg.Done()
+		// Text Search
+		textIdx, err := s.domain.TextIndex(ctx, tx)
+		if err == nil && textIdx != nil {
+			textHits, textErr = textIdx.Search(ctx, query)
+		}
+	}()
+
+	wg.Wait()
+
+	if vecErr != nil {
+		return nil, fmt.Errorf("vector query failed: %w", vecErr)
+	}
+	if textErr != nil {
+		log.Warn("Text search failed", "error", textErr)
+	}
+
 	k := 60.0
 	scores := make(map[string]float64)
 	payloads := make(map[string]map[string]any)
+
+	// Identify Active Memory concepts from conversation to boost relevance
+	activeContext := make(map[string]bool)
+	if s.session != nil && s.session.Memory != nil {
+		for _, threadID := range s.session.Memory.Order {
+			if thread, ok := s.session.Memory.Threads[threadID]; ok {
+				// Add topic or concept IDs to active memory map
+				activeContext[thread.Category] = true
+			}
+		}
+	}
 
 	// Process Vector Hits
 	for rank, hit := range vectorHits {
@@ -677,7 +705,7 @@ func (s *Service) getLLMKnowledge(ctx context.Context) string {
 	}
 
 	// Add tip about how to get more
-	sb.WriteString("Note: Extended knowledge (schemas, other domains) is available via 'manage_knowledge' tool (action='read' or search).\n")
+	sb.WriteString("Note: Extended knowledge (schemas, other domains) is available via explicit namespace search.\n")
 
 	return sb.String()
 }
@@ -985,17 +1013,14 @@ You are capable of managing the conversation flow.
 `
 	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, conversationProtocol)
 
-	// [Active Learning Protocol]
+	// [Active Memory Protocol]
 	learningProtocol := `
-[Active Learning & Refinement Protocol]
-You are a self-correcting agent. If the user corrects your output, provides a definition, or establishes a preference (e.g., "Use 'Client' instead of 'User'", "Always check X before Y"):
+[Active Memory & Refinement Protocol]
+You are a self-correcting agent integrated with an automated "Active Memory" system. 
+When the user corrects your output, provides a definition, or establishes a preference (e.g., "Use 'Client' instead of 'User'", "Always check X before Y"):
 1. ACKNOWLEDGE the correction.
-2. IMMEDIATELY use the 'manage_knowledge' tool to save this rule for future consistency.
-   - For synonyms/renaming: Use namespace="vocabulary", key="term_name", value={"target": "preferred_term", "type": "synonym"}.
-   - For logic/process rules: Use namespace="rule", key="rule_name", value={"condition": "context description", "instruction": "the rule content"}.
-   - For fixing mistakes: Use namespace="correction", key="error_name", value={"error": "what you did wrong", "fix": "what to do instead"}.
-3. CONFIRM to the user that this has been memorized.
-   Example: "I have updated my knowledge base: 'Cost' will now be interpreted as 'TotalAmount'."
+2. Execute the correctly revised action (if applicable) immediately. Your validated actions, intents, and AST payloads are AUTOMATICALLY embedded into Active Memory by the system backend—you do NOT need to call any manual save tools.
+3. Because the system tracks your successful workflow episodes, simply applying the user's feedback once guarantees the system will autonomously recall the corrected approach for future queries. 
 `
 	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, learningProtocol)
 
@@ -1053,7 +1078,7 @@ You are a self-correcting agent. If the user corrects your output, provides a de
 	}
 
 	// DEBUG: Log the full prompt to understand context contamination
-	log.Info("Service.Ask: Full Prompt", "prompt", fullPrompt)
+	// log.Info("Service.Ask: Full Prompt", "prompt", fullPrompt)
 
 	// 3. Determine Generator
 	gen := s.generator
@@ -1244,6 +1269,14 @@ You are a self-correcting agent. If the user corrects your output, provides a de
 					}
 					s.session.Transaction = nil
 					s.session.Variables = nil
+				}
+
+				// [Phase 2] Active Memory Episodic Ingestion
+				if s.EnableActiveMemory && toolCall.Tool == "execute_script" {
+					scriptPayload := toolCall.Args["script"]
+					episodeOutcome := result
+					episodeErr := err
+					go s.logEpisode(context.Background(), query, scriptPayload, episodeOutcome, episodeErr)
 				}
 
 				if err != nil {

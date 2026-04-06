@@ -115,10 +115,19 @@ type VectorStore[T any] interface {
 	// This allows for runtime expansion of the concept space without full rebalancing.
 	AddCentroid(ctx context.Context, vec []float32) (int, error)
 
+	// SplitCentroid reorganizes an overloaded centroid by running localized 2-Means
+	// clustering, creating two new centroids, and reassigning its vectors.
+	SplitCentroid(ctx context.Context, centroidID int) error
+
 	// Optimize reorganizes the index to improve query performance.
 	// It re-calculates centroids based on the full dataset and re-distributes vectors.
 	// This is recommended after a large batch ingestion (BuildOnceQueryMany mode) to "Seal" the index.
 	Optimize(ctx context.Context) error
+
+	// Consolidate reads accumulated vectors from short-term memory (TempVectors),
+	// dynamically routes them into existing Centroids using AssignAndIndex logic,
+	// and clears them from short-term memory.
+	Consolidate(ctx context.Context) error
 
 	// SetDeduplication enables or disables the internal deduplication check during Upsert.
 	// Disabling this can speed up ingestion for pristine data but may lead to ghost vectors if duplicates exist.

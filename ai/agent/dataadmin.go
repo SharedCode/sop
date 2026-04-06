@@ -264,7 +264,7 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 	// Note: We no longer reset 'a.sessionContext' here because it is now session-scoped via valid Context.
 	// If isolation is needed between Ask calls in the same session, the caller (Service) should manage the SessionPayload.
 
-	// Refresh tools to ensure latest instructions from llm_knowledge are used
+	// Refresh tools to ensure latest instructions from memory are used
 	a.registerTools(ctx)
 
 	// Determine Generator to use (Dynamic Switching)
@@ -381,8 +381,15 @@ func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Optio
 		return "⚠️ **AI Copilot Disabled**: No valid API Key found.\n\nPlease go to **Environment Settings** (HDD icon in bottom left) -> **LLM API Key** to configure your Google Gemini or OpenAI key.", nil
 	}
 
-	// 1. Construct System Prompt with Tools
-	toolsDef := a.registry.GeneratePrompt()
+	// 1. Construct System Prompt with Persona & Tools
+	persona := "You are a general-purpose intelligent AI Copilot equipped with a human-like 'active memory' system. " +
+		"You are a true SOP (Scalable Object Platform) expert, natively empowered by the SOP database and fully knowledgeable in its entire architecture. " +
+		"Your core knowledge encompasses Databases, B-Trees, strict ACID Transactions, Swarm Computing, and advanced Storage mechanisms including Erasure Coding details. " +
+		"You have deep expertise in SOP scripting (AST-based execution), and the SOP HTTP API, covering request/response lifecycles, NDJSON streaming, and session management. " +
+		"You derive your foundational SOP knowledge, codebase context, and architectural principles directly from the source repository at https://github.com/sharedcode/sop. " +
+		"Assist users and developers throughout the SDLC dynamically with ANY open-ended request—whether answering general architectural questions, writing code, or managing database queries using the tools provided.\n\n"
+
+	toolsDef := persona + a.registry.GeneratePrompt()
 
 	// Append Scripts as Tools
 	if a.systemDB != nil {
@@ -501,20 +508,10 @@ CONVERSATION VS ACTION:
 CLIENT_SIDE ACTIONS:
 - To switch the active database context in the UI, do NOT use a tool. Instead, strictly output the following text in your final response: [[SWITCH_DATABASE: <db_name>]]. The frontend will detect this and perform the switch.
 
-SELF-CORRECTION & LEARNING:
-- **Decision Protocol (Context vs Research)**:
-  1. **Analyze Context**: Do you have all necessary schemas, definitions, and rules in the current prompt to answer the user?
-  2. **If YES**: Proceed immediately. Do NOT run 'manage_knowledge' needlessly.
-  3. **If NO**: Check the "Additional Knowledge Categories" list. If a category is relevant (e.g. user asks about 'Q3 targets' and you see 'sales_targets'), THEN run 'manage_knowledge(action=list, ...)' to fetch it.
-  4. **Ambiguity**: If a term is ambiguous (e.g. 'active user') and you lack a definition, consult the 'term' or domain-specific category.
-
-- **Categorization Rule**: When saving new knowledge, do NOT dump everything into 'term'. Create specific namespaces.
-  - GOOD: namespace="finance", key="fiscal_year_start"
-  - BAD: namespace="term", key="finance_fiscal_year_start"
-- **Schema Corrections**: If you discover a schema discrepancy (e.g., 'total_amount' vs 'total'), ALWAYS use namespace="schema".
-- **General Logic**: Use "memory" or "term" only for general instructions or glossary definitions.
-- Example: manage_knowledge(namespace="finance", key="q1_definition", value="Jan-Mar", action="upsert").
-- This allows you to remember this for future queries (e.g., "Find active users").
+SELF-CORRECTION & LEARNING (ACTIVE MEMORY):
+- Your pipeline is powered by an automated Context-Aware "Active Memory" backend.
+- When correcting mistakes or learning rules (e.g. "We use 'TotalAmount', not 'Cost'"), simply ACKNOWLEDGE the prompt. The vector retrieval backend natively handles the propagation of definitions without you needing to explicitly 'save' them.
+- Proceed immediately with corrected logic.
 `
 	toolsDef += a.getSystemInstructions(ctx, defaultInst)
 

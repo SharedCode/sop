@@ -33,13 +33,31 @@ type UserDBRequest struct {
 	Path            string              `json:"path"`
 	UseSharedDB     bool                `json:"use_shared_db"`
 	PopulateDemo    bool                `json:"populate_demo"`
+	PopulateMedical bool                `json:"populate_medical"`
 	DatabaseOptions sop.DatabaseOptions `json:"options"`
 }
 
 type SaveConfigRequest struct {
-	RegistryPath   string              `json:"registry_path"`
-	Port           int                 `json:"port"`
-	LLMApiKey      string              `json:"llm_api_key"`
+	RegistryPath string `json:"registry_path"`
+	Port         int    `json:"port"`
+
+	// LLM Brain Options
+	BrainProvider string `json:"brain_provider"` // "gemini", "openai", "ollama"
+	BrainModel    string `json:"brain_model"`    // "gemini-1.5-flash", "gpt-4", "llama3"
+	BrainURL      string `json:"brain_url"`      // e.g. "http://localhost:11434"
+	BrainAPIKey   string `json:"brain_api_key"`  // For cloud providers
+
+	// Embedder Options
+	EmbedderProvider string `json:"embedder_provider"` // "gemini", "openai", "ollama", "simple"
+	EmbedderModel    string `json:"embedder_model"`    // "nomic-embed-text", "text-embedding-3-small"
+	EmbedderURL      string `json:"embedder_url"`      // For ollama
+	EmbedderAPIKey   string `json:"embedder_api_key"`  // For cloud providers
+
+	// Legacy backwards compatibility (or we can just replace them entirely)
+	LLMApiKey           string `json:"llm_api_key"`
+	OllamaEmbedderURL   string `json:"ollama_embedder_url"`
+	OllamaEmbedderModel string `json:"ollama_embedder_model"`
+
 	UseSharedBrain bool                `json:"use_shared_brain"`
 	SystemOptions  sop.DatabaseOptions `json:"system_options"`
 	Databases      []UserDBRequest     `json:"databases"`
@@ -72,8 +90,42 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 	if req.Port > 0 {
 		config.Port = req.Port
 	}
+
+	// Legacy
 	if req.LLMApiKey != "" {
 		config.LLMApiKey = req.LLMApiKey
+	}
+	if req.OllamaEmbedderURL != "" {
+		config.OllamaEmbedderURL = req.OllamaEmbedderURL
+	}
+	if req.OllamaEmbedderModel != "" {
+		config.OllamaEmbedderModel = req.OllamaEmbedderModel
+	}
+
+	// New AI Config
+	if req.BrainProvider != "" {
+		config.BrainProvider = req.BrainProvider
+	}
+	if req.BrainModel != "" {
+		config.BrainModel = req.BrainModel
+	}
+	if req.BrainURL != "" {
+		config.BrainURL = req.BrainURL
+	}
+	if req.BrainAPIKey != "" {
+		config.BrainAPIKey = req.BrainAPIKey
+	}
+	if req.EmbedderProvider != "" {
+		config.EmbedderProvider = req.EmbedderProvider
+	}
+	if req.EmbedderModel != "" {
+		config.EmbedderModel = req.EmbedderModel
+	}
+	if req.EmbedderURL != "" {
+		config.EmbedderURL = req.EmbedderURL
+	}
+	if req.EmbedderAPIKey != "" {
+		config.EmbedderAPIKey = req.EmbedderAPIKey
 	}
 
 	// 4. Setup System DB (I/O)
@@ -494,6 +546,14 @@ func setupUserDBs(ctx context.Context, req *SaveConfigRequest) ([]DatabaseConfig
 						log.Info(fmt.Sprintf("'system_check' store created for User DB '%s'", udb.Name))
 					}
 				}()
+			}
+
+			if udb.PopulateMedical {
+				if err := PopulateMedicalKnowledgeBase(ctx, uOpts); err != nil {
+					log.Error(fmt.Sprintf("Failed to populate medical KB for User DB '%s': %v", udb.Name, err))
+				} else {
+					log.Info(fmt.Sprintf("Medical knowledge base populated for User DB '%s'", udb.Name))
+				}
 			}
 		}
 

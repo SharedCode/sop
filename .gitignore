@@ -259,3 +259,4 @@ tools/httpserver/httpserver
 tools/httpserver/sop_server
 # Generated Headers
 bindings/**/libjsondb*.h
+ai/sop_base_knowledge.json

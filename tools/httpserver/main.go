@@ -16,7 +16,6 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -77,6 +76,20 @@ type Config struct {
 	// LLMApiKey is the default API key for AI Agents (e.g. Gemini).
 	LLMApiKey string `json:"llm_api_key,omitempty"`
 
+	// New Expanded Options
+	BrainProvider    string `json:"brain_provider,omitempty"`
+	BrainModel       string `json:"brain_model,omitempty"`
+	BrainURL         string `json:"brain_url,omitempty"`
+	BrainAPIKey      string `json:"brain_api_key,omitempty"`
+	EmbedderProvider string `json:"embedder_provider,omitempty"`
+	EmbedderModel    string `json:"embedder_model,omitempty"`
+	EmbedderURL      string `json:"embedder_url,omitempty"`
+	EmbedderAPIKey   string `json:"embedder_api_key,omitempty"`
+
+	// Ollama text embedder specific configuration (legacy fallback)
+	OllamaEmbedderURL   string `json:"ollama_embedder_url,omitempty"`
+	OllamaEmbedderModel string `json:"ollama_embedder_model,omitempty"`
+
 	// Legacy/CLI fields - Ignored in JSON to keep config clean
 	DatabasePath string `json:"-"`
 	Mode         string `json:"-"`
@@ -89,8 +102,7 @@ var content embed.FS
 
 var config Config
 var loadedAgents = make(map[string]ai.Agent[map[string]any])
-var activeSessions = make(map[string]ai.Agent[map[string]any])
-var activeSessionsMu sync.RWMutex
+var activeSessions = NewSessionManager(100)
 
 const SystemDBName = "system"
 
@@ -185,6 +197,7 @@ func main() {
 	http.HandleFunc("/api/store/item/delete", handleDeleteItem)
 	http.HandleFunc("/api/admin/validate", handleValidateAdminToken)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
+	http.HandleFunc("/api/ai/session/close", handleCloseSession)
 	http.HandleFunc("/api/ai/feedback", handleAIFeedback)
 	http.HandleFunc("/api/scripts/execute", withAuth(handleExecuteScript))
 
@@ -201,6 +214,17 @@ func main() {
 
 	// Initialize Agents
 	initAgents(context.Background())
+
+	// Start a background goroutine to clean up stale sessions every minute
+	go func() {
+		for {
+			time.Sleep(1 * time.Minute)
+			evicted := activeSessions.RemoveStale(2 * time.Hour) // 2 hour TTL for idle agents
+			if evicted > 0 {
+				log.Info("Background session cleanup evicted stale sessions", "count", evicted)
+			}
+		}
+	}()
 
 	// Start Server
 	addr := fmt.Sprintf(":%d", config.Port)
@@ -2362,10 +2386,10 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 	}
 
 	// Hardening: Prevent manual modification of critical System DB stores
-	// Users should not manually add items to llm_knowledge as it is managed by the AI/System
-	if IsSystemDB(req.Database) && req.StoreName == "llm_knowledge" {
+	// Users should not manually add items to memory as it is managed by the AI/System
+	if IsSystemDB(req.Database) && req.StoreName == "memory" {
 		if op == "add" {
-			http.Error(w, "Access Denied: The 'llm_knowledge' store is managed by the system. Manual additions are restricted.", http.StatusForbidden)
+			http.Error(w, "Access Denied: The 'memory' store is managed by the system. Manual additions are restricted.", http.StatusForbidden)
 			return
 		}
 	}

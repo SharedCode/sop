@@ -21,9 +21,21 @@
       "db_type": "standalone",
       "enable_ingestion_buffer": true,
       "auto_optimize": true,
+      "generator": {
+        "type": "gemini",
+        "options": {
+          "model": "gemini-2.5-flash"
+        }
+      },
+      "embedder": {
+        "type": "gemini",
+        "options": {
+          "model": "gemini-embedding-001"
+        }
+      },
       "requirements": {
         "vector_store": true,
-        "search": false,
+        "search": true,
         "model_store": false
       },
       "data": []
@@ -32,10 +44,6 @@
   "pipeline": [
     {
       "agent": "profanity_filter"
-    },
-    {
-      "agent": "nurse_local",
-      "output_to": "next_step"
     },
     {
       "agent": "doctor_core"

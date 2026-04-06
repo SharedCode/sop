@@ -116,8 +116,8 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open arch 1: %v", err)
 	}
-	if arch1.TempVectors != nil {
-		t.Fatal("TempVectors should be nil in Version 1")
+	if arch1.TempVectors == nil {
+		t.Fatal("TempVectors should NOT be nil in Version 1")
 	}
 
 	// Verify Item A is in Vectors (V1)
@@ -227,8 +227,8 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to open arch 2: %v", err)
 	}
-	if arch2.TempVectors != nil {
-		t.Fatal("TempVectors should be nil in Version 2")
+	if arch2.TempVectors == nil {
+		t.Fatal("TempVectors should NOT be nil in Version 2")
 	}
 
 	// Verify Item A is in Vectors V2

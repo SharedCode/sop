@@ -615,7 +615,7 @@
         // Protected Stores
         const storeName = info.name || currentStore;
         if (storeName === 'llm_feedback') return true;
-        if (isSystem && storeName === 'llm_knowledge') return true;
+        if (isSystem && storeName === 'memory') return true;
 
         const hasIndex = info.indexSpec && info.indexSpec.index_fields && info.indexSpec.index_fields.length > 0;
         const hasCel = !!info.celExpression;
@@ -654,7 +654,7 @@
         // Hardening: Disable delete for System DB and protected stores
         const dbObj = availableDatabases.find(d => d.name === currentDatabase);
         const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
-        const isProtectedStore = (name === 'llm_feedback' || name === 'llm_knowledge');
+        const isProtectedStore = (name === 'llm_feedback' || name === 'memory');
         
         if (isSystem || isProtectedStore) {
             deleteBtn.style.display = 'none';
@@ -890,14 +890,14 @@
         const isReadOnly = isStoreReadOnly(info);
 
         if (info.description !== "AI Models Registry" && !isReadOnly) {
-            // Hardening: Prevent adding items to llm_knowledge in System DB
+            // Hardening: Prevent adding items to memory in System DB
             // Determine if current DB is System DB using the flag from API
             const currentDbObj = availableDatabases.find(db => db.name === currentDatabase);
             const isSystemDB = currentDbObj ? currentDbObj.is_system : false;
 
             let allowAdd = true;
-            // llm_feedback is always read-only, llm_knowledge is read-only in system DBs
-            if (currentStore === 'llm_feedback' || (currentStore === 'llm_knowledge' && isSystemDB)) {
+            // llm_feedback is always read-only, memory is read-only in system DBs
+            if (currentStore === 'llm_feedback' || (currentStore === 'memory' && isSystemDB)) {
                 allowAdd = false;
             }
 
@@ -927,7 +927,7 @@
             // Determine reason for Read-Only to show correct message
             const r_dbObj = availableDatabases.find(db => db.name === currentDatabase);
             const r_isSystem = r_dbObj ? r_dbObj.is_system : false;
-            if (currentStore === 'llm_feedback' || (currentStore === 'llm_knowledge' && r_isSystem)) {
+            if (currentStore === 'llm_feedback' || (currentStore === 'memory' && r_isSystem)) {
                 warning.textContent = "⚠️ Read-Only (System Managed)";
                 warning.title = "This store is managed by the system. Manual additions/deletions are restricted to ensure stability.";
             } else {
@@ -1328,7 +1328,7 @@
 
         // Check read-only status for "Enable Selection / Bulk Delete"
         let isReadOnly = false;
-        if (currentStore === 'llm_feedback' || (isSystemDB && currentStore === 'llm_knowledge')) {
+        if (currentStore === 'llm_feedback' || (isSystemDB && currentStore === 'memory')) {
              isReadOnly = true;
         }
 
@@ -7558,6 +7558,7 @@
 
         const advToggle = document.getElementById('setup-db-advanced-toggle');
         const demoToggle = document.getElementById('setup-populate-demo'); 
+        const medicalToggle = document.getElementById('setup-populate-medical');
 
         if (toggle) {
             const advContainer = advToggle ? advToggle.closest('div') : null;
@@ -7591,6 +7592,12 @@
                     demoToggle.parentElement.title = "Cannot populate demo data when using shared/existing DB.";
                 }
                 
+                if (medicalToggle) {
+                    medicalToggle.checked = false;
+                    medicalToggle.disabled = true;
+                    medicalToggle.parentElement.title = "Cannot populate demo data when using shared/existing DB.";
+                }
+                
                 if (advToggle) {
                     advToggle.checked = false;
                     const opts = document.getElementById('setup-db-advanced-options');
@@ -7621,6 +7628,12 @@
                  if (demoToggle) {
                     demoToggle.disabled = false;
                     demoToggle.parentElement.title = "";
+                 }
+                 
+                 if (medicalToggle) {
+                    medicalToggle.disabled = false;
+                    medicalToggle.parentElement.title = "";
+                 }
                 }
             }
         }
@@ -7722,6 +7735,7 @@
             const dbType = document.getElementById('setup-db-type').value;
             const dbConn = document.getElementById('setup-db-conn').value;
             const populateDemo = document.getElementById('setup-populate-demo').checked;
+            const populateMedical = document.getElementById('setup-populate-medical').checked;
             
             // System Config (Step 2)
             const regPath = document.getElementById('setup-reg-path').value;
@@ -8026,12 +8040,19 @@
         const dbType = document.getElementById('setup-db-type').value;
         const dbConn = document.getElementById('setup-db-conn').value;
         const populateDemo = document.getElementById('setup-populate-demo').checked;
+        const populateMedical = document.getElementById('setup-populate-medical').checked;
 
         // 2. Determine System DB Settings (Simple vs Advanced)
         const port = parseInt(document.getElementById('setup-port').value);
-        const llmApiKey = document.getElementById('setup-llm-api-key').value.trim();
-        if (!port || isNaN(port) || port < 1 || port > 65535) return showAlert("Invalid Server Port (1-65535)");
-        
+        const bProvider = document.getElementById('setup-brain-provider') ? document.getElementById('setup-brain-provider').value : "";
+        const bModel = document.getElementById('setup-brain-model') ? document.getElementById('setup-brain-model').value.trim() : "";
+        const bUrl = document.getElementById('setup-brain-url') ? document.getElementById('setup-brain-url').value.trim() : "";
+        const bApiKey = document.getElementById('setup-brain-api-key') ? document.getElementById('setup-brain-api-key').value.trim() : "";
+
+        const eProvider = document.getElementById('setup-embedder-provider') ? document.getElementById('setup-embedder-provider').value : "";
+        const eModel = document.getElementById('setup-embedder-model') ? document.getElementById('setup-embedder-model').value.trim() : "";
+        const eUrl = document.getElementById('setup-embedder-url') ? document.getElementById('setup-embedder-url').value.trim() : "";
+        const eApiKey = document.getElementById('setup-embedder-api-key') ? document.getElementById('setup-embedder-api-key').value.trim() : "";
         const sysAdvToggle = document.getElementById('setup-sys-advanced-toggle');
         const isSysAdvanced = sysAdvToggle && sysAdvToggle.checked;
 
@@ -8150,6 +8171,7 @@
             path: dbPath,
             use_shared_db: manualDBToggle ? manualDBToggle.checked : false,
             populate_demo: populateDemo,
+            populate_medical: populateMedical,
             options: userOptions
         };
 
@@ -8157,11 +8179,57 @@
         const finalPayload = {
             registry_path: regPath,
             port: port,
-            llm_api_key: llmApiKey,
+            brain_provider: bProvider,
+            brain_model: bModel,
+            brain_url: bUrl,
+            brain_api_key: bApiKey,
+            embedder_provider: eProvider,
+            embedder_model: eModel,
+            embedder_url: eUrl,
+            embedder_api_key: eApiKey,
             use_shared_brain: manualEntToggle ? manualEntToggle.checked : false,
             system_options: systemOptions,
             databases: [ userDBRequest ]
         };
+
+        // UI Loading State (Synchronous wait for the heavy DBs)
+        const loadingModal = document.getElementById('setup-loading-modal');
+        const pb = document.getElementById('setup-progress-bar');
+        const pbDetails = document.getElementById('setup-loading-details');
+        
+        if (loadingModal) {
+            loadingModal.style.display = 'block';
+            document.getElementById('setup-wizard').style.display = 'none';
+            pb.style.width = '10%';
+            pbDetails.innerHTML = '- Initializing config save...<br>';
+            
+            // Faux progress steps since response is monolithic
+            let pTicks = 0;
+            const maxTicks = 10;
+            const progressItl = setInterval(() => {
+                pTicks++;
+                if (pTicks === 2) {
+                    pb.style.width = '30%';
+                    pbDetails.innerHTML += '- Creating System & User Data Stores...<br>';
+                } else if (pTicks === 4 && (populateDemo || populateMedical)) {
+                    pb.style.width = '50%';
+                    pbDetails.innerHTML += '- Pre-loading specified expertise datasets...<br>';
+                    document.getElementById('setup-loading-message').innerText = 'Loading expertise - this may take a bit...';
+                } else if (pTicks === 7 && populateMedical) {
+                    pb.style.width = '70%';
+                    pbDetails.innerHTML += '- Compiling medical semantic models...<br>';
+                } else if (pTicks === 8 && populateDemo) {
+                    pb.style.width = '85%';
+                    pbDetails.innerHTML += '- Inserting demo records...<br>';
+                } else if (pTicks >= 10) {
+                    pb.style.width = '95%';
+                    pbDetails.innerHTML += '- Waiting for final DB persistence sync...<br>';
+                    clearInterval(progressItl);
+                }
+            }, 1500);
+            
+            window._setupProgressItl = progressItl;
+        }
 
         // 1. Single Atomic Save & Setup Call
         fetch('/api/config/save', {
@@ -8170,14 +8238,18 @@
             body: JSON.stringify(finalPayload)
         })
         .then(async res => {
+            if (window._setupProgressItl) clearInterval(window._setupProgressItl);
+            if (loadingModal) {
+                loadingModal.style.display = 'none';
+            }
+
             if (!res.ok) {
                 const text = await res.text();
+                document.getElementById('setup-wizard').style.display = 'flex'; // Restore if failed
                 throw new Error("Failed to save config / init System DB: " + text);
             }
             
             // 3. Reload/Redirect
-            // Explicitly hide wizard to ensure user sees progress/result
-            document.getElementById('setup-wizard').style.display = 'none';
             resetSetupForm();
 
             const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
@@ -8190,6 +8262,10 @@
             }
         })
         .catch(err => {
+            if (window._setupProgressItl) clearInterval(window._setupProgressItl);
+            const loadingModal = document.getElementById('setup-loading-modal');
+            if (loadingModal) loadingModal.style.display = 'none';
+            document.getElementById('setup-wizard').style.display = 'flex'; // Restore UI
             console.error(err);
             showAlert("Error: " + err.message);
             nextBtn.disabled = false;

@@ -200,9 +200,15 @@ func main() {
 }
 ```
 
-# The Doctor Demo: A Local RAG Pipeline
+# The Doctor Demo: A Real RAG Pipeline powered by Gemini
 
-This demo showcases a complete "Doctor-Nurse" AI pipeline running entirely locally. It demonstrates how to chain agents together using the SOP AI framework.
+This demo showcases a complete, real-world RAG (Retrieval-Augmented Generation) pipeline. It demonstrates how to chain agents and vector databases together using the SOP AI framework.
+
+Specifically, it implements a genuine RAG flow:
+- **Embedding (Text-to-Vector)**: Uses Google's Gemini API (`gemini-embedding-001`) to convert patient symptoms into vector embeddings.
+- **Retrieval**: Uses SOP's high-performance hybrid search (Vector + BM25) to locate the closest clinical mappings and disease data in your local stores.
+- **Context-Aware Ranking (Active Memory)**: Intercepts the Reciprocal Rank Fusion (RRF) algorithm to mathematically boost documents (e.g., up to 1.5x) mathematically if they match the user's ongoing conversation/topic thread. This seamlessly solves the "forgetful RAG" problem for follow-up questions.
+- **Generation (LLM)**: Uses Google's Gemini API (`gemini-2.5-flash` or similar) as the "Doctor" to synthesize the retrieved medical context and provide an educated diagnosis.
 
 ## Architecture
 
@@ -232,25 +238,28 @@ The entire process is defined in `etl_workflow.json` and consists of three steps
 
 We provide a script to build the tools, run the ETL pipeline, and verify the agents.
 
-1.  **Run the Rebuild Script**:
+1.  **Run the Rebuild & Demo Script**:
     ```bash
-    ./rebuild_doctor.sh
+    ./run_demo_gemini.sh
     ```
     This script will:
-    *   Build `sop-etl` and `sop-ai` binaries.
-    *   Clean up old data.
-    *   Run the ETL workflow defined in `etl_workflow.json`.
-    *   Run sanity tests.
+    *   Initialize necessary dependencies.
+    *   Clean up old local databases.
+    *   Run the ETL pipeline via `go run main.go` in the demo folder to ingest data (handling Gemini API 429 rate limits seamlessly with backoffs).
+    *   Automatically launch the interactive doctor repl.
 
-2.  **Run the Agent Manually**:
-    Once the data is built, you can chat with the Doctor agent:
+2.  **Run the Agent Manually (Interactive REPL)**:
+    Once the data is built (using the ETL pipelines or scripts like `./run_demo_gemini.sh`), you can chat with the Doctor agent in a fully interactive terminal session powered by Gemini 2.5 Flash and robust Hybrid Search (Vector + BM25):
     ```bash
-    ./sop-ai -config data/doctor_pipeline.json
+    go run ai/cmd/demo_doctor/main.go
     ```
     **Example Interaction**:
     ```text
     Patient> I have a bad cough and a runny nose
-    AI Doctor: [1] Common Cold... (Score: 0.92)
+    ...Doctor is thinking (and searching)...
+
+    🩺 Doctor Answer:
+    Based on your symptoms...
     ```
 
 ## Configuration Files
