@@ -99,7 +99,7 @@ func (s *Service) Clone() ai.Agent[map[string]any] {
 
 	// Inject back the service pointer to agents if they rely on it
 	for _, v := range clone.registry {
-		if da, ok := v.(*DataAdminAgent); ok {
+		if da, ok := v.(*CopilotAgent); ok {
 			da.service = clone
 		}
 	}
@@ -1124,7 +1124,7 @@ When the user corrects your output, provides a definition, or establishes a pref
 	toolRecorded := false
 	_ = toolRecorded
 
-	// Check for Raw Tool Call (from DataAdmin or similar generators)
+	// Check for Raw Tool Call (from Copilot or similar generators)
 	if output.Raw != nil {
 		if _, err := json.Marshal(output.Raw); err == nil {
 			// REMOVED: Drafting Logic for Raw Tool Call

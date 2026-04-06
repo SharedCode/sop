@@ -76,7 +76,7 @@ func TestScriptExecution_JoinRegression(t *testing.T) {
 	json.Unmarshal([]byte(scriptJSON), &script)
 
 	// 4. Run Agent
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		systemDB: sysDB,
 		databases: map[string]sop.DatabaseOptions{
 			"dev_db": dbOpts,

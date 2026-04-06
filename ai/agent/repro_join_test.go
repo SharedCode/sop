@@ -137,7 +137,7 @@ func TestJoinRightReproduction(t *testing.T) {
 
 	tx.Commit(ctx)
 
-	// 2. Setup DataAdminAgent
+	// 2. Setup CopilotAgent
 	cfg := agent.Config{
 		EnableObfuscation: false,
 		Verbose:           true,
@@ -154,7 +154,7 @@ func TestJoinRightReproduction(t *testing.T) {
 		CurrentDB: "mydb",
 	})
 
-	adminAgent := agent.NewDataAdminAgent(cfg, databases, sysDB)
+	adminAgent := agent.NewCopilotAgent(cfg, databases, sysDB)
 	if err := adminAgent.Open(execCtx); err != nil {
 		t.Fatalf("Failed to open agent: %v", err)
 	}

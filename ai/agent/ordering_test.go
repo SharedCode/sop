@@ -54,7 +54,7 @@ func TestExecuteScriptOrdering(t *testing.T) {
 	databases := make(map[string]sop.DatabaseOptions)
 	databases["mydb"] = dbOpts
 	sysDB := database.NewDatabase(sop.DatabaseOptions{StoresFolders: []string{"/tmp/sysdb_ord"}})
-	adminAgent := agent.NewDataAdminAgent(cfg, databases, sysDB)
+	adminAgent := agent.NewCopilotAgent(cfg, databases, sysDB)
 	execCtx := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "mydb"})
 	if err := adminAgent.Open(execCtx); err != nil {
 		t.Fatalf("Failed to open agent: %v", err)

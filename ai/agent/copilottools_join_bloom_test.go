@@ -24,7 +24,7 @@ func TestToolJoin_BloomFilter(t *testing.T) {
 	cfg := Config{Name: "TestAgent"}
 	dbs := make(map[string]sop.DatabaseOptions)
 
-	agent := NewDataAdminAgent(cfg, dbs, sysDB)
+	agent := NewCopilotAgent(cfg, dbs, sysDB)
 
 	ctx := context.Background()
 	// Mock Session Payload manually as in other tests

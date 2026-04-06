@@ -19,7 +19,7 @@ import (
 func TestToolSelect_WithFilter(t *testing.T) {
 	// 1. Setup
 	ctx := context.Background()
-	dbPath := "test_dataadmin_select"
+	dbPath := "test_copilot_select"
 	os.RemoveAll(dbPath)
 	defer os.RemoveAll(dbPath)
 
@@ -84,7 +84,7 @@ func TestToolSelect_WithFilter(t *testing.T) {
 	}
 
 	// 2. Prepare Agent
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{
 			"testdb": dbOpts,
 		},
@@ -181,7 +181,7 @@ func TestToolSelect_WithFilter(t *testing.T) {
 func TestToolSelect_WithAlias(t *testing.T) {
 	// 1. Setup
 	ctx := context.Background()
-	dbPath := "test_dataadmin_select_alias"
+	dbPath := "test_copilot_select_alias"
 	os.RemoveAll(dbPath)
 	defer os.RemoveAll(dbPath)
 
@@ -236,7 +236,7 @@ func TestToolSelect_WithAlias(t *testing.T) {
 	}
 
 	// 2. Prepare Agent
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{
 			"testdb": dbOpts,
 		},
@@ -337,7 +337,7 @@ func TestToolSelect_OutputFormat(t *testing.T) {
 	cfg := Config{
 		EnableObfuscation: false,
 	}
-	agent := NewDataAdminAgent(cfg, nil, nil)
+	agent := NewCopilotAgent(cfg, nil, nil)
 	agent.databases = map[string]sop.DatabaseOptions{"test": dbOpts}
 
 	payload := &ai.SessionPayload{
@@ -389,7 +389,7 @@ func TestToolSelect_OrderBy(t *testing.T) {
 
 	cfg := Config{Name: "TestAgent"}
 	dbs := make(map[string]sop.DatabaseOptions)
-	agent := NewDataAdminAgent(cfg, dbs, sysDB)
+	agent := NewCopilotAgent(cfg, dbs, sysDB)
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
@@ -491,7 +491,7 @@ func TestToolSelect_OrderBy(t *testing.T) {
 func TestToolSelect_OrderedOutput(t *testing.T) {
 	// 1. Setup
 	ctx := context.Background()
-	dbPath := "test_dataadmin_select_ordered"
+	dbPath := "test_copilot_select_ordered"
 	os.RemoveAll(dbPath)
 	defer os.RemoveAll(dbPath)
 
@@ -555,7 +555,7 @@ func TestToolSelect_OrderedOutput(t *testing.T) {
 	}
 
 	// 2. Prepare Agent
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{
 			"testdb": dbOpts,
 		},
@@ -654,7 +654,7 @@ func TestToolSelect_OrderedOutput(t *testing.T) {
 func TestToolSelect_LegacyOrderedOutput(t *testing.T) {
 	// 1. Setup
 	ctx := context.Background()
-	dbPath := "test_dataadmin_select_legacy"
+	dbPath := "test_copilot_select_legacy"
 	os.RemoveAll(dbPath)
 	defer os.RemoveAll(dbPath)
 
@@ -750,7 +750,7 @@ func TestToolSelect_LegacyOrderedOutput(t *testing.T) {
 	}
 
 	// 2. Prepare Agent
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{
 			"testdb": dbOpts,
 		},
@@ -832,7 +832,7 @@ func TestReproSelect_NestedFilter(t *testing.T) {
 	}
 
 	// 2. Prepare Agent
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{
 			"testdb": dbOpts,
 		},

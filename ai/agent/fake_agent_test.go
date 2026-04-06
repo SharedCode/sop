@@ -66,7 +66,7 @@ func TestFakeAgentGeneration(t *testing.T) {
 		t.Fatalf("All models failed. Last error: %v", err)
 	}
 
-	// 2. Setup DataAdminAgent
+	// 2. Setup CopilotAgent
 	// We need a dummy config and database
 	cfg := agent.Config{
 		EnableObfuscation: false, // Disable for now to isolate
@@ -85,7 +85,7 @@ func TestFakeAgentGeneration(t *testing.T) {
 	})
 
 	// Create Agent
-	adminAgent := agent.NewDataAdminAgent(cfg, databases, sysDB)
+	adminAgent := agent.NewCopilotAgent(cfg, databases, sysDB)
 	adminAgent.SetGenerator(gen)
 
 	// Create a dummy script manually to test execution

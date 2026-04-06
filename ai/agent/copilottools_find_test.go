@@ -16,7 +16,7 @@ import (
 func TestToolFind_ClosestItem(t *testing.T) {
 	// 1. Setup
 	ctx := context.Background()
-	dbPath := "test_dataadmin_find"
+	dbPath := "test_copilot_find"
 	os.RemoveAll(dbPath)
 	defer os.RemoveAll(dbPath)
 
@@ -74,7 +74,7 @@ func TestToolFind_ClosestItem(t *testing.T) {
 	}
 
 	// 2. Prepare Agent
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{
 			"testdb": dbOpts,
 		},

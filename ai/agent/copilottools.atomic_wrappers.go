@@ -11,7 +11,7 @@ import (
 
 // toolAtomicOpWrapper creates a tool function that executes a single atomic operation
 // using the shared session ScriptEngine.
-func (a *DataAdminAgent) toolAtomicOpWrapper(op string) func(context.Context, map[string]any) (string, error) {
+func (a *CopilotAgent) toolAtomicOpWrapper(op string) func(context.Context, map[string]any) (string, error) {
 	return func(ctx context.Context, args map[string]any) (string, error) {
 		// Ensure session context exists (Scoped to Request via generic helper)
 		scriptCtx := getOrInitScriptContext(ctx)
@@ -103,7 +103,7 @@ func (a *DataAdminAgent) toolAtomicOpWrapper(op string) func(context.Context, ma
 }
 
 // Helper to register all atomic tools
-func (a *DataAdminAgent) registerAtomicTools() {
+func (a *CopilotAgent) registerAtomicTools() {
 	ops := []string{
 		"open_db", "begin_tx", "commit_tx", "rollback_tx",
 		"open_store", "scan", "filter", "sort", "project", "limit",

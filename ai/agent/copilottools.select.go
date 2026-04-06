@@ -14,7 +14,7 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolSelect(ctx context.Context, args map[string]any) (string, error) {
 	// Stub Mode Check
 	if a.Config.StubMode {
 		bytes, _ := json.MarshalIndent(args, "", "  ")
@@ -366,7 +366,7 @@ func (a *DataAdminAgent) toolSelect(ctx context.Context, args map[string]any) (s
 	return emitter.Finalize(), nil
 }
 
-func (a *DataAdminAgent) toolFind(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolFind(ctx context.Context, args map[string]any) (string, error) {
 	return a.runNavigation(ctx, args, func(ctx context.Context, store jsondb.StoreAccessor) (bool, error) {
 		key, ok := args["key"]
 		if !ok {
@@ -376,7 +376,7 @@ func (a *DataAdminAgent) toolFind(ctx context.Context, args map[string]any) (str
 	})
 }
 
-func (a *DataAdminAgent) toolFindNearest(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolFindNearest(ctx context.Context, args map[string]any) (string, error) {
 	return a.runNavigation(ctx, args, func(ctx context.Context, store jsondb.StoreAccessor) (bool, error) {
 		key, ok := args["key"]
 		if !ok {
@@ -386,25 +386,25 @@ func (a *DataAdminAgent) toolFindNearest(ctx context.Context, args map[string]an
 	}, true)
 }
 
-func (a *DataAdminAgent) toolNext(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolNext(ctx context.Context, args map[string]any) (string, error) {
 	return a.runNavigation(ctx, args, func(ctx context.Context, store jsondb.StoreAccessor) (bool, error) {
 		return store.Next(ctx)
 	})
 }
 
-func (a *DataAdminAgent) toolPrevious(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolPrevious(ctx context.Context, args map[string]any) (string, error) {
 	return a.runNavigation(ctx, args, func(ctx context.Context, store jsondb.StoreAccessor) (bool, error) {
 		return store.Previous(ctx)
 	})
 }
 
-func (a *DataAdminAgent) toolFirst(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolFirst(ctx context.Context, args map[string]any) (string, error) {
 	return a.runNavigation(ctx, args, func(ctx context.Context, store jsondb.StoreAccessor) (bool, error) {
 		return store.First(ctx)
 	})
 }
 
-func (a *DataAdminAgent) toolLast(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolLast(ctx context.Context, args map[string]any) (string, error) {
 	return a.runNavigation(ctx, args, func(ctx context.Context, store jsondb.StoreAccessor) (bool, error) {
 		return store.Last(ctx)
 	})

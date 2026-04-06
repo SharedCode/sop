@@ -17,7 +17,7 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-func (a *DataAdminAgent) toolJoin(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolJoin(ctx context.Context, args map[string]any) (string, error) {
 	// Stub Mode Check
 	if a.Config.StubMode {
 		// We need to import "encoding/json" first, but it's not imported in this file.
@@ -864,7 +864,7 @@ func (jp *JoinProcessor) processLeftItem(k any, vProvider func() (any, error)) (
 		// But `generateJoinKey` doesn't know.
 
 		// Let's verify `generateJoinKey` implementation.
-		// It's in `dataadmintools.utils.go`.
+		// It's in `copilottools.utils.go`.
 		// It does `extractVal`.
 
 		// So:

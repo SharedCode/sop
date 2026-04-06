@@ -12,8 +12,8 @@ func TestServiceListTools(t *testing.T) {
 	// Setup
 	registry := make(map[string]ai.Agent[map[string]any])
 
-	// Create a DataAdminAgent and add to registry with arbitrary key
-	da := NewDataAdminAgent(Config{}, nil, nil)
+	// Create a CopilotAgent and add to registry with arbitrary key
+	da := NewCopilotAgent(Config{}, nil, nil)
 	// We need to register tools on the agent so list_tools works
 	da.registerTools(context.Background())
 

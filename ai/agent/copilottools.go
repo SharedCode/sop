@@ -84,9 +84,9 @@ const (
 	ManageTransactionInstruction = "Manages transactions (begin, commit, rollback)."
 )
 
-// registerTools registers all available tools for the DataAdminAgent.
-func (a *DataAdminAgent) registerTools(ctx context.Context) {
-	log.Debug("DataAdminAgent.registerTools: Starting registration...")
+// registerTools registers all available tools for the CopilotAgent.
+func (a *CopilotAgent) registerTools(ctx context.Context) {
+	log.Debug("CopilotAgent.registerTools: Starting registration...")
 	if a.registry == nil {
 		a.registry = NewRegistry()
 	}
@@ -131,7 +131,7 @@ func (a *DataAdminAgent) registerTools(ctx context.Context) {
 	// Register Atomic Operations (Internal/Granular)
 	// a.registerAtomicTools()
 }
-func (a *DataAdminAgent) getToolInstruction(ctx context.Context, toolName, defaultInst string) string {
+func (a *CopilotAgent) getToolInstruction(ctx context.Context, toolName, defaultInst string) string {
 	if a.systemDB == nil {
 		return defaultInst
 	}
@@ -168,10 +168,10 @@ func (a *DataAdminAgent) getToolInstruction(ctx context.Context, toolName, defau
 }
 
 // toolConcludeTopic is a placeholder. The actual logic requires Session access and is handled/overridden in Service.
-func (a *DataAdminAgent) toolConcludeTopic(ctx context.Context, args map[string]interface{}) (string, error) {
+func (a *CopilotAgent) toolConcludeTopic(ctx context.Context, args map[string]interface{}) (string, error) {
 	return "Topic concluded.", nil
 }
-func (a *DataAdminAgent) getSystemInstructions(ctx context.Context, defaultInst string) string {
+func (a *CopilotAgent) getSystemInstructions(ctx context.Context, defaultInst string) string {
 	if a.systemDB == nil {
 		return defaultInst
 	}
@@ -274,7 +274,7 @@ func (a *DataAdminAgent) getSystemInstructions(ctx context.Context, defaultInst 
 	return sb.String()
 }
 
-func (a *DataAdminAgent) toolListTools(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolListTools(ctx context.Context, args map[string]any) (string, error) {
 	tools := a.registry.List()
 
 	// Sort tools by name for consistent output
@@ -328,7 +328,7 @@ func (a *DataAdminAgent) toolListTools(ctx context.Context, args map[string]any)
 	return sb.String(), nil
 }
 
-func (a *DataAdminAgent) toolListDatabases(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolListDatabases(ctx context.Context, args map[string]any) (string, error) {
 	var names []string
 	for k := range a.databases {
 		names = append(names, k)
@@ -345,7 +345,7 @@ func (a *DataAdminAgent) toolListDatabases(ctx context.Context, args map[string]
 	return sb.String(), nil
 }
 
-func (a *DataAdminAgent) toolListStores(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) (string, error) {
 	p := ai.GetSessionPayload(ctx)
 	if p == nil {
 		return "", fmt.Errorf("no session payload found")
@@ -446,7 +446,7 @@ func (a *DataAdminAgent) toolListStores(ctx context.Context, args map[string]any
 	return fmt.Sprintf("Stores:\n%s", strings.Join(descriptions, "\n")), nil
 }
 
-func (a *DataAdminAgent) toolSwitchDatabase(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolSwitchDatabase(ctx context.Context, args map[string]any) (string, error) {
 	dbName, _ := args["database"].(string)
 	if dbName == "" {
 		return "", fmt.Errorf("argument 'database' is required")

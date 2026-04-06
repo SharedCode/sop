@@ -111,14 +111,14 @@ func TestScriptExecution_SelectTwice(t *testing.T) {
 		},
 	}
 
-	// Create DataAdminAgent
+	// Create CopilotAgent
 	agentCfg := Config{
-		ID:          "sql_admin",
+		ID:          "copilot",
 		Name:        "SQL Admin",
 		Description: "SQL Admin",
 	}
 
-	adminAgent := &DataAdminAgent{
+	adminAgent := &CopilotAgent{
 		Config: agentCfg,
 		brain:  mockGen,
 	}
@@ -131,11 +131,11 @@ func TestScriptExecution_SelectTwice(t *testing.T) {
 	adminAgent.databases = dbs
 
 	registry := map[string]ai.Agent[map[string]any]{
-		"sql_admin": adminAgent,
+		"copilot": adminAgent,
 	}
 
 	_ = []PipelineStep{
-		{Agent: PipelineAgent{ID: "sql_admin"}},
+		{Agent: PipelineAgent{ID: "copilot"}},
 	}
 
 	svc := NewService(&MockDomain{}, sysDB, dbs, mockGen, nil, registry, false)
@@ -425,12 +425,12 @@ func TestScriptRecording_SelectTwice(t *testing.T) {
 	}
 
 	agentCfg := Config{
-		ID:          "sql_admin",
+		ID:          "copilot",
 		Name:        "SQL Admin",
 		Description: "SQL Admin",
 	}
 
-	adminAgent := &DataAdminAgent{
+	adminAgent := &CopilotAgent{
 		Config:   agentCfg,
 		brain:    mockGen,
 		registry: NewRegistry(),
@@ -438,11 +438,11 @@ func TestScriptRecording_SelectTwice(t *testing.T) {
 	adminAgent.registerTools(context.Background())
 
 	_ = map[string]ai.Agent[map[string]any]{
-		"sql_admin": adminAgent,
+		"copilot": adminAgent,
 	}
 
 	_ = []PipelineStep{
-		{Agent: PipelineAgent{ID: "sql_admin"}},
+		{Agent: PipelineAgent{ID: "copilot"}},
 	}
 
 	dbName := filepath.Base(tmpDir)
@@ -663,7 +663,7 @@ func TestToolScriptAddStepFromLast(t *testing.T) {
 	ctx := context.Background()
 
 	// Mock Agent
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{},
 	}
 
@@ -849,7 +849,7 @@ func TestToolScriptAddStepFromLast_MetaToolExclusion(t *testing.T) {
 
 	cfg := Config{Name: "TestAgent"}
 	dbs := make(map[string]sop.DatabaseOptions)
-	agent := NewDataAdminAgent(cfg, dbs, sysDB)
+	agent := NewCopilotAgent(cfg, dbs, sysDB)
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
@@ -916,7 +916,7 @@ func TestToolScriptUpdateStep(t *testing.T) {
 
 	cfg := Config{Name: "TestAgent"}
 	dbs := make(map[string]sop.DatabaseOptions)
-	agent := NewDataAdminAgent(cfg, dbs, sysDB)
+	agent := NewCopilotAgent(cfg, dbs, sysDB)
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})

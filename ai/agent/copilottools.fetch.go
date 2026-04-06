@@ -12,7 +12,7 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-func (a *DataAdminAgent) toolFetch(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolFetch(ctx context.Context, args map[string]any) (string, error) {
 	p := ai.GetSessionPayload(ctx)
 	if p == nil {
 		return "", fmt.Errorf("no session payload found")

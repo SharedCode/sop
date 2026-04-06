@@ -197,7 +197,7 @@ func (jc *JoinRightCursor) buildBloomFilter(count int64) {
 				// Actually, B-Tree `FindOne` takes the whole key map? Or a subset?
 				// It likely takes a subset (prefix) if specific support exists, OR exact match.
 				// `FindOne` vs `Find`?
-				// In `dataadmintools.join_execution.go`: `jc.right.FindOne(ctx, seekKey, true)`.
+				// In `copilottools.join_execution.go`: `jc.right.FindOne(ctx, seekKey, true)`.
 
 				// Simplified approach: If we are using IndexSeek, we are matching on *Indexed Prefix*.
 				// We should add the Value of the *first* index field (or concatenation of prefix fields) to Bloom?
@@ -399,7 +399,7 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 					lVal := getField(jc.currentL, lField)
 					rVal := getField(rItem, rField)
 
-					// Robust Equality Check aligned with dataadmintools.utils.go matchesKey capabilities
+					// Robust Equality Check aligned with copilottools.utils.go matchesKey capabilities
 					// But implemented inline for Join speed
 					if fmt.Sprintf("%v", lVal) != fmt.Sprintf("%v", rVal) {
 						// Double check numeric formats (e.g. 1.0 vs 1)
@@ -729,7 +729,7 @@ func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
 }
 
 // Helper for Join Numeric Coercion
-// Moved to dataadmintools.utils.go as coerceToFloatFull to be shared
+// Moved to copilottools.utils.go as coerceToFloatFull to be shared
 
 // generateTempKey creates a comparable string key for the temp store
 func (jc *JoinRightCursor) generateTempKey(item map[string]any) string {

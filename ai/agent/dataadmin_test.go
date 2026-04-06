@@ -8,11 +8,11 @@ import (
 	"github.com/sharedcode/sop/ai"
 )
 
-func TestDataAdminAgent_Registry(t *testing.T) {
+func TestCopilotAgent_Registry(t *testing.T) {
 	cfg := Config{
 		EnableObfuscation: false,
 	}
-	agent := NewDataAdminAgent(cfg, nil, nil)
+	agent := NewCopilotAgent(cfg, nil, nil)
 	agent.registerTools(context.Background())
 
 	// Test Registry Listing
@@ -33,14 +33,14 @@ func TestDataAdminAgent_Registry(t *testing.T) {
 	}
 }
 
-func TestDataAdminAgent_Execute(t *testing.T) {
+func TestCopilotAgent_Execute(t *testing.T) {
 	cfg := Config{
 		EnableObfuscation: false,
 	}
 	dbs := map[string]sop.DatabaseOptions{
 		"test_db": {},
 	}
-	agent := NewDataAdminAgent(cfg, dbs, nil)
+	agent := NewCopilotAgent(cfg, dbs, nil)
 	agent.registerTools(context.Background())
 
 	// Setup Context with Payload

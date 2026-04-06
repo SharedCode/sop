@@ -40,7 +40,7 @@ func TestReproEmptyColumns(t *testing.T) {
 	tx.Commit(ctx)
 
 	// 3. Script Execution
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{
 			"dev_db": dbOpts,
 		},

@@ -130,8 +130,8 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (ai.Agent[map[string]any], error) {
 	// Handle specialized agent types
 	switch cfg.Type {
-	case "data-admin":
-		return NewDataAdminAgent(cfg, deps.Databases, deps.SystemDB), nil
+	case ai.AgentTypeCopilot:
+		return NewCopilotAgent(cfg, deps.Databases, deps.SystemDB), nil
 	// Add other types here
 	case "standard", "":
 		// Fallthrough to standard service creation
@@ -290,10 +290,10 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (ai.Agent
 	}
 
 	// 4. Create Agent Service
-	// If the generator is "data-admin" and obfuscation is enabled, the generator handles it internally.
+	// If the generator is "copilot" and obfuscation is enabled, the generator handles it internally.
 	// Therefore, we disable Service-level obfuscation to avoid double-obfuscation.
 	serviceObfuscation := cfg.EnableObfuscation
-	if cfg.Generator.Type == "data-admin" && cfg.EnableObfuscation {
+	if cfg.Generator.Type == ai.AgentTypeCopilot && cfg.EnableObfuscation {
 		serviceObfuscation = false
 	}
 

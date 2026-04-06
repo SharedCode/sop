@@ -50,7 +50,7 @@ func TestFindNearest_Ordering(t *testing.T) {
 	}
 
 	// 2. Setup Agent
-	agent := NewDataAdminAgent(Config{}, map[string]sop.DatabaseOptions{"testdb": dbOpts}, nil)
+	agent := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{"testdb": dbOpts}, nil)
 
 	// Session Payload
 	// Ensure no transaction is carried over

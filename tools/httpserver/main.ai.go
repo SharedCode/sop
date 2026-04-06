@@ -137,9 +137,9 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Default to the RAG Agent "sql_admin" if not specified
+	// Default to the RAG Agent "copilot" if not specified
 	if req.Agent == "" {
-		req.Agent = "sql_admin"
+		req.Agent = "copilot"
 	}
 
 	// Check if a specific RAG Agent is requested
@@ -484,7 +484,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 }
 
 func initAgents(ctx context.Context) {
-	loadAgent(ctx, "sql_admin", "ai/data/sql_admin_pipeline.json")
+	loadAgent(ctx, "copilot", "ai/data/copilot_pipeline.json")
 }
 
 func seedDefaultScripts(ctx context.Context, db *aidb.Database) {
@@ -867,12 +867,12 @@ type DefaultToolExecutor struct {
 }
 
 func (e *DefaultToolExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
-	// For now, we assume tools are handled by the "sql_core" agent (DataAdminAgent)
+	// For now, we assume tools are handled by the "copilot" agent (CopilotAgent)
 	// In a real system, we might look up the tool in a global registry or iterate agents.
 
-	// Try sql_core first
-	if agentSvc, ok := e.Agents["sql_core"]; ok {
-		if da, ok := agentSvc.(*agent.DataAdminAgent); ok {
+	// Try copilot first
+	if agentSvc, ok := e.Agents["copilot"]; ok {
+		if da, ok := agentSvc.(*agent.CopilotAgent); ok {
 			return da.Execute(ctx, tool, args)
 		}
 	}

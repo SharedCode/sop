@@ -12,7 +12,7 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-func (a *DataAdminAgent) toolAdd(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolAdd(ctx context.Context, args map[string]any) (string, error) {
 	// Stub Mode Check
 	if a.Config.StubMode {
 		fmt.Printf("DEBUG: toolAdd called in STUB MODE with:\n%+v\n", args)
@@ -168,7 +168,7 @@ func (a *DataAdminAgent) toolAdd(ctx context.Context, args map[string]any) (stri
 	return fmt.Sprintf("Item added to store '%s'", storeName), nil
 }
 
-func (a *DataAdminAgent) toolUpdate(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolUpdate(ctx context.Context, args map[string]any) (string, error) {
 	// Stub Mode Check
 	if a.Config.StubMode {
 		fmt.Printf("DEBUG: toolUpdate called in STUB MODE with:\n%+v\n", args)
@@ -326,7 +326,7 @@ func (a *DataAdminAgent) toolUpdate(ctx context.Context, args map[string]any) (s
 	return fmt.Sprintf("Item updated in store '%s'", storeName), nil
 }
 
-func (a *DataAdminAgent) toolDelete(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolDelete(ctx context.Context, args map[string]any) (string, error) {
 	// Stub Mode Check
 	if a.Config.StubMode {
 		fmt.Printf("DEBUG: toolDelete called in STUB MODE with:\n%+v\n", args)
@@ -460,7 +460,7 @@ func (a *DataAdminAgent) toolDelete(ctx context.Context, args map[string]any) (s
 	return fmt.Sprintf("Item '%v' deleted from store '%s'", key, storeName), nil
 }
 
-func (a *DataAdminAgent) toolManageTransaction(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolManageTransaction(ctx context.Context, args map[string]any) (string, error) {
 	// Stub Mode Check
 	if a.Config.StubMode {
 		fmt.Printf("DEBUG: toolManageTransaction called in STUB MODE with:\n%+v\n", args)

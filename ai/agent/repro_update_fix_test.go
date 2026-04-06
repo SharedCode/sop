@@ -24,10 +24,10 @@ func TestReproScriptUpdateCorruption(t *testing.T) {
 
 	sysDB := database.NewDatabase(dbOpts)
 
-	// 2. Setup DataAdminAgent
-	// Verify NewDataAdminAgent signature
-	// func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, systemDB *database.Database) *DataAdminAgent
-	agent := NewDataAdminAgent(Config{}, nil, sysDB)
+	// 2. Setup CopilotAgent
+	// Verify NewCopilotAgent signature
+	// func NewCopilotAgent(cfg Config, databases map[string]sop.DatabaseOptions, systemDB *database.Database) *CopilotAgent
+	agent := NewCopilotAgent(Config{}, nil, sysDB)
 	ctx := context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{CurrentDB: "system"})
 	agent.Open(ctx)
 

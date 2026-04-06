@@ -16,7 +16,7 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-func (a *DataAdminAgent) resolveTransaction(ctx context.Context, db *database.Database, dbName string, mode sop.TransactionMode) (sop.Transaction, bool, error) {
+func (a *CopilotAgent) resolveTransaction(ctx context.Context, db *database.Database, dbName string, mode sop.TransactionMode) (sop.Transaction, bool, error) {
 	p := ai.GetSessionPayload(ctx)
 	var tx sop.Transaction
 	var localTx bool
@@ -57,7 +57,7 @@ func (a *DataAdminAgent) resolveTransaction(ctx context.Context, db *database.Da
 	return tx, localTx, nil
 }
 
-func (a *DataAdminAgent) openGenericStore(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (btree.BtreeInterface[any, any], btree.ComparerFunc[any], *jsondb.IndexSpecification, error) {
+func (a *CopilotAgent) openGenericStore(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (btree.BtreeInterface[any, any], btree.ComparerFunc[any], *jsondb.IndexSpecification, error) {
 	// Variables to hold state for the closure
 	var indexSpec *jsondb.IndexSpecification
 	var isPrimitiveKey bool
@@ -142,7 +142,7 @@ func (a *DataAdminAgent) openGenericStore(ctx context.Context, dbOpts sop.Databa
 	return store, comparer, indexSpec, err
 }
 
-func (a *DataAdminAgent) runNavigation(ctx context.Context, args map[string]any, op func(context.Context, jsondb.StoreAccessor) (bool, error), showNearest ...bool) (string, error) {
+func (a *CopilotAgent) runNavigation(ctx context.Context, args map[string]any, op func(context.Context, jsondb.StoreAccessor) (bool, error), showNearest ...bool) (string, error) {
 	p := ai.GetSessionPayload(ctx)
 	if p == nil {
 		return "", fmt.Errorf("no session payload found")

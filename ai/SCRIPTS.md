@@ -331,7 +331,7 @@ Because scripts are stored in the persistent SystemDB, they are instantly availa
 
 ```bash
 curl -X POST http://localhost:8080/api/ai/chat \
-  -d '{"message": "/run daily_report date=2025-01-01", "agent": "sql_admin"}'
+  -d '{"message": "/run daily_report date=2025-01-01", "agent": "copilot"}'
 ```
 
 This turns your SOP server into a programmable application server where business logic can be defined via chat and executed via REST.

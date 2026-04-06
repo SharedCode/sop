@@ -53,9 +53,9 @@ func TestToolJoin_SuffixHandling(t *testing.T) {
 
 	// 3. Setup Agent
 	agentCfg := Config{
-		ID: "sql_admin",
+		ID: "copilot",
 	}
-	adminAgent := &DataAdminAgent{
+	adminAgent := &CopilotAgent{
 		Config:    agentCfg,
 		databases: map[string]sop.DatabaseOptions{"test_db": dbOpts},
 		systemDB:  sysDB,
@@ -126,7 +126,7 @@ func keys(m map[string]any) []string {
 func TestToolJoin_WithAlias(t *testing.T) {
 	// 1. Setup
 	ctx := context.Background()
-	dbPath := "test_dataadmin_join_alias"
+	dbPath := "test_copilot_join_alias"
 	os.RemoveAll(dbPath)
 	defer os.RemoveAll(dbPath)
 
@@ -182,7 +182,7 @@ func TestToolJoin_WithAlias(t *testing.T) {
 	}
 
 	// 2. Prepare Agent
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{
 			"testdb": dbOpts,
 		},
@@ -281,7 +281,7 @@ func TestToolJoin_StoreNamePrefix(t *testing.T) {
 		Name: "TestAgent",
 	}
 	dbs := make(map[string]sop.DatabaseOptions)
-	agent := NewDataAdminAgent(cfg, dbs, sysDB)
+	agent := NewCopilotAgent(cfg, dbs, sysDB)
 
 	// Create Stores
 	ctx := context.Background()
@@ -385,7 +385,7 @@ func TestToolJoin_ReproUserScenario(t *testing.T) {
 
 	cfg := Config{Name: "TestAgent"}
 	dbs := make(map[string]sop.DatabaseOptions)
-	agent := NewDataAdminAgent(cfg, dbs, sysDB)
+	agent := NewCopilotAgent(cfg, dbs, sysDB)
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})

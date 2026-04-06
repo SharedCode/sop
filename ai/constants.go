@@ -8,4 +8,7 @@ const (
 
 	// Default Application Configurations
 	DefaultScriptCategory = "general"
+
+	// Agent Types
+	AgentTypeCopilot = "copilot"
 )

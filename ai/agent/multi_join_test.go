@@ -58,7 +58,7 @@ func TestMultiJoinBehavior(t *testing.T) {
 	tx.Commit(ctx)
 
 	// 2. Prepare Agent
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{
 			"testdb": dbOpts,
 		},

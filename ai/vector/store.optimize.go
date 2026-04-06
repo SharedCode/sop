@@ -624,7 +624,7 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 				return err
 			}
 
-			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, btree.DefaultSlotLength, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
+			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, 10000, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
 			if err != nil {
 				if rbErr := tx.Rollback(ctx); rbErr != nil {
 					return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -797,7 +797,7 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 				break
 			}
 
-			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, btree.DefaultSlotLength, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
+			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, 10000, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
 			if err != nil {
 				if rbErr := tx.Rollback(ctx); rbErr != nil {
 					return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)

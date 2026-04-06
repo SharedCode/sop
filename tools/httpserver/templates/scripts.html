@@ -3373,8 +3373,8 @@
     function toggleProviderSelect() {
         const agent = document.getElementById('agent-select').value;
         const providerSelect = document.getElementById('provider-select');
-        // Show provider select only for RAG agents (doctor, sql_admin)
-        if (agent === 'doctor' || agent === 'sql_admin') {
+        // Show provider select only for RAG agents (doctor, copilot)
+        if (agent === 'doctor' || agent === 'copilot') {
             providerSelect.style.display = 'inline-block';
         } else {
             providerSelect.style.display = 'none';
@@ -3748,7 +3748,7 @@
                     ai_content: aiContent,
                     user_content: userContent,
                     database: currentDatabase || "system",
-                    agent: "sql_admin"
+                    agent: "copilot"
                 })
             });
             console.log(`Feedback ${type} sent for msg ${currentAiMsgId}`);

@@ -93,7 +93,7 @@ func TestHandleExecuteScript(t *testing.T) {
 
 	// 2. Register Agent in global map
 	loadedAgents = make(map[string]ai.Agent[map[string]any])
-	loadedAgents["sql_admin"] = svc
+	loadedAgents["copilot"] = svc
 
 	// 3. Create a Test Script
 	ctx := context.Background()

@@ -46,7 +46,7 @@ func (m *SmartMockGenerator) Generate(ctx context.Context, prompt string, opts a
 	}
 
 	// Format as a tool call
-	// The DataAdminAgent expects a JSON object with "tool" and "args"
+	// The CopilotAgent expects a JSON object with "tool" and "args"
 	// or a list of such objects.
 	toolCall := map[string]any{
 		"tool": "execute_script",
@@ -139,7 +139,7 @@ func TestRepro_Leakage_StateCleaning(t *testing.T) {
 	// We need to inject the SessionPayload via Context for Ask to know CurrentDB.
 
 	databases := map[string]sop.DatabaseOptions{"dev_db": dbOpts}
-	svc := agent.NewDataAdminAgent(agent.Config{
+	svc := agent.NewCopilotAgent(agent.Config{
 		ID:   "repro-agent",
 		Name: "Repro",
 	}, databases, systemDB)
@@ -241,7 +241,7 @@ func TestAliasProjection_JoinRight(t *testing.T) {
 	mockBrain := &SmartMockGenerator{Scripts: scripts}
 
 	databases := map[string]sop.DatabaseOptions{"dev_db": dbOpts}
-	svc := agent.NewDataAdminAgent(agent.Config{
+	svc := agent.NewCopilotAgent(agent.Config{
 		ID:   "repro-agent-alias",
 		Name: "ReproAlias",
 	}, databases, systemDB)

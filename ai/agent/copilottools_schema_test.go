@@ -30,9 +30,9 @@ func TestToolListStores_SchemaEnrichment(t *testing.T) {
 	dbs := map[string]sop.DatabaseOptions{
 		dbName: opts,
 	}
-	// Need to initialize generic registry if NewDataAdminAgent doesn't do it properly for all tools.
-	// But NewDataAdminAgent does initialize registry.
-	agent := NewDataAdminAgent(Config{}, dbs, nil)
+	// Need to initialize generic registry if NewCopilotAgent doesn't do it properly for all tools.
+	// But NewCopilotAgent does initialize registry.
+	agent := NewCopilotAgent(Config{}, dbs, nil)
 	ctx := context.Background()
 	agent.Open(ctx)
 

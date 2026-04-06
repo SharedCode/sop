@@ -887,7 +887,7 @@ func (e *ServiceToolExecutor) Execute(ctx context.Context, toolName string, args
 			// If error is "unknown tool", continue to next agent.
 			// Otherwise return error.
 			// Since we don't have a standard error type for "unknown tool", we check string.
-			// DataAdminAgent returns "unknown tool: %s".
+			// CopilotAgent returns "unknown tool: %s".
 			if strings.Contains(err.Error(), "unknown tool") {
 				continue
 			}

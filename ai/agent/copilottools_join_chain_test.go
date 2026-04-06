@@ -57,7 +57,7 @@ func TestToolJoin_Chained_InnerThenRight(t *testing.T) {
 
 	// 2. Prepare Agent
 	agentCfg := Config{ID: "test_admin"}
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		Config:    agentCfg,
 		databases: map[string]sop.DatabaseOptions{"test_db": dbOpts},
 		systemDB:  sysDB,
@@ -200,7 +200,7 @@ func TestToolJoin_Chained_InnerThenLeft(t *testing.T) {
 
 	// 2. Prepare Agent
 	agentCfg := Config{ID: "test_admin_left"}
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		Config:    agentCfg,
 		databases: map[string]sop.DatabaseOptions{"test_db": dbOpts},
 		systemDB:  sysDB,
@@ -315,7 +315,7 @@ func TestToolJoin_Full(t *testing.T) {
 	}
 
 	agentCfg := Config{ID: "test_full"}
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		Config:    agentCfg,
 		databases: map[string]sop.DatabaseOptions{"test_db": dbOpts},
 		systemDB:  sysDB,

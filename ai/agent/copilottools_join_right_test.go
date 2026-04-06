@@ -56,7 +56,7 @@ func TestToolJoin_RightOuterJoin(t *testing.T) {
 	agentCfg := Config{
 		ID: "test_admin",
 	}
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		Config:    agentCfg,
 		databases: map[string]sop.DatabaseOptions{"test_db": dbOpts},
 		systemDB:  sysDB,

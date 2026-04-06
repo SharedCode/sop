@@ -33,7 +33,7 @@ func TestReproSlowJoin(t *testing.T) {
 	dbs := map[string]sop.DatabaseOptions{
 		dbName: dbOpts,
 	}
-	agent := NewDataAdminAgent(cfg, dbs, nil)
+	agent := NewCopilotAgent(cfg, dbs, nil)
 
 	ctx := context.Background()
 	payload := &ai.SessionPayload{

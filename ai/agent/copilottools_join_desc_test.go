@@ -23,7 +23,7 @@ func TestToolJoin_OrderBy_RightStoreDirection(t *testing.T) {
 
 	cfg := Config{Name: "TestAgent"}
 	dbs := make(map[string]sop.DatabaseOptions)
-	agent := NewDataAdminAgent(cfg, dbs, sysDB)
+	agent := NewCopilotAgent(cfg, dbs, sysDB)
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})

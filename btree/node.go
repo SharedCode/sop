@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/encoding"
 )
 
 // MetaDataType specifies metadata fields such as ID and Version.
@@ -62,8 +63,27 @@ type Node[TK Ordered, TV any] struct {
 	indexOfNode int
 }
 
-// Default Slot Length is 2000.
-const DefaultSlotLength = 2000
+func (n *Node[TK, TV]) MarshalJSON() ([]byte, error) {
+	type nodeData struct {
+		ID          sop.UUID       `json:"ID"`
+		ParentID    sop.UUID       `json:"ParentID"`
+		Slots       []Item[TK, TV] `json:"Slots"`
+		Count       int            `json:"Count"`
+		Version     int32          `json:"Version"`
+		ChildrenIDs []sop.UUID     `json:"ChildrenIDs,omitempty"`
+	}
+	return encoding.Marshal(nodeData{
+		ID:          n.ID,
+		ParentID:    n.ParentID,
+		Slots:       n.Slots[:n.Count],
+		Count:       n.Count,
+		Version:     n.Version,
+		ChildrenIDs: n.ChildrenIDs,
+	})
+}
+
+// Default Slot Length is 5000.
+const DefaultSlotLength = 5000
 
 // GetID returns the node's UUID.
 func (n *Node[TK, TV]) GetID() sop.UUID {
@@ -966,12 +986,10 @@ func (node *Node[TK, TV]) unlink(ctx context.Context, btree *Btree[TK, TV]) erro
 
 // copyArrayElements is a helper function for internal use only.
 func copyArrayElements[T any](destination, source []T, count int) {
-	if source == nil || destination == nil {
+	if source == nil || destination == nil || count <= 0 {
 		return
 	}
-	for i := 0; i < count; i++ {
-		destination[i] = source[i]
-	}
+	copy(destination[:count], source[:count])
 }
 
 func shiftSlots[T any](array []T, position int, noOfOccupiedSlots int) {
@@ -983,26 +1001,10 @@ func shiftSlots[T any](array []T, position int, noOfOccupiedSlots int) {
 
 // moveArrayElements is a helper function for internal use only.
 func moveArrayElements[T any](array []T, destStartIndex, srcStartIndex, count int) {
-	if array == nil {
+	if array == nil || count <= 0 {
 		return
 	}
-	addValue := -1
-	srcIndex := srcStartIndex + count - 1
-	destIndex := destStartIndex + count - 1
-	if destStartIndex < srcStartIndex {
-		srcIndex = srcStartIndex
-		destIndex = destStartIndex
-		addValue = 1
-	}
-	for i := 0; i < count; i++ {
-		// Only process if w/in array range.
-		if destIndex < 0 || srcIndex < 0 || destIndex >= len(array) || srcIndex >= len(array) {
-			break
-		}
-		array[destIndex] = array[srcIndex]
-		destIndex = destIndex + addValue
-		srcIndex = srcIndex + addValue
-	}
+	copy(array[destStartIndex:], array[srcStartIndex:srcStartIndex+count])
 }
 
 func (node *Node[TK, TV]) isFull() bool {

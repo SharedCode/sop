@@ -12,7 +12,7 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 )
 
-func (a *DataAdminAgent) toolListScripts(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolListScripts(ctx context.Context, args map[string]any) (string, error) {
 	p := ai.GetSessionPayload(ctx)
 	if p == nil {
 		return "", fmt.Errorf("no session payload found")
@@ -59,7 +59,7 @@ func (a *DataAdminAgent) toolListScripts(ctx context.Context, args map[string]an
 	return fmt.Sprintf("Scripts: %s", strings.Join(names, ", ")), nil
 }
 
-func (a *DataAdminAgent) toolGetScriptDetails(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolGetScriptDetails(ctx context.Context, args map[string]any) (string, error) {
 	name, _ := args["name"].(string)
 	if name == "" {
 		return "", fmt.Errorf("script name required")
@@ -121,7 +121,7 @@ func (a *DataAdminAgent) toolGetScriptDetails(ctx context.Context, args map[stri
 	return sb.String(), nil
 }
 
-func (a *DataAdminAgent) toolCreateScript(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolCreateScript(ctx context.Context, args map[string]any) (string, error) {
 	name, _ := args["name"].(string)
 	if name == "" {
 		return "", fmt.Errorf("script name is required")
@@ -159,7 +159,7 @@ func (a *DataAdminAgent) toolCreateScript(ctx context.Context, args map[string]a
 	// Let's implement independent logic for clarity or reuse updateScript if it supports "not found".
 	// The current updateScript function:
 	/*
-			func (a *DataAdminAgent) updateScript(ctx context.Context, name string, updateFunc func(*ai.Script) error) error {
+			func (a *CopilotAgent) updateScript(ctx context.Context, name string, updateFunc func(*ai.Script) error) error {
 			    ...
 				var script ai.Script
 				if err := store.Get(ctx, ai.DefaultScriptCategory, name, &script); err != nil {
@@ -214,7 +214,7 @@ func (a *DataAdminAgent) toolCreateScript(ctx context.Context, args map[string]a
 	return fmt.Sprintf("Script '%s' created successfully.", name), nil
 }
 
-func (a *DataAdminAgent) toolSaveScript(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolSaveScript(ctx context.Context, args map[string]any) (string, error) {
 	name, _ := args["name"].(string)
 	if name == "" {
 		return "", fmt.Errorf("script name is required")
@@ -310,7 +310,7 @@ func printSteps(sb *strings.Builder, steps []ai.ScriptStep, indent int) {
 	}
 }
 
-func (a *DataAdminAgent) toolRefactorScript(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolRefactorScript(ctx context.Context, args map[string]any) (string, error) {
 	mode, _ := args["mode"].(string)
 	if mode == "" {
 		return "", fmt.Errorf("mode is required (script or block)")
@@ -333,7 +333,7 @@ func (a *DataAdminAgent) toolRefactorScript(ctx context.Context, args map[string
 	return "Last interaction refactored into a block step.", nil
 }
 
-func (a *DataAdminAgent) toolScriptInsertStep(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolScriptInsertStep(ctx context.Context, args map[string]any) (string, error) {
 	scriptName, _ := args["script"].(string)
 	index, _ := args["index"].(float64)
 	stepType, _ := args["type"].(string)
@@ -435,7 +435,7 @@ func (a *DataAdminAgent) toolScriptInsertStep(ctx context.Context, args map[stri
 	return fmt.Sprintf("Step inserted into script '%s' at index %d", scriptName, int(index)), nil
 }
 
-func (a *DataAdminAgent) toolScriptSaveStep(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolScriptSaveStep(ctx context.Context, args map[string]any) (string, error) {
 	// Wrapper to Append a step.
 	// We construct a ScriptStep from args then append it.
 
@@ -547,7 +547,7 @@ func (a *DataAdminAgent) toolScriptSaveStep(ctx context.Context, args map[string
 	return fmt.Sprintf("Step '%s' saved to script '%s'.", newStep.Name, scriptName), nil
 }
 
-func (a *DataAdminAgent) toolScriptDeleteStep(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolScriptDeleteStep(ctx context.Context, args map[string]any) (string, error) {
 	scriptName, _ := args["script"].(string)
 	index, _ := args["index"].(float64)
 
@@ -571,7 +571,7 @@ func (a *DataAdminAgent) toolScriptDeleteStep(ctx context.Context, args map[stri
 	return fmt.Sprintf("Step deleted from script '%s' at index %d", scriptName, int(index)), nil
 }
 
-func (a *DataAdminAgent) toolScriptUpdateStep(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolScriptUpdateStep(ctx context.Context, args map[string]any) (string, error) {
 	scriptName, _ := args["script"].(string)
 	index, _ := args["index"].(float64)
 
@@ -672,7 +672,7 @@ func (a *DataAdminAgent) toolScriptUpdateStep(ctx context.Context, args map[stri
 	return fmt.Sprintf("Step updated in script '%s' at index %d", scriptName, int(index)), nil
 }
 
-func (a *DataAdminAgent) toolScriptReorderSteps(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolScriptReorderSteps(ctx context.Context, args map[string]any) (string, error) {
 	scriptName, _ := args["script"].(string)
 	fromIndex, _ := args["from_index"].(float64)
 	toIndex, _ := args["to_index"].(float64)
@@ -712,7 +712,7 @@ func (a *DataAdminAgent) toolScriptReorderSteps(ctx context.Context, args map[st
 }
 
 // Helper to update a script transactionally
-func (a *DataAdminAgent) updateScript(ctx context.Context, name string, updateFunc func(*ai.Script) error) error {
+func (a *CopilotAgent) updateScript(ctx context.Context, name string, updateFunc func(*ai.Script) error) error {
 	// Look for "system" database
 	db := a.systemDB
 	if db == nil {
@@ -751,7 +751,7 @@ func (a *DataAdminAgent) updateScript(ctx context.Context, name string, updateFu
 	return tx.Commit(ctx)
 }
 
-func (a *DataAdminAgent) toolScriptAddStepFromLast(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolScriptAddStepFromLast(ctx context.Context, args map[string]any) (string, error) {
 	if a.lastToolCall == nil {
 		return "", fmt.Errorf("no last tool call found")
 	}

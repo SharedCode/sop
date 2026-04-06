@@ -211,7 +211,7 @@ func TestService_Ask_Obfuscation(t *testing.T) {
 				// It does NOT parse the JSON to clean specific fields.
 				// So if the LLM returns `**DB_1**`, string replacement turns it into `**Python Complex DB**`.
 				// It does NOT remove the `**`.
-				// The User wants DataAdmin (Service) to handle this "woe".
+				// The User wants Copilot (Service) to handle this "woe".
 				// So we expect the JSON returned by Ask to contain CLEAN names, without artifacts.
 
 				// Let's see what we get currently.

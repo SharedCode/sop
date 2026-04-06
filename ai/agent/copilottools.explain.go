@@ -10,7 +10,7 @@ import (
 )
 
 // toolExplainJoin predicts the execution strategy for a join.
-func (a *DataAdminAgent) toolExplainJoin(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolExplainJoin(ctx context.Context, args map[string]any) (string, error) {
 	p := ai.GetSessionPayload(ctx)
 
 	// Resolve Database

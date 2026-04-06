@@ -22,9 +22,9 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-// DataAdminAgent is a specialized agent for database administration tasks.
+// CopilotAgent is a specialized agent for database administration tasks.
 // It implements the ai.Agent interface.
-type DataAdminAgent struct {
+type CopilotAgent struct {
 	Config       Config
 	brain        ai.Generator
 	registry     *Registry
@@ -46,8 +46,8 @@ type DataAdminAgent struct {
 }
 
 // Clone creates a new isolated instance of the agent sharing read-only components.
-func (a *DataAdminAgent) Clone() ai.Agent[map[string]any] {
-	return &DataAdminAgent{
+func (a *CopilotAgent) Clone() ai.Agent[map[string]any] {
+	return &CopilotAgent{
 		Config:          a.Config,
 		brain:           a.brain,
 		registry:        a.registry, // Pointer to registry
@@ -63,12 +63,12 @@ func (a *DataAdminAgent) Clone() ai.Agent[map[string]any] {
 }
 
 // SetGenerator sets the generator for the agent.
-func (a *DataAdminAgent) SetGenerator(gen ai.Generator) {
+func (a *CopilotAgent) SetGenerator(gen ai.Generator) {
 	a.brain = gen
 }
 
-// NewDataAdminAgent creates a new instance of DataAdminAgent.
-func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, systemDB *database.Database) *DataAdminAgent {
+// NewCopilotAgent creates a new instance of CopilotAgent.
+func NewCopilotAgent(cfg Config, databases map[string]sop.DatabaseOptions, systemDB *database.Database) *CopilotAgent {
 	// Initialize the "Brain" (Generator)
 	// Priority:
 	// 1. Configuration passed (from UI/JSON)
@@ -163,7 +163,7 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 		log.Error("Failed to initialize AI generator", "error", err)
 	}
 
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		Config:    cfg,
 		brain:     gen,
 		registry:  NewRegistry(),
@@ -183,12 +183,12 @@ func NewDataAdminAgent(cfg Config, databases map[string]sop.DatabaseOptions, sys
 }
 
 // SetService sets the reference to the main service (for cache invalidation).
-func (a *DataAdminAgent) SetService(s *Service) {
+func (a *CopilotAgent) SetService(s *Service) {
 	a.service = s
 }
 
 // shouldObfuscate determines if obfuscation should be applied for a given database.
-func (a *DataAdminAgent) shouldObfuscate(dbName string) bool {
+func (a *CopilotAgent) shouldObfuscate(dbName string) bool {
 	// Look up database options
 	if opts, ok := a.databases[dbName]; ok {
 		return opts.EnableObfuscation
@@ -199,19 +199,19 @@ func (a *DataAdminAgent) shouldObfuscate(dbName string) bool {
 }
 
 // SetVerbose enables or disables verbose output.
-func (a *DataAdminAgent) SetVerbose(v bool) {
+func (a *CopilotAgent) SetVerbose(v bool) {
 	a.Config.Verbose = v
 }
 
 // Open initializes the agent's resources.
-func (a *DataAdminAgent) Open(ctx context.Context) error {
+func (a *CopilotAgent) Open(ctx context.Context) error {
 	p := ai.GetSessionPayload(ctx)
 
 	// If CurrentDB is set, start a transaction
 	if p != nil && p.CurrentDB != "" {
 		dbName := p.CurrentDB
 
-		log.Debug(fmt.Sprintf("DataAdminAgent.Open: Checking DB '%s', SystemDB available: %v", dbName, a.systemDB != nil))
+		log.Debug(fmt.Sprintf("CopilotAgent.Open: Checking DB '%s', SystemDB available: %v", dbName, a.systemDB != nil))
 
 		// Check for system DB
 		if dbName == SystemDBName && a.systemDB != nil {
@@ -243,7 +243,7 @@ func (a *DataAdminAgent) Open(ctx context.Context) error {
 }
 
 // Close cleans up the agent's resources.
-func (a *DataAdminAgent) Close(ctx context.Context) error {
+func (a *CopilotAgent) Close(ctx context.Context) error {
 	p := ai.GetSessionPayload(ctx)
 	if p == nil || p.Transaction == nil {
 		return nil
@@ -255,12 +255,12 @@ func (a *DataAdminAgent) Close(ctx context.Context) error {
 }
 
 // Search performs a search using the agent's capabilities.
-func (a *DataAdminAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
+func (a *CopilotAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
 	return []ai.Hit[map[string]any]{}, nil
 }
 
 // Ask processes a query and returns a response.
-func (a *DataAdminAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
 	// Note: We no longer reset 'a.sessionContext' here because it is now session-scoped via valid Context.
 	// If isolation is needed between Ask calls in the same session, the caller (Service) should manage the SessionPayload.
 
@@ -715,13 +715,13 @@ CRITICAL ALIASING RULES:
 }
 
 // ListTools returns the list of available tools.
-func (a *DataAdminAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+func (a *CopilotAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
 	// TODO: Implement proper tool listing from registry
 	return []ai.ToolDefinition{}, nil
 }
 
 // Execute executes the requested tool against the session payload.
-func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
 	// Determine if we should deobfuscate
 	dbName, _ := args["database"].(string)
 	if dbName == "" {
@@ -822,7 +822,7 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 		for k := range a.databases {
 			keys = append(keys, k)
 		}
-		return "", fmt.Errorf("database not found or not selected (DataAdmin). Requested: '%s', Available: %v", dbName, keys)
+		return "", fmt.Errorf("database not found or not selected (Copilot). Requested: '%s', Available: %v", dbName, keys)
 	}
 
 	// Execute specific tool
@@ -860,7 +860,7 @@ func (a *DataAdminAgent) Execute(ctx context.Context, toolName string, args map[
 	return "", fmt.Errorf("unknown tool: %s", toolName)
 }
 
-func (a *DataAdminAgent) runScript(ctx context.Context, name string, script ai.Script, args map[string]any) (string, error) {
+func (a *CopilotAgent) runScript(ctx context.Context, name string, script ai.Script, args map[string]any) (string, error) {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Running script '%s'...\n", name))
 
@@ -983,7 +983,7 @@ func (a *DataAdminAgent) runScript(ctx context.Context, name string, script ai.S
 	return sb.String(), nil
 }
 
-func (a *DataAdminAgent) runScriptRaw(ctx context.Context, script ai.Script, args map[string]any) (string, error) {
+func (a *CopilotAgent) runScriptRaw(ctx context.Context, script ai.Script, args map[string]any) (string, error) {
 	// Scope for template resolution
 	scope := make(map[string]any)
 	for k, v := range args {
@@ -1044,7 +1044,7 @@ func resolveTemplate(tmplStr string, scope map[string]any) string {
 	return tmplStr
 }
 
-func (a *DataAdminAgent) deobfuscateMap(m map[string]any) {
+func (a *CopilotAgent) deobfuscateMap(m map[string]any) {
 	// We need to handle key deobfuscation which usually requires removing the old key and adding the new one.
 	// Since we can't safely modify keys during range, we collect changes first.
 	type keyChange struct {
@@ -1080,7 +1080,7 @@ func (a *DataAdminAgent) deobfuscateMap(m map[string]any) {
 	}
 }
 
-func (a *DataAdminAgent) deobfuscateValue(v any) any {
+func (a *CopilotAgent) deobfuscateValue(v any) any {
 	switch val := v.(type) {
 	case string:
 		s := strings.Trim(val, "*_`")

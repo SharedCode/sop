@@ -22,8 +22,8 @@ func TestToolJoin_ProjectionOrder_WithFieldsString(t *testing.T) {
 	dbOpts := sop.DatabaseOptions{StoresFolders: []string{dbPath}, CacheType: sop.InMemory}
 	sysDB := database.NewDatabase(dbOpts)
 
-	adminAgent := &DataAdminAgent{
-		Config:    Config{ID: "sql_admin"},
+	adminAgent := &CopilotAgent{
+		Config:    Config{ID: "copilot"},
 		databases: map[string]sop.DatabaseOptions{"default": dbOpts},
 		systemDB:  sysDB,
 	}
@@ -110,7 +110,7 @@ func TestToolJoin_ProjectionOrder_Complex_Wildcard(t *testing.T) {
 	}
 
 	// 3. Script Execution
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		Config: Config{ID: "test_admin"},
 		databases: map[string]sop.DatabaseOptions{
 			"dev_db": dbOpts,

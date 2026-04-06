@@ -7,7 +7,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 )
 
-func (a *DataAdminAgent) executeScriptView(ctx context.Context, name string, script ai.Script, args map[string]any) (string, error) {
+func (a *CopilotAgent) executeScriptView(ctx context.Context, name string, script ai.Script, args map[string]any) (string, error) {
 	// For a "View" script, we expect it to have exactly one step which is a "select" command.
 	if len(script.Steps) == 0 {
 		return "", fmt.Errorf("script '%s' is empty", name)

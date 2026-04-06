@@ -103,7 +103,7 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, 
 	}
 
 	// 2. Open Vectors Store (Versioned)
-	vectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(name(vectorsSuffix+suffix), true, btree.DefaultSlotLength, vectorsDesc, sop.SmallData, ""), trans, compositeKeyComparer)
+	vectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(name(vectorsSuffix+suffix), true, 10000, vectorsDesc, sop.SmallData, ""), trans, compositeKeyComparer)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, 
 	// Used as a buffer for Active Memory ingestion across all versions.
 	var tempVectors btree.BtreeInterface[string, []float32]
 	if !skipTempVectors {
-		tempVectors, err = newBtree[string, []float32](ctx, sop.ConfigureStore(name(tempVectorsSuffix), true, btree.DefaultSlotLength, tempVectorsDesc, sop.SmallData, ""), trans, func(a, b string) int {
+		tempVectors, err = newBtree[string, []float32](ctx, sop.ConfigureStore(name(tempVectorsSuffix), true, 10000, tempVectorsDesc, sop.SmallData, ""), trans, func(a, b string) int {
 			if a < b {
 				return -1
 			}

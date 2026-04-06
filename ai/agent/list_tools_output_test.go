@@ -9,7 +9,7 @@ import (
 )
 
 func TestListToolsOutput(t *testing.T) {
-	agent := NewDataAdminAgent(Config{}, nil, nil)
+	agent := NewCopilotAgent(Config{}, nil, nil)
 	ctx := context.Background()
 	payload := &ai.SessionPayload{
 		CurrentDB: "system",

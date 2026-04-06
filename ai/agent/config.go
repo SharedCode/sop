@@ -8,7 +8,7 @@ import (
 // Config defines the structure of the JSON configuration file for an agent.
 type Config struct {
 	ID                    string            `json:"id"`
-	Type                  string            `json:"type,omitempty"` // "standard" (default), "data-admin", "policy", etc.
+	Type                  string            `json:"type,omitempty"` // "standard" (default), "copilot", "policy", etc.
 	Name                  string            `json:"name"`
 	Description           string            `json:"description"`
 	UserPrompt            string            `json:"user_prompt,omitempty"`    // Optional: Custom prompt for the interactive loop (e.g. "Patient> ")
