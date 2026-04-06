@@ -287,3 +287,9 @@ The system supports two types of "Nurse" agents for embedding/translation:
     *   **Cons**: Requires running Ollama, higher latency.
 
 To switch between them, you would update the `embedder` configuration in the agent's JSON file.
+
+### Knowledge Compiler & Setup Wizard Integration
+
+To dramatically speed up the instantiation of the SOP intelligent agent environment, we provide a **Knowledge Compiler** (`ai/cmd/knowledge_compiler/main.go`). This tool pre-compiles baseline architectural knowledge into a static blob (`ai/sop_base_knowledge.json`). 
+
+Instead of waiting for the LLM or embedding endpoints during the first run, the **SOP Setup Wizard** UI automatically catches this JSON payload. When configuring endpoints (e.g., via the frontend `fetch('/api/config/save')` integration), a unified loading screen directly injects the compiled vectors into your target databases synchronously alongside your Demo Data or Medical Expert configurations.
