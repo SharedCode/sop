@@ -77,6 +77,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		Format    string `json:"format"`
 		Verbose   bool   `json:"verbose"`
 		SessionID string `json:"session_id"`
+		Domain    string `json:"domain"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -228,6 +229,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	payload := &ai.SessionPayload{
 		CurrentDB: req.Database,
+			ActiveDomain: req.Domain,
 	}
 	askOpts = append(askOpts, ai.WithSessionPayload(payload))
 
@@ -625,44 +627,6 @@ func seedLLMKnowledge(ctx context.Context, db *aidb.Database) {
 			// Let's log error but try to continue.
 		} else {
 			log.Info("Seeded/Updated user knowledge", "category", entry.Category, "name", entry.Name)
-		}
-	}
-
-	// Try to locate and seed compiled SOP documentation (produced by CI/CD)
-	baseKnowledge := "sop_base_knowledge.json"
-	// Also fallback check `../sop_base_knowledge.json` or `../../` in dev
-	pathsToTry := []string{
-		baseKnowledge,
-		filepath.Join("..", baseKnowledge),
-		filepath.Join("..", "..", baseKnowledge),
-	}
-	var data []byte
-	for _, p := range pathsToTry {
-		if d, err := os.ReadFile(p); err == nil {
-			data = d
-			break
-		}
-	}
-
-	if data != nil {
-		var chunks []struct {
-			Category string `json:"category"`
-			Title    string `json:"title"`
-			Content  string `json:"content"`
-		}
-		if err := json.Unmarshal(data, &chunks); err == nil {
-			seededCount := 0
-			for _, chunk := range chunks {
-				k := agent.KnowledgeKey{Category: chunk.Category, Name: chunk.Title}
-				if _, err := store.Upsert(ctx, k, chunk.Content); err != nil {
-					log.Error("Failed to seed base knowledge chunk", "category", chunk.Category, "name", chunk.Title, "error", err)
-				} else {
-					seededCount++
-				}
-			}
-			log.Info(fmt.Sprintf("Seeded %d pieces of base SOP architectural knowledge.", seededCount))
-		} else {
-			log.Error(fmt.Sprintf("Failed to Unmarshal base knowledge JSON: %v", err))
 		}
 	}
 

@@ -2124,7 +2124,7 @@
                 body: JSON.stringify({
                     name: name,
                     category: category,
-                    verbose: true, session_id: currentSessionID,
+                    verbose: true, session_id: currentSessionID, domain: domain,
                     args: {} 
                 })
             });
@@ -3990,6 +3990,8 @@
         const provider = providerSelect ? providerSelect.value : '';
         const formatSelect = document.getElementById('format-select');
         const format = formatSelect ? formatSelect.value : 'csv';
+        const domainSelect = document.getElementById('domain-select');
+        const domain = domainSelect ? domainSelect.value : '';
 
         if (!message) return;
 
@@ -4018,7 +4020,7 @@
                     agent: agent,
                     provider: provider,
                     format: format,
-                    verbose: true, session_id: currentSessionID
+                    verbose: true, session_id: currentSessionID, domain: domain
                 }),
                 signal: chatAbortController.signal
             });

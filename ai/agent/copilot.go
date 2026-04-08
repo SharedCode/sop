@@ -19,6 +19,7 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/obfuscation"
+	"github.com/sharedcode/sop/ai/vector"
 	"github.com/sharedcode/sop/jsondb"
 )
 
@@ -274,26 +275,41 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 		var err error
 		var tempGen ai.Generator
 
+		// Get runtime overrides
+		customAPIKey, _ := ctx.Value(ai.CtxKeyAPIKey).(string)
+		customBaseURL, _ := ctx.Value(ai.CtxKeyBaseURL).(string)
+
 		switch providerOverride {
 		case ProviderGemini:
-			if a.geminiKey != "" {
+			key := customAPIKey
+			if key == "" {
+				key = a.geminiKey
+			}
+			if key != "" {
 				model := os.Getenv(EnvGeminiModel)
 				if model == "" {
 					model = DefaultModelGemini
 				}
 				tempGen, err = generator.New(ProviderGemini, map[string]any{
-					"api_key": a.geminiKey,
+					"api_key": key,
 					"model":   model,
 				})
 			}
 		case ProviderChatGPT:
-			if a.openAIKey != "" {
-				model := os.Getenv(EnvOpenAIModel)
+			key := customAPIKey
+			if key == "" {
+				key = a.openAIKey
+			}
+			if key != "" {
+				model := customBaseURL // We use BaseURL for custom model string if given
+				if model == "" {
+					model = os.Getenv(EnvOpenAIModel)
+				}
 				if model == "" {
 					model = DefaultModelOpenAI
 				}
 				tempGen, err = generator.New(ProviderChatGPT, map[string]any{
-					"api_key": a.openAIKey,
+					"api_key": key,
 					"model":   model,
 				})
 			}
@@ -302,7 +318,10 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 			if model == "" {
 				model = DefaultModelOllama
 			}
-			host := os.Getenv(EnvOllamaHost)
+			host := customBaseURL
+			if host == "" {
+				host = os.Getenv(EnvOllamaHost)
+			}
 			if host == "" {
 				host = DefaultHost
 			}
@@ -426,6 +445,59 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 		toolsDef += "\nContext Section (Learned Knowledge):\n" + knowledge
 	}
 
+	// Inject Active Domain Context via Vector Search
+	if p := ai.GetSessionPayload(ctx); p != nil && p.ActiveDomain != "" {
+		var domainDB *database.Database
+		for _, dbOpts := range a.databases {
+			tempDB := database.NewDatabase(dbOpts)
+			if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+				stores, _ := tx.GetStores(ctx)
+				hasDomain := false
+				for _, s := range stores {
+					if s == p.ActiveDomain {
+						hasDomain = true
+						break
+					}
+				}
+				tx.Rollback(ctx)
+				if hasDomain {
+					domainDB = tempDB
+					break
+				}
+			}
+		}
+
+		if domainDB != nil {
+			if tx, err := domainDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+				vs, err := domainDB.OpenVectorStore(ctx, p.ActiveDomain, tx, vector.Config{UsageMode: ai.BuildOnceQueryMany})
+				if err == nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
+					vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query})
+					if err == nil && len(vecs) > 0 {
+						hits, err := vs.Query(ctx, vecs[0], 5, nil)
+						if err == nil && len(hits) > 0 {
+							toolsDef += fmt.Sprintf("\nActive Domain Expert Context (%s):\n", p.ActiveDomain)
+							for _, hit := range hits {
+								if hit.Score < 0.6 {
+									continue
+								}
+								valStr := ""
+								if str, ok := hit.Payload["_raw_content"].(string); ok {
+									valStr = str
+								} else if str, ok := hit.Payload["content"].(string); ok {
+									valStr = str
+								} else {
+									valStr = fmt.Sprintf("%v", hit.Payload)
+								}
+								toolsDef += fmt.Sprintf("- Context (Score: %.2f): %s\n", hit.Score, valStr)
+							}
+						}
+					}
+				}
+				tx.Rollback(ctx)
+			}
+		}
+	}
+
 	// Inject Current Database Schema/Stores
 	if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
 		var db *database.Database
@@ -475,53 +547,8 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 		}
 	}
 
-	// Append instructions
-	defaultInst := `
-IMPORTANT:
-- The 'select' tool returns the raw data string. You MUST include this raw data in your final response.
-- When filtering with 'select', use MongoDB-style operators ($eq, $ne, $gt, $gte, $lt, $lte) for comparisons. Example: {"age": {"$gt": 18}}.
-- Sorting/Ordering is ONLY supported by the store's Key or a prefix of the Key. You CANNOT sort by arbitrary fields (e.g. "salary", "date") unless they are the Key.
-- Check if a secondary index store exists (e.g. 'users_by_age' -> Index of users by age). If so, use it to fulfill sort/filter requests by joining it with the main store (e.g. scan 'users_by_age' and join 'users').
-- If no index exists, explain that SOP only supports sorting by Key.
-- For complex queries involving joins or multiple steps, use the 'execute_script' tool. The 'script' argument MUST be a valid JSON array of instruction objects (e.g. [{"op": "...", "args": {...}}]).
-- When using 'execute_script', the 'script' argument MUST be a valid JSON array of instruction objects. Do NOT leave it empty.
-- Join Strategy:
-  - Use 'inner' (default) when the query implies "intersection" or strict matching (e.g. "Find orders for user X").
-  - Use 'left' (Left Outer Join) when the query implies "optional" relationships (e.g. "List users and their orders, if any").
-  - Use 'right' or 'full' only if explicitly requested or logically required to preserve the "right" side or "both" sides.
-
-- Return Values:
-  - The 'return' command must refer to an EXPLICIT variable name defined in a previous step (e.g., 'result_var': "my_data" -> 'return {"value": "my_data"}').
-  - Do NOT assume a variable named 'final_result' exists unless you created it.
-
-
-  - Always use the Store Name as prefix (e.g. "users.age") or the explicit Alias defined in the 'join' step (e.g. "u.age").
-- Contextual Projection:
-  - When joining entities, ALWAYS project identifying fields (e.g. Name, Email) from the parent/source entity alongside the child data in the final result.
-  - Do NOT return orphaned child records without their parent's context if the user filtered by the parent.
-
-CONVERSATION VS ACTION:
-- Distinguish between a request to PERFORM an action (e.g. "Add a user", "Find records") and a request to GENERATE data or EXPLAIN concepts (e.g. "Give me a new UUID", "How does this work?").
-- If the user asks for a "new UUID" or "random ID" in isolation, simply generate it and reply with the text. Do NOT add it to any store unless explicitly instructed to "save" or "add" it.
-- Engage in conversation freely to clarify intent before taking destructive or additive actions.
-
-CLIENT_SIDE ACTIONS:
-- To switch the active database context in the UI, do NOT use a tool. Instead, strictly output the following text in your final response: [[SWITCH_DATABASE: <db_name>]]. The frontend will detect this and perform the switch.
-
-SELF-CORRECTION & LEARNING (ACTIVE MEMORY):
-- Your pipeline is powered by an automated Context-Aware "Active Memory" backend.
-- When correcting mistakes or learning rules (e.g. "We use 'TotalAmount', not 'Cost'"), simply ACKNOWLEDGE the prompt. The vector retrieval backend natively handles the propagation of definitions without you needing to explicitly 'save' them.
-- Proceed immediately with corrected logic.
-`
-	toolsDef += a.getSystemInstructions(ctx, defaultInst)
-
-	// Enforce critical aliasing rules regardless of system prompt source
-	toolsDef += `
-CRITICAL ALIASING RULES:
-- STRICTLY FORBIDDEN: Do NOT use "right.*", "left.*", "l.*", or "r.*" in projection fields.
-- Using "right.*" will fail. You MUST list specific fields (e.g. "orders.key", "users.name") or use the store name wildcard (e.g. "orders.*") if applicable.
-`
-
+	// Request rules and context are dynamically retrieved by the Vectorizer from Active Memory Markdown.
+	toolsDef += a.getSystemInstructions(ctx, "")
 	fullPrompt := toolsDef + "\n" + query
 
 	// Obfuscate Prompt if enabled

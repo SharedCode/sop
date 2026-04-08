@@ -469,7 +469,8 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		"MaxHashMod":         fs.MaximumModValue,
 		"Env": map[string]bool{
 			"SOP_ROOT_PASSWORD": os.Getenv("SOP_ROOT_PASSWORD") != "",
-			"GEMINI_API_KEY":    os.Getenv("GEMINI_API_KEY") != "",
+			"LLM_API_KEY":       os.Getenv("LLM_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("ANTHROPIC_API_KEY") != "",
+			"EMBEDDING_API_KEY": os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("VOYAGE_API_KEY") != "" || os.Getenv("EMBEDDING_API_KEY") != "",
 		},
 	}
 	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {

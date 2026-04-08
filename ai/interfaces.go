@@ -14,6 +14,10 @@ type ContextKey string
 const (
 	// CtxKeyProvider is the context key for overriding the AI provider.
 	CtxKeyProvider ContextKey = "ai_provider"
+	// CtxKeyAPIKey is the context key for passing a transient API key
+	CtxKeyAPIKey ContextKey = "ai_api_key"
+	// CtxKeyBaseURL is the context key for passing a transient Base URL
+	CtxKeyBaseURL ContextKey = "ai_base_url"
 	// CtxKeyExecutor is the context key for passing the ToolExecutor.
 	CtxKeyExecutor ContextKey = "ai_executor"
 	// CtxKeyDeobfuscator is the context key for passing the Deobfuscator.
@@ -311,6 +315,8 @@ type Agent[T any] interface {
 type SessionPayload struct {
 	// CurrentDB is the active database name for the session.
 	CurrentDB string
+	// ActiveDomain is the knowledge domain selected by the user.
+	ActiveDomain string
 	// Transaction holds the active transaction for the session.
 	// Deprecated: Use Transactions map instead for multi-db support.
 	Transaction any

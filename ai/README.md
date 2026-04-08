@@ -84,6 +84,12 @@ A conversational interface for interacting with your data and building scripts.
 *   **Script Drafting**: Teach the assistant workflows by defining them step-by-step.
 *   [Read the User Guide](AI_COPILOT_USAGE.md).
 
+
+### 8. Knowledge Vectorization (Setup Wizard)
+The AI Copilot does not hardcode context rules. Instead, it relies on an embedded **Setup Wizard** and an internal **Vectorizer (compiler)**. 
+When the system initializes, the Setup Wizard compiles documents like this `README.md` and the user/tool guides (`AI_COPILOT_USAGE.md`), converting guidelines, relational schema strategies, and tool lists directly into **Active Memory** (Vectors). 
+This allows the AI to learn how your tables are linked, what tools it is allowed to use (`select`, `join`, `script`), and which CEL expressions map to your domain, directly from your documentation rather than rigid code blocks.
+
 ## Standards & Compatibility
 
 The SOP AI Kit is designed to play nicely with the broader AI ecosystem while adhering to strict software engineering standards.
@@ -293,3 +299,44 @@ To switch between them, you would update the `embedder` configuration in the age
 To dramatically speed up the instantiation of the SOP intelligent agent environment, we provide a **Knowledge Compiler** (`ai/cmd/knowledge_compiler/main.go`). This tool pre-compiles baseline architectural knowledge into a static blob (`ai/sop_base_knowledge.json`). 
 
 Instead of waiting for the LLM or embedding endpoints during the first run, the **SOP Setup Wizard** UI automatically catches this JSON payload. When configuring endpoints (e.g., via the frontend `fetch('/api/config/save')` integration), a unified loading screen directly injects the compiled vectors into your target databases synchronously alongside your Demo Data or Medical Expert configurations.
+
+
+### Engine Constraints & Query Rules (Behavioral Vectors)
+
+*   **Query Filtering**: When filtering with `select`, use MongoDB-style operators (`$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`) for comparisons. Example: `{"age": {"$gt": 18}}`.
+*   **Sorting**: Sorting/Ordering is **ONLY** supported by the store's Key or a prefix of the Key. You CANNOT sort by arbitrary fields (e.g. `salary`, `date`) unless they are the Key.
+*   **Secondary Indexes**: Check if a secondary index store exists (e.g., `users_by_age`). If so, use it to fulfill sort/filter requests by joining it with the main store (e.g. scan `users_by_age` and join `users`). If no index exists, explain that SOP only supports sorting by Key.
+
+### Scripting & Join Execution Strategies
+
+*   **Join Strategy**:
+    *   Use `inner` (default) when the query implies "intersection" or strict matching (e.g., "Find orders for user X").
+    *   Use `left` (Left Outer Join) when the query implies "optional" relationships.
+    *   Use `right` or `full` only if explicitly requested or logically required.
+*   **Return Values**:
+    *   The `return` command in a script must refer to an EXPLICIT variable name defined in a previous step (e.g., `'result_var': "my_data"` -> `'return {"value": "my_data"}'`).
+    *   Do NOT assume a variable named `final_result` exists unless you created it.
+*   **Contextual Projection**:
+    *   When joining entities, ALWAYS project identifying fields (e.g., Name, Email) from the parent/source entity alongside the child data in the final result.
+    *   Do NOT return orphaned child records without their parent's context if the user filtered by the parent.
+    *   Always use the Store Name as prefix (e.g., `users.age`) or the explicit Alias defined in the `join` step.
+
+### Critical Aliasing Rules
+
+*   **STRICTLY FORBIDDEN**: Do NOT use `right.*`, `left.*`, `l.*`, or `r.*` in projection fields. Using `right.*` will fail.
+*   You MUST list specific fields (e.g., `orders.key`, `users.name`) or use the exact store name wildcard (e.g., `orders.*`) if applicable.
+
+### Intent Detection (Conversation vs. Action)
+
+*   Distinguish between a request to PERFORM an action (e.g., "Add a user", "Find records") and a request to GENERATE data or EXPLAIN concepts (e.g., "Give me a new UUID", "How does this work?").
+*   If a user asks for a "new UUID" or "random ID" in isolation, simply generate it and reply with the text. Do NOT add it to any store unless explicitly instructed to "save" or "add" it.
+*   Engage in conversation freely to clarify intent before taking destructive or additive actions.
+
+### UI Handlers (Client-Side Actions)
+
+*   To switch the active database context in the UI, do NOT use a tool. Instead, strictly output the following text in your final response: `[[SWITCH_DATABASE: <db_name>]]`. The frontend will detect this and perform the switch.
+
+### Active Memory & Self-Correction
+
+*   Your pipeline is powered by an automated Context-Aware "Active Memory" backend.
+*   When correcting mistakes or learning rules (e.g., "We use 'TotalAmount', not 'Cost'"), simply ACKNOWLEDGE the prompt. The vector retrieval backend natively handles the propagation of definitions without you needing to explicitly 'save' them. Proceed immediately with corrected logic.

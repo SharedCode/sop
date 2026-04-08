@@ -145,11 +145,15 @@
     <div class="chat-header">
         <div style="display: flex; align-items: center; gap: 8px;">
             <span>AI Copilot</span>
-            <select id="provider-select" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; font-weight: normal;" onclick="event.stopPropagation()" title="Select AI Partner">
-                <option value="">Gemini (Default)</option>
-                <option value="ollama">Ollama (Local AI)</option>
-                <option value="chatgpt">ChatGPT (Cloud)</option>
+            <span onclick="toggleChatSettings()" style="cursor: pointer; font-size: 13px; opacity: 0.8; margin-left: 4px;" title="LLM Settings">⚙️</span>
+            
+            <select id="domain-select" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--accent-color); color: white; font-size: 11px; font-weight: normal; margin-left: 4px;" onclick="event.stopPropagation()" title="Active Knowledge Domain">
+                <option value="">SOP (General)</option>
+                {{if .HasDemo}}
+                <option value="medical_knowledge_base">Medical Expert</option>
+                {{end}}
             </select>
+
             <select id="format-select" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; font-weight: normal;" onclick="event.stopPropagation()" title="Response Format">
                 <option value="csv">CSV</option>
                 <option value="json">JSON</option>
@@ -173,9 +177,45 @@
             <button class="minimize-btn" onclick="toggleChatWidget()">_</button>
         </div>
     </div>
+    
+    <!-- Chat Settings Overlay -->
+    <div id="chat-settings" style="display: none; padding: 12px; font-size: 12px; background: var(--bg-color); flex: 1; overflow-y: auto; border-bottom: 1px solid var(--border-color);">
+        <h4 style="margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">LLM Engine Settings</h4>
+        <div style="margin-bottom: 10px;">
+            <label style="display: block; margin-bottom: 4px; font-weight: bold;">Provider / Model</label>
+            <select id="chat-settings-provider" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="toggleChatSettingsFields()">
+                <option value="">System Default (Ollama/Env)</option>
+                <optgroup label="Anthropic">
+                    <option value="anthropic">Claude (API Key required)</option>
+                </optgroup>
+                <optgroup label="Google">
+                    <option value="gemini">Gemini (API Key required)</option>
+                </optgroup>
+                <optgroup label="OpenAI">
+                    <option value="chatgpt">ChatGPT (API Key required)</option>
+                </optgroup>
+                <optgroup label="Local">
+                    <option value="ollama">Ollama (Base URL optional)</option>
+                </optgroup>
+            </select>
+        </div>
+        <div id="chat-settings-url-container" style="margin-bottom: 10px; display: none;">
+            <label style="display: block; margin-bottom: 4px; font-weight: bold;">Base URL</label>
+            <input type="text" id="chat-settings-url" placeholder="http://localhost:11434" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+        </div>
+        <div id="chat-settings-apikey-container" style="margin-bottom: 10px; display: none;">
+            <label style="display: block; margin-bottom: 4px; font-weight: bold;">API Key (Auth Token)</label>
+            <input type="password" id="chat-settings-api-key" placeholder="Enter API Key securely" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px;">
+            <button onclick="toggleChatSettings()" style="padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--pre-bg); color: var(--text-color); cursor: pointer;">Cancel</button>
+            <button onclick="saveChatSettings()" style="padding: 4px 10px; border-radius: 3px; border: none; background: var(--accent-color); color: white; cursor: pointer;">Save & Close</button>
+        </div>
+    </div>
+
     <div id="chat-history">
         <div class="chat-message ai">
-            Hello! I am your SOP Data Copilot. I can help you query your data using natural language.<br>
+            Hello! I am an AI copilot. I am a general purpose AI that can also assist you in managing SOP databases.<br>
             Type /list_tools to show all available tool commands.<br><br>
             {{if .HasDemo}}
             <strong>Try these examples (if you loaded the Demo Data):</strong>

@@ -4,24 +4,25 @@ import (
 	"context"
 	"fmt"
 
-	"cmp"
-
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/vector"
 )
 
 // PopulateMedicalKnowledgeBase initializes the stores used for the "medical expert" use-case.
 func PopulateMedicalKnowledgeBase(ctx context.Context, opts sop.DatabaseOptions) error {
-	trans, err := database.BeginTransaction(ctx, opts, sop.ForWriting)
+	db := database.NewDatabase(opts)
+	trans, err := db.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %v", err)
 	}
 
-	// Just creating the store for now, data will be enhanced later on.
-	_, err = database.NewBtree[string, string](ctx, opts, "medical_knowledge_base", trans, cmp.Compare[string])
+	// Create VectorStore instead of B-Tree for medical data logic.
+	_, err = db.OpenVectorStore(ctx, "medical_knowledge_base", trans, vector.Config{UsageMode: ai.BuildOnceQueryMany})
 	if err != nil {
 		trans.Rollback(ctx)
-		return fmt.Errorf("failed to create 'medical_knowledge_base' store: %v", err)
+		return fmt.Errorf("failed to create 'medical_knowledge_base' vector store: %v", err)
 	}
 
 	if err := trans.Commit(ctx); err != nil {

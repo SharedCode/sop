@@ -39,12 +39,14 @@ For local development, IoT devices, or single-user desktop applications, the SOP
 - **Instant Access**: Serve one or many databases from a single lightweight process.
 - **Use Case**: A developer inspecting their local data, or an embedded device exposing a management interface.
 
-### 2. Enterprise Swarm (Clustered)
-In a large-scale enterprise environment, the SOP Data Manager shines as a stateless management node within your storage swarm.
-- **Scalable Hosting**: Deploy the SOP Data Manager on **Kubernetes**, **AWS EC2 Auto Scaling Groups**, or **Linux Bare Metal** farms.
-- **Dynamic Scaling**: Spin up as many instances of the SOP Data Manager as needed to serve different teams or departments.
-- **Cluster-Aware**: When configured with the same Redis endpoint as your production applications, the SOP Data Manager participates in the same distributed transaction protocols.
-- **Safe Production Access**: You can view, edit, and manage live production data safely. The SOP Data Manager respects all distributed locks, ensuring that manual admin actions never corrupt data or violate ACID properties, even while your high-throughput microservices are hammering the same data files.
+### 2. Enterprise Swarm (Clustered Peer Nodes)
+In a large-scale enterprise environment, the SOP Data Manager shines as a stateless, high-performance peer node within your storage swarm. 
+- **True Scalability**: Deploy the SOP Data Manager behind a **Load Balancer** on **Kubernetes**, **AWS EC2 Auto Scaling Groups**, or **Linux Bare Metal** farms. Because the frontend UI uses relative paths, users can connect their browser to any `httpserver` instance in the network, and the traffic will natively route and distribute perfectly.
+- **Bare Metal I/O**: Each `httpserver` acts as a peer server capable of doing heavy bare-metal I/O on attached network volumes (EBS/EFS) or local SSDs, distributing the computational load of serving massive client requests across many machines.
+- **Cluster Coordination**: When configured with `"mode": "clustered"` and connected to your infrastructure's **Redis cluster**, the HTTP servers seamlessly negotiate distributed locks, caching, and state coordination across the entire swarm.
+- **Safe Production Access**: You can view, edit, and manage live production data safely. Because every HTTP server peer respects the Redis distributed locks, manual admin actions or AI Copilot queries never corrupt data or violate ACID properties, even while your high-throughput microservices are hammering the same data files.
+- **Distributed Script Execution**: With built-in scripting support and API endpoints, users can cleanly offload heavy computing tasks directly to the cluster. Whether operating in standalone, peer-to-peer, or fully clustered mode, these intensive script executions run correctly and safely across nodes, orchestrated flawlessly by the Redis Cluster backend.
+- **AI Agent Swarm**: Because the autonomous AI RunLoop and Copilot engine are core components baked directly into the HTTP Server, scaling the server instantly creates an AI swarm. Heavy reasoning tasks, autonomous RAG pipelines, and concurrent chat sessions are naturally load-balanced across your peer nodes, yielding a massive, horizontally scalable AI workforce analyzing your enterprise data in parallel.
 
 ## Usage
 

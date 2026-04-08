@@ -38,7 +38,7 @@ func (m *mockAgent) Clone() ai.Agent[map[string]any] {
 func TestSessionIDHandling(t *testing.T) {
 	// Setup
 	activeSessions = NewSessionManager(100)
-	
+
 	loadedAgents = map[string]ai.Agent[map[string]any]{
 		"default": &mockAgent{id: "blueprint"},
 	}
@@ -83,9 +83,8 @@ func TestSessionIDHandling(t *testing.T) {
 	}
 
 	// Verify the session agent was stored
-	
+
 	sessionAgent, exists := activeSessions.Get(sessionID)
-	
 
 	if !exists {
 		t.Fatal("Expected agent to be stored in activeSessions map, but it was missing")
@@ -105,11 +104,10 @@ func TestSessionIDHandling(t *testing.T) {
 	handleAIChat(w2, req2)
 
 	// Verify the map still contains exactly 1 item
-	
+
 	activeSessions.mu.Lock()
 	count := len(activeSessions.lookup)
 	activeSessions.mu.Unlock()
-	
 
 	if count != 1 {
 		t.Fatalf("Expected strictly 1 session, but activeSessions grew to %d", count)
@@ -119,7 +117,7 @@ func TestSessionIDHandling(t *testing.T) {
 func TestSessionIDConcurrency(t *testing.T) {
 	// Setup
 	activeSessions = NewSessionManager(100)
-	
+
 	loadedAgents = map[string]ai.Agent[map[string]any]{
 		"default": &mockAgent{id: "blueprint"},
 	}
@@ -145,11 +143,9 @@ func TestSessionIDConcurrency(t *testing.T) {
 
 	wg.Wait()
 
-	
 	activeSessions.mu.Lock()
 	count := len(activeSessions.lookup)
 	activeSessions.mu.Unlock()
-	
 
 	if count != numRequests {
 		t.Fatalf("Expected %d active sessions after concurrent requests, got %d", numRequests, count)
