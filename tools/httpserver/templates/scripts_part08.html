@@ -1,0 +1,901 @@
+{{define "scripts_part08"}}
+<script>
+    function showStoreDetails() {
+        // Redirect to Edit Store (which now handles Read-Only/Edit hybrid view)
+        showEditStore(true);
+    }
+
+    /* 
+    function showStoreDetails_OLD() {
+        // ... (Old logic commented out)
+    }
+    */
+
+    function isEqual(a, b) {
+        return false;
+    }
+
+    function updateStore() {
+        const name = document.getElementById('new-store-name').value.trim();
+        const desc = document.getElementById('new-store-description').value.trim();
+        const celExpression = document.getElementById('cel-expression-value').value;
+        
+        const type = document.getElementById('new-store-key-type').value;
+        let indexSpec = null;
+        if (type === 'map') {
+            indexSpec = generateIndexSpecJSON();
+        }
+
+        let slotLength = parseInt(document.getElementById('new-store-slot-length').value);
+        if (isNaN(slotLength)) slotLength = 2000;
+        
+        const isUnique = document.getElementById('new-store-is-unique').checked;
+        const dataSize = parseInt(document.getElementById('new-store-data-size').value);
+        
+        let cacheDuration = parseInt(document.getElementById('new-store-cache-duration').value);
+        if (isNaN(cacheDuration)) cacheDuration = 0;
+        let isCacheTTL = document.getElementById('new-store-cache-ttl').checked;
+
+        // If Data Size is Small (0) or Big (2), cache settings are not applicable/hidden.
+        if (dataSize !== 1) {
+            cacheDuration = 0;
+            isCacheTTL = false;
+        }
+
+        // Seed Data (Only if visible/empty)
+        let seedKey = null;
+        let seedValue = null;
+        const seedContainer = document.getElementById('seed-data-container');
+        
+        // Collect Relations
+        const relations = getRelationshipsFromUI();
+
+        if (seedContainer.style.display !== 'none') {
+             // Reuse logic from saveNewStore (simplified duplication for now)
+             if (type === 'map') {
+                const rows = document.querySelectorAll('.seed-key-field-row');
+                if (rows.length > 0) {
+                    seedKey = {};
+                    rows.forEach(row => {
+                        const name = row.getAttribute('data-name') || row.getAttribute('data-field');
+                        const valStr = row.querySelector('.seed-key-field-value').value;
+                        const typeDefRow = Array.from(document.querySelectorAll('.key-field-row')).find(r => r.querySelector('.key-field-name').value.trim() === name);
+                        const fieldType = typeDefRow ? typeDefRow.querySelector('.key-field-type').value : 'string';
+                        let val = valStr;
+                        if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(fieldType)) {
+                            val = parseInt(valStr); if (isNaN(val)) val = 0;
+                        } else if (['float32', 'float64', 'decimal'].includes(fieldType)) {
+                            val = parseFloat(valStr); if (isNaN(val)) val = 0.0;
+                        } else if (fieldType === 'bool') {
+                            val = (valStr.toLowerCase() === 'true' || valStr === '1');
+                        }
+                        seedKey[name] = val;
+                    });
+                }
+             } else {
+                 const seedKeyStr = document.getElementById('new-store-seed-key').value.trim();
+                 if (seedKeyStr) {
+                     seedKey = seedKeyStr;
+                     // Parse based on selected Key Type to ensure backend receives correct type
+                     if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(type)) {
+                         const n = parseInt(seedKeyStr);
+                         if (!isNaN(n)) seedKey = n;
+                     } else if (['float32', 'float64', 'decimal'].includes(type)) {
+                         const n = parseFloat(seedKeyStr);
+                         if (!isNaN(n)) seedKey = n;
+                     } else if (type === 'bool') {
+                         seedKey = (seedKeyStr.toLowerCase() === 'true' || seedKeyStr === '1');
+                     }
+                 }
+             }
+             
+             try {
+                seedValue = generateSeedValueJSON();
+             } catch (e) {
+                showAlert(e.message);
+                return;
+             }
+        }
+
+        const payload = {
+            database: currentDatabase,
+            storeName: name,
+            description: desc,
+            keyType: type,
+            valueType: document.getElementById('new-store-value-type').value,
+            celExpression: celExpression,
+            indexSpec: indexSpec,
+            slotLength: slotLength,
+            isUnique: isUnique,
+            dataSize: dataSize,
+            cacheDuration: cacheDuration,
+            isCacheTTL: isCacheTTL,
+            seedKey: seedKey,
+            seedValue: seedValue,
+            relations: relations,
+            adminToken: window.currentAdminToken || ""
+        };
+
+        fetch('/api/store/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(async res => {
+            if (!res.ok) {
+                const text = await res.text();
+                if (text.includes("Cannot update") && text.includes("structure") && !window.currentAdminToken) {
+                    const token = prompt("Structural changes detected. Please enter Admin Token to override:");
+                    if (token) {
+                        window.currentAdminToken = token;
+                        payload.adminToken = token;
+                        return fetch('/api/store/update', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        }).then(async res2 => {
+                            if (!res2.ok) {
+                                const text2 = await res2.text();
+                                throw new Error(text2 || res2.statusText);
+                            }
+                            return res2.json();
+                        });
+                    }
+                }
+                throw new Error(text || res.statusText);
+            }
+            return res.json();
+        })
+        .then(data => {
+            closeAddStoreModal();
+            // Refresh store info
+            selectDatabase(currentDatabase, true, name);
+            if (data && data.warning) {
+                showAlert('Store updated successfully.\n\nWARNING: ' + data.warning);
+            } else {
+                showAlert('Store updated successfully.');
+            }
+        })
+        .catch(err => {
+            showAlert("Error updating store: " + err.message);
+        });
+    }
+
+    function showAddStore() {
+        // currentStoreInfo = null; // Do not clear this, as it breaks Edit Store if we cancel Add
+        window.currentAdminToken = null;
+        
+        // Fetch stores for potential relationships
+        fetchRelationStores();
+
+        document.getElementById('add-store-modal').style.display = 'flex';
+        document.querySelector('#add-store-modal .modal-header span').textContent = 'Add New Store';
+
+        // populate EC targets
+        const targetSelect = document.getElementById('new-store-target-ec');
+        targetSelect.innerHTML = '<option value="">Default("")</option>';
+        targetSelect.disabled = false;
+        
+        if (currentDatabase) {
+             fetch(`/api/db/options?database=${encodeURIComponent(currentDatabase)}`)
+                .then(res => res.json())
+                .then(opts => {
+                    if (opts.erasure_config) {
+                        Object.keys(opts.erasure_config).forEach(key => {
+                             // Skip empty key as it doubles with Default if logic overlaps, 
+                             // but explicit empty key in config is valid.
+                             if (key === "") return; 
+                             
+                             const opt = document.createElement('option');
+                             opt.value = key;
+                             opt.textContent = key;
+                             targetSelect.appendChild(opt);
+                        });
+                    }
+                })
+                .catch(console.error);
+        }
+
+        // Reset Button
+        const footer = document.querySelector('#add-store-modal .modal-footer');
+        const saveBtn = footer.querySelector('.btn-success');
+        saveBtn.textContent = 'Add';
+        saveBtn.onclick = saveNewStore;
+        saveBtn.disabled = false;
+
+        // Reset Basic Fields
+        document.getElementById('new-store-name').value = '';
+        document.getElementById('new-store-name').disabled = false;
+        document.getElementById('new-store-description').value = '';
+        document.getElementById('new-store-description').disabled = false;
+        document.getElementById('relationship-list').innerHTML = ''; // Clear relationships
+
+        // Reset Key Type
+        document.getElementById('new-store-key-type').value = 'string';
+        document.getElementById('new-store-key-type').disabled = false;
+        document.getElementById('new-store-key-is-array').checked = false;
+        document.getElementById('new-store-key-is-array').disabled = false;
+        
+        // Reset Value Type
+        document.getElementById('new-store-value-type').value = 'string';
+        document.getElementById('new-store-value-type').disabled = false;
+        document.getElementById('new-store-value-is-array').checked = false;
+        document.getElementById('new-store-value-is-array').disabled = false;
+
+        // Reset CEL
+        document.getElementById('cel-expression-value').value = '';
+        document.getElementById('cel-expression-value').disabled = false;
+        const celEditBtn = document.querySelector('#new-store-cel-expression button');
+        if (celEditBtn) celEditBtn.disabled = false;
+
+        // Reset Advanced Mode
+        document.getElementById('new-store-advanced-mode').checked = false;
+        document.getElementById('new-store-advanced-mode').disabled = false;
+        toggleAdvancedOptions();
+
+        // Reset Advanced Fields
+        document.getElementById('new-store-slot-length').value = 2000;
+        document.getElementById('new-store-slot-length').disabled = false;
+        document.getElementById('new-store-is-unique').checked = true;
+        document.getElementById('new-store-is-unique').disabled = false;
+        document.getElementById('new-store-data-size').value = "0"; // Small
+        document.getElementById('new-store-data-size').disabled = false;
+        
+        document.getElementById('new-store-cache-duration').value = 0;
+        document.getElementById('new-store-cache-duration').disabled = false;
+        document.getElementById('new-store-is-streaming').checked = false;
+        document.getElementById('new-store-is-streaming').disabled = false;
+        
+        toggleCacheOptions();
+
+        // Clear Dynamic Lists
+        document.getElementById('key-fields-list').innerHTML = '';
+        document.getElementById('index-fields-list').innerHTML = '';
+        document.getElementById('value-map-fields-list').innerHTML = '';
+        document.getElementById('seed-key-fields-list').innerHTML = '';
+        document.getElementById('seed-value-fields-list').innerHTML = '';
+
+        // Reset Seed Data Inputs
+        document.getElementById('new-store-seed-key').value = '';
+        document.getElementById('new-store-seed-value-simple').value = '';
+        document.getElementById('seed-data-container').style.display = 'block'; // Always show for new store
+
+        // Reset UI State
+        toggleIndexSpec();
+        
+        // Re-enable Add Buttons (in case they were disabled by Edit Store)
+        const addKeyBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
+        if (addKeyBtn) addKeyBtn.disabled = false;
+        
+        const addIndexBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
+        if (addIndexBtn) addIndexBtn.disabled = false;
+        
+        // Hide Unlock Button
+        const unlockBtn = document.getElementById('btn-unlock-admin');
+        if (unlockBtn) unlockBtn.style.display = 'none';
+
+        // Sync UI with reset values
+        if (typeof toggleIndexSpec === 'function') toggleIndexSpec();
+        if (typeof toggleValueSpec === 'function') toggleValueSpec();
+    }
+
+    function closeAddStoreModal() {
+        document.getElementById('add-store-modal').style.display = 'none';
+        window.currentAdminToken = null;
+        const unlockBtn = document.getElementById('btn-unlock-admin');
+        if (unlockBtn) unlockBtn.style.display = 'none';
+    }
+
+    function addValueFieldRow(name = '', type = 'string', value = '') {
+        const container = document.getElementById('value-map-fields-list');
+        const div = document.createElement('div');
+        div.className = 'value-field-row';
+        div.style.display = 'flex';
+        div.style.gap = '5px';
+        div.innerHTML = `
+            <input type="text" placeholder="Field Name" class="value-field-name" value="${name}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <select class="value-field-type" style="width: 100px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                <option value="string" ${type==='string'?'selected':''}>String</option>
+                <option value="int" ${type==='int'?'selected':''}>Int</option>
+                <option value="float64" ${type==='float64'?'selected':''}>Float64</option>
+                <option value="bool" ${type==='bool'?'selected':''}>Bool</option>
+            </select>
+            <input type="text" placeholder="Value" class="value-field-value" value="${value}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <button onclick="this.parentElement.remove();" style="background:var(--danger-bg); color:white; border:none; padding: 4px 8px; cursor:pointer;">×</button>
+        `;
+        container.appendChild(div);
+    }
+
+    // Updates the visibility of the "Is Array" checkbox based on the selected type.
+    // Blob and Map types cannot be arrays, so we hide the checkbox.
+    function updateArrayCheckboxVisibility(type, checkboxId) {
+        const checkbox = document.getElementById(checkboxId);
+        // Try to find the label container by ID convention first
+        let container = document.getElementById(checkboxId + '-label');
+        
+        // Fallback to parentElement if no specific container found
+        if (!container && checkbox) {
+            container = checkbox.parentElement;
+        }
+
+        if (container) {
+            if (type === 'blob' || type === 'map') {
+                if (checkbox) checkbox.checked = false;
+                container.style.display = 'none';
+            } else {
+                container.style.display = 'flex';
+            }
+        }
+    }
+
+    function toggleIndexSpec() {
+        const type = document.getElementById('new-store-key-type').value;
+        updateArrayCheckboxVisibility(type, 'new-store-key-is-array');
+
+        const container = document.getElementById('index-spec-container');
+        const celContainer = document.getElementById('new-store-cel-expression');
+        
+        const simpleKeyInput = document.getElementById('new-store-seed-key');
+        const mapKeyContainer = document.getElementById('new-store-seed-key-map-container');
+
+        if (type === 'map') {
+            container.style.display = 'block';
+            if (celContainer) celContainer.style.display = 'block';
+            simpleKeyInput.style.display = 'none';
+            mapKeyContainer.style.display = 'block';
+
+            // Initialize with one row if empty
+            if (document.getElementById('key-fields-list').children.length === 0) {
+                addKeyFieldRow();
+            }
+            updateSeedKeyForm();
+        } else {
+            container.style.display = 'none';
+            if (celContainer) celContainer.style.display = 'none';
+            simpleKeyInput.style.display = 'block';
+            mapKeyContainer.style.display = 'none';
+        }
+    }
+
+    // --- Map Key Builder Logic ---
+    function addKeyFieldRow(name = '', type = 'string') {
+        const container = document.getElementById('key-fields-list');
+        const div = document.createElement('div');
+        div.className = 'key-field-row';
+        div.style.display = 'flex';
+        div.style.gap = '5px';
+        div.innerHTML = `
+            <input type="text" placeholder="Field Name" class="key-field-name" value="${name}" oninput="updateIndexDropdowns(); updateSeedKeyForm();" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <select class="key-field-type" onchange="updateSeedKeyForm()" style="width: 100px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                <option value="string" ${type==='string'?'selected':''}>String</option>
+                <option value="int" ${type==='int'?'selected':''}>Int</option>
+                <option value="int8" ${type==='int8'?'selected':''}>Int8</option>
+                <option value="int16" ${type==='int16'?'selected':''}>Int16</option>
+                <option value="int32" ${type==='int32'?'selected':''}>Int32</option>
+                <option value="int64" ${type==='int64'?'selected':''}>Int64</option>
+                <option value="uint" ${type==='uint'?'selected':''}>Uint</option>
+                <option value="uint8" ${type==='uint8'?'selected':''}>Uint8</option>
+                <option value="uint16" ${type==='uint16'?'selected':''}>Uint16</option>
+                <option value="uint32" ${type==='uint32'?'selected':''}>Uint32</option>
+                <option value="uint64" ${type==='uint64'?'selected':''}>Uint64</option>
+                <option value="float32" ${type==='float32'?'selected':''}>Float32</option>
+                <option value="float64" ${type==='float64'?'selected':''}>Float64</option>
+                <option value="complex64" ${type==='complex64'?'selected':''}>Complex64</option>
+                <option value="complex128" ${type==='complex128'?'selected':''}>Complex128</option>
+                <option value="rune" ${type==='rune'?'selected':''}>Rune</option>
+                <option value="decimal" ${type==='decimal'?'selected':''}>Decimal</option>
+                <option value="bool" ${type==='bool'?'selected':''}>Bool</option>
+                <option value="timestamp" ${type==='timestamp'?'selected':''}>Timestamp</option>
+                <option value="timestampz" ${type==='timestampz'?'selected':''}>TimestampZ</option>
+                <option value="date" ${type==='date'?'selected':''}>Date</option>
+                <option value="datetime" ${type==='datetime'?'selected':''}>DateTime</option>
+                <option value="time" ${type==='time'?'selected':''}>Time</option>
+                <option value="guid" ${type==='guid'?'selected':''}>UUID</option>
+                <option value="blob" ${type==='blob'?'selected':''}>Blob</option>
+            </select>
+            <div style="display:flex; gap:0; align-items:center; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg);">
+                <button onclick="moveFieldRow(this, -1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px;" title="Move Up">↑</button>
+                <button onclick="moveFieldRow(this, 1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px; border-left: 1px solid var(--input-border);" title="Move Down">↓</button>
+                <button onclick="this.closest('.key-field-row').remove(); updateIndexDropdowns(); updateSeedKeyForm();" style="color:red; cursor:pointer; background:none; border:none; padding: 2px 6px; border-left: 1px solid var(--input-border);">&times;</button>
+            </div>
+        `;
+        container.appendChild(div);
+        updateIndexDropdowns();
+        updateSeedKeyForm();
+    }
+
+    function moveFieldRow(btn, direction) {
+        const row = btn.closest('.key-field-row, .seed-value-field-row, .index-field-row');
+        const container = row.parentElement;
+        if (direction === -1) {
+            if (row.previousElementSibling) {
+                container.insertBefore(row, row.previousElementSibling);
+            }
+        } else {
+            if (row.nextElementSibling) {
+                container.insertBefore(row.nextElementSibling, row);
+            }
+        }
+        // Update dependent UI
+        if (row.classList.contains('key-field-row')) {
+            updateIndexDropdowns();
+            updateSeedKeyForm();
+        }
+    }
+
+    function updateSeedKeyForm() {
+        const container = document.getElementById('seed-key-fields-list');
+        if (!container) return;
+        
+        const currentValues = {};
+        container.querySelectorAll('.seed-key-field-row').forEach(row => {
+            const name = row.getAttribute('data-field');
+            const val = row.querySelector('input').value;
+            if (name) currentValues[name] = val;
+        });
+
+        container.innerHTML = '';
+        
+        const keyRows = document.querySelectorAll('.key-field-row');
+        keyRows.forEach(row => {
+            const nameInput = row.querySelector('.key-field-name');
+            const typeSelect = row.querySelector('.key-field-type');
+            const name = nameInput.value.trim();
+            const type = typeSelect.value;
+            
+            if (!name) return; // Skip empty names
+
+            const div = document.createElement('div');
+            div.className = 'seed-key-field-row';
+            div.setAttribute('data-field', name);
+            div.setAttribute('data-type', type);
+            div.style.display = 'flex';
+            div.style.alignItems = 'center';
+            div.style.gap = '5px';
+            
+            const val = currentValues[name] || '';
+            
+            div.innerHTML = `
+                <label style="width: 100px; font-size: 12px; overflow:hidden; text-overflow:ellipsis;" title="${name}">${name} (${type}):</label>
+                <input type="text" class="seed-key-field-value" value="${val}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function addIndexFieldRow(fieldName = '', order = 'asc') {
+        const container = document.getElementById('index-fields-list');
+        const div = document.createElement('div');
+        div.className = 'index-field-row';
+        div.style.display = 'flex';
+        div.style.gap = '5px';
+        div.innerHTML = `
+            <select class="index-field-select" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                <!-- Populated by updateIndexDropdowns -->
+            </select>
+            <select class="index-field-order" style="width: 80px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                <option value="asc" ${order==='asc'?'selected':''}>Asc</option>
+                <option value="desc" ${order==='desc'?'selected':''}>Desc</option>
+            </select>
+            <div style="display:flex; gap:0; align-items:center; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg);">
+                <button onclick="moveFieldRow(this, -1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px;" title="Move Up">↑</button>
+                <button onclick="moveFieldRow(this, 1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px; border-left: 1px solid var(--input-border);" title="Move Down">↓</button>
+                <button onclick="this.closest('.index-field-row').remove()" style="color:red; cursor:pointer; background:none; border:none; padding: 2px 6px; border-left: 1px solid var(--input-border);">&times;</button>
+            </div>
+        `;
+        container.appendChild(div);
+        const select = div.querySelector('.index-field-select');
+        updateIndexDropdowns(select);
+        if (fieldName) {
+            select.value = fieldName;
+        }
+    }
+
+    function populateKeyFieldsAndIndexSpec(info) {
+        // 1. Populate Key Fields (Definition)
+        const keyList = document.getElementById('key-fields-list');
+        keyList.innerHTML = '';
+        
+        let fieldsFound = false;
+        
+        if (info.sampleKey && typeof info.sampleKey === 'object') {
+            Object.keys(info.sampleKey).forEach(k => {
+                const val = info.sampleKey[k];
+                let type = 'string';
+                const t = typeof val;
+                if (t === 'number') {
+                     if (Number.isInteger(val)) type = 'int';
+                     else type = 'float64';
+                } else if (t === 'boolean') type = 'bool';
+                
+                addKeyFieldRow(k, type);
+            });
+            fieldsFound = true;
+        }
+        
+        // Fallback to Index Spec if sample key is missing
+        if (!fieldsFound && info.indexSpec && info.indexSpec.index_fields) {
+            info.indexSpec.index_fields.forEach(f => {
+                addKeyFieldRow(f.field_name, 'string');
+            });
+        }
+
+        // 2. Populate Index Spec
+        const indexList = document.getElementById('index-fields-list');
+        indexList.innerHTML = '';
+        
+        if (info.indexSpec && info.indexSpec.index_fields) {
+            info.indexSpec.index_fields.forEach(f => {
+                addIndexFieldRow(f.field_name, f.ascending_sort_order ? 'asc' : 'desc');
+            });
+        }
+    }
+
+    function disableKeyAndIndexFields() {
+        const keyRows = document.querySelectorAll('.key-field-row input, .key-field-row select, .key-field-row button');
+        keyRows.forEach(el => el.disabled = true);
+        
+        const indexRows = document.querySelectorAll('.index-field-row select, .index-field-row button');
+        indexRows.forEach(el => el.disabled = true);
+        
+        // Disable Add buttons
+        const addKeyBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
+        if (addKeyBtn) addKeyBtn.disabled = true;
+        
+        const addIndexBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
+        if (addIndexBtn) addIndexBtn.disabled = true;
+    }
+
+    function updateIndexDropdowns(targetSelect = null) {
+        // Collect all defined key field names
+        const keyRows = document.querySelectorAll('.key-field-row');
+        const fieldNames = [];
+        keyRows.forEach(row => {
+            const name = row.querySelector('.key-field-name').value.trim();
+            if (name) fieldNames.push(name);
+        });
+
+        // Update all index dropdowns
+        const indexSelects = document.querySelectorAll('.index-field-select');
+        indexSelects.forEach(select => {
+            const currentVal = select.value;
+            select.innerHTML = '';
+            fieldNames.forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name;
+                opt.text = name;
+                if (name === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            });
+        });
+    }
+
+    function generateIndexSpecJSON() {
+        const indexRows = document.querySelectorAll('.index-field-row');
+        if (indexRows.length === 0) return "";
+
+        const fields = [];
+        indexRows.forEach(row => {
+            const name = row.querySelector('.index-field-select').value;
+            const order = row.querySelector('.index-field-order').value;
+            if (name) {
+                fields.push({
+                    field_name: name,
+                    ascending_sort_order: order === 'asc'
+                });
+            }
+        });
+
+        if (fields.length === 0) return "";
+
+        return JSON.stringify({ index_fields: fields });
+    }
+
+    function toggleAdvancedOptions() {
+        const advanced = document.getElementById('new-store-advanced-mode').checked;
+        const container = document.getElementById('advanced-options-container');
+        container.style.display = advanced ? 'block' : 'none';
+        if (advanced) {
+            toggleCacheOptions();
+            updateSlotLengthWarning();
+        }
+    }
+
+    function updateSlotLengthWarning() {
+        const val = parseInt(document.getElementById('new-store-slot-length').value);
+        const warning = document.getElementById('slot-length-warning');
+        if (isNaN(val)) {
+            warning.style.display = 'none';
+            return;
+        }
+        
+        if (val < 10) {
+            warning.textContent = "Warning: Very low slot length will degrade performance due to frequent node splitting/merging.";
+            warning.style.display = 'block';
+        } else if (val > 5000) {
+            warning.textContent = "Warning: Large slot length (>5000) may diminish performance gains and increase memory usage per node (L1/L2 cache pressure) when the node is full.";
+            warning.style.display = 'block';
+        } else {
+            warning.style.display = 'none';
+        }
+    }
+
+    function toggleCacheOptions() {
+        const dataSize = document.getElementById('new-store-data-size').value;
+        const container = document.getElementById('cache-options-container');
+        
+        // Data Size: 0=Small, 1=Medium, 2=Big
+        // Small (0): Value in Node -> No Cache Config needed (implicit)
+        // Medium (1): Value separate -> Cache Config allowed
+        // Big (2): Value separate + Persisted -> No Cache Config (typically)
+        
+        if (dataSize === "1") { // Medium
+            container.style.display = 'block';
+        } else {
+            container.style.display = 'none';
+            // Reset values if hidden? Or keep them?
+            // If hidden, user can't edit.
+            // For Big (2), we might want to force disable cache.
+            // For Small (0), cache is irrelevant.
+        }
+    }
+
+    function toggleSeedHelp() {
+        const el = document.getElementById('seed-help-text');
+        if (el.style.display === 'none') {
+            el.style.display = 'block';
+        } else {
+            el.style.display = 'none';
+        }
+    }
+
+    function toggleSeedValueMode() {
+        const isRaw = document.getElementById('seed-value-raw-mode').checked;
+        document.getElementById('seed-value-builder').style.display = isRaw ? 'none' : 'block';
+        document.getElementById('new-store-seed-value').style.display = isRaw ? 'block' : 'none';
+    }
+
+    let preStreamingState = null;
+
+    function toggleStreamingMode() {
+        const isStreaming = document.getElementById('new-store-is-streaming').checked;
+        const keyTypeSelect = document.getElementById('new-store-key-type');
+        const valueTypeSelect = document.getElementById('new-store-value-type');
+        const valueInNode = document.getElementById('new-store-value-in-node');
+        const dataSizeSelect = document.getElementById('new-store-data-size');
+        
+        if (isStreaming) {
+            // 1. Force Key Type to Map
+            if (keyTypeSelect.value !== 'map') {
+                keyTypeSelect.value = 'map';
+                // Clear existing fields to avoid "undefined" field from toggleIndexSpec default
+                document.getElementById('key-fields-list').innerHTML = '';
+                toggleIndexSpec(); 
+                
+                // Add default "Key" field (String) if list is empty
+                const rows = document.getElementById('key-fields-list').children;
+                if (rows.length === 0) {
+                     addKeyFieldRow('Key', 'string');
+                } else if (rows.length === 1) {
+                    const nameInput = rows[0].querySelector('.key-field-name');
+                    if (!nameInput.value) nameInput.value = 'Key';
+                }
+            }
+            
+            // 2. Add ChunkIndex field if not exists
+            const keyFields = document.querySelectorAll('.key-field-name');
+            let hasChunkIndex = false;
+            keyFields.forEach(f => { if (f.value === 'ChunkIndex') hasChunkIndex = true; });
+            
+            if (!hasChunkIndex) {
+                addKeyFieldRow('ChunkIndex', 'int');
+            }
+            
+            // 3. Add ChunkIndex to Index Spec if not exists
+            const indexSelects = document.querySelectorAll('.index-field-select');
+            let hasChunkIndexIndex = false;
+            indexSelects.forEach(s => { if (s.value === 'ChunkIndex') hasChunkIndexIndex = true; });
+            
+            if (!hasChunkIndexIndex) {
+                addIndexFieldRow();
+                const rows = document.getElementById('index-fields-list').children;
+                const lastRow = rows[rows.length - 1];
+                const select = lastRow.querySelector('.index-field-select');
+                select.value = 'ChunkIndex';
+            }
+            
+            // 4. Force Value Type to Blob
+            valueTypeSelect.value = 'blob';
+            toggleValueSpec(); 
+
+            // 5. Auto-set Data Size to Big
+            if (dataSizeSelect) {
+                dataSizeSelect.value = "2"; // Big
+                toggleCacheOptions();
+            }
+            
+            if (typeof toggleIndexSpec === 'function') toggleIndexSpec();
+            if (typeof toggleValueSpec === 'function') toggleValueSpec();
+
+            // 6. Disable Value In Node (Handled by Data Size now)
+            // if (valueInNode) { valueInNode.checked = false; valueInNode.disabled = true; }
+            
+            // 6. Update Seed Data Values
+            setTimeout(() => {
+                const seedRows = document.querySelectorAll('.seed-key-field-row');
+                seedRows.forEach(row => {
+                    const name = row.getAttribute('data-name');
+                    const input = row.querySelector('input');
+                    if (name === 'ChunkIndex') input.value = '0';
+                    if (name === 'Key' && !input.value) input.value = 'sample_id';
+                });
+            }, 0);
+            
+            // Set Value to sample byte array
+            document.getElementById('new-store-seed-value-simple').value = "[10, 20, 30, 40, 50]";
+
+        } else {
+            // Restore Value In Node
+            valueInNode.disabled = false;
+            valueInNode.checked = true;
+        }
+        
+        if (typeof toggleCacheOptions === 'function') toggleCacheOptions();
+    }
+
+    function addSeedValueFieldRow(name = '', type = 'string', value = '') {
+        const container = document.getElementById('seed-value-fields-list');
+        const div = document.createElement('div');
+        div.className = 'seed-value-field-row';
+        div.style.display = 'flex';
+        div.style.gap = '5px';
+        div.innerHTML = `
+            <input type="text" placeholder="Field Name" class="seed-field-name" value="${name}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <select class="seed-field-type" style="width: 80px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                <option value="string" ${type==='string'?'selected':''}>String</option>
+                <option value="int" ${type==='int'?'selected':''}>Int</option>
+                <option value="int8" ${type==='int8'?'selected':''}>Int8</option>
+                <option value="int16" ${type==='int16'?'selected':''}>Int16</option>
+                <option value="int32" ${type==='int32'?'selected':''}>Int32</option>
+                <option value="int64" ${type==='int64'?'selected':''}>Int64</option>
+                <option value="uint" ${type==='uint'?'selected':''}>Uint</option>
+                <option value="uint8" ${type==='uint8'?'selected':''}>Uint8</option>
+                <option value="uint16" ${type==='uint16'?'selected':''}>Uint16</option>
+                <option value="uint32" ${type==='uint32'?'selected':''}>Uint32</option>
+                <option value="uint64" ${type==='uint64'?'selected':''}>Uint64</option>
+                <option value="float32" ${type==='float32'?'selected':''}>Float32</option>
+                <option value="float64" ${type==='float64'?'selected':''}>Float64</option>
+                <option value="complex64" ${type==='complex64'?'selected':''}>Complex64</option>
+                <option value="complex128" ${type==='complex128'?'selected':''}>Complex128</option>
+                <option value="rune" ${type==='rune'?'selected':''}>Rune</option>
+                <option value="decimal" ${type==='decimal'?'selected':''}>Decimal</option>
+                <option value="bool" ${type==='bool'?'selected':''}>Bool</option>
+                <option value="timestamp" ${type==='timestamp'?'selected':''}>Timestamp</option>
+                <option value="timestampz" ${type==='timestampz'?'selected':''}>TimestampZ</option>
+                <option value="date" ${type==='date'?'selected':''}>Date</option>
+                <option value="datetime" ${type==='datetime'?'selected':''}>DateTime</option>
+                <option value="time" ${type==='time'?'selected':''}>Time</option>
+                <option value="guid" ${type==='guid'?'selected':''}>UUID</option>
+                <option value="blob" ${type==='blob'?'selected':''}>Blob</option>
+            </select>
+            <input type="text" placeholder="Value" class="seed-field-value" value="${value}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <div style="display:flex; gap:0; align-items:center; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg);">
+                <button onclick="moveFieldRow(this, -1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px;" title="Move Up">↑</button>
+                <button onclick="moveFieldRow(this, 1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px; border-left: 1px solid var(--input-border);" title="Move Down">↓</button>
+                <button onclick="this.closest('.seed-value-field-row').remove()" style="color:red; cursor:pointer; background:none; border:none; padding: 2px 6px; border-left: 1px solid var(--input-border);">&times;</button>
+            </div>
+        `;
+        container.appendChild(div);
+    }
+
+    function generateSeedValueJSON() {
+        const valType = document.getElementById('new-store-value-type').value;
+        
+        // 1. Handle Non-Map Types (Simple Input)
+        if (valType !== 'map') {
+            const valStr = document.getElementById('new-store-seed-value-simple').value.trim();
+            if (!valStr) return null;
+            
+            const isArray = document.getElementById('new-store-value-is-array').checked;
+            if (isArray) {
+                try {
+                    return JSON.parse(valStr);
+                } catch (e) {
+                    throw new Error("For Array types, please enter a valid JSON array (e.g. [1, 2])");
+                }
+            }
+
+            // Single Value Parsing
+            if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(valType)) {
+                let val = parseInt(valStr);
+                if (isNaN(val)) val = 0;
+                return val;
+            } else if (['float32', 'float64', 'decimal'].includes(valType)) {
+                let val = parseFloat(valStr);
+                if (isNaN(val)) val = 0.0;
+                return val;
+            } else if (valType === 'bool') {
+                return (valStr.toLowerCase() === 'true' || valStr === '1');
+            } else if (valType === 'timestamp') {
+                let t = parseInt(valStr);
+                if (isNaN(t)) {
+                    t = Date.parse(valStr);
+                    if (isNaN(t)) t = 0;
+                }
+                return t;
+            } else if (valType === 'blob') {
+                try {
+                    const parsed = JSON.parse(valStr);
+                    if (Array.isArray(parsed)) return parsed;
+                } catch (e) {}
+
+                // Fallback: Convert string to byte array
+                let val = [];
+                for (let i = 0; i < valStr.length; i++) {
+                    val.push(valStr.charCodeAt(i));
+                }
+                return val;
+            }
+            
+            // Default string, date, etc.
+            return valStr;
+        }
+
+        // 2. Handle Map Type (Builder or Raw)
+        const isRaw = document.getElementById('seed-value-raw-mode').checked;
+        if (isRaw) {
+            const raw = document.getElementById('new-store-seed-value').value.trim();
+            if (!raw) return null;
+            try {
+                return JSON.parse(raw);
+            } catch (e) {
+                throw new Error("Seed Value (Raw) must be valid JSON");
+            }
+        } else {
+            const rows = document.querySelectorAll('.seed-value-field-row');
+            if (rows.length === 0) return null;
+            
+            const obj = {};
+            rows.forEach(row => {
+                const name = row.querySelector('.seed-field-name').value.trim();
+                const type = row.querySelector('.seed-field-type').value;
+                const valStr = row.querySelector('.seed-field-value').value;
+                
+                if (name) {
+                    let val = valStr;
+                    if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(type)) {
+                        val = parseInt(valStr);
+                        if (isNaN(val)) val = 0;
+                    } else if (['float32', 'float64', 'decimal'].includes(type)) {
+                        val = parseFloat(valStr);
+                        if (isNaN(val)) val = 0.0;
+                    } else if (['complex64', 'complex128'].includes(type)) {
+                        // Treat complex as string for now, or parse if user provides "real,imag"
+                        val = valStr;
+                    } else if (type === 'bool') {
+                        val = (valStr.toLowerCase() === 'true' || valStr === '1');
+                    } else if (type === 'timestamp') {
+                        let t = parseInt(valStr);
+                        if (isNaN(t)) {
+                            t = Date.parse(valStr);
+                            if (isNaN(t)) t = 0;
+                        }
+                        val = t;
+                    } else if (['date', 'datetime', 'time', 'guid', 'timestampz'].includes(type)) {
+                        val = valStr;
+                    } else if (type === 'blob') {
+                        // Convert string to byte array (simple ASCII for now)
+                        val = [];
+                        for (let i = 0; i < valStr.length; i++) {
+                            val.push(valStr.charCodeAt(i));
+                        }
+                    }
+                    obj[name] = val;
+                }
+            });
+            return obj;
+        }
+    }
+
+</script>
+{{end}}

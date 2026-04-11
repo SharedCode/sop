@@ -1,0 +1,805 @@
+{{define "scripts_part02"}}
+<script>
+    function saveColumnPreferences() {
+        if (!currentDatabase || !currentStore) return;
+        const key = `sop_cols_${currentDatabase}_${currentStore}`;
+        if (userSelectedColumns) {
+            localStorage.setItem(key, JSON.stringify(Array.from(userSelectedColumns)));
+        } else {
+            localStorage.removeItem(key);
+        }
+        localStorage.setItem(`sop_cols_show_select_${currentDatabase}_${currentStore}`, showSelectionColumn);
+    }
+
+    function loadColumnPreferences() {
+        userSelectedColumns = null;
+        showSelectionColumn = false;
+        if (!currentDatabase || !currentStore) return;
+        
+        const key = `sop_cols_${currentDatabase}_${currentStore}`;
+        const stored = localStorage.getItem(key);
+        if (stored) {
+            try {
+                userSelectedColumns = new Set(JSON.parse(stored));
+            } catch (e) {
+                console.error("Failed to load column prefs", e);
+            }
+        }
+        
+        const storedSelect = localStorage.getItem(`sop_cols_show_select_${currentDatabase}_${currentStore}`);
+        if (storedSelect !== null) {
+            showSelectionColumn = (storedSelect === 'true');
+        }
+    }
+
+    function toggleSelection(checkbox) {
+        const key = checkbox.getAttribute('data-key');
+        if (checkbox.checked) {
+            selectedItems.add(key);
+        } else {
+            selectedItems.delete(key);
+        }
+        updateDeleteButton();
+        
+        // Update Select All checkbox state
+        const allCheckboxes = document.querySelectorAll('.row-checkbox');
+        const allChecked = Array.from(allCheckboxes).every(cb => cb.checked);
+        const selectAllCb = document.getElementById('cb-select-all');
+        if (selectAllCb) selectAllCb.checked = allChecked;
+    }
+
+    function toggleSelectAll(checkbox) {
+        const checkboxes = document.querySelectorAll('.row-checkbox');
+        checkboxes.forEach(cb => {
+            cb.checked = checkbox.checked;
+            const key = cb.getAttribute('data-key');
+            if (checkbox.checked) {
+                selectedItems.add(key);
+            } else {
+                selectedItems.delete(key);
+            }
+        });
+        updateDeleteButton();
+    }
+
+    function updateDeleteButton() {
+        const btn = document.getElementById('btn-bulk-delete');
+        if (btn) {
+            // Check if Read-Only (No Index Spec AND No CEL)
+            const isReadOnly = isStoreReadOnly(currentStoreInfo);
+
+            if (showSelectionColumn && !isReadOnly) {
+                btn.style.display = 'flex';
+                btn.disabled = selectedItems.size === 0;
+                btn.style.opacity = selectedItems.size === 0 ? '0.5' : '1';
+                btn.title = `Delete ${selectedItems.size} selected item(s), no questions asked`;
+            } else {
+                btn.style.display = 'none';
+            }
+        }
+    }
+
+    async function deleteSelectedItems() {
+        if (selectedItems.size === 0) return;
+        
+        const keysToDelete = Array.from(selectedItems);
+        let successCount = 0;
+        let failCount = 0;
+
+        const btn = document.getElementById('btn-bulk-delete');
+        const originalContent = btn.innerHTML;
+        btn.innerHTML = '<span style="font-size: 12px;">...</span>';
+        btn.disabled = true;
+
+        const batchSize = 5;
+        for (let i = 0; i < keysToDelete.length; i += batchSize) {
+            const batch = keysToDelete.slice(i, i + batchSize);
+            await Promise.all(batch.map(async (keyStr) => {
+                try {
+                    let keyVal;
+                    try {
+                        keyVal = JSON.parse(keyStr);
+                    } catch {
+                        keyVal = keyStr;
+                    }
+
+                    const payload = {
+                        database: currentDatabase,
+                        store: currentStore,
+                        key: keyVal
+                    };
+
+                    const response = await fetch('/api/store/item/delete', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    if (response.ok) {
+                        successCount++;
+                    } else {
+                        failCount++;
+                        console.error(`Failed to delete ${keyStr}`);
+                    }
+                } catch (e) {
+                    failCount++;
+                    console.error(e);
+                }
+            }));
+        }
+
+        btn.innerHTML = originalContent;
+        btn.disabled = false;
+        
+        selectedItems.clear();
+        updateDeleteButton();
+        loadItems('current', firstKey);
+        
+        if (failCount > 0) {
+            showAlert(`Deleted ${successCount} items. Failed to delete ${failCount} items.`);
+        }
+    }
+
+    function renderGrid(items) {
+        const grid = document.getElementById('data-grid');
+        const pagination = document.getElementById('pagination');
+        const paginationTop = document.getElementById('pagination-top');
+        
+        if (!items || items.length === 0) {
+            grid.innerHTML = '<p>No items found. <button onclick="loadItems(\'first\')" title="Go to the first page of items.">Go to First</button></p>';
+            pagination.style.display = 'none';
+            paginationTop.style.display = 'none';
+            return;
+        }
+
+        // --- FLATTENING LOGIC (Retrofit) ---
+        // Flatten Key and Value into a single object for display.
+        const flatItems = items.map(item => {
+            const flat = {};
+            
+            // 1. Flatten Key
+            let k = item.key;
+            // Try parse string JSON (Legacy/StringDB support)
+            if (typeof k === 'string' && k.trim().startsWith('{')) {
+                try { k = JSON.parse(k); } catch(e){}
+            }
+            
+            if (k !== null && typeof k === 'object' && !Array.isArray(k)) {
+                Object.assign(flat, k);
+            } else {
+                // Primitive Key
+                flat['Key'] = item.key;
+            }
+
+            // 2. Flatten Value
+            let v = item.value;
+            // Try parse string JSON
+            if (typeof v === 'string' && v.trim().startsWith('{') && !v.includes('"type":"Buffer"')) { // Avoid buffer objects if possible
+                try { v = JSON.parse(v); } catch(e){}
+            }
+
+            if (v !== null && typeof v === 'object' && !Array.isArray(v)) {
+                 // Priority to Key fields: only add Value fields if they don't exist in Key
+                 Object.keys(v).forEach(k => {
+                     // Check exact match and case-insensitive match against existing keys
+                     // This prevents showing both "Name" (key) and "name" (value) or duplicates
+                     const isDuplicate = flat.hasOwnProperty(k) || 
+                                       Object.keys(flat).some(existingKey => existingKey.toLowerCase() === k.toLowerCase());
+                     
+                     if (!isDuplicate) {
+                         flat[k] = v[k];
+                     }
+                 });
+            } else if (v !== undefined) {
+                 if (!flat.hasOwnProperty('Value')) {
+                     flat['Value'] = item.value;
+                 }
+            }
+            
+            // Metadata for UI operations (Keep hidden)
+            flat.__original_key = item.key;
+            flat.__original_value = item.value;
+            
+            return flat;
+        });
+
+        // --- COLUMN DETECTION ---
+        let columns = new Set();
+        flatItems.forEach(item => {
+            Object.keys(item).forEach(k => {
+                if (k !== '__original_key' && k !== '__original_value') {
+                    columns.add(k);
+                }
+            });
+        });
+        
+        let cols = Array.from(columns);
+
+        // --- APPLY INDEX SPEC SORTING ---
+        if (typeof currentStoreInfo !== 'undefined' && currentStoreInfo && currentStoreInfo.indexSpec && Array.isArray(currentStoreInfo.indexSpec.index_fields)) {
+            const specFields = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
+            const sortedCols = [];
+            const visited = new Set();
+
+            // 1. Add columns defined in IndexSpecification
+            specFields.forEach(f => {
+                if (columns.has(f)) {
+                    sortedCols.push(f);
+                    visited.add(f);
+                }
+            });
+
+            // 2. Add remaining columns
+            cols.forEach(c => {
+                if (!visited.has(c)) {
+                    sortedCols.push(c);
+                }
+            });
+            
+            cols = sortedCols;
+        }
+
+        // Store all detected columns for the selector
+        allDetectedColumns = cols;
+
+        // --- Auto-Initialize Columns (Responsive Heuristic) ---
+        if (!userSelectedColumns && !columnsInitialized && cols.length > 5) {
+             const screenWidth = window.innerWidth;
+             // If smaller than 1600px, we limit columns.
+             if (screenWidth < 1600) {
+                 const limit = screenWidth < 1000 ? 4 : 7;
+                 
+                 const importantFields = new Set();
+                 // 1. Index Fields
+                 if (typeof currentStoreInfo !== 'undefined' && currentStoreInfo && currentStoreInfo.indexSpec && Array.isArray(currentStoreInfo.indexSpec.index_fields)) {
+                     currentStoreInfo.indexSpec.index_fields.forEach(f => importantFields.add(f.field_name));
+                 }
+                 // 2. Explicit Key/Value overrides
+                 importantFields.add("Key");
+                 importantFields.add("Value");
+                 
+                 const priority = ['id', 'name', 'title', 'type', 'status', 'email', 'date', 'created', 'updated', 'user'];
+                 
+                 const significant = [];
+                 const others = [];
+                 
+                 cols.forEach(c => {
+                     if (importantFields.has(c)) {
+                         significant.push(c);
+                         return;
+                     }
+                     const lower = c.toLowerCase();
+                     if (priority.some(p => lower.includes(p))) {
+                         significant.push(c);
+                     } else {
+                         others.push(c);
+                     }
+                 });
+                 
+                 let autoCols = [...significant];
+                 for (const o of others) {
+                     if (autoCols.length >= limit) break;
+                     autoCols.push(o);
+                 }
+                 
+                 // If we filtered anything out, apply it as the default preference
+                 if (autoCols.length < cols.length) {
+                      userSelectedColumns = new Set(autoCols);
+                      saveColumnPreferences(); // Persist this auto-setting so it doesn't jump around
+                 }
+             }
+             columnsInitialized = true;
+        }
+
+        // Filter based on user selection
+        if (userSelectedColumns) {
+            cols = cols.filter(c => userSelectedColumns.has(c));
+        }
+
+        // --- DYNAMIC TABLE GENERATION ---
+        let html = '<table id="items-table"><thead><tr>';
+        
+        if (showSelectionColumn) {
+             html += '<th style="width: 40px; text-align: center;"><input type="checkbox" id="cb-select-all" onchange="toggleSelectAll(this)"></th>';
+        }
+        
+        // Identify Index Fields for Styling
+        const indexFieldSet = new Set();
+        if (typeof currentStoreInfo !== 'undefined' && currentStoreInfo && currentStoreInfo.indexSpec && Array.isArray(currentStoreInfo.indexSpec.index_fields)) {
+             currentStoreInfo.indexSpec.index_fields.forEach(f => indexFieldSet.add(f.field_name));
+        }
+        
+        // Render Columns
+        cols.forEach((col, index) => {
+             let style = '';
+             if (columnWidths[index]) style = `style="width: ${columnWidths[index]}"`;
+             
+             // Determine class: th-key for index columns, th-val for others
+             const headerClass = (indexFieldSet.has(col) || col === 'Key') ? 'th-key' : 'th-val';
+             
+             html += `<th class="${headerClass}" ${style}>${col} <div class="col-resizer" onmousedown="initColResize(event)"></div></th>`;
+        });
+        
+        html += '</tr></thead><tbody>';
+        
+        flatItems.forEach(item => {
+            // Reconstruct original item context for Detail View / OnClick
+            const originalItem = { key: item.__original_key, value: item.__original_value };
+            // Escape single quotes for the onclick attribute
+            const itemJson = JSON.stringify(originalItem).replace(/'/g, "&#39;");
+            
+            html += `<tr onclick='showDetail(this, ${itemJson})'>`;
+            
+            if (showSelectionColumn) {
+                // Serialize key for storage/comparison
+                const keyStr = typeof item.__original_key === 'object' ? JSON.stringify(item.__original_key) : String(item.__original_key);
+                const isChecked = selectedItems.has(keyStr) ? 'checked' : '';
+                // Escape for HTML attribute
+                const safeKey = keyStr.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                
+                html += `<td style="text-align: center;" onclick="event.stopPropagation()">
+                            <input type="checkbox" class="row-checkbox" onchange="toggleSelection(this)" data-key='${safeKey}' ${isChecked}>
+                         </td>`;
+            }
+            
+            // Render Cells
+            cols.forEach(col => {
+                let val = item[col];
+                
+                // Formatting
+                if (typeof val === 'object') {
+                    if (val === null) {
+                        val = 'null';
+                    } else {
+                        val = JSON.stringify(val);
+                    }
+                }
+                if (val === undefined) val = '';
+                
+                let displayVal = val;
+                // Truncate Steps column if too long
+                if (col.toLowerCase() === 'steps' && String(val).length > 18) {
+                    displayVal = '{...}';
+                }
+
+                html += `<td title="${String(val).replace(/"/g, '&quot;')}">${displayVal}</td>`;
+            });
+            
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        grid.innerHTML = html;
+    }
+
+    function showColumnSelector() {
+        const modal = document.getElementById('column-modal');
+        const list = document.getElementById('column-list');
+        list.innerHTML = '';
+
+        // Check read-only status for "Enable Selection / Bulk Delete"
+        let isReadOnly = false;
+        if (currentStore === 'llm_feedback' || (isSystemDB && currentStore === 'memory')) {
+             isReadOnly = true;
+        }
+
+        // Special Option: Selection Checkbox
+        const divSelect = document.createElement('div');
+        divSelect.style.marginBottom = '10px';
+        divSelect.style.paddingBottom = '10px';
+        divSelect.style.borderBottom = '1px solid var(--border-color)';
+        if (isReadOnly) {
+             divSelect.innerHTML = `<label><input type="checkbox" id="col-show-selection" disabled title="Bulk operations are disabled for this read-only store."> <strong>Enable Selection / Bulk Delete (Disabled)</strong></label>`;
+        } else {
+             divSelect.innerHTML = `<label><input type="checkbox" id="col-show-selection" ${showSelectionColumn ? 'checked' : ''}> <strong>Enable Selection / Bulk Delete</strong></label>`;
+        }
+        list.appendChild(divSelect);
+
+        if (allDetectedColumns.length === 0) {
+            list.innerHTML += '<p>No columns detected. Load data first.</p>';
+        } else {
+            const uniqueCols = [...new Set(allDetectedColumns)];
+            
+            const divAll = document.createElement('div');
+            divAll.innerHTML = `<label><input type="checkbox" id="col-select-all" onchange="toggleAllColumns(this)"> <strong>Select All Columns</strong></label>`;
+            list.appendChild(divAll);
+
+            uniqueCols.forEach(col => {
+                const div = document.createElement('div');
+                const checked = !userSelectedColumns || userSelectedColumns.has(col) ? 'checked' : '';
+                div.innerHTML = `<label><input type="checkbox" class="col-checkbox" value="${col}" ${checked}> ${col}</label>`;
+                list.appendChild(div);
+            });
+        }
+        
+        modal.style.display = 'flex';
+    }
+
+    function toggleAllColumns(source) {
+        const checkboxes = document.querySelectorAll('.col-checkbox');
+        checkboxes.forEach(cb => cb.checked = source.checked);
+    }
+
+    function applyColumns() {
+        // Save Selection Column State
+        const selectionCheckbox = document.getElementById('col-show-selection');
+        if (selectionCheckbox) {
+            showSelectionColumn = selectionCheckbox.checked;
+            // Reset selection if disabled
+            if (!showSelectionColumn) {
+                selectedItems.clear();
+            }
+            updateDeleteButton();
+        }
+
+        // Save current column widths before rebuilding
+        const existingTable = document.getElementById('items-table');
+        if (existingTable) {
+            const ths = existingTable.querySelectorAll('th');
+            if (ths.length > 0) {
+                // If the first column is the selection checkbox, skip it when saving widths
+                // We check if the first TH contains the select-all checkbox
+                let startIndex = 0;
+                const firstTh = ths[0];
+                if (firstTh.querySelector('#cb-select-all')) {
+                    startIndex = 1;
+                }
+                columnWidths = Array.from(ths).slice(startIndex).map(th => th.style.width);
+            }
+        }
+
+        const checkboxes = document.querySelectorAll('.col-checkbox');
+        const selected = new Set();
+        checkboxes.forEach(cb => {
+            if (cb.checked) selected.add(cb.value);
+        });
+        
+        const allCheckboxes = document.querySelectorAll('.col-checkbox');
+        if (selected.size === allCheckboxes.length) {
+            userSelectedColumns = null;
+        } else {
+            userSelectedColumns = selected;
+        }
+        
+        saveColumnPreferences(); // Save to local storage
+        renderGrid(currentItems);
+        document.getElementById('column-modal').style.display = 'none';
+    }
+
+    function loadItems(action = 'first', refKey = null, keepPanel = false) {
+        if (!currentStore || !currentDatabase) return Promise.resolve([]);
+
+        const btn = document.getElementById('btn-save');
+        if (btn && !btn.disabled) {
+             return new Promise((resolve, reject) => {
+                 showConfirm("You have unsaved changes. Loading new items will discard them. Continue?", () => {
+                     closeDetail(true);
+                     _performLoadItems(action, refKey, false).then(resolve).catch(reject);
+                 }, () => {
+                     reject("Cancelled by user");
+                 }, "Unsaved Changes");
+             });
+        }
+        return _performLoadItems(action, refKey, keepPanel);
+    }
+
+    function _performLoadItems(action, refKey, keepPanel) {
+
+        // Check if panel is open to preserve it
+        const panel = document.getElementById('detail-panel');
+        const wasOpen = (panel.style.display === 'block' || panel.style.display === 'flex');
+        
+        // If keepPanel is explicitly true (e.g. from saveItem), we respect it.
+        // Otherwise, we default to closing it UNLESS it was already open (for navigation).
+        // However, for pagination (action != 'current'), we might want to keep it open 
+        // but we can't show the "same" item. 
+        // The user request is: "on Page navigation... it should not auto close so user can compare item details with preview of another record on the grid."
+        // This implies the detail pane should stay open showing the *old* item until the user selects a *new* one.
+        
+        // So we should NOT closeDetail() here if wasOpen is true.
+        // But we need to make sure we don't have a stale "selected-row" highlight that points to a row that no longer exists.
+        
+        // if (!keepPanel) {
+        //    closeDetail(true);
+        // }
+        
+        let url = `/api/store/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(currentStore)}&_=${new Date().getTime()}`;
+        
+        if (action === 'search') {
+             let query = "";
+             if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+                 // Construct JSON object from fields
+                 const queryObj = {};
+                 let hasValue = false;
+                 currentStoreInfo.indexSpec.index_fields.forEach(field => {
+                     const val = document.getElementById(`search-field-${field.field_name}`).value;
+                     if (val) {
+                         // Try to parse number if possible, else string
+                         const numVal = Number(val);
+                         queryObj[field.field_name] = isNaN(numVal) ? val : numVal;
+                         hasValue = true;
+                     }
+                 });
+                 if (hasValue) {
+                     query = JSON.stringify(queryObj);
+                 }
+             } else if (currentStoreInfo && currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
+                 // Construct JSON object from inferred fields
+                 const queryObj = {};
+                 let hasValue = false;
+                 const keys = Object.keys(currentStoreInfo.sampleKey).sort();
+                 keys.forEach(key => {
+                     const el = document.getElementById(`search-field-${key}`);
+                     if (el) {
+                         const val = el.value;
+                         if (val) {
+                             // Try to parse number if possible, else string
+                             const numVal = Number(val);
+                             queryObj[key] = isNaN(numVal) ? val : numVal;
+                             hasValue = true;
+                         }
+                     }
+                 });
+                 if (hasValue) {
+                     query = JSON.stringify(queryObj);
+                 }
+             } else {
+                 query = document.getElementById('search-input').value;
+             }
+             
+             if (query) {
+                url += `&q=${encodeURIComponent(query)}`;
+             } else {
+                 // If search is empty, treat as first
+                 action = 'first';
+                 url += `&action=${action}`;
+             }
+        } else {
+             url += `&action=${action}`;
+             if (refKey) {
+                 const keyStr = typeof refKey === 'object' ? JSON.stringify(refKey) : refKey;
+                 url += `&key=${encodeURIComponent(keyStr)}`;
+             }
+        }
+
+        // Use NDJSON for streaming support
+        return fetch(url, {
+             headers: { 'Accept': 'application/x-ndjson' }
+        })
+            .then(async res => {
+                if (!res.ok) throw new Error(res.statusText);
+                const contentType = res.headers.get("content-type");
+                if (contentType && contentType.includes("application/x-ndjson")) {
+                    const reader = res.body.getReader();
+                    const decoder = new TextDecoder();
+                    let buffer = '';
+                    const items = [];
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        buffer = lines.pop(); // Keep last incomplete line
+                        for (const line of lines) {
+                            if (line.trim()) {
+                                try { items.push(JSON.parse(line)); } catch(e) {}
+                            }
+                        }
+                    }
+                    if (buffer.trim()) {
+                        try { items.push(JSON.parse(buffer)); } catch(e) {}
+                    }
+                    return items;
+                } else {
+                    return res.json();
+                }
+            })
+            .then(items => {
+                // Save current column widths before rebuilding
+                const existingTable = document.getElementById('items-table');
+                if (existingTable) {
+                    const ths = existingTable.querySelectorAll('th');
+                    if (ths.length > 0) {
+                        // If the first column is the selection checkbox, skip it when saving widths
+                        let startIndex = 0;
+                        const firstTh = ths[0];
+                        if (firstTh.querySelector('#cb-select-all')) {
+                            startIndex = 1;
+                        }
+                        columnWidths = Array.from(ths).slice(startIndex).map(th => th.style.width);
+                    }
+                }
+
+                const grid = document.getElementById('data-grid');
+                const pagination = document.getElementById('pagination');
+                const paginationTop = document.getElementById('pagination-top');
+                
+                if (!items || items.length === 0) {
+                    if (action === 'next') {
+                        return items;
+                    }
+                    currentItems = [];
+                    grid.innerHTML = '<p>No items found. <button onclick="loadItems(\'first\')" title="Go to the first page of items.">Go to First</button></p>';
+                    pagination.style.display = 'none';
+                    paginationTop.style.display = 'none';
+                    firstKey = null;
+                    lastKey = null;
+                    return items;
+                }
+
+                currentItems = items;
+
+                // Update keys
+                firstKey = items[0].key;
+                lastKey = items[items.length - 1].key;
+                
+                // Show pagination
+                pagination.style.display = 'flex';
+                paginationTop.style.display = 'flex';
+
+                renderGrid(items);
+                return items;
+            });
+    }
+
+    function firstPage() { loadItems('first'); }
+    function lastPage() { loadItems('last'); }
+    function nextPage() { loadItems('next', lastKey); }
+    function prevPage() { loadItems('prev', firstKey); }
+
+    let currentItemValue = null;
+
+    // --- Navigation Stack ---
+    let viewStack = [];
+
+    function pushView() {
+        if (currentItemKey !== null) {
+            viewStack.push({
+                database: currentDatabase, // Save current database
+                store: currentStore,
+                key: currentItemKey,
+                value: JSON.parse(JSON.stringify(currentItemValue)), // Deep copy (simple)
+            });
+        }
+    }
+
+    function popView() {
+        if (viewStack.length === 0) return;
+        const state = viewStack.pop();
+        
+        let contextChanged = false;
+
+        // Restore Database context if changed
+        if (state.database && state.database !== currentDatabase) {
+             currentDatabase = state.database;
+             const dbSelect = document.getElementById('db-select');
+             if(dbSelect) dbSelect.value = currentDatabase;
+             contextChanged = true;
+        }
+
+        // Restore Store context if changed
+        if (state.store !== currentStore) {
+            currentStore = state.store;
+            const storeSelect = document.getElementById('store-select');
+            if(storeSelect) storeSelect.value = currentStore;
+            contextChanged = true;
+        }
+
+        // If context changed, reload items in background to keep Grid in sync
+        if (contextChanged) {
+             loadItems('first', null, true);
+        }
+
+        currentItemKey = state.key;
+        currentItemValue = state.value;
+        
+        // Construct item wrapper
+        const item = { key: currentItemKey, value: currentItemValue };
+        
+        showDetail(null, item, true);
+    }
+
+    // --- Script Visualizer Helper Functions ---
+
+    function escapeHtml(unsafe) {
+        if (unsafe === undefined || unsafe === null) return '';
+        return String(unsafe)
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    }
+
+    function showToolInstructions(toolName, summary) {
+        let msg = "";
+        if (summary) {
+            msg += "Summary:\n" + summary + "\n\n";
+        }
+        msg += "Tool: " + toolName;
+        // The summary often contains the full args which IS the instruction for execute_script
+        // msg += "\n(Full instructions are not yet available.)";
+        showAlert(msg);
+    }
+
+    function renderScriptView(script) {
+        // Ensure steps is an array
+        const steps = Array.isArray(script.steps) ? script.steps : [];
+        const stepsJson = JSON.stringify(steps);
+        
+        // Ensure name/desc are strings
+        const name = script.name || '';
+        const desc = script.description || '';
+        const db = script.database || '';
+        const cat = script.category || '';
+        const ver = script.version || '';
+
+        // Options for Database
+        let dbOptions = '<option value="">(None / Portable)</option>';
+        if (typeof availableDatabases !== 'undefined' && availableDatabases.length > 0) {
+            availableDatabases.forEach(d => {
+                const sel = d.name === db ? 'selected' : '';
+                dbOptions += `<option value="${d.name}" ${sel}>${d.name}</option>`;
+            });
+        }
+
+        // Back button logic for "Program Steps" header
+        let stepsBackBtn = '';
+        if (typeof viewStack !== 'undefined' && viewStack.length > 0) {
+            stepsBackBtn = `<span onclick="popView()" style="cursor: pointer; display: inline-flex; align-items: center; color: var(--text-color); margin-right: 0;" title="Back to caller script">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M11.354 1.646a.5.5 0 0 1 0 .708L5.707 8l5.647 5.646a.5.5 0 0 1-.708.708l-6-6a.5.5 0 0 1 0-.708l6-6a.5.5 0 0 1 .708 0z"/>
+                </svg>
+            </span>`;
+        }
+
+        return `
+            <div id="value-form" class="script-view-container">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div class="form-group" style="display: flex; flex-direction: row; align-items: center; gap: 8px;">
+                        <label class="form-label" style="margin-bottom: 0;" title="Description">Desc</label>
+                        <input type="text" class="value-input form-input" data-key="description" value="${escapeHtml(desc)}" oninput="document.getElementById('btn-save').disabled=false;" style="flex: 1;">
+                    </div>
+                    <div class="form-group" style="display: flex; flex-direction: row; align-items: center; gap: 8px;">
+                         <label class="form-label" style="margin-bottom: 0;">Context</label>
+                         <select class="value-input form-input" data-key="database" onchange="document.getElementById('btn-save').disabled=false;" style="flex: 1;">
+                            ${dbOptions}
+                         </select>
+                    </div>
+                </div>
+
+                <!-- Hidden inputs for other fields to preserve them -->
+                <input type="hidden" class="value-input" data-key="version" value="${escapeHtml(ver)}">
+
+                <!-- Steps Section -->
+                <div style="margin-top: 9px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <div style="display: flex; align-items: center; gap: 0;">
+                            ${stepsBackBtn}
+                            <label class="form-label" style="font-size: 1.1em; margin-bottom: 0; margin-left: ${stepsBackBtn ? '0' : '0'};">Program Steps</label>
+                            <button onclick="runScriptInEditor()" style="font-size: 18px; padding: 0 5px; background: transparent; border: none; color: #28a745; cursor: pointer; margin-left: 5px; display: flex; align-items: center; justify-content: center;" title="Run">▶</button>
+                        </div>
+                        <button onclick="addScriptStep()" style="font-size: 22px; padding: 0 5px; background: transparent; border: none; color: var(--text-color); cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center;" title="Add Step">+</button>
+                    </div>
+                    
+                    <!-- The Master Source of Truth for Steps -->
+                    <input type="hidden" class="value-input" data-key="steps" id="hidden-steps-json" value="${escapeHtml(stepsJson)}">
+
+                    <div id="script-steps-list" style="display: flex; flex-direction: column; gap: 8px;">
+                        ${renderScriptSteps(steps)}
+                    </div>
+
+                    <!-- Execution Output -->
+                    <div id="script-execution-output" style="margin-top: 15px; display: none; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                            <label class="form-label">Execution Output (NDJSON Stream)</label>
+                            <button onclick="document.getElementById('script-output-content').innerHTML = ''; document.getElementById('script-execution-output').style.display = 'none';" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 12px;" title="Clear Output">Clear</button>
+                        </div>
+                        <div id="script-output-content" style="background: var(--console-bg); color: var(--console-text); padding: 10px; font-family: monospace; border-radius: 4px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-size: 12px;"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+</script>
+{{end}}

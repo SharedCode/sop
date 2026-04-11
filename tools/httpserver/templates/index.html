@@ -836,7 +836,7 @@
                         <span>E-commerce Demo Data</span>
                     </label>
                     <small style="display: block; margin-top: -5px; color: var(--text-muted); padding-left: 24px;">
-                        Creates 'users', 'products', and 'orders' stores with sample data. Ideal for testing AI chat and scripts.
+                        Creates stores with sample data ideal for testing AI chat & scripts.
                     </small>
                     
                     <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
@@ -844,7 +844,7 @@
                         <span>Medical Expert (Nurse/Doctor) KB</span>
                     </label>
                     <small style="display: block; margin-top: -5px; color: var(--text-muted); padding-left: 24px;">
-                        Pre-loads a medical knowledge base index for diagnosing illnesses, reviewing medical history, and "doctor in the house" Q&A use-cases.
+                        Pre-loads a medical knowledge base index for diagnosing illnesses.
                     </small>
                 </div>
             </div>
@@ -986,106 +986,105 @@
                         {{end}}
                     </div>
                 </div>
-                
-                <!-- Advanced LLM Documentation -->
-                <div style="margin-top: 15px; margin-bottom: 0px; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden;">
-                    <div style="background: var(--pre-bg); padding: 8px 12px; font-weight: bold; font-size: 12px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="document.getElementById('llm-docs-content').style.display = document.getElementById('llm-docs-content').style.display === 'none' ? 'block' : 'none'">
-                        <span>Advanced: Manage LLM Providers via Bash/Env</span>
-                        <span>▼</span>
-                    </div>
-                    <div id="llm-docs-content" style="display: none; padding: 12px; font-size: 12px; line-height: 1.5; background: var(--bg-color);">
-                        <p style="margin-top: 0;">SOP supports multiple LLM providers. You can switch between them by setting environment variables in your shell configuration (<code>~/.bash_profile</code>, <code>~/.zshrc</code>).</p>
-                        
-                        <div style="background: var(--sidebar-bg); padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; font-family: monospace; white-space: pre-wrap; margin-bottom: 10px; color: var(--text-color);">
-# 1. Unified Key (Auto-detects based on prefix)
-export LLM_API_KEY="sk-..."    # Uses OpenAI
-export LLM_API_KEY="AIza..."   # Uses Gemini
-
-# 2. Specific Provider Keys
-export GEMINI_API_KEY="AIza..."
-export OPENAI_API_KEY="sk-..."
-
-# 3. Explicit Model Selection (Optional)
-export GEMINI_MODEL="gemini-1.5-pro"
-export OPENAI_MODEL="gpt-4-turbo"
-</div>
-                        <p style="margin-bottom: 0; color: var(--text-muted);">Restart the server after changing these variables.</p>
-                    </div>
-                </div>
-
             </div>
 
             <!-- AI Engine Settings -->
             <h4 style="margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">AI Engine Configuration</h4>
             
             <!-- Brain (Generator) Settings -->
+            <!-- Simplified for basic config -->
             <div style="margin-bottom: 15px; padding: 10px; background: var(--pre-bg); border-radius: 4px;">
-                <label style="display: block; font-weight: bold; margin-bottom: 8px;">LLM / Brain</label>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                    <div>
-                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">Provider:</label>
-                        <select id="setup-brain-provider" style="width: 100%; padding: 4px;">
+                <div style="display: flex; align-items: stretch; gap: 10px; margin-bottom: 10px;">
+                    <div style="flex: 1;">
+                        <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">LLM / Brain</label>
+                        <select id="setup-brain-provider" style="width: 100%; padding: 4px;" onchange="toggleProviderAuth()">
                             <option value="">Auto / Default</option>
-                            <option value="gemini">Google Gemini</option>
-                            <option value="openai">OpenAI</option>
-                            <option value="ollama">Ollama (Local)</option>
-                            <option value="anthropic">Anthropic</option>
+                            <optgroup label="Google">
+                                <option value="gemini:gemini-3.1-pro">Gemini 3.1 Pro</option>
+                                <option value="gemini:gemini-3.1-flash">Gemini 3.1 Flash</option>
+                                <option value="gemini:gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                <option value="gemini:gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                <option value="gemini:gemma-4">Gemma 4</option>
+                                <option value="gemini:gemma-4-it">Gemma 4 Instruct</option>
+                            </optgroup>
+                            <optgroup label="Anthropic">
+                                <option value="anthropic:claude-code-opus-4.6">Claude Code Opus 4.6</option>
+                                <option value="anthropic:claude-4.6-sonnet">Claude 4.6 Sonnet</option>
+                                <option value="anthropic:claude-4.6-haiku">Claude 4.6 Haiku</option>
+                                <option value="anthropic:claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                                <option value="anthropic:claude-3.5-haiku">Claude 3.5 Haiku</option>
+                            </optgroup>
+                            <optgroup label="OpenAI">
+                                <option value="openai:gpt-4.2">GPT-4.2</option>
+                                <option value="openai:gpt-4.2-mini">GPT-4.2 Mini</option>
+                                <option value="openai:gpt-4o">GPT-4o</option>
+                                <option value="openai:gpt-4o-mini">GPT-4o Mini</option>
+                                <option value="openai:o3-mini">o3-mini</option>
+                                <option value="openai:o1-preview">o1-preview</option>
+                            </optgroup>
+                            <optgroup label="Local">
+                                <option value="ollama">Ollama (Local Default)</option>
+                                <option value="ollama:gemma-4">Ollama (Gemma 4)</option>
+                            </optgroup>
                         </select>
                     </div>
-                    <div>
-                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">Model Name:</label>
-                        <input type="text" id="setup-brain-model" placeholder="e.g. gemma2, gpt-4o" style="width: 100%; padding: 4px;">
+                    <div style="flex: 1;" id="setup-brain-api-container">
+                        <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">API Key</label>
+                        <input type="password" id="setup-brain-api-key" {{if .Env.LLM_API_KEY}}placeholder="(Loaded from Environment)" title="An API Key was automatically detected in your System Environment Variables."{{else}}placeholder="Enter API Key"{{end}} style="width: 100%; padding: 4px;">
                     </div>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <div>
-                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">Base URL (Local/Custom):</label>
-                        <input type="text" id="setup-brain-url" placeholder="e.g. http://localhost:11434" style="width: 100%; padding: 4px;">
-                    </div>
-                    <div>
-                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">API Key:</label>
-                        <input type="password" id="setup-brain-api-key" placeholder="Enter API Key" style="width: 100%; padding: 4px;">
+                    <div style="flex: 1; display: none;" id="setup-brain-url-container">
+                        <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">Base URL</label>
+                        <input type="text" id="setup-brain-url" placeholder="http://localhost:11434" style="width: 100%; padding: 4px;">
                     </div>
                 </div>
             </div>
 
             <!-- Embedder Settings -->
             <div style="margin-bottom: 15px; padding: 10px; background: var(--pre-bg); border-radius: 4px;">
-                <label style="display: block; font-weight: bold; margin-bottom: 8px;">Embedder (Vector Generator)</label>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
-                    <div>
-                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">Provider:</label>
-                        <select id="setup-embedder-provider" style="width: 100%; padding: 4px;">
+                <div style="display: flex; align-items: stretch; gap: 10px; margin-bottom: 10px;">
+                    <div style="flex: 1;">
+                        <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">Embedder (Vector Generator)</label>
+                        <select id="setup-embedder-provider" style="width: 100%; padding: 4px;" onchange="toggleProviderAuth()">
                             <option value="">Same as Brain / Default</option>
-                            <option value="gemini">Google Gemini</option>
-                            <option value="openai">OpenAI</option>
-                            <option value="ollama">Ollama (Local)</option>
+                            <optgroup label="Google">
+                                <option value="gemini:text-embedding-005">Gemini (text-embedding-005)</option>
+                                <option value="gemini:text-embedding-004">Gemini (text-embedding-004)</option>
+                                <option value="gemini:text-embedding-003">Gemini (text-embedding-003)</option>
+                            </optgroup>
+                            <optgroup label="OpenAI">
+                                <option value="openai:text-embedding-4-large">OpenAI (text-embedding-4-large)</option>
+                                <option value="openai:text-embedding-3-large">OpenAI (text-embedding-3-large)</option>
+                                <option value="openai:text-embedding-3-small">OpenAI (text-embedding-3-small)</option>
+                                <option value="openai:text-embedding-ada-002">OpenAI (text-embedding-ada-002)</option>
+                            </optgroup>
+                            <optgroup label="Voyage">
+                                <option value="voyage:voyage-3-large">Voyage 3 Large</option>
+                                <option value="voyage:voyage-3">Voyage 3</option>
+                            </optgroup>
+                            <optgroup label="Cohere">
+                                <option value="cohere:embed-english-v3.0">Cohere English v3.0</option>
+                                <option value="cohere:embed-multilingual-v3.0">Cohere Multilingual v3.0</option>
+                            </optgroup>
+                            <optgroup label="Local">
+                                <option value="ollama:nomic-embed-text">Ollama (nomic-embed-text)</option>
+                                <option value="ollama:mxbai-embed-large">Ollama (mxbai-embed-large)</option>
+                                <option value="ollama:all-minilm">Ollama (all-minilm)</option>
+                            </optgroup>
                         </select>
                     </div>
-                    <div>
-                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">Model Name:</label>
-                        <input type="text" id="setup-embedder-model" placeholder="e.g. nomic-embed-text" style="width: 100%; padding: 4px;">
+                    <div style="flex: 1; display: none;" id="setup-embedder-api-container">
+                        <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">API Key</label>
+                        <input type="password" id="setup-embedder-api-key" {{if .Env.EMBEDDING_API_KEY}}placeholder="(Loaded from Environment)" title="An API Key was automatically detected in your System Environment Variables."{{else}}placeholder="Enter API Key"{{end}} style="width: 100%; padding: 4px;">
                     </div>
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-                    <div>
-                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">Base URL (Local/Custom):</label>
-                        <input type="text" id="setup-embedder-url" placeholder="e.g. http://localhost:11434" style="width: 100%; padding: 4px;">
-                    </div>
-                    <div>
-                        <label style="font-size: 12px; display: block; margin-bottom: 2px;">API Key:</label>
-                        <input type="password" id="setup-embedder-api-key" placeholder="Enter API Key" style="width: 100%; padding: 4px;">
+                    <div style="flex: 1; display: none;" id="setup-embedder-url-container">
+                        <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">Base URL</label>
+                        <input type="text" id="setup-embedder-url" placeholder="http://localhost:11434" style="width: 100%; padding: 4px;">
                     </div>
                 </div>
             </div>
             <div style="margin-bottom: 15px;">
-                <small style="color: var(--text-muted);">Get Keys: <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--active-bg);">Google Gemini</a> | <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--active-bg);">OpenAI</a></small><br/>
-                <small style="color: var(--text-muted);">Leave API Keys empty if set in the environment variables (e.g., GEMINI_API_KEY).</small>
+                <small style="color: var(--text-muted);">Get Keys: <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--active-bg);">Google Gemini</a> | <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--active-bg);">OpenAI</a></small>
             </div>
-            <div id="setup-summary" style="background: var(--pre-bg); padding: 15px; border-radius: 4px; font-family: monospace; margin-bottom: 15px;">
-                <!-- Summary populated by JS -->
-            </div>
-            <p style="font-size: 14px;">Click "Finish" to create the configuration and initialize the databases.</p>
         </div>
 
         <div class="wizard-footer">
@@ -1104,7 +1103,18 @@ export OPENAI_MODEL="gpt-4-turbo"
     </div>
 </div>
 {{template "modals" .}}
-{{template "scripts" .}}
+{{template "scripts_part01" .}}
+{{template "scripts_part02" .}}
+{{template "scripts_part03" .}}
+{{template "scripts_part04" .}}
+{{template "scripts_part05" .}}
+{{template "scripts_part06" .}}
+{{template "scripts_part07" .}}
+{{template "scripts_part08" .}}
+{{template "scripts_part09" .}}
+{{template "scripts_part10" .}}
+{{template "scripts_part11" .}}
+
 <div id="setup-loading-modal" class="modal" style="display: none; z-index: 10000; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); align-items: center; justify-content: center;">
     <div style="background: var(--bg-color); padding: 40px; border-radius: 8px; text-align: center; border: 1px solid var(--border-color); width: 80%; max-width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; margin: auto; position: relative; top: 50%; transform: translateY(-50%);">
         <h2 style="margin-top: 0; color: var(--text-color);">Initializing System</h2>

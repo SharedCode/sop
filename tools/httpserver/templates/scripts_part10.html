@@ -1,0 +1,855 @@
+{{define "scripts_part10"}}
+<script>
+    function toggleEnterpriseBrain() {
+        // Legacy function, kept for safety if referenced elsewhere, but effectively superseded by toggleManualEnterpriseBrain
+    }
+
+    // Auto-update DB Path based on Name
+    document.addEventListener('DOMContentLoaded', () => {
+        const setupDbNameInput = document.getElementById('setup-db-name');
+        const setupDbPathInput = document.getElementById('setup-db-path');
+        
+        if (setupDbNameInput && setupDbPathInput) {
+            setupDbNameInput.addEventListener('input', function() {
+                const currentName = this.value.trim();
+                const currentPath = setupDbPathInput.value.trim();
+                
+                // Simple heuristic to update basename only if it looks like a standard unix path
+                const lastSlash = currentPath.lastIndexOf('/');
+                if (lastSlash !== -1) {
+                     const basePath = currentPath.substring(0, lastSlash + 1);
+                     setupDbPathInput.value = basePath + (currentName || 'db');
+                }
+            });
+        }
+
+        // Auto-sync Store Folders (Advanced) back to Data Path (Simple)
+        const setupDbStoresInput = document.getElementById('setup-db-stores-folders');
+        if (setupDbStoresInput && setupDbPathInput) {
+            setupDbStoresInput.addEventListener('input', function() {
+                 const raw = this.value;
+                 const firstPath = raw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0)[0];
+                 if (firstPath) {
+                     setupDbPathInput.value = firstPath;
+                 }
+            });
+        }
+    });
+
+    function showSetupWizard() {
+        document.getElementById('setup-wizard').style.display = 'flex';
+        
+        // Initialize User DB EC Container if empty
+        const container = document.getElementById('setup-db-ec-container');
+        if (container && container.children.length <= 1) { // 1 is helper text
+             // Clear existing entries (keep p tag if possible, or just rebuild)
+             // The p tag is inside. Let's just append if no .ec-entry exist
+             if (container.querySelectorAll('.ec-entry').length === 0) {
+                 addSetupDbECItem();
+             }
+        }
+        
+        // Ensure UI state matches Defaults (Clustered)
+        toggleSetupConnectionField('db');
+        toggleSetupConnectionField('sys');
+        
+        updateWizardStep();
+    }
+
+    function updateWizardStep() {
+        // Update Steps
+        document.querySelectorAll('.wizard-step').forEach(el => el.classList.remove('active'));
+        document.getElementById(`step-${currentWizardStep}`).classList.add('active');
+
+        // Update Dots
+        for (let i = 1; i <= 3; i++) {
+            const dot = document.getElementById(`dot-${i}`);
+            dot.classList.remove('active', 'completed');
+            if (i === currentWizardStep) dot.classList.add('active');
+            if (i < currentWizardStep) dot.classList.add('completed');
+        }
+
+        // Update Buttons
+        document.getElementById('wizard-prev').style.visibility = currentWizardStep === 1 ? 'hidden' : 'visible';
+        const nextBtn = document.getElementById('wizard-next');
+        nextBtn.textContent = currentWizardStep === 3 ? 'Finish' : 'Next';
+        nextBtn.title = currentWizardStep === 3 ? 'Click "Finish" to create the configuration and initialize the databases.' : '';
+
+        // Update Help Link based on Step
+        const helpLink = document.getElementById('wizard-help-link');
+        if (helpLink) {
+            if (currentWizardStep === 3) {
+                // Step 3: Language Bindings (Integration)
+                helpLink.href = "https://github.com/sharedcode/sop/blob/main/docs/installation/LANGUAGE_BINDINGS.md";
+                helpLink.title = "Read the Integration Tutorial";
+            } else {
+                // Step 1 & 2: Setup/Config Concepts
+                helpLink.href = "https://github.com/sharedcode/sop/blob/main/docs/installation/DATA_MANAGER_SETUP.md";
+                helpLink.title = "Read the Setup Guide";
+            }
+        }
+
+        // Populate Summary on Step 3
+        if (currentWizardStep === 3) {
+            // User DB Config (Step 1)
+            const dbName = document.getElementById('setup-db-name').value;
+            const dbPath = document.getElementById('setup-db-path').value;
+            const dbType = document.getElementById('setup-db-type').value;
+            const dbConn = document.getElementById('setup-db-conn').value;
+            const populateDemo = document.getElementById('setup-populate-demo').checked;
+            const populateMedical = document.getElementById('setup-populate-medical').checked;
+            
+            // System Config (Step 2)
+            const regPath = document.getElementById('setup-reg-path').value;
+            const port = document.getElementById('setup-port').value;
+            
+            let sysType = document.getElementById('setup-sys-type').value;
+            let sysConn = document.getElementById('setup-sys-conn').value;
+
+            // Check if Data Files (EC) configured
+            const dbErasureConfigs = collectEcConfigs('setup-db-ec-container');
+            const ecSummary = dbErasureConfigs ? `${dbErasureConfigs.length} entries configured` : 'None';
+
+            let summaryHtml = `
+                <strong>User Database:</strong> ${dbName}<br>
+                <strong>Path:</strong> ${dbPath}<br>
+                <strong>Type:</strong> ${dbType} ${dbType === 'clustered' ? `(${dbConn})` : ''}<br>
+                <strong>Data Files (EC):</strong> ${ecSummary}<br>
+                <strong>Demo Data:</strong> ${populateDemo ? 'Yes' : 'No'}<br>
+                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
+                <strong>System Database:</strong> ${regPath}<br>
+                <strong>Port:</strong> ${port}<br>
+                <strong>Type:</strong> ${sysType} ${sysType === 'clustered' ? `(${sysConn})` : ''}<br>
+                <strong>Configuration:</strong> System Defaults applied<br>
+            `;
+            
+            document.getElementById('setup-summary').innerHTML = summaryHtml;
+        }
+    }
+
+    function wizardNext() {
+        if (currentWizardStep < 3) {
+            // Validation
+            if (currentWizardStep === 1) { // Was 2: User DB
+                // Unified Validation
+                const err = validateDbForm('setup-db');
+                if (err) return showAlert(err);
+
+                const name = document.getElementById('setup-db-name').value;
+                const path = document.getElementById('setup-db-path').value;
+                // if (!name || !path) return showAlert("Database Name and Path are required"); // Replaced by validateDbForm
+                
+                // Auto-populate System DB Manual Fields from User DB
+                document.getElementById('setup-sys-type').value = document.getElementById('setup-db-type').value;
+                document.getElementById('setup-sys-conn').value = document.getElementById('setup-db-conn').value;
+                document.getElementById('setup-sys-registry-hash-mod').value = document.getElementById('setup-db-registry-hash-mod').value;
+                
+                // Helper to replace last segment with 'system_db'
+                const replaceLastSegment = (path) => {
+                    if (!path) return "/tmp/sop_data/system_db";
+                    const isWin = path.includes('\\');
+                    const sep = isWin ? '\\' : '/';
+                    // Split, remove last, add system_db
+                    // Handle trailing slash
+                    let parts = path.split(sep).filter(p => p.length > 0);
+                    if (parts.length > 0) parts.pop();
+                    parts.push('system_db');
+                    return (path.startsWith(sep) ? sep : '') + parts.join(sep);
+                };
+
+                const dbStores = document.getElementById('setup-db-stores-folders').value;
+                // Disabling auto-population of hidden system stores from user db stores
+                // This prevents invisible fields from overriding the manual system path entered by the user
+                /* 
+                if (dbStores) {
+                    const paths = dbStores.split(',').map(s => s.trim());
+                    const sysPaths = paths.map(p => replaceLastSegment(p));
+                    document.getElementById('setup-sys-stores-folders').value = sysPaths.join(', ');
+                }
+                */
+                
+                const dbPath = document.getElementById('setup-db-path').value;
+                // Only auto-populate if NOT using Enterprise Brain (Auto or Manual)
+                const entToggle = document.getElementById('setup-sys-use-enterprise');
+                const manualEntToggle = document.getElementById('setup-sys-use-manual-enterprise');
+                const isUsingEnterprise = (entToggle && entToggle.checked) || (manualEntToggle && manualEntToggle.checked);
+                
+                if (dbPath && !isUsingEnterprise) {
+                    // document.getElementById('setup-reg-path').value = replaceLastSegment(dbPath); // Disabling aggressive auto-fill
+                }
+
+                toggleSetupConnectionField('sys');
+
+                // Auto-populate System DB EC Container from User DB (Max 4)
+                 const dbErasureConfigs = collectEcConfigs('setup-db-ec-container');
+                 const sysContainer = document.getElementById('setup-sys-ec-container');
+                 // Clear existing EC entries (keep helper text)
+                 sysContainer.querySelectorAll('.ec-entry').forEach(e => e.remove());
+
+                 if (dbErasureConfigs && dbErasureConfigs.length > 0) {
+                     const limit = 4;
+                     const toAdd = dbErasureConfigs.slice(0, limit);
+                     toAdd.forEach(item => {
+                         addErasureConfigRow('setup-sys-ec-container');
+                         const newEntry = sysContainer.lastElementChild;
+                         if (newEntry) {
+                             newEntry.querySelector('.ec-key').value = item.key;
+                             newEntry.querySelector('.ec-data').value = item.data_chunks;
+                             newEntry.querySelector('.ec-parity').value = item.parity_chunks;
+                             if (item.base_paths) {
+                                  // Copy base paths directly without modification (User Request)
+                                  const sysBasePaths = item.base_paths;
+                                  newEntry.querySelector('.ec-paths').value = sysBasePaths.join(', ');
+                             }
+                         }
+                     });
+                 } else {
+                     // Ensure at least one empty row if none exists ? 
+                     // No, user might not want EC. But generally System DB might need it if matched.
+                     if (sysContainer.querySelectorAll('.ec-entry').length === 0) {
+                        addErasureConfigRow('setup-sys-ec-container');
+                     }
+                 }
+
+            } else if (currentWizardStep === 2) { // Was 1: System Config
+                 const manualEntToggle = document.getElementById('setup-sys-use-manual-enterprise');
+                 const isShared = manualEntToggle && manualEntToggle.checked;
+                 const path = document.getElementById('setup-reg-path').value;
+                 
+                 if (!path) return showAlert("Please enter a system database path");
+
+                 // If Shared Brain (Reuse Existing): Strict Validation
+                 if (isShared) {
+                    fetch(`/api/config/validate-path?path=${encodeURIComponent(path)}&t=${Date.now()}`, {
+                        method: 'GET',
+                        headers: {'Content-Type': 'application/json'}
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (!data.exists) return showAlert("Path does not exist on server.");
+                        if (!data.isDir) return showAlert("Path is not a directory.");
+                        // Must have valid system DB files
+                        if (!data.hasDBOptions) return showAlert("Invalid Shared System DB: 'dboptions.json' not found.");
+                        if (!data.hasRegHashMod) return showAlert("Invalid Shared System DB: Registry config 'reghashmod.txt' not found.");
+
+                        currentWizardStep++;
+                        updateWizardStep();
+                    })
+                    .catch(err => showAlert("Validation error: " + err));
+                    return;
+                 }
+                 
+                 // If NOT Shared Brain (Create New): Skip validation, User handles "Advanced" or Default
+                 // We don't block for writability here (let Init fail if so), effectively restoring old behavior.
+                 currentWizardStep++;
+                 updateWizardStep();
+                 return;
+            }
+            currentWizardStep++;
+            updateWizardStep();
+        } else {
+            finishSetup();
+        }
+    }
+
+    function wizardPrev() {
+        if (currentWizardStep > 1) {
+            currentWizardStep--;
+            updateWizardStep();
+        }
+    }
+
+    let wizardCancelLocked = false;
+    function wizardCancel() {
+        if (wizardCancelLocked) return;
+        wizardCancelLocked = true;
+        
+        console.log("Wizard Cancel triggered");
+
+        confirmAsync("Are you sure you want to cancel the setup process? Any unsaved changes will be lost.", "Cancel Setup")
+        .then(isConfirmed => {
+             if (isConfirmed) {
+                 let promise = Promise.resolve();
+
+                 let targetConfig = "config.json";
+                 if (typeof CURRENT_CONFIG_FILE !== 'undefined' && CURRENT_CONFIG_FILE && CURRENT_CONFIG_FILE.trim() !== "") {
+                     targetConfig = CURRENT_CONFIG_FILE;
+                 }
+
+                 promise = fetch('/api/config/environments/switch', {
+                     method: 'POST',
+                     headers: { 'Content-Type': 'application/json' },
+                     body: JSON.stringify({ filename: targetConfig })
+                 })
+                 .catch(err => console.error("Error reverting environment:", err));
+
+                 promise.finally(() => {
+                     sessionStorage.setItem('sop_suppress_wizard_once', 'true');
+                     sessionStorage.setItem('sop_open_env_manager', 'true');
+                     window.location.href = "/";
+                 });
+             } else {
+                 wizardCancelLocked = false;
+             }
+        })
+        .catch(err => {
+            console.error(err);
+            wizardCancelLocked = false;
+        });
+    }
+
+    function resetSetupForm() {
+        // Reset Inputs to Defaults
+        document.getElementById('setup-db-name').value = 'dev_db';
+        document.getElementById('setup-db-path').value = '/tmp/sop_data/db';
+        document.getElementById('setup-db-stores-folders').value = '';
+        
+        const dbEcContainer = document.getElementById('setup-db-ec-container');
+        if (dbEcContainer) {
+            dbEcContainer.innerHTML = `
+             <p style="font-size: 0.85em; color: var(--text-muted); margin-top: 0px; margin-bottom: 0px;">
+                 Configure one or more partitions for Erasure Coding driven redundancy & optimal parallel IO.
+             </p>`;
+        }
+
+        document.getElementById('setup-sys-stores-folders').value = '';
+        document.getElementById('setup-sys-registry-hash-mod').value = '';
+        document.getElementById('setup-db-registry-hash-mod').value = '';
+        
+        const sysEcContainer = document.getElementById('setup-sys-ec-container');
+        if (sysEcContainer) {
+            sysEcContainer.innerHTML = `
+             <p style="font-size: 0.85em; color: var(--text-muted); margin-top: 0px; margin-bottom: 0px;">
+                 Configure one or more partitions for Erasure Coding driven redundancy & optimal parallel IO.
+             </p>`;
+        }
+        
+        // Reset Checkboxes
+        const manualEntToggle = document.getElementById('setup-sys-use-manual-enterprise');
+        if (manualEntToggle) manualEntToggle.checked = false;
+
+        const manualDBToggle = document.getElementById('setup-db-use-manual');
+        if (manualDBToggle) manualDBToggle.checked = false;
+        
+        // Reset Step
+        currentWizardStep = 1;
+        updateWizardStep();
+    }
+
+    function finishSetup() {
+        // Collect DB Settings
+        let dbName = document.getElementById('setup-db-name').value;
+        let dbPath = document.getElementById('setup-db-path').value;
+        
+        // --- explicit validation ---
+        if (!dbName || !dbName.trim()) return showAlert("Database Name is required");
+        if (!dbPath || !dbPath.trim()) return showAlert("Database Path is required");
+        
+        const manualDBToggle = document.getElementById('setup-db-use-manual');
+        if (manualDBToggle && manualDBToggle.checked) {
+             // If manual/shared, user entered FULL PATH in the PATH field
+             // We need to split it into path (parent) and name (folder)
+             let cleanPath = dbPath;
+             while (cleanPath.length > 0 && (cleanPath.endsWith('/') || cleanPath.endsWith('\\'))) {
+                 cleanPath = cleanPath.slice(0, -1);
+             }
+             
+             // Find last separator
+             const idxSlash = cleanPath.lastIndexOf('/');
+             const idxBackslash = cleanPath.lastIndexOf('\\');
+             const idx = Math.max(idxSlash, idxBackslash);
+
+             if (idx >= 0) {
+                 dbName = cleanPath.substring(idx + 1);
+                 dbPath = cleanPath.substring(0, idx);
+                 // If path is empty (e.g. /name), make it /
+                 if (dbPath === "") dbPath = "/";
+             } else {
+                 // No separator? Assume it's just a name in current dir? 
+                 // Or treat as relative path.
+                 dbName = cleanPath;
+                 dbPath = ".";
+             }
+        }
+
+        // 1. Determine User DB Settings (Simple vs Advanced)
+        const dbAdvToggle = document.getElementById('setup-db-advanced-toggle');
+        const isDbAdvanced = dbAdvToggle && dbAdvToggle.checked;
+        
+        let finalDbStoresFoldersRaw = null;
+        let finalDbHashMod = 0;
+        let finalDbErasureConfigs = [];
+        
+        if (isDbAdvanced) {
+             finalDbStoresFoldersRaw = document.getElementById('setup-db-stores-folders').value.trim();
+             // In advanced mode, the single "dbPath" is ignored or derived from first store? 
+             // To pass validation, we ensure dbPath reflects the first store
+             if (!finalDbStoresFoldersRaw) return showAlert("In Advanced Mode, at least one Store Folder is required for User DB.");
+             dbPath = finalDbStoresFoldersRaw.split(/[\n,]+/).map(s=>s.trim())[0];
+             
+             finalDbHashMod = document.getElementById('setup-db-registry-hash-mod').value;
+             finalDbErasureConfigs = collectEcConfigs('setup-db-ec-container') || [];
+        } else {
+             // Simple Mode: Use the explicit simple input
+             dbPath = document.getElementById('setup-db-path').value.trim();
+             if (!dbPath) return showAlert("Database Path is required");
+             // Reset advanced fields
+             finalDbStoresFoldersRaw = "";
+             finalDbHashMod = 0;
+             finalDbErasureConfigs = [];
+        }
+
+        const dbType = document.getElementById('setup-db-type').value;
+        const dbConn = document.getElementById('setup-db-conn').value;
+        const populateDemo = document.getElementById('setup-populate-demo').checked;
+        const populateMedical = document.getElementById('setup-populate-medical').checked;
+
+        // 2. Determine System DB Settings (Simple vs Advanced)
+        const port = parseInt(document.getElementById('setup-port').value);
+        const bProvider = document.getElementById('setup-brain-provider') ? document.getElementById('setup-brain-provider').value : "";
+        const bModel = document.getElementById('setup-brain-model') ? document.getElementById('setup-brain-model').value.trim() : "";
+        const bUrl = document.getElementById('setup-brain-url') ? document.getElementById('setup-brain-url').value.trim() : "";
+        const bApiKey = document.getElementById('setup-brain-api-key') ? document.getElementById('setup-brain-api-key').value.trim() : "";
+
+        const eProvider = document.getElementById('setup-embedder-provider') ? document.getElementById('setup-embedder-provider').value : "";
+        const eModel = document.getElementById('setup-embedder-model') ? document.getElementById('setup-embedder-model').value.trim() : "";
+        const eUrl = document.getElementById('setup-embedder-url') ? document.getElementById('setup-embedder-url').value.trim() : "";
+        const eApiKey = document.getElementById('setup-embedder-api-key') ? document.getElementById('setup-embedder-api-key').value.trim() : "";
+        const sysAdvToggle = document.getElementById('setup-sys-advanced-toggle');
+        const isSysAdvanced = sysAdvToggle && sysAdvToggle.checked;
+
+        let regPath = null;
+        let sysType = document.getElementById('setup-sys-type').value;
+        let sysConn = document.getElementById('setup-sys-conn').value;
+        
+        let sysHashMod = 0;
+        let sysStoresFoldersRaw = null;
+        let sysErasureConfigs = [];
+        
+        let validationRegPath = "";
+
+        if (isSysAdvanced) {
+            sysStoresFoldersRaw = document.getElementById('setup-sys-stores-folders').value.trim();
+            if (!sysStoresFoldersRaw) return showAlert("In Advanced Mode, at least one Store Folder is required for System DB.");
+            
+            // In Advanced Mode, we send specific stores folders. Sending registry_path as well causes a conflict in the backend validation.
+            // So we set regPath to empty string for the payload.
+            regPath = "";
+            // Use the first folder for client-side collision validation
+            validationRegPath = sysStoresFoldersRaw.split(/[\n,]+/).map(s=>s.trim())[0];
+            
+            sysHashMod = document.getElementById('setup-sys-registry-hash-mod').value;
+            const manualConfigs = collectEcConfigs('setup-sys-ec-container');
+            if (manualConfigs) sysErasureConfigs = manualConfigs;
+        } else {
+            // Simple Mode: Use explicit simple input
+            regPath = document.getElementById('setup-reg-path').value.trim();
+            if (!regPath) return showAlert("System Database Path is required");
+            validationRegPath = regPath;
+            
+            // Reset advanced fields
+            sysStoresFoldersRaw = "";
+            sysHashMod = 0;
+            sysErasureConfigs = [];
+        }
+        
+        // Prevent collision
+        const normalize = (p) => p.trim().replace(/[/\\]+$/, "");
+        if (normalize(dbPath) === normalize(validationRegPath)) {
+            return showAlert("User Database Path and System Database Path cannot be the same.");
+        }
+
+        // Shared Brain/DB Overrides (if checking "Connect to Existing")
+        const manualEntToggle = document.getElementById('setup-sys-use-manual-enterprise');
+        if (manualEntToggle && manualEntToggle.checked) {
+            // If connecting to existing, we use regPath (simple) but ensure advanced config is ignored
+            sysErasureConfigs = [];
+            sysStoresFoldersRaw = "";
+            sysHashMod = null;
+        }
+        
+        if (manualDBToggle && manualDBToggle.checked) {
+             finalDbErasureConfigs = [];
+             finalDbStoresFoldersRaw = "";
+             finalDbHashMod = null;
+        }
+
+        const nextBtn = document.getElementById('wizard-next');
+        nextBtn.disabled = true;
+        nextBtn.textContent = "Setting up...";
+        nextBtn.title = "Creating databases and configuring environments...";
+
+        console.log("DEBUG: wizard payload", {
+            dbName, dbPath, dbStoresFoldersRaw: finalDbStoresFoldersRaw, regPath, sysStoresFoldersRaw
+        });
+
+        // --- Helper to Convert Frontend EC Config to SOP Backend Map ---
+        const convertToSopEcMap = (arr) => {
+             const m = {};
+             if (!arr || arr.length === 0) return null;
+             arr.forEach(item => {
+                 let key = item.key || "default";
+                 if (key === '""') key = "";
+                 m[key] = {
+                     data_shards_count: item.data_chunks,
+                     parity_shards_count: item.parity_chunks,
+                     base_folder_paths_across_drives: item.base_paths
+                 };
+             });
+             return m;
+        };
+
+        // --- Construct System Options (sop.DatabaseOptions) ---
+        const systemOptions = {
+            type: sysType === 'clustered' ? 1 : 0, // sop.DatabaseType Enum (0=Standalone, 1=Clustered)
+            cache_type: sysType === 'clustered' ? 1 : 0,
+            registry_hash_mod: sysHashMod ? parseInt(sysHashMod) : 0,
+            stores_folders: sysStoresFoldersRaw ? sysStoresFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null
+        };
+        if (sysType === 'clustered') {
+             systemOptions.redis_config = { address: sysConn || "localhost:6379" };
+        }
+        const sysEcMap = convertToSopEcMap(sysErasureConfigs);
+        if (sysEcMap) {
+            systemOptions.erasure_config = sysEcMap;
+        }
+
+        // --- Construct User Options (sop.DatabaseOptions) ---
+        const userOptions = {
+            type: dbType === 'clustered' ? 1 : 0,
+            cache_type: dbType === 'clustered' ? 1 : 0,
+            registry_hash_mod: finalDbHashMod ? parseInt(finalDbHashMod) : 0,
+            stores_folders: finalDbStoresFoldersRaw ? finalDbStoresFoldersRaw.split(/[\n,]+/).map(s => s.trim()).filter(s => s.length > 0) : null
+        };
+        if (dbType === 'clustered') {
+             userOptions.redis_config = { address: dbConn || "localhost:6379" };
+        }
+        const userEcMap = convertToSopEcMap(finalDbErasureConfigs);
+        if (userEcMap) {
+            userOptions.erasure_config = userEcMap;
+        }
+
+        const userDBRequest = {
+            name: dbName,
+            path: dbPath,
+            use_shared_db: manualDBToggle ? manualDBToggle.checked : false,
+            populate_demo: populateDemo,
+            populate_medical: populateMedical,
+            options: userOptions
+        };
+
+        // --- Construct Main Payload ---
+        const finalPayload = {
+            registry_path: regPath,
+            port: port,
+            brain_provider: bProvider,
+            brain_model: bModel,
+            brain_url: bUrl,
+            brain_api_key: bApiKey,
+            embedder_provider: eProvider,
+            embedder_model: eModel,
+            embedder_url: eUrl,
+            embedder_api_key: eApiKey,
+            use_shared_brain: manualEntToggle ? manualEntToggle.checked : false,
+            system_options: systemOptions,
+            databases: [ userDBRequest ]
+        };
+
+        // UI Loading State (Synchronous wait for the heavy DBs)
+        const loadingModal = document.getElementById('setup-loading-modal');
+        const pb = document.getElementById('setup-progress-bar');
+        const pbDetails = document.getElementById('setup-loading-details');
+        
+        if (loadingModal) {
+            loadingModal.style.display = 'block';
+            document.getElementById('setup-wizard').style.display = 'none';
+            pb.style.width = '10%';
+            pbDetails.innerHTML = '- Initializing config save...<br>';
+            
+            // Faux progress steps since response is monolithic
+            let pTicks = 0;
+            const maxTicks = 10;
+            const progressItl = setInterval(() => {
+                pTicks++;
+                if (pTicks === 2) {
+                    pb.style.width = '30%';
+                    pbDetails.innerHTML += '- Creating System & User Data Stores...<br>';
+                } else if (pTicks === 4 && (populateDemo || populateMedical)) {
+                    pb.style.width = '50%';
+                    pbDetails.innerHTML += '- Pre-loading specified expertise datasets...<br>';
+                    document.getElementById('setup-loading-message').innerText = 'Loading expertise - this may take a bit...';
+                } else if (pTicks === 7 && populateMedical) {
+                    pb.style.width = '70%';
+                    pbDetails.innerHTML += '- Compiling medical semantic models...<br>';
+                } else if (pTicks === 8 && populateDemo) {
+                    pb.style.width = '85%';
+                    pbDetails.innerHTML += '- Inserting demo records...<br>';
+                } else if (pTicks >= 10) {
+                    pb.style.width = '95%';
+                    pbDetails.innerHTML += '- Waiting for final DB persistence sync...<br>';
+                    clearInterval(progressItl);
+                }
+            }, 1500);
+            
+            window._setupProgressItl = progressItl;
+        }
+
+        // 1. Single Atomic Save & Setup Call
+        fetch('/api/config/save', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(finalPayload)
+        })
+        .then(async res => {
+            if (window._setupProgressItl) clearInterval(window._setupProgressItl);
+            if (loadingModal) {
+                loadingModal.style.display = 'none';
+            }
+
+            if (!res.ok) {
+                const text = await res.text();
+                document.getElementById('setup-wizard').style.display = 'flex'; // Restore if failed
+                throw new Error("Failed to save config / init System DB: " + text);
+            }
+            
+            // 3. Reload/Redirect
+            resetSetupForm();
+
+            const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
+            if (port && port != parseInt(currentPort)) {
+                 const hostname = window.location.hostname;
+                 const newUrl = `${window.location.protocol}//${hostname}:${port}`;
+                 showAlert(`Setup Complete! IMPORTANT: You changed the port to ${port}. Please RESTART the server manually, then open: ${newUrl}`, null);
+            } else {            
+                showAlert("Setup Complete! Reloading...", () => window.location.reload());
+            }
+        })
+        .catch(err => {
+            if (window._setupProgressItl) clearInterval(window._setupProgressItl);
+            const loadingModal = document.getElementById('setup-loading-modal');
+            if (loadingModal) loadingModal.style.display = 'none';
+            document.getElementById('setup-wizard').style.display = 'flex'; // Restore UI
+            console.error(err);
+            showAlert("Error: " + err.message);
+            nextBtn.disabled = false;
+            nextBtn.textContent = "Finish";
+            nextBtn.title = 'Click "Finish" to create the configuration and initialize the databases.';
+        });
+    }
+
+    // --- Preferences Logic ---
+    function handlePrefEsc(e) {
+        if (e.key === 'Escape') closePreferences();
+    }
+
+    function showPreferences() {
+        const modal = document.getElementById('preferences-modal');
+        const mobileMode = localStorage.getItem('sop_ui_mobile_mode') || 'app';
+        document.getElementById('pref-mobile-mode').value = mobileMode;
+        modal.style.display = 'flex';
+        document.addEventListener('keydown', handlePrefEsc);
+    }
+
+    function closePreferences() {
+        document.getElementById('preferences-modal').style.display = 'none';
+        document.removeEventListener('keydown', handlePrefEsc);
+    }
+
+    function savePreferences() {
+        const mobileMode = document.getElementById('pref-mobile-mode').value;
+        localStorage.setItem('sop_ui_mobile_mode', mobileMode);
+        closePreferences();
+        applyPreferences();
+    }
+
+    function applyPreferences() {
+        // Default to 'app' (Auto 2) if not set
+        const mobileMode = localStorage.getItem('sop_ui_mobile_mode') || 'app';
+        const isMobile = window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        let useAI = false;
+        let lockAI = false;
+
+        if (mobileMode === 'app') {
+            // Auto 2: AI Only on Mobile
+            if (isMobile) {
+                useAI = true;
+                lockAI = true;
+            }
+        } else if (mobileMode === 'hybrid') {
+            // Auto 1: AI Default on Mobile, but can minimize
+            if (isMobile) {
+                useAI = true;
+                lockAI = false;
+            }
+        } else if (mobileMode === 'desktop') {
+            // Desktop Mode: Manual toggle only
+            useAI = false;
+            lockAI = false;
+        }
+
+        const widget = document.getElementById('chat-widget');
+        const minimizeBtn = widget.querySelector('.minimize-btn');
+        const resetBtn = widget.querySelector('.reset-btn');
+
+        if (useAI) {
+            // Auto-open chat if not already open
+            if (!widget.classList.contains('active')) {
+                toggleChatWidget(true);
+            }
+        }
+
+        // On Mobile "App Mode", hide window controls to enforce the "App" feel
+        if (lockAI && isMobile) {
+            if (minimizeBtn) minimizeBtn.style.display = 'none';
+            if (resetBtn) resetBtn.style.display = 'none';
+        } else {
+            if (minimizeBtn) minimizeBtn.style.display = '';
+            if (resetBtn) resetBtn.style.display = '';
+        }
+    }
+
+    // Apply preferences on load
+    document.addEventListener('DOMContentLoaded', applyPreferences);
+
+    // --- Uninstall / Reset System ---
+    function showUninstallModal() {
+        if(document.getElementById('uninstall-delete-user-dbs')) document.getElementById('uninstall-delete-user-dbs').checked = true;
+        if(document.getElementById('uninstall-delete-system-db')) document.getElementById('uninstall-delete-system-db').checked = false;
+        document.getElementById('uninstall-system-modal').style.display = 'block';
+    }
+
+    function closeUninstallModal() {
+        document.getElementById('uninstall-system-modal').style.display = 'none';
+    }
+
+    function confirmUninstallSystem() {
+        const deleteUserDBs = document.getElementById('uninstall-delete-user-dbs').checked;
+        const deleteSystemDB = document.getElementById('uninstall-delete-system-db').checked;
+        
+        fetch('/api/system/uninstall', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                delete_user_dbs: deleteUserDBs,
+                delete_system_db: deleteSystemDB
+            })
+        })
+        .then(res => {
+            if (!res.ok) return res.text().then(t => { throw new Error(t) });
+            return res.json();
+        })
+        .then(() => {
+            showAlert('System uninstalled/reset successfully. Reloading...', () => location.reload());
+        })
+        .catch(err => {
+            showAlert('Failed to uninstall system: ' + err.message);
+        });
+    }
+
+    // --- Erasure Config Helpers ---
+    
+    function addErasureConfigRow(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        
+        const div = document.createElement('div');
+        div.className = 'ec-entry';
+        div.style.border = '1px dashed var(--border-color)';
+        div.style.padding = '10px';
+        div.style.marginBottom = '0px';
+        div.style.position = 'relative';
+        
+        div.innerHTML = `
+            <span style="position: absolute; right: 5px; top: 5px; cursor: pointer; color: var(--danger-bg); font-weight: bold;" onclick="removeECItem(this)">&times;</span>
+            <div style="margin-bottom: 5px; display: flex; align-items: center; gap: 10px;">
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <label style="font-size: 0.9em;">Key:</label>
+                    <input type="text" class="ec-key" placeholder="Empty = Default" title="Leave empty to use as the default configuration." style="width: 160px; font-size: 0.9em;">
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <label style="white-space: nowrap; margin-bottom: 0; font-size: 0.9em;">EC:</label>
+                    <label style="margin-bottom: 0; font-size: 0.8em;">Data:</label>
+                    <input type="number" class="ec-data" min="0" style="width: 40px; flex: none; font-size: 0.9em;">
+                    <label style="margin-bottom: 0; font-size: 0.8em;">Parity:</label>
+                    <input type="number" class="ec-parity" min="0" style="width: 40px; flex: none; font-size: 0.9em;">
+                </div>
+            </div>
+            <input type="text" class="ec-paths" placeholder="/mnt/d1, /mnt/d2..." style="width: 100%; box-sizing: border-box; font-size: 0.9em;">
+        `;
+        container.appendChild(div);
+    }
+
+    function removeECItem(span) {
+        const entry = span.closest('.ec-entry');
+        if (entry) {
+             entry.remove();
+        }
+    }
+    
+    function addNewDbECItem() {
+        addErasureConfigRow('new-db-ec-container');
+    }
+    
+    function addSetupDbECItem() {
+        addErasureConfigRow('setup-db-ec-container');
+    }
+
+    function addSetupSysECItem() {
+        addErasureConfigRow('setup-sys-ec-container');
+    }
+
+    function collectEcConfigs(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return null;
+        
+        const entries = container.querySelectorAll('.ec-entry');
+        if (entries.length === 0) return null;
+        
+        const configs = [];
+        let validationError = null;
+
+        entries.forEach(entry => {
+             if (validationError) return;
+
+             const key = entry.querySelector('.ec-key').value.trim();
+             const data = parseInt(entry.querySelector('.ec-data').value);
+             const parity = parseInt(entry.querySelector('.ec-parity').value);
+             const pathsRaw = entry.querySelector('.ec-paths').value.trim();
+             
+             if (!isNaN(data) && !isNaN(parity)) {
+                 const item = {
+                     key: key,
+                     data_chunks: data,
+                     parity_chunks: parity,
+                     base_paths: [] // Initialize as empty array
+                 };
+                 if (pathsRaw) {
+                     // Updated split regex to include spaces ([\n,\s]+) to handle space-separated paths
+                     item.base_paths = pathsRaw.split(/[\n,\s]+/).map(s => s.trim()).filter(s => s.length > 0);
+                 }
+
+                 // Validate count matches Data + Parity (User Request: Finish must error if mismatch)
+                 const requiredCount = data + parity;
+                 if (item.base_paths.length !== requiredCount) {
+                     validationError = `Erasure Config Error for '${key}':\nRequired Paths: ${requiredCount} (${data} Data + ${parity} Parity)\nFound Paths: ${item.base_paths.length}\n\nPlease check your path separators (space, comma, or newline).`;
+                     return;
+                 }
+
+                 configs.push(item);
+             }
+        });
+
+        if (validationError) {
+            showAlert(validationError);
+            throw new Error(validationError);
+        }
+        
+        return configs.length > 0 ? configs : null;
+    }
+
+    // --- Database Management Functions ---
+
+    // Shared Validation Logic for DB Forms (Setup Wizard Phase 1 & Add Database Modal)
+</script>
+{{end}}

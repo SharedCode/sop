@@ -1,0 +1,954 @@
+{{define "scripts_part01"}}
+<script>
+    window.onerror = function(message, source, lineno, colno, error) {
+        console.error("GLOBAL ERROR CAUGHT:", message, "at", source, ":", lineno, ":", colno);
+        return false; // Let default handler run
+    };
+
+    /* --- Global Modal Helpers --- */
+    let _confirmCallback = null;
+    let _alertCallback = null;
+
+    function showAlert(message, callback) {
+        document.getElementById('global-alert-message').textContent = message;
+        _alertCallback = callback;
+        document.getElementById('global-alert-modal').style.display = 'flex';
+        // Focus OK button for usability
+        setTimeout(() => document.getElementById('global-alert-modal').querySelector('button').focus(), 50);
+    }
+
+    function closeGlobalAlert() {
+        document.getElementById('global-alert-modal').style.display = 'none';
+        if (_alertCallback) {
+            _alertCallback();
+            _alertCallback = null;
+        }
+    }
+
+    let _confirmKeyHandler = null;
+
+    function showConfirm(message, onConfirm, onCancel, title="Confirm", okText="OK", cancelText="Cancel") {
+        document.getElementById('global-confirm-title').textContent = title;
+        document.getElementById('global-confirm-message').textContent = message;
+        
+        const okBtn = document.getElementById('global-confirm-ok-btn');
+        const cancelBtn = document.getElementById('global-confirm-cancel-btn');
+
+        okBtn.textContent = okText;
+        cancelBtn.textContent = cancelText;
+
+        // Remove old listeners to avoid stacking
+        const newOk = okBtn.cloneNode(true);
+        okBtn.parentNode.replaceChild(newOk, okBtn);
+        
+        const newCancel = cancelBtn.cloneNode(true);
+        cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+        const cleanup = () => {
+            document.getElementById('global-confirm-modal').style.display = 'none';
+            if (_confirmKeyHandler) {
+                document.removeEventListener('keydown', _confirmKeyHandler, true);
+                _confirmKeyHandler = null;
+            }
+        };
+
+        newOk.onclick = function() {
+            cleanup();
+            if (onConfirm) onConfirm();
+        };
+
+        newCancel.onclick = function() {
+            cleanup();
+            if (onCancel) onCancel();
+        };
+
+        // Keyboard handling
+        if (_confirmKeyHandler) document.removeEventListener('keydown', _confirmKeyHandler, true);
+        _confirmKeyHandler = function(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                newCancel.click();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                newOk.click();
+            }
+        };
+        document.addEventListener('keydown', _confirmKeyHandler, true);
+
+        document.getElementById('global-confirm-modal').style.display = 'flex';
+        setTimeout(() => newOk.focus(), 50);
+    }
+
+    function closeGlobalConfirm() {
+        document.getElementById('global-confirm-modal').style.display = 'none';
+        if (_confirmKeyHandler) {
+            document.removeEventListener('keydown', _confirmKeyHandler, true);
+            _confirmKeyHandler = null;
+        }
+    }
+
+    function confirmAsync(message, title="Confirm") {
+        return new Promise((resolve) => {
+            showConfirm(message, () => resolve(true), () => resolve(false), title);
+        });
+    }
+    
+    let _promptKeyHandler = null;
+
+    function showPrompt(message, onConfirm, onCancel, title="Prompt", placeholder="", okText="OK", cancelText="Cancel") {
+         document.getElementById('global-prompt-title').textContent = title;
+         document.getElementById('global-prompt-message').textContent = message;
+         
+         const input = document.getElementById('global-prompt-input');
+         input.value = "";
+         input.placeholder = placeholder;
+         
+         const okBtn = document.getElementById('global-prompt-ok-btn');
+         const cancelBtn = document.getElementById('global-prompt-cancel-btn');
+
+         okBtn.textContent = okText;
+         cancelBtn.textContent = cancelText;
+
+         // Remove old listeners
+         const newOk = okBtn.cloneNode(true);
+         okBtn.parentNode.replaceChild(newOk, okBtn);
+         
+         const newCancel = cancelBtn.cloneNode(true);
+         cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+         const cleanup = () => {
+             document.getElementById('global-prompt-modal').style.display = 'none';
+             if (_promptKeyHandler) {
+                 document.removeEventListener('keydown', _promptKeyHandler, true);
+                 _promptKeyHandler = null;
+             }
+         };
+
+         newOk.onclick = function() {
+             const val = input.value;
+             cleanup();
+             if (onConfirm) onConfirm(val);
+         };
+
+         newCancel.onclick = function() {
+             cleanup();
+             if (onCancel) onCancel();
+         };
+
+        // Keyboard handling
+        if (_promptKeyHandler) document.removeEventListener('keydown', _promptKeyHandler, true);
+        _promptKeyHandler = function(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                newCancel.click();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                newOk.click();
+            }
+        };
+        document.addEventListener('keydown', _promptKeyHandler, true);
+
+        document.getElementById('global-prompt-modal').style.display = 'flex';
+        setTimeout(() => input.focus(), 50);
+    }
+    
+    function promptAsync(message, title="Prompt") {
+         return new Promise((resolve) => {
+             showPrompt(message, (val) => resolve(val), () => resolve(null), title);
+         });
+    }
+    
+    // Override native alert (optional, but safer to rename usages explicitly first)
+    // window.alert = function(msg) { showAlert(msg); };
+
+    // Escape Key Handler for Modals (KeyDown)
+    document.addEventListener('keydown', function(event) {
+        if (event.key === "Escape") {
+            const modals = [
+                // Topmost Priority
+                'global-alert-modal',
+                'global-confirm-modal',
+                'confirm-modal', 
+                
+                // Specific Modals
+                'preferences-modal', 
+                'script-modal', 
+                'add-store-modal',
+                'store-details-modal',
+                'cel-modal',
+                'column-modal', 
+                'add-modal', 
+                
+                // Environment/DB Managers
+                'delete-env-modal',
+                'add-database-modal',
+                'delete-database-modal',
+                'environments-modal',
+                'switch-env-modal'
+                // NOTE: setup-wizard moved to keyup handler to prevent confirmation dialog conflict
+            ];
+            
+            for (const id of modals) {
+                const el = document.getElementById(id);
+                // check if the element exists and is visible (display matching flex or block)
+                if (el && el.style.display !== 'none' && el.style.display !== '') {
+                    
+                    event.preventDefault(); 
+                    event.stopImmediatePropagation();
+
+                    // Specific close functions handling
+                    if (id === 'add-modal') closeAdd();
+                    else if (id === 'global-alert-modal') closeGlobalAlert();
+                    else if (id === 'global-confirm-modal') closeGlobalConfirm();
+                    else if (id === 'preferences-modal') closePreferences();
+                    else if (id === 'script-modal') closeScriptModal();
+                    else if (id === 'add-store-modal') closeAddStoreModal();
+                    else if (id === 'store-details-modal') closeStoreDetailsModal();
+                    else if (id === 'cel-modal') closeCelModal();
+                    else if (id === 'delete-env-modal') closeDeleteEnvModal();
+                    else if (id === 'add-database-modal') closeAddDatabaseModal();
+                    else if (id === 'delete-database-modal') closeDeleteDatabaseModal();
+                    else if (id === 'environments-modal') closeEnvironmentsManager();
+                    else if (id === 'switch-env-modal') closeSwitchEnvModal();
+                    else el.style.display = 'none'; // Default fallback
+                    
+                    return; // Stop processing other modals
+                }
+            }
+        }
+    });
+
+    // Dedicated KeyUp Listener for Setup Wizard (prevents double-triggering confirmation)
+    document.addEventListener('keyup', function(event) {
+        if (event.key === "Escape") {
+            const wizard = document.getElementById('setup-wizard');
+            if (wizard && wizard.style.display !== 'none' && wizard.style.display !== '') {
+                // Ensure no other modal is covering it (simple check)
+                 if(document.getElementById('global-alert-modal').style.display === 'flex') return;
+                 if(document.getElementById('global-confirm-modal').style.display === 'flex') return;
+                 
+                 event.preventDefault();
+                 event.stopImmediatePropagation();
+                 wizardCancel();
+            }
+        }
+    });
+
+    let currentDatabase = null;
+    let currentSessionID = "";
+    let currentStore = null;
+    let firstKey = null;
+    let lastKey = null;
+    let currentStoreInfo = null;
+    let currentItemKey = null;
+    
+    const CURRENT_CONFIG_FILE = "{{ .ConfigFile }}";
+
+    // Environment Flags
+    // ALLOW_INVALID_MAP_KEY: If true, allows saving a store with Map Key type without
+    // requiring an Index Specification or CEL Expression. Controlled by SOP_ALLOW_INVALID_MAP_KEY env var.
+    const ALLOW_INVALID_MAP_KEY = {{ .AllowInvalidMapKey }};
+    const IS_ENTERPRISE = {{ .IsEnterprise }};
+    const SYSTEM_DB_NAME = "{{ .SystemDBName }}";
+    
+    // Dropdown Logic for Enterprise Mode
+    function toggleDbDropdown() {
+        const menu = document.getElementById('db-dropdown-menu');
+        if (menu.style.display === 'block') {
+            menu.style.display = 'none';
+        } else {
+            menu.style.display = 'block';
+        }
+    }
+
+    // Close Dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+        const chip = document.getElementById('db-chip');
+        const menu = document.getElementById('db-dropdown-menu');
+        if (chip && menu && !chip.contains(event.target) && !menu.contains(event.target)) {
+            menu.style.display = 'none';
+        }
+    });
+
+    let currentItems = [];
+    let currentKeyColumnWidth = '45%';
+    let columnWidths = [];
+    let availableDatabases = [];
+    const CHIP_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14a2.5 2.5 0 0 1-2.5 2.5v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0zm-.5 3A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 11.5 3h-7zM5 6.5A1.5 1.5 0 0 1 6.5 5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3z"/></svg>`;
+
+    // Load Databases on Start
+    // Refactored into a reusable function to support dynamic database switching
+    window.reloadDatabases = function(autoSelect = true) {
+        return fetch('/api/databases')
+            .then(res => res.json())
+            .then(databases => {
+                availableDatabases = databases;
+                
+                if (!databases || databases.length === 0) {
+                    const select = document.getElementById('database-select');
+                    select.innerHTML = '';
+                    const opt = document.createElement('option');
+                    opt.textContent = "No databases found";
+                    select.appendChild(opt);
+
+                    document.getElementById('database-section').style.display = 'block';
+                    
+                    // Disable UI elements when no databases exist
+                    const btnAddDb = document.getElementById('btn-add-database');
+                    if(btnAddDb) {
+                        btnAddDb.style.opacity = '0.3';
+                        btnAddDb.style.pointerEvents = 'none';
+                    }
+                    const btnAddStore = document.getElementById('btn-add-store');
+                    if(btnAddStore) {
+                        btnAddStore.style.opacity = '0.3';
+                        btnAddStore.style.pointerEvents = 'none';
+                    }
+                    const btnChat = document.getElementById('chat-toggle-btn');
+                    if(btnChat) {
+                        btnChat.style.display = 'none';
+                    }
+                    
+                    // Check if we should suppress the wizard (e.g. redirected after cancel)
+                    if (sessionStorage.getItem('sop_suppress_wizard_once')) {
+                        sessionStorage.removeItem('sop_suppress_wizard_once');
+
+                        // Check if we also need to open the Environment Manager (Post-Cancel)
+                        if (sessionStorage.getItem('sop_open_env_manager')) {
+                            sessionStorage.removeItem('sop_open_env_manager');
+                            showEnvironmentsManager();
+                        }
+                        return;
+                    }
+                    
+                    showSetupWizard();
+                    return;
+                }
+                
+                if (databases.length > 1) {
+                    document.getElementById('database-section').style.display = 'block';
+                }
+
+                const userDBs = databases.filter(db => !db.is_system);
+                const systemDBs = databases.filter(db => db.is_system);
+
+                if (IS_ENTERPRISE) {
+                    // Enterprise Mode: Use Chip UI
+                    document.getElementById('database-select').style.display = 'none';
+                    document.getElementById('enterprise-db-container').style.display = 'block';
+                    
+                    const menu = document.getElementById('db-dropdown-menu');
+                    menu.innerHTML = '';
+                    
+                    // Add User DBs
+                    userDBs.forEach(db => {
+                        const item = document.createElement('div');
+                        item.className = 'db-option';
+                        item.textContent = db.name;
+                        item.onclick = function() {
+                            selectDatabase(db.name);
+                            document.getElementById('db-chip-label').textContent = db.name;
+                            // User DB: Hide Icon
+                            const icon = document.getElementById('db-chip-icon');
+                            if (icon) icon.style.display = 'none';
+                            toggleDbDropdown();
+                        };
+                        menu.appendChild(item);
+                    });
+                    
+                    if (userDBs.length > 0 && systemDBs.length > 0) {
+                        const sep = document.createElement('div');
+                         sep.style.borderTop = "1px solid var(--border-color)";
+                         sep.style.margin = "4px 0";
+                         menu.appendChild(sep);
+                    }
+                    
+                    // Add System DBs
+                    systemDBs.forEach(db => {
+                        const item = document.createElement('div');
+                        item.className = 'db-option';
+                        item.style.fontWeight = "bold";
+                        // item.style.display = "flex"; // Ensure flex via CSS or inline for icon alignment
+                        item.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;">${CHIP_ICON_SVG} ${db.name}</span>`;
+                        item.onclick = function() {
+                            selectDatabase(db.name);
+                            document.getElementById('db-chip-label').textContent = db.name;
+                             // Toggle icon based on type (System)
+                            const icon = document.getElementById('db-chip-icon');
+                            if (icon) icon.style.display = 'inline';
+                            toggleDbDropdown();
+                        };
+                        menu.appendChild(item);
+                    });
+                    
+                } else {
+                     // Standard Mode: Use <select>
+                     document.getElementById('database-select').style.display = 'block';
+                     document.getElementById('enterprise-db-container').style.display = 'none';
+                     
+                    const select = document.getElementById('database-select');
+                    select.innerHTML = '';
+
+                    userDBs.forEach(db => {
+                        const opt = document.createElement('option');
+                        opt.value = db.name;
+                        opt.textContent = db.name;
+                        select.appendChild(opt);
+                    });
+
+                    if (systemDBs.length > 0) {
+                        if (userDBs.length > 0) {
+                            const separator = document.createElement('option');
+                            separator.disabled = true;
+                            separator.textContent = "──────────";
+                            select.appendChild(separator);
+                        }
+                        systemDBs.forEach(db => {
+                            const opt = document.createElement('option');
+                            opt.value = db.name;
+                             // Standard System Red
+                            opt.style.color = "var(--danger-bg)"; 
+                            opt.textContent = "⚠️ " + db.name;
+                            opt.className = "option-system";
+                            opt.style.fontWeight = "bold";
+                            select.appendChild(opt);
+                        });
+                    }
+                }
+
+                if (autoSelect) {
+                    // Persistence Logic
+                    const savedDB = localStorage.getItem('sop_current_database');
+                    const targetDB = databases.find(d => d.name === savedDB);
+                    
+                    let finalDBVal = null;
+
+                    if (targetDB) {
+                        finalDBVal = targetDB.name;
+                    } else if (userDBs.length > 0) {
+                        finalDBVal = userDBs[0].name;
+                    } else if (systemDBs.length > 0) {
+                        finalDBVal = systemDBs[0].name;
+                    }
+                    
+                    if (finalDBVal) {
+                         selectDatabase(finalDBVal);
+                         // Update UI States
+                         if (IS_ENTERPRISE) {
+                             let label = finalDBVal;
+                             const finalDB = databases.find(d => d.name === finalDBVal);
+                             document.getElementById('db-chip-label').textContent = label;
+                             
+                             // Toggle Icon for Initial Load
+                             const icon = document.getElementById('db-chip-icon');
+                             if (icon) {
+                                 icon.style.display = (finalDB && finalDB.is_system) ? 'inline' : 'none';
+                             }
+                         } else {
+                             document.getElementById('database-select').value = finalDBVal;
+                         }
+                    }
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                document.getElementById('database-select').innerHTML = '<option>Error loading databases</option>';
+                document.getElementById('database-section').style.display = 'block';
+            });
+    };
+
+    // Initial Load
+    reloadDatabases(true);
+
+    async function selectDatabase(name, forceRefresh = false, storeToSelect = null) {
+        if (!forceRefresh && currentDatabase === name) return;
+
+        // Check for unsaved changes
+        if (!await closeDetail()) {
+            // Revert selection
+            const select = document.getElementById('database-select');
+            if (select && currentDatabase) {
+                select.value = currentDatabase;
+            }
+            return;
+        }
+
+        currentDatabase = name;
+        localStorage.setItem('sop_current_database', name);
+
+        // Hardening: Hide Add Store button for System DB / System DBs
+        const dbObj = availableDatabases.find(d => d.name === name);
+        const btnAddStore = document.getElementById('btn-add-store');
+        // Define isSystemDB locally so we can reuse it in the store listing
+        const isSystemDB = (dbObj && dbObj.is_system) || name === 'system' || name === 'system_db';
+
+        if (btnAddStore) {
+            // Check implicit system names too just in case is_system missing
+            if (isSystemDB) {
+                 btnAddStore.style.display = 'none';
+            } else {
+                 btnAddStore.style.display = 'inline-block';
+            }
+        }
+
+        currentStore = null;
+        document.getElementById('store-list').innerHTML = '<li>Loading...</li>';
+        document.getElementById('current-store-title').textContent = 'Select a Store';
+        document.getElementById('data-grid').innerHTML = '';
+        document.getElementById('toolbar').style.display = 'none';
+        document.getElementById('pagination').style.display = 'none';
+        document.getElementById('pagination-top').style.display = 'none';
+        
+        // Reset DB Options
+        document.getElementById('db-options-section').style.display = 'none';
+        document.getElementById('db-options-content').innerHTML = 'Loading...';
+        
+        fetch(`/api/stores?database=${encodeURIComponent(name)}`)
+            .then(res => res.json())
+            .then(stores => {
+                const list = document.getElementById('store-list');
+                list.innerHTML = '';
+                if (!stores || stores.length === 0) {
+                    list.innerHTML = '<li>No stores found</li>';
+                    return;
+                }
+                stores.forEach(store => {
+                    if (isSystemDB) {
+                        // Hide internal vector store components
+                        if (store.endsWith('_sys_config') ||
+                            store.endsWith('_lku') ||
+                            store.endsWith('_centroids') ||
+                            store.endsWith('_vecs') ||
+                            store.endsWith('_tmp_vecs') ||
+                            store.endsWith('_data')) {
+                            return;
+                        }
+                    }
+
+                    const li = document.createElement('li');
+                    li.textContent = store.charAt(0).toUpperCase() + store.slice(1);
+                    li.onclick = () => selectStore(store, li);
+                    list.appendChild(li);
+
+                    if (storeToSelect && store === storeToSelect) {
+                        selectStore(store, li);
+                    }
+                });
+            })
+            .catch(err => {
+                const list = document.getElementById('store-list');
+                list.innerHTML = `<li class="error-text">Error: ${err.message}</li>`;
+            });
+
+        // Fetch DB Options
+        fetch(`/api/db/options?database=${encodeURIComponent(name)}`)
+            .then(res => res.json())
+            .then(opts => {
+                const section = document.getElementById('db-options-section');
+                const content = document.getElementById('db-options-content');
+                section.style.display = 'block';
+                
+                let html = '';
+                
+                // Display Mode (Type)
+                // L2CacheType: 2=Redis (Clustered), others (0=NoCache, 1=InMemory) = Standalone
+                const typeStr = (opts.cache_type === 2) ? "Clustered" : "Standalone";
+                html += `<div style="margin-bottom: 5px;"><strong>Type:</strong> ${typeStr}</div>`;
+
+                if (opts.stores_folders && opts.stores_folders.length > 0) {
+                    html += '<strong>Stores Folders:</strong><ul style="margin: 0; padding-left: 20px; list-style-type: disc;">';
+                    opts.stores_folders.forEach(f => {
+                        // Shorten path logic:
+                        // Only shorten if length > 27 characters
+                        let shortPath = f;
+                        if (f.length > 27) {
+                            // Split by / or \
+                            const parts = f.split(/[/\\]/).filter(p => p.length > 0);
+                            if (parts.length > 2) {
+                                shortPath = '../' + parts[parts.length - 2] + '/' + parts[parts.length - 1];
+                            }
+                        }
+                        
+                        // Escape for JS string
+                        const safePath = f.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                        
+                        html += `<li style="cursor: copy; padding: 2px 0;" 
+                                     title="${f} (Click to Copy)"
+                                     onclick="navigator.clipboard.writeText('${safePath}').then(() => { const el = this; const orig = el.style.color; el.style.color = '#4caf50'; setTimeout(() => el.style.color = orig, 500); });">
+                                    ${shortPath}
+                                 </li>`;
+                    });
+                    html += '</ul>';
+                }
+                
+                if (opts.erasure_config && Object.keys(opts.erasure_config).length > 0) {
+                    html += '<details><summary style="cursor: pointer; font-weight: bold; margin-bottom: 5px;">Erasure Config</summary><pre style="margin: 0; font-size: 10px; overflow-x: visible;">' + JSON.stringify(opts.erasure_config, null, 2) + '</pre></details>';
+                }
+
+                if (opts.redis_config) {
+                    html += '<details><summary style="cursor: pointer; font-weight: bold; margin-bottom: 5px;">Redis Config</summary><pre style="margin: 0; font-size: 10px; overflow-x: visible;">' + JSON.stringify(opts.redis_config, null, 2) + '</pre></details>';
+                }
+                
+                if (!html) {
+                    html = 'No specific options found.';
+                }
+                content.innerHTML = html;
+            })
+            .catch(err => {
+                console.error("Failed to fetch DB options", err);
+                document.getElementById('db-options-content').innerHTML = '<span class="error-text">Failed to load options</span>';
+                document.getElementById('db-options-section').style.display = 'block';
+            });
+    }
+
+    function isStoreReadOnly(info) {
+        if (!info) return true;
+        
+        // Check System DB status
+        const dbObj = availableDatabases && currentDatabase ? availableDatabases.find(d => d.name === currentDatabase) : null;
+        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+
+        // Protected Stores
+        const storeName = info.name || currentStore;
+        if (storeName === 'llm_feedback') return true;
+        if (isSystem && storeName === 'memory') return true;
+
+        const hasIndex = info.indexSpec && info.indexSpec.index_fields && info.indexSpec.index_fields.length > 0;
+        const hasCel = !!info.celExpression;
+        const isPrimitiveMetadata = info.isPrimitiveKey;
+        
+        let isPrimitiveData = false;
+        if (info.count > 0 && info.sampleKey !== undefined && info.sampleKey !== null) {
+             const t = typeof info.sampleKey;
+             if (t !== 'object' || Array.isArray(info.sampleKey)) {
+                 isPrimitiveData = true;
+             }
+        }
+        
+        const hasSchema = hasIndex || hasCel || isPrimitiveMetadata || isPrimitiveData;
+        return !hasSchema;
+    }
+
+    async function selectStore(name, element, force = false) {
+        if (currentStore === name && !force) return;
+
+        // Close detail panel as it may be showing data from previous store
+        if (!await closeDetail()) return;
+
+        currentStore = name;
+        columnWidths = []; // Reset column widths
+        loadColumnPreferences(); // Load saved column settings
+        columnsInitialized = false;
+        
+        // Highlight active
+        document.querySelectorAll('#sidebar li').forEach(el => el.classList.remove('active'));
+        element.classList.add('active');
+
+        // Show Delete Button
+        const deleteBtn = document.getElementById('btn-delete-store');
+        
+        // Hardening: Disable delete for System DB and protected stores
+        const dbObj = availableDatabases.find(d => d.name === currentDatabase);
+        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+        const isProtectedStore = (name === 'llm_feedback' || name === 'memory');
+        
+        if (isSystem || isProtectedStore) {
+            deleteBtn.style.display = 'none';
+        } else {
+            deleteBtn.style.display = 'inline-block';
+        }
+        
+        deleteBtn.title = `Delete store '${name}'`;
+
+        // Show Code Button
+        const codeBtn = document.getElementById('btn-code-store');
+        codeBtn.style.display = 'inline-block';
+        codeBtn.title = `Generate Code for '${name}'`;
+
+        // Show Edit Store Button
+        const editBtn = document.getElementById('btn-edit-store');
+        editBtn.style.display = 'none';
+
+        // Show View Store Button
+        const viewBtn = document.getElementById('btn-view-store');
+        viewBtn.style.display = 'none';
+
+        // Show Edit CEL Button
+        const celBtn = document.getElementById('btn-edit-cel');
+        celBtn.style.display = 'none'; // Hidden in favor of Edit Store
+        // celBtn.style.display = 'inline-block';
+        // celBtn.title = `Edit '${name}' CEL expression`;
+
+        // Fetch Store Info
+        fetch(`/api/store/info?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`)
+            .then(res => res.json())
+            .then(info => {
+                currentStoreInfo = info;
+
+                // Toggle Edit/View buttons based on count
+                // NOTE: We now use the Edit button for ALL stores (populated or empty).
+                // The Edit modal handles read-only fields for populated stores.
+                // However, for System DB, we force Read-Only View.
+                if (isSystem) {
+                    editBtn.style.display = 'none';
+                    viewBtn.style.display = 'inline-block';
+                    viewBtn.title = `View Store Metadata for '${name}' (Read-Only)`;
+                } else {
+                    editBtn.style.display = 'inline-block';
+                    editBtn.title = `Edit Store Metadata for '${name}'`;
+                    viewBtn.style.display = 'none';
+                }
+                
+                /*
+                if (info.count > 0) {
+                    viewBtn.style.display = 'inline-block';
+                    viewBtn.title = `View Store Details for '${name}'`;
+                    editBtn.style.display = 'none';
+                } else {
+                    editBtn.style.display = 'inline-block';
+                    editBtn.title = `Edit Store '${name}'`;
+                    viewBtn.style.display = 'none';
+                }
+                */
+
+                // Use name for display, description for tooltip
+                let displayTitle = info.name;
+                if (displayTitle) {
+                    displayTitle = displayTitle.charAt(0).toUpperCase() + displayTitle.slice(1);
+                }
+                const titleElem = document.getElementById('current-store-title');
+                titleElem.textContent = displayTitle;
+                if (info.description) {
+                    titleElem.title = info.description;
+                } else {
+                    titleElem.removeAttribute('title');
+                }
+
+                buildSearchUI(info);
+                loadItems('first');
+            });
+    }
+
+    function deleteStore() {
+        if (!currentStore) return;
+        
+        promptAsync(`Please type the store name '${currentStore}' to confirm deletion:`, "Delete Store")
+        .then(name => {
+            if (name === null) return; // User cancelled prompt
+            
+            if (name.trim().toLowerCase() !== currentStore.toLowerCase()) {
+                showAlert("Store name does not match. Deletion cancelled.");
+                return;
+            }
+
+        fetch('/api/store/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                database: currentDatabase,
+                store: currentStore
+            })
+        })
+        .then(async res => {
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text || res.statusText);
+            }
+            return res.json();
+        })
+        .then(data => {
+            if (data.status === 'ok') {
+                showAlert("Store deleted successfully.");
+                currentStore = null;
+                document.getElementById('current-store-title').textContent = "Select a Store";
+                
+                // Hide all store-specific buttons
+                document.getElementById('btn-delete-store').style.display = 'none';
+                document.getElementById('btn-code-store').style.display = 'none';
+                document.getElementById('btn-edit-store').style.display = 'none';
+                document.getElementById('btn-view-store').style.display = 'none';
+                document.getElementById('btn-edit-cel').style.display = 'none';
+
+                document.getElementById('data-grid').innerHTML = '';
+                document.getElementById('toolbar').style.display = 'none';
+                // Refresh list
+                selectDatabase(currentDatabase, true);
+            } else {
+                showAlert("Error: " + (data.error || "Unknown error"));
+            }
+        })
+        .catch(err => {
+            showAlert("Failed to delete store: " + err.message);
+        });
+        });
+    }
+
+    function buildSearchUI(info) {
+        const toolbar = document.getElementById('toolbar');
+        toolbar.innerHTML = ''; // Clear existing
+        toolbar.style.display = 'flex';
+        toolbar.style.flexWrap = 'wrap';
+
+        // Helper to trigger search
+        const triggerSearch = () => {
+            loadItems('search').then(items => {
+                if (items && items.length > 0) {
+                    const firstRow = document.querySelector('#items-table tbody tr');
+                    if (firstRow) {
+                        showDetail(firstRow, items[0], false);
+                        firstRow.scrollIntoView({ block: 'nearest' });
+                    }
+                }
+            });
+        };
+
+        if (info.indexSpec && info.indexSpec.index_fields) {
+            // Complex Key with Index Spec
+            info.indexSpec.index_fields.forEach(field => {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = `search-field-${field.field_name}`;
+                input.placeholder = `${field.field_name} (${field.ascending_sort_order ? 'Asc' : 'Desc'})`;
+                input.style.marginRight = '5px';
+                input.style.flex = '1 1 150px'; // Allow wrapping
+                input.tabIndex = 0;
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') triggerSearch();
+                });
+                toolbar.appendChild(input);
+            });
+        } else if (info.sampleKey && typeof info.sampleKey === 'object' && info.sampleKey !== null) {
+            // Inferred Complex Key from Sample
+            // Sort keys to be deterministic
+            const keys = Object.keys(info.sampleKey).sort();
+            keys.forEach(key => {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = `search-field-${key}`;
+                input.placeholder = key;
+                input.style.marginRight = '5px';
+                input.style.flex = '1 1 150px'; // Allow wrapping
+                input.tabIndex = 0;
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') triggerSearch();
+                });
+                toolbar.appendChild(input);
+            });
+        } else {
+            // Primitive Key or no spec
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = 'search-input';
+            input.placeholder = 'Search keys...';
+            input.style.flex = '1';
+            input.tabIndex = 0;
+            toolbar.appendChild(input);
+        }
+
+        const btn = document.createElement('button');
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>`;
+        btn.title = "Search for items in the store based on the key or index fields.";
+        btn.onclick = triggerSearch;
+        btn.tabIndex = 0;
+        // Search icon styling (transparent)
+        btn.style.padding = '4px 8px';
+        btn.style.background = 'none';
+        btn.style.border = 'none';
+        btn.style.cursor = 'pointer';
+        btn.style.fontSize = '1.2em';
+        btn.style.color = 'var(--key-color)';
+        toolbar.appendChild(btn);
+
+        // Add Enter key support for simple search input
+        const simpleInput = document.getElementById('search-input');
+        if (simpleInput) {
+            simpleInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') btn.click();
+            });
+        }
+
+        const refreshBtn = document.createElement('button');
+        refreshBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>`;
+        refreshBtn.title = "Refreshes the selected store's currently displayed data. Useful when wanting to fetch latest data from the database";
+        refreshBtn.onclick = () => loadItems('current', firstKey);
+        refreshBtn.style.marginLeft = '0px';
+        refreshBtn.tabIndex = 0;
+        // Refresh icon styling
+        refreshBtn.style.padding = '4px 8px';
+        refreshBtn.style.background = 'none';
+        refreshBtn.style.border = 'none';
+        refreshBtn.style.cursor = 'pointer';
+        refreshBtn.style.fontSize = '1.2em';
+        toolbar.appendChild(refreshBtn);
+
+        // Only show Add Item for non-registry stores (Macros are too complex to add manually)
+        // Determine if store has "Schema" (Add/Delete Allowed)
+        const isReadOnly = isStoreReadOnly(info);
+
+        if (info.description !== "AI Models Registry" && !isReadOnly) {
+            // Hardening: Prevent adding items to memory in System DB
+            // Determine if current DB is System DB using the flag from API
+            const currentDbObj = availableDatabases.find(db => db.name === currentDatabase);
+            const isSystemDB = currentDbObj ? currentDbObj.is_system : false;
+
+            let allowAdd = true;
+            // llm_feedback is always read-only, memory is read-only in system DBs
+            if (currentStore === 'llm_feedback' || (currentStore === 'memory' && isSystemDB)) {
+                allowAdd = false;
+            }
+
+            if (allowAdd) {
+                const addBtn = document.createElement('button');
+                addBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>`;
+                addBtn.title = "Add a new item to the store.";
+                addBtn.onclick = () => showAdd();
+                // addBtn.classList.add('btn-success'); // Removing class to strip background
+                addBtn.style.marginLeft = '0px';
+                addBtn.tabIndex = 0;
+                addBtn.id = 'btn-add-item';
+                 // Add Item icon styling (Green Icon)
+                addBtn.style.padding = '4px 8px';
+                addBtn.style.background = 'none';
+                addBtn.style.border = 'none';
+                addBtn.style.cursor = 'pointer';
+                addBtn.style.fontSize = '1.4em';
+                addBtn.style.color = '#28a745'; // Green color for Add
+                addBtn.style.display = 'flex';
+                addBtn.style.alignItems = 'center';
+                toolbar.appendChild(addBtn);
+            }
+        } else if (isReadOnly) {
+            const warning = document.createElement('span');
+            
+            // Determine reason for Read-Only to show correct message
+            const r_dbObj = availableDatabases.find(db => db.name === currentDatabase);
+            const r_isSystem = r_dbObj ? r_dbObj.is_system : false;
+            if (currentStore === 'llm_feedback' || (currentStore === 'memory' && r_isSystem)) {
+                warning.textContent = "⚠️ Read-Only (System Managed)";
+                warning.title = "This store is managed by the system. Manual additions/deletions are restricted to ensure stability.";
+            } else {
+                warning.textContent = "⚠️ Read-Only (No Index/CEL)";
+                warning.title = "This store does not have an explicit Index Specification or CEL Expression. Adding or deleting items is disabled because the key structure is not strictly defined. Please migrate to a new store with a defined schema.";
+            }
+
+            warning.style.marginLeft = '10px';
+            warning.style.color = 'var(--warning-text)';
+            warning.style.fontSize = '12px';
+            warning.style.alignSelf = 'center';
+            toolbar.appendChild(warning);
+        }
+    }
+
+    let userSelectedColumns = null; // Set of strings, or null if show all
+    let allDetectedColumns = []; // List of all columns detected in currentItems
+    let showSelectionColumn = false; // Toggle for checkbox column
+    let selectedItems = new Set(); // Set of keys selected for deletion
+    let columnsInitialized = false; // Flag to trigger auto-column-hiding once per store load
+
+    // --- Column Persistence ---
+</script>
+{{end}}

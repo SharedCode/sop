@@ -1,0 +1,855 @@
+{{define "scripts_part05"}}
+<script>
+    function saveChatState() {
+        const widget = document.getElementById('chat-widget');
+        if (!widget) return;
+        
+        const state = {
+            width: widget.style.width,
+            height: widget.style.height,
+            left: widget.style.left,
+            top: widget.style.top
+        };
+        localStorage.setItem('sop_chat_state', JSON.stringify(state));
+    }
+
+    function resetChatPosition(forceDefault) {
+        const widget = document.getElementById('chat-widget');
+        
+        // Mobile Detection: Check width or user agent
+        const isMobile = window.innerWidth <= 768 || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+        if (isMobile) {
+            // On mobile, we let the CSS media query handle the full-screen layout.
+            // We clear inline styles that might interfere.
+            widget.style.width = '';
+            widget.style.height = '';
+            widget.style.left = '';
+            widget.style.top = '';
+            widget.style.right = '';
+            widget.style.bottom = '';
+            return;
+        }
+
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        // Clear state if forced
+        if (forceDefault) {
+            localStorage.removeItem('sop_chat_state');
+        }
+
+        // Attempt to load saved state (unless forced)
+        if (!forceDefault) {
+            const savedStateJson = localStorage.getItem('sop_chat_state');
+            if (savedStateJson) {
+                try {
+                    const state = JSON.parse(savedStateJson);
+                    if (state.width && state.height && state.left && state.top) {
+                        widget.style.width = state.width;
+                        widget.style.height = state.height;
+                        widget.style.left = state.left;
+                        widget.style.top = state.top;
+                        widget.style.right = 'auto';
+                        widget.style.bottom = 'auto';
+                        
+                        // Basic bounds check (optional but good)
+                        const rect = widget.getBoundingClientRect();
+                        if (rect.left > viewportWidth - 50) widget.style.left = (viewportWidth - rect.width - 20) + 'px';
+                        if (rect.top > viewportHeight - 50) widget.style.top = (viewportHeight - rect.height - 20) + 'px';
+                        
+                        return;
+                    }
+                } catch (e) {
+                    console.error("Failed to load chat state", e);
+                }
+            }
+        }
+
+        // Defaults (matches CSS)
+        const width = 550;
+        const height = 555;
+        
+        widget.style.width = width + 'px';
+        widget.style.height = height + 'px';
+        // Position at bottom-left, above the toggle button (which is ~52px from bottom)
+        widget.style.left = '57px';
+        widget.style.top = (viewportHeight - height + 2) + 'px';
+        widget.style.right = 'auto';
+        widget.style.bottom = 'auto';
+    }
+
+    // Handle resize events to adjust chat position if needed
+    window.addEventListener('resize', function() {
+        const widget = document.getElementById('chat-widget');
+        if (widget && widget.classList.contains('active')) {
+            resetChatPosition();
+        }
+    });
+
+    function toggleChatWidget(forceOpen) {
+        const widget = document.getElementById('chat-widget');
+        const btn = document.getElementById('chat-toggle-btn');
+        const input = document.getElementById('chat-input');
+        
+        if (widget.classList.contains('active') && !forceOpen) {
+            widget.classList.remove('active');
+        } else {
+            // Always reset position when opening to ensure it is visible and accessible
+            resetChatPosition();
+            
+            widget.classList.add('active');
+
+            // Mobile-specific input optimization
+            if (window.innerWidth <= 768) {
+                input.setAttribute('inputmode', 'search');
+                input.setAttribute('enterkeyhint', 'send');
+                input.name = 'sop_ai_chat_prompt_unique_id'; // Prevent history
+            } else {
+                // Reset for desktop
+                input.removeAttribute('inputmode');
+                input.removeAttribute('enterkeyhint');
+                input.name = 'sop_ai_chat_prompt';
+            }
+
+            // Focus input when opening
+            setTimeout(() => input.focus(), 100);
+        }
+    }
+
+    // --- Draggable Chat Widget Logic ---
+    document.addEventListener('DOMContentLoaded', function() {
+        const widget = document.getElementById('chat-widget');
+        const header = widget.querySelector('.chat-header');
+        let isDragging = false;
+        let dragStartX, dragStartY;
+
+        header.addEventListener('mousedown', function(e) {
+            // Ignore if clicking controls or select
+            if (e.target.closest('.chat-controls') || e.target.closest('select')) return;
+            
+            isDragging = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            
+            // Change cursor style globally to indicate dragging
+            document.body.style.cursor = 'move';
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            
+            const deltaX = e.clientX - dragStartX;
+            const deltaY = e.clientY - dragStartY;
+            
+            // Use top/left for positioning
+            const rect = widget.getBoundingClientRect();
+            widget.style.left = (rect.left + deltaX) + 'px';
+            widget.style.top = (rect.top + deltaY) + 'px';
+            
+            // Clear right/bottom if they exist to avoid conflicts
+            widget.style.right = 'auto';
+            widget.style.bottom = 'auto';
+            
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (isDragging) {
+                isDragging = false;
+                document.body.style.cursor = 'default';
+                saveChatState();
+            }
+        });
+
+        // --- Resize Logic ---
+        let isResizing = false;
+        let resizeDir = '';
+        let resizeStartX, resizeStartY, startWidth, startHeight, startLeft, startTop;
+
+        const handles = widget.querySelectorAll('.resize-handle');
+        handles.forEach(handle => {
+            handle.addEventListener('mousedown', function(e) {
+                e.stopPropagation(); // Prevent drag
+                e.preventDefault(); // Prevent selection
+                isResizing = true;
+                resizeDir = handle.getAttribute('data-dir');
+                resizeStartX = e.clientX;
+                resizeStartY = e.clientY;
+                
+                const rect = widget.getBoundingClientRect();
+                startWidth = rect.width;
+                startHeight = rect.height;
+                startLeft = rect.left;
+                startTop = rect.top;
+                
+                document.body.style.cursor = window.getComputedStyle(handle).cursor;
+            });
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isResizing) return;
+            e.preventDefault();
+            
+            const deltaX = e.clientX - resizeStartX;
+            const deltaY = e.clientY - resizeStartY;
+            const minW = 300;
+            const minH = 300;
+            
+            if (resizeDir.includes('e')) {
+                widget.style.width = Math.max(minW, startWidth + deltaX) + 'px';
+            }
+            if (resizeDir.includes('s')) {
+                widget.style.height = Math.max(minH, startHeight + deltaY) + 'px';
+            }
+            if (resizeDir.includes('w')) {
+                let newWidth = startWidth - deltaX;
+                if (newWidth < minW) {
+                    newWidth = minW;
+                    widget.style.left = (startLeft + startWidth - minW) + 'px';
+                } else {
+                    widget.style.left = (startLeft + deltaX) + 'px';
+                }
+                widget.style.width = newWidth + 'px';
+            }
+            if (resizeDir.includes('n')) {
+                let newHeight = startHeight - deltaY;
+                if (newHeight < minH) {
+                    newHeight = minH;
+                    widget.style.top = (startTop + startHeight - minH) + 'px';
+                } else {
+                    widget.style.top = (startTop + deltaY) + 'px';
+                }
+                widget.style.height = newHeight + 'px';
+            }
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (isResizing) {
+                isResizing = false;
+                document.body.style.cursor = 'default';
+                saveChatState();
+            }
+        });
+    });
+
+    // --- Draggable Add Modal Logic (Event Delegation) ---
+    (function() {
+        let isDragging = false;
+        let dragStartX, dragStartY;
+        let initialLeft, initialTop;
+        let activeModalContent = null;
+
+        document.addEventListener('mousedown', function(e) {
+            const header = e.target.closest('#add-modal-header');
+            if (!header) return;
+            
+            const modalContent = document.getElementById('add-modal-content');
+            if (!modalContent) return;
+
+            isDragging = true;
+            activeModalContent = modalContent;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+            
+            // If we are centered via transform, we need to switch to explicit top/left
+            const rect = modalContent.getBoundingClientRect();
+            modalContent.style.transform = 'none';
+            modalContent.style.left = rect.left + 'px';
+            modalContent.style.top = rect.top + 'px';
+            modalContent.style.margin = '0';
+            
+            initialLeft = rect.left;
+            initialTop = rect.top;
+            
+            document.body.style.cursor = 'move';
+            e.preventDefault(); // Prevent text selection
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDragging || !activeModalContent) return;
+            e.preventDefault();
+            
+            const deltaX = e.clientX - dragStartX;
+            const deltaY = e.clientY - dragStartY;
+            
+            activeModalContent.style.left = (initialLeft + deltaX) + 'px';
+            activeModalContent.style.top = (initialTop + deltaY) + 'px';
+        });
+
+        document.addEventListener('mouseup', function() {
+            if (isDragging) {
+                isDragging = false;
+                activeModalContent = null;
+                document.body.style.cursor = 'default';
+            }
+        });
+    })();
+
+    let chatAbortController = null;
+    let chatHistory = [];
+    let historyIndex = -1;
+    let currentAiMsgId = null;
+
+    function updateHeaderFeedbackVisibility(visible) {
+        const el = document.getElementById('header-feedback-controls');
+        if (el) el.style.display = visible ? 'flex' : 'none';
+        
+        // Reset visual state
+        if (visible) {
+             ['header-fb-up', 'header-fb-down', 'header-fb-teach'].forEach(id => {
+                const btn = document.getElementById(id);
+                if(btn) {
+                    btn.style.opacity = '0.7'; 
+                    btn.style.pointerEvents = 'auto';
+                    btn.style.transform = 'none';
+                }
+             });
+        }
+    }
+
+    async function handleHeaderFeedback(type) {
+        if (!currentAiMsgId) return;
+        
+        const btnId = type === 'positive' ? 'header-fb-up' : 'header-fb-down';
+        const btn = document.getElementById(btnId);
+        
+        if (btn) {
+            btn.style.opacity = '1';
+            btn.style.transform = 'scale(1.2)';
+        }
+        
+        const siblingId = type === 'positive' ? 'header-fb-down' : 'header-fb-up';
+        const sibling = document.getElementById(siblingId);
+        if (sibling) {
+            sibling.style.pointerEvents = 'none';
+            sibling.style.opacity = '0.3';
+        }
+
+        // Gather Context
+        const aiMsgEl = document.getElementById(currentAiMsgId);
+        // Use innerText to get visual text, or textContent for raw. 
+        // innerText is better for "what the user saw"
+        const aiContent = aiMsgEl ? aiMsgEl.innerText : "";
+        
+        // Attempt to find User Query
+        let userContent = "";
+        let prev = aiMsgEl ? aiMsgEl.previousElementSibling : null;
+        while(prev) {
+            // Simple heuristic to find the user message bubble
+            // Adjust class check based on your actual DOM structure if needed
+            if (prev.classList.contains('user-message') || (prev.innerText && prev.innerText.trim().length > 0)) {
+                 userContent = prev.innerText;
+                 break;
+            }
+            prev = prev.previousElementSibling;
+        }
+
+        try {
+            await fetch('/api/ai/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    msgId: currentAiMsgId,
+                    type: type,
+                    ai_content: aiContent,
+                    user_content: userContent,
+                    database: currentDatabase || "system",
+                    agent: "copilot"
+                })
+            });
+            console.log(`Feedback ${type} sent for msg ${currentAiMsgId}`);
+        } catch (e) {
+            console.error("Failed to send feedback", e);
+        }
+    }
+
+    function handleHeaderTeach() {
+        if (!currentAiMsgId) return;
+        const msgEl = document.getElementById(currentAiMsgId);
+        if (!msgEl) return;
+        
+        // Use text content, maybe stripping "Error:" prefix if present?
+        // Note: innerText preserves newlines as they are rendered
+        handleTeach(currentAiMsgId, msgEl.innerText);
+    }
+
+
+    function jsonToCSV(input) {
+        try {
+            let items;
+            if (typeof input === 'string') {
+                items = JSON.parse(input);
+            } else {
+                items = input;
+            }
+
+            if (!Array.isArray(items) || items.length === 0) {
+                console.log("jsonToCSV: Input is not an array or empty");
+                return typeof input === 'string' ? input : JSON.stringify(input);
+            }
+
+            console.log("jsonToCSV: Parsed " + items.length + " items");
+            if (items.length > 0) {
+                console.log("First item structure:", JSON.stringify(items[0]));
+            }
+
+            // Check if items have the specific SOP 'key'/'value' structure
+            const isSopStructure = items.some(item => 
+                (item && typeof item === 'object') && ('key' in item || 'value' in item));
+
+            let headers = [];
+            let csv = "";
+
+            if (!isSopStructure) {
+                // Handle generic JSON array (e.g. Script steps)
+                let fields = new Set();
+                items.forEach(item => {
+                    if (item && typeof item === 'object') {
+                        Object.keys(item).forEach(k => fields.add(k));
+                    }
+                });
+                headers = Array.from(fields);
+                csv = headers.join(", ") + "\n";
+                
+                items.forEach(item => {
+                    let row = [];
+                    headers.forEach(h => {
+                        let val = item[h];
+                         if (typeof val === 'object' && val !== null) {
+                            val = JSON.stringify(val).replace(/"/g, '""'); 
+                            val = `"${val}"`;
+                        } else if (typeof val === 'string') {
+                             if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+                                val = val.replace(/"/g, '""');
+                                val = `"${val}"`;
+                             }
+                        } else if (val === undefined || val === null) {
+                            val = "";
+                        }
+                        row.push(val);
+                    });
+                    csv += row.join(", ") + "\n";
+                });
+                return csv;
+            }
+
+            // Existing SOP Structure Logic
+            let keyIsMap = false;
+            let valueIsMap = false;
+            let keyFields = new Set();
+            let valueFields = new Set();
+
+            // Check if all keys are null (e.g. projection query)
+            const allKeysNull = items.every(item => item.key == null);
+            // Check if all values are null (e.g. key-only query)
+            const allValuesNull = items.every(item => item.value == null);
+
+            items.forEach(item => {
+                if (typeof item.key === 'object' && item.key !== null) {
+                    keyIsMap = true;
+                    Object.keys(item.key).forEach(k => keyFields.add(k));
+                }
+                if (typeof item.value === 'object' && item.value !== null) {
+                    valueIsMap = true;
+                    Object.keys(item.value).forEach(k => valueFields.add(k));
+                }
+            });
+
+            // Use Set insertion order (which matches server order), do NOT sort.
+            let kFieldsArr = Array.from(keyFields);
+            let vFieldsArr = Array.from(valueFields);
+
+            if (keyIsMap) {
+                kFieldsArr.forEach(k => headers.push(k.charAt(0).toUpperCase() + k.slice(1)));
+            } else if (!allKeysNull) {
+                headers.push("Key");
+            }
+
+            if (valueIsMap) {
+                vFieldsArr.forEach(v => headers.push(v.charAt(0).toUpperCase() + v.slice(1)));
+            } else if (!allValuesNull) {
+                headers.push("Value");
+            }
+
+            csv = headers.join(", ") + "\n";
+
+            items.forEach(item => {
+                let row = [];
+                if (keyIsMap) {
+                    kFieldsArr.forEach(k => {
+                        let val = "";
+                        if (item.key && typeof item.key === 'object') {
+                            val = item.key[k] !== undefined ? item.key[k] : "";
+                        }
+                        row.push(val);
+                    });
+                } else if (!allKeysNull) {
+                    row.push(item.key !== null && item.key !== undefined ? item.key : "");
+                }
+
+                if (valueIsMap) {
+                    vFieldsArr.forEach(v => {
+                        let val = "";
+                        if (item.value && typeof item.value === 'object') {
+                            val = item.value[v] !== undefined ? item.value[v] : "";
+                        }
+                        row.push(val);
+                    });
+                } else if (!allValuesNull) {
+                    row.push(item.value !== null && item.value !== undefined ? item.value : "");
+                }
+                csv += row.join(", ") + "\n";
+            });
+
+            return csv;
+        } catch (e) {
+            console.error("Failed to convert JSON to CSV", e);
+            return typeof input === 'string' ? input : JSON.stringify(input);
+        }
+    }
+
+    function processMacroTrace(trace, format) {
+        let output = "";
+        console.log("Processing Macro Trace. Steps:", trace.length);
+        
+        trace.forEach((step, index) => {
+            console.log(`Step ${index} type: ${step.type}`);
+            if (step.type === 'command') {
+                // Optionally show the command being executed
+                // output += `> ${step.command}\n`;
+                
+                if (step.result) {
+                    let resultDisplay = step.result;
+                    
+                    // Handle object/array results (from new streaming logic)
+                    let parsedResult = step.result;
+                    let isObject = typeof step.result === 'object' && step.result !== null;
+
+                    if (!isObject && typeof step.result === 'string') {
+                        try {
+                            // Try to parse if it's a string
+                            if (step.result.trim().startsWith('[') || step.result.trim().startsWith('{')) {
+                                parsedResult = JSON.parse(step.result);
+                                isObject = true;
+                            }
+                        } catch (e) {
+                            // Not JSON
+                        }
+                    }
+
+                    if (format === 'csv') {
+                        try {
+                            if (isObject && Array.isArray(parsedResult)) {
+                                const csv = jsonToCSV(parsedResult);
+                                if (csv.includes(',')) {
+                                    resultDisplay = csv;
+                                }
+                            }
+                        } catch (e) {
+                            console.error(`Step ${index} CSV conversion error:`, e);
+                        }
+                    } else {
+                        // JSON format
+                        if (isObject) {
+                            resultDisplay = JSON.stringify(parsedResult, null, 2);
+                        }
+                    }
+                    
+                    // Ensure we don't print [object Object]
+                    if (typeof resultDisplay === 'object') {
+                        resultDisplay = JSON.stringify(resultDisplay, null, 2);
+                    }
+
+                    output += resultDisplay + "\n";
+                }
+            } else if (step.type === 'say') {
+                output += step.result + "\n";
+            } else if (step.type === 'error') {
+                output += `Error: ${step.error}\n`;
+            } else if (step.type === 'ask') {
+                output += `${step.prompt}\n`;
+            }
+        });
+        
+        return output.trim();
+    }
+
+    async function sendChatMessage() {
+        updateHeaderFeedbackVisibility(false);
+        currentAiMsgId = null;
+        const input = document.getElementById('chat-input');
+        const sendBtn = document.getElementById('chat-send-btn');
+        
+        // Check if we are in "Stop" mode
+        if (chatAbortController) {
+            chatAbortController.abort();
+            chatAbortController = null;
+            if (sendBtn) sendBtn.textContent = 'Send';
+            appendChatMessage('ai', 'Request cancelled by user.');
+            return;
+        }
+
+        const message = input.value.trim();
+        const agentSelect = document.getElementById('agent-select');
+        const agent = agentSelect ? agentSelect.value : 'db_admin';
+        const providerSelect = document.getElementById('provider-select');
+        const provider = providerSelect ? providerSelect.value : '';
+        const formatSelect = document.getElementById('format-select');
+        const format = formatSelect ? formatSelect.value : 'csv';
+        const domainSelect = document.getElementById('domain-select');
+        const domain = domainSelect ? domainSelect.value : '';
+
+        if (!message) return;
+
+        // Save to history
+        chatHistory.push(message);
+        historyIndex = -1; // Reset index
+
+        // Add User Message
+        appendChatMessage('user', message);
+        input.value = '';
+        
+        // Show Loading
+        const loadingId = appendChatMessage('ai', 'Thinking...');
+        // Setup AbortController
+        chatAbortController = new AbortController();
+        if (sendBtn) sendBtn.textContent = 'Stop';
+
+        try {
+            const response = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    message: message,
+                    database: currentDatabase,
+                    store: currentStore,
+                    agent: agent,
+                    provider: provider,
+                    format: format,
+                    verbose: true, session_id: currentSessionID, domain: domain
+                }),
+                signal: chatAbortController.signal
+            });
+
+            // Remove Loading
+            const loadingEl = document.getElementById(loadingId);
+            if (loadingEl) loadingEl.remove();
+
+            if (!response.ok) {
+                const text = await response.text();
+                appendChatMessage('ai', 'HTTP Error: ' + response.status + ' - ' + text);
+                return;
+            }
+
+            // Read the stream
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            
+            // State for rendering
+            let currentContentSpan = null;
+            let currentTableContainer = null;
+            let currentTableRecords = [];
+            let currentTableType = null; // 'record' or 'kv'
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                const chunk = decoder.decode(value, { stream: true });
+                // Split by newline to handle multiple objects in one chunk
+                const lines = chunk.split('\n');
+                
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+                    try {
+                        const event = JSON.parse(line);
+
+                        // Normalize payload/data from mixed backend formats
+                        // StepExecutionResult uses 'record' or 'result' instead of 'payload'
+                        if (event.payload === undefined) {
+                            if (event.record !== undefined) event.payload = event.record;
+                            else if (event.result !== undefined) event.payload = event.result;
+                        }
+
+                        // Map 'result' type to 'content' if it acts like text output
+                        // This ensures command string outputs (like "Transaction committed") are shown
+                        if (event.type === 'result') {
+                            event.type = 'content';
+                        }
+                        
+                        // Helper to flush pending records before showing text or other content
+                        const flushRecords = () => {
+                            if (currentTableRecords.length > 0) {
+                                renderDataResults(currentTableRecords, format, currentTableType);
+                                currentTableRecords = []; // Clear
+                                // Also ensure we create a NEW content span for subsequent text
+                                currentContentSpan = null; 
+                                
+                                // Scroll down
+                                const hist = document.getElementById('chat-history');
+                                if (hist) hist.scrollTop = hist.scrollHeight;
+                            }
+                        };
+
+                        if (event.type === 'content') {
+                             // Ignore empty content to prevent empty UI bubbles
+                             if (!event.payload || String(event.payload).length === 0) continue;
+
+                             flushRecords(); // Flush any data tables before showing new text analysis/headers
+
+                             if (!currentContentSpan) {
+                                // Start new content block
+                                const msgDiv = document.createElement('div');
+                                msgDiv.className = 'chat-message ai';
+                                
+                                // Set ID for feedback
+                                const msgId = 'msg-' + generateUUID();
+                                msgDiv.id = msgId;
+                                currentAiMsgId = msgId;
+
+                                currentContentSpan = document.createElement('span');
+                                msgDiv.appendChild(currentContentSpan);
+                                document.getElementById('chat-history').appendChild(msgDiv);
+                                pruneChatHistory();
+                                document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+                            }
+                            
+                            // Check for Client-Side Action Patterns
+                            let textPayload = String(event.payload);
+                            const switchDbRegex = /\[\[SWITCH_DATABASE:\s*([a-zA-Z0-9_-]+)\]\]/;
+                            const match = textPayload.match(switchDbRegex);
+                            
+                            if (match) {
+                                const newDbName = match[1];
+                                console.log("Detected Client-Side Switch DB Action:", newDbName);
+
+                                // 1. Reload the DB List (in case it's a new DB) - Don't auto-select
+                                if (typeof reloadDatabases === 'function') {
+                                    await reloadDatabases(false);
+                                }
+
+                                // 2. Execute switch logic (sets global var, saves to localStorage, fetches stores)
+                                await selectDatabase(newDbName, true);
+                                
+                                // 3. Visual Sync (redundant but safe)
+                                // Standard Mode
+                                const dbSelect = document.getElementById('database-select');
+                                if (dbSelect) dbSelect.value = newDbName;
+                                
+                                // Enterprise Mode
+                                const chipLabel = document.getElementById('db-chip-label');
+                                if (chipLabel) chipLabel.textContent = newDbName;
+                                
+                                // Update Icon if System DB (Enterprise)
+                                const dbObj = availableDatabases.find(d => d.name === newDbName);
+                                const icon = document.getElementById('db-chip-icon');
+                                if (icon) {
+                                    icon.style.display = (dbObj && dbObj.is_system) ? 'inline' : 'none';
+                                }
+
+                                // Remove the tag from display
+                                textPayload = textPayload.replace(match[0], '');
+                                
+                                // Fix: If the message is empty after removing the tag, provide a default confirmation
+                                if (!textPayload.trim()) {
+                                    textPayload = `Switched database context to **${newDbName}**.`;
+                                }
+                            }
+
+                            // For now basic accumulation, markdown later?
+                            // If event.payload is the whole response (as per our backend right now), just set it.
+                            // If we switch to token streaming, we append.
+                            // Backend emits entire string for now.
+                            // Handle Markdown
+                            const markdownHtml = marked.parse(textPayload);
+                            currentContentSpan.innerHTML += markdownHtml;
+                            document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+                        } 
+                        else if (event.type === 'record' || event.type === 'kv') {
+                            // Collect records
+                            // If we encounter a schema change, we might want to flush?
+                            // For simplicity, we just collect until text/content interrupts.
+                            currentTableRecords.push(event.payload);
+                            currentTableType = event.type;
+                        }
+                        else if (event.type === 'tool_call') {
+                            flushRecords();
+                            appendChatMessage('ai', '🛠️ Calling Tool: ' + event.payload.tool);
+                            currentContentSpan = null;
+                        }
+                        else if (event.type === 'step_start') {
+                            flushRecords();
+                            let label = event.payload || event.command;
+                            const idx = event.step_index;
+                            if (label) {
+                                let prefix = '➡️ Step';
+                                if (idx) {
+                                    prefix += ' ' + idx;
+                                }
+                                appendChatMessage('ai', prefix + ': ' + label);
+                            }
+                            currentContentSpan = null;
+                        }
+                        else if (event.type === 'switch_database') {
+                            flushRecords();
+                            const newDbName = event.payload;
+                            appendChatMessage('ai', `🔄 Switching active database context to '${newDbName}'...`);
+                            
+                            // 1. Trigger the UI switch immediately.
+                            // This updates 'currentDatabase' global var and refreshes sidebar/store list.
+                            await selectDatabase(newDbName, true);
+
+                            // 2. IMPORTANT: We do NOT need to wait for selectDatabase to finish before processing next lines,
+                            // BUT if the agent is about to send us data (like 'record' events or 'content' about stores),
+                            // we want the UI state to be consistent. 
+                            // The selectDatabase call updates 'currentDatabase' synchronously at the start, 
+                            // so subsequent fetch calls (if any from user action) will use the new DB.
+                            
+                            // Re-sync the sidebar dropdown if it exists to match visual state
+                            const dbSelect = document.getElementById('database-select');
+                            if (dbSelect) dbSelect.value = newDbName;
+
+                            currentContentSpan = null;
+                        }
+                        else if (event.type === 'session_id') {
+                            currentSessionID = event.payload;
+                        }
+                        else if (event.type === 'error') {
+                            flushRecords();
+                            appendChatMessage('ai', 'Error: ' + event.payload);
+                            currentContentSpan = null;
+                        }
+                    } catch (e) {
+                        console.error("Failed to parse stream line:", line, e);
+                    }
+                }
+            }
+            
+            // After stream, if we have records, render them
+            if (currentTableRecords.length > 0) {
+                renderDataResults(currentTableRecords, format, currentTableType);
+            }
+
+        } catch (err) {
+             const loadingEl = document.getElementById(loadingId);
+             if (loadingEl) loadingEl.remove();
+
+             if (err.name === 'AbortError') {
+                 // Ignore
+             } else {
+                 appendChatMessage('ai', 'Error: ' + err.message);
+             }
+        } finally {
+             chatAbortController = null;
+             if (sendBtn) sendBtn.textContent = 'Send';
+             if (currentAiMsgId) {
+                 updateHeaderFeedbackVisibility(true);
+             }
+        }
+    }
+
+</script>
+{{end}}

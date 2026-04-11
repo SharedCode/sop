@@ -1,0 +1,815 @@
+{{define "scripts_part06"}}
+<script>
+    function renderDataResults(records, format, type) {
+        // Auto-flatten records if they contain SOP internal fields (key, value, etc)
+        // This makes the output much cleaner for Joins and raw Store scans.
+        if (type === 'record') {
+            // Heuristic to detect Script Instructions (which are technically records but should be viewed as JSON/Code)
+            if (records.length > 0 && records[0] && (records[0].op || records[0].command) && records[0].args) {
+                format = 'json';
+            }
+
+            records = records.map(r => {
+                if (!r) return {}; // Safety for nulls
+                const flat = Object.assign({}, r);
+                ['key', 'value', 'right_key', 'right_value'].forEach(field => {
+                     if (flat[field] !== undefined) {
+                         let val = flat[field];
+                         // Try parse string JSON if possible
+                         if (typeof val === 'string' && val.trim().startsWith('{')) {
+                            try { val = JSON.parse(val); } catch(e){}
+                         }
+                         
+                         // If it's an object, merge it up
+                         if (val && typeof val === 'object' && !Array.isArray(val)) {
+                             Object.assign(flat, val);
+                             delete flat[field];
+                         }
+                     }
+                });
+                return flat;
+            });
+        }
+
+        if (format === 'table') {
+            renderRecordTable(records, type);
+        } else if (format === 'json') {
+            const block = document.createElement('div');
+            block.className = 'chat-message ai';
+            const uuid = generateUUID();
+            block.id = 'msg-' + uuid;
+            block.innerHTML = '<pre>' + JSON.stringify(records, null, 2) + '</pre>';
+            document.getElementById('chat-history').appendChild(block);
+            document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+        } else if (format === 'csv') {
+            const block = document.createElement('div');
+            block.className = 'chat-message ai';
+            const uuid = generateUUID();
+            block.id = 'msg-' + uuid;
+            
+            // Convert Records to CSV
+            const headerSet = new Set();
+            records.forEach(r => Object.keys(r).forEach(k => headerSet.add(k)));
+            const headers = Array.from(headerSet);
+            
+            let csvHeader = headers.join(',');
+            let csvBody = '';
+
+            records.forEach(r => {
+                const row = headers.map(h => {
+                        let val = r[h];
+                        if (val === undefined || val === null) return '';
+                        if (typeof val === 'object') val = JSON.stringify(val);
+                        val = String(val);
+                        if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+                            val = '"' + val.replace(/"/g, '""') + '"';
+                        }
+                        return val;
+                }).join(',');
+                csvBody += row + '\n';
+            });
+
+            block.innerHTML = '<pre class="csv-output"><span class="csv-header">' + csvHeader + '</span>\n' + csvBody + '</pre>';
+            document.getElementById('chat-history').appendChild(block);
+            document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+        } else {
+                // Default Fallback (Table)
+                renderRecordTable(records, type);
+        }
+    }
+
+    function renderRecordTable(records, type) {
+        const container = document.createElement('div');
+        container.className = 'chat-message ai-table-container';
+        
+        const table = document.createElement('table');
+        table.className = 'data-table';
+        const thead = document.createElement('thead');
+        const tbody = document.createElement('tbody');
+        
+        let headers = [];
+        if (type === 'kv') {
+             headers = ['Key', 'Value'];
+        } else {
+             // Discover headers
+             const headerSet = new Set();
+             records.forEach(r => Object.keys(r).forEach(k => headerSet.add(k)));
+             headers = Array.from(headerSet);
+        }
+        
+        // Header Row
+        const trHead = document.createElement('tr');
+        headers.forEach(h => {
+            const th = document.createElement('th');
+            // Replace underscores with spaces so CSS capitalize can work on words
+            th.textContent = h.replace(/_/g, ' ');
+            trHead.appendChild(th);
+        });
+        thead.appendChild(trHead);
+        
+        // Body
+        records.forEach(r => {
+            const tr = document.createElement('tr');
+            if (type === 'kv') {
+                 // KV Specific rendering
+                 const tdK = document.createElement('td');
+                 // TODO: Pretty print objects
+                 tdK.textContent = typeof r.key === 'object' ? JSON.stringify(r.key) : r.key;
+                 
+                 const tdV = document.createElement('td');
+                 tdV.textContent = typeof r.value === 'object' ? JSON.stringify(r.value) : r.value;
+                 
+                 tr.appendChild(tdK);
+                 tr.appendChild(tdV);
+            } else {
+                 headers.forEach(h => {
+                     const td = document.createElement('td');
+                     const val = r[h];
+                     td.textContent = (typeof val === 'object' && val !== null) ? JSON.stringify(val) : (val === undefined ? '' : val);
+                     tr.appendChild(td);
+                 });
+            }
+            tbody.appendChild(tr);
+        });
+        
+        table.appendChild(thead);
+        table.appendChild(tbody);
+        container.appendChild(table);
+        
+        document.getElementById('chat-history').appendChild(container);
+        document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+    }
+
+
+    function navigateHistory(direction) {
+        const input = document.getElementById('chat-input');
+        const e = {
+            key: direction === 'up' ? 'ArrowUp' : 'ArrowDown',
+            preventDefault: () => {}
+        };
+        handleChatKeydown(e);
+        input.focus();
+    }
+
+    function moveCursorToEnd(el) {
+        el.focus();
+        if (typeof window.getSelection != "undefined" && typeof document.createRange != "undefined") {
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+        }
+    }
+
+    function handleChatKeydown(e) {
+        const input = document.getElementById('chat-input');
+
+        // --- CUSTOM NAVIGATION (Cmd/Ctrl + Arrows) ---
+        // Supports macOS (Meta/Command) and Windows/Linux (Control)
+        if (e.metaKey || e.ctrlKey) {
+            const val = input.value;
+            const start = input.selectionStart;
+
+            if (e.key === 'ArrowUp') {
+                // Command+Up: Go to Top
+                e.preventDefault();
+                input.setSelectionRange(0, 0);
+                input.scrollTop = 0;
+                return;
+            }
+            if (e.key === 'ArrowDown') {
+                // Command+Down: Go to Bottom
+                e.preventDefault();
+                input.setSelectionRange(val.length, val.length);
+                input.scrollTop = input.scrollHeight;
+                return;
+            }
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                // Find start of current line (look backward from cursor-1)
+                const lineStart = val.lastIndexOf('\n', start - 1) + 1;
+                if (start > lineStart) {
+                    // Go to start of line
+                    input.setSelectionRange(lineStart, lineStart);
+                } else {
+                    // Already at start of line -> Go to Top
+                    input.setSelectionRange(0, 0);
+                    input.scrollTop = 0;
+                }
+                return;
+            }
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                // Find end of current line
+                let lineEnd = val.indexOf('\n', start);
+                if (lineEnd === -1) lineEnd = val.length;
+                if (start < lineEnd) {
+                    // Go to end of line
+                    input.setSelectionRange(lineEnd, lineEnd);
+                } else {
+                    // Already at end of line -> Go to Bottom
+                    input.setSelectionRange(val.length, val.length);
+                    input.scrollTop = input.scrollHeight;
+                }
+                return;
+            }
+        }
+
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendChatMessage();
+        } else if (e.key === 'ArrowUp') {
+            // History Up
+            if (chatHistory.length > 0) {
+                if (historyIndex === -1) {
+                    historyIndex = chatHistory.length - 1;
+                } else if (historyIndex > 0) {
+                    historyIndex--;
+                }
+                const msg = chatHistory[historyIndex];
+                if (msg) input.value = msg;
+                e.preventDefault();
+            }
+        } else if (e.key === 'ArrowDown') {
+            // History Down
+            if (historyIndex !== -1) {
+                if (historyIndex < chatHistory.length - 1) {
+                    historyIndex++;
+                    input.value = chatHistory[historyIndex];
+                } else {
+                    historyIndex = -1;
+                    input.value = '';
+                }
+                e.preventDefault();
+            }
+        }
+    }
+
+    // --- Macro Tree View Logic ---
+
+    // History Stack for Script Navigation
+    let scriptViewStack = [];
+    let currentScriptView = { name: '', steps: [] };
+
+    function openScriptModal() {
+        const modal = document.getElementById('script-modal');
+        const container = document.getElementById('script-tree-container');
+        
+        let steps = [];
+        let name = "Current Item";
+        
+        // Initial Load from selected item
+        if (currentItemValue && Array.isArray(currentItemValue.steps)) {
+            steps = currentItemValue.steps;
+        }
+        if (currentItemKey) {
+            name = currentItemKey;
+        }
+        
+        // Reset Stack
+        scriptViewStack = [];
+        currentScriptView = { name: name, steps: steps };
+        
+        renderScriptTree();
+        modal.style.display = 'block';
+    }
+
+    function renderScriptTree() {
+        const container = document.getElementById('script-tree-container');
+        container.innerHTML = '';
+        
+        // Render Header with Back Button if needed
+        const header = document.createElement('div');
+        header.style.marginBottom = '10px';
+        header.style.borderBottom = '1px solid var(--border-color)';
+        header.style.paddingBottom = '10px';
+        header.style.display = 'flex';
+        header.style.alignItems = 'center';
+        header.style.gap = '10px';
+        
+        if (scriptViewStack.length > 0) {
+            const backBtn = document.createElement('button');
+            backBtn.innerHTML = '&#8592; Back';
+            backBtn.onclick = goBackScript;
+            backBtn.style.padding = '2px 8px';
+            backBtn.style.cursor = 'pointer';
+            header.appendChild(backBtn);
+        }
+        
+        const title = document.createElement('h4');
+        title.style.margin = '0';
+        title.textContent = "Script: " + currentScriptView.name;
+        header.appendChild(title);
+        
+        container.appendChild(header);
+
+        if (!currentScriptView.steps || currentScriptView.steps.length === 0) {
+            const msg = document.createElement('div');
+            msg.innerHTML = '<em>No steps defined.</em>';
+            container.appendChild(msg);
+        } else {
+            const ul = document.createElement('ul');
+            renderMacroSteps(currentScriptView.steps, ul);
+            container.appendChild(ul);
+        }
+    }
+
+    async function drillDownToScript(scriptName) {
+        // Parse Category if present (e.g. "finance.compute_monthly")
+        let searchName = scriptName;
+        let searchCategory = null;
+        if (scriptName.indexOf('.') > 0) {
+            const parts = scriptName.split('.');
+            // Assume format: category.name
+            searchCategory = parts[0];
+            searchName = parts[1];
+        } else {
+             // If no category is present, can we assume any? 
+             // Ideally we search globally?
+        }
+
+        // Check for unsaved changes before starting navigation
+        const btn = document.getElementById('btn-save');
+        if (btn && !btn.disabled) {
+             if (!await confirmAsync("You have unsaved changes. Navigating to script will discard them. Continue?", "Unsaved Changes")) {
+                 return;
+             }
+        }
+
+        const targetStore = "scripts";
+        
+        // Helper to find the script in a specific database
+        const tryFetch = (dbName) => {
+            // Using query on Name only for flexibility
+            return fetch(`/api/store/items?database=${encodeURIComponent(dbName)}&name=${targetStore}&q=${encodeURIComponent(searchName)}`)
+                .then(res => {
+                    if (!res.ok) throw new Error(res.statusText);
+                    return res.json();
+                });
+        };
+
+        // UI Feedback
+        const originalCursor = document.body.style.cursor;
+        document.body.style.cursor = 'wait';
+
+        tryFetch(currentDatabase)
+            .then(items => {
+                // Return { db: currentDatabase, items: items } if found
+                if (items && items.length > 0) return { db: currentDatabase, items: items };
+                
+                // If not found, look for a System DB to fallback to
+                const systemDB = availableDatabases.find(d => d.is_system);
+                if (systemDB && systemDB.name !== currentDatabase) {
+                    console.log(`Script '${scriptName}' not found in '${currentDatabase}', trying System DB '${systemDB.name}'...`);
+                    return tryFetch(systemDB.name).then(sysItems => {
+                        return { db: systemDB.name, items: sysItems };
+                    });
+                }
+                return { db: currentDatabase, items: [] };
+            })
+            .then(result => {
+                const items = result.items;
+                const foundDB = result.db;
+                
+                if (items && items.length > 0) {
+                    // Match Logic (Object Key vs String Key vs Namespace)
+                    const item = items.find(i => {
+                        if (i.key && typeof i.key === 'object') {
+                             const keyName = i.key.name || i.key.Name;
+                             const keyCat = i.key.category || i.key.Category;
+                             
+                             if (keyName !== searchName) return false;
+                             if (searchCategory && keyCat !== searchCategory) return false;
+                             return true;
+                        }
+                        if (i.key === searchName) {
+                            if (searchCategory) return false;
+                            return true;
+                        }
+                        return false;
+                    }) || items[0];
+
+                    // Verify correctness of match
+                    let isMatch = false;
+                    if (item.key && typeof item.key === 'object') {
+                         const keyName = item.key.name || item.key.Name;
+                         if (keyName === searchName) isMatch = true;
+                    } else if (item.key === searchName) {
+                        isMatch = true;
+                    }
+                    
+                    if (isMatch) {
+                        // FOUND! Now navigate the main UI.
+
+                        // 1. Switch Database Context if needed
+                        if (foundDB !== currentDatabase) {
+                            currentDatabase = foundDB;
+                            const dbSelect = document.getElementById('db-select');
+                            if (dbSelect) dbSelect.value = currentDatabase;
+                        }
+
+                        // 2. Switch Store Context
+                        currentStore = targetStore;
+                        const storeSelect = document.getElementById('store-select');
+                        if (storeSelect) {
+                            storeSelect.value = currentStore;
+                            // Optionally trigger onchange to update store info, but we are manually driving here
+                        }
+
+                        // 3. Load Items (to populate the grid for context) AND Show Detail
+                        // We use loadItems() but we know it might be async.
+                        // However, we already HAVE the item we want to show.
+                        // We can show it immediately.
+                        
+                        document.body.style.cursor = originalCursor;
+                        
+                        // Push View State to History
+                        pushView(); 
+
+                        // Trigger loadItems to update the background grid
+                        // We pass keepPanel=true so it doesn't close our detail view if we open it effectively immediately
+                        loadItems('first', null, true); // This runs in background
+
+                        // Open the Detail Pane with the Found Item
+                        showDetail(null, item, true); 
+
+                    } else {
+                        document.body.style.cursor = originalCursor;
+                        showAlert("Script found but key mismatch? Found: " + JSON.stringify(item.key));
+                    }
+                } else {
+                    document.body.style.cursor = originalCursor;
+                    showAlert("Script not found: " + scriptName);
+                }
+            })
+            .catch(err => {
+                document.body.style.cursor = originalCursor;
+                showAlert("Error fetching script: " + err.message);
+            });
+    }
+
+    function goBackScript() {
+        if (scriptViewStack.length > 0) {
+            currentScriptView = scriptViewStack.pop();
+            renderScriptTree();
+        }
+    }
+
+    function closeScriptModal() {
+        document.getElementById('script-modal').style.display = 'none';
+    }
+
+    function renderMacroSteps(steps, container) {
+        steps.forEach((step, index) => {
+            const li = document.createElement('li');
+            li.className = 'step-item';
+            
+            // Determine Type Class
+            const typeClass = 'type-' + (step.type || 'unknown');
+            
+            // Determine Summary
+            let summary = '';
+            let isScriptCall = false;
+
+            if (step.type === 'ask') summary = `Ask: "${step.prompt}" -> ${step.output_variable || '(no var)'}`;
+            else if (step.type === 'set') summary = `Set: ${step.variable} = ${step.value}`;
+            else if (step.type === 'if') summary = `If: ${step.condition}`;
+            else if (step.type === 'loop') summary = `Loop: ${step.list} as ${step.iterator}`;
+            else if (step.type === 'fetch') summary = `Fetch: ${step.resource} -> ${step.variable}`;
+            else if (step.type === 'say') summary = `Say: "${step.message}"`;
+            else if (step.type === 'command') summary = `Cmd: ${step.command} ${JSON.stringify(step.args || {})}`;
+            else if (step.type === 'script' || step.type === 'call_script') {
+                 summary = `Run Script: ${step.script_name}`;
+                 isScriptCall = true;
+            }
+            else summary = JSON.stringify(step);
+
+            // Check for children (nested steps)
+            const hasChildren = step.steps && step.steps.length > 0;
+            const toggleHtml = hasChildren ? '<div class="step-toggle">&#9654;</div>' : '<div class="step-toggle"></div>';
+
+            const card = document.createElement('div');
+            card.className = 'step-card';
+            
+            // Header
+            const header = document.createElement('div');
+            header.className = 'step-header';
+            
+            let actionHtml = '';
+            if (isScriptCall && step.script_name) {
+                actionHtml = `<button class="step-action-btn" title="View Script" onclick="event.stopPropagation(); drillDownToScript('${step.script_name}')" style="margin-left:auto; background:none; border:none; cursor:pointer; font-size:16px;">🔍</button>`;
+            } else {
+                // Ensure layout consistency
+                actionHtml = '<span style="margin-left:auto;"></span>';
+            }
+
+            header.innerHTML = `
+                ${toggleHtml}
+                <span class="step-type ${typeClass}">${step.type || '?'}</span>
+                <span class="step-summary">${summary.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+                ${actionHtml}
+            `;
+            
+            // Details (JSON view)
+            const details = document.createElement('div');
+            details.className = 'step-details';
+            details.innerHTML = `<pre>${JSON.stringify(step, (k, v) => k === 'steps' ? undefined : v, 2)}</pre>`; // Exclude nested steps from detail view to avoid duplication
+
+            // Event Listeners
+            header.onclick = (e) => {
+                // If clicking toggle area, toggle children
+                // If clicking elsewhere, toggle details? Or just toggle children if present?
+                // Let's make the whole header toggle children if present, else toggle details.
+                if (hasChildren) {
+                    toggleStepChildren(li);
+                } else {
+                    details.classList.toggle('open');
+                }
+            };
+
+            card.appendChild(header);
+            card.appendChild(details);
+            
+            // Children Container
+            if (hasChildren) {
+                const childrenContainer = document.createElement('div');
+                childrenContainer.className = 'step-children';
+                const childUl = document.createElement('ul');
+                renderMacroSteps(step.steps, childUl);
+                childrenContainer.appendChild(childUl);
+                card.appendChild(childrenContainer);
+            }
+
+            li.appendChild(card);
+            container.appendChild(li);
+        });
+    }
+
+    function toggleStepChildren(li) {
+        const toggle = li.querySelector('.step-toggle');
+        const children = li.querySelector('.step-children');
+        if (toggle && children) {
+            toggle.classList.toggle('rotated');
+            children.classList.toggle('open');
+        }
+    }
+
+    // --- End Macro Tree View Logic ---
+
+    function generateUUID() {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            return crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    const MAX_CHAT_MESSAGES = 100; // Limit chat history to prevent DOM bloat
+
+    function pruneChatHistory() {
+        const history = document.getElementById('chat-history');
+        if (history) {
+            while (history.children.length > MAX_CHAT_MESSAGES) {
+                history.removeChild(history.firstChild);
+            }
+        }
+    }
+
+    function appendChatMessage(role, text) {
+        pruneChatHistory();
+        console.log("Appending message:", role, text); // Debug Log
+        const history = document.getElementById('chat-history');
+        const div = document.createElement('div');
+        div.className = `chat-message ${role}`;
+        const msgId = 'msg-' + generateUUID();
+        div.id = msgId;
+        if (role === 'ai') currentAiMsgId = msgId;
+        
+        // Simple markdown-like parsing for code blocks
+        if (text.includes('```')) {
+            text = text.replace(/```([\s\S]*?)```/g, '<pre>$1</pre>');
+        }
+        
+        div.innerHTML = text.replace(/\n/g, '<br>');
+
+        history.appendChild(div);
+        
+        console.log("Message appended to history. History child count:", history.children.length); // Debug Log
+
+        // Auto-scroll to bottom
+        requestAnimationFrame(() => {
+            history.scrollTop = history.scrollHeight;
+        });
+        
+        return div.id;
+    }
+
+    function handleFeedback(e, msgId, type) {
+        // Visual feedback
+        const btn = e.target;
+        btn.style.opacity = '1';
+        btn.style.transform = 'scale(1.2)';
+        
+        // Disable siblings
+        const siblings = btn.parentElement.querySelectorAll('.feedback-btn');
+        siblings.forEach(s => {
+            s.style.pointerEvents = 'none';
+            if (s !== btn) s.style.opacity = '0.3';
+        });
+
+        // Send feedback to server (Mock for now)
+        fetch('/api/ai/feedback', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ msgId, type }) 
+        }).catch(err => console.log('Feedback API not implemented yet, but UI updated.'));
+    }
+
+    function handleTeach(msgId, originalText) {
+        const input = document.getElementById('chat-input');
+        // Extract a summary or just reference it
+        const summary = originalText.length > 50 ? originalText.substring(0, 50) + "..." : originalText;
+        input.value = `Regarding your previous answer about "${summary}":\n\n[Correction/Teaching]: `;
+        input.focus();
+    }
+
+    // Hook into showDetail to ensure we see the details tab
+    const originalShowDetail = showDetail;
+    showDetail = function(row, item, autoOpen) {
+        originalShowDetail(row, item, autoOpen);
+        
+        // Only switch to details tab if we are explicitly opening/selecting (e.g. click)
+        // If autoOpen is false (navigation), preserve the current tab (e.g. if user is in Chat)
+        if (autoOpen === undefined || autoOpen === true) {
+            switchTab('details');
+        }
+    };
+
+    function toggleProviderSelect() {
+        // No-op since we removed the agent select dropdown logic
+    }
+
+    // --- Code Generation Logic ---
+    function showGeneratedCode() {
+        if (!currentStore) return;
+        updateGeneratedCodeView();
+        document.getElementById('code-modal').style.display = 'flex';
+    }
+
+    function updateGeneratedCodeView() {
+        const lang = document.getElementById('code-lang-select').value;
+        const mode = document.querySelector('input[name="code-view-mode"]:checked').value;
+        
+        let keySample = null;
+        let valSample = null;
+
+        // 1. Try to get sample from Store Info
+        if (currentStoreInfo) {
+            if (currentStoreInfo.sampleKey) keySample = currentStoreInfo.sampleKey;
+            if (currentStoreInfo.sampleValue) valSample = currentStoreInfo.sampleValue;
+        }
+
+        // 2. Fallback to first item in grid
+        if (currentItems && currentItems.length > 0) {
+            if (!keySample) keySample = currentItems[0].key;
+            if (!valSample) valSample = currentItems[0].value;
+        }
+
+        // 3. Try to parse if string
+        if (typeof keySample === 'string') {
+            try { keySample = JSON.parse(keySample); } catch(e) {}
+        }
+        if (typeof valSample === 'string') {
+            try { valSample = JSON.parse(valSample); } catch(e) {}
+        }
+
+        const storeNamePascal = toPascalCase(currentStore);
+        let code = "";
+
+        if (lang === 'go') {
+            code = generateGoCode(storeNamePascal, keySample, valSample, mode);
+        } else if (lang === 'python') {
+            code = generatePythonCode(storeNamePascal, keySample, valSample, mode);
+        } else if (lang === 'csharp') {
+            code = generateCSharpCode(storeNamePascal, keySample, valSample, mode);
+        } else if (lang === 'java') {
+            code = generateJavaCode(storeNamePascal, keySample, valSample, mode);
+        } else if (lang === 'rust') {
+            code = generateRustCode(storeNamePascal, keySample, valSample, mode);
+        }
+
+        document.getElementById('generated-code-content').textContent = code;
+    }
+
+    // --- Go Generator ---
+    function generateGoCode(name, keySample, valSample, mode) {
+        let code = `// Generated Go code for store "${currentStore}"\n`;
+        code += `package main\n\n`;
+        
+        // Check for time and uuid imports
+        let needsTime = false;
+        let needsUUID = false;
+        const checkImports = (obj) => {
+            if (typeof obj === 'object' && obj !== null) {
+                Object.values(obj).forEach(v => {
+                    if (typeof v === 'string') {
+                        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v) || /^\d{4}-\d{2}-\d{2}$/.test(v)) needsTime = true;
+                        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) needsUUID = true;
+                    }
+                });
+            }
+        };
+        checkImports(keySample);
+        checkImports(valSample);
+        
+        code += `import (\n`;
+        code += `    "context"\n`;
+        code += `    "fmt"\n`;
+        if (needsTime) code += `    "time"\n`;
+        if (needsUUID) code += `    "github.com/google/uuid"\n`;
+        code += `    "github.com/sharedcode/sop"\n`;
+        code += `    "github.com/sharedcode/sop/btree"\n`;
+        code += `    "github.com/sharedcode/sop/database"\n`;
+        code += `)\n\n`;
+
+        if (mode === 'struct') {
+            // Key Struct
+            if (typeof keySample === 'object' && keySample !== null) {
+                code += jsonToGoStruct(`${name}Key`, keySample);
+            } else {
+                code += `type ${name}Key ${getGoType(keySample)}\n`;
+            }
+            code += "\n";
+            // Value Struct
+            if (typeof valSample === 'object' && valSample !== null) {
+                code += jsonToGoStruct(`${name}Value`, valSample);
+            } else {
+                code += `type ${name}Value ${getGoType(valSample)}\n`;
+            }
+        } else {
+            // Map
+            code += `// Map representation\n`;
+            code += `var ${name}Map = map[string]interface{}{\n`;
+            if (keySample) code += `    "sampleKey": ${JSON.stringify(keySample)},\n`;
+            if (valSample) code += `    "sampleValue": ${JSON.stringify(valSample)},\n`;
+            code += `}\n`;
+        }
+
+        if (mode === 'struct') {
+            code += `// Usage Example:\n`;
+            code += `func example() {\n`;
+            code += `    // 1. Configuration\n`;
+            code += `    opts := sop.DatabaseOptions{\n`;
+            code += `        Type:          sop.Standalone,\n`;
+            code += `        StoresFolders: []string{"./db_data"},\n`;
+            code += `    }\n\n`;
+            code += `    // 2. Begin Transaction\n`;
+            code += `    ctx := context.Background()\n`;
+            code += `    // Note: You must open the transaction on the database manager.\n`;
+            code += `    trans, err := database.BeginTransaction(ctx, opts, sop.ForReading)\n`;
+            code += `    if err != nil {\n`;
+            code += `        panic(err)\n`;
+            code += `    }\n`;
+            code += `    defer trans.Rollback(ctx)\n\n`;
+            code += `    // 3. Open Store\n`;
+            code += `    // database.OpenBtree ensures type-safe access using the generated Key/Value structs.\n`;
+            code += `    store, err := database.OpenBtree[${name}Key, ${name}Value](ctx, opts, "${currentStore}", trans, nil)\n`;
+            code += `    if err != nil {\n`;
+            code += `        panic(err)\n`;
+            code += `    }\n\n`;
+            code += `    // 4. Use Store\n`;
+            code += `    // store.FindOne(ctx, key, true)\n`;
+            code += `    fmt.Printf("Store opened with %d items.\\n", store.Count())\n`;
+            code += `}\n`;
+        }
+
+        return code;
+    }
+
+    function getGoType(val) {
+        if (val === null) return "interface{}";
+        const type = typeof val;
+        if (type === 'string') {
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) return "uuid.UUID";
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) return "time.Time";
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return "time.Time";
+            return "string";
+        }
+        if (type === 'number') return Number.isInteger(val) ? "int" : "float64";
+        if (type === 'boolean') return "bool";
+        if (Array.isArray(val)) {
+            // Check if it looks like a byte array (all numbers 0-255)
+            if (val.length > 0 && val.every(v => typeof v === 'number' && v >= 0 && v <= 255 && Number.isInteger(v))) {
+                return "[]byte";
+            }
+            return "[]interface{}";
+        }
+        return "interface{}";
+    }
+
+</script>
+{{end}}

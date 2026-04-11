@@ -1,0 +1,812 @@
+{{define "scripts_part04"}}
+<script>
+    function saveItem() {
+        if (!currentStore || currentItemKey === null) return;
+
+        let newVal;
+        const form = document.getElementById('value-form');
+        
+        if (form) {
+            // Reconstruct object from form
+            newVal = Array.isArray(currentItemValue) ? [] : {};
+            const inputs = form.querySelectorAll('.value-input');
+            
+            inputs.forEach(input => {
+                const key = input.getAttribute('data-key');
+                const rawVal = input.value;
+                const originalVal = currentItemValue[key];
+                
+                // Type conversion
+                let finalVal = rawVal;
+                
+                // Force JSON parse for 'steps' to ensure array, even if originalVal was missing/null
+                if(key === 'steps') {
+                     try { finalVal = JSON.parse(rawVal); } catch(e) { finalVal = []; }
+                } else if (typeof originalVal === 'number') {
+                    finalVal = Number(rawVal);
+                } else if (typeof originalVal === 'boolean') {
+                    finalVal = (rawVal.toLowerCase() === 'true');
+                } else if (typeof originalVal === 'object' && originalVal !== null) {
+                    try {
+                        finalVal = JSON.parse(rawVal);
+                    } catch {
+                        // Fallback to string if parse fails
+                        finalVal = rawVal;
+                    }
+                }
+                
+                newVal[key] = finalVal;
+            });
+        } else {
+            const valText = document.getElementById('edit-value').value;
+            try {
+                newVal = JSON.parse(valText);
+            } catch (e) {
+                showAlert("Invalid JSON in Value field");
+                return;
+            }
+        }
+
+        const payload = {
+            database: currentDatabase,
+            store: currentStore,
+            key: currentItemKey,
+            value: newVal
+        };
+
+        const btn = document.getElementById('btn-save');
+        // Visual feedback: Disable while saving
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+
+        fetch('/api/store/item/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => {
+            if (!res.ok) return res.text().then(t => { throw new Error(t) });
+            return res.json();
+        })
+        .then(() => {
+            // Success: Reset button state
+            btn.style.opacity = '1';
+            markItemClean();
+            
+            // Update local state so subsequent edits work correctly
+            currentItemValue = newVal;
+
+            // Refresh the grid in background to show updated values
+            return loadItems('current', firstKey, true).then(newItems => {
+                // Re-highlight the saved item
+                if (newItems && newItems.length > 0) {
+                    const savedKeyStr = JSON.stringify(currentItemKey);
+                    const targetIndex = newItems.findIndex(item => JSON.stringify(item.key) === savedKeyStr);
+                    
+                    if (targetIndex >= 0) {
+                        const rows = document.querySelectorAll('#items-table tbody tr');
+                        if (rows && rows[targetIndex]) {
+                            // Just highlight, don't re-open detail as it's already open
+                            document.querySelectorAll('#items-table tr').forEach(tr => tr.classList.remove('selected-row'));
+                            rows[targetIndex].classList.add('selected-row');
+                        }
+                    }
+                }
+            });
+        })
+        .catch(err => {
+            const msg = "Update failed: " + err.message + "\n\n" +
+                        "Another user may have modified this record (Swarm conflict).\n" +
+                        "Please refresh the data to see the latest changes.";
+            showAlert(msg);
+            btn.style.opacity = '1';
+            markItemDirty(); // Re-enable so user can try again
+        });
+    }
+
+    function deleteItem() {
+        if (!currentStore || currentItemKey === null) return;
+        
+        // Check if Read-Only (No Index Spec AND No CEL)
+        if (isStoreReadOnly(currentStoreInfo)) {
+            showAlert("Deletion is disabled for stores without an Index Specification or CEL Expression.");
+            return;
+        }
+
+        showConfirm(
+            "Are you sure you want to delete this item?", 
+            () => { performDelete(); }, 
+            null, 
+            "Confirm Deletion", 
+            "Delete"
+        );
+    }
+
+    function performDelete() {
+        const payload = {
+            database: currentDatabase,
+            store: currentStore,
+            key: currentItemKey
+        };
+
+        fetch('/api/store/item/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => {
+            if (!res.ok) return res.text().then(t => { throw new Error(t) });
+            return res.json();
+        })
+        .then(() => {
+            // Find index of deleted item to determine next selection
+            let targetIndex = -1;
+            if (currentItems && currentItems.length > 0) {
+                // We need to compare keys carefully (objects vs primitives)
+                const deletedKeyStr = JSON.stringify(currentItemKey);
+                targetIndex = currentItems.findIndex(item => JSON.stringify(item.key) === deletedKeyStr);
+            }
+
+            loadItems('current', firstKey).then(newItems => {
+                if (!newItems || newItems.length === 0) {
+                    closeDetail();
+                    return;
+                }
+                
+                // Try to select item at same index, or last item if index out of bounds
+                if (targetIndex >= 0) {
+                    if (targetIndex >= newItems.length) {
+                        targetIndex = newItems.length - 1;
+                    }
+                    // We need to find the row element to pass to showDetail for highlighting
+                    // Since we just reloaded, we can find it by index in the table
+                    const rows = document.querySelectorAll('#items-table tbody tr');
+                    if (rows && rows[targetIndex]) {
+                        showDetail(rows[targetIndex], newItems[targetIndex], false);
+                    } else {
+                        showDetail(null, newItems[targetIndex], false);
+                    }
+                } else {
+                    // Fallback to first item if we couldn't track index
+                    const rows = document.querySelectorAll('#items-table tbody tr');
+                    if (rows && rows[0]) {
+                        showDetail(rows[0], newItems[0], false);
+                    } else {
+                        showDetail(null, newItems[0], false);
+                    }
+                }
+            });
+        })
+        .catch(err => {
+            showAlert("Delete failed: " + err.message);
+        });
+    }
+
+
+
+    function showAdd() {
+        const modal = document.getElementById('add-modal');
+        const keyContainer = document.getElementById('add-key-container');
+        const valContainer = document.getElementById('add-value-container');
+        const keyModeToggle = document.getElementById('add-key-mode-toggle');
+        const valModeToggle = document.getElementById('add-value-mode-toggle');
+        const keyModeWrapper = document.getElementById('add-key-mode-wrapper');
+        const valModeWrapper = document.getElementById('add-value-mode-wrapper');
+        
+        keyContainer.innerHTML = '';
+        valContainer.innerHTML = '';
+        keyModeToggle.checked = false;
+        valModeToggle.checked = false;
+        
+        // Reset visibility
+        if (keyModeWrapper) keyModeWrapper.style.display = 'block';
+        if (valModeWrapper) valModeWrapper.style.display = 'block';
+
+        // --- Build Key UI ---
+        let keySchema = [];
+        // 1. Infer from data first (most accurate for full struct)
+        if (currentItems && currentItems.length > 0 && typeof currentItems[0].key === 'object' && currentItems[0].key !== null) {
+            keySchema = Object.keys(currentItems[0].key);
+        } 
+        // 2. Fallback to IndexSpec
+        else if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+            keySchema = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
+        }
+        // 3. Fallback to Sample Key
+        else if (currentStoreInfo && currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
+            keySchema = Object.keys(currentStoreInfo.sampleKey).sort();
+        }
+
+        if (keySchema.length > 0) {
+            // Reorder keySchema based on IndexSpec if available
+            if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+                const indexOrder = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
+                // Sort keySchema: index fields first (in order), then others
+                keySchema.sort((a, b) => {
+                    const idxA = indexOrder.indexOf(a);
+                    const idxB = indexOrder.indexOf(b);
+                    if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                    if (idxA !== -1) return -1;
+                    if (idxB !== -1) return 1;
+                    return a.localeCompare(b);
+                });
+            }
+
+            // Complex Key Form
+            keySchema.forEach(fieldName => {
+                const div = document.createElement('div');
+                div.style.marginBottom = '5px';
+                div.innerHTML = `
+                    <label style="display:block; font-size:12px; font-weight:bold;">${fieldName}</label>
+                    <input type="text" class="add-key-field" data-name="${fieldName}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
+                `;
+                keyContainer.appendChild(div);
+            });
+        } else {
+            // Simple Key or Unknown Schema -> JSON Mode
+            keyModeToggle.checked = true;
+            renderAddKeyJson();
+            // Hide toggle if primitive (no schema)
+            if (keyModeWrapper) keyModeWrapper.style.display = 'none';
+        }
+
+        // --- Build Value UI ---
+        let useForm = false;
+        let valueSchema = [];
+        let isArray = false;
+
+        // 1. Fallback to Sample Value
+        if (currentStoreInfo && currentStoreInfo.sampleValue) {
+            if (Array.isArray(currentStoreInfo.sampleValue)) {
+                isArray = true;
+            } else if (typeof currentStoreInfo.sampleValue === 'object') {
+                valueSchema = Object.keys(currentStoreInfo.sampleValue);
+            }
+        }
+
+        // 2. Fallback to First Item
+        if (!isArray && valueSchema.length === 0 && currentItems && currentItems.length > 0) {
+            const sampleVal = currentItems[0].value;
+            if (Array.isArray(sampleVal)) {
+                isArray = true;
+            } else if (typeof sampleVal === 'object' && sampleVal !== null) {
+                valueSchema = Object.keys(sampleVal);
+            }
+        }
+
+        if (isArray) {
+            // Force JSON Mode for Arrays
+            valModeToggle.checked = true;
+            renderAddValueJson("[]");
+        } else if (valueSchema.length > 0) {
+            useForm = true;
+            valueSchema.forEach(k => {
+                const div = document.createElement('div');
+                div.style.marginBottom = '5px';
+                div.innerHTML = `
+                    <label style="display:block; font-size:12px; font-weight:bold;">${k}</label>
+                    <input type="text" class="add-value-field" data-name="${k}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
+                `;
+                valContainer.appendChild(div);
+            });
+        }
+
+        if (!useForm && !isArray) {
+            // Fallback to JSON
+            valModeToggle.checked = true;
+            renderAddValueJson();
+            // Hide toggle if primitive
+            if (valModeWrapper) valModeWrapper.style.display = 'none';
+        }
+
+        // Reset position to center
+        const modalContent = document.getElementById('add-modal-content');
+        if (modalContent) {
+            modalContent.style.top = '50%';
+            modalContent.style.left = '50%';
+            modalContent.style.transform = 'translate(-50%, -50%)';
+            modalContent.style.margin = '0';
+        }
+
+        modal.style.display = 'block';
+    }
+
+    function toggleAddKeyMode() {
+        const isJson = document.getElementById('add-key-mode-toggle').checked;
+        const container = document.getElementById('add-key-container');
+        
+        if (isJson) {
+            // Switch to JSON
+            let currentObj = {};
+            const inputs = container.querySelectorAll('.add-key-field');
+            if (inputs.length > 0) {
+                inputs.forEach(inp => {
+                    const k = inp.getAttribute('data-name');
+                    currentObj[k] = parseInputVal(inp.value);
+                });
+                renderAddKeyJson(JSON.stringify(currentObj, null, 2));
+            } else {
+                renderAddKeyJson();
+            }
+        } else {
+            // Switch to Form
+            const textarea = document.getElementById('add-key-json');
+            let obj = {};
+            if (textarea) {
+                try {
+                    obj = JSON.parse(textarea.value);
+                } catch {
+                    showAlert("Invalid JSON or Primitive value, cannot switch to Form view.");
+                    document.getElementById('add-key-mode-toggle').checked = true;
+                    return;
+                }
+            }
+            
+            if (typeof obj === 'object' && obj !== null) {
+                container.innerHTML = '';
+                Object.keys(obj).forEach(k => {
+                    const div = document.createElement('div');
+                    div.style.marginBottom = '5px';
+                    div.innerHTML = `
+                        <label style="display:block; font-size:12px; font-weight:bold;">${k}</label>
+                        <input type="text" class="add-key-field" data-name="${k}" value="${String(obj[k]).replace(/"/g, '&quot;')}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
+                    `;
+                    container.appendChild(div);
+                });
+            } else {
+                showAlert("Value is not an object, cannot use Form view.");
+                document.getElementById('add-key-mode-toggle').checked = true;
+            }
+        }
+    }
+
+    function renderAddKeyJson(content = '') {
+        const container = document.getElementById('add-key-container');
+        container.innerHTML = `<textarea id="add-key-json" placeholder="Key (JSON Object or simple value)" style="width:100%; height:60px; padding:5px; font-family:monospace; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">${content}</textarea>`;
+    }
+
+    function toggleAddValueMode() {
+        const isJson = document.getElementById('add-value-mode-toggle').checked;
+        const container = document.getElementById('add-value-container');
+        
+        if (isJson) {
+            // Switch to JSON
+            // Try to harvest current values from form if they exist
+            let currentObj = {};
+            const inputs = container.querySelectorAll('.add-value-field');
+            if (inputs.length > 0) {
+                inputs.forEach(inp => {
+                    const k = inp.getAttribute('data-name');
+                    currentObj[k] = parseInputVal(inp.value);
+                });
+                renderAddValueJson(JSON.stringify(currentObj, null, 2));
+            } else {
+                renderAddValueJson();
+            }
+        } else {
+            // Switch to Form
+            // Try to parse JSON
+            const textarea = document.getElementById('add-value-json');
+            let obj = {};
+            if (textarea) {
+                try {
+                    obj = JSON.parse(textarea.value);
+                } catch {
+                    showAlert("Invalid JSON, cannot switch to Form view.");
+                    document.getElementById('add-value-mode-toggle').checked = true;
+                    return;
+                }
+            }
+            
+            // Render Form
+            container.innerHTML = '';
+            if (typeof obj === 'object' && obj !== null) {
+                Object.keys(obj).forEach(k => {
+                    const div = document.createElement('div');
+                    div.style.marginBottom = '5px';
+                    div.innerHTML = `
+                        <label style="display:block; font-size:12px; font-weight:bold;">${k}</label>
+                        <input type="text" class="add-value-field" data-name="${k}" value="${String(obj[k]).replace(/"/g, '&quot;')}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
+                    `;
+                    container.appendChild(div);
+                });
+            } else {
+                // Primitive value?
+                showAlert("Value is not an object, cannot use Form view.");
+                document.getElementById('add-value-mode-toggle').checked = true;
+                renderAddValueJson(textarea ? textarea.value : '');
+            }
+        }
+    }
+
+    function renderAddValueJson(content = '') {
+        const container = document.getElementById('add-value-container');
+        container.innerHTML = `<textarea id="add-value-json" placeholder="Enter JSON Object, Array, or simple value (String, Number, Boolean)" style="width:100%; height:200px; padding:5px; font-family:monospace; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">${content}</textarea>`;
+    }
+
+    function parseInputVal(val) {
+        if (val === '') return val;
+        if (!isNaN(Number(val))) return Number(val);
+        if (val.toLowerCase() === 'true') return true;
+        if (val.toLowerCase() === 'false') return false;
+        return val;
+    }
+
+    function closeAdd() {
+        document.getElementById('add-modal').style.display = 'none';
+    }
+
+    async function addItem() {
+        if (!currentStore) return;
+
+        let key, val;
+
+        // --- Construct Key ---
+        const keyFields = document.querySelectorAll('.add-key-field');
+        if (keyFields.length > 0) {
+            // Complex Key Form
+            key = {};
+            keyFields.forEach(inp => {
+                key[inp.getAttribute('data-name')] = parseInputVal(inp.value);
+            });
+        } else {
+            // JSON/Simple Mode
+            let keyText = "";
+            const keyJsonInput = document.getElementById('add-key-json');
+            const keySimpleInput = document.getElementById('add-key-simple');
+            
+            if (keyJsonInput) keyText = keyJsonInput.value;
+            else if (keySimpleInput) keyText = keySimpleInput.value;
+
+            keyText = keyText.trim();
+            if (keyText.startsWith('{') || keyText.startsWith('[')) {
+                try {
+                    key = JSON.parse(keyText);
+                } catch (e) {
+                    showAlert("Invalid JSON in Key field: " + e.message);
+                    return;
+                }
+            } else {
+                // Try to parse as number if it looks like one
+                if (keyText !== "" && !isNaN(Number(keyText))) {
+                    key = Number(keyText);
+                } else {
+                    key = keyText;
+                }
+            }
+        }
+
+        // --- Construct Value ---
+        const valFields = document.querySelectorAll('.add-value-field');
+        if (valFields.length > 0) {
+            // Form Mode
+            val = {};
+            valFields.forEach(inp => {
+                val[inp.getAttribute('data-name')] = parseInputVal(inp.value);
+            });
+        } else {
+            // JSON/Raw Mode
+            const valText = document.getElementById('add-value-json').value.trim();
+            
+            if (valText.startsWith('{') || valText.startsWith('[')) {
+                try {
+                    val = JSON.parse(valText);
+                } catch (e) {
+                    showAlert("Invalid JSON in Value field: " + e.message);
+                    return;
+                }
+            } else if (valText.startsWith('"') && valText.endsWith('"')) {
+                 // Explicitly quoted string -> parse as JSON to handle escapes
+                 try {
+                    val = JSON.parse(valText);
+                 } catch (e) {
+                    showAlert("Invalid JSON string: " + e.message);
+                    return;
+                 }
+            } else {
+                // Primitive inference
+                if (valText === 'true') val = true;
+                else if (valText === 'false') val = false;
+                else if (valText === 'null') val = null;
+                else if (valText !== "" && !isNaN(Number(valText))) {
+                    val = Number(valText);
+                } else {
+                    val = valText; // Treat as plain string
+                }
+            }
+        }
+
+        // --- Validation ---
+
+        // 1. Check IndexSpecification Requirements (Critical)
+        if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+            if (typeof key !== 'object' || key === null) {
+                showAlert("Error: This store requires a structured key (JSON object) to match its Index Specification.");
+                return;
+            }
+            
+            const missingIndexFields = [];
+            currentStoreInfo.indexSpec.index_fields.forEach(field => {
+                if (key[field.field_name] === undefined) {
+                    missingIndexFields.push(field.field_name);
+                }
+            });
+
+            if (missingIndexFields.length > 0) {
+                showAlert(`Error: The key is missing required index fields:\n${missingIndexFields.join(', ')}\n\nThese fields are required for the database comparer to function.`);
+                return;
+            }
+        }
+
+        // 2. Check for missing fields in Key based on sample (Warning)
+        if (currentItems && currentItems.length > 0) {
+            const sampleKey = currentItems[0].key;
+            if (typeof sampleKey === 'object' && sampleKey !== null && typeof key === 'object' && key !== null) {
+                const sampleFields = Object.keys(sampleKey);
+                const newFields = Object.keys(key);
+                const missing = sampleFields.filter(k => !newFields.includes(k));
+                
+                if (missing.length > 0) {
+                    if (!await confirmAsync(`Warning: The key is missing the following fields found in other items:\n${missing.join(', ')}\n\nThis might cause sorting or retrieval issues.\nDo you want to proceed?`, "Key Structure Warning")) {
+                        return;
+                    }
+                }
+            }
+            // Check for type mismatch (Primitive vs Object)
+            const sampleType = typeof sampleKey;
+            const newType = typeof key;
+            if (sampleType !== newType) {
+                 if (!await confirmAsync(`Warning: Key type mismatch.\nExpected: ${sampleType}\nGot: ${newType}\n\nDo you want to proceed?`, "Type Mismatch")) {
+                    return;
+                }
+            }
+        }
+
+        const payload = {
+            database: currentDatabase,
+            store: currentStore,
+            key: key,
+            value: val
+        };
+
+        fetch('/api/store/item/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        })
+        .then(res => {
+            if (!res.ok) return res.text().then(t => { throw new Error(t) });
+            return res.json();
+        })
+        .then(() => {
+            closeAdd();
+            if (!currentItems || currentItems.length <= 1) {
+                loadItems('first');
+            } else {
+                loadItems('current', firstKey);
+            }
+        })
+        .catch(err => {
+            showAlert("Add failed: " + err.message);
+        });
+    }
+    document.getElementById('detail-resizer').style.display = 'none';
+    
+    async function closeDetail(force = false) {
+        const btn = document.getElementById('btn-save');
+        if (!force && btn && !btn.disabled) {
+            if (!await confirmAsync("You have unsaved changes. Are you sure you want to discard them?", "Unsaved Changes")) {
+                return false;
+            }
+        }
+        // Reset state
+        if (btn) btn.disabled = true;
+        currentItemKey = null;
+        currentItemValue = null;
+
+        document.getElementById('detail-panel').style.display = 'none';
+        document.getElementById('detail-resizer').style.display = 'none';
+        return true;
+    }
+
+    // Resizer Logic
+    const sidebar = document.getElementById('sidebar');
+    const resizer = document.getElementById('resizer');
+
+    // Mouse Events
+    resizer.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        document.addEventListener('mousemove', resize);
+        document.addEventListener('mouseup', stopResize);
+        resizer.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+    });
+
+    // Touch Events (for Mobile)
+    resizer.addEventListener('touchstart', (e) => {
+        e.preventDefault(); // Prevent scrolling while dragging
+        document.addEventListener('touchmove', resize, { passive: false });
+        document.addEventListener('touchend', stopResize);
+        resizer.classList.add('resizing');
+    }, { passive: false });
+
+    function resize(e) {
+        let clientX;
+        if (e.type.startsWith('touch')) {
+            clientX = e.touches[0].clientX;
+        } else {
+            clientX = e.clientX;
+        }
+
+        const newWidth = clientX;
+        // Basic constraints - relaxed for mobile
+        if (newWidth > 50 && newWidth < window.innerWidth - 50) {
+            sidebar.style.width = newWidth + 'px';
+        }
+    }
+
+    function stopResize() {
+        document.removeEventListener('mousemove', resize);
+        document.removeEventListener('mouseup', stopResize);
+        document.removeEventListener('touchmove', resize);
+        document.removeEventListener('touchend', stopResize);
+        resizer.classList.remove('resizing');
+        document.body.style.cursor = 'default';
+    }
+
+    // Detail Panel Resizer
+    const detailPanel = document.getElementById('detail-panel');
+    const detailResizer = document.getElementById('detail-resizer');
+
+    detailResizer.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        document.addEventListener('mousemove', resizeDetail);
+        document.addEventListener('mouseup', stopResizeDetail);
+        detailResizer.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+    });
+
+    function resizeDetail(e) {
+        const newWidth = window.innerWidth - e.clientX;
+        if (newWidth > 200 && newWidth < (window.innerWidth * 0.5)) {
+            detailPanel.style.width = newWidth + 'px';
+        }
+    }
+
+    function stopResizeDetail() {
+        document.removeEventListener('mousemove', resizeDetail);
+        document.removeEventListener('mouseup', stopResizeDetail);
+        detailResizer.classList.remove('resizing');
+        document.body.style.cursor = 'default';
+    }
+
+    // Column Resizing
+    let colResizingTh = null;
+    let colStartX, colStartWidth;
+
+    function initColResize(e) {
+        e.stopPropagation();
+        colResizingTh = e.target.parentElement;
+        colStartX = e.clientX;
+        colStartWidth = parseFloat(window.getComputedStyle(colResizingTh).width);
+        document.addEventListener('mousemove', doColResize, false);
+        document.addEventListener('mouseup', stopColResize, false);
+    }
+    function doColResize(e) {
+        if (colResizingTh) {
+            const newWidth = colStartWidth + (e.clientX - colStartX);
+            if (newWidth > 50) {
+                colResizingTh.style.width = newWidth + 'px';
+            }
+        }
+    }
+    function stopColResize(e) {
+        colResizingTh = null;
+        document.removeEventListener('mousemove', doColResize, false);
+        document.removeEventListener('mouseup', stopColResize, false);
+    }
+
+    // Keyboard Navigation
+    document.addEventListener('keydown', function(e) {
+        // Handle Escape for Add Modal
+        if (e.key === 'Escape') {
+            const addModal = document.getElementById('add-modal');
+            if (addModal && addModal.style.display !== 'none') {
+                closeAdd();
+                e.preventDefault();
+                return;
+            }
+            const scriptModal = document.getElementById('script-modal');
+            if (scriptModal && scriptModal.style.display !== 'none') {
+                closeScriptModal();
+                e.preventDefault();
+                return;
+            }
+        }
+
+        // Only handle if not typing in an input or textarea
+        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+        // If modal is open, do not handle grid navigation
+        if (document.getElementById('confirm-modal').style.display === 'flex') return;
+        if (document.getElementById('add-modal').style.display === 'flex') return;
+
+        const selectedRow = document.querySelector('#items-table tr.selected-row');
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (selectedRow) {
+                const nextRow = selectedRow.nextElementSibling;
+                if (nextRow) {
+                    const index = nextRow.sectionRowIndex;
+                    if (currentItems[index]) {
+                        showDetail(nextRow, currentItems[index], false);
+                    }
+                    nextRow.scrollIntoView({ block: 'nearest' });
+                }
+            } else {
+                // Select first row if none selected
+                const firstRow = document.querySelector('#items-table tbody tr');
+                if (firstRow) {
+                    const index = firstRow.sectionRowIndex;
+                    if (currentItems[index]) {
+                        showDetail(firstRow, currentItems[index], false);
+                    }
+                    firstRow.scrollIntoView({ block: 'nearest' });
+                }
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (selectedRow) {
+                const prevRow = selectedRow.previousElementSibling;
+                if (prevRow) {
+                    const index = prevRow.sectionRowIndex;
+                    if (currentItems[index]) {
+                        showDetail(prevRow, currentItems[index], false);
+                    }
+                    prevRow.scrollIntoView({ block: 'nearest' });
+                }
+            }
+        } else if (e.key === 'Delete' || e.key === 'Backspace') {
+            if (selectedRow && currentItemKey !== null) {
+                deleteItem();
+            }
+        } else if (e.key === 'Enter') {
+            if (selectedRow) {
+                e.preventDefault();
+                const index = selectedRow.sectionRowIndex;
+                if (currentItems[index]) {
+                    showDetail(selectedRow, currentItems[index], true);
+                }
+            }
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            closeDetail();
+        }
+    });
+
+    // --- Chat & Tabs Logic ---
+
+    function toggleProviderSelect() {
+        const agent = document.getElementById('agent-select').value;
+        const providerSelect = document.getElementById('provider-select');
+        // Show provider select only for RAG agents (doctor, copilot)
+        if (agent === 'doctor' || agent === 'copilot') {
+            providerSelect.style.display = 'inline-block';
+        } else {
+            providerSelect.style.display = 'none';
+        }
+    }
+
+    function switchTab(tabName) {
+        // Update Tabs
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.getElementById(`tab-btn-${tabName}`).classList.add('active');
+
+        // Update Content
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        document.getElementById(`tab-${tabName}`).classList.add('active');
+    }
+
+</script>
+{{end}}

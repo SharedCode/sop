@@ -145,8 +145,40 @@
     <div class="chat-header">
         <div style="display: flex; align-items: center; gap: 8px;">
             <span>AI Copilot</span>
-            <span onclick="toggleChatSettings()" style="cursor: pointer; font-size: 13px; opacity: 0.8; margin-left: 4px;" title="LLM Settings">⚙️</span>
             
+            <!-- Quick LLM Engine Setup -->
+            <select id="chat-settings-provider" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="LLM Provider" onchange="toggleInlineAuthFields('chat-settings-provider', 'chat-settings-api-key')">
+                <option value="">Auto (Default)</option>
+                <optgroup label="Anthropic">
+                    <option value="anthropic:claude-code-opus-4.6">Claude Code Opus 4.6</option>
+                    <option value="anthropic:claude-4.6-sonnet">Claude 4.6 Sonnet</option>
+                    <option value="anthropic:claude-4.6-haiku">Claude 4.6 Haiku</option>
+                    <option value="anthropic:claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                    <option value="anthropic:claude-3.5-haiku">Claude 3.5 Haiku</option>
+                </optgroup>
+                <optgroup label="Google">
+                    <option value="gemini:gemini-3.1-pro">Gemini 3.1 Pro</option>
+                    <option value="gemini:gemini-3.1-flash">Gemini 3.1 Flash</option>
+                    <option value="gemini:gemini-1.5-pro">Gemini 1.5 Pro</option>
+                    <option value="gemini:gemini-1.5-flash">Gemini 1.5 Flash</option>
+                    <option value="gemini:gemma-4">Gemma 4</option>
+                    <option value="gemini:gemma-4-it">Gemma 4 Instruct</option>
+                </optgroup>
+                <optgroup label="OpenAI">
+                    <option value="openai:gpt-4.2">GPT-4.2</option>
+                    <option value="openai:gpt-4.2-mini">GPT-4.2 Mini</option>
+                    <option value="openai:gpt-4o">GPT-4o</option>
+                    <option value="openai:gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="openai:o3-mini">o3-mini</option>
+                    <option value="openai:o1-preview">o1-preview</option>
+                </optgroup>
+                <optgroup label="Local">
+                    <option value="ollama">Ollama</option>
+                    <option value="ollama:gemma-4">Ollama (Gemma 4)</option>
+                </optgroup>
+            </select>
+            <input type="password" id="chat-settings-api-key" placeholder="API Key" style="width: 80px; padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="API Key / Base URL">
+
             <select id="domain-select" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--accent-color); color: white; font-size: 11px; font-weight: normal; margin-left: 4px;" onclick="event.stopPropagation()" title="Active Knowledge Domain">
                 <option value="">SOP (General)</option>
                 {{if .HasDemo}}
@@ -183,19 +215,34 @@
         <h4 style="margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">LLM Engine Settings</h4>
         <div style="margin-bottom: 10px;">
             <label style="display: block; margin-bottom: 4px; font-weight: bold;">Provider / Model</label>
-            <select id="chat-settings-provider" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="toggleChatSettingsFields()">
-                <option value="">System Default (Ollama/Env)</option>
+            <select id="chat-settings-provider-overlay" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="toggleChatSettingsFields()">
+                <option value="">System Default (Auto)</option>
                 <optgroup label="Anthropic">
-                    <option value="anthropic">Claude (API Key required)</option>
+                    <option value="anthropic:claude-code-opus-4.6">Claude Code Opus 4.6</option>
+                    <option value="anthropic:claude-4.6-sonnet">Claude 4.6 Sonnet</option>
+                    <option value="anthropic:claude-4.6-haiku">Claude 4.6 Haiku</option>
+                    <option value="anthropic:claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                    <option value="anthropic:claude-3.5-haiku">Claude 3.5 Haiku</option>
                 </optgroup>
                 <optgroup label="Google">
-                    <option value="gemini">Gemini (API Key required)</option>
+                    <option value="gemini:gemini-3.1-pro">Gemini 3.1 Pro</option>
+                    <option value="gemini:gemini-3.1-flash">Gemini 3.1 Flash</option>
+                    <option value="gemini:gemini-1.5-pro">Gemini 1.5 Pro</option>
+                    <option value="gemini:gemini-1.5-flash">Gemini 1.5 Flash</option>
+                    <option value="gemini:gemma-4">Gemma 4</option>
+                    <option value="gemini:gemma-4-it">Gemma 4 Instruct</option>
                 </optgroup>
                 <optgroup label="OpenAI">
-                    <option value="chatgpt">ChatGPT (API Key required)</option>
+                    <option value="openai:gpt-4.2">GPT-4.2</option>
+                    <option value="openai:gpt-4.2-mini">GPT-4.2 Mini</option>
+                    <option value="openai:gpt-4o">GPT-4o</option>
+                    <option value="openai:gpt-4o-mini">GPT-4o Mini</option>
+                    <option value="openai:o3-mini">o3-mini</option>
+                    <option value="openai:o1-preview">o1-preview</option>
                 </optgroup>
                 <optgroup label="Local">
                     <option value="ollama">Ollama (Base URL optional)</option>
+                    <option value="ollama:gemma-4">Ollama (Gemma 4)</option>
                 </optgroup>
             </select>
         </div>
