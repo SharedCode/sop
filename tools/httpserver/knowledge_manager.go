@@ -11,7 +11,6 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/vector"
-	"github.com/sharedcode/sop/search"
 )
 
 type ExpertiseMetadata struct {

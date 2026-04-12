@@ -32,8 +32,8 @@ type Index struct {
 func NewIndex(ctx context.Context, config sop.DatabaseOptions, t sop.Transaction, name string) (*Index, error) {
 	// We use a prefix for the store names to keep them grouped.
 	// We use a larger SlotLength (1000) for better performance with many small items.
-	postings, err := database.NewBtree[string, int](ctx, config, name+"_postings", t, nil, sop.ConfigureStore(
-		name+"_postings",
+	postings, err := database.NewBtree[string, int](ctx, config, name+"/postings", t, nil, sop.ConfigureStore(
+		name+"/postings",
 		true,
 		1000,
 		"Inverted index postings (Term|DocID -> Freq)",
@@ -44,8 +44,8 @@ func NewIndex(ctx context.Context, config sop.DatabaseOptions, t sop.Transaction
 		return nil, err
 	}
 
-	termStats, err := database.NewBtree[string, int](ctx, config, name+"_term_stats", t, nil, sop.ConfigureStore(
-		name+"_term_stats",
+	termStats, err := database.NewBtree[string, int](ctx, config, name+"/term_stats", t, nil, sop.ConfigureStore(
+		name+"/term_stats",
 		true,
 		1000,
 		"Term statistics (Term -> DocCount)",
@@ -56,8 +56,8 @@ func NewIndex(ctx context.Context, config sop.DatabaseOptions, t sop.Transaction
 		return nil, err
 	}
 
-	docStats, err := database.NewBtree[string, int](ctx, config, name+"_doc_stats", t, nil, sop.ConfigureStore(
-		name+"_doc_stats",
+	docStats, err := database.NewBtree[string, int](ctx, config, name+"/doc_stats", t, nil, sop.ConfigureStore(
+		name+"/doc_stats",
 		true,
 		1000,
 		"Document statistics (DocID -> Length)",
@@ -68,8 +68,8 @@ func NewIndex(ctx context.Context, config sop.DatabaseOptions, t sop.Transaction
 		return nil, err
 	}
 
-	global, err := database.NewBtree[string, int](ctx, config, name+"_global", t, nil, sop.ConfigureStore(
-		name+"_global",
+	global, err := database.NewBtree[string, int](ctx, config, name+"/global", t, nil, sop.ConfigureStore(
+		name+"/global",
 		true,
 		1000,
 		"Global statistics",

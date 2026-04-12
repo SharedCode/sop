@@ -71,7 +71,7 @@ func (d *GenericDomain[T]) TextIndex(ctx context.Context, tx sop.Transaction) (a
 	if d.cfg.DB == nil {
 		return nil, fmt.Errorf("domain %s has no database configured", d.cfg.ID)
 	}
-	return search.NewIndex(ctx, tx, d.cfg.StoreName)
+	return search.NewIndex(ctx, d.cfg.DB.Config(), tx, d.cfg.StoreName)
 }
 
 // BeginTransaction starts a new transaction for the domain's underlying storage.

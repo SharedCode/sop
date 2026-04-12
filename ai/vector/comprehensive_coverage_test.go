@@ -102,7 +102,7 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	transVerify1, _ := db.BeginTransaction(ctx, sop.ForReading)
 
 	// Check Version in SysStore
-	sysStoreName := fmt.Sprintf("%s_sys_config", storeName)
+	sysStoreName := fmt.Sprintf("%s/sys_config", storeName)
 	sysStore, _ := infs.OpenBtree[string, int64](ctx, sysStoreName, transVerify1, nil)
 	found, _ := sysStore.Find(ctx, storeName, false)
 	if !found {
@@ -114,7 +114,7 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	}
 
 	// Check Files/Stores
-	// V1 should have: _centroids_1, _vecs_1, _lku_1
+	// V1 should have: /centroids_1, /vecs_1, /lku_1
 	// TempVectors should be gone.
 
 	// We use OpenDomainStore to check internal struct
@@ -246,9 +246,9 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	// Check V1 Stores Deleted
 	// We check if we can open them (should fail) or check filesystem
 	v1Stores := []string{
-		fmt.Sprintf("%s_vecs_1", storeName),
-		fmt.Sprintf("%s_centroids_1", storeName),
-		fmt.Sprintf("%s_lku_1", storeName),
+		fmt.Sprintf("%s/vecs_1", storeName),
+		fmt.Sprintf("%s/centroids_1", storeName),
+		fmt.Sprintf("%s/lku_1", storeName),
 	}
 	for _, s := range v1Stores {
 		path := filepath.Join(tmpDir, s)
@@ -259,9 +259,9 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 
 	// Check V2 Stores Exist
 	v2Stores := []string{
-		fmt.Sprintf("%s_vecs_2", storeName),
-		fmt.Sprintf("%s_centroids_2", storeName),
-		fmt.Sprintf("%s_lku_2", storeName),
+		fmt.Sprintf("%s/vecs_2", storeName),
+		fmt.Sprintf("%s/centroids_2", storeName),
+		fmt.Sprintf("%s/lku_2", storeName),
 	}
 	for _, s := range v2Stores {
 		path := filepath.Join(tmpDir, s)

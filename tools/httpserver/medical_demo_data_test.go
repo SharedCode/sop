@@ -33,10 +33,10 @@ func TestPopulateMedicalKnowledgeBase(t *testing.T) {
 		t.Fatalf("Failed to open read transaction: %v", err)
 	}
 
-	_, err = db.OpenVectorStore(ctx, "medical_knowledge_base", trans, vector.Config{UsageMode: ai.BuildOnceQueryMany})
+	_, err = db.OpenVectorStore(ctx, "medical_kb", trans, vector.Config{UsageMode: ai.BuildOnceQueryMany})
 	if err != nil {
 		trans.Rollback(ctx)
-		t.Fatalf("Expected medical_knowledge_base VectorStore to exist, got error: %v", err)
+		t.Fatalf("Expected medical_kb VectorStore to exist, got error: %v", err)
 	}
 	trans.Commit(ctx)
 }

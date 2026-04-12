@@ -19,10 +19,10 @@ func PopulateMedicalKnowledgeBase(ctx context.Context, opts sop.DatabaseOptions)
 	}
 
 	// Create VectorStore instead of B-Tree for medical data logic.
-	_, err = db.OpenVectorStore(ctx, "medical_knowledge_base", trans, vector.Config{UsageMode: ai.BuildOnceQueryMany})
+	_, err = db.OpenVectorStore(ctx, "medical_kb", trans, vector.Config{UsageMode: ai.BuildOnceQueryMany})
 	if err != nil {
 		trans.Rollback(ctx)
-		return fmt.Errorf("failed to create 'medical_knowledge_base' vector store: %v", err)
+		return fmt.Errorf("failed to create 'medical_kb' vector store: %v", err)
 	}
 
 	if err := trans.Commit(ctx); err != nil {

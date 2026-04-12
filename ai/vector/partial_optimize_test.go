@@ -123,7 +123,7 @@ func TestPartialOptimizationState(t *testing.T) {
 	// We can use the helper from store.go but it's private.
 	// We'll use infs.NewBtree directly.
 	// Use sop.ConfigureStore to match OpenDomainStore configuration (IsValueDataInNodeSegment=true for SmallData)
-	v1Vectors, err := infs.NewBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore("partial_test_vecs_1", true, 10000, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
+	v1Vectors, err := infs.NewBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore("partial_test/vecs_1", true, 10000, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
 	if err != nil {
 		t.Fatalf("NewBtree failed: %v", err)
 	}

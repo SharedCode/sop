@@ -16,12 +16,12 @@ import (
 )
 
 const (
-	sysConfigSuffix   = "_sys_config"
-	lookupSuffix      = "_lku"
-	centroidsSuffix   = "_centroids"
-	vectorsSuffix     = "_vecs"
-	tempVectorsSuffix = "_tmp_vecs"
-	dataSuffix        = "_data"
+	sysConfigSuffix   = "/sys_config"
+	lookupSuffix      = "/lku"
+	centroidsSuffix   = "/centroids"
+	vectorsSuffix     = "/vecs"
+	tempVectorsSuffix = "/tmp_vecs"
+	dataSuffix        = "/data"
 
 	sysConfigDesc   = "System Config"
 	lookupDesc      = "Lookup"
