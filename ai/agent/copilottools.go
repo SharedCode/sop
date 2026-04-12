@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -373,12 +374,24 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 			// Note: We ignore errors here because listing stores should succeed even if inspection fails.
 			s, err := jsondb.OpenStore(ctx, dbOpts, sName, tx)
 			if err == nil {
+				info := s.GetStoreInfo()
+				var extras string
+				if info.Description != "" {
+					extras += fmt.Sprintf(" description=\"%s\"", info.Description)
+				}
+				if len(info.Relations) > 0 {
+					rels, _ := json.Marshal(info.Relations)
+					extras += fmt.Sprintf(" relations=%s", string(rels))
+				}
+
 				if ok, _ := s.First(ctx); ok {
 					k := s.GetCurrentKey()
 					v, _ := s.GetCurrentValue(ctx)
 					flat := flattenItem(k, v)
 					schema := inferSchema(flat)
-					desc = fmt.Sprintf("%s schema=%s", sName, formatSchema(schema))
+					desc = fmt.Sprintf("%s schema=%s%s", sName, formatSchema(schema), extras)
+				} else {
+					desc = fmt.Sprintf("%s (empty store)%s", sName, extras)
 				}
 			}
 		}
