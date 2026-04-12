@@ -2,6 +2,7 @@ package vector
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -112,8 +113,25 @@ func TestPartialOptimizationState(t *testing.T) {
 	// Now ActiveVersion becomes 1.
 	// We need to mock getActiveVersion or just update sysStore.
 	// Note: sysStore is empty initially, so we use Add.
-	if _, err := di.sysStore.Add(ctx, di.name, 1); err != nil {
-		t.Fatalf("sysStore.Add failed: %v", err)
+	m := Metadata{
+		ActiveVersion: 1,
+		Embedder: EmbedderInfo{
+			Provider:   "mock",
+			Model:      "mock-model",
+			Dimensions: 5,
+		},
+	}
+	b, _ := json.Marshal(m)
+	foundSys, _ := di.sysStore.Find(ctx, di.name, false)
+	if foundSys {
+		_, err := di.sysStore.UpdateCurrentItem(ctx, di.name, string(b))
+		if err != nil {
+			t.Fatalf("sysStore.UpdateCurrentItem failed: %v", err)
+		}
+	} else {
+		if _, err := di.sysStore.Add(ctx, di.name, string(b)); err != nil {
+			t.Fatalf("sysStore.Add failed: %v", err)
+		}
 	}
 	// Clear cache to force reload
 	// di.archCache = nil // Commented out: We inject manually below

@@ -36,6 +36,22 @@ const (
 	CtxKeyAutoFlush ContextKey = "ai_auto_flush"
 )
 
+// KnowledgeDocument represents a single unit of embeddable contextual information
+// commonly used to standardize preloading Vector DBs and RAG pipelines.
+type KnowledgeDocument struct {
+	ID          string                 `json:"id,omitempty"`
+	Text        string                 `json:"text,omitempty"`
+	PageContent string                 `json:"page_content,omitempty"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// KnowledgeBasePayload represents the standard JSON payload structure
+// used for streaming or batch-loading documents into a Vector DB.
+type KnowledgeBasePayload struct {
+	DatasetName string              `json:"dataset_name,omitempty"`
+	Documents   []KnowledgeDocument `json:"documents"`
+}
+
 // ResultStreamer defines the interface for streaming tool results.
 type ResultStreamer interface {
 	// BeginArray starts a JSON array output.
@@ -132,6 +148,10 @@ type VectorStore[T any] interface {
 	// dynamically routes them into existing Centroids using AssignAndIndex logic,
 	// and clears them from short-term memory.
 	Consolidate(ctx context.Context) error
+
+	// UpdateEmbedderInfo updates the configuration defining which embedder was used
+	// to index the vectors, persisting it in the system configuration of the store.
+	UpdateEmbedderInfo(ctx context.Context, provider string, model string, dimensions int) error
 
 	// SetDeduplication enables or disables the internal deduplication check during Upsert.
 	// Disabling this can speed up ingestion for pristine data but may lead to ghost vectors if duplicates exist.

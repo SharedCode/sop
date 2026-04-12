@@ -46,3 +46,25 @@ To make the authoring experience seamless, the Copilot itself acts as the Omni P
 - [ ] Implement granular Role-Based Access Control (RBAC) at the KB level.
 - [ ] Define the exact UI flow for uploading, chunking, and previewing documents before they embed.
 - [ ] Create a Marketplace/Export format so highly enriched KBs can be packaged and deployed externally (RAG-as-a-Service).
+
+## 9. Standardized Knowledge Base Interchange Format
+
+To ensure seamless integration with the broader AI ecosystem, SOP officially supports industry-standard JSON formats for knowledge base (KB) payloads. This guarantees that datasets exported from popular frameworks like **LangChain**, **LlamaIndex**, or standard embeddings APIs can simply be copy-pasted and ingested without complex transformations.
+
+### Supported Payload Structure
+
+SOP expects an array of `documents`, where each document seamlessly maps to industry-standard fields:
+- `page_content` (LangChain-style) or `text` (common NLP-style) to define the embedded content.
+- `metadata` to hold key-value pairs (filters, sources, author info).
+- `id` (optional) to allow absolute referencing and UPSERT workflows.
+
+**Example `documents` JSON:**
+
+```json
+{
+  "dataset_name": "engineering_runbooks",
+  "documents": [
+    {
+      "id": "doc-001",
+      "page_content": "To restart the primary database layer, initiate a      "page_content": "To restart the prima db      "page_content": "To restart the primaryource": "      "page_content": "To restart the primary database layer, initiate a      "page_content": "To restart the prima db      "page_content": "To restart the primaryource": "      "page_content": "To restart the primary database layer, initiate a      "page_content": "To restart the prima db      "page_content": "To restart the primaryource": "    ohn      "page_content": "To re "arc      "page_content": "To restart the primary database layer, initiate a      "page_content": "T directly bridge SOP's Vector Store into their existing LangChain loaders, maintaining clean boundaries for interchange, migrations, and backups.
+

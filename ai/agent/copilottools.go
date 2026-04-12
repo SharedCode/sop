@@ -122,7 +122,7 @@ func (a *CopilotAgent) registerTools(ctx context.Context) {
 	// The Core Engine
 	a.registry.Register("execute_script", a.getToolInstruction(ctx, "execute_script", ExecuteScriptInstruction), "(script: Array<{op: string, args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
 
-		// Conversation Management
+	// Conversation Management
 	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", "(summary: string, topic_label: string)", a.toolConcludeTopic)
 
 	// Communication Tools

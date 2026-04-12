@@ -31,6 +31,20 @@ const (
 	dataDesc        = "Content"
 )
 
+// EmbedderInfo represents the configured embedder used to build this vector store.
+type EmbedderInfo struct {
+	Provider   string `json:"provider,omitempty"`
+	Model      string `json:"model,omitempty"`
+	Dimensions int    `json:"dimensions,omitempty"`
+}
+
+// Metadata represents the JSON payload stored inside the vector store's configuration.
+type Metadata struct {
+	ActiveVersion int64        `json:"active_version"`
+	Embedder      EmbedderInfo `json:"embedder,omitempty"`
+	Description   string       `json:"description,omitempty"`
+}
+
 // Config holds the configuration for the Vector Store.
 type Config struct {
 	// TransactionOptions specifies the transaction options for the store.
@@ -44,13 +58,15 @@ type Config struct {
 	EnableIngestionBuffer bool
 	// Cache is the L2 cache client used for optimization locking and other operations.
 	Cache sop.L2Cache
+	// Metadata contains the knowledge base information, such as the required Embedder details.
+	Metadata Metadata
 }
 
 // Open returns an Index for the specified domain.
 // It verifies that the database configuration matches the persisted state.
 func Open[T any](ctx context.Context, trans sop.Transaction, domain string, cfg Config) (ai.VectorStore[T], error) {
 	sysStoreName := fmt.Sprintf("%s%s", domain, sysConfigSuffix)
-	sysStore, err := newBtree[string, int64](ctx, cfg, sop.ConfigureStore(sysStoreName, true, btree.DefaultSlotLength, sysConfigDesc, sop.SmallData, ""), trans, func(a, b string) int {
+	sysStore, err := newBtree[string, string](ctx, cfg, sop.ConfigureStore(sysStoreName, true, btree.DefaultSlotLength, sysConfigDesc, sop.SmallData, ""), trans, func(a, b string) int {
 		if a < b {
 			return -1
 		}
@@ -61,6 +77,18 @@ func Open[T any](ctx context.Context, trans sop.Transaction, domain string, cfg 
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// Initialize metadata if empty/missing
+	found, err := sysStore.Find(ctx, domain, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read vector metadata for domain %s: %v", domain, err)
+	}
+
+	if !found {
+		cfg.Metadata.ActiveVersion = 0
+		bytes, _ := json.Marshal(cfg.Metadata)
+		sysStore.Add(ctx, domain, string(bytes))
 	}
 
 	return &domainIndex[T]{
@@ -80,7 +108,7 @@ type domainIndex[T any] struct {
 	centroidsCache       map[int][]float32
 	deduplicationEnabled bool
 	trans                sop.Transaction
-	sysStore             btree.BtreeInterface[string, int64]
+	sysStore             btree.BtreeInterface[string, string]
 	archCache            map[int64]*Architecture
 }
 
@@ -992,13 +1020,64 @@ func (di *domainIndex[T]) isOptimizing(ctx context.Context) (bool, error) {
 	return locked, err
 }
 
+// UpdateEmbedderInfo updates the configuration defining which embedder was used.
+func (di *domainIndex[T]) UpdateEmbedderInfo(ctx context.Context, provider string, model string, dimensions int) error {
+	found, err := di.sysStore.Find(ctx, di.name, false)
+	if err != nil {
+		return err
+	}
+
+	meta := di.config.Metadata
+	if found {
+		strVal, err := di.sysStore.GetCurrentValue(ctx)
+		if err != nil {
+			return err
+		}
+		json.Unmarshal([]byte(strVal), &meta)
+
+		// If it's already set to a provider, disallow modification unless it matches exactly.
+		if meta.Embedder.Provider != "" {
+			if meta.Embedder.Provider == provider && meta.Embedder.Model == model && meta.Embedder.Dimensions == dimensions {
+				return nil // Idempotent success
+			}
+			return fmt.Errorf("embedder info has already been set for vector store '%s' and cannot be changed", di.name)
+		}
+	}
+
+	meta.Embedder = EmbedderInfo{
+		Provider:   provider,
+		Model:      model,
+		Dimensions: dimensions,
+	}
+
+	bytes, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+
+	if found {
+		_, err = di.sysStore.UpdateCurrentItem(ctx, di.name, string(bytes))
+		return err
+	}
+
+	_, err = di.sysStore.Add(ctx, di.name, string(bytes))
+	return err
+}
+
 func (di *domainIndex[T]) getActiveVersion(ctx context.Context) (int64, error) {
 	found, err := di.sysStore.Find(ctx, di.name, false)
 	if err != nil {
 		return 0, err
 	}
 	if found {
-		return di.sysStore.GetCurrentValue(ctx)
+		strVal, err := di.sysStore.GetCurrentValue(ctx)
+		if err != nil {
+			return 0, err
+		}
+		var meta Metadata
+		if err := json.Unmarshal([]byte(strVal), &meta); err == nil {
+			return meta.ActiveVersion, nil
+		}
 	}
 	return 0, nil
 }

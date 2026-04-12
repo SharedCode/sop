@@ -51,10 +51,14 @@ func (di *domainIndex[T]) Consolidate(ctx context.Context) error {
 
 	var version int64
 	if found {
-		version, err = sysStore.GetCurrentValue(ctx)
+		strVal, err := sysStore.GetCurrentValue(ctx)
 		if err != nil {
 			commitErr = err
 			return err
+		}
+		var meta Metadata
+		if err := json.Unmarshal([]byte(strVal), &meta); err == nil {
+			version = meta.ActiveVersion
 		}
 	} else {
 		version = 0

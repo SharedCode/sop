@@ -81,6 +81,10 @@ func (m *MockTransaction) OnCommit(callback func(ctx context.Context) error)    
 // MockVectorStore implements ai.VectorStore for testing.
 type MockVectorStore struct{}
 
+func (m *MockVectorStore) UpdateEmbedderInfo(ctx context.Context, provider string, model string, dimensions int) error {
+	return nil
+}
+
 func (m *MockVectorStore) Upsert(ctx context.Context, item ai.Item[map[string]any]) error { return nil }
 func (m *MockVectorStore) UpsertBatch(ctx context.Context, items []ai.Item[map[string]any]) error {
 	return nil

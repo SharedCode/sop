@@ -2363,9 +2363,12 @@ func handleDeleteStore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := database.RemoveBtree(r.Context(), dbOpts, req.StoreName); err != nil {
-		http.Error(w, "Failed to delete store: "+err.Error(), http.StatusInternalServerError)
-		return
+	aiDB := aidb.NewDatabase(dbOpts)
+	if err := aiDB.RemoveVectorStore(r.Context(), req.StoreName); err != nil {
+		if err := database.RemoveBtree(r.Context(), dbOpts, req.StoreName); err != nil {
+			http.Error(w, "Failed to delete store: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")

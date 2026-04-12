@@ -82,6 +82,53 @@ func (n *Node[TK, TV]) MarshalJSON() ([]byte, error) {
 	})
 }
 
+func (n *Node[TK, TV]) UnmarshalJSON(data []byte) error {
+	type nodeData struct {
+		ID          sop.UUID       `json:"ID"`
+		ParentID    sop.UUID       `json:"ParentID"`
+		Slots       []Item[TK, TV] `json:"Slots"`
+		Count       int            `json:"Count"`
+		Version     int32          `json:"Version"`
+		ChildrenIDs []sop.UUID     `json:"ChildrenIDs,omitempty"`
+	}
+	var nd nodeData
+
+	// Reuse the pre-allocated slice capacities if this node was created via newNode(slotLength).
+	// This prevents encoding/json from allocating new backing arrays!
+	if cap(n.Slots) > 0 {
+		nd.Slots = n.Slots[:0]
+	}
+	if cap(n.ChildrenIDs) > 0 {
+		nd.ChildrenIDs = n.ChildrenIDs[:0]
+	}
+
+	if err := encoding.Unmarshal(data, &nd); err != nil {
+		return err
+	}
+
+	n.ID = nd.ID
+	n.ParentID = nd.ParentID
+	n.Count = nd.Count
+	n.Version = nd.Version
+
+	// Expand the slice lengths up to their capacity so elements can be shifted during inserts.
+	// Since we handed encoding/json the pre-allocated array, nd.Slots and nd.ChildrenIDs
+	// share the same exact backing array as n.Slots and n.ChildrenIDs.
+	if nd.Slots != nil {
+		n.Slots = nd.Slots[:cap(nd.Slots)]
+	} else {
+		n.Slots = nil
+	}
+
+	if len(nd.ChildrenIDs) > 0 {
+		n.ChildrenIDs = nd.ChildrenIDs[:cap(nd.ChildrenIDs)]
+	} else {
+		n.ChildrenIDs = nil
+	}
+
+	return nil
+}
+
 // Default Slot Length is 5000.
 const DefaultSlotLength = 5000
 
@@ -970,7 +1017,7 @@ func (node *Node[TK, TV]) unlink(ctx context.Context, btree *Btree[TK, TV]) erro
 	if err != nil {
 		return err
 	}
-	if !p.hasChildren() {
+	if p == nil || !p.hasChildren() {
 		return nil
 	}
 	// Prune empty children.
@@ -1001,10 +1048,14 @@ func shiftSlots[T any](array []T, position int, noOfOccupiedSlots int) {
 
 // moveArrayElements is a helper function for internal use only.
 func moveArrayElements[T any](array []T, destStartIndex, srcStartIndex, count int) {
-	if array == nil || count <= 0 {
+	if array == nil || count <= 0 || destStartIndex >= len(array) || srcStartIndex >= len(array) || destStartIndex < 0 || srcStartIndex < 0 {
 		return
 	}
-	copy(array[destStartIndex:], array[srcStartIndex:srcStartIndex+count])
+	endSrc := srcStartIndex + count
+	if endSrc > len(array) {
+		endSrc = len(array)
+	}
+	copy(array[destStartIndex:], array[srcStartIndex:endSrc])
 }
 
 func (node *Node[TK, TV]) isFull() bool {

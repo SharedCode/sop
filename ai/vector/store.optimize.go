@@ -2,6 +2,7 @@ package vector
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	log "log/slog"
 	"math"
@@ -98,9 +99,9 @@ func (di *domainIndex[T]) openArch(ctx context.Context, tx sop.Transaction, ver 
 	return di.getArchitecture(ctx, ver)
 }
 
-func (di *domainIndex[T]) openSysStore(ctx context.Context, tx sop.Transaction) (btree.BtreeInterface[string, int64], error) {
+func (di *domainIndex[T]) openSysStore(ctx context.Context, tx sop.Transaction) (btree.BtreeInterface[string, string], error) {
 	sysStoreName := fmt.Sprintf("%s%s", di.name, sysConfigSuffix)
-	return newBtree[string, int64](ctx, di.config, sop.ConfigureStore(sysStoreName, true, btree.DefaultSlotLength, sysConfigDesc, sop.SmallData, ""), tx, func(a, b string) int {
+	return newBtree[string, string](ctx, di.config, sop.ConfigureStore(sysStoreName, true, btree.DefaultSlotLength, sysConfigDesc, sop.SmallData, ""), tx, func(a, b string) int {
 		if a < b {
 			return -1
 		}
@@ -953,10 +954,17 @@ func (di *domainIndex[T]) phase4(ctx context.Context, currentVersion int64, newV
 	}
 	di.sysStore = sysStore
 
+	var meta Metadata = di.config.Metadata
 	if found, _ := sysStore.Find(ctx, di.name, false); found {
-		sysStore.UpdateCurrentValue(ctx, newVersion)
+		strVal, _ := sysStore.GetCurrentValue(ctx)
+		json.Unmarshal([]byte(strVal), &meta)
+		meta.ActiveVersion = newVersion
+		bytes, _ := json.Marshal(meta)
+		sysStore.UpdateCurrentValue(ctx, string(bytes))
 	} else {
-		sysStore.Add(ctx, di.name, newVersion)
+		meta.ActiveVersion = newVersion
+		bytes, _ := json.Marshal(meta)
+		sysStore.Add(ctx, di.name, string(bytes))
 	}
 
 	tx.OnCommit(func(ctx context.Context) error {

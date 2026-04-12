@@ -204,9 +204,9 @@ func (db *Database) RemoveModelStore(ctx context.Context, name string) error {
 // RemoveVectorStore removes the vector store and its underlying B-Trees.
 func (db *Database) RemoveVectorStore(ctx context.Context, name string) error {
 	suffixes := []string{
-		"_sys_config",
-		"_tmp_vecs",
-		"_data",
+		"/sys_config",
+		"/tmp_vecs",
+		"/data",
 	}
 
 	var lastErr error
@@ -228,17 +228,17 @@ func (db *Database) RemoveVectorStore(ctx context.Context, name string) error {
 
 			f := func(versionSuffix string) int {
 				i := 0
-				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "_lku", versionSuffix)); err == nil {
+				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "/lku", versionSuffix)); err == nil {
 					i++
 				} else {
 					lastErr = err
 				}
-				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "_centroids", versionSuffix)); err == nil {
+				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "/centroids", versionSuffix)); err == nil {
 					i++
 				} else {
 					lastErr = err
 				}
-				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "_vecs", versionSuffix)); err == nil {
+				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "/vecs", versionSuffix)); err == nil {
 					i++
 				} else {
 					lastErr = err

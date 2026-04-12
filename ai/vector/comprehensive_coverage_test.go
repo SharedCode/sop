@@ -2,6 +2,7 @@ package vector_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,7 +66,7 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 
 	// Peek V0
 	transPeek0, _ := db.BeginTransaction(ctx, sop.ForReading)
-	arch0, err := vector.OpenDomainStore(ctx, transPeek0, storeName, 0,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
+	arch0, err := vector.OpenDomainStore(ctx, transPeek0, storeName, 0, vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("OpenDomainStore V0 failed: %v", err)
 	}
@@ -103,14 +104,16 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 
 	// Check Version in SysStore
 	sysStoreName := fmt.Sprintf("%s/sys_config", storeName)
-	sysStore, _ := infs.OpenBtree[string, int64](ctx, sysStoreName, transVerify1, nil)
+	sysStore, _ := infs.OpenBtree[string, string](ctx, sysStoreName, transVerify1, nil)
 	found, _ := sysStore.Find(ctx, storeName, false)
 	if !found {
 		t.Fatal("System config not found")
 	}
-	ver, _ := sysStore.GetCurrentValue(ctx)
-	if ver != 1 {
-		t.Errorf("Expected Version 1, got %d", ver)
+	strVer, _ := sysStore.GetCurrentValue(ctx)
+	var meta vector.Metadata
+	json.Unmarshal([]byte(strVer), &meta)
+	if meta.ActiveVersion != 1 {
+		t.Errorf("Expected Version 1, got %d", meta.ActiveVersion)
 	}
 
 	// Check Files/Stores
@@ -118,7 +121,7 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	// TempVectors should be gone.
 
 	// We use OpenDomainStore to check internal struct
-	arch1, err := vector.OpenDomainStore(ctx, transVerify1, storeName, 1,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
+	arch1, err := vector.OpenDomainStore(ctx, transVerify1, storeName, 1, vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("OpenDomainStore V1 failed: %v", err)
 	}
@@ -236,11 +239,12 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	transVerify2, _ := db.BeginTransaction(ctx, sop.ForReading)
 
 	// Check Version
-	sysStore, _ = infs.OpenBtree[string, int64](ctx, sysStoreName, transVerify2, nil)
+	sysStore, _ = infs.OpenBtree[string, string](ctx, sysStoreName, transVerify2, nil)
 	sysStore.Find(ctx, storeName, false)
-	ver, _ = sysStore.GetCurrentValue(ctx)
-	if ver != 2 {
-		t.Errorf("Expected Version 2, got %d", ver)
+	strVer, _ = sysStore.GetCurrentValue(ctx)
+	json.Unmarshal([]byte(strVer), &meta)
+	if meta.ActiveVersion != 2 {
+		t.Errorf("Expected Version 2, got %d", meta.ActiveVersion)
 	}
 
 	// Check V1 Stores Deleted
@@ -271,7 +275,7 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	}
 
 	// Verify Data Integrity in V2
-	arch2, err := vector.OpenDomainStore(ctx, transVerify2, storeName, 2,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
+	arch2, err := vector.OpenDomainStore(ctx, transVerify2, storeName, 2, vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("OpenDomainStore V2 failed: %v", err)
 	}

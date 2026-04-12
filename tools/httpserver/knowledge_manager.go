@@ -70,7 +70,10 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 
 	// We append _knowledge_base to create the specific vector store namespace
 	storeName := req.Expertise + "_knowledge_base"
-	vs, err := db.OpenVectorStore(ctx, storeName, trans, vector.Config{UsageMode: ai.BuildOnceQueryMany})
+	vsConfig := vector.Config{
+		UsageMode: ai.BuildOnceQueryMany,
+	}
+	vs, err := db.OpenVectorStore(ctx, storeName, trans, vsConfig)
 	if err != nil {
 		trans.Rollback(ctx)
 		http.Error(w, fmt.Sprintf("Failed to open vector store '%s': %v", storeName, err), http.StatusInternalServerError)
