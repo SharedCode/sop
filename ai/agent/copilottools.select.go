@@ -98,8 +98,11 @@ func (a *CopilotAgent) toolSelect(ctx context.Context, args map[string]any) (str
 		limit = 100
 	}
 
-	// Parse Order By
+	// Parse Order By / Direction
 	orderBy, _ := args["order_by"].(string)
+	if orderBy == "" {
+		orderBy, _ = args["direction"].(string)
+	}
 	isDesc := false
 	if orderBy != "" {
 		lowerOrder := strings.ToLower(orderBy)
@@ -134,7 +137,7 @@ func (a *CopilotAgent) toolSelect(ctx context.Context, args map[string]any) (str
 	} else {
 		// If "value" is not explicitly provided, check if there are other args that are not reserved
 		// This allows "select(store='users', age=30)" style
-		valMap := CleanArgs(args, "store", "key", "key_match", "database", "fields", "limit", "action", "update_values", "value_match", "order_by", "filter")
+		valMap := CleanArgs(args, "store", "key", "key_match", "database", "fields", "limit", "action", "update_values", "value_match", "order_by", "direction", "filter")
 
 		if len(valMap) > 0 {
 			valueMatch = valMap

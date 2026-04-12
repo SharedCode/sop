@@ -120,7 +120,7 @@ func (a *CopilotAgent) toolJoin(ctx context.Context, args map[string]any) (strin
 			"left_join_fields", "right_join_fields",
 			"fields",
 			"join_type", "limit", "action",
-			"update_values", "order_by",
+			"update_values", "order_by", "direction",
 		)
 	}
 
@@ -183,6 +183,9 @@ func (a *CopilotAgent) toolJoin(ctx context.Context, args map[string]any) (strin
 
 	// Parse Order By
 	orderBy, _ := args["order_by"].(string)
+	if orderBy == "" {
+		orderBy, _ = args["direction"].(string)
+	}
 	isDesc := false
 	var rightSortFields []string
 
