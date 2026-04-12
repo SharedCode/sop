@@ -180,10 +180,9 @@
             <input type="password" id="chat-settings-api-key" placeholder="API Key" style="width: 80px; padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="API Key / Base URL">
 
             <select id="domain-select" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--accent-color); color: white; font-size: 11px; font-weight: normal; margin-left: 4px;" onclick="event.stopPropagation()" title="Active Knowledge Domain">
+                <option value="" selected>No KB (General)</option>
                 {{if .HasDemo}}
                 <option value="medical_kb">Medical Expert</option>
-                {{else}}
-                <option value="" disabled selected>No Custom KB</option>
                 {{end}}
             </select>
 
