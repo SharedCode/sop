@@ -657,6 +657,22 @@
         columnWidths = []; // Reset column widths
         loadColumnPreferences(); // Load saved column settings
         columnsInitialized = false;
+
+        // Restore standard UI if coming from Knowledge Page
+        const kp = document.getElementById('knowledge-page');
+        if (kp) kp.style.display = 'none';
+        const titleElemCont = document.getElementById('current-store-title');
+        if (titleElemCont && titleElemCont.parentElement) {
+            titleElemCont.parentElement.style.display = 'flex';
+        }
+        const elementsToRestore = [
+            'btn-code-store', 'btn-edit-store', 'btn-view-store', 'btn-edit-cel', 'btn-delete-store',
+            'toolbar', 'pagination-top', 'data-grid', 'pagination', 'detail-resizer'
+        ];
+        elementsToRestore.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = ''; // revert inline hide
+        });
         
         // Highlight active
         document.querySelectorAll('#sidebar li').forEach(el => el.classList.remove('active'));
