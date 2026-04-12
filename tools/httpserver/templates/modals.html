@@ -262,11 +262,11 @@
 
     <div id="chat-history">
         <div class="chat-message ai">
-            Hello! I am an AI copilot. I am a general purpose AI that can also assist you in managing SOP databases.<br>
-            Type /list_tools to show all available tool commands.<br><br>
+            Hello! I am a general purpose AI ready to help you with any topic. I can also act as your assistant for managing SOP databases.<br><br>
+            Type <strong>/list_tools</strong> to show all available tool commands.<br><br>
             {{if .HasDemo}}
-            <strong>Try these examples (if you loaded the Demo Data):</strong>
-            <ul>
+            <em style="color: var(--text-muted); font-size: 0.9em;">Want to learn SOP data management? If you have loaded the Demo Data, try these examples:</em>
+            <ul style="color: var(--text-muted); font-size: 0.9em; margin-top: 4px;">
                 <li>"Show me all users sorted by Age descending"</li>
                 <li>"Find orders for users with first_name 'John' with total amount > 500"</li>
                 <li>"List products in 'Electronics' category"</li>
