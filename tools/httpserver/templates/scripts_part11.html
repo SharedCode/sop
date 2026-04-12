@@ -34,11 +34,11 @@
         // Default to Clustered
         document.getElementById('new-db-type').value = 'clustered';
         document.getElementById('new-db-conn').value = 'localhost:6379';
-        document.getElementById('new-db-conn-group').style.display = 'flex'; // Was 'none' or 'block' depending on CSS, but flex is safer for alignment
+        openUIModal('new-db-conn-group'); // Was 'none' or 'block' depending on CSS, but flex is safer for alignment
         
         // Reset Advanced
         document.getElementById('new-db-advanced-toggle').checked = false;
-        document.getElementById('new-db-advanced-options').style.display = 'none';
+        closeUIModal('new-db-advanced-options');
         document.getElementById('new-db-stores-folders').value = '';
         document.getElementById('new-db-registry-hash-mod').value = '';
 
@@ -53,11 +53,11 @@
         document.getElementById('new-db-path').parentElement.style.display = 'flex'; // Actually parent is div with inputs
         document.getElementById('new-db-path').parentElement.parentElement.style.display = 'flex'; // Ensure form group logic is reset if hidden by advanced
         
-        document.getElementById('add-database-modal').style.display = 'block';
+        openUIModal('add-database-modal', 'block');
     }
 
     function closeAddDatabaseModal() {
-        document.getElementById('add-database-modal').style.display = 'none';
+        closeUIModal('add-database-modal');
     }
 
     function toggleNewDbConnectionField() {
@@ -231,11 +231,11 @@
              btn.disabled = (this.value !== currentDatabase);
         };
 
-        document.getElementById('delete-database-modal').style.display = 'block';
+        openUIModal('delete-database-modal', 'block');
     }
 
     function closeDeleteDatabaseModal() {
-        document.getElementById('delete-database-modal').style.display = 'none';
+        closeUIModal('delete-database-modal');
     }
 
     function confirmDeleteDatabase() {
@@ -348,13 +348,13 @@
                      container.appendChild(ul);
                 }
                 
-                document.getElementById('environments-modal').style.display = 'block';
+                openUIModal('environments-modal', 'block');
             })
             .catch(err => showAlert("Failed to load environments: " + err));
     }
 
     function closeEnvironmentsManager() {
-        document.getElementById('environments-modal').style.display = 'none';
+        closeUIModal('environments-modal');
     }
 
     function createEnvironment() {
@@ -362,23 +362,15 @@
         const name = nameInput.value.trim();
         if (!name) return;
 
-        fetch('/api/config/environments/create', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: name })
-        })
-        .then(async res => {
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(text || res.statusText);
-            }
-            return res.json();
-        })
+        apiCall('/api/config/environments/create', 'POST', { name: name })
         .then(data => {
             // Reload with flag so we know we own this file for abandonment logic
             window.location.href = "/?new_env=true"; 
         })
-        .catch(err => showAlert("Error: " + err));
+        .catch(err => {
+            // Error already alerted by apiCall
+            console.error("Error creating environment", err);
+        });
     }
 
     function switchEnvironment(filename) {
@@ -389,11 +381,11 @@
             performSwitchEnvironment(filename);
         };
         
-        document.getElementById('switch-env-modal').style.display = 'flex';
+        openUIModal('switch-env-modal');
     }
 
     function closeSwitchEnvModal() {
-        document.getElementById('switch-env-modal').style.display = 'none';
+        closeUIModal('switch-env-modal');
     }
 
     function performSwitchEnvironment(filename) {
@@ -403,23 +395,12 @@
         btn.textContent = "Switching...";
         btn.disabled = true;
 
-        fetch('/api/config/environments/switch', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ filename: filename })
-        })
-        .then(async res => {
-            if (!res.ok) {
-                 const text = await res.text();
-                 throw new Error(text || res.statusText);
-            }
-            return res.json();
-        })
+        apiCall('/api/config/environments/switch', 'POST', { filename: filename })
         .then(() => {
              location.reload();
         })
         .catch(err => {
-            showAlert("Error switching: " + err);
+            // Error already alerted by apiCall
             btn.textContent = originalText;
             btn.disabled = false;
         });
@@ -445,13 +426,13 @@
             performDeleteEnvironment(filename);
         };
         
-        document.getElementById('delete-env-modal').style.display = 'flex';
+        openUIModal('delete-env-modal');
         // Focus cancel for safety
         // setTimeout(() => document.querySelector('#delete-env-modal button').focus(), 50); 
     }
 
     function closeDeleteEnvModal() {
-        document.getElementById('delete-env-modal').style.display = 'none';
+        closeUIModal('delete-env-modal');
         
         // Reset button state for next usage
         const btn = document.getElementById('delete-env-confirm-btn');
@@ -473,28 +454,17 @@
         btn.textContent = "Deleting...";
         btn.disabled = true;
 
-        fetch('/api/config/environments/delete', {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ 
-                 filename: filename, 
-                 delete_user_dbs: deleteUserDBs,
-                 delete_system_db: deleteSystemDB
-            })
-        })
-        .then(async res => {
-             if (!res.ok) {
-                 const text = await res.text();
-                 throw new Error(text || res.statusText);
-             }
-             return res.json();
+        apiCall('/api/config/environments/delete', 'POST', { 
+             filename: filename, 
+             delete_user_dbs: deleteUserDBs,
+             delete_system_db: deleteSystemDB
         })
         .then(() => {
              closeDeleteEnvModal();
              showEnvironmentsManager(); // Refresh list
         })
         .catch(err => {
-             showAlert("Error deleting: " + err);
+             // Error already alerted by apiCall
              btn.textContent = originalText;
              btn.disabled = false;
         });

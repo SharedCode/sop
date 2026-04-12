@@ -462,7 +462,7 @@
         
         saveColumnPreferences(); // Save to local storage
         renderGrid(currentItems);
-        document.getElementById('column-modal').style.display = 'none';
+        closeUIModal('column-modal');
     }
 
     function loadItems(action = 'first', refKey = null, keepPanel = false) {
@@ -792,7 +792,7 @@
                     <div id="script-execution-output" style="margin-top: 15px; display: none; border-top: 1px solid var(--border-color); padding-top: 10px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                             <label class="form-label">Execution Output (NDJSON Stream)</label>
-                            <button onclick="document.getElementById('script-output-content').innerHTML = ''; document.getElementById('script-execution-output').style.display = 'none';" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 12px;" title="Clear Output">Clear</button>
+                            <button onclick="document.getElementById('script-output-content').innerHTML = ''; closeUIModal('script-execution-output');" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 12px;" title="Clear Output">Clear</button>
                         </div>
                         <div id="script-output-content" style="background: var(--console-bg); color: var(--console-text); padding: 10px; font-family: monospace; border-radius: 4px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-size: 12px;"></div>
                     </div>

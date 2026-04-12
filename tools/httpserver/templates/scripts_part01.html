@@ -5,6 +5,49 @@
         return false; // Let default handler run
     };
 
+    /* --- Core Frontend Utilities --- */
+    async function apiCall(endpoint, method = 'GET', body = null) {
+        try {
+            const options = {
+                method: method,
+                headers: { 'Content-Type': 'application/json' }
+            };
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+            const response = await fetch(endpoint, options);
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(`API Error (${response.status}): ${text || response.statusText}`);
+            }
+            const json = await response.json();
+            if (json.error) {
+                throw new Error(json.error);
+            }
+            return json;
+        } catch (error) {
+            console.error(`[API Error] ${method} ${endpoint}:`, error);
+            showAlert("Action failed: " + error.message);
+            throw error;
+        }
+    }
+
+    function openUIModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.style.display = 'flex';
+        } else {
+            console.warn("openUIModal: Modal not found ->", modalId);
+        }
+    }
+
+    function closeUIModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+
     /* --- Global Modal Helpers --- */
     let _confirmCallback = null;
     let _alertCallback = null;
@@ -12,13 +55,13 @@
     function showAlert(message, callback) {
         document.getElementById('global-alert-message').textContent = message;
         _alertCallback = callback;
-        document.getElementById('global-alert-modal').style.display = 'flex';
+        openUIModal('global-alert-modal');
         // Focus OK button for usability
         setTimeout(() => document.getElementById('global-alert-modal').querySelector('button').focus(), 50);
     }
 
     function closeGlobalAlert() {
-        document.getElementById('global-alert-modal').style.display = 'none';
+        closeUIModal('global-alert-modal');
         if (_alertCallback) {
             _alertCallback();
             _alertCallback = null;
@@ -45,7 +88,7 @@
         cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
 
         const cleanup = () => {
-            document.getElementById('global-confirm-modal').style.display = 'none';
+            closeUIModal('global-confirm-modal');
             if (_confirmKeyHandler) {
                 document.removeEventListener('keydown', _confirmKeyHandler, true);
                 _confirmKeyHandler = null;
@@ -77,12 +120,12 @@
         };
         document.addEventListener('keydown', _confirmKeyHandler, true);
 
-        document.getElementById('global-confirm-modal').style.display = 'flex';
+        openUIModal('global-confirm-modal');
         setTimeout(() => newOk.focus(), 50);
     }
 
     function closeGlobalConfirm() {
-        document.getElementById('global-confirm-modal').style.display = 'none';
+        closeUIModal('global-confirm-modal');
         if (_confirmKeyHandler) {
             document.removeEventListener('keydown', _confirmKeyHandler, true);
             _confirmKeyHandler = null;
@@ -119,7 +162,7 @@
          cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
 
          const cleanup = () => {
-             document.getElementById('global-prompt-modal').style.display = 'none';
+             closeUIModal('global-prompt-modal');
              if (_promptKeyHandler) {
                  document.removeEventListener('keydown', _promptKeyHandler, true);
                  _promptKeyHandler = null;
@@ -152,7 +195,7 @@
         };
         document.addEventListener('keydown', _promptKeyHandler, true);
 
-        document.getElementById('global-prompt-modal').style.display = 'flex';
+        openUIModal('global-prompt-modal');
         setTimeout(() => input.focus(), 50);
     }
     
@@ -295,7 +338,7 @@
                     opt.textContent = "No databases found";
                     select.appendChild(opt);
 
-                    document.getElementById('database-section').style.display = 'block';
+                    openUIModal('database-section', 'block');
                     
                     // Disable UI elements when no databases exist
                     const btnAddDb = document.getElementById('btn-add-database');
@@ -330,7 +373,7 @@
                 }
                 
                 if (databases.length > 1) {
-                    document.getElementById('database-section').style.display = 'block';
+                    openUIModal('database-section', 'block');
                 }
 
                 const userDBs = databases.filter(db => !db.is_system);
@@ -338,8 +381,8 @@
 
                 if (IS_ENTERPRISE) {
                     // Enterprise Mode: Use Chip UI
-                    document.getElementById('database-select').style.display = 'none';
-                    document.getElementById('enterprise-db-container').style.display = 'block';
+                    closeUIModal('database-select');
+                    openUIModal('enterprise-db-container', 'block');
                     
                     const menu = document.getElementById('db-dropdown-menu');
                     menu.innerHTML = '';
@@ -387,8 +430,8 @@
                     
                 } else {
                      // Standard Mode: Use <select>
-                     document.getElementById('database-select').style.display = 'block';
-                     document.getElementById('enterprise-db-container').style.display = 'none';
+                     openUIModal('database-select', 'block');
+                     closeUIModal('enterprise-db-container');
                      
                     const select = document.getElementById('database-select');
                     select.innerHTML = '';
@@ -457,7 +500,7 @@
             .catch(err => {
                 console.error(err);
                 document.getElementById('database-select').innerHTML = '<option>Error loading databases</option>';
-                document.getElementById('database-section').style.display = 'block';
+                openUIModal('database-section', 'block');
             });
     };
 
@@ -513,12 +556,12 @@
         document.getElementById('store-list').innerHTML = '<li>Loading...</li>';
         document.getElementById('current-store-title').textContent = 'Select a Store';
         document.getElementById('data-grid').innerHTML = '';
-        document.getElementById('toolbar').style.display = 'none';
-        document.getElementById('pagination').style.display = 'none';
-        document.getElementById('pagination-top').style.display = 'none';
+        closeUIModal('toolbar');
+        closeUIModal('pagination');
+        closeUIModal('pagination-top');
         
         // Reset DB Options
-        document.getElementById('db-options-section').style.display = 'none';
+        closeUIModal('db-options-section');
         document.getElementById('db-options-content').innerHTML = 'Loading...';
         
         fetch(`/api/stores?database=${encodeURIComponent(name)}`)
@@ -615,7 +658,7 @@
             .catch(err => {
                 console.error("Failed to fetch DB options", err);
                 document.getElementById('db-options-content').innerHTML = '<span class="error-text">Failed to load options</span>';
-                document.getElementById('db-options-section').style.display = 'block';
+                openUIModal('db-options-section', 'block');
             });
     }
 
@@ -797,14 +840,14 @@
                 document.getElementById('current-store-title').textContent = "Select a Store";
                 
                 // Hide all store-specific buttons
-                document.getElementById('btn-delete-store').style.display = 'none';
-                document.getElementById('btn-code-store').style.display = 'none';
-                document.getElementById('btn-edit-store').style.display = 'none';
-                document.getElementById('btn-view-store').style.display = 'none';
-                document.getElementById('btn-edit-cel').style.display = 'none';
+                closeUIModal('btn-delete-store');
+                closeUIModal('btn-code-store');
+                closeUIModal('btn-edit-store');
+                closeUIModal('btn-view-store');
+                closeUIModal('btn-edit-cel');
 
                 document.getElementById('data-grid').innerHTML = '';
-                document.getElementById('toolbar').style.display = 'none';
+                closeUIModal('toolbar');
                 // Refresh list
                 selectDatabase(currentDatabase, true);
             } else {

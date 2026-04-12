@@ -266,7 +266,7 @@
     }
 
     function closeArgsModal() {
-        document.getElementById('args-modal').style.display = 'none';
+        closeUIModal('args-modal');
         currentEditingStepIdx = -1;
     }
     
@@ -828,7 +828,7 @@
             }
         }
 
-        document.getElementById('detail-resizer').style.display = 'block';
+        openUIModal('detail-resizer', 'block');
         panel.style.display = 'flex';
     }
 

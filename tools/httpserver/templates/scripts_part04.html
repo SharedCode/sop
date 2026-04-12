@@ -433,7 +433,7 @@
     }
 
     function closeAdd() {
-        document.getElementById('add-modal').style.display = 'none';
+        closeUIModal('add-modal');
     }
 
     async function addItem() {
@@ -590,7 +590,7 @@
             showAlert("Add failed: " + err.message);
         });
     }
-    document.getElementById('detail-resizer').style.display = 'none';
+    closeUIModal('detail-resizer');
     
     async function closeDetail(force = false) {
         const btn = document.getElementById('btn-save');
@@ -604,8 +604,8 @@
         currentItemKey = null;
         currentItemValue = null;
 
-        document.getElementById('detail-panel').style.display = 'none';
-        document.getElementById('detail-resizer').style.display = 'none';
+        closeUIModal('detail-panel');
+        closeUIModal('detail-resizer');
         return true;
     }
 

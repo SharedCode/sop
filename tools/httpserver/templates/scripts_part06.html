@@ -458,7 +458,7 @@
     }
 
     function closeScriptModal() {
-        document.getElementById('script-modal').style.display = 'none';
+        closeUIModal('script-modal');
     }
 
     function renderMacroSteps(steps, container) {
@@ -657,7 +657,7 @@
     function showGeneratedCode() {
         if (!currentStore) return;
         updateGeneratedCodeView();
-        document.getElementById('code-modal').style.display = 'flex';
+        openUIModal('code-modal');
     }
 
     function updateGeneratedCodeView() {

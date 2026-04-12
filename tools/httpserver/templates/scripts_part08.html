@@ -168,7 +168,7 @@
         // Fetch stores for potential relationships
         fetchRelationStores();
 
-        document.getElementById('add-store-modal').style.display = 'flex';
+        openUIModal('add-store-modal');
         document.querySelector('#add-store-modal .modal-header span').textContent = 'Add New Store';
 
         // populate EC targets
@@ -258,7 +258,7 @@
         // Reset Seed Data Inputs
         document.getElementById('new-store-seed-key').value = '';
         document.getElementById('new-store-seed-value-simple').value = '';
-        document.getElementById('seed-data-container').style.display = 'block'; // Always show for new store
+        openUIModal('seed-data-container', 'block'); // Always show for new store
 
         // Reset UI State
         toggleIndexSpec();
@@ -280,7 +280,7 @@
     }
 
     function closeAddStoreModal() {
-        document.getElementById('add-store-modal').style.display = 'none';
+        closeUIModal('add-store-modal');
         window.currentAdminToken = null;
         const unlockBtn = document.getElementById('btn-unlock-admin');
         if (unlockBtn) unlockBtn.style.display = 'none';

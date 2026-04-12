@@ -38,7 +38,7 @@
     });
 
     function showSetupWizard() {
-        document.getElementById('setup-wizard').style.display = 'flex';
+        openUIModal('setup-wizard');
         
         // Initialize User DB EC Container if empty
         const container = document.getElementById('setup-db-ec-container');
@@ -561,7 +561,7 @@
         
         if (loadingModal) {
             loadingModal.style.display = 'block';
-            document.getElementById('setup-wizard').style.display = 'none';
+            closeUIModal('setup-wizard');
             pb.style.width = '10%';
             pbDetails.innerHTML = '- Initializing config save...<br>';
             
@@ -602,7 +602,7 @@
         .then(async res => {
              if (!res.ok) {
                  const text = await res.text();
-                 document.getElementById('setup-wizard').style.display = 'flex'; // Restore if failed
+                 openUIModal('setup-wizard'); // Restore if failed
                  if (window._setupProgressItl) clearInterval(window._setupProgressItl);
                  if (loadingModal) {
                      loadingModal.style.display = 'none';
@@ -635,7 +635,7 @@
             if (window._setupProgressItl) clearInterval(window._setupProgressItl);
             const loadingModal = document.getElementById('setup-loading-modal');
             if (loadingModal) loadingModal.style.display = 'none';
-            document.getElementById('setup-wizard').style.display = 'flex'; // Restore UI
+            openUIModal('setup-wizard'); // Restore UI
             console.error(err);
             showAlert("Error: " + err.message);
             nextBtn.disabled = false;
@@ -658,7 +658,7 @@
     }
 
     function closePreferences() {
-        document.getElementById('preferences-modal').style.display = 'none';
+        closeUIModal('preferences-modal');
         document.removeEventListener('keydown', handlePrefEsc);
     }
 
@@ -723,11 +723,11 @@
     function showUninstallModal() {
         if(document.getElementById('uninstall-delete-user-dbs')) document.getElementById('uninstall-delete-user-dbs').checked = true;
         if(document.getElementById('uninstall-delete-system-db')) document.getElementById('uninstall-delete-system-db').checked = false;
-        document.getElementById('uninstall-system-modal').style.display = 'block';
+        openUIModal('uninstall-system-modal', 'block');
     }
 
     function closeUninstallModal() {
-        document.getElementById('uninstall-system-modal').style.display = 'none';
+        closeUIModal('uninstall-system-modal');
     }
 
     function confirmUninstallSystem() {
