@@ -220,11 +220,7 @@
 
                  // If Shared Brain (Reuse Existing): Strict Validation
                  if (isShared) {
-                    fetch(`/api/config/validate-path?path=${encodeURIComponent(path)}&t=${Date.now()}`, {
-                        method: 'GET',
-                        headers: {'Content-Type': 'application/json'}
-                    })
-                    .then(res => res.json())
+                    apiCall(`/api/config/validate-path?path=${encodeURIComponent(path)}&t=${Date.now()}`)
                     .then(data => {
                         if (!data.exists) return showAlert("Path does not exist on server.");
                         if (!data.isDir) return showAlert("Path is not a directory.");
@@ -235,7 +231,9 @@
                         currentWizardStep++;
                         updateWizardStep();
                     })
-                    .catch(err => showAlert("Validation error: " + err));
+                    .catch(err => {
+                        // Alerted by apiCall
+                    });
                     return;
                  }
                  
@@ -276,11 +274,7 @@
                      targetConfig = CURRENT_CONFIG_FILE;
                  }
 
-                 promise = fetch('/api/config/environments/switch', {
-                     method: 'POST',
-                     headers: { 'Content-Type': 'application/json' },
-                     body: JSON.stringify({ filename: targetConfig })
-                 })
+                 promise = apiCall('/api/config/environments/switch', 'POST', { filename: targetConfig })
                  .catch(err => console.error("Error reverting environment:", err));
 
                  promise.finally(() => {
@@ -594,22 +588,8 @@
         }
 
         // 1. Single Atomic Save & Setup Call
-        fetch('/api/config/save', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(finalPayload)
-        })
-        .then(async res => {
-             if (!res.ok) {
-                 const text = await res.text();
-                 openUIModal('setup-wizard'); // Restore if failed
-                 if (window._setupProgressItl) clearInterval(window._setupProgressItl);
-                 if (loadingModal) {
-                     loadingModal.style.display = 'none';
-                 }
-                 throw new Error("Failed to save config / init System DB: " + text);
-             }
-             
+        apiCall('/api/config/save', 'POST', finalPayload)
+        .then(() => {
              // Setup finishes DB initialization correctly. 
              // Preloading knowledge bases has been deferred to the main dashboard.
              
@@ -637,7 +617,6 @@
             if (loadingModal) loadingModal.style.display = 'none';
             openUIModal('setup-wizard'); // Restore UI
             console.error(err);
-            showAlert("Error: " + err.message);
             nextBtn.disabled = false;
             nextBtn.textContent = "Finish";
             nextBtn.title = 'Click "Finish" to create the configuration and initialize the databases.';
@@ -734,23 +713,12 @@
         const deleteUserDBs = document.getElementById('uninstall-delete-user-dbs').checked;
         const deleteSystemDB = document.getElementById('uninstall-delete-system-db').checked;
         
-        fetch('/api/system/uninstall', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                delete_user_dbs: deleteUserDBs,
-                delete_system_db: deleteSystemDB
-            })
-        })
-        .then(res => {
-            if (!res.ok) return res.text().then(t => { throw new Error(t) });
-            return res.json();
+        apiCall('/api/system/uninstall', 'POST', {
+            delete_user_dbs: deleteUserDBs,
+            delete_system_db: deleteSystemDB
         })
         .then(() => {
             showAlert('System uninstalled/reset successfully. Reloading...', () => location.reload());
-        })
-        .catch(err => {
-            showAlert('Failed to uninstall system: ' + err.message);
         });
     }
 

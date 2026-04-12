@@ -116,48 +116,32 @@
             adminToken: window.currentAdminToken || ""
         };
 
-        fetch('/api/store/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
-        .then(async res => {
-            if (!res.ok) {
-                const text = await res.text();
-                if (text.includes("Cannot update") && text.includes("structure") && !window.currentAdminToken) {
-                    const token = prompt("Structural changes detected. Please enter Admin Token to override:");
-                    if (token) {
-                        window.currentAdminToken = token;
-                        payload.adminToken = token;
-                        return fetch('/api/store/update', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(payload)
-                        }).then(async res2 => {
-                            if (!res2.ok) {
-                                const text2 = await res2.text();
-                                throw new Error(text2 || res2.statusText);
-                            }
-                            return res2.json();
-                        });
-                    }
+        apiCall('/api/store/update', 'POST', payload)
+        .catch(err => {
+            if (err.message.includes("Cannot update") && err.message.includes("structure") && !window.currentAdminToken) {
+                const token = prompt("Structural changes detected. Please enter Admin Token to override:");
+                if (token) {
+                    window.currentAdminToken = token;
+                    payload.adminToken = token;
+                    return apiCall('/api/store/update', 'POST', payload);
                 }
-                throw new Error(text || res.statusText);
             }
-            return res.json();
+            throw err;
         })
         .then(data => {
+            if (!data) return;
             closeAddStoreModal();
             // Refresh store info
             selectDatabase(currentDatabase, true, name);
-            if (data && data.warning) {
+            if (data.warning) {
                 showAlert('Store updated successfully.\n\nWARNING: ' + data.warning);
             } else {
                 showAlert('Store updated successfully.');
             }
         })
         .catch(err => {
-            showAlert("Error updating store: " + err.message);
+            // Re-thrown error already alerted by apiCall recursively, but if user cancelled prompt:
+            console.error(err);
         });
     }
 
@@ -177,8 +161,7 @@
         targetSelect.disabled = false;
         
         if (currentDatabase) {
-             fetch(`/api/db/options?database=${encodeURIComponent(currentDatabase)}`)
-                .then(res => res.json())
+             apiCall(`/api/db/options?database=${encodeURIComponent(currentDatabase)}`)
                 .then(opts => {
                     if (opts.erasure_config) {
                         Object.keys(opts.erasure_config).forEach(key => {

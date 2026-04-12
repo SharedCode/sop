@@ -677,23 +677,13 @@
             if (!token) return;
             
             // Validate Token
-            fetch('/api/admin/validate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ adminToken: token })
-            })
-            .then(res => {
-                if (!res.ok) {
-                    throw new Error("Invalid Admin Token");
-                }
-                return res.json();
-            })
+            apiCall('/api/admin/validate', 'POST', { adminToken: token })
             .then(data => {
                 window.currentAdminToken = token;
                 proceedUnlock();
             })
             .catch(err => {
-                showAlert("Error: " + err.message);
+                // apiCall will alert
             });
         } catch (e) {
             console.error("Error in unlockAdminFields:", e);

@@ -198,21 +198,10 @@
             payload.erasure_configs = erasureConfigs;
         }
 
-        fetch('/api/databases', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
-        })
-        .then(res => {
-            if (!res.ok) return res.text().then(t => { throw new Error(t) });
-            return res.json();
-        })
+        apiCall('/api/databases', 'POST', payload)
         .then(() => {
             closeAddDatabaseModal();
             location.reload(); 
-        })
-        .catch(err => {
-            showAlert('Failed to create database: ' + err.message);
         });
     }
 
@@ -243,27 +232,17 @@
         
         const deleteData = document.getElementById('delete-db-data-check').checked;
 
-        fetch(`/api/databases?name=${encodeURIComponent(currentDatabase)}&delete_data=${deleteData}`, {
-            method: 'DELETE'
-        })
-        .then(res => {
-            if (!res.ok) return res.text().then(t => { throw new Error(t) });
-            return res.json();
-        })
+        apiCall(`/api/databases?name=${encodeURIComponent(currentDatabase)}&delete_data=${deleteData}`, 'DELETE')
         .then(() => {
             closeDeleteDatabaseModal();
             localStorage.removeItem('sop_current_database');
             location.reload();
-        })
-        .catch(err => {
-            showAlert('Failed to delete database: ' + err.message);
         });
     }
     // --- Environment / Registry Sets Manager ---
 
     function showEnvironmentsManager() {
-        fetch('/api/config/environments')
-            .then(res => res.json())
+        apiCall('/api/config/environments')
             .then(sets => {
                 const container = document.getElementById('env-list-container');
                 container.innerHTML = '';

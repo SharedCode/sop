@@ -109,21 +109,11 @@
                         key: keyVal
                     };
 
-                    const response = await fetch('/api/store/item/delete', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                    });
-                    
-                    if (response.ok) {
-                        successCount++;
-                    } else {
-                        failCount++;
-                        console.error(`Failed to delete ${keyStr}`);
-                    }
+                    await apiCall('/api/store/item/delete', 'POST', payload);
+                    successCount++;
                 } catch (e) {
                     failCount++;
-                    console.error(e);
+                    console.error(`Failed to delete ${keyStr}`, e);
                 }
             }));
         }

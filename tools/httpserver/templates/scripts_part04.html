@@ -59,15 +59,7 @@
         btn.disabled = true;
         btn.style.opacity = '0.5';
 
-        fetch('/api/store/item/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
-        .then(res => {
-            if (!res.ok) return res.text().then(t => { throw new Error(t) });
-            return res.json();
-        })
+        apiCall('/api/store/item/update', 'POST', payload)
         .then(() => {
             // Success: Reset button state
             btn.style.opacity = '1';
@@ -129,15 +121,7 @@
             key: currentItemKey
         };
 
-        fetch('/api/store/item/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
-        .then(res => {
-            if (!res.ok) return res.text().then(t => { throw new Error(t) });
-            return res.json();
-        })
+        apiCall('/api/store/item/delete', 'POST', payload)
         .then(() => {
             // Find index of deleted item to determine next selection
             let targetIndex = -1;
@@ -569,15 +553,7 @@
             value: val
         };
 
-        fetch('/api/store/item/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
-        .then(res => {
-            if (!res.ok) return res.text().then(t => { throw new Error(t) });
-            return res.json();
-        })
+        apiCall('/api/store/item/add', 'POST', payload)
         .then(() => {
             closeAdd();
             if (!currentItems || currentItems.length <= 1) {

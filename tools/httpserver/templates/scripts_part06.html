@@ -343,11 +343,7 @@
         // Helper to find the script in a specific database
         const tryFetch = (dbName) => {
             // Using query on Name only for flexibility
-            return fetch(`/api/store/items?database=${encodeURIComponent(dbName)}&name=${targetStore}&q=${encodeURIComponent(searchName)}`)
-                .then(res => {
-                    if (!res.ok) throw new Error(res.statusText);
-                    return res.json();
-                });
+            return apiCall(`/api/store/items?database=${encodeURIComponent(dbName)}&name=${targetStore}&q=${encodeURIComponent(searchName)}`);
         };
 
         // UI Feedback
@@ -622,11 +618,8 @@
         });
 
         // Send feedback to server (Mock for now)
-        fetch('/api/ai/feedback', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ msgId, type }) 
-        }).catch(err => console.log('Feedback API not implemented yet, but UI updated.'));
+        apiCall('/api/ai/feedback', 'POST', { msgId, type })
+        .catch(err => console.log('Feedback API not implemented yet, but UI updated.'));
     }
 
     function handleTeach(msgId, originalText) {

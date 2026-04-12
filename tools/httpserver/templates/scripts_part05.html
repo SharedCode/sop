@@ -348,17 +348,13 @@
         }
 
         try {
-            await fetch('/api/ai/feedback', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    msgId: currentAiMsgId,
-                    type: type,
-                    ai_content: aiContent,
-                    user_content: userContent,
-                    database: currentDatabase || "system",
-                    agent: "copilot"
-                })
+            await apiCall('/api/ai/feedback', 'POST', {
+                msgId: currentAiMsgId,
+                type: type,
+                ai_content: aiContent,
+                user_content: userContent,
+                database: currentDatabase || "system",
+                agent: "copilot"
             });
             console.log(`Feedback ${type} sent for msg ${currentAiMsgId}`);
         } catch (e) {

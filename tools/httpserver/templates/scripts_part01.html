@@ -326,8 +326,7 @@
     // Load Databases on Start
     // Refactored into a reusable function to support dynamic database switching
     window.reloadDatabases = function(autoSelect = true) {
-        return fetch('/api/databases')
-            .then(res => res.json())
+        return apiCall('/api/databases')
             .then(databases => {
                 availableDatabases = databases;
                 
@@ -818,20 +817,9 @@
                 return;
             }
 
-        fetch('/api/store/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                database: currentDatabase,
-                store: currentStore
-            })
-        })
-        .then(async res => {
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(text || res.statusText);
-            }
-            return res.json();
+        apiCall('/api/store/delete', 'POST', {
+            database: currentDatabase,
+            store: currentStore
         })
         .then(data => {
             if (data.status === 'ok') {
@@ -853,9 +841,6 @@
             } else {
                 showAlert("Error: " + (data.error || "Unknown error"));
             }
-        })
-        .catch(err => {
-            showAlert("Failed to delete store: " + err.message);
         });
         });
     }

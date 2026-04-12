@@ -265,18 +265,7 @@
             adminToken: window.currentAdminToken || ""
         };
 
-        fetch('/api/store/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        })
-        .then(async res => {
-            if (!res.ok) {
-                const text = await res.text();
-                throw new Error(text || res.statusText);
-            }
-            return res.json();
-        })
+        apiCall('/api/store/add', 'POST', payload)
         .then(data => {
             if (data.status === 'ok') {
                 closeAddStoreModal();
@@ -285,9 +274,6 @@
             } else {
                 showAlert("Error: " + (data.error || "Unknown error"));
             }
-        })
-        .catch(err => {
-            showAlert("Error: " + err.message);
         });
     }
 
@@ -489,55 +475,38 @@
             return;
         }
 
-        fetch('/api/store/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                database: currentDatabase,
-                storeName: currentStore,
-                celExpression: celExpr
-            })
+        apiCall('/api/store/update', 'POST', {
+            database: currentDatabase,
+            storeName: currentStore,
+            celExpression: celExpr
         })
-        .then(async res => {
-            if (!res.ok) {
-                const text = await res.text();
-                if (text.includes("Cannot update") && text.includes("structure")) {
-                    const token = prompt("Structural changes detected. Please enter Admin Token to override:");
-                    if (token) {
-                        return fetch('/api/store/update', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                database: currentDatabase,
-                                storeName: currentStore,
-                                celExpression: celExpr,
-                                adminToken: token
-                            })
-                        }).then(async res2 => {
-                            if (!res2.ok) {
-                                const text2 = await res2.text();
-                                throw new Error(text2 || res2.statusText);
-                            }
-                            return res2.json();
-                        });
-                    }
+        .catch(err => {
+            if (err.message.includes("Cannot update") && err.message.includes("structure")) {
+                const token = prompt("Structural changes detected. Please enter Admin Token to override:");
+                if (token) {
+                    return apiCall('/api/store/update', 'POST', {
+                        database: currentDatabase,
+                        storeName: currentStore,
+                        celExpression: celExpr,
+                        adminToken: token
+                    });
                 }
-                throw new Error(text || res.statusText);
             }
-            return res.json(); // Expect JSON now
+            throw err;
         })
         .then(data => {
+            if (!data) return;
             closeCELModal();
             // Refresh store info
             currentStoreInfo.celExpression = celExpr;
-            if (data && data.warning) {
+            if (data.warning) {
                 showAlert('CEL Expression updated successfully.\n\nWARNING: ' + data.warning);
             } else {
                 showAlert('CEL Expression updated successfully.');
             }
         })
         .catch(err => {
-            showAlert("Error updating CEL Expression: " + err);
+            console.error(err);
         });
     }
 
