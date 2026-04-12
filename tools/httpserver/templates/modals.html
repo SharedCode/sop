@@ -148,7 +148,7 @@
             
             <!-- Quick LLM Engine Setup -->
             <select id="chat-settings-provider" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="LLM Provider" onchange="toggleInlineAuthFields('chat-settings-provider', 'chat-settings-api-key')">
-                <option value="">Auto (Default)</option>
+                <option value="">{{if eq .LLMProvider "gemini"}}Gemini (Default){{else if eq .LLMProvider "openai"}}OpenAI (Default){{else if eq .LLMProvider "anthropic"}}Anthropic (Default){{else if eq .LLMProvider "ollama"}}Ollama (Default){{else}}Auto (Default){{end}}</option>
                 <optgroup label="Anthropic">
                     <option value="anthropic:claude-code-opus-4.6">Claude Code Opus 4.6</option>
                     <option value="anthropic:claude-4.6-sonnet">Claude 4.6 Sonnet</option>
@@ -216,7 +216,7 @@
         <div style="margin-bottom: 10px;">
             <label style="display: block; margin-bottom: 4px; font-weight: bold;">Provider / Model</label>
             <select id="chat-settings-provider-overlay" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="toggleChatSettingsFields()">
-                <option value="">System Default (Auto)</option>
+                <option value="">{{if eq .LLMProvider "gemini"}}System Default (Gemini){{else if eq .LLMProvider "openai"}}System Default (OpenAI){{else if eq .LLMProvider "anthropic"}}System Default (Anthropic){{else if eq .LLMProvider "ollama"}}System Default (Ollama){{else}}System Default (Auto){{end}}</option>
                 <optgroup label="Anthropic">
                     <option value="anthropic:claude-code-opus-4.6">Claude Code Opus 4.6</option>
                     <option value="anthropic:claude-4.6-sonnet">Claude 4.6 Sonnet</option>
