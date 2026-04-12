@@ -445,25 +445,45 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 		toolsDef += "\nContext Section (Learned Knowledge):\n" + knowledge
 	}
 
-	// Inject Active Domain Context via Vector Search
-	if p := ai.GetSessionPayload(ctx); p != nil && p.ActiveDomain != "" {
-		var domainDB *database.Database
-		for _, dbOpts := range a.databases {
-			tempDB := database.NewDatabase(dbOpts)
-			if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-				stores, _ := tx.GetStores(ctx)
-				hasDomain := false
+	// Support dynamic extraction of KBs from the databases
+	getKBNames := func(ctx context.Context, tempDB *database.Database) []string {
+		var kbs []string
+		if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+			if stores, err := tx.GetStores(ctx); err == nil {
 				for _, s := range stores {
-					if s == p.ActiveDomain {
-						hasDomain = true
-						break
+					if strings.HasSuffix(s, "/sys_config") {
+						kbs = append(kbs, strings.TrimSuffix(s, "/sys_config"))
 					}
 				}
-				tx.Rollback(ctx)
-				if hasDomain {
-					domainDB = tempDB
+			}
+			tx.Rollback(ctx)
+		}
+		return kbs
+	}
+
+	// Active Domains from Both Local UserDB and Global SystemDB
+	// Extract available domains, add them to context, then do vector search if any match
+	if p := ai.GetSessionPayload(ctx); p != nil && p.ActiveDomain != "" {
+		// Identify the DB containing this domain
+		var domainDB *database.Database
+		dbOptsList := []sop.DatabaseOptions{a.systemDB.Config()}
+		for _, dbOpts := range a.databases {
+			dbOptsList = append(dbOptsList, dbOpts)
+		}
+
+		for _, dbOpts := range dbOptsList {
+			tempDB := database.NewDatabase(dbOpts)
+			kbs := getKBNames(ctx, tempDB)
+			hasDomain := false
+			for _, kb := range kbs {
+				if kb == p.ActiveDomain {
+					hasDomain = true
 					break
 				}
+			}
+			if hasDomain {
+				domainDB = tempDB
+				break
 			}
 		}
 
@@ -513,6 +533,9 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 				if stores, err := tx.GetStores(ctx); err == nil {
 					toolsDef += fmt.Sprintf("\nActive Database: %s\nAvailable Stores:\n", p.CurrentDB)
 					for _, s := range stores {
+						if strings.Contains(s, "/") {
+							continue
+						}
 						var schemaInfo string
 						// Try to open store to get schema info
 						if storeAccessor, err := jsondb.OpenStore(ctx, db.Config(), s, tx); err == nil {

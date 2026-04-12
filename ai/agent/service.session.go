@@ -219,6 +219,9 @@ Use these tools via slash(/) commands. Arguments can be positional (e.g. ` + "`/
 		}
 
 		for _, sName := range stores {
+			if strings.Contains(sName, "/") {
+				continue
+			}
 			desc := sName
 			if hasOpts {
 				s, err := jsondb.OpenStore(ctx, dbOpts, sName, tx)

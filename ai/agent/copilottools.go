@@ -419,6 +419,9 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 	}
 
 	for _, sName := range stores {
+		if strings.Contains(sName, "/") {
+			continue
+		}
 		desc := sName
 		if hasOpts {
 			// Peek for schema to guide the LLM
