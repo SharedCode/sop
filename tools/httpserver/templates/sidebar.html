@@ -32,22 +32,23 @@
                 </div>
             </div>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-            <h2 style="margin: 0;">Stores</h2>
-            <button id="btn-add-store" onclick="showAddStore()" title="Add new store" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                    <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
-                </svg>
-            </button>
-        </div>
-        <ul id="store-list" style="margin-bottom: 12px;">
-            <li>Select a database...</li>
-        </ul>
-        
-        <hr style="margin: 12px 0; border: 0; border-top: 1px solid var(--border-color);">
-        
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-            <h2 style="margin: 0; cursor: pointer;" onclick="showKnowledgeBasePage()" onmouseover="this.style.color='var(--success-bg)'" onmouseout="this.style.color=''">Knowledge Bases</h2>
+        <!-- Grouping Stores and Knowledge Bases as children of the Database -->
+        <div style="margin-left: 8px; padding-left: 12px; border-left: 2px solid var(--border-color);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                <h3 style="margin: 0; font-size: 1.1em;">Stores</h3>
+                <button id="btn-add-store" onclick="showAddStore()" title="Add new store" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                    </svg>
+                </button>
+            </div>
+            <ul id="store-list" style="margin-bottom: 16px;">
+                <li>Select a database...</li>
+            </ul>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                <h3 style="margin: 0; font-size: 1.1em; cursor: pointer;" onclick="showKnowledgeBasePage()" onmouseover="this.style.color='var(--success-bg)'" onmouseout="this.style.color=''">Knowledge Bases</h3>
+            </div>
         </div>
         
         <hr style="margin: 12px 0; border: 0; border-top: 1px solid var(--border-color);">
