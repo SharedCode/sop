@@ -50,7 +50,7 @@ type Config struct {
 // It verifies that the database configuration matches the persisted state.
 func Open[T any](ctx context.Context, trans sop.Transaction, domain string, cfg Config) (ai.VectorStore[T], error) {
 	sysStoreName := fmt.Sprintf("%s%s", domain, sysConfigSuffix)
-	sysStore, err := newBtree[string, int64](ctx, sop.ConfigureStore(sysStoreName, true, btree.DefaultSlotLength, sysConfigDesc, sop.SmallData, ""), trans, func(a, b string) int {
+	sysStore, err := newBtree[string, int64](ctx, cfg, sop.ConfigureStore(sysStoreName, true, btree.DefaultSlotLength, sysConfigDesc, sop.SmallData, ""), trans, func(a, b string) int {
 		if a < b {
 			return -1
 		}
@@ -96,7 +96,7 @@ func (di *domainIndex[T]) getArchitecture(ctx context.Context, version int64) (*
 	if arch, ok := di.archCache[version]; ok {
 		return arch, nil
 	}
-	arch, err := OpenDomainStore(ctx, di.trans, di.name, version, di.config.ContentSize, !di.config.EnableIngestionBuffer)
+	arch, err := OpenDomainStore(ctx, di.trans, di.name, version, di.config)
 	if err != nil {
 		return nil, err
 	}

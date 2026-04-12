@@ -61,7 +61,7 @@ func TestDeduplicationDisabled_Optimize(t *testing.T) {
 
 	// We need access to internal architecture to bypass Upsert's Content update
 	// We use version 1 to access Vectors (Optimize moved data there)
-	arch, err := vector.OpenDomainStore(ctx, trans2, "test_dedupe", 1, sop.MediumData, false)
+	arch, err := vector.OpenDomainStore(ctx, trans2, "test_dedupe", 1,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("Failed to open arch: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestDeduplicationDisabled_Optimize(t *testing.T) {
 
 	// We need to cast to something that exposes Vectors.
 	// Or use `OpenDomainStore` again with version 2.
-	arch4, err := vector.OpenDomainStore(ctx, trans4, "test_dedupe", 2, sop.MediumData, false)
+	arch4, err := vector.OpenDomainStore(ctx, trans4, "test_dedupe", 2,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("Failed to open version 2: %v", err)
 	}

@@ -47,7 +47,7 @@ func TestArchitectureDirectMethods(t *testing.T) {
 	}
 	defer trans.Rollback(ctx)
 
-	arch, err := vector.OpenDomainStore(ctx, trans, "test_arch", 1, sop.MediumData, false)
+	arch, err := vector.OpenDomainStore(ctx, trans, "test_arch", 1,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("OpenDomainStore failed: %v", err)
 	}

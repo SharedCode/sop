@@ -65,7 +65,7 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 
 	// Peek V0
 	transPeek0, _ := db.BeginTransaction(ctx, sop.ForReading)
-	arch0, err := vector.OpenDomainStore(ctx, transPeek0, storeName, 0, sop.MediumData, false)
+	arch0, err := vector.OpenDomainStore(ctx, transPeek0, storeName, 0,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("OpenDomainStore V0 failed: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	// TempVectors should be gone.
 
 	// We use OpenDomainStore to check internal struct
-	arch1, err := vector.OpenDomainStore(ctx, transVerify1, storeName, 1, sop.MediumData, false)
+	arch1, err := vector.OpenDomainStore(ctx, transVerify1, storeName, 1,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("OpenDomainStore V1 failed: %v", err)
 	}
@@ -271,7 +271,7 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	}
 
 	// Verify Data Integrity in V2
-	arch2, err := vector.OpenDomainStore(ctx, transVerify2, storeName, 2, sop.MediumData, false)
+	arch2, err := vector.OpenDomainStore(ctx, transVerify2, storeName, 2,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("OpenDomainStore V2 failed: %v", err)
 	}

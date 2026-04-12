@@ -112,7 +112,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	}
 
 	// Open Arch V1 to verify
-	arch1, err := vector.OpenDomainStore(ctx, trans2a, "lifecycle", 1, sop.MediumData, false)
+	arch1, err := vector.OpenDomainStore(ctx, trans2a, "lifecycle", 1,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("Failed to open arch 1: %v", err)
 	}
@@ -223,7 +223,7 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	}
 
 	// Open Arch V2
-	arch2, err := vector.OpenDomainStore(ctx, trans4, "lifecycle", 2, sop.MediumData, false)
+	arch2, err := vector.OpenDomainStore(ctx, trans4, "lifecycle", 2,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("Failed to open arch 2: %v", err)
 	}
