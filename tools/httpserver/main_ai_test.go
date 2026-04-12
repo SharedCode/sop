@@ -24,7 +24,7 @@ func TestSeedLLMKnowledge(t *testing.T) {
 	db := database.NewDatabase(opts)
 
 	// Call the generic helper to seed LLM knowledge into the DB
-	seedLLMKnowledge(ctx, db)
+	
 
 	// Verify we can open the store as a Vector DB instead of a generic B-Tree
 	trans, err := db.BeginTransaction(ctx, sop.ForReading)

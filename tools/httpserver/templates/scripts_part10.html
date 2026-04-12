@@ -6,6 +6,7 @@
 
     // Auto-update DB Path based on Name
     document.addEventListener('DOMContentLoaded', () => {
+
         const setupDbNameInput = document.getElementById('setup-db-name');
         const setupDbPathInput = document.getElementById('setup-db-path');
         
@@ -97,7 +98,7 @@
             const dbType = document.getElementById('setup-db-type').value;
             const dbConn = document.getElementById('setup-db-conn').value;
             const populateDemo = document.getElementById('setup-populate-demo').checked;
-            const populateMedical = document.getElementById('setup-populate-medical').checked;
+             let selectedExpertise = Array.from(document.querySelectorAll('input[id^="setup-populate-expertise-"]:checked')).map(cb => cb.dataset.name).join(', ') || 'None';
             
             // System Config (Step 2)
             const regPath = document.getElementById('setup-reg-path').value;
@@ -115,8 +116,7 @@
                 <strong>Path:</strong> ${dbPath}<br>
                 <strong>Type:</strong> ${dbType} ${dbType === 'clustered' ? `(${dbConn})` : ''}<br>
                 <strong>Data Files (EC):</strong> ${ecSummary}<br>
-                <strong>Demo Data:</strong> ${populateDemo ? 'Yes' : 'No'}<br>
-                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
+                <strong>Demo Data:</strong> ${populateDemo ? 'Yes' : 'No'}<br>                 <strong>Knowledge Bases:</strong> ${selectedExpertise}<br>                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
                 <strong>System Database:</strong> ${regPath}<br>
                 <strong>Port:</strong> ${port}<br>
                 <strong>Type:</strong> ${sysType} ${sysType === 'clustered' ? `(${sysConn})` : ''}<br>
@@ -402,7 +402,7 @@
         const dbType = document.getElementById('setup-db-type').value;
         const dbConn = document.getElementById('setup-db-conn').value;
         const populateDemo = document.getElementById('setup-populate-demo').checked;
-        const populateMedical = document.getElementById('setup-populate-medical').checked;
+
 
         // 2. Determine System DB Settings (Simple vs Advanced)
         const port = parseInt(document.getElementById('setup-port').value);
@@ -534,7 +534,6 @@
             path: dbPath,
             use_shared_db: manualDBToggle ? manualDBToggle.checked : false,
             populate_demo: populateDemo,
-            populate_medical: populateMedical,
             options: userOptions
         };
 
@@ -574,13 +573,13 @@
                 if (pTicks === 2) {
                     pb.style.width = '30%';
                     pbDetails.innerHTML += '- Creating System & User Data Stores...<br>';
-                } else if (pTicks === 4 && (populateDemo || populateMedical)) {
-                    pb.style.width = '50%';
-                    pbDetails.innerHTML += '- Pre-loading specified expertise datasets...<br>';
-                    document.getElementById('setup-loading-message').innerText = 'Loading expertise - this may take a bit...';
-                } else if (pTicks === 7 && populateMedical) {
-                    pb.style.width = '70%';
-                    pbDetails.innerHTML += '- Compiling medical semantic models...<br>';
+                  } else if (pTicks === 4 && (populateDemo || document.querySelectorAll('input[id^="setup-populate-expertise-"]:checked').length > 0)) {
+                      pb.style.width = '50%';
+                      pbDetails.innerHTML += '- Pre-loading specified expertise datasets...<br>';
+                      document.getElementById('setup-loading-message').innerText = 'Loading expertise - this may take a bit...';
+                  } else if (pTicks === 7 && document.querySelectorAll('input[id^="setup-populate-expertise-"]:checked').length > 0) {
+                      pb.style.width = '70%';
+                      pbDetails.innerHTML += '- Compiling semantic models...<br>';
                 } else if (pTicks === 8 && populateDemo) {
                     pb.style.width = '85%';
                     pbDetails.innerHTML += '- Inserting demo records...<br>';
@@ -601,17 +600,24 @@
             body: JSON.stringify(finalPayload)
         })
         .then(async res => {
-            if (window._setupProgressItl) clearInterval(window._setupProgressItl);
-            if (loadingModal) {
-                loadingModal.style.display = 'none';
-            }
+             if (!res.ok) {
+                 const text = await res.text();
+                 document.getElementById('setup-wizard').style.display = 'flex'; // Restore if failed
+                 if (window._setupProgressItl) clearInterval(window._setupProgressItl);
+                 if (loadingModal) {
+                     loadingModal.style.display = 'none';
+                 }
+                 throw new Error("Failed to save config / init System DB: " + text);
+             }
+             
+             // Setup finishes DB initialization correctly. 
+             // Preloading knowledge bases has been deferred to the main dashboard.
+             
+             if (window._setupProgressItl) clearInterval(window._setupProgressItl);
+             if (loadingModal) {
+                 loadingModal.style.display = 'none';
+             }
 
-            if (!res.ok) {
-                const text = await res.text();
-                document.getElementById('setup-wizard').style.display = 'flex'; // Restore if failed
-                throw new Error("Failed to save config / init System DB: " + text);
-            }
-            
             // 3. Reload/Redirect
             resetSetupForm();
 
@@ -621,7 +627,8 @@
                  const newUrl = `${window.location.protocol}//${hostname}:${port}`;
                  showAlert(`Setup Complete! IMPORTANT: You changed the port to ${port}. Please RESTART the server manually, then open: ${newUrl}`, null);
             } else {            
-                showAlert("Setup Complete! Reloading...", () => window.location.reload());
+                 sessionStorage.setItem('sop_auto_preload_kb', dbName);
+                 window.location.reload();
             }
         })
         .catch(err => {

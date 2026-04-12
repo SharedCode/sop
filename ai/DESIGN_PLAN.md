@@ -125,3 +125,20 @@ To prevent "bloat" for users who only need the core B-Tree database (`sop`), we 
 
 **Action Item**: Create `ai/go.mod` to formalize this separation. This ensures that a developer building a simple Key-Value store doesn't pull in the entire AI stack.
 
+
+## 9. Next Evolution: Knowledge Base Authoring Studio (MVP)
+
+**Date Added**: April 11, 2026
+
+The strategic vision positions SOP as a **Knowledge Base Authoring Studio**, effectively making it the "SOP for AI." By treating a Knowledge Base (KB) as simply a managed list of Vector Databases, any company can use the platform tools to manage its AI needs with scalable growth, cleanly partitioning domains (e.g., departments, applications) into isolated silos.
+
+### 9.1 Core MVP Capabilities: KB CRUD & Enrichment
+The MVP for the Knowledge Base Studio will focus on the following foundational capabilities:
+1. **CRUD Operations**: Users can Create, Read, Update, and Delete individual1. **CRUD Operations**: Users can Cces1. **CRUhe 1. **CRUD Operations**: Users can Create, Read, Update, and y 1. **CRUD Operatiooad1. **CRUD Operations**: Users can Create, Read, Update, anically chunk, embed, and store in the respective Vector DB.
+3. **Hot-Swapping Context (Trialing)**: Users 3. **Hot-Swapping Context the act3. **Hot-Swapping Context (Trialing)**: Users 3. **Hot-r DB the Copilot uses for RAG, allowing the user to immediately trial and verify the knowledge they just uploaded or authored.
+
+### 9.2 The "SOP for AI" Architecture
+By providing these capabilities, the platform achieves:
+* **Scalable Domain Management**: Different departments (HR, Engineering, Legal) can maintain their own isolated KBs without data bleeding across silos.
+* **Master Architect Persona**: The General Copilot acts as a "Butler," navigating these KBs, h* **Master Architect Persona**: The General Copilot acts as a "Butler," navlo.
+* **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * *UI* **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **API-First * **APt in* **API-First * **API-First * *ctive KB from the managed list.

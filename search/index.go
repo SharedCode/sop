@@ -8,7 +8,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/sop/database"
 )
 
 // TextSearchResult represents a scored document from text search.
@@ -29,53 +29,53 @@ type Index struct {
 }
 
 // NewIndex creates or opens a text search index.
-func NewIndex(ctx context.Context, t sop.Transaction, name string) (*Index, error) {
+func NewIndex(ctx context.Context, config sop.DatabaseOptions, t sop.Transaction, name string) (*Index, error) {
 	// We use a prefix for the store names to keep them grouped.
 	// We use a larger SlotLength (1000) for better performance with many small items.
-	postings, err := infs.NewBtree[string, int](ctx, sop.ConfigureStore(
+	postings, err := database.NewBtree[string, int](ctx, config, name+"_postings", t, nil, sop.ConfigureStore(
 		name+"_postings",
 		true,
 		1000,
 		"Inverted index postings (Term|DocID -> Freq)",
 		sop.SmallData,
 		"",
-	), t, nil)
+	))
 	if err != nil {
 		return nil, err
 	}
 
-	termStats, err := infs.NewBtree[string, int](ctx, sop.ConfigureStore(
+	termStats, err := database.NewBtree[string, int](ctx, config, name+"_term_stats", t, nil, sop.ConfigureStore(
 		name+"_term_stats",
 		true,
 		1000,
 		"Term statistics (Term -> DocCount)",
 		sop.SmallData,
 		"",
-	), t, nil)
+	))
 	if err != nil {
 		return nil, err
 	}
 
-	docStats, err := infs.NewBtree[string, int](ctx, sop.ConfigureStore(
+	docStats, err := database.NewBtree[string, int](ctx, config, name+"_doc_stats", t, nil, sop.ConfigureStore(
 		name+"_doc_stats",
 		true,
 		1000,
 		"Document statistics (DocID -> Length)",
 		sop.SmallData,
 		"",
-	), t, nil)
+	))
 	if err != nil {
 		return nil, err
 	}
 
-	global, err := infs.NewBtree[string, int](ctx, sop.ConfigureStore(
+	global, err := database.NewBtree[string, int](ctx, config, name+"_global", t, nil, sop.ConfigureStore(
 		name+"_global",
 		true,
 		1000,
 		"Global statistics",
 		sop.SmallData,
 		"",
-	), t, nil)
+	))
 	if err != nil {
 		return nil, err
 	}

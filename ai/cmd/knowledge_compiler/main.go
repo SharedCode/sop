@@ -9,9 +9,10 @@ import (
 )
 
 type KnowledgeChunk struct {
-	Category string `json:"category"`
-	Title    string `json:"title"`
-	Content  string `json:"content"`
+	ID          string `json:"id"`
+	Category    string `json:"category"`
+	Text        string `json:"text"`
+	Description string `json:"description"`
 }
 
 func main() {
@@ -27,11 +28,48 @@ func main() {
 			upperName := strings.ToUpper(filename)
 			if strings.Contains(upperName, "CODE_OF_CONDUCT") ||
 				strings.Contains(upperName, "LICENSE") ||
-				strings.Contains(upperName, "CHANGELOG") {
+				strings.Contains(upperName, "CHANGELOG") ||
+				strings.Contains(upperName, "ARTICLE") ||
+				strings.Contains(upperName, "POST") ||
+				strings.Contains(upperName, "ANNOUNCEMENT") ||
+				strings.Contains(upperName, "RELEASE") ||
+				strings.Contains(upperName, "README2") ||
+				strings.Contains(upperName, "PROPOSAL") ||
+				strings.Contains(upperName, "CONTRIBUTING") ||
+				strings.Contains(upperName, "DESIGN_PLAN") ||
+				strings.Contains(upperName, "LINKEDIN") ||
+				strings.Contains(upperName, "WHITEPAPER") {
 				continue
 			}
 
-			chunks := processMarkdownFile(file)
+			// Deduplication: If we find multiple READMEs or COOKBOOKs,
+			// tag them so the LLM knows their domain.
+			domainContext := ""
+			absPath, _ := filepath.Abs(file)
+			if strings.Contains(absPath, "/ai/") {
+				if upperName == "README.MD" {
+					domainContext = "[AI MODULE ROOT README] "
+				} else if upperName == "COOKBOOK.MD" {
+					domainContext = "[AI MODULE COOKBOOK] "
+				} else if upperName == "OMNI_PERSONA.MD" {
+					domainContext = "[SYSTEM DIRECTIVE] "
+				} else {
+					domainContext = "[AI MODULE DOC] "
+				}
+			} else {
+				if upperName == "README.MD" {
+					domainContext = "[SOP CORE README] "
+				} else if upperName == "COOKBOOK.MD" {
+					domainContext = "[SOP CORE COOKBOOK] "
+				} else if upperName == "AI_COPILOT.MD" {
+					domainContext = "[AI INTEGRATION OVERVIEW] "
+				} else {
+					domainContext = "[SOP CORE DOC] "
+				}
+			}
+
+			fmt.Printf("Parsing: %s (Context: %s)\n", file, strings.TrimSpace(domainContext))
+			chunks := processMarkdownFile(file, domainContext)
 			allChunks = append(allChunks, chunks...)
 		}
 	}
@@ -43,7 +81,7 @@ func main() {
 	fmt.Printf("Success! Compiled %d knowledge chunks into %s\n", len(allChunks), outputPath)
 }
 
-func processMarkdownFile(path string) []KnowledgeChunk {
+func processMarkdownFile(path string, domainContext string) []KnowledgeChunk {
 	contentBytes, err := os.ReadFile(path)
 	if err != nil {
 		return nil
@@ -90,9 +128,10 @@ func processMarkdownFile(path string) []KnowledgeChunk {
 		}
 
 		chunks = append(chunks, KnowledgeChunk{
-			Category: category,
-			Title:    title,
-			Content:  body,
+			ID:          fmt.Sprintf("%s_section_%d", category, i),
+			Category:    category,
+			Text:        domainContext + title,
+			Description: body,
 		})
 	}
 	return chunks

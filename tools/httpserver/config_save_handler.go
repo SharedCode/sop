@@ -15,7 +15,6 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
-	aidb "github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/model"
 	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/fs"
@@ -33,7 +32,6 @@ type UserDBRequest struct {
 	Path            string              `json:"path"`
 	UseSharedDB     bool                `json:"use_shared_db"`
 	PopulateDemo    bool                `json:"populate_demo"`
-	PopulateMedical bool                `json:"populate_medical"`
 	DatabaseOptions sop.DatabaseOptions `json:"options"`
 }
 
@@ -430,12 +428,6 @@ func setupSystemDB(ctx context.Context, req *SaveConfigRequest) (*DatabaseConfig
 		trans.Commit(ctx)
 	}()
 
-	// Auto-Create LLM Knowledge (System DB only)
-	func() {
-		db := aidb.NewDatabase(sysOpts)
-		seedLLMKnowledge(ctx, db)
-	}()
-
 	// Construct Config
 	mode := "standalone"
 	if sysOpts.Type == sop.Clustered {
@@ -548,13 +540,6 @@ func setupUserDBs(ctx context.Context, req *SaveConfigRequest) ([]DatabaseConfig
 				}()
 			}
 
-			if udb.PopulateMedical {
-				if err := PopulateMedicalKnowledgeBase(ctx, uOpts); err != nil {
-					log.Error(fmt.Sprintf("Failed to populate medical KB for User DB '%s': %v", udb.Name, err))
-				} else {
-					log.Info(fmt.Sprintf("Medical knowledge base populated for User DB '%s'", udb.Name))
-				}
-			}
 		}
 
 		// Config Entry

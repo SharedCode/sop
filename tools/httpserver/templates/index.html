@@ -102,7 +102,17 @@
     </div>
 
     <div id="data-grid"></div>
-    
+
+    <!-- Knowledge Base Page -->
+    <div id="knowledge-page" style="display: none; height: 100%; overflow-y: auto;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 style="margin:0;">Knowledge Bases Dashboard</h2>
+        </div>
+        <div id="expertise-container">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+
     <div id="pagination" style="display:none; margin-top: 10px; gap: 10px; justify-content: center;">
         <button onclick="firstPage()" tabindex="0" title="Go to the first page of items." style="text-decoration: none; padding: 4px 8px; background: none; border: none; font-size: 1.2em; cursor: pointer;">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
@@ -828,6 +838,9 @@
                 </div>
             </div>
 
+            <div class="form-group" style="margin-top: 15px; margin-bottom: 0px;" id="setup-expertise-container">
+            </div>
+
             <div class="form-group" style="margin-top: 15px; margin-bottom: 0px;">
                 <label style="font-weight: bold; margin-bottom: 5px; display: block;">Expertise Examples for Pre-loading:</label>
                 <div style="display: flex; flex-direction: column; gap: 8px;">
@@ -837,14 +850,6 @@
                     </label>
                     <small style="display: block; margin-top: -5px; color: var(--text-muted); padding-left: 24px;">
                         Creates stores with sample data ideal for testing AI chat & scripts.
-                    </small>
-                    
-                    <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                        <input type="checkbox" id="setup-populate-medical" style="width: auto;">
-                        <span>Medical Expert (Nurse/Doctor) KB</span>
-                    </label>
-                    <small style="display: block; margin-top: -5px; color: var(--text-muted); padding-left: 24px;">
-                        Pre-loads a medical knowledge base index for diagnosing illnesses.
                     </small>
                 </div>
             </div>

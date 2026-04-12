@@ -766,4 +766,190 @@
     }
 
 </script>
+<script>
+    // --- Knowledge Base Dashboard Logic ---
+    async function showKnowledgeBasePage() {
+        // Deselect current store
+        currentStore = null;
+        document.querySelectorAll('#sidebar li').forEach(el => el.classList.remove('active'));
+        
+        // Hide standard main elements
+        const elementsToHide = [
+            'btn-code-store', 'btn-edit-store', 'btn-view-store', 'btn-edit-cel', 'btn-delete-store',
+            'toolbar', 'pagination-top', 'data-grid', 'pagination', 'detail-resizer', 'detail-panel'
+        ];
+        elementsToHide.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = 'none';
+        });
+
+        // Hide the store title container specifically
+        const titleContainer = document.getElementById('current-store-title');
+        if (titleContainer && titleContainer.parentElement) {
+            titleContainer.parentElement.style.display = 'none';
+        }
+
+        // Show knowledge page
+        const kp = document.getElementById('knowledge-page');
+        if (kp) kp.style.display = 'block';
+
+        // Load content
+        await loadExpertiseDashboard();
+    }
+
+    async function loadExpertiseDashboard() {
+        const container = document.getElementById('expertise-container');
+        if (!container) return;
+        container.innerHTML = '<div style="color: var(--text-muted);">Loading knowledge bases...</div>';
+        
+        try {
+            const res = await fetch('/api/knowledge/available');
+            if (!res.ok) throw new Error("Failed to load");
+            const data = await res.json();
+            
+            if (!data || data.length === 0) {
+                 container.innerHTML = '<div style="color: var(--text-muted);">No knowledge bases available.</div>';
+                 return;
+            }
+            
+            // Current database is needed to decide where to install
+            const dbName = window.currentDatabase || "db";
+            
+            const dynamicContent = data.map(exp => {
+                return `
+                <div style="border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; margin-bottom: 15px; background: var(--bg-color);">
+                    <div style="display: flex; justify-content: space-between; align-items: start;">
+                        <div>
+                            <h3 style="margin-top: 0; margin-bottom: 5px; color: var(--text-color)">${exp.name}</h3>
+                            <p style="color: var(--text-muted); margin: 0; font-size: 14px; max-width: 600px;">${exp.description}</p>
+                        </div>
+                        <div>
+                            <button class="primary-btn" onclick="installExpertise('${exp.id}', '${dbName}', this)" style="padding: 8px 16px; cursor: pointer; border: none; background-color: var(--active-bg); color: #fff; border-radius: 4px;">Install</button>
+                        </div>
+                    </div>
+                </div>
+                `;
+            }).join('');
+            
+            container.innerHTML = dynamicContent;
+            
+        } catch (e) {
+            console.error(e);
+            container.innerHTML = '<div style="color: var(--text-red);">Failed to load knowledge bases.</div>';
+        }
+    }
+
+    async function triggerSOPFrameworkPreload(dbName) {
+        // Find the container/element in the UI dynamically
+        const container = document.getElementById('expertise-container');
+        if (!container) return;
+        
+        // Find the button for sop_framework
+        const btn = Array.from(container.querySelectorAll('button')).find(b => b.getAttribute('onclick') && b.getAttribute('onclick').includes("'sop_framework'"));
+        
+        if (btn) {
+            btn.innerText = "Auto-Installing...";
+            btn.disabled = true;
+            btn.style.opacity = '0.7';
+        }
+        
+        const loadingModal = document.getElementById('setup-loading-modal');
+        if (loadingModal) {
+            const msg = document.getElementById('setup-loading-message');
+            if (msg) msg.innerText = 'Knowledge Base Studio Initialization: Preloading SOP Framework...';
+            const details = document.getElementById('setup-loading-details');
+            if (details) details.innerHTML = '- Creating Vector DB structure for sop_framework...<br>';
+            const pb = document.getElementById('setup-progress-bar');
+            if (pb) pb.style.width = '30%';
+            loadingModal.style.zIndex = '999999'; // ensure it is on top
+            loadingModal.style.display = 'flex';
+        }
+
+        try {
+            const res = await fetch('/api/knowledge/preload', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    expertise_id: 'sop_framework',
+                    database_name: dbName
+                })
+            });
+            
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text);
+            }
+            
+            if (btn) {
+                btn.innerText = "Installed";
+                btn.style.backgroundColor = "var(--success-bg)";
+            }
+            
+            if (loadingModal) {
+                const pb = document.getElementById('setup-progress-bar');
+                if (pb) pb.style.width = '100%';
+                setTimeout(() => { loadingModal.style.display = 'none'; }, 800);
+            }
+            
+            // Refresh stores if needed
+            if (typeof loadStores === 'function' && currentDatabase === dbName) {
+                loadStores(dbName);
+            }
+            
+            setTimeout(() => { 
+                showAlert("SOP Knowledge Base Studio is ready! You can now ask the Copilot to author new contexts."); 
+            }, 1000);
+            
+        } catch (error) {
+            console.error(error);
+            if (loadingModal) loadingModal.style.display = 'none';
+            showAlert('Failed to preload SOP Knowledge Base: ' + error.message);
+            if (btn) {
+                btn.disabled = false;
+                btn.innerText = "Install";
+                btn.style.opacity = '1';
+            }
+        }
+    }
+
+    async function installExpertise(expId, dbName, btnElement) {
+        if (!confirm('Are you sure you want to install ' + expId + ' into database: ' + dbName + '?')) return;
+        
+        const originalText = btnElement.innerText;
+        btnElement.innerText = "Installing...";
+        btnElement.disabled = true;
+        btnElement.style.opacity = '0.7';
+
+        try {
+            const res = await fetch('/api/knowledge/preload', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    expertise_id: expId,
+                    database_name: dbName
+                })
+            });
+            
+            if (!res.ok) {
+                const text = await res.text();
+                throw new Error(text);
+            }
+            
+            btnElement.innerText = "Installed";
+            btnElement.style.backgroundColor = "var(--success-bg)";
+            
+            // Refresh stores if needed
+            if (typeof loadStores === 'function' && currentDatabase === dbName) {
+                // If they are on the current DB, refresh the store list
+                loadStores(dbName);
+            }
+            
+        } catch (error) {
+            alert('Failed to install: ' + error.message);
+            btnElement.disabled = false;
+            btnElement.innerText = originalText;
+            btnElement.style.opacity = '1';
+        }
+    }
+</script>
 {{end}}

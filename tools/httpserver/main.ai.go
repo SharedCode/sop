@@ -24,7 +24,6 @@ import (
 	"github.com/sharedcode/sop/ai/vector"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/jsondb"
 )
 
 // ObfuscationMode defines the global obfuscation policy.
@@ -228,8 +227,8 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// Also add "system" db if needed?
 
 	payload := &ai.SessionPayload{
-		CurrentDB: req.Database,
-			ActiveDomain: req.Domain,
+		CurrentDB:    req.Database,
+		ActiveDomain: req.Domain,
 	}
 	askOpts = append(askOpts, ai.WithSessionPayload(payload))
 
@@ -547,92 +546,6 @@ func seedDefaultScripts(ctx context.Context, db *aidb.Database) {
 	log.Info("Seeded 'demo_loop' script.")
 }
 
-// seedLLMKnowledge initializes the system instruction/knowledge store.
-func seedLLMKnowledge(ctx context.Context, db *aidb.Database) {
-	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
-	if err != nil {
-		log.Error(fmt.Sprintf("Failed to begin transaction for seeding knowledge: %v", err))
-		return
-	}
-
-	opts := sop.StoreOptions{
-		Name:                     "llm_knowledge",
-		IsPrimitiveKey:           false,
-		IsValueDataInNodeSegment: true,
-	}
-
-	// Use jsondb.IndexSpecification to generating the MapKeyIndexSpecification JSON string.
-	// This ensures consistency with other components that check or use this specification.
-	idxSpec := jsondb.IndexSpecification{
-		IndexFields: []jsondb.IndexFieldSpecification{
-			{FieldName: "Category", AscendingSortOrder: true},
-			{FieldName: "Name", AscendingSortOrder: true},
-		},
-	}
-	if b, err := json.Marshal(idxSpec); err == nil {
-		opts.MapKeyIndexSpecification = string(b)
-	}
-
-	// Open generic B-Tree for KnowledgeKey -> string
-	// Define comparers for the KnowledgeKey
-	comparer := func(a, b agent.KnowledgeKey) int {
-		if a.Category < b.Category {
-			return -1
-		}
-		if a.Category > b.Category {
-			return 1
-		}
-		if a.Name < b.Name {
-			return -1
-		}
-		if a.Name > b.Name {
-			return 1
-		}
-		return 0
-	}
-
-	store, err := database.NewBtree[agent.KnowledgeKey, string](ctx, db.Options(), "llm_knowledge", tx, comparer, opts)
-	if err != nil {
-		tx.Rollback(ctx)
-		log.Error(fmt.Sprintf("Failed to open llm_knowledge store: %v", err))
-		return
-	}
-
-	defaultInst := agent.DefaultKnowledge["execute_script"]
-	if defaultInst == "" {
-		log.Warn("No default instruction found for execute_script")
-		tx.Rollback(ctx)
-		return
-	}
-
-	// Tool knowledge uses "tool" category
-	key := agent.KnowledgeKey{Category: "tool", Name: "execute_script"}
-
-	// Upsert to ensure we have the latest built-in knowledge
-	if _, err := store.Upsert(ctx, key, defaultInst); err != nil {
-		tx.Rollback(ctx)
-		log.Error(fmt.Sprintf("Failed to upsert execute_script instruction: %v", err))
-		return
-	}
-	log.Info("Seeded/Updated 'execute_script' instruction.")
-
-	// Seed User Defined Knowledge from knowledge_seed.go
-	for _, entry := range UserDefinedKnowledge {
-		k := agent.KnowledgeKey{Category: entry.Category, Name: entry.Name}
-		if _, err := store.Upsert(ctx, k, entry.Content); err != nil {
-			log.Error("Failed to seed user knowledge", "category", entry.Category, "name", entry.Name, "error", err)
-			// Continue or fail? If one fails, others might too if it's a DB issue.
-			// But since we are in a transaction, if we continue and commit, it might be partial?
-			// Actually Upsert returns error if IO fails.
-			// Let's log error but try to continue.
-		} else {
-			log.Info("Seeded/Updated user knowledge", "category", entry.Category, "name", entry.Name)
-		}
-	}
-
-	tx.Commit(ctx)
-}
-
 func loadAgent(ctx context.Context, key, configPath string) {
 	// ctx is passed in
 
@@ -703,7 +616,7 @@ func loadAgent(ctx context.Context, key, configPath string) {
 		sysDB = aidb.NewDatabase(sysOpts)
 		// Seed default scripts for testing
 		seedDefaultScripts(ctx, sysDB)
-		seedLLMKnowledge(ctx, sysDB)
+
 	} else {
 		log.Debug(fmt.Sprintf("System DB not available for agent %s: %v", cfg.ID, err))
 	}

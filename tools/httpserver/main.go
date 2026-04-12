@@ -201,6 +201,10 @@ func main() {
 	http.HandleFunc("/api/ai/feedback", handleAIFeedback)
 	http.HandleFunc("/api/scripts/execute", withAuth(handleExecuteScript))
 
+	// Knowledge Base Endpoints
+	http.HandleFunc("/api/knowledge/available", handleGetAvailableKnowledgeBases)
+	http.HandleFunc("/api/knowledge/preload", handlePreloadKnowledge)
+
 	// Configuration Endpoints
 	http.HandleFunc("/api/config/save", handleSaveConfig)
 	http.HandleFunc("/api/db/init", handleInitDatabase)

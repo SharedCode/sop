@@ -462,7 +462,21 @@
     };
 
     // Initial Load
-    reloadDatabases(true);
+    const autoPreloadDb = sessionStorage.getItem('sop_auto_preload_kb');
+    reloadDatabases(!autoPreloadDb).then(() => {
+        if (autoPreloadDb) {
+            sessionStorage.removeItem('sop_auto_preload_kb');
+            setTimeout(() => {
+                if (typeof showKnowledgeBasePage === 'function') {
+                    showKnowledgeBasePage().then(() => {
+                        if (typeof triggerSOPFrameworkPreload === 'function') {
+                            triggerSOPFrameworkPreload(autoPreloadDb);
+                        }
+                    });
+                }
+            }, 500);
+        }
+    });
 
     async function selectDatabase(name, forceRefresh = false, storeToSelect = null) {
         if (!forceRefresh && currentDatabase === name) return;

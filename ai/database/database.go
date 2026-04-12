@@ -193,7 +193,7 @@ func (db *Database) OpenSearch(ctx context.Context, name string, t sop.Transacti
 			return nil, err
 		}
 	}
-	return search.NewIndex(ctx, t, name)
+	return search.NewIndex(ctx, db.config, t, name)
 }
 
 // RemoveModelStore removes the model store and its underlying B-Tree.
