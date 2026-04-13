@@ -4,15 +4,12 @@
         <div id="database-section" style="display: none; margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px;">
                 <h2 style="margin: 0;">Database</h2>
-                <button id="btn-add-database" onclick="showAddDatabaseModal()" title="Add Database" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
-                    </svg>
-                </button>
             </div>
-            <select id="database-select" onchange="selectDatabase(this.value)" style="width: 100%; padding: 5px;">
-                <option>Loading...</option>
-            </select>
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
+                <div style="flex: 1; min-width: 0;">
+                    <select id="database-select" onchange="selectDatabase(this.value)" style="width: 100%; padding: 5px; box-sizing: border-box;">
+                        <option>Loading...</option>
+                    </select>
             
             <!-- Enterprise Chip Dropdown (Hidden initially, toggled by JS) -->
             <div id="enterprise-db-container" style="display: none; position: relative;">
@@ -30,6 +27,13 @@
                 <div id="db-dropdown-menu" class="db-dropdown-menu">
                     <!-- Options populated by JS -->
                 </div>
+            </div>
+                </div>
+                <button id="btn-add-database" onclick="showAddDatabaseModal()" title="Add Database" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer; flex-shrink: 0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                    </svg>
+                </button>
             </div>
         </div>
         <!-- Grouping Stores and Knowledge Bases as children of the Database -->
