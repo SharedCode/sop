@@ -545,7 +545,7 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			return e.OpenStore(ctx, args)
 		}, nil
-	case "scan":
+	case "scan", "select":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
 			return e.Scan(ctx, args)
 		}, nil
@@ -956,7 +956,7 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 		err = e.RollbackTx(ctx, instr.Args)
 	case "open_store":
 		result, err = e.OpenStore(ctx, instr.Args)
-	case "scan":
+	case "scan", "select":
 		result, err = e.Scan(ctx, instr.Args)
 	case "filter":
 		result, err = e.Filter(ctx, input, instr.Args)
