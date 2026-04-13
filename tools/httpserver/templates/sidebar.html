@@ -5,8 +5,8 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px;">
                 <h2 style="margin: 0;">Database</h2>
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-                <div style="flex: 1; min-width: 0;">
+            <div style="display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; width: 100%;">
+                <div style="min-width: 0;">
                     <select id="database-select" onchange="selectDatabase(this.value)" style="width: 100%; padding: 5px; box-sizing: border-box;">
                         <option>Loading...</option>
                     </select>
