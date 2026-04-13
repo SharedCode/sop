@@ -318,7 +318,10 @@ func TestToolSelect_OutputFormat(t *testing.T) {
 		t.Fatalf("BeginTransaction failed: %v", err)
 	}
 
-	b3, err := sopdb.NewBtree[any, any](ctx, dbOpts, "employees", tx, nil)
+	storeOpts := sop.StoreOptions{
+		IsPrimitiveKey: true,
+	}
+	b3, err := sopdb.NewBtree[string, any](ctx, dbOpts, "employees", tx, nil, storeOpts)
 	if err != nil {
 		t.Fatalf("Failed to create store: %v", err)
 	}

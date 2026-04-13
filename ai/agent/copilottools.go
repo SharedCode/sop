@@ -16,12 +16,21 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-const ExecuteScriptInstruction = `Execute a programmatic script to interact with databases. Use this for complex multi-step operations not covered by high-level tools. (For detailed DSL operations, refer to your knowledge base).`
+const ExecuteScriptInstruction = `Execute a programmatic script to interact with databases. Use this for complex multi-step operations not covered by high-level tools. (For detailed DSL operations, refer to your knowledge base).
+IMPORTANT RULES:
+1. ONLY use valid script operations explicitly defined in the AST Grammar.
+2. DO NOT use high-level tools (like 'select' or 'add') inside execute_script unless explicitly allowed.
+3. EVERY script MUST start with 'begin_tx' (e.g. {"op": "begin_tx", "result_var": "tx1"}) and end with 'commit_tx'.
+4. Pass the transaction variable (e.g. "tx1") to 'open_store' via the 'transaction' argument.
+5. 'scan' and 'join' return full objects. To project specific fields, you MUST add a 'project' step.
+6. When joining using a Secondary Index, respect the field names in the 'Relation'. e.g., if it maps '[Value]' to 'target_id', use 'Value' in your 'on' clause.
+7. Group atomic operations (scan, filter, join, project) into a single 'execute_script' block.
+8. Inspect Schema First using 'list_stores' to discover stores, field names, and relations before scripting.`
 
 const (
-	SelectInstruction = "Selects data from a store. Arguments: store (string), key (any, optional), value (any, optional), fields (list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias'], ['a.*', 'b.name AS employee']. The order of this list is respected in the output.), limit (number, optional), direction (string, optional, either 'asc' or 'desc'. Note: select only sorts by the store PRIMARY KEY. To sort by other fields, you must use execute_script with an index store), action (string, optional: 'delete', 'update'), update_values (map, optional)."
+	SelectInstruction = "Selects data from a store. Supported formats for fields: ['*'], ['field1', 'field2'], ['field AS alias'], ['a.*', 'b.name AS employee']. The order of this list is respected in the output. Note: select only sorts by the store PRIMARY KEY. To sort by other fields, you must use execute_script with an index store."
 
-	JoinInstruction = "Joins data from two stores. Arguments: left_store (string), right_store (string), left_join_fields (list<string>), right_join_fields (list<string>), join_type (string, optional: 'inner', 'left', 'right'), fields (list<string>, optional. Use ['*'] or nil for all fields. Supported formats: ['*'], ['field1', 'field2'], ['field AS alias'], ['a.*', 'b.name AS employee']. The order of this list is respected in the output.), limit (number, optional), direction (string, optional, either 'asc' or 'desc'. Note: only sorts by the primary key), action (string, optional: 'delete_left', 'update_left'), update_values (map, optional)."
+	JoinInstruction = "Joins data from two stores. Supported formats for fields: ['*'], ['field1', 'field2'], ['field AS alias'], ['a.*', 'b.name AS employee']. The order of this list is respected in the output. Note: only sorts by the primary key."
 
 	AddInstruction               = "Adds data to a store."
 	UpdateInstruction            = "Updates data in a store."
@@ -55,17 +64,18 @@ func (a *CopilotAgent) registerTools(ctx context.Context) {
 	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new script or block.", "(mode: string, name: string)", a.toolRefactorScript)
 
 	// High-Level Tools
-	a.registry.Register("select", a.getToolInstruction(ctx, "select", SelectInstruction), "(store: string, ...)", a.toolSelect)
-	a.registry.RegisterHidden("join", a.getToolInstruction(ctx, "join", JoinInstruction), "(left_store: string, right_store: string, ...)", a.toolJoin)
+	a.registry.Register("select", a.getToolInstruction(ctx, "select", SelectInstruction), "(store: string, key?: any, value?: any, fields?: Array<string>, limit?: number, direction?: \"asc\" | \"desc\", action?: \"delete\" | \"update\", update_values?: object)", a.toolSelect)
+	a.registry.RegisterHidden("join", a.getToolInstruction(ctx, "join", JoinInstruction), "(left_store: string, right_store: string, left_join_fields: Array<string>, right_join_fields: Array<string>, join_type?: \"inner\" | \"left\" | \"right\", fields?: Array<string>, limit?: number, direction?: \"asc\" | \"desc\", action?: \"delete_left\" | \"update_left\", update_values?: object)", a.toolJoin)
 	a.registry.Register("explain_join", "Predicts the execution strategy (Index Scan vs Full Scan) for a join operation. Useful for performance debugging.", "(right_store: string, on: map, database?: string)", a.toolExplainJoin)
 	// a.registry.Register("fetch", "Fetches raw key/value pairs from a store. Useful for diagnostics to see the actual B-Tree data. Supports optional direct key lookup, prefix scan, or filtering on Key fields.", "(store: string, key?: any, limit?: number, prefix?: string, filter?: map)", a.toolFetch)
 	a.registry.Register("add", a.getToolInstruction(ctx, "add", AddInstruction), "(store: string, key: any, value: any)", a.toolAdd)
 	a.registry.Register("update", a.getToolInstruction(ctx, "update", UpdateInstruction), "(store: string, key: any, value: any)", a.toolUpdate)
 	a.registry.Register("delete", a.getToolInstruction(ctx, "delete", DeleteInstruction), "(store: string, key: any)", a.toolDelete)
-	a.registry.Register("manage_transaction", a.getToolInstruction(ctx, "manage_transaction", ManageTransactionInstruction), "(action: string)", a.toolManageTransaction)
+	a.registry.Register("manage_transaction", a.getToolInstruction(ctx, "manage_transaction", ManageTransactionInstruction), "(action: \"begin\" | \"commit\" | \"rollback\")", a.toolManageTransaction)
 
 	// The Core Engine
-	a.registry.Register("execute_script", a.getToolInstruction(ctx, "execute_script", ExecuteScriptInstruction), "(script: Array<{op: string, args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
+	var ops = "\"open_db\" | \"begin_tx\" | \"commit_tx\" | \"rollback_tx\" | \"open_store\" | \"scan\" | \"select\" | \"filter\" | \"sort\" | \"project\" | \"limit\" | \"join\" | \"join_right\" | \"update\" | \"delete\" | \"inspect\" | \"defer\" | \"assign\" | \"if\" | \"loop\" | \"call_script\" | \"script\" | \"call_function\" | \"list_new\" | \"list_append\" | \"map_merge\" | \"first\" | \"last\" | \"next\" | \"previous\" | \"find\" | \"add\" | \"get_current_key\" | \"get_current_value\" | \"return\""
+	a.registry.Register("execute_script", a.getToolInstruction(ctx, "execute_script", ExecuteScriptInstruction), "(script: Array<{op: "+ops+", args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
 
 	// Conversation Management
 	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", "(summary: string, topic_label: string)", a.toolConcludeTopic)
