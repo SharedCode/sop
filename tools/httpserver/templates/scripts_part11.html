@@ -902,3 +902,47 @@
     }
 </script>
 {{end}}
+
+function showAddKnowledgeBase() {
+    window.currentAdminToken = null;
+    openUIModal('add-kb-modal');
+}
+function closeAddKBModal() {
+    closeUIModal('add-kb-modal');
+    document.getElementById('new-kb-name').value = '';
+    document.getElementById('new-kb-template').value = 'empty';
+}
+function saveNewKB() {
+    if (!currentDatabase) {
+        showAlert("Please select a Database first.");
+        return;
+    }
+    const kbName = document.getElementById('new-kb-name').value.trim();
+    const template = document.getElementById('new-kb-template').value;
+    if (!kbName) {
+        showAlert("Please enter a Knowledge Base name.");
+        return;
+    }
+    
+    if (template !== "empty") {
+        // Use the existing preload endpoint 
+        const expertiseData = {
+            expertise_id: template,
+            database_name: currentDatabase
+            // we should technically pass kbName to the preload or rename the kb afterwards, but standard logic prepends _knowledge_base
+        };
+        apiCall('/api/knowledge/preload', {
+            method: 'POST',
+            body: JSON.stringify(expertiseData)
+        }).then(() => {
+            showAlert("Knowledge Base preloaded successfully!");
+            closeAddKBModal();
+        }).catch(err => {
+            showAlert("Error creating Knowledge Base: " + err.message);
+        });
+    } else {
+        // Here we just use the logic for creating a vector store. Just like creating a store.
+        showAlert("Vector DB logic to be implemented for empty stores!");
+        closeAddKBModal();
+    }
+}

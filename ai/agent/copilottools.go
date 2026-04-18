@@ -64,18 +64,18 @@ func (a *CopilotAgent) registerTools(ctx context.Context) {
 	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new script or block.", "(mode: string, name: string)", a.toolRefactorScript)
 
 	// High-Level Tools
-	a.registry.Register("select", a.getToolInstruction(ctx, "select", SelectInstruction), "(store: string, key?: any, value?: any, fields?: Array<string>, limit?: number, direction?: \"asc\" | \"desc\", action?: \"delete\" | \"update\", update_values?: object)", a.toolSelect)
+	a.registry.RegisterWithUI("select", "Selects data from a store using criteria.", a.getToolInstruction(ctx, "select", SelectInstruction), "(store: string, key?: any, value?: any, fields?: Array<string>, limit?: number, direction?: \"asc\" | \"desc\", action?: \"delete\" | \"update\", update_values?: object)", a.toolSelect)
 	a.registry.RegisterHidden("join", a.getToolInstruction(ctx, "join", JoinInstruction), "(left_store: string, right_store: string, left_join_fields: Array<string>, right_join_fields: Array<string>, join_type?: \"inner\" | \"left\" | \"right\", fields?: Array<string>, limit?: number, direction?: \"asc\" | \"desc\", action?: \"delete_left\" | \"update_left\", update_values?: object)", a.toolJoin)
 	a.registry.Register("explain_join", "Predicts the execution strategy (Index Scan vs Full Scan) for a join operation. Useful for performance debugging.", "(right_store: string, on: map, database?: string)", a.toolExplainJoin)
 	// a.registry.Register("fetch", "Fetches raw key/value pairs from a store. Useful for diagnostics to see the actual B-Tree data. Supports optional direct key lookup, prefix scan, or filtering on Key fields.", "(store: string, key?: any, limit?: number, prefix?: string, filter?: map)", a.toolFetch)
-	a.registry.Register("add", a.getToolInstruction(ctx, "add", AddInstruction), "(store: string, key: any, value: any)", a.toolAdd)
-	a.registry.Register("update", a.getToolInstruction(ctx, "update", UpdateInstruction), "(store: string, key: any, value: any)", a.toolUpdate)
-	a.registry.Register("delete", a.getToolInstruction(ctx, "delete", DeleteInstruction), "(store: string, key: any)", a.toolDelete)
-	a.registry.Register("manage_transaction", a.getToolInstruction(ctx, "manage_transaction", ManageTransactionInstruction), "(action: \"begin\" | \"commit\" | \"rollback\")", a.toolManageTransaction)
+	a.registry.RegisterWithUI("add", "Adds data to a store.", a.getToolInstruction(ctx, "add", AddInstruction), "(store: string, key: any, value: any)", a.toolAdd)
+	a.registry.RegisterWithUI("update", "Updates data in a store.", a.getToolInstruction(ctx, "update", UpdateInstruction), "(store: string, key: any, value: any)", a.toolUpdate)
+	a.registry.RegisterWithUI("delete", "Deletes data from a store.", a.getToolInstruction(ctx, "delete", DeleteInstruction), "(store: string, key: any)", a.toolDelete)
+	a.registry.RegisterWithUI("manage_transaction", "Manages transactions (begin, commit, rollback).", a.getToolInstruction(ctx, "manage_transaction", ManageTransactionInstruction), "(action: \"begin\" | \"commit\" | \"rollback\")", a.toolManageTransaction)
 
 	// The Core Engine
 	var ops = "\"open_db\" | \"begin_tx\" | \"commit_tx\" | \"rollback_tx\" | \"open_store\" | \"scan\" | \"select\" | \"filter\" | \"sort\" | \"project\" | \"limit\" | \"join\" | \"join_right\" | \"update\" | \"delete\" | \"inspect\" | \"defer\" | \"assign\" | \"if\" | \"loop\" | \"call_script\" | \"script\" | \"call_function\" | \"list_new\" | \"list_append\" | \"map_merge\" | \"first\" | \"last\" | \"next\" | \"previous\" | \"find\" | \"add\" | \"get_current_key\" | \"get_current_value\" | \"return\""
-	a.registry.Register("execute_script", a.getToolInstruction(ctx, "execute_script", ExecuteScriptInstruction), "(script: Array<{op: "+ops+", args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
+	a.registry.RegisterWithUI("execute_script", "Executes a multi-step programmatic script for advanced queries.", a.getToolInstruction(ctx, "execute_script", ExecuteScriptInstruction), "(script: Array<{op: "+ops+", args?: object, input_var?: string, result_var?: string}>)", a.toolExecuteScript)
 
 	// Conversation Management
 	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", "(summary: string, topic_label: string)", a.toolConcludeTopic)
@@ -247,8 +247,20 @@ func (a *CopilotAgent) toolListTools(ctx context.Context, args map[string]any) (
 			continue
 		}
 
-		// Clean description
-		desc := strings.ReplaceAll(t.Description, "\n", " ")
+		// Use ShortDescription if available for UI brevity, otherwise fallback and clean Description
+		var desc string
+		if t.ShortDescription != "" {
+			desc = t.ShortDescription
+		} else {
+			desc = strings.ReplaceAll(t.Description, "\n", " ")
+			// Limit to the first sentence to keep the UI clean (hide heavy LLM instructions)
+			if idx := strings.Index(desc, "."); idx > 0 {
+				desc = desc[:idx+1]
+			}
+			if len(desc) > 150 {
+				desc = desc[:147] + "..."
+			}
+		}
 
 		// Simplify ArgsSchema for CLI display
 		// Convert "(arg1: type, arg2: type)" -> "arg1, arg2"

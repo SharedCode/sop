@@ -94,38 +94,6 @@
     </div>
 </div>
 
-<!-- Preferences Modal -->
-<div id="preferences-modal" class="modal">
-    <div class="modal-content" style="width: 400px;">
-        <div class="modal-header">
-            <span>Preferences</span>
-            <button onclick="closePreferences()" style="background:none; border:none; cursor:pointer; font-size:16px;">&times;</button>
-        </div>
-        <div class="modal-body">
-            <div style="margin-bottom: 15px;">
-                <label class="form-label" style="display:block; margin-bottom:5px;">SOP Version v{{.Version}}</label>
-            </div>
-
-            <div style="margin-bottom: 15px;">
-                <label class="form-label" style="display:block; margin-bottom:5px;">Mobile Experience</label>
-                <select id="pref-mobile-mode" class="form-input" style="width: 100%;">
-                    <option value="app">App Mode (Copilot Only)</option>
-                    <option value="hybrid">Hybrid Mode (Copilot Default + Desktop)</option>
-                    <option value="desktop">Desktop Mode (Manual Copilot)</option>
-                </select>
-                <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">
-                    <strong>App Mode:</strong> Turns the site into a dedicated AI Copilot app on mobile. Desktop UI is hidden.<br>
-                    <strong>Hybrid Mode:</strong> Opens AI Copilot by default on mobile, but allows minimizing to access the desktop UI.<br>
-                    <strong>Desktop Mode:</strong> Standard web view. AI Copilot must be opened manually.
-                </div>
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button onclick="closePreferences()" class="btn-secondary">Cancel</button>
-            <button onclick="savePreferences()" class="btn-success">Save</button>
-        </div>
-    </div>
-</div>
 
 <!-- Script Steps Modal -->
 <div id="script-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--overlay-bg); z-index:1200;">
@@ -289,6 +257,7 @@
             name="sop_ai_chat_prompt"
             placeholder="Ask..." 
             onkeydown="handleChatKeydown(event)"
+            oninput="handleChatInput(event)"
             autocomplete="off" 
             autocorrect="off" 
             autocapitalize="off" 
@@ -367,3 +336,32 @@
 </div>
 
 {{end}}
+
+
+<!-- Add Knowledge Base Modal -->
+<div id="add-kb-modal" class="modal">
+    <div class="modal-content" style="width: 400px;">
+        <div class="modal-header">
+            <span>Add Knowledge Base</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="closeAddKBModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:block; margin-bottom:5px;">Knowledge Base Name:</label>
+                <input type="text" id="new-kb-name" class="form-input" style="width: 100%; box-sizing: border-box;" placeholder="e.g. My Domain KB">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:block; margin-bottom:5px;">Template:</label>
+                <select id="new-kb-template" class="form-input" style="width: 100%;">
+                    <option value="empty">Empty Knowledge Base</option>
+                    <option value="sop_framework">Pre-load SOP Framework</option>
+                    <option value="medical">Pre-load Medical Expert</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeAddKBModal()" class="btn-secondary">Cancel</button>
+            <button onclick="saveNewKB()" class="btn-success">Create</button>
+        </div>
+    </div>
+</div>

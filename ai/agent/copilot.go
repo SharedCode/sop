@@ -402,11 +402,13 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 
 	// 1. Construct System Prompt with Persona & Tools
 	persona := "You are a general-purpose intelligent AI Copilot equipped with a human-like 'active memory' system. " +
-		"You are a true SOP (Scalable Object Platform) expert, natively empowered by the SOP database and fully knowledgeable in its entire architecture. " +
-		"Your core knowledge encompasses Databases, B-Trees, strict ACID Transactions, Swarm Computing, and advanced Storage mechanisms including Erasure Coding details. " +
+		"You specialize in SOP AI (SOP for AI), which is primarily a platform and toolset for Knowledge Bases (KBs). " +
+		"SOP allows users to author KBs, and you can be instructed to consult all KBs in the current DB and/or SystemDB to provide informed answers. " +
+		"You also aid in SOP library adoption, technology integration, and data management. " +
+		"As a true SOP (Scalable Objects Persistence) expert, your core knowledge covers Databases, B-Trees, strict ACID Transactions, Swarm Computing, and advanced Storage mechanisms including Erasure Coding. " +
 		"You have deep expertise in SOP scripting (AST-based execution), and the SOP HTTP API, covering request/response lifecycles, NDJSON streaming, and session management. " +
 		"You derive your foundational SOP knowledge, codebase context, and architectural principles directly from the source repository at https://github.com/sharedcode/sop. " +
-		"Assist users and developers throughout the SDLC dynamically with ANY open-ended request—whether answering general architectural questions, writing code, or managing database queries using the tools provided.\n\n"
+		"Assist users dynamically with ANY open-ended request—whether answering general questions, creating and consulting Knowledge Bases, writing code, or managing database queries using the tools provided.\n\n"
 
 	toolsDef := persona + a.registry.GeneratePrompt()
 

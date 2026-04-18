@@ -583,7 +583,10 @@
         if (chatAbortController) {
             chatAbortController.abort();
             chatAbortController = null;
-            if (sendBtn) sendBtn.textContent = 'Send';
+            if (sendBtn) {
+                sendBtn.textContent = 'Send';
+                sendBtn.disabled = input.value.trim() === '';
+            }
             appendChatMessage('ai', 'Request cancelled by user.');
             return;
         }
@@ -607,6 +610,8 @@
         // Add User Message
         appendChatMessage('user', message);
         input.value = '';
+        input.style.height = '40px'; 
+        if (sendBtn) sendBtn.disabled = true;
         
         // Show Loading
         const loadingId = appendChatMessage('ai', 'Thinking...');
@@ -840,7 +845,10 @@
              }
         } finally {
              chatAbortController = null;
-             if (sendBtn) sendBtn.textContent = 'Send';
+             if (sendBtn) {
+                 sendBtn.textContent = 'Send';
+                 sendBtn.disabled = input.value.trim() === '';
+             }
              if (currentAiMsgId) {
                  updateHeaderFeedbackVisibility(true);
              }
