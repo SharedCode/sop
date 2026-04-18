@@ -467,25 +467,25 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		// to have an Index Specification or CEL Expression. This is useful for testing.
 		"AllowInvalidMapKey": os.Getenv("SOP_ALLOW_INVALID_MAP_KEY") == "true",
 		"HasDemo":            hasDemo,
-                "LLMProvider": func() string {
-                        if config.BrainProvider != "" {
-                                return config.BrainProvider
-                        }
-                        if os.Getenv("GEMINI_API_KEY") != "" {
-                                return "gemini"
-                        } else if os.Getenv("OPENAI_API_KEY") != "" {
-                                return "openai"
-                        } else if os.Getenv("ANTHROPIC_API_KEY") != "" {
-                                return "anthropic"
-                        } else if os.Getenv("OLLAMA_HOST") != "" {
-                                return "ollama"
-                        }
-                        return "gemini"
-                }(),		"IsEnterprise":       isEnterprise,
-		"SystemDBName":       SystemDBName,
-		"ConfigFile":         config.ConfigFile,
-		"MinHashMod":         fs.MinimumModValue,
-		"MaxHashMod":         fs.MaximumModValue,
+		"LLMProvider": func() string {
+			if config.BrainProvider != "" {
+				return config.BrainProvider
+			}
+			if os.Getenv("GEMINI_API_KEY") != "" {
+				return "gemini"
+			} else if os.Getenv("OPENAI_API_KEY") != "" {
+				return "openai"
+			} else if os.Getenv("ANTHROPIC_API_KEY") != "" {
+				return "anthropic"
+			} else if os.Getenv("OLLAMA_HOST") != "" {
+				return "ollama"
+			}
+			return "gemini"
+		}(), "IsEnterprise": isEnterprise,
+		"SystemDBName": SystemDBName,
+		"ConfigFile":   config.ConfigFile,
+		"MinHashMod":   fs.MinimumModValue,
+		"MaxHashMod":   fs.MaximumModValue,
 		"Env": map[string]bool{
 			"SOP_ROOT_PASSWORD": os.Getenv("SOP_ROOT_PASSWORD") != "",
 			"LLM_API_KEY":       os.Getenv("LLM_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("ANTHROPIC_API_KEY") != "",

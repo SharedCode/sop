@@ -102,6 +102,12 @@ We will provide production-ready implementations of the core components:
 *   They deploy as many Workers as needed to achieve their desired throughput (e.g., 50 nodes for 50k jobs/sec).
 *   They register their Scripts with the Workers.
 
+### 3.9. Federated AI Communication (Inter-Swarm Coordination)
+To support distributed organizations and scalable knowledge networks, SOP AI instances must be able to communicate securely with other instances over the network/internet. This enhances the Swarm technology, allowing independent AI agents to coordinate and work together dynamically!
+* **Instance-to-Instance Routing**: Allow a local SOP AI Copilot or agent to query or delegate tasks to a remote SOP AI instance accessible via HTTP/REST.
+* **Cross-Instance Knowledge Querying**: Enable querying of a remote knowledge base without transferring or duplicating the underlying vector data, preserving strict data residency, isolation, and security.
+* **Remote Delegation Tool (`ask_remote_agent`)**: A dedicated API that wraps the federated communication protocol, allowing the local AI to seamlessly prompt, search, delegate, and parse capabilities from a network-accessible remote instance.
+
 ## 4. Implementation Roadmap
 1.  **Define Job/Result Schemas**: Create the Go structs for Jobs and Results.
 2.  **Implement Job Store**: Add `sys_jobs` and `sys_results` to the standard store set.

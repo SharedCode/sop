@@ -33,7 +33,15 @@ A UI dashboard that allows users to manage their AI domains exactly like traditi
 
 ### 4.2. Targeted Content Enrichment 
 A KB is only as good as the data it holds. The Studio will provide a facility to enrich a *specific* KB:
-* **Uploads**: Users can upload content (files, raw text, conversational data) directly into a targeted KB. The system handles the underlying chunking, embedding, and transaction commits.
+* **Rich Media & File Uploads**: Rather than relying solely on users pasting raw JSON payloads into a chat window, the Studio must support direct drag-and-drop or file selection for rich media and documents. This includes:
+  * Documents (PDFs, Word, Markdown, CSV, TXT)
+  * Media (Images, GIFs, and potentially Video/Audio transcription)
+  * The system will abstract away the complexity of parsing, OCR, chunking, embedding, and transaction commits for these diverse file types.
+* **Required Processing Tools (APIs)**: To support these rich media types, the agent architecture and backend must be expanded to include new specialized ingestion tools:
+  * `parse_document`: An API to extract clean, structured text and tables from PDFs, Word docs, and CSVs.
+  * `vision_extract` (OCR): A tool mapped to vision models for extracting context, layout, and text from Images and GIFs.
+  * `transcribe_media`: An API service for audio/video transcription (e.g., Whisper integration).
+  * `chunk_and_embed`: A unified processing payload target that accepts the raw text output from the extractors, semantically chunks it, vectorizes it, and commits it to the isolated Vector namespace.
 * **API Ingestion**: External applications can submit data payloads to a designated KB via REST API, allowing continuous, automated enrichment.
 
 ### 4.3. Context Hot-Swapping (The Trial Loop)
