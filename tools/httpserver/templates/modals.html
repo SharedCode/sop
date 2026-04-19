@@ -147,8 +147,9 @@
             </select>
             <input type="password" id="chat-settings-api-key" placeholder="API Key" style="width: 80px; padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="API Key / Base URL">
 
-            <select id="domain-select" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--accent-color); color: white; font-size: 11px; font-weight: normal; margin-left: 4px;" onclick="event.stopPropagation()" title="Active Knowledge Domain">
+            <select id="domain-select" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--accent-color); color: white; font-size: 11px; font-weight: normal; margin-left: 4px;" onclick="event.stopPropagation()" onchange="handleDomainChange(this)" title="Active Playbook / Context Module">
                 <option value="" selected>None</option>
+                <option value="custom">Custom...</option>
                 {{if .HasDemo}}
                 <option value="medical_kb">Medical Expert</option>
                 {{end}}
@@ -338,22 +339,45 @@
 {{end}}
 
 
-<!-- Add Knowledge Base Modal -->
+<!-- Add Playbook Modal -->
 <div id="add-kb-modal" class="modal">
-    <div class="modal-content" style="width: 400px;">
+    <div class="modal-content" style="width: 450px;">
         <div class="modal-header">
-            <span>Add Knowledge Base</span>
+            <span title="Context Modules: Collections of skills, rules, or SOPs that define how the AI should behave and reason.">Add Playbook</span>
             <span style="cursor:pointer; font-size: 20px;" onclick="closeAddKBModal()">&times;</span>
         </div>
         <div class="modal-body">
             <div style="margin-bottom: 15px;">
-                <label class="form-label" style="display:block; margin-bottom:5px;">Knowledge Base Name:</label>
-                <input type="text" id="new-kb-name" class="form-input" style="width: 100%; box-sizing: border-box;" placeholder="e.g. My Domain KB">
+                <label class="form-label" style="display:block; margin-bottom:5px;">Playbook Name:</label>
+                <input type="text" id="new-kb-name" class="form-input" style="width: 100%; box-sizing: border-box;" placeholder="e.g. Coding Rules, Sales Protocol">
             </div>
+            
+            <!-- AI Configuration Section for Agentic Data -->
+            <div style="margin-bottom: 15px; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.02);">
+                <div style="font-size: 13px; font-weight: bold; margin-bottom: 8px; color: var(--key-color);">🤖 Agentic Data Configuration</div>
+                <div style="font-size: 11px; margin-bottom: 10px; color: var(--text-muted);">
+                    Configure the AI that manages and draws persona from this Playbook data.
+                </div>
+                
+                <label class="form-label" style="display:block; margin-bottom:5px; font-size: 12px;">System Prompt (Persona Focus):</label>
+                <textarea id="new-kb-sysprompt" class="form-input" style="width: 100%; height: 60px; box-sizing: border-box; resize: vertical; margin-bottom: 10px;" placeholder="You are a senior data miner and sales expert..."></textarea>
+                
+                <div style="display: flex; gap: 10px;">
+                    <div style="flex: 1;">
+                        <label class="form-label" style="display:block; margin-bottom:5px; font-size: 12px;">Embedder:</label>
+                        <select id="new-kb-embedder" class="form-input" style="width: 100%;">
+                            <option value="default">Default</option>
+                            <option value="text-embedding-3-small">OpenAI text-embedding-3</option>
+                            <option value="minilm">MiniLM (Local)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
             <div style="margin-bottom: 15px;">
                 <label class="form-label" style="display:block; margin-bottom:5px;">Template:</label>
                 <select id="new-kb-template" class="form-input" style="width: 100%;">
-                    <option value="empty">Empty Knowledge Base</option>
+                    <option value="empty">Empty Playbook</option>
                     <option value="sop_framework">Pre-load SOP Framework</option>
                     <option value="medical">Pre-load Medical Expert</option>
                 </select>
@@ -362,6 +386,26 @@
         <div class="modal-footer">
             <button onclick="closeAddKBModal()" class="btn-secondary">Cancel</button>
             <button onclick="saveNewKB()" class="btn-success">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Domain Modal -->
+<div id="custom-domain-modal" class="modal">
+    <div class="modal-content" style="width: 400px;">
+        <div class="modal-header">
+            <span>Select Custom Domains</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="closeCustomDomainModal()">&times;</span>
+        </div>
+        <div class="modal-body" style="max-height: 300px; overflow-y: auto;">
+            <p style="font-size:12px; margin-top:0;">Select the Context Modules you want to combine for the active AI Context.</p>
+            <div id="custom-domain-list" style="display:flex; flex-direction:column; gap:8px;">
+                <!-- checkboxes inserted here -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeCustomDomainModal()" class="btn-secondary">Cancel</button>
+            <button onclick="applyCustomDomain()" class="btn-success">Apply Selection</button>
         </div>
     </div>
 </div>

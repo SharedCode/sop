@@ -1,0 +1,16 @@
+***************
+*** 493,498 ****
+          const payload = {
+              database: currentDatabase,
+              kb_name: kbName,
+              slot_length: parseInt(slotStr, 10),
+              data_size: parseInt(sizeStr, 10),
+              description: descStr,
+--- 493,499 ----
+          const payload = {
+              database: currentDatabase,
+              kb_name: kbName,
++             blob_store_base_folder_path: ecTarget,
+              slot_length: parseInt(slotStr, 10),
+              data_size: parseInt(sizeStr, 10),
+              description: descStr,

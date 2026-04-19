@@ -1,0 +1,23 @@
+{
+    "port": 8080,
+    "databases": null,
+    "pageSize": 0,
+    "system_db": {
+        "name": "system",
+        "path": "/var/folders/lp/tvfcnbv52mj6n_x0q1yqvnr4fvbdsk/T/sop_ec_test1732056340/stores",
+        "mode": "standalone",
+        "redis": "",
+        "is_system": true,
+        "erasure_configs": [
+            {
+                "key": "",
+                "data_chunks": 1,
+                "parity_chunks": 1,
+                "base_paths": [
+                    "/var/folders/lp/tvfcnbv52mj6n_x0q1yqvnr4fvbdsk/T/sop_ec_test1732056340/disk1",
+                    "/var/folders/lp/tvfcnbv52mj6n_x0q1yqvnr4fvbdsk/T/sop_ec_test1732056340/disk2"
+                ]
+            }
+        ]
+    }
+}

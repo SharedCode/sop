@@ -35,8 +35,11 @@ func handleGetAvailableKnowledgeBases(w http.ResponseWriter, r *http.Request) {
 }
 
 type PreloadKnowledgeRequest struct {
-	Expertise    string `json:"expertise_id"`
-	DatabaseName string `json:"database_name"`
+	Expertise         string          `json:"expertise_id"`
+	DatabaseName      string          `json:"database_name"`
+	KnowledgeBaseName string          `json:"knowledge_base_name,omitempty"`
+	URL               string          `json:"url,omitempty"`
+	CustomData        json.RawMessage `json:"custom_data,omitempty"`
 }
 
 func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +73,9 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 
 	// We append _knowledge_base to create the specific vector store namespace
 	storeName := req.Expertise + "_knowledge_base"
+	if req.KnowledgeBaseName != "" {
+		storeName = req.KnowledgeBaseName
+	}
 	vsConfig := vector.Config{
 		UsageMode: ai.BuildOnceQueryMany,
 	}
@@ -88,16 +94,73 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Actually preload data
-	if req.Expertise == "sop_framework" {
-		// Prefer the bundled copy included by build_release.sh first,
-		// falling back to relative repo paths if running in development mode.
+	var items []ai.Item[map[string]any]
+
+	if len(req.CustomData) > 0 {
+		var chunks []struct {
+			ID          string `json:"id"`
+			Category    string `json:"category"`
+			Text        string `json:"text"`
+			Description string `json:"description"`
+		}
+		if err := json.Unmarshal(req.CustomData, &chunks); err == nil {
+			for idx, chunk := range chunks {
+				cid := chunk.ID
+				if cid == "" {
+					cid = fmt.Sprintf("custom_%d", idx)
+				}
+				textIndexStr := chunk.Text + " " + chunk.Description
+				if textIdx != nil {
+					textIdx.Add(ctx, cid, textIndexStr)
+				}
+				items = append(items, ai.Item[map[string]any]{
+					ID: cid, Payload: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+				})
+			}
+		}
+	} else if req.URL != "" {
+		reqHTTP, err := http.NewRequestWithContext(ctx, http.MethodGet, req.URL, nil)
+		if err == nil {
+			resp, err := http.DefaultClient.Do(reqHTTP)
+			if err == nil {
+				defer resp.Body.Close()
+				var chunks []struct {
+					ID          string `json:"id"`
+					Category    string `json:"category"`
+					Text        string `json:"text"`
+					Description string `json:"description"`
+				}
+				if err := json.NewDecoder(resp.Body).Decode(&chunks); err == nil {
+					for idx, chunk := range chunks {
+						cid := chunk.ID
+						if cid == "" {
+							cid = fmt.Sprintf("net_%d", idx)
+						}
+						textIndexStr := chunk.Text + " " + chunk.Description
+						if textIdx != nil {
+							textIdx.Add(ctx, cid, textIndexStr)
+						}
+						items = append(items, ai.Item[map[string]any]{
+							ID: cid, Payload: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+						})
+					}
+				}
+			}
+		}
+	} else if req.Expertise == "empty" {
+		// Just create an empty store and return
+		// (Initialize the vector store and search index is done above, no data to add.)
+	} else {
 		var fileBytes []byte
 		var err error
 		pathsToTry := []string{
-			"sop_base_knowledge.json",          // Root of release bundle
-			"ai/sop_base_knowledge.json",       // Dev: running repository root
-			"../ai/sop_base_knowledge.json",    // Dev: running from tools/httpserver/
-			"../../ai/sop_base_knowledge.json", // Dev: running deeper
+			req.Expertise + ".json",
+			"../" + req.Expertise + ".json",
+			"../../" + req.Expertise + ".json",
+			"ai/" + req.Expertise + ".json",
+		}
+		if req.Expertise == "sop_framework" {
+			pathsToTry = append(pathsToTry, "sop_base_knowledge.json", "ai/sop_base_knowledge.json", "../ai/sop_base_knowledge.json")
 		}
 
 		for _, p := range pathsToTry {
@@ -106,41 +169,37 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if err != nil {
+		if err == nil {
+			var chunks []struct {
+				ID          string `json:"id"`
+				Category    string `json:"category"`
+				Text        string `json:"text"`
+				Description string `json:"description"`
+			}
+			if err := json.Unmarshal(fileBytes, &chunks); err == nil {
+				for idx, chunk := range chunks {
+					cid := chunk.ID
+					if cid == "" {
+						cid = fmt.Sprintf("loc_%d", idx)
+					}
+					textIndexStr := chunk.Text + " " + chunk.Description
+					if textIdx != nil {
+						textIdx.Add(ctx, cid, textIndexStr)
+					}
+					items = append(items, ai.Item[map[string]any]{
+						ID: cid, Payload: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+					})
+				}
+			}
+		} else {
 			trans.Rollback(ctx)
-			http.Error(w, "Failed to find SOP Knowledge Base file locally", http.StatusInternalServerError)
+			http.Error(w, "Failed to find Knowledge Base file locally or provided data", http.StatusInternalServerError)
 			return
 		}
+	}
 
-		var chunks []struct {
-			ID          string `json:"id"`
-			Category    string `json:"category"`
-			Text        string `json:"text"`
-			Description string `json:"description"`
-		}
-
-		if err := json.Unmarshal(fileBytes, &chunks); err == nil {
-			var items []ai.Item[map[string]any]
-			for _, chunk := range chunks {
-				textIndexStr := chunk.Text + " " + chunk.Description
-				if textIdx != nil {
-					textIdx.Add(ctx, chunk.ID, textIndexStr)
-				}
-				items = append(items, ai.Item[map[string]any]{
-					ID:     chunk.ID,
-					Vector: nil, // Text search only via textIdx, or reliant on LLM dynamic embedding if needed
-					Payload: map[string]any{
-						"text":        chunk.Text,
-						"description": chunk.Description,
-						"category":    chunk.Category,
-						"original_id": chunk.ID,
-					},
-				})
-			}
-			if len(items) > 0 {
-				vs.UpsertBatch(ctx, items)
-			}
-		}
+	if len(items) > 0 {
+		vs.UpsertBatch(ctx, items)
 	}
 
 	if err := trans.Commit(ctx); err != nil {

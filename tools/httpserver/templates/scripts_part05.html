@@ -619,6 +619,11 @@
         chatAbortController = new AbortController();
         if (sendBtn) sendBtn.textContent = 'Stop';
 
+        let payloadDomain = domain;
+        if (domain === "custom" && window.customKBs && window.customKBs.length > 0) {
+            payloadDomain = window.customKBs.join(",");
+        }
+
         try {
             const response = await fetch('/api/ai/chat', {
                 method: 'POST',
@@ -630,7 +635,7 @@
                     agent: agent,
                     provider: provider,
                     format: format,
-                    verbose: true, session_id: currentSessionID, domain: domain
+                    verbose: true, session_id: currentSessionID, domain: payloadDomain
                 }),
                 signal: chatAbortController.signal
             });

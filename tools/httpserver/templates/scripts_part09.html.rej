@@ -1,0 +1,28 @@
+***************
+*** 242,253 ****
+          }
+  
+          // Check for Targeted EC
+-         // const ecTarget = document.getElementById('new-store-target-ec').value || "";
+  
+          const payload = {
+              database: currentDatabase,
+              store: name,
+              description: desc,
+              key_type: keyType,
+              value_type: valueType,
+              seed_key: parsedSeedK,
+--- 242,254 ----
+          }
+  
+          // Check for Targeted EC
++         const ecTarget = document.getElementById('new-store-target-ec').value || "";
+  
+          const payload = {
+              database: currentDatabase,
+              store: name,
+              description: desc,
++             blob_store_base_folder_path: ecTarget,
+              key_type: keyType,
+              value_type: valueType,
+              seed_key: parsedSeedK,

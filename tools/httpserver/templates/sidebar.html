@@ -44,7 +44,7 @@
                 </div>
             </div>
         </div>
-        <!-- Grouping Stores and Knowledge Bases as children of the Database -->
+        <!-- Grouping Stores and Playbooks as children of the Database -->
         <div style="margin-top: 12px;">
 
             <!-- Database Options Section -->
@@ -80,14 +80,14 @@
                 </div>
             </div>
             
-            <!-- Knowledge Bases Section -->
-            <div>
+            <!-- Playbooks Section -->
+            <div title="Context Modules: Collections of skills, rules, or SOPs that define how the AI should behave and reason.">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
                     <h3 style="margin: 0; font-size: 1.1em; cursor: pointer; display: flex; align-items: center;" onclick="toggleSidebarList('kb-list-container', 'kb-caret')" onmouseover="this.style.color='var(--success-bg)'" onmouseout="this.style.color=''">
                         <span id="kb-caret" style="display: inline-block; width: 14px; text-align: center; margin-right: 5px; font-size: 0.8em; transition: transform 0.2s;">▶</span>
-                        Knowledge Bases
+                        Playbooks
                     </h3>
-                    <button id="btn-add-kb" onclick="showAddKnowledgeBase()" title="Add new knowledge base" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer;">
+                    <button id="btn-add-kb" onclick="showAddKnowledgeBase()" title="Add new Playbook" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                             <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
                         </svg>

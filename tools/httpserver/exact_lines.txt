@@ -1,0 +1,11 @@
+		"Mode":    config.Mode,
+		// AllowInvalidMapKey is a flag to bypass the validation that requires Map Key types
+		// to have an Index Specification or CEL Expression. This is useful for testing.
+		"AllowInvalidMapKey": os.Getenv("SOP_ALLOW_INVALID_MAP_KEY") == "true",
+		"HasDemo":            hasDemo,
+		"IsEnterprise":       isEnterprise,
+		"SystemDBName":       SystemDBName,
+		"ConfigFile":         config.ConfigFile,
+		"MinHashMod":         fs.MinimumModValue,
+		"MaxHashMod":         fs.MaximumModValue,
+		"Env": map[string]bool{

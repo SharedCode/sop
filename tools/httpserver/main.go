@@ -188,7 +188,7 @@ func main() {
 	http.HandleFunc("/api/databases/update", handleUpdateDatabase)
 	http.HandleFunc("/api/stores", handleListStores)
 	http.HandleFunc("/api/knowledge-bases", handleListKnowledgeBases)
-	http.HandleFunc("/api/knowledge/thoughts", handleListKnowledgeThoughts)
+	http.HandleFunc("/api/knowledge/items", handleListKnowledgeItems)
 	http.HandleFunc("/api/db/options", handleGetDBOptions)
 	http.HandleFunc("/api/store/info", handleGetStoreInfo)
 	http.HandleFunc("/api/store/update", handleUpdateStoreInfo)
@@ -968,7 +968,7 @@ func handleListKnowledgeBases(w http.ResponseWriter, r *http.Request) {
 
 	db := aidb.NewDatabase(dbOpts)
 
-	result, err := db.GetPlaybooks(ctx)
+	result, err := db.GetDomains(ctx)
 	if err != nil {
 		http.Error(w, "Failed to list playbooks: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -981,7 +981,7 @@ func handleListKnowledgeBases(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(result)
 }
 
-func handleListKnowledgeThoughts(w http.ResponseWriter, r *http.Request) {
+func handleListKnowledgeItems(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	storeName := r.URL.Query().Get("name")
 	dbName := r.URL.Query().Get("database")
@@ -1021,13 +1021,13 @@ func handleListKnowledgeThoughts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type Thought struct {
+	type DomainItem struct {
 		ID       string `json:"id"`
 		Category string `json:"category"`
 		Text     string `json:"text"`
 		Desc     string `json:"description"`
 	}
-	var thoughts []Thought
+	var items []DomainItem
 
 	store.First(ctx)
 	for {
@@ -1039,7 +1039,7 @@ func handleListKnowledgeThoughts(w http.ResponseWriter, r *http.Request) {
 
 		var payload map[string]any
 		if err := json.Unmarshal([]byte(val), &payload); err == nil {
-			t := Thought{
+			t := DomainItem{
 				ID:       key.ItemID,
 				Category: fmt.Sprint(payload["category"]),
 				Text:     fmt.Sprint(payload["text"]),
@@ -1051,7 +1051,7 @@ func handleListKnowledgeThoughts(w http.ResponseWriter, r *http.Request) {
 			if t.Desc == "<nil>" {
 				t.Desc = ""
 			}
-			thoughts = append(thoughts, t)
+			items = append(items, t)
 		}
 
 		ok, _ := store.Next(ctx)
@@ -1060,7 +1060,7 @@ func handleListKnowledgeThoughts(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	json.NewEncoder(w).Encode(thoughts)
+	json.NewEncoder(w).Encode(items)
 }
 
 func handleGetDBOptions(w http.ResponseWriter, r *http.Request) {

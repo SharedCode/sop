@@ -551,7 +551,7 @@
 
         currentStore = null;
         document.getElementById('store-list').innerHTML = '<li>Loading...</li>';
-        document.getElementById('current-store-title').textContent = 'Select Store or Knowledge Base';
+        document.getElementById('current-store-title').textContent = 'Select Store or Playbook';
         
         // Hide all store-specific buttons
         closeUIModal('btn-delete-store');
@@ -579,18 +579,6 @@
                     return;
                 }
                 stores.forEach(store => {
-                    if (isSystemDB) {
-                        // Hide internal vector store components
-                        if (store.endsWith('_sys_config') ||
-                            store.endsWith('_lku') ||
-                            store.endsWith('_centroids') ||
-                            store.endsWith('_vecs') ||
-                            store.endsWith('_tmp_vecs') ||
-                            store.endsWith('_data')) {
-                            return;
-                        }
-                    }
-
                     const li = document.createElement('li');
                     li.textContent = store.charAt(0).toUpperCase() + store.slice(1);
                     li.onclick = () => selectStore(store, li);
@@ -606,14 +594,25 @@
                 list.innerHTML = `<li class="error-text">Error: ${err.message}</li>`;
             });
 
-        // Fetch Knowledge Bases
+        // Fetch Playbooks
         fetch(`/api/knowledge-bases?database=${encodeURIComponent(name)}`)
             .then(res => res.json())
             .then(kbs => {
                 const kbList = document.getElementById('kb-list');
+                const domainSelect = document.getElementById('domain-select');
+                
                 kbList.innerHTML = '';
+                
+                if (domainSelect) {
+                    Array.from(domainSelect.options).forEach(opt => {
+                        if (opt.getAttribute('data-dynamic') === 'true') {
+                            domainSelect.removeChild(opt);
+                        }
+                    });
+                }
+                
                 if (!kbs || kbs.length === 0) {
-                    kbList.innerHTML = '<li>No knowledge bases found</li>';
+                    kbList.innerHTML = '<li>No Playbooks found</li>';
                     return;
                 }
                 kbs.forEach(kb => {
@@ -621,6 +620,17 @@
                     li.textContent = kb.charAt(0).toUpperCase() + kb.slice(1);
                     li.onclick = () => selectKnowledgeBase(kb, li);
                     kbList.appendChild(li);
+                    
+                    if (domainSelect) {
+                        const existing = Array.from(domainSelect.options).find(o => o.value === kb);
+                        if (!existing) {
+                            const opt = document.createElement('option');
+                            opt.value = kb;
+                            opt.textContent = kb.charAt(0).toUpperCase() + kb.slice(1);
+                            opt.setAttribute('data-dynamic', 'true');
+                            domainSelect.appendChild(opt);
+                        }
+                    }
                 });
             })
             .catch(err => {
@@ -742,10 +752,10 @@
 
     document.getElementById('current-store-title').textContent = "KB: " + name;
     const grid = document.getElementById('data-grid');
-    grid.innerHTML = "<div style='padding: 15px;'>Fetching knowledge base thoughts...</div>";
+    grid.innerHTML = "<div style='padding: 15px;'>Fetching knowledge base items...</div>";
     
     try {
-        const res = await fetch(`/api/knowledge/thoughts?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`);
+        const res = await fetch(`/api/knowledge/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`);
         
         let data = null;
         if (res.ok) {
@@ -756,12 +766,12 @@
             }
         } else {
             console.error("fetch failed", res.status);
-            grid.innerHTML = "<div style='padding: 15px;'>Error fetching thoughts. Status: " + res.status + "</div>";
+            grid.innerHTML = "<div style='padding: 15px;'>Error fetching items. Status: " + res.status + "</div>";
             return;
         }
         
         if (!data || !data.rows || data.rows.length === 0) {
-            grid.innerHTML = "<div style='padding: 15px;'>No thoughts found in this Knowledge Base.</div>";
+            grid.innerHTML = "<div style='padding: 15px;'>No items found in this Knowledge Base.</div>";
             return;
         }
 
@@ -785,14 +795,14 @@
                     <h3 style="margin-top: 0; font-size: 1.1em; color: var(--text-color); margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">Knowledge Categories</h3>
                     
                     <ul id="kb-category-tree" style="list-style: none; padding-left: 0; margin-top: 0; font-size: 0.95em;">
-                        <li style="margin-bottom: 10px; cursor: pointer; color: var(--link-color); padding: 5px; border-radius: 4px; background: rgba(0,0,0,0.02);" onclick="window.filterThoughts('All', this)">
-                            ▾ <strong>All Thoughts</strong> <span style="background: var(--border-color); color: var(--text-color); border-radius: 10px; padding: 2px 6px; font-size: 0.8em; float: right;">${totalCount}</span>
+                        <li style="margin-bottom: 10px; cursor: pointer; color: var(--link-color); padding: 5px; border-radius: 4px; background: rgba(0,0,0,0.02);" onclick="window.filterItems('All', this)">
+                            ▾ <strong>All Items</strong> <span style="background: var(--border-color); color: var(--text-color); border-radius: 10px; padding: 2px 6px; font-size: 0.8em; float: right;">${totalCount}</span>
                         </li>
         `;
 
         sortedCategories.forEach(cat => {
             html += `
-                        <li style="margin-bottom: 8px; margin-left: 15px; cursor: pointer; color: var(--text-color); padding: 4px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;" onclick="window.filterThoughts('${cat.replace(/'/g, "\'")}', this)" onmouseover="this.style.background='rgba(0,0,0,0.03)'" onmouseout="this.style.background='transparent'">
+                        <li style="margin-bottom: 8px; margin-left: 15px; cursor: pointer; color: var(--text-color); padding: 4px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;" onclick="window.filterItems('${cat.replace(/'/g, "\'")}', this)" onmouseover="this.style.background='rgba(0,0,0,0.03)'" onmouseout="this.style.background='transparent'">
                             <span>◦ ${cat}</span>
                             <span style="background: var(--border-color); color: var(--text-color); border-radius: 10px; padding: 2px 6px; font-size: 0.8em;">${categories[cat]}</span>
                         </li>
@@ -804,7 +814,7 @@
                 </div>
 
                 <!-- Right Side Grid -->
-                <div id="kb-thoughts-grid" style="flex: 1; display: flex; flex-wrap: wrap; gap: 15px; align-content: flex-start; overflow-y: auto; padding-bottom: 20px; height: 100%;">
+                <div id="kb-items-grid" style="flex: 1; display: flex; flex-wrap: wrap; gap: 15px; align-content: flex-start; overflow-y: auto; padding-bottom: 20px; height: 100%;">
                 </div>
             </div>
         `;
@@ -812,8 +822,8 @@
         grid.innerHTML = html;
 
         // Create the global filter function
-        window.allThoughts = data.rows;
-        window.filterThoughts = function(cat, el) {
+        window.allItems = data.rows;
+        window.filterItems = function(cat, el) {
             // Update active styling
             document.querySelectorAll('#kb-category-tree li').forEach(li => {
                 li.style.fontWeight = 'normal';
@@ -828,22 +838,28 @@
                 else el.style.fontWeight = 'bold';
             }
 
-            const tg = document.getElementById('kb-thoughts-grid');
+            const tg = document.getElementById('kb-items-grid');
             let contentHtml = '';
             
-            const filtered = cat === 'All' ? window.allThoughts : window.allThoughts.filter(t => (t.category || "Uncategorized") === cat);
+            const filtered = cat === 'All' ? window.allItems : window.allItems.filter(t => (t.category || "Uncategorized") === cat);
 
             filtered.forEach(t => {
                 contentHtml += `
-                    <div style="width: 320px; border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; background: var(--bg-color); box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; flex-direction: column; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='none'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.05)';">
-                        <div style="font-size: 0.75em; font-weight: 600; color: #fff; background-color: #5b6ed1; display: inline-block; padding: 3px 8px; border-radius: 12px; margin-bottom: 10px; align-self: flex-start; text-transform: uppercase; letter-spacing: 0.5px;">
-                            ${t.category || "Uncategorized"}
+                    <div style="width: 320px; border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; background: var(--bg-color); box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; flex-direction: column; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='none'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.05)';">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                            <div style="font-size: 0.75em; font-weight: 600; color: #fff; background-color: #5b6ed1; padding: 3px 8px; border-radius: 12px; text-transform: uppercase;">
+                                ${t.category || "Uncategorized"}
+                            </div>
+                            <div title="AI Managed" style="width: 8px; height: 8px; border-radius: 50%; background-color: var(--success-bg);"></div>
                         </div>
-                        <div style="font-size: 1.15em; font-weight: 600; margin-bottom: 10px; color: var(--text-color); line-height: 1.3;">
-                            ${t.concept}
+                        <div style="font-size: 1.15em; font-weight: 600; margin-bottom: 10px; color: var(--text-color);">
+                            ${t.concept || t.key || "Unnamed Item"}
                         </div>
                         <div style="font-size: 0.9em; flex: 1; color: var(--text-muted); line-height: 1.5; margin-bottom: 15px;">
-                            ${t.description}
+                            ${t.description || (t.value ? (typeof t.value === 'string' ? t.value.substring(0,100) : JSON.stringify(t.value).substring(0,100)) : "No description")}
+                        </div>
+                        <div style="font-size: 0.75em; color: var(--text-muted); text-align: right; border-top: 1px solid var(--border-color); padding-top: 8px;">
+                            AI Maintained Entity
                         </div>
                     </div>
                 `;
@@ -853,11 +869,11 @@
 
         // Initialize it with All
         const allItem = document.querySelector('#kb-category-tree li');
-        window.filterThoughts('All', allItem);
+        window.filterItems('All', allItem);
 
     } catch (err) {
         console.error(err);
-        grid.innerHTML = "<div style='padding: 15px;'>Error fetching knowledge base thoughts: " + err.message + "</div>";
+        grid.innerHTML = "<div style='padding: 15px;'>Error fetching knowledge base items: " + err.message + "</div>";
     }
 }
 
@@ -997,7 +1013,7 @@ async function selectStore(name, element, force = false) {
             if (data.status === 'ok') {
                 showAlert("Store deleted successfully.");
                 currentStore = null;
-                document.getElementById('current-store-title').textContent = "Select Store or Knowledge Base";
+                document.getElementById('current-store-title').textContent = "Select Store or Playbook";
                 
                 // Hide all store-specific buttons
                 closeUIModal('btn-delete-store');
