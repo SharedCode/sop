@@ -371,9 +371,7 @@
                     return;
                 }
                 
-                if (databases.length > 1) {
-                    openUIModal('database-section', 'block');
-                }
+                openUIModal('database-section', 'block');
 
                 const userDBs = databases.filter(db => !db.is_system);
                 const systemDBs = databases.filter(db => db.is_system);
@@ -560,7 +558,7 @@
         closeUIModal('pagination-top');
         
         // Reset DB Options
-        closeUIModal('db-options-section');
+        document.getElementById('db-options-section').style.display = 'none';
         document.getElementById('db-options-content').innerHTML = 'Loading...';
         
         fetch(`/api/stores?database=${encodeURIComponent(name)}`)
@@ -598,6 +596,28 @@
             .catch(err => {
                 const list = document.getElementById('store-list');
                 list.innerHTML = `<li class="error-text">Error: ${err.message}</li>`;
+            });
+
+        // Fetch Knowledge Bases
+        fetch(`/api/knowledge-bases?database=${encodeURIComponent(name)}`)
+            .then(res => res.json())
+            .then(kbs => {
+                const kbList = document.getElementById('kb-list');
+                kbList.innerHTML = '';
+                if (!kbs || kbs.length === 0) {
+                    kbList.innerHTML = '<li>No knowledge bases found</li>';
+                    return;
+                }
+                kbs.forEach(kb => {
+                    const li = document.createElement('li');
+                    li.textContent = kb.charAt(0).toUpperCase() + kb.slice(1);
+                    li.onclick = () => selectKnowledgeBase(kb, li);
+                    kbList.appendChild(li);
+                });
+            })
+            .catch(err => {
+                const kbList = document.getElementById('kb-list');
+                kbList.innerHTML = `<li class="error-text">Error: ${err.message}</li>`;
             });
 
         // Fetch DB Options
@@ -657,7 +677,7 @@
             .catch(err => {
                 console.error("Failed to fetch DB options", err);
                 document.getElementById('db-options-content').innerHTML = '<span class="error-text">Failed to load options</span>';
-                openUIModal('db-options-section', 'block');
+                document.getElementById('db-options-section').style.display = 'block';
             });
     }
 

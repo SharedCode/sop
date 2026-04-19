@@ -29,15 +29,37 @@
                 </div>
             </div>
                 </div>
-                <button id="btn-add-database" onclick="showAddDatabaseModal()" title="Add Database" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer; flex-shrink: 0;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
-                    </svg>
-                </button>
+                <div style="display: flex; gap: 4px; align-items: center;">
+                    <button onclick="showDeleteDatabaseModal()" title="Delete Current Database" style="background: none; border: none; color: var(--text-color); cursor: pointer; padding: 4px; flex-shrink: 0;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                            <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                        </svg>
+                    </button>
+                    <button id="btn-add-database" onclick="showAddDatabaseModal()" title="Add Database" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer; flex-shrink: 0;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                        </svg>
+                    </button>
+                </div>
             </div>
         </div>
         <!-- Grouping Stores and Knowledge Bases as children of the Database -->
         <div style="margin-top: 12px;">
+
+            <!-- Database Options Section -->
+            <div id="db-options-section" style="display: none; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                    <div style="margin: 0; font-size: 0.95em; font-weight: normal; cursor: pointer; display: flex; align-items: center;" onclick="toggleSidebarList('db-options-content', 'db-options-caret')" onmouseover="this.style.color='var(--success-bg)'" onmouseout="this.style.color=''">
+                        <span id="db-options-caret" style="display: inline-block; width: 14px; text-align: center; margin-right: 5px; font-size: 0.55em; transition: transform 0.2s; opacity: 0.8;">▶</span>
+                        
+                    </div>
+                </div>
+                <div id="db-options-content" style="font-size: 11px; color: var(--text-muted); overflow-x: auto; line-height: 1.4; padding-left: 20px; display: none;">
+                    Loading...
+                </div>
+            </div>
+
             <!-- Stores Section -->
             <div style="margin-bottom: 12px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
@@ -45,7 +67,7 @@
                         <span id="stores-caret" style="display: inline-block; width: 14px; text-align: center; margin-right: 5px; font-size: 0.8em; transition: transform 0.2s;">▼</span>
                         Stores
                     </h3>
-                    <button id="btn-add-store" onclick="showAddStore()" title="Add new store" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer;">
+                    <button id="btn-add-store" onclick="showAddStore()" title="Add new store" style="display: inline-block !important; background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer; flex-shrink: 0;">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                             <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
                         </svg>
@@ -94,22 +116,6 @@
         </script>
         
         <hr style="margin: 12px 0; border: 0; border-top: 1px solid var(--border-color);">
-        
-        
-        <div id="db-options-section" style="display: none;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px;">
-                <h3 style="margin: 0;">Database Options</h3>
-                <button onclick="showDeleteDatabaseModal()" title="Delete Current Database" style="background: none; border: none; color: var(--text-color); cursor: pointer; padding: 2px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-                        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-                    </svg>
-                </button>
-            </div>
-            <div id="db-options-content" style="font-size: 12px; color: var(--text-muted); overflow-x: auto;">
-                Loading...
-            </div>
-        </div>
     </div>
     
     <!-- Sidebar Footer -->

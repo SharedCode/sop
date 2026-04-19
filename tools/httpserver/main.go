@@ -187,6 +187,8 @@ func main() {
 	http.HandleFunc("/api/databases", handleDatabases)
 	http.HandleFunc("/api/databases/update", handleUpdateDatabase)
 	http.HandleFunc("/api/stores", handleListStores)
+	http.HandleFunc("/api/knowledge-bases", handleListKnowledgeBases)
+	http.HandleFunc("/api/knowledge/thoughts", handleListKnowledgeThoughts)
 	http.HandleFunc("/api/db/options", handleGetDBOptions)
 	http.HandleFunc("/api/store/info", handleGetStoreInfo)
 	http.HandleFunc("/api/store/update", handleUpdateStoreInfo)
@@ -952,6 +954,127 @@ func handleListStores(w http.ResponseWriter, r *http.Request) {
 	}
 
 	json.NewEncoder(w).Encode(visibleStores)
+}
+
+func handleListKnowledgeBases(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	dbName := r.URL.Query().Get("database")
+	ctx := r.Context()
+	dbOpts, err := getDBOptions(ctx, dbName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
+	if err != nil {
+		http.Error(w, "Failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer trans.Rollback(ctx)
+
+	stores, err := trans.GetStores(ctx)
+	if err != nil {
+		http.Error(w, "Failed to list stores: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	visibleKBs := make(map[string]bool)
+	for _, s := range stores {
+		if strings.HasSuffix(s, "/vecs") {
+			kbName := strings.TrimSuffix(s, "/vecs")
+			visibleKBs[kbName] = true
+		}
+	}
+
+	var result []string
+	for kb := range visibleKBs {
+		result = append(result, kb)
+	}
+
+	json.NewEncoder(w).Encode(result)
+}
+
+func handleListKnowledgeThoughts(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	storeName := r.URL.Query().Get("name")
+	dbName := r.URL.Query().Get("database")
+	if storeName == "" {
+		http.Error(w, "Knowledge Base name is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	dbOpts, err := getDBOptions(ctx, dbName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
+	if err != nil {
+		http.Error(w, "Failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer trans.Rollback(ctx)
+
+	dataStoreParams := sop.ConfigureStore(storeName+"/data", true, 10000, "Content", sop.SmallData, "")
+	store, err := database.OpenBtree[ai.ContentKey, string](ctx, dbOpts, dataStoreParams.Name, trans,
+		func(a, b ai.ContentKey) int {
+			if a.ItemID < b.ItemID {
+				return -1
+			}
+			if a.ItemID > b.ItemID {
+				return 1
+			}
+			return 0
+		})
+
+	if err != nil {
+		http.Error(w, "Failed to open Content Btree: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	type Thought struct {
+		ID       string `json:"id"`
+		Category string `json:"category"`
+		Text     string `json:"text"`
+		Desc     string `json:"description"`
+	}
+	var thoughts []Thought
+
+	store.First(ctx)
+	for {
+		key := store.GetCurrentKey().Key
+		if key.ItemID == "" {
+			break
+		}
+		val, _ := store.GetCurrentValue(ctx)
+
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(val), &payload); err == nil {
+			t := Thought{
+				ID:       key.ItemID,
+				Category: fmt.Sprint(payload["category"]),
+				Text:     fmt.Sprint(payload["text"]),
+				Desc:     fmt.Sprint(payload["description"]),
+			}
+			if t.Category == "<nil>" {
+				t.Category = "General"
+			}
+			if t.Desc == "<nil>" {
+				t.Desc = ""
+			}
+			thoughts = append(thoughts, t)
+		}
+
+		ok, _ := store.Next(ctx)
+		if !ok {
+			break
+		}
+	}
+
+	json.NewEncoder(w).Encode(thoughts)
 }
 
 func handleGetDBOptions(w http.ResponseWriter, r *http.Request) {
