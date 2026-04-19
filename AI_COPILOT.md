@@ -28,6 +28,15 @@ We've refactored the UI to introduce a persistent, **floating AI widget**.
     *   `search()` & `select()`: To query data directly.
 *   **Visual Feedback**: When the AI performs a search, it doesn't just tell you the results—it can trigger the main data grid to **refresh** and show you the actual records.
 
+## The Paradigm Shift: Introducing "Agentic Data"
+The problem with today's data is that it is too structured—too rigidly SQL (tabular) or too arbitrarily NoSQL (document-based). Traditional schemas force the user to organize data for the *database's* convenience. This makes it difficult for AI to manage, mine, and aggregate data accurately on behalf of the user.
+
+We invented a new primitive: **Agentic Data**. 
+Instead of forcing data into rigid columns, Agentic Data is auto-managed by the AI. It is stored semantically (via `Concept`, `Category`, and `Description` embeddings) inside dedicated **Playbooks (Knowledge Bases)**. 
+- **AI-Native**: Because the data speaks the AI's language (natural language + embeddings), the LLM can seamlessly mine it, reason over it, and self-correct it without complex SQL joins.
+- **Configurable Personas**: Each Playbook is imbued with "AI-ness". When creating a Playbook, users define a **System Prompt** and an **Embedder**, dictating exactly *how* the AI should manage and draw persona from that specific data pool.
+- **UI Reflection**: In the SOP Data Manager, Agentic Data isn't displayed in a dense tabular grid like standard crud stores. It is rendered as a responsive Card UI, subtly reminding the user that this entity is an "AI Maintained" context module.
+
 ## Under the Hood: A Secure RAG Pipeline
 We purposely designed a **Retrieval-Augmented Generation (RAG)** pipeline to address the critical security needs of database management.
 1.  **Local Power, Global Intelligence**: The backend is built in **Go**, keeping the execution logic and data access strictly local.

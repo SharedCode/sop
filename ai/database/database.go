@@ -314,8 +314,8 @@ func (db *Database) GetStores(ctx context.Context) ([]string, error) {
 	return db.getStores(ctx, false)
 }
 
-// GetPlaybooks returns only the vector databases (playbooks).
-func (db *Database) GetPlaybooks(ctx context.Context) ([]string, error) {
+// GetDomains returns only the vector databases (domains).
+func (db *Database) GetDomains(ctx context.Context) ([]string, error) {
 	return db.getStores(ctx, true)
 }
 

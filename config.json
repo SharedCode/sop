@@ -1,0 +1,62 @@
+{
+    "port": 8080,
+    "databases": [
+        {
+            "name": "dev_db",
+            "path": "/tmp/sop_data/db",
+            "stores_folders": [
+                "/tmp/sop_data/db"
+            ],
+            "mode": "clustered",
+            "redis": "localhost:6379",
+            "erasure_configs": [
+                {
+                    "key": "",
+                    "data_chunks": 1,
+                    "parity_chunks": 1,
+                    "base_paths": [
+                        "/tmp/sop_data/db1",
+                        "/tmp/sop_data/db2"
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "quad",
+            "path": "/tmp/sop_data/qadb",
+            "mode": "clustered",
+            "redis": "localhost:6379",
+            "erasure_configs": [
+                {
+                    "key": "",
+                    "data_chunks": 1,
+                    "parity_chunks": 1,
+                    "base_paths": [
+                        "/tmp/sop_data/qadb1",
+                        "/tmp/sop_data/qadb2"
+                    ]
+                }
+            ]
+        }
+    ],
+    "pageSize": 40,
+    "system_db": {
+        "name": "system",
+        "path": "/tmp/sop_data/system_db",
+        "mode": "clustered",
+        "redis": "localhost:6379",
+        "is_system": true,
+        "erasure_configs": [
+            {
+                "key": "",
+                "data_chunks": 1,
+                "parity_chunks": 1,
+                "base_paths": [
+                    "/tmp/sop_data/sdb1",
+                    "/tmp/sop_data/sdb2"
+                ]
+            }
+        ]
+    },
+    "root_password": "root"
+}

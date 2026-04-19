@@ -1,0 +1,94 @@
+[
+  {
+    "id": "log-001",
+    "category": "Incident Logs",
+    "text": "Discovered black mold in the master bedroom closet on Oct 12th. It covers approximately 3 square feet of the lower drywall.",
+    "description": "Initial discovery of the mold issue."
+  },
+  {
+    "id": "log-002",
+    "category": "Incident Logs",
+    "text": "Maintenance from Essex Management arrived on Oct 15th, sprayed bleach on the wall, and left. They did not fix the underlying leak from the roof.",
+    "description": "Inadequate repair attempt by the landlord."
+  },
+  {
+    "id": "comms-001",
+    "category": "Communication",
+    "text": "Sent formal written notice to Essex Property Management via Certified Mail detailing the ongoing mold issue and requesting professional remediation within 14 days.",
+    "description": "Formal notice sent on Oct 16th."
+  },
+  {
+    "id": "comms-002",
+    "category": "Communication",
+    "text": "Received email from property manager 'Sarah' at Essex blaming condensation and declining to send a licensed mold inspector.",
+    "description": "Landlord denial of responsibility."
+  },
+  {
+    "id": "health-001",
+    "category": "Health & Safety",
+    "text": "Visited urgent care on Oct 20th for severe respiratory irritation and chronic coughing. Doctor noted potential environmental mold exposure as cause.",
+    "description": "Medical record linking symptoms to the apartment environment."
+  },
+  {
+    "id": "legal-001",
+    "category": "Legal & Rights",
+    "text": "Under the State's Implied Warranty of Habitability, the landlord is legally mandated to provide a safe, livable environment, which explicitly includes freedom from toxic mold.",
+    "description": "Reference to local tenant laws."
+  },
+  {
+    "id": "legal-002",
+    "category": "Legal & Rights",
+    "text": "Civil Code Section 1941.1 dictates that if a landlord fails to repair dilapidations affecting habitability, a tenant may utilize 'repair and deduct' or vacate the premises (Constructive Eviction).",
+    "description": "Statute on tenant remedies."
+  },
+  {
+    "id": "action-001",
+    "category": "Action Plan",
+    "text": "Task: Hire a private certified mold inspector to run an air quality test to establish an independent evidentiary baseline.",
+    "description": "Next step for evidence gathering."
+  },
+  {
+    "id": "action-002",
+    "category": "Action Plan",
+    "text": "Task: Draft a Constructive Eviction notice to break the lease without penalty, citing the unlivable conditions and documented health impacts.",
+    "description": "Final legal step to exit the lease."
+  }
+][
+  {
+    "id": "log-001",
+    "category": "Incident Logs",
+    "text": "Discovered black mold in the master bedroom closet on Oct 12th. It covers approximately 3 square feet of the lower drywall.",
+    "description": "Initial discovery of the mold issue."
+  },
+  {
+    "id": "log-002",
+    "category": "Incident Logs",
+    "text": "Maintenance from Wessex Management arrived on Oct 15th, sprayed bleach on the wall, and left. They did not fix the underlying leak from the roof.",
+    "description": "Inadequate repair attempt by the landlord."
+  },
+  {
+    "id": "comms-001",
+    "category": "Communication",
+    "text": "Sent formal written notice to Wessex Property Management via Certified Mail detailing the ongoing mold issue and requesting professional remediation within 14 days.",
+    "description": "Formal notice sent on Oct 16th."
+  },
+  {
+    "id": "comms-002",
+    "category": "Communication",
+    "text": "Received email from property manager 'Sarah' blaming     "text": "Received email from property manageld inspe    "text": "Rescript    "text": "Received ema respons    "text": "Received email from property manager 'Sarah' blaming     "text": "Received email from property manageld inspe    "text": "Repi    "text": "Received email from property manager 'S potential   vironmental mold exposure as cause.",
+    "description": "Medical record linking symptoms to the apartment environment."
+  },
+  {
+    "id": "legal-001",
+    "category": "Legal & Rights",
+    "text": "Under the State's Implied Warranty of Habitability, the landlord is legally mandated to provide a safe, livable environment, which explicitly includes freedom from toxic mold.",
+    "description": "Reference to local tenant laws."
+  },
+  {
+    "id": "legal-002",
+    "category": "Legal & Rights",
+    "text": "Civil Code Secti    "text"dictates that if a landlord fails to repair dilapidations affecting habitability, a tenant may utilize 'repa    "text": "Civil Code Secti    "text"dictates that if a landlord fails to repair dilapidations affecting habitability, a tenant may utilize 'repa    "text": "Civil Code Secti    "text"dictates that if a landlord fails to repair dilapidations affecting habitability, a tenant may utilize 'repa    "text": "Civil Code Secti    "text"dictates that if a landlord fails to repair dilapidations affecting habitability, ay": "Action Plan",
+    "text": "Task: Draft a Constructive Eviction notice to break t   lease     "text": "Task:iting    "text": "Task: Draft a nd documented health impacts.",
+    "description": "Final legal step to exit the lease."
+  }
+]

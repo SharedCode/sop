@@ -1,0 +1,21 @@
+***************
+*** 138,145 ****
+         // Since we don't have the "defaulted" req from factory here, we check cfg.Requirements directly.
+         // If cfg.Requirements is nil, we assume false (safe default).
+         if req != nil && req.Search {
+-                 textIdx, err = search.NewIndex(ctx, db.Options(), tx, storeName)
+-                 if err != nil {
+         }
+  
+         // 3. Load Data & Process in Batches
+--- 138,147 ----
+         // Since we don't have the "defaulted" req from factory here, we check cfg.Requirements directly.
+         // If cfg.Requirements is nil, we assume false (safe default).
+         if req != nil && req.Search {
++                textIdx, err = search.NewIndex(ctx, db.Options(), tx, storeName)
++                if err != nil {
++                        return fmt.Errorf("failed to open text index: %w", err)
++                }
+         }
+  
+         // 3. Load Data & Process in Batches

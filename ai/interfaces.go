@@ -348,6 +348,8 @@ type SessionPayload struct {
 	ExplicitTransaction bool
 	// LastInteractionSteps tracks the number of steps added/executed in the last user interaction.
 	LastInteractionSteps int
+	// ConversationHistory stores the active memory/transcript for the session.
+	ConversationHistory string
 }
 
 // GetDatabase returns the effective current Database name.

@@ -1,0 +1,33 @@
+	case "open_db":
+	case "begin_tx":
+	case "commit_tx":
+	case "rollback_tx":
+	case "open_store":
+	case "scan", "select":
+	case "filter":
+	case "sort":
+	case "project":
+	case "limit":
+	case "join":
+	case "join_right":
+	case "update":
+	case "delete":
+	case "inspect":
+	case "defer":
+	case "assign":
+	case "if":
+	case "loop":
+	case "call_script", "script":
+	case "call_function":
+	case "list_new":
+	case "list_append":
+	case "map_merge":
+	case "first":
+	case "last":
+	case "next":
+	case "previous":
+	case "find":
+	case "add":
+	case "get_current_key":
+	case "get_current_value":
+	case "return":

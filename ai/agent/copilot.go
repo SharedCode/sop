@@ -38,6 +38,9 @@ type CopilotAgent struct {
 	compiledScripts   map[string]CachedScript
 	compiledScriptsMu sync.RWMutex
 
+	// AI Persisted Memory for the session
+	ConversationHistory string
+
 	// API Keys for dynamic switching
 	geminiKey string
 	openAIKey string
@@ -49,17 +52,18 @@ type CopilotAgent struct {
 // Clone creates a new isolated instance of the agent sharing read-only components.
 func (a *CopilotAgent) Clone() ai.Agent[map[string]any] {
 	return &CopilotAgent{
-		Config:          a.Config,
-		brain:           a.brain,
-		registry:        a.registry, // Pointer to registry
-		databases:       a.databases,
-		systemDB:        a.systemDB,
-		lastToolCall:    nil,
-		service:         nil, // Caller should populate this
-		compiledScripts: make(map[string]CachedScript),
-		geminiKey:       a.geminiKey,
-		openAIKey:       a.openAIKey,
-		StoreOpener:     a.StoreOpener,
+		Config:              a.Config,
+		brain:               a.brain,
+		registry:            a.registry, // Pointer to registry
+		databases:           a.databases,
+		systemDB:            a.systemDB,
+		lastToolCall:        nil,
+		service:             nil, // Caller should populate this
+		compiledScripts:     make(map[string]CachedScript),
+		geminiKey:           a.geminiKey,
+		openAIKey:           a.openAIKey,
+		StoreOpener:         a.StoreOpener,
+		ConversationHistory: a.ConversationHistory,
 	}
 }
 
@@ -466,56 +470,64 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 	// Active Domains from Both Local UserDB and Global SystemDB
 	// Extract available domains, add them to context, then do vector search if any match
 	if p := ai.GetSessionPayload(ctx); p != nil && p.ActiveDomain != "" {
-		// Identify the DB containing this domain
-		var domainDB *database.Database
-		dbOptsList := []sop.DatabaseOptions{a.systemDB.Config()}
-		for _, dbOpts := range a.databases {
-			dbOptsList = append(dbOptsList, dbOpts)
-		}
+		domains := strings.Split(p.ActiveDomain, ",")
+		for _, domain := range domains {
+			domain = strings.TrimSpace(domain)
+			if domain == "" || domain == "custom" {
+				continue
+			}
 
-		for _, dbOpts := range dbOptsList {
-			tempDB := database.NewDatabase(dbOpts)
-			kbs := getKBNames(ctx, tempDB)
-			hasDomain := false
-			for _, kb := range kbs {
-				if kb == p.ActiveDomain {
-					hasDomain = true
+			// Identify the DB containing this domain
+			var domainDB *database.Database
+			dbOptsList := []sop.DatabaseOptions{a.systemDB.Config()}
+			for _, dbOpts := range a.databases {
+				dbOptsList = append(dbOptsList, dbOpts)
+			}
+
+			for _, dbOpts := range dbOptsList {
+				tempDB := database.NewDatabase(dbOpts)
+				kbs := getKBNames(ctx, tempDB)
+				hasDomain := false
+				for _, kb := range kbs {
+					if kb == domain {
+						hasDomain = true
+						break
+					}
+				}
+				if hasDomain {
+					domainDB = tempDB
 					break
 				}
 			}
-			if hasDomain {
-				domainDB = tempDB
-				break
-			}
-		}
 
-		if domainDB != nil {
-			if tx, err := domainDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-				vs, err := domainDB.OpenVectorStore(ctx, p.ActiveDomain, tx, vector.Config{UsageMode: ai.BuildOnceQueryMany})
-				if err == nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
-					vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query})
-					if err == nil && len(vecs) > 0 {
-						hits, err := vs.Query(ctx, vecs[0], 5, nil)
-						if err == nil && len(hits) > 0 {
-							toolsDef += fmt.Sprintf("\nActive Domain Expert Context (%s):\n", p.ActiveDomain)
-							for _, hit := range hits {
-								if hit.Score < 0.6 {
-									continue
+			if domainDB != nil {
+				if tx, err := domainDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+					vs, err := domainDB.OpenVectorStore(ctx, domain, tx, vector.Config{UsageMode: ai.BuildOnceQueryMany})
+					if err == nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
+						vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query})
+						if err == nil && len(vecs) > 0 {
+							hits, err := vs.Query(ctx, vecs[0], 5, nil)
+							if err == nil && len(hits) > 0 {
+								toolsDef += fmt.Sprintf("\nActive Playbook Context (%s):\n", domain)
+								for _, hit := range hits {
+									if hit.Score < 0.6 {
+										continue
+									}
+									valStr := ""
+									if str, ok := hit.Payload["_raw_content"].(string); ok {
+										valStr = str
+									} else if str, ok := hit.Payload["content"].(string); ok {
+										valStr = str
+									} else {
+										valStr = fmt.Sprintf("%v", hit.Payload)
+									}
+									toolsDef += fmt.Sprintf("- Context (Score: %.2f): %s\n", hit.Score, valStr)
 								}
-								valStr := ""
-								if str, ok := hit.Payload["_raw_content"].(string); ok {
-									valStr = str
-								} else if str, ok := hit.Payload["content"].(string); ok {
-									valStr = str
-								} else {
-									valStr = fmt.Sprintf("%v", hit.Payload)
-								}
-								toolsDef += fmt.Sprintf("- Context (Score: %.2f): %s\n", hit.Score, valStr)
 							}
 						}
 					}
+					tx.Rollback(ctx)
 				}
-				tx.Rollback(ctx)
 			}
 		}
 	}
@@ -574,7 +586,14 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 
 	// Request rules and context are dynamically retrieved by the Vectorizer from Active Memory Markdown.
 	toolsDef += a.getSystemInstructions(ctx, "")
-	fullPrompt := toolsDef + "\n" + query
+
+	// Inject active memory from Agent state to fight amnesia
+	convHistory := ""
+	if a.ConversationHistory != "" {
+		convHistory = "\n[ACTIVE SESSION MEMORY]\n" + a.ConversationHistory + "\n[/ACTIVE SESSION MEMORY]\n\n"
+	}
+
+	fullPrompt := toolsDef + "\n" + convHistory + "User: " + query
 
 	// Obfuscate Prompt if enabled
 	// Note: We use the session payload's CurrentDB to decide, checking "shouldObfuscate".
@@ -745,8 +764,11 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 					}
 				}
 
+				finalResp := strings.Join(results, "\n")
+				// Remember the interaction
+				a.ConversationHistory += "\nUser: " + query + "\nAssistant: " + finalResp + "\n"
 				// Return tool output directly (Optimization)
-				return strings.Join(results, "\n"), nil
+				return finalResp, nil
 			}
 		}
 
@@ -760,6 +782,7 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 		if a.shouldObfuscate(currentDB) {
 			text = obfuscation.GlobalObfuscator.DeobfuscateText(text)
 		}
+		a.ConversationHistory += "\nUser: " + query + "\nAssistant: " + text + "\n"
 		return text, nil
 	}
 
