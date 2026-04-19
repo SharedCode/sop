@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	log "log/slog"
@@ -306,4 +307,58 @@ func (db *Database) RemoveSearch(ctx context.Context, name string) error {
 		remove(fmt.Sprintf("%s%s", name, suffix))
 	}
 	return lastErr
+}
+
+// GetStores returns the standard stores, excluding system and vector databases.
+func (db *Database) GetStores(ctx context.Context) ([]string, error) {
+	return db.getStores(ctx, false)
+}
+
+// GetPlaybooks returns only the vector databases (playbooks).
+func (db *Database) GetPlaybooks(ctx context.Context) ([]string, error) {
+	return db.getStores(ctx, true)
+}
+
+func (db *Database) getStores(ctx context.Context, vector bool) ([]string, error) {
+	trans, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		return nil, err
+	}
+	defer trans.Rollback(ctx)
+
+	// Since trans in main.go actually supports GetStores, let's use type assertion
+	if getStoresTx, ok := trans.(interface {
+		GetStores(context.Context) ([]string, error)
+	}); ok {
+		allStores, err := getStoresTx.GetStores(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		var stores []string
+		kbLookup := make(map[string]byte)
+		for _, store := range allStores {
+			if !vector {
+				// non-vector
+				if !strings.Contains(store, "/") {
+					stores = append(stores, store)
+				}
+			} else {
+				// vector or text search
+				if strings.Contains(store, "/") {
+					parts := strings.Split(store, "/")
+					if _, exists := kbLookup[parts[0]]; !exists {
+						stores = append(stores, parts[0])
+						kbLookup[parts[0]] = 1
+					}
+				}
+			}
+		}
+		if len(stores) > 0 {
+			return stores, nil
+		}
+		return make([]string, 0), nil
+	}
+
+	return nil, fmt.Errorf("underlying transaction does not support GetStores")
 }
