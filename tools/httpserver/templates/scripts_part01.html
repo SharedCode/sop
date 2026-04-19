@@ -551,7 +551,15 @@
 
         currentStore = null;
         document.getElementById('store-list').innerHTML = '<li>Loading...</li>';
-        document.getElementById('current-store-title').textContent = 'Select a Store';
+        document.getElementById('current-store-title').textContent = 'Select Store or Knowledge Base';
+        
+        // Hide all store-specific buttons
+        closeUIModal('btn-delete-store');
+        closeUIModal('btn-code-store');
+        closeUIModal('btn-edit-store');
+        closeUIModal('btn-view-store');
+        closeUIModal('btn-edit-cel');
+
         document.getElementById('data-grid').innerHTML = '';
         closeUIModal('toolbar');
         closeUIModal('pagination');
@@ -714,6 +722,14 @@
     closeUIModal('toolbar');
     closeUIModal('pagination');
     closeUIModal('pagination-top');
+    
+    // Hide store-specific tool buttons when viewing KB:
+    closeUIModal('btn-code-store');
+    closeUIModal('btn-edit-store');
+    closeUIModal('btn-view-store');
+    closeUIModal('btn-edit-cel');
+    closeUIModal('btn-delete-store');
+
     if (!await closeDetail()) return;
 
     columnWidths = [];
@@ -981,7 +997,7 @@ async function selectStore(name, element, force = false) {
             if (data.status === 'ok') {
                 showAlert("Store deleted successfully.");
                 currentStore = null;
-                document.getElementById('current-store-title').textContent = "Select a Store";
+                document.getElementById('current-store-title').textContent = "Select Store or Knowledge Base";
                 
                 // Hide all store-specific buttons
                 closeUIModal('btn-delete-store');
