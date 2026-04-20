@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
@@ -995,34 +996,7 @@
                     <div style="flex: 1;">
                         <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">LLM / Brain</label>
                         <select id="setup-brain-provider" style="width: 100%; padding: 4px;" onchange="toggleProviderAuth()">
-                            <option value="">Auto / Default</option>
-                            <optgroup label="Google">
-                                <option value="gemini:gemini-3.1-pro">Gemini 3.1 Pro</option>
-                                <option value="gemini:gemini-3.1-flash">Gemini 3.1 Flash</option>
-                                <option value="gemini:gemini-1.5-pro">Gemini 1.5 Pro</option>
-                                <option value="gemini:gemini-1.5-flash">Gemini 1.5 Flash</option>
-                                <option value="gemini:gemma-4">Gemma 4</option>
-                                <option value="gemini:gemma-4-it">Gemma 4 Instruct</option>
-                            </optgroup>
-                            <optgroup label="Anthropic">
-                                <option value="anthropic:claude-code-opus-4.6">Claude Code Opus 4.6</option>
-                                <option value="anthropic:claude-4.6-sonnet">Claude 4.6 Sonnet</option>
-                                <option value="anthropic:claude-4.6-haiku">Claude 4.6 Haiku</option>
-                                <option value="anthropic:claude-3.5-sonnet">Claude 3.5 Sonnet</option>
-                                <option value="anthropic:claude-3.5-haiku">Claude 3.5 Haiku</option>
-                            </optgroup>
-                            <optgroup label="OpenAI">
-                                <option value="openai:gpt-4.2">GPT-4.2</option>
-                                <option value="openai:gpt-4.2-mini">GPT-4.2 Mini</option>
-                                <option value="openai:gpt-4o">GPT-4o</option>
-                                <option value="openai:gpt-4o-mini">GPT-4o Mini</option>
-                                <option value="openai:o3-mini">o3-mini</option>
-                                <option value="openai:o1-preview">o1-preview</option>
-                            </optgroup>
-                            <optgroup label="Local">
-                                <option value="ollama">Ollama (Local Default)</option>
-                                <option value="ollama:gemma-4">Ollama (Gemma 4)</option>
-                            </optgroup>
+                            {{template "llmOptions" .}}
                         </select>
                     </div>
                     <div style="flex: 1;" id="setup-brain-api-container">
@@ -1042,31 +1016,7 @@
                     <div style="flex: 1;">
                         <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">Embedder (Vector Generator)</label>
                         <select id="setup-embedder-provider" style="width: 100%; padding: 4px;" onchange="toggleProviderAuth()">
-                            <option value="">Same as Brain / Default</option>
-                            <optgroup label="Google">
-                                <option value="gemini:text-embedding-005">Gemini (text-embedding-005)</option>
-                                <option value="gemini:text-embedding-004">Gemini (text-embedding-004)</option>
-                                <option value="gemini:text-embedding-003">Gemini (text-embedding-003)</option>
-                            </optgroup>
-                            <optgroup label="OpenAI">
-                                <option value="openai:text-embedding-4-large">OpenAI (text-embedding-4-large)</option>
-                                <option value="openai:text-embedding-3-large">OpenAI (text-embedding-3-large)</option>
-                                <option value="openai:text-embedding-3-small">OpenAI (text-embedding-3-small)</option>
-                                <option value="openai:text-embedding-ada-002">OpenAI (text-embedding-ada-002)</option>
-                            </optgroup>
-                            <optgroup label="Voyage">
-                                <option value="voyage:voyage-3-large">Voyage 3 Large</option>
-                                <option value="voyage:voyage-3">Voyage 3</option>
-                            </optgroup>
-                            <optgroup label="Cohere">
-                                <option value="cohere:embed-english-v3.0">Cohere English v3.0</option>
-                                <option value="cohere:embed-multilingual-v3.0">Cohere Multilingual v3.0</option>
-                            </optgroup>
-                            <optgroup label="Local">
-                                <option value="ollama:nomic-embed-text">Ollama (nomic-embed-text)</option>
-                                <option value="ollama:mxbai-embed-large">Ollama (mxbai-embed-large)</option>
-                                <option value="ollama:all-minilm">Ollama (all-minilm)</option>
-                            </optgroup>
+                            {{template "embedderOptions" .}}
                         </select>
                     </div>
                     <div style="flex: 1; display: none;" id="setup-embedder-api-container">

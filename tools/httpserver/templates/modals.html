@@ -116,34 +116,7 @@
             
             <!-- Quick LLM Engine Setup -->
             <select id="chat-settings-provider" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="LLM Provider" onchange="toggleInlineAuthFields('chat-settings-provider', 'chat-settings-api-key')">
-                <option value="">{{if eq .LLMProvider "gemini"}}Gemini (Default){{else if eq .LLMProvider "openai"}}OpenAI (Default){{else if eq .LLMProvider "anthropic"}}Anthropic (Default){{else if eq .LLMProvider "ollama"}}Ollama (Default){{else}}Auto (Default){{end}}</option>
-                <optgroup label="Anthropic">
-                    <option value="anthropic:claude-code-opus-4.6">Claude Code Opus 4.6</option>
-                    <option value="anthropic:claude-4.6-sonnet">Claude 4.6 Sonnet</option>
-                    <option value="anthropic:claude-4.6-haiku">Claude 4.6 Haiku</option>
-                    <option value="anthropic:claude-3.5-sonnet">Claude 3.5 Sonnet</option>
-                    <option value="anthropic:claude-3.5-haiku">Claude 3.5 Haiku</option>
-                </optgroup>
-                <optgroup label="Google">
-                    <option value="gemini:gemini-3.1-pro">Gemini 3.1 Pro</option>
-                    <option value="gemini:gemini-3.1-flash">Gemini 3.1 Flash</option>
-                    <option value="gemini:gemini-1.5-pro">Gemini 1.5 Pro</option>
-                    <option value="gemini:gemini-1.5-flash">Gemini 1.5 Flash</option>
-                    <option value="gemini:gemma-4">Gemma 4</option>
-                    <option value="gemini:gemma-4-it">Gemma 4 Instruct</option>
-                </optgroup>
-                <optgroup label="OpenAI">
-                    <option value="openai:gpt-4.2">GPT-4.2</option>
-                    <option value="openai:gpt-4.2-mini">GPT-4.2 Mini</option>
-                    <option value="openai:gpt-4o">GPT-4o</option>
-                    <option value="openai:gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="openai:o3-mini">o3-mini</option>
-                    <option value="openai:o1-preview">o1-preview</option>
-                </optgroup>
-                <optgroup label="Local">
-                    <option value="ollama">Ollama</option>
-                    <option value="ollama:gemma-4">Ollama (Gemma 4)</option>
-                </optgroup>
+                {{template "llmOptions" .}}
             </select>
             <input type="password" id="chat-settings-api-key" placeholder="API Key" style="width: 80px; padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="API Key / Base URL">
 
@@ -185,34 +158,7 @@
         <div style="margin-bottom: 10px;">
             <label style="display: block; margin-bottom: 4px; font-weight: bold;">Provider / Model</label>
             <select id="chat-settings-provider-overlay" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="toggleChatSettingsFields()">
-                <option value="">{{if eq .LLMProvider "gemini"}}System Default (Gemini){{else if eq .LLMProvider "openai"}}System Default (OpenAI){{else if eq .LLMProvider "anthropic"}}System Default (Anthropic){{else if eq .LLMProvider "ollama"}}System Default (Ollama){{else}}System Default (Auto){{end}}</option>
-                <optgroup label="Anthropic">
-                    <option value="anthropic:claude-code-opus-4.6">Claude Code Opus 4.6</option>
-                    <option value="anthropic:claude-4.6-sonnet">Claude 4.6 Sonnet</option>
-                    <option value="anthropic:claude-4.6-haiku">Claude 4.6 Haiku</option>
-                    <option value="anthropic:claude-3.5-sonnet">Claude 3.5 Sonnet</option>
-                    <option value="anthropic:claude-3.5-haiku">Claude 3.5 Haiku</option>
-                </optgroup>
-                <optgroup label="Google">
-                    <option value="gemini:gemini-3.1-pro">Gemini 3.1 Pro</option>
-                    <option value="gemini:gemini-3.1-flash">Gemini 3.1 Flash</option>
-                    <option value="gemini:gemini-1.5-pro">Gemini 1.5 Pro</option>
-                    <option value="gemini:gemini-1.5-flash">Gemini 1.5 Flash</option>
-                    <option value="gemini:gemma-4">Gemma 4</option>
-                    <option value="gemini:gemma-4-it">Gemma 4 Instruct</option>
-                </optgroup>
-                <optgroup label="OpenAI">
-                    <option value="openai:gpt-4.2">GPT-4.2</option>
-                    <option value="openai:gpt-4.2-mini">GPT-4.2 Mini</option>
-                    <option value="openai:gpt-4o">GPT-4o</option>
-                    <option value="openai:gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="openai:o3-mini">o3-mini</option>
-                    <option value="openai:o1-preview">o1-preview</option>
-                </optgroup>
-                <optgroup label="Local">
-                    <option value="ollama">Ollama (Base URL optional)</option>
-                    <option value="ollama:gemma-4">Ollama (Gemma 4)</option>
-                </optgroup>
+                {{template "llmOptions" .}}
             </select>
         </div>
         <div id="chat-settings-url-container" style="margin-bottom: 10px; display: none;">
@@ -349,36 +295,33 @@
                 <label class="form-label" style="display:block; margin-bottom:5px;">Playbook Name:</label>
                 <input type="text" id="new-kb-name" class="form-input" style="width: 100%; box-sizing: border-box;" placeholder="e.g. Coding Rules, Sales Protocol">
             </div>
+
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:block; margin-bottom:5px;">Embedder:</label>
+                <select id="new-kb-embedder" class="form-input" style="width: 100%;">
+                    {{template "embedderOptions" .}}
+                </select>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="new-kb-is-persona" onchange="document.getElementById('new-kb-sysprompt-container').style.display = this.checked ? 'block' : 'none'"> 
+                    Use as Persona (Agentic Playbook)
+                </label>
+            </div>
             
             <!-- AI Configuration Section for Agentic Data -->
-            <div style="margin-bottom: 15px; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.02);">
+            <div id="new-kb-sysprompt-container" style="display:none; margin-bottom: 15px; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.02);">
                 <div style="font-size: 13px; font-weight: bold; margin-bottom: 8px; color: var(--key-color);">🤖 Agentic Data Configuration</div>
                 <div style="font-size: 11px; margin-bottom: 10px; color: var(--text-muted);">
                     Configure the AI that manages and draws persona from this Playbook data.
                 </div>
                 
-                <label class="form-label" style="display:block; margin-bottom:5px; font-size: 12px;">System Prompt (Persona Focus):</label>
-                <textarea id="new-kb-sysprompt" class="form-input" style="width: 100%; height: 60px; box-sizing: border-box; resize: vertical; margin-bottom: 10px;" placeholder="You are a senior data miner and sales expert..."></textarea>
-                
-                <div style="display: flex; gap: 10px;">
-                    <div style="flex: 1;">
-                        <label class="form-label" style="display:block; margin-bottom:5px; font-size: 12px;">Embedder:</label>
-                        <select id="new-kb-embedder" class="form-input" style="width: 100%;">
-                            <option value="default">Default</option>
-                            <option value="text-embedding-3-small">OpenAI text-embedding-3</option>
-                            <option value="minilm">MiniLM (Local)</option>
-                        </select>
-                    </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <label class="form-label" style="font-size: 12px; margin: 0;">System Prompt (Persona Focus):</label>
+                    <button onclick="enhanceTextWithAI(this, 'new-kb-sysprompt', 'system_prompt', ['new-kb-name'])" style="background: none; border: none; color: var(--key-color); cursor: pointer; font-size: 11px; padding: 0;">✨ Enhance with AI</button>
                 </div>
-            </div>
-
-            <div style="margin-bottom: 15px;">
-                <label class="form-label" style="display:block; margin-bottom:5px;">Template:</label>
-                <select id="new-kb-template" class="form-input" style="width: 100%;">
-                    <option value="empty">Empty Playbook</option>
-                    <option value="sop_framework">Pre-load SOP Framework</option>
-                    <option value="medical">Pre-load Medical Expert</option>
-                </select>
+                <textarea id="new-kb-sysprompt" class="form-input" style="width: 100%; height: 60px; box-sizing: border-box; resize: vertical; margin-bottom: 10px;" placeholder="You are a senior data miner and sales expert..."></textarea>
             </div>
         </div>
         <div class="modal-footer">
@@ -408,3 +351,4 @@
     </div>
 </div>
 {{end}}
+

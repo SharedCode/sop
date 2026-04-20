@@ -1,5 +1,62 @@
 {{define "scripts_part11"}}
 <script>
+    async function enhanceTextWithAI(buttonElement, targetTextareaId, intent, contextFields = []) {
+        const textarea = document.getElementById(targetTextareaId);
+        if (!textarea) return;
+        
+        const originalText = textarea.value.trim();
+        if (!originalText) {
+            showAlert("Please enter some initial text describing what you want.");
+            return;
+        }
+
+        let contextText = "";
+        if (contextFields && contextFields.length > 0) {
+            contextFields.forEach(id => {
+                const el = document.getElementById(id);
+                if (el && el.value) {
+                    let labelText = document.querySelector(`label[for='${id}']`)?.innerText;
+                    if (!labelText && el.previousElementSibling && el.previousElementSibling.tagName === 'LABEL') {
+                        labelText = el.previousElementSibling.innerText;
+                    }
+                    contextText += (labelText || id + ":") + " " + el.value + "\n";
+                }
+            });
+        }
+        
+        const originalBtnText = buttonElement.innerHTML;
+        buttonElement.innerHTML = '✨ Enhancing...';
+        buttonElement.style.opacity = '0.5';
+        buttonElement.disabled = true;
+        textarea.disabled = true;
+
+        try {
+            const response = await fetch('/api/tool/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tool: 'enhance_text', text: originalText, intent: intent, context: contextText })
+            });
+
+            if (!response.ok) {
+                const errResult = await response.text();
+                throw new Error(errResult || "Failed to enhance text");
+            }
+
+            const data = await response.json();
+            if (data && data.enhanced_text) {
+                textarea.value = data.enhanced_text;
+            }
+        } catch(e) {
+            console.error("Enhance Text Error:", e);
+            showAlert("Failed to enhance text. Make sure an LLM is configured.");
+        } finally {
+            buttonElement.innerHTML = originalBtnText;
+            buttonElement.disabled = false;
+            buttonElement.style.opacity = '1';
+            textarea.disabled = false;
+        }
+    }
+
     function validateDbForm(prefix) {
         const name = document.getElementById(`${prefix}-name`).value.trim();
         const path = document.getElementById(`${prefix}-path`).value.trim();
@@ -894,7 +951,7 @@
             }
             
         } catch (error) {
-            alert('Failed to install: ' + error.message);
+            showAlert('Failed to install: ' + error.message);
             btnElement.disabled = false;
             btnElement.innerText = originalText;
             btnElement.style.opacity = '1';
@@ -950,10 +1007,8 @@ function saveNewKB() {
         }
     };
     
-    apiCall('/api/knowledge/preload', {
-        method: 'POST',
-        body: JSON.stringify(expertiseData)
-    }).then(() => {
+    apiCall('/api/knowledge/preload', 'POST', expertiseData)
+    .then(() => {
         showAlert("Playbook created successfully!");
         closeAddKBModal();
         if (typeof selectDatabase === "function") {

@@ -204,6 +204,7 @@ func main() {
 	http.HandleFunc("/api/store/item/delete", handleDeleteItem)
 	http.HandleFunc("/api/admin/validate", handleValidateAdminToken)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
+	http.HandleFunc("/api/tool/execute", handleToolExecute)
 	http.HandleFunc("/api/ai/session/close", handleCloseSession)
 	http.HandleFunc("/api/ai/feedback", handleAIFeedback)
 	http.HandleFunc("/api/scripts/execute", withAuth(handleExecuteScript))

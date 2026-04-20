@@ -205,8 +205,8 @@
          });
     }
     
-    // Override native alert (optional, but safer to rename usages explicitly first)
-    // window.alert = function(msg) { showAlert(msg); };
+    // Override native alert to use our themed custom modal
+    window.alert = function(msg) { showAlert(msg); };
 
     // Escape Key Handler for Modals (KeyDown)
     document.addEventListener('keydown', function(event) {
@@ -1234,11 +1234,11 @@ function savePlaybookItem() {
     const desc = document.getElementById('new-pb-item-desc').value.trim();
     
     if (!name) {
-        alert("Topic/Name is required.");
+        showAlert("Topic/Name is required.");
         return;
     }
     if (!desc) {
-        alert("Content/Description is required.");
+        showAlert("Content/Description is required.");
         return;
     }
     
@@ -1276,11 +1276,11 @@ function savePlaybookItem() {
             const kbNameDisplay = currentStore.replace('/data', '');
             selectKnowledgeBase(kbNameDisplay, document.querySelector('#sidebar li.active'));
         } else {
-            alert(data.message || 'Error occurred');
+            showAlert(data.message || 'Error occurred');
         }
     })
     .catch(err => {
-        alert(err.message);
+        showAlert(err.message);
     });
 }
 

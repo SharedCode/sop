@@ -999,3 +999,69 @@ func handleCloseSession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"success", "message":"Session closed successfully"}`))
 }
+
+func handleToolExecute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Tool    string `json:"tool"`
+		Text    string `json:"text"`
+		Intent  string `json:"intent"`
+		Context string `json:"context"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Error("Invalid JSON body", "error", err)
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	agentSvc, exists := loadedAgents["copilot"]
+	if !exists {
+		http.Error(w, "Default AI agent not configured", http.StatusInternalServerError)
+		return
+	}
+
+	switch req.Tool {
+	case "enhance_text":
+		prompt := fmt.Sprintf("Can you help me enhance this text for a %s?\n\n", strings.ReplaceAll(req.Intent, "_", " "))
+		if req.Context != "" {
+			prompt += fmt.Sprintf("Context / Details about the project:\n%s\n\n", req.Context)
+		}
+		prompt += fmt.Sprintf("Here is what I have so far:\n%s\n\nPlease improve it. Return ONLY the improved text, no conversational filler or markdown formatting.", req.Text)
+
+		ctx := context.Background()
+
+		if err := agentSvc.Open(ctx); err != nil {
+			log.Error("Failed to open agent session", "error", err)
+			http.Error(w, "Failed to initialize AI session", http.StatusInternalServerError)
+			return
+		}
+		defer agentSvc.Close(ctx)
+
+		response, err := agentSvc.Ask(ctx, prompt)
+		if err != nil {
+			log.Error("Failed to ask agent", "error", err)
+			http.Error(w, "Failed to generate text", http.StatusInternalServerError)
+			return
+		}
+
+		response = strings.TrimSpace(response)
+		response = strings.TrimPrefix(response, "```xml")
+		response = strings.TrimPrefix(response, "```markdown")
+		response = strings.TrimPrefix(response, "```json")
+		response = strings.TrimPrefix(response, "```")
+		response = strings.TrimSuffix(response, "```")
+		response = strings.TrimSpace(response)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"enhanced_text": response,
+		})
+	default:
+		http.Error(w, "Unknown tool", http.StatusBadRequest)
+	}
+}
