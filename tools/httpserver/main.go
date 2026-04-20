@@ -134,7 +134,11 @@ func main() {
 	}
 
 	if config.ConfigFile == "" {
-		config.ConfigFile = "config.json"
+		if cwd, err := os.Getwd(); err == nil {
+			config.ConfigFile = filepath.Join(cwd, "config.json")
+		} else {
+			config.ConfigFile = "config.json"
+		}
 	}
 
 	if _, err := os.Stat(config.ConfigFile); err == nil {

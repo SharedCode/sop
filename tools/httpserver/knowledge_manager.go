@@ -71,8 +71,8 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// We append _knowledge_base to create the specific vector store namespace
-	storeName := req.Expertise + "_knowledge_base"
+	// We append _kb to create the specific vector store namespace
+	storeName := req.Expertise + "_kb"
 	if req.KnowledgeBaseName != "" {
 		storeName = req.KnowledgeBaseName
 	}

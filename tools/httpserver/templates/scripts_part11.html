@@ -902,47 +902,66 @@
     }
 
 function showAddKnowledgeBase() {
+    console.log("showAddKnowledgeBase triggered!");
     window.currentAdminToken = null;
     openUIModal('add-kb-modal');
 }
 function closeAddKBModal() {
     closeUIModal('add-kb-modal');
-    document.getElementById('new-kb-name').value = '';
-    document.getElementById('new-kb-template').value = 'empty';
+    const nameEl = document.getElementById('new-kb-name');
+    if (nameEl) nameEl.value = '';
+    const tmplEl = document.getElementById('new-kb-template');
+    if (tmplEl) tmplEl.value = 'empty';
 }
+function togglePersonaSysPrompt() {
+    const isChecked = document.getElementById('new-kb-is-persona').checked;
+    document.getElementById('new-kb-sysprompt-container').style.display = isChecked ? 'block' : 'none';
+}
+
 function saveNewKB() {
     if (!currentDatabase) {
         showAlert("Please select a Database first.");
         return;
     }
     const kbName = document.getElementById('new-kb-name').value.trim();
-    const template = document.getElementById('new-kb-template').value;
+    
+    // Get new fields
+    const selectedTypeRadio = document.querySelector('input[name="new-kb-type"]:checked');
+    const kbType = selectedTypeRadio ? selectedTypeRadio.value : "simple_data";
+    const isPersona = document.getElementById('new-kb-is-persona') ? document.getElementById('new-kb-is-persona').checked : false;
+    const sysPrompt = isPersona && document.getElementById('new-kb-sysprompt') ? document.getElementById('new-kb-sysprompt').value.trim() : "";
+    const embedder = document.getElementById('new-kb-embedder') ? document.getElementById('new-kb-embedder').value : "text-embedding-3-small";
+
     if (!kbName) {
-        showAlert("Please enter a Knowledge Base name.");
+        showAlert("Please enter a Playbook name.");
         return;
     }
     
-    if (template !== "empty") {
-        // Use the existing preload endpoint 
-        const expertiseData = {
-            expertise_id: template,
-            database_name: currentDatabase
-            // we should technically pass kbName to the preload or rename the kb afterwards, but standard logic prepends _knowledge_base
-        };
-        apiCall('/api/knowledge/preload', {
-            method: 'POST',
-            body: JSON.stringify(expertiseData)
-        }).then(() => {
-            showAlert("Knowledge Base preloaded successfully!");
-            closeAddKBModal();
-        }).catch(err => {
-            showAlert("Error creating Knowledge Base: " + err.message);
-        });
-    } else {
-        // Here we just use the logic for creating a vector store. Just like creating a store.
-        showAlert("Vector DB logic to be implemented for empty stores!");
+    // Pass everything to the endpoint, even if empty template
+    const expertiseData = {
+        expertise_id: "empty",
+        database_name: currentDatabase,
+        knowledge_base_name: kbName + "_kb",
+        custom_data: { 
+            type: kbType,
+            is_persona: isPersona,
+            system_prompt: sysPrompt,
+            embedder: embedder
+        }
+    };
+    
+    apiCall('/api/knowledge/preload', {
+        method: 'POST',
+        body: JSON.stringify(expertiseData)
+    }).then(() => {
+        showAlert("Playbook created successfully!");
         closeAddKBModal();
-    }
+        if (typeof selectDatabase === "function") {
+            selectDatabase(currentDatabase, true, kbName + "_kb");
+        }
+    }).catch(err => {
+        showAlert("Error creating Playbook: " + err.message);
+    });
 }
 </script>
 {{end}}

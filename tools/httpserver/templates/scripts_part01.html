@@ -231,7 +231,10 @@
                 'add-database-modal',
                 'delete-database-modal',
                 'environments-modal',
-                'switch-env-modal'
+                'switch-env-modal',
+                
+                // Playbooks
+                'add-kb-modal'
                 // NOTE: setup-wizard moved to keyup handler to prevent confirmation dialog conflict
             ];
             
@@ -245,6 +248,7 @@
 
                     // Specific close functions handling
                     if (id === 'add-modal') closeAdd();
+                    else if (id === 'add-kb-modal') closeAddKBModal();
                     else if (id === 'global-alert-modal') closeGlobalAlert();
                     else if (id === 'global-confirm-modal') closeGlobalConfirm();
                     else if (id === 'preferences-modal') closePreferences();
@@ -621,6 +625,10 @@
                     li.onclick = () => selectKnowledgeBase(kb, li);
                     kbList.appendChild(li);
                     
+                    if (storeToSelect && kb === storeToSelect) {
+                        setTimeout(() => selectKnowledgeBase(kb, li), 50);
+                    }
+                    
                     if (domainSelect) {
                         const existing = Array.from(domainSelect.options).find(o => o.value === kb);
                         if (!existing) {
@@ -752,7 +760,7 @@
 
     document.getElementById('current-store-title').textContent = "KB: " + name;
     const grid = document.getElementById('data-grid');
-    grid.innerHTML = "<div style='padding: 15px;'>Fetching knowledge base items...</div>";
+    grid.innerHTML = "<div style='padding: 15px;'>Fetching thoughts...</div>";
     
     try {
         const res = await fetch(`/api/knowledge/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`);
@@ -766,12 +774,12 @@
             }
         } else {
             console.error("fetch failed", res.status);
-            grid.innerHTML = "<div style='padding: 15px;'>Error fetching items. Status: " + res.status + "</div>";
+            grid.innerHTML = "<div style='padding: 15px;'>Error fetching thoughts. Status: " + res.status + "</div>";
             return;
         }
         
         if (!data || !data.rows || data.rows.length === 0) {
-            grid.innerHTML = "<div style='padding: 15px;'>No items found in this Knowledge Base.</div>";
+            grid.innerHTML = "<div style='padding: 15px;'>No thoughts found in this Playbook.</div>";
             return;
         }
 
@@ -792,7 +800,7 @@
                 
                 <!-- Left Sidebar Treeview -->
                 <div style="width: 250px; min-width: 250px; border-right: 1px solid var(--border-color); padding-right: 15px; height: 100%; overflow-y: auto;">
-                    <h3 style="margin-top: 0; font-size: 1.1em; color: var(--text-color); margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">Knowledge Categories</h3>
+                    <h3 style="margin-top: 0; font-size: 1.1em; color: var(--text-color); margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">Categories</h3>
                     
                     <ul id="kb-category-tree" style="list-style: none; padding-left: 0; margin-top: 0; font-size: 0.95em;">
                         <li style="margin-bottom: 10px; cursor: pointer; color: var(--link-color); padding: 5px; border-radius: 4px; background: rgba(0,0,0,0.02);" onclick="window.filterItems('All', this)">
@@ -814,7 +822,18 @@
                 </div>
 
                 <!-- Right Side Grid -->
-                <div id="kb-items-grid" style="flex: 1; display: flex; flex-wrap: wrap; gap: 15px; align-content: flex-start; overflow-y: auto; padding-bottom: 20px; height: 100%;">
+                <div style="flex: 1; display: flex; flex-direction: column; height: 100%;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 5px; border-bottom: 1px solid var(--border-color);">
+                        <h3 id="kb-items-header-title" style="margin: 0; font-size: 1.1em; color: var(--text-color);">All Items</h3>
+                        <button class="primary-btn" onclick="showAddPlaybookItem()" style="display: flex; align-items: center; gap: 5px; padding: 6px 12px; border: none; background-color: var(--success-bg); color: #fff; border-radius: 4px; cursor: pointer; font-size: 0.9em; font-weight: bold;">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                              <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                            </svg>
+                            Add Item
+                        </button>
+                    </div>
+                    <div id="kb-items-grid" style="flex: 1; display: flex; flex-wrap: wrap; gap: 15px; align-content: flex-start; overflow-y: auto; padding-bottom: 20px; height: 100%;">
+                    </div>
                 </div>
             </div>
         `;
@@ -836,6 +855,12 @@
                 const strong = el.querySelector('strong');
                 if (strong) strong.style.fontWeight = 'bold';
                 else el.style.fontWeight = 'bold';
+            }
+
+            // Update Header Title
+            const headerTitle = document.getElementById('kb-items-header-title');
+            if (headerTitle) {
+                headerTitle.textContent = cat === 'All' ? 'All Items' : 'Items in: ' + cat;
             }
 
             const tg = document.getElementById('kb-items-grid');
@@ -873,7 +898,7 @@
 
     } catch (err) {
         console.error(err);
-        grid.innerHTML = "<div style='padding: 15px;'>Error fetching knowledge base items: " + err.message + "</div>";
+        grid.innerHTML = "<div style='padding: 15px;'>Error fetching thoughts: " + err.message + "</div>";
     }
 }
 
@@ -1195,6 +1220,72 @@ async function selectStore(name, element, force = false) {
     let selectedItems = new Set(); // Set of keys selected for deletion
     let columnsInitialized = false; // Flag to trigger auto-column-hiding once per store load
 
+// --- Playbook Adding Items Logic ---
+function showAddPlaybookItem() {
+    window.currentAdminToken = null;
+    openUIModal('add-playbook-item-modal');
+    document.getElementById('new-pb-item-name').value = '';
+    document.getElementById('new-pb-item-desc').value = '';
+}
+
+function savePlaybookItem() {
+    const category = document.getElementById('new-pb-item-category').value.trim() || 'General';
+    const name = document.getElementById('new-pb-item-name').value.trim();
+    const desc = document.getElementById('new-pb-item-desc').value.trim();
+    
+    if (!name) {
+        alert("Topic/Name is required.");
+        return;
+    }
+    if (!desc) {
+        alert("Content/Description is required.");
+        return;
+    }
+    
+    const keyPayload = {
+        ItemID: crypto.randomUUID(),
+        Key: name,
+        TenantID: 'default'
+    };
+    
+    const valuePayload = JSON.stringify({
+        id: keyPayload.ItemID,
+        category: category,
+        text: desc,
+        description: desc,
+        topic: name,
+        concept: name
+    });
+    
+    const reqBody = {
+        database: currentDatabase,
+        store: currentStore,
+        key: keyPayload,
+        value: valuePayload
+    };
+    
+    fetch('/api/store/item/add', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify(reqBody)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status === 'success') {
+            closeUIModal('add-playbook-item-modal');
+            const kbNameDisplay = currentStore.replace('/data', '');
+            selectKnowledgeBase(kbNameDisplay, document.querySelector('#sidebar li.active'));
+        } else {
+            alert(data.message || 'Error occurred');
+        }
+    })
+    .catch(err => {
+        alert(err.message);
+    });
+}
+
     // --- Column Persistence ---
 </script>
 {{end}}
+
+
