@@ -15,11 +15,11 @@ Instead of treating the AI as a chat partner that needs to be explicitly told th
 
 ## 2. The SOP Advantage (Why B-Trees Make This Possible)
 
-Standard vector DBs (HNSW graphs) struggle with massive reorganization because updating clusters requires complex graph rebuilds. SOP's transactional B-Tree architecture trivializes this:
-* **The `CentroidID` Abstraction:** The `Vectors` B-Tree keys (`ai.VectorKey{CentroidID, Distance, ItemID}`) strictly reference the integer `CentroidID`. 
-* **Zero-Cost Centroid Updates:** The mathematical center (the Centroid's vector itself) can be updated via a rolling average in the `Centroids` B-Tree *without* modifying the thousands of child vectors mapped to it.
-* **Physical Data Locality:** Because vectors are indexed by `CentroidID` first, all "Thoughts" in a category are stored contiguously on disk. Scanning a category is blistering fast.
-* **ACID Re-Categorization:** If a category gets too large, splitting it into two new Centroids and reassigning thousands of vectors is a safe, ACID-compliant series of B-Tree Deletes and Inserts. No graph corruption.
+Standard vector DBs (HNSW graphs) struggle with massive reorganization because updating clusters requires complex graph rebuilds or mathematical $O(N)$ K-Means splits. SOP's transactional B-Tree architecture combined with **Semantic Anchors** trivializes this:
+* **The `CentroidID` Abstraction:** The `Vectors` B-Tree keys strictly reference the `CentroidID` based on semantic relationships. 
+* **Zero-Cost Categorization:** Instead of mathematical cluster splitting, the LLM assigns explicit "Semantic Anchors" to thoughts during ingestion.
+* **Physical Data Locality:** Because vectors are indexed by `CentroidID` first, all "Thoughts" in a category are stored contiguously on disk. Scanning a semantic category is blistering fast.
+* **Asynchronous Sleep Cycle:** The LLM periodically reviews dense centroids (e.g., "Databases") and surgically deduces new sub-categories (e.g., "Vector DBs", "Graph DBs"). Moving vectors between semantic categories is a safe, ACID-compliant series of B-Tree Deletes and Inserts, completely evading mathematical graph corruption.
 
 ---
 
