@@ -62,18 +62,18 @@ func (m *MemoryManager[T]) IngestThought(ctx context.Context, text string, data 
 
 // EnsureCategory guarantees a Semantic Anchor physically exists in the B-Tree for a string noun.
 func (m *MemoryManager[T]) EnsureCategory(ctx context.Context, categoryName string) (sop.UUID, error) {
-	centroidsTree, err := m.store.Centroids(ctx)
+	categoriesTree, err := m.store.Categories(ctx)
 	if err != nil {
 		return sop.NilUUID, err
 	}
 
-	ok, err := centroidsTree.First(ctx)
+	ok, err := categoriesTree.First(ctx)
 	for ok && err == nil {
-		c, _ := centroidsTree.GetCurrentValue(ctx)
+		c, _ := categoriesTree.GetCurrentValue(ctx)
 		if c != nil && strings.EqualFold(c.Name, categoryName) {
-			return centroidsTree.GetCurrentKey().Key, nil
+			return categoriesTree.GetCurrentKey().Key, nil
 		}
-		ok, err = centroidsTree.Next(ctx)
+		ok, err = categoriesTree.Next(ctx)
 	}
 
 	vecs, err := m.embedder.EmbedTexts(ctx, []string{categoryName})
@@ -82,15 +82,15 @@ func (m *MemoryManager[T]) EnsureCategory(ctx context.Context, categoryName stri
 	}
 
 	CID := sop.NewUUID()
-	anchor := &Centroid{
+	anchor := &Category{
 		ID:           CID,
 		Name:         categoryName,
 		Description:  "LLM Generated Semantic Anchor",
 		CenterVector: vecs[0],
-		VectorCount:  0,
+		ItemCount:  0,
 	}
 
-	cid, err := m.store.AddCentroid(ctx, anchor)
+	cid, err := m.store.AddCategory(ctx, anchor)
 	if err != nil {
 		return sop.NilUUID, err
 	}
@@ -98,39 +98,39 @@ func (m *MemoryManager[T]) EnsureCategory(ctx context.Context, categoryName stri
 }
 
 // SleepCycle performs Asynchronous Memory Consolidation.
-// It runs periodically (nightly) to scan heavily packed Centroids and asks the LLM
+// It runs periodically (nightly) to scan heavily packed Categories and asks the LLM
 // if deeper, more granular categories should be split off.
 func (m *MemoryManager[T]) SleepCycle(ctx context.Context) error {
-	centroidsTree, err := m.store.Centroids(ctx)
+	categoriesTree, err := m.store.Categories(ctx)
 	if err != nil {
 		return err
 	}
 
-	ok, err := centroidsTree.First(ctx)
+	ok, err := categoriesTree.First(ctx)
 	for ok && err == nil {
-		c, _ := centroidsTree.GetCurrentValue(ctx)
+		c, _ := categoriesTree.GetCurrentValue(ctx)
 
 		// If an Anchor is getting extremely dense, "Reflect" on it.
-		if c != nil && c.VectorCount > m.sleepThreshold {
+		if c != nil && c.ItemCount > m.sleepThreshold {
 			err = m.reflectAndReassociate(ctx, c)
 			if err != nil {
 				fmt.Printf("Sleep cycle reflection failed for %s: %v\n", c.Name, err)
 			}
 		}
-		ok, err = centroidsTree.Next(ctx)
+		ok, err = categoriesTree.Next(ctx)
 	}
 
 	return nil
 }
 
-// reflectAndReassociate pulls the payloads from a dense centroid, asks LLM to find
+// reflectAndReassociate pulls the items from a dense category, asks LLM to find
 // sub-themes, and surgically moves specific thoughts without rewriting the whole cluster.
-func (m *MemoryManager[T]) reflectAndReassociate(ctx context.Context, anchor *Centroid) error {
+func (m *MemoryManager[T]) reflectAndReassociate(ctx context.Context, anchor *Category) error {
 	// 1. Scan vectors stored under anchor.ID
-	// 2. Sample N payloads.
+	// 2. Sample N items.
 	// 3. Prompt LLM: "These thoughts are under '" + anchor.Name + "'. Can you identify 3 tighter sub-categories?"
 	// 4. EnsureCategory() for each new LLM deduction.
-	// 5. Compare semantic distance of payloads to the new sub-categories vs the old anchor.
-	// 6. Delete old VectorKey, insert new VectorKey for payloads closer to the new sub-categories, logically re-adjusting!
+	// 5. Compare semantic distance of items to the new sub-categories vs the old anchor.
+	// 6. Delete old VectorKey, insert new VectorKey for items closer to the new sub-categories, logically re-adjusting!
 	return nil
 }

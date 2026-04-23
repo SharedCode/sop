@@ -15,13 +15,13 @@ type DynamicVectorStore[T any] interface {
 	// UpsertBatch adds or updates multiple items in the store efficiently.
 	UpsertBatch(ctx context.Context, items []ai.Item[T]) error
 
-	// Get retrieves a payload by its logical ID.
-	Get(ctx context.Context, id sop.UUID) (*Payload[T], error)
+	// Get retrieves a item by its logical ID.
+	Get(ctx context.Context, id sop.UUID) (*Item[T], error)
 	// Delete removes an item by its logical ID.
 	Delete(ctx context.Context, id sop.UUID) error
 
 	// Query searches for the nearest neighbors to the given vector coordinates.
-	// filters is a function that returns true if the payload should be included.
+	// filters is a function that returns true if the item should be included.
 	Query(ctx context.Context, vec []float32, k int, filter func(T) bool) ([]ai.Hit[T], error)
 
 	// QueryText performs a BM25 or keyword text search on the stored text representation of the thoughts.
@@ -30,19 +30,19 @@ type DynamicVectorStore[T any] interface {
 	// Count returns the total number of items in the store.
 	Count(ctx context.Context) (int64, error)
 
-	// Centroids returns a B-Tree interface to manually read/update hierarchical categories.
-	Centroids(ctx context.Context) (btree.BtreeInterface[sop.UUID, *Centroid], error)
+	// Categories returns a B-Tree interface to manually read/update hierarchical categories.
+	Categories(ctx context.Context) (btree.BtreeInterface[sop.UUID, *Category], error)
 
-	// AddCentroid adds a new centroid to the store dynamically.
+	// AddCategory adds a new category to the store dynamically.
 	// This allows for runtime expansion of the concept space without full rebalancing.
-	AddCentroid(ctx context.Context, c *Centroid) (sop.UUID, error)
+	AddCategory(ctx context.Context, c *Category) (sop.UUID, error)
 
-	// SplitCentroid reorganizes an overloaded centroid by running localized 2-Means
-	// clustering, creating two new centroids, and reassigning its vectors.
-	SplitCentroid(ctx context.Context, centroidID sop.UUID) error
+	// SplitCategory reorganizes an overloaded category by running localized 2-Means
+	// clustering, creating two new categories, and reassigning its vectors.
+	SplitCategory(ctx context.Context, categoryID sop.UUID) error
 
 	// Consolidate reads accumulated vectors from short-term memory (TempVectors),
-	// dynamically routes them into existing Centroids using AssignAndIndex logic,
+	// dynamically routes them into existing Categories using AssignAndIndex logic,
 	// and clears them from short-term memory.
 	Consolidate(ctx context.Context) error
 
@@ -56,8 +56,8 @@ type DynamicVectorStore[T any] interface {
 	// Vectors returns the Vectors B-Tree for advanced manipulation (Mathematical layout).
 	Vectors(ctx context.Context) (btree.BtreeInterface[VectorKey, Vector], error)
 
-	// Content returns the Content B-Tree for advanced manipulation (The actual Payload Data).
-	Content(ctx context.Context) (btree.BtreeInterface[ContentKey, Payload[T]], error)
+	// Content returns the Content B-Tree for advanced manipulation (The actual Item Data).
+	Items(ctx context.Context) (btree.BtreeInterface[sop.UUID, Item[T]], error)
 
 	// Version returns the Vector store's version number, which is a unix elapsed time.
 	Version(ctx context.Context) (int64, error)

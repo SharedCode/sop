@@ -12,9 +12,9 @@ import (
 // store implements DynamicVectorStore.
 type store[T any] struct {
 	registry  btree.BtreeInterface[sop.UUID, Handle]
-	centroids btree.BtreeInterface[sop.UUID, *Centroid]
+	categories btree.BtreeInterface[sop.UUID, *Category]
 	vectors   btree.BtreeInterface[VectorKey, Vector]
-	content   btree.BtreeInterface[ContentKey, Payload[T]]
+	items   btree.BtreeInterface[sop.UUID, Item[T]]
 	textIndex ai.TextIndex
 	dedup     bool
 }
@@ -22,15 +22,15 @@ type store[T any] struct {
 // NewStore creates a new instance of DynamicVectorStore.
 func NewStore[T any](
 	
-	centroids btree.BtreeInterface[sop.UUID, *Centroid],
+	categories btree.BtreeInterface[sop.UUID, *Category],
 	vectors btree.BtreeInterface[VectorKey, Vector],
-	content btree.BtreeInterface[ContentKey, Payload[T]],
+	items btree.BtreeInterface[sop.UUID, Item[T]],
 ) DynamicVectorStore[T] {
 	return &store[T]{
 		
-		centroids: centroids,
+		categories: categories,
 		vectors:   vectors,
-		content:   content,
+		items:   items,
 		dedup:     true,
 	}
 }
@@ -45,37 +45,37 @@ func (s *store[T]) Upsert(ctx context.Context, item ai.Item[T]) error {
 		id = sop.NewUUID()
 	}
 
-	// 1. Find nearest centroid
-	var bestCentroid sop.UUID
+	// 1. Find nearest category
+	var bestCategory sop.UUID
 	var bestDist float32 = -1
-	ok, err := s.centroids.First(ctx)
+	ok, err := s.categories.First(ctx)
 	if err != nil {
 		return err
 	}
 	if !ok {
-		// Create a root centroid if none exists
-		c := &Centroid{
+		// Create a root category if none exists
+		c := &Category{
 			ID:           sop.NewUUID(),
-			CenterVector: item.Vector, // Initial centroid math uses the first vector
+			CenterVector: item.Vector, // Initial category math uses the first vector
 			Name:         "Default Root",
 		}
-		_, err = s.AddCentroid(ctx, c)
+		_, err = s.AddCategory(ctx, c)
 		if err != nil {
 			return err
 		}
-		bestCentroid = c.ID
+		bestCategory = c.ID
 		bestDist = 0
 	} else {
 		for {
-			c, err := s.centroids.GetCurrentValue(ctx)
+			c, err := s.categories.GetCurrentValue(ctx)
 			if err == nil && c != nil {
 				dist := EuclideanDistance(item.Vector, c.CenterVector)
 				if bestDist == -1 || dist < bestDist {
 					bestDist = dist
-					bestCentroid = c.ID
+					bestCategory = c.ID
 				}
 			}
-			nextOk, nextErr := s.centroids.Next(ctx)
+			nextOk, nextErr := s.categories.Next(ctx)
 			if nextErr != nil || !nextOk {
 				break
 			}
@@ -87,11 +87,11 @@ func (s *store[T]) Upsert(ctx context.Context, item ai.Item[T]) error {
 	v := Vector{
 		ID:        vID,
 		Data:      item.Vector,
-		PayloadID: id,
+		ItemID: id,
 	}
 	vk := VectorKey{
-		CentroidID:         bestCentroid,
-		DistanceToCentroid: bestDist,
+		CategoryID:         bestCategory,
+		DistanceToCategory: bestDist,
 		VectorID:           vID,
 	}
 	_, err = s.vectors.Add(ctx, vk, v)
@@ -99,18 +99,13 @@ func (s *store[T]) Upsert(ctx context.Context, item ai.Item[T]) error {
 		return err
 	}
 
-	// 3. Insert into content tree
-	ck := ContentKey{
-		VectorID:   vID,
-		PayloadID:  id,
-		CentroidID: bestCentroid,
-		Distance:   bestDist,
-	}
-	payload := Payload[T]{
+	// 3. Insert into items tree
+	itemObj := Item[T]{
 		ID:   id,
 		Data: item.Payload,
+		Positions: []VectorKey{vk},
 	}
-	_, err = s.content.Add(ctx, ck, payload)
+	_, err = s.items.Add(ctx, id, itemObj)
 	return err
 }
 
@@ -118,7 +113,7 @@ func (s *store[T]) UpsertBatch(ctx context.Context, items []ai.Item[T]) error {
 	return fmt.Errorf("not implemented")
 }
 
-func (s *store[T]) Get(ctx context.Context, id sop.UUID) (*Payload[T], error) {
+func (s *store[T]) Get(ctx context.Context, id sop.UUID) (*Item[T], error) {
 	return nil, fmt.Errorf("not implemented")
 }
 
@@ -127,8 +122,8 @@ func (s *store[T]) Delete(ctx context.Context, id sop.UUID) error {
 }
 
 func (s *store[T]) Query(ctx context.Context, vec []float32, k int, filter func(T) bool) ([]ai.Hit[T], error) {
-	var centroids []*Centroid
-	ok, err := s.centroids.First(ctx)
+	var categories []*Category
+	ok, err := s.categories.First(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -136,26 +131,26 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, k int, filter func(
 		return nil, nil // No data
 	}
 
-	// Gather all top level centroids. Wait, for now we just get all root centroids.
+	// Gather all top level categories. Wait, for now we just get all root categories.
 	for {
-		c, err := s.centroids.GetCurrentValue(ctx)
+		c, err := s.categories.GetCurrentValue(ctx)
 		if err == nil && c != nil {
-			centroids = append(centroids, c)
+			categories = append(categories, c)
 		}
-		nextOk, nextErr := s.centroids.Next(ctx)
+		nextOk, nextErr := s.categories.Next(ctx)
 		if nextErr != nil || !nextOk {
 			break
 		}
 	}
 
-	// Find best centroid
-	bestCentroid, _ := FindClosestCentroid(vec, centroids)
-	if bestCentroid == nil {
+	// Find best category
+	bestCategory, _ := FindClosestCategory(vec, categories)
+	if bestCategory == nil {
 		return nil, nil
 	}
 
 	var hits []ai.Hit[T]
-	searchKey := VectorKey{CentroidID: bestCentroid.ID}
+	searchKey := VectorKey{CategoryID: bestCategory.ID}
 
 	ok, err = s.vectors.Find(ctx, searchKey, true)
 	if err != nil {
@@ -165,27 +160,21 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, k int, filter func(
 	if ok {
 		for {
 			vk := s.vectors.GetCurrentKey()
-			if vk.Key.CentroidID != bestCentroid.ID {
+			if vk.Key.CategoryID != bestCategory.ID {
 				break
 			}
 			v, err := s.vectors.GetCurrentValue(ctx)
 			if err == nil {
-				// Fetch payload
-				ck := ContentKey{
-					VectorID:   v.ID,
-					PayloadID:  v.PayloadID,
-					CentroidID: bestCentroid.ID,
-					Distance:   vk.Key.DistanceToCentroid,
-				}
-				foundPayload, err := s.content.Find(ctx, ck, true)
-				if foundPayload && err == nil {
-					payload, err := s.content.GetCurrentValue(ctx)
+				// Fetch item
+				foundItem, err := s.items.Find(ctx, v.ItemID, false)
+				if foundItem && err == nil {
+					item, err := s.items.GetCurrentValue(ctx)
 					if err == nil {
-						if filter == nil || filter(payload.Data) {
+						if filter == nil || filter(item.Data) {
 							hits = append(hits, ai.Hit[T]{
-								ID:      payload.ID.String(),
+								ID:      item.ID.String(),
 								Score:   EuclideanDistance(vec, v.Data),
-								Payload: payload.Data,
+								Payload: item.Data,
 							})
 						}
 					}
@@ -219,8 +208,8 @@ func (s *store[T]) Count(ctx context.Context) (int64, error) {
 	return 0, fmt.Errorf("not implemented")
 }
 
-func (s *store[T]) Centroids(ctx context.Context) (btree.BtreeInterface[sop.UUID, *Centroid], error) {
-	return s.centroids, nil
+func (s *store[T]) Categories(ctx context.Context) (btree.BtreeInterface[sop.UUID, *Category], error) {
+	return s.categories, nil
 }
 
 func (s *store[T]) Consolidate(ctx context.Context) error {
@@ -239,8 +228,8 @@ func (s *store[T]) Vectors(ctx context.Context) (btree.BtreeInterface[VectorKey,
 	return s.vectors, nil
 }
 
-func (s *store[T]) Content(ctx context.Context) (btree.BtreeInterface[ContentKey, Payload[T]], error) {
-	return s.content, nil
+func (s *store[T]) Items(ctx context.Context) (btree.BtreeInterface[sop.UUID, Item[T]], error) {
+	return s.items, nil
 }
 
 func (s *store[T]) Version(ctx context.Context) (int64, error) {

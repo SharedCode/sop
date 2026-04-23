@@ -12,23 +12,15 @@ import (
 // Compare implementation needed for ordered sorting
 func (k VectorKey) Compare(other interface{}) int {
 	o := other.(VectorKey)
-	if k.CentroidID.Compare(o.CentroidID) != 0 {
-		return k.CentroidID.Compare(o.CentroidID)
+	if k.CategoryID.Compare(o.CategoryID) != 0 {
+		return k.CategoryID.Compare(o.CategoryID)
 	}
-	if k.DistanceToCentroid < o.DistanceToCentroid {
+	if k.DistanceToCategory < o.DistanceToCategory {
 		return -1
-	} else if k.DistanceToCentroid > o.DistanceToCentroid {
+	} else if k.DistanceToCategory > o.DistanceToCategory {
 		return 1
 	}
 	return k.VectorID.Compare(o.VectorID)
-}
-
-func (k ContentKey) Compare(other interface{}) int {
-	o := other.(ContentKey)
-	if k.VectorID.Compare(o.VectorID) != 0 {
-		return k.VectorID.Compare(o.VectorID)
-	}
-	return k.PayloadID.Compare(o.PayloadID)
 }
 
 func TestDynamicStore_Upsert(t *testing.T) {
@@ -36,13 +28,13 @@ func TestDynamicStore_Upsert(t *testing.T) {
 
 	// Define B-Tree stores
 	
-	centroids := inmemory.NewBtree[sop.UUID, *Centroid](true)
+	categories := inmemory.NewBtree[sop.UUID, *Category](true)
 	vectors := inmemory.NewBtree[VectorKey, Vector](false)
-	content := inmemory.NewBtree[ContentKey, Payload[string]](false)
+	items := inmemory.NewBtree[sop.UUID, Item[string]](false)
 
 	// Create DynamicStore
-	s := NewStore[string](centroids.Btree, vectors.Btree, content.Btree)
-	// Single Payload Upsert
+	s := NewStore[string](categories.Btree, vectors.Btree, items.Btree)
+	// Single Item Upsert
 	err := s.Upsert(ctx, ai.Item[string]{
 		ID:      sop.NewUUID().String(),
 		Vector:  []float32{0.1, 0.2, 0.3},
@@ -52,19 +44,19 @@ func TestDynamicStore_Upsert(t *testing.T) {
 		t.Fatalf("Failed to upsert item: %v", err)
 	}
 
-	// Verify centroid creation
-	count := centroids.Count()
+	// Verify category creation
+	count := categories.Count()
 	if count != 1 {
-		t.Fatalf("Expected 1 centroid, found %v", count)
+		t.Fatalf("Expected 1 category, found %v", count)
 	}
 
-	// Double check vectors and content nodes
+	// Double check vectors and items nodes
 	vc := vectors.Count()
 	if vc != 1 {
 		t.Fatalf("Expected 1 vector, found %v", vc)
 	}
 
-	cc := content.Count()
+	cc := items.Count()
 	if cc != 1 {
 		t.Fatalf("Expected 1 content, found %v", cc)
 	}
@@ -79,9 +71,9 @@ func TestDynamicStore_Upsert(t *testing.T) {
 		t.Fatalf("Failed to upsert second item: %v", err)
 	}
 
-	count = centroids.Count()
+	count = categories.Count()
 	if count != 1 {
-		t.Fatalf("Expected exactly 1 root centroid still, found %v", count)
+		t.Fatalf("Expected exactly 1 root category still, found %v", count)
 	}
 
 	vc = vectors.Count()

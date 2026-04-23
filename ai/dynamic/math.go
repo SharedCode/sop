@@ -35,20 +35,20 @@ func CosineSimilarity(a, b []float32) float32 {
 	return dot / (float32(math.Sqrt(float64(na))) * float32(math.Sqrt(float64(nb))))
 }
 
-type centroidCandidate struct {
-	centroid *Centroid
+type categoryCandidate struct {
+	category *Category
 	dist     float32
 }
 
-// FindClosestCentroid finds the nearest single centroid to the target vector using Euclidean distance.
-func FindClosestCentroid(vec []float32, centroids []*Centroid) (*Centroid, float32) {
-	if len(centroids) == 0 {
+// FindClosestCategory finds the nearest single category to the target vector using Euclidean distance.
+func FindClosestCategory(vec []float32, categories []*Category) (*Category, float32) {
+	if len(categories) == 0 {
 		return nil, 0
 	}
-	var closest *Centroid
+	var closest *Category
 	minDist := float32(math.MaxFloat32)
 
-	for _, c := range centroids {
+	for _, c := range categories {
 		d := EuclideanDistance(vec, c.CenterVector)
 		if d < minDist {
 			minDist = d
@@ -58,16 +58,16 @@ func FindClosestCentroid(vec []float32, centroids []*Centroid) (*Centroid, float
 	return closest, minDist
 }
 
-// FindClosestCentroids finds the nearest N centroids to the target vector using Euclidean distance.
-func FindClosestCentroids(vec []float32, centroids []*Centroid, n int) []*Centroid {
-	if len(centroids) == 0 {
+// FindClosestCategories finds the nearest N categories to the target vector using Euclidean distance.
+func FindClosestCategories(vec []float32, categories []*Category, n int) []*Category {
+	if len(categories) == 0 {
 		return nil
 	}
 
-	candidates := make([]centroidCandidate, 0, len(centroids))
-	for _, c := range centroids {
-		candidates = append(candidates, centroidCandidate{
-			centroid: c,
+	candidates := make([]categoryCandidate, 0, len(categories))
+	for _, c := range categories {
+		candidates = append(candidates, categoryCandidate{
+			category: c,
 			dist:     EuclideanDistance(vec, c.CenterVector),
 		})
 	}
@@ -80,9 +80,9 @@ func FindClosestCentroids(vec []float32, centroids []*Centroid, n int) []*Centro
 		candidates = candidates[:n]
 	}
 
-	result := make([]*Centroid, len(candidates))
+	result := make([]*Category, len(candidates))
 	for i, c := range candidates {
-		result[i] = c.centroid
+		result[i] = c.category
 	}
 	return result
 }
