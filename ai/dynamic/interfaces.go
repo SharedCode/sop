@@ -37,10 +37,6 @@ type DynamicVectorStore[T any] interface {
 	// This allows for runtime expansion of the concept space without full rebalancing.
 	AddCategory(ctx context.Context, c *Category) (sop.UUID, error)
 
-	// SplitCategory reorganizes an overloaded category by running localized 2-Means
-	// clustering, creating two new categories, and reassigning its vectors.
-	SplitCategory(ctx context.Context, categoryID sop.UUID) error
-
 	// Consolidate reads accumulated vectors from short-term memory (TempVectors),
 	// dynamically routes them into existing Categories using AssignAndIndex logic,
 	// and clears them from short-term memory.

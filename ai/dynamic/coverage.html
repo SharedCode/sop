@@ -1,0 +1,841 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>dynamic: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/sharedcode/sop/ai/dynamic/handle.go (0.0%)</option>
+				
+				<option value="file1">github.com/sharedcode/sop/ai/dynamic/manager.go (89.1%)</option>
+				
+				<option value="file2">github.com/sharedcode/sop/ai/dynamic/math.go (37.5%)</option>
+				
+				<option value="file3">github.com/sharedcode/sop/ai/dynamic/store.go (79.0%)</option>
+				
+				<option value="file4">github.com/sharedcode/sop/ai/dynamic/store_categories.go (31.8%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package dynamic
+
+import (
+        "time"
+
+        "github.com/sharedcode/sop"
+)
+
+// Now returns the current time. It is a var to allow tests to override time.Now for determinism.
+var Now = time.Now
+
+// Handle holds a logical ID and its two physical IDs (A and B) used to implement ACID-safe swaps.
+// SOP uses Handle to quickly switch between node versions and to support logical deletes.
+type Handle struct {
+        // LogicalID is the stable identifier of the entity.
+        LogicalID sop.UUID
+        // PhysicalIDA is one of the two physical IDs supported.
+        PhysicalIDA sop.UUID
+        // PhysicalIDB is the second physical ID supported.
+        PhysicalIDB sop.UUID
+        // IsActiveIDB indicates whether PhysicalIDB is currently the active ID.
+        IsActiveIDB bool
+}
+
+// NewHandle creates a new Handle with the provided logical ID. PhysicalIDA is initialized to the same value.
+func NewHandle(id sop.UUID) Handle <span class="cov0" title="0">{
+        return Handle{
+                LogicalID:   id,
+                PhysicalIDA: id,
+        }
+}</span>
+
+// GetActiveID returns the currently active UUID (either PhysicalIDA or PhysicalIDB).
+func (h Handle) GetActiveID() sop.UUID <span class="cov0" title="0">{
+        if h.IsActiveIDB </span><span class="cov0" title="0">{
+                return h.PhysicalIDB
+        }</span>
+        <span class="cov0" title="0">return h.PhysicalIDA</span>
+}
+
+// GetInActiveID returns the currently inactive physical UUID.
+func (h Handle) GetInActiveID() sop.UUID <span class="cov0" title="0">{
+        if h.IsActiveIDB </span><span class="cov0" title="0">{
+                return h.PhysicalIDA
+        }</span>
+        <span class="cov0" title="0">return h.PhysicalIDB</span>
+}
+
+// IsAandBinUse reports whether both physical IDs A and B are populated.
+func (h Handle) IsAandBinUse() bool <span class="cov0" title="0">{
+        return !h.PhysicalIDA.IsNil() &amp;&amp; !h.PhysicalIDB.IsNil()
+}</span>
+
+// HasID reports whether the provided UUID matches either physical ID A or B.
+func (h *Handle) HasID(id sop.UUID) bool <span class="cov0" title="0">{
+        return h.PhysicalIDA == id || h.PhysicalIDB == id
+}</span>
+
+// FlipActiveID switches the active physical ID from A to B or B to A.
+func (h *Handle) FlipActiveID() <span class="cov0" title="0">{
+        h.IsActiveIDB = !h.IsActiveIDB
+}</span>
+
+// ClearInactiveID resets the inactive physical ID to NilUUID and clears the WIP timestamp.
+func (h *Handle) ClearInactiveID() <span class="cov0" title="0">{
+        if h.IsActiveIDB </span><span class="cov0" title="0">{
+                h.PhysicalIDA = sop.NilUUID
+        }</span> else<span class="cov0" title="0"> {
+                h.PhysicalIDB = sop.NilUUID
+        }</span>
+}
+
+// IsEmpty reports whether all Handle fields are zero values (no IDs, not deleted, zero version and timestamps).
+func (x *Handle) IsEmpty() bool <span class="cov0" title="0">{
+        return x.LogicalID == sop.NilUUID &amp;&amp;
+                x.PhysicalIDA == sop.NilUUID &amp;&amp;
+                x.PhysicalIDB == sop.NilUUID
+}</span>
+
+// IsEqual reports whether two Handle instances are equal ignoring the Version field.
+func (x *Handle) IsEqual(y *Handle) bool <span class="cov0" title="0">{
+        return x.LogicalID == y.LogicalID &amp;&amp;
+                x.PhysicalIDA == y.PhysicalIDA &amp;&amp;
+                x.PhysicalIDB == y.PhysicalIDB
+}</span>
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package dynamic
+
+import (
+        "context"
+        "fmt"
+        "strings"
+
+        "github.com/sharedcode/sop"
+        "github.com/sharedcode/sop/ai"
+)
+
+// MemoryManager orchestrates the Semantic Anchoring and Asynchronous Sleep Cycle.
+// It interfaces directly with an LLM and an Embedder to completely bypass
+// mathematical (K-Means) clustering in favor of Semantic taxonomies.
+type MemoryManager[T any] struct {
+        store          DynamicVectorStore[T]
+        llm            ai.Generator
+        embedder       ai.Embeddings
+        sleepThreshold int
+}
+
+// NewMemoryManager creates a new biomimetic memory orchestrator.
+func NewMemoryManager[T any](store DynamicVectorStore[T], llm ai.Generator, embedder ai.Embeddings) *MemoryManager[T] <span class="cov8" title="1">{
+        return &amp;MemoryManager[T]{
+                store:          store,
+                llm:            llm,
+                embedder:       embedder,
+                sleepThreshold: 1000,
+        }
+}</span>
+
+// IngestThought represents the "Wake State" fast-path.
+// 1. Asks LLM for a high-level category representing the text.
+// 2. Ensures that Category exists as an Anchor.
+// 3. Upserts the thought vector directly targeting that Category loosely.
+func (m *MemoryManager[T]) IngestThought(ctx context.Context, text string, data T) error <span class="cov8" title="1">{
+        prompt := fmt.Sprintf("Categorize the following thought into a 2-4 word concept:\n\n%s", text)
+        opts := ai.GenOptions{MaxTokens: 10, Temperature: 0.1}
+        out, err := m.llm.Generate(ctx, prompt, opts)
+        if err != nil </span><span class="cov8" title="1">{
+                return fmt.Errorf("llm classification failed: %w", err)
+        }</span>
+        <span class="cov8" title="1">categoryName := strings.TrimSpace(out.Text)
+
+        _, err = m.EnsureCategory(ctx, categoryName)
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">vecs, err := m.embedder.EmbedTexts(ctx, []string{text})
+        if err != nil </span><span class="cov8" title="1">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">item := ai.Item[T]{
+                ID:      sop.NewUUID().String(),
+                Vector:  vecs[0],
+                Payload: data,
+        }
+        return m.store.Upsert(ctx, item)</span>
+}
+
+// EnsureCategory guarantees a Semantic Anchor physically exists in the B-Tree for a string noun.
+func (m *MemoryManager[T]) EnsureCategory(ctx context.Context, categoryName string) (sop.UUID, error) <span class="cov8" title="1">{
+        categoriesTree, err := m.store.Categories(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return sop.NilUUID, err
+        }</span>
+
+        <span class="cov8" title="1">ok, err := categoriesTree.First(ctx)
+        for ok &amp;&amp; err == nil </span><span class="cov8" title="1">{
+                c, _ := categoriesTree.GetCurrentValue(ctx)
+                if c != nil &amp;&amp; strings.EqualFold(c.Name, categoryName) </span><span class="cov8" title="1">{
+                        return categoriesTree.GetCurrentKey().Key, nil
+                }</span>
+                <span class="cov0" title="0">ok, err = categoriesTree.Next(ctx)</span>
+        }
+
+        <span class="cov8" title="1">vecs, err := m.embedder.EmbedTexts(ctx, []string{categoryName})
+        if err != nil </span><span class="cov8" title="1">{
+                return sop.NilUUID, fmt.Errorf("failed to embed new category: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">CID := sop.NewUUID()
+        anchor := &amp;Category{
+                ID:           CID,
+                Name:         categoryName,
+                Description:  "LLM Generated Semantic Anchor",
+                CenterVector: vecs[0],
+                ItemCount:  0,
+        }
+
+        cid, err := m.store.AddCategory(ctx, anchor)
+        if err != nil </span><span class="cov0" title="0">{
+                return sop.NilUUID, err
+        }</span>
+        <span class="cov8" title="1">return cid, nil</span>
+}
+
+// SleepCycle performs Asynchronous Memory Consolidation.
+// It runs periodically (nightly) to scan heavily packed Categories and asks the LLM
+// if deeper, more granular categories should be split off.
+func (m *MemoryManager[T]) SleepCycle(ctx context.Context) error <span class="cov8" title="1">{
+        categoriesTree, err := m.store.Categories(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov8" title="1">ok, err := categoriesTree.First(ctx)
+        for ok &amp;&amp; err == nil </span><span class="cov8" title="1">{
+                c, _ := categoriesTree.GetCurrentValue(ctx)
+
+                // If an Anchor is getting extremely dense, "Reflect" on it.
+                if c != nil &amp;&amp; c.ItemCount &gt; m.sleepThreshold </span><span class="cov8" title="1">{
+                        err = m.reflectAndReassociate(ctx, c)
+                        if err != nil </span><span class="cov0" title="0">{
+                                fmt.Printf("Sleep cycle reflection failed for %s: %v\n", c.Name, err)
+                        }</span>
+                }
+                <span class="cov8" title="1">ok, err = categoriesTree.Next(ctx)</span>
+        }
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+// reflectAndReassociate pulls the items from a dense category, asks LLM to find
+// sub-themes, and surgically moves specific thoughts without rewriting the whole cluster.
+func (m *MemoryManager[T]) reflectAndReassociate(ctx context.Context, anchor *Category) error <span class="cov8" title="1">{
+        // 1. Scan vectors stored under anchor.ID
+        // 2. Sample N items.
+        // 3. Prompt LLM: "These thoughts are under '" + anchor.Name + "'. Can you identify 3 tighter sub-categories?"
+        // 4. EnsureCategory() for each new LLM deduction.
+        // 5. Compare semantic distance of items to the new sub-categories vs the old anchor.
+        // 6. Delete old VectorKey, insert new VectorKey for items closer to the new sub-categories, logically re-adjusting!
+        return nil
+}</span>
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package dynamic
+
+import (
+        "math"
+        "sort"
+)
+
+// EuclideanDistance computes the Euclidean distance between two vectors.
+func EuclideanDistance(a, b []float32) float32 <span class="cov8" title="1">{
+        if len(a) != len(b) </span><span class="cov0" title="0">{
+                return 0
+        }</span>
+        <span class="cov8" title="1">var sum float32
+        for i := range a </span><span class="cov8" title="1">{
+                diff := a[i] - b[i]
+                sum += diff * diff
+        }</span>
+        <span class="cov8" title="1">return float32(math.Sqrt(float64(sum)))</span>
+}
+
+// CosineSimilarity computes the mathematical cosine similarity between two vectors.
+func CosineSimilarity(a, b []float32) float32 <span class="cov0" title="0">{
+        if len(a) != len(b) || len(a) == 0 </span><span class="cov0" title="0">{
+                return 0
+        }</span>
+        <span class="cov0" title="0">var dot, na, nb float32
+        for i := range a </span><span class="cov0" title="0">{
+                dot += a[i] * b[i]
+                na += a[i] * a[i]
+                nb += b[i] * b[i]
+        }</span>
+        <span class="cov0" title="0">if na == 0 || nb == 0 </span><span class="cov0" title="0">{
+                return 0
+        }</span>
+        <span class="cov0" title="0">return dot / (float32(math.Sqrt(float64(na))) * float32(math.Sqrt(float64(nb))))</span>
+}
+
+type categoryCandidate struct {
+        category *Category
+        dist     float32
+}
+
+// FindClosestCategory finds the nearest single category to the target vector using Euclidean distance.
+func FindClosestCategory(vec []float32, categories []*Category) (*Category, float32) <span class="cov8" title="1">{
+        if len(categories) == 0 </span><span class="cov0" title="0">{
+                return nil, 0
+        }</span>
+        <span class="cov8" title="1">var closest *Category
+        minDist := float32(math.MaxFloat32)
+
+        for _, c := range categories </span><span class="cov8" title="1">{
+                d := EuclideanDistance(vec, c.CenterVector)
+                if d &lt; minDist </span><span class="cov8" title="1">{
+                        minDist = d
+                        closest = c
+                }</span>
+        }
+        <span class="cov8" title="1">return closest, minDist</span>
+}
+
+// FindClosestCategories finds the nearest N categories to the target vector using Euclidean distance.
+func FindClosestCategories(vec []float32, categories []*Category, n int) []*Category <span class="cov0" title="0">{
+        if len(categories) == 0 </span><span class="cov0" title="0">{
+                return nil
+        }</span>
+
+        <span class="cov0" title="0">candidates := make([]categoryCandidate, 0, len(categories))
+        for _, c := range categories </span><span class="cov0" title="0">{
+                candidates = append(candidates, categoryCandidate{
+                        category: c,
+                        dist:     EuclideanDistance(vec, c.CenterVector),
+                })
+        }</span>
+
+        <span class="cov0" title="0">sort.Slice(candidates, func(i, j int) bool </span><span class="cov0" title="0">{
+                return candidates[i].dist &lt; candidates[j].dist
+        }</span>)
+
+        <span class="cov0" title="0">if len(candidates) &gt; n </span><span class="cov0" title="0">{
+                candidates = candidates[:n]
+        }</span>
+
+        <span class="cov0" title="0">result := make([]*Category, len(candidates))
+        for i, c := range candidates </span><span class="cov0" title="0">{
+                result[i] = c.category
+        }</span>
+        <span class="cov0" title="0">return result</span>
+}
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package dynamic
+
+import (
+        "context"
+        "fmt"
+
+        "github.com/sharedcode/sop"
+        "github.com/sharedcode/sop/ai"
+        "github.com/sharedcode/sop/btree"
+)
+
+// store implements DynamicVectorStore.
+type store[T any] struct {
+        registry   btree.BtreeInterface[sop.UUID, Handle]
+        categories btree.BtreeInterface[sop.UUID, *Category]
+        vectors    btree.BtreeInterface[VectorKey, Vector]
+        items      btree.BtreeInterface[sop.UUID, Item[T]]
+        textIndex  ai.TextIndex
+        dedup      bool
+}
+
+// NewStore creates a new instance of DynamicVectorStore.
+func NewStore[T any](
+        categories btree.BtreeInterface[sop.UUID, *Category],
+        vectors btree.BtreeInterface[VectorKey, Vector],
+        items btree.BtreeInterface[sop.UUID, Item[T]],
+) DynamicVectorStore[T] <span class="cov8" title="1">{
+        return &amp;store[T]{
+                categories: categories,
+                vectors:    vectors,
+                items:      items,
+                dedup:      true,
+        }
+}</span>
+
+func (s *store[T]) SetTextIndex(idx ai.TextIndex) <span class="cov8" title="1">{
+        s.textIndex = idx
+}</span>
+
+func (s *store[T]) Upsert(ctx context.Context, item ai.Item[T]) error <span class="cov8" title="1">{
+        id, err := sop.ParseUUID(item.ID)
+        if err != nil </span><span class="cov0" title="0">{
+                id = sop.NewUUID()
+        }</span>
+
+        // 1. Find nearest category
+        <span class="cov8" title="1">var bestCategory sop.UUID
+        var bestDist float32 = -1
+        ok, err := s.categories.First(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">if !ok </span><span class="cov8" title="1">{
+                // Create a root category if none exists
+                c := &amp;Category{
+                        ID:           sop.NewUUID(),
+                        CenterVector: item.Vector, // Initial category math uses the first vector
+                        Name:         "Default Root",
+                }
+                _, err = s.AddCategory(ctx, c)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov8" title="1">bestCategory = c.ID
+                bestDist = 0</span>
+        } else<span class="cov8" title="1"> {
+                for </span><span class="cov8" title="1">{
+                        c, err := s.categories.GetCurrentValue(ctx)
+                        if err == nil &amp;&amp; c != nil </span><span class="cov8" title="1">{
+                                dist := EuclideanDistance(item.Vector, c.CenterVector)
+                                if bestDist == -1 || dist &lt; bestDist </span><span class="cov8" title="1">{
+                                        bestDist = dist
+                                        bestCategory = c.ID
+                                }</span>
+                        }
+                        <span class="cov8" title="1">nextOk, nextErr := s.categories.Next(ctx)
+                        if nextErr != nil || !nextOk </span><span class="cov8" title="1">{
+                                break</span>
+                        }
+                }
+        }
+
+        // 2. Insert into vectors tree
+        <span class="cov8" title="1">vID := sop.NewUUID()
+        v := Vector{
+                ID:         vID,
+                Data:       item.Vector,
+                ItemID:     id,
+                CategoryID: bestCategory,
+        }
+        vk := VectorKey{
+                CategoryID:         bestCategory,
+                DistanceToCategory: bestDist,
+                VectorID:           vID,
+        }
+        _, err = s.vectors.Add(ctx, vk, v)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // 3. Insert into items tree
+        <span class="cov8" title="1">foundItem, err := s.items.Find(ctx, id, false)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        
+        <span class="cov8" title="1">if foundItem </span><span class="cov0" title="0">{
+                existingItem, err := s.items.GetCurrentValue(ctx)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+                <span class="cov0" title="0">existingItem.Positions = append(existingItem.Positions, vk)
+                _, err = s.items.UpdateCurrentItem(ctx, id, existingItem)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        } else<span class="cov8" title="1"> {
+                itemObj := Item[T]{
+                        ID:       id,
+                        Data:     item.Payload,
+                        Positions: []VectorKey{vk},
+                }
+                _, err = s.items.Add(ctx, id, itemObj)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+
+        // 4. Update TextIndex if present
+        <span class="cov8" title="1">if s.textIndex != nil </span><span class="cov8" title="1">{
+                strData := fmt.Sprintf("%v", item.Payload)
+                err = s.textIndex.Add(ctx, id.String(), strData)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+
+        <span class="cov8" title="1">return nil</span>
+}
+
+func (s *store[T]) DeleteItem(ctx context.Context, itemID sop.UUID) error <span class="cov8" title="1">{
+        found, err := s.items.Find(ctx, itemID, false)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+        <span class="cov8" title="1">if !found </span><span class="cov0" title="0">{
+                return nil // already deleted
+        }</span>
+
+        <span class="cov8" title="1">item, err := s.items.GetCurrentValue(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        // Clean up all associated vectors in O(1) time
+        <span class="cov8" title="1">for _, pos := range item.Positions </span><span class="cov8" title="1">{
+                _, err := s.vectors.Remove(ctx, pos)
+                if err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+
+        // Finally, remove the item itself
+        <span class="cov8" title="1">_, err = s.items.Remove(ctx, itemID)
+        return err</span>
+}
+
+func (s *store[T]) UpsertBatch(ctx context.Context, items []ai.Item[T]) error <span class="cov8" title="1">{
+        for _, item := range items </span><span class="cov8" title="1">{
+                if err := s.Upsert(ctx, item); err != nil </span><span class="cov0" title="0">{
+                        return err
+                }</span>
+        }
+        <span class="cov8" title="1">return nil</span>
+}
+
+func (s *store[T]) Get(ctx context.Context, id sop.UUID) (*Item[T], error) <span class="cov8" title="1">{
+        found, err := s.items.Find(ctx, id, false)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if !found </span><span class="cov8" title="1">{
+                return nil, fmt.Errorf("item not found")
+        }</span>
+
+        <span class="cov8" title="1">item, err := s.items.GetCurrentValue(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">return &amp;item, nil</span>
+}
+
+func (s *store[T]) Delete(ctx context.Context, id sop.UUID) error <span class="cov8" title="1">{
+        return s.DeleteItem(ctx, id)
+}</span>
+
+func (s *store[T]) Query(ctx context.Context, vec []float32, k int, filter func(T) bool) ([]ai.Hit[T], error) <span class="cov8" title="1">{
+        var categories []*Category
+        ok, err := s.categories.First(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+        <span class="cov8" title="1">if !ok </span><span class="cov0" title="0">{
+                return nil, nil // No data
+        }</span>
+
+        // Gather all top level categories. Wait, for now we just get all root categories.
+        <span class="cov8" title="1">for </span><span class="cov8" title="1">{
+                c, err := s.categories.GetCurrentValue(ctx)
+                if err == nil &amp;&amp; c != nil </span><span class="cov8" title="1">{
+                        categories = append(categories, c)
+                }</span>
+                <span class="cov8" title="1">nextOk, nextErr := s.categories.Next(ctx)
+                if nextErr != nil || !nextOk </span><span class="cov8" title="1">{
+                        break</span>
+                }
+        }
+
+        // Find best category
+        <span class="cov8" title="1">bestCategory, _ := FindClosestCategory(vec, categories)
+        if bestCategory == nil </span><span class="cov0" title="0">{
+                return nil, nil
+        }</span>
+
+        <span class="cov8" title="1">var hits []ai.Hit[T]
+
+        // Instead of seeking, let's just collect ALL items that exist with this CategoryID.
+        // Since we mock and could have cursor issues, let's gather keys.
+        ok, err = s.vectors.First(ctx)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov8" title="1">var matchingVectors []Vector
+        if ok </span><span class="cov8" title="1">{
+                for </span><span class="cov8" title="1">{
+                        vk := s.vectors.GetCurrentKey()
+                        // Need to verify CategoryID equality properly
+                        if vk.Key.CategoryID.Compare(bestCategory.ID) == 0 </span><span class="cov8" title="1">{
+                                v, err := s.vectors.GetCurrentValue(ctx)
+                                if err == nil </span><span class="cov8" title="1">{
+                                        matchingVectors = append(matchingVectors, v)
+                                }</span>
+                        }
+                        
+                        <span class="cov8" title="1">nextOk, nextErr := s.vectors.Next(ctx)
+                        if nextErr != nil || !nextOk </span><span class="cov8" title="1">{
+                                break</span>
+                        }
+                }
+        }
+
+        // Fetch items after we're done iterating vectors to avoid ANY cursor conflict
+        <span class="cov8" title="1">for _, v := range matchingVectors </span><span class="cov8" title="1">{
+                foundItem, err := s.items.Find(ctx, v.ItemID, false)
+                if foundItem &amp;&amp; err == nil </span><span class="cov8" title="1">{
+                        item, err := s.items.GetCurrentValue(ctx)
+                        if err == nil </span><span class="cov8" title="1">{
+                                // Let's print out what we found
+                                // fmt.Printf("Found item: %v\n", item.Data)
+                                if filter == nil || filter(item.Data) </span><span class="cov8" title="1">{
+                                        hits = append(hits, ai.Hit[T]{
+                                                ID:      item.ID.String(),
+                                                Score:   EuclideanDistance(vec, v.Data),
+                                                Payload: item.Data,
+                                        })
+                                }</span>
+                        }
+                }
+        }
+
+        // Sort hits by score ascending (Euclidean distance: lower is better)
+        <span class="cov8" title="1">for i := 0; i &lt; len(hits); i++ </span><span class="cov8" title="1">{
+                for j := i + 1; j &lt; len(hits); j++ </span><span class="cov0" title="0">{
+                        if hits[i].Score &gt; hits[j].Score </span><span class="cov0" title="0">{
+                                hits[i], hits[j] = hits[j], hits[i]
+                        }</span>
+                }
+        }
+
+        <span class="cov8" title="1">if len(hits) &gt; k </span><span class="cov0" title="0">{
+                hits = hits[:k]
+        }</span>
+        <span class="cov8" title="1">return hits, nil</span>
+}
+
+func (s *store[T]) Count(ctx context.Context) (int64, error) <span class="cov8" title="1">{
+        return s.items.Count(), nil
+}</span>
+
+func (s *store[T]) Categories(ctx context.Context) (btree.BtreeInterface[sop.UUID, *Category], error) <span class="cov8" title="1">{
+        return s.categories, nil
+}</span>
+
+func (s *store[T]) Consolidate(ctx context.Context) error <span class="cov8" title="1">{
+        return nil
+}</span>
+
+func (s *store[T]) UpdateEmbedderInfo(ctx context.Context, provider string, model string, dimensions int) error <span class="cov8" title="1">{
+        return nil
+}</span>
+
+func (s *store[T]) SetDeduplication(enabled bool) <span class="cov8" title="1">{
+        s.dedup = enabled
+}</span>
+
+func (s *store[T]) Vectors(ctx context.Context) (btree.BtreeInterface[VectorKey, Vector], error) <span class="cov8" title="1">{
+        return s.vectors, nil
+}</span>
+
+func (s *store[T]) Items(ctx context.Context) (btree.BtreeInterface[sop.UUID, Item[T]], error) <span class="cov8" title="1">{
+        return s.items, nil
+}</span>
+
+func (s *store[T]) Version(ctx context.Context) (int64, error) <span class="cov8" title="1">{
+        return 0, nil
+}</span>
+
+// QueryText performs a BM25 or keyword text search on the stored text representation of the thoughts.
+func (s *store[T]) QueryText(ctx context.Context, text string, k int, filter func(T) bool) ([]ai.Hit[T], error) <span class="cov8" title="1">{
+        if s.textIndex == nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("text search is not enabled on this store")
+        }</span>
+
+        <span class="cov8" title="1">searchResults, err := s.textIndex.Search(ctx, text)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("text search failed: %w", err)
+        }</span>
+
+        <span class="cov8" title="1">var results []ai.Hit[T]
+        for _, res := range searchResults </span><span class="cov8" title="1">{
+                if len(results) &gt;= k </span><span class="cov0" title="0">{
+                        break</span>
+                }
+
+                // Fetch the payload directly from items tree since we have an ID
+                <span class="cov8" title="1">id, err := sop.ParseUUID(res.DocID)
+                if err != nil </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+                <span class="cov8" title="1">foundItem, err := s.items.Find(ctx, id, false)
+                var payload T
+                if foundItem &amp;&amp; err == nil </span><span class="cov8" title="1">{
+                        item, err := s.items.GetCurrentValue(ctx)
+                        if err == nil </span><span class="cov8" title="1">{
+                                payload = item.Data
+                                if filter != nil &amp;&amp; !filter(payload) </span><span class="cov0" title="0">{
+                                        continue</span>
+                                }
+                        }
+                }
+
+                <span class="cov8" title="1">results = append(results, ai.Hit[T]{
+                        ID:      res.DocID,
+                        Score:   float32(res.Score),
+                        Payload: payload,
+                })</span>
+        }
+        <span class="cov8" title="1">return results, nil</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">package dynamic
+
+import (
+        "context"
+        "fmt"
+
+        "github.com/sharedcode/sop"
+)
+
+// AddCategory dynamically inserts a new explicit sub-category directly into the B-Tree.
+func (s *store[T]) AddCategory(ctx context.Context, c *Category) (sop.UUID, error) <span class="cov8" title="1">{
+        if c == nil </span><span class="cov0" title="0">{
+                return sop.UUID{}, fmt.Errorf("category cannot be nil")
+        }</span>
+
+        // Validate/Ensure ID
+        <span class="cov8" title="1">if c.ID.IsNil() </span><span class="cov0" title="0">{
+                c.ID = sop.NewUUID()
+        }</span>
+
+        // Lock the transaction on this insert in the categories BTree
+        <span class="cov8" title="1">ok, err := s.categories.Add(ctx, c.ID, c)
+        if err != nil </span><span class="cov0" title="0">{
+                return sop.UUID{}, fmt.Errorf("failed to insert new category: %w", err)
+        }</span>
+        <span class="cov8" title="1">if !ok </span><span class="cov0" title="0">{
+                return sop.UUID{}, fmt.Errorf("category with ID %v already exists", c.ID)
+        }</span>
+
+        // If this has a parent, we must update the parent's ChildrenIDs list to declare this hierarchy
+        <span class="cov8" title="1">if !c.ParentID.IsNil() </span><span class="cov0" title="0">{
+                ok, err := s.categories.Find(ctx, c.ParentID, false)
+                if err != nil </span><span class="cov0" title="0">{
+                        return sop.UUID{}, fmt.Errorf("failed to lookup parent category: %w", err)
+                }</span>
+                <span class="cov0" title="0">if ok </span><span class="cov0" title="0">{
+                        parent, err := s.categories.GetCurrentValue(ctx)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return sop.UUID{}, fmt.Errorf("failed to fetch parent category value: %w", err)
+                        }</span>
+                        // Link the child to the parent category hierarchy
+                        <span class="cov0" title="0">parent.ChildrenIDs = append(parent.ChildrenIDs, c.ID)
+                        _, err = s.categories.UpdateCurrentItem(ctx, c.ParentID, parent)
+                        if err != nil </span><span class="cov0" title="0">{
+                                return sop.UUID{}, fmt.Errorf("failed to link category to parent: %w", err)
+                        }</span>
+                }
+        }
+
+        <span class="cov8" title="1">return c.ID, nil</span>
+}
+
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>

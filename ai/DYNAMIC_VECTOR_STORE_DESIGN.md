@@ -48,7 +48,7 @@ The underlying transactional storage relies on three specialized SOP B-Trees:
 
 
 
-## 8. "The Sleep Cycle": Asynchronous Memory Consolidation
+## 8. "The Sleep Cycle": Asynchronous Memory Consolidation & Algorithmic Re-categorization
 While LLM-generated Semantic Anchors during real-time ingestion provide excellent immediate categorization, we tolerate that these initial rapid categories might not be globally optimal given limited runtime context. 
 
 To refine the vector space, the Dynamic Vector Store implements a background "Sleep Cycle" (biomimetic to human memory consolidation during sleep):
@@ -57,6 +57,7 @@ To refine the vector space, the Dynamic Vector Store implements a background "Sl
 * **Deep LLM Reasoning:** Without the strict latency constraints of real-time ingestion API paths, the system provides a larger batch of related thoughts to the LLM and asks it to deduce higher-quality, more globally accurate Categories.
 * **Seamless Re-association:** Thoughts are transitioned to new, optimized Semantic Anchors. Because SOP is fully ACID-transactional, this background reorganization happens safely alongside live user queries and writes without locking or blocking the database.
 * **Evolving Taxonomy:** Just as a human brain refines its understanding of the world overnight, the store taxonomy continuously evolves, heals, and sharpens its semantic layout over time, resulting in progressively higher quality RAG retrieval.
+* **Algorithmic Category Mutation:** Like a person efficiently organizing a physical catalog, the LLM is empowered to algorithmically *mutate* Category Names and Descriptions based on incoming data trends, or shift Categories up and down a hierarchy. By intelligently renaming or broadening a Category in-place, the system requires **zero item movement** and **zero vector recalculation**. Because only the Category metadata is moved or mutated, all underlying Items and their Vector distances remain completely untouched. This drastically reduces VectorDB I/O—the math remains perfectly stable while the semantic umbrella seamlessly adapts to better fit the data.
 
 ## 9. Hierarchical Centroids: Massive Fault Tolerance
 One of the most profound advantages of LLM-generated Semantic Anchors is the natural emergence of **Hierarchical Centroids**.
