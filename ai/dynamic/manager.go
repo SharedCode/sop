@@ -141,23 +141,20 @@ func (m *MemoryManager[T]) reflectAndReassociate(ctx context.Context, anchor *Ca
         if err != nil {
                 return err
         }
+// 1. Scan vectors stored under anchor.ID
+var vectorsToMove []Vector
 
-        // 1. Scan vectors stored under anchor.ID
-        var vectorsToMove []Vector
-        searchKey := VectorKey{CategoryID: anchor.ID}
-
-        ok, err := vectorsTree.Find(ctx, searchKey, true)
-        for ok && err == nil {
-                vk := vectorsTree.GetCurrentKey()
-                if vk.Key.CategoryID != anchor.ID {
-                        break
-                }
-                v, valErr := vectorsTree.GetCurrentValue(ctx)
-                if valErr == nil {
-                        vectorsToMove = append(vectorsToMove, v)
-                }
-                ok, err = vectorsTree.Next(ctx)
-        }
+ok, err := vectorsTree.First(ctx)
+for ok && err == nil {
+vk := vectorsTree.GetCurrentKey()
+if vk.Key.CategoryID.Compare(anchor.ID) == 0 {
+v, valErr := vectorsTree.GetCurrentValue(ctx)
+if valErr == nil {
+vectorsToMove = append(vectorsToMove, v)
+}
+}
+ok, err = vectorsTree.Next(ctx)
+}
 
         if len(vectorsToMove) == 0 {
                 return nil

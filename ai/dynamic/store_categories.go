@@ -49,4 +49,3 @@ func (s *store[T]) AddCategory(ctx context.Context, c *Category) (sop.UUID, erro
 
 	return c.ID, nil
 }
-

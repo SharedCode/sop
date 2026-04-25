@@ -103,7 +103,7 @@ func (s *store[T]) Upsert(ctx context.Context, item ai.Item[T]) error {
 	if err != nil {
 		return err
 	}
-	
+
 	if foundItem {
 		existingItem, err := s.items.GetCurrentValue(ctx)
 		if err != nil {
@@ -116,8 +116,8 @@ func (s *store[T]) Upsert(ctx context.Context, item ai.Item[T]) error {
 		}
 	} else {
 		itemObj := Item[T]{
-			ID:       id,
-			Data:     item.Payload,
+			ID:        id,
+			Data:      item.Payload,
 			Positions: []VectorKey{vk},
 		}
 		_, err = s.items.Add(ctx, id, itemObj)
@@ -243,7 +243,7 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, k int, filter func(
 					matchingVectors = append(matchingVectors, v)
 				}
 			}
-			
+
 			nextOk, nextErr := s.vectors.Next(ctx)
 			if nextErr != nil || !nextOk {
 				break

@@ -20,8 +20,12 @@ func (m *MockEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]floa
 		return nil, nil
 	}
 	vecs := make([][]float32, len(texts))
-	for i := range texts {
-		vecs[i] = []float32{0.1, 0.2, 0.3} // Static mock vector for tests
+	for i, text := range texts {
+		if text == "SubCat1" {
+			vecs[i] = []float32{0.1, 0.2, 0.3} // Close to test vector
+		} else {
+			vecs[i] = []float32{0.5, 0.6, 0.7} // Default mismatch
+		}
 	}
 	return vecs, nil
 }

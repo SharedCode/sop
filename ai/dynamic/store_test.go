@@ -106,7 +106,7 @@ func TestDynamicStore_SimulateLLMSleepCycle(t *testing.T) {
 
 	ds := NewStore[string](categories.Btree, vectors.Btree, items.Btree)
 	s := ds.(*store[string])
-	
+
 	s.SetTextIndex(&MockTextIndex{})
 
 	item1 := ai.Item[string]{
@@ -142,7 +142,7 @@ func TestDynamicStore_SimulateLLMSleepCycle(t *testing.T) {
 		t.Errorf("Expected 0 vectors after delete, got %v", vecCount)
 	}
 
-	item1.Vector = []float32{0.11, 0.21, 0.31} 
+	item1.Vector = []float32{0.11, 0.21, 0.31}
 	err = s.Upsert(ctx, item1)
 	if err != nil {
 		t.Fatalf("Failed to re-upsert: %v", err)
@@ -212,7 +212,7 @@ func TestDynamicStore_PublicAPIs(t *testing.T) {
 	if err == nil {
 		t.Errorf("Expected error fetching deleted item")
 	}
-	
+
 	count, _ = s.Count(ctx)
 	if count != 1 {
 		t.Errorf("Expected Count=1 after delete, got %v", count)
