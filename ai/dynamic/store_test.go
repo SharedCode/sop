@@ -2,6 +2,7 @@ package dynamic
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -85,7 +86,7 @@ func (m *MockTextIndex) Add(ctx context.Context, docID string, text string) erro
 func (m *MockTextIndex) Search(ctx context.Context, query string) ([]search.TextSearchResult, error) {
 	var res []search.TextSearchResult
 	for k, v := range m.data {
-		if v == query {
+		if v == query || strings.Contains(v, query) {
 			res = append(res, search.TextSearchResult{DocID: k, Score: 1.0})
 		}
 	}
@@ -148,7 +149,7 @@ func TestDynamicStore_SimulateLLMSleepCycle(t *testing.T) {
 		t.Fatalf("Failed to re-upsert: %v", err)
 	}
 
-	hits, err := s.Query(ctx, []float32{0.11, 0.21, 0.31}, 5, nil)
+	hits, err := s.Query(ctx, []float32{0.11, 0.21, 0.31}, &SearchOptions[string]{Limit: 5})
 	if err != nil {
 		t.Fatalf("Failed to query: %v", err)
 	}
@@ -159,7 +160,7 @@ func TestDynamicStore_SimulateLLMSleepCycle(t *testing.T) {
 		t.Errorf("Expected hit payload 'Apple is a fruit', got %v", hits[0].Payload)
 	}
 
-	textHits, err := ds.QueryText(ctx, "Apple is a fruit", 5, nil)
+	textHits, err := ds.QueryText(ctx, "Apple is a fruit", &SearchOptions[string]{Limit: 5})
 	if err != nil {
 		t.Fatalf("Failed to text search: %v", err)
 	}

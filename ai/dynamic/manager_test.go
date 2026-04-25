@@ -3,7 +3,7 @@ package dynamic
 import (
 	"context"
 	"fmt"
-	
+
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -32,7 +32,7 @@ func (m *MockEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]floa
 
 type MockLLM struct{}
 
-func (m *MockLLM) Name() string { return "MockLLM" }
+func (m *MockLLM) Name() string                                 { return "MockLLM" }
 func (m *MockLLM) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
 func (m *MockLLM) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	// Let's pretend it always categorizes into "MockCategory"
@@ -41,7 +41,7 @@ func (m *MockLLM) Generate(ctx context.Context, prompt string, opts ai.GenOption
 
 type FailingLLM struct{}
 
-func (m *FailingLLM) Name() string { return "FailingLLM" }
+func (m *FailingLLM) Name() string                                 { return "FailingLLM" }
 func (m *FailingLLM) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
 func (m *FailingLLM) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	return ai.GenOutput{}, fmt.Errorf("mock llm failure")

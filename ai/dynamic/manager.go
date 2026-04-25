@@ -13,19 +13,21 @@ import (
 // It interfaces directly with an LLM and an Embedder to completely bypass
 // mathematical (K-Means) clustering in favor of Semantic taxonomies.
 type MemoryManager[T any] struct {
-	store          DynamicVectorStore[T]
-	llm            ai.Generator
-	embedder       ai.Embeddings
-	sleepThreshold int
+	store                   DynamicVectorStore[T]
+	llm                     ai.Generator
+	embedder                ai.Embeddings
+	sleepThreshold          int
+	inlineRefactorThreshold int
 }
 
 // NewMemoryManager creates a new biomimetic memory orchestrator.
 func NewMemoryManager[T any](store DynamicVectorStore[T], llm ai.Generator, embedder ai.Embeddings) *MemoryManager[T] {
 	return &MemoryManager[T]{
-		store:          store,
-		llm:            llm,
-		embedder:       embedder,
-		sleepThreshold: 1000,
+		store:                   store,
+		llm:                     llm,
+		embedder:                embedder,
+		sleepThreshold:          1000,
+		inlineRefactorThreshold: 10,
 	}
 }
 
@@ -59,12 +61,41 @@ func (m *MemoryManager[T]) IngestThought(ctx context.Context, text string, categ
 		return err
 	}
 
+	itemID := sop.NewUUID()
 	item := ai.Item[T]{
-		ID:      sop.NewUUID().String(),
+		ID:      itemID.String(),
 		Vector:  vecs[0],
 		Payload: data,
 	}
-	return m.store.Upsert(ctx, item)
+
+	err = m.store.Upsert(ctx, item)
+	if err != nil {
+		return err
+	}
+
+	// Advanced Case: Inline "Reality Check" Refactor
+	// Periodically, during ingestion, if the semantic node hits our density threshold, we refactor it immediately
+	// instead of waiting exclusively for SleepCycle.
+	itemsTree, err := m.store.Items(ctx)
+	if err == nil {
+		found, _ := itemsTree.Find(ctx, itemID, false)
+		if found {
+			itm, _ := itemsTree.GetCurrentValue(ctx)
+			if len(itm.Positions) > 0 {
+				catID := itm.Positions[0].CategoryID
+				catTree, _ := m.store.Categories(ctx)
+				foundCat, _ := catTree.Find(ctx, catID, false)
+				if foundCat {
+					c, _ := catTree.GetCurrentValue(ctx)
+					if c != nil && c.ItemCount > 0 && c.ItemCount%m.inlineRefactorThreshold == 0 {
+						_ = m.reflectAndReassociate(ctx, c)
+					}
+				}
+			}
+		}
+	}
+
+	return nil
 }
 
 // EnsureCategory guarantees a Semantic Anchor physically exists in the B-Tree for a string noun.
@@ -94,7 +125,7 @@ func (m *MemoryManager[T]) EnsureCategory(ctx context.Context, categoryName stri
 		Name:         categoryName,
 		Description:  "LLM Generated Semantic Anchor",
 		CenterVector: vecs[0],
-		ItemCount:  0,
+		ItemCount:    0,
 	}
 
 	cid, err := m.store.AddCategory(ctx, anchor)
@@ -137,139 +168,139 @@ func (m *MemoryManager[T]) reflectAndReassociate(ctx context.Context, anchor *Ca
 		return fmt.Errorf("simulated reflection failure")
 	}
 
-        vectorsTree, err := m.store.Vectors(ctx)
-        if err != nil {
-                return err
-        }
-// 1. Scan vectors stored under anchor.ID
-var vectorsToMove []Vector
+	vectorsTree, err := m.store.Vectors(ctx)
+	if err != nil {
+		return err
+	}
+	// 1. Scan vectors stored under anchor.ID
+	var vectorsToMove []Vector
 
-ok, err := vectorsTree.First(ctx)
-for ok && err == nil {
-vk := vectorsTree.GetCurrentKey()
-if vk.Key.CategoryID.Compare(anchor.ID) == 0 {
-v, valErr := vectorsTree.GetCurrentValue(ctx)
-if valErr == nil {
-vectorsToMove = append(vectorsToMove, v)
-}
-}
-ok, err = vectorsTree.Next(ctx)
-}
+	ok, err := vectorsTree.First(ctx)
+	for ok && err == nil {
+		vk := vectorsTree.GetCurrentKey()
+		if vk.Key.CategoryID.Compare(anchor.ID) == 0 {
+			v, valErr := vectorsTree.GetCurrentValue(ctx)
+			if valErr == nil {
+				vectorsToMove = append(vectorsToMove, v)
+			}
+		}
+		ok, err = vectorsTree.Next(ctx)
+	}
 
-        if len(vectorsToMove) == 0 {
-                return nil
-        }
+	if len(vectorsToMove) == 0 {
+		return nil
+	}
 
-        // 2./3. Prompt LLM to find sub-themes
-        prompt := fmt.Sprintf("These thoughts are under '%s'. identify 3 tighter sub-categories, comma-separated.", anchor.Name)
-        opts := ai.GenOptions{MaxTokens: 20, Temperature: 0.2}
-        out, err := m.llm.Generate(ctx, prompt, opts)
-        if err != nil {
-                return err
-        }
+	// 2./3. Prompt LLM to find sub-themes
+	prompt := fmt.Sprintf("These thoughts are under '%s'. identify 3 tighter sub-categories, comma-separated.", anchor.Name)
+	opts := ai.GenOptions{MaxTokens: 20, Temperature: 0.2}
+	out, err := m.llm.Generate(ctx, prompt, opts)
+	if err != nil {
+		return err
+	}
 
-        subCats := strings.Split(out.Text, ",")
-        var newAnchors []*Category
+	subCats := strings.Split(out.Text, ",")
+	var newAnchors []*Category
 
-        // 4. EnsureCategory() for each new LLM deduction.
-        cTree, _ := m.store.Categories(ctx)
-        for _, sub := range subCats {
-                sub = strings.TrimSpace(sub)
-                if sub == "" {
-                        continue
-                }
-                newCatID, catErr := m.EnsureCategory(ctx, sub)
-                if catErr != nil {
-                        continue
-                }
+	// 4. EnsureCategory() for each new LLM deduction.
+	cTree, _ := m.store.Categories(ctx)
+	for _, sub := range subCats {
+		sub = strings.TrimSpace(sub)
+		if sub == "" {
+			continue
+		}
+		newCatID, catErr := m.EnsureCategory(ctx, sub)
+		if catErr != nil {
+			continue
+		}
 
-                found, _ := cTree.Find(ctx, newCatID, false)
-                if found {
-                        newCat, _ := cTree.GetCurrentValue(ctx)
-                        newAnchors = append(newAnchors, newCat)
-                }
-        }
+		found, _ := cTree.Find(ctx, newCatID, false)
+		if found {
+			newCat, _ := cTree.GetCurrentValue(ctx)
+			newAnchors = append(newAnchors, newCat)
+		}
+	}
 
-        if len(newAnchors) == 0 {
-                return nil
-        }
+	if len(newAnchors) == 0 {
+		return nil
+	}
 
-        itemsTree, err := m.store.Items(ctx)
-        if err != nil {
-                return err
-        }
+	itemsTree, err := m.store.Items(ctx)
+	if err != nil {
+		return err
+	}
 
-        // 5. Compare semantic distance of items to the new sub-categories vs the old anchor.
-        for _, v := range vectorsToMove {
-                oldDist := EuclideanDistance(v.Data, anchor.CenterVector)
-                oldKey := VectorKey{
-                        CategoryID:         anchor.ID,
-                        DistanceToCategory: oldDist,
-                        VectorID:           v.ID,
-                }
+	// 5. Compare semantic distance of items to the new sub-categories vs the old anchor.
+	for _, v := range vectorsToMove {
+		oldDist := EuclideanDistance(v.Data, anchor.CenterVector)
+		oldKey := VectorKey{
+			CategoryID:         anchor.ID,
+			DistanceToCategory: oldDist,
+			VectorID:           v.ID,
+		}
 
-                bestAnchor := anchor
-                minDist := oldDist
+		bestAnchor := anchor
+		minDist := oldDist
 
-                for _, na := range newAnchors {
-                        dist := EuclideanDistance(v.Data, na.CenterVector)
-                        if dist < minDist {
-                                minDist = dist
-                                bestAnchor = na
-                        }
-                }
+		for _, na := range newAnchors {
+			dist := EuclideanDistance(v.Data, na.CenterVector)
+			if dist < minDist {
+				minDist = dist
+				bestAnchor = na
+			}
+		}
 
-                // 6. Delete old VectorKey, insert new VectorKey for items closer to the new sub-categories
-                if bestAnchor.ID != anchor.ID {
-                        _, err = vectorsTree.Remove(ctx, oldKey)
-                        if err != nil {
-                                continue
-                        }
+		// 6. Delete old VectorKey, insert new VectorKey for items closer to the new sub-categories
+		if bestAnchor.ID != anchor.ID {
+			_, err = vectorsTree.Remove(ctx, oldKey)
+			if err != nil {
+				continue
+			}
 
-                        newKey := VectorKey{
-                                CategoryID:         bestAnchor.ID,
-                                DistanceToCategory: minDist,
-                                VectorID:           v.ID,
-                        }
-                        // Update the physical reference ID on the Vector
-                        v.CategoryID = bestAnchor.ID
-                        _, err = vectorsTree.Add(ctx, newKey, v)
-                        if err != nil {
-                                continue
-                        }
+			newKey := VectorKey{
+				CategoryID:         bestAnchor.ID,
+				DistanceToCategory: minDist,
+				VectorID:           v.ID,
+			}
+			// Update the physical reference ID on the Vector
+			v.CategoryID = bestAnchor.ID
+			_, err = vectorsTree.Add(ctx, newKey, v)
+			if err != nil {
+				continue
+			}
 
-                        // Update the Item's direct Position links to reflect the move
-                        foundItem, _ := itemsTree.Find(ctx, v.ItemID, false)
-                        if foundItem {
-                                itm, _ := itemsTree.GetCurrentValue(ctx)
-                                updatedPositions := make([]VectorKey, 0, len(itm.Positions))
-                                for _, pos := range itm.Positions {
-                                        // Match explicit pointer replacement
-                                        if pos.VectorID == oldKey.VectorID && pos.CategoryID == oldKey.CategoryID {
-                                                updatedPositions = append(updatedPositions, newKey)
-                                        } else {
-                                                updatedPositions = append(updatedPositions, pos)
-                                        }
-                                }
-                                itm.Positions = updatedPositions
-                                // Optional logical update
-                                if itm.CategoryID == anchor.ID {
-                                        itm.CategoryID = bestAnchor.ID
-                                }
-                                _, _ = itemsTree.UpdateCurrentItem(ctx, v.ItemID, itm)
-                        }
+			// Update the Item's direct Position links to reflect the move
+			foundItem, _ := itemsTree.Find(ctx, v.ItemID, false)
+			if foundItem {
+				itm, _ := itemsTree.GetCurrentValue(ctx)
+				updatedPositions := make([]VectorKey, 0, len(itm.Positions))
+				for _, pos := range itm.Positions {
+					// Match explicit pointer replacement
+					if pos.VectorID == oldKey.VectorID && pos.CategoryID == oldKey.CategoryID {
+						updatedPositions = append(updatedPositions, newKey)
+					} else {
+						updatedPositions = append(updatedPositions, pos)
+					}
+				}
+				itm.Positions = updatedPositions
+				// Optional logical update
+				if itm.CategoryID == anchor.ID {
+					itm.CategoryID = bestAnchor.ID
+				}
+				_, _ = itemsTree.UpdateCurrentItem(ctx, v.ItemID, itm)
+			}
 
-                        anchor.ItemCount--
-                        bestAnchor.ItemCount++
-                }
-        }
+			anchor.ItemCount--
+			bestAnchor.ItemCount++
+		}
+	}
 
-        cTree.Find(ctx, anchor.ID, false)
-        cTree.UpdateCurrentItem(ctx, anchor.ID, anchor)
-        for _, na := range newAnchors {
-                cTree.Find(ctx, na.ID, false)
-                cTree.UpdateCurrentItem(ctx, na.ID, na)
-        }
+	cTree.Find(ctx, anchor.ID, false)
+	cTree.UpdateCurrentItem(ctx, anchor.ID, anchor)
+	for _, na := range newAnchors {
+		cTree.Find(ctx, na.ID, false)
+		cTree.UpdateCurrentItem(ctx, na.ID, na)
+	}
 
-        return nil
+	return nil
 }

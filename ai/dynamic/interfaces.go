@@ -13,6 +13,8 @@ type DynamicVectorStore[T any] interface {
 	// Upsert adds or updates a single item in the store.
 	Upsert(ctx context.Context, item ai.Item[T]) error
 	// UpsertBatch adds or updates multiple items in the store efficiently.
+// UpsertByCategory explicitly assigns a category ignoring spatial routing.
+UpsertByCategory(ctx context.Context, categoryName string, item ai.Item[T]) error
 	UpsertBatch(ctx context.Context, items []ai.Item[T]) error
 
 	// Get retrieves a item by its logical ID.
@@ -22,10 +24,10 @@ type DynamicVectorStore[T any] interface {
 
 	// Query searches for the nearest neighbors to the given vector coordinates.
 	// filters is a function that returns true if the item should be included.
-	Query(ctx context.Context, vec []float32, k int, filter func(T) bool) ([]ai.Hit[T], error)
+	Query(ctx context.Context, vec []float32, opts *SearchOptions[T]) ([]ai.Hit[T], error)
 
 	// QueryText performs a BM25 or keyword text search on the stored text representation of the thoughts.
-	QueryText(ctx context.Context, text string, k int, filter func(T) bool) ([]ai.Hit[T], error)
+	QueryText(ctx context.Context, text string, opts *SearchOptions[T]) ([]ai.Hit[T], error)
 
 	// Count returns the total number of items in the store.
 	Count(ctx context.Context) (int64, error)
@@ -36,6 +38,10 @@ type DynamicVectorStore[T any] interface {
 	// AddCategory adds a new category to the store dynamically.
 	// This allows for runtime expansion of the concept space without full rebalancing.
 	AddCategory(ctx context.Context, c *Category) (sop.UUID, error)
+
+	// AddCategoryParent connects an existing category to an additional parent, supporting
+	// the polyhierarchy DAG structure. This is often leveraged during LLM Sleep Cycles.
+	AddCategoryParent(ctx context.Context, categoryID sop.UUID, parent CategoryParent) error
 
 	// Consolidate reads accumulated vectors from short-term memory (TempVectors),
 	// dynamically routes them into existing Categories using AssignAndIndex logic,
@@ -49,6 +55,9 @@ type DynamicVectorStore[T any] interface {
 	// SetDeduplication enables or disables the internal deduplication check during Upsert.
 	SetDeduplication(enabled bool)
 
+	// SetLLM sets the LLM interface used to generate categories dynamically.
+	SetLLM(llm LLM[T])
+
 	// Vectors returns the Vectors B-Tree for advanced manipulation (Mathematical layout).
 	Vectors(ctx context.Context) (btree.BtreeInterface[VectorKey, Vector], error)
 
@@ -57,4 +66,11 @@ type DynamicVectorStore[T any] interface {
 
 	// Version returns the Vector store's version number, which is a unix elapsed time.
 	Version(ctx context.Context) (int64, error)
+}
+
+// SearchOptions provides optional parameters for querying the vector store
+type SearchOptions[T any] struct {
+Limit    int
+Category string
+Filter   func(T) bool
 }

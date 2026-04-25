@@ -16,6 +16,7 @@ type store[T any] struct {
 	vectors    btree.BtreeInterface[VectorKey, Vector]
 	items      btree.BtreeInterface[sop.UUID, Item[T]]
 	textIndex  ai.TextIndex
+	llm        LLM[T]
 	dedup      bool
 }
 
@@ -37,6 +38,10 @@ func (s *store[T]) SetTextIndex(idx ai.TextIndex) {
 	s.textIndex = idx
 }
 
+func (s *store[T]) SetLLM(l LLM[T]) {
+	s.llm = l
+}
+
 func (s *store[T]) Upsert(ctx context.Context, item ai.Item[T]) error {
 	id, err := sop.ParseUUID(item.ID)
 	if err != nil {
@@ -52,10 +57,24 @@ func (s *store[T]) Upsert(ctx context.Context, item ai.Item[T]) error {
 	}
 	if !ok {
 		// Create a root category if none exists
-		c := &Category{
-			ID:           sop.NewUUID(),
-			CenterVector: item.Vector, // Initial category math uses the first vector
-			Name:         "Default Root",
+		var c *Category
+		if s.llm != nil {
+			if genCat, gErr := s.llm.GenerateCategory(ctx, item.Payload); gErr == nil && genCat != nil {
+				c = genCat
+				if c.ID == sop.NilUUID {
+					c.ID = sop.NewUUID()
+				}
+				if len(c.CenterVector) == 0 {
+					c.CenterVector = item.Vector
+				}
+			}
+		}
+		if c == nil {
+			c = &Category{
+				ID:           sop.NewUUID(),
+				CenterVector: item.Vector, // Initial category math uses the first vector
+				Name:         "Default Root",
+			}
 		}
 		_, err = s.AddCategory(ctx, c)
 		if err != nil {
@@ -76,6 +95,23 @@ func (s *store[T]) Upsert(ctx context.Context, item ai.Item[T]) error {
 			nextOk, nextErr := s.categories.Next(ctx)
 			if nextErr != nil || !nextOk {
 				break
+			}
+		}
+
+		// Dynamic Vector Clustering: Re-evaluate category boundary via LLM if item's distance is too far from existing centers.
+		if bestDist > 0.60 && s.llm != nil {
+			if genCat, gErr := s.llm.GenerateCategory(ctx, item.Payload); gErr == nil && genCat != nil {
+				if genCat.ID == sop.NilUUID {
+					genCat.ID = sop.NewUUID()
+				}
+				if len(genCat.CenterVector) == 0 {
+					genCat.CenterVector = item.Vector
+				}
+				if _, addErr := s.AddCategory(ctx, genCat); addErr == nil {
+					bestCategory = genCat.ID
+					// bestDist resets to perfect fit for the newly generated category
+					bestDist = 0
+				}
 			}
 		}
 	}
@@ -138,6 +174,55 @@ func (s *store[T]) Upsert(ctx context.Context, item ai.Item[T]) error {
 	return nil
 }
 
+// UpsertByCategory strictly inserts data assuming an explicit, fixed Category.
+func (s *store[T]) UpsertByCategory(ctx context.Context, categoryName string, item ai.Item[T]) error {
+	id, err := sop.ParseUUID(item.ID)
+	if err != nil {
+		id = sop.NewUUID()
+	}
+
+	// Ensure the Category exists
+	var c *Category
+	ok, _ := s.categories.First(ctx)
+	if ok {
+		for {
+			cat, err := s.categories.GetCurrentValue(ctx)
+			if err == nil && cat != nil && cat.Name == categoryName {
+				c = cat
+				break
+			}
+			ok, _ := s.categories.Next(ctx)
+			if !ok {
+				break
+			}
+		}
+	}
+
+	if c == nil {
+		// Auto-vivify static category
+		c = &Category{ID: sop.NewUUID(), Name: categoryName}
+		s.categories.Add(ctx, c.ID, c)
+	}
+
+	// Insert Vector link
+	vk := VectorKey{CategoryID: c.ID, VectorID: sop.NewUUID()}
+	s.vectors.Add(ctx, vk, Vector{ItemID: id, Data: item.Vector})
+
+	// Insert Item
+	if found, _ := s.items.Find(ctx, id, false); found {
+		s.items.UpdateCurrentItem(ctx, id, Item[T]{ID: id, CategoryID: c.ID, Data: item.Payload, Positions: []VectorKey{vk}})
+	} else {
+		s.items.Add(ctx, id, Item[T]{ID: id, CategoryID: c.ID, Data: item.Payload, Positions: []VectorKey{vk}})
+	}
+
+	// Update global text index
+	if s.textIndex != nil {
+		s.textIndex.Add(ctx, id.String(), item.ID) // Assumes item.ID actually contained textual representation.
+	}
+
+	return nil
+}
+
 func (s *store[T]) DeleteItem(ctx context.Context, itemID sop.UUID) error {
 	found, err := s.items.Find(ctx, itemID, false)
 	if err != nil {
@@ -195,7 +280,11 @@ func (s *store[T]) Delete(ctx context.Context, id sop.UUID) error {
 	return s.DeleteItem(ctx, id)
 }
 
-func (s *store[T]) Query(ctx context.Context, vec []float32, k int, filter func(T) bool) ([]ai.Hit[T], error) {
+func (s *store[T]) Query(ctx context.Context, vec []float32, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
+	if opts == nil {
+		opts = &SearchOptions[T]{Limit: 10}
+	}
+	var targetCategory *Category
 	var categories []*Category
 	ok, err := s.categories.First(ctx)
 	if err != nil {
@@ -205,11 +294,16 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, k int, filter func(
 		return nil, nil // No data
 	}
 
-	// Gather all top level categories. Wait, for now we just get all root categories.
 	for {
 		c, err := s.categories.GetCurrentValue(ctx)
 		if err == nil && c != nil {
-			categories = append(categories, c)
+			if opts.Category != "" && c.Name == opts.Category {
+				targetCategory = c
+				break
+			}
+			if opts.Category == "" {
+				categories = append(categories, c)
+			}
 		}
 		nextOk, nextErr := s.categories.Next(ctx)
 		if nextErr != nil || !nextOk {
@@ -217,16 +311,19 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, k int, filter func(
 		}
 	}
 
-	// Find best category
-	bestCategory, _ := FindClosestCategory(vec, categories)
-	if bestCategory == nil {
+	if opts.Category != "" {
+		if targetCategory == nil {
+			return nil, nil // Category strictly required but not found
+		}
+	} else {
+		targetCategory, _ = FindClosestCategory(vec, categories)
+	}
+
+	if targetCategory == nil {
 		return nil, nil
 	}
 
 	var hits []ai.Hit[T]
-
-	// Instead of seeking, let's just collect ALL items that exist with this CategoryID.
-	// Since we mock and could have cursor issues, let's gather keys.
 	ok, err = s.vectors.First(ctx)
 	if err != nil {
 		return nil, err
@@ -237,7 +334,7 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, k int, filter func(
 		for {
 			vk := s.vectors.GetCurrentKey()
 			// Need to verify CategoryID equality properly
-			if vk.Key.CategoryID.Compare(bestCategory.ID) == 0 {
+			if vk.Key.CategoryID.Compare(targetCategory.ID) == 0 {
 				v, err := s.vectors.GetCurrentValue(ctx)
 				if err == nil {
 					matchingVectors = append(matchingVectors, v)
@@ -257,9 +354,7 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, k int, filter func(
 		if foundItem && err == nil {
 			item, err := s.items.GetCurrentValue(ctx)
 			if err == nil {
-				// Let's print out what we found
-				// fmt.Printf("Found item: %v\n", item.Data)
-				if filter == nil || filter(item.Data) {
+				if opts.Filter == nil || opts.Filter(item.Data) {
 					hits = append(hits, ai.Hit[T]{
 						ID:      item.ID.String(),
 						Score:   EuclideanDistance(vec, v.Data),
@@ -279,8 +374,8 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, k int, filter func(
 		}
 	}
 
-	if len(hits) > k {
-		hits = hits[:k]
+	if len(hits) > opts.Limit {
+		hits = hits[:opts.Limit]
 	}
 	return hits, nil
 }
@@ -318,9 +413,33 @@ func (s *store[T]) Version(ctx context.Context) (int64, error) {
 }
 
 // QueryText performs a BM25 or keyword text search on the stored text representation of the thoughts.
-func (s *store[T]) QueryText(ctx context.Context, text string, k int, filter func(T) bool) ([]ai.Hit[T], error) {
+func (s *store[T]) QueryText(ctx context.Context, text string, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
+	if opts == nil {
+		opts = &SearchOptions[T]{Limit: 10}
+	}
 	if s.textIndex == nil {
 		return nil, fmt.Errorf("text search is not enabled on this store")
+	}
+
+	var targetCategoryID sop.UUID
+	if opts.Category != "" {
+		ok, err := s.categories.First(ctx)
+		if err == nil && ok {
+			for {
+				c, err := s.categories.GetCurrentValue(ctx)
+				if err == nil && c != nil && c.Name == opts.Category {
+					targetCategoryID = c.ID
+					break
+				}
+				nextOk, _ := s.categories.Next(ctx)
+				if !nextOk {
+					break
+				}
+			}
+		}
+		if targetCategoryID == sop.NilUUID {
+			return nil, nil // Category strictly requested but not found
+		}
 	}
 
 	searchResults, err := s.textIndex.Search(ctx, text)
@@ -330,11 +449,10 @@ func (s *store[T]) QueryText(ctx context.Context, text string, k int, filter fun
 
 	var results []ai.Hit[T]
 	for _, res := range searchResults {
-		if len(results) >= k {
+		if len(results) >= opts.Limit {
 			break
 		}
 
-		// Fetch the payload directly from items tree since we have an ID
 		id, err := sop.ParseUUID(res.DocID)
 		if err != nil {
 			continue
@@ -344,8 +462,13 @@ func (s *store[T]) QueryText(ctx context.Context, text string, k int, filter fun
 		if foundItem && err == nil {
 			item, err := s.items.GetCurrentValue(ctx)
 			if err == nil {
+				// Category strictly requested, filtering...
+				if opts.Category != "" && item.CategoryID.Compare(targetCategoryID) != 0 {
+					continue
+				}
+
 				payload = item.Data
-				if filter != nil && !filter(payload) {
+				if opts.Filter != nil && !opts.Filter(payload) {
 					continue
 				}
 			}

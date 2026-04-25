@@ -110,7 +110,7 @@ func TestPlaybookSimulation_Harness(t *testing.T) {
 		{
 			Name: "Explicit Categories Security and Compliance Playbook",
 			Rules: []PlaybookRule{
-				{Keywords: []string{"System Playbook Root", "validate", "network"}, CategoryName: "System Playbook Root (Generated)", Vector: []float32{0.5, 0.5, 0.5}},
+				{Keywords: []string{"System Playbook Root", "validate", "network", "System"}, CategoryName: "System Playbook Root (Generated)", Vector: []float32{0.5, 0.5, 0.5}},
 				{Keywords: []string{"Security Requirements", "Security", "password", "JWT"}, CategoryName: "Security Requirements (Generated)", Vector: []float32{0.9, 0.1, 0.1}},
 				{Keywords: []string{"Corporate Compliance", "Compliance", "Audit"}, CategoryName: "Corporate Compliance (Generated)", Vector: []float32{0.9, 0.9, 0.1}},
 			},
@@ -136,7 +136,7 @@ func TestPlaybookSimulation_Harness(t *testing.T) {
 		{
 			Name: "Dynamic LLM Generated Cloud and DevSecOps Playbook",
 			Rules: []PlaybookRule{
-				{Keywords: []string{"validate", "network"}, CategoryName: "System Playbook Root (Generated)", Vector: []float32{0.5, 0.5, 0.5}},
+				{Keywords: []string{"validate", "network", "System"}, CategoryName: "System Playbook Root (Generated)", Vector: []float32{0.5, 0.5, 0.5}},
 				{Keywords: []string{"Security", "password", "JWT"}, CategoryName: "Security Requirements (Generated)", Vector: []float32{0.9, 0.1, 0.1}},
 				{Keywords: []string{"Compliance", "Audit"}, CategoryName: "Corporate Compliance (Generated)", Vector: []float32{0.9, 0.9, 0.1}},
 			},
@@ -261,7 +261,7 @@ func TestPlaybookSimulation_Harness(t *testing.T) {
 
 			// 4. Validate KNN Queries map correctly
 			for _, q := range tt.Queries {
-				hits, err := s.Query(ctx, q.Vector, 3, nil)
+				hits, err := s.Query(ctx, q.Vector, &SearchOptions[string]{Limit: 3})
 				if err != nil {
 					t.Fatalf("KNN Query Failed: %v", err)
 				}
