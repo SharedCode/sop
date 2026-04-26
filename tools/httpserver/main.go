@@ -133,22 +133,17 @@ func main() {
 		os.Exit(0)
 	}
 
-	var targetConfigPath = config.ConfigFile
-	if targetConfigPath == "" {
+	if config.ConfigFile == "" {
 		if cwd, err := os.Getwd(); err == nil {
-			targetConfigPath = filepath.Join(cwd, "config.json")
+			config.ConfigFile = filepath.Join(cwd, "config.json")
 		} else {
-			targetConfigPath = "config.json"
+			config.ConfigFile = "config.json"
 		}
 	}
 
-	if _, err := os.Stat(targetConfigPath); err == nil {
-		if err := loadConfig(targetConfigPath); err != nil {
+	if _, err := os.Stat(config.ConfigFile); err == nil {
+		if err := loadConfig(config.ConfigFile); err != nil {
 			log.Error(fmt.Sprintf("Failed to load config file: %v", err))
-		} else {
-			if config.ConfigFile == "" {
-				config.ConfigFile = targetConfigPath
-			}
 		}
 	}
 
@@ -828,7 +823,7 @@ func saveConfigFile() {
 	if config.ConfigFile == "" {
 		return
 	}
-	f, err := os.Create(config.ConfigFile)
+	f, err := os.Create(config.ConfigFile + ".tmp")
 	if err != nil {
 		log.Error(fmt.Sprintf("Failed to save config: %v", err))
 		return
@@ -837,6 +832,7 @@ func saveConfigFile() {
 	encoder := json.NewEncoder(f)
 	encoder.SetIndent("", "    ")
 	encoder.Encode(config)
+	os.Rename(config.ConfigFile+".tmp", config.ConfigFile)
 }
 
 func handleUpdateDatabase(w http.ResponseWriter, r *http.Request) {

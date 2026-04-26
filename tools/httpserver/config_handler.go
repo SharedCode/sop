@@ -519,6 +519,10 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+                if entries, err := os.ReadDir(req.Path); err == nil && len(entries) > 0 {
+                        http.Error(w, fmt.Sprintf("Destination path '%s' is not empty. Cannot create a fresh database here as it may corrupt existing data.", req.Path), http.StatusBadRequest)
+                        return
+                }
 
 	// 1. Setup Database (Creates folders, writes dboptions.json)
 	// This uses the official SOP setup routine.
