@@ -1,4 +1,4 @@
-package dynamic
+package memory
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/inmemory"
 )
 
@@ -230,7 +229,7 @@ func TestPlaybookSimulation_Harness(t *testing.T) {
 			for _, payload := range tt.Payloads {
 				// Embed to trigger thresholds and knn logic
 				eVecs, _ := embedder.EmbedTexts(ctx, []string{payload})
-				item := ai.Item[string]{
+				item := Item[string]{
 					ID:      sop.NewUUID().String(),
 					Vector:  eVecs[0],
 					Payload: payload,

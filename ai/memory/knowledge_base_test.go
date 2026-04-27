@@ -1,4 +1,4 @@
-package dynamic
+package memory
 
 import (
 	"context"
@@ -43,7 +43,7 @@ func TestKnowledgeBase_API(t *testing.T) {
 		Manager:           manager,
 	}
 
-	err := kb.IngestThought(ctx, "test_cat", "test_id", "test", "payload")
+	err := kb.IngestThoughts(ctx, []Thought[string]{{Text: "test_cat", Category: "test_id", Data: "payload"}}, "test")
 	if err != nil {
 		t.Fatalf("IngestThought failed: %v", err)
 	}
@@ -81,16 +81,17 @@ func TestStaticKnowledgeBase(t *testing.T) {
 	ds := memStore.(*store[string])
 	ds.SetTextIndex(&MockTextIndex{})
 
-	kb := StaticKnowledgeBase[string]{
+	kb := KnowledgeBase[string]{
 		BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: ds},
+		Manager:           NewMemoryManager[string](ds, &MockLLM{}, &MockEmbedder{}),
 	}
 
-	err := kb.Insert(ctx, "Apple is a fruit", "Fruits", []float32{0.1, 0.2, 0.3}, "apple")
+	err := kb.IngestThoughts(ctx, []Thought[string]{{Text: "Apple is a fruit", Category: "Fruits", Vector: []float32{0.1, 0.2, 0.3}, Data: "apple"}}, "")
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
-	err = kb.Insert(ctx, "Car is a vehicle", "Vehicles", []float32{0.9, 0.8, 0.7}, "car")
+	err = kb.IngestThoughts(ctx, []Thought[string]{{Text: "Car is a vehicle", Category: "Vehicles", Vector: []float32{0.9, 0.8, 0.7}, Data: "car"}}, "")
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}

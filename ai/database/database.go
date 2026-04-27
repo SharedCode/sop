@@ -202,6 +202,22 @@ func (db *Database) RemoveModelStore(ctx context.Context, name string) error {
 	return database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s_models", name))
 }
 
+// RemoveKnowledgeBase removes the Knowledge Base and its underlying B-Trees.
+func (db *Database) RemoveKnowledgeBase(ctx context.Context, name string) error {
+	suffixes := []string{
+		"/categories",
+		"/vectors",
+		"/items",
+	}
+	var lastErr error
+	for _, suffix := range suffixes {
+		if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s", name, suffix)); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
 // RemoveVectorStore removes the vector store and its underlying B-Trees.
 func (db *Database) RemoveVectorStore(ctx context.Context, name string) error {
 	suffixes := []string{

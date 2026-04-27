@@ -1,4 +1,4 @@
-package dynamic
+package memory
 
 import (
 	"context"
@@ -67,7 +67,8 @@ func TestMemoryManager_IngestAndSleep(t *testing.T) {
 	mgr := NewMemoryManager[string](store, &MockLLM{}, &MockEmbedder{})
 
 	// 1. Test IngestThought
-	err := mgr.IngestThought(ctx, "this is a brilliant thought about apples", "", "Nutritionist", "Apples are great")
+	kbMgr := &KnowledgeBase[string]{Manager: mgr, BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: store}}
+	err := kbMgr.IngestThoughts(ctx, []Thought[string]{{Text: "this is a brilliant thought about apples", Category: "", Data: "Apples are great"}}, "Nutritionist")
 	if err != nil {
 		t.Fatalf("IngestThought failed: %v", err)
 	}

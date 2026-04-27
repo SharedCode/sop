@@ -1,4 +1,4 @@
-package dynamic
+package memory
 
 import (
 	"testing"

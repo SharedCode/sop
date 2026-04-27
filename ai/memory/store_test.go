@@ -1,4 +1,4 @@
-package dynamic
+package memory
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/inmemory"
 	"github.com/sharedcode/sop/search"
 )
@@ -33,7 +32,7 @@ func TestDynamicStore_Upsert(t *testing.T) {
 
 	s := NewStore[string](categories.Btree, vectors.Btree, items.Btree)
 
-	err := s.Upsert(ctx, ai.Item[string]{
+	err := s.Upsert(ctx, Item[string]{
 		ID:      sop.NewUUID().String(),
 		Vector:  []float32{0.1, 0.2, 0.3},
 		Payload: "LLM Thought One",
@@ -57,7 +56,7 @@ func TestDynamicStore_Upsert(t *testing.T) {
 		t.Fatalf("Expected 1 content, found %v", cc)
 	}
 
-	err = s.Upsert(ctx, ai.Item[string]{
+	err = s.Upsert(ctx, Item[string]{
 		ID:      sop.NewUUID().String(),
 		Vector:  []float32{0.15, 0.21, 0.33},
 		Payload: "LLM Thought Two",
@@ -110,7 +109,7 @@ func TestDynamicStore_SimulateLLMSleepCycle(t *testing.T) {
 
 	s.SetTextIndex(&MockTextIndex{})
 
-	item1 := ai.Item[string]{
+	item1 := Item[string]{
 		ID:      sop.NewUUID().String(),
 		Vector:  []float32{0.1, 0.2, 0.3},
 		Payload: "Apple is a fruit",
@@ -180,7 +179,7 @@ func TestDynamicStore_PublicAPIs(t *testing.T) {
 	items := inmemory.NewBtree[sop.UUID, Item[string]](true)
 	s := NewStore[string](categories.Btree, vectors.Btree, items.Btree)
 
-	err := s.UpsertBatch(ctx, []ai.Item[string]{
+	err := s.UpsertBatch(ctx, []Item[string]{
 		{ID: sop.NewUUID().String(), Vector: []float32{0.1}, Payload: "1"},
 		{ID: sop.NewUUID().String(), Vector: []float32{0.2}, Payload: "2"},
 	})

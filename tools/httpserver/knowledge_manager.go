@@ -8,9 +8,9 @@ import (
 	"os"
 
 	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
+	
+	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/vector"
 )
 
 type ExpertiseMetadata struct {
@@ -72,17 +72,15 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// We append _kb to create the specific vector store namespace
-	storeName := req.Expertise + "_kb"
+	storeName := req.Expertise
 	if req.KnowledgeBaseName != "" {
 		storeName = req.KnowledgeBaseName
 	}
-	vsConfig := vector.Config{
-		UsageMode: ai.BuildOnceQueryMany,
-	}
-	vs, err := db.OpenVectorStore(ctx, storeName, trans, vsConfig)
+
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, nil, nil)
 	if err != nil {
 		trans.Rollback(ctx)
-		http.Error(w, fmt.Sprintf("Failed to open vector store '%s': %v", storeName, err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to open KnowledgeBase '%s': %v", storeName, err), http.StatusInternalServerError)
 		return
 	}
 
@@ -94,7 +92,7 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Actually preload data
-	var items []ai.Item[map[string]any]
+	var thoughts []memory.Thought[map[string]any]
 
 	if len(req.CustomData) > 0 {
 		var chunks []struct {
@@ -113,8 +111,8 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 				if textIdx != nil {
 					textIdx.Add(ctx, cid, textIndexStr)
 				}
-				items = append(items, ai.Item[map[string]any]{
-					ID: cid, Payload: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+				thoughts = append(thoughts, memory.Thought[map[string]any]{
+					Text: chunk.Text, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
 				})
 			}
 		}
@@ -140,8 +138,8 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 						if textIdx != nil {
 							textIdx.Add(ctx, cid, textIndexStr)
 						}
-						items = append(items, ai.Item[map[string]any]{
-							ID: cid, Payload: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+						thoughts = append(thoughts, memory.Thought[map[string]any]{
+							Text: chunk.Text, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
 						})
 					}
 				}
@@ -159,7 +157,7 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 			"../../" + req.Expertise + ".json",
 			"ai/" + req.Expertise + ".json",
 		}
-		if req.Expertise == "sop_framework" {
+		if req.Expertise == "SOP_KB" {
 			pathsToTry = append(pathsToTry, "sop_base_knowledge.json", "ai/sop_base_knowledge.json", "../ai/sop_base_knowledge.json")
 		}
 
@@ -186,8 +184,8 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 					if textIdx != nil {
 						textIdx.Add(ctx, cid, textIndexStr)
 					}
-					items = append(items, ai.Item[map[string]any]{
-						ID: cid, Payload: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+					thoughts = append(thoughts, memory.Thought[map[string]any]{
+						Text: chunk.Text, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
 					})
 				}
 			}
@@ -198,8 +196,8 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if len(items) > 0 {
-		vs.UpsertBatch(ctx, items)
+	if len(thoughts) > 0 {
+		kb.IngestThoughts(ctx, thoughts, "expert")
 	}
 
 	if err := trans.Commit(ctx); err != nil {
