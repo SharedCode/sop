@@ -12,7 +12,7 @@ import (
 
 func TestSingleBlobScriptExecution(t *testing.T) {
 	// 1. Setup Environment
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		registry: NewRegistry(),
 		Config:   Config{},
 	}
@@ -63,7 +63,7 @@ func TestSingleBlobScriptExecution(t *testing.T) {
 	scriptCtx.Stores["department"] = storeA
 	scriptCtx.Stores["employees"] = storeB
 
-	// Key used in dataadmintools.utils.go
+	// Key used in copilottools.utils.go
 	payload.Variables["_atomic_script_context"] = scriptCtx
 
 	// Assuming "session_payload" is the key string for context value in ai/interfaces.go

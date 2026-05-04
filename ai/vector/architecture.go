@@ -8,8 +8,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/common"
-	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/sop/database"
 )
 
 // Architecture demonstrates the 3-B-Tree layout for optimal performance.
@@ -49,34 +48,12 @@ type Architecture struct {
 }
 
 // newBtree is a helper to create a B-Tree that automatically selects between standard and replicated modes.
-func newBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
-	var b3 btree.BtreeInterface[TK, TV]
-	var err error
-
-	// Fix for regression: Explicitly set IsPrimitiveKey if not set, to match legacy behavior
-	// where common.NewBtree used to auto-detect it. This ensures compatibility with existing stores.
-	if !so.IsPrimitiveKey && btree.IsPrimitive[TK]() {
-		so.IsPrimitiveKey = true
-	}
-
-	if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
-		if ct.HandleReplicationRelatedError != nil {
-			b3, err = infs.NewBtreeWithReplication[TK, TV](ctx, so, t, comparer)
-		} else {
-			b3, err = infs.NewBtree[TK, TV](ctx, so, t, comparer)
-		}
-	} else {
-		b3, err = infs.NewBtree[TK, TV](ctx, so, t, comparer)
-	}
+func newBtree[TK btree.Ordered, TV any](ctx context.Context, config Config, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
+	b3, err := database.NewBtree[TK, TV](ctx, config.TransactionOptions.GetDatabaseOptions(), so.Name, t, comparer, so)
 
 	if err != nil {
 		if err.Error() == fmt.Sprintf("b-tree '%s' is already in the transaction's b-tree instances list", so.Name) {
-			if ct, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
-				if ct.HandleReplicationRelatedError != nil {
-					return infs.OpenBtreeWithReplication[TK, TV](ctx, so.Name, t, comparer)
-				}
-			}
-			return infs.OpenBtree[TK, TV](ctx, so.Name, t, comparer)
+			return database.OpenBtree[TK, TV](ctx, config.TransactionOptions.GetDatabaseOptions(), so.Name, t, comparer)
 		}
 	}
 	return b3, err
@@ -85,25 +62,28 @@ func newBtree[TK btree.Ordered, TV any](ctx context.Context, so sop.StoreOptions
 // OpenDomainStore initializes the B-Trees for the vertical.
 // version is applied ONLY to Centroids and Vectors (the Index).
 // Content, TempVectors, and Lookup are shared across versions.
-func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, version int64, contentSize sop.ValueDataSize, skipTempVectors bool) (*Architecture, error) {
+func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, version int64, config Config) (*Architecture, error) {
 	suffix := ""
 	if version > 0 {
 		suffix = fmt.Sprintf("_%d", version)
 	}
 
 	// Helper to prefix store names with domain
+	contentSize := config.ContentSize
+	skipTempVectors := !config.EnableIngestionBuffer
+
 	name := func(s string) string {
 		return fmt.Sprintf("%s%s", domain, s)
 	}
 
 	// 1. Open Centroids Store (Versioned)
-	centroids, err := newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(name(centroidsSuffix+suffix), true, btree.DefaultSlotLength, centroidsDesc, sop.SmallData, ""), trans, func(a, b int) int { return a - b })
+	centroids, err := newBtree[int, ai.Centroid](ctx, config, sop.ConfigureStore(name(centroidsSuffix+suffix), true, btree.DefaultSlotLength, centroidsDesc, sop.SmallData, ""), trans, func(a, b int) int { return a - b })
 	if err != nil {
 		return nil, err
 	}
 
 	// 2. Open Vectors Store (Versioned)
-	vectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(name(vectorsSuffix+suffix), true, btree.DefaultSlotLength, vectorsDesc, sop.SmallData, ""), trans, compositeKeyComparer)
+	vectors, err := newBtree[ai.VectorKey, []float32](ctx, config, sop.ConfigureStore(name(vectorsSuffix+suffix), true, 10000, vectorsDesc, sop.SmallData, ""), trans, compositeKeyComparer)
 	if err != nil {
 		return nil, err
 	}
@@ -118,23 +98,22 @@ func OpenDomainStore(ctx context.Context, trans sop.Transaction, domain string, 
 		}
 		return 0
 	}
-	content, err := newBtree[ai.ContentKey, string](ctx, sop.ConfigureStore(name(dataSuffix), true, btree.DefaultSlotLength, dataDesc, contentSize, ""), trans, contentComparer)
+	content, err := newBtree[ai.ContentKey, string](ctx, config, sop.ConfigureStore(name(dataSuffix), true, btree.DefaultSlotLength, dataDesc, contentSize, ""), trans, contentComparer)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Open Lookup Store (Versioned)
-	lookup, err := newBtree[int, string](ctx, sop.ConfigureStore(name(lookupSuffix+suffix), true, btree.DefaultSlotLength, lookupDesc, sop.SmallData, ""), trans, func(a, b int) int { return a - b })
+	lookup, err := newBtree[int, string](ctx, config, sop.ConfigureStore(name(lookupSuffix+suffix), true, btree.DefaultSlotLength, lookupDesc, sop.SmallData, ""), trans, func(a, b int) int { return a - b })
 	if err != nil {
 		return nil, err
 	}
 
 	// 5. Open TempVectors Store (Shared)
-	// Only open TempVectors for version 0 (initial ingestion).
-	// Once optimized (version > 0), TempVectors is retired.
+	// Used as a buffer for Active Memory ingestion across all versions.
 	var tempVectors btree.BtreeInterface[string, []float32]
-	if version == 0 && !skipTempVectors {
-		tempVectors, err = newBtree[string, []float32](ctx, sop.ConfigureStore(name(tempVectorsSuffix), true, btree.DefaultSlotLength, tempVectorsDesc, sop.SmallData, ""), trans, func(a, b string) int {
+	if !skipTempVectors {
+		tempVectors, err = newBtree[string, []float32](ctx, config, sop.ConfigureStore(name(tempVectorsSuffix), true, 10000, tempVectorsDesc, sop.SmallData, ""), trans, func(a, b string) int {
 			if a < b {
 				return -1
 			}

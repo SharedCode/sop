@@ -9,7 +9,7 @@ type KnowledgeEntry struct {
 
 // UserDefinedKnowledge is a list of knowledge entries to be seeded into the system.
 // Users can add their custom learnings here.
-// When the server starts, these entries will be upserted into the llm_knowledge store.
+// When the server starts, these entries will be upserted into the memory store.
 var UserDefinedKnowledge = []KnowledgeEntry{
 	// Example Entry:
 	// {

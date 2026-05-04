@@ -138,7 +138,7 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 	// Since we don't have the "defaulted" req from factory here, we check cfg.Requirements directly.
 	// If cfg.Requirements is nil, we assume false (safe default).
 	if req != nil && req.Search {
-		textIdx, err = search.NewIndex(ctx, tx, storeName)
+		textIdx, err = search.NewIndex(ctx, db.Options(), tx, storeName)
 		if err != nil {
 			return fmt.Errorf("failed to open text index: %w", err)
 		}

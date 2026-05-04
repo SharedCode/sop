@@ -21,32 +21,38 @@ type SmartMockGenerator struct {
 func (m *SmartMockGenerator) Name() string                     { return "mock" }
 func (m *SmartMockGenerator) EstimateCost(in, out int) float64 { return 0 }
 func (m *SmartMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
-	// Simple keyword matching - Check the END of the prompt to avoid system prompt noise
-	// Or splitting by newline and checking the last non-empty line
-	lines := strings.Split(prompt, "\n")
-	lastLine := ""
-	for i := len(lines) - 1; i >= 0; i-- {
-		if strings.TrimSpace(lines[i]) != "" {
-			lastLine = lines[i]
-			break
+	var scriptBody string
+	// Instead of naive strings.Contains which can trigger on history context,
+	// we should only check the last line or lines after the last "User: " prompt.
+	parts := strings.Split(prompt, "User: ")
+	lastPrompt := parts[len(parts)-1]
+
+	if strings.Contains(lastPrompt, "Analyze the tool response") {
+		// Mock the LLM extracting the JSON result and presenting it to the user.
+		// We can just extract the [System Tool Response] block and return it as text.
+		blocks := strings.Split(prompt, "[System Tool Response]:\n")
+		if len(blocks) > 1 {
+			sysResp := strings.SplitN(blocks[len(blocks)-1], "\n\nUser:", 2)[0]
+			return ai.GenOutput{Text: strings.TrimSpace(sysResp)}, nil
 		}
+		// Fallback
+		return ai.GenOutput{Text: "Task complete."}, nil
 	}
 
-	var scriptBody string
-	if strings.Contains(lastLine, "Show me all users") {
+	if strings.Contains(lastPrompt, "Show me all users") {
 		scriptBody = m.Scripts["sort"]
-	} else if strings.Contains(lastLine, "Find orders for user") {
+	} else if strings.Contains(lastPrompt, "Find orders for user") {
 		scriptBody = m.Scripts["join"]
-	} else if strings.Contains(lastLine, "List products") {
+	} else if strings.Contains(lastPrompt, "List products") {
 		scriptBody = m.Scripts["list"]
-	} else if strings.Contains(lastLine, "Run alias test") {
+	} else if strings.Contains(lastPrompt, "Run alias test") {
 		scriptBody = m.Scripts["alias"]
 	} else {
 		return ai.GenOutput{Text: "I don't know how to do that."}, nil
 	}
 
 	// Format as a tool call
-	// The DataAdminAgent expects a JSON object with "tool" and "args"
+	// The CopilotAgent expects a JSON object with "tool" and "args"
 	// or a list of such objects.
 	toolCall := map[string]any{
 		"tool": "execute_script",
@@ -139,7 +145,7 @@ func TestRepro_Leakage_StateCleaning(t *testing.T) {
 	// We need to inject the SessionPayload via Context for Ask to know CurrentDB.
 
 	databases := map[string]sop.DatabaseOptions{"dev_db": dbOpts}
-	svc := agent.NewDataAdminAgent(agent.Config{
+	svc := agent.NewCopilotAgent(agent.Config{
 		ID:   "repro-agent",
 		Name: "Repro",
 	}, databases, systemDB)
@@ -241,7 +247,7 @@ func TestAliasProjection_JoinRight(t *testing.T) {
 	mockBrain := &SmartMockGenerator{Scripts: scripts}
 
 	databases := map[string]sop.DatabaseOptions{"dev_db": dbOpts}
-	svc := agent.NewDataAdminAgent(agent.Config{
+	svc := agent.NewCopilotAgent(agent.Config{
 		ID:   "repro-agent-alias",
 		Name: "ReproAlias",
 	}, databases, systemDB)

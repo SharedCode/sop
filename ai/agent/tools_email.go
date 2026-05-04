@@ -7,7 +7,7 @@ import (
 
 // toolSendEmail simulates sending an email.
 // In a production environment, this would integrate with an SMTP server or email API (e.g. SendGrid, AWS SES).
-func (a *DataAdminAgent) toolSendEmail(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolSendEmail(ctx context.Context, args map[string]any) (string, error) {
 	to, _ := args["to"].(string)
 	subject, _ := args["subject"].(string)
 	body, _ := args["body"].(string)

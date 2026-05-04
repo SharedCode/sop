@@ -37,20 +37,30 @@ var DefaultMaxCapacity = 1350
 
 // globalL1CacheRegistry is the singleton L1 cache instance used by GetGlobalCache and NewGlobalCache.
 var globalL1CacheRegistry = make(map[sop.L2CacheType]*L1Cache)
-var globalL1Locker sync.Mutex
+var globalL1Locker sync.RWMutex
 
 // GetGlobalL1Cache returns the global L1 cache singleton, creating one on first use
 // with a Redis L2 cache and default capacities when necessary.
 func GetGlobalL1Cache(l2c sop.L2Cache) *L1Cache {
+	globalL1Locker.RLock()
 	gc := globalL1CacheRegistry[l2c.GetType()]
-	if gc == nil {
-		globalL1Locker.Lock()
-		defer globalL1Locker.Unlock()
-		// Create and register new Global L1Cache for the given Cache Type.
-		gc = NewL1Cache(l2c, DefaultMinCapacity, DefaultMaxCapacity)
-		gc.l2CacheNodes = l2c
-		globalL1CacheRegistry[l2c.GetType()] = gc
+	globalL1Locker.RUnlock()
+	if gc != nil {
+		return gc
 	}
+
+	globalL1Locker.Lock()
+	defer globalL1Locker.Unlock()
+
+	gc = globalL1CacheRegistry[l2c.GetType()]
+	if gc != nil {
+		return gc
+	}
+
+	// Create and register new Global L1Cache for the given Cache Type.
+	gc = NewL1Cache(l2c, DefaultMinCapacity, DefaultMaxCapacity)
+	gc.l2CacheNodes = l2c
+	globalL1CacheRegistry[l2c.GetType()] = gc
 	return gc
 }
 

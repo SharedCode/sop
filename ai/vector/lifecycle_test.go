@@ -112,12 +112,12 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	}
 
 	// Open Arch V1 to verify
-	arch1, err := vector.OpenDomainStore(ctx, trans2a, "lifecycle", 1, sop.MediumData, false)
+	arch1, err := vector.OpenDomainStore(ctx, trans2a, "lifecycle", 1,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("Failed to open arch 1: %v", err)
 	}
-	if arch1.TempVectors != nil {
-		t.Fatal("TempVectors should be nil in Version 1")
+	if arch1.TempVectors == nil {
+		t.Fatal("TempVectors should NOT be nil in Version 1")
 	}
 
 	// Verify Item A is in Vectors (V1)
@@ -223,12 +223,12 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	}
 
 	// Open Arch V2
-	arch2, err := vector.OpenDomainStore(ctx, trans4, "lifecycle", 2, sop.MediumData, false)
+	arch2, err := vector.OpenDomainStore(ctx, trans4, "lifecycle", 2,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("Failed to open arch 2: %v", err)
 	}
-	if arch2.TempVectors != nil {
-		t.Fatal("TempVectors should be nil in Version 2")
+	if arch2.TempVectors == nil {
+		t.Fatal("TempVectors should NOT be nil in Version 2")
 	}
 
 	// Verify Item A is in Vectors V2
@@ -277,14 +277,14 @@ func TestVectorStoreLifecycle(t *testing.T) {
 	// Verify V1 stores are gone
 	// We can check if the folders exist in the temp dir.
 	// The folder names are constructed as: {tmpDir}/{domain}_{store}_{version}
-	// e.g. lifecycle_vecs_1
+	// e.g. lifecycle/vecs_1
 	// But the store path is managed by sop.
 	// We can try to open them and expect failure, or check file system.
 	// Let's check file system.
-	v1Stores := []string{"lifecycle_vecs_1", "lifecycle_centroids_1", "lifecycle_lku_1"}
+	v1Stores := []string{"lifecycle/vecs_1", "lifecycle/centroids_1", "lifecycle/lku_1"}
 	for _, storeName := range v1Stores {
 		// The folder path is usually {tmpDir}/{storeName} in Standalone mode if not configured otherwise.
-		// But createStore logs show: .../T/sop-ai-test-lifecycle-.../lifecycle_vecs_1
+		// But createStore logs show: .../T/sop-ai-test-lifecycle-.../lifecycle/vecs_1
 		storePath := filepath.Join(tmpDir, storeName)
 		if _, err := os.Stat(storePath); !os.IsNotExist(err) {
 			t.Errorf("Store %s should have been deleted after Optimize V1->V2", storeName)

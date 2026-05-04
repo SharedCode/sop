@@ -86,7 +86,7 @@ func TestReproJoinCollision(t *testing.T) {
 	// 3. Setup Agent
 	cfg := agent.Config{StubMode: false}
 	dbs := map[string]sop.DatabaseOptions{"default": dbOpts}
-	ag := agent.NewDataAdminAgent(cfg, dbs, nil)
+	ag := agent.NewCopilotAgent(cfg, dbs, nil)
 
 	// Inject Session Payload
 	payload := &ai.SessionPayload{

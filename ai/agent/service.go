@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	log "log/slog"
@@ -14,6 +15,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/generator"
+	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/ai/obfuscation"
 	sopdb "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/search"
@@ -22,7 +24,7 @@ import (
 const (
 	// KnowledgeStore is the name of the B-tree store used to persist learned rules, vocabulary, and corrections.
 	// This store resides in the System Database configured for the agent.
-	KnowledgeStore = "llm_knowledge"
+	KnowledgeStore = "memory"
 	// MRUKnowledgeStore is the name of the store that tracks "active" or "relevant" knowledge categories/items.
 	// This acts as a Working Memory Index, telling the agent what to pre-load from Long Term Memory.
 	// Keys are "{Category}/{Name}" or just "{Category}", Values are Timestamps/Scores.
@@ -42,9 +44,13 @@ type Service struct {
 	EnableObfuscation bool
 	// Feature Flags
 	EnableHistoryInjection bool
+	EnableShortTermMemory  bool
 
 	// Session State
 	session *RunnerSession
+
+	// STM Asynchronous Batch Pipeline
+	episodeQueue chan map[string]any
 
 	// Refresh Tracker
 	lastKnowledgeRefresh map[string]time.Time
@@ -65,6 +71,7 @@ func NewService(domain ai.Domain[map[string]any], systemDB *database.Database, d
 		EnableObfuscation:      enableObfuscation,
 		EnableHistoryInjection: false, // Default to OFF for simple machine mode (can be enabled via config)
 		session:                NewRunnerSession(),
+		episodeQueue:           make(chan map[string]any, 1000),
 		lastKnowledgeRefresh:   make(map[string]time.Time),
 	}
 }
@@ -97,7 +104,7 @@ func (s *Service) Clone() ai.Agent[map[string]any] {
 
 	// Inject back the service pointer to agents if they rely on it
 	for _, v := range clone.registry {
-		if da, ok := v.(*DataAdminAgent); ok {
+		if da, ok := v.(*CopilotAgent); ok {
 			da.service = clone
 		}
 	}
@@ -108,6 +115,8 @@ func (s *Service) Clone() ai.Agent[map[string]any] {
 // SetFeature allows toggling of agent features at runtime.
 func (s *Service) SetFeature(feature string, enabled bool) {
 	switch feature {
+	case "active_memory":
+		s.EnableShortTermMemory = enabled
 	case "history_injection":
 		s.EnableHistoryInjection = enabled
 	case "obfuscation":
@@ -366,29 +375,53 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 		return nil, fmt.Errorf("domain %s has no index configured: %w", s.domain.ID(), err)
 	}
 
-	// Vector Search
-	vectorHits, err := idx.Query(ctx, vecs[0], limit, nil)
-	if err != nil {
-		return nil, fmt.Errorf("vector query failed: %w", err)
-	}
-
-	// Text Search
-	textIdx, err := s.domain.TextIndex(ctx, tx)
-	var textHits []search.TextSearchResult
-	if err == nil && textIdx != nil {
-		textHits, err = textIdx.Search(ctx, query)
-		if err != nil {
-			// Log error but continue with vector results?
-			// For now, let's treat it as non-fatal if text index is missing or fails,
-			// but maybe we should log it.
-			log.Warn("Text search failed", "error", err)
-		}
-	}
-
 	// Hybrid Fusion (RRF)
+	var wg sync.WaitGroup
+	var vectorHits []ai.Hit[map[string]any]
+	var vecErr error
+	var textHits []search.TextSearchResult
+	var textErr error
+
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		// Vector Search
+		vectorHits, vecErr = idx.Query(ctx, vecs[0], limit, nil)
+	}()
+
+	go func() {
+		defer wg.Done()
+		// Text Search
+		textIdx, err := s.domain.TextIndex(ctx, tx)
+		if err == nil && textIdx != nil {
+			textHits, textErr = textIdx.Search(ctx, query)
+		}
+	}()
+
+	wg.Wait()
+
+	if vecErr != nil {
+		return nil, fmt.Errorf("vector query failed: %w", vecErr)
+	}
+	if textErr != nil {
+		log.Warn("Text search failed", "error", textErr)
+	}
+
 	k := 60.0
 	scores := make(map[string]float64)
 	payloads := make(map[string]map[string]any)
+
+	// Identify Active Memory concepts from conversation to boost relevance
+	activeContext := make(map[string]bool)
+	if s.session != nil && s.session.Memory != nil {
+		for _, threadID := range s.session.Memory.Order {
+			if thread, ok := s.session.Memory.Threads[threadID]; ok {
+				// Add topic or concept IDs to active memory map
+				activeContext[thread.Category] = true
+			}
+		}
+	}
 
 	// Process Vector Hits
 	for rank, hit := range vectorHits {
@@ -677,7 +710,7 @@ func (s *Service) getLLMKnowledge(ctx context.Context) string {
 	}
 
 	// Add tip about how to get more
-	sb.WriteString("Note: Extended knowledge (schemas, other domains) is available via 'manage_knowledge' tool (action='read' or search).\n")
+	sb.WriteString("Note: Extended knowledge (schemas, other domains) is available via explicit namespace search.\n")
 
 	return sb.String()
 }
@@ -963,6 +996,32 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		systemPrompt, _ = s.domain.Prompt(ctx, "system")
 	}
 
+	// 2_0. Inject User Preferences (Long-Term Memory Search via pre-prompt fetch)
+	if p := ai.GetSessionPayload(ctx); p != nil && p.UserID != "" && s.systemDB != nil {
+		kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, p.UserID)
+		if tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+			if kb, err := s.systemDB.OpenKnowledgeBase(ctx, kbName, tx, s.generator, nil); err == nil {
+				// We search the user's Long-Term memory kb for implicitly learned preferences related to the query
+				if userHits, err := kb.SearchKeywords(ctx, query, &memory.SearchOptions[map[string]any]{Limit: 5}); err == nil && len(userHits) > 0 {
+					var prefText strings.Builder
+					prefText.WriteString("\n\n[User Preferences & Active Memory Ledger for this query]\n")
+					for _, hit := range userHits {
+						if txt, ok := hit.Payload["thought"].(string); ok {
+							prefText.WriteString(fmt.Sprintf("- %s\n", txt))
+						} else if txt, ok := hit.Payload["text"].(string); ok {
+							prefText.WriteString(fmt.Sprintf("- %s\n", txt))
+						} else {
+							b, _ := json.Marshal(hit.Payload)
+							prefText.WriteString(fmt.Sprintf("- %s\n", string(b)))
+						}
+					}
+					systemPrompt = fmt.Sprintf("%s%s", systemPrompt, prefText.String())
+				}
+			}
+			tx.Rollback(ctx)
+		}
+	}
+
 	// 2a. Inject LLM Knowledge (Lifecycle "On Init" simulation)
 	if known := s.getLLMKnowledge(ctx); known != "" {
 		systemPrompt = fmt.Sprintf("%s\n\n%s", systemPrompt, known)
@@ -985,19 +1044,41 @@ You are capable of managing the conversation flow.
 `
 	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, conversationProtocol)
 
-	// [Active Learning Protocol]
+	// [Active Memory Protocol]
 	learningProtocol := `
-[Active Learning & Refinement Protocol]
-You are a self-correcting agent. If the user corrects your output, provides a definition, or establishes a preference (e.g., "Use 'Client' instead of 'User'", "Always check X before Y"):
+[Active Memory & Refinement Protocol]
+You are a self-correcting agent integrated with an automated "Active Memory" system. 
+When the user corrects your output, provides a definition, or establishes a preference (e.g., "Use 'Client' instead of 'User'", "Always check X before Y"):
 1. ACKNOWLEDGE the correction.
-2. IMMEDIATELY use the 'manage_knowledge' tool to save this rule for future consistency.
-   - For synonyms/renaming: Use namespace="vocabulary", key="term_name", value={"target": "preferred_term", "type": "synonym"}.
-   - For logic/process rules: Use namespace="rule", key="rule_name", value={"condition": "context description", "instruction": "the rule content"}.
-   - For fixing mistakes: Use namespace="correction", key="error_name", value={"error": "what you did wrong", "fix": "what to do instead"}.
-3. CONFIRM to the user that this has been memorized.
-   Example: "I have updated my knowledge base: 'Cost' will now be interpreted as 'TotalAmount'."
+2. Execute the correctly revised action (if applicable) immediately. Your validated actions, intents, and AST payloads are AUTOMATICALLY embedded into Active Memory by the system backend—you do NOT need to call any manual save tools.
+3. Because the system tracks your successful workflow episodes, simply applying the user's feedback once guarantees the system will autonomously recall the corrected approach for future queries. 
 `
 	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, learningProtocol)
+
+	// [Omni Protocol / Master Architect Precedence]
+	omniProtocol := `[Omni Precedence & Master Architecture Rules]
+You are the Omni Persona, an intelligent Orchestrator and Database Architect capable of managing pure technical schemas AND high-level Knowledge Spaces in a seamless ecosystem.
+
+When discussing what you are, or when interacting with users, keep in mind:
+- A "Space" or "Knowledge Base" (often represented as a single word like 'Notes' or 'Contacts') is a new AI memory subsystem comprised of a VectorDB, Text Search, a special schema (Thoughts: Category/Items), and its own memory management.
+- Users can ask you to generate data on the fly into a Space.
+- "Technical Tables" or raw B-Trees ('orders', 'users') require strict schema adherence and database tool usage.
+
+When retrieving tools, processing queries, or searching Context, you MUST respect this strict Knowledge Base (KB) PRECEDENCE HIERARCHY:
+1. Selected KB (Highest Priority): If the user has mounted or selected a specific KB (e.g. Medical Expert), its domain rules strictly override generic rules.
+2. SOP KB (Core Foundation): This is of EQUAL precedence. You MUST rely on it for fundamental database management, constraints, schema evaluation, and orchestration tools.
+3. User DB KBs: After primary checks, you must actively search other relevant domain namespaces within the current User Database.
+4. SystemDB KBs (Global Defaults): If rules are not found elsewhere, fallback to global KBs within the SystemDB.`
+	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, omniProtocol)
+
+	// [Pattern of Thinking]
+	thinkingProtocol := `[Pattern of Thinking & Data Management]
+When asked to query, manage, or manipulate data, you MUST follow this explicit sequence before generating your final response or script:
+1. KB Fallback: If you are about to execute a tool (like 'select', 'join', or 'execute_script'), but its exact DSL or rules are not locally documented, FIRST use 'gettoolinfo' to retrieve the full specifications from the SOP KB.
+2. Schema Inspection: ALWAYS use 'list_stores' and evaluate the schema to verify the exact tables and field names before constructing any data scripts to existing technical tables.
+3. SPACE AUTO-IMPORT: IF the user asks to generate, create, or import into a Space or Knowledge Base, IT IS A FATAL ERROR TO USE ANY TOOLS. DO NOT output a tool call (like {"tool": "open_store"}). You must immediately output ONLY the raw JSON matching the ExportData array (with target_space, categories, and items), wrapped in a standard JSON markdown block.
+4. Active Memory: Rely on the actively injected Knowledge, Context, and the verified schema to formulate your operations. Let exact facts guide your script parameters.`
+	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, thinkingProtocol)
 
 	// [Regression Fix]
 	// If EnableHistoryInjection is false, we should also ensure that formatContext
@@ -1053,7 +1134,7 @@ You are a self-correcting agent. If the user corrects your output, provides a de
 	}
 
 	// DEBUG: Log the full prompt to understand context contamination
-	log.Info("Service.Ask: Full Prompt", "prompt", fullPrompt)
+	// log.Info("Service.Ask: Full Prompt", "prompt", fullPrompt)
 
 	// 3. Determine Generator
 	gen := s.generator
@@ -1099,7 +1180,7 @@ You are a self-correcting agent. If the user corrects your output, provides a de
 	toolRecorded := false
 	_ = toolRecorded
 
-	// Check for Raw Tool Call (from DataAdmin or similar generators)
+	// Check for Raw Tool Call (from Copilot or similar generators)
 	if output.Raw != nil {
 		if _, err := json.Marshal(output.Raw); err == nil {
 			// REMOVED: Drafting Logic for Raw Tool Call
@@ -1244,6 +1325,14 @@ You are a self-correcting agent. If the user corrects your output, provides a de
 					}
 					s.session.Transaction = nil
 					s.session.Variables = nil
+				}
+
+				// [Phase 2] Active Memory Episodic Ingestion
+				if s.EnableShortTermMemory && toolCall.Tool == "execute_script" {
+					scriptPayload := toolCall.Args["script"]
+					episodeOutcome := result
+					episodeErr := err
+					go s.logEpisode(context.Background(), query, scriptPayload, episodeOutcome, episodeErr)
 				}
 
 				if err != nil {

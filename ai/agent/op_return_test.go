@@ -17,7 +17,7 @@ import (
 // instead of the data payload, breaking all downstream UI/AI consumers.
 func TestOpReturn_VariableResolution(t *testing.T) {
 	ctx := context.Background()
-	agent := &DataAdminAgent{}
+	agent := &CopilotAgent{}
 
 	tests := []struct {
 		name        string
@@ -84,7 +84,7 @@ func TestOpReturn_VariableResolution(t *testing.T) {
 
 func TestOpReturn_LiteralValue(t *testing.T) {
 	ctx := context.Background()
-	agent := &DataAdminAgent{}
+	agent := &CopilotAgent{}
 
 	script := []map[string]any{
 		{

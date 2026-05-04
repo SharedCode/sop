@@ -1,0 +1,10 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Go: AI Dynamic Coverage",
+			"type": "shell",
+			"command": "cd dynamic && go test -coverprofile=coverage.out && go tool cover -func=coverage.out"
+		}
+	]
+}

@@ -38,7 +38,7 @@ func TestOptimizeWithTempVectors(t *testing.T) {
 	}
 
 	// Open Store (Version 0)
-	arch, err := vector.OpenDomainStore(ctx, trans, "test_temp", 0, sop.MediumData, false)
+	arch, err := vector.OpenDomainStore(ctx, trans, "test_temp", 0, vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("Failed to open domain store: %v", err)
 	}

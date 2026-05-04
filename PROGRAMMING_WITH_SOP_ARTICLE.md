@@ -4,6 +4,13 @@ In the traditional software development lifecycle, "programming" is a translatio
 
 SOP changes this paradigm. In our platform, you don't write the code—you **manage** the entity that writes the code. You act as the Architect, and the SOP AI Agent acts as your tireless Staff Engineer.
 
+### The Foundation: Agentic Data
+First, it's essential to understand that programming AI requires a new data format. The problem with today's data is that it is too structured—too rigidly SQL (tabular) or arbitrarily NoSQL (nested trees). This forces the user to organize data for the *machine's* convenience, which AI struggles to effectively manage, mine, and govern accurately.
+
+SOP introduces **Agentic Data**. You create "Playbooks" (Knowledge Bases) populated with conceptual, semantic items rather than strict columns. This data is imbued with a System Prompt and an Embedder setting. The data itself drives the AI's persona, its reasoning limits, and the rules of the system. The AI auto-manages this agentic data natively, making it simple to retrieve exactly the right context to build scripts and answer complex data queries without manual JOINs.
+
+---
+
 Here is what it looks like to build a real, robust data application using "Natural Language Programming" in SOP.
 
 ## The Goal: A "Churn Prevention" Program

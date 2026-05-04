@@ -14,6 +14,10 @@ type ContextKey string
 const (
 	// CtxKeyProvider is the context key for overriding the AI provider.
 	CtxKeyProvider ContextKey = "ai_provider"
+	// CtxKeyAPIKey is the context key for passing a transient API key
+	CtxKeyAPIKey ContextKey = "ai_api_key"
+	// CtxKeyBaseURL is the context key for passing a transient Base URL
+	CtxKeyBaseURL ContextKey = "ai_base_url"
 	// CtxKeyExecutor is the context key for passing the ToolExecutor.
 	CtxKeyExecutor ContextKey = "ai_executor"
 	// CtxKeyDeobfuscator is the context key for passing the Deobfuscator.
@@ -31,6 +35,22 @@ const (
 	// CtxKeyAutoFlush is the context key for enabling/disabling auto-flush (boolean).
 	CtxKeyAutoFlush ContextKey = "ai_auto_flush"
 )
+
+// KnowledgeDocument represents a single unit of embeddable contextual information
+// commonly used to standardize preloading Vector DBs and RAG pipelines.
+type KnowledgeDocument struct {
+	ID          string                 `json:"id,omitempty"`
+	Text        string                 `json:"text,omitempty"`
+	PageContent string                 `json:"page_content,omitempty"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+}
+
+// KnowledgeBasePayload represents the standard JSON payload structure
+// used for streaming or batch-loading documents into a Vector DB.
+type KnowledgeBasePayload struct {
+	DatasetName string              `json:"dataset_name,omitempty"`
+	Documents   []KnowledgeDocument `json:"documents"`
+}
 
 // ResultStreamer defines the interface for streaming tool results.
 type ResultStreamer interface {
@@ -115,10 +135,23 @@ type VectorStore[T any] interface {
 	// This allows for runtime expansion of the concept space without full rebalancing.
 	AddCentroid(ctx context.Context, vec []float32) (int, error)
 
+	// SplitCentroid reorganizes an overloaded centroid by running localized 2-Means
+	// clustering, creating two new centroids, and reassigning its vectors.
+	SplitCentroid(ctx context.Context, centroidID int) error
+
 	// Optimize reorganizes the index to improve query performance.
 	// It re-calculates centroids based on the full dataset and re-distributes vectors.
 	// This is recommended after a large batch ingestion (BuildOnceQueryMany mode) to "Seal" the index.
 	Optimize(ctx context.Context) error
+
+	// Consolidate reads accumulated vectors from short-term memory (TempVectors),
+	// dynamically routes them into existing Centroids using AssignAndIndex logic,
+	// and clears them from short-term memory.
+	Consolidate(ctx context.Context) error
+
+	// UpdateEmbedderInfo updates the configuration defining which embedder was used
+	// to index the vectors, persisting it in the system configuration of the store.
+	UpdateEmbedderInfo(ctx context.Context, provider string, model string, dimensions int) error
 
 	// SetDeduplication enables or disables the internal deduplication check during Upsert.
 	// Disabling this can speed up ingestion for pristine data but may lead to ghost vectors if duplicates exist.
@@ -237,6 +270,9 @@ type Domain[T any] interface {
 	// Index returns the vector index used for retrieval.
 	// It requires a transaction to be passed in.
 	Index(ctx context.Context, tx sop.Transaction) (VectorStore[T], error)
+	// Memory returns the new Cognitive Knowledge Base for retrieval and episodic reasoning.
+	// Returns any to prevent circular dependencies with the memory package.
+	Memory(ctx context.Context, tx sop.Transaction) (any, error)
 	// TextIndex returns the text search index used for retrieval.
 	TextIndex(ctx context.Context, tx sop.Transaction) (TextIndex, error)
 	// BeginTransaction starts a new transaction for the domain's underlying storage.
@@ -302,6 +338,12 @@ type Agent[T any] interface {
 type SessionPayload struct {
 	// CurrentDB is the active database name for the session.
 	CurrentDB string
+// UserID identifies the user for privacy and memory isolation.
+UserID string
+	// ActiveDomain is the knowledge domain selected by the user.
+	ActiveDomain string
+	// SelectedKBs are the explicit Knowledge Bases selected by the user from the dropdown.
+	SelectedKBs []string
 	// Transaction holds the active transaction for the session.
 	// Deprecated: Use Transactions map instead for multi-db support.
 	Transaction any
@@ -313,6 +355,8 @@ type SessionPayload struct {
 	ExplicitTransaction bool
 	// LastInteractionSteps tracks the number of steps added/executed in the last user interaction.
 	LastInteractionSteps int
+	// ConversationHistory stores the active memory/transcript for the session.
+	ConversationHistory string
 }
 
 // GetDatabase returns the effective current Database name.

@@ -85,7 +85,7 @@ func TestProjectLimitOrdering(t *testing.T) {
 	// 3. Execute
 	cfg := agent.Config{StubMode: false}
 	dbs := map[string]sop.DatabaseOptions{"default": dbOpts}
-	ag := agent.NewDataAdminAgent(cfg, dbs, nil)
+	ag := agent.NewCopilotAgent(cfg, dbs, nil)
 
 	// Inject Mock Opener
 	ag.StoreOpener = func(ctx context.Context, opts sop.DatabaseOptions, name string, tx sop.Transaction) (jsondb.StoreAccessor, error) {

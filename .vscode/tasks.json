@@ -179,6 +179,11 @@
 			"type": "shell",
 			"command": "./build_release.sh",
 			"group": "build"
+		},
+		{
+			"label": "Go: AI Dynamic Coverage",
+			"type": "shell",
+			"command": "cd ai/memory && go test -coverprofile=coverage.out && go tool cover -func=coverage.out"
 		}
 	]
 }

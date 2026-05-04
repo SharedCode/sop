@@ -51,7 +51,7 @@ func TestToolJoin_Chained_ABCD(t *testing.T) {
 	}
 
 	// 3. Prepare Agent
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{
 			"testdb": dbOpts,
 		},

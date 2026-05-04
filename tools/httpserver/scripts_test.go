@@ -57,9 +57,10 @@ func (a *MockAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) 
 // GenericDomain is a placeholder.
 type GenericDomain struct{}
 
-func (d *GenericDomain) ID() string              { return "generic" }
-func (d *GenericDomain) Name() string            { return "generic" }
-func (d *GenericDomain) Embedder() ai.Embeddings { return nil }
+func (d *GenericDomain) ID() string                                                  { return "generic" }
+func (d *GenericDomain) Name() string                                                { return "generic" }
+func (d *GenericDomain) Embedder() ai.Embeddings                                     { return nil }
+func (d *GenericDomain) Memory(ctx context.Context, tx sop.Transaction) (any, error) { return nil, nil }
 func (d *GenericDomain) Index(ctx context.Context, tx sop.Transaction) (ai.VectorStore[map[string]any], error) {
 	return nil, nil
 }
@@ -93,7 +94,7 @@ func TestHandleExecuteScript(t *testing.T) {
 
 	// 2. Register Agent in global map
 	loadedAgents = make(map[string]ai.Agent[map[string]any])
-	loadedAgents["sql_admin"] = svc
+	loadedAgents["copilot"] = svc
 
 	// 3. Create a Test Script
 	ctx := context.Background()

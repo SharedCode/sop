@@ -25,7 +25,7 @@ func TestRepro_SchemaValidation(t *testing.T) {
 		"dev_db": opts,
 	}
 	// Mock brain?
-	agent := NewDataAdminAgent(Config{}, dbs, nil)
+	agent := NewCopilotAgent(Config{}, dbs, nil)
 
 	// 2. Prepare Data
 	ctx := context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})

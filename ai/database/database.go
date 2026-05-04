@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	log "log/slog"
@@ -193,7 +194,7 @@ func (db *Database) OpenSearch(ctx context.Context, name string, t sop.Transacti
 			return nil, err
 		}
 	}
-	return search.NewIndex(ctx, t, name)
+	return search.NewIndex(ctx, db.config, t, name)
 }
 
 // RemoveModelStore removes the model store and its underlying B-Tree.
@@ -201,12 +202,28 @@ func (db *Database) RemoveModelStore(ctx context.Context, name string) error {
 	return database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s_models", name))
 }
 
+// RemoveKnowledgeBase removes the Knowledge Base and its underlying B-Trees.
+func (db *Database) RemoveKnowledgeBase(ctx context.Context, name string) error {
+	suffixes := []string{
+		"/categories",
+		"/vectors",
+		"/items",
+	}
+	var lastErr error
+	for _, suffix := range suffixes {
+		if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s", name, suffix)); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
+}
+
 // RemoveVectorStore removes the vector store and its underlying B-Trees.
 func (db *Database) RemoveVectorStore(ctx context.Context, name string) error {
 	suffixes := []string{
-		"_sys_config",
-		"_tmp_vecs",
-		"_data",
+		"/sys_config",
+		"/tmp_vecs",
+		"/data",
 	}
 
 	var lastErr error
@@ -228,17 +245,17 @@ func (db *Database) RemoveVectorStore(ctx context.Context, name string) error {
 
 			f := func(versionSuffix string) int {
 				i := 0
-				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "_lku", versionSuffix)); err == nil {
+				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "/lku", versionSuffix)); err == nil {
 					i++
 				} else {
 					lastErr = err
 				}
-				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "_centroids", versionSuffix)); err == nil {
+				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "/centroids", versionSuffix)); err == nil {
 					i++
 				} else {
 					lastErr = err
 				}
-				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "_vecs", versionSuffix)); err == nil {
+				if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s%s", name, "/vecs", versionSuffix)); err == nil {
 					i++
 				} else {
 					lastErr = err
@@ -306,4 +323,58 @@ func (db *Database) RemoveSearch(ctx context.Context, name string) error {
 		remove(fmt.Sprintf("%s%s", name, suffix))
 	}
 	return lastErr
+}
+
+// GetStores returns the standard stores, excluding system and vector databases.
+func (db *Database) GetStores(ctx context.Context) ([]string, error) {
+	return db.getStores(ctx, false)
+}
+
+// GetDomains returns only the vector databases (domains).
+func (db *Database) GetDomains(ctx context.Context) ([]string, error) {
+	return db.getStores(ctx, true)
+}
+
+func (db *Database) getStores(ctx context.Context, vector bool) ([]string, error) {
+	trans, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		return nil, err
+	}
+	defer trans.Rollback(ctx)
+
+	// Since trans in main.go actually supports GetStores, let's use type assertion
+	if getStoresTx, ok := trans.(interface {
+		GetStores(context.Context) ([]string, error)
+	}); ok {
+		allStores, err := getStoresTx.GetStores(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		var stores []string
+		kbLookup := make(map[string]byte)
+		for _, store := range allStores {
+			if !vector {
+				// non-vector
+				if !strings.Contains(store, "/") {
+					stores = append(stores, store)
+				}
+			} else {
+				// vector or text search
+				if strings.Contains(store, "/") {
+					parts := strings.Split(store, "/")
+					if _, exists := kbLookup[parts[0]]; !exists {
+						stores = append(stores, parts[0])
+						kbLookup[parts[0]] = 1
+					}
+				}
+			}
+		}
+		if len(stores) > 0 {
+			return stores, nil
+		}
+		return make([]string, 0), nil
+	}
+
+	return nil, fmt.Errorf("underlying transaction does not support GetStores")
 }

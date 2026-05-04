@@ -2,6 +2,7 @@ package vector
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	log "log/slog"
 	"math"
@@ -44,7 +45,21 @@ const (
 func (di *domainIndex[T]) Optimize(ctx context.Context) error {
 	log.Debug("Optimize started", "domain", di.name)
 
-	// 1. Initialization
+	// 1. Commit pending initial writes so Consolidate can see them
+	if di.trans != nil && di.trans.HasBegun() {
+		log.Debug("Committing initial transaction before optimization", "domain", di.name)
+		if err := di.trans.Commit(ctx); err != nil {
+			return err
+		}
+	}
+
+	// 2. Perform TempVectors consolidation BEFORE locking optimization mode
+	if err := di.Consolidate(ctx); err != nil {
+		log.Warn("Optimize: failed to pre-consolidate TempVectors", "domain", di.name, "error", err)
+		return err
+	}
+
+	// 3. Initialization (acquires optimize distributed lock)
 	currentVersion, newVersion, suffix, useTempVectors, _, cleanupLock, err := di.initialize(ctx)
 	if err != nil {
 		return err
@@ -84,9 +99,9 @@ func (di *domainIndex[T]) openArch(ctx context.Context, tx sop.Transaction, ver 
 	return di.getArchitecture(ctx, ver)
 }
 
-func (di *domainIndex[T]) openSysStore(ctx context.Context, tx sop.Transaction) (btree.BtreeInterface[string, int64], error) {
+func (di *domainIndex[T]) openSysStore(ctx context.Context, tx sop.Transaction) (btree.BtreeInterface[string, string], error) {
 	sysStoreName := fmt.Sprintf("%s%s", di.name, sysConfigSuffix)
-	return newBtree[string, int64](ctx, sop.ConfigureStore(sysStoreName, true, btree.DefaultSlotLength, sysConfigDesc, sop.SmallData, ""), tx, func(a, b string) int {
+	return newBtree[string, string](ctx, di.config, sop.ConfigureStore(sysStoreName, true, btree.DefaultSlotLength, sysConfigDesc, sop.SmallData, ""), tx, func(a, b string) int {
 		if a < b {
 			return -1
 		}
@@ -98,14 +113,6 @@ func (di *domainIndex[T]) openSysStore(ctx context.Context, tx sop.Transaction) 
 }
 
 func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string, bool, []*sop.LockKey, func(), error) {
-	// 1. Commit the current transaction to ensure any pending writes are saved.
-	if di.trans.HasBegun() {
-		log.Debug("Committing initial transaction")
-		if err := di.trans.Commit(ctx); err != nil {
-			return 0, 0, "", false, nil, nil, err
-		}
-	}
-
 	// Set Distributed Lock
 	if di.config.Cache == nil {
 		return 0, 0, "", false, nil, nil, fmt.Errorf("cache is required for optimization locking")
@@ -242,7 +249,7 @@ func (di *domainIndex[T]) initialize(ctx context.Context) (int64, int64, string,
 		}
 	}
 
-	useTempVectors := newVersion == 1 && di.config.EnableIngestionBuffer
+	useTempVectors := false // Processed by Consolidate
 	return currentVersion, newVersion, suffix, useTempVectors, lockKeys, cleanupLock, nil
 }
 
@@ -282,7 +289,7 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 			return 0, err
 		}
 
-		newLookup, err := newBtree[int, string](ctx, sop.ConfigureStore(di.name+lookupSuffix+suffix, true, btree.DefaultSlotLength, lookupDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
+		newLookup, err := newBtree[int, string](ctx, di.config, sop.ConfigureStore(di.name+lookupSuffix+suffix, true, btree.DefaultSlotLength, lookupDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 		if err != nil {
 			if rbErr := tx.Rollback(ctx); rbErr != nil {
 				return 0, fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -383,19 +390,33 @@ func (di *domainIndex[T]) phase1(ctx context.Context, currentVersion int64, suff
 					itemID = item.Key.ItemID
 					key = item.Key
 
-					shouldProcess := true
-					if found, err := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: itemID}, false); err != nil {
-						if rbErr := tx.Rollback(ctx); rbErr != nil {
-							return 0, fmt.Errorf("Content.Find failed: %w, rollback failed: %v", err, rbErr)
+					shouldProcess := !di.deduplicationEnabled
+					if !shouldProcess {
+						if found, err := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: itemID}, false); err != nil {
+							if rbErr := tx.Rollback(ctx); rbErr != nil {
+								return 0, fmt.Errorf("Content.Find failed: %w, rollback failed: %v", err, rbErr)
+							}
+							return 0, err
+						} else if found {
+							currentKey := oldArch.Content.GetCurrentKey().Key
+							if !currentKey.Deleted {
+								cID := currentKey.CentroidID
+								cDist := currentKey.Distance
+								if currentKey.Version != currentVersion {
+									if currentKey.NextVersion == currentVersion {
+										cID = currentKey.NextCentroidID
+										cDist = currentKey.Distance
+										if currentKey.NextDistance != 0 {
+											cDist = currentKey.NextDistance
+										}
+									}
+								}
+								vecKey, ok := key.(ai.VectorKey)
+								if ok && cID == vecKey.CentroidID && math.Abs(float64(cDist-vecKey.DistanceToCentroid)) < 1e-3 {
+									shouldProcess = true
+								}
+							}
 						}
-						return 0, err
-					} else if found {
-						currentKey := oldArch.Content.GetCurrentKey().Key
-						if currentKey.Deleted {
-							shouldProcess = false
-						}
-					} else {
-						shouldProcess = false
 					}
 
 					if shouldProcess {
@@ -467,7 +488,7 @@ func (di *domainIndex[T]) phase2(ctx context.Context, currentVersion int64, suff
 			return nil, err
 		}
 
-		newLookup, err := newBtree[int, string](ctx, sop.ConfigureStore(di.name+lookupSuffix+suffix, true, btree.DefaultSlotLength, lookupDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
+		newLookup, err := newBtree[int, string](ctx, di.config, sop.ConfigureStore(di.name+lookupSuffix+suffix, true, btree.DefaultSlotLength, lookupDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 		if err != nil {
 			if rbErr := tx.Rollback(ctx); rbErr != nil {
 				return nil, fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -556,7 +577,7 @@ func (di *domainIndex[T]) phase2(ctx context.Context, currentVersion int64, suff
 			return nil, err
 		}
 
-		newCentroids, err := newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, btree.DefaultSlotLength, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
+		newCentroids, err := newBtree[int, ai.Centroid](ctx, di.config, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, btree.DefaultSlotLength, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 		if err != nil {
 			if rbErr := tx.Rollback(ctx); rbErr != nil {
 				return nil, fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -604,7 +625,7 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 				return err
 			}
 
-			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, btree.DefaultSlotLength, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
+			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, di.config, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, 10000, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
 			if err != nil {
 				if rbErr := tx.Rollback(ctx); rbErr != nil {
 					return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -614,7 +635,7 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 
 			var newCentroids btree.BtreeInterface[int, ai.Centroid]
 			if di.config.UsageMode == ai.DynamicWithVectorCountTracking {
-				newCentroids, err = newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, btree.DefaultSlotLength, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
+				newCentroids, err = newBtree[int, ai.Centroid](ctx, di.config, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, btree.DefaultSlotLength, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 				if err != nil {
 					if rbErr := tx.Rollback(ctx); rbErr != nil {
 						return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -653,21 +674,31 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 					}
 
 					vec := *item.Value
-					shouldMigrate := false
-					if found, _ := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key.ItemID}, false); found {
-						currentKey := oldArch.Content.GetCurrentKey().Key
-						if !currentKey.Deleted {
-							shouldMigrate = true
-						} else {
-							if _, err := oldArch.Content.RemoveCurrentItem(ctx); err != nil {
-								if rbErr := tx.Rollback(ctx); rbErr != nil {
-									return fmt.Errorf("RemoveCurrentItem failed: %w, rollback failed: %v", err, rbErr)
+					shouldMigrate := !di.deduplicationEnabled
+					if !shouldMigrate {
+						if found, _ := oldArch.Content.Find(ctx, ai.ContentKey{ItemID: item.Key.ItemID}, false); found {
+							currentKey := oldArch.Content.GetCurrentKey().Key
+							if !currentKey.Deleted {
+								cID := currentKey.CentroidID
+								cDist := currentKey.Distance
+								if currentKey.Version != currentVersion {
+									if currentKey.NextVersion == currentVersion {
+										cID = currentKey.NextCentroidID
+										cDist = currentKey.NextDistance
+									}
 								}
-								return err
+								if cID == item.Key.CentroidID && math.Abs(float64(cDist-item.Key.DistanceToCentroid)) < 1e-3 {
+									shouldMigrate = true
+								}
+							} else {
+								if _, err := oldArch.Content.RemoveCurrentItem(ctx); err != nil {
+									if rbErr := tx.Rollback(ctx); rbErr != nil {
+										return fmt.Errorf("RemoveCurrentItem failed: %w, rollback failed: %v", err, rbErr)
+									}
+									return err
+								}
 							}
 						}
-					} else {
-						shouldMigrate = false
 					}
 
 					if shouldMigrate {
@@ -767,7 +798,7 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 				break
 			}
 
-			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, btree.DefaultSlotLength, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
+			newVectors, err := newBtree[ai.VectorKey, []float32](ctx, di.config, sop.ConfigureStore(di.name+vectorsSuffix+suffix, true, 10000, vectorsDesc, sop.SmallData, ""), tx, compositeKeyComparer)
 			if err != nil {
 				if rbErr := tx.Rollback(ctx); rbErr != nil {
 					return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -777,7 +808,7 @@ func (di *domainIndex[T]) phase3(ctx context.Context, currentVersion int64, newV
 
 			var newCentroids btree.BtreeInterface[int, ai.Centroid]
 			if di.config.UsageMode == ai.DynamicWithVectorCountTracking {
-				newCentroids, err = newBtree[int, ai.Centroid](ctx, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, btree.DefaultSlotLength, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
+				newCentroids, err = newBtree[int, ai.Centroid](ctx, di.config, sop.ConfigureStore(di.name+centroidsSuffix+suffix, true, btree.DefaultSlotLength, centroidsDesc, sop.SmallData, ""), tx, func(a, b int) int { return a - b })
 				if err != nil {
 					if rbErr := tx.Rollback(ctx); rbErr != nil {
 						return fmt.Errorf("newBtree failed: %w, rollback failed: %v", err, rbErr)
@@ -923,10 +954,17 @@ func (di *domainIndex[T]) phase4(ctx context.Context, currentVersion int64, newV
 	}
 	di.sysStore = sysStore
 
+	var meta Metadata = di.config.Metadata
 	if found, _ := sysStore.Find(ctx, di.name, false); found {
-		sysStore.UpdateCurrentValue(ctx, newVersion)
+		strVal, _ := sysStore.GetCurrentValue(ctx)
+		json.Unmarshal([]byte(strVal), &meta)
+		meta.ActiveVersion = newVersion
+		bytes, _ := json.Marshal(meta)
+		sysStore.UpdateCurrentValue(ctx, string(bytes))
 	} else {
-		sysStore.Add(ctx, di.name, newVersion)
+		meta.ActiveVersion = newVersion
+		bytes, _ := json.Marshal(meta)
+		sysStore.Add(ctx, di.name, string(bytes))
 	}
 
 	tx.OnCommit(func(ctx context.Context) error {
@@ -936,10 +974,8 @@ func (di *domainIndex[T]) phase4(ctx context.Context, currentVersion int64, newV
 			return nil
 		}
 
-		if useTempVectors {
-			storeName := fmt.Sprintf("%s%s", di.name, tempVectorsSuffix)
-			_ = ct.StoreRepository.Remove(ctx, storeName)
-		}
+		storeName := fmt.Sprintf("%s%s", di.name, tempVectorsSuffix)
+		_ = ct.StoreRepository.Remove(ctx, storeName)
 
 		suffix := ""
 		if currentVersion > 0 {

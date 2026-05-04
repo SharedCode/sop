@@ -1,5 +1,9 @@
 # Transactional Vector Store Design (IVF on SOP)
 
+> **⚠️ ARCHITECTURAL NOTICE: LOW-LEVEL SYSTEM COMPONENT ⚠️**
+> This document describes the bare-metal physical setup of the Vector DB (Inverted File Index using B-Trees). 
+> **Important Distinction:** The `TempVectors` tree referenced in this document is a *low-level bulk-ingestion staging mechanism* for physical vectors. It is **NOT** the AI's Short-Term Memory (STM) scratchpad. For the high-level cognitive architecture (The Butler Protocol, STM `user_active_scratchpad`, and LTM semantic processing), please read `ai/memory/ACTIVE_MEMORY_DESIGN.md`. Do not confuse physical vector staging with cognitive episodic memory.
+
 ## 1. Core Problem: Indexing High-Dimensional Vectors
 We explored why standard B-Tree indexing fails for raw vectors:
 *   **Unit Sphere Problem**: AI embeddings are normalized (Length = 1.0). Sorting by "Magnitude" (Distance from Origin) puts all items in the same bucket.
@@ -45,8 +49,8 @@ We utilize two separate SOP B-Trees to manage this structure efficiently and tra
 *   **Value**: `ItemID` (string).
 *   **Usage**: Enables efficient random sampling (e.g., for training K-Means) by picking random integers.
 
-### B-Tree #5: The TempVectors Store
-*   **Purpose**: Temporarily stores vectors during the initial build phase before they are assigned to centroids.
+### B-Tree #5: The TempVectors Store (Physical Staging)
+*   **Purpose**: Temporarily stores raw physical vectors during the initial build phase before they are assigned to centroids. *(Note: This is a low-level physical DB stage, completely distinct from the AI's cognitive STM scratchpad).*
 *   **Key**: `ItemID` (string).
 *   **Value**: `[]float32` (Vector).
 *   **Usage**: Used in `BuildOnceQueryMany` mode to hold data until K-Means is trained.

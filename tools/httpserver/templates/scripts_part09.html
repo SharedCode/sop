@@ -1,0 +1,844 @@
+{{define "scripts_part09"}}
+<script>
+    function toggleValueSpec() {
+        const valType = document.getElementById('new-store-value-type').value;
+        updateArrayCheckboxVisibility(valType, 'new-store-value-is-array');
+        
+        const simpleInput = document.getElementById('new-store-seed-value-simple');
+        const builder = document.getElementById('seed-value-builder');
+        const rawInput = document.getElementById('new-store-seed-value');
+        const rawOption = document.getElementById('seed-value-raw-option');
+        const rawModeCheckbox = document.getElementById('seed-value-raw-mode');
+
+        // If map, show builder or raw json
+        if (valType === 'map') {
+            if (rawOption) rawOption.style.display = 'block';
+            if (rawModeCheckbox && rawModeCheckbox.checked) {
+                if (simpleInput) simpleInput.style.display = 'none';
+                if (builder) builder.style.display = 'none';
+                if (rawInput) rawInput.style.display = 'block';
+            } else {
+                if (simpleInput) simpleInput.style.display = 'none';
+                if (builder) builder.style.display = 'block';
+                if (rawInput) rawInput.style.display = 'none';
+            }
+        } else {
+            // Simple type
+            if (rawOption) rawOption.style.display = 'none';
+            if (simpleInput) simpleInput.style.display = 'block';
+            if (builder) builder.style.display = 'none';
+            if (rawInput) rawInput.style.display = 'none';
+        }
+    }
+
+    function saveNewStore() {
+        const name = document.getElementById('new-store-name').value.trim();
+        const type = document.getElementById('new-store-key-type').value;
+        const desc = document.getElementById('new-store-description').value.trim();
+        
+        let indexSpec = "";
+        const celExpression = document.getElementById('cel-expression-value').value;
+
+        if (type === 'map') {
+            indexSpec = generateIndexSpecJSON();
+            
+            // Validation: Map Key must have Index OR CEL, unless bypassed via env var
+            if (!ALLOW_INVALID_MAP_KEY) {
+                const hasIndex = indexSpec && indexSpec !== "";
+                const hasCEL = celExpression && celExpression.trim() !== "";
+                
+                if (!hasIndex && !hasCEL) {
+                    showAlert("Map Key type requires an Index Specification OR a CEL Expression.");
+                    return;
+                }
+            }
+        }
+
+        const advancedMode = document.getElementById('new-store-advanced-mode').checked;
+        let slotLength = parseInt(document.getElementById('new-store-slot-length').value);
+        if (isNaN(slotLength) || slotLength < 2) slotLength = 2;
+        if (slotLength > 10000) slotLength = 10000;
+
+        const isUnique = document.getElementById('new-store-is-unique').checked;
+        const dataSize = parseInt(document.getElementById('new-store-data-size').value);
+        let cacheDuration = parseInt(document.getElementById('new-store-cache-duration').value);
+        if (isNaN(cacheDuration)) cacheDuration = 0;
+        let isCacheTTL = document.getElementById('new-store-cache-ttl').checked;
+        // celExpression already retrieved above
+
+        // If Data Size is Small (0) or Big (2), cache settings are not applicable/hidden.
+        if (dataSize !== 1) {
+            cacheDuration = 0;
+            isCacheTTL = false;
+        }
+
+        if (!name) {
+            showAlert("Store name is required");
+            return;
+        }
+
+        // Parse Seed Data
+        let seedKey = null;
+        let seedValue = null;
+        
+        if (type === 'map') {
+            // Build from form
+            const rows = document.querySelectorAll('.seed-key-field-row');
+            if (rows.length > 0) {
+                seedKey = {};
+                rows.forEach(row => {
+                    const name = row.getAttribute('data-name') || row.getAttribute('data-field');
+                    const valStr = row.querySelector('.seed-key-field-value').value;
+                    
+                    // Find type definition
+                    const typeDefRow = Array.from(document.querySelectorAll('.key-field-row')).find(r => r.querySelector('.key-field-name').value.trim() === name);
+                    const fieldType = typeDefRow ? typeDefRow.querySelector('.key-field-type').value : 'string';
+                    
+                    let val = valStr;
+                    if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(fieldType)) {
+                        val = parseInt(valStr);
+                        if (isNaN(val)) val = 0;
+                    } else if (['float32', 'float64', 'decimal'].includes(fieldType)) {
+                        val = parseFloat(valStr);
+                        if (isNaN(val)) val = 0.0;
+                    } else if (['complex64', 'complex128'].includes(fieldType)) {
+                        val = valStr;
+                    } else if (fieldType === 'bool') {
+                        val = (valStr.toLowerCase() === 'true' || valStr === '1');
+                    } else if (fieldType === 'timestamp') {
+                        let t = parseInt(valStr);
+                        if (isNaN(t)) {
+                            t = Date.parse(valStr);
+                            if (isNaN(t)) t = 0;
+                        }
+                        val = t;
+                    } else if (['date', 'datetime', 'time', 'guid', 'timestampz'].includes(fieldType)) {
+                        val = valStr;
+                    } else if (fieldType === 'blob') {
+                        val = [];
+                        for (let i = 0; i < valStr.length; i++) {
+                            val.push(valStr.charCodeAt(i));
+                        }
+                    }
+                    seedKey[name] = val;
+                });
+            }
+        } else {
+            // Simple Key
+            const seedKeyStr = document.getElementById('new-store-seed-key').value.trim();
+            if (seedKeyStr) {
+                if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(type)) {
+                    seedKey = parseInt(seedKeyStr);
+                    if (isNaN(seedKey)) seedKey = 0;
+                } else if (['float32', 'float64', 'decimal'].includes(type)) {
+                    seedKey = parseFloat(seedKeyStr);
+                    if (isNaN(seedKey)) seedKey = 0.0;
+                } else if (['complex64', 'complex128'].includes(type)) {
+                    seedKey = seedKeyStr;
+                } else if (type === 'bool') {
+                    seedKey = (seedKeyStr.toLowerCase() === 'true' || seedKeyStr === '1');
+                } else if (type === 'timestamp') {
+                    let t = parseInt(seedKeyStr);
+                    if (isNaN(t)) {
+                        t = Date.parse(seedKeyStr);
+                        if (isNaN(t)) t = 0;
+                    }
+                    seedKey = t;
+                } else if (['date', 'datetime', 'time', 'guid', 'timestampz'].includes(type)) {
+                    seedKey = seedKeyStr;
+                } else if (type === 'blob') {
+                    seedKey = [];
+                    for (let i = 0; i < seedKeyStr.length; i++) {
+                        seedKey.push(seedKeyStr.charCodeAt(i));
+                    }
+                } else {
+                    // Default string or fallback
+                    try {
+                        seedKey = JSON.parse(seedKeyStr);
+                    } catch {
+                        seedKey = seedKeyStr;
+                    }
+                }
+            }
+        }
+
+        /*
+        if (seedKey === null || (typeof seedKey === 'string' && seedKey === '') || (typeof seedKey === 'object' && Object.keys(seedKey).length === 0)) {
+             showAlert("Initial Item Key is required.");
+             return;
+        }
+        */
+
+        try {
+            seedValue = generateSeedValueJSON();
+        } catch (e) {
+            showAlert(e.message);
+            return;
+        }
+
+        const isStreaming = document.getElementById('new-store-is-streaming').checked;
+        if (isStreaming) {
+            // --- Validation for Streaming/Chunked Data ---
+            
+            // 1. Validate Key Type
+            if (type !== 'map') {
+                showAlert("Streaming stores must use a Map key type.");
+                return;
+            }
+
+            // 2. Validate Value Type
+            const valType = document.getElementById('new-store-value-type').value;
+            if (valType !== 'blob') {
+                showAlert("Streaming stores must use 'Blob' (Byte Array) as the value type.");
+                return;
+            }
+
+            // 3. Validate Key Fields
+            const keyRows = document.querySelectorAll('.key-field-row');
+            let hasChunkIndex = false;
+            let chunkIndexType = '';
+            let otherFieldCount = 0;
+
+            keyRows.forEach(row => {
+                const name = row.querySelector('.key-field-name').value.trim();
+                const fType = row.querySelector('.key-field-type').value;
+                if (name === 'ChunkIndex') {
+                    hasChunkIndex = true;
+                    chunkIndexType = fType;
+                } else if (name) {
+                    otherFieldCount++;
+                }
+            });
+
+            if (!hasChunkIndex || chunkIndexType !== 'int') {
+                showAlert("Streaming stores must have a 'ChunkIndex' field of type 'int' in the Key.");
+                return;
+            }
+            if (otherFieldCount < 1) {
+                showAlert("Streaming stores must have at least one other field in the Key (besides ChunkIndex).");
+                return;
+            }
+
+            // 4. Validate Index Spec
+            const indexRows = document.querySelectorAll('.index-field-row');
+            if (indexRows.length === 0) {
+                showAlert("Streaming stores must have an Index defined.");
+                return;
+            }
+
+            const lastIndexRow = indexRows[indexRows.length - 1];
+            const lastIndexField = lastIndexRow.querySelector('.index-field-select').value;
+
+            if (lastIndexField !== 'ChunkIndex') {
+                showAlert("For Streaming stores, 'ChunkIndex' must be the LAST field in the Index.");
+                return;
+            }
+            
+            // Ensure at least one other field is indexed (ChunkIndex + Other = 2+)
+            if (indexRows.length < 2) {
+                 showAlert("Streaming stores must index both the ChunkIndex and the identifier field(s).");
+                 return;
+            }
+        }
+
+        // Check for Targeted EC
+        const ecTarget = document.getElementById('new-store-target-ec').value || "";
+
+        const payload = {
+            database: currentDatabase,
+            store: name,
+            description: desc,
+            blob_store_base_folder_path: ecTarget,
+            key_type: type,
+            keyIsArray: document.getElementById('new-store-key-is-array').checked,
+            value_type: document.getElementById('new-store-value-type').value,
+            valueIsArray: document.getElementById('new-store-value-is-array').checked,
+            index_spec: indexSpec,
+            cel_expression: celExpression,
+            slot_length: slotLength,
+            is_unique: isUnique,
+            data_size: dataSize,
+            cache_duration: cacheDuration,
+            is_cache_ttl: isCacheTTL,
+            relations: getRelationshipsFromUI(),
+            seed_key: seedKey,
+            seed_value: seedValue,
+            adminToken: window.currentAdminToken || ""
+        };
+
+        apiCall('/api/store/add', 'POST', payload)
+        .then(data => {
+            if (data.status === 'ok') {
+                closeAddStoreModal();
+                // Refresh store list and select the new store
+                selectDatabase(currentDatabase, true, name);
+            } else {
+                showAlert("Error: " + (data.error || "Unknown error"));
+            }
+        });
+    }
+
+    // --- CEL Editing Logic ---
+    function openCELModal() {
+        const modal = document.getElementById('cel-modal');
+        const input = document.getElementById('cel-expression-input');
+        const helpText = document.getElementById('cel-help-text');
+        
+        // Check if New Store Modal is open
+        const addStoreModal = document.getElementById('add-store-modal');
+        const isNewStore = addStoreModal && addStoreModal.style.display === 'flex';
+
+        if (isNewStore) {
+            input.value = document.getElementById('cel-expression-value').value;
+            
+            // Generate Help Content for New Store
+            let helpContent = '';
+            let generatedExpr = null;
+            
+            // 1. Try to generate from UI Index Spec
+            const indexRows = document.querySelectorAll('.index-field-row');
+            if (indexRows.length > 0) {
+                const fields = [];
+                indexRows.forEach(row => {
+                    const field = row.querySelector('.index-field-select').value;
+                    const order = row.querySelector('.index-field-order').value;
+                    if (field) {
+                        fields.push({
+                            field_name: field,
+                            ascending_sort_order: order === 'asc'
+                        });
+                    }
+                });
+
+                if (fields.length > 0) {
+                    // Recursive function to build the ternary chain
+                    function buildExpr(index) {
+                        if (index >= fields.length) return "0";
+                        
+                        const f = fields[index];
+                        const name = f.field_name;
+                        const isAsc = f.ascending_sort_order;
+                        
+                        const lessVal = isAsc ? "-1" : "1";
+                        const greaterVal = isAsc ? "1" : "-1";
+                        
+                        return `mapX['${name}'] < mapY['${name}'] ? ${lessVal} : mapX['${name}'] > mapY['${name}'] ? ${greaterVal} : (${buildExpr(index + 1)})`;
+                    }
+                    
+                    generatedExpr = buildExpr(0);
+                }
+            }
+
+            // 2. Generate Help Text based on Key Fields
+            const keyRows = document.querySelectorAll('.key-field-row');
+            const keyFields = [];
+            keyRows.forEach(row => {
+                const name = row.querySelector('.key-field-name').value.trim();
+                if (name) keyFields.push(name);
+            });
+
+            if (keyFields.length > 0) {
+                helpContent += `<div style="margin-bottom:5px;"><strong>Available Fields (mapX/mapY):</strong> ${keyFields.map(f => `<code>${f}</code>`).join(', ')}</div>`;
+                
+                if (generatedExpr) {
+                    helpContent += `
+                        <div style="margin-bottom:10px;">
+                            <strong>Generated from Index Spec:</strong>
+                            <div style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 2px;">Equivalent CEL for current index configuration:</div>
+                            <code style="display:block; padding:5px; background:var(--input-bg); border:1px solid var(--border-color); margin-top:3px; cursor:pointer; user-select:all; white-space: pre-wrap;" 
+                                onclick="document.getElementById('cel-expression-input').value = this.innerText">${generatedExpr}</code>
+                        </div>
+                        <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
+                    `;
+                } else {
+                    const fieldName = keyFields[0];
+                    const sampleExpr = `mapX['${fieldName}'] < mapY['${fieldName}'] ? -1 : mapX['${fieldName}'] > mapY['${fieldName}'] ? 1 : 0`;
+                    
+                    helpContent += `
+                        <div><strong>Sample Expression (Click to use):</strong></div>
+                        <code style="display:block; padding:5px; background:var(--input-bg); border:1px solid var(--border-color); margin-top:3px; cursor:pointer; user-select:all;" 
+                              onclick="document.getElementById('cel-expression-input').value = this.innerText">${sampleExpr}</code>
+                    `;
+                }
+            } else {
+                 if (!helpContent) {
+                     helpContent = '<div>Define Key Fields or Index Spec to see suggestions.</div>';
+                 }
+            }
+
+            if (helpContent) {
+                helpText.innerHTML = helpContent;
+                helpText.style.display = 'block';
+            } else {
+                helpText.style.display = 'none';
+            }
+
+            modal.style.display = 'flex';
+            return;
+        }
+
+        if (!currentStoreInfo) return;
+
+        input.value = currentStoreInfo.celExpression || '';
+
+        let helpContent = '';
+
+        // 1. Generate from Index Spec if available
+        if (currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0) {
+             const fields = currentStoreInfo.indexSpec.index_fields;
+             
+             // Recursive function to build the ternary chain
+             function buildExpr(index) {
+                 if (index >= fields.length) return "0";
+                 
+                 const f = fields[index];
+                 const name = f.field_name;
+                 const isAsc = f.ascending_sort_order;
+                 
+                 // Standard: X < Y ? -1 : X > Y ? 1 : Next
+                 // Desc:    X < Y ? 1 : X > Y ? -1 : Next
+                 
+                 const lessVal = isAsc ? "-1" : "1";
+                 const greaterVal = isAsc ? "1" : "-1";
+                 
+                 return `mapX['${name}'] < mapY['${name}'] ? ${lessVal} : mapX['${name}'] > mapY['${name}'] ? ${greaterVal} : (${buildExpr(index + 1)})`;
+             }
+             
+             // Remove outer parens if they exist from recursion (optional cleanup)
+             let generatedExpr = buildExpr(0);
+             
+             helpContent += `
+                <div style="margin-bottom:10px;">
+                    <strong>Generated from Index Spec:</strong>
+                    <div style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 2px;">Equivalent CEL for current index configuration:</div>
+                    <code style="display:block; padding:5px; background:var(--input-bg); border:1px solid var(--border-color); margin-top:3px; cursor:pointer; user-select:all; white-space: pre-wrap;" 
+                          onclick="document.getElementById('cel-expression-input').value = this.innerText">${generatedExpr}</code>
+                </div>
+                <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
+             `;
+        }
+
+        // 2. Generate Help Text based on sample key
+        if (currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
+            const fields = Object.keys(currentStoreInfo.sampleKey);
+            if (fields.length > 0) {
+                const fieldName = fields[0];
+                // Sample expression using the first field
+                const sampleExpr = `mapX['${fieldName}'] < mapY['${fieldName}'] ? -1 : mapX['${fieldName}'] > mapY['${fieldName}'] ? 1 : 0`;
+                
+                helpContent += `
+                    <div style="margin-bottom:5px;"><strong>Available Fields (mapX/mapY):</strong> ${fields.map(f => `<code>${f}</code>`).join(', ')}</div>
+                    <div><strong>Sample Expression (Click to use):</strong></div>
+                    <code style="display:block; padding:5px; background:var(--input-bg); border:1px solid var(--border-color); margin-top:3px; cursor:pointer; user-select:all;" 
+                          onclick="document.getElementById('cel-expression-input').value = this.innerText">${sampleExpr}</code>
+                `;
+            }
+        } else {
+             // If no sample key, maybe show generic help if no index spec either
+             if (!helpContent) {
+                 helpContent = '<div>No sample data or index specification available to generate suggestions.</div>';
+             }
+        }
+
+        if (helpContent) {
+            helpText.innerHTML = helpContent;
+            helpText.style.display = 'block';
+        } else {
+            helpText.style.display = 'none';
+        }
+
+        modal.style.display = 'flex';
+    }
+
+    function closeCELModal() {
+        closeUIModal('cel-modal');
+    }
+
+    function saveCELExpression() {
+        const input = document.getElementById('cel-expression-input');
+        const celExpr = input.value;
+
+        // Check if New Store Modal is open
+        const addStoreModal = document.getElementById('add-store-modal');
+        const isNewStore = addStoreModal && addStoreModal.style.display === 'flex';
+
+        if (isNewStore) {
+            document.getElementById('cel-expression-value').value = celExpr;
+            const preview = document.getElementById('cel-expression-preview');
+            if (celExpr) {
+                preview.textContent = celExpr;
+                preview.style.color = 'var(--text-color)';
+            } else {
+                preview.textContent = "(No expression defined - using default sorting)";
+                preview.style.color = 'var(--text-muted)';
+            }
+            closeCELModal();
+            return;
+        }
+
+        apiCall('/api/store/update', 'POST', {
+            database: currentDatabase,
+            storeName: currentStore,
+            celExpression: celExpr
+        })
+        .catch(err => {
+            if (err.message.includes("Cannot update") && err.message.includes("structure")) {
+                const token = prompt("Structural changes detected. Please enter Admin Token to override:");
+                if (token) {
+                    return apiCall('/api/store/update', 'POST', {
+                        database: currentDatabase,
+                        storeName: currentStore,
+                        celExpression: celExpr,
+                        adminToken: token
+                    });
+                }
+            }
+            throw err;
+        })
+        .then(data => {
+            if (!data) return;
+            closeCELModal();
+            // Refresh store info
+            currentStoreInfo.celExpression = celExpr;
+            if (data.warning) {
+                showAlert('CEL Expression updated successfully.\n\nWARNING: ' + data.warning);
+            } else {
+                showAlert('CEL Expression updated successfully.');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+        });
+    }
+
+    window.onbeforeunload = function() {
+        const btn = document.getElementById('btn-save');
+        if (btn && !btn.disabled) {
+            return "You have unsaved changes.";
+        }
+    };
+
+    // --- Draggable Chat Toggle Button Logic ---
+    document.addEventListener('DOMContentLoaded', function() {
+        const btn = document.getElementById('chat-toggle-btn');
+        let isDraggingBtn = false;
+        let hasMoved = false;
+        let mouseOffsetX = 0;
+        let mouseOffsetY = 0;
+        let startX = 0;
+        let startY = 0;
+
+        // Prevent context menu on the button
+        btn.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+
+        btn.addEventListener('mousedown', function(e) {
+            // Only Right Click (button 2) for dragging
+            if (e.button !== 2) return;
+            
+            isDraggingBtn = true;
+            hasMoved = false;
+            startX = e.clientX;
+            startY = e.clientY;
+            
+            // Calculate offset
+            const rect = btn.getBoundingClientRect();
+            mouseOffsetX = e.clientX - rect.left;
+            mouseOffsetY = e.clientY - rect.top;
+            
+            // Switch to explicit positioning
+            btn.style.left = rect.left + 'px';
+            btn.style.top = rect.top + 'px';
+            btn.style.right = 'auto';
+            btn.style.bottom = 'auto';
+            
+            e.preventDefault(); // Prevent text selection
+        });
+
+        document.addEventListener('mousemove', function(e) {
+            if (!isDraggingBtn) return;
+            
+            if (!hasMoved) {
+                const dist = Math.sqrt(Math.pow(e.clientX - startX, 2) + Math.pow(e.clientY - startY, 2));
+                // Threshold of 5 pixels to distinguish Click vs Drag
+                if (dist > 5) {
+                    hasMoved = true;
+                    document.body.style.cursor = 'move';
+                } else {
+                    return; // Do not move yet
+                }
+            }
+
+            // Only move if we have passed the threshold
+            btn.style.left = (e.clientX - mouseOffsetX) + 'px';
+            btn.style.top = (e.clientY - mouseOffsetY) + 'px';
+        });
+
+        document.addEventListener('mouseup', function(e) {
+            if (isDraggingBtn) {
+                isDraggingBtn = false;
+                document.body.style.cursor = 'default';
+            }
+        });
+
+        // Left Click to Toggle
+        btn.addEventListener('click', function(e) {
+            toggleChatWidget(true);
+        });
+
+        // Global Escape Key Handler for Modals
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                // Args Modal (Check first)
+                const argsModal = document.getElementById('args-modal');
+                if (argsModal && argsModal.style.display === 'flex') {
+                    closeArgsModal();
+                    return;
+                }
+
+                // CEL Modal (Check first as it can be on top of Add Store)
+                const celModal = document.getElementById('cel-modal');
+                if (celModal && celModal.style.display === 'flex') {
+                    closeCELModal();
+                    return;
+                }
+
+                // Add Store Modal
+                const addStoreModal = document.getElementById('add-store-modal');
+                if (addStoreModal && addStoreModal.style.display === 'flex') {
+                    closeAddStoreModal();
+                    return;
+                }
+
+                // Code Modal
+                const codeModal = document.getElementById('code-modal');
+                if (codeModal && codeModal.style.display === 'flex') {
+                    codeModal.style.display = 'none';
+                    return;
+                }
+
+                // Column Modal
+                const colModal = document.getElementById('column-modal');
+                if (colModal && colModal.style.display === 'flex') {
+                    colModal.style.display = 'none';
+                    return;
+                }
+
+                // Script Modal
+                const scriptModal = document.getElementById('script-modal');
+                if (scriptModal && scriptModal.style.display !== 'none') {
+                    closeScriptModal();
+                    return;
+                }
+            }
+        });
+    });
+
+    // Setup Wizard Logic
+    let currentWizardStep = 1;
+
+    function toggleSetupConnectionField(mode) {
+        // mode: 'db' or 'sys'
+        const typeId = mode === 'sys' ? 'setup-sys-type' : 'setup-db-type';
+        const groupId = mode === 'sys' ? 'setup-conn-group-sys' : 'setup-conn-group-db';
+        const inputId = mode === 'sys' ? 'setup-sys-conn' : 'setup-db-conn';
+        
+        const type = document.getElementById(typeId).value;
+        const group = document.getElementById(groupId);
+        const input = document.getElementById(inputId);
+        
+        if (type === 'clustered') {
+            group.style.display = 'flex';
+            if(input) {
+                input.placeholder = 'localhost:6379';
+                if (!input.value) input.value = 'localhost:6379';
+            }
+        } else {
+            group.style.display = 'none';
+        }
+    }
+
+    function toggleSetupAdvancedOptions(mode) {
+        const checkboxId = mode === 'sys' ? 'setup-sys-advanced-toggle' : 'setup-db-advanced-toggle';
+        const optionsId = mode === 'sys' ? 'setup-sys-advanced-options' : 'setup-db-advanced-options';
+        
+        const chk = document.getElementById(checkboxId);
+        const opts = document.getElementById(optionsId);
+        
+        if (chk && opts) {
+            opts.style.display = chk.checked ? 'block' : 'none';
+        }
+
+        if (mode === 'db') {
+            const isChecked = chk.checked;
+            // Toggle Logic for Setup
+            const pathGroup = document.getElementById('setup-db-path').parentElement;
+            const storesFoldersInput = document.getElementById('setup-db-stores-folders');
+            const dataPathInput = document.getElementById('setup-db-path');
+            
+            if (isChecked) {
+                pathGroup.style.display = 'none';
+                 if (dataPathInput.value && !storesFoldersInput.value) {
+                    storesFoldersInput.value = dataPathInput.value;
+                }
+            } else {
+                pathGroup.style.display = 'flex'; 
+                if (storesFoldersInput.value) {
+                    const firstPath = storesFoldersInput.value.split(',')[0].trim();
+                    if (firstPath) dataPathInput.value = firstPath;
+                }
+            }
+        } else if (mode === 'sys') {
+             const isChecked = chk.checked;
+             const storesFoldersInput = document.getElementById('setup-sys-stores-folders');
+             const dataPathInput = document.getElementById('setup-reg-path');
+             const pathGroup = document.getElementById('setup-sys-path-group');
+
+             if (isChecked) {
+                  if (pathGroup) pathGroup.style.display = 'none';
+                  if (dataPathInput && storesFoldersInput && dataPathInput.value && !storesFoldersInput.value) {
+                    storesFoldersInput.value = dataPathInput.value;
+                }
+             } else {
+                 if (pathGroup) pathGroup.style.display = 'flex';
+                 // Do not overwrite dataPathInput from stores folders when disabling advanced mode for System DB
+                 // if (dataPathInput && storesFoldersInput && storesFoldersInput.value) {
+                 //     const firstPath = storesFoldersInput.value.split(',')[0].trim();
+                 //     if (firstPath) dataPathInput.value = firstPath;
+                 // }
+             }
+        }
+    }
+
+    function toggleManualEnterpriseBrain() {
+        const toggle = document.getElementById('setup-sys-use-manual-enterprise');
+        const input = document.getElementById('setup-reg-path');
+        const advToggle = document.getElementById('setup-sys-advanced-toggle');
+        
+        if (toggle && input) {
+            const advContainer = advToggle ? advToggle.closest('div') : null;
+
+            if (toggle.checked) {
+                // Visual Highlight for "Connected" State
+                input.style.borderColor = '#6f42c1'; 
+                input.style.boxShadow = '0 0 0 2px rgba(111, 66, 193, 0.2)';
+                
+                // Hide Advanced Mode Container
+                if (advContainer) advContainer.style.display = 'none';
+                
+                // Ensure options are strictly closed/reset logic
+                if (advToggle) {
+                    advToggle.checked = false;
+                    const opts = document.getElementById('setup-sys-advanced-options');
+                    if (opts) opts.style.display = 'none';
+                }
+
+                // If value is default /tmp..., maybe clear it to encourage entry?
+                if (input.value.startsWith('/tmp/sop_data')) {
+                    // input.value = ""; 
+                }
+                input.focus();
+            } else {
+                 input.style.borderColor = ''; 
+                 input.style.boxShadow = '';
+                 
+                 // Show Advanced Mode
+                 if (advContainer) advContainer.style.display = 'block';
+            }
+        }
+    }
+
+    function toggleManualUserDB() {
+        const toggle = document.getElementById('setup-db-use-manual');
+        const input = document.getElementById('setup-db-path');
+        const inputContainer = document.getElementById('setup-db-path-container');
+        const inputLabel = document.getElementById('setup-db-path-label');
+        
+        const nameInput = document.getElementById('setup-db-name');
+        const nameContainer = document.getElementById('setup-db-name-container');
+
+        const advToggle = document.getElementById('setup-db-advanced-toggle');
+        const demoToggle = document.getElementById('setup-populate-demo'); 
+        const medicalToggle = document.getElementById('setup-populate-medical');
+
+        if (toggle) {
+            const advContainer = advToggle ? advToggle.closest('div') : null;
+
+            if (toggle.checked) {
+                // Shared Mode:
+                // 1. Hide Name Input (User provides full path to existing DB)
+                if (nameContainer) nameContainer.style.display = 'none';
+
+                // 2. Ensure Path input is visible and highlighted
+                if (inputContainer) inputContainer.style.display = 'flex';
+                // Adjust Label
+                if (inputLabel) inputLabel.innerText = "User DB Path";
+                // Adjust Input
+                if (input) {
+                    input.placeholder = "/path/to/existing/db_folder";
+                    // If default value (parent dir), clear it so user enters full path
+                    if (input.value === "/tmp/sop_data/db" || input.value === "") {
+                         input.value = "";
+                    }
+                    input.focus();
+                }
+
+                // Hide Advanced Mode Container
+                if (advContainer) advContainer.style.display = 'none';
+                
+                // Disable Populating Demo Data
+                if (demoToggle) {
+                    demoToggle.checked = false;
+                    demoToggle.disabled = true;
+                    demoToggle.parentElement.title = "Cannot populate demo data when using shared/existing DB.";
+                }
+                
+                if (medicalToggle) {
+                    medicalToggle.checked = false;
+                    medicalToggle.disabled = true;
+                    medicalToggle.parentElement.title = "Cannot populate demo data when using shared/existing DB.";
+                }
+                
+                if (advToggle) {
+                    advToggle.checked = false;
+                    const opts = document.getElementById('setup-db-advanced-options');
+                    if (opts) opts.style.display = 'none';
+                }
+
+            } else {
+                 // Standalone/New Mode:
+                 // 1. Show Name Input
+                 if (nameContainer) nameContainer.style.display = 'flex';
+
+                 // 2. Show Path Input (as Parent Directory)
+                 if (inputContainer) inputContainer.style.display = 'flex';
+                 // Revert Label
+                 if (inputLabel) inputLabel.innerText = "Data Path";
+                 
+                 // Revert Value if needed? 
+                 // If user typed a custom shared path, we leave it? 
+                 // Or revert to default parent? 
+                 // Generally safer to leave it or reset to default if empt.
+                 if (input && input.value === "") {
+                     input.value = "/tmp/sop_data/db";
+                 }
+                 
+                 // Show Advanced Mode
+                 if (advContainer) advContainer.style.display = 'block';
+
+                 if (demoToggle) {
+                    demoToggle.disabled = false;
+                    demoToggle.parentElement.title = "";
+                 }
+                 
+                 if (medicalToggle) {
+                    medicalToggle.disabled = false;
+                    medicalToggle.parentElement.title = "";
+                 }
+            }
+        }
+    }
+
+</script>
+{{end}}

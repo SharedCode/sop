@@ -52,7 +52,17 @@ We realized: **We aren't just storing data anymore. We are processing it.**
 
 The storage engine had become a **Compute Platform**. The database could now run applications, execute workflows, and host logic, all within the same ACID-compliant environment.
 
-## 6. The Future: Swarm Intelligence
+## 6. The Paradigm Shift: Agentic Data
+With complex automation came a fundamental realization: **The problem with today's data is that it is too structured for AI**. It is either too SQL (rigid RDBMS) or too NoSQLish (nested, schema-less chaos). When data is formatted for the *database's* convenience, AI struggles to manage and mine it accurately on the user's behalf.
+
+So, we invented a new data primitive: **Agentic Data**.
+1. **Auto-Managed by AI**: We moved away from the concept of humans manually editing JSON documents or SQL rows in "Stores."
+2. **Playbooks (Knowledge Bases)**: We created dedicated semantic pools where data is stored via embeddings (`Concept`, `Category`, `Description`). The AI naturally understands this unstructured representation, allowing it to aggregate, correct, and retrieve facts seamlessly using its native "language."
+3. **Imbued Personas**: This data acts as a Playbook. An entry contains regular facts, but it drives the AI's persona, its rules, and its constraints. Users create a Playbook, assign it a "System Persona", define the Embedder, and the AI takes over.
+
+Agentic Data shifts the cognitive load entirely. The human describes the world; the Agentic Database organizes it.
+
+## 7. The Future: Swarm Intelligence
 Now, we stand at the threshold of the next step. With a solid B-Tree foundation, a distributed Swarm architecture, and a Scripting Engine capable of executing logic anywhere, the path forward is clear.
 
 A **Map-Reduce / Swarm Intelligence** system is just a package away.

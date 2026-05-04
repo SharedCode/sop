@@ -14,10 +14,21 @@ It provides a complete toolkit for building local, privacy-first AI applications
 
 ## Core Components
 
-### 1. Vector Database (`ai/vector`)
-A persistent, ACID-compliant vector store that runs on your local filesystem.
-*   **Storage**: Uses SOP B-Trees to store vectors and metadata.
-*   **Architecture**: Uses a "Flat" directory structure where all B-Trees (Vectors, Centroids, Content) reside in a shared root folder, managed by a `sys_config` registry.
+### 1. New Memory Architecture (`ai/memory`)
+The core user-facing and Agent-driven storage engine. It provides **Human-Readable Ontologies** and structured data for the UI and Copilot.
+*   **Knowledge Bases**: Groups information logically rather than physically. Implements the `OpenKnowledgeBase` pattern.
+*   **LLM Categorization**: Unlike legacy systems that use mathematics, this system uses LLMs to read data and determine its **Category** (e.g., "Billing", "HR").
+*   **Deterministic Pre-Filtering**: Caching and filtering by human-readable categories allows UI Copilots to skip 99% of the search space instantly before any math is done.
+*   **Always-Online (No Optimization Downtime)**: The new memory system intelligently shapes items into semantic categories natively. This completely eliminates the need for the blocking, expensive `Optimize()` phases that plague legacy K-Means vector architectures.
+*   **Granular Items**: The memory system inherently understands relationship mappings and structured JSON arrays for document retrieval.
+*   **Data as a Tradable Asset (Marketplace Ready)**: Because structuring this memory requires cognitive reasoning (LLM API calls), each Knowledge Base represents a literal "intellectual investment". Unlike flat, meaningless mathematical centroids, these highly-managed, "human-grade" semantic spaces (Spaces) can be managed via the UI, exported, and eventually minted, bought, or sold in a Data Marketplace by end-users.
+
+### 2. Legacy Vector Database (`ai/vector`)
+A persistent, ACID-compliant vector store optimized for **pure mathematical throughput**. This is retained for high-volume pipelines, backward compatibility, and the cross-language FFI bindings.
+*   **Mathematical Centroids**: Zero-LLM ingestion. Vectors are grouped into clusters (Centroids) purely by cosine distance. This makes ingestion lightning fast and completely free (no API calls).
+*   **Blocking Optimizations (Weakness)**: Because centroids are purely mathematical, data drifts as vectors are added. It strictly requires periodic calls to the `Optimize()` function to recalculate the centers and shift data, during which writing may be blocked.
+*   **Storage**: Uses SOP B-Trees to store vectors and metadata. Wait-free, parallel queries point directly at mathematical clusters.
+*   **Usage**: Best for "Blind" data-dumping where 100M logs need to be searched without caring about folder structures, or when using language wrappers in Rust/Python/etc.
 *   **Modes**: Supports **Standalone** (In-Memory Cache) for local use and **Clustered** (Redis Cache) for distributed deployments.
 *   **Search**: Supports cosine similarity search with metadata filtering.
 *   **Partitioning**: Designed for massive scale via natural partitioning.
@@ -78,11 +89,18 @@ A unique **Hybrid Execution** engine that runs inside the Agent.
 *   [Read the full documentation](SCRIPTS.md).
 
 ### 7. AI Copilot (Interactive Mode)
-A conversational interface for interacting with your data and building scripts.
+A conversational interface for interacting with your data, building scripts, and managing AI Spaces.
 *   **Natural Language Queries**: "Select all users where role is admin".
 *   **CRUD Operations**: Add, update, and delete records using plain English.
+*   **AI Spaces Management**: Effortlessly generate, import, and manage "Spaces". A Space (or Knowledge Base) is a new AI memory subsystem combining VectorDB, Text Search, and a specialized schema (Thoughts: Category/Items). The AI natively outputs structured `ExportData` JSON rather than running raw technical database tools for this domain.
 *   **Script Drafting**: Teach the assistant workflows by defining them step-by-step.
 *   [Read the User Guide](AI_COPILOT_USAGE.md).
+
+
+### 8. Knowledge Vectorization (Setup Wizard)
+The AI Copilot does not hardcode context rules. Instead, it relies on an embedded **Setup Wizard** and an internal **Vectorizer (compiler)**. 
+When the system initializes, the Setup Wizard compiles documents like this `README.md` and the user/tool guides (`AI_COPILOT_USAGE.md`), converting guidelines, relational schema strategies, and tool lists directly into **Active Memory** (Vectors). 
+This allows the AI to learn how your tables are linked, what tools it is allowed to use (`select`, `join`, `script`), and which CEL expressions map to your domain, directly from your documentation rather than rigid code blocks.
 
 ## Standards & Compatibility
 
@@ -200,9 +218,15 @@ func main() {
 }
 ```
 
-# The Doctor Demo: A Local RAG Pipeline
+# The Doctor Demo: A Real RAG Pipeline powered by Gemini
 
-This demo showcases a complete "Doctor-Nurse" AI pipeline running entirely locally. It demonstrates how to chain agents together using the SOP AI framework.
+This demo showcases a complete, real-world RAG (Retrieval-Augmented Generation) pipeline. It demonstrates how to chain agents and vector databases together using the SOP AI framework.
+
+Specifically, it implements a genuine RAG flow:
+- **Embedding (Text-to-Vector)**: Uses Google's Gemini API (`gemini-embedding-001`) to convert patient symptoms into vector embeddings.
+- **Retrieval**: Uses SOP's high-performance hybrid search (Vector + BM25) to locate the closest clinical mappings and disease data in your local stores.
+- **Context-Aware Ranking (Active Memory)**: Intercepts the Reciprocal Rank Fusion (RRF) algorithm to mathematically boost documents (e.g., up to 1.5x) mathematically if they match the user's ongoing conversation/topic thread. This seamlessly solves the "forgetful RAG" problem for follow-up questions.
+- **Generation (LLM)**: Uses Google's Gemini API (`gemini-2.5-flash` or similar) as the "Doctor" to synthesize the retrieved medical context and provide an educated diagnosis.
 
 ## Architecture
 
@@ -232,25 +256,28 @@ The entire process is defined in `etl_workflow.json` and consists of three steps
 
 We provide a script to build the tools, run the ETL pipeline, and verify the agents.
 
-1.  **Run the Rebuild Script**:
+1.  **Run the Rebuild & Demo Script**:
     ```bash
-    ./rebuild_doctor.sh
+    ./run_demo_gemini.sh
     ```
     This script will:
-    *   Build `sop-etl` and `sop-ai` binaries.
-    *   Clean up old data.
-    *   Run the ETL workflow defined in `etl_workflow.json`.
-    *   Run sanity tests.
+    *   Initialize necessary dependencies.
+    *   Clean up old local databases.
+    *   Run the ETL pipeline via `go run main.go` in the demo folder to ingest data (handling Gemini API 429 rate limits seamlessly with backoffs).
+    *   Automatically launch the interactive doctor repl.
 
-2.  **Run the Agent Manually**:
-    Once the data is built, you can chat with the Doctor agent:
+2.  **Run the Agent Manually (Interactive REPL)**:
+    Once the data is built (using the ETL pipelines or scripts like `./run_demo_gemini.sh`), you can chat with the Doctor agent in a fully interactive terminal session powered by Gemini 2.5 Flash and robust Hybrid Search (Vector + BM25):
     ```bash
-    ./sop-ai -config data/doctor_pipeline.json
+    go run ai/cmd/demo_doctor/main.go
     ```
     **Example Interaction**:
     ```text
     Patient> I have a bad cough and a runny nose
-    AI Doctor: [1] Common Cold... (Score: 0.92)
+    ...Doctor is thinking (and searching)...
+
+    🩺 Doctor Answer:
+    Based on your symptoms...
     ```
 
 ## Configuration Files
@@ -278,3 +305,50 @@ The system supports two types of "Nurse" agents for embedding/translation:
     *   **Cons**: Requires running Ollama, higher latency.
 
 To switch between them, you would update the `embedder` configuration in the agent's JSON file.
+
+### Knowledge Compiler & Setup Wizard Integration
+
+To dramatically speed up the instantiation of the SOP intelligent agent environment, we provide a **Knowledge Compiler** (`ai/cmd/knowledge_compiler/main.go`). This tool pre-compiles baseline architectural knowledge into a static blob (`ai/sop_base_knowledge.json`). 
+
+Instead of waiting for the LLM or embedding endpoints during the first run, the **SOP Setup Wizard** UI automatically catches this JSON payload. When configuring endpoints (e.g., via the frontend `fetch('/api/config/save')` integration), a unified loading screen directly injects the compiled vectors into your target databases synchronously alongside your Demo Data or Medical Expert configurations.
+
+
+### Engine Constraints & Query Rules (Behavioral Vectors)
+
+*   **Query Filtering**: When filtering with `select`, use MongoDB-style operators (`$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte`) for comparisons. Example: `{"age": {"$gt": 18}}`.
+*   **Sorting**: Sorting/Ordering is **ONLY** supported by the store's Key or a prefix of the Key. You CANNOT sort by arbitrary fields (e.g. `salary`, `date`) unless they are the Key.
+*   **Secondary Indexes**: Check if a secondary index store exists (e.g., `users_by_age`). If so, use it to fulfill sort/filter requests by joining it with the main store (e.g. scan `users_by_age` and join `users`). If no index exists, explain that SOP only supports sorting by Key.
+
+### Scripting & Join Execution Strategies
+
+*   **Join Strategy**:
+    *   Use `inner` (default) when the query implies "intersection" or strict matching (e.g., "Find orders for user X").
+    *   Use `left` (Left Outer Join) when the query implies "optional" relationships.
+    *   Use `right` or `full` only if explicitly requested or logically required.
+*   **Return Values**:
+    *   The `return` command in a script must refer to an EXPLICIT variable name defined in a previous step (e.g., `'result_var': "my_data"` -> `'return {"value": "my_data"}'`).
+    *   Do NOT assume a variable named `final_result` exists unless you created it.
+*   **Contextual Projection**:
+    *   When joining entities, ALWAYS project identifying fields (e.g., Name, Email) from the parent/source entity alongside the child data in the final result.
+    *   Do NOT return orphaned child records without their parent's context if the user filtered by the parent.
+    *   Always use the Store Name as prefix (e.g., `users.age`) or the explicit Alias defined in the `join` step.
+
+### Critical Aliasing Rules
+
+*   **STRICTLY FORBIDDEN**: Do NOT use `right.*`, `left.*`, `l.*`, or `r.*` in projection fields. Using `right.*` will fail.
+*   You MUST list specific fields (e.g., `orders.key`, `users.name`) or use the exact store name wildcard (e.g., `orders.*`) if applicable.
+
+### Intent Detection (Conversation vs. Action)
+
+*   Distinguish between a request to PERFORM an action (e.g., "Add a user", "Find records") and a request to GENERATE data or EXPLAIN concepts (e.g., "Give me a new UUID", "How does this work?").
+*   If a user asks for a "new UUID" or "random ID" in isolation, simply generate it and reply with the text. Do NOT add it to any store unless explicitly instructed to "save" or "add" it.
+*   Engage in conversation freely to clarify intent before taking destructive or additive actions.
+
+### UI Handlers (Client-Side Actions)
+
+*   To switch the active database context in the UI, do NOT use a tool. Instead, strictly output the following text in your final response: `[[SWITCH_DATABASE: <db_name>]]`. The frontend will detect this and perform the switch.
+
+### Active Memory & Self-Correction
+
+*   Your pipeline is powered by an automated Context-Aware "Active Memory" backend.
+*   When correcting mistakes or learning rules (e.g., "We use 'TotalAmount', not 'Cost'"), simply ACKNOWLEDGE the prompt. The vector retrieval backend natively handles the propagation of definitions without you needing to explicitly 'save' them. Proceed immediately with corrected logic.

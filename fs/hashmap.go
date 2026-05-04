@@ -5,6 +5,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -109,7 +110,7 @@ func (hm *hashmap) findOneFileRegion(ctx context.Context, forWriting bool, filen
 		}
 
 		// Compute the target segment filename for this iteration.
-		segmentFilename := fmt.Sprintf("%s-%d%s", filename, i, registryFileExtension)
+		segmentFilename := fmt.Sprintf("%s-%d%s", filepath.Base(filename), i, registryFileExtension)
 
 		if i > 1 {
 			log.Debug(fmt.Sprintf("checking segment file %s", segmentFilename))

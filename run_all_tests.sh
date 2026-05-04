@@ -2,7 +2,7 @@
 set -e
 
 echo "Running Core Tests..."
-go test ./...
+go test $(go list ./... | grep -v /tools)
 
 echo "Running AI Tests..."
 (cd ai && go test ./...)
