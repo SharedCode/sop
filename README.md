@@ -303,10 +303,20 @@ SOP now includes a powerful **SOP Data Manager** that provides **full CRUD** cap
 
 To launch the SOP Data Manager:
 
+### Development Mode (Offline / Dummy AI)
+By default, the server runs in development mode. The AI Copilot and Space Management tools will use dummy/mock AI providers. This is perfect for local testing without incurring API costs.
 ```bash
 # From the root of the repository
 go run ./tools/httpserver
 ```
+
+### Production Mode (Real AI / BYOK)
+To unlock the actual AI Copilot and manage **Spaces** (Memory Architecture), you need to start the server in **Production Mode**. Because SOP uses a **BYOK (Bring Your Own Key)** architecture, the backend remains stateless—your API keys are entered directly into the Web UI.
+```bash
+# From the root of the repository
+go run ./tools/httpserver -production
+```
+Once running, you can enter your Embedder and LLM credentials during the Setup Wizard (Page 3), directly in the AI Chat window, or (in the future) via the Login screen.
 
 Or use the pre-built binaries if available. See [tools/httpserver/README.md](tools/httpserver/README.md) for more details.
 
