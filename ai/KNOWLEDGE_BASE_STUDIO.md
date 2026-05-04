@@ -49,11 +49,28 @@ To make the authoring experience seamless, the Copilot itself acts as the Omni P
 * Users can **"hot swap"** the Copilot's active Vector DB to point it at the KB they just created or enriched.
 * This provides an immediate, conversational **trial loop**, allowing users to QA their new KB, verify its accuracy, and spot-check for missing information *before* releasing it to their organization.
 
-## 5. Future Refinements & Roadmap
+### 4.4. Semantic Space Organization (User-Defined Hierarchies)
+A critical feature of the Knowledge Base Studio is empowering users to dictate how their data is semantically organized within a Space. 
+* **User-Defined Categories**: Users can dynamically create, edit, or delete Categories inside a Space to construct a bespoke semantic hierarchy. This moves away from relying entirely on black-box LLM clustering, establishing deterministic business rules.
+* **Auto-Synchronized Vector Alignment**: When a user edits a Category's Name or Description, the system automatically updates and re-embeds the Category's `CenterVector`. This ensures that as the organization's nomenclature and domain terminology evolves, the underlying vector math actively stays in sync, preserving the accuracy of semantic search algorithms.
+* **Granular Re-Vectorization**: Workflows allow users to specifically target individual Categories or clusters of Items and re-process/re-vectorize them via background async tasks. This isolates computational cost to only the data boundaries that require updates without having to re-index the entire Space.
+
+## 5. The AI Memory Marketplace (Minting & Trading)
+Bringing all these capabilities together—Isolated Knowledge Silos, BYOM (Bring Your Own Metadata), and Granular Re-Vectorization—SOP AI establishes the foundation for a completely new digital economy: **The AI Memory Marketplace**. 
+
+Because Knowledge Bases (Spaces) are deterministic, purely isolated, and perfectly structured, they become highly valuable, portable assets. Users can effectively package and sell high-value "AI Memories."
+
+* **Invest & Mint**: Users "mint" high-quality AI memories by investing their resources (LLM API calls for vectorization) and human expertise (BYOM curating and structuring) to create clean, specialized data silos (e.g., a highly-tuned space for Medical Case Law).
+* **Buy, Sell, and Trade**: Once minted, these semantic Spaces can be exported, packaged, and traded on an open ecosystem. 
+* **Earn (Sales Margin)**: Creators and organizations earn money by selling their refined AI memories (RAG-as-a-Service) at a premium margin compared to the baseline LLM and Embedder API costs it took to generate them. 
+
+This transforms highly structured digital knowledge into a financial hotcake—a tradeable asset where users are directly rewarded for their data organization and vectorization investments.
+
+## 6. Future Refinements & Roadmap
 *(This section is reserved for future planning as we iterate on the MVP design)*
 - [ ] Implement granular Role-Based Access Control (RBAC) at the KB level.
 - [ ] Define the exact UI flow for uploading, chunking, and previewing documents before they embed.
-- [ ] Create a Marketplace/Export format so highly enriched KBs can be packaged and deployed externally (RAG-as-a-Service).
+- [ ] Develop the exchange protocols for the AI Memory Marketplace.
 
 ## 9. Standardized Knowledge Base Interchange Format
 
