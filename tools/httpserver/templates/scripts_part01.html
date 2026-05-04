@@ -647,7 +647,7 @@
             });
 
         // Fetch Spaces
-        fetch(`/api/knowledge-bases?database=${encodeURIComponent(name)}&session_id=${encodeURIComponent(currentSessionID)}`)
+        fetch(`/api/spaces?database=${encodeURIComponent(name)}&session_id=${encodeURIComponent(currentSessionID)}`)
             .then(res => res.json())
             .then(kbs => {
                 const kbList = document.getElementById('kb-list');
@@ -970,7 +970,7 @@
             if (summaries && summaries.length > 0) {
                  payload.summaries = summaries;
             }
-            const res = await fetch(`/api/knowledge/item/update?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
+            const res = await fetch(`/api/spaces/item/update?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload)
@@ -1114,7 +1114,7 @@
             
             if (newName && (newName !== cat.name || newDesc !== cat.description)) {
                 try {
-                    const res = await fetch(`/api/knowledge/category/add?name=${encodeURIComponent(spaceName)}`, {
+                    const res = await fetch(`/api/spaces/category/add?name=${encodeURIComponent(spaceName)}`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({id: cat.id, name: newName, description: newDesc})
@@ -1213,7 +1213,7 @@
     grid.innerHTML = "<div style='padding: 15px;'>Fetching thoughts...</div>";
     
     try {
-        const resCat = await fetch(`/api/knowledge/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`);
+        const resCat = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`);
         if (!resCat.ok) throw new Error("Failed to fetch categories");
         const categories = await resCat.json() || [];
         window._currentKBCategories = categories;
@@ -1429,7 +1429,7 @@
             tg.innerHTML = "<div style='padding: 15px;'>Loading items...</div>";
 
             try {
-                let url = `/api/knowledge/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(spaceName)}`;
+                let url = `/api/spaces/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(spaceName)}`;
                 if (categoryId) url += `&category_id=${encodeURIComponent(categoryId)}`;
                 
                 const res = await fetch(url);
@@ -1553,7 +1553,7 @@ async function selectStore(name, element, force = false) {
         columnsInitialized = false;
 
         // Restore standard UI if coming from Knowledge Page
-        const kp = document.getElementById('knowledge-page');
+        const kp = document.getElementById('space-page');
         if (kp) kp.style.display = 'none';
         const titleElemCont = document.getElementById('current-store-title');
         if (titleElemCont && titleElemCont.parentElement) {
@@ -1885,7 +1885,7 @@ async function submitAddCategoryItem() {
     }
     
     try {
-        const res = await fetch(`/api/knowledge/category/add?name=${encodeURIComponent(spaceName)}&database=${encodeURIComponent(currentDatabase)}`, {
+        const res = await fetch(`/api/spaces/category/add?name=${encodeURIComponent(spaceName)}&database=${encodeURIComponent(currentDatabase)}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({name: name, description: desc})
@@ -1910,7 +1910,7 @@ async function submitAddCategoryItem() {
 
 window.deleteCategory = async function(catId, spaceName) {
     try {
-        const res = await fetch(`/api/knowledge/category/delete?name=${encodeURIComponent(spaceName)}&database=${encodeURIComponent(currentDatabase)}`, {
+        const res = await fetch(`/api/spaces/category/delete?name=${encodeURIComponent(spaceName)}&database=${encodeURIComponent(currentDatabase)}`, {
             method: 'DELETE',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({id: catId})
@@ -2021,7 +2021,7 @@ async function saveSpaceItem() {
     };
     
     try {
-        const res = await fetch(`/api/knowledge/item/add?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
+        const res = await fetch(`/api/spaces/item/add?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify(reqBody)
@@ -2055,7 +2055,7 @@ async function saveSpaceItem() {
                 try {
                     const kbNameDisplay = window.currentStore ? window.currentStore.replace('/data', '') : (currentStore ? currentStore.replace('/data', '') : '');
                     const dbNameDisplay = window.currentDatabase || currentDatabase || '';
-                    const res = await fetch(`/api/knowledge/item/delete?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
+                    const res = await fetch(`/api/spaces/item/delete?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
                         method: 'DELETE',
                         headers: {'Content-Type':'application/json'},
                         body: JSON.stringify(payload)
@@ -2096,7 +2096,7 @@ async function saveSpaceItem() {
 async function exportSpace() {
     if (!currentStore) return;
     const baseName = currentStore.replace('/data', '');
-    const url = `/api/knowledge/export?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`;
+    const url = `/api/spaces/export?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`;
     window.open(url, '_blank');
 }
 
@@ -2114,7 +2114,7 @@ async function importSpace(event) {
     formData.append('file', file);
 
     try {
-        const res = await fetch(`/api/knowledge/import?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`, {
+        const res = await fetch(`/api/spaces/import?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`, {
             method: 'POST',
             body: formData
         });

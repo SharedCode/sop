@@ -796,7 +796,7 @@
         }
 
         // Show knowledge page
-        const kp = document.getElementById('knowledge-page');
+        const kp = document.getElementById('space-page');
         if (kp) kp.style.display = 'block';
 
         // Load content
@@ -809,7 +809,7 @@
         container.innerHTML = '<div style="color: var(--text-muted);">Loading spaces...</div>';
         
         try {
-            const res = await fetch('/api/knowledge/available');
+            const res = await fetch('/api/spaces/available');
             if (!res.ok) throw new Error("Failed to load");
             const data = await res.json();
             
@@ -872,7 +872,7 @@
         }
 
         try {
-            const res = await fetch('/api/knowledge/preload', {
+            const res = await fetch('/api/spaces/ingest', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -966,7 +966,7 @@
         btnElement.style.opacity = '0.7';
 
         try {
-            const res = await fetch('/api/knowledge/preload', {
+            const res = await fetch('/api/spaces/ingest', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -1078,7 +1078,7 @@ function saveNewKB() {
     const expertiseData = {
         expertise_id: "empty",
         database_name: currentDatabase,
-        knowledge_base_name: kbName,
+        space_name: kbName,
         custom_data: { 
             type: kbType,
             is_persona: isPersona,
@@ -1087,7 +1087,7 @@ function saveNewKB() {
         }
     };
     
-    apiCall('/api/knowledge/preload', 'POST', expertiseData)
+    apiCall('/api/spaces/ingest', 'POST', expertiseData)
     .then(() => {
         showAlert("Space created successfully!");
         closeAddKBModal();

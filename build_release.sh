@@ -277,6 +277,9 @@ go run ./cmd/knowledge_compiler/main.go
 cp sop_base_knowledge.json "$SOP_ROOT/$OUTPUT_DIR/"
 cd "$SOP_ROOT"
 
+# Copy Medical Knowledge Base demo as well
+cp medical.json "$SOP_ROOT/$OUTPUT_DIR/" || true
+
 echo "Release Packaging Complete."
 ls -lh $OUTPUT_DIR/*.{tar.gz,zip} 2>/dev/null || echo "No bundles created."
 

@@ -11,7 +11,7 @@ import (
 	"github.com/sharedcode/sop/database"
 )
 
-func handleListKnowledgeCategories(w http.ResponseWriter, r *http.Request) {
+func handleListSpaceCategories(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	storeName := r.URL.Query().Get("name")
 	dbName := r.URL.Query().Get("database")
@@ -89,7 +89,7 @@ func handleListKnowledgeCategories(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(categories)
 }
 
-func handleListKnowledgeItems(w http.ResponseWriter, r *http.Request) {
+func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	storeName := r.URL.Query().Get("name")
 	dbName := r.URL.Query().Get("database")
