@@ -3,13 +3,15 @@
 This cookbook provides practical examples and patterns for using the SOP AI library.
 
 ## Table of Contents
-1.  [Vector Store API](#vector-store-api)
+1.  [Knowledge Base API (Recommended)](#knowledge-base-api-recommended)
+    *   [Data Ingestion (ImportJSON/ExportJSON)](#data-ingestion-importjsonexportjson)
+2.  [Vector Store API (Low-Level / Legacy)](#vector-store-api-low-level--legacy)
     *   [Basic Setup (Standalone)](#basic-setup-standalone)
     *   [Ingesting Data](#ingesting-data)
     *   [Searching (Query)](#searching-query)
     *   [Filtering Results](#filtering-results)
     *   [Deleting Items](#deleting-items)
-2.  [Model Store API](#model-store-api)
+3.  [Model Store API](#model-store-api)
     *   [Saving a Model](#saving-a-model)
     *   [Loading a Model](#loading-a-model)
     *   [Listing Models](#listing-models)
@@ -17,9 +19,90 @@ This cookbook provides practical examples and patterns for using the SOP AI libr
 
 ---
 
-## Vector Store API
+## Knowledge Base API (Recommended)
 
-The Vector Store is the core component for RAG and semantic search.
+The Knowledge Base is the recommended, higher-level abstraction over the Vector Store that provides human-readable ontologies, deterministic category pre-filtering, and dynamic structuring via an LLM from the `ai/memory` package.
+
+### Data Ingestion (ImportJSON/ExportJSON)
+
+You can easily ingest data into a Knowledge Base from external sources (or export it) using standard JSON payloads. The system handles categorizing and vectorizing the imported items natively.
+
+#### Ideal JSON Payload Structure
+The API expects the data to be structured cleanly into `Categories` (optional) and `Items`. The ideal structure maps to the `ExportData` and `ExportItem` Go structs:
+
+```go
+// ExportData defines the structure of the KnowledgeBase JSON payload.
+type ExportData[T any] struct {
+	Categories []*Category     `json:"categories"`
+	Items      []ExportItem[T] `json:"items"`
+}
+
+// ExportItem dictates what fields from the item are serialized.
+type ExportItem[T any] struct {
+	Category         string      `json:"category"`
+	Data             T           `json:"data"`
+	Summaries        []string    `json:"summaries,omitempty"`
+	SummariesVectors [][]float32 `json:"summaries_vectors,omitempty"`
+}
+```
+
+#### Sample JSON Payload
+
+Here is an example payload representing a batch of documents ready for ingestion. This payload can be fed directly to `kb.ImportJSON()`:
+
+```json
+{
+  "categories": [
+    {
+      "name": "Engineering",
+      "description": "Technical documentation and architecture plans."
+    },
+    {
+      "name": "HR",
+      "description": "Human resources and company policies."
+    }
+  ],
+  "items": [
+    {
+      "category": "Engineering",
+      "data": {
+        "title": "System Architecture v2",
+        "content": "The new architecture replaces monolithic vector stores with compartmentalized B-Tree namespaces."
+      },
+      "summaries": [
+        "Architecture overview",
+        "B-Tree namespaces"
+      ]
+    },
+    {
+      "category": "HR",
+      "data": {
+        "title": "Remote Work Policy",
+        "content": "Employees are permitted to work remotely up to 3 days a week pending manager approval."
+      }
+    }
+  ]
+}
+```
+
+#### Ingestion Code Example
+
+```go
+func IngestKnowledgeBase(ctx context.Context, kb *memory.KnowledgeBase[map[string]any], jsonPayload io.Reader) error {
+	// Import the JSON byte stream into the Knowledge Base
+	persona := "Default Ingest Persona"
+	if err := kb.ImportJSON(ctx, jsonPayload, persona); err != nil {
+		return err
+	}
+	return nil
+}
+```
+
+---
+
+## Vector Store API (Low-Level / Legacy)
+
+The Vector Store is the low-level, core component for RAG and semantic search. It lacks the semantic structuring properties provided by the Knowledge Base.
 
 ### Basic Setup (Standalone)
 

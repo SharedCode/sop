@@ -81,7 +81,7 @@ func seedSOPKnowledge(ctx context.Context, db *aidb.Database) {
 		}
 
 		thoughts = append(thoughts, memory.Thought[map[string]any]{
-			Summaries: []string{chunk.Text}, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+			Summaries: []string{chunk.Text}, Category: chunk.Category, Data: map[string]any{"description": chunk.Description, "original_id": cid},
 		})
 	}
 

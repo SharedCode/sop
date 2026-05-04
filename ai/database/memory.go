@@ -64,7 +64,7 @@ func (db *Database) KnowledgeBaseExists(ctx context.Context, name string) (bool,
 //   - VectorStore (ai/vector) uses unguided K-Means mathematical centroids. It
 //     is retained for zero-LLM high-throughput ingestion and cross-language
 //     FII bindings where blind mathematical data-dumping is required. However, it
-//     suffers from needing periodic, blocking `Optimize()` calls to rebalance clusters.
+//     suffers from needing periodic, IO intensive `Optimize()` calls to rebalance clusters.
 func (db *Database) OpenKnowledgeBase(
 	ctx context.Context,
 	name string,

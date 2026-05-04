@@ -590,7 +590,7 @@
         const dbObj = availableDatabases.find(d => d.name === name);
         const btnAddStore = document.getElementById('btn-add-store');
         // Define isSystemDB locally so we can reuse it in the store listing
-        const isSystemDB = (dbObj && dbObj.is_system) || name === 'system' || name === 'system_db';
+        const isSystemDB = (dbObj && dbObj.is_system) || name === 'system' || name === SYSTEM_DB_NAME;
 
         if (btnAddStore) {
             // Check implicit system names too just in case is_system missing
@@ -760,7 +760,7 @@
         
         // System DB check
         const dbObj = availableDatabases && databaseName ? availableDatabases.find(d => d.name === databaseName) : null;
-        const isSystem = (dbObj && dbObj.is_system) || databaseName === 'system' || databaseName === 'system_db';
+        const isSystem = (dbObj && dbObj.is_system) || databaseName === 'system' || databaseName === SYSTEM_DB_NAME;
 
         // Current rule: SOP and LongTermMemory (memory_...) KBs are read-only in System DB
         if (isSystem && (spaceName.startsWith('memory_') || spaceName === 'SOP/data' || spaceName === 'SOP' || spaceName === 'Medical')) {
@@ -805,7 +805,7 @@
         overlay.style.position = 'fixed';
         overlay.style.top = '0';
         overlay.style.left = '0';
-        overlay.style.width = '100vw';
+        overlay.style.width = '100%';
         overlay.style.height = '100vh';
         overlay.style.background = 'rgba(0,0,0,0.6)';
         overlay.style.zIndex = '10000';
@@ -823,6 +823,7 @@
         modal.style.height = '65%';
         modal.style.display = 'flex';
         modal.style.flexDirection = 'column';
+        modal.style.boxSizing = 'border-box';
         modal.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
 
         const titleObj = document.createElement('h3');
@@ -834,14 +835,15 @@
         
         // Create Summaries input
         const summLbl = document.createElement('label');
-        summLbl.innerText = 'Summaries (Comma separated for distinct logic vectors):';
+        summLbl.innerText = 'Summaries (Dot separated for distinct logic vectors):';
         summLbl.style.marginTop = '10px';
         summLbl.style.fontSize = '0.9em';
 
-        const summInput = document.createElement('input');
-        summInput.type = 'text';
+        const summInput = document.createElement('textarea');
         summInput.value = existingSummariesStr || '';
         summInput.style.width = '100%';
+        summInput.style.flex = '0.3';
+        summInput.style.resize = 'none';
         summInput.style.background = 'var(--input-bg)';
         summInput.style.color = 'var(--text-color)';
         summInput.style.border = '1px solid var(--border-color)';
@@ -860,7 +862,7 @@
         // Create textarea
         const ta = document.createElement('textarea');
         ta.value = fullText || '';
-        ta.style.flex = '1';
+        ta.style.flex = '0.7';
         ta.style.width = '100%';
         ta.style.background = 'var(--input-bg)';
         ta.style.color = 'var(--text-color)';
@@ -901,7 +903,7 @@
         cancelBtn.style.fontSize = '1em';
 
         const summarizeBtn = document.createElement('button');
-        summarizeBtn.innerText = '✨ Summarize with LLM (WIP)';
+        summarizeBtn.innerText = '✨ Summarize with LLM';
         summarizeBtn.style.background = '#8a2be2';
         summarizeBtn.style.color = '#fff';
         summarizeBtn.style.border = 'none';
@@ -910,8 +912,31 @@
         summarizeBtn.style.cursor = 'pointer';
         summarizeBtn.style.marginRight = 'auto'; // push other buttons to right
         summarizeBtn.style.fontSize = '0.9em';
-        summarizeBtn.onclick = () => {
-            alert('LLM Summarization feature is coming soon!');
+        summarizeBtn.onclick = async () => {
+            if (!ta.value.trim()) {
+                showAlert("Content is empty.");
+                return;
+            }
+            summarizeBtn.innerText = "✨ Summarizing...";
+            summarizeBtn.disabled = true;
+            try {
+                const res = await fetch("/api/ai/summarize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text: ta.value })
+                });
+                const data = await res.json();
+                if (data.status === "success" && data.summaries) {
+                    summInput.value = data.summaries.join(". ");
+                } else {
+                    showAlert(data.message || "Failed to summarize");
+                }
+            } catch(e) {
+                showAlert("Error: " + e.message);
+            } finally {
+                summarizeBtn.innerText = '✨ Summarize with LLM';
+                summarizeBtn.disabled = false;
+            }
         };
 
         // Create action buttons container
@@ -936,10 +961,18 @@
             const newSummVal = summInput.value;
             let summArr = [];
             if (newSummVal) {
-                summArr = newSummVal.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                summArr = newSummVal.split('.').map(s => s.trim()).filter(s => s.length > 0);
             }
 
-            inlineUpdateItem(itemId, categoryId, {chunk: newVal, text: newVal, description: newVal}, summArr);
+            inlineUpdateItem(itemId, categoryId, {chunk: newVal, text: newVal, description: newVal}, summArr).then(() => {
+                // To keep the click handler fresh without a full page reload, we refresh the list if possible
+                if (window._lastFetchItemsArgs) {
+                    const args = window._lastFetchItemsArgs;
+                    window.fetchItemsForCategory(args.spaceName, args.categoryId, args.categoryName, args.liElement, args.catObj);
+                } else if (window.currentStore) {
+                    selectSpace(window.currentStore.replace('/data', ''), document.querySelector('#sidebar li.active'));
+                }
+            });
             fullSpan.innerText = newVal;
             if (shortSpan) {
                 const shortTxt = newVal.length > 150 ? newVal.substring(0, 150) + "..." : newVal;
@@ -989,7 +1022,7 @@
         overlay.style.position = 'fixed';
         overlay.style.top = '0';
         overlay.style.left = '0';
-        overlay.style.width = '100vw';
+        overlay.style.width = '100%';
         overlay.style.height = '100vh';
         overlay.style.background = 'rgba(0,0,0,0.6)';
         overlay.style.zIndex = '10000';
@@ -1006,6 +1039,7 @@
         modal.style.maxWidth = '90%';
         modal.style.display = 'flex';
         modal.style.flexDirection = 'column';
+        modal.style.boxSizing = 'border-box';
         modal.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
 
         const titleObj = document.createElement('h3');
@@ -1159,7 +1193,7 @@
         
         // Check System DB status
         const dbObj = availableDatabases && currentDatabase ? availableDatabases.find(d => d.name === currentDatabase) : null;
-        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === SYSTEM_DB_NAME;
 
         // Protected Stores
         const storeName = info.name || currentStore;
@@ -1183,7 +1217,7 @@
         return !hasSchema;
     }
 
-        async function selectSpace(name, element) {
+    async function selectSpace(name, element, force = false, catOffset = 0, catLimit = 70) {
     currentStore = name + "/data";
     closeUIModal('toolbar');
     closeUIModal('pagination');
@@ -1213,9 +1247,18 @@
     grid.innerHTML = "<div style='padding: 15px;'>Fetching thoughts...</div>";
     
     try {
-        const resCat = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`);
+        const resCat = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}&offset=${catOffset}&limit=${catLimit}`);
         if (!resCat.ok) throw new Error("Failed to fetch categories");
-        const categories = await resCat.json() || [];
+        const categoriesData = await resCat.json();
+        let categories = [];
+        let totalCatCount = 0;
+        if (Array.isArray(categoriesData)) {
+            categories = categoriesData;
+            totalCatCount = categories.length;
+        } else if (categoriesData && Array.isArray(categoriesData.data)) {
+            categories = categoriesData.data;
+            totalCatCount = categoriesData.total || categories.length;
+        }
         window._currentKBCategories = categories;
 
         // Build hierarchy based on parent_id
@@ -1234,6 +1277,9 @@
         const currentDbObj = availableDatabases.find(db => db.name === currentDatabase);
         const isSystemDB = currentDbObj ? currentDbObj.is_system : false;
         const isReadOnlyKB = isSpaceReadOnly(name, currentDatabase);
+        
+        window._currentLimit = window._currentLimit || 50;
+        
         let actionButtons = '';
         if (!isReadOnlyKB) {
             actionButtons = `
@@ -1248,12 +1294,12 @@
         }
 
         let html = `
-            <div style="display: flex; flex-direction: row; gap: 20px; padding: 15px; height: 100%; align-items: flex-start; width: 100%;">
+            <div style="display: flex; flex-direction: row; gap: 20px; padding: 15px; height: 100%; align-items: flex-start; width: 100%; box-sizing: border-box;">
                 
                 <!-- Left Sidebar Treeview -->
                 <div style="width: 250px; min-width: 250px; border-right: 1px solid var(--border-color); padding-right: 15px; height: 100%; overflow-y: auto;">
                     <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; margin-bottom: 15px;">
-                        <h3 style="margin: 0; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center;">Categories <span title="AI Managed Space" style="background: none; border: none; color: var(--key-color); font-size: 11px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: default;">✨</span></h3>
+                        <h3 style="margin: 0; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center;">Categories <span title="AI Managed" style="background: none; border: none; color: var(--key-color); font-size: 11px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: default;">✨</span></h3>
                         <span id="sidebar-view-all-items" title="View All Items" style="cursor: pointer; color: var(--link-color); display: flex; align-items: center; padding: 4px; border-radius: 4px;" onclick="window.fetchItemsForCategory('${name}', '', 'All Items', this)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                                 <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zm8 0A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm-8 8A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm8 0A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z"/>
@@ -1269,7 +1315,16 @@
                 <div style="flex: 1; display: flex; flex-direction: column; height: 100%; overflow-y: auto; padding-right: 15px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 5px; border-bottom: 1px solid var(--border-color); position: sticky; top: 0; background: var(--bg-color); z-index: 10; overflow: hidden;">
                         <h3 id="kb-items-header-title" style="margin: 0; font-size: 1.1em; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px;">All Items</h3>
-                        ${actionButtons}
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <select id="items-per-page-select" onchange="window._currentLimit = parseInt(this.value); if(window._lastFetchItemsArgs) { window.fetchItemsForCategory(window._lastFetchItemsArgs.spaceName, window._lastFetchItemsArgs.categoryId, window._lastFetchItemsArgs.categoryName, window._lastFetchItemsArgs.liElement, window._lastFetchItemsArgs.catObj, 0, window._currentLimit); }" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-color); font-size: 0.85em; cursor: pointer; outline: none;">
+                                <option value="10" ${window._currentLimit === 10 ? 'selected' : ''}>10 / page</option>
+                                <option value="25" ${window._currentLimit === 25 ? 'selected' : ''}>25 / page</option>
+                                <option value="50" ${window._currentLimit === 50 ? 'selected' : ''}>50 / page</option>
+                                <option value="100" ${window._currentLimit === 100 ? 'selected' : ''}>100 / page</option>
+                                <option value="500" ${window._currentLimit === 500 ? 'selected' : ''}>500 / page</option>
+                            </select>
+                            ${actionButtons}
+                        </div>
                     </div>
                     <div id="kb-items-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; align-content: flex-start; padding-bottom: 20px;">
                         <div style="padding: 15px;">Please select a category.</div>
@@ -1335,9 +1390,52 @@
         if (roots.length > 0) {
             renderTreeNodes(roots.sort((a,b) => a.name.localeCompare(b.name)), treeRoot);
         }
+        
+        // Category Pagination UI
+        const totalCatPages = Math.ceil(totalCatCount / catLimit);
+        const currentCatPage = Math.floor(catOffset / catLimit) + 1;
+        if (totalCatPages > 1) {
+            let pHtml = `<div style="display: flex; gap: 5px; margin-top: 15px; align-items: center; justify-content: center; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--border-color);">`;
+            
+            if (currentCatPage > 1) {
+                pHtml += `<button onclick="window.selectSpace('${name}', document.querySelector('#sidebar li.active'), false, ${catOffset - catLimit}, ${catLimit})" style="padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">&lt;</button>`;
+            }
+            
+            let sPage = Math.max(1, currentCatPage - 1);
+            let ePage = Math.min(totalCatPages, currentCatPage + 1);
+            
+            if (sPage > 1) {
+                pHtml += `<button onclick="window.selectSpace('${name}', document.querySelector('#sidebar li.active'), false, 0, ${catLimit})" style="padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">1</button>`;
+                if (sPage > 2) pHtml += `<span style="font-size: 0.85em; color: var(--text-muted);">..</span>`;
+            }
+            
+            for (let i = sPage; i <= ePage; i++) {
+                const isC = i === currentCatPage;
+                const poff = (i - 1) * catLimit;
+                const st = isC 
+                    ? `padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid #5b6ed1; background: #5b6ed1; color: white; cursor: default;`
+                    : `padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;`;
+                
+                pHtml += `<button ${!isC ? `onclick="window.selectSpace('${name}', document.querySelector('#sidebar li.active'), false, ${poff}, ${catLimit})"` : ''} style="${st}">${i}</button>`;
+            }
+            
+            if (ePage < totalCatPages) {
+                if (ePage < totalCatPages - 1) pHtml += `<span style="font-size: 0.85em; color: var(--text-muted);">..</span>`;
+                pHtml += `<button onclick="window.selectSpace('${name}', document.querySelector('#sidebar li.active'), false, ${(totalCatPages - 1) * catLimit}, ${catLimit})" style="padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">${totalCatPages}</button>`;
+            }
 
-        window.fetchItemsForCategory = async function(spaceName, categoryId, categoryName, liElement, catObj) {
-            window._lastFetchItemsArgs = { spaceName, categoryId, categoryName, liElement, catObj };
+            if (currentCatPage < totalCatPages) {
+                pHtml += `<button onclick="window.selectSpace('${name}', document.querySelector('#sidebar li.active'), false, ${catOffset + catLimit}, ${catLimit})" style="padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">&gt;</button>`;
+            }
+            
+            pHtml += `</div>`;
+            const pagingWrap = document.createElement('div');
+            pagingWrap.innerHTML = pHtml;
+            treeRoot.parentNode.appendChild(pagingWrap);
+        }
+
+        window.fetchItemsForCategory = async function(spaceName, categoryId, categoryName, liElement, catObj, offset = 0, limit = (window._currentLimit || 50)) {
+            window._lastFetchItemsArgs = { spaceName, categoryId, categoryName, liElement, catObj, offset, limit };
             window._currentSelectedCategoryName = categoryName;
             document.querySelectorAll('#kb-category-tree li').forEach(li => {
                 li.style.fontWeight = 'normal';
@@ -1429,16 +1527,19 @@
             tg.innerHTML = "<div style='padding: 15px;'>Loading items...</div>";
 
             try {
-                let url = `/api/spaces/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(spaceName)}`;
+                let url = `/api/spaces/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(spaceName)}&offset=${offset}&limit=${limit}`;
                 if (categoryId) url += `&category_id=${encodeURIComponent(categoryId)}`;
                 
                 const res = await fetch(url);
                 if (!res.ok) throw new Error("Failed to fetch items");
-                let items = [];
+                
+                let resPayload = null;
                 try {
-                	items = await res.json();
+                	resPayload = await res.json();
                 } catch(e){}
                 
+                let items = resPayload ? resPayload.data || [] : [];
+                let totalCount = resPayload ? resPayload.total || items.length : items.length;
                 if (!items || items.length === 0) {
                     tg.innerHTML = "<div style='padding: 15px;'>No items found.</div>";
                     return;
@@ -1476,10 +1577,10 @@
                                 <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
                                     <a href="javascript:void(0)" class="read-more-btn" onclick="toggleDomainItemDesc(this)" data-item-id="${t.id}" data-item-category="${t.category_id || t.category || ''}" style="color:var(--link-color); font-size:0.85em; text-decoration:underline;">Read More</a>
                                     ${isReadOnlyKB ? 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join(', ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; margin-left: 15px;" title="View Details">View Details</a>` 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; margin-left: 15px;" title="View Details">View Details</a>` 
                                         : 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join(', ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
-                                         <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${(t.topic || t.concept || t.name || t.id).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
+                                         <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id)).substring(0, 100).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
                                     }
                                     ${vectorBox}
                                 </div>
@@ -1494,10 +1595,10 @@
                                 </div>
                                 <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
                                     ${isReadOnlyKB ? 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; display: inline-flex; align-items: center;" title="View Details">View Details</a>` 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; display: inline-flex; align-items: center;" title="View Details">View Details</a>` 
                                         : 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
-                                         <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${(t.topic || t.concept || t.name || t.id).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
+                                         <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id)).substring(0, 100).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
                                     }
                                     ${vectorBox}
                                 </div>
@@ -1516,7 +1617,7 @@
                                 
                             </div>
                             <div style="font-size: 1.15em; font-weight: 600; margin-bottom: 10px; color: var(--text-color);">
-                                ${t.text ? t.text.substring(0, 50).replace(/</g, '&lt;') : (t.id ? t.id.substring(0,8) : "Unnamed Item")}
+                                ${t.summaries && t.summaries.length > 0 ? t.summaries[0].substring(0, 50).replace(/</g, '&lt;') : (t.id ? t.id.substring(0,8) : "Unnamed Item")}
                             </div>
                             <div style="font-size: 0.9em; flex: 1; color: var(--text-muted); line-height: 1.5; margin-bottom: 15px; word-break: break-word; display: flex; flex-direction: column;">
                                 ${descHtml}
@@ -1524,6 +1625,59 @@
                         </div>
                     `;
                 });
+                
+                // Add pagination controls
+                const totalPages = Math.ceil(totalCount / limit);
+                const currentPage = Math.floor(offset / limit) + 1;
+                
+                let paginationHtml = '';
+                if (totalPages > 1) {
+                        paginationHtml += `<div style="display: flex; gap: 10px; margin-top: 20px; align-items: center; justify-content: center; width: 100%; grid-column: 1 / -1; padding: 10px; box-sizing: border-box; border-top: 1px solid var(--border-color);">`;
+                
+                        // Prev
+                        if (currentPage > 1) {
+                                paginationHtml += `<button onclick="window.fetchItemsForCategory('${spaceName}', '${categoryId || ''}', '${categoryName.replace(/'/g, "\\'")}', null, null, ${offset - limit}, ${limit})" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">Prev</button>`;
+                        } else {
+                                paginationHtml += `<button disabled style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--secondary-bg); color: var(--text-muted); cursor: not-allowed; opacity: 0.5;">Prev</button>`;
+                        }
+                	let startPage = Math.max(1, currentPage - 2);
+                	let endPage = Math.min(totalPages, currentPage + 2);
+                	
+                	if (startPage > 1) {
+                		paginationHtml += `<button onclick="window.fetchItemsForCategory('${spaceName}', '${categoryId || ''}', '${categoryName.replace(/'/g, "\\'")}', null, null, 0, ${limit})" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">1</button>`;
+                		if (startPage > 2) paginationHtml += `<span style="padding: 0 5px; color: var(--text-muted);">...</span>`;
+                	}
+                	
+                	for (let i = startPage; i <= endPage; i++) {
+                		const isCurrent = i === currentPage;
+                		const pageOffset = (i - 1) * limit;
+                		const style = isCurrent 
+                			? `padding: 5px 10px; border-radius: 4px; border: 1px solid #5b6ed1; background: #5b6ed1; color: white; font-weight: bold; cursor: default;`
+                			: `padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;`;
+                			
+                		if (isCurrent) {
+                			paginationHtml += `<button style="${style}">${i}</button>`;
+                		} else {
+                			paginationHtml += `<button onclick="window.fetchItemsForCategory('${spaceName}', '${categoryId || ''}', '${categoryName.replace(/'/g, "\\'")}', null, null, ${pageOffset}, ${limit})" style="${style}">${i}</button>`;
+                		}
+                	}
+                	
+                	if (endPage < totalPages) {
+                		if (endPage < totalPages - 1) paginationHtml += `<span style="padding: 0 5px; color: var(--text-muted);">...</span>`;
+                		paginationHtml += `<button onclick="window.fetchItemsForCategory('${spaceName}', '${categoryId || ''}', '${categoryName.replace(/'/g, "\\'")}', null, null, ${(totalPages - 1) * limit}, ${limit})" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">${totalPages}</button>`;
+                	}
+
+                	// Next
+                	if (currentPage < totalPages) {
+                		paginationHtml += `<button onclick="window.fetchItemsForCategory('${spaceName}', '${categoryId || ''}', '${categoryName.replace(/'/g, "\\'")}', null, null, ${offset + limit}, ${limit})" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">Next</button>`;
+                	} else {
+                		paginationHtml += `<button disabled style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--secondary-bg); color: var(--text-muted); cursor: not-allowed; opacity: 0.5;">Next</button>`;
+                	}
+
+                	paginationHtml += `</div>`;
+                }
+                
+                contentHtml += paginationHtml;
                 tg.innerHTML = contentHtml;
 
             } catch (err) {
@@ -1577,7 +1731,7 @@ async function selectStore(name, element, force = false) {
         
         // Hardening: Disable delete for System DB and protected stores
         const dbObj = availableDatabases.find(d => d.name === currentDatabase);
-        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === SYSTEM_DB_NAME;
         const isProtectedStore = (name === 'llm_feedback' || name === 'memory');
         
         if (isSystem || isProtectedStore) {
@@ -1939,8 +2093,7 @@ function showAddSpaceItem() {
 
     window.currentAdminToken = null;
     openUIModal('add-space-item-modal');
-    document.getElementById('new-space-item-name').value = '';
-    document.getElementById('new-space-item-desc').value = '';
+        document.getElementById('new-space-item-desc').value = '';
     
     // Re-populate correct categories
     const catSelect = document.getElementById('new-space-item-category');
@@ -1970,21 +2123,49 @@ function showAddSpaceItem() {
 
 window.showAddSpaceItem = showAddSpaceItem;
 
+async function autoSummarizeAddSpaceItem() {
+    const descInput = document.getElementById('new-space-item-desc');
+    const summInput = document.getElementById('new-space-item-summaries');
+    const btn = document.getElementById('add-space-summarize-btn');
+    
+    if (!descInput.value.trim()) {
+        showAlert("Content is empty.");
+        return;
+    }
+    
+    btn.innerText = "✨ Summarizing...";
+    btn.disabled = true;
+    
+    try {
+        const res = await fetch("/api/ai/summarize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: descInput.value })
+        });
+        const data = await res.json();
+        if (data.status === "success" && data.summaries) {
+            summInput.value = data.summaries.join(". ");
+        } else {
+            showAlert(data.message || "Failed to summarize");
+        }
+    } catch(e) {
+        showAlert("Error: " + e.message);
+    } finally {
+        btn.innerText = '✨ Summarize with LLM';
+        btn.disabled = false;
+    }
+}
+
 async function saveSpaceItem() {
     const categoryId = document.getElementById('new-space-item-category').value.trim();
-    const name = document.getElementById('new-space-item-name').value.trim();
-    const desc = document.getElementById('new-space-item-desc').value.trim();
+        const desc = document.getElementById('new-space-item-desc').value.trim();
     const summariesInput = document.getElementById('new-space-item-summaries').value.trim();
     
     if (!categoryId) {
         showAlert("Category is required.");
         return;
     }
-    if (!name) {
-        showAlert("Topic/Name is required.");
-        return;
-    }
-    if (!desc) {
+        if (!desc) {
         showAlert("Content/Description is required.");
         return;
     }
@@ -2004,7 +2185,7 @@ async function saveSpaceItem() {
 
     let summaries = [];
     if (summariesInput) {
-        summaries = summariesInput.split(',').map(s => s.trim()).filter(s => s.length > 0);
+        summaries = summariesInput.split('.').map(s => s.trim()).filter(s => s.length > 0);
     }
 
     const reqBody = {
@@ -2012,11 +2193,7 @@ async function saveSpaceItem() {
         category_id: categoryId,
         summaries: summaries,
         data: {
-            topic: name,
-            concept: name,
-            description: desc,
-            chunk: desc,
-            text: desc
+            description: desc
         }
     };
     

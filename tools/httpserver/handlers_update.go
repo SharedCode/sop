@@ -33,12 +33,16 @@ func handleUpdateSpaceItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newText, hasChunk := req.Data["chunk"].(string)
+	if !hasChunk {
+		newText, hasChunk = req.Data["Text"].(string)
+	}
+
 	if req.ID == "" {
 		http.Error(w, "Missing ID", http.StatusBadRequest)
 		return
 	}
 	if !hasChunk && len(req.Summaries) == 0 {
-		http.Error(w, "Missing fields: must provide Data 'chunk' or 'summaries'", http.StatusBadRequest)
+		http.Error(w, "Missing fields: must provide Data 'chunk' or 'Text', or 'summaries'", http.StatusBadRequest)
 		return
 	}
 
@@ -71,9 +75,9 @@ func handleUpdateSpaceItem(w http.ResponseWriter, r *http.Request) {
 
 	db := aidb.NewDatabase(dbOpts)
 	dbEmbedder := GetConfiguredEmbedder(r)
-		dbLLM := GetConfiguredLLM(r)
+	dbLLM := GetConfiguredLLM(r)
 
-		kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
 	if err != nil {
 		http.Error(w, "Failed to open knowledge base", http.StatusInternalServerError)
 		return
@@ -125,24 +129,16 @@ func handleUpdateSpaceItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract summaries string array, bypassing if explicitly provided via the marketplace goal
-	var summaries []string
-	if len(req.Summaries) > 0 {
-		summaries = req.Summaries
-	} else {
-		summarizer := GetSummarizer(config.ProductionMode, GetConfiguredLLMClient(r)) // In future, inject active LLM here
-		// If newText not supplied but summarizer needs it, this might fail, so fallback correctly
-		textToSummarize := ""
-		if hasChunk {
-			textToSummarize = newText
-		}
-		s, err := summarizer.Summarize(ctx, textToSummarize, maxSummaries)
-		if err != nil {
-			summaries = []string{textToSummarize} // strict fallback
-		} else {
-			summaries = s
-		}
+	mergedDataBytes, _ := json.Marshal(mergedData)
+	mergedDataStr := string(mergedDataBytes)
+
+	textToSummarize := ""
+	if hasChunk {
+		textToSummarize = newText
 	}
+
+	summarizer := GetSummarizer(config.ProductionMode, GetConfiguredLLMClient(r)) // In future, inject active LLM here
+	summaries := DetermineSummaries(ctx, summarizer, req.Summaries, textToSummarize, mergedDataStr, maxSummaries)
 
 	// Create multiple vectors with Differential Sync/Merge
 	var vecs [][]float32

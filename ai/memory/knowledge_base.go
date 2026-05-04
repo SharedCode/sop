@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"encoding/json"
 	"context"
 	"errors"
 
@@ -67,7 +68,29 @@ func (kb *KnowledgeBase[T]) IngestThoughts(ctx context.Context, thoughts []Thoug
 	}
 	var jobs []embedJob
 
-	// 1. Resolve missing vectors
+	// 0. Resolve missing summaries via LLM LLM Enrichment
+for i, thought := range thoughts {
+if len(thought.Summaries) > 0 {
+continue
+}
+
+dataStr := ""
+if str, ok := any(thought.Data).(string); ok {
+dataStr = str
+} else {
+b, _ := json.Marshal(thought.Data)
+dataStr = string(b)
+}
+
+gen, err := kb.Manager.GenerateSummaries(ctx, dataStr)
+if err == nil && len(gen) > 0 {
+thoughts[i].Summaries = gen
+} else {
+thoughts[i].Summaries = []string{dataStr}
+}
+}
+
+// 1. Resolve missing vectors
 	for i, thought := range thoughts {
 		if len(thought.Vectors) == len(thought.Summaries) {
 			continue

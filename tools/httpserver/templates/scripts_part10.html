@@ -146,16 +146,16 @@
                 document.getElementById('setup-sys-conn').value = document.getElementById('setup-db-conn').value;
                 document.getElementById('setup-sys-registry-hash-mod').value = document.getElementById('setup-db-registry-hash-mod').value;
                 
-                // Helper to replace last segment with 'system_db'
+                // Helper to replace last segment with SYSTEM_DB_NAME
                 const replaceLastSegment = (path) => {
-                    if (!path) return "/tmp/sop_data/system_db";
+                    if (!path) return `/tmp/sop_data/${SYSTEM_DB_NAME}`;
                     const isWin = path.includes('\\');
                     const sep = isWin ? '\\' : '/';
-                    // Split, remove last, add system_db
+                    // Split, remove last, add SYSTEM_DB_NAME
                     // Handle trailing slash
                     let parts = path.split(sep).filter(p => p.length > 0);
                     if (parts.length > 0) parts.pop();
-                    parts.push('system_db');
+                    parts.push(SYSTEM_DB_NAME);
                     return (path.startsWith(sep) ? sep : '') + parts.join(sep);
                 };
 
@@ -615,7 +615,7 @@
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         expertise_id: 'SOP',
-                        database_name: dbName
+                        database_name: SYSTEM_DB_NAME
                     })
                 });
                 if (sopRes.ok) {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -35,11 +36,63 @@ func handleGetAvailableSpaces(w http.ResponseWriter, r *http.Request) {
 }
 
 type IngestSpaceRequest struct {
-	Expertise         string          `json:"expertise_id"`
-	DatabaseName      string          `json:"database_name"`
-	SpaceName string          `json:"space_name,omitempty"`
-	URL               string          `json:"url,omitempty"`
-	CustomData        json.RawMessage `json:"custom_data,omitempty"`
+	Expertise    string          `json:"expertise_id"`
+	DatabaseName string          `json:"database_name"`
+	SpaceName    string          `json:"space_name,omitempty"`
+	URL          string          `json:"url,omitempty"`
+	CustomData   json.RawMessage `json:"custom_data,omitempty"`
+}
+
+type ingestChunk struct {
+	ID               string         `json:"id"`
+	Category         string         `json:"category"`
+	Text             string         `json:"text"`
+	Description      string         `json:"description"`
+	Summaries        interface{}    `json:"summaries"`
+	Vectors          [][]float32    `json:"vectors"`
+	SummariesVectors [][]float32    `json:"summaries_vectors,omitempty"`
+	Data             map[string]any `json:"data,omitempty"`
+}
+
+func extractSummaries(chunk ingestChunk) []string {
+	summaries := chunk.Summaries
+	text := chunk.Text
+	if sArr, ok := summaries.([]interface{}); ok && len(sArr) > 0 {
+		var res []string
+		for _, s := range sArr {
+			if str, ok := s.(string); ok && str != "" {
+				res = append(res, str)
+			}
+		}
+		if len(res) > 0 {
+			return res
+		}
+	}
+	if sStr, ok := summaries.(string); ok && sStr != "" {
+		parts := strings.Split(sStr, ".")
+		var res []string
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				res = append(res, p)
+			}
+		}
+		if len(res) > 0 {
+			return res
+		}
+	}
+
+	// Check if we can apply some heuristics and come up with decent Summaries.
+	s := determineSummaries(chunk.Text, chunk.Description, MAX_ITEM_SUMMARIES)
+	if len(s) > 0 {
+		return s
+	}
+
+	// Fallback to text as single Summary.
+	if len(text) < 150 && text != "" {
+		return []string{text}
+	}
+	return nil
 }
 
 func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
@@ -72,13 +125,6 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 
 		ctx := context.Background()
 		UpdateTask(taskId, "in_progress", 10, 100, "Initializing database connection...", "")
-
-		if request.Expertise == "SOP" {
-			request.DatabaseName = SystemDBName
-		}
-		if request.Expertise == "SOP" {
-			request.DatabaseName = SystemDBName
-		}
 		opts, err := getDBOptions(ctx, request.DatabaseName)
 		if err != nil {
 			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to get DB config: %v", err))
@@ -108,35 +154,20 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		textIdx, err := db.OpenSearch(ctx, storeName, trans)
-		if err != nil {
-			trans.Rollback(ctx)
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to get TextIndex: %v", err))
-			return
-		}
-
 		var thoughts []memory.Thought[map[string]any]
 		UpdateTask(taskId, "in_progress", 30, 100, "Reading Space data...", "")
 
 		if len(request.CustomData) > 0 {
-			var chunks []struct {
-				ID          string `json:"id"`
-				Category    string `json:"category"`
-				Text        string `json:"text"`
-				Description string `json:"description"`
-			}
+			var chunks []ingestChunk
 			if err := json.Unmarshal(request.CustomData, &chunks); err == nil {
 				for idx, chunk := range chunks {
 					cid := chunk.ID
 					if cid == "" {
 						cid = fmt.Sprintf("custom_%d", idx)
 					}
-					textIndexStr := chunk.Text + " " + chunk.Description
-					if textIdx != nil {
-						textIdx.Add(ctx, cid, textIndexStr)
-					}
+
 					thoughts = append(thoughts, memory.Thought[map[string]any]{
-						Summaries: []string{chunk.Text}, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+						Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
 					})
 				}
 			}
@@ -146,24 +177,15 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 				resp, err := http.DefaultClient.Do(reqHTTP)
 				if err == nil {
 					defer resp.Body.Close()
-					var chunks []struct {
-						ID          string `json:"id"`
-						Category    string `json:"category"`
-						Text        string `json:"text"`
-						Description string `json:"description"`
-					}
+					var chunks []ingestChunk
 					if err := json.NewDecoder(resp.Body).Decode(&chunks); err == nil {
 						for idx, chunk := range chunks {
 							cid := chunk.ID
 							if cid == "" {
 								cid = fmt.Sprintf("net_%d", idx)
 							}
-							textIndexStr := chunk.Text + " " + chunk.Description
-							if textIdx != nil {
-								textIdx.Add(ctx, cid, textIndexStr)
-							}
 							thoughts = append(thoughts, memory.Thought[map[string]any]{
-								Summaries: []string{chunk.Text}, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+								Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
 							})
 						}
 					}
@@ -191,24 +213,15 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if err == nil {
-				var chunks []struct {
-					ID          string `json:"id"`
-					Category    string `json:"category"`
-					Text        string `json:"text"`
-					Description string `json:"description"`
-				}
+				var chunks []ingestChunk
 				if err := json.Unmarshal(fileBytes, &chunks); err == nil {
 					for idx, chunk := range chunks {
 						cid := chunk.ID
 						if cid == "" {
 							cid = fmt.Sprintf("loc_%d", idx)
 						}
-						textIndexStr := chunk.Text + " " + chunk.Description
-						if textIdx != nil {
-							textIdx.Add(ctx, cid, textIndexStr)
-						}
 						thoughts = append(thoughts, memory.Thought[map[string]any]{
-							Summaries: []string{chunk.Text}, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+							Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
 						})
 					}
 				}

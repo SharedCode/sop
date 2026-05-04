@@ -16,9 +16,10 @@ type ExportData[T any] struct {
 
 // ExportItem dictates what fields from the item are serialized.
 type ExportItem[T any] struct {
-	Category string    `json:"category"`
-	Data     T         `json:"data"`
-	Vector   []float32 `json:"vector"`
+	Category         string      `json:"category"`
+	Data             T           `json:"data"`
+	Summaries        []string    `json:"summaries,omitempty"`
+	SummariesVectors [][]float32 `json:"summaries_vectors,omitempty"`
 }
 
 // ExportJSON serializes the KnowledgeBase contents into a JSON stream.
@@ -50,23 +51,26 @@ func (kb *KnowledgeBase[T]) ExportJSON(ctx context.Context, writer io.Writer) er
 	for ok {
 		item, err := itemsBtree.GetCurrentValue(ctx)
 		if err == nil {
-			var vec []float32
+			var vectors [][]float32
 			if len(item.Positions) > 0 {
 				vecBtree, _ := kb.Store.Vectors(ctx)
 				if vecBtree != nil {
-					has, _ := vecBtree.Find(ctx, item.Positions[0], false)
-					if has {
-						v, _ := vecBtree.GetCurrentValue(ctx)
-						vec = v.Data
+					for _, pos := range item.Positions {
+						has, _ := vecBtree.Find(ctx, pos, false)
+						if has {
+							v, _ := vecBtree.GetCurrentValue(ctx)
+							vectors = append(vectors, v.Data)
+						}
 					}
 				}
 			}
 
 			catName := catMap[item.CategoryID]
 			exportData.Items = append(exportData.Items, ExportItem[T]{
-				Category: catName,
-				Data:     item.Data,
-				Vector:   vec,
+				Category:         catName,
+				Data:             item.Data,
+				Summaries:        item.Summaries,
+				SummariesVectors: vectors,
 			})
 		}
 		ok, _ = itemsBtree.Next(ctx)
@@ -111,10 +115,10 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 	var thoughts []Thought[T]
 	for _, it := range exportData.Items {
 		thoughts = append(thoughts, Thought[T]{
-			Category: it.Category,
-			Data:     it.Data,
-			Vectors:   [][]float32{it.Vector},
-			Summaries: []string{it.Category}, // Fallback as text may not be persisted directly
+			Category:  it.Category,
+			Data:      it.Data,
+			Vectors:   it.SummariesVectors,
+			Summaries: it.Summaries,
 		})
 	}
 

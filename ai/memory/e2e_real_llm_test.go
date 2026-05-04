@@ -76,13 +76,13 @@ func TestActiveMemory_EndToEnd(t *testing.T) {
 
 	event := Event{
 		ID:        "evt-001",
-		Text:      ruleText,
+		Summaries: []string{      ruleText,
 		Timestamp: time.Now(),
 	}
 
 	// Ingesting acts as writing to the Scratchpad (O(1) buffer)
 	thoughts := []memory.Thought[Event]{
-		{Text: ruleText, Data: event},
+		{Summaries: []string{ ruleText, Data: event},
 	}
 	err = kb.IngestThoughts(ctx, thoughts, "Database Administrator")
 	if err != nil {

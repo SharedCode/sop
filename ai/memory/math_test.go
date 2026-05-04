@@ -32,9 +32,9 @@ func TestCosineSimilarity(t *testing.T) {
 
 func TestFindClosestCategories(t *testing.T) {
 	categories := []*Category{
-		{ID: sop.NewUUID(), CenterVector: []float32{1, 0, 0}},
-		{ID: sop.NewUUID(), CenterVector: []float32{0, 1, 0}},
-		{ID: sop.NewUUID(), CenterVector: []float32{0, 0, 1}},
+		{ID: sop.NewUUID(), CenterVectors: [][]float32{ []float32{1, 0, 0}},
+		{ID: sop.NewUUID(), CenterVectors: [][]float32{ []float32{0, 1, 0}},
+		{ID: sop.NewUUID(), CenterVectors: [][]float32{ []float32{0, 0, 1}},
 	}
 
 	c := FindClosestCategories([]float32{1, 0, 0}, categories, 2)

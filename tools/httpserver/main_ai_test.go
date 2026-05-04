@@ -29,8 +29,8 @@ func TestSeedLLMKnowledge(t *testing.T) {
 		t.Fatalf("Failed to open read transaction: %v", err)
 	}
 
-	dbEmbedder := GetConfiguredEmbedder(r)
-		dbLLM := GetConfiguredLLM(r)
+	dbEmbedder := GetConfiguredEmbedder(nil)
+		dbLLM := GetConfiguredLLM(nil)
 
 		_, err = db.OpenKnowledgeBase(ctx, "llm_knowledge", trans, dbLLM, dbEmbedder)
 	if err != nil {
