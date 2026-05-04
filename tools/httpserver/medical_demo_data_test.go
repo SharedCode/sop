@@ -31,10 +31,10 @@ func TestPopulateMedicalKnowledgeBase(t *testing.T) {
 		t.Fatalf("Failed to open read transaction: %v", err)
 	}
 
-	dbEmbedder := GetConfiguredEmbedder(r)
-		dbLLM := GetConfiguredLLM(r)
+	dbEmbedder := GetConfiguredEmbedder(nil)
+	dbLLM := GetConfiguredLLM(nil)
 
-		_, err = db.OpenKnowledgeBase(ctx, "medical", trans, dbLLM, dbEmbedder)
+	_, err = db.OpenKnowledgeBase(ctx, "medical", trans, dbLLM, dbEmbedder)
 	if err != nil {
 		trans.Rollback(ctx)
 		t.Fatalf("Expected medical_kb KnowledgeBase to exist, got error: %v", err)

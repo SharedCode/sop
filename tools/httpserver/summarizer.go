@@ -80,14 +80,7 @@ func GetSummarizer(productionMode bool, client LLMClient) Summarizer {
 	return &sentenceSummarizer{}
 }
 
-// DetermineSummaries encapsulates the fallback logic for item summaries.
-// It prioritizes explicit summaries, then short chunk bounds, then short data strings,
-// then bounded sentence-splits of data strings, before falling back to the full summarizer.
-func DetermineSummaries(ctx context.Context, summarizer Summarizer, explicitSummaries []string, chunkStr string, dataStr string, maxSummaries int) []string {
-	if len(explicitSummaries) > 0 {
-		return explicitSummaries
-	}
-
+func determineSummaries(chunkStr string, dataStr string, maxSummaries int) []string {
 	var summaries []string
 	if len(chunkStr) > 0 && len(chunkStr) < 150 {
 		summaries = append(summaries, chunkStr)
@@ -111,6 +104,18 @@ func DetermineSummaries(ctx context.Context, summarizer Summarizer, explicitSumm
 			summaries = append(summaries, validSentences...)
 		}
 	}
+	return summaries
+}
+
+// DetermineSummaries encapsulates the fallback logic for item summaries.
+// It prioritizes explicit summaries, then short chunk bounds, then short data strings,
+// then bounded sentence-splits of data strings, before falling back to the full summarizer.
+func DetermineSummaries(ctx context.Context, summarizer Summarizer, explicitSummaries []string, chunkStr string, dataStr string, maxSummaries int) []string {
+	if len(explicitSummaries) > 0 {
+		return explicitSummaries
+	}
+
+	summaries := determineSummaries(chunkStr, dataStr, maxSummaries)
 
 	if len(summaries) == 0 {
 		s, err := summarizer.Summarize(ctx, dataStr, maxSummaries)

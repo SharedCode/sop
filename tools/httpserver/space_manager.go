@@ -54,7 +54,9 @@ type ingestChunk struct {
 	Data             map[string]any `json:"data,omitempty"`
 }
 
-func parseSummaries(summaries interface{}, text string) []string {
+func extractSummaries(chunk ingestChunk) []string {
+	summaries := chunk.Summaries
+	text := chunk.Text
 	if sArr, ok := summaries.([]interface{}); ok && len(sArr) > 0 {
 		var res []string
 		for _, s := range sArr {
@@ -79,6 +81,14 @@ func parseSummaries(summaries interface{}, text string) []string {
 			return res
 		}
 	}
+
+	// Check if we can apply some heuristics and come up with decent Summaries.
+	s := determineSummaries(chunk.Text, chunk.Description, MAX_ITEM_SUMMARIES)
+	if len(s) > 0 {
+		return s
+	}
+
+	// Fallback to text as single Summary.
 	if len(text) < 150 && text != "" {
 		return []string{text}
 	}
@@ -144,13 +154,6 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		textIdx, err := db.OpenSearch(ctx, storeName, trans)
-		if err != nil {
-			trans.Rollback(ctx)
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to get TextIndex: %v", err))
-			return
-		}
-
 		var thoughts []memory.Thought[map[string]any]
 		UpdateTask(taskId, "in_progress", 30, 100, "Reading Space data...", "")
 
@@ -162,12 +165,9 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 					if cid == "" {
 						cid = fmt.Sprintf("custom_%d", idx)
 					}
-					textIndexStr := chunk.Text + " " + chunk.Description
-					if textIdx != nil {
-						textIdx.Add(ctx, cid, textIndexStr)
-					}
+
 					thoughts = append(thoughts, memory.Thought[map[string]any]{
-						Summaries: parseSummaries(chunk.Summaries, chunk.Text), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+						Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
 					})
 				}
 			}
@@ -184,12 +184,8 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 							if cid == "" {
 								cid = fmt.Sprintf("net_%d", idx)
 							}
-							textIndexStr := chunk.Text + " " + chunk.Description
-							if textIdx != nil {
-								textIdx.Add(ctx, cid, textIndexStr)
-							}
 							thoughts = append(thoughts, memory.Thought[map[string]any]{
-								Summaries: parseSummaries(chunk.Summaries, chunk.Text), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+								Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
 							})
 						}
 					}
@@ -224,12 +220,8 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 						if cid == "" {
 							cid = fmt.Sprintf("loc_%d", idx)
 						}
-						textIndexStr := chunk.Text + " " + chunk.Description
-						if textIdx != nil {
-							textIdx.Add(ctx, cid, textIndexStr)
-						}
 						thoughts = append(thoughts, memory.Thought[map[string]any]{
-							Summaries: parseSummaries(chunk.Summaries, chunk.Text), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+							Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
 						})
 					}
 				}
