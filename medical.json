@@ -1,0 +1,248 @@
+[
+  {
+    "id": "cond_0",
+    "category": "Dermatology",
+    "text": "Fungal infection",
+    "description": "Symptoms include: dischromic  patches, itching, nodal skin eruptions, skin rash."
+  },
+  {
+    "id": "cond_1",
+    "category": "Immunology",
+    "text": "Allergy",
+    "description": "Symptoms include: chills, continuous sneezing, shivering, watering from eyes."
+  },
+  {
+    "id": "cond_2",
+    "category": "Gastroenterology",
+    "text": "GERD",
+    "description": "Symptoms include: acidity, chest pain, cough, stomach pain, ulcers on tongue, vomiting."
+  },
+  {
+    "id": "cond_3",
+    "category": "Gastroenterology",
+    "text": "Chronic cholestasis",
+    "description": "Symptoms include: abdominal pain, itching, loss of appetite, nausea, vomiting, yellowing of eyes, yellowish skin."
+  },
+  {
+    "id": "cond_4",
+    "category": "Immunology",
+    "text": "Drug Reaction",
+    "description": "Symptoms include: burning micturition, itching, skin rash, spotting  urination, stomach pain."
+  },
+  {
+    "id": "cond_5",
+    "category": "Gastroenterology",
+    "text": "Peptic ulcer diseae",
+    "description": "Symptoms include: abdominal pain, indigestion, internal itching, loss of appetite, passage of gases, vomiting."
+  },
+  {
+    "id": "cond_6",
+    "category": "Immunology",
+    "text": "AIDS",
+    "description": "Symptoms include: extra marital contacts, high fever, muscle wasting, patches in throat."
+  },
+  {
+    "id": "cond_7",
+    "category": "Endocrinology",
+    "text": "Diabetes",
+    "description": "Symptoms include: blurred and distorted vision, excessive hunger, fatigue, increased appetite, irregular sugar level, lethargy, obesity, polyuria, restlessness, weight loss."
+  },
+  {
+    "id": "cond_8",
+    "category": "Gastroenterology",
+    "text": "Gastroenteritis",
+    "description": "Symptoms include: dehydration, diarrhea, sunken eyes, vomiting."
+  },
+  {
+    "id": "cond_9",
+    "category": "Respiratory",
+    "text": "Bronchial Asthma",
+    "description": "Symptoms include: breathlessness, cough, family history, fatigue, high fever, mucoid sputum."
+  },
+  {
+    "id": "cond_10",
+    "category": "Cardiology",
+    "text": "Hypertension",
+    "description": "Symptoms include: chest pain, dizziness, headache, lack of concentration, loss of balance."
+  },
+  {
+    "id": "cond_11",
+    "category": "Neurology",
+    "text": "Migraine",
+    "description": "Symptoms include: acidity, blurred and distorted vision, depression, excessive hunger, headache, indigestion, irritability, stiff neck, visual disturbances."
+  },
+  {
+    "id": "cond_12",
+    "category": "Rheumatology",
+    "text": "Cervical spondylosis",
+    "description": "Symptoms include: back pain, dizziness, loss of balance, neck pain, weakness in limbs."
+  },
+  {
+    "id": "cond_13",
+    "category": "Neurology",
+    "text": "Paralysis (brain hemorrhage)",
+    "description": "Symptoms include: altered sensorium, headache, vomiting, weakness of one body side."
+  },
+  {
+    "id": "cond_14",
+    "category": "Gastroenterology",
+    "text": "Jaundice",
+    "description": "Symptoms include: abdominal pain, dark urine, fatigue, high fever, itching, vomiting, weight loss, yellowish skin."
+  },
+  {
+    "id": "cond_15",
+    "category": "Infectious Disease",
+    "text": "Malaria",
+    "description": "Symptoms include: chills, diarrhea, headache, high fever, muscle pain, nausea, sweating, vomiting."
+  },
+  {
+    "id": "cond_16",
+    "category": "Infectious Disease",
+    "text": "Chicken pox",
+    "description": "Symptoms include: fatigue, headache, high fever, itching, lethargy, loss of appetite, malaise, mild fever, red spots over body, skin rash, swelled lymph nodes."
+  },
+  {
+    "id": "cond_17",
+    "category": "Infectious Disease",
+    "text": "Dengue",
+    "description": "Symptoms include: back pain, chills, fatigue, headache, high fever, joint pain, loss of appetite, malaise, muscle pain, nausea, pain behind the eyes, red spots over body, skin rash, vomiting."
+  },
+  {
+    "id": "cond_18",
+    "category": "Infectious Disease",
+    "text": "Typhoid",
+    "description": "Symptoms include: abdominal pain, belly pain, chills, constipation, diarrhea, fatigue, headache, high fever, nausea, toxic look (typhos), vomiting."
+  },
+  {
+    "id": "cond_19",
+    "category": "Hepatology",
+    "text": "hepatitis A",
+    "description": "Symptoms include: abdominal pain, dark urine, diarrhea, joint pain, loss of appetite, mild fever, muscle pain, nausea, vomiting, yellowing of eyes, yellowish skin."
+  },
+  {
+    "id": "cond_20",
+    "category": "Hepatology",
+    "text": "Hepatitis B",
+    "description": "Symptoms include: abdominal pain, dark urine, fatigue, itching, lethargy, loss of appetite, malaise, receiving blood transfusion, receiving unsterile injections, yellow urine, yellowing of eyes, yellowish skin."
+  },
+  {
+    "id": "cond_21",
+    "category": "Hepatology",
+    "text": "Hepatitis C",
+    "description": "Symptoms include: family history, fatigue, loss of appetite, nausea, yellowing of eyes, yellowish skin."
+  },
+  {
+    "id": "cond_22",
+    "category": "Hepatology",
+    "text": "Hepatitis D",
+    "description": "Symptoms include: abdominal pain, dark urine, fatigue, joint pain, loss of appetite, nausea, vomiting, yellowing of eyes, yellowish skin."
+  },
+  {
+    "id": "cond_23",
+    "category": "Hepatology",
+    "text": "Hepatitis E",
+    "description": "Symptoms include: abdominal pain, acute liver failure, coma, dark urine, fatigue, high fever, joint pain, loss of appetite, nausea, stomach bleeding, vomiting, yellowing of eyes, yellowish skin."
+  },
+  {
+    "id": "cond_24",
+    "category": "Hepatology",
+    "text": "Alcoholic hepatitis",
+    "description": "Symptoms include: abdominal pain, distention of abdomen, fluid overload, history of alcohol consumption, swelling of stomach, vomiting, yellowish skin."
+  },
+  {
+    "id": "cond_25",
+    "category": "Respiratory",
+    "text": "Tuberculosis",
+    "description": "Symptoms include: blood in sputum, breathlessness, chest pain, chills, cough, fatigue, high fever, loss of appetite, malaise, mild fever, phlegm, sweating, swelled lymph nodes, vomiting, weight loss, yellowing of eyes."
+  },
+  {
+    "id": "cond_26",
+    "category": "Respiratory",
+    "text": "Common Cold",
+    "description": "Symptoms include: chest pain, chills, congestion, continuous sneezing, cough, fatigue, headache, high fever, loss of smell, malaise, muscle pain, phlegm, redness of eyes, runny nose, sinus pressure, swelled lymph nodes, throat irritation."
+  },
+  {
+    "id": "cond_27",
+    "category": "Respiratory",
+    "text": "Pneumonia",
+    "description": "Symptoms include: breathlessness, chest pain, chills, cough, fast heart rate, fatigue, high fever, malaise, phlegm, rusty sputum, sweating."
+  },
+  {
+    "id": "cond_28",
+    "category": "Gastroenterology",
+    "text": "Dimorphic hemmorhoids(piles)",
+    "description": "Symptoms include: bloody stool, constipation, irritation in anus, pain during bowel movements, pain in anal region."
+  },
+  {
+    "id": "cond_29",
+    "category": "Cardiology",
+    "text": "Heart attack",
+    "description": "Symptoms include: breathlessness, chest pain, sweating, vomiting."
+  },
+  {
+    "id": "cond_30",
+    "category": "Cardiology",
+    "text": "Varicose veins",
+    "description": "Symptoms include: bruising, cramps, fatigue, obesity, prominent veins on calf, swollen blood vessels, swollen legs."
+  },
+  {
+    "id": "cond_31",
+    "category": "Endocrinology",
+    "text": "Hypothyroidism",
+    "description": "Symptoms include: abnormal menstruation, brittle nails, cold hands and feet, depression, dizziness, enlarged thyroid, fatigue, irritability, lethargy, mood swings, puffy face and eyes, swollen extremeties, weight gain."
+  },
+  {
+    "id": "cond_32",
+    "category": "Endocrinology",
+    "text": "Hyperthyroidism",
+    "description": "Symptoms include: abnormal menstruation, diarrhea, excessive hunger, fast heart rate, fatigue, irritability, mood swings, muscle weakness, restlessness, sweating, weight loss."
+  },
+  {
+    "id": "cond_33",
+    "category": "Endocrinology",
+    "text": "Hypoglycemia",
+    "description": "Symptoms include: anxiety, blurred and distorted vision, drying and tingling lips, excessive hunger, fatigue, headache, irritability, nausea, palpitations, slurred speech, sweating, vomiting."
+  },
+  {
+    "id": "cond_34",
+    "category": "Rheumatology",
+    "text": "Osteoarthristis",
+    "description": "Symptoms include: hip joint pain, joint pain, knee pain, neck pain, painful walking, swelling joints."
+  },
+  {
+    "id": "cond_35",
+    "category": "Rheumatology",
+    "text": "Arthritis",
+    "description": "Symptoms include: movement stiffness, muscle weakness, painful walking, stiff neck, swelling joints."
+  },
+  {
+    "id": "cond_36",
+    "category": "Neurology",
+    "text": "(vertigo) Paroymsal  Positional Vertigo",
+    "description": "Symptoms include: headache, loss of balance, nausea, spinning movements, unsteadiness, vomiting."
+  },
+  {
+    "id": "cond_37",
+    "category": "Dermatology",
+    "text": "Acne",
+    "description": "Symptoms include: blackheads, pus filled pimples, scurring, skin rash."
+  },
+  {
+    "id": "cond_38",
+    "category": "Urology",
+    "text": "Urinary tract infection",
+    "description": "Symptoms include: bladder discomfort, burning micturition, continuous feel of urine, foul smell of urine."
+  },
+  {
+    "id": "cond_39",
+    "category": "Dermatology",
+    "text": "Psoriasis",
+    "description": "Symptoms include: inflammatory nails, joint pain, silver like dusting, skin peeling, skin rash, small dents in nails."
+  },
+  {
+    "id": "cond_40",
+    "category": "Dermatology",
+    "text": "Impetigo",
+    "description": "Symptoms include: blister, high fever, red sore around nose, skin rash, yellow crust ooze."
+  }
+]

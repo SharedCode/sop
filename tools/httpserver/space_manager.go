@@ -24,37 +24,37 @@ var AvailableExpertise = []ExpertiseMetadata{
 	{
 		ID:          "medical",
 		Name:        "Medical Expert (Nurse/Doctor) KB",
-		Description: "Pre-loads a medical knowledge base index for diagnosing illnesses.",
+		Description: "Pre-loads a medical space index for diagnosing illnesses.",
 		IsDefault:   false,
 	},
 }
 
-func handleGetAvailableKnowledgeBases(w http.ResponseWriter, r *http.Request) {
+func handleGetAvailableSpaces(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(AvailableExpertise)
 }
 
-type PreloadKnowledgeRequest struct {
+type IngestSpaceRequest struct {
 	Expertise         string          `json:"expertise_id"`
 	DatabaseName      string          `json:"database_name"`
-	KnowledgeBaseName string          `json:"knowledge_base_name,omitempty"`
+	SpaceName string          `json:"space_name,omitempty"`
 	URL               string          `json:"url,omitempty"`
 	CustomData        json.RawMessage `json:"custom_data,omitempty"`
 }
 
-func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
+func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	var req PreloadKnowledgeRequest
+	var req IngestSpaceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	task := RegisterTask("KnowledgePreload", 100)
+	task := RegisterTask("SpaceIngest", 100)
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -63,7 +63,7 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 		"message": fmt.Sprintf("Preloading %s started in background", req.Expertise),
 	})
 
-	go func(taskId string, request PreloadKnowledgeRequest) {
+	go func(taskId string, request IngestSpaceRequest) {
 		defer func() {
 			if rec := recover(); rec != nil {
 				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Panic during preload: %v", rec))
@@ -94,8 +94,8 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 		}
 
 		storeName := request.Expertise
-		if request.KnowledgeBaseName != "" {
-			storeName = request.KnowledgeBaseName
+		if request.SpaceName != "" {
+			storeName = request.SpaceName
 		}
 
 		dbEmbedder := GetConfiguredEmbedder(r)
@@ -116,7 +116,7 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 		}
 
 		var thoughts []memory.Thought[map[string]any]
-		UpdateTask(taskId, "in_progress", 30, 100, "Reading Knowledge Base data...", "")
+		UpdateTask(taskId, "in_progress", 30, 100, "Reading Space data...", "")
 
 		if len(request.CustomData) > 0 {
 			var chunks []struct {
@@ -214,7 +214,7 @@ func handlePreloadKnowledge(w http.ResponseWriter, r *http.Request) {
 				}
 			} else {
 				trans.Rollback(ctx)
-				UpdateTask(taskId, "error", 0, 0, "", "Failed to find Knowledge Base file locally or provided data")
+				UpdateTask(taskId, "error", 0, 0, "", "Failed to find Space file locally or provided data")
 				return
 			}
 		}

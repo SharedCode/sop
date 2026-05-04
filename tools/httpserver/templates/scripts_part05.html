@@ -809,7 +809,7 @@
                                     const formData = new FormData();
                                     formData.append('file', blob, 'ai-import.json');
                                     
-                                    fetch(`/api/knowledge/import?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(targetSpace)}`, {
+                                    fetch(`/api/spaces/import?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(targetSpace)}`, {
                                         method: 'POST',
                                         body: formData
                                     }).then(async res => {

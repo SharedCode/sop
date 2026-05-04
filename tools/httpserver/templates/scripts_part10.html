@@ -610,7 +610,7 @@
 
             // 1. Trigger SOP Space preload
             try {
-                const sopRes = await fetch('/api/knowledge/preload', {
+                const sopRes = await fetch('/api/spaces/ingest', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
@@ -629,7 +629,7 @@
             // 2. Trigger Medical Space preload if requested (Preload Examples checkbox)
             if (populateDemo) {
                 try {
-                    const medRes = await fetch('/api/knowledge/preload', {
+                    const medRes = await fetch('/api/spaces/ingest', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
