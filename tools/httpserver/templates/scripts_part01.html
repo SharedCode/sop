@@ -834,14 +834,15 @@
         
         // Create Summaries input
         const summLbl = document.createElement('label');
-        summLbl.innerText = 'Summaries (Comma separated for distinct logic vectors):';
+        summLbl.innerText = 'Summaries (Dot separated for distinct logic vectors):';
         summLbl.style.marginTop = '10px';
         summLbl.style.fontSize = '0.9em';
 
-        const summInput = document.createElement('input');
-        summInput.type = 'text';
+        const summInput = document.createElement('textarea');
         summInput.value = existingSummariesStr || '';
         summInput.style.width = '100%';
+        summInput.style.flex = '0.3';
+        summInput.style.resize = 'none';
         summInput.style.background = 'var(--input-bg)';
         summInput.style.color = 'var(--text-color)';
         summInput.style.border = '1px solid var(--border-color)';
@@ -860,7 +861,7 @@
         // Create textarea
         const ta = document.createElement('textarea');
         ta.value = fullText || '';
-        ta.style.flex = '1';
+        ta.style.flex = '0.7';
         ta.style.width = '100%';
         ta.style.background = 'var(--input-bg)';
         ta.style.color = 'var(--text-color)';
@@ -936,7 +937,7 @@
             const newSummVal = summInput.value;
             let summArr = [];
             if (newSummVal) {
-                summArr = newSummVal.split(',').map(s => s.trim()).filter(s => s.length > 0);
+                summArr = newSummVal.split('.').map(s => s.trim()).filter(s => s.length > 0);
             }
 
             inlineUpdateItem(itemId, categoryId, {chunk: newVal, text: newVal, description: newVal}, summArr);
@@ -1543,9 +1544,9 @@
                                 <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
                                     <a href="javascript:void(0)" class="read-more-btn" onclick="toggleDomainItemDesc(this)" data-item-id="${t.id}" data-item-category="${t.category_id || t.category || ''}" style="color:var(--link-color); font-size:0.85em; text-decoration:underline;">Read More</a>
                                     ${isReadOnlyKB ? 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join(', ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; margin-left: 15px;" title="View Details">View Details</a>` 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; margin-left: 15px;" title="View Details">View Details</a>` 
                                         : 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join(', ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
                                          <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${(t.topic || t.concept || t.name || t.id).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
                                     }
                                     ${vectorBox}
@@ -2124,7 +2125,7 @@ async function saveSpaceItem() {
 
     let summaries = [];
     if (summariesInput) {
-        summaries = summariesInput.split(',').map(s => s.trim()).filter(s => s.length > 0);
+        summaries = summariesInput.split('.').map(s => s.trim()).filter(s => s.length > 0);
     }
 
     const reqBody = {
