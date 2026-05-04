@@ -590,7 +590,7 @@
         const dbObj = availableDatabases.find(d => d.name === name);
         const btnAddStore = document.getElementById('btn-add-store');
         // Define isSystemDB locally so we can reuse it in the store listing
-        const isSystemDB = (dbObj && dbObj.is_system) || name === 'system' || name === 'system_db';
+        const isSystemDB = (dbObj && dbObj.is_system) || name === 'system' || name === SYSTEM_DB_NAME;
 
         if (btnAddStore) {
             // Check implicit system names too just in case is_system missing
@@ -760,7 +760,7 @@
         
         // System DB check
         const dbObj = availableDatabases && databaseName ? availableDatabases.find(d => d.name === databaseName) : null;
-        const isSystem = (dbObj && dbObj.is_system) || databaseName === 'system' || databaseName === 'system_db';
+        const isSystem = (dbObj && dbObj.is_system) || databaseName === 'system' || databaseName === SYSTEM_DB_NAME;
 
         // Current rule: SOP and LongTermMemory (memory_...) KBs are read-only in System DB
         if (isSystem && (spaceName.startsWith('memory_') || spaceName === 'SOP/data' || spaceName === 'SOP' || spaceName === 'Medical')) {
@@ -1193,7 +1193,7 @@
         
         // Check System DB status
         const dbObj = availableDatabases && currentDatabase ? availableDatabases.find(d => d.name === currentDatabase) : null;
-        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === SYSTEM_DB_NAME;
 
         // Protected Stores
         const storeName = info.name || currentStore;
@@ -1577,9 +1577,9 @@
                                 <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
                                     <a href="javascript:void(0)" class="read-more-btn" onclick="toggleDomainItemDesc(this)" data-item-id="${t.id}" data-item-category="${t.category_id || t.category || ''}" style="color:var(--link-color); font-size:0.85em; text-decoration:underline;">Read More</a>
                                     ${isReadOnlyKB ? 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; margin-left: 15px;" title="View Details">View Details</a>` 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; margin-left: 15px;" title="View Details">View Details</a>` 
                                         : 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
                                          <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${(t.topic || t.concept || t.name || t.id).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
                                     }
                                     ${vectorBox}
@@ -1595,9 +1595,9 @@
                                 </div>
                                 <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
                                     ${isReadOnlyKB ? 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; display: inline-flex; align-items: center;" title="View Details">View Details</a>` 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; display: inline-flex; align-items: center;" title="View Details">View Details</a>` 
                                         : 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
                                          <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${(t.topic || t.concept || t.name || t.id).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
                                     }
                                     ${vectorBox}
@@ -1617,7 +1617,7 @@
                                 
                             </div>
                             <div style="font-size: 1.15em; font-weight: 600; margin-bottom: 10px; color: var(--text-color);">
-                                ${t.text ? t.text.substring(0, 50).replace(/</g, '&lt;') : (t.id ? t.id.substring(0,8) : "Unnamed Item")}
+                                ${t.summaries && t.summaries.length > 0 ? t.summaries[0].substring(0, 50).replace(/</g, '&lt;') : (t.id ? t.id.substring(0,8) : "Unnamed Item")}
                             </div>
                             <div style="font-size: 0.9em; flex: 1; color: var(--text-muted); line-height: 1.5; margin-bottom: 15px; word-break: break-word; display: flex; flex-direction: column;">
                                 ${descHtml}
@@ -1731,7 +1731,7 @@ async function selectStore(name, element, force = false) {
         
         // Hardening: Disable delete for System DB and protected stores
         const dbObj = availableDatabases.find(d => d.name === currentDatabase);
-        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === SYSTEM_DB_NAME;
         const isProtectedStore = (name === 'llm_feedback' || name === 'memory');
         
         if (isSystem || isProtectedStore) {
@@ -2093,8 +2093,7 @@ function showAddSpaceItem() {
 
     window.currentAdminToken = null;
     openUIModal('add-space-item-modal');
-    document.getElementById('new-space-item-name').value = '';
-    document.getElementById('new-space-item-desc').value = '';
+        document.getElementById('new-space-item-desc').value = '';
     
     // Re-populate correct categories
     const catSelect = document.getElementById('new-space-item-category');
@@ -2159,19 +2158,14 @@ async function autoSummarizeAddSpaceItem() {
 
 async function saveSpaceItem() {
     const categoryId = document.getElementById('new-space-item-category').value.trim();
-    const name = document.getElementById('new-space-item-name').value.trim();
-    const desc = document.getElementById('new-space-item-desc').value.trim();
+        const desc = document.getElementById('new-space-item-desc').value.trim();
     const summariesInput = document.getElementById('new-space-item-summaries').value.trim();
     
     if (!categoryId) {
         showAlert("Category is required.");
         return;
     }
-    if (!name) {
-        showAlert("Topic/Name is required.");
-        return;
-    }
-    if (!desc) {
+        if (!desc) {
         showAlert("Content/Description is required.");
         return;
     }
@@ -2199,11 +2193,7 @@ async function saveSpaceItem() {
         category_id: categoryId,
         summaries: summaries,
         data: {
-            topic: name,
-            concept: name,
-            description: desc,
-            chunk: desc,
-            Text: desc
+            description: desc
         }
     };
     

@@ -261,6 +261,8 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 	chunkStr := ""
 	if chunk, ok := req.Data["chunk"].(string); ok {
 		chunkStr = chunk
+	} else if textVal, ok := req.Data["text"].(string); ok {
+		chunkStr = textVal
 	} else if textVal, ok := req.Data["Text"].(string); ok {
 		chunkStr = textVal
 	}

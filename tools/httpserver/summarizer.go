@@ -91,10 +91,11 @@ func DetermineSummaries(ctx context.Context, summarizer Summarizer, explicitSumm
 	var summaries []string
 	if len(chunkStr) > 0 && len(chunkStr) < 150 {
 		summaries = append(summaries, chunkStr)
-	} else if len(dataStr) > 0 && len(dataStr) < 150 {
+	}
+	if len(dataStr) > 0 && len(dataStr) < 150 {
 		summaries = append(summaries, dataStr)
-	} else if len(chunkStr) >= 150 {
-		sentences := strings.Split(chunkStr, ".")
+	} else {
+		sentences := strings.Split(dataStr, ".")
 		var validSentences []string
 		for _, s := range sentences {
 			trimmed := strings.TrimSpace(s)
@@ -110,19 +111,20 @@ func DetermineSummaries(ctx context.Context, summarizer Summarizer, explicitSumm
 			summaries = append(summaries, validSentences...)
 		}
 	}
+
 	if len(summaries) == 0 {
-		s, err := summarizer.Summarize(ctx, chunkStr, maxSummaries)
+		s, err := summarizer.Summarize(ctx, dataStr, maxSummaries)
 		if err != nil {
-			summaries = []string{chunkStr}
+			summaries = []string{dataStr}
 		} else {
 			summaries = s
 		}
 	}
-	
+
 	// Cap the summaries if it somehow exceeded the max
 	if len(summaries) > maxSummaries {
 		summaries = summaries[:maxSummaries]
 	}
-	
+
 	return summaries
 }

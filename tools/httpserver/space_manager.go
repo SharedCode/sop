@@ -44,12 +44,14 @@ type IngestSpaceRequest struct {
 }
 
 type ingestChunk struct {
-	ID          string      `json:"id"`
-	Category    string      `json:"category"`
-	Text        string      `json:"text"`
-	Description string      `json:"description"`
-	Summaries   interface{} `json:"summaries"`
-	Vectors     [][]float32 `json:"vectors"`
+	ID               string         `json:"id"`
+	Category         string         `json:"category"`
+	Text             string         `json:"text"`
+	Description      string         `json:"description"`
+	Summaries        interface{}    `json:"summaries"`
+	Vectors          [][]float32    `json:"vectors"`
+	SummariesVectors [][]float32    `json:"summaries_vectors,omitempty"`
+	Data             map[string]any `json:"data,omitempty"`
 }
 
 func parseSummaries(summaries interface{}, text string) []string {
@@ -113,13 +115,6 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 
 		ctx := context.Background()
 		UpdateTask(taskId, "in_progress", 10, 100, "Initializing database connection...", "")
-
-		if request.Expertise == "SOP" {
-			request.DatabaseName = SystemDBName
-		}
-		if request.Expertise == "SOP" {
-			request.DatabaseName = SystemDBName
-		}
 		opts, err := getDBOptions(ctx, request.DatabaseName)
 		if err != nil {
 			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to get DB config: %v", err))

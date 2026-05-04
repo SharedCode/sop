@@ -381,7 +381,7 @@
 
             // Determine if Read-Only Mode (System DB)
             const dbObj = availableDatabases.find(d => d.name === currentDatabase);
-            const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+            const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === SYSTEM_DB_NAME;
             const isReadOnlyMode = forceReadOnly || isSystem;
 
             // Fetch stores for potential relationships
