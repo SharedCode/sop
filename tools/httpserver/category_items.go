@@ -147,13 +147,14 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 	}
 	defer trans.Rollback(ctx)
 
-	type DomainItem struct {
-		ID       string    `json:"id"`
-		Category string    `json:"category"`
-		Text     string    `json:"text"`
-		Desc     string    `json:"description"`
-		Vector   []float32 `json:"vector,omitempty"`
-	}
+type DomainItem struct {
+ID        string    `json:"id"`
+Category  string    `json:"category"`
+Text      string    `json:"text"`
+Desc      string    `json:"description"`
+Summaries []string  `json:"summaries,omitempty"`
+Vector    []float32 `json:"vector,omitempty"`
+}
 	var items []DomainItem
 
 	// 1. Try NEW Dynamic Store (from today)
@@ -175,6 +176,7 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 						t := DomainItem{
 							ID:       val.ID.String(),
 							Category: val.CategoryID.String(),
+							Summaries: val.Summaries,
 						}
 						if val.Data != nil {
 							payload := val.Data

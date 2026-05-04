@@ -903,7 +903,7 @@
         cancelBtn.style.fontSize = '1em';
 
         const summarizeBtn = document.createElement('button');
-        summarizeBtn.innerText = '✨ Summarize with LLM (WIP)';
+        summarizeBtn.innerText = '✨ Summarize with LLM';
         summarizeBtn.style.background = '#8a2be2';
         summarizeBtn.style.color = '#fff';
         summarizeBtn.style.border = 'none';
@@ -912,8 +912,31 @@
         summarizeBtn.style.cursor = 'pointer';
         summarizeBtn.style.marginRight = 'auto'; // push other buttons to right
         summarizeBtn.style.fontSize = '0.9em';
-        summarizeBtn.onclick = () => {
-            alert('LLM Summarization feature is coming soon!');
+        summarizeBtn.onclick = async () => {
+            if (!ta.value.trim()) {
+                showAlert("Content is empty.");
+                return;
+            }
+            summarizeBtn.innerText = "✨ Summarizing...";
+            summarizeBtn.disabled = true;
+            try {
+                const res = await fetch("/api/ai/summarize", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text: ta.value })
+                });
+                const data = await res.json();
+                if (data.status === "success" && data.summaries) {
+                    summInput.value = data.summaries.join(". ");
+                } else {
+                    showAlert(data.message || "Failed to summarize");
+                }
+            } catch(e) {
+                showAlert("Error: " + e.message);
+            } finally {
+                summarizeBtn.innerText = '✨ Summarize with LLM';
+                summarizeBtn.disabled = false;
+            }
         };
 
         // Create action buttons container
@@ -941,7 +964,15 @@
                 summArr = newSummVal.split('.').map(s => s.trim()).filter(s => s.length > 0);
             }
 
-            inlineUpdateItem(itemId, categoryId, {chunk: newVal, text: newVal, description: newVal}, summArr);
+            inlineUpdateItem(itemId, categoryId, {chunk: newVal, text: newVal, description: newVal}, summArr).then(() => {
+                // To keep the click handler fresh without a full page reload, we refresh the list if possible
+                if (window._lastFetchItemsArgs) {
+                    const args = window._lastFetchItemsArgs;
+                    window.fetchItemsForCategory(args.spaceName, args.categoryId, args.categoryName, args.liElement, args.catObj);
+                } else if (window.currentStore) {
+                    selectSpace(window.currentStore.replace('/data', ''), document.querySelector('#sidebar li.active'));
+                }
+            });
             fullSpan.innerText = newVal;
             if (shortSpan) {
                 const shortTxt = newVal.length > 150 ? newVal.substring(0, 150) + "..." : newVal;
@@ -1268,7 +1299,7 @@
                 <!-- Left Sidebar Treeview -->
                 <div style="width: 250px; min-width: 250px; border-right: 1px solid var(--border-color); padding-right: 15px; height: 100%; overflow-y: auto;">
                     <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; margin-bottom: 15px;">
-                        <h3 style="margin: 0; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center;">Categories <span title="AI Managed Space" style="background: none; border: none; color: var(--key-color); font-size: 11px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: default;">✨</span></h3>
+                        <h3 style="margin: 0; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center;">Categories <span title="AI Managed" style="background: none; border: none; color: var(--key-color); font-size: 11px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: default;">✨</span></h3>
                         <span id="sidebar-view-all-items" title="View All Items" style="cursor: pointer; color: var(--link-color); display: flex; align-items: center; padding: 4px; border-radius: 4px;" onclick="window.fetchItemsForCategory('${name}', '', 'All Items', this)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                                 <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zm8 0A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm-8 8A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm8 0A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z"/>
@@ -1564,9 +1595,9 @@
                                 </div>
                                 <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
                                     ${isReadOnlyKB ? 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; display: inline-flex; align-items: center;" title="View Details">View Details</a>` 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; display: inline-flex; align-items: center;" title="View Details">View Details</a>` 
                                         : 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
                                          <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${(t.topic || t.concept || t.name || t.id).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
                                     }
                                     ${vectorBox}
@@ -2093,6 +2124,39 @@ function showAddSpaceItem() {
 
 window.showAddSpaceItem = showAddSpaceItem;
 
+async function autoSummarizeAddSpaceItem() {
+    const descInput = document.getElementById('new-space-item-desc');
+    const summInput = document.getElementById('new-space-item-summaries');
+    const btn = document.getElementById('add-space-summarize-btn');
+    
+    if (!descInput.value.trim()) {
+        showAlert("Content is empty.");
+        return;
+    }
+    
+    btn.innerText = "✨ Summarizing...";
+    btn.disabled = true;
+    
+    try {
+        const res = await fetch("/api/ai/summarize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: descInput.value })
+        });
+        const data = await res.json();
+        if (data.status === "success" && data.summaries) {
+            summInput.value = data.summaries.join(". ");
+        } else {
+            showAlert(data.message || "Failed to summarize");
+        }
+    } catch(e) {
+        showAlert("Error: " + e.message);
+    } finally {
+        btn.innerText = '✨ Summarize with LLM';
+        btn.disabled = false;
+    }
+}
+
 async function saveSpaceItem() {
     const categoryId = document.getElementById('new-space-item-category').value.trim();
     const name = document.getElementById('new-space-item-name').value.trim();
@@ -2139,7 +2203,7 @@ async function saveSpaceItem() {
             concept: name,
             description: desc,
             chunk: desc,
-            text: desc
+            Text: desc
         }
     };
     

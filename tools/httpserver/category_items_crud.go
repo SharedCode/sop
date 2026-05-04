@@ -60,9 +60,9 @@ func handleAddSpaceCategory(w http.ResponseWriter, r *http.Request) {
 
 	db := aidb.NewDatabase(dbOpts)
 	dbEmbedder := GetConfiguredEmbedder(r)
-		dbLLM := GetConfiguredLLM(r)
+	dbLLM := GetConfiguredLLM(r)
 
-		kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
 	if err != nil {
 		http.Error(w, "Failed to open knowledge base: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -167,9 +167,9 @@ func handleDeleteSpaceCategory(w http.ResponseWriter, r *http.Request) {
 
 	db := aidb.NewDatabase(dbOpts)
 	dbEmbedder := GetConfiguredEmbedder(r)
-		dbLLM := GetConfiguredLLM(r)
+	dbLLM := GetConfiguredLLM(r)
 
-		kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
 	if err != nil {
 		http.Error(w, "Failed to open knowledge base", http.StatusInternalServerError)
 		return
@@ -249,9 +249,9 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 
 	db := aidb.NewDatabase(dbOpts)
 	dbEmbedder := GetConfiguredEmbedder(r)
-		dbLLM := GetConfiguredLLM(r)
+	dbLLM := GetConfiguredLLM(r)
 
-		kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
 	if err != nil {
 		http.Error(w, "Failed to open knowledge base", http.StatusInternalServerError)
 		return
@@ -261,6 +261,8 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 	chunkStr := ""
 	if chunk, ok := req.Data["chunk"].(string); ok {
 		chunkStr = chunk
+	} else if textVal, ok := req.Data["Text"].(string); ok {
+		chunkStr = textVal
 	}
 
 	categoriesTree, _ := kb.Store.Categories(ctx)
@@ -276,18 +278,11 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 		maxSummaries = MAX_ITEM_SUMMARIES
 	}
 
-	var summaries []string
-	if len(req.Summaries) > 0 {
-		summaries = req.Summaries
-	} else {
-		summarizer := GetSummarizer(config.ProductionMode, GetConfiguredLLMClient(r))
-		s, err := summarizer.Summarize(ctx, chunkStr, maxSummaries)
-		if err != nil {
-			summaries = []string{chunkStr}
-		} else {
-			summaries = s
-		}
-	}
+	dataBytes, _ := json.Marshal(req.Data)
+	dataStr := string(dataBytes)
+
+	summarizer := GetSummarizer(config.ProductionMode, GetConfiguredLLMClient(r))
+	summaries := DetermineSummaries(ctx, summarizer, req.Summaries, chunkStr, dataStr, maxSummaries)
 
 	if len(req.Positions) > 0 {
 		vecs = req.Positions
@@ -300,7 +295,10 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 		}
 		vecs = v
 	} else {
-		vecs = [][]float32{{0.4, 0.5, 0.6}}
+		vecs = make([][]float32, len(summaries))
+		for i := range summaries {
+			vecs[i] = []float32{0.4, 0.5, 0.6}
+		}
 	}
 
 	newItem := memory.Item[map[string]any]{
@@ -374,9 +372,9 @@ func handleDeleteSpaceItem(w http.ResponseWriter, r *http.Request) {
 
 	db := aidb.NewDatabase(dbOpts)
 	dbEmbedder := GetConfiguredEmbedder(r)
-		dbLLM := GetConfiguredLLM(r)
+	dbLLM := GetConfiguredLLM(r)
 
-		kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
 	if err != nil {
 		http.Error(w, "Failed to open knowledge base", http.StatusInternalServerError)
 		return
@@ -451,9 +449,9 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 
 	db := aidb.NewDatabase(dbOpts)
 	dbEmbedder := GetConfiguredEmbedder(r)
-		dbLLM := GetConfiguredLLM(r)
+	dbLLM := GetConfiguredLLM(r)
 
-		kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
 	if err != nil {
 		http.Error(w, "Failed to open knowledge base", http.StatusInternalServerError)
 		return
@@ -496,19 +494,14 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 		chunkStr := ""
 		if chunk, ok := itm.Data["chunk"].(string); ok {
 			chunkStr = chunk
+		} else if textVal, ok := itm.Data["Text"].(string); ok {
+			chunkStr = textVal
 		}
 
-		var summaries []string
-		if len(itm.Summaries) > 0 {
-			summaries = itm.Summaries
-		} else {
-			s, err := summarizer.Summarize(ctx, chunkStr, maxSummaries)
-			if err != nil {
-				summaries = []string{chunkStr}
-			} else {
-				summaries = s
-			}
-		}
+		dataBytes, _ := json.Marshal(itm.Data)
+		dataStr := string(dataBytes)
+
+		summaries := DetermineSummaries(ctx, summarizer, itm.Summaries, chunkStr, dataStr, maxSummaries)
 
 		state := itemState{
 			OriginalReq:  itm,
@@ -568,7 +561,10 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		} else {
-			vecs = [][]float32{{0.4, 0.5, 0.6}}
+			vecs = make([][]float32, len(s.Item.Summaries))
+			for k := range s.Item.Summaries {
+				vecs[k] = []float32{0.4, 0.5, 0.6}
+			}
 		}
 
 		err = kb.Store.UpsertByCategory(ctx, s.CatName, s.Item, vecs)
