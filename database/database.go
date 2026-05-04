@@ -407,7 +407,14 @@ func Remove(ctx context.Context, dbPath string) error {
 		// Also avoid deleting the current working directory if it happens to be the DB path.
 		absPath, _ := filepath.Abs(folder)
 		if absPath == cwd {
-			return fmt.Errorf("Skipping os.RemoveAll for database path '%s' because it is the current working directory.", folder)
+			// Instead of entirely skipping, we must clean up SOP's specific metadata files.
+			// This addresses the issue where `storelist.txt` is not deleted or recreated
+			// during workspace initialization overrides.
+			os.RemoveAll(filepath.Join(folder, "storelist.txt"))
+			os.RemoveAll(filepath.Join(folder, databaseOptionsFilename))
+			os.RemoveAll(filepath.Join(folder, "replstat.txt")) // fs.replicationStatusFilename
+
+			log.Warn("Skipping os.RemoveAll because it is the current working directory. Removed SOP metadata only.", "path", folder)
 		} else {
 			if err := os.RemoveAll(folder); err != nil {
 				return err

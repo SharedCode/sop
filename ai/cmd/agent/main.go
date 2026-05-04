@@ -7,8 +7,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent"
+	"github.com/sharedcode/sop/ai/database"
 )
 
 func main() {
@@ -176,6 +178,24 @@ func main() {
 	deps := agent.Dependencies{
 		AgentRegistry: registry,
 	}
+
+	if cfg.StoragePath != "" {
+		dbPath := filepath.Join(cfg.StoragePath, "db")
+		dbType := sop.Standalone
+		if cfg.DBType == "clustered" {
+			dbType = sop.Clustered
+		}
+		dbOpts := sop.DatabaseOptions{
+			StoresFolders: []string{dbPath},
+			Type:          dbType,
+		}
+		sysDB := database.NewDatabase(dbOpts)
+		deps.SystemDB = sysDB
+		deps.Databases = map[string]sop.DatabaseOptions{
+			"default": dbOpts,
+		}
+	}
+
 	svc, err := agent.NewFromConfig(context.Background(), *cfg, deps)
 	if err != nil {
 		panic(fmt.Errorf("failed to initialize agent: %w", err))

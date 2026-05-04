@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="format-detection" content="telephone=no">
@@ -23,7 +24,7 @@
 
 <div id="main">
     <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-        <h1 id="current-store-title" style="margin: 0;">Select a Store</h1>
+        <h1 id="current-store-title" style="margin: 0;">Select Store or Context Space</h1>
         <button id="btn-code-store" onclick="showGeneratedCode()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Generate Code">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M10.478 1.647a.5.5 0 1 0-.956-.294l-4 13a.5.5 0 0 0 .956.294l4-13zM4.854 4.146a.5.5 0 0 1 0 .708L1.707 8l3.147 3.146a.5.5 0 0 1-.708.708l-3.5-3.5a.5.5 0 0 1 0-.708l3.5-3.5a.5.5 0 0 1 .708 0zm6.292 0a.5.5 0 0 0 0 .708L14.293 8l-3.147 3.146a.5.5 0 0 0 .708.708l3.5-3.5a.5.5 0 0 0 0-.708l-3.5-3.5a.5.5 0 0 0-.708 0z"/>
@@ -35,6 +36,35 @@
             </svg>
         </button>
         <!-- View Store Button Removed (Merged into Edit) -->
+        <button id="btn-export-kb" onclick="exportSpace()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Export Space to JSON">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
+            </svg>
+        </button>
+        <button id="btn-import-kb" onclick="document.getElementById('import-kb-file').click()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Import Space from JSON">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+                <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+            </svg>
+        </button>
+        <input type="file" id="import-kb-file" style="display:none" accept=".json" onchange="importSpace(event)">
+        
+        <!-- New Add Category Button -->
+        <button id="btn-add-kb-category" onclick="showAddCategoryModal()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Add Category">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2zm10-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1z"/>
+                <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+            </svg>
+        </button>
+
+        <!-- New Add Item Button -->
+        <button id="btn-add-kb-item" onclick="showAddItemModal()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Add Knowledge Item">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                <path fill-rule="evenodd" d="M8 2a.5.5 0 0 1 .5.5v5h5a.5.5 0 0 1 0 1h-5v5a.5.5 0 0 1-1 0v-5h-5a.5.5 0 0 1 0-1h5v-5A.5.5 0 0 1 8 2Z"/>
+            </svg>
+        </button>
+
         <button id="btn-view-store" onclick="showStoreDetails()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="View Store Details">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M10.5 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0z"/>
@@ -46,7 +76,7 @@
                 <path d="M2.114 8.063V7.9c1.005-.102 1.497-.615 1.497-1.6V4.503c0-1.094.39-1.538 1.354-1.538h.273V2h-.376C3.25 2 2.49 2.759 2.49 4.352v1.524c0 1.094-.376 1.456-1.49 1.456v1.299c1.114 0 1.49.362 1.49 1.456v1.524c0 1.593.759 2.352 2.372 2.352h.376v-.964h-.273c-.964 0-1.354-.444-1.354-1.538V9.663c0-.984-.492-1.497-1.497-1.6zM13.886 7.9v.163c-1.005.103-1.497.616-1.497 1.6v1.798c0 1.094-.39 1.538-1.354 1.538h-.273v.964h.376c1.613 0 2.372-.759 2.372-2.352v-1.524c0-1.094.376-1.456 1.49-1.456V7.332c-1.114 0-1.49-.362-1.49-1.456V4.352C13.51 2.759 12.75 2 11.138 2h-.376v.964h.273c.964 0 1.354.444 1.354 1.538V6.3c0 .984.492 1.497 1.497 1.6z"/>
             </svg>
         </button>
-        <button id="btn-delete-store" onclick="deleteStore()" style="display:none; background: none; padding: 4px; border: none; cursor: pointer;" title="Delete Store">
+        <button id="btn-delete-store" onclick="deleteStore()" style="display:none; background-color: transparent; color: var(--text-color); padding: 4px; border: none; cursor: pointer;" title="Delete Store">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
                 <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
@@ -102,7 +132,9 @@
     </div>
 
     <div id="data-grid"></div>
+
     
+
     <div id="pagination" style="display:none; margin-top: 10px; gap: 10px; justify-content: center;">
         <button onclick="firstPage()" tabindex="0" title="Go to the first page of items." style="text-decoration: none; padding: 4px 8px; background: none; border: none; font-size: 1.2em; cursor: pointer;">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
@@ -828,14 +860,17 @@
                 </div>
             </div>
 
+            <div class="form-group" style="margin-top: 15px; margin-bottom: 0px;" id="setup-expertise-container">
+            </div>
+
             <div class="form-group" style="margin-top: 15px; margin-bottom: 0px;">
-                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
-                    <input type="checkbox" id="setup-populate-demo" style="width: auto;">
-                    <span>Populate with Demo Data (E-commerce)</span>
-                </label>
-                <small style="display: block; margin-top: 5px; color: var(--text-muted);">
-                    Optional: Creates 'users', 'products', and 'orders' stores with sample data. Ideal for testing AI chat and scripts.
-                </small>
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <label style="cursor: pointer; user-select: none;">
+                        <input type="checkbox" id="setup-populate-demo"> 
+                        <strong>Preload Examples</strong>
+                        <span style="font-size: 0.85em; color: var(--text-muted); font-weight: normal;"> e-Commerce stores & Medical KB</span>
+                    </label>
+                </div>
             </div>
         </div>
 
@@ -975,53 +1010,54 @@
                         {{end}}
                     </div>
                 </div>
-                
-                <!-- Advanced LLM Documentation -->
-                <div style="margin-top: 15px; margin-bottom: 0px; border: 1px solid var(--border-color); border-radius: 4px; overflow: hidden;">
-                    <div style="background: var(--pre-bg); padding: 8px 12px; font-weight: bold; font-size: 12px; display: flex; align-items: center; justify-content: space-between; cursor: pointer;" onclick="document.getElementById('llm-docs-content').style.display = document.getElementById('llm-docs-content').style.display === 'none' ? 'block' : 'none'">
-                        <span>Advanced: Manage LLM Providers via Bash/Env</span>
-                        <span>▼</span>
-                    </div>
-                    <div id="llm-docs-content" style="display: none; padding: 12px; font-size: 12px; line-height: 1.5; background: var(--bg-color);">
-                        <p style="margin-top: 0;">SOP supports multiple LLM providers. You can switch between them by setting environment variables in your shell configuration (<code>~/.bash_profile</code>, <code>~/.zshrc</code>).</p>
-                        
-                        <div style="background: var(--sidebar-bg); padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; font-family: monospace; white-space: pre-wrap; margin-bottom: 10px; color: var(--text-color);">
-# 1. Unified Key (Auto-detects based on prefix)
-export LLM_API_KEY="sk-..."    # Uses OpenAI
-export LLM_API_KEY="AIza..."   # Uses Gemini
-
-# 2. Specific Provider Keys
-export GEMINI_API_KEY="AIza..."
-export OPENAI_API_KEY="sk-..."
-
-# 3. Explicit Model Selection (Optional)
-export GEMINI_MODEL="gemini-1.5-pro"
-export OPENAI_MODEL="gpt-4-turbo"
-</div>
-                        <p style="margin-bottom: 0; color: var(--text-muted);">Restart the server after changing these variables.</p>
-                    </div>
-                </div>
-
             </div>
 
-            <!-- LLM API Key -->
+            <!-- AI Engine Settings -->
+            <h4 style="margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">AI Engine Configuration</h4>
+            
+            <!-- Brain (Generator) Settings -->
+            <!-- Simplified for basic config -->
+            <div style="margin-bottom: 15px; padding: 10px; background: var(--pre-bg); border-radius: 4px;">
+                <div style="display: flex; align-items: stretch; gap: 10px; margin-bottom: 10px;">
+                    <div style="flex: 1;">
+                        <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">LLM / Brain</label>
+                        <select id="setup-brain-provider" style="width: 100%; padding: 4px;" onchange="toggleProviderAuth()">
+                            {{template "llmOptions" .}}
+                        </select>
+                    </div>
+                    <div style="flex: 1;" id="setup-brain-api-container">
+                        <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">API Key</label>
+                        <input type="password" id="setup-brain-api-key" {{if .Env.LLM_API_KEY}}placeholder="(Loaded from Environment)" title="An API Key was automatically detected in your System Environment Variables."{{else}}placeholder="Enter API Key"{{end}} style="width: 100%; padding: 4px;">
+                    </div>
+                    <div style="flex: 1; display: none;" id="setup-brain-url-container">
+                        <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">Base URL</label>
+                        <input type="text" id="setup-brain-url" placeholder="http://localhost:11434" style="width: 100%; padding: 4px;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Embedder Settings -->
+            <div style="margin-bottom: 15px; padding: 10px; background: var(--pre-bg); border-radius: 4px;">
+                <div style="display: flex; align-items: stretch; gap: 10px; margin-bottom: 10px;">
+                    <div style="flex: 1;">
+                        <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">Embedder (Vector Generator)</label>
+                        <select id="setup-embedder-provider" style="width: 100%; padding: 4px;" onchange="toggleProviderAuth()">
+                            {{template "embedderOptions" .}}
+                        </select>
+                    </div>
+                    <div style="flex: 1; display: none;" id="setup-embedder-api-container">
+                        <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">API Key</label>
+                        <input type="password" id="setup-embedder-api-key" {{if .Env.EMBEDDING_API_KEY}}placeholder="(Loaded from Environment)" title="An API Key was automatically detected in your System Environment Variables."{{else}}placeholder="Enter API Key"{{end}} style="width: 100%; padding: 4px;">
+                    </div>
+                    <div style="flex: 1; display: none;" id="setup-embedder-url-container">
+                        <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">Base URL</label>
+                        <input type="text" id="setup-embedder-url" placeholder="http://localhost:11434" style="width: 100%; padding: 4px;">
+                    </div>
+                </div>
+            </div>
             <div style="margin-bottom: 15px;">
-                <label style="display: block; margin-bottom: 5px; font-weight: bold;">LLM API Key (Optional)</label>
-                <div style="display: flex; gap: 10px;">
-                     <input type="password" id="setup-llm-api-key" placeholder="Enter LLM API Key (Start with 'sk-' for OpenAI, otherwise Gemini)" style="flex: 1;">
-                </div>
-                <div style="margin-top: 5px; font-size: 11px;">
-                    Get Key: 
-                    <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--active-bg);">Google Gemini</a> | 
-                    <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--active-bg);">OpenAI GPT</a>
-                </div>
-                <small style="color: var(--text-muted); display: block; margin-top: 5px;">Required for AI Copilot. Leave empty if you have LLM api key set in environment.</small>
+                <small style="color: var(--text-muted);">Get Keys: <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--active-bg);">Google Gemini</a> | <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--active-bg);">OpenAI</a></small>
             </div>
-
-            <div id="setup-summary" style="background: var(--pre-bg); padding: 15px; border-radius: 4px; font-family: monospace; margin-bottom: 15px;">
-                <!-- Summary populated by JS -->
-            </div>
-            <p style="font-size: 14px;">Click "Finish" to create the configuration and initialize the databases.</p>
         </div>
 
         <div class="wizard-footer">
@@ -1040,7 +1076,35 @@ export OPENAI_MODEL="gpt-4-turbo"
     </div>
 </div>
 {{template "modals" .}}
-{{template "scripts" .}}
+{{template "scripts_part01" .}}
+{{template "scripts_part02" .}}
+{{template "scripts_part03" .}}
+{{template "scripts_part04" .}}
+{{template "scripts_part05" .}}
+{{template "scripts_part06" .}}
+{{template "scripts_part07" .}}
+{{template "scripts_part08" .}}
+{{template "scripts_part09" .}}
+{{template "scripts_part10" .}}
+{{template "scripts_part11" .}}
+
+<div id="setup-loading-modal" class="modal" style="display: none; z-index: 10000; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); align-items: center; justify-content: center;">
+    <div style="background: var(--bg-color); padding: 40px; border-radius: 8px; text-align: center; border: 1px solid var(--border-color); width: 80%; max-width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; margin: auto; position: relative; top: 50%; transform: translateY(-50%);">
+        <h2 style="margin-top: 0; color: var(--text-color);">Initializing System</h2>
+        <p id="setup-loading-message" style="color: var(--text-muted); margin-bottom: 20px;">Creating databases and preparing environment...</p>
+        
+        <div style="width: 100%; background: var(--pre-bg); border-radius: 4px; height: 12px; overflow: hidden; margin-bottom: 10px; border: 1px solid var(--border-color);">
+            <div id="setup-progress-bar" style="width: 0%; height: 100%; background: var(--active-bg); transition: width 0.5s ease;"></div>
+        </div>
+        
+        <div id="setup-loading-details" style="font-family: monospace; font-size: 12px; color: var(--text-muted); text-align: left; height: 60px; overflow-y: hidden; width: 100%;">
+        </div>
+        <div style="margin-top: 20px; display: inline-block; width: 30px; height: 30px; border: 3px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: var(--active-bg); animation: spin 1s ease-in-out infinite;"></div>
+    </div>
+</div>
+<style>
+@keyframes spin { 100% { transform: rotate(360deg); } }
+</style>
 <div id="environments-modal" class="modal">
     <div class="modal-content" style="max-width: 500px;">
         <div class="modal-header">

@@ -31,10 +31,11 @@ func (m *l1_mru) remove(n *node[sop.UUID]) {
 
 // evict removes entries from the tail while the cache exceeds its capacity, updating the L1 index.
 func (m *l1_mru) evict() {
-	for {
-		if !m.isFull() {
-			break
-		}
+	if !m.isFull() {
+		return
+	}
+	itemsToRemove := m.maxCapacity - m.minCapacity
+	for range itemsToRemove {
 		if id, ok := m.dll.deleteFromTail(); ok {
 			if v, found := m.l1Cache.lookup[id]; found {
 				v.nodeData = nil

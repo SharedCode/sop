@@ -9,12 +9,12 @@ import (
 	"github.com/sharedcode/sop/ai/agent/parser"
 )
 
-func TestDataAdminAgent_Ask_SlashCommand(t *testing.T) {
+func TestCopilotAgent_Ask_SlashCommand(t *testing.T) {
 	// Setup Agent with NO databases
 	cfg := Config{
 		EnableObfuscation: false,
 	}
-	agent := NewDataAdminAgent(cfg, nil, nil)
+	agent := NewCopilotAgent(cfg, nil, nil)
 	ctx := context.Background()
 	agent.Open(ctx)
 

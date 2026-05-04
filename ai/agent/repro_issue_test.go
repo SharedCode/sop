@@ -15,6 +15,22 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
+type reproMockGenerator struct {
+	toolCall string
+}
+
+func (m *reproMockGenerator) Name() string                     { return "mock" }
+func (m *reproMockGenerator) EstimateCost(in, out int) float64 { return 0 }
+func (m *reproMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	parts := strings.Split(prompt, "User: ")
+	lastPrompt := parts[len(parts)-1]
+
+	if strings.Contains(lastPrompt, "Analyze the tool response") {
+		return ai.GenOutput{Text: "Final answer: Found John Doe in the database"}, nil
+	}
+	return ai.GenOutput{Text: fmt.Sprintf("```json\n%s\n```", m.toolCall)}, nil
+}
+
 func TestReproLoadFailedError(t *testing.T) {
 	// 1. Setup DB
 	ctx := context.Background()
@@ -99,8 +115,8 @@ func TestReproLoadFailedError(t *testing.T) {
 	}
 	toolCallJSON, _ := json.Marshal(toolCall)
 
-	gen := &MockGenerator{
-		Response: fmt.Sprintf("```json\n%s\n```", string(toolCallJSON)),
+	gen := &reproMockGenerator{
+		toolCall: string(toolCallJSON),
 	}
 
 	// We need a system DB for scripts
@@ -110,20 +126,20 @@ func TestReproLoadFailedError(t *testing.T) {
 	systemDBOpts := sop.DatabaseOptions{StoresFolders: []string{systemDBPath}}
 	systemDB := database.NewDatabase(systemDBOpts)
 
-	// Create DataAdminAgent
-	daAgent := NewDataAdminAgent(Config{}, map[string]sop.DatabaseOptions{"testdb": dbOpts}, systemDB)
+	// Create CopilotAgent
+	daAgent := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{"testdb": dbOpts}, systemDB)
 	daAgent.SetGenerator(gen)
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "testdb"})
 	daAgent.Open(ctx)
 
 	registry := map[string]ai.Agent[map[string]any]{
-		"sql_admin": daAgent,
+		"copilot": daAgent,
 	}
 
 	// Configure Pipeline
 	pipeline := []PipelineStep{
 		{
-			Agent: PipelineAgent{ID: "sql_admin"},
+			Agent: PipelineAgent{ID: "copilot"},
 		},
 	}
 
@@ -157,13 +173,13 @@ func TestReproLoadFailedError(t *testing.T) {
 
 	// Issue the query
 	// Service.Ask will run the pipeline.
-	// DataAdminAgent.Ask will be called.
-	// DataAdminAgent.Ask will call ExecuteTool.
+	// CopilotAgent.Ask will be called.
+	// CopilotAgent.Ask will call ExecuteTool.
 	// ExecuteTool will call toolSelect.
 	// toolSelect will call jsondb.OpenStore.
 	// Since we commented out store creation, OpenStore should fail.
 
-	// We don't need to set executor in context anymore because DataAdminAgent executes it.
+	// We don't need to set executor in context anymore because CopilotAgent executes it.
 	// ctx = context.WithValue(ctx, ai.CtxKeyExecutor, daAgent)
 
 	query := "select region, name, salary from employees where key like region='APAC', department='HR' limit 5"

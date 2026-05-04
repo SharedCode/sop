@@ -24,6 +24,7 @@ type Config[T any] struct {
 	StoreCfg   vector.Config
 	Policy     ai.PolicyEngine
 	Classifier ai.Classifier
+	Generator  ai.Generator
 	Prompts    map[string]string
 }
 
@@ -58,6 +59,26 @@ func (d *GenericDomain[T]) Embedder() ai.Embeddings {
 	return d.cfg.Embedder
 }
 
+// Memory returns the new cognitive Memory Store for retrieval.
+func (d *GenericDomain[T]) Memory(ctx context.Context, tx sop.Transaction) (any, error) {
+	if d.cfg.DB == nil {
+		return nil, fmt.Errorf("domain %s has no database configured", d.cfg.ID)
+	}
+
+	kbName := d.cfg.StoreName
+	if kbName == "" {
+		kbName = "default_kb"
+	}
+
+	fmt.Printf("genericDomain %s Generator is nil: %v\n", d.cfg.Name, d.cfg.Generator == nil)
+		kb, err := d.cfg.DB.OpenKnowledgeBase(ctx, kbName, tx, d.cfg.Generator, d.cfg.Embedder)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open domain knowledge base %s: %w", kbName, err)
+	}
+
+	return kb, nil
+}
+
 // Index returns the vector index used for retrieval.
 func (d *GenericDomain[T]) Index(ctx context.Context, tx sop.Transaction) (ai.VectorStore[T], error) {
 	if d.cfg.DB == nil {
@@ -71,7 +92,7 @@ func (d *GenericDomain[T]) TextIndex(ctx context.Context, tx sop.Transaction) (a
 	if d.cfg.DB == nil {
 		return nil, fmt.Errorf("domain %s has no database configured", d.cfg.ID)
 	}
-	return search.NewIndex(ctx, tx, d.cfg.StoreName)
+	return search.NewIndex(ctx, d.cfg.DB.Config(), tx, d.cfg.StoreName)
 }
 
 // BeginTransaction starts a new transaction for the domain's underlying storage.

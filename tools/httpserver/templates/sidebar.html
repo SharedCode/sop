@@ -3,16 +3,13 @@
     <div style="flex: 1; overflow-y: auto;">
         <div id="database-section" style="display: none; margin-bottom: 12px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px;">
-                <h2 style="margin: 0;">Databases</h2>
-                <button id="btn-add-database" onclick="showAddDatabaseModal()" title="Add Database" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
-                    </svg>
-                </button>
+                <h2 style="margin: 0;">Database</h2>
             </div>
-            <select id="database-select" onchange="selectDatabase(this.value)" style="width: 100%; padding: 5px;">
-                <option>Loading...</option>
-            </select>
+            <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%;">
+                <div>
+                    <select id="database-select" onchange="selectDatabase(this.value)" style="width: 100%; min-width: max-content; max-width: 100%; padding: 5px; box-sizing: border-box; text-overflow: ellipsis; overflow: hidden; white-space: nowrap;">
+                        <option>Loading...</option>
+                    </select>
             
             <!-- Enterprise Chip Dropdown (Hidden initially, toggled by JS) -->
             <div id="enterprise-db-container" style="display: none; position: relative;">
@@ -31,36 +28,94 @@
                     <!-- Options populated by JS -->
                 </div>
             </div>
+                </div>
+                <div style="display: flex; gap: 0px; align-items: center;">
+                    <button onclick="showDeleteDatabaseModal()" title="Delete Current Database" style="background: none; border: none; margin-right: -4px; color: var(--text-color); cursor: pointer; padding: 4px; flex-shrink: 0;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+                            <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+                        </svg>
+                    </button>
+                    <button id="btn-add-database" onclick="showAddDatabaseModal()" title="Add Database" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer; flex-shrink: 0;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
         </div>
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-            <h2 style="margin: 0;">Stores</h2>
-            <button id="btn-add-store" onclick="showAddStore()" title="Add new store" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                    <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
-                </svg>
-            </button>
+        <!-- Grouping Stores and Spaces as children of the Database -->
+        <div style="margin-top: 12px;">
+
+            <!-- Database Options Section -->
+            <div id="db-options-section" style="display: none; margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                    <div style="margin: 0; font-size: 0.95em; font-weight: normal; cursor: pointer; display: flex; align-items: center;" onclick="toggleSidebarList('db-options-content', 'db-options-caret')" onmouseover="this.style.color='var(--success-bg)'" onmouseout="this.style.color=''">
+                        <span id="db-options-caret" style="display: inline-block; width: 14px; text-align: center; margin-right: 5px; font-size: 0.55em; transition: transform 0.2s; opacity: 0.8;">▶</span>
+                        
+                    </div>
+                </div>
+                <div id="db-options-content" style="font-size: 11px; color: var(--text-muted); overflow-x: auto; line-height: 1.4; padding-left: 20px; display: none;">
+                    Loading...
+                </div>
+            </div>
+
+            <!-- Stores Section -->
+            <div style="margin-bottom: 12px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                    <h3 style="margin: 0; font-size: 1.1em; cursor: pointer; display: flex; align-items: center;" onclick="toggleSidebarList('store-list-container', 'stores-caret')" onmouseover="this.style.color='var(--success-bg)'" onmouseout="this.style.color=''">
+                        <span id="stores-caret" style="display: inline-block; width: 14px; text-align: center; margin-right: 5px; font-size: 0.8em; transition: transform 0.2s;">▼</span>
+                        Stores
+                    </h3>
+                    <button id="btn-add-store" onclick="showAddStore()" title="Add new store" style="display: inline-block !important; background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer; flex-shrink: 0;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div id="store-list-container" style="display: block;">
+                    <ul id="store-list" style="margin-bottom: 0;">
+                        <li>Select a database...</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- Spaces Section -->
+            <div title="Spaces: Spaces, Spaces, Memories, Skills, and other Contexts that define how the AI should behave.">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                    <h3 style="margin: 0; font-size: 1.1em; cursor: pointer; display: flex; align-items: center;" onclick="toggleSidebarList('kb-list-container', 'kb-caret')" onmouseover="this.style.color='var(--success-bg)'" onmouseout="this.style.color=''">
+                        <span id="kb-caret" style="display: inline-block; width: 14px; text-align: center; margin-right: 5px; font-size: 0.8em; transition: transform 0.2s;">▶</span>
+                        Spaces
+                    </h3>
+                    <button id="btn-add-kb" onclick="showAddSpace()" title="Add new Space" style="background-color: transparent; color: var(--success-bg); padding: 4px; border: none; cursor: pointer;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div id="kb-list-container" style="display: none;">
+                    <ul id="kb-list" style="margin-bottom: 16px;">
+                        <li>Select a database...</li>
+                    </ul>
+                </div>
+            </div>
         </div>
-        <ul id="store-list" style="margin-bottom: 12px;">
-            <li>Select a database...</li>
-        </ul>
+
+        <script>
+            function toggleSidebarList(containerId, caretId) {
+                const container = document.getElementById(containerId);
+                const caret = document.getElementById(caretId);
+                if (container.style.display === 'none') {
+                    container.style.display = 'block';
+                    caret.textContent = '▼';
+                } else {
+                    container.style.display = 'none';
+                    caret.textContent = '▶';
+                }
+            }
+        </script>
         
         <hr style="margin: 12px 0; border: 0; border-top: 1px solid var(--border-color);">
-        
-        
-        <div id="db-options-section" style="display: none;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px;">
-                <h3 style="margin: 0;">Database Options</h3>
-                <button onclick="showDeleteDatabaseModal()" title="Delete Current Database" style="background: none; border: none; color: var(--text-color); cursor: pointer; padding: 2px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-                        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-                        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-                    </svg>
-                </button>
-            </div>
-            <div id="db-options-content" style="font-size: 12px; color: var(--text-muted); overflow-x: auto;">
-                Loading...
-            </div>
-        </div>
     </div>
     
     <!-- Sidebar Footer -->
@@ -69,12 +124,6 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                  <!-- HDD/Server Icon -->
                  <path d="M1 4.5A2.5 2.5 0 0 1 3.5 2h9A2.5 2.5 0 0 1 15 4.5v1A2.5 2.5 0 0 1 12.5 8h-9A2.5 2.5 0 0 1 1 5.5v-1zM3.5 3a1.5 1.5 0 0 0-1.5 1.5v1a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-1a1.5 1.5 0 0 0-1.5-1.5h-9zM1 10.5A2.5 2.5 0 0 1 3.5 8h9a2.5 2.5 0 0 1 2.5 2.5v1a2.5 2.5 0 0 1-2.5 2.5h-9a2.5 2.5 0 0 1-2.5-2.5v-1zm1.5 1a1.5 1.5 0 0 0-1.5 1.5v1a1.5 1.5 0 0 0 1.5 1.5h9a1.5 1.5 0 0 0 1.5-1.5v-1a1.5 1.5 0 0 0-1.5-1.5h-9z"/>
-            </svg>
-        </button>
-        <button onclick="showPreferences()" title="Preferences" style="background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
-                <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/>
             </svg>
         </button>
     </div>

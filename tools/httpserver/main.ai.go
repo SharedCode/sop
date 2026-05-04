@@ -18,13 +18,12 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent"
 	aidb "github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/embed"
+	
 	_ "github.com/sharedcode/sop/ai/generator"
+	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/ai/obfuscation"
-	"github.com/sharedcode/sop/ai/vector"
 	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/jsondb"
 )
 
 // ObfuscationMode defines the global obfuscation policy.
@@ -53,6 +52,55 @@ func (d *DirectFlushingWriter) Write(p []byte) (n int, err error) {
 	return
 }
 
+func seedMetaCognitionAsync(userID, kbName string, sysOpts sop.DatabaseOptions) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	sysDB := aidb.NewDatabase(sysOpts)
+
+	trans, err := sysDB.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		return
+	}
+
+	embedder := GetConfiguredEmbedder(nil)
+	kb, err := sysDB.OpenKnowledgeBase(ctx, kbName, trans, nil, embedder)
+	if err != nil {
+		trans.Rollback(ctx)
+		return
+	}
+	opts := &memory.SearchOptions[map[string]any]{Limit: 1}
+	res, _ := kb.SearchKeywords(ctx, "Meta_Cognition", opts)
+	trans.Rollback(ctx)
+
+	if len(res) > 0 {
+		return
+	}
+
+	wTrans, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return
+	}
+	defer wTrans.Rollback(ctx)
+	wKb, err := sysDB.OpenKnowledgeBase(ctx, kbName, wTrans, nil, embedder)
+	if err != nil {
+		return
+	}
+
+	thoughtText := "Meta-Memory Rules: 1) Generalize bugs instead of memorizing stack traces. 2) Never duplicate information available in SOP. 3) Prioritize specific user preferences over generic defaults."
+	vecs, err := embedder.EmbedTexts(ctx, []string{thoughtText})
+	if err == nil && len(vecs) > 0 {
+		data := map[string]any{
+			"type":        "meta_rule",
+			"description": "Base rules for Long Term Memory consolidation",
+		}
+		_ = wKb.IngestThought(ctx, thoughtText, "Meta_Cognition", "system", vecs[0], data)
+		if wTrans.Commit(ctx) == nil {
+			log.Info("Successfully seeded lightweight Meta_Cognition to LTM", "user_id", userID)
+		}
+	}
+}
+
 func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -69,14 +117,16 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	log.Debug("Received AIChat Request", "body", string(bodyBytes))
 
 	var req struct {
-		Message   string `json:"message"`
-		Database  string `json:"database"`
-		StoreName string `json:"store"`
-		Agent     string `json:"agent"`
-		Provider  string `json:"provider"`
-		Format    string `json:"format"`
-		Verbose   bool   `json:"verbose"`
-		SessionID string `json:"session_id"`
+		Message     string   `json:"message"`
+		Database    string   `json:"database"`
+		StoreName   string   `json:"store"`
+		Agent       string   `json:"agent"`
+		Provider    string   `json:"provider"`
+		Format      string   `json:"format"`
+		Verbose     bool     `json:"verbose"`
+		SessionID   string   `json:"session_id"`
+		Domain      string   `json:"domain"`
+		SelectedKBs []string `json:"selected_kbs"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -137,9 +187,9 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Default to the RAG Agent "sql_admin" if not specified
+	// Default to the RAG Agent "copilot" if not specified
 	if req.Agent == "" {
-		req.Agent = "sql_admin"
+		req.Agent = "copilot"
 	}
 
 	// Check if a specific RAG Agent is requested
@@ -156,26 +206,37 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		req.SessionID = uuid.New().String() // Client lifecycle zero-day bootstrapping
 	}
 
-	activeSessionsMu.RLock()
-	sessionAgent, ok := activeSessions[req.SessionID]
-	activeSessionsMu.RUnlock()
+	// Provision LTM (memory_<user_id>)
+	if sysOpts, err := getSystemDBOptions(r.Context()); err == nil {
+		sysDB := aidb.NewDatabase(sysOpts)
+		ctx := r.Context()
+		kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, req.SessionID)
+		trans, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
+		if trans != nil {
+			// Just open it to ensure it is created
+			dbEmbedder := GetConfiguredEmbedder(nil)
+					dbLLM := GetConfiguredLLM(nil)
 
-	if ok {
-		agentSvc = sessionAgent
-		log.Debug("Found active session for client", "session_id", req.SessionID)
-	} else {
+					sysDB.OpenKnowledgeBase(ctx, kbName, trans, dbLLM, dbEmbedder)
+			trans.Commit(ctx)
+			go seedMetaCognitionAsync(req.SessionID, kbName, sysOpts)
+		}
+	}
+
+	agentSvc, sessionMu := activeSessions.GetOrCreate(req.SessionID, func() ai.Agent[map[string]any] {
 		if cloneable, ok := blueprint.(interface {
 			Clone() ai.Agent[map[string]any]
 		}); ok {
-			agentSvc = cloneable.Clone()
 			log.Debug("Cloned new pristine agent instance for session", "session_id", req.SessionID)
-		} else {
-			agentSvc = blueprint // Fallback if not cloneable
+			return cloneable.Clone()
 		}
-		activeSessionsMu.Lock()
-		activeSessions[req.SessionID] = agentSvc
-		activeSessionsMu.Unlock()
-	}
+		return blueprint // Fallback if not cloneable
+	})
+
+	// Uniqueness / creation has been safely handled.
+	// We MUST lock the agent before asking it anything, else concurrent requests on the same ID scramble it!
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
 
 	// Always enforce uniqueness and tell the client their active session ID
 	// BEFORE long LLM wait so they can anchor to it immediately.
@@ -222,7 +283,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if req.Database != "" {
 		// If we already have it as options, great. If not, we might need to add it?
 		// But getDBOptions(req.Database) should have covered it if it's valid.
-		// If it's not in config.Databases but getDBOptions works (e.g. dynamic?), add it.
+		// If it's not in config.Databases but getDBOptions works (e.g. memory?), add it.
 		if _, exists := databases[req.Database]; !exists {
 			if opts, err := getDBOptions(r.Context(), req.Database); err == nil {
 				databases[req.Database] = opts
@@ -233,7 +294,9 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// Also add "system" db if needed?
 
 	payload := &ai.SessionPayload{
-		CurrentDB: req.Database,
+		CurrentDB:    req.Database,
+		ActiveDomain: req.Domain,
+		SelectedKBs:  req.SelectedKBs,
 	}
 	askOpts = append(askOpts, ai.WithSessionPayload(payload))
 
@@ -248,8 +311,8 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	// Prepend context information to the message
 	fullMessage := req.Message
 	// Only prepend context if it's not a system command
-msgTrimmed := strings.TrimSpace(req.Message)
-if req.Database != "" && !strings.HasPrefix(msgTrimmed, "/") && msgTrimmed != "last-tool" && msgTrimmed != "last_tool" {
+	msgTrimmed := strings.TrimSpace(req.Message)
+	if req.Database != "" && !strings.HasPrefix(msgTrimmed, "/") && msgTrimmed != "last-tool" && msgTrimmed != "last_tool" {
 		fullMessage = fmt.Sprintf("Current Database: %s\n%s", req.Database, req.Message)
 	}
 
@@ -490,7 +553,7 @@ if req.Database != "" && !strings.HasPrefix(msgTrimmed, "/") && msgTrimmed != "l
 }
 
 func initAgents(ctx context.Context) {
-	loadAgent(ctx, "sql_admin", "ai/data/sql_admin_pipeline.json")
+	loadAgent(ctx, "copilot", "ai/data/copilot_pipeline.json")
 }
 
 func seedDefaultScripts(ctx context.Context, db *aidb.Database) {
@@ -507,12 +570,11 @@ func seedDefaultScripts(ctx context.Context, db *aidb.Database) {
 	}
 
 	// Check if demo_loop exists
-	// We force update it to ensure latest schema is used during development
-	// var existing ai.Script
-	// if err := store.Load(ctx, "scripts", "demo_loop", &existing); err == nil {
-	// 	tx.Rollback(ctx)
-	// 	return // Already exists
-	// }
+	var existing ai.Script
+	if err := store.Load(ctx, "general", "demo_loop", &existing); err == nil {
+		tx.Rollback(ctx)
+		return // Already exists
+	}
 
 	// Create demo_loop script
 	demoLoop := ai.Script{
@@ -551,92 +613,6 @@ func seedDefaultScripts(ctx context.Context, db *aidb.Database) {
 	log.Info("Seeded 'demo_loop' script.")
 }
 
-// seedLLMKnowledge initializes the system instruction/knowledge store.
-func seedLLMKnowledge(ctx context.Context, db *aidb.Database) {
-	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
-	if err != nil {
-		log.Error(fmt.Sprintf("Failed to begin transaction for seeding knowledge: %v", err))
-		return
-	}
-
-	opts := sop.StoreOptions{
-		Name:                     "llm_knowledge",
-		IsPrimitiveKey:           false,
-		IsValueDataInNodeSegment: true,
-	}
-
-	// Use jsondb.IndexSpecification to generating the MapKeyIndexSpecification JSON string.
-	// This ensures consistency with other components that check or use this specification.
-	idxSpec := jsondb.IndexSpecification{
-		IndexFields: []jsondb.IndexFieldSpecification{
-			{FieldName: "Category", AscendingSortOrder: true},
-			{FieldName: "Name", AscendingSortOrder: true},
-		},
-	}
-	if b, err := json.Marshal(idxSpec); err == nil {
-		opts.MapKeyIndexSpecification = string(b)
-	}
-
-	// Open generic B-Tree for KnowledgeKey -> string
-	// Define comparers for the KnowledgeKey
-	comparer := func(a, b agent.KnowledgeKey) int {
-		if a.Category < b.Category {
-			return -1
-		}
-		if a.Category > b.Category {
-			return 1
-		}
-		if a.Name < b.Name {
-			return -1
-		}
-		if a.Name > b.Name {
-			return 1
-		}
-		return 0
-	}
-
-	store, err := database.NewBtree[agent.KnowledgeKey, string](ctx, db.Options(), "llm_knowledge", tx, comparer, opts)
-	if err != nil {
-		tx.Rollback(ctx)
-		log.Error(fmt.Sprintf("Failed to open llm_knowledge store: %v", err))
-		return
-	}
-
-	defaultInst := agent.DefaultKnowledge["execute_script"]
-	if defaultInst == "" {
-		log.Warn("No default instruction found for execute_script")
-		tx.Rollback(ctx)
-		return
-	}
-
-	// Tool knowledge uses "tool" category
-	key := agent.KnowledgeKey{Category: "tool", Name: "execute_script"}
-
-	// Upsert to ensure we have the latest built-in knowledge
-	if _, err := store.Upsert(ctx, key, defaultInst); err != nil {
-		tx.Rollback(ctx)
-		log.Error(fmt.Sprintf("Failed to upsert execute_script instruction: %v", err))
-		return
-	}
-	log.Info("Seeded/Updated 'execute_script' instruction.")
-
-	// Seed User Defined Knowledge from knowledge_seed.go
-	for _, entry := range UserDefinedKnowledge {
-		k := agent.KnowledgeKey{Category: entry.Category, Name: entry.Name}
-		if _, err := store.Upsert(ctx, k, entry.Content); err != nil {
-			log.Error("Failed to seed user knowledge", "category", entry.Category, "name", entry.Name, "error", err)
-			// Continue or fail? If one fails, others might too if it's a DB issue.
-			// But since we are in a transaction, if we continue and commit, it might be partial?
-			// Actually Upsert returns error if IO fails.
-			// Let's log error but try to continue.
-		} else {
-			log.Info("Seeded/Updated user knowledge", "category", entry.Category, "name", entry.Name)
-		}
-	}
-
-	tx.Commit(ctx)
-}
-
 func loadAgent(ctx context.Context, key, configPath string) {
 	// ctx is passed in
 
@@ -667,19 +643,8 @@ func loadAgent(ctx context.Context, key, configPath string) {
 		return
 	}
 
-	// Apply Stub Mode if enabled globally
-	if config.StubMode {
-		log.Info(fmt.Sprintf("Enabling Stub Mode for agent %s", key))
-		cfg.StubMode = true
-		for i := range cfg.Agents {
-			cfg.Agents[i].StubMode = true
-		}
-	}
-
-	// Apply Global LLM API Key if provided in HTTP Config
-	if config.LLMApiKey != "" {
-		injectAPIKey(cfg, config.LLMApiKey)
-	}
+	// Apply Global config (LLM API Key, text embedders, etc)
+	injectGlobalConfig(cfg, &config)
 
 	// Apply Global Obfuscation Mode if specified in HTTP Config
 	// We do NOT update the agent config anymore, instead we calculate the per-database flag below
@@ -706,10 +671,20 @@ func loadAgent(ctx context.Context, key, configPath string) {
 	sysOpts, err := getSystemDBOptions(ctx)
 	var sysDB *aidb.Database
 	if err == nil {
-		sysDB = aidb.NewDatabase(sysOpts)
-		// Seed default scripts for testing
-		seedDefaultScripts(ctx, sysDB)
-		seedLLMKnowledge(ctx, sysDB)
+		pathExists := true
+		if len(sysOpts.StoresFolders) > 0 {
+			if _, statErr := os.Stat(sysOpts.StoresFolders[0]); os.IsNotExist(statErr) {
+				pathExists = false
+			}
+		}
+		if pathExists {
+			sysDB = aidb.NewDatabase(sysOpts)
+			// Seed default scripts for testing
+			seedDefaultScripts(ctx, sysDB)
+			seedSOPKnowledge(ctx, sysDB)
+		} else {
+			log.Warn("System DB path does not exist. Skipping AI Agent seeding to prevent auto-creation.")
+		}
 	} else {
 		log.Debug(fmt.Sprintf("System DB not available for agent %s: %v", cfg.ID, err))
 	}
@@ -790,7 +765,7 @@ func loadAgent(ctx context.Context, key, configPath string) {
 			// For now, we stick to Env Vars as the "Configuration" source.
 			// But to allow runtime switching, we might need to re-initialize the agent or pass the provider in the Ask() call.
 			// Since Ask() is generic, we can't easily pass it there without changing the interface.
-			// However, we can make the Generator itself dynamic!
+			// However, we can make the Generator itself memory!
 
 			provider := os.Getenv("AI_PROVIDER")
 			if provider != "" {
@@ -837,12 +812,12 @@ type DefaultToolExecutor struct {
 }
 
 func (e *DefaultToolExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
-	// For now, we assume tools are handled by the "sql_core" agent (DataAdminAgent)
+	// For now, we assume tools are handled by the "copilot" agent (CopilotAgent)
 	// In a real system, we might look up the tool in a global registry or iterate agents.
 
-	// Try sql_core first
-	if agentSvc, ok := e.Agents["sql_core"]; ok {
-		if da, ok := agentSvc.(*agent.DataAdminAgent); ok {
+	// Try copilot first
+	if agentSvc, ok := e.Agents["copilot"]; ok {
+		if da, ok := agentSvc.(*agent.CopilotAgent); ok {
 			return da.Execute(ctx, tool, args)
 		}
 	}
@@ -850,16 +825,71 @@ func (e *DefaultToolExecutor) Execute(ctx context.Context, tool string, args map
 	return "", fmt.Errorf("tool '%s' not found or no executor available", tool)
 }
 
-func injectAPIKey(cfg *agent.Config, apiKey string) {
-	if cfg.Generator.Type == "gemini" {
+func injectGlobalConfig(cfg *agent.Config, globalCfg *Config) {
+	if cfg == nil || globalCfg == nil {
+		return
+	}
+
+	// 1. Brain Config
+	if globalCfg.BrainProvider != "" {
+		cfg.Generator.Type = globalCfg.BrainProvider
+		if cfg.Generator.Options == nil {
+			cfg.Generator.Options = make(map[string]any)
+		}
+		if globalCfg.BrainModel != "" {
+			cfg.Generator.Options["model"] = globalCfg.BrainModel
+		}
+		if globalCfg.BrainURL != "" {
+			cfg.Generator.Options["base_url"] = globalCfg.BrainURL
+		}
+		if globalCfg.BrainAPIKey != "" {
+			cfg.Generator.Options["api_key"] = globalCfg.BrainAPIKey
+		}
+	} else if cfg.Generator.Type == "gemini" && globalCfg.LLMApiKey != "" {
 		if cfg.Generator.Options == nil {
 			cfg.Generator.Options = make(map[string]any)
 		}
 		// Only override if not set (or should we strictly override?)
 		// Let's force override for now as the global config is likely the user's intent
-		cfg.Generator.Options["api_key"] = apiKey
+		cfg.Generator.Options["api_key"] = globalCfg.LLMApiKey
 	}
 
+	// 2. Embedder Config
+	if globalCfg.EmbedderProvider != "" {
+		cfg.Embedder.Type = globalCfg.EmbedderProvider
+		if cfg.Embedder.Options == nil {
+			cfg.Embedder.Options = make(map[string]any)
+		}
+		if globalCfg.EmbedderModel != "" {
+			cfg.Embedder.Options["model"] = globalCfg.EmbedderModel
+		}
+		if globalCfg.EmbedderURL != "" {
+			cfg.Embedder.Options["base_url"] = globalCfg.EmbedderURL
+		}
+		if globalCfg.EmbedderAPIKey != "" {
+			cfg.Embedder.Options["api_key"] = globalCfg.EmbedderAPIKey
+		}
+	} else {
+		// Legacy Fallback
+		if cfg.Embedder.Type == "gemini" && globalCfg.LLMApiKey != "" {
+			if cfg.Embedder.Options == nil {
+				cfg.Embedder.Options = make(map[string]any)
+			}
+			cfg.Embedder.Options["api_key"] = globalCfg.LLMApiKey
+		} else if cfg.Embedder.Type == "ollama" {
+			if globalCfg.OllamaEmbedderURL != "" || globalCfg.OllamaEmbedderModel != "" {
+				if cfg.Embedder.Options == nil {
+					cfg.Embedder.Options = make(map[string]any)
+				}
+				if globalCfg.OllamaEmbedderURL != "" {
+					cfg.Embedder.Options["base_url"] = globalCfg.OllamaEmbedderURL
+				}
+				if globalCfg.OllamaEmbedderModel != "" {
+					cfg.Embedder.Options["model"] = globalCfg.OllamaEmbedderModel
+				}
+			}
+		}
+	}
 	// Recursive injection
 	for i := range cfg.Agents {
 		// We need to take address of slice element to modify it
@@ -868,7 +898,7 @@ func injectAPIKey(cfg *agent.Config, apiKey string) {
 		// We can't easily recurse efficiently on value type slices in Go without pointers or rewriting the slice.
 		// cfg.Agents is []Config (values).
 		subCfg := &cfg.Agents[i]
-		injectAPIKey(subCfg, apiKey)
+		injectGlobalConfig(subCfg, globalCfg)
 	}
 }
 
@@ -961,46 +991,31 @@ func handleAIFeedback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 6. Vectorize & Save to Vector Store (if user content is present)
+	// 6. Vectorize & Save to Memory KnowledgeBase (if user content is present)
 	if req.UserContent != "" {
 		// Create Embedder (Simple Hash for now, ideally use Agent's Embedder)
 		// 384 dimensions is good balance
-		embedder := embed.NewSimple("simple_hash", 384, nil)
+		embedder := GetConfiguredEmbedder(nil)
 
 		vecs, err := embedder.EmbedTexts(ctx, []string{req.UserContent})
 		if err != nil {
 			log.Warn("Failed to embed user content", "error", err)
 			// Don't fail the request, just skip vectorization
 		} else if len(vecs) > 0 {
-			var to sop.TransactionOptions
-			opts.CopyTo(&to)
-
-			vecConfig := vector.Config{
-				TransactionOptions: to,
-				ContentSize:        sop.SmallData,
-				UsageMode:          ai.DynamicWithVectorCountTracking,
-			}
-
-			// Open Vector Store (Domain: "llm_feedback")
-			vecStore, err := vector.Open[string](ctx, trans, "llm_feedback", vecConfig)
+			sysDB := aidb.NewDatabase(opts)
+			kb, err := sysDB.OpenKnowledgeBase(ctx, "llm_feedback", trans, nil, embedder)
 			if err != nil {
-				log.Error("Failed to open vector store", "error", err)
-				http.Error(w, "Vector store open error", http.StatusInternalServerError)
+				log.Error("Failed to open physical knowledge base", "error", err)
+				http.Error(w, "Knowledge base open error", http.StatusInternalServerError)
 				return
 			}
 
-			item := ai.Item[string]{
-				ID:      id,
-				Vector:  vecs[0],
-				Payload: val, // Store full payload for easy retrieval during search
-			}
-
-			if err := vecStore.Upsert(ctx, item); err != nil {
-				log.Error("Failed to upsert vector", "error", err)
-				http.Error(w, "Vector upsert error", http.StatusInternalServerError)
+			if err := kb.IngestThought(ctx, req.UserContent, "Feedback", "System", vecs[0], map[string]any{"data": val}); err != nil {
+				log.Error("Failed to ingest memory feedback", "error", err)
+				http.Error(w, "Memory ingest error", http.StatusInternalServerError)
 				return
 			}
-			log.Info("Feedback Vectorized", "id", id)
+			log.Info("Feedback ingested to active memory", "id", id)
 		}
 	}
 
@@ -1015,4 +1030,91 @@ func handleAIFeedback(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "id": id})
+}
+
+// handleCloseSession allows explicitly closing an active session.
+func handleCloseSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sessionID := r.URL.Query().Get("session_id")
+	if sessionID == "" {
+		http.Error(w, "query param session_id is required", http.StatusBadRequest)
+		return
+	}
+
+	activeSessions.Close(sessionID)
+	log.Info("Closed session explicitly", "session_id", sessionID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status":"success", "message":"Session closed successfully"}`))
+}
+
+func handleToolExecute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Tool    string `json:"tool"`
+		Text    string `json:"text"`
+		Intent  string `json:"intent"`
+		Context string `json:"context"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		log.Error("Invalid JSON body", "error", err)
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	agentSvc, exists := loadedAgents["copilot"]
+	if !exists {
+		http.Error(w, "Default AI agent not configured", http.StatusInternalServerError)
+		return
+	}
+
+	switch req.Tool {
+	case "enhance_text":
+		prompt := fmt.Sprintf("Can you help me enhance this text for a %s?\n\n", strings.ReplaceAll(req.Intent, "_", " "))
+		if req.Context != "" {
+			prompt += fmt.Sprintf("Context / Details about the project:\n%s\n\n", req.Context)
+		}
+		prompt += fmt.Sprintf("Here is what I have so far:\n%s\n\nPlease improve it. Return ONLY the improved text, no conversational filler or markdown formatting.", req.Text)
+
+		ctx := context.Background()
+
+		if err := agentSvc.Open(ctx); err != nil {
+			log.Error("Failed to open agent session", "error", err)
+			http.Error(w, "Failed to initialize AI session", http.StatusInternalServerError)
+			return
+		}
+		defer agentSvc.Close(ctx)
+
+		response, err := agentSvc.Ask(ctx, prompt)
+		if err != nil {
+			log.Error("Failed to ask agent", "error", err)
+			http.Error(w, "Failed to generate text", http.StatusInternalServerError)
+			return
+		}
+
+		response = strings.TrimSpace(response)
+		response = strings.TrimPrefix(response, "```xml")
+		response = strings.TrimPrefix(response, "```markdown")
+		response = strings.TrimPrefix(response, "```json")
+		response = strings.TrimPrefix(response, "```")
+		response = strings.TrimSuffix(response, "```")
+		response = strings.TrimSpace(response)
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"enhanced_text": response,
+		})
+	default:
+		http.Error(w, "Unknown tool", http.StatusBadRequest)
+	}
 }

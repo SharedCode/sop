@@ -98,6 +98,14 @@ You can modify data directly.
 
 ---
 
+## 3. Spaces and Knowledge Bases
+
+The AI acts as an **Omni Persona**—managing both underlying B-Trees as a Database Engineer and recognizing "Spaces" or "Knowledge Bases" explicitly.
+
+A "Space" or "Knowledge Base" (often represented as a single word like "Notes" or "Contacts") is a new AI memory subsystem comprised of a VectorDB, Text Search, and a special schema (Thoughts: Category/Items) along with its memory management. When a user asks to generate, translate, upload, or import data into a target Space, the AI **DOES NOT USE ANY DATABASE TOOLS** (e.g., `open_store`, `list_stores`). Treating Spaces like raw B-Trees will result in schema validation errors. 
+
+Instead, the AI must immediately output a JSON codeblock matching the `ExportData` schema. The JSON must have a top-level `target_space` string indicating the name, along with `categories` (string array) and `items`. The Space APIs will intercept this JSON and automatically provision the AI Memory for the user.
+
 ## 4. Memory & Learning: The Self-Correcting Copilot
 
 The AI is designed to evolve. It possesses two distinct types of memory, allowing it to adapt to your specific environment and business logic over time.

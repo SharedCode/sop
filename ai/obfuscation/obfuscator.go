@@ -30,6 +30,14 @@ func (m *MetadataObfuscator) Obfuscate(realName string, prefix string) string {
 	if realName == "" {
 		return ""
 	}
+
+	m.mu.RLock()
+	if hash, ok := m.realToHash[realName]; ok {
+		m.mu.RUnlock()
+		return hash
+	}
+	m.mu.RUnlock()
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

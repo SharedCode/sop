@@ -37,6 +37,49 @@
     </div>
 </div>
 
+<!-- Add Space Item Modal -->
+<div id="add-space-item-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--overlay-bg); justify-content:center; align-items:center; z-index:2000;">
+    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:500px; max-width:90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); display: flex; flex-direction: column;">
+        <h3 style="margin-top:0;">Add Item</h3>
+        
+        <label style="margin-top: 10px; font-size: 0.9em;">Category:</label>
+        <select id="new-space-item-category" style="width: 100%; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 8px; border-radius: 4px; box-sizing: border-box; margin-top: 5px;">
+        </select>
+
+        <label style="margin-top: 10px; font-size: 0.9em;">Topic/Name:</label>
+        <input type="text" id="new-space-item-name" style="width: 100%; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 8px; border-radius: 4px; box-sizing: border-box; margin-top: 5px;">
+        
+        <label style="margin-top: 10px; font-size: 0.9em;">Summaries (Optional - Comma separated for distinct semantic vectors):</label>
+        <input type="text" id="new-space-item-summaries" placeholder="High speed cache, Persistent storage, Cloud architecture" style="width: 100%; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 8px; border-radius: 4px; box-sizing: border-box; margin-top: 5px;">
+
+        <label style="margin-top: 15px; font-size: 0.9em;">Content/Description:</label>
+        <textarea id="new-space-item-desc" style="width: 100%; height: 120px; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 8px; border-radius: 4px; box-sizing: border-box; margin-top: 5px; resize: vertical;"></textarea>
+        
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top: 20px;">
+            <button onclick="closeUIModal('add-space-item-modal')" style="padding: 8px 20px; background: transparent; color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer;">Cancel</button>
+            <button onclick="saveSpaceItem()" style="padding: 8px 20px; background: var(--success-bg); color: #fff; border: none; border-radius: 4px; cursor: pointer;">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- Add Category Modal -->
+<div id="add-category-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--overlay-bg); justify-content:center; align-items:center; z-index:2000;">
+    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:450px; max-width:90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); display: flex; flex-direction: column;">
+        <h3 style="margin-top:0;">Add Category</h3>
+        
+        <label style="margin-top: 10px; font-size: 0.9em;">Category Name:</label>
+        <input type="text" id="new-category-name" style="width: 100%; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 8px; border-radius: 4px; box-sizing: border-box; margin-top: 5px;">
+        
+        <label style="margin-top: 15px; font-size: 0.9em;">Description:</label>
+        <textarea id="new-category-desc" style="width: 100%; height: 100px; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 8px; border-radius: 4px; box-sizing: border-box; margin-top: 5px; resize: vertical;"></textarea>
+        
+        <div style="display:flex; justify-content:flex-end; gap:10px; margin-top: 20px;">
+            <button onclick="closeUIModal('add-category-modal')" style="padding: 8px 20px; background: transparent; color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer;">Cancel</button>
+            <button onclick="submitAddCategoryItem()" style="padding: 8px 20px; background: var(--success-bg); color: #fff; border: none; border-radius: 4px; cursor: pointer;">Add</button>
+        </div>
+    </div>
+</div>
+
 <div id="confirm-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--overlay-bg); justify-content:center; align-items:center; z-index:2000;">
     <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:400px; max-width:90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color);">
         <h3 style="margin-top:0;">Confirm Action</h3>
@@ -94,38 +137,6 @@
     </div>
 </div>
 
-<!-- Preferences Modal -->
-<div id="preferences-modal" class="modal">
-    <div class="modal-content" style="width: 400px;">
-        <div class="modal-header">
-            <span>Preferences</span>
-            <button onclick="closePreferences()" style="background:none; border:none; cursor:pointer; font-size:16px;">&times;</button>
-        </div>
-        <div class="modal-body">
-            <div style="margin-bottom: 15px;">
-                <label class="form-label" style="display:block; margin-bottom:5px;">SOP Version v{{.Version}}</label>
-            </div>
-
-            <div style="margin-bottom: 15px;">
-                <label class="form-label" style="display:block; margin-bottom:5px;">Mobile Experience</label>
-                <select id="pref-mobile-mode" class="form-input" style="width: 100%;">
-                    <option value="app">App Mode (Copilot Only)</option>
-                    <option value="hybrid">Hybrid Mode (Copilot Default + Desktop)</option>
-                    <option value="desktop">Desktop Mode (Manual Copilot)</option>
-                </select>
-                <div style="font-size: 11px; color: var(--text-muted); margin-top: 8px; line-height: 1.4;">
-                    <strong>App Mode:</strong> Turns the site into a dedicated AI Copilot app on mobile. Desktop UI is hidden.<br>
-                    <strong>Hybrid Mode:</strong> Opens AI Copilot by default on mobile, but allows minimizing to access the desktop UI.<br>
-                    <strong>Desktop Mode:</strong> Standard web view. AI Copilot must be opened manually.
-                </div>
-            </div>
-        </div>
-        <div class="modal-footer">
-            <button onclick="closePreferences()" class="btn-secondary">Cancel</button>
-            <button onclick="savePreferences()" class="btn-success">Save</button>
-        </div>
-    </div>
-</div>
 
 <!-- Script Steps Modal -->
 <div id="script-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--overlay-bg); z-index:1200;">
@@ -144,12 +155,19 @@
 <div id="chat-widget" class="chat-widget">
     <div class="chat-header">
         <div style="display: flex; align-items: center; gap: 8px;">
-            <span>AI Copilot</span>
-            <select id="provider-select" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; font-weight: normal;" onclick="event.stopPropagation()" title="Select AI Partner">
-                <option value="">Gemini (Default)</option>
-                <option value="ollama">Ollama (Local AI)</option>
-                <option value="chatgpt">ChatGPT (Cloud)</option>
+            <span>AI</span>
+            
+            <!-- Quick LLM Engine Setup -->
+            <select id="chat-settings-provider" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="LLM Provider" onchange="toggleInlineAuthFields('chat-settings-provider', 'chat-settings-api-key')">
+                {{template "llmOptions" .}}
             </select>
+            <input type="password" id="chat-settings-api-key" placeholder="API Key" style="width: 80px; padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="API Key / Base URL">
+
+            <select id="domain-select" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--accent-color); color: white; font-size: 11px; font-weight: normal; margin-left: 4px;" onclick="event.stopPropagation()" onchange="handleDomainChange(this)" title="Active Space">
+                <option value="" selected>None</option>
+                <option value="custom">Custom...</option>
+            </select>
+
             <select id="format-select" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; font-weight: normal;" onclick="event.stopPropagation()" title="Response Format">
                 <option value="csv">CSV</option>
                 <option value="json">JSON</option>
@@ -165,24 +183,55 @@
             </div>
             -->
 
-            <!-- Hidden Agent Select (Hardcoded to sql_admin) -->
-            <input type="hidden" id="agent-select" value="sql_admin">
+            <!-- Hidden Agent Select (Hardcoded to copilot) -->
+            <input type="hidden" id="agent-select" value="copilot">
         </div>
         <div class="chat-controls">
             <button class="reset-btn" onclick="resetChatPosition(true)" title="Reset Position" style="font-size: 14px;">&#x21ba;</button>
             <button class="minimize-btn" onclick="toggleChatWidget()">_</button>
         </div>
     </div>
+    
+    <!-- Chat Settings Overlay -->
+    <div id="chat-settings" style="display: none; padding: 12px; font-size: 12px; background: var(--bg-color); flex: 1; overflow-y: auto; border-bottom: 1px solid var(--border-color);">
+        <h4 style="margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">LLM Engine Settings</h4>
+        <div style="margin-bottom: 10px;">
+            <label style="display: block; margin-bottom: 4px; font-weight: bold;">Provider / Model</label>
+            <select id="chat-settings-provider-overlay" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="toggleChatSettingsFields()">
+                {{template "llmOptions" .}}
+            </select>
+        </div>
+        <div id="chat-settings-url-container" style="margin-bottom: 10px; display: none;">
+            <label style="display: block; margin-bottom: 4px; font-weight: bold;">Base URL</label>
+            <input type="text" id="chat-settings-url" placeholder="http://localhost:11434" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+        </div>
+        <div id="chat-settings-apikey-container" style="margin-bottom: 10px; display: none;">
+            <label style="display: block; margin-bottom: 4px; font-weight: bold;">API Key (Auth Token)</label>
+            <input type="password" id="chat-settings-api-key" placeholder="Enter API Key securely" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+        </div>
+        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px;">
+            <button onclick="toggleChatSettings()" style="padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--pre-bg); color: var(--text-color); cursor: pointer;">Cancel</button>
+            <button onclick="saveChatSettings()" style="padding: 4px 10px; border-radius: 3px; border: none; background: var(--accent-color); color: white; cursor: pointer;">Save & Close</button>
+        </div>
+    </div>
+
     <div id="chat-history">
         <div class="chat-message ai">
-            Hello! I am your SOP Data Copilot. I can help you query your data using natural language.<br>
-            Type /list_tools to show all available tool commands.<br><br>
+            Hello! I am your <strong>Butler</strong>. I can help you effortlessly generate intelligent, application-ready <strong>Spaces</strong> (Spaces), guide you through integrating SOP in your SDLC, and seamlessly assist you in managing underlying SOP B-Tree databases.<br><br>
+            <strong>SOP is a Database architecture built for AI.</strong> Whether you're quickly spinning up custom Spaces dynamically or executing complex NoSQL B-Tree transactions, I'm here to help.<br><br>
+            Type <strong>/list_tools</strong> to show all available tool commands.<br><br>
+            
+            <em style="color: var(--text-muted); font-size: 0.9em;">Want to learn SOP?</em><br>
+            <em style="color: var(--text-muted); font-size: 0.9em;">Sample how to work with Spaces:</em>
+            <ul style="color: var(--text-muted); font-size: 0.9em; margin-top: 4px;">
+                <li>"Generate sample tasks and import them into my Tasks space"</li>
+            </ul>
+
             {{if .HasDemo}}
-            <strong>Try these examples (if you loaded the Demo Data):</strong>
-            <ul>
+            <em style="color: var(--text-muted); font-size: 0.9em;">With Demo Data loaded, try these examples:</em>
+            <ul style="color: var(--text-muted); font-size: 0.9em; margin-top: 4px;">
                 <li>"Show me all users sorted by Age descending"</li>
                 <li>"Find orders for users with first_name 'John' with total amount > 500"</li>
-                <li>"List products in 'Electronics' category"</li>
                 <li>"Create a script named 'expensive_orders' to find orders over $1000"</li>
             </ul>
             {{end}}
@@ -202,6 +251,7 @@
             name="sop_ai_chat_prompt"
             placeholder="Ask..." 
             onkeydown="handleChatKeydown(event)"
+            oninput="handleChatInput(event)"
             autocomplete="off" 
             autocorrect="off" 
             autocapitalize="off" 
@@ -246,8 +296,8 @@
 <!-- Generic Alert Modal -->
 <div id="global-alert-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--overlay-bg); justify-content:center; align-items:center; z-index:9999;">
     <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:400px; max-width:90%; box-shadow: 0 4px 12px rgba(0,0,0,0.2); border: 1px solid var(--border-color); display: flex; flex-direction: column;">
-        <h3 style="margin-top:0; font-size: 1.2rem;">Alert</h3>
-        <p id="global-alert-message" style="margin: 15px 0 25px 0; word-wrap: break-word; line-height: 1.5;"></p>
+        <h3 id="global-alert-title" style="margin-top:0; font-size: 1.2rem;">Alert</h3>
+        <p id="global-alert-message" style="margin: 15px 0 25px 0; word-wrap: break-word; line-height: 1.5; white-space: pre-wrap;"></p>
         <div style="display:flex; justify-content:flex-end;">
             <button onclick="closeGlobalAlert()" style="padding: 8px 16px; background:var(--button-bg); color:var(--button-text); border:1px solid var(--border-color); border-radius: 4px; cursor: pointer;">OK</button>
         </div>
@@ -279,4 +329,73 @@
     </div>
 </div>
 
+
+<!-- Add Space Modal -->
+<div id="add-kb-modal" class="modal">
+    <div class="modal-content" style="width: 450px;">
+        <div class="modal-header">
+            <span title="Spaces: Spaces, Spaces, Memories, and Skills that define how the AI should behave.">Add New Space or Space</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="closeAddKBModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:block; margin-bottom:5px;">Space Name:</label>
+                <input type="text" id="new-kb-name" class="form-input" style="width: 100%; box-sizing: border-box;" placeholder="e.g. Coding Rules, Study Notes">
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:block; margin-bottom:5px;">Embedder:</label>
+                <select id="new-kb-embedder" class="form-input" style="width: 100%;">
+                    {{template "embedderOptions" .}}
+                </select>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="new-kb-is-persona" onchange="document.getElementById('new-kb-sysprompt-container').style.display = this.checked ? 'block' : 'none'"> 
+                    Use as Persona (Agentic Context)
+                </label>
+            </div>
+            
+            <!-- AI Configuration Section for Agentic Data -->
+            <div id="new-kb-sysprompt-container" style="display:none; margin-bottom: 15px; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.02);">
+                <div style="font-size: 13px; font-weight: bold; margin-bottom: 8px; color: var(--key-color);">🤖 Agentic Data Configuration</div>
+                <div style="font-size: 11px; margin-bottom: 10px; color: var(--text-muted);">
+                    Configure the AI that manages and draws persona from this data space.
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <label class="form-label" style="font-size: 12px; margin: 0;">System Prompt (Persona Focus):</label>
+                    <button onclick="enhanceTextWithAI(this, 'new-kb-sysprompt', 'system_prompt', ['new-kb-name'])" style="background: none; border: none; color: var(--key-color); cursor: pointer; font-size: 11px; padding: 0;">✨ Enhance with AI</button>
+                </div>
+                <textarea id="new-kb-sysprompt" class="form-input" style="width: 100%; height: 60px; box-sizing: border-box; resize: vertical; margin-bottom: 10px;" placeholder="You are a senior data miner and sales expert..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeAddKBModal()" class="btn-secondary">Cancel</button>
+            <button onclick="saveNewKB()" class="btn-success">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Custom Domain Modal -->
+<div id="custom-domain-modal" class="modal">
+    <div class="modal-content" style="width: 400px;">
+        <div class="modal-header">
+            <span>Select Custom Domains</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="closeCustomDomainModal()">&times;</span>
+        </div>
+        <div class="modal-body" style="max-height: 300px; overflow-y: auto;">
+            <p style="font-size:12px; margin-top:0;">Select the Spaces (Spaces, Spaces, etc.) you want to combine for the active AI Context.</p>
+            <div id="custom-domain-list" style="display:flex; flex-direction:column; gap:8px;">
+                <!-- checkboxes inserted here -->
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeCustomDomainModal()" class="btn-secondary">Cancel</button>
+            <button onclick="applyCustomDomain()" class="btn-success">Apply Selection</button>
+        </div>
+    </div>
+</div>
 {{end}}
+

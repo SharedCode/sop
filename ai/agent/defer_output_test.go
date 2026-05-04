@@ -69,7 +69,7 @@ func TestDeferSilentOutput(t *testing.T) {
 // the toolExecuteScript wrapper returns a success message instead of "null".
 func TestScriptReturnNilIsHandled(t *testing.T) {
 	// Setup a minimal agent
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		Config: Config{StubMode: false},
 		StoreOpener: func(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (jsondb.StoreAccessor, error) {
 			return nil, nil // Return nil store for now, script doesn't use it
@@ -132,7 +132,7 @@ func TestSerializeResultHandlesNil(t *testing.T) {
 
 // TestExplicitReturnNil checks if a top-level return op returning nil produces "null"
 func TestExplicitReturnNil(t *testing.T) {
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		Config: Config{StubMode: false},
 		StoreOpener: func(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (jsondb.StoreAccessor, error) {
 			return nil, nil

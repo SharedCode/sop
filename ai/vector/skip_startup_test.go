@@ -66,7 +66,7 @@ func TestDirectIngestion(t *testing.T) {
 	transReadArch, _ := db.BeginTransaction(ctx, sop.ForReading)
 
 	// Open internal architecture to inspect
-	arch, err := vector.OpenDomainStore(ctx, transReadArch, "skip_stage_demo", 0, sop.MediumData, true)
+	arch, err := vector.OpenDomainStore(ctx, transReadArch, "skip_stage_demo", 0,vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: false})
 	if err != nil {
 		t.Fatalf("OpenDomainStore failed: %v", err)
 	}

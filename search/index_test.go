@@ -23,7 +23,7 @@ func TestIndex_AddAndSearch(t *testing.T) {
 	}
 	defer trans.Rollback(ctx)
 
-	idx, err := NewIndex(ctx, trans, "test_index")
+	idx, err := NewIndex(ctx, sop.DatabaseOptions{StoresFolders: []string{"test_search_trans"}}, trans, "test_index")
 	if err != nil {
 		t.Fatalf("Failed to create index: %v", err)
 	}

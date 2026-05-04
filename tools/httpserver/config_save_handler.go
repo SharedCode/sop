@@ -12,10 +12,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
-	aidb "github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/model"
 	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/fs"
@@ -37,9 +37,26 @@ type UserDBRequest struct {
 }
 
 type SaveConfigRequest struct {
-	RegistryPath   string              `json:"registry_path"`
-	Port           int                 `json:"port"`
-	LLMApiKey      string              `json:"llm_api_key"`
+	RegistryPath string `json:"registry_path"`
+	Port         int    `json:"port"`
+
+	// LLM Brain Options
+	BrainProvider string `json:"brain_provider"` // "gemini", "openai", "ollama"
+	BrainModel    string `json:"brain_model"`    // "gemini-1.5-flash", "gpt-4", "llama3"
+	BrainURL      string `json:"brain_url"`      // e.g. "http://localhost:11434"
+	BrainAPIKey   string `json:"brain_api_key"`  // For cloud providers
+
+	// Embedder Options
+	EmbedderProvider string `json:"embedder_provider"` // "gemini", "openai", "ollama", "simple"
+	EmbedderModel    string `json:"embedder_model"`    // "nomic-embed-text", "text-embedding-3-small"
+	EmbedderURL      string `json:"embedder_url"`      // For ollama
+	EmbedderAPIKey   string `json:"embedder_api_key"`  // For cloud providers
+
+	// Legacy backwards compatibility (or we can just replace them entirely)
+	LLMApiKey           string `json:"llm_api_key"`
+	OllamaEmbedderURL   string `json:"ollama_embedder_url"`
+	OllamaEmbedderModel string `json:"ollama_embedder_model"`
+
 	UseSharedBrain bool                `json:"use_shared_brain"`
 	SystemOptions  sop.DatabaseOptions `json:"system_options"`
 	Databases      []UserDBRequest     `json:"databases"`
@@ -72,8 +89,42 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 	if req.Port > 0 {
 		config.Port = req.Port
 	}
+
+	// Legacy
 	if req.LLMApiKey != "" {
 		config.LLMApiKey = req.LLMApiKey
+	}
+	if req.OllamaEmbedderURL != "" {
+		config.OllamaEmbedderURL = req.OllamaEmbedderURL
+	}
+	if req.OllamaEmbedderModel != "" {
+		config.OllamaEmbedderModel = req.OllamaEmbedderModel
+	}
+
+	// New AI Config
+	if req.BrainProvider != "" {
+		config.BrainProvider = req.BrainProvider
+	}
+	if req.BrainModel != "" {
+		config.BrainModel = req.BrainModel
+	}
+	if req.BrainURL != "" {
+		config.BrainURL = req.BrainURL
+	}
+	if req.BrainAPIKey != "" {
+		config.BrainAPIKey = req.BrainAPIKey
+	}
+	if req.EmbedderProvider != "" {
+		config.EmbedderProvider = req.EmbedderProvider
+	}
+	if req.EmbedderModel != "" {
+		config.EmbedderModel = req.EmbedderModel
+	}
+	if req.EmbedderURL != "" {
+		config.EmbedderURL = req.EmbedderURL
+	}
+	if req.EmbedderAPIKey != "" {
+		config.EmbedderAPIKey = req.EmbedderAPIKey
 	}
 
 	// 4. Setup System DB (I/O)
@@ -378,12 +429,6 @@ func setupSystemDB(ctx context.Context, req *SaveConfigRequest) (*DatabaseConfig
 		trans.Commit(ctx)
 	}()
 
-	// Auto-Create LLM Knowledge (System DB only)
-	func() {
-		db := aidb.NewDatabase(sysOpts)
-		seedLLMKnowledge(ctx, db)
-	}()
-
 	// Construct Config
 	mode := "standalone"
 	if sysOpts.Type == sop.Clustered {
@@ -443,6 +488,13 @@ func setupUserDBs(ctx context.Context, req *SaveConfigRequest) ([]DatabaseConfig
 
 		shouldSetupUser := !udb.UseSharedDB
 		if shouldSetupUser {
+			if entries, err := os.ReadDir(uOpts.StoresFolders[0]); err == nil && len(entries) > 0 {
+				log.Error(fmt.Sprintf("Failed to setup User DB [%d] '%s': destination path '%s' is not empty. Cannot create a fresh database here, as it may corrupt existing data.", i, udb.Name, uOpts.StoresFolders[0]))
+				for _, cp := range createdPaths {
+					os.RemoveAll(cp)
+				}
+				return nil, fmt.Errorf("user destination path '%s' is not empty. Cannot create a fresh database here as it may corrupt existing data", uOpts.StoresFolders[0])
+			}
 			if _, err := database.Setup(ctx, uOpts); err != nil {
 				log.Error(fmt.Sprintf("Failed to setup User DB [%d] '%s': %v. Rolling back user DBs...", i, udb.Name, err))
 				// Rollback all user DB paths created so far
@@ -469,10 +521,20 @@ func setupUserDBs(ctx context.Context, req *SaveConfigRequest) ([]DatabaseConfig
 
 			// Init/Demo
 			if udb.PopulateDemo {
-				if err := PopulateDemoData(ctx, uOpts); err != nil {
-					log.Error(fmt.Sprintf("Failed to populate demo data for User DB '%s': %v", udb.Name, err))
-					// We warn but do not fail the whole setup? Or should we?
-					// For now, log error is better than silence.
+				var wg sync.WaitGroup
+				var errDemo error
+
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					if e := PopulateDemoData(ctx, uOpts); e != nil {
+						errDemo = e
+					}
+				}()
+				wg.Wait()
+
+				if errDemo != nil {
+					log.Error(fmt.Sprintf("Failed to populate demo data for User DB '%s': %v", udb.Name, errDemo))
 				} else {
 					log.Info(fmt.Sprintf("Demo data populated for User DB '%s'", udb.Name))
 				}
@@ -495,6 +557,7 @@ func setupUserDBs(ctx context.Context, req *SaveConfigRequest) ([]DatabaseConfig
 					}
 				}()
 			}
+
 		}
 
 		// Config Entry

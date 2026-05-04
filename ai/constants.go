@@ -8,4 +8,11 @@ const (
 
 	// Default Application Configurations
 	DefaultScriptCategory = "general"
+
+	// Agent Types
+	AgentTypeCopilot = "copilot"
+
+	// Knowledge Base Constants
+	DefaultKBName  = "SOP"
+	MemoryKBPrefix = "memory_"
 )

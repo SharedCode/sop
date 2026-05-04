@@ -42,7 +42,7 @@ func TestProject_JoinedFields_PrefixIssue(t *testing.T) {
 
 	// 2. Prepare Agent
 	agentCfg := Config{ID: "test_admin"}
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		Config:    agentCfg,
 		databases: map[string]sop.DatabaseOptions{"test_db": dbOpts},
 		systemDB:  sysDB,
@@ -126,7 +126,7 @@ func TestProject_EmptyFields_Flattening(t *testing.T) {
 
 	// 2. Prepare Agent
 	agentCfg := Config{ID: "test_admin"}
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		Config:    agentCfg,
 		databases: map[string]sop.DatabaseOptions{"test_db": dbOpts},
 		systemDB:  sysDB,
@@ -194,7 +194,7 @@ func TestProject_Unprefixed_Match_Prefixed(t *testing.T) {
 	}
 
 	agentCfg := Config{ID: "test_admin"}
-	agent := &DataAdminAgent{Config: agentCfg, databases: map[string]sop.DatabaseOptions{"test_db": dbOpts}, systemDB: sysDB}
+	agent := &CopilotAgent{Config: agentCfg, databases: map[string]sop.DatabaseOptions{"test_db": dbOpts}, systemDB: sysDB}
 
 	// Script: Scan users (produces users.name) -> Project "name"
 	scriptJSON := `[
@@ -253,7 +253,7 @@ func TestProject_Mixed_Prefix_Scenarios(t *testing.T) {
 	}
 
 	agentCfg := Config{ID: "test_admin"}
-	agent := &DataAdminAgent{Config: agentCfg, databases: map[string]sop.DatabaseOptions{"test_db": dbOpts}, systemDB: sysDB}
+	agent := &CopilotAgent{Config: agentCfg, databases: map[string]sop.DatabaseOptions{"test_db": dbOpts}, systemDB: sysDB}
 
 	// Script:
 	// Scan config -> Project "version", "config.version"
@@ -321,7 +321,7 @@ func TestProject_Alias_Explicit(t *testing.T) {
 	}
 
 	agentCfg := Config{ID: "test_admin"}
-	agent := &DataAdminAgent{Config: agentCfg, databases: map[string]sop.DatabaseOptions{"test_db": dbOpts}, systemDB: sysDB}
+	agent := &CopilotAgent{Config: agentCfg, databases: map[string]sop.DatabaseOptions{"test_db": dbOpts}, systemDB: sysDB}
 
 	// Script:
 	// 1. Project strict flat field with alias: "version AS v"

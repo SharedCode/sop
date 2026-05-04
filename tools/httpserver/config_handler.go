@@ -519,6 +519,10 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if entries, err := os.ReadDir(req.Path); err == nil && len(entries) > 0 {
+		http.Error(w, fmt.Sprintf("Destination path '%s' is not empty. Cannot create a fresh database here as it may corrupt existing data.", req.Path), http.StatusBadRequest)
+		return
+	}
 
 	// 1. Setup Database (Creates folders, writes dboptions.json)
 	// This uses the official SOP setup routine.
@@ -932,8 +936,13 @@ func isPathConflict(pathA, pathB string) (bool, string) {
 // saveConfig writes the current configuration to the file specified in config.ConfigFile.
 func saveConfig() error {
 	if config.ConfigFile == "" {
-		// Do not default to config.json. If no config file is specified, run in ephemeral mode.
-		return nil
+		// Default to config.json in the current working directory
+		cwd, err := os.Getwd()
+		if err == nil {
+			config.ConfigFile = filepath.Join(cwd, "config.json")
+		} else {
+			config.ConfigFile = "config.json"
+		}
 	}
 
 	// Ensure directory exists

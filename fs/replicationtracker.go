@@ -55,7 +55,7 @@ func (r *replicationTracker) getReplicationStatusCacheKey() string {
 }
 
 var GlobalReplicationDetails *ReplicationTrackedDetails
-var globalReplicationDetailsLocker sync.Mutex = sync.Mutex{}
+var globalReplicationDetailsLocker sync.RWMutex = sync.RWMutex{}
 
 // NewReplicationTracker instantiates a tracker for active/passive folders and replication status.
 // It reads persisted status, initializes global in-memory state, and optionally synchronizes with L2 cache.
@@ -79,11 +79,12 @@ func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, repl
 		}
 		globalReplicationDetailsLocker.Unlock()
 		// Minimize reading the replication "status" if we have read it and is tracking it globally.
+		globalReplicationDetailsLocker.RLock()
 		if GlobalReplicationDetails != nil {
-			globalReplicationDetailsLocker.Lock()
 			rt.ReplicationTrackedDetails = *GlobalReplicationDetails
-			globalReplicationDetailsLocker.Unlock()
+			globalReplicationDetailsLocker.RUnlock()
 		} else {
+			globalReplicationDetailsLocker.RUnlock()
 			if err := rt.readStatusFromHomeFolder(ctx); err != nil {
 				return nil, fmt.Errorf("failed reading replication status (%sº file, details: %v", replicationStatusFilename, err)
 			}
@@ -148,10 +149,13 @@ func (r *replicationTracker) handleFailedToReplicate(ctx context.Context) {
 	globalReplicationDetailsLocker.Unlock()
 
 	// L2 cache "knows" of failure, just return.
+	globalReplicationDetailsLocker.RLock()
 	if GlobalReplicationDetails.FailedToReplicate {
+		globalReplicationDetailsLocker.RUnlock()
 		r.FailedToReplicate = true
 		return
 	}
+	globalReplicationDetailsLocker.RUnlock()
 
 	globalReplicationDetailsLocker.Lock()
 
@@ -175,11 +179,14 @@ func (r *replicationTracker) handleFailedToReplicate(ctx context.Context) {
 }
 
 func (r *replicationTracker) failover(ctx context.Context) error {
+	globalReplicationDetailsLocker.RLock()
 	if GlobalReplicationDetails.ActiveFolderToggler == !r.ActiveFolderToggler ||
 		r.FailedToReplicate {
+		globalReplicationDetailsLocker.RUnlock()
 		// Do nothing if global tracker already knows that a failover already occurred.
 		return nil
 	}
+	globalReplicationDetailsLocker.RUnlock()
 
 	globalReplicationDetailsLocker.Lock()
 	if err := r.syncWithL2Cache(ctx, false); err != nil {
@@ -187,10 +194,13 @@ func (r *replicationTracker) failover(ctx context.Context) error {
 	}
 	globalReplicationDetailsLocker.Unlock()
 
+	globalReplicationDetailsLocker.RLock()
 	if GlobalReplicationDetails.ActiveFolderToggler == !r.ActiveFolderToggler {
+		globalReplicationDetailsLocker.RUnlock()
 		// Do nothing if global tracker already knows that a failover already occurred.
 		return nil
 	}
+	globalReplicationDetailsLocker.RUnlock()
 
 	globalReplicationDetailsLocker.Lock()
 	if GlobalReplicationDetails.ActiveFolderToggler == !r.ActiveFolderToggler {

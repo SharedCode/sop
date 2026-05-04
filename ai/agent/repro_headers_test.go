@@ -35,8 +35,8 @@ func TestRepro_SelectMissingHeaders(t *testing.T) {
 	// mockGen := &MockScriptedGenerator{}
 
 	// adminAgent definition
-	adminAgent := &DataAdminAgent{
-		Config:    Config{ID: "data_admin"},
+	adminAgent := &CopilotAgent{
+		Config:    Config{ID: "copilot"},
 		databases: dbs,
 		systemDB:  sysDB,
 	}

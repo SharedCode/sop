@@ -706,6 +706,24 @@ func (btree *Btree[TK, TV]) getNode(ctx context.Context, id sop.UUID) (*Node[TK,
 	if e != nil {
 		return nil, e
 	}
+	if n != nil {
+		if cap(n.Slots) < btree.getSlotLength() {
+			newSlots := make([]Item[TK, TV], btree.getSlotLength())
+			copy(newSlots, n.Slots)
+			n.Slots = newSlots
+		} else {
+			n.Slots = n.Slots[:btree.getSlotLength()]
+		}
+		if n.ChildrenIDs != nil {
+			if cap(n.ChildrenIDs) < btree.getSlotLength()+1 {
+				newChildren := make([]sop.UUID, btree.getSlotLength()+1)
+				copy(newChildren, n.ChildrenIDs)
+				n.ChildrenIDs = newChildren
+			} else {
+				n.ChildrenIDs = n.ChildrenIDs[:btree.getSlotLength()+1]
+			}
+		}
+	}
 	return n, nil
 }
 

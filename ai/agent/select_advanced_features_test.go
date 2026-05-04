@@ -124,7 +124,7 @@ func TestFilterFields_LateBinding(t *testing.T) {
 // TestToolSelect_ValueMatch verifies filtering by value fields.
 func TestToolSelect_ValueMatch(t *testing.T) {
 	ctx := context.Background()
-	dbPath := "test_dataadmin_select_valuematch"
+	dbPath := "test_copilot_select_valuematch"
 	os.RemoveAll(dbPath)
 	defer os.RemoveAll(dbPath)
 
@@ -152,7 +152,7 @@ func TestToolSelect_ValueMatch(t *testing.T) {
 
 	tx.Commit(ctx)
 
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{"testdb": dbOpts},
 	}
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "testdb"})
@@ -200,7 +200,7 @@ func TestToolSelect_ValueMatch(t *testing.T) {
 // TestToolSelect_ScriptView verifies using a Script as a data source.
 func TestToolSelect_ScriptView(t *testing.T) {
 	ctx := context.Background()
-	dbPath := "test_dataadmin_select_script"
+	dbPath := "test_copilot_select_script"
 	os.RemoveAll(dbPath)
 	defer os.RemoveAll(dbPath)
 
@@ -250,7 +250,7 @@ func TestToolSelect_ScriptView(t *testing.T) {
 	tx.Commit(ctx)
 
 	// 4. Run Select against Script
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		databases: map[string]sop.DatabaseOptions{"testdb": dbOpts},
 		systemDB:  systemDB,
 	}

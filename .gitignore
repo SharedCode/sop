@@ -259,3 +259,5 @@ tools/httpserver/httpserver
 tools/httpserver/sop_server
 # Generated Headers
 bindings/**/libjsondb*.h
+!copilot_pipeline.json
+config.json

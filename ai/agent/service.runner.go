@@ -423,6 +423,27 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.ScriptStep, scope map[
 func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder) error {
 	w, _ := ctx.Value(ai.CtxKeyWriter).(io.Writer)
 
+	// Create a safe writer function
+	sbMu := ctx.Value("sb_mutex")
+	var writeMsg func(msg string)
+	if mu, ok := sbMu.(*sync.Mutex); ok && mu != nil {
+		writeMsg = func(msg string) {
+			mu.Lock()
+			defer mu.Unlock()
+			sb.WriteString(msg)
+			if w != nil {
+				fmt.Fprint(w, msg)
+			}
+		}
+	} else {
+		writeMsg = func(msg string) {
+			sb.WriteString(msg)
+			if w != nil {
+				fmt.Fprint(w, msg)
+			}
+		}
+	}
+
 	// Resolve templates in Args (Recursive)
 	resolvedArgs := make(map[string]any)
 	for k, v := range step.Args {
@@ -431,11 +452,13 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 
 	// Capture step for /last-tool support
 	if s.session != nil {
+		s.session.mu.Lock()
 		recordedStep := step
 		recordedStep.Args = resolvedArgs
 		s.session.LastInteractionToolCalls = append(s.session.LastInteractionToolCalls, recordedStep)
 		// Also update LastStep for robustness (some logic checks LastStep)
 		s.session.LastStep = &recordedStep
+		s.session.mu.Unlock()
 	}
 
 	// Execute Tool
@@ -575,10 +598,7 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 		} else {
 			// Fallback to string builder if no streamer (standard output mode)
 			msg := fmt.Sprintf("%s\n", resp)
-			sb.WriteString(msg)
-			if w != nil {
-				fmt.Fprint(w, msg)
-			}
+			writeMsg(msg)
 		}
 
 		// Output Variable
@@ -887,7 +907,7 @@ func (e *ServiceToolExecutor) Execute(ctx context.Context, toolName string, args
 			// If error is "unknown tool", continue to next agent.
 			// Otherwise return error.
 			// Since we don't have a standard error type for "unknown tool", we check string.
-			// DataAdminAgent returns "unknown tool: %s".
+			// CopilotAgent returns "unknown tool: %s".
 			if strings.Contains(err.Error(), "unknown tool") {
 				continue
 			}
@@ -902,6 +922,8 @@ func (e *ServiceToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinitio
 }
 
 func (s *Service) executeScript(ctx context.Context, script *ai.Script, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+	var sbMu sync.Mutex
+	ctx = context.WithValue(ctx, "sb_mutex", &sbMu)
 	// ScriptRecorder must be preserved in context so that tools executed by the script
 	// are recorded in the session state (Session.LastStep / Session.LastInteractionToolCalls).
 	// This ensures commands like /last-tool work correctly after script execution.
@@ -941,6 +963,12 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map
 	// Create cancellable context for this script execution scope to support stopping on error
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	// Ensure sb_mutex exists in context for concurrent string builder writing
+	if ctx.Value("sb_mutex") == nil {
+		var sbMu sync.Mutex
+		ctx = context.WithValue(ctx, "sb_mutex", &sbMu)
+	}
 
 	// Use errgroup for managing concurrency and error propagation
 	g, groupCtx := errgroup.WithContext(ctx)

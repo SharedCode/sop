@@ -12,7 +12,7 @@ import (
 
 func TestRepro_LLMScript(t *testing.T) {
 	// 1. Setup Environment
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		registry: NewRegistry(),
 	}
 	agent.registerTools(context.Background())
@@ -65,7 +65,7 @@ func TestRepro_LLMScript(t *testing.T) {
 
 	// To intercept `open_db`, we might need to modify `toolExecuteScript` to allow injection?
 	// Or we can modify the Agent's state.
-	// DataAdminAgent has `databases` map.
+	// CopilotAgent has `databases` map.
 	// `toolExecuteScript` uses `a.databases` to pass to the engine?
 	// Let's check `toolExecuteScript` implementation again.
 

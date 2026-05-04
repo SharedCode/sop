@@ -1,0 +1,814 @@
+{{define "scripts_part07"}}
+<script>
+    function jsonToGoStruct(structName, obj) {
+        let code = `type ${structName} struct {\n`;
+        const keys = Object.keys(obj);
+        keys.forEach(key => {
+            const val = obj[key];
+            const fieldName = toPascalCase(key);
+            let type = "interface{}";
+            if (val !== null) {
+                if (Array.isArray(val)) {
+                    type = (val.length > 0) ? `[]${getGoType(val[0])}` : "[]interface{}";
+                } else if (typeof val === 'object') {
+                    type = "map[string]interface{}"; 
+                } else {
+                    type = getGoType(val);
+                }
+            }
+            code += `    ${fieldName} ${type} \`json:"${key}"\`\n`;
+        });
+        code += `}`;
+        return code;
+    }
+
+    // --- Python Generator ---
+    function generatePythonCode(name, keySample, valSample, mode) {
+        let code = `# Generated Python code for store "${currentStore}"\n`;
+        
+        let imports = [];
+        if (mode === 'struct') {
+            imports.push("dataclasses.dataclass");
+            imports.push("typing.Any", "typing.List", "typing.Dict", "typing.Optional");
+        }
+        
+        // Check for datetime/uuid imports
+        let needsDateTime = false;
+        let needsUUID = false;
+        
+        const checkTypes = (obj) => {
+            if (typeof obj === 'object' && obj !== null) {
+                Object.values(obj).forEach(v => {
+                    if (typeof v === 'string') {
+                        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v) || /^\d{4}-\d{2}-\d{2}$/.test(v)) needsDateTime = true;
+                        if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)) needsUUID = true;
+                    }
+                });
+            }
+        };
+        checkTypes(keySample);
+        checkTypes(valSample);
+        
+        if (needsDateTime) imports.push("datetime.datetime");
+        if (needsUUID) imports.push("uuid.UUID");
+        
+        if (imports.length > 0) {
+            // Group imports
+            const fromImports = {};
+            imports.forEach(imp => {
+                const parts = imp.split('.');
+                if (parts.length > 1) {
+                    const mod = parts[0];
+                    const cls = parts[1];
+                    if (!fromImports[mod]) fromImports[mod] = [];
+                    fromImports[mod].push(cls);
+                }
+            });
+            
+            Object.keys(fromImports).forEach(mod => {
+                code += `from ${mod} import ${fromImports[mod].join(', ')}\n`;
+            });
+            code += "\n";
+        }
+        
+        if (mode === 'struct') {
+            // Key Class
+            if (typeof keySample === 'object' && keySample !== null) {
+                code += jsonToPythonClass(`${name}Key`, keySample);
+            } else {
+                code += `# Key is a primitive: ${typeof keySample}\n`;
+            }
+            code += "\n";
+            // Value Class
+            if (typeof valSample === 'object' && valSample !== null) {
+                code += jsonToPythonClass(`${name}Value`, valSample);
+            } else {
+                code += `# Value is a primitive: ${typeof valSample}\n`;
+            }
+        } else {
+            code += `# Dictionary representation\n`;
+            code += `${name.toLowerCase()}_data = {\n`;
+            if (keySample) code += `    "sample_key": ${JSON.stringify(keySample, null, 4)},\n`;
+            if (valSample) code += `    "sample_value": ${JSON.stringify(valSample, null, 4)}\n`;
+            code += `}\n`;
+        }
+        return code;
+    }
+
+    function getPythonType(val) {
+        if (val === null) return "Optional[Any]";
+        const type = typeof val;
+        if (type === 'string') {
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) return "UUID";
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) return "datetime";
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return "datetime";
+            return "str";
+        }
+        if (type === 'number') return Number.isInteger(val) ? "int" : "float";
+        if (type === 'boolean') return "bool";
+        if (Array.isArray(val)) {
+            if (val.length > 0 && val.every(v => typeof v === 'number' && v >= 0 && v <= 255 && Number.isInteger(v))) {
+                return "bytes";
+            }
+            return "List[Any]";
+        }
+        return "Any";
+    }
+
+    function jsonToPythonClass(className, obj) {
+        let code = `@dataclass\nclass ${className}:\n`;
+        const keys = Object.keys(obj);
+        if (keys.length === 0) code += "    pass\n";
+        
+        keys.forEach(key => {
+            const val = obj[key];
+            let type = "Any";
+            if (val !== null) {
+                if (Array.isArray(val)) {
+                    type = (val.length > 0) ? `List[${getPythonType(val[0])}]` : "List[Any]";
+                } else if (typeof val === 'object') {
+                    type = "Dict[str, Any]";
+                } else {
+                    type = getPythonType(val);
+                }
+            }
+            code += `    ${key}: ${type}\n`;
+        });
+        return code;
+    }
+
+    // --- C# Generator ---
+    function generateCSharpCode(name, keySample, valSample, mode) {
+        let code = `// Generated C# code for store "${currentStore}"\n`;
+        code += `using System;\nusing System.Collections.Generic;\n\n`;
+        code += `namespace Sop.Generated {\n`;
+
+        if (mode === 'struct') {
+            // Key Class
+            if (typeof keySample === 'object' && keySample !== null) {
+                code += jsonToCSharpClass(`${name}Key`, keySample);
+            } else {
+                code += `    // Key is a primitive: ${getCSharpType(keySample)}\n`;
+            }
+            code += "\n";
+            // Value Class
+            if (typeof valSample === 'object' && valSample !== null) {
+                code += jsonToCSharpClass(`${name}Value`, valSample);
+            } else {
+                code += `    // Value is a primitive: ${getCSharpType(valSample)}\n`;
+            }
+        } else {
+            code += `    public class ${name}Data {\n`;
+            code += `        public static Dictionary<string, object> Sample = new Dictionary<string, object> {\n`;
+            if (keySample) code += `            { "SampleKey", ${JSON.stringify(keySample)} },\n`;
+            if (valSample) code += `            { "SampleValue", ${JSON.stringify(valSample)} }\n`;
+            code += `        };\n    }\n`;
+        }
+        code += `}\n`;
+        return code;
+    }
+
+    function getCSharpType(val) {
+        if (val === null) return "object";
+        const type = typeof val;
+        if (type === 'string') {
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) return "Guid";
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) return "DateTime";
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return "DateTime";
+            return "string";
+        }
+        if (type === 'number') return Number.isInteger(val) ? "int" : "double";
+        if (type === 'boolean') return "bool";
+        if (Array.isArray(val)) {
+            if (val.length > 0 && val.every(v => typeof v === 'number' && v >= 0 && v <= 255 && Number.isInteger(v))) {
+                return "byte[]";
+            }
+            return "List<object>";
+        }
+        return "object";
+    }
+
+    function jsonToCSharpClass(className, obj) {
+        let code = `    public class ${className} {\n`;
+        const keys = Object.keys(obj);
+        keys.forEach(key => {
+            const val = obj[key];
+            const fieldName = toPascalCase(key);
+            let type = "object";
+            if (val !== null) {
+                if (Array.isArray(val)) {
+                    type = (val.length > 0) ? `List<${getCSharpType(val[0])}>` : "List<object>";
+                } else if (typeof val === 'object') {
+                    type = "Dictionary<string, object>";
+                } else {
+                    type = getCSharpType(val);
+                }
+            }
+            code += `        public ${type} ${fieldName} { get; set; }\n`;
+        });
+        code += `    }\n`;
+        return code;
+    }
+
+    // --- Java Generator ---
+    function generateJavaCode(name, keySample, valSample, mode) {
+        let code = `// Generated Java code for store "${currentStore}"\n`;
+        code += `import java.util.*;\n\n`;
+
+        if (mode === 'struct') {
+            // Key Class
+            if (typeof keySample === 'object' && keySample !== null) {
+                code += jsonToJavaClass(`${name}Key`, keySample);
+            } else {
+                code += `// Key is a primitive: ${getJavaType(keySample)}\n`;
+            }
+            code += "\n";
+            // Value Class
+            if (typeof valSample === 'object' && valSample !== null) {
+                code += jsonToJavaClass(`${name}Value`, valSample);
+            } else {
+                code += `// Value is a primitive: ${getJavaType(valSample)}\n`;
+            }
+        } else {
+            code += `public class ${name}Data {\n`;
+            code += `    public static Map<String, Object> getSample() {\n`;
+            code += `        Map<String, Object> map = new HashMap<>();\n`;
+            // Simplified map generation
+            code += `        // ... populate map with sample data ...\n`;
+            code += `        return map;\n`;
+            code += `    }\n}\n`;
+        }
+        return code;
+    }
+
+    function getJavaType(val) {
+        if (val === null) return "Object";
+        const type = typeof val;
+        if (type === 'string') {
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)) return "UUID";
+            if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(val)) return "Date";
+            if (/^\d{4}-\d{2}-\d{2}$/.test(val)) return "Date";
+            return "String";
+        }
+        if (type === 'number') return Number.isInteger(val) ? "Integer" : "Double";
+        if (type === 'boolean') return "Boolean";
+        if (Array.isArray(val)) {
+            if (val.length > 0 && val.every(v => typeof v === 'number' && v >= 0 && v <= 255 && Number.isInteger(v))) {
+                return "byte[]";
+            }
+            return "List<Object>";
+        }
+        return "Object";
+    }
+
+    function jsonToJavaClass(className, obj) {
+        let code = `public class ${className} {\n`;
+        const keys = Object.keys(obj);
+        keys.forEach(key => {
+            const val = obj[key];
+            // Java convention: camelCase fields
+            const fieldName = key; 
+            let type = "Object";
+            if (val !== null) {
+                if (Array.isArray(val)) {
+                    type = (val.length > 0) ? `List<${getJavaType(val[0])}>` : "List<Object>";
+                } else if (typeof val === 'object') {
+                    type = "Map<String, Object>";
+                } else {
+                    type = getJavaType(val);
+                }
+            }
+            code += `    public ${type} ${fieldName};\n`;
+        });
+        code += `}\n`;
+        return code;
+    }
+
+    // --- Rust Generator ---
+    function generateRustCode(name, keySample, valSample, mode) {
+        let code = `// Generated Rust code for store "${currentStore}"\n`;
+        code += `use serde::{Deserialize, Serialize};\nuse std::collections::HashMap;\n\n`;
+
+        if (mode === 'struct') {
+            // Key Struct
+            if (typeof keySample === 'object' && keySample !== null) {
+                code += jsonToRustStruct(`${name}Key`, keySample);
+            } else {
+                code += `// Key is a primitive: ${getRustType(keySample)}\n`;
+                code += `type ${name}Key = ${getRustType(keySample)};\n`;
+            }
+            code += "\n";
+            // Value Struct
+            if (typeof valSample === 'object' && valSample !== null) {
+                code += jsonToRustStruct(`${name}Value`, valSample);
+            } else {
+                code += `// Value is a primitive: ${getRustType(valSample)}\n`;
+                code += `type ${name}Value = ${getRustType(valSample)};\n`;
+            }
+        } else {
+            code += `// HashMap representation\n`;
+            code += `// let mut map = HashMap::new();\n`;
+            code += `// map.insert("sample_key", ...);\n`;
+        }
+        return code;
+    }
+
+    function getRustType(val) {
+        if (val === null) return "Option<serde_json::Value>";
+        const type = typeof val;
+        if (type === 'string') return "String";
+        if (type === 'number') return Number.isInteger(val) ? "i64" : "f64";
+        if (type === 'boolean') return "bool";
+        if (Array.isArray(val)) {
+            if (val.length > 0 && val.every(v => typeof v === 'number' && v >= 0 && v <= 255 && Number.isInteger(v))) {
+                return "Vec<u8>";
+            }
+            return "Vec<serde_json::Value>";
+        }
+        return "serde_json::Value";
+    }
+
+    function jsonToRustStruct(structName, obj) {
+        let code = `#[derive(Serialize, Deserialize, Debug)]\nstruct ${structName} {\n`;
+        const keys = Object.keys(obj);
+        keys.forEach(key => {
+            const val = obj[key];
+            const fieldName = key; // Rust uses snake_case usually, but keeping key name for simplicity
+            let type = "serde_json::Value";
+            if (val !== null) {
+                if (Array.isArray(val)) {
+                    type = (val.length > 0) ? `Vec<${getRustType(val[0])}>` : "Vec<serde_json::Value>";
+                } else if (typeof val === 'object') {
+                    type = "HashMap<String, serde_json::Value>";
+                } else {
+                    type = getRustType(val);
+                }
+            }
+            code += `    ${fieldName}: ${type},\n`;
+        });
+        code += `}\n`;
+        return code;
+    }
+
+    function copyGeneratedCode() {
+        const content = document.getElementById('generated-code-content').textContent;
+        navigator.clipboard.writeText(content).then(() => {
+            showAlert("Code copied to clipboard!");
+        });
+    }
+
+    function toPascalCase(str) {
+        return str.replace(/(?:^\w|[A-Z]|\b\w)/g, function(word, index) {
+            return word.toUpperCase();
+        }).replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '');
+    }
+    /*
+     * showEditStore opens the modal to edit store metadata.
+     * 
+     * EDITING RULES:
+     * 1. Empty Store (Count == 0):
+     *    - Full structural rebuild allowed (Key/Value Type, Slot Length, etc.).
+     *    - Seed Data inputs are shown to allow initializing the store with a specific type.
+     * 
+     * 2. Non-Empty Store (Count > 0):
+     *    - Structural fields are LOCKED.
+     *    - EXCEPTION: Index Spec and CEL can be edited IF AND ONLY IF they are currently missing.
+     *    - Description and Cache Duration are always editable.
+     */
+    function showEditStore(forceReadOnly = false) {
+        try {
+            if (!currentStoreInfo) return;
+
+            // Determine if Read-Only Mode (System DB)
+            const dbObj = availableDatabases.find(d => d.name === currentDatabase);
+            const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+            const isReadOnlyMode = forceReadOnly || isSystem;
+
+            // Fetch stores for potential relationships
+            fetchRelationStores();
+            
+            const modal = document.getElementById('add-store-modal');
+            if (modal) {
+                modal.style.display = 'flex';
+                const header = modal.querySelector('.modal-header span');
+                if (header) header.textContent = isReadOnlyMode ? 'View Store Metadata (Read-Only)' : 'Edit Store Metadata';
+            }
+            
+            // Populate fields
+            const nameInput = document.getElementById('new-store-name');
+            if (nameInput) {
+                nameInput.value = currentStoreInfo.name;
+                nameInput.disabled = true; // Name cannot be changed
+            }
+            
+            const descInput = document.getElementById('new-store-description');
+            if (descInput) {
+                descInput.value = currentStoreInfo.description || '';
+                descInput.disabled = isReadOnlyMode;
+            }
+            
+            // Button Save Visibility
+            const saveBtn = document.getElementById('btn-save-new-store');
+            if (saveBtn) {
+                saveBtn.style.display = isReadOnlyMode ? 'none' : 'block';
+            }
+
+            // Clear relationships UI (re-extraction from text requires parsing, for now we just show text)
+            // But we can let them add NEW relationships
+            const relList = document.getElementById('relationship-list');
+            if (relList) relList.innerHTML = ''; 
+            
+            // Populate relationships if present
+            if (currentStoreInfo.relations) {
+                populateRelationshipUI(currentStoreInfo.relations, isReadOnlyMode);
+            }
+
+            // Relation Add Button
+            const addRelBtn = document.getElementById('btn-add-relationship');
+            if (addRelBtn) addRelBtn.style.display = isReadOnlyMode ? 'none' : 'inline-block';
+            
+            // ... Rest of Logic ...
+
+            // Disable Target Data File Dropdown in Edit Mode
+            const targetSelect = document.getElementById('new-store-target-ec');
+            if (targetSelect) {
+                 // Try to set current value if available in store info (not always preserved in lightweight struct)
+                 // If not preserved, it likely defaults to empty/default.
+                 // Ideally we should know which partition it belongs to.
+                 // For now, we simply disable it so user can't screw it up.
+                 targetSelect.disabled = true;
+            }
+
+            // Ensure count is treated as number
+            const isEmptyStore = (currentStoreInfo.count === 0);
+            console.log("showEditStore: currentStoreInfo.count=", currentStoreInfo.count, "isEmptyStore=", isEmptyStore);
+    
+            // Key Type (Read-Only unless empty, or forced Read-Only)
+            const keyType = document.getElementById('new-store-key-type');
+            if (keyType) {
+                let typeToSet = currentStoreInfo.keyType || 'string';
+                
+                if (!currentStoreInfo.isPrimitiveKey) {
+                    typeToSet = 'map';
+                }
+                
+                keyType.value = typeToSet;
+                keyType.disabled = isReadOnlyMode || !isEmptyStore;
+            }
+            
+            const keyIsArray = document.getElementById('new-store-key-is-array');
+            if (keyIsArray) {
+                keyIsArray.checked = currentStoreInfo.keyIsArray || false;
+                keyIsArray.disabled = isReadOnlyMode || !isEmptyStore;
+            }
+            
+            // Trigger visibility and populate fields
+            if (typeof toggleIndexSpec === 'function') toggleIndexSpec();
+            
+            if (keyType && keyType.value === 'map') {
+                 if (typeof populateKeyFieldsAndIndexSpec === 'function') populateKeyFieldsAndIndexSpec(currentStoreInfo, isReadOnlyMode);
+                 
+                 if (!isEmptyStore || isReadOnlyMode) {
+                     // Disable all structural fields
+                     if (typeof disableKeyAndIndexFields === 'function') disableKeyAndIndexFields();
+                 } else {
+                     // Empty Store: Enable everything
+                     const keyRows = document.querySelectorAll('.key-field-row input, .key-field-row select, .key-field-row button');
+                     keyRows.forEach(el => el.disabled = false);
+                     
+                     const indexRows = document.querySelectorAll('.index-field-row select, .index-field-row button');
+                     indexRows.forEach(el => el.disabled = false);
+                     
+                     const addKeyBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
+                     if (addKeyBtn) addKeyBtn.disabled = false;
+                     
+                     const addIndexBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
+                     if (addIndexBtn) addIndexBtn.disabled = false;
+                 }
+            }
+    
+            // Value Type (Read-Only unless empty, or forced Read-Only)
+            const valType = document.getElementById('new-store-value-type');
+            if (valType) {
+                valType.value = currentStoreInfo.valueType || 'string';
+                valType.disabled = isReadOnlyMode || !isEmptyStore;
+            }
+            
+            const valIsArray = document.getElementById('new-store-value-is-array');
+            if (valIsArray) {
+                valIsArray.checked = currentStoreInfo.valueIsArray || false;
+                valIsArray.disabled = isReadOnlyMode || !isEmptyStore;
+            }
+
+            if (typeof toggleValueSpec === 'function') toggleValueSpec();
+            
+            // Other fields
+            const slotLength = document.getElementById('new-store-slot-length');
+            if (slotLength) {
+                slotLength.value = currentStoreInfo.slotLength || 2000;
+                slotLength.disabled = isReadOnlyMode || !isEmptyStore;
+            }
+            
+            const isUnique = document.getElementById('new-store-is-unique');
+            if (isUnique) {
+                isUnique.checked = currentStoreInfo.isUnique !== false;
+                isUnique.disabled = isReadOnlyMode || !isEmptyStore;
+            }
+            
+            // Infer Data Size from IsValueInNode & IsValueDataActivelyPersisted
+            // 0: Small (Value in Node)
+            // 1: Medium (Value in Segment, not actively persisted)
+            // 2: Big (Value actively persisted)
+            let dataSize = "1"; // Default to Medium
+            if (currentStoreInfo.isValueActivelyPersisted) {
+                dataSize = "2"; // Big
+            } else if (currentStoreInfo.isValueInNode) {
+                dataSize = "0"; // Small
+            }
+            const dataSizeInput = document.getElementById('new-store-data-size');
+            if (dataSizeInput) {
+                dataSizeInput.value = dataSize;
+                dataSizeInput.disabled = isReadOnlyMode || !isEmptyStore;
+            }
+            
+            const cacheDuration = document.getElementById('new-store-cache-duration');
+            if (cacheDuration) {
+                cacheDuration.value = currentStoreInfo.cacheDuration || 0;
+                cacheDuration.disabled = isReadOnlyMode; // Only editable if not Read-Only mode
+            }
+    
+            // Infer Streaming Mode
+            let isStreaming = false;
+            if (currentStoreInfo.keyType === 'map' && currentStoreInfo.valueType === 'blob') {
+                 if (currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
+                     const fields = currentStoreInfo.indexSpec.index_fields;
+                     if (fields.length > 0 && fields[fields.length-1].field_name === 'ChunkIndex') {
+                         isStreaming = true;
+                     }
+                 }
+            }
+            const streamingInput = document.getElementById('new-store-is-streaming');
+            if (streamingInput) {
+                streamingInput.checked = isStreaming;
+                streamingInput.disabled = isReadOnlyMode || !isEmptyStore;
+            }
+    
+            // Enable Advanced Mode to show all fields
+            const advMode = document.getElementById('new-store-advanced-mode');
+            if (advMode) advMode.checked = true;
+            if (typeof toggleAdvancedOptions === 'function') toggleAdvancedOptions();
+    
+            // Ensure cache options visibility matches current ValueInNode state
+            if (typeof toggleCacheOptions === 'function') toggleCacheOptions();
+    
+            // Show Unlock Button for non-empty stores to allow Admin override for Index/CEL
+            const unlockBtn = document.getElementById('btn-unlock-admin');
+            if (unlockBtn) {
+                if (isReadOnlyMode) {
+                    unlockBtn.style.display = 'none';
+                } else if (!isEmptyStore && !currentStoreInfo.isPrimitiveKey) {
+                    unlockBtn.style.display = 'inline-block';
+                } else {
+                    unlockBtn.style.display = 'none';
+                }
+            }
+            
+            // Show Seed Data (relevant for empty store)
+            // Hide if Read-Only Mode
+            const seedContainer = document.getElementById('seed-data-container');
+            if (seedContainer) seedContainer.style.display = (isEmptyStore && !isReadOnlyMode) ? 'block' : 'none';
+            if (isEmptyStore) {
+                if (typeof populateSeedDataUI === 'function') populateSeedDataUI();
+            }
+            
+            // Update Button
+            const footer = document.querySelector('#add-store-modal .modal-footer');
+            if (footer) {
+                const saveBtn = footer.querySelector('.btn-success');
+                if (saveBtn) {
+                    saveBtn.textContent = 'Update';
+                    saveBtn.onclick = updateStore;
+                }
+            }
+            
+            // Enable Description editing
+            if (descInput) descInput.disabled = false;
+    
+            // CEL is structural: editable only when Index is editable.
+            const celEditBtn = document.querySelector('#new-store-cel-expression button');
+            const hasIndexSpec = !!(currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0);
+            
+            const canEditIndex = isEmptyStore;
+    
+            if (celEditBtn) {
+                celEditBtn.disabled = !canEditIndex;
+            }
+            const celExprVal = document.getElementById('cel-expression-value');
+            if (celExprVal) celExprVal.disabled = !canEditIndex;
+    
+            // Disable Advanced Mode Toggle
+            if (advMode) advMode.disabled = true;
+            
+        } catch (e) {
+            console.error("Error in showEditStore:", e);
+            showAlert("Error showing store details: " + e.message);
+        }
+    }
+
+
+
+    function populateSeedDataUI() {
+        if (!currentStoreInfo) return;
+
+        // Populate Seed Key
+        const keyType = document.getElementById('new-store-key-type').value;
+        if (keyType === 'map') {
+            // Ensure forms are generated
+            updateSeedKeyForm();
+            
+            if (currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
+                const rows = document.querySelectorAll('.seed-key-field-row');
+                rows.forEach(row => {
+                    const name = row.getAttribute('data-field');
+                    if (currentStoreInfo.sampleKey[name] !== undefined) {
+                        row.querySelector('input').value = currentStoreInfo.sampleKey[name];
+                    }
+                });
+            }
+        } else {
+            if (currentStoreInfo.sampleKey !== undefined) {
+                 document.getElementById('new-store-seed-key').value = currentStoreInfo.sampleKey;
+            }
+        }
+
+        // Populate Seed Value
+        const valType = document.getElementById('new-store-value-type').value;
+        if (valType === 'map') {
+            document.getElementById('seed-value-fields-list').innerHTML = '';
+            if (currentStoreInfo.sampleValue && typeof currentStoreInfo.sampleValue === 'object') {
+                Object.keys(currentStoreInfo.sampleValue).forEach(k => {
+                    const val = currentStoreInfo.sampleValue[k];
+                    let type = 'string';
+                    const t = typeof val;
+                    if (t === 'number') {
+                         if (Number.isInteger(val)) type = 'int';
+                         if (!Number.isInteger(val)) type = 'float64';
+                    } 
+                    if (t === 'boolean') type = 'bool';
+                    
+                    addSeedValueFieldRow(k, type, val);
+                });
+            }
+        } else {
+            if (currentStoreInfo.sampleValue !== undefined) {
+                let val = currentStoreInfo.sampleValue;
+                if (valType === 'blob' && Array.isArray(val)) {
+                    if (typeof val === 'object') val = JSON.stringify(val);
+                }
+                document.getElementById('new-store-seed-value-simple').value = val;
+            }
+        }
+    }
+
+    function unlockAdminFields() {
+        try {
+            console.log("unlockAdminFields called");
+            const token = prompt("Enter Admin Token to unlock structural fields:");
+            if (!token) return;
+            
+            // Validate Token
+            apiCall('/api/admin/validate', 'POST', { adminToken: token })
+            .then(data => {
+                window.currentAdminToken = token;
+                proceedUnlock();
+            })
+            .catch(err => {
+                // apiCall will alert
+            });
+        } catch (e) {
+            console.error("Error in unlockAdminFields:", e);
+            showAlert("Error unlocking: " + e.message);
+        }
+    }
+
+    function proceedUnlock() {
+        try {
+            const isEmptyStore = currentStoreInfo && currentStoreInfo.count === 0;
+
+            if (!isEmptyStore) {
+                 showAlert("WARNING: You are about to modify the schema (Index/CEL) of a non-empty store.\n\nThis is an advanced operation. Ensure you understand the implications on existing data.");
+            }
+    
+            // --- Key/Value Structure (Only editable if empty) ---
+            if (isEmptyStore) {
+                const keyType = document.getElementById('new-store-key-type');
+                if (keyType) keyType.disabled = false;
+                
+                const keyIsArray = document.getElementById('new-store-key-is-array');
+                if (keyIsArray) keyIsArray.disabled = false;
+                
+                // Enable Key Field inputs (for Map keys)
+                const keyRows = document.querySelectorAll('.key-field-row input, .key-field-row select, .key-field-row button');
+                keyRows.forEach(el => el.disabled = false);
+    
+                // Enable "Add Key Field" button
+                const addKeyFieldBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
+                if (addKeyFieldBtn) addKeyFieldBtn.disabled = false;
+    
+                const valType = document.getElementById('new-store-value-type');
+                if (valType) valType.disabled = false;
+                
+                const valIsArray = document.getElementById('new-store-value-is-array');
+                if (valIsArray) valIsArray.disabled = false;
+    
+                // Enable Value Map Fields
+                const valRows = document.querySelectorAll('.value-field-row input, .value-field-row select, .value-field-row button');
+                valRows.forEach(el => el.disabled = false);
+                
+                // Add "Add Field" button for Value Map if not exists
+                const valMapContainer = document.getElementById('value-map-spec-container');
+                if (valMapContainer) {
+                    let addValBtn = valMapContainer.querySelector('button.add-val-btn');
+                    if (!addValBtn) {
+                        addValBtn = document.createElement('button');
+                        addValBtn.className = 'add-val-btn';
+                        addValBtn.textContent = '+ Add Field';
+                        addValBtn.onclick = () => addValueFieldRow();
+                        addValBtn.style.marginTop = '5px';
+                        addValBtn.style.padding = '4px 8px';
+                        addValBtn.style.cursor = 'pointer';
+                        valMapContainer.appendChild(addValBtn);
+                    }
+                    addValBtn.disabled = false;
+                }
+    
+                // Show Seed Data Container for Empty Store
+                const seedContainer = document.getElementById('seed-data-container');
+                if (seedContainer) seedContainer.style.display = 'block';
+                
+                // Ensure Seed Key form is populated and correct inputs are shown
+                if (typeof updateSeedKeyForm === 'function') updateSeedKeyForm();
+                if (typeof toggleIndexSpec === 'function') toggleIndexSpec();
+                if (typeof populateSeedDataUI === 'function') populateSeedDataUI();
+            }
+    
+            // --- Index & CEL (Always editable when unlocked) ---
+    
+            // Enable Advanced Mode Toggle
+            console.log("Unlocking: advanced-mode");
+            // document.getElementById('new-store-advanced-mode').disabled = false;
+            
+            // Advanced Options: Structural vs Config
+            // Slot Length, Is Unique, Value In Node are Structural -> STRICTLY LOCKED ALWAYS
+            console.log("Unlocking: slot-length");
+            // document.getElementById('new-store-slot-length').disabled = true;
+            console.log("Unlocking: is-unique");
+            // document.getElementById('new-store-is-unique').disabled = true;
+            console.log("Unlocking: data-size");
+            // document.getElementById('new-store-data-size').disabled = true;
+            console.log("Unlocking: is-streaming");
+            // document.getElementById('new-store-is-streaming').disabled = !isEmptyStore;
+            
+            // Cache Duration is Config -> Always Unlocked
+            console.log("Unlocking: cache-duration");
+            // document.getElementById('new-store-cache-duration').disabled = false;
+            if (typeof toggleCacheOptions === 'function') toggleCacheOptions();
+    
+            
+            // Enable Index Spec inputs
+            const indexRows = document.querySelectorAll('.index-field-row select, .index-field-row button');
+            indexRows.forEach(el => el.disabled = false);
+    
+            // Enable "Add Index" button
+            const addIndexFieldBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
+            if (addIndexFieldBtn) addIndexFieldBtn.disabled = false;
+            
+            // CEL is structural: editable only when Index is editable.
+            const hasIndexSpec = !!(currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0);
+            // Since we have Admin Token (we are in unlockAdminFields), we allow editing Index/CEL even if they exist.
+            const canEditIndex = true;
+
+            const celEditBtn = document.querySelector('#new-store-cel-expression button');
+            if (celEditBtn) {
+                celEditBtn.style.display = 'inline-block';
+                celEditBtn.disabled = !canEditIndex;
+            }
+            const celExprVal = document.getElementById('cel-expression-value');
+            if (celExprVal) celExprVal.disabled = !canEditIndex;
+            
+            // Hide the unlock button
+            const unlockBtn = document.getElementById('btn-unlock-admin');
+            if (unlockBtn) unlockBtn.style.display = 'none';
+            
+            // Enable Update button
+            const saveBtn = document.querySelector('#add-store-modal .modal-footer .btn-success');
+            if (saveBtn) saveBtn.disabled = false;
+            
+        } catch (e) {
+            console.error("Error in proceedUnlock:", e);
+            showAlert("Error unlocking: " + e.message);
+        }
+    }
+
+</script>
+{{end}}

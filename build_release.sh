@@ -267,6 +267,16 @@ create_bundle linux arm64 "linux-arm64"
 create_bundle windows amd64 "windows-amd64"
 create_bundle windows arm64 "windows-arm64"
 
+# ------------------------------------------
+# KNOWLEDGE BASE
+# ------------------------------------------
+echo "Compiling SOP AI Base Knowledge..."
+cd "$SOP_ROOT/ai"
+go run ./cmd/knowledge_compiler/main.go
+# Copy it alongside all bundles so users can utilize it in setup wizard!
+cp sop_base_knowledge.json "$SOP_ROOT/$OUTPUT_DIR/"
+cd "$SOP_ROOT"
+
 echo "Release Packaging Complete."
 ls -lh $OUTPUT_DIR/*.{tar.gz,zip} 2>/dev/null || echo "No bundles created."
 

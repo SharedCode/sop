@@ -146,16 +146,16 @@ func TestScript_Transactions(t *testing.T) {
 	tx.Commit(ctx)
 
 	// 3. Initialize Service
-	// We need a DataAdminAgent in the registry to handle the commands
+	// We need a CopilotAgent in the registry to handle the commands
 	registry := make(map[string]ai.Agent[map[string]any])
 	cfg := Config{
-		ID:   "data_admin",
+		ID:   "copilot",
 		Name: "Data Admin",
 	}
-	dataAdmin := NewDataAdminAgent(cfg, databases, sysDB)
+	copilot := NewCopilotAgent(cfg, databases, sysDB)
 	ctx = context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{CurrentDB: "system"})
-	dataAdmin.Open(ctx)
-	registry["data_admin"] = dataAdmin
+	copilot.Open(ctx)
+	registry["copilot"] = copilot
 
 	svc := NewService(nil, sysDB, databases, nil, nil, registry, false)
 

@@ -45,7 +45,7 @@ func handleExecuteScript(w http.ResponseWriter, r *http.Request) {
 	// Determine which agent to use
 	agentID := req.Agent
 	if agentID == "" {
-		agentID = "sql_admin" // Default to sql_admin as it's the main one loaded
+		agentID = "copilot" // Default to copilot as it's the main one loaded
 	}
 
 	agentIntf, exists := loadedAgents[agentID]

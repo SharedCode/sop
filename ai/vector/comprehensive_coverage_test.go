@@ -2,6 +2,7 @@ package vector_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,7 +66,7 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 
 	// Peek V0
 	transPeek0, _ := db.BeginTransaction(ctx, sop.ForReading)
-	arch0, err := vector.OpenDomainStore(ctx, transPeek0, storeName, 0, sop.MediumData, false)
+	arch0, err := vector.OpenDomainStore(ctx, transPeek0, storeName, 0, vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("OpenDomainStore V0 failed: %v", err)
 	}
@@ -102,28 +103,30 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	transVerify1, _ := db.BeginTransaction(ctx, sop.ForReading)
 
 	// Check Version in SysStore
-	sysStoreName := fmt.Sprintf("%s_sys_config", storeName)
-	sysStore, _ := infs.OpenBtree[string, int64](ctx, sysStoreName, transVerify1, nil)
+	sysStoreName := fmt.Sprintf("%s/sys_config", storeName)
+	sysStore, _ := infs.OpenBtree[string, string](ctx, sysStoreName, transVerify1, nil)
 	found, _ := sysStore.Find(ctx, storeName, false)
 	if !found {
 		t.Fatal("System config not found")
 	}
-	ver, _ := sysStore.GetCurrentValue(ctx)
-	if ver != 1 {
-		t.Errorf("Expected Version 1, got %d", ver)
+	strVer, _ := sysStore.GetCurrentValue(ctx)
+	var meta vector.Metadata
+	json.Unmarshal([]byte(strVer), &meta)
+	if meta.ActiveVersion != 1 {
+		t.Errorf("Expected Version 1, got %d", meta.ActiveVersion)
 	}
 
 	// Check Files/Stores
-	// V1 should have: _centroids_1, _vecs_1, _lku_1
+	// V1 should have: /centroids_1, /vecs_1, /lku_1
 	// TempVectors should be gone.
 
 	// We use OpenDomainStore to check internal struct
-	arch1, err := vector.OpenDomainStore(ctx, transVerify1, storeName, 1, sop.MediumData, false)
+	arch1, err := vector.OpenDomainStore(ctx, transVerify1, storeName, 1, vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("OpenDomainStore V1 failed: %v", err)
 	}
-	if arch1.TempVectors != nil {
-		t.Fatal("TempVectors should be nil in V1")
+	if arch1.TempVectors == nil {
+		t.Fatal("TempVectors should NOT be nil in V1")
 	}
 	if arch1.Vectors.Count() != 3 {
 		t.Errorf("Expected 3 vectors in V1, got %d", arch1.Vectors.Count())
@@ -236,19 +239,20 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	transVerify2, _ := db.BeginTransaction(ctx, sop.ForReading)
 
 	// Check Version
-	sysStore, _ = infs.OpenBtree[string, int64](ctx, sysStoreName, transVerify2, nil)
+	sysStore, _ = infs.OpenBtree[string, string](ctx, sysStoreName, transVerify2, nil)
 	sysStore.Find(ctx, storeName, false)
-	ver, _ = sysStore.GetCurrentValue(ctx)
-	if ver != 2 {
-		t.Errorf("Expected Version 2, got %d", ver)
+	strVer, _ = sysStore.GetCurrentValue(ctx)
+	json.Unmarshal([]byte(strVer), &meta)
+	if meta.ActiveVersion != 2 {
+		t.Errorf("Expected Version 2, got %d", meta.ActiveVersion)
 	}
 
 	// Check V1 Stores Deleted
 	// We check if we can open them (should fail) or check filesystem
 	v1Stores := []string{
-		fmt.Sprintf("%s_vecs_1", storeName),
-		fmt.Sprintf("%s_centroids_1", storeName),
-		fmt.Sprintf("%s_lku_1", storeName),
+		fmt.Sprintf("%s/vecs_1", storeName),
+		fmt.Sprintf("%s/centroids_1", storeName),
+		fmt.Sprintf("%s/lku_1", storeName),
 	}
 	for _, s := range v1Stores {
 		path := filepath.Join(tmpDir, s)
@@ -259,9 +263,9 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 
 	// Check V2 Stores Exist
 	v2Stores := []string{
-		fmt.Sprintf("%s_vecs_2", storeName),
-		fmt.Sprintf("%s_centroids_2", storeName),
-		fmt.Sprintf("%s_lku_2", storeName),
+		fmt.Sprintf("%s/vecs_2", storeName),
+		fmt.Sprintf("%s/centroids_2", storeName),
+		fmt.Sprintf("%s/lku_2", storeName),
 	}
 	for _, s := range v2Stores {
 		path := filepath.Join(tmpDir, s)
@@ -271,7 +275,7 @@ func TestVectorStoreComprehensiveLifecycle(t *testing.T) {
 	}
 
 	// Verify Data Integrity in V2
-	arch2, err := vector.OpenDomainStore(ctx, transVerify2, storeName, 2, sop.MediumData, false)
+	arch2, err := vector.OpenDomainStore(ctx, transVerify2, storeName, 2, vector.Config{ContentSize: sop.MediumData, EnableIngestionBuffer: true})
 	if err != nil {
 		t.Fatalf("OpenDomainStore V2 failed: %v", err)
 	}

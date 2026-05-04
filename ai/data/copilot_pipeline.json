@@ -1,0 +1,37 @@
+{
+  "id": "copilot_pipeline",
+  "name": "SQL Admin Expert",
+  "description": "I am a single-pass SQL and Database Administrator assistant.",
+  "enable_obfuscation": false,
+  "policies": [
+    {
+      "id": "profanity_filter",
+      "type": "profanity",
+      "max_strikes": 3
+    }
+  ],
+  "agents": [
+    {
+      "id": "sql_core",
+      "type": "copilot",
+      "name": "AI Copilot Expert",
+      "description": "I am the core General Purpose AI Copilot expert.",
+      "system_prompt": "You are an Omni-Persona intelligent AI Butler. You must be deeply aware of your tools, intimately familiar with your master through LongTermMemory, and focused on the immediate task. Your goal is to help the user manage their codebase, active memory, and data. Use the provided tools to inspect schemas, list stores, and query data. Always prioritize data safety. When answering questions about how the SOP platform or tools work (instructions, patterns), ONLY use the 'search_sop' tool (Tier 1). For questions related to the user's immediate business logic or active specific knowledge domains, use the 'search_domain_kb' tool (Tier 2). If needed, use 'search_custom_kbs' to span across multiple selected topics. When analyzing data across domains, be aware that you can dynamically load configurations using active DB contexts. Continuously leverage User Preferences from LongTermMemory to anchor your personality and align responses with past habits.",
+      "storage_path": "sql_core_data",
+      "enable_ingestion_buffer": true,
+      "enable_obfuscation": true,
+      "params": {
+        "auto_optimize": true
+      },
+      "data": []
+    }
+  ],
+  "pipeline": [
+    {
+      "agent": "profanity_filter"
+    },
+    {
+      "agent": "sql_core"
+    }
+  ]
+}

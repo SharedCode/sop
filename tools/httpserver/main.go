@@ -16,7 +16,7 @@ import (
 	"runtime"
 	"sort"
 	"strconv"
-	"sync"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,6 +47,7 @@ type DatabaseConfig struct {
 	Mode          string   `json:"mode"`  // "standalone" or "clustered"
 	RedisURL      string   `json:"redis"` // Optional, for clustered
 	IsSystem      bool     `json:"is_system,omitempty"`
+	Warning       string   `json:"warning,omitempty"` // New field for UI alerting
 
 	// ErasureConfigs stores a list of EC configurations.
 	ErasureConfigs []ErasureConfigEntry `json:"erasure_configs,omitempty"`
@@ -68,7 +69,7 @@ type Config struct {
 	SystemDB       *DatabaseConfig  `json:"system_db,omitempty"`
 	RootPassword   string           `json:"root_password,omitempty"`
 	EnableRestAuth bool             `json:"enable_rest_auth,omitempty"`
-	StubMode       bool             `json:"stub_mode,omitempty"`
+	ProductionMode bool             `json:"production_mode,omitempty"`
 
 	// ObfuscationMode defines the global obfuscation policy (disabled, per_database, all_databases).
 	// This overrides any setting in the agent's own configuration.
@@ -76,6 +77,20 @@ type Config struct {
 
 	// LLMApiKey is the default API key for AI Agents (e.g. Gemini).
 	LLMApiKey string `json:"llm_api_key,omitempty"`
+
+	// New Expanded Options
+	BrainProvider    string `json:"brain_provider,omitempty"`
+	BrainModel       string `json:"brain_model,omitempty"`
+	BrainURL         string `json:"brain_url,omitempty"`
+	BrainAPIKey      string `json:"brain_api_key,omitempty"`
+	EmbedderProvider string `json:"embedder_provider,omitempty"`
+	EmbedderModel    string `json:"embedder_model,omitempty"`
+	EmbedderURL      string `json:"embedder_url,omitempty"`
+	EmbedderAPIKey   string `json:"embedder_api_key,omitempty"`
+
+	// Ollama text embedder specific configuration (legacy fallback)
+	OllamaEmbedderURL   string `json:"ollama_embedder_url,omitempty"`
+	OllamaEmbedderModel string `json:"ollama_embedder_model,omitempty"`
 
 	// Legacy/CLI fields - Ignored in JSON to keep config clean
 	DatabasePath string `json:"-"`
@@ -89,8 +104,7 @@ var content embed.FS
 
 var config Config
 var loadedAgents = make(map[string]ai.Agent[map[string]any])
-var activeSessions = make(map[string]ai.Agent[map[string]any])
-var activeSessionsMu sync.RWMutex
+var activeSessions = NewSessionManager(100)
 
 const SystemDBName = "system"
 
@@ -112,7 +126,7 @@ func main() {
 	flag.StringVar(&config.RedisURL, "redis", "localhost:6379", "Redis URL for clustered mode (e.g. localhost:6379)")
 	flag.IntVar(&config.PageSize, "pageSize", 40, "Number of items to display per page")
 	flag.BoolVar(&config.EnableRestAuth, "enable-rest-auth", false, "Enable Bearer token authentication for REST endpoints")
-	flag.BoolVar(&config.StubMode, "stub", false, "Enable stub mode for AI agents")
+	flag.BoolVar(&config.ProductionMode, "production", false, "Enable Production mode (use real Embedder and LLM)")
 	flag.Parse()
 
 	if showVersion {
@@ -120,13 +134,29 @@ func main() {
 		os.Exit(0)
 	}
 
-	if config.ConfigFile == "" {
-		config.ConfigFile = "config.json"
+	// IMPORTANT: We use a temporary variable (targetConfigPath) instead of assigning directly
+	// to config.ConfigFile here. If we assign directly, config.ConfigFile will not be ""
+	// later on, which breaks the check for entering Setup Mode (len(Databases)==0 && ConfigFile=="").
+	var targetConfigPath = config.ConfigFile
+	if targetConfigPath == "" {
+		if cwd, err := os.Getwd(); err == nil {
+			targetConfigPath = filepath.Join(cwd, "config.json")
+		} else {
+			targetConfigPath = "config.json"
+		}
 	}
 
-	if _, err := os.Stat(config.ConfigFile); err == nil {
-		if err := loadConfig(config.ConfigFile); err != nil {
+	if _, err := os.Stat(targetConfigPath); err == nil {
+		if err := loadConfig(targetConfigPath); err != nil {
 			log.Error(fmt.Sprintf("Failed to load config file: %v", err))
+		} else {
+			if config.ConfigFile == "" {
+				config.ConfigFile = targetConfigPath
+			}
+			log.Info(fmt.Sprintf("Loaded configuration from: %s", targetConfigPath))
+			if len(config.Databases) == 0 && config.SystemDB == nil {
+				log.Warn(fmt.Sprintf("Loaded configuration file '%s' but found 0 databases defined.", targetConfigPath))
+			}
 		}
 	}
 
@@ -165,7 +195,59 @@ func main() {
 		}
 		// Ensure database path exists (basic check)
 		if _, err := os.Stat(config.Databases[i].Path); os.IsNotExist(err) {
-			log.Warn(fmt.Sprintf("Warning: Database path '%s' for '%s' does not exist.", config.Databases[i].Path, config.Databases[i].Name))
+			msg := fmt.Sprintf("Warning: Database '%s' does not exist at path '%s'.", config.Databases[i].Name, config.Databases[i].Path)
+			log.Warn(msg)
+			config.Databases[i].Warning = msg
+		} else {
+			// Check Erasure configs
+			for _, ec := range config.Databases[i].ErasureConfigs {
+				for _, bp := range ec.BasePaths {
+					if _, err := os.Stat(bp); os.IsNotExist(err) {
+						msg := fmt.Sprintf("Warning: EC data path '%s' does not exist for database '%s'.", bp, config.Databases[i].Name)
+						log.Warn(msg)
+						if config.Databases[i].Warning == "" {
+							config.Databases[i].Warning = msg
+						} else {
+							config.Databases[i].Warning += " " + msg
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if config.SystemDB != nil {
+		if abs, err := filepath.Abs(config.SystemDB.Path); err == nil {
+			config.SystemDB.Path = abs
+		}
+		if _, err := os.Stat(config.SystemDB.Path); os.IsNotExist(err) {
+			msg := fmt.Sprintf("Warning: System DB does not exist at path '%s'.", config.SystemDB.Path)
+			log.Warn(msg)
+			config.SystemDB.Warning = msg
+		} else {
+			// Check Erasure config base paths
+			for _, ec := range config.SystemDB.ErasureConfigs {
+				for _, bp := range ec.BasePaths {
+					if _, err := os.Stat(bp); os.IsNotExist(err) {
+						msg := fmt.Sprintf("Warning: System DB EC data path does not exist at '%s'.", bp)
+						log.Warn(msg)
+						if config.SystemDB.Warning == "" {
+							config.SystemDB.Warning = msg
+						} else {
+							config.SystemDB.Warning += " " + msg
+						}
+					}
+				}
+			}
+		}
+	} else if len(config.Databases) > 0 {
+		implicitPath := "."
+		if config.ConfigFile != "" {
+			implicitPath = filepath.Dir(config.ConfigFile)
+		}
+		implPath := filepath.Join(implicitPath, SystemDBName)
+		if _, err := os.Stat(implPath); os.IsNotExist(err) {
+			log.Warn(fmt.Sprintf("Warning: Implicit System DB does not exist at path '%s'.", implPath))
 		}
 	}
 
@@ -174,6 +256,7 @@ func main() {
 	http.HandleFunc("/api/databases", handleDatabases)
 	http.HandleFunc("/api/databases/update", handleUpdateDatabase)
 	http.HandleFunc("/api/stores", handleListStores)
+	http.HandleFunc("/api/knowledge-bases", handleListKnowledgeBases)
 	http.HandleFunc("/api/db/options", handleGetDBOptions)
 	http.HandleFunc("/api/store/info", handleGetStoreInfo)
 	http.HandleFunc("/api/store/update", handleUpdateStoreInfo)
@@ -185,9 +268,22 @@ func main() {
 	http.HandleFunc("/api/store/item/delete", handleDeleteItem)
 	http.HandleFunc("/api/admin/validate", handleValidateAdminToken)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
+	http.HandleFunc("/api/tool/execute", handleToolExecute)
+	http.HandleFunc("/api/ai/session/close", handleCloseSession)
 	http.HandleFunc("/api/ai/feedback", handleAIFeedback)
 	http.HandleFunc("/api/scripts/execute", withAuth(handleExecuteScript))
 
+	// Knowledge Base Endpoints
+	http.HandleFunc("/api/knowledge/available", handleGetAvailableKnowledgeBases)
+	http.HandleFunc("/api/knowledge/categories", handleListKnowledgeCategories)
+	http.HandleFunc("/api/knowledge/category/add", handleAddSpaceCategory)
+	http.HandleFunc("/api/knowledge/category/delete", handleDeleteSpaceCategory)
+	http.HandleFunc("/api/knowledge/items", handleListKnowledgeItems)
+	http.HandleFunc("/api/knowledge/item/add", handleAddSpaceItem)
+	http.HandleFunc("/api/knowledge/item/update", handleUpdateSpaceItem)
+	http.HandleFunc("/api/knowledge/item/delete", handleDeleteSpaceItem)
+	http.HandleFunc("/api/knowledge/preload", handlePreloadKnowledge)
+	http.HandleFunc("/api/tasks/status", handleGetTaskStatus)
 	// Configuration Endpoints
 	http.HandleFunc("/api/config/save", handleSaveConfig)
 	http.HandleFunc("/api/db/init", handleInitDatabase)
@@ -199,8 +295,22 @@ func main() {
 	http.HandleFunc("/api/config/environments/delete", handleDeleteEnvironment)
 	http.HandleFunc("/api/config/llm/update", handleUpdateLLMConfig)
 
-	// Initialize Agents
-	initAgents(context.Background())
+	// Initialize Agents only if we have configured databases
+	// In Setup Mode (no databases), agents shouldn't initialize as the target environment isn't set yet.
+	if len(config.Databases) > 0 || config.SystemDB != nil {
+		initAgents(context.Background())
+	}
+
+	// Start a background goroutine to clean up stale sessions every minute
+	go func() {
+		for {
+			time.Sleep(1 * time.Minute)
+			evicted := activeSessions.RemoveStale(2 * time.Hour) // 2 hour TTL for idle agents
+			if evicted > 0 {
+				log.Info("Background session cleanup evicted stale sessions", "count", evicted)
+			}
+		}
+	}()
 
 	// Start Server
 	addr := fmt.Sprintf(":%d", config.Port)
@@ -438,14 +548,29 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		// to have an Index Specification or CEL Expression. This is useful for testing.
 		"AllowInvalidMapKey": os.Getenv("SOP_ALLOW_INVALID_MAP_KEY") == "true",
 		"HasDemo":            hasDemo,
-		"IsEnterprise":       isEnterprise,
-		"SystemDBName":       SystemDBName,
-		"ConfigFile":         config.ConfigFile,
-		"MinHashMod":         fs.MinimumModValue,
-		"MaxHashMod":         fs.MaximumModValue,
+		"LLMProvider": func() string {
+			if config.BrainProvider != "" {
+				return config.BrainProvider
+			}
+			if os.Getenv("GEMINI_API_KEY") != "" {
+				return "gemini"
+			} else if os.Getenv("OPENAI_API_KEY") != "" {
+				return "openai"
+			} else if os.Getenv("ANTHROPIC_API_KEY") != "" {
+				return "anthropic"
+			} else if os.Getenv("OLLAMA_HOST") != "" {
+				return "ollama"
+			}
+			return "gemini"
+		}(), "IsEnterprise": isEnterprise,
+		"SystemDBName": SystemDBName,
+		"ConfigFile":   config.ConfigFile,
+		"MinHashMod":   fs.MinimumModValue,
+		"MaxHashMod":   fs.MaximumModValue,
 		"Env": map[string]bool{
 			"SOP_ROOT_PASSWORD": os.Getenv("SOP_ROOT_PASSWORD") != "",
-			"GEMINI_API_KEY":    os.Getenv("GEMINI_API_KEY") != "",
+			"LLM_API_KEY":       os.Getenv("LLM_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("ANTHROPIC_API_KEY") != "",
+			"EMBEDDING_API_KEY": os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("VOYAGE_API_KEY") != "" || os.Getenv("EMBEDDING_API_KEY") != "",
 		},
 	}
 	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
@@ -463,12 +588,35 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 		dbs := make([]DatabaseConfig, len(config.Databases))
 		copy(dbs, config.Databases)
 
+		for i := range dbs {
+			if _, err := os.Stat(dbs[i].Path); os.IsNotExist(err) {
+				msg := fmt.Sprintf("Database '%s' does not exist at path '%s'.", dbs[i].Name, dbs[i].Path)
+				if !strings.Contains(dbs[i].Warning, msg) {
+					if dbs[i].Warning == "" {
+						dbs[i].Warning = msg
+					} else {
+						dbs[i].Warning += " " + msg
+					}
+				}
+			}
+		}
+
 		if config.SystemDB != nil {
 			sysDB := *config.SystemDB
 			if sysDB.Name == "" {
 				sysDB.Name = SystemDBName
 			}
 			sysDB.IsSystem = true
+			if _, err := os.Stat(sysDB.Path); os.IsNotExist(err) {
+				msg := fmt.Sprintf("System Database '%s' does not exist at path '%s'.", sysDB.Name, sysDB.Path)
+				if !strings.Contains(sysDB.Warning, msg) {
+					if sysDB.Warning == "" {
+						sysDB.Warning = msg
+					} else {
+						sysDB.Warning += " " + msg
+					}
+				}
+			}
 			dbs = append(dbs, sysDB)
 		} else if len(config.Databases) > 0 {
 			// Backward Compatibility:
@@ -486,12 +634,24 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 				implicitPath = filepath.Dir(config.ConfigFile)
 			}
 
-			dbs = append(dbs, DatabaseConfig{
+			implDB := DatabaseConfig{
 				Name:     SystemDBName,
-				Path:     implicitPath,
+				Path:     filepath.Join(implicitPath, SystemDBName),
 				Mode:     config.Mode,
 				IsSystem: true,
-			})
+			}
+			if _, err := os.Stat(implDB.Path); os.IsNotExist(err) {
+				msg := fmt.Sprintf("System Database '%s' does not exist at path '%s'.", implDB.Name, implDB.Path)
+				if !strings.Contains(implDB.Warning, msg) {
+					if implDB.Warning == "" {
+						implDB.Warning = msg
+					} else {
+						implDB.Warning += " " + msg
+					}
+				}
+			}
+
+			dbs = append(dbs, implDB)
 		}
 
 		json.NewEncoder(w).Encode(dbs)
@@ -772,7 +932,7 @@ func saveConfigFile() {
 	if config.ConfigFile == "" {
 		return
 	}
-	f, err := os.Create(config.ConfigFile)
+	f, err := os.Create(config.ConfigFile + ".tmp")
 	if err != nil {
 		log.Error(fmt.Sprintf("Failed to save config: %v", err))
 		return
@@ -781,6 +941,7 @@ func saveConfigFile() {
 	encoder := json.NewEncoder(f)
 	encoder.SetIndent("", "    ")
 	encoder.Encode(config)
+	os.Rename(config.ConfigFile+".tmp", config.ConfigFile)
 }
 
 func handleUpdateDatabase(w http.ResponseWriter, r *http.Request) {
@@ -899,7 +1060,60 @@ func handleListStores(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	json.NewEncoder(w).Encode(stores)
+	// Filter out component stores generated by AI/Search engines (those containing slashes)
+	// EXCEPT for vector namespaces, which are exposed as Domains/Workspaces in handleListKnowledgeBases.
+	var visibleStores []string
+	for _, s := range stores {
+		if !strings.Contains(s, "/") && !strings.HasSuffix(s, "_vecs") {
+			visibleStores = append(visibleStores, s)
+		}
+	}
+
+	json.NewEncoder(w).Encode(visibleStores)
+}
+
+func handleListKnowledgeBases(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	dbName := r.URL.Query().Get("database")
+	sessionID := r.URL.Query().Get("session_id")
+	ctx := r.Context()
+	dbOpts, err := getDBOptions(ctx, dbName)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	db := aidb.NewDatabase(dbOpts)
+
+	result, err := db.GetDomains(ctx)
+	if err != nil {
+		http.Error(w, "Failed to list playbooks: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Filter out other users' LTMs
+	var filtered []string
+	expectedMemoryPrefix := "memory_"
+	expectedMemoryFull := expectedMemoryPrefix + sessionID
+
+	if result != nil {
+		for _, name := range result {
+			if strings.HasPrefix(name, expectedMemoryPrefix) {
+				if name == expectedMemoryFull {
+					filtered = append(filtered, name)
+				}
+			} else {
+				filtered = append(filtered, name)
+			}
+		}
+	}
+
+	if filtered == nil {
+		// Ensure we output [] instead of null in JSON if no playbooks exist
+		filtered = make([]string, 0)
+	}
+
+	json.NewEncoder(w).Encode(filtered)
 }
 
 func handleGetDBOptions(w http.ResponseWriter, r *http.Request) {
@@ -2325,9 +2539,12 @@ func handleDeleteStore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := database.RemoveBtree(r.Context(), dbOpts, req.StoreName); err != nil {
-		http.Error(w, "Failed to delete store: "+err.Error(), http.StatusInternalServerError)
-		return
+	aiDB := aidb.NewDatabase(dbOpts)
+	if err := aiDB.RemoveKnowledgeBase(r.Context(), req.StoreName); err != nil {
+		if err := database.RemoveBtree(r.Context(), dbOpts, req.StoreName); err != nil {
+			http.Error(w, "Failed to delete store: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -2362,10 +2579,10 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 	}
 
 	// Hardening: Prevent manual modification of critical System DB stores
-	// Users should not manually add items to llm_knowledge as it is managed by the AI/System
-	if IsSystemDB(req.Database) && req.StoreName == "llm_knowledge" {
+	// Users should not manually add items to memory as it is managed by the AI/System
+	if IsSystemDB(req.Database) && req.StoreName == "memory" {
 		if op == "add" {
-			http.Error(w, "Access Denied: The 'llm_knowledge' store is managed by the system. Manual additions are restricted.", http.StatusForbidden)
+			http.Error(w, "Access Denied: The 'memory' store is managed by the system. Manual additions are restricted.", http.StatusForbidden)
 			return
 		}
 	}

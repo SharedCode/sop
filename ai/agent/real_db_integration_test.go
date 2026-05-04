@@ -31,7 +31,7 @@ func TestRealDBIntegration_JoinFlow(t *testing.T) {
 	}
 
 	cfg := Config{}
-	agent := NewDataAdminAgent(cfg, databases, nil)
+	agent := NewCopilotAgent(cfg, databases, nil)
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{

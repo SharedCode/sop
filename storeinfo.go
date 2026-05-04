@@ -19,7 +19,10 @@ type StoreInfo struct {
 	Description string `json:"description" maxLength:"1000"`
 	// RegistryTable is the registry table name.
 	RegistryTable string `json:"registry_table" minLength:"1" maxLength:"140"`
-	// BlobTable is the blob table name or base filesystem path.
+	// BlobTable defines the target Erasure Coding (EC) configuration to use.
+	// The Database Options contain an EC configuration map keyed by a name, and
+	// this field's value is used to look up a match. If no matching entry is found,
+	// it falls back to the default EC config (which uses an empty string key "").
 	BlobTable string `json:"blob_table" minLength:"1" maxLength:"300"`
 	// RootNodeID is the root B-Tree node identifier.
 	RootNodeID UUID `json:"root_node_id"`

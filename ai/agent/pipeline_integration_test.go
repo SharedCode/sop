@@ -54,11 +54,11 @@ func TestServiceIntegration_LastTool(t *testing.T) {
 	// Registry
 	registry := make(map[string]ai.Agent[map[string]any])
 
-	// 3. Create DataAdminAgent (sql_core)
+	// 3. Create CopilotAgent (sql_core)
 	coreCfg := agent.Config{
 		ID:                "sql_core",
 		Name:              "SQL Core",
-		Type:              "data_admin",
+		Type:              "copilot",
 		EnableObfuscation: true, // Enable Obfuscation to match production
 		Verbose:           true,
 		StubMode:          true, // Enable Stub Mode
@@ -66,13 +66,13 @@ func TestServiceIntegration_LastTool(t *testing.T) {
 
 	// We need to manually set the generator for the core agent since NewFromConfig might try to create one
 	// But NewFromConfig creates a new agent.
-	// Let's use NewDataAdminAgent directly to inject the generator easily.
-	coreAgent := agent.NewDataAdminAgent(coreCfg, databases, sysDB)
+	// Let's use NewCopilotAgent directly to inject the generator easily.
+	coreAgent := agent.NewCopilotAgent(coreCfg, databases, sysDB)
 	coreAgent.Open(ctx)
 	coreAgent.SetGenerator(gen)
 	registry["sql_core"] = coreAgent
 
-	// 4. Create Service (sql_admin)
+	// 4. Create Service (copilot)
 	// The Service uses a pipeline.
 	pipeline := []agent.PipelineStep{
 		{
@@ -106,7 +106,7 @@ func TestServiceIntegration_LastTool(t *testing.T) {
 	})
 
 	// Query that should trigger execute_script
-	// "Join users and orders" is a good candidate as per the prompt in DataAdminAgent
+	// "Join users and orders" is a good candidate as per the prompt in CopilotAgent
 	query := "Join users and orders on user_id"
 
 	fmt.Printf("Sending query: %s\n", query)
@@ -160,7 +160,7 @@ type TestToolExecutor struct {
 
 func (e *TestToolExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
 	if agentSvc, ok := e.Agents["sql_core"]; ok {
-		if da, ok := agentSvc.(*agent.DataAdminAgent); ok {
+		if da, ok := agentSvc.(*agent.CopilotAgent); ok {
 			return da.Execute(ctx, tool, args)
 		}
 	}

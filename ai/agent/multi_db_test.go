@@ -58,7 +58,7 @@ func TestMultiDBScriptExecution(t *testing.T) {
 	systemDBOpts := sop.DatabaseOptions{StoresFolders: []string{systemDBPath}}
 	systemDB := database.NewDatabase(systemDBOpts)
 
-	daAgent := NewDataAdminAgent(Config{}, map[string]sop.DatabaseOptions{
+	daAgent := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{
 		"db1": dbOpts1,
 		"db2": dbOpts2,
 	}, systemDB)

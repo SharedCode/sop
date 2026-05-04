@@ -125,9 +125,9 @@ Use these tools via slash(/) commands. Arguments can be positional (e.g. ` + "`/
 		// Delegate to the agent's tool execution to get its list
 
 		// Find the Data Admin agent in the registry
-		var adminAgent *DataAdminAgent
+		var adminAgent *CopilotAgent
 		for _, a := range s.registry {
-			if da, ok := a.(*DataAdminAgent); ok {
+			if da, ok := a.(*CopilotAgent); ok {
 				adminAgent = da
 				break
 			}
@@ -219,6 +219,9 @@ Use these tools via slash(/) commands. Arguments can be positional (e.g. ` + "`/
 		}
 
 		for _, sName := range stores {
+			if strings.Contains(sName, "/") {
+				continue
+			}
 			desc := sName
 			if hasOpts {
 				s, err := jsondb.OpenStore(ctx, dbOpts, sName, tx)
@@ -1070,7 +1073,7 @@ Use these tools via slash(/) commands. Arguments can be positional (e.g. ` + "`/
 	// /list_databases
 	if strings.HasPrefix(query, "/list_databases") {
 		// Call to registry? No registry in s.session. We need s.agent or just use system tools.
-		// But Service wraps DataAdminAgent?
+		// But Service wraps CopilotAgent?
 		// We have access to db via 'db' arg.
 		// Let's implement directly for speed, or call the tool if we can.
 		// Service has no direct access to agent registry from here easily without exposing it.
@@ -1079,7 +1082,7 @@ Use these tools via slash(/) commands. Arguments can be positional (e.g. ` + "`/
 		// But this method 'handleSessionCommand' is on Service.
 		// Let's implement simple queries directly.
 
-		// However, DataAdminAgent is where these are defined.
+		// However, CopilotAgent is where these are defined.
 		// To be DRY, we should invoke the tool.
 		// But handleSessionCommand is called BEFORE tool selection.
 		// If we return handled=true, we handle it.
@@ -1091,7 +1094,7 @@ Use these tools via slash(/) commands. Arguments can be positional (e.g. ` + "`/
 		// We need the data path.
 		// The simplest way: Ask the LLM to do it? No, user wants NO LLM.
 		// We need to implement the logic.
-		// In dataadmin.go: toolListDatabases lists subdirectories of registry.RegistryPath or similar.
+		// In copilot.go: toolListDatabases lists subdirectories of registry.RegistryPath or similar.
 
 		// For now, let's just list what we can see from the active DB connection if possible.
 		// Since we don't have a direct ListDatabases method in the public interface exposed here easily,

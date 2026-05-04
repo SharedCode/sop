@@ -1,0 +1,2133 @@
+{{define "scripts_part01"}}
+<script>
+    window.onerror = function(message, source, lineno, colno, error) {
+        console.error("GLOBAL ERROR CAUGHT:", message, "at", source, ":", lineno, ":", colno);
+        return false; // Let default handler run
+    };
+
+    /* --- Core Frontend Utilities --- */
+    async function apiCall(endpoint, method = 'GET', body = null) {
+        try {
+            const h = { 'Content-Type': 'application/json' };
+            const lStr = localStorage.getItem('sop_ai_config');
+            if (lStr) {
+                try {
+                    const c = JSON.parse(lStr);
+                    if(c.brain_provider) h['X-LLM-Provider'] = c.brain_provider;
+                    if(c.brain_api_key) h['X-LLM-API-Key'] = c.brain_api_key;
+                    if(c.brain_url) h['X-LLM-URL'] = c.brain_url;
+                    if(c.brain_model) h['X-LLM-Model'] = c.brain_model;
+                    if(c.embedder_provider) h['X-Embedder-Provider'] = c.embedder_provider;
+                    if(c.embedder_api_key) h['X-Embedder-API-Key'] = c.embedder_api_key;
+                    if(c.embedder_url) h['X-Embedder-URL'] = c.embedder_url;
+                    if(c.embedder_model) h['X-Embedder-Model'] = c.embedder_model;
+                } catch(e){}
+            }
+
+            const options = {
+                method: method,
+                headers: h
+            };
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+            const response = await fetch(endpoint, options);
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(`API Error (${response.status}): ${text || response.statusText}`);
+            }
+            const json = await response.json();
+            if (json.error) {
+                throw new Error(json.error);
+            }
+            return json;
+        } catch (error) {
+            console.error(`[API Error] ${method} ${endpoint}:`, error);
+            showAlert("Action failed: " + error.message);
+            throw error;
+        }
+    }
+
+    function openUIModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.style.display = 'flex';
+        } else {
+            console.warn("openUIModal: Modal not found ->", modalId);
+        }
+    }
+
+    function closeUIModal(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.style.display = 'none';
+        }
+    }
+
+    /* --- Global Modal Helpers --- */
+    let _confirmCallback = null;
+    let _alertCallback = null;
+
+    function showAlert(message, callback, titleText="Alert", titleColor="") {
+        const titleEl = document.getElementById('global-alert-title');
+        if (titleEl) {
+            titleEl.textContent = titleText;
+            titleEl.style.color = titleColor || "var(--text-color)";
+        }
+        document.getElementById('global-alert-message').textContent = message;
+        _alertCallback = callback;
+        openUIModal('global-alert-modal');
+        // Focus OK button for usability
+        setTimeout(() => document.getElementById('global-alert-modal').querySelector('button').focus(), 50);
+    }
+
+    function closeGlobalAlert() {
+        closeUIModal('global-alert-modal');
+        if (_alertCallback) {
+            _alertCallback();
+            _alertCallback = null;
+        }
+    }
+
+    let _confirmKeyHandler = null;
+
+    function showConfirm(message, onConfirm, onCancel, title="Confirm", okText="OK", cancelText="Cancel") {
+        document.getElementById('global-confirm-title').textContent = title;
+        document.getElementById('global-confirm-message').textContent = message;
+        
+        const okBtn = document.getElementById('global-confirm-ok-btn');
+        const cancelBtn = document.getElementById('global-confirm-cancel-btn');
+
+        okBtn.textContent = okText;
+        cancelBtn.textContent = cancelText;
+
+        // Remove old listeners to avoid stacking
+        const newOk = okBtn.cloneNode(true);
+        okBtn.parentNode.replaceChild(newOk, okBtn);
+        
+        const newCancel = cancelBtn.cloneNode(true);
+        cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+        const cleanup = () => {
+            closeUIModal('global-confirm-modal');
+            if (_confirmKeyHandler) {
+                document.removeEventListener('keydown', _confirmKeyHandler, true);
+                _confirmKeyHandler = null;
+            }
+        };
+
+        newOk.onclick = function() {
+            cleanup();
+            if (onConfirm) onConfirm();
+        };
+
+        newCancel.onclick = function() {
+            cleanup();
+            if (onCancel) onCancel();
+        };
+
+        // Keyboard handling
+        if (_confirmKeyHandler) document.removeEventListener('keydown', _confirmKeyHandler, true);
+        _confirmKeyHandler = function(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                newCancel.click();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                newOk.click();
+            }
+        };
+        document.addEventListener('keydown', _confirmKeyHandler, true);
+
+        openUIModal('global-confirm-modal');
+        setTimeout(() => newOk.focus(), 50);
+    }
+
+    function closeGlobalConfirm() {
+        closeUIModal('global-confirm-modal');
+        if (_confirmKeyHandler) {
+            document.removeEventListener('keydown', _confirmKeyHandler, true);
+            _confirmKeyHandler = null;
+        }
+    }
+
+    function confirmAsync(message, title="Confirm") {
+        return new Promise((resolve) => {
+            showConfirm(message, () => resolve(true), () => resolve(false), title);
+        });
+    }
+    
+    let _promptKeyHandler = null;
+
+    function showPrompt(message, onConfirm, onCancel, title="Prompt", placeholder="", okText="OK", cancelText="Cancel") {
+         document.getElementById('global-prompt-title').textContent = title;
+         document.getElementById('global-prompt-message').textContent = message;
+         
+         const input = document.getElementById('global-prompt-input');
+         input.value = "";
+         input.placeholder = placeholder;
+         
+         const okBtn = document.getElementById('global-prompt-ok-btn');
+         const cancelBtn = document.getElementById('global-prompt-cancel-btn');
+
+         okBtn.textContent = okText;
+         cancelBtn.textContent = cancelText;
+
+         // Remove old listeners
+         const newOk = okBtn.cloneNode(true);
+         okBtn.parentNode.replaceChild(newOk, okBtn);
+         
+         const newCancel = cancelBtn.cloneNode(true);
+         cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+
+         const cleanup = () => {
+             closeUIModal('global-prompt-modal');
+             if (_promptKeyHandler) {
+                 document.removeEventListener('keydown', _promptKeyHandler, true);
+                 _promptKeyHandler = null;
+             }
+         };
+
+         newOk.onclick = function() {
+             const val = input.value;
+             cleanup();
+             if (onConfirm) onConfirm(val);
+         };
+
+         newCancel.onclick = function() {
+             cleanup();
+             if (onCancel) onCancel();
+         };
+
+        // Keyboard handling
+        if (_promptKeyHandler) document.removeEventListener('keydown', _promptKeyHandler, true);
+        _promptKeyHandler = function(e) {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                e.stopPropagation();
+                newCancel.click();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                e.stopPropagation();
+                newOk.click();
+            }
+        };
+        document.addEventListener('keydown', _promptKeyHandler, true);
+
+        openUIModal('global-prompt-modal');
+        setTimeout(() => input.focus(), 50);
+    }
+    
+    function promptAsync(message, title="Prompt") {
+         return new Promise((resolve) => {
+             showPrompt(message, (val) => resolve(val), () => resolve(null), title);
+         });
+    }
+    
+    // Override native alert to use our themed custom modal
+    window.alert = function(msg) { showAlert(msg); };
+
+    // Escape Key Handler for Modals (KeyDown)
+    document.addEventListener('keydown', function(event) {
+        if (event.key === "Escape") {
+            const modals = [
+                // Topmost Priority
+                'global-alert-modal',
+                'global-confirm-modal',
+                'confirm-modal', 
+                
+                // Specific Modals
+                'preferences-modal', 
+                'script-modal', 
+                'add-store-modal',
+                'store-details-modal',
+                'cel-modal',
+                'column-modal', 
+                'add-modal', 
+                
+                // Environment/DB Managers
+                'delete-env-modal',
+                'add-database-modal',
+                'delete-database-modal',
+                'environments-modal',
+                'switch-env-modal',
+                
+                // Spaces
+                'add-kb-modal'
+                // NOTE: setup-wizard moved to keyup handler to prevent confirmation dialog conflict
+            ];
+            
+            for (const id of modals) {
+                const el = document.getElementById(id);
+                // check if the element exists and is visible (display matching flex or block)
+                if (el && el.style.display !== 'none' && el.style.display !== '') {
+                    
+                    event.preventDefault(); 
+                    event.stopImmediatePropagation();
+
+                    // Specific close functions handling
+                    if (id === 'add-modal') closeAdd();
+                    else if (id === 'add-kb-modal') closeAddKBModal();
+                    else if (id === 'global-alert-modal') closeGlobalAlert();
+                    else if (id === 'global-confirm-modal') closeGlobalConfirm();
+                    else if (id === 'preferences-modal') closePreferences();
+                    else if (id === 'script-modal') closeScriptModal();
+                    else if (id === 'add-store-modal') closeAddStoreModal();
+                    else if (id === 'store-details-modal') closeStoreDetailsModal();
+                    else if (id === 'cel-modal') closeCelModal();
+                    else if (id === 'delete-env-modal') closeDeleteEnvModal();
+                    else if (id === 'add-database-modal') closeAddDatabaseModal();
+                    else if (id === 'delete-database-modal') closeDeleteDatabaseModal();
+                    else if (id === 'environments-modal') closeEnvironmentsManager();
+                    else if (id === 'switch-env-modal') closeSwitchEnvModal();
+                    else el.style.display = 'none'; // Default fallback
+                    
+                    return; // Stop processing other modals
+                }
+            }
+        }
+    });
+
+    // Dedicated KeyUp Listener for Setup Wizard (prevents double-triggering confirmation)
+    document.addEventListener('keyup', function(event) {
+        if (event.key === "Escape") {
+            const wizard = document.getElementById('setup-wizard');
+            if (wizard && wizard.style.display !== 'none' && wizard.style.display !== '') {
+                // Ensure no other modal is covering it (simple check)
+                 if(document.getElementById('global-alert-modal').style.display === 'flex') return;
+                 if(document.getElementById('global-confirm-modal').style.display === 'flex') return;
+                 
+                 event.preventDefault();
+                 event.stopImmediatePropagation();
+                 wizardCancel();
+            }
+        }
+    });
+
+    let currentDatabase = null;
+    let currentSessionID = "";
+    let currentStore = null;
+    let firstKey = null;
+    let lastKey = null;
+    let currentStoreInfo = null;
+    let currentItemKey = null;
+    
+    const CURRENT_CONFIG_FILE = "{{ .ConfigFile }}";
+
+    // Environment Flags
+    // ALLOW_INVALID_MAP_KEY: If true, allows saving a store with Map Key type without
+    // requiring an Index Specification or CEL Expression. Controlled by SOP_ALLOW_INVALID_MAP_KEY env var.
+    const ALLOW_INVALID_MAP_KEY = {{ .AllowInvalidMapKey }};
+    const IS_ENTERPRISE = {{ .IsEnterprise }};
+    const SYSTEM_DB_NAME = "{{ .SystemDBName }}";
+    
+    // Dropdown Logic for Enterprise Mode
+    function toggleDbDropdown() {
+        const menu = document.getElementById('db-dropdown-menu');
+        if (menu.style.display === 'block') {
+            menu.style.display = 'none';
+        } else {
+            menu.style.display = 'block';
+        }
+    }
+
+    // Close Dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+        const chip = document.getElementById('db-chip');
+        const menu = document.getElementById('db-dropdown-menu');
+        if (chip && menu && !chip.contains(event.target) && !menu.contains(event.target)) {
+            menu.style.display = 'none';
+        }
+    });
+
+    let currentItems = [];
+    let currentKeyColumnWidth = '45%';
+    let columnWidths = [];
+    let availableDatabases = [];
+    const CHIP_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M5 0a.5.5 0 0 1 .5.5V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2h1V.5a.5.5 0 0 1 1 0V2A2.5 2.5 0 0 1 14 4.5h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14v1h1.5a.5.5 0 0 1 0 1H14a2.5 2.5 0 0 1-2.5 2.5v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14h-1v1.5a.5.5 0 0 1-1 0V14A2.5 2.5 0 0 1 2 11.5H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2v-1H.5a.5.5 0 0 1 0-1H2A2.5 2.5 0 0 1 4.5 2V.5A.5.5 0 0 1 5 0zm-.5 3A1.5 1.5 0 0 0 3 4.5v7A1.5 1.5 0 0 0 4.5 13h7a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 11.5 3h-7zM5 6.5A1.5 1.5 0 0 1 6.5 5h3A1.5 1.5 0 0 1 11 6.5v3A1.5 1.5 0 0 1 9.5 11h-3A1.5 1.5 0 0 1 5 9.5v-3z"/></svg>`;
+
+    // Load Databases on Start
+    // Refactored into a reusable function to support dynamic database switching
+    window.reloadDatabases = function(autoSelect = true) {
+        return apiCall('/api/databases')
+            .then(databases => {
+                availableDatabases = databases;
+
+                // Build a warning alert for missing databases
+                let warnings = [];
+                if (databases && databases.length > 0) {
+                    databases.forEach(db => {
+                        if (db.warning) {
+                            warnings.push("• " + db.warning);
+                        }
+                    });
+                }
+                if (warnings.length > 0) {
+                    showAlert("SOP Configuration Missing Database Paths:\n\n" + warnings.join("\n"), null, "Alert", "red");
+                }
+                
+                if (!databases || databases.length === 0) {
+                    const select = document.getElementById('database-select');
+                    select.innerHTML = '';
+                    const opt = document.createElement('option');
+                    opt.textContent = "No databases found";
+                    select.appendChild(opt);
+
+                    openUIModal('database-section', 'block');
+                    
+                    // Disable UI elements when no databases exist
+                    const btnAddDb = document.getElementById('btn-add-database');
+                    if(btnAddDb) {
+                        btnAddDb.style.opacity = '0.3';
+                        btnAddDb.style.pointerEvents = 'none';
+                    }
+                    const btnAddStore = document.getElementById('btn-add-store');
+                    if(btnAddStore) {
+                        btnAddStore.style.opacity = '0.3';
+                        btnAddStore.style.pointerEvents = 'none';
+                    }
+                    const btnChat = document.getElementById('chat-toggle-btn');
+                    if(btnChat) {
+                        btnChat.style.display = 'none';
+                    }
+                    
+                    // Check if we should suppress the wizard (e.g. redirected after cancel)
+                    if (sessionStorage.getItem('sop_suppress_wizard_once')) {
+                        sessionStorage.removeItem('sop_suppress_wizard_once');
+
+                        // Check if we also need to open the Environment Manager (Post-Cancel)
+                        if (sessionStorage.getItem('sop_open_env_manager')) {
+                            sessionStorage.removeItem('sop_open_env_manager');
+                            showEnvironmentsManager();
+                        }
+                        return;
+                    }
+                    
+                    showSetupWizard();
+                    return;
+                }
+                
+                openUIModal('database-section', 'block');
+
+                const userDBs = databases.filter(db => !db.is_system);
+                const systemDBs = databases.filter(db => db.is_system);
+
+                if (IS_ENTERPRISE) {
+                    // Enterprise Mode: Use Chip UI
+                    closeUIModal('database-select');
+                    openUIModal('enterprise-db-container', 'block');
+                    
+                    const menu = document.getElementById('db-dropdown-menu');
+                    menu.innerHTML = '';
+                    
+                    // Add User DBs
+                    userDBs.forEach(db => {
+                        const item = document.createElement('div');
+                        item.className = 'db-option';
+                        if (db.warning) {
+                            item.textContent = `❌ ${db.name} (Missing Database)`;
+                            item.style.color = "red";
+                            item.style.cursor = "not-allowed";
+                            item.onclick = null; // Do nothing if clicked
+                        } else {
+                            item.textContent = db.name;
+                            item.onclick = function() {
+                                selectDatabase(db.name);
+                                document.getElementById('db-chip-label').textContent = db.name;
+                                // User DB: Hide Icon
+                                const icon = document.getElementById('db-chip-icon');
+                                if (icon) icon.style.display = 'none';
+                                toggleDbDropdown();
+                            };
+                        }
+                        menu.appendChild(item);
+                    });
+                    
+                    if (userDBs.length > 0 && systemDBs.length > 0) {
+                        const sep = document.createElement('div');
+                         sep.style.borderTop = "1px solid var(--border-color)";
+                         sep.style.margin = "4px 0";
+                         menu.appendChild(sep);
+                    }
+                    
+                    // Add System DBs
+                    systemDBs.forEach(db => {
+                        const item = document.createElement('div');
+                        item.className = 'db-option';
+                        item.style.fontWeight = "bold";
+                        // item.style.display = "flex"; // Ensure flex via CSS or inline for icon alignment
+                        if (db.warning) {
+                            item.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;">❌ ${db.name} (Missing Database)</span>`;
+                            item.style.color = "red";
+                            item.style.cursor = "not-allowed";
+                            item.onclick = null; // Do nothing if clicked
+                        } else {
+                            item.innerHTML = `<span style="display:inline-flex; align-items:center; gap:6px;">${CHIP_ICON_SVG} ${db.name}</span>`;
+                            item.onclick = function() {
+                                selectDatabase(db.name);
+                                document.getElementById('db-chip-label').textContent = db.name;
+                                 // Toggle icon based on type (System)
+                                const icon = document.getElementById('db-chip-icon');
+                                if (icon) icon.style.display = 'inline';
+                                toggleDbDropdown();
+                            };
+                        }
+                        menu.appendChild(item);
+                    });
+                    
+                } else {
+                     // Standard Mode: Use <select>
+                     openUIModal('database-select', 'block');
+                     closeUIModal('enterprise-db-container');
+                     
+                    const select = document.getElementById('database-select');
+                    select.innerHTML = '';
+
+                    userDBs.forEach(db => {
+                        const opt = document.createElement('option');
+                        opt.value = db.name;
+                        if (db.warning) {
+                            opt.textContent = `❌ ${db.name} (Missing Database)`;
+                            opt.disabled = true;
+                            opt.style.color = "red";
+                        } else {
+                            opt.textContent = db.name;
+                        }
+                        select.appendChild(opt);
+                    });
+
+                    if (systemDBs.length > 0) {
+                        if (userDBs.length > 0) {
+                            const separator = document.createElement('option');
+                            separator.disabled = true;
+                            separator.textContent = "──────────";
+                            select.appendChild(separator);
+                        }
+                        systemDBs.forEach(db => {
+                            const opt = document.createElement('option');
+                            opt.value = db.name;
+                            if (db.warning) {
+                                opt.textContent = `❌ ${db.name} (Missing Database)`;
+                                opt.disabled = true;
+                                opt.style.color = "red";
+                            } else {
+                                // Standard System Red
+                                opt.style.color = "var(--danger-bg)"; 
+                                opt.textContent = "⚠️ " + db.name;
+                            }
+                            opt.className = "option-system";
+                            opt.style.fontWeight = "bold";
+                            select.appendChild(opt);
+                        });
+                    }
+                }
+
+                if (autoSelect) {
+                    // Persistence Logic
+                    const savedDB = localStorage.getItem('sop_current_database');
+                    const targetDB = databases.find(d => d.name === savedDB);
+                    
+                    let finalDBVal = null;
+
+                    if (targetDB) {
+                        finalDBVal = targetDB.name;
+                    } else if (userDBs.length > 0) {
+                        finalDBVal = userDBs[0].name;
+                    } else if (systemDBs.length > 0) {
+                        finalDBVal = systemDBs[0].name;
+                    }
+                    
+                    if (finalDBVal) {
+                         selectDatabase(finalDBVal);
+                         // Update UI States
+                         if (IS_ENTERPRISE) {
+                             let label = finalDBVal;
+                             const finalDB = databases.find(d => d.name === finalDBVal);
+                             document.getElementById('db-chip-label').textContent = label;
+                             
+                             // Toggle Icon for Initial Load
+                             const icon = document.getElementById('db-chip-icon');
+                             if (icon) {
+                                 icon.style.display = (finalDB && finalDB.is_system) ? 'inline' : 'none';
+                             }
+                         } else {
+                             document.getElementById('database-select').value = finalDBVal;
+                         }
+                    }
+                }
+            })
+            .catch(err => {
+                console.error(err);
+                document.getElementById('database-select').innerHTML = '<option>Error loading databases</option>';
+                openUIModal('database-section', 'block');
+            });
+    };
+
+    // Initial Load
+    reloadDatabases(true).then(() => {
+        // Initialization handled during setup wizard now
+    });
+
+    async function selectDatabase(name, forceRefresh = false, storeToSelect = null) {
+        if (!forceRefresh && currentDatabase === name) return;
+
+        // Check for unsaved changes
+        if (!await closeDetail()) {
+            // Revert selection
+            const select = document.getElementById('database-select');
+            if (select && currentDatabase) {
+                select.value = currentDatabase;
+            }
+            return;
+        }
+
+        currentDatabase = name;
+        localStorage.setItem('sop_current_database', name);
+
+        // Hardening: Hide Add Store button for System DB / System DBs
+        const dbObj = availableDatabases.find(d => d.name === name);
+        const btnAddStore = document.getElementById('btn-add-store');
+        // Define isSystemDB locally so we can reuse it in the store listing
+        const isSystemDB = (dbObj && dbObj.is_system) || name === 'system' || name === 'system_db';
+
+        if (btnAddStore) {
+            // Check implicit system names too just in case is_system missing
+            if (isSystemDB) {
+                 btnAddStore.style.display = 'none';
+            } else {
+                 btnAddStore.style.display = 'inline-block';
+            }
+        }
+
+        currentStore = null;
+        document.getElementById('store-list').innerHTML = '<li>Loading...</li>';
+        document.getElementById('current-store-title').textContent = 'Select Store or Context Space';
+        
+        // Hide all store-specific buttons
+        closeUIModal('btn-delete-store');
+        closeUIModal('btn-code-store');
+        closeUIModal('btn-edit-store');
+        closeUIModal('btn-view-store');
+        closeUIModal('btn-edit-cel');
+
+        document.getElementById('data-grid').innerHTML = '';
+        closeUIModal('toolbar');
+        closeUIModal('pagination');
+        closeUIModal('pagination-top');
+        
+        // Reset DB Options
+        document.getElementById('db-options-section').style.display = 'none';
+        document.getElementById('db-options-content').innerHTML = 'Loading...';
+        
+        fetch(`/api/stores?database=${encodeURIComponent(name)}`)
+            .then(res => res.json())
+            .then(stores => {
+                const list = document.getElementById('store-list');
+                list.innerHTML = '';
+                if (!stores || stores.length === 0) {
+                    list.innerHTML = '<li>No stores found</li>';
+                    return;
+                }
+                stores.forEach(store => {
+                    const li = document.createElement('li');
+                    li.textContent = store.charAt(0).toUpperCase() + store.slice(1);
+                    li.onclick = () => selectStore(store, li);
+                    list.appendChild(li);
+
+                    if (storeToSelect && store === storeToSelect) {
+                        selectStore(store, li);
+                    }
+                });
+            })
+            .catch(err => {
+                const list = document.getElementById('store-list');
+                list.innerHTML = `<li class="error-text">Error: ${err.message}</li>`;
+            });
+
+        // Fetch Spaces
+        fetch(`/api/knowledge-bases?database=${encodeURIComponent(name)}&session_id=${encodeURIComponent(currentSessionID)}`)
+            .then(res => res.json())
+            .then(kbs => {
+                const kbList = document.getElementById('kb-list');
+                const domainSelect = document.getElementById('domain-select');
+                
+                kbList.innerHTML = '';
+                
+                if (domainSelect) {
+                    Array.from(domainSelect.options).forEach(opt => {
+                        if (opt.getAttribute('data-dynamic') === 'true') {
+                            domainSelect.removeChild(opt);
+                        }
+                    });
+                }
+                
+                if (!kbs || kbs.length === 0) {
+                    kbList.innerHTML = '<li>No Spaces found</li>';
+                    return;
+                }
+                kbs.forEach(kb => {
+                    const li = document.createElement('li');
+                    li.textContent = kb.charAt(0).toUpperCase() + kb.slice(1);
+                    li.onclick = () => selectSpace(kb, li);
+                    kbList.appendChild(li);
+                    
+                    if (storeToSelect && kb === storeToSelect) {
+                        setTimeout(() => selectSpace(kb, li), 50);
+                    }
+                    
+                    if (domainSelect) {
+                        const existing = Array.from(domainSelect.options).find(o => o.value === kb);
+                        if (!existing) {
+                            const opt = document.createElement('option');
+                            opt.value = kb;
+                            opt.textContent = kb.charAt(0).toUpperCase() + kb.slice(1);
+                            opt.setAttribute('data-dynamic', 'true');
+                            domainSelect.appendChild(opt);
+                        }
+                    }
+                });
+            })
+            .catch(err => {
+                const kbList = document.getElementById('kb-list');
+                kbList.innerHTML = `<li class="error-text">Error: ${err.message}</li>`;
+            });
+
+        // Fetch DB Options
+        fetch(`/api/db/options?database=${encodeURIComponent(name)}`)
+            .then(res => res.json())
+            .then(opts => {
+                const section = document.getElementById('db-options-section');
+                const content = document.getElementById('db-options-content');
+                section.style.display = 'block';
+                
+                let html = '';
+                
+                // Display Mode (Type)
+                // L2CacheType: 2=Redis (Clustered), others (0=NoCache, 1=InMemory) = Standalone
+                const typeStr = (opts.cache_type === 2) ? "Clustered" : "Standalone";
+                html += `<div style="margin-bottom: 5px;"><strong>Type:</strong> ${typeStr}</div>`;
+
+                if (opts.stores_folders && opts.stores_folders.length > 0) {
+                    html += '<strong>Stores Folders:</strong><ul style="margin: 0; padding-left: 20px; list-style-type: disc;">';
+                    opts.stores_folders.forEach(f => {
+                        // Shorten path logic:
+                        // Only shorten if length > 27 characters
+                        let shortPath = f;
+                        if (f.length > 27) {
+                            // Split by / or \
+                            const parts = f.split(/[/\\]/).filter(p => p.length > 0);
+                            if (parts.length > 2) {
+                                shortPath = '../' + parts[parts.length - 2] + '/' + parts[parts.length - 1];
+                            }
+                        }
+                        
+                        // Escape for JS string
+                        const safePath = f.replace(/\\/g, '\\\\').replace(/\u0027/g, "\\'");
+                        
+                        html += `<li style="cursor: copy; padding: 2px 0;" 
+                                     title="${f} (Click to Copy)"
+                                     onclick="navigator.clipboard.writeText('${safePath}').then(() => { const el = this; const orig = el.style.color; el.style.color = '#4caf50'; setTimeout(() => el.style.color = orig, 500); });">
+                                    ${shortPath}
+                                 </li>`;
+                    });
+                    html += '</ul>';
+                }
+                
+                if (opts.erasure_config && Object.keys(opts.erasure_config).length > 0) {
+                    html += '<details><summary style="cursor: pointer; font-weight: bold; margin-bottom: 5px;">Erasure Config</summary><pre style="margin: 0; font-size: 10px; overflow-x: visible;">' + JSON.stringify(opts.erasure_config, null, 2) + '</pre></details>';
+                }
+
+                if (opts.redis_config) {
+                    html += '<details><summary style="cursor: pointer; font-weight: bold; margin-bottom: 5px;">Redis Config</summary><pre style="margin: 0; font-size: 10px; overflow-x: visible;">' + JSON.stringify(opts.redis_config, null, 2) + '</pre></details>';
+                }
+                
+                if (!html) {
+                    html = 'No specific options found.';
+                }
+                content.innerHTML = html;
+            })
+            .catch(err => {
+                console.error("Failed to fetch DB options", err);
+                document.getElementById('db-options-content').innerHTML = '<span class="error-text">Failed to load options</span>';
+                document.getElementById('db-options-section').style.display = 'block';
+            });
+    }
+
+    function isSpaceReadOnly(spaceName, databaseName) {
+        if (!spaceName) return false;
+        
+        // System DB check
+        const dbObj = availableDatabases && databaseName ? availableDatabases.find(d => d.name === databaseName) : null;
+        const isSystem = (dbObj && dbObj.is_system) || databaseName === 'system' || databaseName === 'system_db';
+
+        // Current rule: SOP and LongTermMemory (memory_...) KBs are read-only in System DB
+        if (isSystem && (spaceName.startsWith('memory_') || spaceName === 'SOP/data' || spaceName === 'SOP' || spaceName === 'Medical')) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    window.toggleDomainItemDesc = function(link) {
+        const parent = link.closest('.item-content-wrapper') || link.parentElement.parentElement;
+        const shortSpan = parent.querySelector('.desc-short');
+        const fullSpan = parent.querySelector('.desc-full');
+        // Edit button remains visible regardless of read more/less mode
+        
+        if (shortSpan.style.display === 'none') { 
+            // Switching back to read less mode
+            fullSpan.style.display = 'none';
+            shortSpan.style.display = 'inline';
+            link.innerText = 'Read More';
+            // Clean up any active edit areas
+            const editArea = parent.querySelector('.edit-item-area');
+            if (editArea) editArea.remove();
+            const editActions = parent.querySelector('.edit-actions');
+            if (editActions) editActions.remove();
+        } else { 
+            // Switching to read more mode
+            shortSpan.style.display = 'none';
+            fullSpan.style.display = 'inline';
+            link.innerText = 'Read Less';
+        }
+    }
+    // Create Modal logic inside editDomainItemInline
+    window.editDomainItemInline = function(link, itemId, categoryId, categoryName, existingSummariesStr) {
+        const parent = link.closest('.item-content-wrapper') || link.parentElement.parentElement;
+        const shortSpan = parent.querySelector('.desc-short');
+        const fullSpan = parent.querySelector('.desc-full');
+        let fullText = fullSpan.innerText;
+        
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.background = 'rgba(0,0,0,0.6)';
+        overlay.style.zIndex = '10000';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+
+        // Create modal box
+        const modal = document.createElement('div');
+        modal.style.background = 'var(--bg-color)';
+        modal.style.padding = '20px';
+        modal.style.borderRadius = '8px';
+        modal.style.width = '70%';
+        modal.style.maxWidth = '900px';
+        modal.style.height = '65%';
+        modal.style.display = 'flex';
+        modal.style.flexDirection = 'column';
+        modal.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
+
+        const titleObj = document.createElement('h3');
+        titleObj.style.marginTop = '0';
+        titleObj.style.color = 'var(--text-color)';
+        
+        const readonly = isSpaceReadOnly(currentStore, currentDatabase);
+        titleObj.innerText = readonly ? (categoryName ? 'View ' + categoryName + ' Details' : 'View Details') : (categoryName ? 'Edit ' + categoryName + ' content' : 'Edit Item content');
+        
+        // Create Summaries input
+        const summLbl = document.createElement('label');
+        summLbl.innerText = 'Summaries (Comma separated for distinct logic vectors):';
+        summLbl.style.marginTop = '10px';
+        summLbl.style.fontSize = '0.9em';
+
+        const summInput = document.createElement('input');
+        summInput.type = 'text';
+        summInput.value = existingSummariesStr || '';
+        summInput.style.width = '100%';
+        summInput.style.background = 'var(--input-bg)';
+        summInput.style.color = 'var(--text-color)';
+        summInput.style.border = '1px solid var(--border-color)';
+        summInput.style.padding = '10px';
+        summInput.style.borderRadius = '4px';
+        summInput.style.boxSizing = 'border-box';
+        summInput.style.marginBottom = '10px';
+        if (readonly) {
+            summInput.readOnly = true;
+        }
+
+        const descLbl = document.createElement('label');
+        descLbl.innerText = 'Content/Description:';
+        descLbl.style.fontSize = '0.9em';
+
+        // Create textarea
+        const ta = document.createElement('textarea');
+        ta.value = fullText || '';
+        ta.style.flex = '1';
+        ta.style.width = '100%';
+        ta.style.background = 'var(--input-bg)';
+        ta.style.color = 'var(--text-color)';
+        ta.style.border = '1px solid var(--border-color)';
+        ta.style.borderRadius = '4px';
+        ta.style.padding = '12px';
+        ta.style.boxSizing = 'border-box';
+        ta.style.fontFamily = 'inherit';
+        ta.style.fontSize = '1em';
+        ta.style.marginBottom = '20px';
+        ta.style.resize = 'none';
+        if (readonly) {
+            ta.readOnly = true;
+        }
+
+        // Create action buttons container
+        // actionContainer logic replaced below
+
+        const saveBtn = document.createElement('button');
+        saveBtn.innerText = 'Save';
+        saveBtn.style.background = 'var(--active-bg)';
+        saveBtn.style.color = '#fff';
+        saveBtn.style.border = 'none';
+        saveBtn.style.padding = '8px 20px';
+        saveBtn.style.borderRadius = '4px';
+        saveBtn.style.cursor = 'pointer';
+        saveBtn.style.marginLeft = '10px';
+        saveBtn.style.fontSize = '1em';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.innerText = readonly ? 'Close' : 'Cancel';
+        cancelBtn.style.background = 'transparent';
+        cancelBtn.style.color = 'var(--text-color)';
+        cancelBtn.style.border = '1px solid var(--border-color)';
+        cancelBtn.style.padding = '8px 20px';
+        cancelBtn.style.borderRadius = '4px';
+        cancelBtn.style.cursor = 'pointer';
+        cancelBtn.style.fontSize = '1em';
+
+        const summarizeBtn = document.createElement('button');
+        summarizeBtn.innerText = '✨ Summarize with LLM (WIP)';
+        summarizeBtn.style.background = '#8a2be2';
+        summarizeBtn.style.color = '#fff';
+        summarizeBtn.style.border = 'none';
+        summarizeBtn.style.padding = '8px 15px';
+        summarizeBtn.style.borderRadius = '4px';
+        summarizeBtn.style.cursor = 'pointer';
+        summarizeBtn.style.marginRight = 'auto'; // push other buttons to right
+        summarizeBtn.style.fontSize = '0.9em';
+        summarizeBtn.onclick = () => {
+            alert('LLM Summarization feature is coming soon!');
+        };
+
+        // Create action buttons container
+        const actionContainer = document.createElement('div');
+        actionContainer.style.display = 'flex';
+        actionContainer.style.justifyContent = 'space-between';
+        
+        const rightBtns = document.createElement('div');
+        rightBtns.appendChild(cancelBtn);
+        if (!readonly) rightBtns.appendChild(saveBtn);
+        
+        if (!readonly) actionContainer.appendChild(summarizeBtn);
+        actionContainer.appendChild(rightBtns);
+
+        // Cleanup function
+        function cleanUp() {
+            document.body.removeChild(overlay);
+        }
+
+        saveBtn.onclick = () => {
+            const newVal = ta.value;
+            const newSummVal = summInput.value;
+            let summArr = [];
+            if (newSummVal) {
+                summArr = newSummVal.split(',').map(s => s.trim()).filter(s => s.length > 0);
+            }
+
+            inlineUpdateItem(itemId, categoryId, {chunk: newVal, text: newVal, description: newVal}, summArr);
+            fullSpan.innerText = newVal;
+            if (shortSpan) {
+                const shortTxt = newVal.length > 150 ? newVal.substring(0, 150) + "..." : newVal;
+                shortSpan.innerHTML = shortTxt.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+            cleanUp();
+        };
+
+        cancelBtn.onclick = cleanUp;
+
+        modal.appendChild(titleObj);
+        modal.appendChild(summLbl);
+        modal.appendChild(summInput);
+        modal.appendChild(descLbl);
+        modal.appendChild(ta);
+        modal.appendChild(actionContainer);
+        overlay.appendChild(modal);
+
+        document.body.appendChild(overlay);
+        ta.focus();
+    };
+
+    window.inlineUpdateItem = async function(id, categoryId, data, summaries) {
+        const kbNameDisplay = window.currentStore ? window.currentStore.replace('/data', '') : (currentStore ? currentStore.replace('/data', '') : '');
+        const dbNameDisplay = window.currentDatabase || currentDatabase || '';
+        try {
+            const payload = {id: id, category_id: categoryId, data: data};
+            if (summaries && summaries.length > 0) {
+                 payload.summaries = summaries;
+            }
+            const res = await fetch(`/api/knowledge/item/update?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            });
+            if (!res.ok) console.error('Failed to inline update item');
+        } catch(e) {
+            console.error(e);
+        }
+    };
+
+    window.editCategoryModal = function(cat, spaceName) {
+        const readonly = isSpaceReadOnly(spaceName, currentDatabase);
+
+        // Create overlay
+        const overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100vw';
+        overlay.style.height = '100vh';
+        overlay.style.background = 'rgba(0,0,0,0.6)';
+        overlay.style.zIndex = '10000';
+        overlay.style.display = 'flex';
+        overlay.style.alignItems = 'center';
+        overlay.style.justifyContent = 'center';
+
+        // Create modal box
+        const modal = document.createElement('div');
+        modal.style.background = 'var(--bg-color)';
+        modal.style.padding = '20px';
+        modal.style.borderRadius = '8px';
+        modal.style.width = '500px';
+        modal.style.maxWidth = '90%';
+        modal.style.display = 'flex';
+        modal.style.flexDirection = 'column';
+        modal.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
+
+        const titleObj = document.createElement('h3');
+        titleObj.innerText = readonly ? 'View Category' : 'Edit Category';
+        titleObj.style.marginTop = '0';
+        titleObj.style.color = 'var(--text-color)';
+        
+        // Name input
+        const nameLabel = document.createElement('label');
+        nameLabel.innerText = 'Category Name:';
+        nameLabel.style.color = 'var(--text-color)';
+        nameLabel.style.marginTop = '10px';
+        nameLabel.style.fontSize = '0.9em';
+        
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = cat.name || '';
+        nameInput.style.width = '100%';
+        nameInput.style.background = 'var(--input-bg)';
+        nameInput.style.color = 'var(--text-color)';
+        nameInput.style.border = '1px solid var(--border-color)';
+        nameInput.style.padding = '8px';
+        nameInput.style.borderRadius = '4px';
+        nameInput.style.boxSizing = 'border-box';
+        nameInput.style.marginTop = '5px';
+        if (readonly) {
+            nameInput.readOnly = true;
+        }
+
+        // Description input
+        const descLabel = document.createElement('label');
+        descLabel.innerText = 'Description:';
+        descLabel.style.color = 'var(--text-color)';
+        descLabel.style.marginTop = '15px';
+        descLabel.style.fontSize = '0.9em';
+        
+        const descInput = document.createElement('textarea');
+        descInput.value = cat.description || '';
+        descInput.style.width = '100%';
+        descInput.style.height = '100px';
+        descInput.style.background = 'var(--input-bg)';
+        descInput.style.color = 'var(--text-color)';
+        descInput.style.border = '1px solid var(--border-color)';
+        descInput.style.padding = '8px';
+        descInput.style.borderRadius = '4px';
+        descInput.style.boxSizing = 'border-box';
+        descInput.style.marginTop = '5px';
+        descInput.style.resize = 'vertical';
+        if (readonly) {
+            descInput.readOnly = true;
+        }
+
+        // Read-only Vector info (if any)
+        const sysLabel = document.createElement('div');
+        sysLabel.style.marginTop = '15px';
+        sysLabel.style.fontSize = '0.8em';
+        sysLabel.style.color = 'var(--link-color)';
+        
+        let extraInfo = '';
+        if (cat.center_vector && cat.center_vector.length > 0) {
+            extraInfo += `<span><strong>Vector Length:</strong> ${cat.center_vector.length} dimensions</span><br/>`;
+        }
+        if (cat.item_count !== undefined) {
+             extraInfo += `<span><strong>Items Count:</strong> ${cat.item_count}</span><br/>`;
+        }
+        sysLabel.innerHTML = extraInfo;
+
+        // Action Buttons
+        const actionContainer = document.createElement('div');
+        actionContainer.style.textAlign = 'right';
+        actionContainer.style.marginTop = '20px';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.innerText = 'Save';
+        saveBtn.style.background = 'var(--active-bg)';
+        saveBtn.style.color = '#fff';
+        saveBtn.style.border = 'none';
+        saveBtn.style.padding = '8px 20px';
+        saveBtn.style.borderRadius = '4px';
+        saveBtn.style.cursor = 'pointer';
+        saveBtn.style.marginLeft = '10px';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.innerText = readonly ? 'Close' : 'Cancel';
+        cancelBtn.style.background = 'transparent';
+        cancelBtn.style.color = 'var(--text-color)';
+        cancelBtn.style.border = '1px solid var(--border-color)';
+        cancelBtn.style.padding = '8px 20px';
+        cancelBtn.style.borderRadius = '4px';
+        cancelBtn.style.cursor = 'pointer';
+
+        actionContainer.appendChild(cancelBtn);
+        if (!readonly) {
+            actionContainer.appendChild(saveBtn);
+        }
+
+        function cleanUp() {
+            document.body.removeChild(overlay);
+        }
+
+        cancelBtn.onclick = cleanUp;
+
+        saveBtn.onclick = async () => {
+            const newName = nameInput.value.trim();
+            const newDesc = descInput.value.trim();
+            
+            if (newName && (newName !== cat.name || newDesc !== cat.description)) {
+                try {
+                    const res = await fetch(`/api/knowledge/category/add?name=${encodeURIComponent(spaceName)}`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({id: cat.id, name: newName, description: newDesc})
+                    });
+                    if (res.ok) {
+                        selectSpace(spaceName, document.querySelector('#sidebar li.active'));
+                    }
+                } catch(e) { console.error('Update failed', e); }
+            }
+            cleanUp();
+        };
+
+        actionContainer.appendChild(cancelBtn);
+        actionContainer.appendChild(saveBtn);
+        
+        modal.appendChild(titleObj);
+        modal.appendChild(nameLabel);
+        modal.appendChild(nameInput);
+        modal.appendChild(descLabel);
+        modal.appendChild(descInput);
+        if (extraInfo) modal.appendChild(sysLabel);
+        modal.appendChild(actionContainer);
+        
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+        
+        nameInput.focus();
+    };
+
+    window.toggleDomainItemVector = function(link) {
+        const parent = link.parentElement;
+        const vectorBox = parent.querySelector('.vector-array-box');
+        if (vectorBox.style.display === 'none') {
+            vectorBox.style.display = 'block';
+        } else {
+            vectorBox.style.display = 'none';
+        }
+    };
+
+    function isStoreReadOnly(info) {
+        if (!info) return true;
+        
+        // Check System DB status
+        const dbObj = availableDatabases && currentDatabase ? availableDatabases.find(d => d.name === currentDatabase) : null;
+        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+
+        // Protected Stores
+        const storeName = info.name || currentStore;
+        if (storeName === 'llm_feedback') return true;
+
+        if (isSpaceReadOnly(storeName, currentDatabase)) return true;
+
+        const hasIndex = info.indexSpec && info.indexSpec.index_fields && info.indexSpec.index_fields.length > 0;
+        const hasCel = !!info.celExpression;
+        const isPrimitiveMetadata = info.isPrimitiveKey;
+        
+        let isPrimitiveData = false;
+        if (info.count > 0 && info.sampleKey !== undefined && info.sampleKey !== null) {
+             const t = typeof info.sampleKey;
+             if (t !== 'object' || Array.isArray(info.sampleKey)) {
+                 isPrimitiveData = true;
+             }
+        }
+        
+        const hasSchema = hasIndex || hasCel || isPrimitiveMetadata || isPrimitiveData;
+        return !hasSchema;
+    }
+
+        async function selectSpace(name, element) {
+    currentStore = name + "/data";
+    closeUIModal('toolbar');
+    closeUIModal('pagination');
+    closeUIModal('pagination-top');
+    
+    // Hide store-specific tool buttons when viewing KB:
+    closeUIModal('btn-code-store');
+    closeUIModal('btn-edit-store');
+    closeUIModal('btn-view-store');
+    closeUIModal('btn-edit-cel');
+    closeUIModal('btn-delete-store');
+    const exKb = document.getElementById('btn-export-kb'); if(exKb) exKb.style.display = 'inline-block';
+    const imKb = document.getElementById('btn-import-kb'); if(imKb) imKb.style.display = 'inline-block';
+
+    if (!await closeDetail()) return;
+
+    columnWidths = [];
+    columnsInitialized = false;
+
+    document.querySelectorAll('#sidebar li').forEach(el => el.classList.remove('active'));
+    if (element) {
+        element.classList.add('active');
+    }
+
+    document.getElementById('current-store-title').textContent = name;
+    const grid = document.getElementById('data-grid');
+    grid.innerHTML = "<div style='padding: 15px;'>Fetching thoughts...</div>";
+    
+    try {
+        const resCat = await fetch(`/api/knowledge/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`);
+        if (!resCat.ok) throw new Error("Failed to fetch categories");
+        const categories = await resCat.json() || [];
+        window._currentKBCategories = categories;
+
+        // Build hierarchy based on parent_id
+        const roots = categories.filter(c => !c.parents || c.parents.length === 0);
+        const childrenMap = {};
+        categories.forEach(c => {
+            if (c.parents && c.parents.length > 0) {
+                c.parents.forEach(p => {
+                    const pid = p.parent_id;
+                    if (!childrenMap[pid]) childrenMap[pid] = [];
+                    childrenMap[pid].push(c);
+                });
+            }
+        });
+
+        const currentDbObj = availableDatabases.find(db => db.name === currentDatabase);
+        const isSystemDB = currentDbObj ? currentDbObj.is_system : false;
+        const isReadOnlyKB = isSpaceReadOnly(name, currentDatabase);
+        let actionButtons = '';
+        if (!isReadOnlyKB) {
+            actionButtons = `
+                        <div style="display: flex; gap: 10px; margin-right: 4px;">
+                            <button class="primary-btn" onclick="showAddSpaceItem()" style="display: flex; align-items: center; gap: 5px; padding: 6px 12px; border: none; background-color: var(--success-bg); color: #fff; border-radius: 4px; cursor: pointer; font-size: 0.9em; font-weight: bold;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                                  <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+                                </svg>
+                                Add Item
+                            </button>
+                        </div>`;
+        }
+
+        let html = `
+            <div style="display: flex; flex-direction: row; gap: 20px; padding: 15px; height: 100%; align-items: flex-start; width: 100%;">
+                
+                <!-- Left Sidebar Treeview -->
+                <div style="width: 250px; min-width: 250px; border-right: 1px solid var(--border-color); padding-right: 15px; height: 100%; overflow-y: auto;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; margin-bottom: 15px;">
+                        <h3 style="margin: 0; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center;">Categories <span title="AI Managed Space" style="background: none; border: none; color: var(--key-color); font-size: 11px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: default;">✨</span></h3>
+                        <span id="sidebar-view-all-items" title="View All Items" style="cursor: pointer; color: var(--link-color); display: flex; align-items: center; padding: 4px; border-radius: 4px;" onclick="window.fetchItemsForCategory('${name}', '', 'All Items', this)">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zm8 0A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm-8 8A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm8 0A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z"/>
+                            </svg>
+                        </span>
+                    </div>
+                    
+                    <ul id="kb-category-tree" style="list-style: none; padding-left: 0; margin-top: 0; font-size: 0.95em;">
+                    </ul>
+                </div>
+
+                <!-- Right Side Grid -->
+                <div style="flex: 1; display: flex; flex-direction: column; height: 100%; overflow-y: auto; padding-right: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 5px; border-bottom: 1px solid var(--border-color); position: sticky; top: 0; background: var(--bg-color); z-index: 10; overflow: hidden;">
+                        <h3 id="kb-items-header-title" style="margin: 0; font-size: 1.1em; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px;">All Items</h3>
+                        ${actionButtons}
+                    </div>
+                    <div id="kb-items-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; align-content: flex-start; padding-bottom: 20px;">
+                        <div style="padding: 15px;">Please select a category.</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        grid.innerHTML = html;
+
+        // Recursively render tree
+        const treeRoot = document.querySelector('#kb-category-tree');
+        function renderTreeNodes(catList, container, depth=0) {
+            catList.forEach(cat => {
+                const li = document.createElement('li');
+                li.style.marginBottom = '8px';
+                li.style.marginLeft = (depth > 0 ? 15 : 0) + 'px';
+                li.style.cursor = 'pointer';
+                li.style.color = 'var(--text-color)';
+                li.style.padding = '4px';
+                li.style.borderRadius = '4px';
+                li.style.display = 'flex';
+                li.style.justifyContent = 'space-between';
+                li.style.alignItems = 'center';
+                
+                li.onmouseover = () => li.style.background = 'rgba(0,0,0,0.03)';
+                li.onmouseout = () => li.style.background = 'transparent';
+                
+                li.onclick = (e) => {
+                    e.stopPropagation();
+                    window.fetchItemsForCategory(name, cat.id, cat.name, li, cat);
+                };
+
+                const titleSpan = document.createElement('span');
+                const hasChildren = childrenMap[cat.id] && childrenMap[cat.id].length > 0;
+                titleSpan.innerHTML = (hasChildren ? '▾ ' : '◦ ') + cat.name;
+                titleSpan.style.whiteSpace = 'nowrap';
+                titleSpan.style.overflow = 'hidden';
+                titleSpan.style.textOverflow = 'ellipsis';
+                titleSpan.title = cat.name;
+
+                const titleContainer = document.createElement('div');
+                titleContainer.style.display = 'flex';
+                titleContainer.style.alignItems = 'center';
+                titleContainer.style.overflow = 'hidden';
+                titleContainer.appendChild(titleSpan);
+
+                li.appendChild(titleContainer);
+                
+                container.appendChild(li);
+
+                if (hasChildren) {
+                    const ul = document.createElement('ul');
+                    ul.style.listStyle = 'none';
+                    ul.style.paddingLeft = '0';
+                    ul.style.marginTop = '5px';
+                    renderTreeNodes(childrenMap[cat.id], ul, depth+1);
+                    container.appendChild(ul);
+                }
+            });
+        }
+        
+        if (roots.length > 0) {
+            renderTreeNodes(roots.sort((a,b) => a.name.localeCompare(b.name)), treeRoot);
+        }
+
+        window.fetchItemsForCategory = async function(spaceName, categoryId, categoryName, liElement, catObj) {
+            window._lastFetchItemsArgs = { spaceName, categoryId, categoryName, liElement, catObj };
+            window._currentSelectedCategoryName = categoryName;
+            document.querySelectorAll('#kb-category-tree li').forEach(li => {
+                li.style.fontWeight = 'normal';
+                li.style.color = 'var(--text-color)';
+                const strong = li.querySelector('strong');
+                if (strong) strong.style.fontWeight = 'normal';
+            });
+            if (liElement) {
+                liElement.style.color = 'var(--link-color)';
+                const strong = liElement.querySelector('strong');
+                if (strong) strong.style.fontWeight = 'bold';
+                else liElement.style.fontWeight = 'bold';
+            }
+
+            const headerTitle = document.getElementById('kb-items-header-title');
+            headerTitle.innerHTML = '';
+            headerTitle.appendChild(document.createTextNode(categoryId ? 'Items in: ' + categoryName : 'All Items'));
+
+            if (!isReadOnlyKB) {
+                // Determine if DB allows adding items (mostly System DB logic mirroring selectStore)
+                let allowAdd = true;
+                const currentDbObj = availableDatabases.find(db => db.name === currentDatabase);
+                const isSystemDB = currentDbObj ? currentDbObj.is_system : false;
+                
+                if (currentStore === 'llm_feedback' || (isSystemDB && currentStore === 'memory')) {
+                    allowAdd = false;
+                }
+
+                // ADD CATEGORY ICON (+)
+                const addCatBtn = document.createElement('span');
+                addCatBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>';
+                addCatBtn.title = 'Add Category';
+                addCatBtn.style.fontSize = '1.1em';
+                addCatBtn.style.marginLeft = '10px';
+                addCatBtn.style.cursor = 'pointer';
+                addCatBtn.style.color = 'var(--text-color)';
+                addCatBtn.style.opacity = '0.5';
+                addCatBtn.style.verticalAlign = 'middle';
+                addCatBtn.style.display = 'inline-flex';
+                addCatBtn.style.alignItems = 'center';
+                addCatBtn.onmouseover = () => addCatBtn.style.opacity = '1';
+                addCatBtn.onmouseout = () => addCatBtn.style.opacity = '0.5';
+                addCatBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    window.showAddCategoryModal();
+                };
+                headerTitle.appendChild(addCatBtn);
+
+                if (categoryId && catObj) {
+                    const editBtn = document.createElement('span');
+                    editBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg>';
+                    editBtn.title = 'Edit Category';
+                    editBtn.style.fontSize = '1em';
+                    editBtn.style.marginLeft = '10px';
+                    editBtn.style.cursor = 'pointer';
+                    editBtn.style.color = 'var(--text-color)';
+                    editBtn.style.verticalAlign = 'middle';
+                    editBtn.style.display = 'inline-flex';
+                    editBtn.style.alignItems = 'center';
+                    editBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        window.editCategoryModal(catObj, spaceName);
+                    };
+                    headerTitle.appendChild(editBtn);
+
+                    const delBtn = document.createElement('span');
+                    delBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>';
+                    delBtn.title = 'Delete Category (' + categoryName + ')';
+                    delBtn.style.fontSize = '1em';
+                    delBtn.style.marginLeft = '10px';
+                    delBtn.style.cursor = 'pointer';
+                    delBtn.style.color = 'var(--text-color)';
+                    delBtn.style.verticalAlign = 'middle';
+                    delBtn.style.display = 'inline-flex';
+                    delBtn.style.alignItems = 'center';
+                    delBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        if (confirm('Are you sure you want to delete the category "' + categoryName + '"? This cannot be undone.')) {
+                            window.deleteCategory(catObj.id, spaceName);
+                        }
+                    };
+                    headerTitle.appendChild(delBtn);
+                }
+
+// UI logic for Add Item button used to be here, moved back to actionButtons render logic.
+            }
+
+            const tg = document.getElementById('kb-items-grid');
+            tg.innerHTML = "<div style='padding: 15px;'>Loading items...</div>";
+
+            try {
+                let url = `/api/knowledge/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(spaceName)}`;
+                if (categoryId) url += `&category_id=${encodeURIComponent(categoryId)}`;
+                
+                const res = await fetch(url);
+                if (!res.ok) throw new Error("Failed to fetch items");
+                let items = [];
+                try {
+                	items = await res.json();
+                } catch(e){}
+                
+                if (!items || items.length === 0) {
+                    tg.innerHTML = "<div style='padding: 15px;'>No items found.</div>";
+                    return;
+                }
+
+                let contentHtml = '';
+                items.forEach(t => {
+                    let fullDesc = t.description || t.text || "";
+                    let isLongDesc = fullDesc.length > 150;
+                    let shortDesc = isLongDesc ? fullDesc.substring(0, 150) + "..." : fullDesc;
+
+                    let vectorCount = t.vector ? t.vector.length : 0;
+                    let vectorBox = "";
+                    if(vectorCount > 0) {
+                        vectorBox = `
+                            <div style="margin-left: auto;">
+                                <a href="javascript:void(0)" onclick="toggleDomainItemVector(this)" style="color:var(--link-color); text-decoration:none; display:flex; align-items:center; gap:3px; font-size:0.85em;">
+                                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM4.5 7.5a.5.5 0 0 0 0 1h7a.5.5 0 0 0 0-1h-7z"/></svg> Vector [${vectorCount}]
+                                </a>
+                                <div class="vector-array-box" style="display:none; font-size:0.9em; text-align: left; background:var(--input-bg); color:var(--text-color); margin-top:5px; padding:5px; border-radius:4px; max-height:80px; overflow-y:auto; word-break:break-all; border:1px solid var(--border-color); position: absolute; max-width: 250px; right: 0; z-index: 10; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                    [ ${t.vector.map(n => Number(n).toFixed(5)).join(", ")} ]
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    let descHtml = '';
+                    if (isLongDesc) {
+                        descHtml = `
+                            <div class="item-content-wrapper" style="flex: 1; display: flex; flex-direction: column;">
+                                <div style="flex: 1;">
+                                    <span class="desc-short">${shortDesc}</span>
+                                    <span class="desc-full" style="display:none; white-space:pre-wrap;">${fullDesc.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+                                </div>
+                                <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
+                                    <a href="javascript:void(0)" class="read-more-btn" onclick="toggleDomainItemDesc(this)" data-item-id="${t.id}" data-item-category="${t.category_id || t.category || ''}" style="color:var(--link-color); font-size:0.85em; text-decoration:underline;">Read More</a>
+                                    ${isReadOnlyKB ? 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join(', ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; margin-left: 15px;" title="View Details">View Details</a>` 
+                                        : 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join(', ').replace(/\u0027/g, "&apos;") : '')}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
+                                         <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${(t.topic || t.concept || t.name || t.id).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
+                                    }
+                                    ${vectorBox}
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        descHtml = `
+                            <div class="item-content-wrapper" style="flex: 1; display: flex; flex-direction: column;">
+                                <div style="flex: 1;">
+                                    <span class="desc-short" style="display:none;">${shortDesc}</span>
+                                    <span class="desc-full" style="display:inline; white-space:pre-wrap;">${fullDesc.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
+                                </div>
+                                <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
+                                    ${isReadOnlyKB ? 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; display: inline-flex; align-items: center;" title="View Details">View Details</a>` 
+                                        : 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${(categoryName || '').replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
+                                         <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${(t.topic || t.concept || t.name || t.id).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
+                                    }
+                                    ${vectorBox}
+                                </div>
+                            </div>
+                        `;
+                    }
+
+                    contentHtml += `
+                        <div class="kb-item-card" style="width: 100%; box-sizing: border-box; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 15px; background: var(--bg-color); box-shadow: 0 2px 4px rgba(0,0,0,0.05); display: flex; flex-direction: column; transition: transform 0.2s, box-shadow 0.2s; cursor: pointer;" onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.1)';" onmouseout="this.style.transform='none'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.05)';">
+                            <div style="display:flex; justify-content:${(!categoryId || categoryName === 'All Items') ? 'space-between' : 'flex-end'}; align-items:center; margin-bottom:5px;">
+                                ${(!categoryId || categoryName === 'All Items') ? `
+                                <div style="font-size: 0.75em; font-weight: 600; color: #fff; background-color: #5b6ed1; padding: 3px 8px; border-radius: 12px; text-transform: uppercase;">
+                                    ${(t.category && t.category !== "<nil>") ? t.category : "Uncategorized"}
+                                </div>
+                                ` : ''}
+                                
+                            </div>
+                            <div style="font-size: 1.15em; font-weight: 600; margin-bottom: 10px; color: var(--text-color);">
+                                ${t.text ? t.text.substring(0, 50).replace(/</g, '&lt;') : (t.id ? t.id.substring(0,8) : "Unnamed Item")}
+                            </div>
+                            <div style="font-size: 0.9em; flex: 1; color: var(--text-muted); line-height: 1.5; margin-bottom: 15px; word-break: break-word; display: flex; flex-direction: column;">
+                                ${descHtml}
+                            </div>
+                        </div>
+                    `;
+                });
+                tg.innerHTML = contentHtml;
+
+            } catch (err) {
+                console.error(err);
+                tg.innerHTML = "<div style='padding: 15px; color: red;'>Error fetching items: " + err.message + "</div>";
+            }
+        };
+
+        const allItem = document.querySelector('#sidebar-view-all-items');
+        window.fetchItemsForCategory(name, '', 'All Items', allItem);
+
+    } catch (err) {
+        console.error(err);
+        grid.innerHTML = "<div style='padding: 15px;'>Error fetching Categories: " + err.message + "</div>";
+    }
+}
+
+async function selectStore(name, element, force = false) {
+        if (currentStore === name && !force) return;
+
+        // Close detail panel as it may be showing data from previous store
+        if (!await closeDetail()) return;
+
+        currentStore = name;
+        columnWidths = []; // Reset column widths
+        loadColumnPreferences(); // Load saved column settings
+        columnsInitialized = false;
+
+        // Restore standard UI if coming from Knowledge Page
+        const kp = document.getElementById('knowledge-page');
+        if (kp) kp.style.display = 'none';
+        const titleElemCont = document.getElementById('current-store-title');
+        if (titleElemCont && titleElemCont.parentElement) {
+            titleElemCont.parentElement.style.display = 'flex';
+        }
+        const elementsToRestore = [
+            'btn-code-store', 'btn-edit-store', 'btn-view-store', 'btn-edit-cel', 'btn-delete-store',
+            'toolbar', 'pagination-top', 'data-grid', 'pagination', 'detail-resizer'
+        ];
+        elementsToRestore.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.style.display = ''; // revert inline hide
+        });
+        
+        // Highlight active
+        document.querySelectorAll('#sidebar li').forEach(el => el.classList.remove('active'));
+        element.classList.add('active');
+
+        // Show Delete Button
+        const deleteBtn = document.getElementById('btn-delete-store');
+        
+        // Hardening: Disable delete for System DB and protected stores
+        const dbObj = availableDatabases.find(d => d.name === currentDatabase);
+        const isSystem = (dbObj && dbObj.is_system) || currentDatabase === 'system' || currentDatabase === 'system_db';
+        const isProtectedStore = (name === 'llm_feedback' || name === 'memory');
+        
+        if (isSystem || isProtectedStore) {
+            deleteBtn.style.display = 'none';
+        } else {
+            deleteBtn.style.display = 'inline-block';
+        }
+        
+        deleteBtn.title = `Delete store '${name}'`;
+
+        // Show Code Button
+        const codeBtn = document.getElementById('btn-code-store');
+        codeBtn.style.display = 'inline-block';
+        codeBtn.title = `Generate Code for '${name}'`;
+
+        // Show Edit Store Button
+        const editBtn = document.getElementById('btn-edit-store');
+        editBtn.style.display = 'none';
+
+        // Show View Store Button
+        const viewBtn = document.getElementById('btn-view-store');
+        viewBtn.style.display = 'none';
+
+        // Show Edit CEL Button
+        const celBtn = document.getElementById('btn-edit-cel');
+        celBtn.style.display = 'none'; // Hidden in favor of Edit Store
+        // celBtn.style.display = 'inline-block';
+        // celBtn.title = `Edit '${name}' CEL expression`;
+
+        // Fetch Store Info
+        fetch(`/api/store/info?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`)
+            .then(res => res.json())
+            .then(info => {
+                currentStoreInfo = info;
+
+                // Toggle Edit/View buttons based on count
+                // NOTE: We now use the Edit button for ALL stores (populated or empty).
+                // The Edit modal handles read-only fields for populated stores.
+                // However, for System DB, we force Read-Only View.
+                if (isSystem) {
+                    editBtn.style.display = 'none';
+                    viewBtn.style.display = 'inline-block';
+                    viewBtn.title = `View Store Metadata for '${name}' (Read-Only)`;
+                } else {
+                    editBtn.style.display = 'inline-block';
+                    editBtn.title = `Edit Store Metadata for '${name}'`;
+                    viewBtn.style.display = 'none';
+                }
+                
+                /*
+                if (info.count > 0) {
+                    viewBtn.style.display = 'inline-block';
+                    viewBtn.title = `View Store Details for '${name}'`;
+                    editBtn.style.display = 'none';
+                } else {
+                    editBtn.style.display = 'inline-block';
+                    editBtn.title = `Edit Store '${name}'`;
+                    viewBtn.style.display = 'none';
+                }
+                */
+
+                // Use name for display, description for tooltip
+                let displayTitle = info.name;
+                if (displayTitle) {
+                    displayTitle = displayTitle.charAt(0).toUpperCase() + displayTitle.slice(1);
+                }
+                const titleElem = document.getElementById('current-store-title');
+                titleElem.textContent = displayTitle;
+                if (info.description) {
+                    titleElem.title = info.description;
+                } else {
+                    titleElem.removeAttribute('title');
+                }
+
+                buildSearchUI(info);
+                loadItems('first');
+            });
+    }
+
+    function deleteStore() {
+        if (!currentStore) return;
+        
+        promptAsync(`Please type the store name '${currentStore}' to confirm deletion:`, "Delete Store")
+        .then(name => {
+            if (name === null) return; // User cancelled prompt
+            
+            if (name.trim().toLowerCase() !== currentStore.toLowerCase()) {
+                showAlert("Store name does not match. Deletion cancelled.");
+                return;
+            }
+
+        apiCall('/api/store/delete', 'POST', {
+            database: currentDatabase,
+            store: currentStore
+        })
+        .then(data => {
+            if (data.status === 'ok') {
+                showAlert("Store deleted successfully.");
+                currentStore = null;
+                document.getElementById('current-store-title').textContent = "Select Store or Space";
+                
+                // Hide all store-specific buttons
+                closeUIModal('btn-delete-store');
+                closeUIModal('btn-code-store');
+                closeUIModal('btn-edit-store');
+                closeUIModal('btn-view-store');
+                closeUIModal('btn-edit-cel');
+
+                document.getElementById('data-grid').innerHTML = '';
+                closeUIModal('toolbar');
+                // Refresh list
+                selectDatabase(currentDatabase, true);
+            } else {
+                showAlert("Error: " + (data.error || "Unknown error"));
+            }
+        });
+        });
+    }
+
+    function buildSearchUI(info) {
+        const toolbar = document.getElementById('toolbar');
+        toolbar.innerHTML = ''; // Clear existing
+        toolbar.style.display = 'flex';
+        toolbar.style.flexWrap = 'wrap';
+
+        // Helper to trigger search
+        const triggerSearch = () => {
+            loadItems('search').then(items => {
+                if (items && items.length > 0) {
+                    const firstRow = document.querySelector('#items-table tbody tr');
+                    if (firstRow) {
+                        showDetail(firstRow, items[0], false);
+                        firstRow.scrollIntoView({ block: 'nearest' });
+                    }
+                }
+            });
+        };
+
+        if (info.indexSpec && info.indexSpec.index_fields) {
+            // Complex Key with Index Spec
+            info.indexSpec.index_fields.forEach(field => {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = `search-field-${field.field_name}`;
+                input.placeholder = `${field.field_name} (${field.ascending_sort_order ? 'Asc' : 'Desc'})`;
+                input.style.marginRight = '5px';
+                input.style.flex = '1 1 150px'; // Allow wrapping
+                input.tabIndex = 0;
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') triggerSearch();
+                });
+                toolbar.appendChild(input);
+            });
+        } else if (info.sampleKey && typeof info.sampleKey === 'object' && info.sampleKey !== null) {
+            // Inferred Complex Key from Sample
+            // Sort keys to be deterministic
+            const keys = Object.keys(info.sampleKey).sort();
+            keys.forEach(key => {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = `search-field-${key}`;
+                input.placeholder = key;
+                input.style.marginRight = '5px';
+                input.style.flex = '1 1 150px'; // Allow wrapping
+                input.tabIndex = 0;
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') triggerSearch();
+                });
+                toolbar.appendChild(input);
+            });
+        } else {
+            // Primitive Key or no spec
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = 'search-input';
+            input.placeholder = 'Search keys...';
+            input.style.flex = '1';
+            input.tabIndex = 0;
+            toolbar.appendChild(input);
+        }
+
+        const btn = document.createElement('button');
+        btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg>`;
+        btn.title = "Search for items in the store based on the key or index fields.";
+        btn.onclick = triggerSearch;
+        btn.tabIndex = 0;
+        // Search icon styling (transparent)
+        btn.style.padding = '4px 8px';
+        btn.style.background = 'none';
+        btn.style.border = 'none';
+        btn.style.cursor = 'pointer';
+        btn.style.fontSize = '1.2em';
+        btn.style.color = 'var(--key-color)';
+        toolbar.appendChild(btn);
+
+        // Add Enter key support for simple search input
+        const simpleInput = document.getElementById('search-input');
+        if (simpleInput) {
+            simpleInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') btn.click();
+            });
+        }
+
+        const refreshBtn = document.createElement('button');
+        refreshBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>`;
+        refreshBtn.title = "Refreshes the selected store's currently displayed data. Useful when wanting to fetch latest data from the database";
+        refreshBtn.onclick = () => loadItems('current', firstKey);
+        refreshBtn.style.marginLeft = '0px';
+        refreshBtn.tabIndex = 0;
+        // Refresh icon styling
+        refreshBtn.style.padding = '4px 8px';
+        refreshBtn.style.background = 'none';
+        refreshBtn.style.border = 'none';
+        refreshBtn.style.cursor = 'pointer';
+        refreshBtn.style.fontSize = '1.2em';
+        toolbar.appendChild(refreshBtn);
+
+        // Only show Add Item for non-registry stores (Macros are too complex to add manually)
+        // Determine if store has "Schema" (Add/Delete Allowed)
+        const isReadOnly = isStoreReadOnly(info);
+
+        if (info.description !== "AI Models Registry" && !isReadOnly) {
+            // Hardening: Prevent adding items to memory in System DB
+            // Determine if current DB is System DB using the flag from API
+            const currentDbObj = availableDatabases.find(db => db.name === currentDatabase);
+            const isSystemDB = currentDbObj ? currentDbObj.is_system : false;
+
+            let allowAdd = true;
+            // llm_feedback is always read-only, SOP/data and memory_ are read-only in system DBs
+            if (currentStore === 'llm_feedback' || isSpaceReadOnly(currentStore, currentDatabase)) {
+                allowAdd = false;
+            }
+
+            if (allowAdd) {
+                const addBtn = document.createElement('button');
+                addBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>`;
+                addBtn.title = "Add a new item to the store.";
+                addBtn.onclick = () => showAdd();
+                // addBtn.classList.add('btn-success'); // Removing class to strip background
+                addBtn.style.marginLeft = '0px';
+                addBtn.tabIndex = 0;
+                addBtn.id = 'btn-add-item';
+                 // Add Item icon styling (Green Icon)
+                addBtn.style.padding = '4px 8px';
+                addBtn.style.background = 'none';
+                addBtn.style.border = 'none';
+                addBtn.style.cursor = 'pointer';
+                addBtn.style.fontSize = '1.4em';
+                addBtn.style.color = '#28a745'; // Green color for Add
+                addBtn.style.display = 'flex';
+                addBtn.style.alignItems = 'center';
+                toolbar.appendChild(addBtn);
+            }
+        } else if (isReadOnly) {
+            const warning = document.createElement('span');
+            
+            // Determine reason for Read-Only to show correct message
+            const r_dbObj = availableDatabases.find(db => db.name === currentDatabase);
+            const r_isSystem = r_dbObj ? r_dbObj.is_system : false;
+            if (currentStore === 'llm_feedback' || isSpaceReadOnly(currentStore, currentDatabase)) {
+                warning.textContent = "⚠️ Read-Only (System Managed)";
+                warning.title = "This store is managed by the system. Manual additions/deletions are restricted to ensure stability.";
+            } else {
+                warning.textContent = "⚠️ Read-Only (No Index/CEL)";
+                warning.title = "This store does not have an explicit Index Specification or CEL Expression. Adding or deleting items is disabled because the key structure is not strictly defined. Please migrate to a new store with a defined schema.";
+            }
+
+            warning.style.marginLeft = '10px';
+            warning.style.color = 'var(--warning-text)';
+            warning.style.fontSize = '12px';
+            warning.style.alignSelf = 'center';
+            toolbar.appendChild(warning);
+        }
+    }
+
+    let userSelectedColumns = null; // Set of strings, or null if show all
+    let allDetectedColumns = []; // List of all columns detected in currentItems
+    let showSelectionColumn = false; // Toggle for checkbox column
+    let selectedItems = new Set(); // Set of keys selected for deletion
+    let columnsInitialized = false; // Flag to trigger auto-column-hiding once per store load
+
+// --- Add Category Logic ---
+function showAddCategoryItem() {
+    window.currentAdminToken = null;
+    openUIModal('add-category-modal');
+    document.getElementById('new-category-name').value = '';
+    document.getElementById('new-category-desc').value = '';
+}
+
+window.showAddCategoryModal = showAddCategoryItem;
+
+async function submitAddCategoryItem() {
+    const spaceName = document.getElementById('current-store-title').textContent || document.getElementById('database-select').value;
+    if (!spaceName) {
+        showAlert("No Domain/Space selected.");
+        return;
+    }
+
+    const name = document.getElementById('new-category-name').value.trim();
+    const desc = document.getElementById('new-category-desc').value.trim();
+    
+    if (!name) {
+        showAlert("Category Name is required.");
+        return;
+    }
+    
+    try {
+        const res = await fetch(`/api/knowledge/category/add?name=${encodeURIComponent(spaceName)}&database=${encodeURIComponent(currentDatabase)}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name, description: desc})
+        });
+        
+        if (res.ok) {
+            closeUIModal('add-category-modal');
+            const data = await res.json();
+            if (data.message) {
+                showAlert(data.message, false);
+            }
+            selectSpace(spaceName, document.querySelector('#sidebar li.active'));
+        } else {
+            const err = await res.text();
+            showAlert("Failed to add category: " + err, true);
+        }
+    } catch(e) { 
+        console.error('Add Category failed', e);
+        showAlert("Error adding category.", true);
+    }
+}
+
+window.deleteCategory = async function(catId, spaceName) {
+    try {
+        const res = await fetch(`/api/knowledge/category/delete?name=${encodeURIComponent(spaceName)}&database=${encodeURIComponent(currentDatabase)}`, {
+            method: 'DELETE',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({id: catId})
+        });
+        
+        if (res.ok) {
+            selectSpace(spaceName, document.querySelector('#sidebar li.active'));
+        } else {
+            const err = await res.text();
+            showAlert("Failed to delete category: " + err, true);
+        }
+    } catch(e) {
+        console.error('Delete Category failed', e);
+        showAlert("Error deleting category.", true);
+    }
+};
+
+// --- Space Adding Items Logic ---
+function showAddSpaceItem() {
+    const kbNameDisplay = window.currentStore ? window.currentStore.replace('/data', '') : (typeof currentStore !== 'undefined' && currentStore ? currentStore.replace('/data', '') : '');
+
+    if (!kbNameDisplay) {
+        showAlert("Space Name is required. Please select or create a Space from the side panel first.");
+        return;
+    }
+
+    window.currentAdminToken = null;
+    openUIModal('add-space-item-modal');
+    document.getElementById('new-space-item-name').value = '';
+    document.getElementById('new-space-item-desc').value = '';
+    
+    // Re-populate correct categories
+    const catSelect = document.getElementById('new-space-item-category');
+    if (catSelect && window._currentKBCategories) {
+        catSelect.innerHTML = '';
+        
+        let selectedCatName = window._currentSelectedCategoryName || '';
+        let selectedCatId = '';
+        
+        window._currentKBCategories.forEach(c => {
+            if (c.name === selectedCatName) {
+                selectedCatId = c.id;
+            }
+            const opt = document.createElement('option');
+            opt.value = c.id; // Use UUID for backend
+            opt.textContent = c.name;
+            catSelect.appendChild(opt);
+        });
+        
+        if (selectedCatId) {
+            catSelect.value = selectedCatId;
+        } else if (catSelect.options.length > 0) {
+            catSelect.value = catSelect.options[0].value;
+        }
+    }
+}
+
+window.showAddSpaceItem = showAddSpaceItem;
+
+async function saveSpaceItem() {
+    const categoryId = document.getElementById('new-space-item-category').value.trim();
+    const name = document.getElementById('new-space-item-name').value.trim();
+    const desc = document.getElementById('new-space-item-desc').value.trim();
+    const summariesInput = document.getElementById('new-space-item-summaries').value.trim();
+    
+    if (!categoryId) {
+        showAlert("Category is required.");
+        return;
+    }
+    if (!name) {
+        showAlert("Topic/Name is required.");
+        return;
+    }
+    if (!desc) {
+        showAlert("Content/Description is required.");
+        return;
+    }
+    
+    const kbNameDisplay = window.currentStore ? window.currentStore.replace('/data', '') : (typeof currentStore !== 'undefined' && currentStore ? currentStore.replace('/data', '') : '');
+    const dbNameDisplay = window.currentDatabase || (typeof currentDatabase !== 'undefined' ? currentDatabase : '');
+
+    if (!kbNameDisplay) {
+        showAlert("Space Name is required. Please select or create a Space first.");
+        return;
+    }
+
+    if (!dbNameDisplay) {
+        showAlert("Database Name is required.");
+        return;
+    }
+
+    let summaries = [];
+    if (summariesInput) {
+        summaries = summariesInput.split(',').map(s => s.trim()).filter(s => s.length > 0);
+    }
+
+    const reqBody = {
+        id: "", 
+        category_id: categoryId,
+        summaries: summaries,
+        data: {
+            topic: name,
+            concept: name,
+            description: desc,
+            chunk: desc,
+            text: desc
+        }
+    };
+    
+    try {
+        const res = await fetch(`/api/knowledge/item/add?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
+            method: 'POST',
+            headers: {'Content-Type':'application/json'},
+            body: JSON.stringify(reqBody)
+        });
+        
+        if (res.ok) {
+            closeUIModal('add-space-item-modal');
+            if (window._lastFetchItemsArgs) {
+                const args = window._lastFetchItemsArgs;
+                window.fetchItemsForCategory(args.spaceName, args.categoryId, args.categoryName, args.liElement, args.catObj);
+            } else {
+                selectSpace(kbNameDisplay, document.querySelector('#sidebar li.active'));
+            }
+        } else {
+            const errText = await res.text();
+            showAlert(errText || 'Error occurred');
+        }
+    } catch(err) {
+        showAlert("Network error: " + err.message);
+    }
+}
+
+    window.deleteSpaceItem = function(itemId, itemName) {
+        showConfirm(
+            "Are you sure you want to delete this item? (" + (itemName || "Unknown item") + ")", 
+            async () => {
+                const payload = {
+                    id: itemId
+                };
+
+                try {
+                    const kbNameDisplay = window.currentStore ? window.currentStore.replace('/data', '') : (currentStore ? currentStore.replace('/data', '') : '');
+                    const dbNameDisplay = window.currentDatabase || currentDatabase || '';
+                    const res = await fetch(`/api/knowledge/item/delete?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
+                        method: 'DELETE',
+                        headers: {'Content-Type':'application/json'},
+                        body: JSON.stringify(payload)
+                    });
+                    if (!res.ok) {
+                        throw new Error(await res.text());
+                    }
+                    
+                    const data = await res.json();
+                    
+                    if (data.status === 'success' || data.Success || data.message === 'Item deleted successfully') {
+                        if (window._lastFetchItemsArgs) {
+                            const args = window._lastFetchItemsArgs;
+                            window.fetchItemsForCategory(args.spaceName, args.categoryId, args.categoryName, args.liElement, args.catObj);
+                        } else {
+                            window.selectSpace(kbNameDisplay, document.querySelector('#sidebar li.active'));
+                        }
+                    } else {
+                        window.showAlert(data.message || 'Error deleting item');
+                    }
+                } catch(e) {
+                     window.showAlert('Network error: ' + e.message);
+                }
+            }, 
+            null, 
+            "Confirm Deletion", 
+            "Delete", 
+            "Cancel"
+        );
+    };
+
+    // --- Column Persistence ---
+</script>
+{{end}}
+
+
+
+async function exportSpace() {
+    if (!currentStore) return;
+    const baseName = currentStore.replace('/data', '');
+    const url = `/api/knowledge/export?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`;
+    window.open(url, '_blank');
+}
+
+async function importSpace(event) {
+    const file = event.target.files[0];
+    if (!file || !currentStore) return;
+    const baseName = currentStore.replace('/data', '');
+    
+    if (!confirm(`Are you sure you want to import data into the Space '${baseName}'? Existing data won't be replaced, but similar data might cause duplication.`)) {
+        event.target.value = '';
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+        const res = await fetch(`/api/knowledge/import?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`, {
+            method: 'POST',
+            body: formData
+        });
+        if (res.ok) {
+            alert('Import completed successfully!');
+            const activeLi = document.querySelector('#sidebar li.active');
+            if(activeLi) activeLi.click();
+        } else {
+            const err = await res.text();
+            alert('Import failed: ' + err);
+        }
+    } catch (e) {
+        alert('Network error during import: ' + e.message);
+    }
+    event.target.value = '';
+}

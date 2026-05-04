@@ -227,7 +227,7 @@ func RetrieveLLMKnowledge(ctx context.Context, systemDB *database.Database) stri
 			}
 		}
 		if len(available) > 0 {
-			sb.WriteString(fmt.Sprintf("\n[System] Additional Knowledge Categories Available: %s\n(Use 'manage_knowledge' with action='list'/'read' to access them if relevant to your task.)\n", strings.Join(available, ", ")))
+			sb.WriteString(fmt.Sprintf("\n[System] Additional Knowledge Categories Available: %s\n(These are automatically injected into your active memory context when semantically relevant.)\n", strings.Join(available, ", ")))
 		}
 	}
 

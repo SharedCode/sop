@@ -69,5 +69,6 @@ func ExampleVectorStore() {
 	txRead.Commit(ctx)
 
 	// Output:
+	// sysStore.Add returned: true, <nil>
 	// Found: item1
 }

@@ -9,7 +9,7 @@ import (
 )
 
 func TestListTools(t *testing.T) {
-	agent := NewDataAdminAgent(Config{}, nil, nil)
+	agent := NewCopilotAgent(Config{}, nil, nil)
 	ctx := context.Background()
 
 	// Inject session payload

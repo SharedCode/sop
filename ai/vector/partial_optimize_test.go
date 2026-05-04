@@ -2,12 +2,12 @@ package vector
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"testing"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/cache"
 	"github.com/sharedcode/sop/infs"
 )
@@ -113,8 +113,25 @@ func TestPartialOptimizationState(t *testing.T) {
 	// Now ActiveVersion becomes 1.
 	// We need to mock getActiveVersion or just update sysStore.
 	// Note: sysStore is empty initially, so we use Add.
-	if _, err := di.sysStore.Add(ctx, di.name, 1); err != nil {
-		t.Fatalf("sysStore.Add failed: %v", err)
+	m := Metadata{
+		ActiveVersion: 1,
+		Embedder: EmbedderInfo{
+			Provider:   "mock",
+			Model:      "mock-model",
+			Dimensions: 5,
+		},
+	}
+	b, _ := json.Marshal(m)
+	foundSys, _ := di.sysStore.Find(ctx, di.name, false)
+	if foundSys {
+		_, err := di.sysStore.UpdateCurrentItem(ctx, di.name, string(b))
+		if err != nil {
+			t.Fatalf("sysStore.UpdateCurrentItem failed: %v", err)
+		}
+	} else {
+		if _, err := di.sysStore.Add(ctx, di.name, string(b)); err != nil {
+			t.Fatalf("sysStore.Add failed: %v", err)
+		}
 	}
 	// Clear cache to force reload
 	// di.archCache = nil // Commented out: We inject manually below
@@ -124,7 +141,7 @@ func TestPartialOptimizationState(t *testing.T) {
 	// We can use the helper from store.go but it's private.
 	// We'll use infs.NewBtree directly.
 	// Use sop.ConfigureStore to match OpenDomainStore configuration (IsValueDataInNodeSegment=true for SmallData)
-	v1Vectors, err := infs.NewBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore("partial_test_vecs_1", true, btree.DefaultSlotLength, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
+	v1Vectors, err := infs.NewBtree[ai.VectorKey, []float32](ctx, sop.ConfigureStore("partial_test/vecs_1", true, 10000, "Vectors", sop.SmallData, ""), trans, compositeKeyComparer)
 	if err != nil {
 		t.Fatalf("NewBtree failed: %v", err)
 	}

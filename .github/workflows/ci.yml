@@ -82,6 +82,15 @@ jobs:
           echo "Running unit tests"
           go test -timeout 30m -v -count=1 ./inmemory ./infs ./btree ./common
 
+      - name: Verify AI Knowledge Compiler
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Compiling SOP Knowledge Base JSON..."
+          cd ai
+          go run cmd/knowledge_compiler/main.go
+          git diff --exit-code sop_base_knowledge.json || (echo "AI Knowledge Base (sop_base_knowledge.json) is outdated. Please run 'cd ai && go run cmd/knowledge_compiler/main.go' and commit the result." && exit 1)
+
       - name: Run infs integration tests
         shell: bash
         env:

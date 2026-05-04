@@ -4,14 +4,19 @@ import (
 	"context"
 	log "log/slog"
 	"math/rand"
+	"sync"
 	"time"
 )
 
-// jitterRNG is the random source used for sleep jitter. It is seeded once at init time.
-var jitterRNG = rand.New(rand.NewSource(time.Now().UnixNano()))
+var (
+	jitterMutex sync.Mutex
+	jitterRNG   = rand.New(rand.NewSource(time.Now().UnixNano()))
+)
 
 // SetJitterRNG overrides the RNG used for sleep jitter. Useful for deterministic tests.
 func SetJitterRNG(r *rand.Rand) {
+	jitterMutex.Lock()
+	defer jitterMutex.Unlock()
 	if r != nil {
 		jitterRNG = r
 	}
@@ -33,7 +38,10 @@ func TimedOut(ctx context.Context, name string, startTime time.Time, maxTime tim
 // RandomSleepWithUnit sleeps for a random multiple (1..4) of the provided unit duration.
 // Useful to jitter conflicting transactions and reduce contention.
 func RandomSleepWithUnit(ctx context.Context, unit time.Duration) {
+	jitterMutex.Lock()
 	sleepTime := time.Duration(jitterRNG.Intn(5))
+	jitterMutex.Unlock()
+
 	if sleepTime == 0 {
 		sleepTime = 1
 	}

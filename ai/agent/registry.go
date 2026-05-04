@@ -12,11 +12,12 @@ type ToolHandler func(ctx context.Context, args map[string]any) (string, error)
 
 // ToolDefinition defines a tool's metadata and handler.
 type ToolDefinition struct {
-	Name        string
-	Description string
-	ArgsSchema  string // JSON schema or description of args
-	Handler     ToolHandler
-	Hidden      bool
+	Name             string
+	Description      string
+	ShortDescription string
+	ArgsSchema       string // JSON schema or description of args
+	Handler          ToolHandler
+	Hidden           bool
 }
 
 // Registry manages the available tools.
@@ -39,6 +40,18 @@ func (r *Registry) Register(name, description, argsSchema string, handler ToolHa
 		ArgsSchema:  argsSchema,
 		Handler:     handler,
 		Hidden:      false,
+	}
+}
+
+// RegisterWithUI adds a tool to the registry with a short, user-friendly UI description.
+func (r *Registry) RegisterWithUI(name, shortDesc, description, argsSchema string, handler ToolHandler) {
+	r.tools[name] = ToolDefinition{
+		Name:             name,
+		Description:      description,
+		ShortDescription: shortDesc,
+		ArgsSchema:       argsSchema,
+		Handler:          handler,
+		Hidden:           false,
 	}
 }
 

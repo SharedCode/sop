@@ -9,9 +9,9 @@ import (
 	"github.com/sharedcode/sop/ai/obfuscation"
 )
 
-func TestDataAdminAgent_Execute_Deobfuscation(t *testing.T) {
+func TestCopilotAgent_Execute_Deobfuscation(t *testing.T) {
 	// Setup
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		registry: NewRegistry(),
 		databases: map[string]sop.DatabaseOptions{
 			"testdb": {EnableObfuscation: true},
@@ -64,9 +64,9 @@ func TestDataAdminAgent_Execute_Deobfuscation(t *testing.T) {
 	}
 }
 
-func TestDataAdminAgent_Execute_Deobfuscation_Nested(t *testing.T) {
+func TestCopilotAgent_Execute_Deobfuscation_Nested(t *testing.T) {
 	// Setup
-	agent := &DataAdminAgent{
+	agent := &CopilotAgent{
 		registry: NewRegistry(),
 		databases: map[string]sop.DatabaseOptions{
 			"testdb": {EnableObfuscation: true},

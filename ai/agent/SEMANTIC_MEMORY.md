@@ -1,10 +1,12 @@
 # Semantic Memory Structure & Rules
 
+> **📝 ARCHITECTURAL CONTEXT:** This document describes the **Knowledge Schema** used to structure rules, vocabulary, and corrections within the AI's Long-Term Memory (LTM) KnowledgeBase. This represents the *formats* of the data stored, whether populated manually by the user or automatically curated by the AI's background Sleep Cycle (as defined in the Butler Architecture).
+
 This document defines the structured Knowledge Schema used by the AI Agent to store, retrieve, and apply semantic learnings. This structure allows the LLM to refine its understanding of user intent and domain specifics over time.
 
 ## 1. The Structure
 
-All semantic knowledge is stored in the configured **Knowledge Store** (default name: `llm_knowledge`) within the System Database. The name of this B-Tree is configurable via the `agent.KnowledgeStore` constant.
+All semantic knowledge is stored in the configured **Knowledge Store** (default name: `memory`) within the System Database. The name of this B-Tree is configurable via the `agent.KnowledgeStore` constant.
 
 **Storage Location & Scoping**:
 The physical location of this knowledge depends on the connection string of the System Database provided to the Agent.

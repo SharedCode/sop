@@ -61,7 +61,8 @@ func (m *MockDomain) Classifier() ai.Classifier { return nil }
 func (m *MockDomain) Prompt(ctx context.Context, kind string) (string, error) {
 	return "System Prompt", nil
 }
-func (m *MockDomain) DataPath() string { return "/tmp" }
+func (m *MockDomain) Memory(ctx context.Context, tx sop.Transaction) (any, error) { return nil, nil }
+func (m *MockDomain) DataPath() string                                            { return "/tmp" }
 
 // MockTransaction implements sop.Transaction for testing.
 type MockTransaction struct{}
@@ -81,6 +82,10 @@ func (m *MockTransaction) OnCommit(callback func(ctx context.Context) error)    
 // MockVectorStore implements ai.VectorStore for testing.
 type MockVectorStore struct{}
 
+func (m *MockVectorStore) UpdateEmbedderInfo(ctx context.Context, provider string, model string, dimensions int) error {
+	return nil
+}
+
 func (m *MockVectorStore) Upsert(ctx context.Context, item ai.Item[map[string]any]) error { return nil }
 func (m *MockVectorStore) UpsertBatch(ctx context.Context, items []ai.Item[map[string]any]) error {
 	return nil
@@ -95,6 +100,7 @@ func (m *MockVectorStore) Query(ctx context.Context, vec []float32, k int, filte
 func (m *MockVectorStore) Count(ctx context.Context) (int64, error)                    { return 0, nil }
 func (m *MockVectorStore) AddCentroid(ctx context.Context, vec []float32) (int, error) { return 0, nil }
 func (m *MockVectorStore) Optimize(ctx context.Context) error                          { return nil }
+func (m *MockVectorStore) Consolidate(ctx context.Context) error                       { return nil }
 func (m *MockVectorStore) SetDeduplication(enabled bool)                               {}
 func (m *MockVectorStore) Centroids(ctx context.Context) (btree.BtreeInterface[int, ai.Centroid], error) {
 	return nil, nil
@@ -210,7 +216,7 @@ func TestService_Ask_Obfuscation(t *testing.T) {
 				// It does NOT parse the JSON to clean specific fields.
 				// So if the LLM returns `**DB_1**`, string replacement turns it into `**Python Complex DB**`.
 				// It does NOT remove the `**`.
-				// The User wants DataAdmin (Service) to handle this "woe".
+				// The User wants Copilot (Service) to handle this "woe".
 				// So we expect the JSON returned by Ask to contain CLEAN names, without artifacts.
 
 				// Let's see what we get currently.
@@ -264,4 +270,9 @@ func TestService_Ask_NoObfuscation(t *testing.T) {
 	if result != "Some response with DB_123" {
 		t.Errorf("Expected raw response 'Some response with DB_123', got '%s'", result)
 	}
+}
+
+// SplitCentroid mocks the base method.
+func (m *MockVectorStore) SplitCentroid(ctx context.Context, centroidID int) error {
+	return nil
 }

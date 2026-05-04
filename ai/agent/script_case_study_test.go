@@ -25,18 +25,18 @@ func TestCaseStudy_TwoPathsToAutomation(t *testing.T) {
 
 	// Initialize Agent
 	agentCfg := Config{
-		ID:          "sql_admin",
+		ID:          "copilot",
 		Name:        "SQL Admin",
 		Description: "SQL Admin",
 	}
 	// We map the database options so the agent knows about the environment
 	dbs := map[string]sop.DatabaseOptions{"default": dbOpts}
 
-	adminAgent := NewDataAdminAgent(agentCfg, dbs, sysDB)
+	adminAgent := NewCopilotAgent(agentCfg, dbs, sysDB)
 
 	// Initialize the Service with the agent registered
 	// The service uses this registry to find tools
-	svc := NewService(nil, sysDB, dbs, nil, nil, map[string]ai.Agent[map[string]any]{"sql_admin": adminAgent}, false)
+	svc := NewService(nil, sysDB, dbs, nil, nil, map[string]ai.Agent[map[string]any]{"copilot": adminAgent}, false)
 
 	// Link back (important for cache invalidation etc, though maybe not for this test)
 	adminAgent.service = svc

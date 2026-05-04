@@ -27,7 +27,10 @@
   },
   "db_type": "standalone",
   "embedder": {
-    "type": "simple"
+    "type": "gemini",
+    "options": {
+      "model": "gemini-embedding-001"
+    }
   },
   "data": []
 }

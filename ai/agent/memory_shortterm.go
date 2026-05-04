@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"sync"
+
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 )
@@ -9,6 +11,7 @@ import (
 // including script drafting and transaction management.
 // This represents the Short-Term / Working Memory of the Agent.
 type RunnerSession struct {
+	mu                    sync.Mutex
 	Playback              bool // True if a script is currently being executed
 	AutoSave              bool // If true, the draft is saved to DB after every step
 	CurrentScript         *ai.Script

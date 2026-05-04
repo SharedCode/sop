@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"math"
 	"os"
 	"sort"
@@ -15,12 +16,12 @@ import (
 )
 
 const (
-	sysConfigSuffix   = "_sys_config"
-	lookupSuffix      = "_lku"
-	centroidsSuffix   = "_centroids"
-	vectorsSuffix     = "_vecs"
-	tempVectorsSuffix = "_tmp_vecs"
-	dataSuffix        = "_data"
+	sysConfigSuffix   = "/sys_config"
+	lookupSuffix      = "/lku"
+	centroidsSuffix   = "/centroids"
+	vectorsSuffix     = "/vecs"
+	tempVectorsSuffix = "/tmp_vecs"
+	dataSuffix        = "/data"
 
 	sysConfigDesc   = "System Config"
 	lookupDesc      = "Lookup"
@@ -29,6 +30,20 @@ const (
 	tempVectorsDesc = "Temp Vectors"
 	dataDesc        = "Content"
 )
+
+// EmbedderInfo represents the configured embedder used to build this vector store.
+type EmbedderInfo struct {
+	Provider   string `json:"provider,omitempty"`
+	Model      string `json:"model,omitempty"`
+	Dimensions int    `json:"dimensions,omitempty"`
+}
+
+// Metadata represents the JSON payload stored inside the vector store's configuration.
+type Metadata struct {
+	ActiveVersion int64        `json:"active_version"`
+	Embedder      EmbedderInfo `json:"embedder,omitempty"`
+	Description   string       `json:"description,omitempty"`
+}
 
 // Config holds the configuration for the Vector Store.
 type Config struct {
@@ -43,13 +58,15 @@ type Config struct {
 	EnableIngestionBuffer bool
 	// Cache is the L2 cache client used for optimization locking and other operations.
 	Cache sop.L2Cache
+	// Metadata contains the knowledge base information, such as the required Embedder details.
+	Metadata Metadata
 }
 
 // Open returns an Index for the specified domain.
 // It verifies that the database configuration matches the persisted state.
 func Open[T any](ctx context.Context, trans sop.Transaction, domain string, cfg Config) (ai.VectorStore[T], error) {
 	sysStoreName := fmt.Sprintf("%s%s", domain, sysConfigSuffix)
-	sysStore, err := newBtree[string, int64](ctx, sop.ConfigureStore(sysStoreName, true, btree.DefaultSlotLength, sysConfigDesc, sop.SmallData, ""), trans, func(a, b string) int {
+	sysStore, err := newBtree[string, string](ctx, cfg, sop.ConfigureStore(sysStoreName, true, btree.DefaultSlotLength, sysConfigDesc, sop.SmallData, ""), trans, func(a, b string) int {
 		if a < b {
 			return -1
 		}
@@ -60,6 +77,18 @@ func Open[T any](ctx context.Context, trans sop.Transaction, domain string, cfg 
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	// Initialize metadata if empty/missing
+	found, err := sysStore.Find(ctx, domain, false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read vector metadata for domain %s: %v", domain, err)
+	}
+
+	if !found {
+		cfg.Metadata.ActiveVersion = 0
+		bytes, _ := json.Marshal(cfg.Metadata)
+		added, errAdd := sysStore.Add(ctx, domain, string(bytes)); fmt.Printf("sysStore.Add returned: %v, %v\n", added, errAdd)
 	}
 
 	return &domainIndex[T]{
@@ -79,7 +108,7 @@ type domainIndex[T any] struct {
 	centroidsCache       map[int][]float32
 	deduplicationEnabled bool
 	trans                sop.Transaction
-	sysStore             btree.BtreeInterface[string, int64]
+	sysStore             btree.BtreeInterface[string, string]
 	archCache            map[int64]*Architecture
 }
 
@@ -95,7 +124,7 @@ func (di *domainIndex[T]) getArchitecture(ctx context.Context, version int64) (*
 	if arch, ok := di.archCache[version]; ok {
 		return arch, nil
 	}
-	arch, err := OpenDomainStore(ctx, di.trans, di.name, version, di.config.ContentSize, !di.config.EnableIngestionBuffer)
+	arch, err := OpenDomainStore(ctx, di.trans, di.name, version, di.config)
 	if err != nil {
 		return nil, err
 	}
@@ -220,12 +249,27 @@ func (di *domainIndex[T]) upsertItem(ctx context.Context, arch *Architecture, it
 		}
 	}
 
-	// Increment count
+	// Increment count & Rolling Average (Prevent Cluster Drift)
 	if di.config.UsageMode == ai.DynamicWithVectorCountTracking && shouldIncrement {
 		if foundC, _ := arch.Centroids.Find(ctx, centroidID, false); foundC {
 			c, _ := arch.Centroids.GetCurrentValue(ctx)
+
+			// Compute Rolling Average to naturally shift the centroid toward new data points
+			n := float32(c.VectorCount)
+			if c.Vector == nil || len(c.Vector) == 0 {
+				c.Vector = make([]float32, len(vec))
+				copy(c.Vector, vec)
+			} else {
+				for i := 0; i < len(c.Vector) && i < len(vec); i++ {
+					c.Vector[i] = ((c.Vector[i] * n) + vec[i]) / (n + 1.0)
+				}
+			}
+
 			c.VectorCount++
 			arch.Centroids.UpdateCurrentValue(ctx, c)
+
+			// Keep cache in sync if initialized
+			di.addCentroidToCache(centroidID, c.Vector)
 		}
 	}
 
@@ -959,7 +1003,9 @@ func (di *domainIndex[T]) addCentroidToCache(id int, vec []float32) {
 func (di *domainIndex[T]) isOptimizing(ctx context.Context) (bool, error) {
 	if di.config.Cache != nil {
 		lockKeyName := di.config.Cache.FormatLockKey(fmt.Sprintf("optimize_lock_%s", di.name))
-		return di.config.Cache.IsLockedByOthers(ctx, []string{lockKeyName})
+		locked, err := di.config.Cache.IsLockedByOthers(ctx, []string{lockKeyName})
+		slog.Warn("isOptimizing Check Cached", "domain", di.name, "locked", locked, "err", err)
+		return locked, err
 	}
 	if di.config.TransactionOptions.CacheType == sop.NoCache {
 		return false, nil
@@ -969,7 +1015,53 @@ func (di *domainIndex[T]) isOptimizing(ctx context.Context) (bool, error) {
 		return false, nil
 	}
 	lockKeyName := cache.FormatLockKey(fmt.Sprintf("optimize_lock_%s", di.name))
-	return cache.IsLockedByOthers(ctx, []string{lockKeyName})
+	locked, err := cache.IsLockedByOthers(ctx, []string{lockKeyName})
+	slog.Warn("isOptimizing Check L2 Cached", "domain", di.name, "locked", locked, "err", err)
+	return locked, err
+}
+
+// UpdateEmbedderInfo updates the configuration defining which embedder was used.
+func (di *domainIndex[T]) UpdateEmbedderInfo(ctx context.Context, provider string, model string, dimensions int) error {
+	found, err := di.sysStore.Find(ctx, di.name, false)
+	if err != nil {
+		return err
+	}
+
+	meta := di.config.Metadata
+	if found {
+		strVal, err := di.sysStore.GetCurrentValue(ctx)
+		if err != nil {
+			return err
+		}
+		json.Unmarshal([]byte(strVal), &meta)
+
+		// If it's already set to a provider, disallow modification unless it matches exactly.
+		if meta.Embedder.Provider != "" {
+			if meta.Embedder.Provider == provider && meta.Embedder.Model == model && meta.Embedder.Dimensions == dimensions {
+				return nil // Idempotent success
+			}
+			return fmt.Errorf("embedder info has already been set for vector store '%s' and cannot be changed", di.name)
+		}
+	}
+
+	meta.Embedder = EmbedderInfo{
+		Provider:   provider,
+		Model:      model,
+		Dimensions: dimensions,
+	}
+
+	bytes, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+
+	if found {
+		_, err = di.sysStore.UpdateCurrentItem(ctx, di.name, string(bytes))
+		return err
+	}
+
+	_, err = di.sysStore.Add(ctx, di.name, string(bytes))
+	return err
 }
 
 func (di *domainIndex[T]) getActiveVersion(ctx context.Context) (int64, error) {
@@ -978,7 +1070,14 @@ func (di *domainIndex[T]) getActiveVersion(ctx context.Context) (int64, error) {
 		return 0, err
 	}
 	if found {
-		return di.sysStore.GetCurrentValue(ctx)
+		strVal, err := di.sysStore.GetCurrentValue(ctx)
+		if err != nil {
+			return 0, err
+		}
+		var meta Metadata
+		if err := json.Unmarshal([]byte(strVal), &meta); err == nil {
+			return meta.ActiveVersion, nil
+		}
 	}
 	return 0, nil
 }
@@ -996,4 +1095,163 @@ func (di *domainIndex[T]) beginTransaction(ctx context.Context) (sop.Transaction
 		return nil, err
 	}
 	return t, nil
+}
+
+// SplitCentroid reorganizes an overloaded centroid by running localized 2-Means
+// clustering, creating two new centroids, and reassigning its vectors.
+func (di *domainIndex[T]) SplitCentroid(ctx context.Context, centroidID int) error {
+	if locked, err := di.isOptimizing(ctx); err != nil {
+		return err
+	} else if locked {
+		return fmt.Errorf("vector store is currently optimizing, read-only mode active")
+	}
+
+	version, err := di.getActiveVersion(ctx)
+	if err != nil {
+		return err
+	}
+
+	arch, err := di.getArchitecture(ctx, version)
+	if err != nil {
+		return err
+	}
+
+	// 1. Collect all vectors for this centroid
+	startKey := ai.VectorKey{CentroidID: centroidID, DistanceToCentroid: -1, ItemID: ""}
+	var items []ai.Item[T]
+	var keys []ai.VectorKey
+
+	if _, err := arch.Vectors.Find(ctx, startKey, true); err != nil {
+		return err
+	}
+
+	for {
+		vectorItem, err := arch.Vectors.GetCurrentItem(ctx)
+		if err != nil {
+			if os.IsNotExist(err) {
+				if ok, _ := arch.Vectors.Next(ctx); !ok {
+					break
+				}
+				continue
+			}
+			return err
+		}
+
+		key := vectorItem.Key
+		if compositeKeyComparer(key, startKey) < 0 {
+			if ok, err := arch.Vectors.Next(ctx); !ok || err != nil {
+				break
+			}
+			continue
+		}
+
+		if vectorItem.ID.IsNil() || vectorItem.Key.CentroidID != centroidID {
+			break
+		}
+
+		items = append(items, ai.Item[T]{
+			ID:     vectorItem.Key.ItemID,
+			Vector: *vectorItem.Value,
+		})
+		keys = append(keys, vectorItem.Key)
+
+		if ok, err := arch.Vectors.Next(ctx); err != nil {
+			return err
+		} else if !ok {
+			break
+		}
+	}
+
+	if len(items) < 2 {
+		return fmt.Errorf("centroid %d has %d vectors, not enough to split", centroidID, len(items))
+	}
+
+	// 2. Perform 2-Means Clustering using robust KMeans++
+	newCentroidsMap, err := ComputeCentroids(items, 2)
+	if err != nil {
+		return fmt.Errorf("kmeans failed: %w", err)
+	}
+
+	// 3. Create 2 New Centroids
+	newIDs := make([]int, 0, 2)
+	// We need 1 and 2 from ComputeCentroids
+	for i := 1; i <= 2; i++ {
+		if vec, exists := newCentroidsMap[i]; exists {
+			newID, err := di.AddCentroid(ctx, vec)
+			if err != nil {
+				return err
+			}
+			newIDs = append(newIDs, newID)
+		}
+	}
+
+	if len(newIDs) < 2 {
+		return fmt.Errorf("failed to generate 2 new centroids")
+	}
+
+	newCvecs := [][]float32{newCentroidsMap[1], newCentroidsMap[2]}
+
+	// 4. Reassign vectors
+	for i, item := range items {
+		oldKey := keys[i]
+
+		dist0 := euclideanDistance(item.Vector, newCvecs[0])
+		dist1 := euclideanDistance(item.Vector, newCvecs[1])
+
+		var newCID int
+		var dist float32
+		if dist0 < dist1 {
+			newCID = newIDs[0]
+			dist = dist0
+		} else {
+			newCID = newIDs[1]
+			dist = dist1
+		}
+
+		if found, _ := arch.Vectors.Find(ctx, oldKey, false); found {
+			if _, err := arch.Vectors.RemoveCurrentItem(ctx); err != nil {
+				return err
+			}
+		}
+
+		newKey := ai.VectorKey{CentroidID: newCID, DistanceToCentroid: dist, ItemID: oldKey.ItemID}
+		if _, err := arch.Vectors.Add(ctx, newKey, item.Vector); err != nil {
+			return err
+		}
+
+		contentKey := ai.ContentKey{ItemID: oldKey.ItemID}
+		if found, _ := arch.Content.Find(ctx, contentKey, false); found {
+			val, _ := arch.Content.GetCurrentValue(ctx)
+			updatedKey := ai.ContentKey{
+				ItemID:     oldKey.ItemID,
+				CentroidID: newCID,
+				Distance:   dist,
+				Version:    version,
+			}
+			if _, err := arch.Content.Upsert(ctx, updatedKey, val); err != nil {
+				return err
+			}
+		}
+
+		if di.config.UsageMode == ai.DynamicWithVectorCountTracking {
+			if foundC, _ := arch.Centroids.Find(ctx, newCID, false); foundC {
+				c, _ := arch.Centroids.GetCurrentValue(ctx)
+				c.VectorCount++
+				arch.Centroids.UpdateCurrentValue(ctx, c)
+			}
+		}
+	}
+
+	// 5. Delete Old Centroid
+	if found, _ := arch.Centroids.Find(ctx, centroidID, false); found {
+		if _, err := arch.Centroids.RemoveCurrentItem(ctx); err != nil {
+			return err
+		}
+	}
+
+	if di.centroidsCache != nil {
+		delete(di.centroidsCache, centroidID)
+	}
+
+	return nil
 }
