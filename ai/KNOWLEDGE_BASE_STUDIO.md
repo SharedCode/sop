@@ -64,6 +64,8 @@ Because Knowledge Bases (Spaces) are deterministic, purely isolated, and perfect
 * **Buy, Sell, and Trade**: Once minted, these semantic Spaces can be exported, packaged, and traded on an open ecosystem. 
 * **Earn (Sales Margin)**: Creators and organizations earn money by selling their refined AI memories (RAG-as-a-Service) at a premium margin compared to the baseline LLM and Embedder API costs it took to generate them. 
 
+**Example Case Study**: An adult male curates and mints a highly specialized Knowledge Base designed to simulate a "Girlfriend Companion." By investing the time to structure deep personality traits, reactions, and conversational history, the AI is able to flawlessly personify this companion. Once shared with friends and proven highly sought after in the ecosystem, the creator can attach a premium price tag to the "Girlfriend" KB and sell access/copies to others seeking a similar experience. 
+
 This transforms highly structured digital knowledge into a financial hotcake—a tradeable asset where users are directly rewarded for their data organization and vectorization investments.
 
 ## 6. Future Refinements & Roadmap
