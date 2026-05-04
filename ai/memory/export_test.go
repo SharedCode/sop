@@ -27,8 +27,8 @@ func TestExportImportJSON(t *testing.T) {
 
 	// Ingest some thoughts
 	thoughts := []Thought[string]{
-		{Text: "Apple is a fruit", Category: "Food", Data: "apple_data", Vector: []float32{0.1, 0.2}},
-		{Text: "Car is a vehicle", Category: "Vehicles", Data: "car_data", Vector: []float32{0.9, 0.8}},
+		{Summaries: []string{"Apple is a fruit"}, Category: "Food", Data: "apple_data", Vectors: [][]float32{{0.1, 0.2}}},
+		{Summaries: []string{"Car is a vehicle"}, Category: "Vehicles", Data: "car_data", Vectors: [][]float32{{0.9, 0.8}}},
 	}
 	err := kb.IngestThoughts(ctx, thoughts, "test")
 	if err != nil {

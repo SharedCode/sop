@@ -805,7 +805,7 @@
         overlay.style.position = 'fixed';
         overlay.style.top = '0';
         overlay.style.left = '0';
-        overlay.style.width = '100vw';
+        overlay.style.width = '100%';
         overlay.style.height = '100vh';
         overlay.style.background = 'rgba(0,0,0,0.6)';
         overlay.style.zIndex = '10000';
@@ -823,6 +823,7 @@
         modal.style.height = '65%';
         modal.style.display = 'flex';
         modal.style.flexDirection = 'column';
+        modal.style.boxSizing = 'border-box';
         modal.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
 
         const titleObj = document.createElement('h3');
@@ -990,7 +991,7 @@
         overlay.style.position = 'fixed';
         overlay.style.top = '0';
         overlay.style.left = '0';
-        overlay.style.width = '100vw';
+        overlay.style.width = '100%';
         overlay.style.height = '100vh';
         overlay.style.background = 'rgba(0,0,0,0.6)';
         overlay.style.zIndex = '10000';
@@ -1007,6 +1008,7 @@
         modal.style.maxWidth = '90%';
         modal.style.display = 'flex';
         modal.style.flexDirection = 'column';
+        modal.style.boxSizing = 'border-box';
         modal.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
 
         const titleObj = document.createElement('h3');
@@ -1261,7 +1263,7 @@
         }
 
         let html = `
-            <div style="display: flex; flex-direction: row; gap: 20px; padding: 15px; height: 100%; align-items: flex-start; width: 100%;">
+            <div style="display: flex; flex-direction: row; gap: 20px; padding: 15px; height: 100%; align-items: flex-start; width: 100%; box-sizing: border-box;">
                 
                 <!-- Left Sidebar Treeview -->
                 <div style="width: 250px; min-width: 250px; border-right: 1px solid var(--border-color); padding-right: 15px; height: 100%; overflow-y: auto;">
@@ -1599,7 +1601,7 @@
                 
                 let paginationHtml = '';
                 if (totalPages > 1) {
-                        paginationHtml += `<div style="display: flex; gap: 10px; margin-top: 20px; align-items: center; justify-content: center; width: 100%; grid-column: 1 / -1; padding: 10px; border-top: 1px solid var(--border-color);">`;
+                        paginationHtml += `<div style="display: flex; gap: 10px; margin-top: 20px; align-items: center; justify-content: center; width: 100%; grid-column: 1 / -1; padding: 10px; box-sizing: border-box; border-top: 1px solid var(--border-color);">`;
                 
                         // Prev
                         if (currentPage > 1) {

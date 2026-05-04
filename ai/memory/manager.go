@@ -155,3 +155,26 @@ func (m *MemoryManager[T]) SleepCycle(ctx context.Context) error {
 	// Historical sleep-cycle reflection logic would remain here...
 	return nil
 }
+
+func (m *MemoryManager[T]) GenerateSummaries(ctx context.Context, dataStr string) ([]string, error) {
+if m.llm == nil {
+    return []string{dataStr}, nil
+}
+prompt := "Break the following data down into distinct logical vectors or small standalone factual observations (sentences or short phrases). Return ONLY a pipe-separated ( | ) list of these phrases.\n\nData: " + dataStr
+opts := ai.GenOptions{MaxTokens: 1000, Temperature: 0.1}
+out, err := m.llm.Generate(ctx, prompt, opts)
+if err != nil {
+return nil, err
+}
+parts := strings.Split(out.Text, "|")
+var res []string
+for _, p := range parts {
+if strings.TrimSpace(p) != "" {
+res = append(res, strings.TrimSpace(p))
+}
+}
+if len(res) == 0 {
+res = []string{dataStr}
+}
+return res, nil
+}

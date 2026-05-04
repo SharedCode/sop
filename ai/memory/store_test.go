@@ -120,7 +120,7 @@ func TestDynamicStore_SimulateLLMSleepCycle(t *testing.T) {
 	newRootCat := &Category{
 		ID:           sop.NewUUID(),
 		Name:         "Fruits",
-		CenterVector: []float32{0.11, 0.21, 0.31},
+		CenterVectors: [][]float32{ []float32{0.11, 0.21, 0.31},
 	}
 
 	_, err = s.categories.Add(ctx, newRootCat.ID, newRootCat)
