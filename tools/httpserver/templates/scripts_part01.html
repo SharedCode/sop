@@ -1183,7 +1183,7 @@
         return !hasSchema;
     }
 
-        async function selectSpace(name, element) {
+    async function selectSpace(name, element, force = false, catOffset = 0, catLimit = 70) {
     currentStore = name + "/data";
     closeUIModal('toolbar');
     closeUIModal('pagination');
@@ -1213,9 +1213,18 @@
     grid.innerHTML = "<div style='padding: 15px;'>Fetching thoughts...</div>";
     
     try {
-        const resCat = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`);
+        const resCat = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}&offset=${catOffset}&limit=${catLimit}`);
         if (!resCat.ok) throw new Error("Failed to fetch categories");
-        const categories = await resCat.json() || [];
+        const categoriesData = await resCat.json();
+        let categories = [];
+        let totalCatCount = 0;
+        if (Array.isArray(categoriesData)) {
+            categories = categoriesData;
+            totalCatCount = categories.length;
+        } else if (categoriesData && Array.isArray(categoriesData.data)) {
+            categories = categoriesData.data;
+            totalCatCount = categoriesData.total || categories.length;
+        }
         window._currentKBCategories = categories;
 
         // Build hierarchy based on parent_id
@@ -1234,6 +1243,9 @@
         const currentDbObj = availableDatabases.find(db => db.name === currentDatabase);
         const isSystemDB = currentDbObj ? currentDbObj.is_system : false;
         const isReadOnlyKB = isSpaceReadOnly(name, currentDatabase);
+        
+        window._currentLimit = window._currentLimit || 50;
+        
         let actionButtons = '';
         if (!isReadOnlyKB) {
             actionButtons = `
@@ -1269,7 +1281,16 @@
                 <div style="flex: 1; display: flex; flex-direction: column; height: 100%; overflow-y: auto; padding-right: 15px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; padding-bottom: 5px; border-bottom: 1px solid var(--border-color); position: sticky; top: 0; background: var(--bg-color); z-index: 10; overflow: hidden;">
                         <h3 id="kb-items-header-title" style="margin: 0; font-size: 1.1em; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px;">All Items</h3>
-                        ${actionButtons}
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <select id="items-per-page-select" onchange="window._currentLimit = parseInt(this.value); if(window._lastFetchItemsArgs) { window.fetchItemsForCategory(window._lastFetchItemsArgs.spaceName, window._lastFetchItemsArgs.categoryId, window._lastFetchItemsArgs.categoryName, window._lastFetchItemsArgs.liElement, window._lastFetchItemsArgs.catObj, 0, window._currentLimit); }" style="padding: 4px 8px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-color); font-size: 0.85em; cursor: pointer; outline: none;">
+                                <option value="10" ${window._currentLimit === 10 ? 'selected' : ''}>10 / page</option>
+                                <option value="25" ${window._currentLimit === 25 ? 'selected' : ''}>25 / page</option>
+                                <option value="50" ${window._currentLimit === 50 ? 'selected' : ''}>50 / page</option>
+                                <option value="100" ${window._currentLimit === 100 ? 'selected' : ''}>100 / page</option>
+                                <option value="500" ${window._currentLimit === 500 ? 'selected' : ''}>500 / page</option>
+                            </select>
+                            ${actionButtons}
+                        </div>
                     </div>
                     <div id="kb-items-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; align-content: flex-start; padding-bottom: 20px;">
                         <div style="padding: 15px;">Please select a category.</div>
@@ -1335,9 +1356,52 @@
         if (roots.length > 0) {
             renderTreeNodes(roots.sort((a,b) => a.name.localeCompare(b.name)), treeRoot);
         }
+        
+        // Category Pagination UI
+        const totalCatPages = Math.ceil(totalCatCount / catLimit);
+        const currentCatPage = Math.floor(catOffset / catLimit) + 1;
+        if (totalCatPages > 1) {
+            let pHtml = `<div style="display: flex; gap: 5px; margin-top: 15px; align-items: center; justify-content: center; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--border-color);">`;
+            
+            if (currentCatPage > 1) {
+                pHtml += `<button onclick="window.selectSpace('${name}', document.querySelector('#sidebar li.active'), false, ${catOffset - catLimit}, ${catLimit})" style="padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">&lt;</button>`;
+            }
+            
+            let sPage = Math.max(1, currentCatPage - 1);
+            let ePage = Math.min(totalCatPages, currentCatPage + 1);
+            
+            if (sPage > 1) {
+                pHtml += `<button onclick="window.selectSpace('${name}', document.querySelector('#sidebar li.active'), false, 0, ${catLimit})" style="padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">1</button>`;
+                if (sPage > 2) pHtml += `<span style="font-size: 0.85em; color: var(--text-muted);">..</span>`;
+            }
+            
+            for (let i = sPage; i <= ePage; i++) {
+                const isC = i === currentCatPage;
+                const poff = (i - 1) * catLimit;
+                const st = isC 
+                    ? `padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid #5b6ed1; background: #5b6ed1; color: white; cursor: default;`
+                    : `padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;`;
+                
+                pHtml += `<button ${!isC ? `onclick="window.selectSpace('${name}', document.querySelector('#sidebar li.active'), false, ${poff}, ${catLimit})"` : ''} style="${st}">${i}</button>`;
+            }
+            
+            if (ePage < totalCatPages) {
+                if (ePage < totalCatPages - 1) pHtml += `<span style="font-size: 0.85em; color: var(--text-muted);">..</span>`;
+                pHtml += `<button onclick="window.selectSpace('${name}', document.querySelector('#sidebar li.active'), false, ${(totalCatPages - 1) * catLimit}, ${catLimit})" style="padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">${totalCatPages}</button>`;
+            }
 
-        window.fetchItemsForCategory = async function(spaceName, categoryId, categoryName, liElement, catObj) {
-            window._lastFetchItemsArgs = { spaceName, categoryId, categoryName, liElement, catObj };
+            if (currentCatPage < totalCatPages) {
+                pHtml += `<button onclick="window.selectSpace('${name}', document.querySelector('#sidebar li.active'), false, ${catOffset + catLimit}, ${catLimit})" style="padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">&gt;</button>`;
+            }
+            
+            pHtml += `</div>`;
+            const pagingWrap = document.createElement('div');
+            pagingWrap.innerHTML = pHtml;
+            treeRoot.parentNode.appendChild(pagingWrap);
+        }
+
+        window.fetchItemsForCategory = async function(spaceName, categoryId, categoryName, liElement, catObj, offset = 0, limit = (window._currentLimit || 50)) {
+            window._lastFetchItemsArgs = { spaceName, categoryId, categoryName, liElement, catObj, offset, limit };
             window._currentSelectedCategoryName = categoryName;
             document.querySelectorAll('#kb-category-tree li').forEach(li => {
                 li.style.fontWeight = 'normal';
@@ -1429,16 +1493,19 @@
             tg.innerHTML = "<div style='padding: 15px;'>Loading items...</div>";
 
             try {
-                let url = `/api/spaces/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(spaceName)}`;
+                let url = `/api/spaces/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(spaceName)}&offset=${offset}&limit=${limit}`;
                 if (categoryId) url += `&category_id=${encodeURIComponent(categoryId)}`;
                 
                 const res = await fetch(url);
                 if (!res.ok) throw new Error("Failed to fetch items");
-                let items = [];
+                
+                let resPayload = null;
                 try {
-                	items = await res.json();
+                	resPayload = await res.json();
                 } catch(e){}
                 
+                let items = resPayload ? resPayload.data || [] : [];
+                let totalCount = resPayload ? resPayload.total || items.length : items.length;
                 if (!items || items.length === 0) {
                     tg.innerHTML = "<div style='padding: 15px;'>No items found.</div>";
                     return;
@@ -1524,6 +1591,59 @@
                         </div>
                     `;
                 });
+                
+                // Add pagination controls
+                const totalPages = Math.ceil(totalCount / limit);
+                const currentPage = Math.floor(offset / limit) + 1;
+                
+                let paginationHtml = '';
+                if (totalPages > 1) {
+                        paginationHtml += `<div style="display: flex; gap: 10px; margin-top: 20px; align-items: center; justify-content: center; width: 100%; grid-column: 1 / -1; padding: 10px; border-top: 1px solid var(--border-color);">`;
+                
+                        // Prev
+                        if (currentPage > 1) {
+                                paginationHtml += `<button onclick="window.fetchItemsForCategory('${spaceName}', '${categoryId || ''}', '${categoryName.replace(/'/g, "\\'")}', null, null, ${offset - limit}, ${limit})" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">Prev</button>`;
+                        } else {
+                                paginationHtml += `<button disabled style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--secondary-bg); color: var(--text-muted); cursor: not-allowed; opacity: 0.5;">Prev</button>`;
+                        }
+                	let startPage = Math.max(1, currentPage - 2);
+                	let endPage = Math.min(totalPages, currentPage + 2);
+                	
+                	if (startPage > 1) {
+                		paginationHtml += `<button onclick="window.fetchItemsForCategory('${spaceName}', '${categoryId || ''}', '${categoryName.replace(/'/g, "\\'")}', null, null, 0, ${limit})" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">1</button>`;
+                		if (startPage > 2) paginationHtml += `<span style="padding: 0 5px; color: var(--text-muted);">...</span>`;
+                	}
+                	
+                	for (let i = startPage; i <= endPage; i++) {
+                		const isCurrent = i === currentPage;
+                		const pageOffset = (i - 1) * limit;
+                		const style = isCurrent 
+                			? `padding: 5px 10px; border-radius: 4px; border: 1px solid #5b6ed1; background: #5b6ed1; color: white; font-weight: bold; cursor: default;`
+                			: `padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;`;
+                			
+                		if (isCurrent) {
+                			paginationHtml += `<button style="${style}">${i}</button>`;
+                		} else {
+                			paginationHtml += `<button onclick="window.fetchItemsForCategory('${spaceName}', '${categoryId || ''}', '${categoryName.replace(/'/g, "\\'")}', null, null, ${pageOffset}, ${limit})" style="${style}">${i}</button>`;
+                		}
+                	}
+                	
+                	if (endPage < totalPages) {
+                		if (endPage < totalPages - 1) paginationHtml += `<span style="padding: 0 5px; color: var(--text-muted);">...</span>`;
+                		paginationHtml += `<button onclick="window.fetchItemsForCategory('${spaceName}', '${categoryId || ''}', '${categoryName.replace(/'/g, "\\'")}', null, null, ${(totalPages - 1) * limit}, ${limit})" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">${totalPages}</button>`;
+                	}
+
+                	// Next
+                	if (currentPage < totalPages) {
+                		paginationHtml += `<button onclick="window.fetchItemsForCategory('${spaceName}', '${categoryId || ''}', '${categoryName.replace(/'/g, "\\'")}', null, null, ${offset + limit}, ${limit})" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">Next</button>`;
+                	} else {
+                		paginationHtml += `<button disabled style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--secondary-bg); color: var(--text-muted); cursor: not-allowed; opacity: 0.5;">Next</button>`;
+                	}
+
+                	paginationHtml += `</div>`;
+                }
+                
+                contentHtml += paginationHtml;
                 tg.innerHTML = contentHtml;
 
             } catch (err) {
