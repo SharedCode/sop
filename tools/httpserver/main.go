@@ -110,15 +110,13 @@ const SystemDBName = "system"
 
 func main() {
 
-	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
-		Level: log.LevelDebug,
-	}))
-	log.SetDefault(l) // configures log package to print with LevelInfo
-
 	var showVersion bool
 	var openBrowserFlag bool
+	var logLevelFlag string
+
 	flag.BoolVar(&showVersion, "version", false, "Show version and exit")
 	flag.BoolVar(&openBrowserFlag, "open-browser", true, "Open browser on startup")
+	flag.StringVar(&logLevelFlag, "log-level", "info", "Set log level (debug, info, warn, error). Default is info.")
 	flag.IntVar(&config.Port, "port", 8080, "Port to run the server on")
 	flag.StringVar(&config.DatabasePath, "database", "/tmp/sop_data", "Path to the SOP database/data directory")
 	flag.StringVar(&config.Mode, "mode", "standalone", "SOP mode: 'standalone' or 'clustered'")
@@ -128,6 +126,24 @@ func main() {
 	flag.BoolVar(&config.EnableRestAuth, "enable-rest-auth", false, "Enable Bearer token authentication for REST endpoints")
 	flag.BoolVar(&config.ProductionMode, "production", false, "Enable Production mode (use real Embedder and LLM)")
 	flag.Parse()
+
+	var lvl log.Level
+	logLevelFlagUpper := strings.ToUpper(logLevelFlag)
+	switch logLevelFlagUpper {
+	case "DEBUG":
+		lvl = log.LevelDebug
+	case "WARN":
+		lvl = log.LevelWarn
+	case "ERROR":
+		lvl = log.LevelError
+	default:
+		lvl = log.LevelInfo
+	}
+
+	l := log.New(log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
+		Level: lvl,
+	}))
+	log.SetDefault(l) // configures log package to print with specified level
 
 	if showVersion {
 		fmt.Printf("SOP Data Manager v%s\n", sop.Version)

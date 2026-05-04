@@ -133,6 +133,12 @@ All SOP environments come with a built-in **SystemDB**. Far from just a log repo
 *   **LLM Knowledge**: Standard B-Tree stores containing domain knowledge. Modeled like a "Model Store" (Category + Name keys), we use deterministic lookups to avoid the high false-positive rates found in Vector similarity search.
 *   **(Future) RBAC**: Role-Based Access Control configurations for multi-user security.
 
+### Spaces & Active Memory
+Instead of a single monolithic Vector Database, SOP utilizes **Spaces**—isolated, highly-focused semantic VectorDBs.
+*   **Targeted Context**: By partitioning data into domains (e.g., "Medical", "HR", "Sales"), queries remain highly relevant, bypassing the signal-to-noise degradation normally found in massive shared vector spaces.
+*   **Stateless Backend (BYOK)**: Connect to any Space safely using **Bring Your Own Key (BYOK)** architecture. The frontend injects credentials per-request via headers (`X-LLM-XX` and `X-Embedder-XX`), ensuring maximum security and a completely stateless backend.
+*   **Active Memory**: "The Butler" (our orchestrator) maintains bio-mimicked conceptual context retention via vector centroids, meaning conversations remember the *idea* of what you were talking about without requiring enormous token windows.
+
 ### AI Copilot & Scripts
 The Data Manager includes an integrated AI Copilot that supports **Natural Language Programming**.
 *   **Natural Language Queries**: Ask "Show me all active users" or "Join users with their last order", and the system acts on it.

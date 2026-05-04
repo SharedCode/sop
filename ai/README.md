@@ -14,8 +14,9 @@ It provides a complete toolkit for building local, privacy-first AI applications
 
 ## Core Components
 
-### 1. New Memory Architecture (`ai/memory`)
-The core user-facing and Agent-driven storage engine. It provides **Human-Readable Ontologies** and structured data for the UI and Copilot.
+### 1. New Memory Architecture (`ai/memory`) (Recommended)
+The core user-facing and Agent-driven storage engine. It is the **recommended** approach for new applications. It provides **Human-Readable Ontologies**, structured data for the UI and Copilot, rich visual analysis tools within the Data Manager, and is fully user-manageable and overridable.
+*   **Visual & Manageable**: Data Manager provides full UI integration to see how information is categorized. Users can manually inspect, manage, and override how the AI linked concepts, creating user-enrichable AI memories.
 *   **Knowledge Bases**: Groups information logically rather than physically. Implements the `OpenKnowledgeBase` pattern.
 *   **LLM Categorization**: Unlike legacy systems that use mathematics, this system uses LLMs to read data and determine its **Category** (e.g., "Billing", "HR").
 *   **Deterministic Pre-Filtering**: Caching and filtering by human-readable categories allows UI Copilots to skip 99% of the search space instantly before any math is done.
@@ -23,8 +24,8 @@ The core user-facing and Agent-driven storage engine. It provides **Human-Readab
 *   **Granular Items**: The memory system inherently understands relationship mappings and structured JSON arrays for document retrieval.
 *   **Data as a Tradable Asset (Marketplace Ready)**: Because structuring this memory requires cognitive reasoning (LLM API calls), each Knowledge Base represents a literal "intellectual investment". Unlike flat, meaningless mathematical centroids, these highly-managed, "human-grade" semantic spaces (Spaces) can be managed via the UI, exported, and eventually minted, bought, or sold in a Data Marketplace by end-users.
 
-### 2. Legacy Vector Database (`ai/vector`)
-A persistent, ACID-compliant vector store optimized for **pure mathematical throughput**. This is retained for high-volume pipelines, backward compatibility, and the cross-language FFI bindings.
+### 2. K-Means Vector Database (`ai/vector`) (Supported)
+A persistent, ACID-compliant vector store optimized for **pure mathematical throughput**. While the new memory architecture is recommended, the K-Means VectorDB is **fully supported** and retained for high-volume pipelines, backward compatibility, and cross-language FFI bindings. We will add support for the new memory architecture in cross-language FFI bindings soon.
 *   **Mathematical Centroids**: Zero-LLM ingestion. Vectors are grouped into clusters (Centroids) purely by cosine distance. This makes ingestion lightning fast and completely free (no API calls).
 *   **Blocking Optimizations (Weakness)**: Because centroids are purely mathematical, data drifts as vectors are added. It strictly requires periodic calls to the `Optimize()` function to recalculate the centers and shift data, during which writing may be blocked.
 *   **Storage**: Uses SOP B-Trees to store vectors and metadata. Wait-free, parallel queries point directly at mathematical clusters.
