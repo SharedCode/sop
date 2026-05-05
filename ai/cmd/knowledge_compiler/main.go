@@ -36,7 +36,6 @@ func main() {
 				strings.Contains(upperName, "README2") ||
 				strings.Contains(upperName, "PROPOSAL") ||
 				strings.Contains(upperName, "CONTRIBUTING") ||
-				strings.Contains(upperName, "DESIGN_PLAN") ||
 				strings.Contains(upperName, "LINKEDIN") ||
 				strings.Contains(upperName, "WHITEPAPER") {
 				continue
