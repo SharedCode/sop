@@ -122,8 +122,8 @@ func (db *Database) OpenKnowledgeBase(
 	manager := memory.NewMemoryManager[map[string]any](store, llm, embedder)
 
 	return &memory.KnowledgeBase[map[string]any]{
-		BaseKnowledgeBase: memory.BaseKnowledgeBase[map[string]any]{Store: store},
-		Manager:           manager,
+		Store:   store,
+		Manager: manager,
 	}, nil
 }
 

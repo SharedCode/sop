@@ -611,6 +611,11 @@
         closeUIModal('btn-edit-store');
         closeUIModal('btn-view-store');
         closeUIModal('btn-edit-cel');
+        closeUIModal('btn-edit-kb');
+        closeUIModal('btn-export-kb');
+        closeUIModal('btn-import-kb');
+        closeUIModal('btn-delete-kb');
+        closeUIModal('btn-add-kb-category');
 
         document.getElementById('data-grid').innerHTML = '';
         closeUIModal('toolbar');
@@ -1229,8 +1234,10 @@
     closeUIModal('btn-view-store');
     closeUIModal('btn-edit-cel');
     closeUIModal('btn-delete-store');
+    const edKb = document.getElementById('btn-edit-kb'); if(edKb) edKb.style.display = 'inline-block';
     const exKb = document.getElementById('btn-export-kb'); if(exKb) exKb.style.display = 'inline-block';
     const imKb = document.getElementById('btn-import-kb'); if(imKb) imKb.style.display = 'inline-block';
+    const delKb = document.getElementById('btn-delete-kb'); if(delKb) delKb.style.display = 'inline-block';
 
     if (!await closeDetail()) return;
 
@@ -1759,6 +1766,13 @@ async function selectStore(name, element, force = false) {
         const editBtn = document.getElementById('btn-edit-store');
         editBtn.style.display = 'none';
 
+        // Hide Space-specific buttons
+        closeUIModal('btn-edit-kb');
+        closeUIModal('btn-export-kb');
+        closeUIModal('btn-import-kb');
+        closeUIModal('btn-delete-kb');
+        closeUIModal('btn-add-kb-category');
+
         // Show View Store Button
         const viewBtn = document.getElementById('btn-view-store');
         viewBtn.style.display = 'none';
@@ -1847,6 +1861,11 @@ async function selectStore(name, element, force = false) {
                 closeUIModal('btn-edit-store');
                 closeUIModal('btn-view-store');
                 closeUIModal('btn-edit-cel');
+                closeUIModal('btn-edit-kb');
+                closeUIModal('btn-export-kb');
+                closeUIModal('btn-import-kb');
+                closeUIModal('btn-delete-kb');
+                closeUIModal('btn-add-kb-category');
 
                 document.getElementById('data-grid').innerHTML = '';
                 closeUIModal('toolbar');
@@ -1856,6 +1875,57 @@ async function selectStore(name, element, force = false) {
                 showAlert("Error: " + (data.error || "Unknown error"));
             }
         });
+        });
+    }
+
+    function deleteSpace() {
+        if (!currentStore) return;
+        
+        let spaceName = currentStore;
+        if (spaceName.endsWith("/data")) {
+            spaceName = spaceName.slice(0, -5);
+        }
+
+        promptAsync(`Please type the space name '${spaceName}' to confirm deletion:`, "Delete Space")
+        .then(name => {
+            if (name === null) return; // cancelled
+            
+            if (name.trim().toLowerCase() !== spaceName.toLowerCase()) {
+                showAlert("Space name does not match. Deletion cancelled.");
+                return;
+            }
+
+            apiCall('/api/spaces/delete', 'POST', {
+                database: currentDatabase,
+                space: spaceName
+            })
+            .then(data => {
+                if (data.status === 'ok') {
+                    showAlert("Space deleted successfully.");
+                    if (currentStore === spaceName || currentStore === spaceName + "/data") {
+                        currentStore = null;
+                        document.getElementById('current-store-title').textContent = "Select Store or Space";
+                        closeUIModal('btn-delete-store');
+                        closeUIModal('btn-code-store');
+                        closeUIModal('btn-edit-store');
+                        closeUIModal('btn-view-store');
+                        closeUIModal('btn-edit-cel');
+                        closeUIModal('btn-edit-kb');
+                        closeUIModal('btn-export-kb');
+                        closeUIModal('btn-import-kb');
+                        closeUIModal('btn-delete-kb');
+                        closeUIModal('btn-add-kb-category');
+                        document.getElementById('data-grid').innerHTML = '';
+                        closeUIModal('toolbar');
+                    }
+                    selectDatabase(currentDatabase, true);
+                } else {
+                    showAlert(`Error deleting space: ${data.error || 'Unknown error'}`);
+                }
+            })
+            .catch(err => {
+                showAlert(`Error: ${err.message}`);
+            });
         });
     }
 
@@ -2313,7 +2383,7 @@ window.vectorizeSpace = async function(spaceName) {
         let url = `/api/spaces/vectorize?space=${encodeURIComponent(cleanName)}&database=${encodeURIComponent(currentDatabase)}`;
         
         let itemIds = [];
-        let bodyPayload = null;
+        let bodyPayload = { database: currentDatabase, space: cleanName };
 
         if (scope === 'current_page') {
             if (window._lastSpaceItems && window._lastSpaceItems.length > 0) {
@@ -2323,17 +2393,20 @@ window.vectorizeSpace = async function(spaceName) {
                 showAlert("No items to vectorize on current page.");
                 return;
             }
-            bodyPayload = { itemIds: itemIds };
+            bodyPayload.itemIds = itemIds;
+            if (selCatId && selCatName !== 'All Items') {
+                bodyPayload.categoryId = selCatId;
+            }
         } else if (scope === 'current_category') {
             if (!selCatId || selCatName === 'All Items') {
                 showAlert("No specific category selected.");
                 return;
             }
-            bodyPayload = { categoryId: selCatId };
+            bodyPayload.categoryId = selCatId;
         }
         
         try {
-            const result = await apiCall(url, 'POST', bodyPayload ? JSON.stringify(bodyPayload) : null);
+            const result = await apiCall(url, 'POST', bodyPayload);
             if (result.task_id) {
                 showAlert(`Vectorization task started (ID: ${result.task_id}).`);
             } else {

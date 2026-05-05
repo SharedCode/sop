@@ -63,9 +63,7 @@ func TestActiveMemory_EndToEnd(t *testing.T) {
 	manager := memory.NewMemoryManager[Event](memStore, gen, emb)
 	kb := &memory.KnowledgeBase[Event]{
 		Manager: manager,
-		BaseKnowledgeBase: memory.BaseKnowledgeBase[Event]{
-			Store:    memStore,
-		},
+		Store:   memStore,
 	}
 	
 	ctx := context.Background()

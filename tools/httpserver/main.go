@@ -301,6 +301,7 @@ func main() {
 	http.HandleFunc("/api/spaces/item/delete", handleDeleteSpaceItem)
 	http.HandleFunc("/api/spaces/ingest", handleIngestSpace)
 	http.HandleFunc("/api/spaces/vectorize", handleVectorizeSpace)
+	http.HandleFunc("/api/spaces/delete", handleDeleteSpace)
 	http.HandleFunc("/api/tasks/status", handleGetTaskStatus)
 	// Configuration Endpoints
 	http.HandleFunc("/api/config/save", handleSaveConfig)
@@ -2568,6 +2569,49 @@ func handleDeleteStore(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Store deleted successfully"})
+}
+
+func handleDeleteSpace(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Database string `json:"database"`
+		Space    string `json:"space"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if IsSystemDB(req.Database) {
+		http.Error(w, "Access Denied: Deleting spaces from the System DB is not allowed.", http.StatusForbidden)
+		return
+	}
+
+	if req.Space == "" {
+		http.Error(w, "Space name is required", http.StatusBadRequest)
+		return
+	}
+
+	dbOpts, err := getDBOptions(r.Context(), req.Database)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	aiDB := aidb.NewDatabase(dbOpts)
+	if err := aiDB.RemoveKnowledgeBase(r.Context(), req.Space); err != nil {
+		http.Error(w, "Failed to delete space: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Space deleted successfully"})
 }
 
 func handleAddItem(w http.ResponseWriter, r *http.Request) {

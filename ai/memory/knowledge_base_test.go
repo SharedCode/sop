@@ -39,7 +39,7 @@ func TestKnowledgeBase_API(t *testing.T) {
 	manager := NewMemoryManager[string](s, llm, embedder)
 
 	kb := &KnowledgeBase[string]{
-		BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: s},
+		Store: s,
 		Manager:           manager,
 	}
 
@@ -82,7 +82,7 @@ func TestStaticKnowledgeBase(t *testing.T) {
 	ds.SetTextIndex(&MockTextIndex{})
 
 	kb := KnowledgeBase[string]{
-		BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: ds},
+		Store: ds,
 		Manager:           NewMemoryManager[string](ds, &MockLLM{}, &MockEmbedder{}),
 	}
 

@@ -21,7 +21,7 @@ func TestExportImportJSON(t *testing.T) {
 	st := NewStore[string](cats.Btree, vecs.Btree, items.Btree).(*store[string])
 	st.SetTextIndex(&MockTextIndex{})
 	kb := &KnowledgeBase[string]{
-		BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: st},
+		Store: st,
 		Manager:           NewMemoryManager[string](st, llm, embedder),
 	}
 
@@ -58,7 +58,7 @@ func TestExportImportJSON(t *testing.T) {
 	st2 := NewStore[string](cats2.Btree, vecs2.Btree, items2.Btree).(*store[string])
 	st2.SetTextIndex(&MockTextIndex{})
 	kb2 := &KnowledgeBase[string]{
-		BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: st2},
+		Store: st2,
 		Manager:           NewMemoryManager[string](st2, llm, embedder),
 	}
 

@@ -208,6 +208,10 @@ func (db *Database) RemoveKnowledgeBase(ctx context.Context, name string) error 
 		"/categories",
 		"/vectors",
 		"/items",
+		"/text/postings",
+		"/text/term_stats",
+		"/text/doc_stats",
+		"/text/global",
 	}
 	var lastErr error
 	for _, suffix := range suffixes {

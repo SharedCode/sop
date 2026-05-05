@@ -10,8 +10,9 @@ import (
 
 // ExportData defines the structure of the KnowledgeBase JSON payload.
 type ExportData[T any] struct {
-	Categories []*Category     `json:"categories"`
-	Items      []ExportItem[T] `json:"items"`
+	Config     *KnowledgeBaseConfig `json:"config,omitempty"`
+	Categories []*Category          `json:"categories"`
+	Items      []ExportItem[T]      `json:"items"`
 }
 
 // ExportItem dictates what fields from the item are serialized.
@@ -51,27 +52,38 @@ func (kb *KnowledgeBase[T]) ExportJSON(ctx context.Context, writer io.Writer) er
 	for ok {
 		item, err := itemsBtree.GetCurrentValue(ctx)
 		if err == nil {
-			var vectors [][]float32
-			if len(item.Positions) > 0 {
-				vecBtree, _ := kb.Store.Vectors(ctx)
-				if vecBtree != nil {
-					for _, pos := range item.Positions {
-						has, _ := vecBtree.Find(ctx, pos, false)
-						if has {
-							v, _ := vecBtree.GetCurrentValue(ctx)
-							vectors = append(vectors, v.Data)
+			if item.ID == sop.NilUUID {
+				// Attempt to recover KnowledgeBaseConfig from this Item
+				b, err := json.Marshal(item.Data)
+				if err == nil {
+					var cfg KnowledgeBaseConfig
+					if json.Unmarshal(b, &cfg) == nil {
+						exportData.Config = &cfg
+					}
+				}
+			} else {
+				var vectors [][]float32
+				if len(item.Positions) > 0 {
+					vecBtree, _ := kb.Store.Vectors(ctx)
+					if vecBtree != nil {
+						for _, pos := range item.Positions {
+							has, _ := vecBtree.Find(ctx, pos, false)
+							if has {
+								v, _ := vecBtree.GetCurrentValue(ctx)
+								vectors = append(vectors, v.Data)
+							}
 						}
 					}
 				}
-			}
 
-			catName := catMap[item.CategoryID]
-			exportData.Items = append(exportData.Items, ExportItem[T]{
-				Category:         catName,
-				Data:             item.Data,
-				Summaries:        item.Summaries,
-				SummariesVectors: vectors,
-			})
+				catName := catMap[item.CategoryID]
+				exportData.Items = append(exportData.Items, ExportItem[T]{
+					Category:         catName,
+					Data:             item.Data,
+					Summaries:        item.Summaries,
+					SummariesVectors: vectors,
+				})
+			}
 		}
 		ok, _ = itemsBtree.Next(ctx)
 	}
@@ -120,6 +132,20 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 			Vectors:   it.SummariesVectors,
 			Summaries: it.Summaries,
 		})
+	}
+
+	if exportData.Config != nil {
+		b, err := json.Marshal(exportData.Config)
+		if err == nil {
+			var configData T
+			if json.Unmarshal(b, &configData) == nil {
+				_ = kb.Store.Upsert(ctx, Item[T]{
+					ID:         sop.NilUUID,
+					CategoryID: sop.NilUUID,
+					Data:       configData,
+				}, nil)
+			}
+		}
 	}
 
 	return kb.IngestThoughts(ctx, thoughts, persona)

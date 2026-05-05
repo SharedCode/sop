@@ -4,6 +4,13 @@ import (
 	"github.com/sharedcode/sop"
 )
 
+type KnowledgeBaseConfig struct {
+	Type         string `json:"type,omitempty"`
+	IsPersona    bool   `json:"is_persona,omitempty"`
+	SystemPrompt string `json:"system_prompt,omitempty"`
+	Embedder     string `json:"embedder,omitempty"`
+}
+
 // Item represents the actual content (The "Thought" or Document).
 // Singular form as requested. It is fundamentally mapped to one or more Vector embeddings.
 type Item[T any] struct {

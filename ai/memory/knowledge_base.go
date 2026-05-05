@@ -11,39 +11,34 @@ import (
 	"github.com/sharedcode/sop/ai"
 )
 
-// BaseKnowledgeBase encapsulates the shared search and store logic across all bases.
-type BaseKnowledgeBase[T any] struct {
-	Store MemoryStore[T]
-}
-
-func (kb *BaseKnowledgeBase[T]) SearchSemanticsBatch(ctx context.Context, queryVectors [][]float32, opts *SearchOptions[T]) ([][]ai.Hit[T], error) {
-	return kb.Store.QueryBatch(ctx, queryVectors, opts)
-}
-
-// SearchKeywordsBatch executes textual BM25 text-matched sparse searches for multiple text payloads.
-func (kb *BaseKnowledgeBase[T]) SearchKeywordsBatch(ctx context.Context, textQueries []string, opts *SearchOptions[T]) ([][]ai.Hit[T], error) {
-	return kb.Store.QueryTextBatch(ctx, textQueries, opts)
-}
-
-// SearchSemantics executes a spatial search (vector matching against mathematical bounds).
-func (kb *BaseKnowledgeBase[T]) SearchSemantics(ctx context.Context, queryVector []float32, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
-	return kb.Store.Query(ctx, queryVector, opts)
-}
-
-// SearchKeywords executes a traditional textual BM25 text-matched sparse search.
-func (kb *BaseKnowledgeBase[T]) SearchKeywords(ctx context.Context, textQuery string, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
-	return kb.Store.QueryText(ctx, textQuery, opts)
-}
-
 // KnowledgeBase provides a clean, unified API for developers.
 // It orchestrates both the storage tables and the LLM memory management.
 type KnowledgeBase[T any] struct {
-	BaseKnowledgeBase[T]
+	Store   MemoryStore[T]
 	Manager *MemoryManager[T]
 	// MaxMathCategoryDistance specifies the max Euclidean distance to cluster centroids
 	// to avoid calling the LLM for category categorization. Set to 0.0 or less to disable
 	// and always rely on "pristine" LLM categorization.
 	MaxMathCategoryDistance float32
+}
+
+func (kb *KnowledgeBase[T]) SearchSemanticsBatch(ctx context.Context, queryVectors [][]float32, opts *SearchOptions[T]) ([][]ai.Hit[T], error) {
+	return kb.Store.QueryBatch(ctx, queryVectors, opts)
+}
+
+// SearchKeywordsBatch executes textual BM25 text-matched sparse searches for multiple text payloads.
+func (kb *KnowledgeBase[T]) SearchKeywordsBatch(ctx context.Context, textQueries []string, opts *SearchOptions[T]) ([][]ai.Hit[T], error) {
+	return kb.Store.QueryTextBatch(ctx, textQueries, opts)
+}
+
+// SearchSemantics executes a spatial search (vector matching against mathematical bounds).
+func (kb *KnowledgeBase[T]) SearchSemantics(ctx context.Context, queryVector []float32, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
+	return kb.Store.Query(ctx, queryVector, opts)
+}
+
+// SearchKeywords executes a traditional textual BM25 text-matched sparse search.
+func (kb *KnowledgeBase[T]) SearchKeywords(ctx context.Context, textQuery string, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
+	return kb.Store.QueryText(ctx, textQuery, opts)
 }
 
 // Thought represents the individual entity of data in a batch categorization execution.
@@ -375,4 +370,37 @@ func (kb *KnowledgeBase[T]) VectorizeItems(ctx context.Context, categoryID sop.U
 	}
 
 	return nil
+}
+
+// GetConfig retrieves the metadata configuration for this KnowledgeBase.
+func (kb *KnowledgeBase[T]) GetConfig(ctx context.Context) (*KnowledgeBaseConfig, error) {
+	itemsBtree, err := kb.Store.Items(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	found, err := itemsBtree.Find(ctx, sop.NilUUID, false)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return nil, nil // No config found
+	}
+
+	item, err := itemsBtree.GetCurrentValue(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	b, err := json.Marshal(item.Data)
+	if err != nil {
+		return nil, err
+	}
+
+	var cfg KnowledgeBaseConfig
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
 }

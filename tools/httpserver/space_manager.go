@@ -36,11 +36,12 @@ func handleGetAvailableSpaces(w http.ResponseWriter, r *http.Request) {
 }
 
 type IngestSpaceRequest struct {
-	Expertise    string          `json:"expertise_id"`
-	DatabaseName string          `json:"database_name"`
-	SpaceName    string          `json:"space_name,omitempty"`
-	URL          string          `json:"url,omitempty"`
-	CustomData   json.RawMessage `json:"custom_data,omitempty"`
+	Expertise    string                      `json:"expertise_id"`
+	DatabaseName string                      `json:"database_name"`
+	SpaceName    string                      `json:"space_name,omitempty"`
+	URL          string                      `json:"url,omitempty"`
+	Attributes   *memory.KnowledgeBaseConfig `json:"attributes,omitempty"`
+	CustomData   json.RawMessage             `json:"custom_data,omitempty"`
 }
 
 type ingestChunk struct {
@@ -152,6 +153,21 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 			trans.Rollback(ctx)
 			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to open KnowledgeBase '%s': %v", storeName, err))
 			return
+		}
+
+		if request.Attributes != nil {
+			attrMap := map[string]any{}
+			b, _ := json.Marshal(request.Attributes)
+			_ = json.Unmarshal(b, &attrMap)
+
+			err := kb.Store.Upsert(ctx, memory.Item[map[string]any]{
+				ID:         sop.NilUUID,
+				CategoryID: sop.NilUUID,
+				Data:       attrMap,
+			}, nil)
+			if err != nil {
+				fmt.Printf("Failed to insert Space Attributes: %v\n", err)
+			}
 		}
 
 		var thoughts []memory.Thought[map[string]any]

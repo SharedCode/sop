@@ -27,7 +27,7 @@ func TestKnowledgeBase_VectorizeItems(t *testing.T) {
 	manager := NewMemoryManager[string](s, llm, embedder)
 
 	kb := &KnowledgeBase[string]{
-		BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: s},
+		Store: s,
 		Manager:           manager,
 	}
 

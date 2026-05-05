@@ -22,7 +22,7 @@ func TestMemoryManager_FailuresAndCoverage(t *testing.T) {
 
 	// 1. LLM Failure in Ingest
 	mgrLLMFail := NewMemoryManager[string](store, &FailingLLM{}, &MockEmbedder{})
-	kbLLM := &KnowledgeBase[string]{Manager: mgrLLMFail, BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: store}}
+	kbLLM := &KnowledgeBase[string]{Manager: mgrLLMFail, Store: store}
 	err := kbLLM.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test"}, Category: "", Data: "data"}}, "")
 	if err == nil || !strings.Contains(err.Error(), "llm batch classification failed:") {
 		t.Fatalf("Expected llm failure, got: %v", err)
@@ -30,7 +30,7 @@ func TestMemoryManager_FailuresAndCoverage(t *testing.T) {
 
 	// 2. Embedder Failure in EnsureCategory
 	mgrEmbedFail := NewMemoryManager[string](store, &MockLLM{}, &FailingEmbedder{})
-	kbEmbedFail := &KnowledgeBase[string]{Manager: mgrEmbedFail, BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: store}}
+	kbEmbedFail := &KnowledgeBase[string]{Manager: mgrEmbedFail, Store: store}
 	err = kbEmbedFail.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test"}, Category: "", Data: "data"}}, "")
 	if err == nil || (!strings.Contains(err.Error(), "failed to embed new category") && !strings.Contains(err.Error(), "mock embedder failure")) {
 		t.Fatalf("Expected embedder failure, got: %v", err)
@@ -42,7 +42,7 @@ func TestMemoryManager_FailuresAndCoverage(t *testing.T) {
 
 	// Now try with failing embedder on store where the category is already ensured
 	mgrEmbedFailLater := NewMemoryManager[string](store, &MockLLM{}, &FailingEmbedder{})
-	kbEmbedFailLater := &KnowledgeBase[string]{Manager: mgrEmbedFailLater, BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: store}}
+	kbEmbedFailLater := &KnowledgeBase[string]{Manager: mgrEmbedFailLater, Store: store}
 	err = kbEmbedFailLater.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test"}, Category: "", Data: "data"}}, "")
 	if err == nil || err.Error() != "mock embedder failure" {
 		t.Fatalf("Expected embedder failure on item, got: %v", err)
@@ -185,7 +185,7 @@ func TestIngestThought_DefinedCategory(t *testing.T) {
 	failingLLM := &FailingLLM{} // should not be called
 	mgr := NewMemoryManager[string](store, failingLLM, &MockEmbedder{})
 
-	kbMgr := &KnowledgeBase[string]{Manager: mgr, BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: store}}
+	kbMgr := &KnowledgeBase[string]{Manager: mgr, Store: store}
 	err := kbMgr.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Text"}, Category: "DirectCat", Data: "Data"}}, "Persona")
 	if err != nil {
 		t.Fatalf("Failed to ingest directly with category: %v", err)
@@ -202,7 +202,7 @@ func TestIngestThought_PersonaContext(t *testing.T) {
 
 	mgr := NewMemoryManager[string](store, &MockLLM{}, &MockEmbedder{})
 
-	kbMgr := &KnowledgeBase[string]{Manager: mgr, BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: store}}
+	kbMgr := &KnowledgeBase[string]{Manager: mgr, Store: store}
 	err := kbMgr.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Text"}, Category: "", Data: "Data"}}, "Persona")
 	if err != nil {
 		t.Fatalf("Failed to ingest with persona: %v", err)
