@@ -331,6 +331,34 @@
     </div>
 </div>
 
+<!-- Vectorize Options Modal -->
+<div id="vectorize-options-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--overlay-bg); justify-content:center; align-items:center; z-index:9999;">
+    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:450px; max-width:90%; box-shadow: 0 4px 12px rgba(0,0,0,0.2); border: 1px solid var(--border-color); display: flex; flex-direction: column;">
+        <h3 style="margin-top:0; font-size: 1.2rem;">Vectorize Options</h3>
+        <p style="margin: 15px 0 15px 0; word-wrap: break-word; line-height: 1.5;">Choose the scope of vectorization for <strong id="vectorize-space-name-display"></strong>:</p>
+        
+        <div style="display:flex; flex-direction:column; gap:10px; margin-bottom: 20px;">
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                <input type="radio" name="vectorize-scope" value="entire_space" checked>
+                <span><strong>Entire Space</strong> - Vectorize all items in the Space</span>
+            </label>
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 8px;" id="vectorize-category-label">
+                <input type="radio" name="vectorize-scope" value="current_category">
+                <span><strong>Selected Category</strong> - Vectorize only items in <span id="vectorize-category-name-display" style="font-weight: bold; color: var(--key-color);"></span></span>
+            </label>
+            <label style="cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                <input type="radio" name="vectorize-scope" value="current_page">
+                <span><strong>Current Page</strong> - Vectorize only the items presently displayed on this page</span>
+            </label>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button onclick="document.getElementById('vectorize-options-modal').style.display='none'" style="padding: 8px 16px; background: transparent; color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer;">Cancel</button>
+            <button id="vectorize-options-ok-btn" style="padding: 8px 16px; background:var(--button-bg); color:var(--button-text); border:none; border-radius: 4px; cursor: pointer;">Confirm Vectorize</button>
+        </div>
+    </div>
+</div>
+
 
 <!-- Add Space Modal -->
 <div id="add-kb-modal" class="modal">
