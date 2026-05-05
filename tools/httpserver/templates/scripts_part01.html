@@ -6,6 +6,61 @@
     };
 
     /* --- Core Frontend Utilities --- */
+    
+    // Polls a long running task by ID and updates the progress modal.
+    function pollLongRunningTask(taskId, titleText, initialMsg, prefixMsg, closeOnComplete = true) {
+        return new Promise((resolve, reject) => {
+            if (!taskId) return resolve();
+            
+            const modal = document.getElementById('setup-loading-modal');
+            const title = document.getElementById('setup-loading-title');
+            const msg = document.getElementById('setup-loading-message');
+            const details = document.getElementById('setup-loading-details');
+            const pb = document.getElementById('setup-progress-bar');
+            
+            if(modal) {
+                modal.style.display = 'flex';
+            }
+            if(title && titleText) title.innerText = titleText;
+            if(msg && initialMsg) msg.innerText = initialMsg;
+            if(details) details.innerHTML = '';
+            if(pb) pb.style.width = '0%';
+            
+            const interval = setInterval(async () => {
+                try {
+                    const statusRes = await fetch(`/api/tasks/status?task_id=${taskId}`);
+                    if (!statusRes.ok) throw new Error("Status check failed");
+                    const statusData = await statusRes.json();
+                    
+                    if (statusData.status === "in_progress") {
+                        if (details) {
+                            let text = statusData.message || 'Processing...';
+                            if (prefixMsg) {
+                                text = `${prefixMsg}: ${text}`;
+                            }
+                            details.innerHTML = `- ${text}<br>`;
+                        }
+                        if (pb && statusData.progress) {
+                            pb.style.width = `${Math.min(95, statusData.progress)}%`;
+                        }
+                    } else if (statusData.status === "completed") {
+                        clearInterval(interval);
+                        if(modal && closeOnComplete) modal.style.display = 'none';
+                        resolve();
+                    } else if (statusData.status === "error") {
+                        clearInterval(interval);
+                        if(modal && closeOnComplete) modal.style.display = 'none';
+                        reject(new Error(statusData.error || "Unknown error"));
+                    }
+                } catch (e) {
+                    clearInterval(interval);
+                    if(modal && closeOnComplete) modal.style.display = 'none';
+                    reject(e);
+                }
+            }, 1000);
+        });
+    }
+
     async function apiCall(endpoint, method = 'GET', body = null) {
         try {
             const h = { 'Content-Type': 'application/json' };
@@ -2366,8 +2421,10 @@ window.vectorizeSpace = async function(spaceName) {
     if (selCatId && selCatName !== 'All Items') {
         document.getElementById('vectorize-category-name-display').textContent = selCatName;
         document.getElementById('vectorize-category-label').style.display = 'flex';
+        document.getElementById('vectorize-page-label').style.display = 'flex';
     } else {
         document.getElementById('vectorize-category-label').style.display = 'none';
+        document.getElementById('vectorize-page-label').style.display = 'none';
         document.querySelector('input[name="vectorize-scope"][value="entire_space"]').checked = true;
     }
 
@@ -2386,6 +2443,10 @@ window.vectorizeSpace = async function(spaceName) {
         let bodyPayload = { database: currentDatabase, space: cleanName };
 
         if (scope === 'current_page') {
+            if (!selCatId || selCatName === 'All Items') {
+                showAlert("Please select a specific category before vectorizing current page items.");
+                return;
+            }
             if (window._lastSpaceItems && window._lastSpaceItems.length > 0) {
                 itemIds = window._lastSpaceItems.map(item => item.id);
             }
@@ -2394,9 +2455,7 @@ window.vectorizeSpace = async function(spaceName) {
                 return;
             }
             bodyPayload.itemIds = itemIds;
-            if (selCatId && selCatName !== 'All Items') {
-                bodyPayload.categoryId = selCatId;
-            }
+            bodyPayload.categoryId = selCatId;
         } else if (scope === 'current_category') {
             if (!selCatId || selCatName === 'All Items') {
                 showAlert("No specific category selected.");
@@ -2408,7 +2467,17 @@ window.vectorizeSpace = async function(spaceName) {
         try {
             const result = await apiCall(url, 'POST', bodyPayload);
             if (result.task_id) {
-                showAlert(`Vectorization task started (ID: ${result.task_id}).`);
+                // Poll using global function
+                pollLongRunningTask(
+                    result.task_id, 
+                    "Vectorizing Space", 
+                    `Vectorizing Space: ${cleanName}`, 
+                    "Vectorize"
+                ).then(() => {
+                    showAlert(`Space '${cleanName}' vectorization completed successfully!`);
+                }).catch(err => {
+                    showAlert(`Vectorization failed: ${err.message}`);
+                });
             } else {
                 showAlert(`Space '${cleanName}' vectorization started successfully!`);
             }

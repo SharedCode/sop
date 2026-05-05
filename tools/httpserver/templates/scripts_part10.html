@@ -646,44 +646,13 @@
                 }
             }
 
-            // 3. Poll SOP Task
-            const pollTask = (taskId, prefixMsg) => {
-                return new Promise((resolve, reject) => {
-                    if (!taskId) return resolve();
-                    
-                    const details = document.getElementById('setup-loading-details');
-                    const pb = document.getElementById('setup-progress-bar');
-
-                    const interval = setInterval(async () => {
-                        try {
-                            const statusRes = await fetch(`/api/tasks/status?task_id=${taskId}`);
-                            if (!statusRes.ok) throw new Error("Status check failed");
-                            const statusData = await statusRes.json();
-                            
-                            if (statusData.status === "in_progress") {
-                                if (details) details.innerHTML = `- ${prefixMsg}: ${statusData.message || 'Processing...'}<br>`;
-                                if (pb && statusData.progress) pb.style.width = `${Math.min(95, statusData.progress)}%`;
-                            } else if (statusData.status === "completed") {
-                                clearInterval(interval);
-                                resolve();
-                            } else if (statusData.status === "error") {
-                                clearInterval(interval);
-                                reject(new Error(statusData.error || "Unknown error"));
-                            }
-                        } catch (e) {
-                            clearInterval(interval);
-                            reject(e);
-                        }
-                    }, 1000);
-                });
-            };
-
+            // 3. Poll Tasks via global system
             try {
                 const msg = document.getElementById('setup-loading-message');
                 if (msg) msg.innerText = 'Preloading spaces...';
 
-                if (sopTaskId) await pollTask(sopTaskId, "SOP");
-                if (medTaskId) await pollTask(medTaskId, "Medical");
+                if (sopTaskId) await pollLongRunningTask(sopTaskId, null, null, "SOP", false);
+                if (medTaskId) await pollLongRunningTask(medTaskId, null, null, "Medical", false);
             } catch (e) {
                 console.error("Error during space preloading:", e);
                 // We'll still proceed to finish setup, but log the error
