@@ -36,7 +36,7 @@ func (m *MockLLM) Name() string                                 { return "MockLL
 func (m *MockLLM) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
 func (m *MockLLM) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	// Let's pretend it always categorizes into "MockCategory"
-	return ai.GenOutput{Summaries: []string{ "MockCategory"}, nil
+	return ai.GenOutput{Text: "MockCategory"}, nil
 }
 
 type FailingLLM struct{}
@@ -68,7 +68,7 @@ func TestMemoryManager_IngestAndSleep(t *testing.T) {
 
 	// 1. Test IngestThought
 	kbMgr := &KnowledgeBase[string]{Manager: mgr, BaseKnowledgeBase: BaseKnowledgeBase[string]{Store: store}}
-	err := kbMgr.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{ "this is a brilliant thought about apples", Category: "", Data: "Apples are great"}}, "Nutritionist")
+	err := kbMgr.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"this is a brilliant thought about apples"}, Category: "", Data: "Apples are great"}}, "Nutritionist")
 	if err != nil {
 		t.Fatalf("IngestThought failed: %v", err)
 	}

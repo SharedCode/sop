@@ -1,8 +1,8 @@
 package memory
 
 import (
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"errors"
 
 	"strings"
@@ -69,28 +69,28 @@ func (kb *KnowledgeBase[T]) IngestThoughts(ctx context.Context, thoughts []Thoug
 	var jobs []embedJob
 
 	// 0. Resolve missing summaries via LLM LLM Enrichment
-for i, thought := range thoughts {
-if len(thought.Summaries) > 0 {
-continue
-}
+	for i, thought := range thoughts {
+		if len(thought.Summaries) > 0 {
+			continue
+		}
 
-dataStr := ""
-if str, ok := any(thought.Data).(string); ok {
-dataStr = str
-} else {
-b, _ := json.Marshal(thought.Data)
-dataStr = string(b)
-}
+		dataStr := ""
+		if str, ok := any(thought.Data).(string); ok {
+			dataStr = str
+		} else {
+			b, _ := json.Marshal(thought.Data)
+			dataStr = string(b)
+		}
 
-gen, err := kb.Manager.GenerateSummaries(ctx, dataStr)
-if err == nil && len(gen) > 0 {
-thoughts[i].Summaries = gen
-} else {
-thoughts[i].Summaries = []string{dataStr}
-}
-}
+		gen, err := kb.Manager.GenerateSummaries(ctx, dataStr)
+		if err == nil && len(gen) > 0 {
+			thoughts[i].Summaries = gen
+		} else {
+			thoughts[i].Summaries = []string{dataStr}
+		}
+	}
 
-// 1. Resolve missing vectors
+	// 1. Resolve missing vectors
 	for i, thought := range thoughts {
 		if len(thought.Vectors) == len(thought.Summaries) {
 			continue
@@ -200,4 +200,179 @@ func (kb *KnowledgeBase[T]) IngestThought(
 // TriggerSleepCycle forces the LLM to scan, reflect, and re-organize dense categories.
 func (kb *KnowledgeBase[T]) TriggerSleepCycle(ctx context.Context) error {
 	return kb.Manager.SleepCycle(ctx)
+}
+
+// Vectorize iterates through all items in the KnowledgeBase, calculates or recalculates their embedding
+// vectors using the configured embedder, and updates the store.
+func (kb *KnowledgeBase[T]) Vectorize(ctx context.Context) error {
+	if kb.Manager == nil || kb.Manager.embedder == nil {
+		return errors.New("embedder is not configured: cannot vectorize space")
+	}
+
+	itemsBtree, err := kb.Store.Items(ctx)
+	if err != nil {
+		return err
+	}
+
+	catBtree, err := kb.Store.Categories(ctx)
+	if err != nil {
+		return err
+	}
+
+	catMap := make(map[sop.UUID]string)
+	ok, _ := catBtree.First(ctx)
+	for ok {
+		cat, err := catBtree.GetCurrentValue(ctx)
+		if err == nil && cat != nil {
+			catMap[cat.ID] = cat.Name
+		}
+		ok, _ = catBtree.Next(ctx)
+	}
+
+	var itemsToUpdate []Item[T]
+
+	ok, _ = itemsBtree.First(ctx)
+	for ok {
+		item, err := itemsBtree.GetCurrentValue(ctx)
+		if err == nil {
+			itemsToUpdate = append(itemsToUpdate, item)
+		}
+		ok, _ = itemsBtree.Next(ctx)
+	}
+
+	for _, item := range itemsToUpdate {
+		if len(item.Summaries) == 0 {
+			dataStr := ""
+			if str, isStr := any(item.Data).(string); isStr {
+				dataStr = str
+			} else {
+				b, _ := json.Marshal(item.Data)
+				dataStr = string(b)
+			}
+			item.Summaries = []string{dataStr}
+		}
+
+		vecs, err := kb.Manager.embedder.EmbedTexts(ctx, item.Summaries)
+		if err != nil {
+			return err
+		}
+
+		catName, found := catMap[item.CategoryID]
+		if !found {
+			continue
+		}
+
+		err = kb.Store.UpsertByCategory(ctx, catName, item, vecs)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// VectorizeItems iterates through a specific set of items in the KnowledgeBase, calculates or recalculates their embedding
+// vectors using the configured embedder, and updates the store.
+func (kb *KnowledgeBase[T]) VectorizeItems(ctx context.Context, categoryID sop.UUID, itemIDs []sop.UUID) error {
+	if kb.Manager == nil || kb.Manager.embedder == nil {
+		return errors.New("embedder is not configured: cannot vectorize items")
+	}
+
+	itemsBtree, err := kb.Store.Items(ctx)
+	if err != nil {
+		return err
+	}
+
+	catBtree, err := kb.Store.Categories(ctx)
+	if err != nil {
+		return err
+	}
+
+	var category *Category
+	if ok, _ := catBtree.Find(ctx, categoryID, false); ok {
+		cat, _ := catBtree.GetCurrentValue(ctx)
+		category = cat
+	}
+	if category == nil || category.Name == "" {
+		return errors.New("category not found")
+	}
+
+	var itemsToUpdate []Item[T]
+
+	if len(itemIDs) == 0 {
+		ok, _ := itemsBtree.First(ctx)
+		for ok {
+			if item, err := itemsBtree.GetCurrentValue(ctx); err == nil && item.CategoryID == categoryID {
+				itemsToUpdate = append(itemsToUpdate, item)
+			}
+			ok, _ = itemsBtree.Next(ctx)
+		}
+	} else {
+		for _, id := range itemIDs {
+			if ok, _ := itemsBtree.Find(ctx, id, false); ok {
+				item, err := itemsBtree.GetCurrentValue(ctx)
+				if err == nil && item.CategoryID == categoryID {
+					itemsToUpdate = append(itemsToUpdate, item)
+				}
+			}
+		}
+	}
+
+	batchSize := 50
+	for i := 0; i < len(itemsToUpdate); i += batchSize {
+		end := i + batchSize
+		if end > len(itemsToUpdate) {
+			end = len(itemsToUpdate)
+		}
+
+		batch := itemsToUpdate[i:end]
+		var batchSummaries []string
+		var itemSummaryCounts []int
+
+		for _, item := range batch {
+			if len(item.Summaries) == 0 {
+				dataStr := ""
+				if str, isStr := any(item.Data).(string); isStr {
+					dataStr = str
+				} else {
+					b, _ := json.Marshal(item.Data)
+					dataStr = string(b)
+				}
+				item.Summaries = []string{dataStr}
+			}
+			batchSummaries = append(batchSummaries, item.Summaries...)
+			itemSummaryCounts = append(itemSummaryCounts, len(item.Summaries))
+		}
+
+		if len(batchSummaries) == 0 {
+			continue
+		}
+
+		allVecs, err := kb.Manager.embedder.EmbedTexts(ctx, batchSummaries)
+		if err != nil {
+			return err
+		}
+
+		vecIdx := 0
+		for j, item := range batch {
+			count := itemSummaryCounts[j]
+			itemVecs := allVecs[vecIdx : vecIdx+count]
+			vecIdx += count
+
+			err = kb.Store.UpsertByCategory(ctx, category.Name, item, itemVecs)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	if len(category.CenterVector) == 0 {
+		catVecs, _ := kb.Manager.embedder.EmbedTexts(ctx, []string{category.Name})
+		if len(catVecs) > 0 {
+			category.CenterVector = catVecs[0]
+			catBtree.UpdateCurrentValue(ctx, category)
+		}
+	}
+
+	return nil
 }

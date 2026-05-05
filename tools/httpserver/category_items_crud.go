@@ -81,31 +81,77 @@ func handleAddSpaceCategory(w http.ResponseWriter, r *http.Request) {
 		vec = []float32{0.1, 0.2, 0.3}
 	}
 
-	newID := sop.NewUUID()
-	cat := &memory.Category{
-		ID:              newID,
-		Name:            req.Name,
-		Description:     req.Description,
-		CenterVector:    vec,
-		SummaryMaxCount: MAX_ITEM_SUMMARIES,
-	}
+	var id sop.UUID
+	isUpdate := req.ID != ""
 
-	if req.ParentID != "" {
-		parsedParent, err := sop.ParseUUID(req.ParentID)
-		if err == nil {
-			cat.ParentIDs = []memory.CategoryParent{
-				{
-					ParentID: parsedParent,
-					UseCase:  "Manual Subcategory",
-				},
+	var cat *memory.Category
+
+	if isUpdate {
+		categoriesTree, err := kb.Store.Categories(ctx)
+		if err != nil {
+			http.Error(w, "Failed to load categories store", http.StatusInternalServerError)
+			return
+		}
+
+		targetID, err := sop.ParseUUID(req.ID)
+		if err != nil {
+			http.Error(w, "Invalid ID format format", http.StatusBadRequest)
+			return
+		}
+
+		found, err := categoriesTree.Find(ctx, targetID, false)
+		if err != nil || !found {
+			http.Error(w, "Category not found", http.StatusNotFound)
+			return
+		}
+
+		cat, err = categoriesTree.GetCurrentValue(ctx)
+		if err != nil {
+			http.Error(w, "Failed to load category details", http.StatusInternalServerError)
+			return
+		}
+
+		cat.Name = req.Name
+		cat.Description = req.Description
+
+		// Only generate a new vector if CenterVector already existed
+		if len(cat.CenterVector) > 0 {
+			cat.CenterVector = vec
+		}
+
+		_, err = categoriesTree.UpdateCurrentItem(ctx, targetID, cat)
+		if err != nil {
+			http.Error(w, "Failed to update category: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		id = targetID
+	} else {
+		newID := sop.NewUUID()
+		cat = &memory.Category{
+			ID:              newID,
+			Name:            req.Name,
+			Description:     req.Description,
+			CenterVector:    vec,
+			SummaryMaxCount: MAX_ITEM_SUMMARIES,
+		}
+
+		if req.ParentID != "" {
+			parsedParent, err := sop.ParseUUID(req.ParentID)
+			if err == nil {
+				cat.ParentIDs = []memory.CategoryParent{
+					{
+						ParentID: parsedParent,
+						UseCase:  "Manual Subcategory",
+					},
+				}
 			}
 		}
-	}
 
-	id, err := kb.Store.AddCategory(ctx, cat)
-	if err != nil {
-		http.Error(w, "Failed to add category: "+err.Error(), http.StatusInternalServerError)
-		return
+		id, err = kb.Store.AddCategory(ctx, cat)
+		if err != nil {
+			http.Error(w, "Failed to add category: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	if err := trans.Commit(ctx); err != nil {
@@ -117,7 +163,7 @@ func handleAddSpaceCategory(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(addCategoryResponse{
 		Success: true,
 		ID:      id.String(),
-		Message: "Category added",
+		Message: "Category added/updated",
 	})
 }
 

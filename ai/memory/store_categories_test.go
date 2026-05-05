@@ -89,7 +89,7 @@ func TestAddCategoryParent(t *testing.T) {
 	_, _ = s.AddCategory(ctx, &Category{ID: otherRootID, Name: "OtherRoot"})
 
 	// 1. Invalid IDs
-	if err := s.AddCategoryParent(ctx, sop.UUID{}}, CategoryParent{ParentID: otherRootID}); err == nil {
+	if err := s.AddCategoryParent(ctx, sop.UUID{}, CategoryParent{ParentID: otherRootID}); err == nil {
 		t.Errorf("expected error for empty category ID")
 	}
 	if err := s.AddCategoryParent(ctx, childID, CategoryParent{}); err == nil {

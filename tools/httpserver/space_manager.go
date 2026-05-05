@@ -107,6 +107,9 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	dbEmbedder := GetConfiguredEmbedder(r)
+	dbLLM := GetConfiguredLLM(r)
+
 	task := RegisterTask("SpaceIngest", 100)
 
 	w.Header().Set("Content-Type", "application/json")
@@ -116,7 +119,7 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 		"message": fmt.Sprintf("Preloading %s started in background", req.Expertise),
 	})
 
-	go func(taskId string, request IngestSpaceRequest) {
+	go func(taskId string, request IngestSpaceRequest, emb ai.Embeddings, llm ai.Generator) {
 		defer func() {
 			if rec := recover(); rec != nil {
 				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Panic during preload: %v", rec))
@@ -144,10 +147,7 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 			storeName = request.SpaceName
 		}
 
-		dbEmbedder := GetConfiguredEmbedder(r)
-		dbLLM := GetConfiguredLLM(r)
-
-		kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+		kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, llm, emb)
 		if err != nil {
 			trans.Rollback(ctx)
 			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to open KnowledgeBase '%s': %v", storeName, err))
@@ -248,5 +248,5 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 		}
 
 		UpdateTask(taskId, "completed", 100, 100, fmt.Sprintf("Successfully pre-loaded %s", request.Expertise), "")
-	}(task.TaskID, req)
+	}(task.TaskID, req, dbEmbedder, dbLLM)
 }

@@ -29,10 +29,10 @@ func TestKnowledgeBase_API(t *testing.T) {
 	s.SetTextIndex(&MockTextIndex{})
 
 	embedder := &MockPlaybookEmbedder{Rules: []PlaybookRule{
-		{Keywords: []string{"test"}}, CategoryName: "test_cat", Vectors: [][]float32{ []float32{1.0, 1.0, 1.0}},
+		{Keywords: []string{"test"}, CategoryName: "test_cat", Vector: []float32{1.0, 1.0, 1.0}},
 	}}
 	llm := &MockPlaybookLLM{Rules: []PlaybookRule{
-		{Keywords: []string{"test"}}, CategoryName: "test_cat", Vectors: [][]float32{ []float32{1.0, 1.0, 1.0}},
+		{Keywords: []string{"test"}, CategoryName: "test_cat", Vector: []float32{1.0, 1.0, 1.0}},
 	}, Embedder: embedder}
 	s.SetLLM(llm)
 
@@ -43,7 +43,7 @@ func TestKnowledgeBase_API(t *testing.T) {
 		Manager:           manager,
 	}
 
-	err := kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{ "test_cat", Category: "test_id", Data: "payload"}}, "test")
+	err := kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test_cat"}, Category: "test_id", Data: "payload"}}, "test")
 	if err != nil {
 		t.Fatalf("IngestThought failed: %v", err)
 	}
@@ -86,12 +86,12 @@ func TestStaticKnowledgeBase(t *testing.T) {
 		Manager:           NewMemoryManager[string](ds, &MockLLM{}, &MockEmbedder{}),
 	}
 
-	err := kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{ "Apple is a fruit", Category: "Fruits", Vectors: [][]float32{ []float32{0.1, 0.2, 0.3}, Data: "apple is a fruit"}}, "")
+	err := kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Apple is a fruit"}, Category: "Fruits", Vectors: [][]float32{{0.1, 0.2, 0.3}}, Data: "apple is a fruit"}}, "")
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
-	err = kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{ "Car is a vehicle", Category: "Vehicles", Vectors: [][]float32{ []float32{0.9, 0.8, 0.7}, Data: "car"}}, "")
+	err = kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Car is a vehicle"}, Category: "Vehicles", Vectors: [][]float32{{0.9, 0.8, 0.7}}, Data: "car"}}, "")
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}

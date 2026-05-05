@@ -300,6 +300,7 @@ func main() {
 	http.HandleFunc("/api/spaces/item/update", handleUpdateSpaceItem)
 	http.HandleFunc("/api/spaces/item/delete", handleDeleteSpaceItem)
 	http.HandleFunc("/api/spaces/ingest", handleIngestSpace)
+	http.HandleFunc("/api/spaces/vectorize", handleVectorizeSpace)
 	http.HandleFunc("/api/tasks/status", handleGetTaskStatus)
 	// Configuration Endpoints
 	http.HandleFunc("/api/config/save", handleSaveConfig)
