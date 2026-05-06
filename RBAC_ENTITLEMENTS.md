@@ -104,8 +104,16 @@ To facilitate this architecture cleanly, the backend incorporates the following 
          Endpoints   []string            // UI API endpoints related to this asset
          Actions     []sop.Action        // Capabilities: Read, Write, Delete, Execute
          
-         // Evaluator executes the actual permission check for a specific asset instance
-         Evaluator   func(ctx context.Context, assetID string, action sop.Action) bool
+         // Evaluator executes the actual permission check for a specific asset instance or context
+         Evaluator   func(ctx context.Context, entCtx sop.EntitlementContext, action sop.Action) bool
+     }
+
+     // EntitlementContext holds the request scope parameters necessary for granular RBAC evaluation.
+     type EntitlementContext struct {
+         AssetID    string
+         Database   string
+         IsSystemDB bool
+         UserRole   string
      }
 
      // Global Blueprint Registry
