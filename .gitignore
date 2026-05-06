@@ -261,3 +261,6 @@ tools/httpserver/sop_server
 bindings/**/libjsondb*.h
 !copilot_pipeline.json
 config.json
+
+# SOP KB (Generated locally & on release)
+sop_base_knowledge.json
