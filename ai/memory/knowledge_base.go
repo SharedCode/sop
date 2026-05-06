@@ -404,3 +404,41 @@ func (kb *KnowledgeBase[T]) GetConfig(ctx context.Context) (*KnowledgeBaseConfig
 
 	return &cfg, nil
 }
+
+
+// SetConfig saves the metadata configuration for this KnowledgeBase.
+func (kb *KnowledgeBase[T]) SetConfig(ctx context.Context, config *KnowledgeBaseConfig) error {
+	itemsBtree, err := kb.Store.Items(ctx)
+	if err != nil {
+		return err
+	}
+
+	found, err := itemsBtree.FindWithID(ctx, sop.NilUUID, sop.NilUUID)
+	if err != nil && err.Error() == "not found" {
+		found = false
+	} else if err != nil {
+		return err
+	}
+
+	var v T
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(configBytes, &v); err != nil {
+		return err
+	}
+
+	configItem := Item[T]{
+		ID:         sop.NilUUID,
+		CategoryID: sop.NilUUID,
+		Data:       v,
+	}
+
+	if found {
+		_, err = itemsBtree.UpdateCurrentItem(ctx, sop.NilUUID, configItem)
+		return err
+	}
+	_, err = itemsBtree.Add(ctx, sop.NilUUID, configItem)
+	return err
+}

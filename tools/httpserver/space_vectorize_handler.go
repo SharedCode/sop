@@ -36,6 +36,11 @@ func handleVectorizeSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if reqData.CategoryID == "" && len(reqData.ItemIDs) == 0 {
+		http.Error(w, "categoryId is required when itemIds are empty", http.StatusBadRequest)
+		return
+	}
+
         var catUUID sop.UUID
         if reqData.CategoryID != "" {
                 catUUID, err = sop.ParseUUID(reqData.CategoryID)
