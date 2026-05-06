@@ -30,9 +30,9 @@ func TestSeedLLMKnowledge(t *testing.T) {
 	}
 
 	dbEmbedder := GetConfiguredEmbedder(nil)
-		dbLLM := GetConfiguredLLM(nil)
+	dbLLM := GetConfiguredLLM(nil)
 
-		_, err = db.OpenKnowledgeBase(ctx, "llm_knowledge", trans, dbLLM, dbEmbedder)
+	_, err = db.OpenKnowledgeBase(ctx, "llm_knowledge", trans, dbLLM, dbEmbedder)
 	if err != nil {
 		trans.Rollback(ctx)
 		t.Fatalf("Expected llm_knowledge KnowledgeBase to exist, got error: %v", err)

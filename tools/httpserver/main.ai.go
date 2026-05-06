@@ -18,7 +18,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent"
 	aidb "github.com/sharedcode/sop/ai/database"
-	
+
 	_ "github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/ai/obfuscation"
@@ -215,9 +215,9 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		if trans != nil {
 			// Just open it to ensure it is created
 			dbEmbedder := GetConfiguredEmbedder(nil)
-					dbLLM := GetConfiguredLLM(nil)
+			dbLLM := GetConfiguredLLM(nil)
 
-					sysDB.OpenKnowledgeBase(ctx, kbName, trans, dbLLM, dbEmbedder)
+			sysDB.OpenKnowledgeBase(ctx, kbName, trans, dbLLM, dbEmbedder)
 			trans.Commit(ctx)
 			go seedMetaCognitionAsync(req.SessionID, kbName, sysOpts)
 		}

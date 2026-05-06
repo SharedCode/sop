@@ -41,15 +41,15 @@ func handleVectorizeSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-        var catUUID sop.UUID
-        if reqData.CategoryID != "" {
-                catUUID, err = sop.ParseUUID(reqData.CategoryID)
-                if err != nil {
-                        http.Error(w, "invalid categoryId format", http.StatusBadRequest)
-                        return
-                }
-        }
-        var itemUUIDs []sop.UUID
+	var catUUID sop.UUID
+	if reqData.CategoryID != "" {
+		catUUID, err = sop.ParseUUID(reqData.CategoryID)
+		if err != nil {
+			http.Error(w, "invalid categoryId format", http.StatusBadRequest)
+			return
+		}
+	}
+	var itemUUIDs []sop.UUID
 	if len(reqData.ItemIDs) > 0 {
 		for _, idStr := range reqData.ItemIDs {
 			id, err := sop.ParseUUID(idStr)
@@ -92,20 +92,19 @@ func handleVectorizeSpace(w http.ResponseWriter, r *http.Request) {
 
 		UpdateTask(taskId, "in_progress", 10, 100, "Calculating Embeddings...", "")
 
-                if catId == sop.NilUUID && len(itemIds) == 0 {
-                        err = kb.Vectorize(ctx)
-                        if err != nil {
-                                UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Vectorize failed: %v", err))
-                                return
-                        }
-                } else {
-                        err = kb.VectorizeItems(ctx, catId, itemIds)
-                        if err != nil {
-                                UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("VectorizeItems failed: %v", err))
-                                return
-                        }
-                }
-
+		if catId == sop.NilUUID && len(itemIds) == 0 {
+			err = kb.Vectorize(ctx)
+			if err != nil {
+				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Vectorize failed: %v", err))
+				return
+			}
+		} else {
+			err = kb.VectorizeItems(ctx, catId, itemIds)
+			if err != nil {
+				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("VectorizeItems failed: %v", err))
+				return
+			}
+		}
 
 		UpdateTask(taskId, "in_progress", 90, 100, "Committing changes...", "")
 		if err := trans.Commit(ctx); err != nil {

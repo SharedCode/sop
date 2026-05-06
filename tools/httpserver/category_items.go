@@ -110,7 +110,7 @@ func handleListSpaceCategories(w http.ResponseWriter, r *http.Request) {
 		"offset": offset,
 		"limit":  limit,
 		// When a Space is about to be displayed, it calls handleListSpaceCategories. Thus we can send the RBAC for the Space here.
-		"rbac":   rbacMap,
+		"rbac": rbacMap,
 	}
 	json.NewEncoder(w).Encode(response)
 }
@@ -217,11 +217,11 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 			}
 
 			response := map[string]any{
-						"data":   items,
-						"total":  matchCount,
-						"offset": offset,
-						"limit":  limit,
-					}
+				"data":   items,
+				"total":  matchCount,
+				"offset": offset,
+				"limit":  limit,
+			}
 			json.NewEncoder(w).Encode(response)
 			return
 		}

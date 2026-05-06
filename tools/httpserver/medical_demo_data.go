@@ -18,9 +18,9 @@ func PopulateMedicalKnowledgeBase(ctx context.Context, opts sop.DatabaseOptions)
 
 	// Create KnowledgeBase instead of B-Tree for medical data logic.
 	dbEmbedder := GetConfiguredEmbedder(nil)
-		dbLLM := GetConfiguredLLM(nil)
+	dbLLM := GetConfiguredLLM(nil)
 
-		_, err = db.OpenKnowledgeBase(ctx, "medical", trans, dbLLM, dbEmbedder)
+	_, err = db.OpenKnowledgeBase(ctx, "medical", trans, dbLLM, dbEmbedder)
 	if err != nil {
 		trans.Rollback(ctx)
 		return fmt.Errorf("failed to create 'medical' knowledge base: %v", err)
