@@ -1,5 +1,8 @@
 {{define "scripts_part01"}}
 <script>
+    // Global context RBAC map mapping asset type to permission map.
+    window.CONTEXT_RBAC = window.CONTEXT_RBAC || {};
+
     window.onerror = function(message, source, lineno, colno, error) {
         console.error("GLOBAL ERROR CAUGHT:", message, "at", source, ":", lineno, ":", colno);
         return false; // Let default handler run
@@ -683,7 +686,9 @@
         
         fetch(`/api/stores?database=${encodeURIComponent(name)}`)
             .then(res => res.json())
-            .then(stores => {
+            .then(bundle => {
+                let stores = bundle.data || [];
+                if (bundle.rbac) { window.CONTEXT_RBAC["store"] = bundle.rbac; }
                 const list = document.getElementById('store-list');
                 list.innerHTML = '';
                 if (!stores || stores.length === 0) {
@@ -709,7 +714,8 @@
         // Fetch Spaces
         fetch(`/api/spaces?database=${encodeURIComponent(name)}&session_id=${encodeURIComponent(currentSessionID)}`)
             .then(res => res.json())
-            .then(kbs => {
+            .then(bundle => {
+                let kbs = bundle.data || [];
                 const kbList = document.getElementById('kb-list');
                 const domainSelect = document.getElementById('domain-select');
                 
@@ -816,17 +822,10 @@
     }
 
     function isSpaceReadOnly(spaceName, databaseName) {
-        if (!spaceName) return false;
-        
-        // System DB check
-        const dbObj = availableDatabases && databaseName ? availableDatabases.find(d => d.name === databaseName) : null;
-        const isSystem = (dbObj && dbObj.is_system) || databaseName === 'system' || databaseName === SYSTEM_DB_NAME;
-
-        // Current rule: SOP and LongTermMemory (memory_...) KBs are read-only in System DB
-        if (isSystem && (spaceName.startsWith('memory_') || spaceName === 'SOP/data' || spaceName === 'SOP' || spaceName === 'Medical')) {
-            return true;
+        const cleanName = typeof spaceName === 'string' ? spaceName.replace(/\/data$/, '') : spaceName;
+        if (cleanName && window.CONTEXT_RBAC && window.CONTEXT_RBAC["space_" + cleanName]) {
+             return !window.CONTEXT_RBAC["space_" + cleanName].can_edit;
         }
-        
         return false;
     }
 
@@ -1005,6 +1004,7 @@
         actionContainer.style.justifyContent = 'space-between';
         
         const rightBtns = document.createElement('div');
+        rightBtns.style.marginLeft = 'auto'; // Ensure it's pushed to the right edge even if it's the only child
         rightBtns.appendChild(cancelBtn);
         if (!readonly) rightBtns.appendChild(saveBtn);
         
@@ -1289,10 +1289,9 @@
     closeUIModal('btn-view-store');
     closeUIModal('btn-edit-cel');
     closeUIModal('btn-delete-store');
-    const edKb = document.getElementById('btn-edit-kb'); if(edKb) edKb.style.display = 'inline-block';
-    const exKb = document.getElementById('btn-export-kb'); if(exKb) exKb.style.display = 'inline-block';
-    const imKb = document.getElementById('btn-import-kb'); if(imKb) imKb.style.display = 'inline-block';
-    const delKb = document.getElementById('btn-delete-kb'); if(delKb) delKb.style.display = 'inline-block';
+    
+    // We defer rendering the space-specific tool buttons (edit, export, delete)
+    // until we've fetched the categories and grabbed this space's specific RBAC object
 
     if (!await closeDetail()) return;
 
@@ -1312,6 +1311,30 @@
         const resCat = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}&offset=${catOffset}&limit=${catLimit}`);
         if (!resCat.ok) throw new Error("Failed to fetch categories");
         const categoriesData = await resCat.json();
+
+        // Absorb the RBAC payload fetched specifically for this space (carried over from the new category API structure)
+        if (categoriesData && categoriesData.rbac) {
+            window.CONTEXT_RBAC = window.CONTEXT_RBAC || {};
+            window.CONTEXT_RBAC["space_" + name] = categoriesData.rbac;
+        }
+
+        // Now that the space RBAC is safely cached, render the action buttons
+        const isReadOnlyKBTop = isSpaceReadOnly(name, currentDatabase);
+        const edKb = document.getElementById('btn-edit-kb'); 
+        if(edKb) {
+            edKb.style.display = 'inline-block';
+            if (isReadOnlyKBTop) {
+                edKb.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg>';
+                edKb.title = 'View Space Configuration';
+            } else {
+                edKb.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg>';
+                edKb.title = 'Edit Space Configuration';
+            }
+        }
+        const exKb = document.getElementById('btn-export-kb'); if(exKb) exKb.style.display = 'inline-block';
+        const imKb = document.getElementById('btn-import-kb'); if(imKb) imKb.style.display = 'inline-block';
+        const delKb = document.getElementById('btn-delete-kb'); if(delKb) delKb.style.display = isReadOnlyKBTop ? 'none' : 'inline-block';
+
         let categories = [];
         let totalCatCount = 0;
         if (Array.isArray(categoriesData)) {
@@ -1516,16 +1539,16 @@
             headerTitle.innerHTML = '';
             headerTitle.appendChild(document.createTextNode(categoryId ? 'Items in: ' + categoryName : 'All Items'));
 
-            if (!isReadOnlyKB) {
-                // Determine if DB allows adding items (mostly System DB logic mirroring selectStore)
-                let allowAdd = true;
-                const currentDbObj = availableDatabases.find(db => db.name === currentDatabase);
-                const isSystemDB = currentDbObj ? currentDbObj.is_system : false;
-                
-                if (currentStore === 'llm_feedback' || (isSystemDB && currentStore === 'memory')) {
-                    allowAdd = false;
-                }
+            // Determine if DB allows adding items (mostly System DB logic mirroring selectStore)
+            let allowAdd = true;
+            const currentDbObj = availableDatabases.find(db => db.name === currentDatabase);
+            const isSystemDB = currentDbObj ? currentDbObj.is_system : false;
+            
+            if (currentStore === 'llm_feedback' || (isSystemDB && currentStore === 'memory')) {
+                allowAdd = false;
+            }
 
+            if (!isReadOnlyKB) {
                 // ADD CATEGORY ICON (+)
                 const addCatBtn = document.createElement('span');
                 addCatBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/></svg>';
@@ -1545,24 +1568,31 @@
                     window.showAddCategoryModal();
                 };
                 headerTitle.appendChild(addCatBtn);
+            }
 
-                if (categoryId && catObj) {
-                    const editBtn = document.createElement('span');
+            if (categoryId && catObj) {
+                const editBtn = document.createElement('span');
+                if (isReadOnlyKB) {
+                    editBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg>';
+                    editBtn.title = 'View Category';
+                } else {
                     editBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg>';
                     editBtn.title = 'Edit Category';
-                    editBtn.style.fontSize = '1em';
-                    editBtn.style.marginLeft = '10px';
-                    editBtn.style.cursor = 'pointer';
-                    editBtn.style.color = 'var(--text-color)';
-                    editBtn.style.verticalAlign = 'middle';
-                    editBtn.style.display = 'inline-flex';
-                    editBtn.style.alignItems = 'center';
-                    editBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        window.editCategoryModal(catObj, spaceName);
-                    };
-                    headerTitle.appendChild(editBtn);
+                }
+                editBtn.style.fontSize = '1em';
+                editBtn.style.marginLeft = '10px';
+                editBtn.style.cursor = 'pointer';
+                editBtn.style.color = 'var(--text-color)';
+                editBtn.style.verticalAlign = 'middle';
+                editBtn.style.display = 'inline-flex';
+                editBtn.style.alignItems = 'center';
+                editBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    window.editCategoryModal(catObj, spaceName);
+                };
+                headerTitle.appendChild(editBtn);
 
+                if (!isReadOnlyKB) {
                     const delBtn = document.createElement('span');
                     delBtn.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>';
                     delBtn.title = 'Delete Category (' + categoryName + ')';
@@ -1575,15 +1605,21 @@
                     delBtn.style.alignItems = 'center';
                     delBtn.onclick = (e) => {
                         e.stopPropagation();
-                        if (confirm('Are you sure you want to delete the category "' + categoryName + '"? This cannot be undone.')) {
-                            window.deleteCategory(catObj.id, spaceName);
-                        }
+                        showConfirm(
+                            'Are you sure you want to delete the category "' + categoryName + '"? This cannot be undone.',
+                            () => {
+                                window.deleteCategory(catObj.id, spaceName);
+                            },
+                            null,
+                            "Confirm Deletion",
+                            "Delete"
+                        );
                     };
                     headerTitle.appendChild(delBtn);
                 }
+            }
 
 // UI logic for Add Item button used to be here, moved back to actionButtons render logic.
-            }
 
             const tg = document.getElementById('kb-items-grid');
             tg.innerHTML = "<div style='padding: 15px;'>Loading items...</div>";
@@ -1597,9 +1633,11 @@
                 
                 let resPayload = null;
                 try {
-                	resPayload = await res.json();
+                        resPayload = await res.json();
                 } catch(e){}
-                
+
+                const kbIsReadOnly = isReadOnlyKB;
+
                 let items = resPayload ? resPayload.data || [] : [];
                 window._lastSpaceItems = items;
                 let totalCount = resPayload ? resPayload.total || items.length : items.length;
@@ -1629,11 +1667,13 @@
                         `;
                     }
 
-                    let currCatName = (categoryName === 'All Items' && t.category && t.category !== "<nil>") ? t.category : (categoryName || '');
-                    if (categoryName !== 'All Items' && window._currentKBCategories) {
+                    let displayCatName = (t.category && t.category !== "<nil>") ? t.category : "Uncategorized";
+                    let currCatName = (categoryName === 'All Items') ? displayCatName : (categoryName || '');
+                    if (window._currentKBCategories) {
                         let catObj = window._currentKBCategories.find(c => c.id === (t.category_id || t.category));
                         if(catObj && catObj.name) {
                             currCatName = catObj.name;
+                            displayCatName = catObj.name;
                         }
                     }
                     let descHtml = '';
@@ -1646,8 +1686,8 @@
                                 </div>
                                 <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
                                     <a href="javascript:void(0)" class="read-more-btn" onclick="toggleDomainItemDesc(this)" data-item-id="${t.id}" data-item-category="${t.category_id || t.category || ''}" style="color:var(--link-color); font-size:0.85em; text-decoration:underline;">Read More</a>
-                                    ${isReadOnlyKB ? 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${currCatName.replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; margin-left: 15px;" title="View Details">View Details</a>` 
+                                    ${kbIsReadOnly ? 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${currCatName.replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="View Details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></a>` 
                                         : 
                                         `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${currCatName.replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
                                          <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id)).substring(0, 100).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
@@ -1664,8 +1704,8 @@
                                     <span class="desc-full" style="display:inline; white-space:pre-wrap;">${fullDesc.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
                                 </div>
                                 <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
-                                    ${isReadOnlyKB ? 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${currCatName.replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--link-color); font-size:0.85em; text-decoration:underline; display: inline-flex; align-items: center;" title="View Details">View Details</a>` 
+                                    ${kbIsReadOnly ? 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${currCatName.replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--text-color); display: inline-flex; align-items: center;" title="View Details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></a>` 
                                         : 
                                         `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${currCatName.replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
                                          <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id)).substring(0, 100).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
@@ -1681,7 +1721,7 @@
                             <div style="display:flex; justify-content:${(!categoryId || categoryName === 'All Items') ? 'space-between' : 'flex-end'}; align-items:center; margin-bottom:5px;">
                                 ${(!categoryId || categoryName === 'All Items') ? `
                                 <div style="font-size: 0.75em; font-weight: 600; color: #fff; background-color: #5b6ed1; padding: 3px 8px; border-radius: 12px; text-transform: uppercase;">
-                                    ${(t.category && t.category !== "<nil>") ? t.category : "Uncategorized"}
+                                    ${displayCatName}
                                 </div>
                                 ` : ''}
                                 
@@ -2485,6 +2525,87 @@ window.vectorizeSpace = async function(spaceName) {
             showAlert("Failed to start vectorization: " + err.message);
         }
     };
+};
+
+window.showEditKB = async function() {
+    if (!currentStore) return;
+    const baseName = currentStore.replace('/data', '');
+    const isReadOnly = isSpaceReadOnly(baseName, currentDatabase);
+
+    // Fetch config
+    let config = null;
+    try {
+        const res = await fetch(`/api/spaces/config/get?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`);
+        if (res.ok) {
+            config = await res.json();
+        }
+    } catch (e) {
+        console.error("Error fetching space config:", e);
+    }
+
+    const modal = document.getElementById('add-kb-modal');
+    const titleSpan = modal.querySelector('.modal-header span:first-child');
+    if (titleSpan) {
+        titleSpan.textContent = isReadOnly ? 'View Space Configuration' : 'Edit Space Configuration';
+    }
+    
+    // Load config values into modal fields if you have an edit-kb-modal logic or use add-kb-modal UI
+    document.getElementById('new-kb-name').value = baseName;
+    document.getElementById('new-kb-name').disabled = true; // Always disable name in edit mode
+
+    // Pre-fill
+    if (config) {
+        if(document.getElementById('new-kb-sysprompt')) document.getElementById('new-kb-sysprompt').value = config.system_prompt || '';
+        if(document.getElementById('new-kb-is-persona')) document.getElementById('new-kb-is-persona').checked = !!config.use_ai_persona;
+        
+        // Trigger display logic for the prompt container based on persona checked
+        if(document.getElementById('new-kb-sysprompt-container')) {
+             document.getElementById('new-kb-sysprompt-container').style.display = config.use_ai_persona ? 'block' : 'none';
+        }
+
+        if(document.getElementById('new-kb-embedder')) document.getElementById('new-kb-embedder').value = config.embedder || 'default';
+        if(document.getElementById('new-kb-public')) document.getElementById('new-kb-public').checked = !!config.is_public;
+    }
+
+    // Apply read-only locks
+    const allInputs = modal.querySelectorAll('input:not(#new-kb-name), select, textarea');
+    allInputs.forEach(el => el.disabled = isReadOnly);
+
+    const saveBtn = modal.querySelector('.modal-footer button.btn-success');
+    if (saveBtn) {
+        saveBtn.style.display = isReadOnly ? 'none' : 'inline-block';
+        if (!isReadOnly) {
+            saveBtn.textContent = 'Save Changes';
+            saveBtn.onclick = async () => {
+                const payload = {
+                    database: currentDatabase,
+                    name: baseName,
+                    embedder: document.getElementById('new-kb-embedder') ? document.getElementById('new-kb-embedder').value : 'default',
+                    use_ai_persona: document.getElementById('new-kb-is-persona') ? document.getElementById('new-kb-is-persona').checked : false,
+                    is_public: document.getElementById('new-kb-public') ? document.getElementById('new-kb-public').checked : false,
+                    system_prompt: document.getElementById('new-kb-sysprompt') ? document.getElementById('new-kb-sysprompt').value : ''
+                };
+                
+                try {
+                    const r = await fetch('/api/spaces/config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    if (!r.ok) {
+                        const err = await r.json();
+                        showAlert('Error saving space configuration: ' + (err.error || 'Unknown error'));
+                    } else {
+                        closeUIModal('add-kb-modal');
+                    }
+                } catch (e) {
+                    showAlert('Failed to save configuration: ' + e.message);
+                }
+            };
+        }
+    }
+    
+    openUIModal('add-kb-modal');
 };
 
 async function exportSpace() {

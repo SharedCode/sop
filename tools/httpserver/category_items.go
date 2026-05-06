@@ -102,11 +102,15 @@ func handleListSpaceCategories(w http.ResponseWriter, r *http.Request) {
 		categories = make([]map[string]any, 0)
 	}
 
+	rbacMap := sop.ResolveRBACMap(ctx, "space", sop.EntitlementContext{AssetID: storeName, Database: dbName, IsSystemDB: IsSystemDB(dbName)}, nil)
+
 	response := map[string]any{
 		"data":   categories,
 		"total":  matchCount,
 		"offset": offset,
 		"limit":  limit,
+		// When a Space is about to be displayed, it calls handleListSpaceCategories. Thus we can send the RBAC for the Space here.
+		"rbac":   rbacMap,
 	}
 	json.NewEncoder(w).Encode(response)
 }
@@ -147,14 +151,14 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 	}
 	defer trans.Rollback(ctx)
 
-type DomainItem struct {
-ID        string    `json:"id"`
-Category  string    `json:"category"`
-Text      string    `json:"text"`
-Desc      string    `json:"description"`
-Summaries []string  `json:"summaries,omitempty"`
-Vector    []float32 `json:"vector,omitempty"`
-}
+	type DomainItem struct {
+		ID        string    `json:"id"`
+		Category  string    `json:"category"`
+		Text      string    `json:"text"`
+		Desc      string    `json:"description"`
+		Summaries []string  `json:"summaries,omitempty"`
+		Vector    []float32 `json:"vector,omitempty"`
+	}
 	var items []DomainItem
 
 	// 1. Try NEW Dynamic Store (from today)
@@ -174,8 +178,8 @@ Vector    []float32 `json:"vector,omitempty"`
 				if categoryFilter == "" || val.CategoryID.String() == categoryFilter {
 					if matchCount >= offset && matchCount < offset+limit {
 						t := DomainItem{
-							ID:       val.ID.String(),
-							Category: val.CategoryID.String(),
+							ID:        val.ID.String(),
+							Category:  val.CategoryID.String(),
 							Summaries: val.Summaries,
 						}
 						if val.Data != nil {
@@ -211,12 +215,13 @@ Vector    []float32 `json:"vector,omitempty"`
 			if items == nil {
 				items = make([]DomainItem, 0)
 			}
+
 			response := map[string]any{
-				"data":   items,
-				"total":  matchCount,
-				"offset": offset,
-				"limit":  limit,
-			}
+						"data":   items,
+						"total":  matchCount,
+						"offset": offset,
+						"limit":  limit,
+					}
 			json.NewEncoder(w).Encode(response)
 			return
 		}

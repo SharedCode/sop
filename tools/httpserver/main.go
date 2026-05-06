@@ -108,6 +108,26 @@ var activeSessions = NewSessionManager(100)
 
 const SystemDBName = "system"
 
+func init() {
+	isReadOnlyContext := func(id string) bool {
+		lower := strings.ToLower(id)
+		return lower == "sop" || strings.HasPrefix(lower, "memory_")
+	}
+
+	sop.RegisterAssetRBAC(sop.AssetBlueprint{
+		AssetType:   "space",
+		Description: "Space represents a domain or workspace in the system",
+		Endpoints:   []string{string(sop.EndpointSpacesList)},
+		Actions:     []sop.Action{sop.ActionRead, sop.ActionWrite, sop.ActionDelete},
+		Evaluator: func(ctx context.Context, entCtx sop.EntitlementContext, action sop.Action) bool {
+			if isReadOnlyContext(entCtx.AssetID) && entCtx.IsSystemDB && (action == sop.ActionWrite || action == sop.ActionDelete) {
+				return false
+			}
+			return true
+		},
+	})
+}
+
 func main() {
 
 	var showVersion bool
@@ -302,6 +322,10 @@ func main() {
 	http.HandleFunc("/api/spaces/ingest", handleIngestSpace)
 	http.HandleFunc("/api/spaces/vectorize", handleVectorizeSpace)
 	http.HandleFunc("/api/spaces/delete", handleDeleteSpace)
+	http.HandleFunc("/api/spaces/export", handleExportSpace)
+	http.HandleFunc("/api/spaces/import", handleImportSpace)
+	http.HandleFunc("/api/spaces/config/get", handleGetSpaceConfig)
+	http.HandleFunc("/api/spaces/config", handleSaveSpaceConfig)
 	http.HandleFunc("/api/tasks/status", handleGetTaskStatus)
 	// Configuration Endpoints
 	http.HandleFunc("/api/config/save", handleSaveConfig)
@@ -347,7 +371,30 @@ func main() {
 		}()
 	}
 
-	if err := http.ListenAndServe(addr, nil); err != nil {
+	// Dev bypass: If SOP_ROOT_PASSWORD is set in env, or if running via 'go run', auto-assign Admin role
+	// TODO: Once login screen/session auth is implemented, ensure authenticated session overlays take precedence over this dev bypass.
+	var handler http.Handler = http.DefaultServeMux
+	hasRootPassword := os.Getenv("SOP_ROOT_PASSWORD") != ""
+	isGoRun := strings.Contains(os.Args[0], "go-build")
+
+	if hasRootPassword || isGoRun {
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			isLocalhost := strings.HasPrefix(r.RemoteAddr, "127.0.0.1:") || strings.HasPrefix(r.RemoteAddr, "[::1]:")
+			if hasRootPassword || (isGoRun && isLocalhost) {
+				auth := sop.AuthContext{
+					IsSystem: true,
+					Roles:    []string{sop.RoleAdmin},
+					UserID:   "admin",
+				}
+				ctx := sop.ContextWithAuth(r.Context(), auth)
+				http.DefaultServeMux.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+			http.DefaultServeMux.ServeHTTP(w, r)
+		})
+	}
+
+	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Error(err.Error())
 	}
 }
@@ -1088,7 +1135,16 @@ func handleListStores(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	json.NewEncoder(w).Encode(visibleStores)
+	if visibleStores == nil {
+		visibleStores = make([]string, 0)
+	}
+
+	bundled := sop.BundledResponse{
+		Data: visibleStores,
+		RBAC: sop.ResolveRBACMap(ctx, "store", sop.EntitlementContext{AssetID: dbName, Database: dbName, IsSystemDB: IsSystemDB(dbName)}, nil),
+	}
+
+	json.NewEncoder(w).Encode(bundled)
 }
 
 func handleListSpaces(w http.ResponseWriter, r *http.Request) {
@@ -1132,7 +1188,12 @@ func handleListSpaces(w http.ResponseWriter, r *http.Request) {
 		filtered = make([]string, 0)
 	}
 
-	json.NewEncoder(w).Encode(filtered)
+	bundled := sop.BundledResponse{
+		Data: filtered,
+		RBAC: sop.ResolveRBACMap(ctx, "space", sop.EntitlementContext{AssetID: dbName, Database: dbName, IsSystemDB: IsSystemDB(dbName)}, nil),
+	}
+
+	json.NewEncoder(w).Encode(bundled)
 }
 
 func handleGetDBOptions(w http.ResponseWriter, r *http.Request) {
@@ -1985,7 +2046,15 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !isNDJSON {
-		json.NewEncoder(w).Encode(items)
+		if items == nil {
+			items = make([]map[string]any, 0)
+		}
+
+		response := map[string]any{
+			"data": items,
+		}
+
+		json.NewEncoder(w).Encode(response)
 	}
 }
 

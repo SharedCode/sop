@@ -580,7 +580,9 @@
                     }
                     return items;
                 } else {
-                    return res.json();
+                    return res.json().then(bundle => {
+                         return bundle.data || [];
+                    });
                 }
             })
             .then(items => {
