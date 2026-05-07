@@ -1,3 +1,4 @@
+//go:build integration
 package agent_test
 
 import (
