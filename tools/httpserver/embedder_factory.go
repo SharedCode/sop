@@ -47,7 +47,7 @@ func GetConfiguredEmbedder(r *http.Request) ai.Embeddings {
 			apiKey = config.LLMApiKey
 		}
 		if model == "" {
-			model = "text-embedding-004"
+			model = "gemini-embedding-2"
 		}
 		return embed.NewGemini(apiKey, model)
 	case "ollama":

@@ -136,15 +136,21 @@ To facilitate this architecture cleanly, the backend incorporates the following 
    ```json
    {
      "data": [
-       {"id": "uuid-1", "name": "SOP/data"},
-       {"id": "uuid-2", "name": "InternalProject"}
+       "SOP/data",
+       "InternalProject"
      ],
      "rbac": {
-       "uuid-1": {"can_edit": false, "can_delete": false},
-       "uuid-2": {"can_edit": true, "can_delete": true}
+       "can_read": true,
+       "can_edit": true,
+       "can_delete": true,
+       "can_ai_select": true
+     },
+     "item_rbac": {
+       "SOP/data": {"can_edit": false, "can_delete": false, "can_ai_select": false}
      }
    }
    ```
+   *Note: `item_rbac` is optimized to only ship exclusion rules (where a capability is explicitly false) to minimize payload size. The frontend defaults to the globally allowed state if an item is not present in `item_rbac`.*
 
 4. **Synchronous UI Lookup**
    The frontend caches this bundled payload in local memory (e.g., `let currentPermissionsMap = {}`). When frontend rendering methods (like `isSpaceReadOnly()`, `showDetail()`) are invoked, they execute a highly performant $O(1)$ synchronous lookup against the memory map rather than making network requests.

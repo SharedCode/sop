@@ -16,9 +16,10 @@ type KnowledgeBaseConfig struct {
 type Item[T any] struct {
 	ID         sop.UUID    `json:"id"`
 	CategoryID sop.UUID    `json:"category_id"`
-	Summaries  []string    `json:"summaries,omitempty"` // 1 or more distinct, clean sentences for vector indexing
-	Data       T           `json:"data"`                // The application data or structured thought
-	Positions  []VectorKey `json:"positions,omitempty"` // Direct links to its Vectors for O(1) cleanup during Category moves
+	Summaries  []string    `json:"summaries,omitempty"`   // 1 or more distinct, clean sentences for vector indexing
+	Data       T           `json:"data"`                  // The application data or structured thought
+	Positions  []VectorKey `json:"positions,omitempty"`   // Direct links to its Vectors for O(1) cleanup during Category moves
+	VectorHash string      `json:"vector_hash,omitempty"` // Hash of EmbedderName + Content to avoid re-vectorizing unchanged items
 }
 
 // Vector represents the pointer/index fragment mapping the math to the Item.
@@ -52,6 +53,7 @@ type Category struct {
 	Name            string           `json:"name,omitempty"`              // Human-readable concept name
 	Description     string           `json:"description,omitempty"`       // Broader context
 	SummaryMaxCount int              `json:"summary_max_count,omitempty"` // Maximum number of summaries for items in this category
+	VectorHash      string           `json:"vector_hash,omitempty"`       // Hash of EmbedderName + Content to deduplicate vectorization
 }
 
 // VectorKey is the key for the Vectors B-Tree. It dictates how vectors are sorted

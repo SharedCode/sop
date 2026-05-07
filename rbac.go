@@ -35,10 +35,11 @@ type ResourceAccess struct {
 type Action string
 
 const (
-	ActionRead   Action = "read"
-	ActionWrite  Action = "write"
-	ActionDelete Action = "delete"
-	ActionList   Action = "list"
+	ActionRead     Action = "read"
+	ActionWrite    Action = "write"
+	ActionDelete   Action = "delete"
+	ActionList     Action = "list"
+	ActionAISelect Action = "ai_select"
 )
 
 type AuthContext struct {

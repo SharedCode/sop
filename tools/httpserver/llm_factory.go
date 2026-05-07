@@ -53,10 +53,18 @@ func GetConfiguredLLM(r *http.Request) ai.Generator {
 			options["baseURL"] = config.BrainURL
 		}
 		options["model"] = model
-	case "chatgpt":
-		options["apiKey"] = apiKey
-		if options["apiKey"] == "" {
-			options["apiKey"] = config.LLMApiKey
+	case "chatgpt", "openai":
+		provider = "chatgpt"
+		options["api_key"] = apiKey
+		if options["api_key"] == "" {
+			options["api_key"] = config.LLMApiKey
+		}
+		options["model"] = model
+	case "anthropic":
+		provider = "anthropic"
+		options["api_key"] = apiKey
+		if options["api_key"] == "" {
+			options["api_key"] = config.LLMApiKey
 		}
 		options["model"] = model
 	}

@@ -16,9 +16,11 @@ func TestAssetBlueprintRegistry(t *testing.T) {
 		Description: "A test asset for unit tests",
 		Endpoints:   []string{"/api/test_assets"},
 		Actions:     []Action{ActionRead, ActionWrite},
-                Evaluator: func(ctx context.Context, entitlementCtx EntitlementContext, action Action) bool {
+		Evaluator: func(ctx context.Context, entitlementCtx EntitlementContext, action Action) bool {
+			return true
+		},
+	}
 	RegisterAssetRBAC(blueprint)
-
 	bp, found := GetAssetBlueprint("test_asset")
 	if !found {
 		t.Fatalf("Expected to find test_asset in global registry but did not")

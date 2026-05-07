@@ -162,15 +162,15 @@ func (s *store[T]) Upsert(ctx context.Context, item Item[T], vec []float32) erro
 
 	// 4. Update TextIndex if present
 	if s.textIndex != nil {
-		
-strData := ""
-if m, ok := any(item.Data).(map[string]any); ok {
-  strData = fmt.Sprintf("%v %v", m["text"], m["description"])
-} else if st, ok := any(item.Data).(interface{ SearchText() string }); ok {
-  strData = st.SearchText()
-} else {
-  strData = fmt.Sprintf("%v", item.Data)
-}
+
+		strData := ""
+		if m, ok := any(item.Data).(map[string]any); ok {
+			strData = fmt.Sprintf("%v %v", m["text"], m["description"])
+		} else if st, ok := any(item.Data).(interface{ SearchText() string }); ok {
+			strData = st.SearchText()
+		} else {
+			strData = fmt.Sprintf("%v", item.Data)
+		}
 		err = s.textIndex.Add(ctx, id.String(), strData)
 		if err != nil {
 			return err
@@ -210,7 +210,11 @@ func (s *store[T]) UpsertByCategory(ctx context.Context, categoryName string, it
 	// Insert Vector links
 	var keys []VectorKey
 	for _, vec := range vecs {
-		vk := VectorKey{CategoryID: c.ID, VectorID: sop.NewUUID()}
+		dist := float32(0)
+		if len(c.CenterVector) > 0 {
+			dist = EuclideanDistance(vec, c.CenterVector)
+		}
+		vk := VectorKey{CategoryID: c.ID, VectorID: sop.NewUUID(), DistanceToCategory: dist}
 		s.vectors.Add(ctx, vk, Vector{ID: vk.VectorID, ItemID: id, CategoryID: c.ID, Data: vec})
 		keys = append(keys, vk)
 	}
@@ -229,15 +233,15 @@ func (s *store[T]) UpsertByCategory(ctx context.Context, categoryName string, it
 
 	// Update global text index
 	if s.textIndex != nil {
-		
-strData := ""
-if m, ok := any(item.Data).(map[string]any); ok {
-  strData = fmt.Sprintf("%v %v", m["text"], m["description"])
-} else if st, ok := any(item.Data).(interface{ SearchText() string }); ok {
-  strData = st.SearchText()
-} else {
-  strData = fmt.Sprintf("%v", item.Data)
-}
+
+		strData := ""
+		if m, ok := any(item.Data).(map[string]any); ok {
+			strData = fmt.Sprintf("%v %v", m["text"], m["description"])
+		} else if st, ok := any(item.Data).(interface{ SearchText() string }); ok {
+			strData = st.SearchText()
+		} else {
+			strData = fmt.Sprintf("%v", item.Data)
+		}
 		s.textIndex.Add(ctx, id.String(), strData) // Assumes item.ID actually contained textual representation.
 	}
 

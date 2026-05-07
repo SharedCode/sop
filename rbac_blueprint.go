@@ -6,9 +6,10 @@ import "context"
 type UICapability string
 
 const (
-	UICapabilityRead   UICapability = "can_read"
-	UICapabilityEdit   UICapability = "can_edit"
-	UICapabilityDelete UICapability = "can_delete"
+	UICapabilityRead     UICapability = "can_read"
+	UICapabilityEdit     UICapability = "can_edit"
+	UICapabilityDelete   UICapability = "can_delete"
+	UICapabilityAISelect UICapability = "can_ai_select"
 )
 
 // EndpointContext represents an API endpoint representing a grouping of assets.
@@ -25,8 +26,9 @@ type ContextRBACMap map[UICapability]bool
 
 // BundledResponse represents the standard JSON payload structure containing both the domain data and the paired RBAC map.
 type BundledResponse struct {
-	Data interface{}    `json:"data"`
-	RBAC ContextRBACMap `json:"rbac"`
+	Data     interface{}               `json:"data"`
+	RBAC     ContextRBACMap            `json:"rbac,omitempty"`
+	ItemRBAC map[string]ContextRBACMap `json:"item_rbac,omitempty"`
 }
 
 // ActionToUICapability maps an internal Action to the UI consumable Capability string
@@ -38,6 +40,8 @@ func ActionToUICapability(action Action) UICapability {
 		return UICapabilityEdit
 	case ActionDelete:
 		return UICapabilityDelete
+	case ActionAISelect:
+		return UICapabilityAISelect
 	default:
 		return UICapability(string(action))
 	}

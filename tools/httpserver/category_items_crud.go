@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/sharedcode/sop"
@@ -10,6 +12,12 @@ import (
 	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/database"
 )
+
+func generateDeterministicID(catID sop.UUID, dataStr string) sop.UUID {
+	hashBytes := sha256.Sum256([]byte(catID.String() + ":" + dataStr))
+	id, _ := sop.ParseUUID(fmt.Sprintf("%x", hashBytes[:16]))
+	return id
+}
 
 type addCategoryRequest struct {
 	ID          string `json:"id,omitempty"`
@@ -329,6 +337,25 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 	dataBytes, _ := json.Marshal(req.Data)
 	dataStr := string(dataBytes)
 
+	detID := generateDeterministicID(parsedCatID, dataStr)
+	itemsTree, err := kb.Store.Items(ctx)
+	if err == nil {
+		if found, _ := itemsTree.Find(ctx, detID, false); found {
+			// Item already exists. Skip summarization and vector generation.
+			if err := trans.Commit(ctx); err != nil {
+				http.Error(w, "Commit failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(addCategoryResponse{
+				Success: true,
+				ID:      detID.String(),
+				Message: "Item already exists",
+			})
+			return
+		}
+	}
+
 	summarizer := GetSummarizer(config.ProductionMode, GetConfiguredLLMClient(r))
 	summaries := DetermineSummaries(ctx, summarizer, req.Summaries, chunkStr, dataStr, maxSummaries)
 
@@ -350,7 +377,7 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newItem := memory.Item[map[string]any]{
-		ID:         sop.NewUUID(),
+		ID:         detID,
 		CategoryID: parsedCatID,
 		Summaries:  summaries,
 		Data:       req.Data,
@@ -514,6 +541,7 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 		Item         memory.Item[map[string]any]
 		ChunkStr     string
 		MaxSummaries int
+		Skip         bool
 	}
 
 	var states []itemState
@@ -549,6 +577,28 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 		dataBytes, _ := json.Marshal(itm.Data)
 		dataStr := string(dataBytes)
 
+		detID := generateDeterministicID(parsedCatID, dataStr)
+		itemsTree, err := kb.Store.Items(ctx)
+		if err == nil {
+			if found, _ := itemsTree.Find(ctx, detID, false); found {
+				state := itemState{
+					OriginalReq:  itm,
+					ParsedCatID:  parsedCatID,
+					CatName:      cat.Name,
+					ChunkStr:     chunkStr,
+					MaxSummaries: maxSummaries,
+					Skip:         true,
+					Item: memory.Item[map[string]any]{
+						ID:         detID,
+						CategoryID: parsedCatID,
+						Data:       itm.Data,
+					},
+				}
+				states = append(states, state)
+				continue
+			}
+		}
+
 		summaries := DetermineSummaries(ctx, summarizer, itm.Summaries, chunkStr, dataStr, maxSummaries)
 
 		state := itemState{
@@ -557,8 +607,9 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 			CatName:      cat.Name,
 			ChunkStr:     chunkStr,
 			MaxSummaries: maxSummaries,
+			Skip:         false,
 			Item: memory.Item[map[string]any]{
-				ID:         sop.NewUUID(),
+				ID:         detID,
 				CategoryID: parsedCatID,
 				Summaries:  summaries,
 				Data:       itm.Data,
@@ -599,6 +650,11 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 
 	var generatedIDs []string
 	for i, s := range states {
+		if s.Skip {
+			generatedIDs = append(generatedIDs, s.Item.ID.String())
+			continue
+		}
+
 		var vecs [][]float32
 		if len(s.OriginalReq.Positions) > 0 {
 			vecs = s.OriginalReq.Positions

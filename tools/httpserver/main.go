@@ -118,8 +118,16 @@ func init() {
 		AssetType:   "space",
 		Description: "Space represents a domain or workspace in the system",
 		Endpoints:   []string{string(sop.EndpointSpacesList)},
-		Actions:     []sop.Action{sop.ActionRead, sop.ActionWrite, sop.ActionDelete},
+		Actions:     []sop.Action{sop.ActionRead, sop.ActionWrite, sop.ActionDelete, sop.ActionAISelect},
 		Evaluator: func(ctx context.Context, entCtx sop.EntitlementContext, action sop.Action) bool {
+			if action == sop.ActionAISelect {
+				lower := strings.ToLower(entCtx.AssetID)
+				if lower == "sop" || strings.HasPrefix(lower, "memory_") || lower == "longtermmemory" || lower == "long_term_memory" {
+					return false
+				}
+				return true
+			}
+
 			if isReadOnlyContext(entCtx.AssetID) && entCtx.IsSystemDB && (action == sop.ActionWrite || action == sop.ActionDelete) {
 				return false
 			}
@@ -1188,9 +1196,25 @@ func handleListSpaces(w http.ResponseWriter, r *http.Request) {
 		filtered = make([]string, 0)
 	}
 
+	itemRBAC := make(map[string]sop.ContextRBACMap)
+	for _, name := range filtered {
+		itemMap := sop.ResolveRBACMap(ctx, "space", sop.EntitlementContext{AssetID: name, Database: dbName, IsSystemDB: IsSystemDB(dbName)}, nil)
+		// Default to allowed, only ship the exclusion rules over the wire
+		exclusionsOnly := make(sop.ContextRBACMap)
+		for k, v := range itemMap {
+			if !v {
+				exclusionsOnly[k] = false
+			}
+		}
+		if len(exclusionsOnly) > 0 {
+			itemRBAC[name] = exclusionsOnly
+		}
+	}
+
 	bundled := sop.BundledResponse{
-		Data: filtered,
-		RBAC: sop.ResolveRBACMap(ctx, "space", sop.EntitlementContext{AssetID: dbName, Database: dbName, IsSystemDB: IsSystemDB(dbName)}, nil),
+		Data:     filtered,
+		RBAC:     sop.ResolveRBACMap(ctx, "space", sop.EntitlementContext{AssetID: dbName, Database: dbName, IsSystemDB: IsSystemDB(dbName)}, nil),
+		ItemRBAC: itemRBAC,
 	}
 
 	json.NewEncoder(w).Encode(bundled)

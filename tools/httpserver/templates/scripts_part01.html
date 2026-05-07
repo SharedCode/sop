@@ -745,7 +745,11 @@
                     
                     if (domainSelect) {
                         const existing = Array.from(domainSelect.options).find(o => o.value === kb);
-                        if (!existing) {
+                        let canSelect = true;
+                        if (bundle.item_rbac && bundle.item_rbac[kb] && bundle.item_rbac[kb]["can_ai_select"] === false) {
+                            canSelect = false;
+                        }
+                        if (!existing && canSelect) {
                             const opt = document.createElement('option');
                             opt.value = kb;
                             opt.textContent = kb.charAt(0).toUpperCase() + kb.slice(1);
@@ -1159,13 +1163,43 @@
         sysLabel.style.color = 'var(--link-color)';
         
         let extraInfo = '';
+        let vectorField = null;
         if (cat.center_vector && cat.center_vector.length > 0) {
             extraInfo += `<span><strong>Vector Length:</strong> ${cat.center_vector.length} dimensions</span><br/>`;
+            
+            vectorField = document.createElement('div');
+            vectorField.style.marginTop = '10px';
+            const vectorLabel = document.createElement('label');
+            vectorLabel.innerText = 'Center Vector:';
+            vectorLabel.style.color = 'var(--text-color)';
+            vectorLabel.style.fontSize = '0.9em';
+            
+            const vectorInput = document.createElement('textarea');
+            vectorInput.value = JSON.stringify(cat.center_vector);
+            vectorInput.readOnly = true;
+            vectorInput.style.width = '100%';
+            vectorInput.style.height = '60px';
+            vectorInput.style.background = 'var(--bg-color)';
+            vectorInput.style.color = 'var(--text-color)';
+            vectorInput.style.border = '1px solid var(--border-color)';
+            vectorInput.style.padding = '8px';
+            vectorInput.style.borderRadius = '4px';
+            vectorInput.style.boxSizing = 'border-box';
+            vectorInput.style.marginTop = '5px';
+            vectorInput.style.resize = 'vertical';
+            vectorInput.style.opacity = '0.7';
+            
+            vectorField.appendChild(vectorLabel);
+            vectorField.appendChild(vectorInput);
         }
         if (cat.item_count !== undefined) {
              extraInfo += `<span><strong>Items Count:</strong> ${cat.item_count}</span><br/>`;
         }
         sysLabel.innerHTML = extraInfo;
+
+        if (vectorField) {
+            sysLabel.appendChild(vectorField);
+        }
 
         // Action Buttons
         const actionContainer = document.createElement('div');
@@ -1308,7 +1342,7 @@
     grid.innerHTML = "<div style='padding: 15px;'>Fetching thoughts...</div>";
     
     try {
-        const resCat = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}&offset=${catOffset}&limit=${catLimit}`);
+        const resCat = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}&offset=${catOffset}&limit=${catLimit}&parent_id=root`);
         if (!resCat.ok) throw new Error("Failed to fetch categories");
         const categoriesData = await resCat.json();
 
@@ -1332,7 +1366,7 @@
             }
         }
         const exKb = document.getElementById('btn-export-kb'); if(exKb) exKb.style.display = 'inline-block';
-        const imKb = document.getElementById('btn-import-kb'); if(imKb) imKb.style.display = 'inline-block';
+        const imKb = document.getElementById('btn-import-kb'); if(imKb) imKb.style.display = isReadOnlyKBTop ? 'none' : 'inline-block';
         const delKb = document.getElementById('btn-delete-kb'); if(delKb) delKb.style.display = isReadOnlyKBTop ? 'none' : 'inline-block';
 
         let categories = [];
@@ -1384,7 +1418,7 @@
                 <!-- Left Sidebar Treeview -->
                 <div style="width: 250px; min-width: 250px; border-right: 1px solid var(--border-color); padding-right: 15px; height: 100%; overflow-y: auto;">
                     <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; margin-bottom: 15px;">
-                        <h3 style="margin: 0; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center;">Categories <span onclick="event.stopPropagation(); window.vectorizeSpace('${name}')" title="Vectorize Entire Space" style="background: none; border: none; color: var(--key-color); font-size: 14px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: pointer; transition: transform 0.2s ease-in-out;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">✨</span></h3>
+                        <h3 style="margin: 0; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center;">Categories ${!isReadOnlyKB ? `<span onclick="event.stopPropagation(); window.vectorizeSpace('${name}')" title="Vectorize Entire Space" style="background: none; border: none; color: var(--key-color); font-size: 14px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: pointer; transition: transform 0.2s ease-in-out;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">✨</span>` : `<span title="Vectorize Entire Space" style="background: none; border: none; color: var(--key-color); font-size: 14px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: default;">✨</span>`}</h3>
                         <span id="sidebar-view-all-items" title="View All Items" style="cursor: pointer; color: var(--link-color); display: flex; align-items: center; padding: 4px; border-radius: 4px;" onclick="window.fetchItemsForCategory('${name}', '', 'All Items', this)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                                 <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zm8 0A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm-8 8A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm8 0A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z"/>
@@ -1435,40 +1469,111 @@
                 li.style.justifyContent = 'space-between';
                 li.style.alignItems = 'center';
                 
-                li.onmouseover = () => li.style.background = 'rgba(0,0,0,0.03)';
-                li.onmouseout = () => li.style.background = 'transparent';
-                
                 li.onclick = (e) => {
                     e.stopPropagation();
                     window.fetchItemsForCategory(name, cat.id, cat.name, li, cat);
                 };
 
+                const hasChildren = (cat.children && cat.children.length > 0) || (childrenMap[cat.id] && childrenMap[cat.id].length > 0);
+                const isExpanded = childrenMap[cat.id] && childrenMap[cat.id].length > 0;
+
+                const arrowSpan = document.createElement('span');
+                arrowSpan.innerHTML = hasChildren ? (isExpanded ? '▾ ' : '▸ ') : '◦ ';
+                arrowSpan.style.cursor = hasChildren ? 'pointer' : 'default';
+                arrowSpan.style.display = 'inline-block';
+                arrowSpan.style.width = '16px';
+                arrowSpan.style.textAlign = 'center';
+
                 const titleSpan = document.createElement('span');
-                const hasChildren = childrenMap[cat.id] && childrenMap[cat.id].length > 0;
-                titleSpan.innerHTML = (hasChildren ? '▾ ' : '◦ ') + cat.name;
+                titleSpan.innerHTML = cat.name;
                 titleSpan.style.whiteSpace = 'nowrap';
                 titleSpan.style.overflow = 'hidden';
                 titleSpan.style.textOverflow = 'ellipsis';
                 titleSpan.title = cat.name;
 
+                const childrenContainer = document.createElement('ul');
+                childrenContainer.style.listStyle = 'none';
+                childrenContainer.style.paddingLeft = '0';
+                childrenContainer.style.marginTop = '0px';
+                childrenContainer.style.marginBottom = isExpanded ? '8px' : '0px';
+                childrenContainer.style.display = isExpanded ? 'block' : 'none';
+
+                li.style.marginBottom = isExpanded ? '2px' : '8px';
+
+                arrowSpan.onclick = async (e) => {
+                    e.stopPropagation();
+                    if (!hasChildren) return;
+                    
+                    if (childrenContainer.style.display === 'none') {
+                        arrowSpan.innerHTML = '▾ ';
+                        childrenContainer.style.display = 'block';
+                        li.style.marginBottom = '2px';
+                        childrenContainer.style.marginBottom = '8px';
+                        
+                        if (childrenContainer.children.length === 0) {
+                            arrowSpan.innerHTML = '⌛ ';
+                            try {
+                                const resCat = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}&parent_id=${cat.id}&offset=0&limit=500`);
+                                if (resCat.ok) {
+                                    const data = await resCat.json();
+                                    let childrenData = Array.isArray(data) ? data : (data.data || []);
+                                    childrenData.forEach(c => {
+                                        if (!window._currentKBCategories.find(existing => existing.id === c.id)) {
+                                            window._currentKBCategories.push(c);
+                                        }
+                                    });
+                                    childrenData.sort((a,b) => a.name.localeCompare(b.name));
+                                    renderTreeNodes(childrenData, childrenContainer, depth+1);
+                                }
+                            } catch(err) {
+                                console.error('Failed to fetch sub-categories', err);
+                            }
+                            arrowSpan.innerHTML = '▾ ';
+                        }
+                    } else {
+                        arrowSpan.innerHTML = '▸ ';
+                        childrenContainer.style.display = 'none';
+                        li.style.marginBottom = '8px';
+                        childrenContainer.style.marginBottom = '0px';
+                    }
+                };
+
+                const addSubBtn = document.createElement('span');
+                addSubBtn.innerHTML = '+';
+                addSubBtn.title = 'Add Sub-Category';
+                addSubBtn.style.marginLeft = '8px';
+                addSubBtn.style.cursor = 'pointer';
+                addSubBtn.style.color = 'var(--key-color)';
+                addSubBtn.style.fontSize = '1.1em';
+                addSubBtn.style.fontWeight = 'bold';
+                addSubBtn.style.display = 'none'; // hidden by default, shown on hover
+                
+                li.onmouseover = () => { li.style.background = 'rgba(0,0,0,0.03)'; addSubBtn.style.display = 'inline'; };
+                li.onmouseout = () => { li.style.background = 'transparent'; addSubBtn.style.display = 'none'; };
+
+                addSubBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    window.showAddCategoryModal(cat.id);
+                };
+
                 const titleContainer = document.createElement('div');
                 titleContainer.style.display = 'flex';
                 titleContainer.style.alignItems = 'center';
                 titleContainer.style.overflow = 'hidden';
+                titleContainer.appendChild(arrowSpan);
                 titleContainer.appendChild(titleSpan);
+                if (!isReadOnlyKB) {
+                    titleContainer.appendChild(addSubBtn);
+                }
 
                 li.appendChild(titleContainer);
                 
                 container.appendChild(li);
 
-                if (hasChildren) {
-                    const ul = document.createElement('ul');
-                    ul.style.listStyle = 'none';
-                    ul.style.paddingLeft = '0';
-                    ul.style.marginTop = '5px';
-                    renderTreeNodes(childrenMap[cat.id], ul, depth+1);
-                    container.appendChild(ul);
+                if (isExpanded) {
+                    renderTreeNodes(childrenMap[cat.id], childrenContainer, depth+1);
                 }
+                container.appendChild(childrenContainer);
             });
         }
         
@@ -2187,11 +2292,28 @@ async function selectStore(name, element, force = false) {
     let columnsInitialized = false; // Flag to trigger auto-column-hiding once per store load
 
 // --- Add Category Logic ---
-function showAddCategoryItem() {
+function showAddCategoryItem(preselectedParentId = "") {
     window.currentAdminToken = null;
     openUIModal('add-category-modal');
     document.getElementById('new-category-name').value = '';
     document.getElementById('new-category-desc').value = '';
+    
+    // Populate parent dropdown
+    const select = document.getElementById('new-category-parent');
+    if (select) {
+        select.innerHTML = '<option value="">None (Top Level)</option>';
+        if (window._currentKBCategories) {
+            window._currentKBCategories.sort((a,b) => a.name.localeCompare(b.name)).forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = c.name;
+                if (c.id === preselectedParentId) {
+                    opt.selected = true;
+                }
+                select.appendChild(opt);
+            });
+        }
+    }
 }
 
 window.showAddCategoryModal = showAddCategoryItem;
@@ -2205,6 +2327,11 @@ async function submitAddCategoryItem() {
 
     const name = document.getElementById('new-category-name').value.trim();
     const desc = document.getElementById('new-category-desc').value.trim();
+    let parentId = "";
+    const parentSel = document.getElementById('new-category-parent');
+    if (parentSel) {
+        parentId = parentSel.value;
+    }
     
     if (!name) {
         showAlert("Category Name is required.");
@@ -2215,7 +2342,7 @@ async function submitAddCategoryItem() {
         const res = await fetch(`/api/spaces/category/add?name=${encodeURIComponent(spaceName)}&database=${encodeURIComponent(currentDatabase)}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name, description: desc})
+            body: JSON.stringify({name: name, description: desc, parent_id: parentId})
         });
         
         if (res.ok) {
@@ -2378,6 +2505,10 @@ async function saveSpaceItem() {
         });
         
         if (res.ok) {
+            const resData = await res.json();
+            if (resData.message === "Item already exists") {
+                showAlert("Item already exists in this Category. Duplicate ignored.");
+            }
             closeUIModal('add-space-item-modal');
             if (window._lastFetchItemsArgs) {
                 const args = window._lastFetchItemsArgs;
@@ -2515,6 +2646,10 @@ window.vectorizeSpace = async function(spaceName) {
                     "Vectorize"
                 ).then(() => {
                     showAlert(`Space '${cleanName}' vectorization completed successfully!`);
+                    // Refresh current view (categories and items) to show updated vectors
+                    if (window._lastFetchItemsArgs) {
+                        selectSpace(cleanName, null, true);
+                    }
                 }).catch(err => {
                     showAlert(`Vectorization failed: ${err.message}`);
                 });
