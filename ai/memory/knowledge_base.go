@@ -2,6 +2,8 @@ package memory
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 
@@ -214,52 +216,150 @@ func (kb *KnowledgeBase[T]) Vectorize(ctx context.Context) error {
 		return err
 	}
 
-	catMap := make(map[sop.UUID]string)
+	var allCats []*Category
 	ok, _ := catBtree.First(ctx)
 	for ok {
 		cat, err := catBtree.GetCurrentValue(ctx)
 		if err == nil && cat != nil {
-			catMap[cat.ID] = cat.Name
+			allCats = append(allCats, cat)
 		}
 		ok, _ = catBtree.Next(ctx)
 	}
 
-	var itemsToUpdate []Item[T]
+	// 1. Vectorize Categories
+	var categoriesToUpdate []*Category
+	var catNames []string
+	embedderDim := kb.Manager.embedder.Dim()
+	catIDsUpdated := make(map[sop.UUID]bool)
 
-	ok, _ = itemsBtree.First(ctx)
-	for ok {
-		item, err := itemsBtree.GetCurrentValue(ctx)
-		if err == nil {
-			itemsToUpdate = append(itemsToUpdate, item)
+	for _, c := range allCats {
+		expectedHash := ComputeVectorHash(embedderDim, c.Name)
+		if c.VectorHash != expectedHash || len(c.CenterVector) == 0 {
+			c.VectorHash = expectedHash
+			categoriesToUpdate = append(categoriesToUpdate, c)
+			catNames = append(catNames, c.Name)
+			catIDsUpdated[c.ID] = true
 		}
-		ok, _ = itemsBtree.Next(ctx)
 	}
 
-	for _, item := range itemsToUpdate {
-		if len(item.Summaries) == 0 {
-			dataStr := ""
-			if str, isStr := any(item.Data).(string); isStr {
-				dataStr = str
-			} else {
-				b, _ := json.Marshal(item.Data)
-				dataStr = string(b)
+	if len(catNames) > 0 {
+		catVecs, err := kb.Manager.embedder.EmbedTexts(ctx, catNames)
+		if err == nil && len(catVecs) == len(catNames) {
+			for i, c := range categoriesToUpdate {
+				c.CenterVector = catVecs[i]
+				catBtree.Update(ctx, c.ID, c)
 			}
-			item.Summaries = []string{dataStr}
+		}
+	}
+
+	vectorsBtree, err := kb.Store.Vectors(ctx)
+	if err != nil {
+		return err
+	}
+
+	// 2. Vectorize Items per Category using batches
+	for _, cat := range allCats {
+		catUpdated := catIDsUpdated[cat.ID]
+		var catItems []Item[T]
+		var catItemsNoLLM []Item[T]
+		ok, _ = itemsBtree.First(ctx)
+		for ok {
+			item, err := itemsBtree.GetCurrentValue(ctx)
+			if err == nil && item.CategoryID == cat.ID {
+
+				// Apply caching check
+				dataStr := ""
+				if len(item.Summaries) == 0 {
+					if str, isStr := any(item.Data).(string); isStr {
+						dataStr = str
+					} else {
+						b, _ := json.Marshal(item.Data)
+						dataStr = string(b)
+					}
+				}
+
+				hashTexts := item.Summaries
+				if len(hashTexts) == 0 {
+					hashTexts = []string{dataStr}
+				}
+
+				expectedHash := ComputeVectorHash(embedderDim, hashTexts...)
+				if item.VectorHash != expectedHash || len(item.Positions) == 0 {
+					item.VectorHash = expectedHash
+					catItems = append(catItems, item)
+				} else if catUpdated {
+					catItemsNoLLM = append(catItemsNoLLM, item)
+				}
+			}
+			ok, _ = itemsBtree.Next(ctx)
 		}
 
-		vecs, err := kb.Manager.embedder.EmbedTexts(ctx, item.Summaries)
-		if err != nil {
-			return err
+		batchSize := 50
+		for i := 0; i < len(catItems); i += batchSize {
+			end := i + batchSize
+			if end > len(catItems) {
+				end = len(catItems)
+			}
+
+			batch := catItems[i:end]
+			var batchSummaries []string
+			var itemSummaryCounts []int
+
+			for _, item := range batch {
+				if len(item.Summaries) == 0 {
+					dataStr := ""
+					if str, isStr := any(item.Data).(string); isStr {
+						dataStr = str
+					} else {
+						b, _ := json.Marshal(item.Data)
+						dataStr = string(b)
+					}
+					item.Summaries = []string{dataStr}
+				}
+				batchSummaries = append(batchSummaries, item.Summaries...)
+				itemSummaryCounts = append(itemSummaryCounts, len(item.Summaries))
+			}
+
+			if len(batchSummaries) == 0 {
+				continue
+			}
+
+			allVecs, err := kb.Manager.embedder.EmbedTexts(ctx, batchSummaries)
+			if err != nil {
+				return err
+			}
+
+			vecIdx := 0
+			for j, item := range batch {
+				count := itemSummaryCounts[j]
+				if vecIdx+count > len(allVecs) {
+					break
+				}
+				itemVecs := allVecs[vecIdx : vecIdx+count]
+				vecIdx += count
+
+				err = kb.Store.UpsertByCategory(ctx, cat.Name, item, itemVecs)
+				if err != nil {
+					return err
+				}
+			}
 		}
 
-		catName, found := catMap[item.CategoryID]
-		if !found {
-			continue
-		}
-
-		err = kb.Store.UpsertByCategory(ctx, catName, item, vecs)
-		if err != nil {
-			return err
+		for _, item := range catItemsNoLLM {
+			var itemVecs [][]float32
+			for _, pos := range item.Positions {
+				if found, _ := vectorsBtree.Find(ctx, pos, false); found {
+					if v, err := vectorsBtree.GetCurrentValue(ctx); err == nil {
+						itemVecs = append(itemVecs, v.Data)
+					}
+				}
+			}
+			if len(itemVecs) > 0 {
+				err = kb.Store.UpsertByCategory(ctx, cat.Name, item, itemVecs)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -292,13 +392,54 @@ func (kb *KnowledgeBase[T]) VectorizeItems(ctx context.Context, categoryID sop.U
 		return errors.New("category not found")
 	}
 
+	vectorsBtree, err := kb.Store.Vectors(ctx)
+	if err != nil {
+		return err
+	}
+
+	embedderDim := kb.Manager.embedder.Dim()
+	catUpdated := false
+
+	expectedCatHash := ComputeVectorHash(embedderDim, category.Name)
+	if category.VectorHash != expectedCatHash || len(category.CenterVector) == 0 {
+		catVecs, _ := kb.Manager.embedder.EmbedTexts(ctx, []string{category.Name})
+		if len(catVecs) > 0 {
+			category.CenterVector = catVecs[0]
+			category.VectorHash = expectedCatHash
+			catBtree.Update(ctx, category.ID, category)
+			catUpdated = true
+		}
+		// Force vectorization of all items to fix math since center just updated
+		itemIDs = nil
+	}
+
 	var itemsToUpdate []Item[T]
+	var catItemsNoLLM []Item[T]
 
 	if len(itemIDs) == 0 {
 		ok, _ := itemsBtree.First(ctx)
 		for ok {
 			if item, err := itemsBtree.GetCurrentValue(ctx); err == nil && item.CategoryID == categoryID {
-				itemsToUpdate = append(itemsToUpdate, item)
+				dataStr := ""
+				if len(item.Summaries) == 0 {
+					if str, isStr := any(item.Data).(string); isStr {
+						dataStr = str
+					} else {
+						b, _ := json.Marshal(item.Data)
+						dataStr = string(b)
+					}
+				}
+				hashTexts := item.Summaries
+				if len(hashTexts) == 0 {
+					hashTexts = []string{dataStr}
+				}
+				expectedHash := ComputeVectorHash(embedderDim, hashTexts...)
+				if item.VectorHash != expectedHash || len(item.Positions) == 0 {
+					item.VectorHash = expectedHash
+					itemsToUpdate = append(itemsToUpdate, item)
+				} else if catUpdated {
+					catItemsNoLLM = append(catItemsNoLLM, item)
+				}
 			}
 			ok, _ = itemsBtree.Next(ctx)
 		}
@@ -307,7 +448,26 @@ func (kb *KnowledgeBase[T]) VectorizeItems(ctx context.Context, categoryID sop.U
 			if ok, _ := itemsBtree.Find(ctx, id, false); ok {
 				item, err := itemsBtree.GetCurrentValue(ctx)
 				if err == nil && item.CategoryID == categoryID {
-					itemsToUpdate = append(itemsToUpdate, item)
+					dataStr := ""
+					if len(item.Summaries) == 0 {
+						if str, isStr := any(item.Data).(string); isStr {
+							dataStr = str
+						} else {
+							b, _ := json.Marshal(item.Data)
+							dataStr = string(b)
+						}
+					}
+					hashTexts := item.Summaries
+					if len(hashTexts) == 0 {
+						hashTexts = []string{dataStr}
+					}
+					expectedHash := ComputeVectorHash(embedderDim, hashTexts...)
+					if item.VectorHash != expectedHash || len(item.Positions) == 0 {
+						item.VectorHash = expectedHash
+						itemsToUpdate = append(itemsToUpdate, item)
+					} else if catUpdated {
+						catItemsNoLLM = append(catItemsNoLLM, item)
+					}
 				}
 			}
 		}
@@ -361,11 +521,20 @@ func (kb *KnowledgeBase[T]) VectorizeItems(ctx context.Context, categoryID sop.U
 		}
 	}
 
-	if len(category.CenterVector) == 0 {
-		catVecs, _ := kb.Manager.embedder.EmbedTexts(ctx, []string{category.Name})
-		if len(catVecs) > 0 {
-			category.CenterVector = catVecs[0]
-			catBtree.UpdateCurrentValue(ctx, category)
+	for _, item := range catItemsNoLLM {
+		var itemVecs [][]float32
+		for _, pos := range item.Positions {
+			if found, _ := vectorsBtree.Find(ctx, pos, false); found {
+				if v, err := vectorsBtree.GetCurrentValue(ctx); err == nil {
+					itemVecs = append(itemVecs, v.Data)
+				}
+			}
+		}
+		if len(itemVecs) > 0 {
+			err = kb.Store.UpsertByCategory(ctx, category.Name, item, itemVecs)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -405,7 +574,6 @@ func (kb *KnowledgeBase[T]) GetConfig(ctx context.Context) (*KnowledgeBaseConfig
 	return &cfg, nil
 }
 
-
 // SetConfig saves the metadata configuration for this KnowledgeBase.
 func (kb *KnowledgeBase[T]) SetConfig(ctx context.Context, config *KnowledgeBaseConfig) error {
 	itemsBtree, err := kb.Store.Items(ctx)
@@ -441,4 +609,18 @@ func (kb *KnowledgeBase[T]) SetConfig(ctx context.Context, config *KnowledgeBase
 	}
 	_, err = itemsBtree.Add(ctx, sop.NilUUID, configItem)
 	return err
+}
+
+// ComputeVectorHash computes a predictable string hash representing the text content.
+// We optionally include dimensions, but explicitly exclude embedderName so that compatible models (same dims) don't trigger re-vectorization unless content actually changes.
+func ComputeVectorHash(embedderDim int, texts ...string) string {
+	hasher := sha256.New()
+
+	dimStr := "dim:" + string(rune(embedderDim)) + "::"
+	hasher.Write([]byte(dimStr))
+
+	for _, t := range texts {
+		hasher.Write([]byte(t + "::"))
+	}
+	return hex.EncodeToString(hasher.Sum(nil))
 }

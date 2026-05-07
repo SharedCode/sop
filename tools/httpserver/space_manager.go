@@ -156,15 +156,7 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if request.Attributes != nil {
-			attrMap := map[string]any{}
-			b, _ := json.Marshal(request.Attributes)
-			_ = json.Unmarshal(b, &attrMap)
-
-			err := kb.Store.Upsert(ctx, memory.Item[map[string]any]{
-				ID:         sop.NilUUID,
-				CategoryID: sop.NilUUID,
-				Data:       attrMap,
-			}, nil)
+			err := kb.SetConfig(ctx, request.Attributes)
 			if err != nil {
 				fmt.Printf("Failed to insert Space Attributes: %v\n", err)
 			}

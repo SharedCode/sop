@@ -72,6 +72,10 @@ func handleListSpaceCategories(w http.ResponseWriter, r *http.Request) {
 			isMatch := false
 			if parentIDStr == "" {
 				isMatch = true
+			} else if parentIDStr == "root" {
+				if len(cat.ParentIDs) == 0 {
+					isMatch = true
+				}
 			} else {
 				for _, p := range cat.ParentIDs {
 					if p.ParentID.String() == parentIDStr {
@@ -84,12 +88,13 @@ func handleListSpaceCategories(w http.ResponseWriter, r *http.Request) {
 			if isMatch {
 				if matchCount >= offset && matchCount < offset+limit {
 					categories = append(categories, map[string]any{
-						"id":          cat.ID.String(),
-						"name":        cat.Name,
-						"description": cat.Description,
-						"item_count":  cat.ItemCount,
-						"children":    cat.ChildrenIDs,
-						"parents":     cat.ParentIDs,
+						"id":            cat.ID.String(),
+						"name":          cat.Name,
+						"description":   cat.Description,
+						"item_count":    cat.ItemCount,
+						"children":      cat.ChildrenIDs,
+						"parents":       cat.ParentIDs,
+						"center_vector": cat.CenterVector,
 					})
 				}
 				matchCount++
@@ -174,6 +179,12 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 			ok, _ := itemsTree.First(ctx)
 			for ok {
 				val, _ := itemsTree.GetCurrentValue(ctx)
+
+				if val.ID == sop.NilUUID {
+					ok, _ = itemsTree.Next(ctx)
+					continue
+				}
+
 				// Filter (if user passed category_id)
 				if categoryFilter == "" || val.CategoryID.String() == categoryFilter {
 					if matchCount >= offset && matchCount < offset+limit {
