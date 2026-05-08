@@ -21,6 +21,8 @@ type ExportItem[T any] struct {
 	Data             T           `json:"data"`
 	Summaries        []string    `json:"summaries,omitempty"`
 	SummariesVectors [][]float32 `json:"summaries_vectors,omitempty"`
+	Positions        []VectorKey `json:"positions,omitempty"`
+	VectorHash       string      `json:"vector_hash,omitempty"`
 }
 
 // ExportJSON serializes the KnowledgeBase contents into a JSON stream.
@@ -82,6 +84,8 @@ func (kb *KnowledgeBase[T]) ExportJSON(ctx context.Context, writer io.Writer) er
 					Data:             item.Data,
 					Summaries:        item.Summaries,
 					SummariesVectors: vectors,
+					Positions:        item.Positions,
+					VectorHash:       item.VectorHash,
 				})
 			}
 		}
@@ -127,10 +131,12 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 	var thoughts []Thought[T]
 	for _, it := range exportData.Items {
 		thoughts = append(thoughts, Thought[T]{
-			Category:  it.Category,
-			Data:      it.Data,
-			Vectors:   it.SummariesVectors,
-			Summaries: it.Summaries,
+			Category:   it.Category,
+			Data:       it.Data,
+			Vectors:    it.SummariesVectors,
+			Summaries:  it.Summaries,
+			Positions:  it.Positions,
+			VectorHash: it.VectorHash,
 		})
 	}
 

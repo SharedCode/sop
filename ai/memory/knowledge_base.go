@@ -45,10 +45,12 @@ func (kb *KnowledgeBase[T]) SearchKeywords(ctx context.Context, textQuery string
 
 // Thought represents the individual entity of data in a batch categorization execution.
 type Thought[T any] struct {
-	Summaries []string
-	Category  string
-	Data      T
-	Vectors   [][]float32
+	Summaries  []string
+	Category   string
+	Data       T
+	Vectors    [][]float32
+	Positions  []VectorKey
+	VectorHash string
 }
 
 // IngestThoughts securely categorizes and stores an array of thoughts, optimizing latency
@@ -156,19 +158,28 @@ func (kb *KnowledgeBase[T]) IngestThoughts(ctx context.Context, thoughts []Thoug
 	}
 
 	// 4. Ensure Categories and Store
+	catCache := make(map[string]sop.UUID)
+
 	for _, thought := range thoughts {
-		_, err := kb.Manager.EnsureCategory(ctx, thought.Category)
-		if err != nil {
-			return err
+		catID, exists := catCache[thought.Category]
+		if !exists {
+			var err error
+			catID, err = kb.Manager.EnsureCategory(ctx, thought.Category)
+			if err != nil {
+				return err
+			}
+			catCache[thought.Category] = catID
 		}
 
 		item := Item[T]{
-			ID:        sop.NewUUID(),
-			Summaries: thought.Summaries,
-			Data:      thought.Data,
+			ID:         sop.NewUUID(),
+			Summaries:  thought.Summaries,
+			Data:       thought.Data,
+			Positions:  thought.Positions,
+			VectorHash: thought.VectorHash,
 		}
 
-		err = kb.Store.UpsertByCategory(ctx, thought.Category, item, thought.Vectors)
+		err := kb.Store.UpsertByCategoryID(ctx, catID, item, thought.Vectors)
 		if err != nil {
 			return err
 		}

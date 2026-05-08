@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	log "log/slog"
@@ -364,7 +363,7 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 	}
 
 	// 3. Query Index
-	tx, err := s.domain.BeginTransaction(ctx, sop.ForReading)
+	tx, err := s.domain.BeginTransaction(ctx, sop.NoCheck)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -375,31 +374,19 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 		return nil, fmt.Errorf("domain %s has no index configured: %w", s.domain.ID(), err)
 	}
 
-	// Hybrid Fusion (RRF)
-	var wg sync.WaitGroup
 	var vectorHits []ai.Hit[map[string]any]
 	var vecErr error
 	var textHits []search.TextSearchResult
 	var textErr error
 
-	wg.Add(2)
+	// Vector Search
+	vectorHits, vecErr = idx.Query(ctx, vecs[0], limit, nil)
 
-	go func() {
-		defer wg.Done()
-		// Vector Search
-		vectorHits, vecErr = idx.Query(ctx, vecs[0], limit, nil)
-	}()
-
-	go func() {
-		defer wg.Done()
-		// Text Search
-		textIdx, err := s.domain.TextIndex(ctx, tx)
-		if err == nil && textIdx != nil {
-			textHits, textErr = textIdx.Search(ctx, query)
-		}
-	}()
-
-	wg.Wait()
+	// Text Search
+	textIdx, err := s.domain.TextIndex(ctx, tx)
+	if err == nil && textIdx != nil {
+		textHits, textErr = textIdx.Search(ctx, query)
+	}
 
 	if vecErr != nil {
 		return nil, fmt.Errorf("vector query failed: %w", vecErr)
@@ -650,7 +637,7 @@ func (s *Service) getLLMKnowledge(ctx context.Context) string {
 	namespacesToLoad := []string{"memory", "term"}
 
 	// SCALABILITY FIX 2: Load Semantic Memory namespaces
-	semanticNamespaces := []string{"vocabulary", "rule", "correction"}
+	semanticNamespaces := []string{"vocabulary", "rule", "correction", "persona"}
 
 	// Add current DB domain if applicable
 	if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
@@ -743,7 +730,7 @@ func (s *Service) getToolInfo(ctx context.Context, toolName string) (string, err
 // registerTools sets up the tools available to the LLM.
 func (s *Service) registerTools() {
 	if s.registry == nil {
-		return
+		s.registry = make(map[string]ai.Agent[map[string]any])
 	}
 	// We inject `conclude_topic` by directly defining it in the interface.
 	// Since s.registry is map[string]ai.Agent (where ai.Agent is an interface),
@@ -808,7 +795,59 @@ func (s *Service) handleConcludeTopic(ctx context.Context, args map[string]inter
 		thread.Label = label
 	}
 
+	if s.EnableShortTermMemory {
+		itemID := sop.NewUUID().String()
+		payload := map[string]any{
+			"id":         itemID,
+			"session_id": "session_" + itemID,
+			"intent":     label,
+			"thought":    summary,
+			"ts":         time.Now().UnixMilli(),
+			"type":       "conclusion",
+		}
+		select {
+		case s.episodeQueue <- payload:
+			log.Debug("ShortTermMemory: Concluded topic queued for batch writing", "temp_id", itemID)
+		default:
+			log.Warn("ShortTermMemory: Batch queue is full, dropping conclusion", "temp_id", itemID)
+		}
+	}
+
 	return fmt.Sprintf("Topic '%s' concluded. Summary saved: %s", thread.Label, summary), nil
+}
+
+// InitializeUserSession explicitly creates the DDL components required for a user's workflow.
+// This creates the User's Long-Term Memory (LTM) Vector Knowledge Base and any other
+// dependencies that must exist before the ReAct loop starts querying with ForReading transactions.
+func (s *Service) InitializeUserSession(ctx context.Context, userID string) error {
+	// 1. STM Initialization (if enabled)
+	if s.EnableShortTermMemory {
+		if err := s.InitializeShortTermMemory(ctx); err != nil {
+			return fmt.Errorf("failed to init STM: %w", err)
+		}
+	}
+
+	if userID == "" {
+		return nil // Nothing to init for a systemic or session-less user
+	}
+
+	// 2. LTM Initialization (User's Private Knowledge Base DB Tables)
+	tx, err := s.systemDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return fmt.Errorf("failed to begin session init tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	ltmName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, userID)
+
+	// OpenKnowledgeBase safely ensures DDL (creates B-Trees if they don't exist)
+	// Because this is a ForWriting transaction, the NewBtree calls deep inside will succeed.
+	_, err = s.systemDB.OpenKnowledgeBase(ctx, ltmName, tx, s.generator, nil)
+	if err != nil {
+		return fmt.Errorf("failed to initialize user LTM '%s': %w", ltmName, err)
+	}
+
+	return tx.Commit(ctx)
 }
 
 func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
@@ -846,6 +885,13 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		}
 	}
 
+	// Ensure we have a tool executor
+	// If the caller didn't provide one, we use the ServiceToolExecutor which delegates to registered agents.
+	if ctx.Value(ai.CtxKeyExecutor) == nil {
+		executor := &ServiceToolExecutor{s: s}
+		ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
+	}
+
 	// Inject SessionPayload into context if present
 	if val, ok := cfg.Values["payload"]; ok {
 		if p, ok := val.(*ai.SessionPayload); ok {
@@ -868,13 +914,6 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	} else {
 		// If no payload provided, create a default one from session state
 		// Use forcedDBName if provided via Ask options, otherwise session state
-
-		// Ensure we have a tool executor
-		// If the caller didn't provide one, we use the ServiceToolExecutor which delegates to registered agents.
-		if ctx.Value(ai.CtxKeyExecutor) == nil {
-			executor := &ServiceToolExecutor{s: s}
-			ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
-		}
 
 		// 1. Prepare Context (History, DB schema, etc.)
 		targetDB := s.session.CurrentDB
@@ -1034,51 +1073,9 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	// 2c. Tool Usage Hint for Knowledge Retrieval
 	systemPrompt = fmt.Sprintf("%s\n\n[Tool Usage Note]\nYou can use the tool \"gettoolinfo\" with argument \"tool\" (e.g., \"gettoolinfo('execute_script')\") to get detailed usage instructions for any tool if you are unsure about its parameters or behavior.", systemPrompt)
 
-	// [Managed Conversation Protocol]
-	conversationProtocol := `
-[Conversation Management]
-You are capable of managing the conversation flow.
-- A "Conversation Thread" tracks the current topic.
-- When an issue is resolved, or a significant sub-task is completed, and you are ready to switch context, use the 'conclude_topic(summary, topic_label)' tool.
-- This helps cleaner context management.
-`
-	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, conversationProtocol)
-
-	// [Active Memory Protocol]
-	learningProtocol := `
-[Active Memory & Refinement Protocol]
-You are a self-correcting agent integrated with an automated "Active Memory" system. 
-When the user corrects your output, provides a definition, or establishes a preference (e.g., "Use 'Client' instead of 'User'", "Always check X before Y"):
-1. ACKNOWLEDGE the correction.
-2. Execute the correctly revised action (if applicable) immediately. Your validated actions, intents, and AST payloads are AUTOMATICALLY embedded into Active Memory by the system backend—you do NOT need to call any manual save tools.
-3. Because the system tracks your successful workflow episodes, simply applying the user's feedback once guarantees the system will autonomously recall the corrected approach for future queries. 
-`
-	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, learningProtocol)
-
-	// [Omni Protocol / Master Architect Precedence]
-	omniProtocol := `[Omni Precedence & Master Architecture Rules]
-You are the Omni Persona, an intelligent Orchestrator and Database Architect capable of managing pure technical schemas AND high-level Knowledge Spaces in a seamless ecosystem.
-
-When discussing what you are, or when interacting with users, keep in mind:
-- A "Space" or "Knowledge Base" (often represented as a single word like 'Notes' or 'Contacts') is a new AI memory subsystem comprised of a VectorDB, Text Search, a special schema (Thoughts: Category/Items), and its own memory management.
-- Users can ask you to generate data on the fly into a Space.
-- "Technical Tables" or raw B-Trees ('orders', 'users') require strict schema adherence and database tool usage.
-
-When retrieving tools, processing queries, or searching Context, you MUST respect this strict Knowledge Base (KB) PRECEDENCE HIERARCHY:
-1. Selected KB (Highest Priority): If the user has mounted or selected a specific KB (e.g. Medical Expert), its domain rules strictly override generic rules.
-2. SOP KB (Core Foundation): This is of EQUAL precedence. You MUST rely on it for fundamental database management, constraints, schema evaluation, and orchestration tools.
-3. User DB KBs: After primary checks, you must actively search other relevant domain namespaces within the current User Database.
-4. SystemDB KBs (Global Defaults): If rules are not found elsewhere, fallback to global KBs within the SystemDB.`
-	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, omniProtocol)
-
-	// [Pattern of Thinking]
-	thinkingProtocol := `[Pattern of Thinking & Data Management]
-When asked to query, manage, or manipulate data, you MUST follow this explicit sequence before generating your final response or script:
-1. KB Fallback: If you are about to execute a tool (like 'select', 'join', or 'execute_script'), but its exact DSL or rules are not locally documented, FIRST use 'gettoolinfo' to retrieve the full specifications from the SOP KB.
-2. Schema Inspection: ALWAYS use 'list_stores' and evaluate the schema to verify the exact tables and field names before constructing any data scripts to existing technical tables.
-3. SPACE AUTO-IMPORT: IF the user asks to generate, create, or import into a Space or Knowledge Base, IT IS A FATAL ERROR TO USE ANY TOOLS. DO NOT output a tool call (like {"tool": "open_store"}). You must immediately output ONLY the raw JSON matching the ExportData array (with target_space, categories, and items), wrapped in a standard JSON markdown block.
-4. Active Memory: Rely on the actively injected Knowledge, Context, and the verified schema to formulate your operations. Let exact facts guide your script parameters.`
-	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, thinkingProtocol)
+	// Filter and inject heavy architectural protocols ONLY if the query or topic warrants it.
+	// This prevents LLM "memory tax" and bloat for casual conversational threads.
+	// (Omni protocol logic removed or delegated to KB)
 
 	// [Regression Fix]
 	// If EnableHistoryInjection is false, we should also ensure that formatContext
@@ -1203,13 +1200,25 @@ When asked to query, manage, or manipulate data, you MUST follow this explicit s
 		text = strings.TrimSpace(text)
 
 		possibleTool := false
-		if strings.HasPrefix(text, "{") && strings.Contains(text, "\"tool\"") {
+		if strings.HasPrefix(text, "{") && (strings.Contains(text, "\"tool\"") || strings.Contains(text, "\"tool_calls\"")) {
 			possibleTool = true
 		}
 
-		// Also check toolRecorded (Raw output) - if so, we can use that if Text parsing fails or instead.
-		// Detailed logic:
-		// 1. Try to parse Text as Tool Call.
+		// Fallback: Extract from ```json block if embedded in text
+		if !possibleTool {
+			start := strings.Index(output.Text, "```json")
+			if start != -1 {
+				sub := output.Text[start+7:]
+				end := strings.Index(sub, "```")
+				if end != -1 {
+					jsonText := strings.TrimSpace(sub[:end])
+					if strings.HasPrefix(jsonText, "{") && (strings.Contains(jsonText, "\"tool\"") || strings.Contains(jsonText, "\"tool_calls\"")) {
+						possibleTool = true
+						text = jsonText
+					}
+				}
+			}
+		}
 		// 2. If Text is NOT valid tool call, but output.Raw IS, use output.Raw.
 
 		// Let's stick to existing logic but just fix the indentation/flow.
@@ -1218,13 +1227,30 @@ When asked to query, manage, or manipulate data, you MUST follow this explicit s
 
 			// 1. Parse JSON FIRST to get the exact values the LLM returned
 			var toolCall struct {
-				Tool string         `json:"tool"`
-				Args map[string]any `json:"args"`
+				Tool      string         `json:"tool"`
+				Args      map[string]any `json:"args"`
+				Arguments map[string]any `json:"arguments"`
+			}
+			var openaiCall struct {
+				ToolCalls []struct {
+					Name      string         `json:"name"`
+					Arguments map[string]any `json:"arguments"`
+				} `json:"tool_calls"`
 			}
 
-			// We try to unmarshal the text directly.
-			// If the LLM returned valid JSON (even with obfuscated values), this will succeed.
-			if err := json.Unmarshal([]byte(text), &toolCall); err == nil {
+			unmarshaled := false
+			if err := json.Unmarshal([]byte(text), &toolCall); err == nil && toolCall.Tool != "" {
+				if toolCall.Args == nil && toolCall.Arguments != nil {
+					toolCall.Args = toolCall.Arguments
+				}
+				unmarshaled = true
+			} else if err := json.Unmarshal([]byte(text), &openaiCall); err == nil && len(openaiCall.ToolCalls) > 0 {
+				toolCall.Tool = openaiCall.ToolCalls[0].Name
+				toolCall.Args = openaiCall.ToolCalls[0].Arguments
+				unmarshaled = true
+			}
+
+			if unmarshaled {
 				// 2. Sanitize Args
 				var sanitize func(any) any
 				sanitize = func(v any) any {

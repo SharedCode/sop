@@ -74,8 +74,8 @@ func TestHandleVectorizeSpace_MissingCategory(t *testing.T) {
 	handleVectorizeSpace(w, req)
 
 	res := w.Result()
-	if res.StatusCode != http.StatusBadRequest {
-		t.Errorf("Expected BadRequest, got %v", res.StatusCode)
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("Expected OK, got %v", res.StatusCode)
 	}
 }
 

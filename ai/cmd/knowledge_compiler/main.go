@@ -16,78 +16,78 @@ type KnowledgeChunk struct {
 }
 
 func main() {
-        var allChunks []KnowledgeChunk
-        repoRoot := "../../.."
+	var allChunks []KnowledgeChunk
+	repoRoot := "../../.."
 
-        filepath.WalkDir(repoRoot, func(file string, d os.DirEntry, err error) error {
-                if err != nil {
-                        return nil
-                }
-                
-                if d.IsDir() {
-                        name := d.Name()
-                        if strings.HasPrefix(name, ".") && name != "." && name != ".." {
-                                return filepath.SkipDir
-                        }
-                        if name == "node_modules" || name == "vendor" || name == "server" || name == "server_bin" {
-                                return filepath.SkipDir
-                        }
-                        return nil
-                }
-                
-                if !strings.HasSuffix(strings.ToLower(file), ".md") {
-                        return nil
-                }
+	filepath.WalkDir(repoRoot, func(file string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
 
-                filename := d.Name()
-                upperName := strings.ToUpper(filename)
-                if strings.Contains(upperName, "CODE_OF_CONDUCT") ||
-                        strings.Contains(upperName, "LICENSE") ||
-                        strings.Contains(upperName, "CHANGELOG") ||
-                        strings.Contains(upperName, "ARTICLE") ||
-                        strings.Contains(upperName, "POST") ||
-                        strings.Contains(upperName, "ANNOUNCEMENT") ||
-                        strings.Contains(upperName, "RELEASE") ||
-                        strings.Contains(upperName, "README2") ||
-                        strings.Contains(upperName, "PROPOSAL") ||
-                        strings.Contains(upperName, "CONTRIBUTING") ||
-                        strings.Contains(upperName, "LINKEDIN") ||
-                        strings.Contains(upperName, "WHITEPAPER") {
-                        return nil
-                }
+		if d.IsDir() {
+			name := d.Name()
+			if strings.HasPrefix(name, ".") && name != "." && name != ".." {
+				return filepath.SkipDir
+			}
+			if name == "node_modules" || name == "vendor" || name == "server" || name == "server_bin" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 
-                // Deduplication: If we find multiple READMEs or COOKBOOKs,
-                // tag them so the LLM knows their domain.
-                domainContext := ""
-                absPath, _ := filepath.Abs(file)
-                if strings.Contains(absPath, "/ai/") {
-                        if upperName == "README.MD" {
-                                domainContext = "[AI MODULE ROOT README] "
-                        } else if upperName == "COOKBOOK.MD" {
-                                domainContext = "[AI MODULE COOKBOOK] "
-                        } else if upperName == "OMNI_PERSONA.MD" {
-                                domainContext = "[SYSTEM DIRECTIVE] "
-                        } else {
-                                domainContext = "[AI MODULE DOC] "
-                        }
-                } else {
-                        if upperName == "README.MD" {
-                                domainContext = "[SOP CORE README] "
-                        } else if upperName == "COOKBOOK.MD" {
-                                domainContext = "[SOP CORE COOKBOOK] "
-                        } else if upperName == "AI_COPILOT.MD" {
-                                domainContext = "[AI INTEGRATION OVERVIEW] "
-                        } else {
-                                domainContext = "[SOP CORE DOC] "
-                        }
-                }
+		if !strings.HasSuffix(strings.ToLower(file), ".md") {
+			return nil
+		}
 
-                fmt.Printf("Parsing: %s (Context: %s)\n", file, strings.TrimSpace(domainContext))
-                chunks := processMarkdownFile(file, domainContext)
-                allChunks = append(allChunks, chunks...)
-                
-                return nil
-        })
+		filename := d.Name()
+		upperName := strings.ToUpper(filename)
+		if strings.Contains(upperName, "CODE_OF_CONDUCT") ||
+			strings.Contains(upperName, "LICENSE") ||
+			strings.Contains(upperName, "CHANGELOG") ||
+			strings.Contains(upperName, "ARTICLE") ||
+			strings.Contains(upperName, "POST") ||
+			strings.Contains(upperName, "ANNOUNCEMENT") ||
+			strings.Contains(upperName, "RELEASE") ||
+			strings.Contains(upperName, "README2") ||
+			strings.Contains(upperName, "PROPOSAL") ||
+			strings.Contains(upperName, "CONTRIBUTING") ||
+			strings.Contains(upperName, "LINKEDIN") ||
+			strings.Contains(upperName, "WHITEPAPER") {
+			return nil
+		}
+
+		// Deduplication: If we find multiple READMEs or COOKBOOKs,
+		// tag them so the LLM knows their domain.
+		domainContext := ""
+		absPath, _ := filepath.Abs(file)
+		if strings.Contains(absPath, "/ai/") {
+			if upperName == "README.MD" {
+				domainContext = "[AI MODULE ROOT README] "
+			} else if upperName == "COOKBOOK.MD" {
+				domainContext = "[AI MODULE COOKBOOK] "
+			} else if upperName == "OMNI_PERSONA.MD" {
+				domainContext = "[SYSTEM DIRECTIVE] "
+			} else {
+				domainContext = "[AI MODULE DOC] "
+			}
+		} else {
+			if upperName == "README.MD" {
+				domainContext = "[SOP CORE README] "
+			} else if upperName == "COOKBOOK.MD" {
+				domainContext = "[SOP CORE COOKBOOK] "
+			} else if upperName == "AI_COPILOT.MD" {
+				domainContext = "[AI INTEGRATION OVERVIEW] "
+			} else {
+				domainContext = "[SOP CORE DOC] "
+			}
+		}
+
+		fmt.Printf("Parsing: %s (Context: %s)\n", file, strings.TrimSpace(domainContext))
+		chunks := processMarkdownFile(file, domainContext)
+		allChunks = append(allChunks, chunks...)
+
+		return nil
+	})
 	outData, _ := json.MarshalIndent(allChunks, "", "  ")
 	outputPath := "sop_base_knowledge.json"
 	os.WriteFile(outputPath, outData, 0644)

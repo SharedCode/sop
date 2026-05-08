@@ -182,8 +182,6 @@ func (s *store[T]) Upsert(ctx context.Context, item Item[T], vec []float32) erro
 
 // UpsertByCategory strictly inserts data assuming an explicit, fixed Category.
 func (s *store[T]) UpsertByCategory(ctx context.Context, categoryName string, item Item[T], vecs [][]float32) error {
-	id := item.ID
-
 	// Ensure the Category exists
 	var c *Category
 	ok, _ := s.categories.First(ctx)
@@ -205,6 +203,25 @@ func (s *store[T]) UpsertByCategory(ctx context.Context, categoryName string, it
 		// Auto-vivify static category
 		c = &Category{ID: sop.NewUUID(), Name: categoryName}
 		s.categories.Add(ctx, c.ID, c)
+	}
+
+	return s.UpsertByCategoryID(ctx, c.ID, item, vecs)
+}
+
+// UpsertByCategoryID securely inserts data bypassing string name lookup.
+func (s *store[T]) UpsertByCategoryID(ctx context.Context, catID sop.UUID, item Item[T], vecs [][]float32) error {
+	id := item.ID
+
+	// Ensure the Category exists
+	var c *Category
+	ok, err := s.categories.Find(ctx, catID, false)
+	if err != nil {
+		return err
+	}
+	if ok {
+		c, _ = s.categories.GetCurrentValue(ctx)
+	} else {
+		return fmt.Errorf("category ID %v not found", catID)
 	}
 
 	// Insert Vector links

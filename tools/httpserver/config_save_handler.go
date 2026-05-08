@@ -405,14 +405,18 @@ func setupSystemDB(ctx context.Context, req *SaveConfigRequest) (*DatabaseConfig
 	}
 
 	// Auto-Create Scripts
-	func() {
-		trans, err := database.BeginTransaction(ctx, sysOpts, sop.ForWriting)
+	
+		func() {
+		fmt.Println("DB_SETUP: before BeginTransaction")
+trans, err := database.BeginTransaction(ctx, sysOpts, sop.ForWriting)
 		if err != nil {
 			log.Error(fmt.Sprintf("Scripts store tx error: %v", err))
 			return
 		}
 		ms := model.New("scripts", trans)
-		ms.List(ctx, "") // trigger init
+		fmt.Println("DB_SETUP: before ms.List")
+ms.List(ctx, "") // trigger init
+fmt.Println("DB_SETUP: after ms.List")
 
 		// Seed demo
 		demoLoop := ai.Script{
@@ -525,7 +529,8 @@ func setupUserDBs(ctx context.Context, req *SaveConfigRequest) ([]DatabaseConfig
 				var errDemo error
 
 				wg.Add(1)
-				go func() {
+				go 
+		func() {
 					defer wg.Done()
 					if e := PopulateDemoData(ctx, uOpts); e != nil {
 						errDemo = e
@@ -539,7 +544,8 @@ func setupUserDBs(ctx context.Context, req *SaveConfigRequest) ([]DatabaseConfig
 					log.Info(fmt.Sprintf("Demo data populated for User DB '%s'", udb.Name))
 				}
 			} else {
-				func() {
+				
+		func() {
 					tx, err := database.BeginTransaction(ctx, uOpts, sop.ForWriting)
 					if err != nil {
 						log.Error(fmt.Sprintf("Failed to begin transaction for 'system_check' in User DB '%s': %v", udb.Name, err))

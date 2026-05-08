@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
 )
 
@@ -22,6 +23,7 @@ func TestSeedLLMKnowledge(t *testing.T) {
 	db := database.NewDatabase(opts)
 
 	// Call the generic helper to seed LLM knowledge into the DB
+	seedSOPKnowledge(ctx, db)
 
 	// Verify we can open the store as a KnowledgeBase instead of a generic B-Tree
 	trans, err := db.BeginTransaction(ctx, sop.ForReading)
@@ -32,10 +34,10 @@ func TestSeedLLMKnowledge(t *testing.T) {
 	dbEmbedder := GetConfiguredEmbedder(nil)
 	dbLLM := GetConfiguredLLM(nil)
 
-	_, err = db.OpenKnowledgeBase(ctx, "llm_knowledge", trans, dbLLM, dbEmbedder)
+	_, err = db.OpenKnowledgeBase(ctx, ai.DefaultKBName, trans, dbLLM, dbEmbedder)
 	if err != nil {
 		trans.Rollback(ctx)
-		t.Fatalf("Expected llm_knowledge KnowledgeBase to exist, got error: %v", err)
+		t.Fatalf("Expected ai.DefaultKBName KnowledgeBase to exist, got error: %v", err)
 	}
 	trans.Commit(ctx)
 }

@@ -105,9 +105,10 @@ func (s *Service) StartShortTermMemoryBatchWriter(ctx context.Context) {
 				}
 				batchCount++
 
-				// Batch remaining items (up to 50)
+				// Batch remaining items
+				timeout := time.After(5 * time.Second)
 				batching := true
-				for batching && batchCount < 50 {
+				for batching && batchCount < 500 {
 					select {
 					case nextPayload := <-s.episodeQueue:
 						pk := nextPayload["id"].(string)
@@ -120,7 +121,9 @@ func (s *Service) StartShortTermMemoryBatchWriter(ctx context.Context) {
 							store.Update(ctx, pk, nextPayload)
 						}
 						batchCount++
-					default:
+					case <-timeout:
+						batching = false
+					case <-ctx.Done():
 						batching = false
 					}
 				}
@@ -159,17 +162,20 @@ func (s *Service) StartShortTermMemorySleepCycle(ctx context.Context, interval t
 					continue
 				}
 
+				// Use a background context so it does not conflict with or reuse the caller's transaction
+				bgCtx := context.Background()
+
 				// 1. Open read-write on systemDB to get the buffered episodes
-				sysTx, err := s.systemDB.BeginTransaction(ctx, sop.ForWriting)
+				sysTx, err := s.systemDB.BeginTransaction(bgCtx, sop.ForWriting)
 				if err != nil {
 					log.Warn("ShortTermMemory: Sleep Cycle Failed to start sysTx", "error", err)
 					continue
 				}
 
 				storeName := "user_scratchpad"
-				store, err := s.systemDB.OpenBtree(ctx, storeName, sysTx)
+				store, err := s.systemDB.OpenBtree(bgCtx, storeName, sysTx)
 				if err != nil {
-					sysTx.Rollback(ctx)
+					sysTx.Rollback(bgCtx)
 					log.Warn("ShortTermMemory: Sleep Cycle Failed to open scratchpad", "error", err)
 					continue
 				}
@@ -177,12 +183,12 @@ func (s *Service) StartShortTermMemorySleepCycle(ctx context.Context, interval t
 				var thoughts []memory.Thought[map[string]any]
 				var itemIDs []string
 
-				ok, _ := store.First(ctx)
+				ok, _ := store.First(bgCtx)
 				for ok {
 					key := store.GetCurrentKey()
 					// Skip the root anchor
 					if key.Key != "root_anchor" {
-						val, _ := store.GetCurrentValue(ctx)
+						val, _ := store.GetCurrentValue(bgCtx)
 
 						log.Info("ShortTermMemory: Inspecting scratchpad item", "type", fmt.Sprintf("%T", val))
 
@@ -203,71 +209,71 @@ func (s *Service) StartShortTermMemorySleepCycle(ctx context.Context, interval t
 							itemIDs = append(itemIDs, key.Key)
 						}
 					}
-					ok, _ = store.Next(ctx)
+					ok, _ = store.Next(bgCtx)
 				}
 
 				if len(thoughts) == 0 {
 					log.Info("ShortTermMemory: Sleep Cycle found 0 valid thoughts...")
-					sysTx.Rollback(ctx)
+					sysTx.Rollback(bgCtx)
 					continue
 				}
 
 				log.Info("ShortTermMemory: Sleep Cycle Triggered. Consolidating memories...", "count", len(thoughts))
 
 				// 2. Open ForWriting on Domain for KnowledgeBase ingestion
-				domTx, err := s.domain.BeginTransaction(ctx, sop.ForWriting)
+				domTx, err := s.domain.BeginTransaction(bgCtx, sop.ForWriting)
 				if err != nil {
-					sysTx.Rollback(ctx)
+					sysTx.Rollback(bgCtx)
 					log.Warn("ShortTermMemory: Sleep Cycle Failed to get domain transaction", "error", err)
 					continue
 				}
 
-				memStoreAny, err := s.domain.Memory(ctx, domTx)
+				memStoreAny, err := s.domain.Memory(bgCtx, domTx)
 				if err != nil {
-					domTx.Rollback(ctx)
-					sysTx.Rollback(ctx)
+					domTx.Rollback(bgCtx)
+					sysTx.Rollback(bgCtx)
 					log.Warn("ShortTermMemory: Sleep Cycle Failed to get memory store", "error", err)
 					continue
 				}
 
 				kb, ok := memStoreAny.(*memory.KnowledgeBase[map[string]any])
 				if !ok {
-					domTx.Rollback(ctx)
-					sysTx.Rollback(ctx)
+					domTx.Rollback(bgCtx)
+					sysTx.Rollback(bgCtx)
 					log.Warn("ShortTermMemory: Sleep Cycle Failed, memory interface invalid")
 					continue
 				}
 
 				// Perform sleep cycle reorganization / ingestion
-				err = kb.IngestThoughts(ctx, thoughts, "System")
+				err = kb.IngestThoughts(bgCtx, thoughts, "System")
 				if err != nil {
-					domTx.Rollback(ctx)
-					sysTx.Rollback(ctx)
+					domTx.Rollback(bgCtx)
+					sysTx.Rollback(bgCtx)
 					log.Warn("ShortTermMemory: Sleep Cycle Consolidation encountered an error during ingestion", "error", err)
 					continue
 				}
 
-				err = kb.TriggerSleepCycle(ctx)
+				err = kb.TriggerSleepCycle(bgCtx)
 				if err != nil {
 					log.Warn("ShortTermMemory: TriggerSleepCycle reorganization logic returned error", "error", err)
 				}
 
-				err = domTx.Commit(ctx)
+				err = domTx.Commit(bgCtx)
 				if err != nil {
-					sysTx.Rollback(ctx)
+					sysTx.Rollback(bgCtx)
 					log.Warn("ShortTermMemory: Consolidation commit failed", "error", err)
 					continue
 				}
 
 				// 3. Remove processed items from scratchpad
 				for _, id := range itemIDs {
-					_, err = store.Remove(ctx, id)
+					_, err = store.Remove(bgCtx, id)
 					if err != nil {
 						log.Warn("ShortTermMemory: Failed to remove scrubbed item from scratchpad", "id", id, "error", err)
 					}
 				}
 
-				err = sysTx.Commit(ctx)
+				err = sysTx.Commit(bgCtx)
 				if err != nil {
 					log.Warn("ShortTermMemory: Failed to commit removals from scratchpad", "error", err)
 				} else {

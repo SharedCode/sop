@@ -60,21 +60,35 @@ func seedSOPKnowledge(ctx context.Context, db *aidb.Database) {
 		return
 	}
 
-	var chunks []struct {
+	type chunkType struct {
 		ID          string `json:"id"`
 		Category    string `json:"category"`
 		Text        string `json:"text"`
 		Description string `json:"description"`
 	}
 
-	if err := json.Unmarshal(fileBytes, &chunks); err != nil {
-		trans.Rollback(ctx)
-		log.Error(fmt.Sprintf("Failed to unmarshal knowledge base JSON: %v", err))
-		return
+	var seedData struct {
+		Config *memory.KnowledgeBaseConfig `json:"config"`
+		Items  []chunkType                 `json:"items"`
+	}
+
+	if err := json.Unmarshal(fileBytes, &seedData); err != nil {
+		// Fallback to old flat array structure for backwards compatibility temporarily
+		var chunks []chunkType
+		if err2 := json.Unmarshal(fileBytes, &chunks); err2 != nil {
+			trans.Rollback(ctx)
+			log.Error(fmt.Sprintf("Failed to unmarshal knowledge base JSON: %v", err))
+			return
+		}
+		seedData.Items = chunks
+	}
+
+	if seedData.Config != nil {
+		kb.SetConfig(ctx, seedData.Config)
 	}
 
 	var thoughts []memory.Thought[map[string]any]
-	for idx, chunk := range chunks {
+	for idx, chunk := range seedData.Items {
 		cid := chunk.ID
 		if cid == "" {
 			cid = fmt.Sprintf("loc_%d", idx)
@@ -93,7 +107,18 @@ func seedSOPKnowledge(ctx context.Context, db *aidb.Database) {
 	})
 
 	if len(thoughts) > 0 {
-		kb.IngestThoughts(ctx, thoughts, "expert")
+		// Batch ingestion to prevent deadlocks on large datasets
+		const batchSize = 200
+		for i := 0; i < len(thoughts); i += batchSize {
+			end := i + batchSize
+			if end > len(thoughts) {
+				end = len(thoughts)
+			}
+			if err := kb.IngestThoughts(ctx, thoughts[i:end], "expert"); err != nil {
+				log.Error(fmt.Sprintf("Failed during batched ingestion: %v", err))
+				return
+			}
+		}
 	}
 
 	if err := trans.Commit(ctx); err != nil {

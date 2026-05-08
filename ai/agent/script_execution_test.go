@@ -419,8 +419,10 @@ func TestScriptRecording_SelectTwice(t *testing.T) {
 		Responses: []string{
 			// Step 1
 			`{"tool": "select", "args": {"database": "` + filepath.Base(tmpDir) + `", "store": "employees", "limit": 2}}`,
+			`Here are 2 employees`,
 			// Step 2 (Action)
 			`{"tool": "select", "args": {"database": "` + filepath.Base(tmpDir) + `", "store": "employees", "limit": 3}}`,
+			`Here are 3 employees`,
 		},
 	}
 
@@ -437,17 +439,17 @@ func TestScriptRecording_SelectTwice(t *testing.T) {
 	}
 	adminAgent.registerTools(context.Background())
 
-	_ = map[string]ai.Agent[map[string]any]{
+	registry := map[string]ai.Agent[map[string]any]{
 		"copilot": adminAgent,
 	}
 
-	_ = []PipelineStep{
+	pipeline := []PipelineStep{
 		{Agent: PipelineAgent{ID: "copilot"}},
 	}
 
 	dbName := filepath.Base(tmpDir)
 	dbs := map[string]sop.DatabaseOptions{dbName: dbOpts}
-	svc := NewService(&MockDomain{}, sysDB, dbs, mockGen, nil, nil, false)
+	svc := NewService(&MockDomain{}, sysDB, dbs, mockGen, pipeline, registry, false)
 
 	// 4. Execute Script Logic (Recording Mode)
 	t.Log("Starting Script Recording Simulation...")
@@ -490,8 +492,8 @@ func TestScriptRecording_SelectTwice(t *testing.T) {
 	}
 	t.Logf("Step 2 Response: %s", resp2)
 
-	if !strings.Contains(resp2, `"limit": 3`) {
-		t.Error("Step 2 response missing limit 3")
+	if !strings.Contains(resp2, "Here are 3 employees") {
+		t.Error("Step 2 response mismatch")
 	}
 
 	// Stop recording

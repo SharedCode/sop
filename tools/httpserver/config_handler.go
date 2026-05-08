@@ -807,7 +807,8 @@ func sanitizePath(p string) string {
 	p = strings.TrimRight(p, "|")
 
 	// 4. Final trim in case stripping left whitespace
-	return resolveConfigRelativePath(strings.TrimSpace(p))
+	cleanP := filepath.Clean(strings.TrimSpace(p))
+	return resolveConfigRelativePath(cleanP)
 }
 
 // collectAllConfiguredPaths gathers all paths currently in use by the system and other databases,
