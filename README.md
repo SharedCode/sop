@@ -335,8 +335,8 @@ See [ai/README.md](ai/README.md) for a deep dive into the AI capabilities.
 
 - [Introduction](#introduction)
 - [Polyglot Support](#polyglot-support)
-- [Interoperability (Go vs. Bindings)](#interoperability-go-vs-bindings)
-- [Scalability & Limits](#scalability--limits)
+- [Interoperability & Data Management](#interoperability-data-management)
+- [Scalability & Limits](#scalability-limits)
 - [Swarm Computing (Architecture)](SWARM_COMPUTING.md)
 - [Workflows & Scenarios](WORKFLOWS.md)
 - [Engineering Culture & SDLC](SDLC.md) - **New!** How we use AI & Automation.
