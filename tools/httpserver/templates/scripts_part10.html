@@ -98,7 +98,7 @@
             const dbType = document.getElementById('setup-db-type').value;
             const dbConn = document.getElementById('setup-db-conn').value;
             const populateDemo = document.getElementById('setup-populate-demo').checked;
-             let selectedExpertise = Array.from(document.querySelectorAll('input[id^="setup-populate-expertise-"]:checked')).map(cb => cb.dataset.name).join(', ') || 'None';
+             let selectedTemplate = Array.from(document.querySelectorAll('input[id^="setup-populate-template-"]:checked')).map(cb => cb.dataset.name).join(', ') || 'None';
             
             // System Config (Step 2)
             const regPath = document.getElementById('setup-reg-path').value;
@@ -117,7 +117,7 @@
                 <strong>Type:</strong> ${dbType} ${dbType === 'clustered' ? `(${dbConn})` : ''}<br>
                 <strong>Data Files (EC):</strong> ${ecSummary}<br>
                 <strong>Demo Data:</strong> ${populateDemo ? 'Yes' : 'No'}<br>
-                <strong>Spaces:</strong> ${selectedExpertise}<br>
+                <strong>Spaces:</strong> ${selectedTemplate}<br>
                 <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 10px 0;">
                 <strong>System Database:</strong> ${regPath}<br>
                 <strong>Port:</strong> ${port}<br>
@@ -567,7 +567,7 @@
         const pbDetails = document.getElementById('setup-loading-details');
         
         if (loadingModal) {
-            loadingModal.style.display = 'block';
+            loadingModal.style.display = 'flex';
             closeUIModal('setup-wizard');
             pb.style.width = '10%';
             pbDetails.innerHTML = '- Initializing config save...<br>';
@@ -580,11 +580,11 @@
                 if (pTicks === 2) {
                     pb.style.width = '30%';
                     pbDetails.innerHTML += '- Creating System & User Data Stores...<br>';
-                  } else if (pTicks === 4 && (populateDemo || document.querySelectorAll('input[id^="setup-populate-expertise-"]:checked').length > 0)) {
+                  } else if (pTicks === 4 && (populateDemo || document.querySelectorAll('input[id^="setup-populate-template-"]:checked').length > 0)) {
                       pb.style.width = '50%';
-                      pbDetails.innerHTML += '- Pre-loading specified expertise datasets...<br>';
-                      document.getElementById('setup-loading-message').innerText = 'Loading expertise - this may take a bit...';
-                  } else if (pTicks === 7 && document.querySelectorAll('input[id^="setup-populate-expertise-"]:checked').length > 0) {
+                      pbDetails.innerHTML += '- Pre-loading specified template datasets...<br>';
+                      document.getElementById('setup-loading-message').innerText = 'Loading templates - this may take a bit...';
+                  } else if (pTicks === 7 && document.querySelectorAll('input[id^="setup-populate-template-"]:checked').length > 0) {
                       pb.style.width = '70%';
                       pbDetails.innerHTML += '- Compiling semantic models...<br>';
                 } else if (pTicks === 8 && populateDemo) {
@@ -610,11 +610,11 @@
 
             // 1. Trigger SOP Space preload
             try {
-                const sopRes = await fetch('/api/spaces/ingest', {
+                const sopRes = await fetch('/api/spaces/preload', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        expertise_id: 'SOP',
+                        template_id: 'SOP',
                         database_name: SYSTEM_DB_NAME
                     })
                 });
@@ -629,11 +629,11 @@
             // 2. Trigger Medical Space preload if requested (Preload Examples checkbox)
             if (populateDemo) {
                 try {
-                    const medRes = await fetch('/api/spaces/ingest', {
+                    const medRes = await fetch('/api/spaces/preload', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
-                            expertise_id: 'medical',
+                            template_id: 'medical',
                             database_name: dbName
                         })
                     });
@@ -651,8 +651,11 @@
                 const msg = document.getElementById('setup-loading-message');
                 if (msg) msg.innerText = 'Preloading spaces...';
 
-                if (sopTaskId) await pollLongRunningTask(sopTaskId, null, null, "SOP", false);
-                if (medTaskId) await pollLongRunningTask(medTaskId, null, null, "Medical", false);
+                const pollPromises = [];
+                if (sopTaskId) pollPromises.push(pollLongRunningTask(sopTaskId, null, null, "SOP", false));
+                if (medTaskId) pollPromises.push(pollLongRunningTask(medTaskId, null, null, "Medical", false));
+                
+                await Promise.allSettled(pollPromises);
             } catch (e) {
                 console.error("Error during space preloading:", e);
                 // We'll still proceed to finish setup, but log the error

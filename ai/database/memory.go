@@ -73,40 +73,58 @@ func (db *Database) OpenKnowledgeBase(
 	embedder ai.Embeddings,
 ) (*memory.KnowledgeBase[map[string]any], error) {
 
+	isRead := t.GetPhasedTransaction().GetMode() == sop.ForReading
+
 	// 1. Open Categories Store
 	catsStore := sop.ConfigureStore(fmt.Sprintf("%s/categories", name), true, btree.DefaultSlotLength, "dynamic categories store", sop.SmallData, "")
-	catsTree, err := core.NewBtree[sop.UUID, *memory.Category](ctx, db.config, catsStore.Name, t, uuidComparer, catsStore)
-	if err != nil {
-		if err.Error() == fmt.Sprintf("b-tree '%s' is already in the transaction's b-tree instances list", catsStore.Name) {
-			catsTree, err = core.OpenBtree[sop.UUID, *memory.Category](ctx, db.config, catsStore.Name, t, uuidComparer)
-		}
+	var catsTree btree.BtreeInterface[sop.UUID, *memory.Category]
+	var err error
+	if isRead {
+		catsTree, err = core.OpenBtree[sop.UUID, *memory.Category](ctx, db.config, catsStore.Name, t, uuidComparer)
+	} else {
+		catsTree, err = core.NewBtree[sop.UUID, *memory.Category](ctx, db.config, catsStore.Name, t, uuidComparer, catsStore)
 		if err != nil {
-			return nil, err
+			if err.Error() == fmt.Sprintf("b-tree '%s' is already in the transaction's b-tree instances list", catsStore.Name) {
+				catsTree, err = core.OpenBtree[sop.UUID, *memory.Category](ctx, db.config, catsStore.Name, t, uuidComparer)
+			}
 		}
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	// 2. Open Vectors Store
 	vecsStore := sop.ConfigureStore(fmt.Sprintf("%s/vectors", name), true, 10000, "active memorys store", sop.SmallData, "")
-	vecsTree, err := core.NewBtree[memory.VectorKey, memory.Vector](ctx, db.config, vecsStore.Name, t, vectorKeyComparer, vecsStore)
-	if err != nil {
-		if err.Error() == fmt.Sprintf("b-tree '%s' is already in the transaction's b-tree instances list", vecsStore.Name) {
-			vecsTree, err = core.OpenBtree[memory.VectorKey, memory.Vector](ctx, db.config, vecsStore.Name, t, vectorKeyComparer)
-		}
+	var vecsTree btree.BtreeInterface[memory.VectorKey, memory.Vector]
+	if isRead {
+		vecsTree, err = core.OpenBtree[memory.VectorKey, memory.Vector](ctx, db.config, vecsStore.Name, t, vectorKeyComparer)
+	} else {
+		vecsTree, err = core.NewBtree[memory.VectorKey, memory.Vector](ctx, db.config, vecsStore.Name, t, vectorKeyComparer, vecsStore)
 		if err != nil {
-			return nil, err
+			if err.Error() == fmt.Sprintf("b-tree '%s' is already in the transaction's b-tree instances list", vecsStore.Name) {
+				vecsTree, err = core.OpenBtree[memory.VectorKey, memory.Vector](ctx, db.config, vecsStore.Name, t, vectorKeyComparer)
+			}
 		}
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	// 3. Open Items Store
 	itemsStore := sop.ConfigureStore(fmt.Sprintf("%s/items", name), true, btree.DefaultSlotLength, "dynamic items store", sop.SmallData, "")
-	itemsTree, err := core.NewBtree[sop.UUID, memory.Item[map[string]any]](ctx, db.config, itemsStore.Name, t, uuidComparer, itemsStore)
-	if err != nil {
-		if err.Error() == fmt.Sprintf("b-tree '%s' is already in the transaction's b-tree instances list", itemsStore.Name) {
-			itemsTree, err = core.OpenBtree[sop.UUID, memory.Item[map[string]any]](ctx, db.config, itemsStore.Name, t, uuidComparer)
-		}
+	var itemsTree btree.BtreeInterface[sop.UUID, memory.Item[map[string]any]]
+	if isRead {
+		itemsTree, err = core.OpenBtree[sop.UUID, memory.Item[map[string]any]](ctx, db.config, itemsStore.Name, t, uuidComparer)
+	} else {
+		itemsTree, err = core.NewBtree[sop.UUID, memory.Item[map[string]any]](ctx, db.config, itemsStore.Name, t, uuidComparer, itemsStore)
 		if err != nil {
-			return nil, err
+			if err.Error() == fmt.Sprintf("b-tree '%s' is already in the transaction's b-tree instances list", itemsStore.Name) {
+				itemsTree, err = core.OpenBtree[sop.UUID, memory.Item[map[string]any]](ctx, db.config, itemsStore.Name, t, uuidComparer)
+			}
 		}
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	// Assemble the storage engine

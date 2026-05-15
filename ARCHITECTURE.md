@@ -240,20 +240,32 @@ SOP is designed to run in two distinct modes, catering to different scale requir
 *   **Use Case**: Desktop apps, CLI tools, local AI vector stores.
 *   **Pros**: Zero external dependencies, maximum single-node performance.
 
-## AI & Agent Architecture
+## AI & Cognitive Memory Architecture
 
-SOP introduces a novel architecture for AI Agents, distinguishing itself from standard "RAG" or "Chatbot" implementations by leveraging the B-Tree as the central nervous system.
+SOP introduces a novel architecture for AI Agents, distinguishing itself from standard "RAG" or "Chatbot" implementations by adopting a **Tri-State Cognitive Memory Architecture**. This leverages the B-Tree as the central nervous system, providing session continuity, experiential learning, and Knowledge Base compilation.
 
-### 1. The "Powerhouse" B-Tree Memory
-Unlike systems that rely on vector databases or flat text files for memory, SOP treats **Memory as a Database System**.
-*   **Long-Term Memory (LTM)**: Stored in a dedicated **ACID-compliant B-Tree** (`llm_knowledge`). This ensures that the Agent's knowledge base is transactional, ordered, and scalable ($O(\log N)$ retrieval). The Agent can safely update its own mind (Self-Learning) without corruption.
-*   **Short-Term Memory (STM)**: Implemented as **Structured Threads** (`ConversationThread`), not a flat list of tokens. This gives the Agent "Executive Function"—the ability to track topics, manage context switches, and maintain a rigorous "Train of Thought" separate from the raw chat history.
+### 1. Working Memory (MRU) - Session-Scoped
+*   **Mechanism**: A fast, in-memory array (`[]MRUItem`) attached to the `Session` state.
+*   **Workflow**: Ensures context is contiguous for the User regardless of which agent is currently active. The Omni Architect orchestrates passing a copied snapshot of the Session MRU into the Avatar as a "whiteboard", returning and appending the result to the global MRU under thread-safe locks.
+*   **Context Continuity (Dynamic Semantic Injection)**: Rather than falling back to placeholder text ("dummy" logs) during multi-turn exchanges, the engine dynamically pipes actual semantic RAG chunks (`kb.SearchSemantics`) straight into `MarkMRUCategory()`. If a user's follow-up query is semantically bare, the system seamlessly pulls the `Carried-Over Playbook Context` directly from the prior exchange in the MRU. This reliably eradicates conversational amnesia across the episodic ReAct loop.
 
-### 2. Hybrid Scripting Engine (Explicit Execution)
+### 2. Episodic Memory (STM) - Avatar-Scoped
+*   **Mechanism**: A completely physically isolated B-Tree per agent (`stm_<agent_id>`), detaching from global channels.
+*   **Workflow**: The Avatar operates a private, localized batch-write loop connected to its own channel. During its internal execution loop, it logs execution snapshots to its channel. A background worker periodically flushes its local channel to the `stm_<agent_id>` tree natively. This guarantees O(1) decommissioning and pure isolation.
+
+### 3. Declarative Long-Term Memory (LTM) & Sleep Cycle
+*   **Mechanism**: The Avatar has private Vector DBs (`ltm_<agent_id>`) for its own semantic procedural learnings swept during its private **Sleep Cycle**. By balancing "Minted" UI Knowledge Bases (Declarative) against Auto-Enriched Conversational Memory (Episodic LTM), SOP bridges unstructured interactions into structured vectors through a rigorous summarization, clustering, and fallback-LLM cataloging pipeline.
+
+### 4. Hybrid Scripting Engine (Explicit Execution)
 The SOP Scripting Engine (`ai/agent`) follows a unique **"Explicit Execution"** design pattern.
 *   **No "Magic" Compilation**: The engine is "dumb and obedient." It does not try to guess user intent or "compile away" interaction steps.
 *   **Hybrid Flow**: Scripts naturally mix **Deterministic Commands** (e.g., `scan`, `filter`) with **Probabilistic Reasoning** (e.g., `ask`).
 *   **Run-Loop Scripting**: The Agent can pause a deterministic workflow to ask the LLM for guidance ("Analyze these results"), and then resume execution based on the LLM's structured response. This allows for essentially infinite complexity in agentic behaviors without the fragility of pure-LLM loops.
+
+### 5. Architectural Philosophy: Native Semantic Instruction vs Binary Hardcoding
+We have strictly banned the practice of hardcoding prompt engineering limits inside the Go application binary (e.g. constant strings in `copilottools.go`). 
+*   **Semantic Overrides**: Instead of injecting engine-agnostic DSL parameters (like "NEVER use JSONLogic, use CEL" inside `copilottools.go`), these architectural constraints are codified natively inside the Playbooks/Knowledge Bases (like `SYSTEM_KNOWLEDGE.md` / `sop_base_knowledge.json`).
+*   **Dynamic Brain Alignment**: This ensures the "Dynamic Brain" Retrieval-Augmented Generation execution can natively map and constrain LLM boundaries per-domain without redeploying backend Go binaries. The LLM must "learn" the platform syntaxes directly (and solely) through semantic retrieval context injection.
 
 ## Backend Comparison: Isolation & Concurrency
 

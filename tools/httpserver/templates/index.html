@@ -12,7 +12,6 @@
     <meta http-equiv="Expires" content="0" />
     <title>SOP Data Manager</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <style>
     {{template "styles"}}
 </head>
 <body>
@@ -871,7 +870,7 @@
                 </div>
             </div>
 
-            <div class="form-group" style="margin-top: 15px; margin-bottom: 0px;" id="setup-expertise-container">
+            <div class="form-group" style="margin-top: 15px; margin-bottom: 0px;" id="setup-template-container">
             </div>
 
             <div class="form-group" style="margin-top: 15px; margin-bottom: 0px;">
@@ -1100,7 +1099,7 @@
 {{template "scripts_part11" .}}
 
 <div id="setup-loading-modal" class="modal" style="display: none; z-index: 10000; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); align-items: center; justify-content: center;">
-    <div style="background: var(--bg-color); padding: 40px; border-radius: 8px; text-align: center; border: 1px solid var(--border-color); width: 80%; max-width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; margin: auto; position: relative; top: 50%; transform: translateY(-50%);">
+    <div style="background: var(--bg-color); padding: 40px; border-radius: 8px; text-align: center; border: 1px solid var(--border-color); width: 80%; max-width: 500px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center;">
         <h2 id="setup-loading-title" style="margin-top: 0; color: var(--text-color);">Initializing System</h2>
         <p id="setup-loading-message" style="color: var(--text-muted); margin-bottom: 20px;">Creating databases and preparing environment...</p>
         
@@ -1131,7 +1130,7 @@
                 <label style="font-weight: bold; font-size: 12px; margin-bottom: 5px; display: block;">Create New Environment:</label>
                 <div style="display: flex; gap: 10px;">
                     <input type="text" id="new-env-name" placeholder="Name (e.g. production)" style="flex: 1; padding: 6px; box-sizing: border-box; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); border-radius: 4px;">
-                    <button onclick="createEnvironment()" style="padding: 6px 12px; cursor: pointer;">Create & Switch</button>
+                    <button id="create-env-btn" onclick="createEnvironment()" style="padding: 6px 12px; cursor: pointer;">Create & Switch</button>
                 </div>
             </div>
         </div>

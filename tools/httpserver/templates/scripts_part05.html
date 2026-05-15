@@ -635,7 +635,7 @@
                     agent: agent,
                     provider: provider,
                     format: format,
-                    verbose: true, session_id: currentSessionID, domain: payloadDomain
+                    verbose: true, session_id: currentSessionID, user_id: currentUserID, domain: payloadDomain
                 }),
                 signal: chatAbortController.signal
             });
@@ -725,6 +725,34 @@
                             
                             // Check for Client-Side Action Patterns
                             let textPayload = String(event.payload);
+
+                            // Detect Avatar Delegation Indicator
+                            const avatarRegex = /^Avatar\s+([a-zA-Z0-9_-]+)\s+completed task:\s*([\s\S]*)/i;
+                            const avatarMatch = textPayload.match(avatarRegex);
+                            if (avatarMatch && currentContentSpan) {
+                                const subAvatarName = avatarMatch[1];
+                                textPayload = avatarMatch[2] || (textPayload.replace(avatarMatch[0], '')); // Strip out the prefix
+                                
+                                const parentDiv = currentContentSpan.parentElement;
+                                if (parentDiv && !parentDiv.classList.contains('avatar-handoff-applied')) {
+                                    parentDiv.classList.add('avatar-handoff-applied');
+                                    const badge = document.createElement('div');
+                                    badge.innerHTML = `<span style="display: inline-block; font-size: 0.75rem; background: #6366f1; color: white; padding: 3px 8px; border-radius: 12px; font-weight: bold; margin-bottom: 8px; font-family: monospace; box-shadow: 0 2px 4px rgba(99, 102, 241, 0.3);">🔀 Routed to specialised agent: ${subAvatarName}</span>`;
+                                    parentDiv.insertBefore(badge, currentContentSpan);
+                                    parentDiv.style.borderLeft = "4px solid #6366f1";
+                                }
+                            }
+
+                            // Detect Multi-KB Semantic Search fanout
+                            // It returns blocks like: === Results from KB: xxx ===\n
+                            const kbResultsRegex = /===\s*Results from KB:\s*([a-zA-Z0-9_-]+)\s*===/gi;
+                            if (kbResultsRegex.test(textPayload) && currentContentSpan) {
+                                // Transform these text headers into nice UI blocks
+                                textPayload = textPayload.replace(/===\s*Results from KB:\s*([a-zA-Z0-9_-]+)\s*===/gi, 
+                                    '<div style="margin-top: 10px; margin-bottom: 5px; font-size: 0.8rem; background: #10b981; color: white; padding: 3px 8px; border-radius: 4px; display: inline-block; font-weight: bold; font-family: monospace;">📚 Searched Knowledge Base: $1</div>\n'
+                                );
+                            }
+
                             const switchDbRegex = /\[\[SWITCH_DATABASE:\s*([a-zA-Z0-9_-]+)\]\]/;
                             const match = textPayload.match(switchDbRegex);
                             
@@ -763,6 +791,15 @@
                                 if (!textPayload.trim()) {
                                     textPayload = `Switched database context to **${newDbName}**.`;
                                 }
+                            }
+
+                            const refreshSpacesRegex = /\[\[REFRESH_SPACES\]\]/;
+                            if (refreshSpacesRegex.test(textPayload)) {
+                                console.log("Detected Client-Side Refresh Spaces Action");
+                                if (typeof selectDatabase === 'function' && currentDatabase) {
+                                    await selectDatabase(currentDatabase, true, currentStore);
+                                }
+                                textPayload = textPayload.replace(refreshSpacesRegex, '');
                             }
 
                             // For now basic accumulation, markdown later?
@@ -868,6 +905,33 @@
                             }
                             currentContentSpan = null;
                         }
+                        else if (event.type === 'action_required') {
+                            flushRecords();
+                            const action = event.payload; // {action_type: '...', command: '...', reasoning: '...'}
+                            
+                            if (action.action_type === 'local_shell_execution') {
+                                const msgDiv = document.createElement('div');
+                                msgDiv.className = 'chat-message ai';
+                                msgDiv.innerHTML = `
+                                    <div style="background: #1e1e1e; border: 1px solid #4ade80; border-radius: 8px; padding: 12px; margin-top: 8px;">
+                                        <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                                            <span style="font-size: 1.2rem; margin-right: 8px;">💻</span>
+                                            <strong>Local Command Request</strong>
+                                        </div>
+                                        <p style="margin: 0 0 8px 0; font-size: 0.9rem; color: #a1a1aa;">${action.reasoning || 'The AI wants to run a command locally.'}</p>
+                                        <code style="display: block; background: #000; padding: 8px; border-radius: 4px; color: #4ade80; margin-bottom: 12px; font-family: monospace;">$ ${action.command}</code>
+                                        <div style="display: flex; gap: 8px;">
+                                            <button onclick="approveLocalCommand('${encodeURIComponent(action.command)}', this)" style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">Approve & Run Locally</button>
+                                            <button onclick="rejectLocalCommand(this)" style="background: #3f3f46; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Deny</button>
+                                        </div>
+                                    </div>
+                                `;
+                                document.getElementById('chat-history').appendChild(msgDiv);
+                                document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+                            }
+                            
+                            currentContentSpan = null;
+                        }
                         else if (event.type === 'switch_database') {
                             flushRecords();
                             const newDbName = event.payload;
@@ -928,6 +992,57 @@
              }
         }
     }
+
+    window.rejectLocalCommand = function(btn) {
+        const container = btn.parentElement.parentElement;
+        container.innerHTML = '<span style="color: #ef4444;">❌ Local shell execution denied by user.</span>';
+        
+        // Notify the agent
+        const input = document.getElementById('chat-input');
+        input.value = "I have denied the request to run that command on my local machine.";
+        sendAIChatMessage();
+    };
+
+    window.approveLocalCommand = async function(encodedCommand, btn) {
+        const command = decodeURIComponent(encodedCommand);
+        const container = btn.parentElement.parentElement;
+        container.innerHTML = '<span style="color: #eab308;">⏳ Executing locally via SOP Daemon...</span>';
+        
+        try {
+            const res = await fetch('http://127.0.0.1:9090/api/execute', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ command: command })
+            });
+            
+            if (!res.ok) {
+                const txt = await res.text();
+                throw new Error("HTTP " + res.status + ": " + txt);
+            }
+            
+            const data = await res.json();
+            container.innerHTML = `<span style="color: #10b981;">✅ Executed locally.</span>`;
+            
+            // Format daemon output back into the chat context as the user's response
+            let outputMsg = `[Local Daemon Execution Result for \`${command}\`]\n`;
+            if (data.stdout) outputMsg += `\n**Stdout:**\n\`\`\`\n${data.stdout}\n\`\`\``;
+            if (data.stderr) outputMsg += `\n**Stderr:**\n\`\`\`\n${data.stderr}\n\`\`\``;
+            if (data.error) outputMsg += `\n**Error:** ${data.error}`;
+            outputMsg += `\n\nExit Code: ${data.exit_code}`;
+            
+            // Auto-send the result back to the chat so the LLM knows what happened
+            const input = document.getElementById('chat-input');
+            input.value = outputMsg;
+            sendAIChatMessage();
+            
+        } catch (err) {
+            container.innerHTML = `<span style="color: #ef4444;">❌ Daemon Error: Is the SOP Desktop Daemon running on port 9090?</span><br><br><span style="color:#a1a1aa; font-size:0.8rem">${err.message}</span>`;
+            
+            const input = document.getElementById('chat-input');
+            input.value = `The local execution failed because the SOP Desktop Daemon was not reachable. Error: ${err.message}`;
+            sendAIChatMessage();
+        }
+    };
 
 </script>
 {{end}}

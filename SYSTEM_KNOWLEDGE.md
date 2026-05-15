@@ -43,6 +43,7 @@ The `execute_script` tool accepts a JSON array of operations. This is the "Assem
 *   **Key Operations**:
     *   `open_db`, `begin_tx`, `open_store`
     *   `scan`: Iterates a B-Tree (returns full objects).
+    *   `filter`: Operates on streams filtering by data bounds. Accepts a `condition` argument. **CRITICAL:** Use native CEL (Common Expression Language) string format for the condition (e.g. `{"condition": "value.first_name == 'John' && value.total_amount > 500"}`). DO NOT use JsonLogic tree objects.
     *   `join_right`: Performs a stream-based right outer join (returns combined objects).
     *   `project`: Filters and renames fields (CRITICAL for column selection).
     *   `limit`: Restricts the number of results.

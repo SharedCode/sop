@@ -90,6 +90,7 @@ func handleListSpaceCategories(w http.ResponseWriter, r *http.Request) {
 					categories = append(categories, map[string]any{
 						"id":            cat.ID.String(),
 						"name":          cat.Name,
+						"path":          cat.Path,
 						"description":   cat.Description,
 						"item_count":    cat.ItemCount,
 						"children":      cat.ChildrenIDs,

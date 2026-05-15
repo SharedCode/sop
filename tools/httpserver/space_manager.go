@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -14,34 +16,84 @@ import (
 	"github.com/sharedcode/sop/ai/memory"
 )
 
-type ExpertiseMetadata struct {
+type TemplateMetadata struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	IsDefault   bool   `json:"is_default"`
 }
 
-var AvailableExpertise = []ExpertiseMetadata{
-	{
-		ID:          "medical",
-		Name:        "Medical Expert (Nurse/Doctor) KB",
-		Description: "Pre-loads a medical space index for diagnosing illnesses.",
-		IsDefault:   false,
-	},
+type PreloadSpaceRequest struct {
+	TemplateID   string `json:"template_id"`
+	DatabaseName string `json:"database_name"`
 }
 
-func handleGetAvailableSpaces(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(AvailableExpertise)
+func handlePreloadSpace(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req PreloadSpaceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if req.TemplateID == "" || req.DatabaseName == "" {
+		http.Error(w, "template_id and database_name are required", http.StatusBadRequest)
+		return
+	}
+
+	var actualPath string
+	pathsToTry := []string{
+		req.TemplateID + ".json",
+		"../" + req.TemplateID + ".json",
+		"../../" + req.TemplateID + ".json",
+		"ai/" + req.TemplateID + ".json",
+	}
+	if strings.EqualFold(req.TemplateID, ai.DefaultKBName) || req.TemplateID == "SOP" {
+		pathsToTry = append(pathsToTry, "sop_base_knowledge.json", "ai/sop_base_knowledge.json", "../ai/sop_base_knowledge.json")
+	}
+
+	for _, p := range pathsToTry {
+		if _, err := os.Stat(p); err == nil {
+			actualPath = p
+			break
+		}
+	}
+
+	if actualPath == "" {
+		http.Error(w, fmt.Sprintf("Failed to find Space file for template '%s'", req.TemplateID), http.StatusBadRequest)
+		return
+	}
+
+	// Remap to Ingest request
+	ingestReq := IngestSpaceRequest{
+		DatabaseName:    req.DatabaseName,
+		SpaceName:       req.TemplateID, // Use template ID as the Space name
+		PreloadFilePath: actualPath,
+	}
+
+	bodyBytes, _ := json.Marshal(ingestReq)
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	if strings.EqualFold(req.TemplateID, ai.DefaultKBName) || strings.EqualFold(req.TemplateID, "SOP") {
+		// Forward directly to ingest import for SOP KB
+		handleIngestImportSpace(w, r)
+	} else {
+		// Forward directly to ingest for other templates
+		handleIngestSpace(w, r)
+	}
 }
 
 type IngestSpaceRequest struct {
-	Expertise    string                      `json:"expertise_id"`
-	DatabaseName string                      `json:"database_name"`
-	SpaceName    string                      `json:"space_name,omitempty"`
-	URL          string                      `json:"url,omitempty"`
-	Attributes   *memory.KnowledgeBaseConfig `json:"attributes,omitempty"`
-	CustomData   json.RawMessage             `json:"custom_data,omitempty"`
+	DatabaseName    string                      `json:"database_name"`
+	SpaceName       string                      `json:"space_name,omitempty"`
+	URL             string                      `json:"url,omitempty"`
+	PreloadFilePath string                      `json:"preload_filepath,omitempty"`
+	Attributes      *memory.KnowledgeBaseConfig `json:"attributes,omitempty"`
+	CustomData      json.RawMessage             `json:"custom_data,omitempty"`
 }
 
 type ingestChunk struct {
@@ -57,7 +109,7 @@ type ingestChunk struct {
 
 func extractSummaries(chunk ingestChunk) []string {
 	summaries := chunk.Summaries
-	text := chunk.Text
+	var sentences []string
 	if sArr, ok := summaries.([]interface{}); ok && len(sArr) > 0 {
 		var res []string
 		for _, s := range sArr {
@@ -65,11 +117,11 @@ func extractSummaries(chunk ingestChunk) []string {
 				res = append(res, str)
 			}
 		}
-		if len(res) > 0 {
+		if len(res) >= MAX_ITEM_SUMMARIES {
 			return res
 		}
-	}
-	if sStr, ok := summaries.(string); ok && sStr != "" {
+		sentences = res
+	} else if sStr, ok := summaries.(string); ok && sStr != "" {
 		parts := strings.Split(sStr, ".")
 		var res []string
 		for _, p := range parts {
@@ -78,22 +130,109 @@ func extractSummaries(chunk ingestChunk) []string {
 				res = append(res, p)
 			}
 		}
-		if len(res) > 0 {
+		if len(res) >= MAX_ITEM_SUMMARIES {
 			return res
 		}
+		sentences = append(sentences, res...)
 	}
 
 	// Check if we can apply some heuristics and come up with decent Summaries.
 	s := determineSummaries(chunk.Text, chunk.Description, MAX_ITEM_SUMMARIES)
 	if len(s) > 0 {
-		return s
+		sentences = append(sentences, s...)
+	}
+	if len(sentences) > MAX_ITEM_SUMMARIES {
+		return sentences[:MAX_ITEM_SUMMARIES]
 	}
 
-	// Fallback to text as single Summary.
-	if len(text) < 150 && text != "" {
-		return []string{text}
+	// Check if there is Text, Description in Data.
+	if chunk.Data != nil {
+		var dataText, dataDesc string
+		if t, ok := chunk.Data["text"].(string); ok {
+			dataText = t
+		}
+		if d, ok := chunk.Data["description"].(string); ok {
+			dataDesc = d
+		}
+		if dataText != "" || dataDesc != "" {
+			s = determineSummaries(dataText, dataDesc, MAX_ITEM_SUMMARIES)
+			if len(s) > 0 {
+				sentences = append(sentences, s...)
+			}
+		}
 	}
-	return nil
+
+	if len(sentences) > MAX_ITEM_SUMMARIES {
+		sentences = sentences[:MAX_ITEM_SUMMARIES]
+	}
+
+	return sentences
+}
+
+type CreateSpaceRequest struct {
+	DatabaseName string                      `json:"database_name"`
+	SpaceName    string                      `json:"space_name"`
+	Attributes   *memory.KnowledgeBaseConfig `json:"attributes,omitempty"`
+}
+
+func handleCreateSpace(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req CreateSpaceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if req.SpaceName == "" || req.DatabaseName == "" {
+		http.Error(w, "space_name and database_name are required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := context.Background()
+	opts, err := getDBOptions(ctx, req.DatabaseName)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get DB config: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	db := database.NewDatabase(opts)
+	trans, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to begin transaction: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer trans.Rollback(ctx)
+
+	dbEmbedder := GetConfiguredEmbedder(r)
+	dbLLM := GetConfiguredLLM(r)
+
+	kb, err := db.OpenKnowledgeBase(ctx, req.SpaceName, trans, dbLLM, dbEmbedder)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to open Space '%s': %v", req.SpaceName, err), http.StatusInternalServerError)
+		return
+	}
+
+	if req.Attributes != nil {
+		if err := kb.SetConfig(ctx, req.Attributes); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to set Space config: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := trans.Commit(ctx); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to commit Space creation: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"message": fmt.Sprintf("Space '%s' created successfully", req.SpaceName),
+	})
 }
 
 func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +247,21 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.DatabaseName == "" {
+		http.Error(w, "database_name is required", http.StatusBadRequest)
+		return
+	}
+
+	if req.SpaceName == "" {
+		http.Error(w, "space_name is required", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.CustomData) == 0 && req.URL == "" && req.PreloadFilePath == "" {
+		http.Error(w, "Must provide custom_data, url, or preload filepath to ingest", http.StatusBadRequest)
+		return
+	}
+
 	dbEmbedder := GetConfiguredEmbedder(r)
 	dbLLM := GetConfiguredLLM(r)
 
@@ -117,7 +271,7 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"success": true,
 		"task_id": task.TaskID,
-		"message": fmt.Sprintf("Preloading %s started in background", req.Expertise),
+		"message": fmt.Sprintf("Preloading and Ingesting %s started in background", req.SpaceName),
 	})
 
 	go func(taskId string, request IngestSpaceRequest, emb ai.Embeddings, llm ai.Generator) {
@@ -143,15 +297,10 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		storeName := request.Expertise
-		if request.SpaceName != "" {
-			storeName = request.SpaceName
-		}
-
-		kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, llm, emb)
+		kb, err := db.OpenKnowledgeBase(ctx, request.SpaceName, trans, llm, emb)
 		if err != nil {
 			trans.Rollback(ctx)
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to open KnowledgeBase '%s': %v", storeName, err))
+			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to open KnowledgeBase '%s': %v", request.SpaceName, err))
 			return
 		}
 
@@ -162,90 +311,156 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		var thoughts []memory.Thought[map[string]any]
-		UpdateTask(taskId, "in_progress", 30, 100, "Reading Space data...", "")
+		var reader io.Reader
+		var closer io.Closer
 
 		if len(request.CustomData) > 0 {
-			var chunks []ingestChunk
-			if err := json.Unmarshal(request.CustomData, &chunks); err == nil {
-				for idx, chunk := range chunks {
-					cid := chunk.ID
-					if cid == "" {
-						cid = fmt.Sprintf("custom_%d", idx)
-					}
-
-					thoughts = append(thoughts, memory.Thought[map[string]any]{
-						Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
-					})
-				}
-			}
+			reader = bytes.NewReader(request.CustomData)
 		} else if request.URL != "" {
 			reqHTTP, err := http.NewRequestWithContext(ctx, http.MethodGet, request.URL, nil)
 			if err == nil {
 				resp, err := http.DefaultClient.Do(reqHTTP)
 				if err == nil {
-					defer resp.Body.Close()
-					var chunks []ingestChunk
-					if err := json.NewDecoder(resp.Body).Decode(&chunks); err == nil {
-						for idx, chunk := range chunks {
-							cid := chunk.ID
-							if cid == "" {
-								cid = fmt.Sprintf("net_%d", idx)
-							}
-							thoughts = append(thoughts, memory.Thought[map[string]any]{
-								Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
-							})
-						}
-					}
+					reader = resp.Body
+					closer = resp.Body
+					defer closer.Close()
 				}
 			}
-		} else if request.Expertise == "empty" {
-			// Empty
-		} else {
-			var fileBytes []byte
-			var err error
-			pathsToTry := []string{
-				request.Expertise + ".json",
-				"../" + request.Expertise + ".json",
-				"../../" + request.Expertise + ".json",
-				"ai/" + request.Expertise + ".json",
-			}
-			if request.Expertise == ai.DefaultKBName {
-				pathsToTry = append(pathsToTry, "sop_base_knowledge.json", "ai/sop_base_knowledge.json", "../ai/sop_base_knowledge.json")
-			}
-
-			for _, p := range pathsToTry {
-				if fileBytes, err = os.ReadFile(p); err == nil {
-					break
-				}
-			}
-
+		} else if request.PreloadFilePath != "" {
+			f, err := os.Open(request.PreloadFilePath)
 			if err == nil {
-				var chunks []ingestChunk
-				if err := json.Unmarshal(fileBytes, &chunks); err == nil {
-					for idx, chunk := range chunks {
-						cid := chunk.ID
-						if cid == "" {
-							cid = fmt.Sprintf("loc_%d", idx)
-						}
-						thoughts = append(thoughts, memory.Thought[map[string]any]{
-							Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
-						})
-					}
-				}
-			} else {
-				trans.Rollback(ctx)
-				UpdateTask(taskId, "error", 0, 0, "", "Failed to find Space file locally or provided data")
-				return
+				reader = f
+				closer = f
+				defer closer.Close()
 			}
 		}
 
-		if len(thoughts) > 0 {
-			UpdateTask(taskId, "in_progress", 50, len(thoughts), "Embedding and ingesting thoughts. This may take some time...", "")
-			err := kb.IngestThoughts(ctx, thoughts, "expert")
-			if err != nil {
-				// Ignore failure here as it might be partial?
-				// Actually, better to log but keep going.
+		if reader != nil {
+			UpdateTask(taskId, "in_progress", 30, 100, "Reading Space data stream...", "")
+
+			decoder := json.NewDecoder(reader)
+			var batch []memory.Thought[map[string]any]
+			const batchSize = 500
+			totalProcessed := 0
+
+			t, err := decoder.Token()
+			if err == nil {
+				if delim, ok := t.(json.Delim); ok {
+					if delim == '{' {
+						// It's an object, look for 'items' array
+						for decoder.More() {
+							keyToken, err := decoder.Token()
+							if err != nil {
+								break
+							}
+							keyStr, ok := keyToken.(string)
+							if !ok {
+								break
+							}
+
+							if keyStr == "config" {
+								var cfg memory.KnowledgeBaseConfig
+								if err := decoder.Decode(&cfg); err == nil {
+									kb.SetConfig(ctx, &cfg)
+								}
+							} else if keyStr == "items" {
+								// read opening '['
+								t, err := decoder.Token()
+								if err != nil {
+									break
+								}
+								if delim, ok := t.(json.Delim); !ok || delim != '[' {
+									break
+								}
+
+								// read items
+								for decoder.More() {
+									var chunk ingestChunk
+									if err := decoder.Decode(&chunk); err != nil {
+										break
+									}
+
+									cid := chunk.ID
+									if cid == "" {
+										cid = fmt.Sprintf("custom_%d", totalProcessed)
+									}
+
+									batch = append(batch, memory.Thought[map[string]any]{
+										Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+									})
+									totalProcessed++
+
+									if len(batch) >= batchSize {
+										UpdateTask(taskId, "in_progress", 50, totalProcessed+100, fmt.Sprintf("Embedding and ingesting batch (processed %d)...", totalProcessed), "")
+										err := kb.IngestThoughts(ctx, batch, "expert")
+										if err != nil {
+											fmt.Printf("Failed to ingest batch: %v\n", err)
+										}
+										batch = batch[:0]
+									}
+								}
+							} else {
+								// skip unknown properties
+								var skip any
+								decoder.Decode(&skip)
+							}
+						}
+					} else if delim == '[' {
+						// It's an array directly
+						for decoder.More() {
+							var chunk ingestChunk
+							if err := decoder.Decode(&chunk); err != nil {
+								break
+							}
+
+							cid := chunk.ID
+							if cid == "" {
+								cid = fmt.Sprintf("custom_%d", totalProcessed)
+							}
+
+							batch = append(batch, memory.Thought[map[string]any]{
+								Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+							})
+							totalProcessed++
+
+							if len(batch) >= batchSize {
+								UpdateTask(taskId, "in_progress", 50, totalProcessed+100, fmt.Sprintf("Embedding and ingesting batch (processed %d)...", totalProcessed), "")
+								err := kb.IngestThoughts(ctx, batch, "expert")
+								if err != nil {
+									fmt.Printf("Failed to ingest batch: %v\n", err)
+								}
+								batch = batch[:0]
+							}
+						}
+					}
+				}
+			}
+
+			// Process remaining batch
+			if len(batch) > 0 {
+				UpdateTask(taskId, "in_progress", 50, totalProcessed, fmt.Sprintf("Embedding and ingesting final batch (processed %d)...", totalProcessed), "")
+				err := kb.IngestThoughts(ctx, batch, "expert")
+				if err != nil {
+					fmt.Printf("Failed to ingest final batch: %v\n", err)
+				}
+			}
+
+			if kb.DidVectorize && dbEmbedder != nil {
+				cfg, cfgErr := kb.GetConfig(ctx)
+				if cfgErr == nil && cfg != nil {
+					needsUpdate := false
+					if cfg.EmbedderDimension != dbEmbedder.Dim() {
+						cfg.EmbedderDimension = dbEmbedder.Dim()
+						needsUpdate = true
+					}
+					if cfg.Embedder != dbEmbedder.Name() {
+						cfg.Embedder = dbEmbedder.Name()
+						needsUpdate = true
+					}
+					if needsUpdate {
+						kb.SetConfig(ctx, cfg)
+					}
+				}
 			}
 		}
 
@@ -255,6 +470,139 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		UpdateTask(taskId, "completed", 100, 100, fmt.Sprintf("Successfully pre-loaded %s", request.Expertise), "")
+		UpdateTask(taskId, "completed", 100, 100, fmt.Sprintf("Successfully pre-loaded %s", request.SpaceName), "")
+	}(task.TaskID, req, dbEmbedder, dbLLM)
+}
+
+func handleIngestImportSpace(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req IngestSpaceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	if req.DatabaseName == "" || req.SpaceName == "" {
+		http.Error(w, "database_name and space_name are required", http.StatusBadRequest)
+		return
+	}
+
+	if len(req.CustomData) == 0 && req.URL == "" && req.PreloadFilePath == "" {
+		http.Error(w, "Must provide custom_data, url, or preload filepath to ingest/import", http.StatusBadRequest)
+		return
+	}
+
+	dbEmbedder := GetConfiguredEmbedder(r)
+	dbLLM := GetConfiguredLLM(r)
+
+	task := RegisterTask("SpaceIngestImport", 100)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"task_id": task.TaskID,
+		"message": fmt.Sprintf("Ingest/Importing %s started in background", req.SpaceName),
+	})
+
+	go func(taskId string, request IngestSpaceRequest, emb ai.Embeddings, llm ai.Generator) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Panic during ingest import: %v", rec))
+			}
+		}()
+
+		ctx := context.Background()
+		UpdateTask(taskId, "in_progress", 10, 100, "Initializing database connection...", "")
+		opts, err := getDBOptions(ctx, request.DatabaseName)
+		if err != nil {
+			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to get DB config: %v", err))
+			return
+		}
+
+		db := database.NewDatabase(opts)
+		trans, err := db.BeginTransaction(ctx, sop.ForWriting)
+		if err != nil {
+			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to begin transaction: %v", err))
+			return
+		}
+
+		kb, err := db.OpenKnowledgeBase(ctx, request.SpaceName, trans, llm, emb)
+		if err != nil {
+			trans.Rollback(ctx)
+			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to open KnowledgeBase '%s': %v", request.SpaceName, err))
+			return
+		}
+
+		var reader io.Reader
+		var closer io.Closer
+
+		if request.PreloadFilePath != "" {
+			f, err := os.Open(request.PreloadFilePath)
+			if err == nil {
+				reader = f
+				closer = f
+				defer closer.Close()
+			}
+		} else if request.URL != "" {
+			reqHTTP, err := http.NewRequestWithContext(ctx, http.MethodGet, request.URL, nil)
+			if err == nil {
+				resp, err := http.DefaultClient.Do(reqHTTP)
+				if err == nil {
+					reader = resp.Body
+					closer = resp.Body
+					defer closer.Close()
+				}
+			}
+		} else if len(request.CustomData) > 0 {
+			reader = bytes.NewReader(request.CustomData)
+		}
+
+		if reader != nil {
+			UpdateTask(taskId, "in_progress", 30, 100, "Reading Space data stream...", "")
+
+			enrichCb := func(it *memory.ExportItem[map[string]any]) {
+				it.Summaries = extractSummaries(ingestChunk{
+					Summaries: it.Summaries,
+					Data:      it.Data,
+				})
+			}
+
+			err = kb.ImportJSON(ctx, reader, "expert", enrichCb)
+			if err != nil {
+				trans.Rollback(ctx)
+				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to ImportJSON: %v", err))
+				return
+			}
+		}
+
+		if kb.DidVectorize && dbEmbedder != nil {
+			cfg, cfgErr := kb.GetConfig(ctx)
+			if cfgErr == nil && cfg != nil {
+				needsUpdate := false
+				if cfg.EmbedderDimension != dbEmbedder.Dim() {
+					cfg.EmbedderDimension = dbEmbedder.Dim()
+					needsUpdate = true
+				}
+				if cfg.Embedder != dbEmbedder.Name() {
+					cfg.Embedder = dbEmbedder.Name()
+					needsUpdate = true
+				}
+				if needsUpdate {
+					kb.SetConfig(ctx, cfg)
+				}
+			}
+		}
+
+		UpdateTask(taskId, "in_progress", 90, 100, "Committing changes...", "")
+		if err := trans.Commit(ctx); err != nil {
+			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to commit ingest import: %v", err))
+			return
+		}
+
+		UpdateTask(taskId, "completed", 100, 100, fmt.Sprintf("Successfully imported and ingested %s", request.SpaceName), "")
 	}(task.TaskID, req, dbEmbedder, dbLLM)
 }

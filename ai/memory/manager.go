@@ -114,7 +114,7 @@ func (m *MemoryManager[T]) FindClosestCategory(ctx context.Context, vector []flo
 }
 
 // EnsureCategory guarantees a Semantic Anchor physically exists in the B-Tree for a string noun.
-func (m *MemoryManager[T]) EnsureCategory(ctx context.Context, categoryName string) (sop.UUID, error) {
+func (m *MemoryManager[T]) EnsureCategory(ctx context.Context, categoryPath string) (sop.UUID, error) {
 	categoriesTree, err := m.store.Categories(ctx)
 	if err != nil {
 		return sop.NilUUID, err
@@ -123,21 +123,26 @@ func (m *MemoryManager[T]) EnsureCategory(ctx context.Context, categoryName stri
 	ok, err := categoriesTree.First(ctx)
 	for ok && err == nil {
 		c, _ := categoriesTree.GetCurrentValue(ctx)
-		if c != nil && strings.EqualFold(c.Name, categoryName) {
+		// Match against Path instead of Name to ensure uniqueness of deeper nodes
+		if c != nil && strings.EqualFold(c.Path, categoryPath) {
 			return categoriesTree.GetCurrentKey().Key, nil
 		}
 		ok, err = categoriesTree.Next(ctx)
 	}
 
-	vecs, err := m.embedder.EmbedTexts(ctx, []string{categoryName})
+	vecs, err := m.embedder.EmbedTexts(ctx, []string{categoryPath})
 	if err != nil {
 		return sop.NilUUID, fmt.Errorf("failed to embed new category: %w", err)
 	}
 
+	parts := strings.Split(categoryPath, " / ")
+	leafName := parts[len(parts)-1]
+
 	CID := sop.NewUUID()
 	anchor := &Category{
 		ID:           CID,
-		Name:         categoryName,
+		Name:         leafName,
+		Path:         categoryPath,
 		Description:  "LLM Generated Semantic Anchor",
 		CenterVector: vecs[0],
 		ItemCount:    0,
@@ -157,24 +162,24 @@ func (m *MemoryManager[T]) SleepCycle(ctx context.Context) error {
 }
 
 func (m *MemoryManager[T]) GenerateSummaries(ctx context.Context, dataStr string) ([]string, error) {
-if m.llm == nil {
-    return []string{dataStr}, nil
-}
-prompt := "Break the following data down into distinct logical vectors or small standalone factual observations (sentences or short phrases). Return ONLY a pipe-separated ( | ) list of these phrases.\n\nData: " + dataStr
-opts := ai.GenOptions{MaxTokens: 1000, Temperature: 0.1}
-out, err := m.llm.Generate(ctx, prompt, opts)
-if err != nil {
-return nil, err
-}
-parts := strings.Split(out.Text, "|")
-var res []string
-for _, p := range parts {
-if strings.TrimSpace(p) != "" {
-res = append(res, strings.TrimSpace(p))
-}
-}
-if len(res) == 0 {
-res = []string{dataStr}
-}
-return res, nil
+	if m.llm == nil {
+		return []string{dataStr}, nil
+	}
+	prompt := "Break the following data down into distinct logical vectors or small standalone factual observations (sentences or short phrases). Return ONLY a pipe-separated ( | ) list of these phrases.\n\nData: " + dataStr
+	opts := ai.GenOptions{MaxTokens: 1000, Temperature: 0.1}
+	out, err := m.llm.Generate(ctx, prompt, opts)
+	if err != nil {
+		return nil, err
+	}
+	parts := strings.Split(out.Text, "|")
+	var res []string
+	for _, p := range parts {
+		if strings.TrimSpace(p) != "" {
+			res = append(res, strings.TrimSpace(p))
+		}
+	}
+	if len(res) == 0 {
+		res = []string{dataStr}
+	}
+	return res, nil
 }

@@ -39,12 +39,14 @@
 
 <!-- Add Space Item Modal -->
 <div id="add-space-item-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--overlay-bg); justify-content:center; align-items:center; z-index:2000;">
-    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:5px; width:500px; max-width:90%; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); display: flex; flex-direction: column;">
+    <div style="background:var(--bg-color); color:var(--text-color); padding:20px; border-radius:8px; width:70%; max-width:900px; height: 65%; max-height: 90vh; box-sizing: border-box; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid var(--border-color); display: flex; flex-direction: column;">
         <h3 style="margin-top:0;">Add Item</h3>
         
-        <label style="margin-top: 10px; font-size: 0.9em;">Category:</label>
-        <select id="new-space-item-category" style="width: 100%; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 8px; border-radius: 4px; box-sizing: border-box; margin-top: 5px;">
-        </select>
+        <div style="display:flex; align-items:center; margin-top: 10px; gap: 10px;">
+            <label style="font-size: 0.9em; white-space: nowrap;">Category:</label>
+            <select id="new-space-item-category" style="width: 100%; background: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); padding: 8px; border-radius: 4px; box-sizing: border-box;">
+            </select>
+        </div>
 
         
         
@@ -242,6 +244,7 @@
                 <li>"Create a script named 'expensive_orders' to find orders over $1000"</li>
             </ul>
             {{end}}
+            
         </div>
     </div>
     <div class="chat-input-area" style="position: relative;">
@@ -378,11 +381,17 @@
                 <input type="text" id="new-kb-name" class="form-input" style="width: 100%; box-sizing: border-box;" placeholder="e.g. Coding Rules, Study Notes">
             </div>
 
-            <div style="margin-bottom: 15px;">
-                <label class="form-label" style="display:block; margin-bottom:5px;">Embedder:</label>
-                <select id="new-kb-embedder" class="form-input" style="width: 100%;">
-                    {{template "embedderOptions" .}}
-                </select>
+            <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+                <div style="flex: 2;">
+                    <label class="form-label" style="display:block; margin-bottom:5px;">Embedder (for this Space):</label>
+                    <select id="new-kb-embedder" class="form-input" style="width: 100%;">
+                        {{template "embedderOptions" .}}
+                    </select>
+                </div>
+                <div style="flex: 1;">
+                    <label class="form-label" style="display:block; margin-bottom:5px;">Dimension:</label>
+                    <input type="text" id="new-kb-dimension" class="form-input" style="width: 100%; color: var(--text-muted);" readonly title="Automatically determined by Embedder upon vectorization" placeholder="Auto">
+                </div>
             </div>
 
             <div style="margin-bottom: 15px;">
@@ -403,12 +412,66 @@
                     <label class="form-label" style="font-size: 12px; margin: 0;">System Prompt (Persona Focus):</label>
                     <button onclick="enhanceTextWithAI(this, 'new-kb-sysprompt', 'system_prompt', ['new-kb-name'])" style="background: none; border: none; color: var(--key-color); cursor: pointer; font-size: 11px; padding: 0;">✨ Enhance with AI</button>
                 </div>
-                <textarea id="new-kb-sysprompt" class="form-input" style="width: 100%; height: 60px; box-sizing: border-box; resize: vertical; margin-bottom: 10px;" placeholder="You are a senior data miner and sales expert..."></textarea>
+                <textarea id="new-kb-sysprompt" class="form-input" style="width: 100%; height: 60px; box-sizing: border-box; resize: vertical; margin-bottom: 10px;" placeholder="Describe how the AI should think, search, and synthesize data from this Space. (e.g., 'You are a strict Legal Auditor. Cite references...') Click ✨ Enhance with AI to automatically expand your draft!"></textarea>
             </div>
         </div>
         <div class="modal-footer">
             <button onclick="closeAddKBModal()" class="btn-secondary">Cancel</button>
             <button onclick="saveNewKB()" class="btn-success">Create</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Space Modal -->
+<div id="edit-kb-modal" class="modal">
+    <div class="modal-content" style="width: 450px;">
+        <div class="modal-header">
+            <span id="edit-kb-modal-title" title="Spaces: Spaces, Memories, and Skills that define how the AI should behave.">Edit Space Configuration</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="closeEditKBModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:block; margin-bottom:5px;">Space Name:</label>
+                <input type="text" id="edit-kb-name" class="form-input" style="width: 100%; box-sizing: border-box;" disabled>
+            </div>
+
+            <div style="margin-bottom: 15px; display: flex; gap: 10px;">
+                <div style="flex: 2;">
+                    <label class="form-label" style="display:block; margin-bottom:5px;">Embedder (for this Space):</label>
+                    <select id="edit-kb-embedder" class="form-input" style="width: 100%;">
+                        {{template "embedderOptions" .}}
+                    </select>
+                </div>
+                <div style="flex: 1;">
+                    <label class="form-label" style="display:block; margin-bottom:5px;">Dimension:</label>
+                    <input type="text" id="edit-kb-dimension" class="form-input" style="width: 100%; color: var(--text-muted);" readonly title="Automatically determined by Embedder upon vectorization" placeholder="Auto">
+                </div>
+            </div>
+
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:flex; align-items:center; gap:8px;">
+                    <input type="checkbox" id="edit-kb-is-persona" onchange="document.getElementById('edit-kb-sysprompt-container').style.display = this.checked ? 'block' : 'none'"> 
+                    Use as Persona (Agentic Context)
+                </label>
+            </div>
+            
+            <!-- AI Configuration Section for Agentic Data -->
+            <div id="edit-kb-sysprompt-container" style="display:none; margin-bottom: 15px; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.02);">
+                <div style="font-size: 13px; font-weight: bold; margin-bottom: 8px; color: var(--key-color);">🤖 Agentic Data Configuration</div>
+                <div style="font-size: 11px; margin-bottom: 10px; color: var(--text-muted);">
+                    Configure the AI that manages and draws persona from this data space.
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <label class="form-label" style="font-size: 12px; margin: 0;">System Prompt (Persona Focus):</label>
+                    <button onclick="enhanceTextWithAI(this, 'edit-kb-sysprompt', 'system_prompt', ['edit-kb-name'])" style="background: none; border: none; color: var(--key-color); cursor: pointer; font-size: 11px; padding: 0;">✨ Enhance with AI</button>
+                </div>
+                <textarea id="edit-kb-sysprompt" class="form-input" style="width: 100%; height: 60px; box-sizing: border-box; resize: vertical; margin-bottom: 10px;" placeholder="Describe how the AI should think, search, and synthesize data from this Space. (e.g., 'You are a strict Legal Auditor. Cite references...') Click ✨ Enhance with AI to automatically expand your draft!"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeEditKBModal()" class="btn-secondary">Cancel</button>
+            <button id="edit-kb-save-btn" onclick="saveEditKB()" class="btn-success">Save Changes</button>
         </div>
     </div>
 </div>
@@ -432,5 +495,31 @@
         </div>
     </div>
 </div>
-{{end}}
 
+
+<!-- Missing Provider JIT Modal -->
+<div id="missing-provider-modal" class="modal">
+    <div class="modal-content" style="width: 400px;">
+        <div class="modal-header">
+            <span>Authentication Required</span>
+            <span style="cursor:pointer; font-size: 20px;" onclick="closeMissingProviderModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+            <p style="font-size:13px; margin-top:0;">This Space requires the <strong id="missing-provider-name"></strong> provider to perform vectorization, which isn't configured in your current System defaults.</p>
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:block; margin-bottom:5px;">API Key</label>
+                <input type="password" id="missing-provider-key" class="form-input" style="width: 100%; box-sizing: border-box;" placeholder="Enter your API Key">
+            </div>
+            <div style="margin-bottom: 15px;">
+                <label class="form-label" style="display:block; margin-bottom:5px;">Custom URL (Optional)</label>
+                <input type="text" id="missing-provider-url" class="form-input" style="width: 100%; box-sizing: border-box;" placeholder="e.g. http://localhost:11434">
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button onclick="closeMissingProviderModal()" class="btn-secondary">Cancel</button>
+            <button id="missing-provider-save-btn" class="btn-success">Save & Continue</button>
+        </div>
+    </div>
+</div>
+
+{{end}}

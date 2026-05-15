@@ -7,26 +7,30 @@ import (
 
 // Config defines the structure of the JSON configuration file for an agent.
 type Config struct {
-	ID                    string            `json:"id"`
-	Type                  string            `json:"type,omitempty"` // "standard" (default), "copilot", "policy", etc.
-	Name                  string            `json:"name"`
-	Description           string            `json:"description"`
-	UserPrompt            string            `json:"user_prompt,omitempty"`    // Optional: Custom prompt for the interactive loop (e.g. "Patient> ")
-	AssistantName         string            `json:"assistant_name,omitempty"` // Optional: Custom name for the assistant (e.g. "AI Doctor")
-	Requirements          *Requirements     `json:"requirements,omitempty"`   // Optional: Explicitly state required components
-	Synonyms              map[string]string `json:"synonyms"`
-	SystemPrompt          string            `json:"system_prompt"`
-	Policies              []PolicyConfig    `json:"policies"`
-	ETL                   ETLConfig         `json:"etl,omitempty"`                     // Configuration for the ETL/Curator pipeline
-	Embedder              EmbedderConfig    `json:"embedder,omitempty"`                // Configuration for the embedder
-	Generator             GeneratorConfig   `json:"generator,omitempty"`               // Configuration for the LLM generator
-	Data                  []DataItem        `json:"data"`                              // For seeding (MVP)
-	StoragePath           string            `json:"storage_path,omitempty"`            // Optional: Override default storage path. Will be converted to absolute path.
-	DBType                string            `json:"db_type,omitempty"`                 // Optional: "standalone" (default) or "clustered"
-	ContentSize           string            `json:"content_size,omitempty"`            // Optional: "small", "medium", "big". Defaults to "medium".
-	SkipDeduplication     bool              `json:"skip_deduplication,omitempty"`      // Optional: Skip deduplication phase
-	EnableIngestionBuffer bool              `json:"enable_ingestion_buffer,omitempty"` // Optional: Enable Stage 0 buffering for faster ingestion
-	Verbose               bool              `json:"verbose,omitempty"`                 // Optional: Enable verbose output (e.g. tool instructions)
+	ID                      string            `json:"id"`
+	Type                    string            `json:"type,omitempty"` // "standard" (default), "copilot", "policy", etc.
+	Name                    string            `json:"name"`
+	Description             string            `json:"description"`
+	UserPrompt              string            `json:"user_prompt,omitempty"`                // Optional: Custom prompt for the interactive loop (e.g. "Patient> ")
+	AssistantName           string            `json:"assistant_name,omitempty"`             // Optional: Custom name for the assistant (e.g. "AI Doctor")
+	UseLegacyBaselineEngine bool              `json:"use_legacy_baseline_engine,omitempty"` // A/B test flag for the ReAct engine implementation
+	Requirements            *Requirements     `json:"requirements,omitempty"`               // Optional: Explicitly state required components
+	Synonyms                map[string]string `json:"synonyms"`
+	SystemPrompt            string            `json:"system_prompt"`
+	Policies                []PolicyConfig    `json:"policies"`
+	ETL                     ETLConfig         `json:"etl,omitempty"`                     // Configuration for the ETL/Curator pipeline
+	Embedder                EmbedderConfig    `json:"embedder,omitempty"`                // Configuration for the embedder
+	Generator               GeneratorConfig   `json:"generator,omitempty"`               // Configuration for the LLM generator
+	Data                    []DataItem        `json:"data"`                              // For seeding (MVP)
+	StoragePath             string            `json:"storage_path,omitempty"`            // Optional: Override default storage path. Will be converted to absolute path.
+	DBType                  string            `json:"db_type,omitempty"`                 // Optional: "standalone" (default) or "clustered"
+	ContentSize             string            `json:"content_size,omitempty"`            // Optional: "small", "medium", "big". Defaults to "medium".
+	SkipDeduplication       bool              `json:"skip_deduplication,omitempty"`      // Optional: Skip deduplication phase
+	EnableIngestionBuffer   bool              `json:"enable_ingestion_buffer,omitempty"` // Optional: Enable Stage 0 buffering for faster ingestion
+	Verbose                 bool              `json:"verbose,omitempty"`                 // Optional: Enable verbose output (e.g. tool instructions)
+	// Cognitive Memory Consolidation (STM to LTM)
+	SleepCycleIntervalHours int `json:"sleep_cycle_interval_hours,omitempty"` // e.g. 1 (run every X hours on the clock). 0 disables hourly.
+	IdleSleepTimeoutMinutes int `json:"idle_sleep_timeout_minutes,omitempty"` // e.g. 5 (run cycle after X minutes of avatar inactivity).
 	// AutoOptimize is deprecated. Use Params["auto_optimize"] instead.
 	AutoOptimize      bool           `json:"auto_optimize,omitempty"`      // Optional: Automatically run Optimize() after ingestion
 	EnableObfuscation bool           `json:"enable_obfuscation,omitempty"` // Optional: Enable metadata obfuscation (Legacy)

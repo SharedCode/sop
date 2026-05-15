@@ -50,7 +50,7 @@ func TestReproJoinResult(t *testing.T) {
 		"store":  "users",
 		"filter": map[string]any{"first_name": map[string]any{"$eq": "John"}},
 	}
-	scanRes, err := engine.Scan(context.Background(), argsScan)
+	scanRes, err := engine.Scan(context.Background(), argsScan, nil)
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)
 	}

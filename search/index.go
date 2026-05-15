@@ -31,11 +31,11 @@ type Index struct {
 // NewIndex creates or opens a text search index.
 func NewIndex(ctx context.Context, config sop.DatabaseOptions, t sop.Transaction, name string) (*Index, error) {
 	// We use a prefix for the store names to keep them grouped.
-	// We use a larger SlotLength (1000) for better performance with many small items.
+	// We use a larger SlotLength (btree.DefaultSlotLength) for better performance with many small items.
 	postings, err := database.NewBtree[string, int](ctx, config, name+"/postings", t, nil, sop.ConfigureStore(
 		name+"/postings",
 		true,
-		1000,
+		btree.DefaultSlotLength,
 		"Inverted index postings (Term|DocID -> Freq)",
 		sop.SmallData,
 		"",
@@ -47,7 +47,7 @@ func NewIndex(ctx context.Context, config sop.DatabaseOptions, t sop.Transaction
 	termStats, err := database.NewBtree[string, int](ctx, config, name+"/term_stats", t, nil, sop.ConfigureStore(
 		name+"/term_stats",
 		true,
-		1000,
+		btree.DefaultSlotLength,
 		"Term statistics (Term -> DocCount)",
 		sop.SmallData,
 		"",
@@ -59,7 +59,7 @@ func NewIndex(ctx context.Context, config sop.DatabaseOptions, t sop.Transaction
 	docStats, err := database.NewBtree[string, int](ctx, config, name+"/doc_stats", t, nil, sop.ConfigureStore(
 		name+"/doc_stats",
 		true,
-		1000,
+		btree.DefaultSlotLength,
 		"Document statistics (DocID -> Length)",
 		sop.SmallData,
 		"",
@@ -71,7 +71,7 @@ func NewIndex(ctx context.Context, config sop.DatabaseOptions, t sop.Transaction
 	global, err := database.NewBtree[string, int](ctx, config, name+"/global", t, nil, sop.ConfigureStore(
 		name+"/global",
 		true,
-		1000,
+		btree.DefaultSlotLength,
 		"Global statistics",
 		sop.SmallData,
 		"",
@@ -113,16 +113,17 @@ func (idx *Index) Add(ctx context.Context, docID string, text string) error {
 		}
 
 		// Increment DocCount for this term
-		// We use Upsert to handle both new and existing terms
-		count := 0
 		if found, err := idx.termStats.Find(ctx, term, false); err != nil {
 			return err
 		} else if found {
-			count, _ = idx.termStats.GetCurrentValue(ctx)
-		}
-
-		if _, err := idx.termStats.Upsert(ctx, term, count+1); err != nil {
-			return err
+			count, _ := idx.termStats.GetCurrentValue(ctx)
+			if _, err := idx.termStats.UpdateCurrentValue(ctx, count+1); err != nil {
+				return err
+			}
+		} else {
+			if _, err := idx.termStats.Add(ctx, term, 1); err != nil {
+				return err
+			}
 		}
 	}
 

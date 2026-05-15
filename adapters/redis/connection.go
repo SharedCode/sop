@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"sync"
+	"time"
 
 	log "log/slog"
 
@@ -21,6 +22,15 @@ type Options struct {
 	DB int
 	// TLSConfig contains TLS configuration for secure connections.
 	TLSConfig *tls.Config
+
+	// DialTimeout specifies the timeout for connecting to Redis.
+	DialTimeout time.Duration
+	// ReadTimeout specifies the timeout for reading from Redis.
+	ReadTimeout time.Duration
+	// WriteTimeout specifies the timeout for writing to Redis.
+	WriteTimeout time.Duration
+	// MaxRetries is the maximum number of retries before giving up on Redis connection.
+	MaxRetries int
 }
 
 // Connection wraps a redis.Client and the Options used to create it.
@@ -107,11 +117,32 @@ var hasRestarted int64
 
 // openConnection creates a new redis client connection from options.
 func openConnection(options Options) *Connection {
+	dialTimeout := options.DialTimeout
+	if dialTimeout == 0 {
+		dialTimeout = 2 * time.Second
+	}
+	readTimeout := options.ReadTimeout
+	if readTimeout == 0 {
+		readTimeout = 2 * time.Second
+	}
+	writeTimeout := options.WriteTimeout
+	if writeTimeout == 0 {
+		writeTimeout = 2 * time.Second
+	}
+	maxRetries := options.MaxRetries
+	if maxRetries == 0 {
+		maxRetries = 3
+	}
+
 	return openConnectionFromRedisOptions(&redis.Options{
-		TLSConfig: options.TLSConfig,
-		Addr:      options.Address,
-		Password:  options.Password,
-		DB:        options.DB,
+		TLSConfig:    options.TLSConfig,
+		Addr:         options.Address,
+		Password:     options.Password,
+		DB:           options.DB,
+		DialTimeout:  dialTimeout,
+		ReadTimeout:  readTimeout,
+		WriteTimeout: writeTimeout,
+		MaxRetries:   maxRetries,
 	})
 }
 
@@ -121,10 +152,14 @@ func openConnectionFromRedisOptions(opts *redis.Options) *Connection {
 	c := Connection{
 		Client: client,
 		Options: Options{
-			Address:   opts.Addr,
-			Password:  opts.Password,
-			DB:        opts.DB,
-			TLSConfig: opts.TLSConfig,
+			Address:      opts.Addr,
+			Password:     opts.Password,
+			DB:           opts.DB,
+			TLSConfig:    opts.TLSConfig,
+			DialTimeout:  opts.DialTimeout,
+			ReadTimeout:  opts.ReadTimeout,
+			WriteTimeout: opts.WriteTimeout,
+			MaxRetries:   opts.MaxRetries,
 		},
 	}
 	return &c

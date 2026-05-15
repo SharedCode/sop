@@ -367,6 +367,9 @@
         list.innerHTML = '';
 
         // Check read-only status for "Enable Selection / Bulk Delete"
+        const currentDbObj = availableDatabases ? availableDatabases.find(db => db.name === currentDatabase) : null;
+        let isSystemDB = currentDbObj ? currentDbObj.is_system : false;
+
         let isReadOnly = false;
         if (currentStore === 'llm_feedback' || (isSystemDB && currentStore === 'memory')) {
              isReadOnly = true;
@@ -396,7 +399,7 @@
             uniqueCols.forEach(col => {
                 const div = document.createElement('div');
                 const checked = !userSelectedColumns || userSelectedColumns.has(col) ? 'checked' : '';
-                div.innerHTML = `<label><input type="checkbox" class="col-checkbox" value="${col}" ${checked}> ${col}</label>`;
+                div.innerHTML = `<label><input type="checkbox" class="col-checkbox" value="${window.escapeHTML(col)}" ${checked}> ${col}</label>`;
                 list.appendChild(div);
             });
         }
@@ -692,15 +695,7 @@
 
     // --- Script Visualizer Helper Functions ---
 
-    function escapeHtml(unsafe) {
-        if (unsafe === undefined || unsafe === null) return '';
-        return String(unsafe)
-             .replace(/&/g, "&amp;")
-             .replace(/</g, "&lt;")
-             .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;")
-             .replace(/'/g, "&#039;");
-    }
+
 
     function showToolInstructions(toolName, summary) {
         let msg = "";
@@ -749,7 +744,7 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
                     <div class="form-group" style="display: flex; flex-direction: row; align-items: center; gap: 8px;">
                         <label class="form-label" style="margin-bottom: 0;" title="Description">Desc</label>
-                        <input type="text" class="value-input form-input" data-key="description" value="${escapeHtml(desc)}" oninput="document.getElementById('btn-save').disabled=false;" style="flex: 1;">
+                        <input type="text" class="value-input form-input" data-key="description" value="${window.escapeHTML(desc)}" oninput="document.getElementById('btn-save').disabled=false;" style="flex: 1;">
                     </div>
                     <div class="form-group" style="display: flex; flex-direction: row; align-items: center; gap: 8px;">
                          <label class="form-label" style="margin-bottom: 0;">Context</label>
@@ -760,7 +755,7 @@
                 </div>
 
                 <!-- Hidden inputs for other fields to preserve them -->
-                <input type="hidden" class="value-input" data-key="version" value="${escapeHtml(ver)}">
+                <input type="hidden" class="value-input" data-key="version" value="${window.escapeHTML(ver)}">
 
                 <!-- Steps Section -->
                 <div style="margin-top: 9px; border-top: 1px solid var(--border-color); padding-top: 10px;">
@@ -770,15 +765,9 @@
                             <label class="form-label" style="font-size: 1.1em; margin-bottom: 0; margin-left: ${stepsBackBtn ? '0' : '0'};">Program Steps</label>
                             <button onclick="runScriptInEditor()" style="font-size: 18px; padding: 0 5px; background: transparent; border: none; color: #28a745; cursor: pointer; margin-left: 5px; display: flex; align-items: center; justify-content: center;" title="Run">▶</button>
                         </div>
-                        <button onclick="addScriptStep()" style="font-size: 22px; padding: 0 5px; background: transparent; border: none; color: var(--text-color); cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center;" title="Add Step">+</button>
+                        <button onclick="formatStepsJSON()" style="font-size: 11px; padding: 3px 8px; background: var(--button-bg); border: 1px solid var(--border-color); color: var(--button-text); cursor: pointer; border-radius: 3px;" title="Format JSON">Format JSON</button>
                     </div>
-                    
-                    <!-- The Master Source of Truth for Steps -->
-                    <input type="hidden" class="value-input" data-key="steps" id="hidden-steps-json" value="${escapeHtml(stepsJson)}">
-
-                    <div id="script-steps-list" style="display: flex; flex-direction: column; gap: 8px;">
-                        ${renderScriptSteps(steps)}
-                    </div>
+                    <textarea class="value-input form-input" data-key="steps" id="json-steps-editor" style="width: 100%; height: 350px; font-family: monospace; white-space: pre; overflow-x: auto; box-sizing: border-box; font-size: 0.9em; resize: vertical;" onchange="document.getElementById('btn-save').disabled=false;">${window.escapeHTML(JSON.stringify(steps, null, 2))}</textarea>
 
                     <!-- Execution Output -->
                     <div id="script-execution-output" style="margin-top: 15px; display: none; border-top: 1px solid var(--border-color); padding-top: 10px;">
@@ -786,7 +775,7 @@
                             <label class="form-label">Execution Output (NDJSON Stream)</label>
                             <button onclick="document.getElementById('script-output-content').innerHTML = ''; closeUIModal('script-execution-output');" style="background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 12px;" title="Clear Output">Clear</button>
                         </div>
-                        <div id="script-output-content" style="background: var(--console-bg); color: var(--console-text); padding: 10px; font-family: monospace; border-radius: 4px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; font-size: 12px;"></div>
+                        <div id="script-output-content" style="background: var(--console-bg); color: var(--console-text); padding: 10px; font-family: monospace; border-radius: 4px; white-space: pre-wrap; font-size: 12px; overflow-wrap: break-word;"></div>
                     </div>
                 </div>
             </div>

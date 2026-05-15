@@ -3,150 +3,262 @@ package memory
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 
 	"github.com/sharedcode/sop"
 )
 
-// ExportData defines the structure of the KnowledgeBase JSON payload.
+// ExportData	defines	the	structure	of	the	KnowledgeBase	JSON	payload.
 type ExportData[T any] struct {
 	Config     *KnowledgeBaseConfig `json:"config,omitempty"`
 	Categories []*Category          `json:"categories"`
 	Items      []ExportItem[T]      `json:"items"`
 }
 
-// ExportItem dictates what fields from the item are serialized.
+// ExportItem	dictates	what	fields	from	the	item	are	serialized.
 type ExportItem[T any] struct {
 	Category         string      `json:"category"`
 	Data             T           `json:"data"`
 	Summaries        []string    `json:"summaries,omitempty"`
 	SummariesVectors [][]float32 `json:"summaries_vectors,omitempty"`
+	Positions        []VectorKey `json:"positions,omitempty"`
+	VectorHash       string      `json:"vector_hash,omitempty"`
 }
 
-// ExportJSON serializes the KnowledgeBase contents into a JSON stream.
+// ExportJSON	serializes	the	KnowledgeBase	contents	into	a	JSON	stream.
 func (kb *KnowledgeBase[T]) ExportJSON(ctx context.Context, writer io.Writer) error {
 	catBtree, err := kb.Store.Categories(ctx)
 	if err != nil {
 		return err
 	}
 
-	exportData := ExportData[T]{}
-	catMap := make(map[sop.UUID]string)
+	encoder := json.NewEncoder(writer)
+	io.WriteString(writer, "{\n")
 
-	ok, _ := catBtree.First(ctx)
-	for ok {
-		cat, err := catBtree.GetCurrentValue(ctx)
-		if err == nil && cat != nil {
-			exportData.Categories = append(exportData.Categories, cat)
-			catMap[cat.ID] = cat.Name
-		}
-		ok, _ = catBtree.Next(ctx)
-	}
-
+	//	1.	Config	block
 	itemsBtree, err := kb.Store.Items(ctx)
 	if err != nil {
 		return err
 	}
-
-	ok, _ = itemsBtree.First(ctx)
+	hasConfig := false
+	ok, _ := itemsBtree.First(ctx)
 	for ok {
 		item, err := itemsBtree.GetCurrentValue(ctx)
-		if err == nil {
-			if item.ID == sop.NilUUID {
-				// Attempt to recover KnowledgeBaseConfig from this Item
-				b, err := json.Marshal(item.Data)
-				if err == nil {
-					var cfg KnowledgeBaseConfig
-					if json.Unmarshal(b, &cfg) == nil {
-						exportData.Config = &cfg
-					}
+		if err == nil && item.ID == sop.NilUUID {
+			b, err := json.Marshal(item.Data)
+			if err == nil {
+				var cfg KnowledgeBaseConfig
+				if json.Unmarshal(b, &cfg) == nil {
+					io.WriteString(writer, "\"config\":	")
+					encoder.Encode(cfg)
+					hasConfig = true
 				}
-			} else {
-				var vectors [][]float32
-				if len(item.Positions) > 0 {
-					vecBtree, _ := kb.Store.Vectors(ctx)
-					if vecBtree != nil {
-						for _, pos := range item.Positions {
-							has, _ := vecBtree.Find(ctx, pos, false)
-							if has {
-								v, _ := vecBtree.GetCurrentValue(ctx)
-								vectors = append(vectors, v.Data)
-							}
-						}
-					}
-				}
-
-				catName := catMap[item.CategoryID]
-				exportData.Items = append(exportData.Items, ExportItem[T]{
-					Category:         catName,
-					Data:             item.Data,
-					Summaries:        item.Summaries,
-					SummariesVectors: vectors,
-				})
 			}
+			break
 		}
 		ok, _ = itemsBtree.Next(ctx)
 	}
 
-	encoder := json.NewEncoder(writer)
-	encoder.SetIndent("", "  ")
-	return encoder.Encode(exportData)
+	if hasConfig {
+		io.WriteString(writer, ",\n")
+	}
+
+	//	2.	Categories	array
+	io.WriteString(writer, "\"categories\":	[\n")
+	catMap := make(map[sop.UUID]string)
+	firstCat := true
+	ok, _ = catBtree.First(ctx)
+	for ok {
+		cat, err := catBtree.GetCurrentValue(ctx)
+		if err == nil && cat != nil {
+			if !firstCat {
+				io.WriteString(writer, ",\n")
+			}
+			firstCat = false
+			encoder.Encode(cat)
+			catMap[cat.ID] = cat.Name
+		}
+		ok, _ = catBtree.Next(ctx)
+	}
+	io.WriteString(writer, "\n]")
+
+	//	3.	Items	array
+	io.WriteString(writer, ",\n\"items\":	[\n")
+	firstItem := true
+	ok, _ = itemsBtree.First(ctx)
+	for ok {
+		item, err := itemsBtree.GetCurrentValue(ctx)
+		if err == nil && item.ID != sop.NilUUID {
+			var vectors [][]float32
+			if len(item.Positions) > 0 {
+				vecBtree, _ := kb.Store.Vectors(ctx)
+				if vecBtree != nil {
+					for _, pos := range item.Positions {
+						has, _ := vecBtree.Find(ctx, pos, false)
+						if has {
+							v, _ := vecBtree.GetCurrentValue(ctx)
+							vectors = append(vectors, v.Data)
+						}
+					}
+				}
+			}
+
+			catName := catMap[item.CategoryID]
+			if !firstItem {
+				io.WriteString(writer, ",\n")
+			}
+			firstItem = false
+			encoder.Encode(ExportItem[T]{
+				Category:         catName,
+				Data:             item.Data,
+				Summaries:        item.Summaries,
+				SummariesVectors: vectors,
+				Positions:        item.Positions,
+				VectorHash:       item.VectorHash,
+			})
+		}
+		ok, _ = itemsBtree.Next(ctx)
+	}
+
+	io.WriteString(writer, "\n]\n}\n")
+	return nil
 }
 
-// ImportJSON deserializes a JSON stream and ingests it into the KnowledgeBase.
-func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, persona string) error {
-	var exportData ExportData[T]
+// ImportJSON	deserializes	a	JSON	stream	and	ingests	it	into	the	KnowledgeBase.
+func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, persona string, onEnrich ...func(*ExportItem[T])) error {
 	decoder := json.NewDecoder(reader)
-	if err := decoder.Decode(&exportData); err != nil {
+
+	//	Read	opening	'{'
+	t, err := decoder.Token()
+	if err != nil {
 		return err
+	}
+	if delim, ok := t.(json.Delim); !ok || delim != '{' {
+		return fmt.Errorf("expected	'{'	at	the	beginning	of	stream")
 	}
 
 	catBtree, err := kb.Store.Categories(ctx)
 	if err != nil {
 		return err
 	}
+	uuidMap := make(map[sop.UUID]sop.UUID)
 
-	for _, c := range exportData.Categories {
-		// Use manual loop as BTree Find requires exact sop.UUID which may not match
-		ok, _ := catBtree.First(ctx)
-		found := false
-		for ok {
-			existing, _ := catBtree.GetCurrentValue(ctx)
-			if existing != nil && existing.Name == c.Name {
-				found = true
-				break
-			}
-			ok, _ = catBtree.Next(ctx)
+	for decoder.More() {
+		t, err := decoder.Token()
+		if err != nil {
+			return err
 		}
-		if !found {
-			c.ID = sop.NewUUID()
-			catBtree.Add(ctx, c.ID, c)
+		key, ok := t.(string)
+		if !ok {
+			return fmt.Errorf("expected	string	key")
 		}
-	}
 
-	var thoughts []Thought[T]
-	for _, it := range exportData.Items {
-		thoughts = append(thoughts, Thought[T]{
-			Category:  it.Category,
-			Data:      it.Data,
-			Vectors:   it.SummariesVectors,
-			Summaries: it.Summaries,
-		})
-	}
-
-	if exportData.Config != nil {
-		b, err := json.Marshal(exportData.Config)
-		if err == nil {
+		if key == "config" {
 			var configData T
-			if json.Unmarshal(b, &configData) == nil {
+			if err := decoder.Decode(&configData); err == nil {
 				_ = kb.Store.Upsert(ctx, Item[T]{
 					ID:         sop.NilUUID,
 					CategoryID: sop.NilUUID,
 					Data:       configData,
 				}, nil)
 			}
+		} else if key == "categories" {
+			//	Read	opening	'['
+			if _, err := decoder.Token(); err != nil { //	'['
+				return err
+			}
+			for decoder.More() {
+				var c Category
+				if err := decoder.Decode(&c); err != nil {
+					return err
+				}
+				//	Deduplicate	based	on	Path	instead	of	Name
+				ok, _ := catBtree.First(ctx)
+				found := false
+				for ok {
+					existing, _ := catBtree.GetCurrentValue(ctx)
+					if existing != nil && existing.Path == c.Path && c.Path != "" {
+						uuidMap[c.ID] = existing.ID
+						found = true
+						break
+					} else if existing != nil && existing.Path == "" && existing.Name == c.Name {
+						uuidMap[c.ID] = existing.ID
+						found = true
+						break
+					}
+					ok, _ = catBtree.Next(ctx)
+				}
+				if !found {
+					oldID := c.ID
+					if c.ID.IsNil() {
+						c.ID = sop.NewUUID()
+					}
+					uuidMap[oldID] = c.ID
+					for i := range c.ParentIDs {
+						if mappedID, ok := uuidMap[c.ParentIDs[i].ParentID]; ok {
+							c.ParentIDs[i].ParentID = mappedID
+						}
+					}
+					catBtree.Add(ctx, c.ID, &c)
+				}
+			}
+			if _, err := decoder.Token(); err != nil { //	Read	closing	']'
+				return err
+			}
+		} else if key == "items" {
+			//	Read	opening	'['
+			if _, err := decoder.Token(); err != nil { //	'['
+				return err
+			}
+			var thoughts []Thought[T]
+			for decoder.More() {
+				var it ExportItem[T]
+				if err := decoder.Decode(&it); err != nil {
+					return err
+				}
+
+
+				if len(onEnrich) > 0 && onEnrich[0] != nil {
+					onEnrich[0](&it)
+				}
+
+				thoughts = append(thoughts, Thought[T]{
+					Category:   it.Category,
+					Data:       it.Data,
+					Vectors:    it.SummariesVectors,
+					Summaries:  it.Summaries,
+					Positions:  it.Positions,
+					VectorHash: it.VectorHash,
+				})
+
+				//	Submit	in	batches	to	keep	memory	usage	low
+				if len(thoughts) >= 500 {
+					if err := kb.IngestThoughts(ctx, thoughts, persona); err != nil {
+						return err
+					}
+					thoughts = thoughts[:0] //	Keep	capacity,	reset	length
+				}
+			}
+			if _, err := decoder.Token(); err != nil { //	Read	closing	']'
+				return err
+			}
+
+			//	Submit	remaining	tail
+			if len(thoughts) > 0 {
+				if err := kb.IngestThoughts(ctx, thoughts, persona); err != nil {
+					return err
+				}
+			}
+		} else {
+			//	Ignore	any	unknown	root	keys
+			var discard any
+			decoder.Decode(&discard)
 		}
 	}
 
-	return kb.IngestThoughts(ctx, thoughts, persona)
+	if _, err := decoder.Token(); err != nil { //	Read	closing	'}'
+		return err
+	}
+	return nil
 }

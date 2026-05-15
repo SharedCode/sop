@@ -77,7 +77,7 @@ func TestJoinPipeline_ExplicitInto(t *testing.T) {
 	// args: with=storeB, type=inner, on={id:id}, into=temp1
 
 	// Prepare input cursor for A
-	step1Input, err := engine.Scan(ctx, map[string]any{"store": "storeA"})
+	step1Input, err := engine.Scan(ctx, map[string]any{"store": "storeA"}, nil)
 	if err != nil {
 		t.Fatalf("Scan A failed: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestJoinPipeline_ExplicitInto(t *testing.T) {
 	// result = StoreC matches temp1
 
 	// Scan temp1
-	step2Input, err := engine.Scan(ctx, map[string]any{"store": "temp1"})
+	step2Input, err := engine.Scan(ctx, map[string]any{"store": "temp1"}, nil)
 	if err != nil {
 		t.Fatalf("Scan temp1 failed: %v", err)
 	}

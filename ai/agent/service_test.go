@@ -23,8 +23,34 @@ func (m *MockGenerator) Name() string {
 }
 
 func (m *MockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	// For testing native tool calls since we moved away from JSON regex parsing
+	var tc []ai.ToolCall
+
+	// Obfuscation test match:
+	// dbHash might be anything since it's md5. We just examine m.Response to see if it looks like the obfuscation test responses.
+	if strings.Contains(m.Response, `{"tool": "select", "args": {"database": "`) && strings.Contains(m.Response, `"store": "`) {
+		// Mock decoding the string back (test logic will check the obfuscated payload behavior)
+		// For the purpose of the test, we mock what the LLM *would* have returned as ToolCalls natively:
+
+		// Extract dbhash and storehash manually from m.Response since it's dynamic
+		// Very brittle, but it's a test mock.
+		dbStart := strings.Index(m.Response, `"database": "`) + 13
+		dbEnd := strings.Index(m.Response[dbStart:], `"`) + dbStart
+		storeStart := strings.Index(m.Response, `"store": "`) + 10
+		storeEnd := strings.Index(m.Response[storeStart:], `"`) + storeStart
+
+		tc = append(tc, ai.ToolCall{
+			Name: "select",
+			Args: map[string]any{
+				"database": strings.ReplaceAll(m.Response[dbStart:dbEnd], `\u00a0`, "\u00a0"),
+				"store":    m.Response[storeStart:storeEnd],
+			},
+		})
+	}
+
 	return ai.GenOutput{
-		Text: m.Response,
+		Text:      m.Response,
+		ToolCalls: tc,
 	}, nil
 }
 

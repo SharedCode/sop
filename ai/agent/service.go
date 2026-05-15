@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	log "log/slog"
@@ -49,9 +48,6 @@ type Service struct {
 	// Session State
 	session *RunnerSession
 
-	// STM Asynchronous Batch Pipeline
-	episodeQueue chan map[string]any
-
 	// Refresh Tracker
 	lastKnowledgeRefresh map[string]time.Time
 }
@@ -71,7 +67,6 @@ func NewService(domain ai.Domain[map[string]any], systemDB *database.Database, d
 		EnableObfuscation:      enableObfuscation,
 		EnableHistoryInjection: false, // Default to OFF for simple machine mode (can be enabled via config)
 		session:                NewRunnerSession(),
-		episodeQueue:           make(chan map[string]any, 1000),
 		lastKnowledgeRefresh:   make(map[string]time.Time),
 	}
 }
@@ -364,7 +359,7 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 	}
 
 	// 3. Query Index
-	tx, err := s.domain.BeginTransaction(ctx, sop.ForReading)
+	tx, err := s.domain.BeginTransaction(ctx, sop.NoCheck)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -375,31 +370,19 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 		return nil, fmt.Errorf("domain %s has no index configured: %w", s.domain.ID(), err)
 	}
 
-	// Hybrid Fusion (RRF)
-	var wg sync.WaitGroup
 	var vectorHits []ai.Hit[map[string]any]
 	var vecErr error
 	var textHits []search.TextSearchResult
 	var textErr error
 
-	wg.Add(2)
+	// Vector Search
+	vectorHits, vecErr = idx.Query(ctx, vecs[0], limit, nil)
 
-	go func() {
-		defer wg.Done()
-		// Vector Search
-		vectorHits, vecErr = idx.Query(ctx, vecs[0], limit, nil)
-	}()
-
-	go func() {
-		defer wg.Done()
-		// Text Search
-		textIdx, err := s.domain.TextIndex(ctx, tx)
-		if err == nil && textIdx != nil {
-			textHits, textErr = textIdx.Search(ctx, query)
-		}
-	}()
-
-	wg.Wait()
+	// Text Search
+	textIdx, err := s.domain.TextIndex(ctx, tx)
+	if err == nil && textIdx != nil {
+		textHits, textErr = textIdx.Search(ctx, query)
+	}
 
 	if vecErr != nil {
 		return nil, fmt.Errorf("vector query failed: %w", vecErr)
@@ -650,7 +633,7 @@ func (s *Service) getLLMKnowledge(ctx context.Context) string {
 	namespacesToLoad := []string{"memory", "term"}
 
 	// SCALABILITY FIX 2: Load Semantic Memory namespaces
-	semanticNamespaces := []string{"vocabulary", "rule", "correction"}
+	semanticNamespaces := []string{"vocabulary", "rule", "correction", "persona"}
 
 	// Add current DB domain if applicable
 	if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
@@ -743,7 +726,7 @@ func (s *Service) getToolInfo(ctx context.Context, toolName string) (string, err
 // registerTools sets up the tools available to the LLM.
 func (s *Service) registerTools() {
 	if s.registry == nil {
-		return
+		s.registry = make(map[string]ai.Agent[map[string]any])
 	}
 	// We inject `conclude_topic` by directly defining it in the interface.
 	// Since s.registry is map[string]ai.Agent (where ai.Agent is an interface),
@@ -811,6 +794,59 @@ func (s *Service) handleConcludeTopic(ctx context.Context, args map[string]inter
 	return fmt.Sprintf("Topic '%s' concluded. Summary saved: %s", thread.Label, summary), nil
 }
 
+// InitializeUserSession explicitly creates the DDL components required for a user's workflow.
+// This creates the User's Long-Term Memory (LTM) Vector Knowledge Base and any other
+// dependencies that must exist before the ReAct loop starts querying with ForReading transactions.
+func (s *Service) InitializeUserSession(ctx context.Context, userID string) error {
+	// 1. STM Initialization (if enabled)
+	if s.EnableShortTermMemory {
+		if err := s.InitializeShortTermMemory(ctx); err != nil {
+			return fmt.Errorf("failed to init STM: %w", err)
+		}
+	}
+
+	if userID == "" {
+		return nil // Nothing to init for a systemic or session-less user
+	}
+
+	// 2. LTM Initialization (User's Private Knowledge Base DB Tables)
+	tx, err := s.systemDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return fmt.Errorf("failed to begin session init tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	ltmName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, userID)
+	if p := ai.GetSessionPayload(ctx); p != nil && p.GetMemoryKBName() != "" {
+		ltmName = p.GetMemoryKBName()
+	}
+
+	// OpenKnowledgeBase safely ensures DDL (creates B-Trees if they don't exist)
+	// Because this is a ForWriting transaction, the NewBtree calls deep inside will succeed.
+	ltmKB, err := s.systemDB.OpenKnowledgeBase(ctx, ltmName, tx, s.generator, nil)
+	if err != nil {
+		return fmt.Errorf("failed to initialize user LTM '%s': %w", ltmName, err)
+	}
+
+	// Sync SystemPrompt from the SOP KB config to the LTM KB config
+	sopKB, err := s.systemDB.OpenKnowledgeBase(ctx, "sop", tx, s.generator, nil)
+	if err == nil && sopKB != nil {
+		sopCfg, _ := sopKB.GetConfig(ctx)
+		if sopCfg != nil && sopCfg.SystemPrompt != "" {
+			ltmCfg, _ := ltmKB.GetConfig(ctx)
+			if ltmCfg == nil {
+				ltmCfg = &memory.KnowledgeBaseConfig{}
+			}
+			if ltmCfg.SystemPrompt != sopCfg.SystemPrompt {
+				ltmCfg.SystemPrompt = sopCfg.SystemPrompt
+				_ = ltmKB.SetConfig(ctx, ltmCfg)
+			}
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
 func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
 	// Ensure statelessness for non-playback sessions (Interactive & Drafting)
 	defer func() {
@@ -846,6 +882,13 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		}
 	}
 
+	// Ensure we have a tool executor
+	// If the caller didn't provide one, we use the ServiceToolExecutor which delegates to registered agents.
+	if ctx.Value(ai.CtxKeyExecutor) == nil {
+		executor := &ServiceToolExecutor{s: s}
+		ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
+	}
+
 	// Inject SessionPayload into context if present
 	if val, ok := cfg.Values["payload"]; ok {
 		if p, ok := val.(*ai.SessionPayload); ok {
@@ -868,13 +911,6 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	} else {
 		// If no payload provided, create a default one from session state
 		// Use forcedDBName if provided via Ask options, otherwise session state
-
-		// Ensure we have a tool executor
-		// If the caller didn't provide one, we use the ServiceToolExecutor which delegates to registered agents.
-		if ctx.Value(ai.CtxKeyExecutor) == nil {
-			executor := &ServiceToolExecutor{s: s}
-			ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
-		}
 
 		// 1. Prepare Context (History, DB schema, etc.)
 		targetDB := s.session.CurrentDB
@@ -998,7 +1034,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 
 	// 2_0. Inject User Preferences (Long-Term Memory Search via pre-prompt fetch)
 	if p := ai.GetSessionPayload(ctx); p != nil && p.UserID != "" && s.systemDB != nil {
-		kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, p.UserID)
+		kbName := p.GetMemoryKBName()
 		if tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
 			if kb, err := s.systemDB.OpenKnowledgeBase(ctx, kbName, tx, s.generator, nil); err == nil {
 				// We search the user's Long-Term memory kb for implicitly learned preferences related to the query
@@ -1034,51 +1070,9 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	// 2c. Tool Usage Hint for Knowledge Retrieval
 	systemPrompt = fmt.Sprintf("%s\n\n[Tool Usage Note]\nYou can use the tool \"gettoolinfo\" with argument \"tool\" (e.g., \"gettoolinfo('execute_script')\") to get detailed usage instructions for any tool if you are unsure about its parameters or behavior.", systemPrompt)
 
-	// [Managed Conversation Protocol]
-	conversationProtocol := `
-[Conversation Management]
-You are capable of managing the conversation flow.
-- A "Conversation Thread" tracks the current topic.
-- When an issue is resolved, or a significant sub-task is completed, and you are ready to switch context, use the 'conclude_topic(summary, topic_label)' tool.
-- This helps cleaner context management.
-`
-	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, conversationProtocol)
-
-	// [Active Memory Protocol]
-	learningProtocol := `
-[Active Memory & Refinement Protocol]
-You are a self-correcting agent integrated with an automated "Active Memory" system. 
-When the user corrects your output, provides a definition, or establishes a preference (e.g., "Use 'Client' instead of 'User'", "Always check X before Y"):
-1. ACKNOWLEDGE the correction.
-2. Execute the correctly revised action (if applicable) immediately. Your validated actions, intents, and AST payloads are AUTOMATICALLY embedded into Active Memory by the system backend—you do NOT need to call any manual save tools.
-3. Because the system tracks your successful workflow episodes, simply applying the user's feedback once guarantees the system will autonomously recall the corrected approach for future queries. 
-`
-	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, learningProtocol)
-
-	// [Omni Protocol / Master Architect Precedence]
-	omniProtocol := `[Omni Precedence & Master Architecture Rules]
-You are the Omni Persona, an intelligent Orchestrator and Database Architect capable of managing pure technical schemas AND high-level Knowledge Spaces in a seamless ecosystem.
-
-When discussing what you are, or when interacting with users, keep in mind:
-- A "Space" or "Knowledge Base" (often represented as a single word like 'Notes' or 'Contacts') is a new AI memory subsystem comprised of a VectorDB, Text Search, a special schema (Thoughts: Category/Items), and its own memory management.
-- Users can ask you to generate data on the fly into a Space.
-- "Technical Tables" or raw B-Trees ('orders', 'users') require strict schema adherence and database tool usage.
-
-When retrieving tools, processing queries, or searching Context, you MUST respect this strict Knowledge Base (KB) PRECEDENCE HIERARCHY:
-1. Selected KB (Highest Priority): If the user has mounted or selected a specific KB (e.g. Medical Expert), its domain rules strictly override generic rules.
-2. SOP KB (Core Foundation): This is of EQUAL precedence. You MUST rely on it for fundamental database management, constraints, schema evaluation, and orchestration tools.
-3. User DB KBs: After primary checks, you must actively search other relevant domain namespaces within the current User Database.
-4. SystemDB KBs (Global Defaults): If rules are not found elsewhere, fallback to global KBs within the SystemDB.`
-	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, omniProtocol)
-
-	// [Pattern of Thinking]
-	thinkingProtocol := `[Pattern of Thinking & Data Management]
-When asked to query, manage, or manipulate data, you MUST follow this explicit sequence before generating your final response or script:
-1. KB Fallback: If you are about to execute a tool (like 'select', 'join', or 'execute_script'), but its exact DSL or rules are not locally documented, FIRST use 'gettoolinfo' to retrieve the full specifications from the SOP KB.
-2. Schema Inspection: ALWAYS use 'list_stores' and evaluate the schema to verify the exact tables and field names before constructing any data scripts to existing technical tables.
-3. SPACE AUTO-IMPORT: IF the user asks to generate, create, or import into a Space or Knowledge Base, IT IS A FATAL ERROR TO USE ANY TOOLS. DO NOT output a tool call (like {"tool": "open_store"}). You must immediately output ONLY the raw JSON matching the ExportData array (with target_space, categories, and items), wrapped in a standard JSON markdown block.
-4. Active Memory: Rely on the actively injected Knowledge, Context, and the verified schema to formulate your operations. Let exact facts guide your script parameters.`
-	systemPrompt = fmt.Sprintf("%s\n%s", systemPrompt, thinkingProtocol)
+	// Filter and inject heavy architectural protocols ONLY if the query or topic warrants it.
+	// This prevents LLM "memory tax" and bloat for casual conversational threads.
+	// (Omni protocol logic removed or delegated to KB)
 
 	// [Regression Fix]
 	// If EnableHistoryInjection is false, we should also ensure that formatContext
@@ -1128,14 +1122,6 @@ When asked to query, manage, or manipulate data, you MUST follow this explicit s
 		}
 	}
 
-	fullPrompt := fmt.Sprintf("%s\n\nContext:\n%s%s\n\nUser Query: %s", systemPrompt, contextText, historyText, query)
-	if s.EnableObfuscation {
-		// Log?
-	}
-
-	// DEBUG: Log the full prompt to understand context contamination
-	// log.Info("Service.Ask: Full Prompt", "prompt", fullPrompt)
-
 	// 3. Determine Generator
 	gen := s.generator
 
@@ -1156,241 +1142,55 @@ When asked to query, manage, or manipulate data, you MUST follow this explicit s
 		}
 	}
 
-	// 4. Generate Answer
-	if gen == nil {
-		// Fallback: If no generator is configured, return the retrieved context directly.
-		// This allows agents to act as "Search Services" or "Translators" without an LLM.
-		if s.EnableObfuscation {
-			return obfuscation.GlobalObfuscator.DeobfuscateText(contextText), nil
-		}
-		return contextText, nil
+	// 4. Delegate to the Reasoning Engine
+	executor, _ := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor)
+
+	// Create the explicit native engine for Phase 4
+	engine := &NativeReActEngine{
+		EnableObfuscation: s.EnableObfuscation,
 	}
 
-	output, err := gen.Generate(ctx, fullPrompt, ai.GenOptions{
-		MaxTokens:   1024,
-		Temperature: 0.7,
-	})
+	req := ai.ReasoningRequest{
+		SystemPrompt: systemPrompt,
+		ContextText:  contextText,
+		HistoryText:  historyText,
+		UserQuery:    query,
+		Executor:     executor,
+		Generator:    gen,
+		// DB passing strategy: The ServiceToolExecutor currently runs Execution and does AutoTX inside Service.Ask.
+		// For proper isolation while maintaining auto-tx flow matching the legacy codebase,
+		// we pass the DB securely down via context inside ServiceToolExecutor or wrap it here.
+	}
+
+	// Because we want to retain the EXACT auto-transaction logic that was tightly coupled inside Service.Ask,
+	// we will wrap the executor just for this call so `engine` doesn't need to know about AutoTX.
+
+	wrappedExecutor := &autoTxExecutor{
+		original: executor,
+		s:        s,
+		db:       db,
+	}
+	req.Executor = wrappedExecutor
+
+	engineResp, err := engine.Run(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("generation failed: %w", err)
-	}
-	if s.EnableObfuscation {
+		return "", err
 	}
 
-	// Track if we recorded a tool call to avoid duplicate "print" recording
-	toolRecorded := false
-	_ = toolRecorded
+	finalText := engineResp.FinalText
 
-	// Check for Raw Tool Call (from Copilot or similar generators)
-	if output.Raw != nil {
-		if _, err := json.Marshal(output.Raw); err == nil {
-			// REMOVED: Drafting Logic for Raw Tool Call
-			toolRecorded = true
+	// Record Chat Output if recording (we check if a tool was executed)
+	toolRecorded := len(engineResp.ToolCalls) > 0
+	if s.session.CurrentScript != nil && !toolRecorded {
+		s.session.LastStep = &ai.ScriptStep{
+			Type:   "ask",
+			Prompt: query,
 		}
+		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, *s.session.LastStep)
 	}
 
-	// 5. Check for Tool Execution (Agent -> App)
-	// If the generator returns a JSON tool call, and we have an executor, run it.
-	// NOTE: If toolRecorded is TRUE (Raw output was present), we still check Text because
-	// some generators might provide both. But usually Raw takes precedence.
-	// However, the test "TestService_Ask_CapturesLastStep_OnToolExecution" relies on parsing Text JSON.
-	if executor, ok := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor); ok && executor != nil {
-		// Simple heuristic: If output looks like a JSON tool call
-		text := strings.TrimSpace(output.Text)
-		// Remove markdown code blocks if present
-		text = strings.TrimPrefix(text, "```json")
-		text = strings.TrimPrefix(text, "```")
-		text = strings.TrimSuffix(text, "```")
-		text = strings.TrimSpace(text)
-
-		possibleTool := false
-		if strings.HasPrefix(text, "{") && strings.Contains(text, "\"tool\"") {
-			possibleTool = true
-		}
-
-		// Also check toolRecorded (Raw output) - if so, we can use that if Text parsing fails or instead.
-		// Detailed logic:
-		// 1. Try to parse Text as Tool Call.
-		// 2. If Text is NOT valid tool call, but output.Raw IS, use output.Raw.
-
-		// Let's stick to existing logic but just fix the indentation/flow.
-		if possibleTool {
-			// De-obfuscate Tool Arguments before returning to caller.
-
-			// 1. Parse JSON FIRST to get the exact values the LLM returned
-			var toolCall struct {
-				Tool string         `json:"tool"`
-				Args map[string]any `json:"args"`
-			}
-
-			// We try to unmarshal the text directly.
-			// If the LLM returned valid JSON (even with obfuscated values), this will succeed.
-			if err := json.Unmarshal([]byte(text), &toolCall); err == nil {
-				// 2. Sanitize Args
-				var sanitize func(any) any
-				sanitize = func(v any) any {
-					switch val := v.(type) {
-					case string:
-						// a. Remove Markdown bold/italics/code wrappers
-						val = strings.Trim(val, "*_`")
-						// b. Replace NBSP with space and Trim whitespace
-						val = strings.ReplaceAll(val, "\u00a0", " ")
-						val = strings.TrimSpace(val)
-						// c. De-obfuscate if enabled
-						if s.EnableObfuscation {
-							val = obfuscation.GlobalObfuscator.DeobfuscateText(val)
-						}
-						return val
-					case []any:
-						for i, item := range val {
-							val[i] = sanitize(item)
-						}
-						return val
-					case map[string]any:
-						for k, item := range val {
-							val[k] = sanitize(item)
-						}
-						return val
-					default:
-						return val
-					}
-				}
-
-				for k, v := range toolCall.Args {
-					toolCall.Args[k] = sanitize(v)
-				}
-
-				// Inject Database from Options if missing
-				if db != nil {
-					// Inject the database instance into args for the ToolExecutor.
-					toolCall.Args["_db_instance"] = db
-				}
-
-				// Capture Last Step Logic
-				// If we are executing a tool, we should update the LastStep in the session.
-				// This is crucial for "run previous step" or "save as script" features.
-				s.session.LastStep = &ai.ScriptStep{
-					Type:    "command",
-					Command: toolCall.Tool,
-					Args:    toolCall.Args,
-				}
-				// Also update CurrentScript to "Drafting" state implicitly (or assume UI handles it)
-				if s.session.CurrentScript != nil {
-					s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, *s.session.LastStep)
-				}
-				toolRecorded = true
-
-				// Auto-Transaction Management for Tool Execution
-				// We ensure that if a database is present, we wrap the tool execution in a transaction.
-				// This prevents leaving open transactions if the tool doesn't manage them,
-				// and ensures atomic execution of the tool's operations.
-				var tx sop.Transaction
-				if db != nil {
-					if p := ai.GetSessionPayload(ctx); p != nil && p.Transaction == nil {
-						var err error
-						tx, err = db.BeginTransaction(ctx, sop.ForWriting)
-						if err != nil {
-							return "", fmt.Errorf("failed to begin auto-transaction: %w", err)
-						}
-						p.Transaction = tx
-					}
-				}
-
-				// Execute Tool
-				result, err := executor.Execute(ctx, toolCall.Tool, toolCall.Args)
-
-				// Commit or Rollback Auto-Transaction
-				if tx != nil {
-					if err != nil {
-						// If tool failed, rollback
-						tx.Rollback(ctx)
-					} else {
-						// If tool succeeded, commit
-						if commitErr := tx.Commit(ctx); commitErr != nil {
-							return "", fmt.Errorf("tool execution succeeded but transaction commit failed: %w", commitErr)
-						}
-					}
-					// Clear from payload to avoid reuse if p is reused
-					if p := ai.GetSessionPayload(ctx); p != nil {
-						p.Transaction = nil
-					}
-					// Also clear session transaction to ensure statelessness
-					s.session.Transaction = nil
-				} else if s.session.Transaction != nil {
-					// Ensure statelessness for non-script sessions even if no auto-transaction was started
-					if err != nil {
-						s.session.Transaction.Rollback(ctx)
-					} else {
-						// We commit if the tool execution was successful
-						s.session.Transaction.Commit(ctx)
-					}
-					s.session.Transaction = nil
-					s.session.Variables = nil
-				}
-
-				// [Phase 2] Active Memory Episodic Ingestion
-				if s.EnableShortTermMemory && toolCall.Tool == "execute_script" {
-					scriptPayload := toolCall.Args["script"]
-					episodeOutcome := result
-					episodeErr := err
-					go s.logEpisode(context.Background(), query, scriptPayload, episodeOutcome, episodeErr)
-				}
-
-				if err != nil {
-					return "", fmt.Errorf("tool execution failed: %w", err)
-				}
-
-				// [Fix] Update Memory Context (Prevent Amnesia on Tool Execution)
-				// We must record the interaction even if it was a direct tool execution.
-				if s.session.Memory != nil {
-					thread := s.session.Memory.GetCurrentThread()
-					// If new topic or no thread active, create one
-					if topicAssessment.IsNewTopic || thread == nil {
-						newID := sop.NewUUID()
-						newThread := &ConversationThread{
-							ID:     newID,
-							Label:  topicAssessment.NewTopicLabel,
-							Status: "active",
-						}
-						if newThread.Label == "" {
-							newThread.Label = "Conversation"
-						}
-						// Capture Root Prompt
-						newThread.RootPrompt = query
-
-						s.session.Memory.AddThread(newThread)
-						s.session.Memory.PromoteThread(newID)
-						thread = newThread
-					}
-
-					thread.Exchanges = append(thread.Exchanges, Interaction{
-						Role:      RoleUser,
-						Content:   query,
-						Timestamp: time.Now().Unix(),
-					})
-
-					thread.Exchanges = append(thread.Exchanges, Interaction{
-						Role:      RoleAssistant,
-						Content:   fmt.Sprintf("Tool '%s' executed.\nResult: %s", toolCall.Tool, result),
-						Timestamp: time.Now().Unix(),
-					})
-				}
-
-				return result, nil
-			}
-
-			// Fallback: If JSON parsing failed (maybe invalid JSON), return as is
-			// Or continue to non-tool processing
-			// For now, we continue to non-tool processing (just text response)
-			// return text, nil
-		}
-	}
-
-	// De-obfuscate Output Text
-	finalText := output.Text
-	if s.EnableObfuscation {
-		finalText = obfuscation.GlobalObfuscator.DeobfuscateText(output.Text)
-	}
-
+	// Update Session Memory (Structured)
+	// We rely on the TopicAssessment performed at the start of the request.
 	// Record Chat Output if recording
 	if s.session.CurrentScript != nil && !toolRecorded {
 		s.session.LastStep = &ai.ScriptStep{

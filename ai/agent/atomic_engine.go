@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/cel-go/cel"
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
@@ -151,6 +152,19 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 			}
 		}
 
+		// Auto-correct flat structures: move extra fields into "args"
+		argsObj, hasArgs := step["args"].(map[string]any)
+		if !hasArgs {
+			argsObj = make(map[string]any)
+			step["args"] = argsObj
+		}
+
+		for k, v := range step {
+			if k != "op" && k != "command" && k != "name" && k != "input_var" && k != "result_var" && k != "args" {
+				argsObj[k] = v
+			}
+		}
+
 	}
 
 	bytes, _ := json.Marshal(rawSteps)
@@ -231,6 +245,9 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 		if lastInstr.Op == "return" {
 
 			log.Debug("toolExecuteScript: Returning 'return' op result")
+			if engine.ReturnValue != nil {
+				return serializeResult(ctx, engine.ReturnValue)
+			}
 			if engine.LastResult == nil {
 				return "Script executed successfully.", nil
 			}
@@ -546,8 +563,8 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 			return e.OpenStore(ctx, args)
 		}, nil
 	case "scan", "select":
-		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
-			return e.Scan(ctx, args)
+		return func(ctx context.Context, e *ScriptEngine, args map[string]any, input any) (any, error) {
+			return e.Scan(ctx, args, input)
 		}, nil
 	case "filter":
 		return func(ctx context.Context, e *ScriptEngine, args map[string]any, input any) (any, error) {
@@ -705,7 +722,7 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 			return e.GetCurrentValue(ctx, args)
 		}, nil
 	case "return":
-		return func(ctx context.Context, e *ScriptEngine, args map[string]any, _ any) (any, error) {
+		return func(ctx context.Context, e *ScriptEngine, args map[string]any, input any) (any, error) {
 			if val, ok := args["value"]; ok {
 
 				// Helper to resolve a value (string or structure)
@@ -733,6 +750,13 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 				e.HasReturned = true
 				return res, nil
 			}
+
+			if input != nil {
+				e.ReturnValue = input
+				e.HasReturned = true
+				return input, nil
+			}
+
 			return nil, nil
 		}, nil
 	default:
@@ -957,7 +981,7 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 	case "open_store":
 		result, err = e.OpenStore(ctx, instr.Args)
 	case "scan", "select":
-		result, err = e.Scan(ctx, instr.Args)
+		result, err = e.Scan(ctx, instr.Args, input)
 	case "filter":
 		result, err = e.Filter(ctx, input, instr.Args)
 	case "sort":
@@ -1179,6 +1203,12 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 	txName, _ := args["transaction"].(string)
 	txName = e.resolveVarName(txName)
 	storeName, _ := args["name"].(string)
+	if storeName == "" {
+		storeName, _ = args["store"].(string)
+	}
+	if storeName == "" {
+		storeName, _ = args["store_name"].(string)
+	}
 
 	var tx sop.Transaction
 	var ok bool
@@ -1255,11 +1285,24 @@ func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (json
 	return jsondb.OpenStore(ctx, db.Config(), storeName, tx)
 }
 
-func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, error) {
+func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any, input any) (any, error) {
 
 	storeVarName, _ := args["store"].(string)
 	storeVarName = e.resolveVarName(storeVarName)
-	store, ok := e.getStore(storeVarName)
+
+	var store jsondb.StoreAccessor
+	var ok bool
+
+	if inputStore, isStore := input.(jsondb.StoreAccessor); isStore && storeVarName == "" {
+		store = inputStore
+		ok = true
+	} else if inputStr, isStr := input.(string); isStr && storeVarName == "" {
+		storeVarName = inputStr
+		store, ok = e.getStore(storeVarName)
+	} else {
+		store, ok = e.getStore(storeVarName)
+	}
+
 	if !ok {
 		return nil, fmt.Errorf("store variable '%s' not found", storeVarName)
 	}
@@ -1355,7 +1398,7 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 		}, nil
 	}
 
-	var results []map[string]any
+	results := make([]map[string]any, 0)
 	count := 0
 	for okIter && count < int(limit) {
 		k := store.GetCurrentKey()
@@ -1413,10 +1456,124 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any) (any, erro
 	return results, nil
 }
 
+func TranslateASTToCEL(ast any) (string, bool) {
+	switch v := ast.(type) {
+	case string:
+		return fmt.Sprintf("%q", v), true
+	case float64, int, bool:
+		return fmt.Sprintf("%v", v), true
+	case map[string]any:
+		if varName, ok := v["var"].(string); ok {
+			if !strings.Contains(varName, ".") {
+				return "value." + varName, true
+			}
+			return varName, true
+		}
+		for op, argsRAW := range v {
+			if args, ok := argsRAW.([]any); ok {
+				if len(args) == 2 {
+					switch op {
+					case "==", "!=", ">", ">=", "<", "<=":
+						left, leftOk := TranslateASTToCEL(args[0])
+						right, rightOk := TranslateASTToCEL(args[1])
+						if leftOk && rightOk {
+							return fmt.Sprintf("(%s %s %s)", left, op, right), true
+						}
+					}
+				}
+				if op == "and" || op == "or" || op == "&&" || op == "||" {
+					opStr := op
+					if op == "and" {
+						opStr = "&&"
+					}
+					if op == "or" {
+						opStr = "||"
+					}
+					var parts []string
+					for _, arg := range args {
+						part, ok := TranslateASTToCEL(arg)
+						if ok {
+							parts = append(parts, part)
+						}
+					}
+					if len(parts) > 0 {
+						return fmt.Sprintf("(%s)", strings.Join(parts, " "+opStr+" ")), true
+					}
+				}
+			}
+		}
+	}
+	return "", false
+}
+
 func (e *ScriptEngine) evaluateCondition(item any, condition any) (bool, error) {
 
-	if _, ok := condition.(string); ok {
-		return false, fmt.Errorf("CEL filter expressions not supported yet")
+	// Automatically translate map-based proprietary AST to CEL string expression natively.
+	if _, ok := condition.(map[string]any); ok {
+		if celStr, ok := TranslateASTToCEL(condition); ok {
+			condition = celStr
+		}
+	}
+
+	if expr, ok := condition.(string); ok {
+		env, err := cel.NewEnv(
+			cel.Variable("key", cel.AnyType),
+			cel.Variable("value", cel.AnyType),
+			cel.Variable("item", cel.AnyType),
+		)
+		if err != nil {
+			return false, err
+		}
+		ast, issues := env.Compile(expr)
+		if issues != nil && issues.Err() != nil {
+			return false, issues.Err()
+		}
+		prg, err := env.Program(ast)
+		if err != nil {
+			return false, err
+		}
+
+		itemMap, ok := item.(map[string]any)
+		if !ok {
+			return false, fmt.Errorf("item is not a map")
+		}
+
+		// Build a robust context map that supports "value.x", "orders.x", or just "x"
+		ctxMap := make(map[string]any)
+		unprefixed := make(map[string]any)
+
+		for k, v := range itemMap {
+			ctxMap[k] = v // literal prefix map
+
+			if idx := strings.Index(k, "."); idx != -1 {
+				base := k[idx+1:]
+				unprefixed[base] = v
+
+				prefix := k[:idx]
+				if _, ok := unprefixed[prefix]; !ok {
+					unprefixed[prefix] = make(map[string]any)
+				}
+				unprefixed[prefix].(map[string]any)[base] = v
+			} else {
+				unprefixed[k] = v
+			}
+		}
+
+		for k, v := range unprefixed {
+			ctxMap[k] = v
+		}
+		ctxMap["item"] = itemMap
+		ctxMap["value"] = unprefixed
+		ctxMap["key"] = unprefixed["key"]
+
+		out, _, err := prg.Eval(ctxMap)
+		if err != nil {
+			return false, err
+		}
+		if b, ok := out.Value().(bool); ok {
+			return b, nil
+		}
+		return false, fmt.Errorf("expression did not return a boolean")
 	}
 
 	if matchMap, ok := condition.(map[string]any); ok {
@@ -1631,10 +1788,20 @@ func (e *ScriptEngine) handleInto(ctx context.Context, input any, args map[strin
 func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any) (any, error) {
 	rightVar, _ := args["with"].(string)
 	if rightVar == "" {
-
 		rightVar, _ = args["store"].(string)
 	}
+	if rightVar == "" {
+		rightVar, _ = args["right_store"].(string)
+	}
+	if rightVar == "" {
+		rightVar, _ = args["right"].(string)
+	}
+
 	rightVar = e.resolveVarName(rightVar)
+
+	if rightVar == "" {
+		return nil, fmt.Errorf("operation 'join' failed: right input variable '' not found")
+	}
 
 	joinType, _ := args["type"].(string)
 	if joinType == "" {
@@ -2125,7 +2292,7 @@ func (e *ScriptEngine) stageFilter(input []any, args map[string]any) ([]any, err
 		return input, nil
 	}
 
-	var output []any
+	output := make([]any, 0)
 
 	if _, ok := conditionRaw.(string); ok {
 		for _, item := range input {

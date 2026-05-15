@@ -46,7 +46,9 @@ func init() {
 func (g *gemini) Name() string { return "gemini" }
 
 type geminiRequest struct {
-	Contents []geminiContent `json:"contents"`
+	SystemInstruction *geminiContent  `json:"systemInstruction,omitempty"`
+	Contents          []geminiContent `json:"contents"`
+	Tools             []geminiTool    `json:"tools,omitempty"`
 }
 
 type geminiContent struct {
@@ -54,15 +56,29 @@ type geminiContent struct {
 }
 
 type geminiPart struct {
-	Text string `json:"text"`
+	Text         string              `json:"text,omitempty"`
+	FunctionCall *geminiFunctionCall `json:"functionCall,omitempty"`
+}
+
+type geminiTool struct {
+	FunctionDeclarations []geminiFunction `json:"functionDeclarations,omitempty"`
+}
+
+type geminiFunction struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters,omitempty"`
+}
+
+type geminiFunctionCall struct {
+	Name string         `json:"name"`
+	Args map[string]any `json:"args"`
 }
 
 type geminiResponse struct {
 	Candidates []struct {
 		Content struct {
-			Parts []struct {
-				Text string `json:"text"`
-			} `json:"parts"`
+			Parts []geminiPart `json:"parts"`
 		} `json:"content"`
 	} `json:"candidates"`
 	Error *struct {
@@ -78,14 +94,41 @@ func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions
 		}, nil
 	}
 
-	// URL encode the API key to be safe
-	// safeKey := url.QueryEscape(g.apiKey) // Key moved to header
 	apiURL := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", g.model)
 
 	reqBody := geminiRequest{
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
 		},
+	}
+
+	if opts.SystemPrompt != "" {
+		reqBody.SystemInstruction = &geminiContent{
+			Parts: []geminiPart{{Text: opts.SystemPrompt}},
+		}
+	}
+
+	if len(opts.Tools) > 0 {
+		var funcs []geminiFunction
+		for _, t := range opts.Tools {
+			var params map[string]any
+			if t.Schema != "" && strings.HasPrefix(strings.TrimSpace(t.Schema), "{") {
+				json.Unmarshal([]byte(t.Schema), &params)
+			} else if t.Schema != "" {
+				// Provide a generic object schema if it's a TS string signature
+				params = map[string]any{
+					"type": "object",
+				}
+			}
+			funcs = append(funcs, geminiFunction{
+				Name:        t.Name,
+				Description: t.Description,
+				Parameters:  params,
+			})
+		}
+		reqBody.Tools = []geminiTool{
+			{FunctionDeclarations: funcs},
+		}
 	}
 
 	jsonBody, err := json.Marshal(reqBody)
@@ -125,11 +168,21 @@ func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions
 		return ai.GenOutput{}, fmt.Errorf("no candidates returned from gemini")
 	}
 
-	text := geminiResp.Candidates[0].Content.Parts[0].Text
-	return ai.GenOutput{
-		Text:       text,
-		TokensUsed: len(prompt) / 4, // Rough estimate
-	}, nil
+	var out ai.GenOutput
+	for _, p := range geminiResp.Candidates[0].Content.Parts {
+		if p.FunctionCall != nil {
+			out.ToolCalls = append(out.ToolCalls, ai.ToolCall{
+				Name: p.FunctionCall.Name,
+				Args: p.FunctionCall.Args,
+			})
+		} else if p.Text != "" {
+			out.Text += p.Text
+		}
+	}
+
+	// Default rough estimate
+	out.TokensUsed = len(prompt) / 4
+	return out, nil
 }
 
 // EstimateCost estimates the cost of the generation based on token usage.

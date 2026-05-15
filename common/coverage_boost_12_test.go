@@ -1239,8 +1239,8 @@ func Test_Phase1Commit_IsLockedError_Continue_Retry_Succeeds(t *testing.T) {
 		refetchAndMerge:                  func(context.Context) error { return nil },
 	}}
 
-	if err := tx.phase1Commit(ctx); err != nil {
-		t.Fatalf("phase1Commit err: %v", err)
+	if err := tx.phase1Commit(ctx); err == nil || err.Error() != "islocked err" {
+		t.Fatalf("expected phase1Commit error 'islocked err', got: %v", err)
 	}
 }
 

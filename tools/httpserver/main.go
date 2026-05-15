@@ -155,6 +155,20 @@ func main() {
 	flag.BoolVar(&config.ProductionMode, "production", false, "Enable Production mode (use real Embedder and LLM)")
 	flag.Parse()
 
+	var wasProductionFlagPassed bool
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "production" {
+			wasProductionFlagPassed = true
+		}
+	})
+
+	if !wasProductionFlagPassed {
+		arg0 := filepath.ToSlash(os.Args[0])
+		if !strings.Contains(arg0, "go-build") && !strings.Contains(arg0, "/Temp/") && !strings.Contains(arg0, "/tmp/") && !strings.HasSuffix(arg0, ".test") {
+			config.ProductionMode = true
+		}
+	}
+
 	var lvl log.Level
 	logLevelFlagUpper := strings.ToUpper(logLevelFlag)
 	switch logLevelFlagUpper {
@@ -319,7 +333,6 @@ func main() {
 	http.HandleFunc("/api/scripts/execute", withAuth(handleExecuteScript))
 
 	// Knowledge Base Endpoints
-	http.HandleFunc("/api/spaces/available", handleGetAvailableSpaces)
 	http.HandleFunc("/api/spaces/categories", handleListSpaceCategories)
 	http.HandleFunc("/api/spaces/category/add", handleAddSpaceCategory)
 	http.HandleFunc("/api/spaces/category/delete", handleDeleteSpaceCategory)
@@ -327,7 +340,10 @@ func main() {
 	http.HandleFunc("/api/spaces/item/add", handleAddSpaceItem)
 	http.HandleFunc("/api/spaces/item/update", handleUpdateSpaceItem)
 	http.HandleFunc("/api/spaces/item/delete", handleDeleteSpaceItem)
+	http.HandleFunc("/api/spaces/create", handleCreateSpace)
+	http.HandleFunc("/api/spaces/preload", handlePreloadSpace)
 	http.HandleFunc("/api/spaces/ingest", handleIngestSpace)
+	http.HandleFunc("/api/spaces/ingest/import", handleIngestImportSpace)
 	http.HandleFunc("/api/spaces/vectorize", handleVectorizeSpace)
 	http.HandleFunc("/api/spaces/delete", handleDeleteSpace)
 	http.HandleFunc("/api/spaces/export", handleExportSpace)
@@ -349,7 +365,9 @@ func main() {
 	// Initialize Agents only if we have configured databases
 	// In Setup Mode (no databases), agents shouldn't initialize as the target environment isn't set yet.
 	if len(config.Databases) > 0 || config.SystemDB != nil {
-		initAgents(context.Background())
+		if err := initAgents(context.Background()); err != nil {
+			log.Error(fmt.Sprintf("Failed to initialize agents: %v", err))
+		}
 	}
 
 	// Start a background goroutine to clean up stale sessions every minute
@@ -792,7 +810,10 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 		if config.ConfigFile != "" {
 			saveConfigFile()
 			// Re-initialize agents to drop the deleted database
-			initAgents(r.Context())
+			if err := initAgents(context.Background()); err != nil {
+				http.Error(w, fmt.Sprintf("Failed to initialize agents: %v", err), http.StatusInternalServerError)
+				return
+			}
 		}
 
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -994,7 +1015,10 @@ func handleDatabases(w http.ResponseWriter, r *http.Request) {
 		if config.ConfigFile != "" {
 			saveConfigFile()
 			// Re-initialize agents to pick up the new database
-			initAgents(r.Context())
+			if err := initAgents(context.Background()); err != nil {
+				http.Error(w, fmt.Sprintf("Failed to initialize agents: %v", err), http.StatusInternalServerError)
+				return
+			}
 		}
 
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
@@ -1158,7 +1182,7 @@ func handleListStores(w http.ResponseWriter, r *http.Request) {
 func handleListSpaces(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	dbName := r.URL.Query().Get("database")
-	sessionID := r.URL.Query().Get("session_id")
+	userID := r.URL.Query().Get("user_id")
 	ctx := r.Context()
 	dbOpts, err := getDBOptions(ctx, dbName)
 	if err != nil {
@@ -1177,7 +1201,7 @@ func handleListSpaces(w http.ResponseWriter, r *http.Request) {
 	// Filter out other users' LTMs
 	var filtered []string
 	expectedMemoryPrefix := "memory_"
-	expectedMemoryFull := expectedMemoryPrefix + sessionID
+	expectedMemoryFull := expectedMemoryPrefix + userID
 
 	if result != nil {
 		for _, name := range result {
@@ -1833,11 +1857,16 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 	// Detect sample key for primitive types to guide parsing
 	var sampleKey any
 	if si.IsPrimitiveKey && si.Count > 0 {
-		if ok, _ := store.First(ctx); ok {
+		ok, err := store.First(ctx)
+		if err != nil {
+			log.Error(fmt.Sprintf("Failed to get first item for sample key: %v", err))
+			http.Error(w, fmt.Sprintf("Failed to fetch initial page: %v", err), http.StatusInternalServerError)
+			return
+		}
+		if ok {
 			sampleKey = store.GetCurrentKey().Key
 		}
 	}
-
 	var items []map[string]any
 	limit := config.PageSize
 	if limit <= 0 {

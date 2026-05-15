@@ -34,7 +34,8 @@ func TestKnowledgeBase_VectorizeItems(t *testing.T) {
 	cat := &Category{
 		ID:           sop.NewUUID(),
 		Name:         "test_cat",
-		CenterVector: []float32{0, 0, 0},
+		CenterVector: []float32{1.0, 1.0, 1.0},
+		VectorHash:   ComputeVectorHash(manager.embedder.Dim(), "test_cat"),
 	}
 	s.categories.Add(ctx, cat.ID, cat)
 

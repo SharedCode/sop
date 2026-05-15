@@ -1,349 +1,35 @@
 {{define "scripts_part03"}}
 <script>
-    function renderScriptSteps(steps, openIdx = -1) {
-        if (!steps || steps.length === 0) {
-            return '<div style="text-align: center; color: var(--text-muted); padding: 20px; border: 1px dashed var(--border-color); border-radius: 4px;">No steps defined. Add one to start programming.</div>';
-        }
-        return steps.map((step, idx) => renderSingleStepCard(step, idx, idx === openIdx)).join('');
-    }
-
-    function renderSingleStepCard(step, idx, isOpen) {
-        // Resolve the Display Name for the step
-        // We prioritize Name as the primary label ("Function"), falling back to Command/Script
-        if (step.function && !step.command) {
-             // Migration fix for old "function" field
-             step.command = step.function;
-             if (!step.type) step.type = 'command';
-        }
-        
-        const type = step.type || 'unknown';
-        
-        let fn = step.name || step.command || step.script_name || step.function || 'unknown';
-        if (type === 'script' || type === 'call_script') {
-            // For scripts, always prioritize script_name unless an explicit Name overrides it.
-            // If Name is present, we use that (step.name check above covers it).
-            // But if Name is missing, we MUST use script_name, not fall through to 'command' or 'llm.generate'.
-            if (!step.name && step.script_name) {
-                fn = step.script_name;
-            }
-        }
-
-        // Color coding
-        let color = '#7f8c8d'; // Gray
-        if (fn.startsWith('llm.') || type === 'ask') color = '#9b59b6'; // Purple
-        else if (fn.startsWith('db.') || type === 'fetch') color = '#2ecc71'; // Green
-        else if (fn.startsWith('os.') || type === 'command') color = '#e74c3c'; // Red
-        else if (fn === 'loop' || type === 'loop') color = '#f39c12'; // Orange
-        else if (fn === 'map' || fn === 'reduce') color = '#d35400'; // Dark Orange
-        else if (type === 'call_script' || type === 'script') color = '#3498db'; // Blue for Script Calls
-
-        const argsCount = Object.keys(step.args || {}).length;
-        const outVar = step.out ? `<span style="background: var(--bg-primary); padding: 1px 4px; border-radius: 3px; border: 1px solid var(--border-color); font-size: 0.85em; margin-left: auto;">&rarr; ${escapeHtml(step.out)}</span>` : '';
-
-        // Step Arguments Summary
-        let fullSummary = '';
-        if (type === 'ask' && step.prompt) fullSummary = step.prompt;
-        else if (step.args && step.args.prompt) fullSummary = step.args.prompt;
-        else if (step.args && step.args.query) fullSummary = step.args.query;
-        else if (step.args && Object.keys(step.args).length > 0) {
-            if (typeof step.args === 'string') {
-                try {
-                    const parsed = JSON.parse(step.args);
-                    fullSummary = JSON.stringify(parsed, null, 2);
-                } catch (e) {
-                    fullSummary = step.args;
-                }
-            } else {
-                fullSummary = JSON.stringify(step.args, null, 2);
-            }
-        }
-        else fullSummary = '';
-
-        let summary = '';
-        if (fullSummary.startsWith('{') || fullSummary.startsWith('[')) {
-             // JSON Args Logic
-             if (fullSummary.length <= 18) {
-                 summary = fullSummary;
-             } else {
-                 summary = "{...}";
-             }
-        } else if (fullSummary) {
-             // String/Text logic
-             if (fullSummary.length > 30) {
-                 summary = `"${fullSummary.substring(0, 30)}..."`;
-             } else {
-                 summary = `"${fullSummary}"`;
-             }
-        }
-
-
-        // Drill Down Logic
-        // Always allow drill-down if type is 'call_script'
-        // Or if it looks like a custom function (not standard namespaces)
-        const isStandard = fn.startsWith('llm.') || fn.startsWith('db.') || fn.startsWith('os.') || ['loop', 'map', 'reduce'].includes(fn) || ['ask', 'set', 'if', 'say'].includes(type);
-        
-        let shouldDrill = (type === 'call_script' || type === 'script');
-        if (!shouldDrill && !isStandard && type === 'tool') {
-            shouldDrill = true; // Assume custom tool is a script
-        }
-        
-        // Target for drill down
-        const drillTarget = step.script_name || fn;
-        
-        // --- Toolbar Button Logic ---
-        // If it's drillable, show Spyglass. Otherwise show Info.
-        // We now place this in the main toolbar, not next to title.
-        
-        let toolBtn = '';
-        if (shouldDrill && drillTarget) {
-             toolBtn = `<button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; background: none; border: none; cursor: pointer; color: var(--text-color);" onclick="event.stopPropagation(); drillDownToScript('${escapeHtml(drillTarget)}')" title="Drill into script"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></button>`;
-        } else {
-             toolBtn = `<button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); showToolInstructions('${escapeHtml(step.command)}', this.getAttribute('data-summary'))" data-summary="${escapeHtml(fullSummary)}" title="Instructions"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="m8.93 6.588-2.29.287-.082.38.45.083c.294.07.352.176.288.469l-.738 3.468c-.194.897.105 1.319.808 1.319.545 0 1.178-.252 1.465-.598l.088-.416c-.2.176-.492.246-.686.246-.275 0-.375-.193-.304-.533L8.93 6.588zM9 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0z"/></svg></button>`;
-        }
-
-        // Label (e.g. "call: my_script")
-        const label = (type === 'call_script' || type === 'script') ? `call: ${fn}` : fn;
-
-        let headerTitle = step.description || step.prompt || fullSummary || label;
-
-        return `
-            <div class="step-card" id="step-card-${idx}" style="border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-secondary);">
-                <div class="step-header" onclick="toggleStepDetails(${idx})" style="padding: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; border-left: 4px solid ${color};">
-                    <span style="font-weight: bold; font-family: monospace;" title="${escapeHtml(headerTitle)}">${escapeHtml(label)}</span>
-                    <span style="color: var(--text-muted); font-size: 0.9em;" title="${escapeHtml(fullSummary)}">${escapeHtml(summary)}</span>
-                    <div style="margin-left: auto; display: flex; align-items: center; gap: 0px;">
-                        <button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); moveScriptStepUp(${idx})" title="Move Up"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 15a.5.5 0 0 0 .5-.5V2.707l3.146 3.147a.5.5 0 0 0 .708-.708l-4-4a.5.5 0 0 0-.708 0l-4 4a.5.5 0 1 0 .708.708L7.5 2.707V14.5a.5.5 0 0 0 .5.5z"/></svg></button>
-                        <button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); moveScriptStepDown(${idx})" title="Move Down"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 1a.5.5 0 0 1 .5.5v11.793l3.146-3.147a.5.5 0 0 1 .708.708l-4 4a.5.5 0 0 1-.708 0l-4-4a.5.5 0 0 1 .708-.708L7.5 13.293V1.5A.5.5 0 0 1 8 1z"/></svg></button>
-                        ${toolBtn}
-                        <button style="padding: 4px; line-height: 0; font-size: 1.1em; z-index: 10; margin-left: 0px; background: none; border: none; cursor: pointer;" onclick="event.stopPropagation(); deleteScriptStep(${idx})" title="Delete Step"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></button>
-                    </div>
-                </div>
-                <div id="step-body-${idx}" style="display: ${isOpen ? 'block' : 'none'}; padding: 10px 10px 6px 10px; border-top: 1px solid var(--border-color); background: var(--bg-primary);">
-                    <!-- We will render the form for editing this step here -->
-                    ${renderStepEditForm(step, idx)}
-                </div>
-            </div>
-        `;
-    }
-
-    function renderStepEditForm(step, idx) {
-        const argsJson = JSON.stringify(step.args || {}, null, 2);
-        
-        // --- Type Selection ---
-        const typeOptions = ['command', 'ask', 'set', 'if', 'loop', 'fetch', 'say', 'script'];
-        let typeOptsHtml = '';
-        typeOptions.forEach(t => {
-            const sel = (step.type || 'command') === t ? 'selected' : '';
-            typeOptsHtml += `<option value="${t}" ${sel}>${t}</option>`;
-        });
-        
-        // Exact Execution Field Logic (No Magic)
-        // Modified Layout: Type | Name | Output
-        
-        let execInput = '';
-        let execLabel = '';
-        
-        if (step.type === 'command') {
-            execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Command">Cmd</label>`;
-            execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.command || '')}" onchange="updateStepField(${idx}, 'command', this.value)">`;
-        } else if (step.type === 'call_script' || step.type === 'script') {
-            execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Script Name">Script</label>`;
-            execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.script_name || '')}" onchange="updateStepField(${idx}, 'script_name', this.value)">`;
-        } else if (step.type === 'ask') {
-             execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Prompt">Prompt</label>`;
-             execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.prompt || '')}" onchange="updateStepField(${idx}, 'prompt', this.value)">`;
-        } else if (step.type === 'set') {
-             execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Variable">Var</label>`;
-             execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.variable || '')}" onchange="updateStepField(${idx}, 'variable', this.value)">`;
-        } else if (step.type === 'fetch') {
-             execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Resource">Res</label>`;
-             execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.resource || '')}" onchange="updateStepField(${idx}, 'resource', this.value)">`;
-        } else if (step.type === 'say') {
-             execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Message">Msg</label>`;
-             execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.message || '')}" onchange="updateStepField(${idx}, 'message', this.value)">`;
-        } else if (step.type === 'if') {
-             execLabel = `<label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Condition">If</label>`;
-             execInput = `<input type="text" class="form-input" style="font-family: monospace; width: 33%;" value="${escapeHtml(step.condition || '')}" onchange="updateStepField(${idx}, 'condition', this.value)">`;
-        }
-        
-        let row2Html = '';
-        if (execInput) {
-             row2Html = `
-            <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px; margin-top: 0px;">
-                ${execLabel}
-                ${execInput}
-                <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Description">Desc</label>
-                <input type="text" class="form-input" style="flex: 1;" value="${escapeHtml(step.description || '')}" onchange="updateStepField(${idx}, 'description', this.value)">
-            </div>`;
-        } else {
-             // Fallback: Just Description row
-             row2Html = `
-            <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px; margin-top: 0px;">
-                <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Description">Desc</label>
-                <input type="text" class="form-input" style="flex: 1;" value="${escapeHtml(step.description || '')}" onchange="updateStepField(${idx}, 'description', this.value)">
-            </div>`;
-        }
-
-        let row1 = `
-            <div id="step-row1-${idx}" style="display: grid; grid-template-columns: 1.2fr 1.4fr 1.4fr; gap: 8px; margin-bottom: 0px;">
-                <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
-                    <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;">Type</label>
-                    <select class="form-input" style="flex: 1; padding: 2px;" onchange="updateStepField(${idx}, 'type', this.value)">
-                        ${typeOptsHtml}
-                    </select>
-                </div>
-                <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
-                    <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;">Name</label>
-                    <input type="text" class="form-input" style="font-family: monospace; flex: 1;" value="${escapeHtml(step.name || '')}" onchange="updateStepField(${idx}, 'name', this.value)">
-                </div>
-                <div class="form-group" style="flex-direction: row; align-items: center; gap: 8px;">
-                    <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;" title="Output Variable">Output</label>
-                    <input type="text" class="form-input" style="font-family: monospace; flex: 1;" value="${escapeHtml(step.out || '')}" onchange="updateStepField(${idx}, 'out', this.value)">
-                </div>
-            </div>`;
-
-        return `
-            ${row1}
-            <div id="step-row2-${idx}">${row2Html}</div>
-            <div class="form-group" style="margin-top: 2px; margin-bottom: 8px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                    <div style="display: flex; align-items: center; gap: 5px;">
-                        <label class="form-label" style="font-size: 0.8em; margin-bottom: 0;">Args(JSON)</label>
-                        <span onclick="openArgsModal(${idx})" style="cursor: pointer; padding: 2px;" title="Open in Editor">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" fill="currentColor" viewBox="0 0 16 16">
-                                <path d="M15.502 1.94a.5.5 0 0 1 0 .706L14.459 3.69l-2-2L13.502.646a.5.5 0 0 1 .707 0l1.293 1.293zm-1.75 2.456-2-2L4.939 9.21a.5.5 0 0 0-.121.196l-.805 2.414a.25.25 0 0 0 .316.316l2.414-.805a.5.5 0 0 0 .196-.12l6.813-6.814z"/>
-                                <path fill-rule="evenodd" d="M1 13.5A1.5 1.5 0 0 0 2.5 15h11a1.5 1.5 0 0 0 1.5-1.5v-6a.5.5 0 0 0-1 0v6a.5.5 0 0 1-.5.5h-11a.5.5 0 0 1-.5-.5v-11a.5.5 0 0 1 .5-.5H9a.5.5 0 0 0 0-1H2.5A1.5 1.5 0 0 0 1 2.5v11z"/>
-                             </svg>
-                        </span>
-                    </div>
-                </div>
-                <textarea id="args-input-${idx}" class="form-input" style="font-family: monospace; height: 56px; max-height: 200px; font-size: 0.9em; width: 100%; box-sizing: border-box; white-space: nowrap; overflow-x: auto; overflow-y: hidden;" onchange="updateStepField(${idx}, 'args', this.value)">${escapeHtml(JSON.stringify(step.args || {}))}</textarea>
-            </div>
-        `;
-    }
-
-    let currentEditingStepIdx = -1;
-
-    function openArgsModal(idx) {
-        currentEditingStepIdx = idx;
-        const input = document.getElementById(`args-input-${idx}`);
-        const modal = document.getElementById('args-modal');
-        const modalInput = document.getElementById('args-modal-input');
-        
-        if (!input || !modal || !modalInput) return;
-        
+    function formatStepsJSON() {
+        const el = document.getElementById('json-steps-editor');
+        if (!el) return;
         try {
-            const json = JSON.parse(input.value);
-            modalInput.value = JSON.stringify(json, null, 4);
-        } catch(e) {
-            modalInput.value = input.value;
+            const parsed = JSON.parse(el.value);
+            el.value = JSON.stringify(parsed, null, 2);
+        } catch (e) {
+            showAlert("Invalid JSON in steps editor. Cannot format.");
         }
-        
-        modal.style.display = 'flex';
-        modalInput.focus();
     }
 
+
+
+    // Polyfill for args modal which was removed
+    function closeArgsModal() {
+        const m = document.getElementById('args-modal');
+        if (m) m.style.display = 'none';
+    }
+    
     function saveArgsFromModal() {
-        if (currentEditingStepIdx === -1) return;
-        
-        const modalInput = document.getElementById('args-modal-input');
-        const input = document.getElementById(`args-input-${currentEditingStepIdx}`);
-        
-        if (input && modalInput) {
-            try {
-                // Minify or reformat to compact JSON
-                const json = JSON.parse(modalInput.value);
-                // Keep it relatively compact in the list view? Or just stringify.
-                input.value = JSON.stringify(json);
-                updateStepField(currentEditingStepIdx, 'args', input.value);
-            } catch(e) {
-                showAlert("Invalid JSON: " + e.message);
-                return;
-            }
-        }
-        
         closeArgsModal();
     }
-
-    function closeArgsModal() {
-        closeUIModal('args-modal');
-        currentEditingStepIdx = -1;
-    }
     
-    // Legacy function placeholder if needed
-    function toggleArgsEditor(idx) {
-        openArgsModal(idx);
-    }
-
-    // Dirty State Management for Item Details
-    function markItemDirty() {
-        const btn = document.getElementById('btn-save');
-        const icon = document.getElementById('btn-save-icon');
-        if (btn) {
-             btn.disabled = false;
-             // Visual Cue: Blue color when dirty
-             btn.style.color = '#3498db'; 
-             if (icon) icon.style.color = '#3498db';
-        }
-    }
-
-    function markItemClean() {
-        const btn = document.getElementById('btn-save');
-        const icon = document.getElementById('btn-save-icon');
-        if (btn) {
-             btn.disabled = true;
-             // Reset color
-             btn.style.color = 'var(--text-color)';
-             if (icon) icon.style.color = 'currentColor';
-        }
-    }
-
-    function toggleStepDetails(idx) {
-        const body = document.getElementById(`step-body-${idx}`);
-        if (body.style.display === 'none') {
-            body.style.display = 'block';
-        } else {
-            body.style.display = 'none';
-        }
-    }
-
-    // State Management for Steps
-    // We read from the hidden input, modify, and write back
-    
-    function getStepsFromDOM() {
-        const el = document.getElementById('hidden-steps-json');
-        try {
-            return JSON.parse(el.value);
-        } catch(e) { return []; }
-    }
-
-    function saveStepsToDOM(steps, openIdx = -1) {
-        const el = document.getElementById('hidden-steps-json');
-        el.value = JSON.stringify(steps);
-        // Refresh the list view
-        document.getElementById('script-steps-list').innerHTML = renderScriptSteps(steps, openIdx);
-        // Enable main save button
-        document.getElementById('btn-save').disabled = false;
-    }
-
-    function updateStepField(idx, field, value) {
-        const steps = getStepsFromDOM();
-        if (!steps[idx]) return;
-
-        if (field === 'args') {
-            try {
-                steps[idx].args = JSON.parse(value);
-            } catch (e) {
-                showAlert("Invalid JSON for arguments");
-                return;
-            }
-        } else {
-            steps[idx][field] = value;
-        }
-        saveStepsToDOM(steps, idx);
-    }
-
     async function runScriptInEditor() {
+        const domainSelect = document.getElementById('domain-select');
+        let domain = domainSelect ? domainSelect.value : '';
+        if (domain === "custom" && window.customKBs && window.customKBs.length > 0) {
+            domain = window.customKBs[0];
+        }
+
         let name = '';
         let category = 'general';
 
@@ -373,7 +59,7 @@
                 body: JSON.stringify({
                     name: name,
                     category: category,
-                    verbose: true, session_id: currentSessionID, domain: domain,
+                    verbose: true, session_id: currentSessionID, user_id: currentUserID, domain: domain,
                     args: {} 
                 })
             });
@@ -771,7 +457,7 @@
                 <pre class="pre-block detail-key" title="${keyStr.replace(/"/g, '&quot;')}" style="margin: 0; flex: 1; padding: 4px; overflow: hidden; height: 38px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; white-space: pre-wrap; word-break: break-all;">${keyStr.replace(/\n/g, ' ')}</pre>
             </div>
             <div style="margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;">
-                <strong>Value:</strong>
+                <strong>${isScriptView ? '' : 'Value:'}</strong>
                 <div style="display: flex; align-items: center;">
                     ${backBtn}
                     <button onclick="closeDetail()" style="padding: 2px 4px; font-size: 1.1em; background: none; border: none; cursor: pointer;" title="Close the item details panel.">✕</button>

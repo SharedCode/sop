@@ -36,7 +36,6 @@ func handleVectorizeSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-
 	var catUUID sop.UUID
 	if reqData.CategoryID != "" {
 		catUUID, err = sop.ParseUUID(reqData.CategoryID)
@@ -99,6 +98,14 @@ func handleVectorizeSpace(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("VectorizeItems failed: %v", err))
 				return
+			}
+		}
+
+		if emb != nil {
+			cfg, cfgErr := kb.GetConfig(ctx)
+			if cfgErr == nil && cfg != nil && cfg.EmbedderDimension != emb.Dim() {
+				cfg.EmbedderDimension = emb.Dim()
+				kb.SetConfig(ctx, cfg)
 			}
 		}
 

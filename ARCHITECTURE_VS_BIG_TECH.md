@@ -28,6 +28,16 @@ Gemini Nano is a stateless chatbot. SOP AI is a dedicated **Agentic Orchestrator
 
 Our Copilot natively reads internal DB states, executes AST-based scripts, retrieves structured Vector JSON payloads, and manages multi-turn transaction sessions. It provides structured, persisted conversational memory (verified by our internal evaluation harnesses) that actively counters the "amnesia" that plagues standard LLM interfaces. 
 
+## 5. Multi-KB Routing vs. Context Collapse
+If you dump an entire company's HR policy, Engineering docs, and Legal guidelines into a standard chatbot interface, it will suffer from context collapse and hallucinate across domains.
+
+SOP AI features a **Multi-KB Omni Pipeline**. Our Orchestrator intelligently classifies the user intent and dynamically "hot-swaps" only the relevant Knowledge Base into active memory, preventing data contamination while maintaining overarching context.
+
+## 6. Native Avatar Environments (Stateless Immersion)
+With native consumer LLMs, customization is usually limited to a basic system prompt, but the bot still fundamentally behaves like a generic assistant. 
+
+SOP AI enables **Avatar Mode (Type 2 deployments)**. It performs *Stateless Immersion*, where it completely strips the base platform knowledge on the backend and forces the LLM to 100% adopt the identity of a specific silo (e.g., a dedicated Medical Advisor). Crucially, it does this while secretly preserving RBAC, token limits, and DB safety rails in the invisible architectural wrapper.
+
 ## The Core Positioning Statement
 
 When introducing SOP AI to developers, businesses, and end-users, this is our position:

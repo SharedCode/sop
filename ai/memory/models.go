@@ -5,10 +5,14 @@ import (
 )
 
 type KnowledgeBaseConfig struct {
-	Type         string `json:"type,omitempty"`
-	IsPersona    bool   `json:"is_persona,omitempty"`
-	SystemPrompt string `json:"system_prompt,omitempty"`
-	Embedder     string `json:"embedder,omitempty"`
+	Type                string   `json:"type,omitempty"`
+	IsPersona           bool     `json:"is_persona,omitempty"`
+	IsExclusive         bool     `json:"is_exclusive,omitempty"`
+	SystemPrompt        string   `json:"system_prompt,omitempty"`
+	Embedder            string   `json:"embedder,omitempty"`
+	EmbedderDimension   int      `json:"embedder_dimension,omitempty"`
+	AllowAutoEnrichment bool     `json:"allowAutoEnrichment,omitempty"`
+	AllowedTools        []string `json:"allowed_tools,omitempty"`
 }
 
 // Item represents the actual content (The "Thought" or Document).
@@ -51,6 +55,7 @@ type Category struct {
 	Radius          float32          `json:"radius,omitempty"`            // Size of the cluster
 	ItemCount       int              `json:"item_count,omitempty"`        // Number of vectors/items in this bucket
 	Name            string           `json:"name,omitempty"`              // Human-readable concept name
+	Path            string           `json:"path,omitempty"`              // Full contextual taxonomy path (e.g. "tools / execute_script")
 	Description     string           `json:"description,omitempty"`       // Broader context
 	SummaryMaxCount int              `json:"summary_max_count,omitempty"` // Maximum number of summaries for items in this category
 	VectorHash      string           `json:"vector_hash,omitempty"`       // Hash of EmbedderName + Content to deduplicate vectorization

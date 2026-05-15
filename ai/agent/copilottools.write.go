@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -635,4 +637,123 @@ func (a *CopilotAgent) toolManageTransaction(ctx context.Context, args map[strin
 	default:
 		return "", fmt.Errorf("unknown action: %s", action)
 	}
+}
+
+func (a *CopilotAgent) toolEnrichKnowledgeBase(ctx context.Context, args map[string]any) (string, error) {
+	kbName, _ := args["kb_name"].(string)
+	if kbName == "" {
+		return "", fmt.Errorf("kb_name is required")
+	}
+
+	p := ai.GetSessionPayload(ctx)
+	if p == nil {
+		return "", fmt.Errorf("no session payload found")
+	}
+
+	var db *database.Database
+	dbName, _ := args["database"].(string)
+	if dbName == "" {
+		dbName = p.CurrentDB
+	}
+
+	if dbName != "" {
+		if dbName == "system" && a.systemDB != nil {
+			db = a.systemDB
+		} else if opts, ok := a.databases[dbName]; ok {
+			db = database.NewDatabase(opts)
+		}
+	}
+
+	if db == nil {
+		return "", fmt.Errorf("database not found: %s", dbName)
+	}
+
+	if a.service != nil {
+		err := a.service.enrichSingleKB(ctx, db, kbName)
+		if err != nil {
+			return "", fmt.Errorf("failed to enrich KB %s: %v", kbName, err)
+		}
+	}
+
+	return fmt.Sprintf("Enrichment cycle triggered successfully for Knowledge Base '%s'.", kbName), nil
+}
+
+func (a *CopilotAgent) toolMintToSpace(ctx context.Context, args map[string]any) (string, error) {
+	p := ai.GetSessionPayload(ctx)
+	if p == nil {
+		return "", fmt.Errorf("session payload is missing")
+	}
+
+	kbName, ok := args["kb_name"].(string)
+	if !ok || kbName == "" {
+		if fallback, ok2 := args["name"].(string); ok2 && fallback != "" {
+			kbName = fallback
+		} else if fallback3, ok3 := args["space_name"].(string); ok3 && fallback3 != "" {
+			kbName = fallback3
+		} else if fallback4, ok4 := args["space"].(string); ok4 && fallback4 != "" {
+			kbName = fallback4
+		} else {
+			return "", fmt.Errorf("argument 'kb_name' is missing or not a string")
+		}
+	}
+
+	content, ok := args["content"].(string)
+	if !ok || content == "" {
+		return "", fmt.Errorf("argument 'content' is missing or not a string")
+	}
+
+	category, _ := args["category"].(string)
+
+	var targetDB *database.Database
+	if strings.HasPrefix(kbName, ai.MemoryKBPrefix) {
+		if a.systemDB == nil {
+			return "", fmt.Errorf("systemDB is not initialized")
+		}
+		targetDB = a.systemDB
+	} else {
+		if opts, ok := a.databases[p.CurrentDB]; ok {
+			targetDB = database.NewDatabase(opts)
+		} else {
+			return "", fmt.Errorf("active database '%s' not found", p.CurrentDB)
+		}
+	}
+
+	tx, err := targetDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return "", fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var embedder ai.Embeddings
+	if a.service != nil && a.service.Domain() != nil {
+		embedder = a.service.Domain().Embedder()
+	}
+	kb, err := targetDB.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder)
+	if err != nil {
+		return "", fmt.Errorf("failed to open knowledge base '%s': %w", kbName, err)
+	}
+
+	err = kb.IngestThought(ctx, content, category, "", nil, map[string]any{
+		"content": content,
+		"source":  "minted_by_copilot",
+		"ts":      time.Now().UnixMilli(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to ingest thought to knowledge base: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return "", fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	if a.service != nil {
+		// Optional: Trigger background enrichment for the created thought
+		go func() {
+			bgCtx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			_ = a.service.enrichSingleKB(bgCtx, targetDB, kbName)
+		}()
+	}
+
+	return fmt.Sprintf("Successfully minted content to Knowledge Base '%s'.\n[[REFRESH_SPACES]]", kbName), nil
 }

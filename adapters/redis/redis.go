@@ -30,17 +30,25 @@ func NewClient(options sop.TransactionOptions) sop.L2Cache {
 				log.Error("Invalid Redis URL", "url", options.RedisConfig.URL, "error", err)
 			} else {
 				return NewConnectionClient(Options{
-					Address:   opts.Addr,
-					Password:  opts.Password,
-					DB:        opts.DB,
-					TLSConfig: opts.TLSConfig,
+					Address:      opts.Addr,
+					Password:     opts.Password,
+					DB:           opts.DB,
+					TLSConfig:    opts.TLSConfig,
+					DialTimeout:  options.RedisConfig.DialTimeout,
+					ReadTimeout:  options.RedisConfig.ReadTimeout,
+					WriteTimeout: options.RedisConfig.WriteTimeout,
+					MaxRetries:   options.RedisConfig.MaxRetries,
 				})
 			}
 		}
 		return NewConnectionClient(Options{
-			Address:  options.RedisConfig.Address,
-			Password: options.RedisConfig.Password,
-			DB:       options.RedisConfig.DB,
+			Address:      options.RedisConfig.Address,
+			Password:     options.RedisConfig.Password,
+			DB:           options.RedisConfig.DB,
+			DialTimeout:  options.RedisConfig.DialTimeout,
+			ReadTimeout:  options.RedisConfig.ReadTimeout,
+			WriteTimeout: options.RedisConfig.WriteTimeout,
+			MaxRetries:   options.RedisConfig.MaxRetries,
 		})
 	}
 	// Fallback to default options if no config provided
