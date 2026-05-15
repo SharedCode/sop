@@ -125,6 +125,8 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		Format      string   `json:"format"`
 		Verbose     bool     `json:"verbose"`
 		SessionID   string   `json:"session_id"`
+		UserID      string   `json:"user_id"`
+		ClientID    string   `json:"client_id"`
 		Domain      string   `json:"domain"`
 		SelectedKBs []string `json:"selected_kbs"`
 	}
@@ -210,7 +212,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if sysOpts, err := getSystemDBOptions(r.Context()); err == nil {
 		sysDB := aidb.NewDatabase(sysOpts)
 		ctx := r.Context()
-		kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, req.SessionID)
+		kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, req.UserID)
 		trans, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 		if trans != nil {
 			// Just open it to ensure it is created
@@ -219,7 +221,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 			sysDB.OpenKnowledgeBase(ctx, kbName, trans, dbLLM, dbEmbedder)
 			trans.Commit(ctx)
-			go seedMetaCognitionAsync(req.SessionID, kbName, sysOpts)
+			go seedMetaCognitionAsync(req.UserID, kbName, sysOpts)
 		}
 	}
 
@@ -293,10 +295,38 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	// Also add "system" db if needed?
 
+	// Determine AvatarScope (if any selected KB is flagged as IsExclusive)
+	var avatarScope string
+	for _, kbID := range req.SelectedKBs {
+		opts, err := getDBOptions(r.Context(), req.Database)
+		if err == nil {
+			db := aidb.NewDatabase(opts)
+			trans, _ := db.BeginTransaction(r.Context(), sop.ForReading)
+			if trans != nil {
+				kb, err := db.OpenKnowledgeBase(r.Context(), kbID, trans, nil, nil)
+				if err == nil {
+					cfg, err := kb.GetConfig(r.Context())
+					if err == nil && cfg != nil && cfg.IsExclusive {
+						avatarScope = kbID
+						log.Info("[Copilot] Avatar Mode Active. LLM Sandboxed to: " + kbID)
+					}
+				}
+				trans.Rollback(r.Context())
+				if avatarScope != "" {
+					break
+				}
+			}
+		}
+	}
+
 	payload := &ai.SessionPayload{
 		CurrentDB:    req.Database,
 		ActiveDomain: req.Domain,
 		SelectedKBs:  req.SelectedKBs,
+		UserID:       req.UserID,
+		ClientID:     req.ClientID,
+		SessionID:    req.SessionID,
+		AvatarScope:  avatarScope,
 	}
 	askOpts = append(askOpts, ai.WithSessionPayload(payload))
 
@@ -357,8 +387,23 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	// Process the response from LLM as returned by the agent.
 	text := strings.TrimSpace(response)
+
+	// Intercept Action Required directives from the LLM (e.g., local execution tools)
+	if idxStart := strings.Index(text, "<<<ACTION_REQUIRED:"); idxStart >= 0 {
+		if idxEnd := strings.LastIndex(text, ">>>"); idxEnd > idxStart {
+			candidate := text[idxStart+len("<<<ACTION_REQUIRED:") : idxEnd]
+			var actionPayload map[string]any
+			if err := json.Unmarshal([]byte(candidate), &actionPayload); err == nil {
+				log.Info("Response: Action Required payload detected")
+				sendEvent("action_required", actionPayload)
+				return
+			}
+		}
+	}
+
 	var toolCall struct {
-		Tool string         `json:"tool"`
+		Tool string `json:"tool"`
+
 		Args map[string]any `json:"args"`
 	}
 	cleanText := strings.TrimPrefix(text, "```json")
@@ -552,8 +597,8 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func initAgents(ctx context.Context) {
-	loadAgent(ctx, "copilot", "ai/data/copilot_pipeline.json")
+func initAgents(ctx context.Context) error {
+	return loadAgent(ctx, "copilot", "ai/data/copilot_pipeline.json")
 }
 
 func seedDefaultScripts(ctx context.Context, db *aidb.Database) {
@@ -613,7 +658,7 @@ func seedDefaultScripts(ctx context.Context, db *aidb.Database) {
 	log.Info("Seeded 'demo_loop' script.")
 }
 
-func loadAgent(ctx context.Context, key, configPath string) {
+func loadAgent(ctx context.Context, key, configPath string) error {
 	// ctx is passed in
 
 	// Try to find the file in common locations
@@ -634,13 +679,13 @@ func loadAgent(ctx context.Context, key, configPath string) {
 
 	if foundPath == "" {
 		log.Debug(fmt.Sprintf("Agent config not found at %s (searched parents), skipping.", configPath))
-		return
+		return nil
 	}
 
 	cfg, err := agent.LoadConfigFromFile(foundPath)
 	if err != nil {
 		log.Debug(fmt.Sprintf("Failed to load agent config %s: %v", foundPath, err))
-		return
+		return err
 	}
 
 	// Apply Global config (LLM API Key, text embedders, etc)
@@ -681,7 +726,6 @@ func loadAgent(ctx context.Context, key, configPath string) {
 			sysDB = aidb.NewDatabase(sysOpts)
 			// Seed default scripts for testing
 			seedDefaultScripts(ctx, sysDB)
-			seedSOPKnowledge(ctx, sysDB)
 		} else {
 			log.Warn("System DB path does not exist. Skipping AI Agent seeding to prevent auto-creation.")
 		}
@@ -694,7 +738,7 @@ func loadAgent(ctx context.Context, key, configPath string) {
 
 	// Add System DB if available
 	if sysDB != nil {
-		databases["System DB"] = sysOpts
+		databases[agent.SystemDBName] = sysOpts
 	}
 
 	for _, dbCfg := range config.Databases {
@@ -793,7 +837,7 @@ func loadAgent(ctx context.Context, key, configPath string) {
 	})
 	if err != nil {
 		log.Debug(fmt.Sprintf("Failed to initialize main agent %s: %v", key, err))
-		return
+		return err
 	}
 
 	// Enable History Injection (Manual Override as requested)
@@ -804,6 +848,7 @@ func loadAgent(ctx context.Context, key, configPath string) {
 
 	loadedAgents[key] = mainAgent
 	log.Debug(fmt.Sprintf("Agent '%s' initialized successfully.", key))
+	return nil
 }
 
 // DefaultToolExecutor implements ai.ToolExecutor by delegating to registered agents.
@@ -1080,11 +1125,15 @@ func handleToolExecute(w http.ResponseWriter, r *http.Request) {
 
 	switch req.Tool {
 	case "enhance_text":
-		prompt := fmt.Sprintf("Can you help me enhance this text for a %s?\n\n", strings.ReplaceAll(req.Intent, "_", " "))
+		prompt := fmt.Sprintf("Can you help me creatively enhance this text/prompt config for a %s?\n\n", strings.ReplaceAll(req.Intent, "_", " "))
 		if req.Context != "" {
 			prompt += fmt.Sprintf("Context / Details about the project:\n%s\n\n", req.Context)
 		}
-		prompt += fmt.Sprintf("Here is what I have so far:\n%s\n\nPlease improve it. Return ONLY the improved text, no conversational filler or markdown formatting.", req.Text)
+		if req.Intent == "system_prompt" {
+			prompt += "IMPORTANT INSTRUCTION: The user is writing a System Prompt for an AI that interacts with a specific Knowledge Base.\n"
+			prompt += "Please expand their text into a robust set of instructions that tells the AI exactly HOW to interact with, search, and synthesize the data in this knowledge base, ensuring it grounds its answers in the data.\n\n"
+		}
+		prompt += fmt.Sprintf("Here is what the user has drafted so far:\n%s\n\nPlease improve it into a professional, clear, and comprehensive format. Return ONLY the improved text, no conversational filler or markdown code block formatting.", req.Text)
 
 		ctx := context.Background()
 

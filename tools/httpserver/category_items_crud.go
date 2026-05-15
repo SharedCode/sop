@@ -22,6 +22,7 @@ func generateDeterministicID(catID sop.UUID, dataStr string) sop.UUID {
 type addCategoryRequest struct {
 	ID          string `json:"id,omitempty"`
 	Name        string `json:"name"`
+	Path        string `json:"path,omitempty"`
 	Description string `json:"description"`
 	ParentID    string `json:"parent_id,omitempty"`
 }
@@ -135,24 +136,39 @@ func handleAddSpaceCategory(w http.ResponseWriter, r *http.Request) {
 		id = targetID
 	} else {
 		newID := sop.NewUUID()
-		cat = &memory.Category{
-			ID:              newID,
-			Name:            req.Name,
-			Description:     req.Description,
-			CenterVector:    vec,
-			SummaryMaxCount: MAX_ITEM_SUMMARIES,
+
+		pathVal := req.Path
+		if pathVal == "" {
+			pathVal = req.Name
 		}
+		var parentIDs []memory.CategoryParent
 
 		if req.ParentID != "" {
 			parsedParent, err := sop.ParseUUID(req.ParentID)
 			if err == nil {
-				cat.ParentIDs = []memory.CategoryParent{
-					{
-						ParentID: parsedParent,
-						UseCase:  "Manual Subcategory",
-					},
+				parentIDs = []memory.CategoryParent{{ParentID: parsedParent, UseCase: "Manual Subcategory"}}
+
+				categoriesTree, err := kb.Store.Categories(ctx)
+				if err == nil {
+					found, _ := categoriesTree.Find(ctx, parsedParent, false)
+					if found {
+						pCat, _ := categoriesTree.GetCurrentValue(ctx)
+						if pCat != nil && pCat.Path != "" {
+							pathVal = pCat.Path + " / " + req.Name
+						}
+					}
 				}
 			}
+		}
+
+		cat = &memory.Category{
+			ID:              newID,
+			Name:            req.Name,
+			Path:            pathVal,
+			Description:     req.Description,
+			CenterVector:    vec,
+			SummaryMaxCount: MAX_ITEM_SUMMARIES,
+			ParentIDs:       parentIDs,
 		}
 
 		id, err = kb.Store.AddCategory(ctx, cat)

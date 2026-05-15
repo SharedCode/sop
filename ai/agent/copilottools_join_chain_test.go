@@ -26,7 +26,7 @@ func TestToolJoin_Chained_InnerThenRight(t *testing.T) {
 	// 1. Setup DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}
@@ -169,7 +169,7 @@ func TestToolJoin_Chained_InnerThenLeft(t *testing.T) {
 	// 1. Setup DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}
@@ -289,7 +289,7 @@ func TestToolJoin_Full(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}

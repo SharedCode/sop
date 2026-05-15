@@ -88,7 +88,8 @@ func Open[T any](ctx context.Context, trans sop.Transaction, domain string, cfg 
 	if !found {
 		cfg.Metadata.ActiveVersion = 0
 		bytes, _ := json.Marshal(cfg.Metadata)
-		added, errAdd := sysStore.Add(ctx, domain, string(bytes)); fmt.Printf("sysStore.Add returned: %v, %v\n", added, errAdd)
+		added, errAdd := sysStore.Add(ctx, domain, string(bytes))
+		fmt.Printf("sysStore.Add returned: %v, %v\n", added, errAdd)
 	}
 
 	return &domainIndex[T]{

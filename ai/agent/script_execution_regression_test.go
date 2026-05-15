@@ -17,7 +17,7 @@ func TestScriptExecution_JoinRegression(t *testing.T) {
 	// 1. Setup Temp DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}

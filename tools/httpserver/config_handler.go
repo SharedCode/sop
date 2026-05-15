@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -93,7 +94,10 @@ func handleCreateEnvironment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Reload agents (will be empty)
-	initAgents(r.Context())
+	if err := initAgents(context.Background()); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to initialize agents: %v", err), http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -142,7 +146,10 @@ func handleSwitchEnvironment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Re-initialize agents to pick up new database configuration
-	initAgents(r.Context())
+	if err := initAgents(context.Background()); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to initialize agents: %v", err), http.StatusInternalServerError)
+		return
+	}
 
 	// Force update ConfigFile tracker
 	config.ConfigFile = req.Filename
@@ -254,7 +261,10 @@ func handleUpdateLLMConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Reload agents to reflect configuration changes
-	initAgents(r.Context())
+	if err := initAgents(context.Background()); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to initialize agents: %v", err), http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "LLM API Key updated successfully"})
@@ -636,7 +646,10 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Reload agents to reflect configuration changes
-	initAgents(r.Context())
+	if err := initAgents(context.Background()); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to initialize agents: %v", err), http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Database initialized successfully"})
@@ -807,7 +820,8 @@ func sanitizePath(p string) string {
 	p = strings.TrimRight(p, "|")
 
 	// 4. Final trim in case stripping left whitespace
-	return resolveConfigRelativePath(strings.TrimSpace(p))
+	cleanP := filepath.Clean(strings.TrimSpace(p))
+	return resolveConfigRelativePath(cleanP)
 }
 
 // collectAllConfiguredPaths gathers all paths currently in use by the system and other databases,

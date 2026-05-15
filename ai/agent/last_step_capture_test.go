@@ -19,6 +19,22 @@ func (m *MockGeneratorWithRaw) Name() string {
 }
 
 func (m *MockGeneratorWithRaw) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	// For TestService_Ask_CapturesLastStep_OnToolExecution which relies on Native tools check now
+	if m.Response == `{"tool": "select", "args": {"database": "mydb", "query": "select * from users"}}` {
+		return ai.GenOutput{
+			ToolCalls: []ai.ToolCall{
+				{
+					Name: "select",
+					Args: map[string]any{
+						"database": "mydb",
+						"query":    "select * from users",
+					},
+				},
+			},
+			Text: m.Response,
+			Raw:  m.Raw,
+		}, nil
+	}
 	return ai.GenOutput{
 		Text: m.Response,
 		Raw:  m.Raw,

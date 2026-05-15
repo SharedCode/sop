@@ -75,10 +75,10 @@ func handleExecuteScript(w http.ResponseWriter, r *http.Request) {
 	// Create context with session payload
 	ctx := r.Context()
 	payload := &ai.SessionPayload{
-		CurrentDB: "system", // Default to system or make configurable
+		CurrentDB:   "system", // Default to system or make configurable
+		AvatarScope: "",       // System scripts do not run in Avatar Mode
 	}
 	ctx = context.WithValue(ctx, "session_payload", payload)
-
 	// Pass Verbose flag
 	ctx = context.WithValue(ctx, "verbose", req.Verbose)
 

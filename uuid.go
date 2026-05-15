@@ -69,3 +69,18 @@ func (id UUID) Split() (uint64, uint64) {
 func (x UUID) Compare(y UUID) int {
 	return bytes.Compare(x[:], y[:])
 }
+
+// MarshalText implements the encoding.TextMarshaler interface.
+func (id UUID) MarshalText() ([]byte, error) {
+	return uuid.UUID(id).MarshalText()
+}
+
+// UnmarshalText implements the encoding.TextUnmarshaler interface.
+func (id *UUID) UnmarshalText(b []byte) error {
+	var u uuid.UUID
+	err := u.UnmarshalText(b)
+	if err == nil {
+		*id = UUID(u)
+	}
+	return err
+}

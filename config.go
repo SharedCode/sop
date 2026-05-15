@@ -26,6 +26,14 @@ type RedisCacheConfig struct {
 	// URL is the connection string (e.g. redis://user:pass@host:port/db).
 	// If provided, it overrides Address, Password, and DB.
 	URL string `json:"url,omitempty"`
+	// DialTimeout specifies the timeout for connecting to Redis.
+	DialTimeout time.Duration `json:"dial_timeout,omitempty"`
+	// ReadTimeout specifies the timeout for reading from Redis.
+	ReadTimeout time.Duration `json:"read_timeout,omitempty"`
+	// WriteTimeout specifies the timeout for writing to Redis.
+	WriteTimeout time.Duration `json:"write_timeout,omitempty"`
+	// MaxRetries is the maximum number of retries before giving up on Redis connection.
+	MaxRetries int `json:"max_retries,omitempty"`
 }
 
 // DatabaseOptions holds the configuration for the database.

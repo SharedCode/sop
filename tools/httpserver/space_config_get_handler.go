@@ -54,11 +54,23 @@ func handleGetSpaceConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	systemEmbedder := GetConfiguredEmbedder(nil)
+	sysDim := systemEmbedder.Dim()
+
+	spaceDim := sysDim
+	if cfg != nil && cfg.EmbedderDimension != 0 {
+		spaceDim = cfg.EmbedderDimension
+	}
+
 	response := struct {
 		memory.KnowledgeBaseConfig `json:",inline"`
 		IsReadOnly                 bool `json:"is_read_only"`
+		SystemEmbedderDimension    int  `json:"system_embedder_dimension"`
+		SpaceEmbedderDimension     int  `json:"space_embedder_dimension"`
 	}{
-		IsReadOnly: !sop.CanPerformAction(ctx, spaceName, sop.ResourceAccess{}, sop.ActionWrite),
+		IsReadOnly:              !sop.CanPerformAction(ctx, spaceName, sop.ResourceAccess{}, sop.ActionWrite),
+		SystemEmbedderDimension: sysDim,
+		SpaceEmbedderDimension:  spaceDim,
 	}
 
 	if cfg != nil {

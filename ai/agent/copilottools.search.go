@@ -81,6 +81,7 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 		return "No results found.", nil
 	}
 
+	a.MarkMRUCategory(kbName, fmt.Sprintf("Last searched query: %s", query))
 	return strings.Join(results, "\n\n"), nil
 }
 

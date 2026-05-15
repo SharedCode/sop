@@ -64,7 +64,7 @@
         });
     }
 
-    async function apiCall(endpoint, method = 'GET', body = null) {
+    async function apiCall(endpoint, method = 'GET', body = null, overrideHeaders = null) {
         try {
             const h = { 'Content-Type': 'application/json' };
             const lStr = localStorage.getItem('sop_ai_config');
@@ -80,6 +80,12 @@
                     if(c.embedder_url) h['X-Embedder-URL'] = c.embedder_url;
                     if(c.embedder_model) h['X-Embedder-Model'] = c.embedder_model;
                 } catch(e){}
+            }
+
+            if (overrideHeaders) {
+                for (const [k, v] of Object.entries(overrideHeaders)) {
+                    h[k] = v;
+                }
             }
 
             const options = {
@@ -313,7 +319,8 @@
                 'switch-env-modal',
                 
                 // Spaces
-                'add-kb-modal'
+                'add-kb-modal',
+                'edit-kb-modal'
                 // NOTE: setup-wizard moved to keyup handler to prevent confirmation dialog conflict
             ];
             
@@ -328,6 +335,7 @@
                     // Specific close functions handling
                     if (id === 'add-modal') closeAdd();
                     else if (id === 'add-kb-modal') closeAddKBModal();
+                    else if (id === 'edit-kb-modal') closeEditKBModal();
                     else if (id === 'global-alert-modal') closeGlobalAlert();
                     else if (id === 'global-confirm-modal') closeGlobalConfirm();
                     else if (id === 'preferences-modal') closePreferences();
@@ -366,6 +374,13 @@
 
     let currentDatabase = null;
     let currentSessionID = "";
+    
+    let currentUserID = localStorage.getItem("sop_userId");
+    if (!currentUserID) {
+        currentUserID = crypto.randomUUID ? crypto.randomUUID() : 'user-' + Date.now();
+        localStorage.setItem("sop_userId", currentUserID);
+    }
+    
     let currentStore = null;
     let firstKey = null;
     let lastKey = null;
@@ -684,7 +699,7 @@
         document.getElementById('db-options-section').style.display = 'none';
         document.getElementById('db-options-content').innerHTML = 'Loading...';
         
-        fetch(`/api/stores?database=${encodeURIComponent(name)}`)
+        fetch(`/api/stores?database=${encodeURIComponent(name)}&_=${Date.now()}`)
             .then(res => res.json())
             .then(bundle => {
                 let stores = bundle.data || [];
@@ -698,6 +713,8 @@
                 stores.forEach(store => {
                     const li = document.createElement('li');
                     li.textContent = store.charAt(0).toUpperCase() + store.slice(1);
+                    li.title = store;
+                    li.classList.add('truncate-text');
                     li.onclick = () => selectStore(store, li);
                     list.appendChild(li);
 
@@ -712,7 +729,7 @@
             });
 
         // Fetch Spaces
-        fetch(`/api/spaces?database=${encodeURIComponent(name)}&session_id=${encodeURIComponent(currentSessionID)}`)
+        fetch(`/api/spaces?database=${encodeURIComponent(name)}&user_id=${encodeURIComponent(currentUserID)}&_=${Date.now()}`)
             .then(res => res.json())
             .then(bundle => {
                 let kbs = bundle.data || [];
@@ -736,6 +753,8 @@
                 kbs.forEach(kb => {
                     const li = document.createElement('li');
                     li.textContent = kb.charAt(0).toUpperCase() + kb.slice(1);
+                    li.title = kb;
+                    li.classList.add('truncate-text');
                     li.onclick = () => selectSpace(kb, li);
                     kbList.appendChild(li);
                     
@@ -857,11 +876,27 @@
         }
     }
     // Create Modal logic inside editDomainItemInline
-    window.editDomainItemInline = function(link, itemId, categoryId, categoryName, existingSummariesStr) {
+    window.escapeHTML = function(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;')
+              .replace(/</g, '&lt;')
+              .replace(/>/g, '&gt;')
+              .replace(/"/g, '&quot;')
+              .replace(/'/g, '&#39;')
+              .replace(/\n/g, '&#10;')
+              .replace(/\r/g, '&#13;');
+};
+
+    window.editDomainItemInline = function(link) {
+        let itemId = link.getAttribute('data-id') || '';
+        let categoryId = link.getAttribute('data-category-id') || '';
+        let categoryName = link.getAttribute('data-category-name') || '';
+        let existingSummariesStr = link.getAttribute('data-summaries') || '';
+        let fullText = link.getAttribute('data-full-desc') || '';
         const parent = link.closest('.item-content-wrapper') || link.parentElement.parentElement;
         const shortSpan = parent.querySelector('.desc-short');
         const fullSpan = parent.querySelector('.desc-full');
-        let fullText = fullSpan.innerText;
+        
         
         // Create overlay
         const overlay = document.createElement('div');
@@ -884,13 +919,16 @@
         modal.style.width = '70%';
         modal.style.maxWidth = '900px';
         modal.style.height = '65%';
+        modal.style.maxHeight = '90vh';
         modal.style.display = 'flex';
         modal.style.flexDirection = 'column';
         modal.style.boxSizing = 'border-box';
-        modal.style.boxShadow = '0 4px 20px rgba(0,0,0,0.5)';
+        modal.style.border = '1px solid var(--border-color)';
+        modal.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
 
         const titleObj = document.createElement('h3');
         titleObj.style.marginTop = '0';
+        titleObj.style.marginBottom = '10px';
         titleObj.style.color = 'var(--text-color)';
         
         const readonly = isSpaceReadOnly(currentStore, currentDatabase);
@@ -1418,7 +1456,7 @@
                 <!-- Left Sidebar Treeview -->
                 <div style="width: 250px; min-width: 250px; border-right: 1px solid var(--border-color); padding-right: 15px; height: 100%; overflow-y: auto;">
                     <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; margin-bottom: 15px;">
-                        <h3 style="margin: 0; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center;">Categories ${!isReadOnlyKB ? `<span onclick="event.stopPropagation(); window.vectorizeSpace('${name}')" title="Vectorize Entire Space" style="background: none; border: none; color: var(--key-color); font-size: 14px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: pointer; transition: transform 0.2s ease-in-out;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">✨</span>` : `<span title="Vectorize Entire Space" style="background: none; border: none; color: var(--key-color); font-size: 14px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: default;">✨</span>`}</h3>
+                        <h3 style="margin: 0; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center;">Categories <span onclick="event.stopPropagation(); window.vectorizeSpace('${name}')" title="Vectorize Entire Space" style="background: none; border: none; color: var(--key-color); font-size: 14px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: pointer; transition: transform 0.2s ease-in-out;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">✨</span></h3>
                         <span id="sidebar-view-all-items" title="View All Items" style="cursor: pointer; color: var(--link-color); display: flex; align-items: center; padding: 4px; border-radius: 4px;" onclick="window.fetchItemsForCategory('${name}', '', 'All Items', this)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                                 <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zm8 0A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm-8 8A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm8 0A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z"/>
@@ -1790,12 +1828,12 @@
                                     <span class="desc-full" style="display:none; white-space:pre-wrap;">${fullDesc.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
                                 </div>
                                 <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
-                                    <a href="javascript:void(0)" class="read-more-btn" onclick="toggleDomainItemDesc(this)" data-item-id="${t.id}" data-item-category="${t.category_id || t.category || ''}" style="color:var(--link-color); font-size:0.85em; text-decoration:underline;">Read More</a>
+                                    <a href="javascript:void(0)" class="read-more-btn" onclick="toggleDomainItemDesc(this)" data-item-id="${window.escapeHTML(t.id || '')}" data-item-category="${window.escapeHTML(t.category_id || t.category || '')}" style="color:var(--link-color); font-size:0.85em; text-decoration:underline;">Read More</a>
                                     ${kbIsReadOnly ? 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${currCatName.replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="View Details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></a>` 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="View Details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></a>` 
                                         : 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${currCatName.replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
-                                         <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id)).substring(0, 100).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
+                                        `<a href="javascript:void(0)" class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
+                                         <a href="javascript:void(0)" class="delete-item-btn" data-item-id="${window.escapeHTML(t.id || '')}" data-item-name="${window.escapeHTML(((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id || '')).substring(0, 100))}" onclick="window.deleteSpaceItem(this)" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
                                     }
                                     ${vectorBox}
                                 </div>
@@ -1810,10 +1848,10 @@
                                 </div>
                                 <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
                                     ${kbIsReadOnly ? 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${currCatName.replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--text-color); display: inline-flex; align-items: center;" title="View Details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></a>` 
+                                        `<a href="javascript:void(0)" class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="color:var(--text-color); display: inline-flex; align-items: center;" title="View Details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></a>` 
                                         : 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" onclick="editDomainItemInline(this, '${t.id}', '${t.category_id || t.category || ''}', '${currCatName.replace(/\u0027/g, "&apos;")}', '${(t.summaries ? t.summaries.join('. ').replace(/\u0027/g, "&apos;").replace(/"/g, "&quot;").replace(/\\n/g, " ") : '')}')" style="color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
-                                         <a href="javascript:void(0)" class="delete-item-btn" onclick="window.deleteSpaceItem('${t.id}', '${((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id)).substring(0, 100).replace(/\u0027/g, "&apos;")}')" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
+                                        `<a href="javascript:void(0)" class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
+                                         <a href="javascript:void(0)" class="delete-item-btn" data-item-id="${window.escapeHTML(t.id || '')}" data-item-name="${window.escapeHTML(((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id || '')).substring(0, 100))}" onclick="window.deleteSpaceItem(this)" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
                                     }
                                     ${vectorBox}
                                 </div>
@@ -2393,7 +2431,9 @@ function showAddSpaceItem() {
 
     window.currentAdminToken = null;
     openUIModal('add-space-item-modal');
-        document.getElementById('new-space-item-desc').value = '';
+    document.getElementById('new-space-item-desc').value = '';
+    const summariesInput = document.getElementById('new-space-item-summaries');
+    if (summariesInput) summariesInput.value = '';
     
     // Re-populate correct categories
     const catSelect = document.getElementById('new-space-item-category');
@@ -2525,7 +2565,9 @@ async function saveSpaceItem() {
     }
 }
 
-    window.deleteSpaceItem = function(itemId, itemName) {
+    window.deleteSpaceItem = function(link) {
+        let itemId = link.getAttribute('data-item-id') || '';
+        let itemName = link.getAttribute('data-item-name') || '';
         showConfirm(
             "Are you sure you want to delete this item? (" + (itemName || "Unknown item") + ")", 
             async () => {
@@ -2570,9 +2612,129 @@ async function saveSpaceItem() {
 
 
 
-window.vectorizeSpace = async function(spaceName) {
+window.closeMissingProviderModal = function() {
+    document.getElementById('missing-provider-modal').style.display = 'none';
+};
+
+window.resolveSpaceEmbedderAuth = async function(config) {
+    if (!config || !config.embedder) return null; // No specific embedder requested, use system
+
+    let provider = config.embedder;
+    let model = "";
+    if (provider.includes(":")) {
+        let parts = provider.split(":");
+        provider = parts[0];
+        model = parts[1] || "";
+    }
+
+    // Checking if system config already fulfills it
+    const sysLStr = localStorage.getItem('sop_ai_config');
+    if (sysLStr) {
+        try {
+            const sysConfig = JSON.parse(sysLStr);
+            if (sysConfig.embedder_provider === provider) {
+                return null; // System config currently covers this provider perfectly
+            }
+        } catch(e) {}
+    }
+
+    // Check custom provider keys keychain
+    let keychainStr = localStorage.getItem('sop_provider_keys');
+    let keychain = {};
+    if (keychainStr) {
+        try {
+            keychain = JSON.parse(keychainStr);
+        } catch(e) {}
+    }
+
+    // If keychain has valid credentials for this provider, return them as override headers immediately
+    if (keychain[provider] && (keychain[provider].api_key || provider === 'ollama')) {
+        let headers = {
+            'X-Embedder-Provider': provider,
+            'X-Embedder-API-Key': keychain[provider].api_key || '',
+            'X-Embedder-URL': keychain[provider].url || '',
+            'X-Embedder-Model': model || ''
+        };
+        return headers;
+    }
+
+    // JIT: Not found! We must resolve it interactively.
+    return new Promise((resolve, reject) => {
+        document.getElementById('missing-provider-name').textContent = provider.toUpperCase();
+        document.getElementById('missing-provider-key').value = '';
+        document.getElementById('missing-provider-url').value = '';
+        document.getElementById('missing-provider-modal').style.display = 'flex';
+
+        document.getElementById('missing-provider-save-btn').onclick = () => {
+            let key = document.getElementById('missing-provider-key').value.trim();
+            let url = document.getElementById('missing-provider-url').value.trim();
+            
+            if (!key && provider !== 'ollama') {
+                alert(`An API Key is required for ${provider}.`);
+                return;
+            }
+
+            keychain[provider] = { api_key: key, url: url };
+            localStorage.setItem('sop_provider_keys', JSON.stringify(keychain));
+            document.getElementById('missing-provider-modal').style.display = 'none';
+
+            let headers = {
+                'X-Embedder-Provider': provider,
+                'X-Embedder-API-Key': key,
+                'X-Embedder-URL': url,
+                'X-Embedder-Model': model
+            };
+            resolve(headers);
+        };
+
+        window.closeMissingProviderModal = function() {
+            document.getElementById('missing-provider-modal').style.display = 'none';
+            reject(new Error("Provider authentication cancelled by user."));
+        };
+    });
+};
+
+window.vectorizeSpace = async function(spaceName, skipDimensionCheck = false) {
     let cleanName = spaceName ? spaceName : (currentStore ? currentStore.replace('/data', '') : "");
     if (!cleanName) return;
+
+    let overrideHeaders = null;
+    try {
+        const res = await fetch(`/api/spaces/config/get?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(cleanName)}`);
+        if (res.ok) {
+            const config = await res.json();
+            
+            // Perform JIT Authentication Resolution
+            try {
+                overrideHeaders = await window.resolveSpaceEmbedderAuth(config);
+            } catch(authErr) {
+                showAlert(authErr.message);
+                return; // User cancelled JIT
+            }
+
+            if (!skipDimensionCheck && config.embedder && config.space_embedder_dimension > 0 && config.space_embedder_dimension !== config.system_embedder_dimension) {
+                if(confirm(`The current System Embedder has a different dimension (${config.system_embedder_dimension}) than your Space's specifically configured Embedder (${config.space_embedder_dimension}). Vectorizing partial items may result in dimension mismatch errors.\n\nWould you like to Vectorize the ENTIRE Space now to normalize all vectors?`)) {
+                    document.getElementById('vectorize-options-modal').style.display = 'none';
+                    let url = `/api/spaces/vectorize?space=${encodeURIComponent(cleanName)}&database=${encodeURIComponent(currentDatabase)}`;
+                    let bodyPayload = { database: currentDatabase, space: cleanName };
+                    const result = await apiCall(url, 'POST', bodyPayload, overrideHeaders);
+                    if (result.task_id) {
+                        pollLongRunningTask(result.task_id, "Vectorizing Space", `Vectorizing Space: ${cleanName}`, "Vectorize").then(() => {
+                            showAlert(`Space '${cleanName}' vectorization completed successfully!`);
+                            if (window._lastFetchItemsArgs) {
+                                window.fetchItemsForCategory(window._lastFetchItemsArgs.spaceName, window._lastFetchItemsArgs.categoryId, window._lastFetchItemsArgs.categoryName, window._lastFetchItemsArgs.liElement, window._lastFetchItemsArgs.catObj);
+                            }
+                        });
+                    }
+                    return;
+                } else {
+                    return;
+                }
+            }
+        }
+    } catch(e) {
+        console.error("Error fetching space config for embedder check:", e);
+    }
 
     document.getElementById('vectorize-space-name-display').textContent = cleanName;
     
@@ -2636,7 +2798,7 @@ window.vectorizeSpace = async function(spaceName) {
         }
         
         try {
-            const result = await apiCall(url, 'POST', bodyPayload);
+            const result = await apiCall(url, 'POST', bodyPayload, overrideHeaders);
             if (result.task_id) {
                 // Poll using global function
                 pollLongRunningTask(
@@ -2659,8 +2821,14 @@ window.vectorizeSpace = async function(spaceName) {
         } catch (err) {
             showAlert("Failed to start vectorization: " + err.message);
         }
-    };
 };
+};
+
+window.closeEditKBModal = function() {
+    closeUIModal('edit-kb-modal');
+    const nameEl = document.getElementById('edit-kb-name');
+    if (nameEl) nameEl.value = '';
+}
 
 window.showEditKB = async function() {
     if (!currentStore) return;
@@ -2678,49 +2846,67 @@ window.showEditKB = async function() {
         console.error("Error fetching space config:", e);
     }
 
-    const modal = document.getElementById('add-kb-modal');
-    const titleSpan = modal.querySelector('.modal-header span:first-child');
+    const modal = document.getElementById('edit-kb-modal');
+    const titleSpan = document.getElementById('edit-kb-modal-title');
     if (titleSpan) {
         titleSpan.textContent = isReadOnly ? 'View Space Configuration' : 'Edit Space Configuration';
     }
     
-    // Load config values into modal fields if you have an edit-kb-modal logic or use add-kb-modal UI
-    document.getElementById('new-kb-name').value = baseName;
-    document.getElementById('new-kb-name').disabled = true; // Always disable name in edit mode
+    // Load config values into modal fields
+    document.getElementById('edit-kb-name').value = baseName;
+    document.getElementById('edit-kb-name').disabled = true; // Always disable name in edit mode
 
     // Pre-fill
     if (config) {
-        if(document.getElementById('new-kb-sysprompt')) document.getElementById('new-kb-sysprompt').value = config.system_prompt || '';
-        if(document.getElementById('new-kb-is-persona')) document.getElementById('new-kb-is-persona').checked = !!config.use_ai_persona;
+        if(document.getElementById('edit-kb-sysprompt')) document.getElementById('edit-kb-sysprompt').value = config.system_prompt || '';
+        if(document.getElementById('edit-kb-is-persona')) document.getElementById('edit-kb-is-persona').checked = !!config.is_persona;
         
         // Trigger display logic for the prompt container based on persona checked
-        if(document.getElementById('new-kb-sysprompt-container')) {
-             document.getElementById('new-kb-sysprompt-container').style.display = config.use_ai_persona ? 'block' : 'none';
+        if(document.getElementById('edit-kb-sysprompt-container')) {
+             document.getElementById('edit-kb-sysprompt-container').style.display = config.is_persona ? 'block' : 'none';
         }
 
-        if(document.getElementById('new-kb-embedder')) document.getElementById('new-kb-embedder').value = config.embedder || 'default';
-        if(document.getElementById('new-kb-public')) document.getElementById('new-kb-public').checked = !!config.is_public;
+        if(document.getElementById('edit-kb-embedder')) {
+             document.getElementById('edit-kb-embedder').value = config.embedder || '';
+        }
+        if(document.getElementById('edit-kb-dimension')) {
+             document.getElementById('edit-kb-dimension').value = config.space_embedder_dimension || config.system_embedder_dimension || '';
+        }
+        if(document.getElementById('edit-kb-public')) document.getElementById('edit-kb-public').checked = !!config.is_public;
+    } else {
+        // Fallback clear
+        if(document.getElementById('edit-kb-sysprompt')) document.getElementById('edit-kb-sysprompt').value = '';
+        if(document.getElementById('edit-kb-is-persona')) document.getElementById('edit-kb-is-persona').checked = false;
+        if(document.getElementById('edit-kb-sysprompt-container')) document.getElementById('edit-kb-sysprompt-container').style.display = 'none';
     }
 
     // Apply read-only locks
-    const allInputs = modal.querySelectorAll('input:not(#new-kb-name), select, textarea');
+    const allInputs = modal.querySelectorAll('input:not(#edit-kb-name), select, textarea');
     allInputs.forEach(el => el.disabled = isReadOnly);
 
-    const saveBtn = modal.querySelector('.modal-footer button.btn-success');
+    const saveBtn = document.getElementById('edit-kb-save-btn');
     if (saveBtn) {
         saveBtn.style.display = isReadOnly ? 'none' : 'inline-block';
         if (!isReadOnly) {
-            saveBtn.textContent = 'Save Changes';
             saveBtn.onclick = async () => {
                 const payload = {
                     database: currentDatabase,
                     name: baseName,
-                    embedder: document.getElementById('new-kb-embedder') ? document.getElementById('new-kb-embedder').value : 'default',
-                    use_ai_persona: document.getElementById('new-kb-is-persona') ? document.getElementById('new-kb-is-persona').checked : false,
-                    is_public: document.getElementById('new-kb-public') ? document.getElementById('new-kb-public').checked : false,
-                    system_prompt: document.getElementById('new-kb-sysprompt') ? document.getElementById('new-kb-sysprompt').value : ''
+                    embedder: document.getElementById('edit-kb-embedder') ? document.getElementById('edit-kb-embedder').value : '',
+                    is_persona: document.getElementById('edit-kb-is-persona') ? document.getElementById('edit-kb-is-persona').checked : false,
+                    is_public: document.getElementById('edit-kb-public') ? document.getElementById('edit-kb-public').checked : false,
+                    system_prompt: document.getElementById('edit-kb-sysprompt') ? document.getElementById('edit-kb-sysprompt').value : ''
                 };
                 
+                if (window.resolveSpaceEmbedderAuth) {
+                    try {
+                        await window.resolveSpaceEmbedderAuth({ embedder: payload.embedder });
+                    } catch(e) {
+                        console.log("JIT provider auth cancelled by user during Space Edit");
+                        return;
+                    }
+                }
+
                 try {
                     const r = await fetch('/api/spaces/config', {
                         method: 'POST',
@@ -2731,7 +2917,7 @@ window.showEditKB = async function() {
                         const err = await r.json();
                         showAlert('Error saving space configuration: ' + (err.error || 'Unknown error'));
                     } else {
-                        closeUIModal('add-kb-modal');
+                        window.closeEditKBModal();
                     }
                 } catch (e) {
                     showAlert('Failed to save configuration: ' + e.message);
@@ -2740,7 +2926,7 @@ window.showEditKB = async function() {
         }
     }
     
-    openUIModal('add-kb-modal');
+    openUIModal('edit-kb-modal');
 };
 
 async function exportSpace() {

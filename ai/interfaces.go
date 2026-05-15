@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
@@ -215,10 +216,18 @@ type Generator interface {
 
 // GenOptions configures the generation process.
 type GenOptions struct {
-	MaxTokens   int
-	Temperature float32
-	TopP        float32
-	Stop        []string
+	SystemPrompt string
+	MaxTokens    int
+	Temperature  float32
+	TopP         float32
+	Stop         []string
+	Tools        []ToolDefinition // NEW: Pass the schemas via Native API
+}
+
+// ToolCall represents a native tool call requested by the LLM.
+type ToolCall struct {
+	Name string
+	Args map[string]any
 }
 
 // GenOutput represents the result of a generation.
@@ -226,6 +235,27 @@ type GenOutput struct {
 	Text       string
 	TokensUsed int
 	Raw        any
+	ToolCalls  []ToolCall // NEW: Struct for natively parsed tool requests
+}
+
+// ReasoningEngine isolates the orchestration loop from the service configuration.
+type ReasoningEngine interface {
+	Run(ctx context.Context, req ReasoningRequest) (ReasoningResponse, error)
+}
+
+type ReasoningRequest struct {
+	SystemPrompt string
+	ContextText  string
+	HistoryText  string
+	UserQuery    string
+	Executor     ToolExecutor
+	Generator    Generator
+	Streamer     func(eventType string, data any) // Optional NDJSON callback
+}
+
+type ReasoningResponse struct {
+	FinalText string
+	ToolCalls []ToolCall // For audit/logging
 }
 
 // PolicyEngine defines the interface for evaluating content against safety policies.
@@ -338,8 +368,17 @@ type Agent[T any] interface {
 type SessionPayload struct {
 	// CurrentDB is the active database name for the session.
 	CurrentDB string
-// UserID identifies the user for privacy and memory isolation.
-UserID string
+	// UserID identifies the user for privacy and memory isolation.
+	UserID string
+	// ClientID tags the origin client device or application.
+	ClientID string
+	// SessionID tracks the specific transient connection/session.
+	SessionID string
+	// AvatarScope tags the session with the active KBContextID.
+	// Used by Omni-Protocol to know which sandbox the conversation occurred within.
+	AvatarScope string
+	// AgentID represents whether Omni or a specific Avatar generated this payload/memory
+	AgentID string
 	// ActiveDomain is the knowledge domain selected by the user.
 	ActiveDomain string
 	// SelectedKBs are the explicit Knowledge Bases selected by the user from the dropdown.
@@ -360,6 +399,18 @@ UserID string
 }
 
 // GetDatabase returns the effective current Database name.
+// GetMemoryKBName constructs the correct Long-Term Memory namespace.
+// It branches the user's vector store namespace if AvatarScope is present.
+func (s *SessionPayload) GetMemoryKBName() string {
+	if s.UserID == "" {
+		return ""
+	}
+	if s.AvatarScope != "" {
+		return fmt.Sprintf("%s%s_Avatar_%s", MemoryKBPrefix, s.UserID, s.AvatarScope)
+	}
+	return fmt.Sprintf("%s%s", MemoryKBPrefix, s.UserID)
+}
+
 func (s *SessionPayload) GetDatabase() string {
 	return s.CurrentDB
 }

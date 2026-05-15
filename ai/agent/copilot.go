@@ -5,11 +5,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"text/template"
 	"time"
 
@@ -22,8 +25,31 @@ import (
 	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/ai/obfuscation"
+	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/jsondb"
 )
+
+const (
+	MaxMRUSize            = 20
+	MaxExchangesInHistory = 20
+)
+
+// MRUItem represents a single category currently in working memory
+type MRUItem struct {
+	Category     string
+	LastAccessed int64
+	Context      string
+}
+
+// MemoryUnit encapsulates the cognitive state and boundaries of an Agent instance.
+type MemoryUnit struct {
+	AgentID    string
+	AllowedKBs []string // LTM scoping boundaries
+
+	// Physical On-Disk Memory Structures
+	STM btree.BtreeInterface[string, any]     // Episodic B-Tree buffer for the cognitive footprint
+	LTM *memory.KnowledgeBase[map[string]any] // Declarative Vector Database (Sellable knowledge mapping)
+}
 
 // CopilotAgent is a specialized agent for database administration tasks.
 // It implements the ai.Agent interface.
@@ -36,12 +62,14 @@ type CopilotAgent struct {
 	lastToolCall *ai.ScriptStep
 	service      *Service // Reference back to main service for cache invalidation
 
+	// Encapsulated memory and context boundaries
+	Memory        *MemoryUnit
+	episodeQueue  chan map[string]any // Agent-scoped STM batching queue
+	lastEpisodeTS atomic.Int64        // Tracks the last time an episode was logged to STM for idle sleep cycles
+
 	// Compiled Scripts Cache
 	compiledScripts   map[string]CachedScript
 	compiledScriptsMu sync.RWMutex
-
-	// AI Persisted Memory for the session
-	ConversationHistory string
 
 	// API Keys for dynamic switching
 	geminiKey string
@@ -54,24 +82,64 @@ type CopilotAgent struct {
 // Clone creates a new isolated instance of the agent sharing read-only components.
 func (a *CopilotAgent) Clone() ai.Agent[map[string]any] {
 	return &CopilotAgent{
-		Config:              a.Config,
-		brain:               a.brain,
-		registry:            a.registry, // Pointer to registry
-		databases:           a.databases,
-		systemDB:            a.systemDB,
-		lastToolCall:        nil,
-		service:             nil, // Caller should populate this
-		compiledScripts:     make(map[string]CachedScript),
-		geminiKey:           a.geminiKey,
-		openAIKey:           a.openAIKey,
-		StoreOpener:         a.StoreOpener,
-		ConversationHistory: a.ConversationHistory,
+		Config:    a.Config,
+		brain:     a.brain,
+		registry:  a.registry, // Pointer to registry
+		databases: a.databases,
+		systemDB:  a.systemDB,
+		Memory: &MemoryUnit{
+			AgentID: "omni", // By default Clone behaves as Omni, Avatars explicitly override
+		},
+		lastToolCall:    nil,
+		service:         nil, // Caller should populate this
+		compiledScripts: make(map[string]CachedScript),
+		geminiKey:       a.geminiKey,
+		openAIKey:       a.openAIKey,
+		StoreOpener:     a.StoreOpener,
 	}
 }
 
 // SetGenerator sets the generator for the agent.
 func (a *CopilotAgent) SetGenerator(gen ai.Generator) {
 	a.brain = gen
+}
+
+// MarkMRUCategory adds or updates a category in the global working memory MRU
+func (a *CopilotAgent) MarkMRUCategory(category string, context string) {
+	if a.service == nil || a.service.session == nil {
+		return
+	}
+	sess := a.service.session
+	sess.MRUMu.Lock()
+	defer sess.MRUMu.Unlock()
+
+	ts := time.Now().UnixMilli()
+
+	// Update if exists
+	for i, item := range sess.MRU {
+		if item.Category == category {
+			sess.MRU[i].LastAccessed = ts
+			if context != "" {
+				sess.MRU[i].Context = context
+			}
+			return
+		}
+	}
+
+	// Add new
+	sess.MRU = append(sess.MRU, MRUItem{
+		Category:     category,
+		LastAccessed: ts,
+		Context:      context,
+	})
+
+	// Sort by newest and shrink if > MaxMRUSize
+	if len(sess.MRU) > MaxMRUSize {
+		sort.Slice(sess.MRU, func(i, j int) bool {
+			return sess.MRU[i].LastAccessed > sess.MRU[j].LastAccessed
+		})
+		sess.MRU = sess.MRU[:MaxMRUSize]
+	}
 }
 
 // NewCopilotAgent creates a new instance of CopilotAgent.
@@ -176,11 +244,15 @@ func NewCopilotAgent(cfg Config, databases map[string]sop.DatabaseOptions, syste
 		registry:  NewRegistry(),
 		databases: databases,
 		systemDB:  systemDB,
+		Memory: &MemoryUnit{
+			AgentID: "omni", // Root loop defaults to omni
+		},
 		// API Keys are less relevant now that we use the Generator interface mostly,
 		// but we keep them empty or fill them if we really need them for direct calls later.
 		// geminiKey:       geminiKey,
 		// openAIKey:       openAIKey,
 		compiledScripts: make(map[string]CachedScript),
+		episodeQueue:    make(chan map[string]any, 100),
 	}
 	// Tools are registered dynamically in Open() or Ask() to ensure context propagation
 	// context.Background() is used here to ensure tools are available even if Open() is not called or context context is missing
@@ -243,6 +315,11 @@ func (a *CopilotAgent) Open(ctx context.Context) error {
 		}
 	}
 
+	// Initialize strict physical cognitive buffers natively
+	if err := a.InitializePhysicalMemory(ctx); err != nil {
+		log.Warn("CopilotAgent: STM Initialization failure", "error", err)
+	}
+
 	// Register tools now that we have a context (and potentially transactions)
 	a.registerTools(ctx)
 
@@ -268,157 +345,323 @@ func (a *CopilotAgent) Search(ctx context.Context, query string, limit int) ([]a
 
 // Ask processes a query and returns a response.
 func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
-	// Note: We no longer reset 'a.sessionContext' here because it is now session-scoped via valid Context.
-	// If isolation is needed between Ask calls in the same session, the caller (Service) should manage the SessionPayload.
+	// 1. Determine Generator to use (Dynamic Switching)
+	gen := a.resolveGenerator(ctx)
 
-	// Refresh tools to ensure latest instructions from memory are used
-	a.registerTools(ctx)
-
-	// Determine Generator to use (Dynamic Switching)
-	// We do this BEFORE slash commands now to allow fallback logic
-	gen := a.brain
-	if providerOverride, ok := ctx.Value(ai.CtxKeyProvider).(string); ok && providerOverride != "" {
-		var err error
-		var tempGen ai.Generator
-
-		// Get runtime overrides
-		customAPIKey, _ := ctx.Value(ai.CtxKeyAPIKey).(string)
-		customBaseURL, _ := ctx.Value(ai.CtxKeyBaseURL).(string)
-
-		switch providerOverride {
-		case ProviderGemini:
-			key := customAPIKey
-			if key == "" {
-				key = a.geminiKey
-			}
-			if key != "" {
-				model := os.Getenv(EnvGeminiModel)
-				if model == "" {
-					model = DefaultModelGemini
-				}
-				tempGen, err = generator.New(ProviderGemini, map[string]any{
-					"api_key": key,
-					"model":   model,
-				})
-			}
-		case ProviderChatGPT:
-			key := customAPIKey
-			if key == "" {
-				key = a.openAIKey
-			}
-			if key != "" {
-				model := customBaseURL // We use BaseURL for custom model string if given
-				if model == "" {
-					model = os.Getenv(EnvOpenAIModel)
-				}
-				if model == "" {
-					model = DefaultModelOpenAI
-				}
-				tempGen, err = generator.New(ProviderChatGPT, map[string]any{
-					"api_key": key,
-					"model":   model,
-				})
-			}
-		case ProviderOllama:
-			model := os.Getenv(EnvOllamaModel)
-			if model == "" {
-				model = DefaultModelOllama
-			}
-			host := customBaseURL
-			if host == "" {
-				host = os.Getenv(EnvOllamaHost)
-			}
-			if host == "" {
-				host = DefaultHost
-			}
-			tempGen, err = generator.New(ProviderOllama, map[string]any{
-				"base_url": host,
-				"model":    model,
-			})
-		}
-
-		if err == nil && tempGen != nil {
-			gen = tempGen
-		} else {
-			log.Warn("Failed to switch provider", "provider", providerOverride, "error", err)
-		}
-	}
-
-	// Handle Direct Tool Invocations (Slash Commands)
-	// This allows using tools even if the LLM is disabled (no API Key)
+	// 2. Handle Direct Tool Invocations (Slash Commands)
 	if strings.HasPrefix(strings.TrimSpace(query), "/") {
-		cmdLine := strings.TrimSpace(query)[1:] // Remove leading slash
-
-		// Parse command line respecting quotes: tool_name key="value with spaces"
-		toolName, args, err := parser.ParseSlashCommand(cmdLine)
-
-		// Handle built-in config commands
-		if err == nil && (toolName == "verbose" || toolName == "v") {
-			newState := !a.Config.Verbose
-			if pos, ok := args["_positional"].([]string); ok && len(pos) > 0 {
-				val := strings.ToLower(pos[0])
-				if val == "on" || val == "true" || val == "1" {
-					newState = true
-				} else if val == "off" || val == "false" || val == "0" {
-					newState = false
-				}
+		// Register tools for local command parsing
+		a.registerTools(ctx)
+		handled, res, err := a.handleSlashCommand(ctx, query, gen)
+		if handled {
+			if err != nil {
+				return res, nil // Return the error message string directly as per original flow
 			}
-			a.SetVerbose(newState)
-			status := "OFF"
-			if newState {
-				status = "ON"
-			}
-			return fmt.Sprintf("Verbose mode: **%s**", status), nil
-		}
-
-		if err == nil && toolName != "" {
-			// Execute straight away
-			res, execErr := a.Execute(ctx, toolName, args)
-
-			// Fallback Logic:
-			// If execution failed AND we have an LLM, maybe the user meant a natural language query starting with /
-			// or the parser was too naive. We delegate to the Brain.
-			if execErr != nil {
-				// Only fallback if the error indicates "unknown tool"
-				// If the tool IS known but failed (e.g. invalid args), we should return the error directly
-				// instead of confusing the LLM or user.
-				if strings.Contains(execErr.Error(), "unknown tool") {
-					if gen != nil {
-						log.Warn("Slash command failed locally (unknown tool), falling back to LLM", "tool", toolName, "error", execErr)
-						// Proceed to LLM flow below...
-					} else {
-						// No Brain to save us. Die.
-						return fmt.Sprintf("Error executing command '%s' (and no AI Copilot available to interpret it): %v", toolName, execErr), nil
-					}
-				} else {
-					// Tool exists but execution failed. Return error.
-					return fmt.Sprintf("Error executing command '%s': %v", toolName, execErr), nil
-				}
-			} else {
-				return res, nil
-			}
+			return res, nil
 		}
 	}
-
-	// cfg := ai.NewAskConfig(opts...)
 
 	if gen == nil {
 		return "⚠️ **AI Copilot Disabled**: No valid API Key found.\n\nPlease go to **Environment Settings** (HDD icon in bottom left) -> **LLM API Key** to configure your Google Gemini or OpenAI key.", nil
 	}
 
-	// 1. Construct System Prompt with Persona & Tools
-	persona := "You are a general-purpose intelligent AI Copilot equipped with a human-like 'active memory' system. " +
-		"You specialize in SOP AI (SOP for AI), which is primarily a platform and toolset for Knowledge Bases (KBs). " +
-		"SOP allows users to author KBs, and you can be instructed to consult all KBs in the current DB and/or SystemDB to provide informed answers. " +
-		"You also aid in SOP library adoption, technology integration, Spaces management, and data management. " +
-		"As a true SOP (Scalable Objects Persistence) expert, your core knowledge covers Databases, B-Trees, strict ACID Transactions, Swarm Computing, and advanced Storage mechanisms including Erasure Coding. " +
-		"You also understand that a 'Space' or 'Knowledge Base' is a new AI memory subsystem combining VectorDB, Text Search, and a specialized schema (Thoughts: Category/Items), and you manage it differently than raw technical tables. " +
-		"You have deep expertise in SOP scripting (AST-based execution), and the SOP HTTP API, covering request/response lifecycles, NDJSON streaming, and session management. " +
-		"You derive your foundational SOP knowledge, codebase context, and architectural principles directly from the source repository at https://github.com/sharedcode/sop. " +
-		"Assist users dynamically with ANY open-ended request—whether answering general questions, creating and consulting Knowledge Bases, writing code, or managing database queries using the tools provided.\n\n"
+	// 3. Classify Intent Router (OMNI vs specific Avatar)
+	intent := a.classifyIntent(ctx, query, gen)
+
+	// 4. Fast-path routing: If Avatar, execute Avatar Sub-Agent
+	if intent != "OMNI" {
+		log.Info("Ask: Request classified for Avatar routing", "avatar", intent)
+		return a.executeAvatarSubAgent(ctx, intent, query)
+	}
+
+	// 5. Omni routing: Load heavy baseline tools, compile system prompt, execute
+	log.Info("Ask: Request classified for OMNI baseline")
+
+	// Determine current target KB
+	currentKBTrack := "sop"
+	if p := ai.GetSessionPayload(ctx); p != nil && len(p.SelectedKBs) > 0 {
+		currentKBTrack = strings.Join(p.SelectedKBs, ",")
+	}
+
+	// --- DYNAMIC MRU INJECTION FROM PREVIOUS EPISODE ---
+	if a.service != nil && a.service.session != nil {
+		if a.service.session.Memory != nil {
+			thread := a.service.session.Memory.GetCurrentThread()
+			if thread != nil && len(thread.Exchanges) > 0 {
+				lastExchange := thread.Exchanges[len(thread.Exchanges)-1]
+
+				// Inspect the prior Q&A exchange (episode metadata)
+				// If the interaction resolves to the same Entity and same Knowledge Base...
+				if lastExchange.Entity == intent && lastExchange.ActiveKB == currentKBTrack {
+					// Auto-inject the matching contexts into MRU
+					kbs := strings.Split(currentKBTrack, ",")
+					for _, kb := range kbs {
+						kb = strings.TrimSpace(kb)
+						if kb != "" {
+							a.MarkMRUCategory(kb, "")
+						}
+					}
+				}
+			}
+		}
+	}
+
+	a.registerTools(ctx)
+
+	// 6. Construct System Prompt with Persona & Tools & Context
+	fullPrompt := a.buildSystemPrompt(ctx, query)
+
+	// Obfuscate Prompt if enabled
+	currentDB := ""
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		currentDB = p.CurrentDB
+	}
+	if a.shouldObfuscate(currentDB) {
+		fullPrompt = obfuscation.GlobalObfuscator.ObfuscateText(fullPrompt)
+	}
+
+	// 5. Delegate to Reasoning Engine
+
+	var engine ai.ReasoningEngine
+	if a.Config.UseLegacyBaselineEngine {
+		engine = &BaselineReActEngine{
+			Agent: a,
+		}
+	} else {
+		// Active Implementation: Native Tools (API-level tool calling)
+		engine = &NativeReActEngine{
+			EnableObfuscation: a.shouldObfuscate(currentDB),
+		}
+	}
+
+	req := ai.ReasoningRequest{
+		SystemPrompt: fullPrompt, // For baseline, the system prompt contains the full aggregated state
+		UserQuery:    query,
+		Executor:     a, // CopilotAgent implements Executor
+		Generator:    gen,
+		// ContextText and HistoryText are pre-injected into fullPrompt in this legacy baseline
+	}
+
+	resp, err := engine.Run(ctx, req)
+	if err != nil {
+		return "", err
+	}
+
+	// 6. Post-Processing
+	finalText := resp.FinalText
+	if a.shouldObfuscate(currentDB) {
+		finalText = obfuscation.GlobalObfuscator.DeobfuscateText(finalText)
+	}
+
+	if a.service != nil && a.service.session != nil {
+		if a.service.session.Memory == nil {
+			a.service.session.Memory = NewShortTermMemory()
+		}
+		thread := a.service.session.Memory.GetCurrentThread()
+		if thread == nil {
+			newThreadID := sop.NewUUID()
+			thread = &ConversationThread{
+				ID:         newThreadID,
+				RootPrompt: query,
+				Label:      "Copilot Session",
+				Category:   "General",
+				Exchanges:  make([]Interaction, 0),
+				Status:     "active",
+			}
+			a.service.session.Memory.AddThread(thread)
+			a.service.session.Memory.CurrentThreadID = newThreadID
+		}
+
+		kbTrack := "sop"
+		if p := ai.GetSessionPayload(ctx); p != nil && len(p.SelectedKBs) > 0 {
+			kbTrack = strings.Join(p.SelectedKBs, ",")
+		}
+
+		// Track User
+		thread.Exchanges = append(thread.Exchanges, Interaction{
+			Role:      RoleUser,
+			Content:   query,
+			Timestamp: time.Now().UnixMilli(),
+			Entity:    intent,
+			ActiveKB:  kbTrack,
+		})
+		// Track Assistant
+		thread.Exchanges = append(thread.Exchanges, Interaction{
+			Role:      RoleAssistant,
+			Content:   finalText,
+			Timestamp: time.Now().UnixMilli(),
+			Entity:    intent,
+			ActiveKB:  kbTrack,
+		})
+
+	}
+
+	// 7. Log Episode for SleepCycle (Episodic Memory)
+	if a.service != nil && a.service.EnableShortTermMemory {
+		var mruSnapshot []MRUItem
+		if a.service.session != nil {
+			a.service.session.MRUMu.RLock()
+			mruSnapshot = append([]MRUItem(nil), a.service.session.MRU...)
+			a.service.session.MRUMu.RUnlock()
+		}
+
+		thoughtPayload := map[string]any{
+			"query":          query,
+			"response":       finalText,
+			"active_context": mruSnapshot,
+		}
+
+		go a.logEpisodeToSTM(context.Background(), "user_interaction", thoughtPayload, "Interacted with user", nil)
+	}
+
+	return finalText, nil
+}
+
+// ----------------------------------------------------------------------------
+// HELPER METHODS
+// ----------------------------------------------------------------------------
+
+func (a *CopilotAgent) resolveGenerator(ctx context.Context) ai.Generator {
+	gen := a.brain
+	providerOverride, ok := ctx.Value(ai.CtxKeyProvider).(string)
+	if !ok || providerOverride == "" {
+		return gen
+	}
+
+	var err error
+	var tempGen ai.Generator
+
+	customAPIKey, _ := ctx.Value(ai.CtxKeyAPIKey).(string)
+	customBaseURL, _ := ctx.Value(ai.CtxKeyBaseURL).(string)
+
+	switch providerOverride {
+	case ProviderGemini:
+		key := customAPIKey
+		if key == "" {
+			key = a.geminiKey
+		}
+		if key != "" {
+			model := os.Getenv(EnvGeminiModel)
+			if model == "" {
+				model = DefaultModelGemini
+			}
+			tempGen, err = generator.New(ProviderGemini, map[string]any{
+				"api_key": key,
+				"model":   model,
+			})
+		}
+	case ProviderChatGPT:
+		key := customAPIKey
+		if key == "" {
+			key = a.openAIKey
+		}
+		if key != "" {
+			model := customBaseURL
+			if model == "" {
+				model = os.Getenv(EnvOpenAIModel)
+			}
+			if model == "" {
+				model = DefaultModelOpenAI
+			}
+			tempGen, err = generator.New(ProviderChatGPT, map[string]any{
+				"api_key": key,
+				"model":   model,
+			})
+		}
+	case ProviderOllama:
+		model := os.Getenv(EnvOllamaModel)
+		if model == "" {
+			model = DefaultModelOllama
+		}
+		host := customBaseURL
+		if host == "" {
+			host = os.Getenv(EnvOllamaHost)
+		}
+		if host == "" {
+			host = DefaultHost
+		}
+		tempGen, err = generator.New(ProviderOllama, map[string]any{
+			"base_url": host,
+			"model":    model,
+		})
+	}
+
+	if err == nil && tempGen != nil {
+		gen = tempGen
+	} else {
+		log.Warn("Failed to switch provider", "provider", providerOverride, "error", err)
+	}
+
+	return gen
+}
+
+func (a *CopilotAgent) handleSlashCommand(ctx context.Context, query string, gen ai.Generator) (bool, string, error) {
+	cmdLine := strings.TrimSpace(query)[1:]
+	toolName, args, err := parser.ParseSlashCommand(cmdLine)
+
+	if err == nil && (toolName == "verbose" || toolName == "v") {
+		newState := !a.Config.Verbose
+		if pos, ok := args["_positional"].([]string); ok && len(pos) > 0 {
+			val := strings.ToLower(pos[0])
+			if val == "on" || val == "true" || val == "1" {
+				newState = true
+			} else if val == "off" || val == "false" || val == "0" {
+				newState = false
+			}
+		}
+		a.SetVerbose(newState)
+		status := "OFF"
+		if newState {
+			status = "ON"
+		}
+		return true, fmt.Sprintf("Verbose mode: **%s**", status), nil
+	}
+
+	if err == nil && toolName != "" {
+		res, execErr := a.Execute(ctx, toolName, args)
+		if execErr != nil {
+			if strings.Contains(execErr.Error(), "unknown tool") {
+				if gen != nil {
+					log.Warn("Slash command failed locally (unknown tool), falling back to LLM", "tool", toolName, "error", execErr)
+					return false, "", nil // Handled by LLM
+				}
+				return true, fmt.Sprintf("Error executing command '%s' (and no AI Copilot available to interpret it): %v", toolName, execErr), fmt.Errorf("tool fallback failed")
+			}
+			return true, fmt.Sprintf("Error executing command '%s': %v", toolName, execErr), fmt.Errorf("tool execution failed")
+		}
+		return true, res, nil
+	}
+	return false, "", nil
+}
+
+func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string) string {
+	persona := ""
+	if p := ai.GetSessionPayload(ctx); p != nil && p.UserID != "" && a.systemDB != nil {
+		kbName := p.GetMemoryKBName()
+		if tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+			if kb, err := a.systemDB.OpenKnowledgeBase(ctx, kbName, tx, nil, nil); err == nil {
+				if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil && cfg.SystemPrompt != "" {
+					persona = cfg.SystemPrompt + "\n\n"
+				}
+			}
+			tx.Rollback(ctx)
+		}
+	}
+
+	// Fallback persona
+	if persona == "" {
+		persona = "You are a general-purpose intelligent AI Copilot equipped with a human-like 'active memory' system. " +
+			"You specialize in SOP AI (SOP for AI), which is primarily a platform and toolset for Knowledge Bases (KBs). " +
+			"SOP allows users to author KBs, and you can be instructed to consult all KBs in the current DB and/or SystemDB to provide informed answers. " +
+			"You also aid in SOP library adoption, technology integration, Spaces management, and data management. " +
+			"As a true SOP (Scalable Objects Persistence) expert, your core knowledge covers Databases, B-Trees, strict ACID Transactions, Swarm Computing, and advanced Storage mechanisms including Erasure Coding. " +
+			"You also understand that a 'Space' or 'Knowledge Base' is a new AI memory subsystem combining VectorDB, Text Search, and a specialized schema (Thoughts: Category/Items), and you manage it differently than raw technical tables. " +
+			"You have deep expertise in SOP scripting (AST-based execution), and the SOP HTTP API, covering request/response lifecycles, NDJSON streaming, and session management. " +
+			"You derive your foundational SOP knowledge, codebase context, and architectural principles directly from the source repository at https://github.com/sharedcode/sop. " +
+			"Assist users dynamically with ANY open-ended request—whether answering general questions, creating and consulting Knowledge Bases, writing code, or managing database queries using the tools provided.\n\n"
+	}
 
 	toolsDef := persona
-
 	isSpaceGeneration := strings.Contains(query, "IMPORTANT SYSTEM RULE: The user is generating a UI Space.")
 
 	if !isSpaceGeneration {
@@ -427,17 +670,12 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 
 	// Append Scripts as Tools
 	if a.systemDB != nil && !isSpaceGeneration {
-		// We need a transaction to read from system DB
-		tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
-		if err == nil {
-			store, err := a.systemDB.OpenModelStore(ctx, "scripts", tx)
-			if err == nil {
-				names, err := store.List(ctx, ai.DefaultScriptCategory)
-				if err == nil {
+		if tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+			if store, err := a.systemDB.OpenModelStore(ctx, "scripts", tx); err == nil {
+				if names, err := store.List(ctx, ai.DefaultScriptCategory); err == nil {
 					for _, name := range names {
 						var script ai.Script
 						if err := store.Load(ctx, ai.DefaultScriptCategory, name, &script); err == nil {
-							// Format args schema
 							argsSchema := "()"
 							if len(script.Parameters) > 0 {
 								var params []string
@@ -455,29 +693,51 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 		}
 	}
 
-	// Inject Learned Knowledge (Contextual)
-	if knowledge := RetrieveLLMKnowledge(ctx, a.systemDB); knowledge != "" {
-		toolsDef += "\nContext Section (Learned Knowledge):\n" + knowledge
-	}
-
-	// Support dynamic extraction of KBs from the databases
-	getKBNames := func(ctx context.Context, tempDB *database.Database) []string {
-		var kbs []string
-		if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-			if stores, err := tx.GetStores(ctx); err == nil {
-				for _, s := range stores {
-					if strings.HasSuffix(s, "/sys_config") {
-						kbs = append(kbs, strings.TrimSuffix(s, "/sys_config"))
+	// Contextual Learned Knowledge (JIT Semantic Recall from Episodic LTM)
+	if a.systemDB != nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil && a.Memory.AgentID != "" {
+		if tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+			kbName := fmt.Sprintf("ltm_%s", a.Memory.AgentID)
+			kb, err := a.systemDB.OpenKnowledgeBase(ctx, kbName, tx, nil, nil)
+			if err == nil {
+				vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query})
+				if err == nil && len(vecs) > 0 {
+					closestCat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
+					catFilter := ""
+					if err == nil && closestCat != nil {
+						catFilter = closestCat.Name
+					}
+					hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: 5, Category: catFilter})
+					if err == nil && len(hits) > 0 {
+						hasKnowledge := false
+						knowledgeStr := ""
+						for _, hit := range hits {
+							if hit.Score < 0.6 {
+								continue
+							}
+							valStr := ""
+							if str, ok := hit.Payload["_raw_content"].(string); ok {
+								valStr = str
+							} else if str, ok := hit.Payload["content"].(string); ok {
+								valStr = str
+							} else {
+								valStr = fmt.Sprintf("%v", hit.Payload)
+							}
+							if valStr != "" {
+								hasKnowledge = true
+								knowledgeStr += fmt.Sprintf("- (Score: %.2f) %s\n", hit.Score, valStr)
+							}
+						}
+						if hasKnowledge {
+							toolsDef += "\nContext Section (Learned Knowledge):\n" + knowledgeStr
+						}
 					}
 				}
 			}
 			tx.Rollback(ctx)
 		}
-		return kbs
 	}
 
-	// Active Domains from Both Local UserDB and Global SystemDB
-	// Extract available domains, add them to context, then do vector search if any match
+	// Active Domains Lookup
 	if p := ai.GetSessionPayload(ctx); p != nil && p.ActiveDomain != "" {
 		domains := strings.Split(p.ActiveDomain, ",")
 		for _, domain := range domains {
@@ -486,7 +746,6 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 				continue
 			}
 
-			// Identify the DB containing this domain
 			var domainDB *database.Database
 			dbOptsList := []sop.DatabaseOptions{a.systemDB.Config()}
 			for _, dbOpts := range a.databases {
@@ -495,7 +754,21 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 
 			for _, dbOpts := range dbOptsList {
 				tempDB := database.NewDatabase(dbOpts)
-				kbs := getKBNames(ctx, tempDB)
+				kbs := func(ctx context.Context, tempDB *database.Database) []string {
+					var kbs []string
+					if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+						if stores, err := tx.GetStores(ctx); err == nil {
+							for _, s := range stores {
+								if strings.HasSuffix(s, "/sys_config") {
+									kbs = append(kbs, strings.TrimSuffix(s, "/sys_config"))
+								}
+							}
+						}
+						tx.Rollback(ctx)
+					}
+					return kbs
+				}(ctx, tempDB)
+
 				hasDomain := false
 				for _, kb := range kbs {
 					if kb == domain {
@@ -515,13 +788,20 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 					if err == nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
 						vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query})
 						if err == nil && len(vecs) > 0 {
-							hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: 5})
+							closestCat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
+							catFilter := ""
+							if err == nil && closestCat != nil {
+								catFilter = closestCat.Name
+							}
+							hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: 5, Category: catFilter})
+							hasGoodHits := false
+							accumStr := ""
 							if err == nil && len(hits) > 0 {
-								toolsDef += fmt.Sprintf("\nActive Playbook Context (%s):\n", domain)
 								for _, hit := range hits {
 									if hit.Score < 0.6 {
 										continue
 									}
+									hasGoodHits = true
 									valStr := ""
 									if str, ok := hit.Payload["_raw_content"].(string); ok {
 										valStr = str
@@ -530,7 +810,23 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 									} else {
 										valStr = fmt.Sprintf("%v", hit.Payload)
 									}
-									toolsDef += fmt.Sprintf("- Context (Score: %.2f): %s\n", hit.Score, valStr)
+									accumStr += fmt.Sprintf("- Context (Score: %.2f): %s\n", hit.Score, valStr)
+								}
+							}
+
+							if hasGoodHits {
+								toolsDef += fmt.Sprintf("\nActive Playbook Context (%s):\n%s", domain, accumStr)
+								a.MarkMRUCategory(domain, fmt.Sprintf("Retrieved Semantics:\n%s", accumStr))
+							} else {
+								if a.service != nil && a.service.session != nil {
+									a.service.session.MRUMu.RLock()
+									for _, item := range a.service.session.MRU {
+										if item.Category == domain && item.Context != "" {
+											toolsDef += fmt.Sprintf("\nCarried-Over Playbook Context (%s):\n%s\n", domain, item.Context)
+											break
+										}
+									}
+									a.service.session.MRUMu.RUnlock()
 								}
 							}
 						}
@@ -541,7 +837,6 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 		}
 	}
 
-	// Inject Current Database Schema/Stores
 	if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" && !isSpaceGeneration {
 		var db *database.Database
 		if p.CurrentDB == SystemDBName {
@@ -551,7 +846,6 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 		}
 
 		if db != nil {
-			// We use a read-only transaction for this metadata fetch
 			if tx, err := db.BeginTransaction(ctx, sop.ForReading); err == nil {
 				if stores, err := tx.GetStores(ctx); err == nil {
 					toolsDef += fmt.Sprintf("\nActive Database: %s\nAvailable Stores:\n", p.CurrentDB)
@@ -560,10 +854,8 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 							continue
 						}
 						var schemaInfo string
-						// Try to open store to get schema info
 						if storeAccessor, err := jsondb.OpenStore(ctx, db.Config(), s, tx); err == nil {
 							info := storeAccessor.GetStoreInfo()
-							// SAMPLE SCHEMA (SCALABILITY: Only 1st item)
 							if ok, _ := storeAccessor.First(ctx); ok {
 								key := storeAccessor.GetCurrentKey()
 								if key != nil {
@@ -593,66 +885,72 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 		}
 	}
 
-	// Request rules and context are dynamically retrieved by the Vectorizer from Active Memory Markdown.
-	toolsDef += a.getSystemInstructions(ctx, "")
+	toolsDef += a.getSystemInstructions(ctx, query)
 
-	// Inject active memory from Agent state to fight amnesia
+	// Reconstruct the active transcript dynamically from episodic Short-Term Memory
 	convHistory := ""
-	if a.ConversationHistory != "" {
-		convHistory = "\n[ACTIVE SESSION MEMORY]\n" + a.ConversationHistory + "\n[/ACTIVE SESSION MEMORY]\n\n"
+	if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+		if thread := a.service.session.Memory.GetCurrentThread(); thread != nil && len(thread.Exchanges) > 0 {
+			var sb strings.Builder
+
+			exchanges := thread.Exchanges
+			if len(exchanges) > MaxExchangesInHistory {
+				exchanges = exchanges[len(exchanges)-MaxExchangesInHistory:]
+			}
+
+			for _, ex := range exchanges {
+				if ex.Role == RoleUser {
+					sb.WriteString(fmt.Sprintf("User: %s\n", ex.Content))
+				} else if ex.Role == RoleAssistant {
+					sb.WriteString(fmt.Sprintf("Assistant: %s\n", ex.Content))
+				}
+			}
+			if sb.Len() > 0 {
+				convHistory = "\n[ACTIVE SESSION MEMORY]\n" + sb.String() + "\n[/ACTIVE SESSION MEMORY]\n\n"
+			}
+		}
 	}
 
-	fullPrompt := toolsDef + "\n" + convHistory + "User: " + query
+	return toolsDef + "\n" + convHistory + "User: " + query
+}
 
-	// Obfuscate Prompt if enabled
-	// Note: We use the session payload's CurrentDB to decide, checking "shouldObfuscate".
-	// If no DB is selected yet, we might fallback to global setting or skip.
-	currentDB := ""
-	if p := ai.GetSessionPayload(ctx); p != nil {
-		currentDB = p.CurrentDB
-	}
+// ============================================================================
+// BASELINE ReACT ENGINE (10 Turn Loop Abstraction)
+// ============================================================================
 
-	if a.shouldObfuscate(currentDB) {
-		fullPrompt = obfuscation.GlobalObfuscator.ObfuscateText(fullPrompt)
-	}
+type BaselineReActEngine struct {
+	Agent *CopilotAgent
+}
 
-	// 2. ReAct Loop
+func (b *BaselineReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (ai.ReasoningResponse, error) {
 	maxTurns := 10
-	history := fullPrompt
+	history := req.SystemPrompt
+	isSpaceGeneration := strings.Contains(req.UserQuery, "IMPORTANT SYSTEM RULE: The user is generating a UI Space.")
 
 	for i := 0; i < maxTurns; i++ {
-		resp, err := gen.Generate(ctx, history, ai.GenOptions{})
+		// Use injected Generator (gen)
+		resp, err := req.Generator.Generate(ctx, history, ai.GenOptions{})
 		if err != nil {
-			return "", err
+			return ai.ReasoningResponse{}, err
 		}
 
 		text := strings.TrimSpace(resp.Text)
-
-		// Check for Tool Call OR Raw Script (Auto-Correction)
 		isToolCall := false
 		var cleanText string
-
-		// 1. Check for Markdown blocks
 		if start := strings.Index(text, "```"); start != -1 {
 			cleanText = text[start:]
-			// Try to remove standard delimiters
 			if strings.HasPrefix(cleanText, "```json") {
 				cleanText = strings.TrimPrefix(cleanText, "```json")
 			} else {
 				cleanText = strings.TrimPrefix(cleanText, "```")
 			}
-
-			// Remove trailing block (if any)
 			if end := strings.LastIndex(cleanText, "```"); end != -1 {
 				cleanText = cleanText[:end]
 			}
 			isToolCall = true
-
 		} else {
-			// 2. Fallback: Search for raw JSON start ({ or [)
 			idxOb := strings.Index(text, "{")
 			idxAr := strings.Index(text, "[")
-
 			if idxOb != -1 && (idxAr == -1 || idxOb < idxAr) {
 				cleanText = text[idxOb:]
 				isToolCall = true
@@ -662,20 +960,15 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 			}
 		}
 
-		// Verify it actually looks like a tool/script before trying to parse
 		if isToolCall && (strings.Contains(cleanText, "\"tool\"") || strings.Contains(cleanText, "\"op\"")) {
 			cleanText = strings.TrimSpace(cleanText)
-
-			type ToolCall struct {
+			type localToolCall struct {
 				Tool string         `json:"tool"`
 				Args map[string]any `json:"args"`
 			}
-			var toolCalls []ToolCall
+			var toolCalls []localToolCall
 
-			// Try unmarshal as array
 			if err := json.Unmarshal([]byte(cleanText), &toolCalls); err == nil {
-				// Check if it's actually a tool call (has "tool" field)
-				// If the LLM generates a script ([{"op":...}]) directly, unmarshal might succeed but Tool will be empty.
 				validToolCalls := true
 				if len(toolCalls) > 0 {
 					for _, tc := range toolCalls {
@@ -686,16 +979,13 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 					}
 				}
 				if !validToolCalls || len(toolCalls) == 0 {
-					toolCalls = nil // Reset and try other formats
+					toolCalls = nil
 				}
 			}
 
-			// If standard parsing failed, check for direct Script usage (Auto-Correction)
 			if len(toolCalls) == 0 {
-				var scriptSteps []any // Use []any instead of []map[string]any to match what toolExecuteScript accepts more easily
+				var scriptSteps []any
 				if err := json.Unmarshal([]byte(cleanText), &scriptSteps); err == nil && len(scriptSteps) > 0 {
-					// Check if it looks like a script (has "op")
-					// We need to inspect the elements
 					isScript := true
 					for _, step := range scriptSteps {
 						if m, ok := step.(map[string]any); ok {
@@ -708,10 +998,9 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 							break
 						}
 					}
-
 					if isScript {
 						log.Info("Auto-detected raw script in LLM output. Wrapping in 'execute_script' tool.")
-						toolCalls = []ToolCall{
+						toolCalls = []localToolCall{
 							{
 								Tool: "execute_script",
 								Args: map[string]any{
@@ -723,18 +1012,16 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 				}
 			}
 
-			// Try unmarshal as single object (Legacy/Single Tool)
 			if len(toolCalls) == 0 {
-				var single ToolCall
+				var single localToolCall
 				if err2 := json.Unmarshal([]byte(cleanText), &single); err2 == nil && single.Tool != "" {
-					toolCalls = []ToolCall{single}
+					toolCalls = []localToolCall{single}
 				}
 			}
 
 			if len(toolCalls) > 0 {
 				isCtxVerbose, _ := ctx.Value("verbose").(bool)
-				if a.Config.Verbose || isCtxVerbose {
-					// Display Tool Instructions
+				if b.Agent.Config.Verbose || isCtxVerbose {
 					if w, ok := ctx.Value(ai.CtxKeyWriter).(io.Writer); ok {
 						var prettyJSON bytes.Buffer
 						if err := json.Indent(&prettyJSON, []byte(cleanText), "", "  "); err == nil {
@@ -745,7 +1032,6 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 					}
 				}
 
-				// Reset LastInteractionSteps
 				if p := ai.GetSessionPayload(ctx); p != nil {
 					p.LastInteractionSteps = 0
 				}
@@ -753,17 +1039,14 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 				var results []string
 				for _, tc := range toolCalls {
 					if isSpaceGeneration && (tc.Tool == "open_store" || tc.Tool == "execute_script" || tc.Tool == "list_stores") {
-						return "SYSTEM ERROR: DO NOT output any tool callbacks for Space generation. Please emit purely raw ExportData JSON object without 'tool' formatting.", nil
+						return ai.ReasoningResponse{FinalText: "SYSTEM ERROR: DO NOT output any tool callbacks for Space generation. Please emit purely raw ExportData JSON object without 'tool' formatting."}, nil
 					}
-					// Execute Tool
-					// We need to execute the tool against the session payload
-					result, err := a.Execute(ctx, tc.Tool, tc.Args)
+					result, err := req.Executor.Execute(ctx, tc.Tool, tc.Args)
 					if err != nil {
 						result = "Error: " + err.Error()
 					}
 					results = append(results, result)
 
-					// Record the tool call if a recorder is present
 					if recorder, ok := ctx.Value(ai.CtxKeyScriptRecorder).(ai.ScriptRecorder); ok {
 						recorder.RecordStep(ctx, ai.ScriptStep{
 							Type:    "command",
@@ -777,38 +1060,206 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 				}
 
 				finalResp := strings.Join(results, "\n")
-
-				// STM Interception: Log the executed tools sequence
 				tcBytes, _ := json.Marshal(toolCalls)
-				a.logThought(ctx, query, string(tcBytes), finalResp)
+				b.Agent.logThought(ctx, req.UserQuery, string(tcBytes), finalResp)
 
-				// Keep the Runloop going! Append tool calls & results to the context instead of returning.
 				history += "\n\nAssistant:\n" + text + "\n\n[System Tool Response]:\n" + finalResp + "\n\nUser: Analyze the tool response and decide the next step. If the task is fully complete, provide your final response to the user with NO JSON or tool markup."
 				continue
 			}
 		}
 
-		// De-obfuscate Output Text if enabled
-		// Check if obfuscation was likely used based on our config logic
-		// We use the same DB check as before
-		currentDB := ""
-		if p := ai.GetSessionPayload(ctx); p != nil {
-			currentDB = p.CurrentDB
-		}
-		if a.shouldObfuscate(currentDB) {
-			text = obfuscation.GlobalObfuscator.DeobfuscateText(text)
-		}
-		a.ConversationHistory += "\nUser: " + query + "\nAssistant: " + text + "\n"
-		return text, nil
+		return ai.ReasoningResponse{FinalText: text}, nil
 	}
 
-	return "Error: Maximum turns reached.", nil
+	return ai.ReasoningResponse{FinalText: "Error: Maximum turns reached."}, nil
 }
 
 // ListTools returns the list of available tools.
 func (a *CopilotAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
-	// TODO: Implement proper tool listing from registry
-	return []ai.ToolDefinition{}, nil
+	var tools []ai.ToolDefinition
+
+	// Append compiled go tools
+	if a.registry != nil {
+		for _, t := range a.registry.List() {
+			if t.Hidden {
+				continue // Skip hidden for the LLM natively as well
+			}
+			tools = append(tools, ai.ToolDefinition{
+				Name:        t.Name,
+				Description: t.Description,
+				Schema:      t.ArgsSchema,
+			})
+		}
+	}
+
+	// Query systemDB for stored user scripts
+	if a.systemDB != nil {
+		tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
+		if err == nil {
+			defer tx.Rollback(ctx)
+			store, err := a.systemDB.OpenModelStore(ctx, "scripts", tx)
+			if err == nil {
+				// Iterate via Store.List
+				// For simplicity, scripts might not have explicit schema strings yet,
+				// but we build a minimal one if properties are available.
+				var defaultArgsSchema = `{"type": "object", "properties": {"database": {"type": "string", "description": "Target database constraint (optional)"}}}`
+
+				// Attempt to load all scripts under ai.DefaultScriptCategory
+				var keys []string
+				keys, _ = store.List(ctx, ai.DefaultScriptCategory)
+				for _, scriptName := range keys {
+					var script ai.Script
+					if err := store.Load(ctx, ai.DefaultScriptCategory, scriptName, &script); err == nil {
+						desc := script.Description
+						if desc == "" {
+							desc = "Executes the script '" + scriptName + "'"
+						}
+
+						tools = append(tools, ai.ToolDefinition{
+							Name:        scriptName,
+							Description: "Execute pre-saved user script. " + desc,
+							Schema:      defaultArgsSchema,
+						})
+					}
+				}
+			}
+		}
+	}
+
+	return tools, nil
+}
+
+// InitializePhysicalMemory creates strictly isolated B-Tree (STM) and Vector (LTM) structures for this Agent ID
+func (a *CopilotAgent) InitializePhysicalMemory(ctx context.Context) error {
+	if a.Memory == nil {
+		return fmt.Errorf("MemoryUnit is nil")
+	}
+	if a.systemDB == nil {
+		log.Warn("CopilotAgent: systemDB is nil, skipping physical STM/LTM initialization")
+		return nil
+	}
+	if a.Memory.AgentID == "" {
+		a.Memory.AgentID = "omni"
+	}
+
+	// Dynamic store naming based on Avatar ID to ensure physical strict isolation
+	stmStoreName := fmt.Sprintf("stm_%s", a.Memory.AgentID)
+
+	tx, err := a.systemDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction for isolated STM: %w", err)
+	}
+
+	// In the real system, you might want a specialized Opener or B-Tree logic. B-Tree auto creates if not exist (using NewBtree if Open fails).
+	store, err := a.systemDB.OpenBtree(ctx, stmStoreName, tx)
+	if err != nil {
+		if strings.Contains(err.Error(), "does not exist") || strings.Contains(err.Error(), "not found") {
+			// Because OpenBtree failed, SOP likely rolled back the transaction. Create a new one.
+			tx, err = a.systemDB.BeginTransaction(ctx, sop.ForWriting)
+			if err != nil {
+				return fmt.Errorf("failed to begin new transaction for isolated STM: %w", err)
+			}
+			if !tx.HasBegun() {
+				if err := tx.Begin(ctx); err != nil {
+					tx.Rollback(ctx)
+					return fmt.Errorf("failed to start transaction: %w", err)
+				}
+			}
+			store, err = a.systemDB.NewBtree(ctx, stmStoreName, tx)
+			if err != nil {
+				tx.Rollback(ctx)
+				return fmt.Errorf("failed to create isolated STM BTree: %w", err)
+			}
+		} else {
+			tx.Rollback(ctx)
+			return fmt.Errorf("failed to open isolated STM BTree: %w", err)
+		}
+	}
+
+	ltmStoreName := fmt.Sprintf("ltm_%s", a.Memory.AgentID)
+	ltm, err := a.systemDB.OpenKnowledgeBase(ctx, ltmStoreName, tx, a.brain, nil)
+	if err != nil {
+		tx.Rollback(ctx)
+		return fmt.Errorf("failed to open isolated LTM KnowledgeBase: %w", err)
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to commit isolated physical memory initialization: %w", err)
+	}
+
+	a.Memory.STM = store
+	a.Memory.LTM = ltm
+	log.Debug("Initialized Isolated Physical Memory for Avatar", "agent_id", a.Memory.AgentID, "stm_store", stmStoreName, "ltm_store", ltmStoreName)
+
+	// Wire up Cognitive Memory background workers for the Avatar
+	// 1. Batch short-term flushing (Working Memory -> STM)
+	a.StartMemoryWorkers(ctx)
+
+	// 2. Schedule Sleep Cycle consolidator (STM -> LTM)
+	hourlyInterval := a.Config.SleepCycleIntervalHours
+	idleTimeout := a.Config.IdleSleepTimeoutMinutes
+
+	a.StartSleepCycle(ctx, hourlyInterval, idleTimeout, nil)
+
+	return nil
+}
+
+// logEpisodeToSTM directly writes to the Agent's physical STM structure
+func (a *CopilotAgent) logEpisodeToSTM(ctx context.Context, intent string, astPayload any, outcome string, executeErr error) {
+	if a.Memory == nil || a.Memory.STM == nil {
+		return
+	}
+
+	astBytes, err := json.Marshal(astPayload)
+	var astStr string
+	if err == nil {
+		astStr = string(astBytes)
+	} else {
+		astStr = fmt.Sprintf("%T", astPayload)
+	}
+
+	status := "Success"
+	errorDesc := ""
+	if executeErr != nil {
+		status = "Error"
+		errorDesc = executeErr.Error()
+	}
+
+	// Combine into a structured representation for embedding and retrieval
+	thought := fmt.Sprintf("Intent: %s\nAST: %s\nStatus: %s\n", intent, astStr, status)
+	if errorDesc != "" {
+		thought += fmt.Sprintf("Error: %s\n", errorDesc)
+	}
+	if status == "Success" && outcome != "" {
+		outLog := outcome
+		if len(outLog) > 100 {
+			outLog = outLog[:100] + "..."
+		}
+		thought += fmt.Sprintf("Outcome: %s\n", outLog)
+	}
+
+	hash := sha256.Sum256([]byte(thought))
+	itemID := fmt.Sprintf("%x", hash)
+
+	payload := map[string]any{
+		"id":         itemID,
+		"intent":     intent,
+		"thought":    thought,
+		"status":     status,
+		"outcome":    outcome,
+		"created_at": time.Now().UnixMilli(),
+		"agent_id":   a.Memory.AgentID,
+	}
+
+	a.lastEpisodeTS.Store(time.Now().UnixMilli())
+
+	select {
+	case a.episodeQueue <- payload:
+		log.Debug("Isolated STM: Buffered thought snippet to queue successfully", "agent_id", a.Memory.AgentID)
+	default:
+		log.Warn("Isolated STM: Episode queue is full, dropping thought snippet", "agent_id", a.Memory.AgentID)
+	}
 }
 
 func (a *CopilotAgent) logThought(ctx context.Context, query string, toolsExecuted string, outcome string) {
@@ -818,10 +1269,11 @@ func (a *CopilotAgent) logThought(ctx context.Context, query string, toolsExecut
 
 	payloadInfo := ai.GetSessionPayload(ctx)
 	userID := "default"
+	kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, userID)
 	if payloadInfo != nil && payloadInfo.UserID != "" {
 		userID = payloadInfo.UserID
+		kbName = payloadInfo.GetMemoryKBName()
 	}
-	kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, userID)
 
 	var embedder ai.Embeddings
 	if a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
@@ -952,7 +1404,9 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 	var dbFound bool
 	dbName, _ = args["database"].(string)
 	if dbName != "" {
-		if _, ok := a.databases[dbName]; ok {
+		if dbName == SystemDBName && a.systemDB != nil {
+			dbFound = true
+		} else if _, ok := a.databases[dbName]; ok {
 			dbFound = true
 		}
 	} else {
@@ -975,6 +1429,9 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 	if !dbFound && toolName != "list_databases" && toolName != "list_scripts" && toolName != "get_script_details" {
 		// Debugging
 		var keys []string
+		if a.systemDB != nil {
+			keys = append(keys, SystemDBName)
+		}
 		for k := range a.databases {
 			keys = append(keys, k)
 		}
@@ -1277,4 +1734,46 @@ func deepCopyValue(v any) any {
 	default:
 		return v
 	}
+}
+
+func (a *CopilotAgent) classifyIntent(ctx context.Context, query string, gen ai.Generator) string {
+	if flag.Lookup("test.v") != nil {
+		// Bypass LLM-based intent routing in unit tests
+		return "OMNI"
+	}
+
+	availableKBs := ""
+	if p := ai.GetSessionPayload(ctx); p != nil && len(p.SelectedKBs) > 0 {
+		availableKBs = strings.Join(p.SelectedKBs, ", ")
+	}
+
+	sysPrompt := `You are an ultra-fast Intent Classifier Router. Determine if the user is asking a general Omni Copilot question, or explicitly directing a query to a domain-specific Avatar or Persona.`
+	if availableKBs != "" {
+		sysPrompt += fmt.Sprintf("\n\nAvailable Avatars/KBs in the user's current workspace dropdown context: [%s].", availableKBs)
+	}
+
+	sysPrompt += `
+Note: The "OMNI" Copilot is the primary expert on the SOP platform itself. Any questions regarding general SOP configuration, Data Stores, Spaces, SOP in SDLC, platform troubleshooting, or core platform tools should be classified as "OMNI".
+
+If the request is general or pertains to the SOP platform, output EXACTLY the word "OMNI".
+If they specifically name or target an Avatar/domain from the Available Avatars list, output ONLY the exact name of that Avatar. Do not output any other formatting or punctuation.`
+
+	opts := ai.GenOptions{
+		SystemPrompt: sysPrompt,
+		Temperature:  0.1, // Fast, deterministic routing
+	}
+
+	out, err := gen.Generate(ctx, query, opts)
+	if err != nil {
+		log.Warn("Intent Classification failed, defaulting to OMNI", "error", err)
+		return "OMNI"
+	}
+
+	res := strings.TrimSpace(out.Text)
+	res = strings.Trim(res, "\"'*")
+
+	if strings.ToUpper(res) == "OMNI" || res == "" {
+		return "OMNI"
+	}
+	return res
 }

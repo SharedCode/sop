@@ -22,7 +22,7 @@ func TestRealDBIntegration_JoinFlow(t *testing.T) {
 
 	dbOpts := sop.DatabaseOptions{
 		StoresFolders: []string{tempDir + "/db"},
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		RedisConfig:   nil,
 		ErasureConfig: map[string]sop.ErasureCodingConfig{"": ec},
 	}

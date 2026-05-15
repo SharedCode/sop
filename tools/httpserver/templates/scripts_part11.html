@@ -394,9 +394,11 @@
     }
 
     function createEnvironment() {
+        const btn = document.getElementById("create-env-btn");
+        if (btn) { btn.disabled = true; btn.textContent = "Creating..."; }
         const nameInput = document.getElementById('new-env-name');
         const name = nameInput.value.trim();
-        if (!name) return;
+        if (!name) { if (btn) { btn.disabled = false; btn.textContent = "Create & Switch"; } return; }
 
         apiCall('/api/config/environments/create', 'POST', { name: name })
         .then(data => {
@@ -406,6 +408,8 @@
         .catch(err => {
             // Error already alerted by apiCall
             console.error("Error creating environment", err);
+            const btn = document.getElementById("create-env-btn");
+            if (btn) { btn.disabled = false; btn.textContent = "Create & Switch"; }
         });
     }
 
@@ -685,7 +689,7 @@
             
             div.innerHTML = `
                 <div style="flex: 1;">
-                    <input type="text" class="rel-source-field" value="${src}" placeholder="Local Fields (comma-sep)" ${isReadOnly ? 'disabled' : ''} style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);">
+                    <input type="text" class="rel-source-field" value="${window.escapeHTML(src)}" placeholder="Local Fields (comma-sep)" ${isReadOnly ? 'disabled' : ''} style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);">
                 </div>
                 <div style="font-size: 11px; color: var(--text-muted);">ref</div>
                 <div style="flex: 1;">
@@ -693,7 +697,7 @@
                 </div>
                 <div style="font-size: 11px; color: var(--text-muted);">.</div>
                 <div style="flex: 1;">
-                    <input type="text" class="rel-target-field" value="${tgt}" placeholder="Target Fields (comma-sep)" ${isReadOnly ? 'disabled' : ''} style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);">
+                    <input type="text" class="rel-target-field" value="${window.escapeHTML(tgt)}" placeholder="Target Fields (comma-sep)" ${isReadOnly ? 'disabled' : ''} style="width: 100%; box-sizing: border-box; padding: 4px; font-size: 11px; border: 1px solid var(--input-border); border-radius: 3px; background: var(--input-bg); color: var(--text-color);">
                 </div>
                 ${!isReadOnly ? `<button onclick="this.parentElement.remove();" style="border: none; background: none; color: var(--danger-bg); cursor: pointer; font-weight: bold; padding: 0 4px;" title="Remove">×</button>` : ''}
             `;
@@ -773,81 +777,9 @@
 
 </script>
 <script>
-    // --- Space Dashboard Logic ---
-    async function showSpacePage() {
-        // Deselect current store
-        currentStore = null;
-        document.querySelectorAll('#sidebar li').forEach(el => el.classList.remove('active'));
-        
-        // Hide standard main elements
-        const elementsToHide = [
-            'btn-code-store', 'btn-edit-store', 'btn-view-store', 'btn-edit-cel', 'btn-delete-store',
-            'toolbar', 'pagination-top', 'data-grid', 'pagination', 'detail-resizer', 'detail-panel'
-        ];
-        elementsToHide.forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.style.display = 'none';
-        });
-
-        // Hide the store title container specifically
-        const titleContainer = document.getElementById('current-store-title');
-        if (titleContainer && titleContainer.parentElement) {
-            titleContainer.parentElement.style.display = 'none';
-        }
-
-        // Show knowledge page
-        const kp = document.getElementById('space-page');
-        if (kp) kp.style.display = 'block';
-
-        // Load content
-        await loadExpertiseDashboard();
-    }
-
-    async function loadExpertiseDashboard() {
-        const container = document.getElementById('expertise-container');
-        if (!container) return;
-        container.innerHTML = '<div style="color: var(--text-muted);">Loading spaces...</div>';
-        
-        try {
-            const res = await fetch('/api/spaces/available');
-            if (!res.ok) throw new Error("Failed to load");
-            const data = await res.json();
-            
-            if (!data || data.length === 0) {
-                 container.innerHTML = '<div style="color: var(--text-muted);">No spaces available.</div>';
-                 return;
-            }
-            
-            // Current database is needed to decide where to install
-            const dbName = window.currentDatabase || "db";
-            
-            const dynamicContent = data.map(exp => {
-                return `
-                <div style="border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; margin-bottom: 15px; background: var(--bg-color);">
-                    <div style="display: flex; justify-content: space-between; align-items: start;">
-                        <div>
-                            <h3 style="margin-top: 0; margin-bottom: 5px; color: var(--text-color)">${exp.name}</h3>
-                            <p style="color: var(--text-muted); margin: 0; font-size: 14px; max-width: 600px;">${exp.description}</p>
-                        </div>
-                        <div>
-                            <button class="primary-btn" onclick="installExpertise('${exp.id}', '${dbName}', this)" style="padding: 8px 16px; cursor: pointer; border: none; background-color: var(--active-bg); color: #fff; border-radius: 4px;">Install</button>
-                        </div>
-                    </div>
-                </div>
-                `;
-            }).join('');
-            
-            container.innerHTML = dynamicContent;
-            
-        } catch (e) {
-            console.error(e);
-            container.innerHTML = '<div style="color: var(--text-red);">Failed to load spaces.</div>';
-        }
-    }
-
     async function triggerSOPFrameworkPreload(dbName) {
         // Find the container/element in the UI dynamically
-        const container = document.getElementById('expertise-container');
+        const container = document.getElementById('template-container');
         if (!container) return;
         
         // Find the button for SOP
@@ -872,11 +804,11 @@
         }
 
         try {
-            const res = await fetch('/api/spaces/ingest', {
+            const res = await fetch('/api/spaces/preload', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    expertise_id: 'SOP',
+                    template_id: 'SOP',
                     database_name: SYSTEM_DB_NAME
                 })
             });
@@ -957,7 +889,7 @@
         }
     }
 
-    async function installExpertise(expId, dbName, btnElement) {
+    async function installTemplate(expId, dbName, btnElement) {
         if (!confirm('Are you sure you want to install ' + expId + ' into database: ' + dbName + '?')) return;
         
         const originalText = btnElement.innerText;
@@ -966,11 +898,11 @@
         btnElement.style.opacity = '0.7';
 
         try {
-            const res = await fetch('/api/spaces/ingest', {
+            const res = await fetch('/api/spaces/preload', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
-                    expertise_id: expId,
+                    template_id: expId,
                     database_name: dbName
                 })
             });
@@ -1041,6 +973,23 @@
 function showAddSpace() {
     console.log("showAddSpace triggered!");
     window.currentAdminToken = null;
+    
+    // Reset modal state before showing
+    const modal = document.getElementById('add-kb-modal');
+    if (modal) {
+        const nameInput = document.getElementById('new-kb-name');
+        if (nameInput) {
+            nameInput.value = '';
+        }
+        
+        if (document.getElementById('new-kb-sysprompt')) document.getElementById('new-kb-sysprompt').value = '';
+        if (document.getElementById('new-kb-is-persona')) document.getElementById('new-kb-is-persona').checked = false;
+        if (document.getElementById('new-kb-sysprompt-container')) document.getElementById('new-kb-sysprompt-container').style.display = 'none';
+        if (document.getElementById('new-kb-embedder')) document.getElementById('new-kb-embedder').value = 'text-embedding-3-small';
+        if (document.getElementById('new-kb-dimension')) document.getElementById('new-kb-dimension').value = '';
+        if (document.getElementById('new-kb-public')) document.getElementById('new-kb-public').checked = false;
+    }
+    
     openUIModal('add-kb-modal');
 }
 function closeAddKBModal() {
@@ -1055,7 +1004,7 @@ function togglePersonaSysPrompt() {
     document.getElementById('new-kb-sysprompt-container').style.display = isChecked ? 'block' : 'none';
 }
 
-function saveNewKB() {
+async function saveNewKB() {
     if (!currentDatabase) {
         showAlert("Please select a Database first.");
         return;
@@ -1069,14 +1018,23 @@ function saveNewKB() {
     const sysPrompt = isPersona && document.getElementById('new-kb-sysprompt') ? document.getElementById('new-kb-sysprompt').value.trim() : "";
     const embedder = document.getElementById('new-kb-embedder') ? document.getElementById('new-kb-embedder').value : "text-embedding-3-small";
 
+    // JIT: Fetch missing provider keys via UI modal
+    if (window.resolveSpaceEmbedderAuth) {
+        try {
+            await window.resolveSpaceEmbedderAuth({ embedder: embedder });
+        } catch(e) {
+            console.log("JIT provider auth cancelled by user during Space Create");
+            return;
+        }
+    }
+
     if (!kbName) {
         showAlert("Please enter a Space Name.");
         return;
     }
     
-    // Pass everything to the endpoint, even if empty template
-    const expertiseData = {
-        expertise_id: "empty",
+    // Pass configuration to the create endpoint
+    const createData = {
         database_name: currentDatabase,
         space_name: kbName,
         attributes: { 
@@ -1087,7 +1045,7 @@ function saveNewKB() {
         }
     };
     
-    apiCall('/api/spaces/ingest', 'POST', expertiseData)
+    apiCall('/api/spaces/create', 'POST', createData)
     .then(() => {
         showAlert("Space created successfully!");
         closeAddKBModal();

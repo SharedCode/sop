@@ -81,14 +81,12 @@ func GetSummarizer(productionMode bool, client LLMClient) Summarizer {
 }
 
 func determineSummaries(chunkStr string, dataStr string, maxSummaries int) []string {
-	var summaries []string
-	if len(chunkStr) > 0 && len(chunkStr) < 150 {
-		summaries = append(summaries, chunkStr)
-	}
-	if len(dataStr) > 0 && len(dataStr) < 150 {
-		summaries = append(summaries, dataStr)
-	} else {
-		sentences := strings.Split(dataStr, ".")
+	chunkStr = strings.TrimSpace(chunkStr)
+	dataStr = strings.TrimSpace(dataStr)
+
+	f := func(str string, isFallback bool, currentSummCount int) []string {
+		var result []string
+		sentences := strings.Split(str, ".")
 		var validSentences []string
 		for _, s := range sentences {
 			trimmed := strings.TrimSpace(s)
@@ -96,15 +94,70 @@ func determineSummaries(chunkStr string, dataStr string, maxSummaries int) []str
 				validSentences = append(validSentences, trimmed)
 			}
 		}
+
 		allowedSentences := maxSummaries
-		if len(summaries) > 0 {
-			allowedSentences = maxSummaries - 1
+		if currentSummCount > 0 {
+			allowedSentences = maxSummaries - currentSummCount
 		}
-		if len(validSentences) > 0 && len(validSentences) <= allowedSentences {
-			summaries = append(summaries, validSentences...)
+		if allowedSentences <= 0 {
+			return result
+		}
+
+		if isFallback {
+			if len(validSentences) > 0 {
+				if len(validSentences) > allowedSentences {
+					validSentences = validSentences[:allowedSentences]
+				}
+				result = append(result, validSentences...)
+			}
+		} else {
+			if len(validSentences) > 0 && len(validSentences) <= allowedSentences {
+				result = append(result, validSentences...)
+			}
+		}
+		return result
+	}
+
+	var summaries []string
+	var a, b bool
+	if len(chunkStr) > 0 && len(chunkStr) < 150 {
+		summaries = append(summaries, chunkStr)
+		a = true
+	}
+	if len(dataStr) > 0 && len(dataStr) < 150 {
+		summaries = append(summaries, dataStr)
+		b = true
+	}
+
+	if len(summaries) < 2 {
+		if !a {
+			summaries = append(summaries, f(chunkStr, false, len(summaries))...)
+		}
+		if len(summaries) < maxSummaries && !b {
+			summaries = append(summaries, f(dataStr, false, len(summaries))...)
+		}
+		if len(summaries) == 0 {
+			summaries = append(summaries, f(chunkStr, true, len(summaries))...)
+			if len(summaries) < maxSummaries {
+				summaries = append(summaries, f(dataStr, true, len(summaries))...)
+			}
 		}
 	}
-	return summaries
+
+	// Filter out any empty/whitespace-only items one last time to be completely robust
+	var finalSummaries []string
+	for _, s := range summaries {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			finalSummaries = append(finalSummaries, s)
+		}
+	}
+
+	// Cap the summaries if it somehow exceeded the max
+	if len(finalSummaries) > maxSummaries {
+		finalSummaries = finalSummaries[:maxSummaries]
+	}
+	return finalSummaries
 }
 
 // DetermineSummaries encapsulates the fallback logic for item summaries.

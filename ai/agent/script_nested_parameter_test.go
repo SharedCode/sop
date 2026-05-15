@@ -13,7 +13,7 @@ func TestScriptParameterization_Nested(t *testing.T) {
 	// 1. Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}

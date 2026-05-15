@@ -328,8 +328,8 @@ func Test_Phase1Commit_IsLockedError_Then_Succeeds(t *testing.T) {
 		getForRollbackTrackedItemsValues: func() *sop.BlobsPayload[sop.UUID] { return nil },
 		getObsoleteTrackedItemsValues:    func() *sop.BlobsPayload[sop.UUID] { return nil },
 	}}
-	if err := tx.phase1Commit(ctx); err != nil {
-		t.Fatalf("phase1Commit unexpected err after IsLocked error retry: %v", err)
+	if err := tx.phase1Commit(ctx); err == nil || err.Error() != "islocked once err" {
+		t.Fatalf("expected phase1Commit error 'islocked once err', got: %v", err)
 	}
 }
 

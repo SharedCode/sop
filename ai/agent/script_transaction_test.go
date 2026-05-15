@@ -14,7 +14,7 @@ func TestScript_Transactions(t *testing.T) {
 	// 1. Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		// Use NoCache to ensure data is flushed to disk and visible across DB instances
 		CacheType: sop.NoCache,

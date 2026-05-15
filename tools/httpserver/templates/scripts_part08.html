@@ -276,14 +276,14 @@
         div.style.display = 'flex';
         div.style.gap = '5px';
         div.innerHTML = `
-            <input type="text" placeholder="Field Name" class="value-field-name" value="${name}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <input type="text" placeholder="Field Name" class="value-field-name" value="${window.escapeHTML(name)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
             <select class="value-field-type" style="width: 100px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
                 <option value="string" ${type==='string'?'selected':''}>String</option>
                 <option value="int" ${type==='int'?'selected':''}>Int</option>
                 <option value="float64" ${type==='float64'?'selected':''}>Float64</option>
                 <option value="bool" ${type==='bool'?'selected':''}>Bool</option>
             </select>
-            <input type="text" placeholder="Value" class="value-field-value" value="${value}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <input type="text" placeholder="Value" class="value-field-value" value="${window.escapeHTML(value)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
             <button onclick="this.parentElement.remove();" style="background:var(--danger-bg); color:white; border:none; padding: 4px 8px; cursor:pointer;">×</button>
         `;
         container.appendChild(div);
@@ -348,7 +348,7 @@
         div.style.display = 'flex';
         div.style.gap = '5px';
         div.innerHTML = `
-            <input type="text" placeholder="Field Name" class="key-field-name" value="${name}" oninput="updateIndexDropdowns(); updateSeedKeyForm();" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <input type="text" placeholder="Field Name" class="key-field-name" value="${window.escapeHTML(name)}" oninput="updateIndexDropdowns(); updateSeedKeyForm();" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
             <select class="key-field-type" onchange="updateSeedKeyForm()" style="width: 100px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
                 <option value="string" ${type==='string'?'selected':''}>String</option>
                 <option value="int" ${type==='int'?'selected':''}>Int</option>
@@ -439,8 +439,8 @@
             const val = currentValues[name] || '';
             
             div.innerHTML = `
-                <label style="width: 100px; font-size: 12px; overflow:hidden; text-overflow:ellipsis;" title="${name}">${name} (${type}):</label>
-                <input type="text" class="seed-key-field-value" value="${val}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+                <label style="width: 100px; font-size: 12px; overflow:hidden; text-overflow:ellipsis;" title="${window.escapeHTML(name)}">${name} (${type}):</label>
+                <input type="text" class="seed-key-field-value" value="${window.escapeHTML(val)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
             `;
             container.appendChild(div);
         });
@@ -733,7 +733,7 @@
         div.style.display = 'flex';
         div.style.gap = '5px';
         div.innerHTML = `
-            <input type="text" placeholder="Field Name" class="seed-field-name" value="${name}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <input type="text" placeholder="Field Name" class="seed-field-name" value="${window.escapeHTML(name)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
             <select class="seed-field-type" style="width: 80px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
                 <option value="string" ${type==='string'?'selected':''}>String</option>
                 <option value="int" ${type==='int'?'selected':''}>Int</option>
@@ -761,7 +761,7 @@
                 <option value="guid" ${type==='guid'?'selected':''}>UUID</option>
                 <option value="blob" ${type==='blob'?'selected':''}>Blob</option>
             </select>
-            <input type="text" placeholder="Value" class="seed-field-value" value="${value}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <input type="text" placeholder="Value" class="seed-field-value" value="${window.escapeHTML(value)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
             <div style="display:flex; gap:0; align-items:center; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg);">
                 <button onclick="moveFieldRow(this, -1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px;" title="Move Up">↑</button>
                 <button onclick="moveFieldRow(this, 1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px; border-left: 1px solid var(--input-border);" title="Move Down">↓</button>

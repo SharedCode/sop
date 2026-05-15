@@ -15,7 +15,7 @@ func TestProject_JoinedFields_PrefixIssue(t *testing.T) {
 	// 1. Setup DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}
@@ -100,7 +100,7 @@ func TestProject_EmptyFields_Flattening(t *testing.T) {
 	// 1. Setup DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}
@@ -176,7 +176,7 @@ func TestProject_Unprefixed_Match_Prefixed(t *testing.T) {
 	// 1. Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}
@@ -233,7 +233,7 @@ func TestProject_Mixed_Prefix_Scenarios(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}
@@ -297,7 +297,7 @@ func TestProject_Alias_Explicit(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}

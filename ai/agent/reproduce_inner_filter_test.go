@@ -44,7 +44,7 @@ func TestReproInnerJoinFilter(t *testing.T) {
 	scanRes, _ := engine.Scan(context.Background(), map[string]any{
 		"store":  "users",
 		"filter": map[string]any{"first_name": map[string]any{"$eq": "John"}},
-	})
+	}, nil)
 
 	// B. Join users_orders (Inner)
 	// join_right in prompt calls Join logic.
@@ -91,7 +91,7 @@ func TestReproInnerJoinFilter(t *testing.T) {
 	scanRes, _ = engine.Scan(context.Background(), map[string]any{
 		"store":  "users",
 		"filter": map[string]any{"first_name": map[string]any{"$eq": "John"}},
-	})
+	}, nil)
 	join1Res, _ = engine.Join(context.Background(), scanRes, map[string]any{
 		"with": "users_orders",
 		"type": "inner",

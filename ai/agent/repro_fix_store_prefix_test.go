@@ -47,7 +47,7 @@ func TestScanUsesCanonicalStoreNameForPrefix(t *testing.T) {
 		"store": "users_store",
 	}
 
-	result, err := engine.Scan(ctx, args)
+	result, err := engine.Scan(ctx, args, nil)
 	if err != nil {
 		t.Fatalf("Scan failed: %v", err)
 	}

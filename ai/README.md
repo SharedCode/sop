@@ -103,6 +103,15 @@ The AI Copilot does not hardcode context rules. Instead, it relies on an embedde
 When the system initializes, the Setup Wizard compiles documents like this `README.md` and the user/tool guides (`AI_COPILOT_USAGE.md`), converting guidelines, relational schema strategies, and tool lists directly into **Active Memory** (Vectors). 
 This allows the AI to learn how your tables are linked, what tools it is allowed to use (`select`, `join`, `script`), and which CEL expressions map to your domain, directly from your documentation rather than rigid code blocks.
 
+
+## AI Tools
+*   [Execute Script Tool](EXECUTE_SCRIPT_TOOL.md)
+*   [Knowledge Base Studio](KNOWLEDGE_BASE_STUDIO.md)
+*   [Vector Store Design](VECTOR_STORE_DESIGN.md)
+*   [Dynamic Vector Store Design](DYNAMIC_VECTOR_STORE_DESIGN.md)
+*   [Swarm Design](SWARM_DESIGN.md)
+*   [SOP AI Architecture Article](SOP_AI_ARCHITECTURE_ARTICLE.md)
+
 ## Standards & Compatibility
 
 The SOP AI Kit is designed to play nicely with the broader AI ecosystem while adhering to strict software engineering standards.

@@ -26,6 +26,11 @@ type RunnerSession struct {
 	// LastInteractionToolCalls buffers the tool calls from the last interaction for refactoring.
 	LastInteractionToolCalls []ai.ScriptStep
 
+	// Contextual Working Memory for the Session
+	MRU                 []MRUItem
+	MRUMu               sync.RWMutex
+	ConversationHistory string
+
 	// PendingRefinement holds the proposed changes for a script from /script refine
 	PendingRefinement *RefinementProposal
 
@@ -48,6 +53,8 @@ type Interaction struct {
 	Role      ConversationRole `json:"role"`
 	Content   string           `json:"content"`
 	Timestamp int64            `json:"timestamp"`
+	Entity    string           `json:"entity,omitempty"`    // OMNI or Avatar name
+	ActiveKB  string           `json:"active_kb,omitempty"` // The target KB evaluated in this sequence
 }
 
 // ConversationThread represents a single conversational thread.

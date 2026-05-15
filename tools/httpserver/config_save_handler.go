@@ -159,7 +159,10 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 7. Reload Agents
-	initAgents(r.Context())
+	if err := initAgents(context.Background()); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to initialize agents: %v", err), http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Configuration saved successfully"})
@@ -405,14 +408,18 @@ func setupSystemDB(ctx context.Context, req *SaveConfigRequest) (*DatabaseConfig
 	}
 
 	// Auto-Create Scripts
+
 	func() {
+		fmt.Println("DB_SETUP: before BeginTransaction")
 		trans, err := database.BeginTransaction(ctx, sysOpts, sop.ForWriting)
 		if err != nil {
 			log.Error(fmt.Sprintf("Scripts store tx error: %v", err))
 			return
 		}
 		ms := model.New("scripts", trans)
+		fmt.Println("DB_SETUP: before ms.List")
 		ms.List(ctx, "") // trigger init
+		fmt.Println("DB_SETUP: after ms.List")
 
 		// Seed demo
 		demoLoop := ai.Script{
@@ -421,7 +428,7 @@ func setupSystemDB(ctx context.Context, req *SaveConfigRequest) (*DatabaseConfig
 				{Type: "set", Variable: "items", Value: "apple\nbanana\ncherry"},
 				{Type: "loop", List: "items", Iterator: "fruit", Steps: []ai.ScriptStep{
 					{Type: "say", Message: "Processing {{.fruit}}..."},
-					{Type: "ask", Prompt: "Color?"},
+					{Type: "ask", Prompt: "What color is {{.fruit}}? (Answer in 1 word)"},
 				}},
 			},
 		}
@@ -539,6 +546,7 @@ func setupUserDBs(ctx context.Context, req *SaveConfigRequest) ([]DatabaseConfig
 					log.Info(fmt.Sprintf("Demo data populated for User DB '%s'", udb.Name))
 				}
 			} else {
+
 				func() {
 					tx, err := database.BeginTransaction(ctx, uOpts, sop.ForWriting)
 					if err != nil {

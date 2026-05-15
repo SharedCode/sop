@@ -346,7 +346,13 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		}
 
 		//* Start: Try to lock all updated & removed nodes before moving forward.
-		if ok, _, _ := t.l2Cache.Lock(ctx, t.maxTime, t.nodesKeys); !ok {
+		ok, _, err := t.l2Cache.Lock(ctx, t.maxTime, t.nodesKeys)
+		if err != nil {
+			t.l2Cache.Unlock(ctx, t.nodesKeys)
+			log.Error(fmt.Sprintf("Failed to lock nodes in cache: %v", err))
+			return err
+		}
+		if !ok {
 			// Unlock in case there are those that got locked.
 			t.l2Cache.Unlock(ctx, t.nodesKeys)
 			sop.RandomSleep(ctx)
@@ -355,6 +361,10 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		}
 
 		if ok, err := t.l2Cache.IsLocked(ctx, t.nodesKeys); !ok || err != nil {
+			if err != nil {
+				log.Error(fmt.Sprintf("cache.IsLocked failed with error: %v", err))
+				return err
+			}
 			log.Debug(fmt.Sprintf("cache.IsLocked didn't confirm nodesKeys are locked, tid: %v", t.GetID()))
 			sop.RandomSleep(ctx)
 			continue

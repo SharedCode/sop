@@ -18,7 +18,7 @@ func TestToolJoin_SuffixHandling(t *testing.T) {
 	// 1. Setup Temp DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}
@@ -271,7 +271,7 @@ func TestToolJoin_StoreNamePrefix(t *testing.T) {
 	// Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}
@@ -377,7 +377,7 @@ func TestToolJoin_ReproUserScenario(t *testing.T) {
 	// Setup
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.InMemory,
 	}

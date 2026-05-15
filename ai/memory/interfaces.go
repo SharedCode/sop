@@ -15,6 +15,9 @@ type MemoryStore[T any] interface {
 	// UpsertBatch adds or updates multiple items in the store efficiently.
 	// UpsertByCategory explicitly assigns a category ignoring spatial routing.
 	UpsertByCategory(ctx context.Context, categoryName string, item Item[T], vecs [][]float32) error
+
+	// UpsertByCategoryID securely inserts data bypassing string name lookup.
+	UpsertByCategoryID(ctx context.Context, catID sop.UUID, item Item[T], vecs [][]float32) error
 	UpsertBatch(ctx context.Context, items []Item[T], vecs [][]float32) error
 
 	// Get retrieves a item by its logical ID.

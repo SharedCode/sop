@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	log "log/slog"
 	"net/http"
 
 	"github.com/sharedcode/sop"
@@ -48,6 +49,7 @@ func handleExportSpace(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename=\""+spaceName+"_export.json\"")
 	if err := kb.ExportJSON(ctx, w); err != nil {
 		// Cannot change HTTP status code after headers are written, just log
+		log.Error("handleExportSpace ExportJSON failed", "error", err)
 		return
 	}
 }
@@ -98,6 +100,27 @@ func handleImportSpace(w http.ResponseWriter, r *http.Request) {
 	if err := kb.ImportJSON(ctx, file, ""); err != nil {
 		http.Error(w, "Failed to import JSON: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if kb.DidVectorize {
+		dbEmbedder := GetConfiguredEmbedder(r)
+		if dbEmbedder != nil {
+			cfg, cfgErr := kb.GetConfig(ctx)
+			if cfgErr == nil && cfg != nil {
+				needsUpdate := false
+				if cfg.EmbedderDimension != dbEmbedder.Dim() {
+					cfg.EmbedderDimension = dbEmbedder.Dim()
+					needsUpdate = true
+				}
+				if cfg.Embedder != dbEmbedder.Name() {
+					cfg.Embedder = dbEmbedder.Name()
+					needsUpdate = true
+				}
+				if needsUpdate {
+					kb.SetConfig(ctx, cfg)
+				}
+			}
+		}
 	}
 
 	if err := trans.Commit(ctx); err != nil {

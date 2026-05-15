@@ -269,7 +269,7 @@
                 div.style.marginBottom = '5px';
                 div.innerHTML = `
                     <label style="display:block; font-size:12px; font-weight:bold;">${k}</label>
-                    <input type="text" class="add-value-field" data-name="${k}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
+                    <input type="text" class="add-value-field" data-name="${window.escapeHTML(k)}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
                 `;
                 valContainer.appendChild(div);
             });
@@ -333,7 +333,7 @@
                     div.style.marginBottom = '5px';
                     div.innerHTML = `
                         <label style="display:block; font-size:12px; font-weight:bold;">${k}</label>
-                        <input type="text" class="add-key-field" data-name="${k}" value="${String(obj[k]).replace(/"/g, '&quot;')}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
+                        <input type="text" class="add-key-field" data-name="${window.escapeHTML(k)}" value="${window.escapeHTML(obj[k])}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
                     `;
                     container.appendChild(div);
                 });
@@ -390,7 +390,7 @@
                     div.style.marginBottom = '5px';
                     div.innerHTML = `
                         <label style="display:block; font-size:12px; font-weight:bold;">${k}</label>
-                        <input type="text" class="add-value-field" data-name="${k}" value="${String(obj[k]).replace(/"/g, '&quot;')}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
+                        <input type="text" class="add-value-field" data-name="${window.escapeHTML(k)}" value="${window.escapeHTML(obj[k])}" style="width:100%; padding:5px; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">
                     `;
                     container.appendChild(div);
                 });

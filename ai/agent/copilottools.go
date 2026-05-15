@@ -1,6 +1,7 @@
 package agent
 
 import (
+"github.com/sharedcode/sop/ai/memory"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -52,6 +53,10 @@ func (a *CopilotAgent) registerTools(ctx context.Context) {
 
 	// Script Management
 	a.registry.Register("list_scripts", "Lists all available scripts.", "()", a.toolListScripts)
+
+	// Local Automation (SOP Desktop Companion)
+	a.registry.Register("execute_local_command", "Executes a shell command on the user's local machine via the SOP Desktop Daemon. Use this for building code, git operations, local file inspection, or running local scripts. This will prompt the user for approval in the UI.", "(command: string, reasoning: string)", a.toolExecuteLocalCommand)
+
 	a.registry.Register("create_script", "Creates a new script.", "(name: string, description: string, steps: list<object> (optional, e.g. [{'type':'command', 'command':'select', 'args':{...}}]))", a.toolCreateScript)
 	a.registry.Register("save_script", "Saves a full script definition (create or overwrite).", "(name: string, description: string, steps: list<object>)", a.toolSaveScript)
 	a.registry.Register("get_script_details", "Get details of a specific script.", "(name: string)", a.toolGetScriptDetails)
@@ -65,6 +70,8 @@ func (a *CopilotAgent) registerTools(ctx context.Context) {
 
 	// High-Level Tools
 	a.registry.RegisterWithUI("select", "Selects data from a store using criteria.", a.getToolInstruction(ctx, "select", SelectInstruction), "(store: string, key?: any, value?: any, fields?: Array<string>, limit?: number, direction?: \"asc\" | \"desc\", action?: \"delete\" | \"update\", update_values?: object)", a.toolSelect)
+	a.registry.RegisterWithUI("mint_to_space", "Mints a declarative fact, observation, or solution directly into a designated UI Knowledge Base (Space) to scale learning to other users.", "Directly stores information as a permanent KnowledgeChunk.", "(kb_name: string, content: string, category?: string)", a.toolMintToSpace)
+
 	a.registry.RegisterHidden("join", a.getToolInstruction(ctx, "join", JoinInstruction), "(left_store: string, right_store: string, left_join_fields: Array<string>, right_join_fields: Array<string>, join_type?: \"inner\" | \"left\" | \"right\", fields?: Array<string>, limit?: number, direction?: \"asc\" | \"desc\", action?: \"delete_left\" | \"update_left\", update_values?: object)", a.toolJoin)
 	a.registry.Register("explain_join", "Predicts the execution strategy (Index Scan vs Full Scan) for a join operation. Useful for performance debugging.", "(right_store: string, on: map, database?: string)", a.toolExplainJoin)
 	// a.registry.Register("fetch", "Fetches raw key/value pairs from a store. Useful for diagnostics to see the actual B-Tree data. Supports optional direct key lookup, prefix scan, or filtering on Key fields.", "(store: string, key?: any, limit?: number, prefix?: string, filter?: map)", a.toolFetch)
@@ -77,6 +84,11 @@ func (a *CopilotAgent) registerTools(ctx context.Context) {
 	a.registry.Register("search_sop", "Searches the central SOP system documentation and instruction set.", "(query: string, limit?: number)", a.toolSearchSopKB)
 	a.registry.Register("search_domain_kb", "Searches the primary Knowledge Base domain selected by the user.", "(query: string, limit?: number)", a.toolSearchDomainKB)
 	a.registry.Register("search_custom_kbs", "Searches across multiple topic-specific Knowledge Bases explicitly selected by the user.", "(query: string, limit?: number)", a.toolSearchCustomKBs)
+	a.registry.RegisterWithUI("enrich_knowledge_base", "Forces the background process or directly executes knowledge base enrichment on a given item or entire KB.", a.getToolInstruction(ctx, "enrich_knowledge_base", "Executes knowledge base sleep cycle compilation."), "(kb_name: string)", a.toolEnrichKnowledgeBase)
+
+	// Omni Routing Tools
+	a.registry.RegisterWithUI("route_to_multi_kb", "Routes a query to multiple specific knowledge bases.", "Executes query across given KBs", "(kb_names: Array<string>, optimized_query: string)", a.toolRouteToMultiKB)
+	a.registry.RegisterWithUI("handoff_to_avatar", "Yields control to an Avatar-specific Knowledge Base to execute a task.", "Handoff to an Avatar", "(avatar_kb_name: string, task_context: object)", a.toolHandoffToAvatar)
 
 	// The Core Engine
 	var ops = "\"open_db\" | \"begin_tx\" | \"commit_tx\" | \"rollback_tx\" | \"open_store\" | \"scan\" | \"select\" | \"filter\" | \"sort\" | \"project\" | \"limit\" | \"join\" | \"join_right\" | \"update\" | \"delete\" | \"inspect\" | \"defer\" | \"assign\" | \"if\" | \"loop\" | \"call_script\" | \"script\" | \"call_function\" | \"list_new\" | \"list_append\" | \"map_merge\" | \"first\" | \"last\" | \"next\" | \"previous\" | \"find\" | \"add\" | \"get_current_key\" | \"get_current_value\" | \"return\""
@@ -131,7 +143,8 @@ func (a *CopilotAgent) getToolInstruction(ctx context.Context, toolName, default
 func (a *CopilotAgent) toolConcludeTopic(ctx context.Context, args map[string]interface{}) (string, error) {
 	return "Topic concluded.", nil
 }
-func (a *CopilotAgent) getSystemInstructions(ctx context.Context, defaultInst string) string {
+func (a *CopilotAgent) getSystemInstructions(ctx context.Context, query string) string {
+	defaultInst := ""
 	if a.systemDB == nil {
 		return defaultInst
 	}
@@ -164,9 +177,7 @@ func (a *CopilotAgent) getSystemInstructions(ctx context.Context, defaultInst st
 	}
 
 	// 2. Load MRU / Active Knowledge
-	// We open the MRU store to see what "Categories" or "Items" are marked as active.
-	// MRU Store: Key = Category (string), Value = Timestamp (string/int)
-	// For now, we assume simple string->string map where Key is the Category to load.
+	// We scan the in-memory MRU array to see what "Categories" are marked as active.
 
 	categoriesToLoad := make(map[string]bool)
 	// Always load core categories
@@ -175,23 +186,39 @@ func (a *CopilotAgent) getSystemInstructions(ctx context.Context, defaultInst st
 	categoriesToLoad["policy"] = true
 	categoriesToLoad["recipes"] = true
 
-	mruStore, err := core.OpenBtree[string, string](ctx, a.systemDB.Options(), MRUKnowledgeStore, tx, nil)
-	if err == nil {
-		// Iterate all keys in MRU store
-		if ok, err := mruStore.First(ctx); ok && err == nil {
-			for {
-				cat := mruStore.GetCurrentKey().Key
-				categoriesToLoad[cat] = true
-				if ok, err := mruStore.Next(ctx); !ok || err != nil {
-					break
-				}
-			}
+	if a.service != nil && a.service.session != nil && a.service.session.MRU != nil {
+		a.service.session.MRUMu.RLock()
+		for _, item := range a.service.session.MRU {
+			categoriesToLoad[item.Category] = true
 		}
+		a.service.session.MRUMu.RUnlock()
 	}
 
 	var sb strings.Builder
 	sb.WriteString(baseInst)
 	sb.WriteString("\n\n### Loaded Knowledge:\n")
+
+	// Use Category based semantic search lookup on SOP if query exists
+	if query != "" && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
+		if kb, err := a.systemDB.OpenKnowledgeBase(ctx, ai.DefaultKBName, tx, nil, nil); err == nil {
+			if vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query}); err == nil && len(vecs) > 0 {
+				closestCat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
+				catFilter := ""
+				if err == nil && closestCat != nil {
+					catFilter = closestCat.Name
+				}
+				if hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: 10, Category: catFilter}); err == nil {
+					for _, h := range hits {
+						if content, ok := h.Payload["Content"].(string); ok {
+							sb.WriteString(fmt.Sprintf("- [%s] %s: %s\n", h.Payload["Category"], h.Payload["Name"], content))
+						} else {
+							sb.WriteString(fmt.Sprintf("- [%v] %v\n", h.Payload["Category"], h.Payload["Name"]))
+						}
+					}
+				}
+			}
+		}
+	}
 
 	// Convert map to sorted slice for consistent prompt caching
 	var sortedCats []string

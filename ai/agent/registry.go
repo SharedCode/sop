@@ -88,9 +88,7 @@ func (r *Registry) List() []ToolDefinition {
 // GeneratePrompt generates the tools description for the LLM prompt.
 func (r *Registry) GeneratePrompt() string {
 	var sb strings.Builder
-	sb.WriteString("You have access to the following tools to help answer the user's question.\n")
-	sb.WriteString("To use a tool, you MUST output a JSON object in the following format ONLY, with no other text:\n")
-	sb.WriteString("{\"tool\": \"tool_name\", \"args\": { ... }}\n\n")
+	sb.WriteString("You have access to the following tools via the native tools platform to help answer the user's question.\n")
 	sb.WriteString("Tools:\n")
 
 	for i, t := range r.List() {
