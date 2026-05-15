@@ -8,10 +8,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai/memory"
-
-	"github.com/google/uuid"
 )
 
 type KnowledgeChunk struct {
@@ -20,6 +19,8 @@ type KnowledgeChunk struct {
 	Text        string `json:"text"`
 	Description string `json:"description"`
 }
+
+var linkRegex = regexp.MustCompile(`\[.*?\]\(([^)]+\.md)\)`)
 
 func findRepoRoot() string {
 	dir, err := os.Getwd()
@@ -42,66 +43,157 @@ func findRepoRoot() string {
 	return "."
 }
 
-func parseREADME(readmePath string, fileCategoryMap map[string]string) {
-	bytes, err := os.ReadFile(readmePath)
+var parsedFiles = make(map[string]bool)
+var allChunks []KnowledgeChunk
+var catGraphMap = make(map[string]*memory.Category)
+
+func getCat(catPath string) *memory.Category {
+	if c, ok := catGraphMap[catPath]; ok {
+		return c
+	}
+	parts := strings.Split(catPath, " / ")
+	id := sop.UUID(uuid.New())
+	c := &memory.Category{
+		ID:   id,
+		Name: parts[len(parts)-1],
+		Path: catPath,
+	}
+	if len(parts) > 1 {
+		parentPath := strings.Join(parts[:len(parts)-1], " / ")
+		parentCat := getCat(parentPath)
+		c.ParentIDs = append(c.ParentIDs, memory.CategoryParent{ParentID: parentCat.ID})
+	}
+	catGraphMap[catPath] = c
+	return c
+}
+
+func parseMarkdownRecursive(filePath string, categoryContext []string) {
+	absPath, err := filepath.Abs(filePath)
 	if err != nil {
 		return
 	}
 
-	lines := strings.Split(string(bytes), "\n")
-	currentCategory := "General Overview"
-	if strings.Contains(readmePath, "/ai/") {
-		currentCategory = "AI & Scripts Overview"
+	if parsedFiles[absPath] {
+		return
+	}
+	parsedFiles[absPath] = true
+
+	// Ignore KB compiler's own files or AI Copilot usage instructions
+	if strings.Contains(absPath, "knowledge_compiler") || strings.Contains(absPath, "AI_COPILOT_USAGE.md") {
+		return
 	}
 
-	linkRegex := regexp.MustCompile(`\[.*?\]\(([^)]+\.md)\)`)
+	fmt.Printf("Crawling: %s\n", absPath)
+
+	contentBytes, err := os.ReadFile(absPath)
+	if err != nil {
+		return
+	}
+	content := string(contentBytes)
+	lines := strings.Split(content, "\n")
+
+	currentContext := append([]string{}, categoryContext...)
+
+	var currentChunkText []string
+	var currentChunkTitle string
+
+	flushChunk := func() {
+		if len(currentChunkText) > 0 {
+			body := strings.TrimSpace(strings.Join(currentChunkText, "\n"))
+			if len(body) >= 50 {
+				catPath := ""
+				if len(currentContext) > 0 {
+					catPath = strings.Join(currentContext, " / ")
+				} else {
+					catPath = strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath))
+				}
+
+				idPrefix := strings.ReplaceAll(strings.TrimSuffix(filepath.Base(filePath), filepath.Ext(filePath)), " ", "_")
+
+				if currentChunkTitle == "" {
+					currentChunkTitle = filepath.Base(filePath)
+				}
+
+				allChunks = append(allChunks, KnowledgeChunk{
+					ID:          fmt.Sprintf("%s_section_%d", idPrefix, len(allChunks)),
+					Category:    catPath,
+					Text:        currentChunkTitle,
+					Description: body,
+				})
+			}
+			currentChunkText = nil
+		}
+	}
+
+	var inCodeBlock bool
 
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
+		trimmedLine := strings.TrimSpace(line)
 
-		// Update category on Headers (##)
-		if strings.HasPrefix(line, "## ") {
-			currentCategory = strings.TrimPrefix(line, "## ")
-			currentCategory = strings.TrimSpace(strings.ReplaceAll(currentCategory, "*", ""))
-		} else if strings.HasPrefix(line, "### ") {
-			sub := strings.TrimPrefix(line, "### ")
-			// Keep top level and append child
-			currentCatParts := strings.Split(currentCategory, " / ")
-			if len(currentCatParts) > 0 {
-				currentCategory = currentCatParts[0] + " / " + strings.TrimSpace(strings.ReplaceAll(sub, "*", ""))
+		if strings.HasPrefix(trimmedLine, "```") {
+			inCodeBlock = !inCodeBlock
+			// Continue processing the line if needed, but don't treat it as a header
+		}
+
+		isHeader := false
+		var headerText string
+		var headerLevel int
+
+		if !inCodeBlock {
+			if strings.HasPrefix(trimmedLine, "# ") {
+				isHeader = true
+				headerLevel = 1
+				headerText = strings.TrimPrefix(trimmedLine, "# ")
+			} else if strings.HasPrefix(trimmedLine, "## ") {
+				isHeader = true
+				headerLevel = 2
+				headerText = strings.TrimPrefix(trimmedLine, "## ")
+			} else if strings.HasPrefix(trimmedLine, "### ") {
+				isHeader = true
+				headerLevel = 3
+				headerText = strings.TrimPrefix(trimmedLine, "### ")
 			}
 		}
 
-		// Map any links found
-		matches := linkRegex.FindAllStringSubmatch(line, -1)
+		if isHeader {
+			flushChunk()
+
+			headerText = strings.TrimSpace(strings.ReplaceAll(headerText, "*", ""))
+			currentChunkTitle = headerText
+
+			startDepth := len(categoryContext)
+
+			expectedDepth := startDepth + headerLevel - 1
+			if expectedDepth < len(currentContext) {
+				currentContext = currentContext[:expectedDepth]
+			}
+
+			if len(currentContext) > expectedDepth {
+				currentContext[expectedDepth] = headerText
+			} else {
+				for len(currentContext) < expectedDepth {
+					currentContext = append(currentContext, "Misc Context")
+				}
+				currentContext = append(currentContext, headerText)
+			}
+		}
+
+		currentChunkText = append(currentChunkText, line)
+
+		matches := linkRegex.FindAllStringSubmatch(trimmedLine, -1)
 		for _, match := range matches {
 			if len(match) > 1 {
 				target := match[1]
-				// Resolve path relative to the readme
-				targetPath := filepath.Clean(filepath.Join(filepath.Dir(readmePath), target))
-				if _, ok := fileCategoryMap[targetPath]; !ok {
-					fileCategoryMap[targetPath] = currentCategory
-				}
+				targetPath := filepath.Clean(filepath.Join(filepath.Dir(filePath), target))
+
+				parseMarkdownRecursive(targetPath, currentContext)
 			}
 		}
 	}
+	flushChunk()
 }
 
-func main() {
-	var allChunks []KnowledgeChunk
-	repoRoot := findRepoRoot()
-
-	// Map to track the absolute path of files to their detected hierarchical category
-	fileCategoryMap := make(map[string]string)
-
-	// Parse Root README
-	rootReadme := filepath.Join(repoRoot, "README.md")
-	parseREADME(rootReadme, fileCategoryMap)
-
-	// Parse AI README
-	aiReadme := filepath.Join(repoRoot, "ai", "README.md")
-	parseREADME(aiReadme, fileCategoryMap)
-
+func parseUnlinkedFiles(repoRoot string) {
 	filepath.WalkDir(repoRoot, func(file string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -122,6 +214,14 @@ func main() {
 			return nil
 		}
 
+		absPath, _ := filepath.Abs(file)
+
+		// Ignore KB compiler itself or AI copilot usage file
+		if strings.Contains(absPath, "knowledge_compiler") || strings.Contains(absPath, "AI_COPILOT_USAGE.md") {
+			return nil
+		}
+
+		// Also skip files we explicitly excluded previously in the code like License etc
 		filename := d.Name()
 		upperName := strings.ToUpper(filename)
 		if strings.Contains(upperName, "CODE_OF_CONDUCT") ||
@@ -137,84 +237,49 @@ func main() {
 			return nil
 		}
 
-		domainContext := ""
-		absPath, _ := filepath.Abs(file)
-		if strings.Contains(absPath, "/ai/") {
-			domainContext = "[AI MODULE DOC] "
-		} else {
-			domainContext = "[SOP CORE DOC] "
-		}
+		if !parsedFiles[absPath] {
+			fmt.Printf("Sweeping up unlinked file: %s\n", absPath)
 
-		// Determine Category
-		category := "Uncategorized"
-
-		// Special override for root readmes
-		if upperName == "README.MD" {
-			if strings.Contains(absPath, "/ai/") {
-				category = "AI / Documentation Root"
-			} else {
-				category = "Core / Documentation Root"
+			contentBytes, err := os.ReadFile(absPath)
+			if err != nil {
+				return nil
 			}
-		} else {
-			if mappedCat, ok := fileCategoryMap[file]; ok {
-				category = mappedCat
-			} else if mappedCatAbs, ok := fileCategoryMap[absPath]; ok {
-				category = mappedCatAbs
-			} else {
-				// Fallback: directory name
-				category = filepath.Base(filepath.Dir(file))
+			title := strings.TrimSuffix(filepath.Base(absPath), filepath.Ext(absPath))
+			inCodeBlock := false
+			for _, line := range strings.Split(string(contentBytes), "\n") {
+				trimmed := strings.TrimSpace(line)
+				if strings.HasPrefix(trimmed, "```") {
+					inCodeBlock = !inCodeBlock
+				}
+				if !inCodeBlock && strings.HasPrefix(trimmed, "# ") {
+					title = strings.TrimPrefix(trimmed, "# ")
+					break
+				}
 			}
-		}
 
-		if category == "Table of contents" {
-			category = filepath.Base(filepath.Dir(file))
-		} else if strings.HasPrefix(category, "Table of contents / ") {
-			category = strings.TrimPrefix(category, "Table of contents / ")
+			// We launch recursion on this unlinked file with its generic top root title
+			parseMarkdownRecursive(absPath, []string{title})
 		}
-
-		if strings.HasPrefix(category, "Unmapped / ") {
-			category = strings.TrimPrefix(category, "Unmapped / ")
-		}
-
-		if category == filepath.Base(repoRoot) {
-			name := strings.TrimSuffix(filepath.Base(file), filepath.Ext(file))
-			name = strings.ReplaceAll(name, "_", " ")
-			category = strings.Title(strings.ToLower(name))
-		}
-
-		fmt.Printf("Parsing: %s (Category: %s)\n", file, category)
-		chunks := processMarkdownFile(file, domainContext, category)
-		allChunks = append(allChunks, chunks...)
 
 		return nil
 	})
+}
 
-	catGraphMap := make(map[string]*memory.Category)
-	var getCat func(string) *memory.Category
-	getCat = func(catPath string) *memory.Category {
-		if c, ok := catGraphMap[catPath]; ok {
-			return c
-		}
-		parts := strings.Split(catPath, " / ")
-		id := sop.UUID(uuid.New())
-		c := &memory.Category{
-			ID:   id,
-			Name: catPath, // Keeping the full path so the Vector Embedder generates highly contextualized mathematical boundaries!
-		}
-		if len(parts) > 1 {
-			parentPath := strings.Join(parts[:len(parts)-1], " / ")
-			parentCat := getCat(parentPath)
-			c.ParentIDs = append(c.ParentIDs, memory.CategoryParent{ParentID: parentCat.ID})
-		}
-		catGraphMap[catPath] = c
-		return c
-	}
+func main() {
+	repoRoot := findRepoRoot()
+	rootReadme := filepath.Join(repoRoot, "README.md")
+
+	fmt.Println("Starting Recursive AST Crawl from Root README.md...")
+	parseMarkdownRecursive(rootReadme, []string{})
+
+	fmt.Println("Sweeping unlinked Markdown files...")
+	parseUnlinkedFiles(repoRoot)
 
 	var exportItems []memory.ExportItem[map[string]any]
 	for _, chunk := range allChunks {
 		cat := getCat(chunk.Category)
 		exportItems = append(exportItems, memory.ExportItem[map[string]any]{
-			Category:  cat.Name,
+			Category:  cat.ID.String(),
 			Data:      map[string]any{"description": chunk.Description, "original_id": chunk.ID},
 			Summaries: []string{chunk.Text},
 		})
@@ -245,97 +310,4 @@ func main() {
 	os.WriteFile(outputPath, outData, 0644)
 
 	fmt.Printf("Success! Compiled %d knowledge items and %d categories into %s\n", len(exportItems), len(categories), outputPath)
-}
-
-func processMarkdownFile(path string, domainContext string, baseCategory string) []KnowledgeChunk {
-	contentBytes, err := os.ReadFile(path)
-	if err != nil {
-		return nil
-	}
-	content := string(contentBytes)
-
-	filename := filepath.Base(path)
-
-	// Create safe ID prefix
-	idPrefix := strings.ReplaceAll(strings.TrimSuffix(filename, filepath.Ext(filename)), " ", "_")
-
-	var chunks []KnowledgeChunk
-	parts := strings.Split(content, "\n## ")
-
-	fileTitle := filename
-	if len(parts) > 0 {
-		firstLines := strings.Split(parts[0], "\n")
-		for _, line := range firstLines {
-			if strings.HasPrefix(line, "# ") {
-				fileTitle = strings.TrimPrefix(line, "# ")
-				fileTitle = strings.TrimSpace(strings.ReplaceAll(fileTitle, "*", ""))
-				break
-			}
-		}
-	}
-
-	fileCategory := baseCategory
-	cleanFilename := strings.TrimSuffix(filename, filepath.Ext(filename))
-
-	if fileTitle != filename {
-		if fileCategory == "Uncategorized" {
-			fileCategory = fileTitle
-		} else {
-			fileCategory = fileCategory + " / " + fileTitle
-		}
-	} else {
-		if fileCategory == "Uncategorized" {
-			fileCategory = cleanFilename
-		} else {
-			fileCategory = fileCategory + " / " + cleanFilename
-		}
-	}
-
-	for i, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-
-		title := fileTitle
-		body := part
-		chunkCategory := fileCategory
-
-		if i > 0 {
-			lines := strings.SplitN(part, "\n", 2)
-			title = strings.TrimSpace(lines[0])
-
-			// We do NOT append the H2 title to the category hierarchy.
-			// The H2 block is the Item itself, so it should belong to the file's category.
-			chunkCategory = fileCategory
-
-			if len(lines) > 1 {
-				body = strings.TrimSpace(lines[1])
-			} else {
-				body = ""
-			}
-		} else {
-			if strings.HasPrefix(part, "# ") {
-				lines := strings.SplitN(part, "\n", 2)
-				title = strings.TrimPrefix(strings.TrimSpace(lines[0]), "# ")
-				if len(lines) > 1 {
-					body = strings.TrimSpace(lines[1])
-				}
-			}
-		}
-
-		title = strings.TrimLeft(title, "# ")
-
-		if len(strings.TrimSpace(body)) < 50 {
-			continue
-		}
-
-		chunks = append(chunks, KnowledgeChunk{
-			ID:          fmt.Sprintf("%s_section_%d", idPrefix, i),
-			Category:    chunkCategory,
-			Text:        domainContext + title,
-			Description: body,
-		})
-	}
-	return chunks
 }

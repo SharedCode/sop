@@ -202,8 +202,39 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 					}
 					catBtree.Add(ctx, c.ID, &c)
 				}
+			} // Rebuild Bi-Directional Children Links
+			updates := make(map[sop.UUID][]sop.UUID)
+			okCat, _ := catBtree.First(ctx)
+			for okCat {
+				c, _ := catBtree.GetCurrentValue(ctx)
+				if c != nil {
+					for _, p := range c.ParentIDs {
+						updates[p.ParentID] = append(updates[p.ParentID], c.ID)
+					}
+				}
+				okCat, _ = catBtree.Next(ctx)
 			}
-			if _, err := decoder.Token(); err != nil { //	Read	closing	']'
+			for parentID, children := range updates {
+				if found, _ := catBtree.Find(ctx, parentID, false); found {
+					parent, _ := catBtree.GetCurrentValue(ctx)
+					if parent != nil {
+						for _, newChild := range children {
+							exists := false
+							for _, existingChild := range parent.ChildrenIDs {
+								if existingChild == newChild {
+									exists = true
+									break
+								}
+							}
+							if !exists {
+								parent.ChildrenIDs = append(parent.ChildrenIDs, newChild)
+							}
+						}
+						catBtree.UpdateCurrentItem(ctx, parentID, parent)
+					}
+				}
+			}
+			if _, err := decoder.Token(); err != nil { // Read closing ']'
 				return err
 			}
 		} else if key == "items" {
@@ -218,11 +249,11 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 					return err
 				}
 
-
-				if len(onEnrich) > 0 && onEnrich[0] != nil {
-					onEnrich[0](&it)
+				if parsedID, err := sop.ParseUUID(it.Category); err == nil {
+					if mapped, ok := uuidMap[parsedID]; ok {
+						it.Category = mapped.String()
+					}
 				}
-
 				thoughts = append(thoughts, Thought[T]{
 					Category:   it.Category,
 					Data:       it.Data,

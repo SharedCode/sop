@@ -120,12 +120,23 @@ func (m *MemoryManager[T]) EnsureCategory(ctx context.Context, categoryPath stri
 		return sop.NilUUID, err
 	}
 
+	if parsedID, err := sop.ParseUUID(categoryPath); err == nil {
+		if found, _ := categoriesTree.Find(ctx, parsedID, false); found {
+			return parsedID, nil
+		}
+	}
+
 	ok, err := categoriesTree.First(ctx)
 	for ok && err == nil {
 		c, _ := categoriesTree.GetCurrentValue(ctx)
 		// Match against Path instead of Name to ensure uniqueness of deeper nodes
-		if c != nil && strings.EqualFold(c.Path, categoryPath) {
-			return categoriesTree.GetCurrentKey().Key, nil
+		if c != nil {
+			if c.Path != "" && strings.EqualFold(c.Path, categoryPath) {
+				return categoriesTree.GetCurrentKey().Key, nil
+			}
+			if c.Path == "" && strings.EqualFold(c.Name, categoryPath) {
+				return categoriesTree.GetCurrentKey().Key, nil
+			}
 		}
 		ok, err = categoriesTree.Next(ctx)
 	}
