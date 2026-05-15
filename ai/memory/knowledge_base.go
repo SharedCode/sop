@@ -249,11 +249,15 @@ func (kb *KnowledgeBase[T]) Vectorize(ctx context.Context) error {
 	catIDsUpdated := make(map[sop.UUID]bool)
 
 	for _, c := range allCats {
-		expectedHash := ComputeVectorHash(embedderDim, c.Name)
+		embedText := c.Description
+		if embedText == "" {
+			embedText = c.Name
+		}
+		expectedHash := ComputeVectorHash(embedderDim, embedText)
 		if c.VectorHash != expectedHash || len(c.CenterVector) == 0 {
 			c.VectorHash = expectedHash
 			categoriesToUpdate = append(categoriesToUpdate, c)
-			catNames = append(catNames, c.Name)
+			catNames = append(catNames, embedText)
 			catIDsUpdated[c.ID] = true
 		}
 	}
@@ -416,9 +420,14 @@ func (kb *KnowledgeBase[T]) VectorizeItems(ctx context.Context, categoryID sop.U
 	embedderDim := kb.Manager.embedder.Dim()
 	catUpdated := false
 
-	expectedCatHash := ComputeVectorHash(embedderDim, category.Name)
+	embedText := category.Description
+	if embedText == "" {
+		embedText = category.Name
+	}
+
+	expectedCatHash := ComputeVectorHash(embedderDim, embedText)
 	if category.VectorHash != expectedCatHash || len(category.CenterVector) == 0 {
-		catVecs, _ := kb.Manager.embedder.EmbedTexts(ctx, []string{category.Name})
+		catVecs, _ := kb.Manager.embedder.EmbedTexts(ctx, []string{embedText})
 		if len(catVecs) > 0 {
 			category.CenterVector = catVecs[0]
 			category.VectorHash = expectedCatHash

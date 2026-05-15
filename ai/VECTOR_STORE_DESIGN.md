@@ -1,4 +1,4 @@
-# Transactional Vector Store Design (IVF on SOP)
+# Vector Store
 
 > **⚠️ ARCHITECTURAL NOTICE: LOW-LEVEL SYSTEM COMPONENT ⚠️**
 > This document describes the bare-metal physical setup of the Vector DB (Inverted File Index using B-Trees). 

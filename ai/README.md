@@ -1,7 +1,4 @@
 # SOP AI Kit
-
-> **Note**: This package was developed with an AI copilot. I want to keep an open development approach (not finicky and narrow) in this package to keep efficient in "automaton" cycles. Thus, source codes here may be subject to refactor because of AI first philosophy.
-
 The `sop/ai` package is the **SOP AI Kit** — a versatile **AI Platform** that transforms SOP from a storage engine into a complete **Computing Platform**.
 
 It enables you to build:

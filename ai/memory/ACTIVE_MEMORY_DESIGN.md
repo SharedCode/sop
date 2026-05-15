@@ -1,4 +1,4 @@
-# SOP Active Memory Pipeline: Phase 2 Design (The Butler Architecture)
+# Active Memory
 
 ## Objective
 Implement Phase 2: LongTermMemory Provisioning & ShortTermMemory Interception to emulate human cognition within the SOP AI engine, acting as a deeply aware "Butler".
@@ -36,7 +36,7 @@ We treat the AI's Memory as a distinct, dedicated `KnowledgeBase` (e.g., `memory
 * **LongTermMemory (The Butler's Ledger):** As the AI completes chores, it continuously writes to this dedicated LongTermMemory KnowledgeBase. As thoughts flow into the LongTermMemory Knowledge Base, they undergo the **Semantic Anchor** progressive categorization strategy. The LLM generates a precise "Category" (e.g., "User Management Analytics") which becomes the geometric spatial center in the LongTermMemory vector store. During subsequent sleep cycles, the LLM can mutate or broaden Category descriptions if it notices patterns, meaning categorization quality strictly improves as more data flows in.
 * **ReAct Loop Integration:** At the start of a prompt, the AI *always* does a cheap, high-speed lookup against its LongTermMemory to fetch "User Preferences" or "Historical Context" relevant to the current ask. This anchors the AI's personality.
 
-### 2. The Multi-Tiered Routing & Prioritization Hierarchy
+### 2. Multi-Tiered Routing & Prioritization Hierarchy
 Instead of querying all KBs and concatenating the results, we equip the AI's ReAct loop with specific Retrieval Tools:
 * **Tier 1: SOP KB (The Instruction Manual)**
   * *When:* Consulted if the intent classifier detects user asking about the platform, tools, patterns, or how to build with SOP.
@@ -60,8 +60,6 @@ To prevent LongTermMemory from becoming bloated with redundant data, the AI must
     - *Rule 1 (Referencing):* "If data already exists in the SOP KB, do not duplicate it; just log a reference pointer."
     - *Rule 2 (Generalization):* "If the user solves a bug, generalize the solution instead of memorizing the exact stack trace."
 *   **Rollout:** Begin simply by injecting a few hardcoded meta-rules into this category upon session creation. Over time, allow the LLM to update this section based on explicit user feedback (e.g. "Don't save this," or "Always remember this pattern").
-
----
 
 ## Component Architecture (Engine Level)
 
@@ -90,41 +88,7 @@ To prevent LongTermMemory from becoming bloated with redundant data, the AI must
 ## Implementation Guidelines & Corrections
 *   **`logEpisode` Execution:** The `logEpisode` function (the interception point) MUST write its serialized outcomes directly to the raw `user_active_scratchpad` buffer. It MUST NOT call `KnowledgeBase` methods (like `IngestThought`) because doing so bypasses the buffer, incorrectly routing thoughts directly into LongTermMemory in real-time.
 
----
-
-## Implementation Map
-
-### Phase 1: API & Configuration Plumbing (✅ Complete)
-Getting the required data from the UI down into the engine.
-* [x] **API Update:** Update the HTTP `ChatRequest` struct to accept `SelectedKBs []string` from the dropdown.
-* [x] **Domain Interface Update:** Update `GenericDomain`'s `Memory()` function to explicitly accept the LLM `Generator` to allow Agentic RAG categorization upon load.
-* [x] **Dependency Injection:** Verify `agent.CopilotAgent` and `agent.Dependencies` securely hold references to both the `SystemDB` and the Active Tenant `CurrentDB` simultaneously.
-* [x] **Context Passing:** Pipe the `SelectedKBs` array from `main.ai.go` down through the agent initialization context into `ai.SessionPayload` so ReAct tools can natively access it during reasoning.
-
-### Phase 2: Memory Infrastructure (ShortTermMemory & LongTermMemory Interplay) (✅ Complete)
-Building the dedicated "Butler's Ledger."
-* [x] **LongTermMemory Provisioning:** Modified the HTTP server and Copilot initialization to automatically discover or create `memory_<user_id>` to persist the user's memory ledger.
-* [x] **ShortTermMemory Interception:** Completely refactored `active_memory.go` to use pure JSON B-Tree (`user_active_scratchpad`) without embeddings or `TempVector` dependencies, establishing a true O(1) buffer.
-* [x] **ReAct Pre-Prompt Fetch:** Add logic to the start of the ReAct sequence that performs a lightning-fast vector search against `memory_<user_id>` to fetch user preferences, quietly injecting them into the System Prompt before standard execution.
-
-### Phase 3: The Context Multiplexer & Retrieval Tools (✅ Complete)
-Equipping the LLM with the tiered toolset to fetch data deterministically.
-* [x] **Tier 1 (SOP Tool):** Consolidate/Create a `search_sop` tool that is hardcoded to only scan the `SystemDB` for SOP platform instructions.
-* [x] **Tier 2 (Domain Tool):** Create a `search_domain_kb` tool that maps to the primary KB selected by the user.
-* [x] **Tier 3 (Fallback Tool):** Build the `search_custom_kbs` tool that accepts a topic and iterates over the `SelectedKBs` array.
-* [x] **Namespace Shadowing Logic:** Inside these tools, write the logic that checks if the requested KB exists in the Tenant DB first; if yes, use it (override). If no, check the System DB.
-
-### Phase 4: Intent Routing & The Sleep Cycle (✅ Complete)
-Completing the autonomous feedback loops.
-* [x] **System Prompt Update:** Rewrite the Copilot's `system_prompt` explicitly instructing the LLM on *when* to use the SOP tool vs. the Domain tool.
-* [x] **Sleep Cycle Scheduler:** Implement a background goroutine (cron-like) that periodically loops over `user_active_scratchpad`, structurally categorizes them via LLM against the Meta-Memory rules, and triggers ingestion into the Long-Term `memory_<user_id>`.
-* [x] **Meta-Memory Seeding Background Routine:** Developed `seedMetaCognitionAsync` in `main.ai.go` which bypasses LLM latency during initialization by deterministically injecting `Meta_Cognition` baseline constraints for Sleep Cycle orchestration constraints.stration constraints.
----
-
 ## Future Enhancements & Roadmap
-
-
-# Future Enhancements & Roa I# Future Enhancements & Roa I# Future Enhancements & Roa I# FTh# Future Enhancements & Roa I# Future Enhancements & Roa I# Future Enhancements & Roa I# cifi# Future Enhancements & Roa I# Future Enhancements & Roa I# Future Enhancements & Roa I# FTh# Future Enhancements & Roa I# Future Enhancements & Roa I# Future Enhancements & Roa I# cifi# Future Enhancements & Roa I# Future Enhancements & Roa I# Future Enhancements & Roa I# FThtem`'# Future Enhancements & Roa I# Future Enhancements & Roa I# Future Enhancements & Roa I# FTh# Future Enhancements & Roa I# Future Enhancements & Roa I# Future Enhancements & Roa I# cifi# Future Enhancements & Roa I# Future Enhancements & Roa I# Future Enhancements & Roa I# FTh# Future Enhancements & Roa I# Future Enhancements & Roa I# Futuy # Future Enhancements & Roa I# Future Enhancements & Ruce# Future Enhancements & Roa I# Future EnhhH# Future Enhancements & Roa I# Future Enhancements & Roa I# Future Enha text hi# Future Enhancementegory UUID subtree.
 
 **Performance & Architectural Considerations:**
 Adding Categorical data to the `TextIndex` creates a lifecycle coupling issue when Categories are managed/refactored.
@@ -135,3 +99,4 @@ Adding Categorical data to the `TextIndex` creates a lifecycle coupling issue wh
 We will implement this in the far future, when we have stabilized the LLM-managed Categories to the point where the semantic clustering creates a stable ontology. Once the `SleepCycle` matures and noWeonger requires frequent "movements" or re-associations of items across Categories, the I/O penalty of re-indexing text will become negligible, making this safe to implemeWe will implement this in the far future, when we have stabilized the LLM-managed Categories to the point where the semantic clustering creates a stable ontology. Once the `SleepCycle` matures and noWeonger requires frequent "movements" or re-associations of items across Categories, the I/O penalty of re-indexing text will become negligible, making this safe to implemeWe will implement this in the far future, when wentic taxonomy graph (`Category.ChildrenIDs` and `Category.ParentIDs`), we can potentially achieve near O(log C) traversal at query time to rapidly eliminate broad swaths of vector space.
 
 We have opted to delay the implementation of this advanced crawler/search for now, but the B-Tree underlying structure and dynamic vector boundaries are fully prepared to support it when necessary.
+

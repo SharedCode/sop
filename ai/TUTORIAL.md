@@ -1,4 +1,4 @@
-# Build Your Own AI Expert System: A Guide to SOP's "Doctor & Nurse" Pattern
+# Build Your Own AI Expert System
 
 Welcome to the "Green Field" of AI development. 
 

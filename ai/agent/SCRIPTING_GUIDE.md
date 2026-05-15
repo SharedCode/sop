@@ -1,4 +1,4 @@
-# SOP Scripting Engine Guide
+# Scripting Engine Guide
 
 > **Note:** This document describes the low-level **Execution Plan** optimization concepts. for the user-facing AI Scripting Language (AST), please refer to `ai/SCRIPTS.md` and `ai/agent/README.md`.
 

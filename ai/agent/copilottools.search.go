@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -48,8 +49,14 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 					// Wait, the payload might contain the category and text? Yes, IngestThought puts it there or it's the raw data.
 					text := ""
 					category := ""
-					if textVal, ok := h.Payload["text"].(string); ok {
+					if descVal, ok := h.Payload["description"].(string); ok {
+						text = descVal
+					} else if textVal, ok := h.Payload["text"].(string); ok {
 						text = textVal
+					}
+					if text == "" {
+						b, _ := json.Marshal(h.Payload)
+						text = string(b)
 					}
 					if catVal, ok := h.Payload["category"].(string); ok {
 						category = catVal
@@ -67,8 +74,14 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 		for _, h := range keywordHits {
 			text := ""
 			category := ""
-			if textVal, ok := h.Payload["text"].(string); ok {
+			if descVal, ok := h.Payload["description"].(string); ok {
+				text = descVal
+			} else if textVal, ok := h.Payload["text"].(string); ok {
 				text = textVal
+			}
+			if text == "" {
+				b, _ := json.Marshal(h.Payload)
+				text = string(b)
 			}
 			if catVal, ok := h.Payload["category"].(string); ok {
 				category = catVal

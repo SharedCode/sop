@@ -1,6 +1,4 @@
-
 ## Running Modes & Security
-
 The SOP Data Manager is designed to be flexible, serving as both a lightweight internal tool and a secure public API.
 
 ### 1. Internal / WebUI Mode (Default)

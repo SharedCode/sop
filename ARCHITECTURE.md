@@ -1,4 +1,4 @@
-# SOP Architecture Guide
+# Architecture Guide
 
 This document outlines the high-level architecture of the Scalable Objects Persistence (SOP) library, focusing on the package structure and the design decisions behind public vs. internal components.
 

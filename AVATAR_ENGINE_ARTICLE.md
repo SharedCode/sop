@@ -1,4 +1,5 @@
-# Beyond the Chatbot: How SOP's "Avatar Mode" Constructs an AI Simulation Engine
+# AI Simulation Engine
+Beyond the Chatbot: How SOP's "Avatar Mode" Constructs an AI Simulation Engine
 
 *In preparation for our upcoming release, Codename: "Memory", we are redefining what an AI-integrated platform can be.*
 

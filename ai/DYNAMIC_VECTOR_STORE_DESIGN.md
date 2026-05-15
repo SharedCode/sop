@@ -1,5 +1,6 @@
-# Dynamic Vector Store Architecture: Semantic Anchors & Hybrid Search
+# Dynamic Vector Store
 
+Semantic Anchors & Hybrid Search
 > **📝 ARCHITECTURAL CONTEXT:** This document describes the design of the underlying **AI Database (Dynamic Vector Store)**. This is the storage engine that powers the AI's Long-Term Memory (LTM) KnowledgeBase. Do not confuse the DB-level ingestion mechanics described here with the Agent's cognitive ReAct loop (STM `user_active_scratchpad` -> LTM Sleep Cycle), which is documented in `ai/memory/ACTIVE_MEMORY_DESIGN.md`.
 
 This document outlines the architectural breakthroughs and operational mechanics of the SOP Dynamic Vector Store. 

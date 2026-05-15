@@ -93,5 +93,16 @@ SOP expects an array of `documents`, where each document seamlessly maps to indu
   "documents": [
     {
       "id": "doc-001",
-      "page_content": "To restart the primary database layer, initiate a      "page_content": "To restart the prima db      "page_content": "To restart the primaryource": "      "page_content": "To restart the primary database layer, initiate a      "page_content": "To restart the prima db      "page_content": "To restart the primaryource": "      "page_content": "To restart the primary database layer, initiate a      "page_content": "To restart the prima db      "page_content": "To restart the primaryource": "    ohn      "page_content": "To re "arc      "page_content": "To restart the primary database layer, initiate a      "page_content": "T directly bridge SOP's Vector Store into their existing LangChain loaders, maintaining clean boundaries for interchange, migrations, and backups.
+      "page_content": "To restart the primary database layer, initiate a graceful failover to the secondary node before executing the systemctl restart command.",
+      "metadata": {
+        "source": "wiki_ops",
+        "author": "John Doe",
+        "tags": ["database", "restart", "failover"]
+      }
+    }
+  ]
+}
+```
+
+This ensures enterprise teams can directly bridge SOP's Vector Store into their existing LangChain loaders, maintaining clean boundaries for interchange, migrations, and backups.
 

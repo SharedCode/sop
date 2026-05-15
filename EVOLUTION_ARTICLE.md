@@ -1,4 +1,5 @@
-# From B-Tree to Brains: The Unexpected Evolution of SOP into a Universal Computing Platform
+# From B-Tree to Brains
+The Unexpected Evolution of SOP into a Universal Computing Platform
 
 **What started as a better way to store data became a new way to compute.**
 

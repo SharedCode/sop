@@ -35,4 +35,11 @@ Example Pipeline Join:
 ]
 
 ## Best Practices
-- **Projection Order for UX:** When a user requests data to be sorted or filtered by a specific field (e.g., "sorted by Age descending"), always ensure that the operation `project` places that specific field as the **first item** in the `fields` array (e.g., `["users.age", "users.key", ...]`). This makes the sorting/filtering immediately obvious to the user in the resulting output.
+- **Projection Order for UX:** When a user requests data to be sorted or filtered by a specific field, always ensure that the operation `project` places that specific field as the **first item** in the `fields` array. This makes the sorting/filtering immediately obvious to the user in the resulting output.
+
+## Example: Querying and Filtering Records
+When a user asks to retrieve records matching a specific criteria from a store:
+1. Use `open_store` to open the target store.
+2. Use `scan` to stream the records.
+3. Use `filter` with the required evaluation condition against the store's properties.
+4. Use `project` to surface the filtered property to the front so the user sees it immediately.

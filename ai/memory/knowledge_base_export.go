@@ -155,13 +155,9 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 		}
 
 		if key == "config" {
-			var configData T
+			var configData KnowledgeBaseConfig
 			if err := decoder.Decode(&configData); err == nil {
-				_ = kb.Store.Upsert(ctx, Item[T]{
-					ID:         sop.NilUUID,
-					CategoryID: sop.NilUUID,
-					Data:       configData,
-				}, nil)
+				_ = kb.SetConfig(ctx, &configData)
 			}
 		} else if key == "categories" {
 			//	Read	opening	'['

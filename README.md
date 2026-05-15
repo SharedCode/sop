@@ -153,6 +153,7 @@ The Data Manager includes an integrated AI Copilot that supports **Natural Langu
     *   **Tool Steps**: Preserved as raw code (e.g., `Scan`, `Join`) for **zero-latency** execution.
     *   **Natural Language Steps**: Invokes the LLM only when reasoning is required (e.g., "Analyze sentiment").
 *   **Bare-Metal Performance**: Scripts are compiled into efficient engine instructions (Go code), avoiding the overhead of runtime parsing for repeated tasks.
+*   **Documentation**: See the [Execute Script Tool](ai/EXECUTE_SCRIPT_TOOL.md) for technical details on how scripts are parsed and executed by the AI Copilot.
 
 To launch the Data Manager:
 ```bash

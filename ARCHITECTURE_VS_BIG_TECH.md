@@ -1,4 +1,5 @@
-# Platform Positioning: SOP AI vs. Big Tech (Gemini, ChatGPT)
+# Platform Positioning
+SOP AI vs. Big Tech (Gemini, ChatGPT)
 
 When evaluating SOP AI against native consumer LLM wrappers like Google's Gemini (Nano/Pro) or OpenAI's ChatGPT, it is critical to understand the foundational architectural differences. 
 

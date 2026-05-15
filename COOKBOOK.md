@@ -1,4 +1,4 @@
-# SOP API Cookbook
+# API Cookbook
 
 Simple, copy-pasteable examples for common SOP scenarios.
 
