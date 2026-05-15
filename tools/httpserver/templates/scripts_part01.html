@@ -428,18 +428,31 @@
             .then(databases => {
                 availableDatabases = databases;
 
-                // Build a warning alert for missing databases
-                let warnings = [];
-                if (databases && databases.length > 0) {
-                    databases.forEach(db => {
-                        if (db.warning) {
-                            warnings.push("• " + db.warning);
+                let systemDB = databases ? databases.find(d => d.is_system) : null;
+                let sysName = systemDB ? systemDB.name : "system";
+
+                return apiCall(`/api/spaces?database=${encodeURIComponent(sysName)}`)
+                    .then(res => (res && res.data) ? res.data : [])
+                    .catch(e => [])
+                    .then(spaces => {
+                        // Build a warning alert for missing databases
+                        let warnings = [];
+                        if (databases && databases.length > 0) {
+                            databases.forEach(db => {
+                                if (db.warning) {
+                                    warnings.push("• " + db.warning);
+                                }
+                            });
                         }
-                    });
-                }
-                if (warnings.length > 0) {
-                    showAlert("SOP Configuration Missing Database Paths:\n\n" + warnings.join("\n"), null, "Alert", "red");
-                }
+                        
+                        // Check if SOP KB exists in the System DB
+                        if (!spaces.includes("SOP")) {
+                            warnings.push("• SOP KB (KnowledgeBase) Space is missing from the System Database.");
+                        }
+
+                        if (warnings.length > 0) {
+                            showAlert("SOP Configuration Missing:\n\n" + warnings.join("\n"), null, "Alert", "red");
+                        }
                 
                 if (!databases || databases.length === 0) {
                     const select = document.getElementById('database-select');
@@ -630,7 +643,7 @@
                          }
                     }
                 }
-            })
+            })})
             .catch(err => {
                 console.error(err);
                 document.getElementById('database-select').innerHTML = '<option>Error loading databases</option>';

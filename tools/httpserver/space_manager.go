@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/sharedcode/sop"
@@ -60,6 +61,34 @@ func handlePreloadSpace(w http.ResponseWriter, r *http.Request) {
 		if _, err := os.Stat(p); err == nil {
 			actualPath = p
 			break
+		}
+	}
+
+	if actualPath == "" && (strings.EqualFold(req.TemplateID, ai.DefaultKBName) || req.TemplateID == "SOP") {
+		// Auto-generate if running in source development (go run)
+		isGoRun := strings.Contains(os.Args[0], "go-build") || strings.HasPrefix(os.Args[0], os.TempDir())
+		if isGoRun {
+			fmt.Printf("SOP Knowledge Base JSON not found. Auto-compiling since running in dev mode...\n")
+			compilerPath := "./ai/cmd/knowledge_compiler" 
+			if _, err := os.Stat("../../ai/cmd/knowledge_compiler"); err == nil { 
+				compilerPath = "../../ai/cmd/knowledge_compiler"
+			} else if _, err := os.Stat("../ai/cmd/knowledge_compiler"); err == nil { 
+				compilerPath = "../ai/cmd/knowledge_compiler"
+			}
+			cmd := exec.Command("go", "run", compilerPath)
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			if err := cmd.Run(); err == nil {
+				// Search again
+				for _, p := range pathsToTry {
+					if _, err := os.Stat(p); err == nil {
+						actualPath = p
+						break
+					}
+				}
+			} else {
+				fmt.Printf("Warning: Failed to auto-compile SOP KB: %v\n", err)
+			}
 		}
 	}
 

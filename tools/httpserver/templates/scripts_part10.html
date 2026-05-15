@@ -621,9 +621,14 @@
                 if (sopRes.ok) {
                     const data = await sopRes.json();
                     sopTaskId = data.task_id;
+                } else {
+                    const text = await sopRes.text();
+                    alert("Critical Error: Missing SOP KB JSON! SOP Space failed to initialize: " + text);
+                    console.error("Critical SOP KB missing:", text);
                 }
             } catch (e) {
                 console.error("Failed to trigger SOP preload:", e);
+                alert("Critical Error: Failed to trigger SOP preload. " + e.message);
             }
 
             // 2. Trigger Medical Space preload if requested (Preload Examples checkbox)
@@ -655,9 +660,14 @@
                 if (sopTaskId) pollPromises.push(pollLongRunningTask(sopTaskId, null, null, "SOP", false));
                 if (medTaskId) pollPromises.push(pollLongRunningTask(medTaskId, null, null, "Medical", false));
                 
-                await Promise.allSettled(pollPromises);
+                const results = await Promise.allSettled(pollPromises);
+                const errors = results.filter(r => r.status === 'rejected').map(r => r.reason.message || r.reason);
+                if (errors.length > 0) {
+                    throw new Error(errors.join(" | "));
+                }
             } catch (e) {
                 console.error("Error during space preloading:", e);
+                alert("Critical Error: Failed to preload Knowledge Base JSON: " + e);
                 // We'll still proceed to finish setup, but log the error
                 const details = document.getElementById('setup-loading-details');
                 if (details) details.innerHTML += `<span style="color: var(--text-red);">- Preload Error: ${e.message}</span><br>`;
