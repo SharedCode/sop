@@ -1,8 +1,9 @@
-# Vector Store
+# Vector Store (Predecessor)
 
-> **⚠️ ARCHITECTURAL NOTICE: LOW-LEVEL SYSTEM COMPONENT ⚠️**
-> This document describes the bare-metal physical setup of the Vector DB (Inverted File Index using B-Trees). 
-> **Important Distinction:** The `TempVectors` tree referenced in this document is a *low-level bulk-ingestion staging mechanism* for physical vectors. It is **NOT** the AI's Short-Term Memory (STM) scratchpad. For the high-level cognitive architecture (The Butler Protocol, STM `user_active_scratchpad`, and LTM semantic processing), please read `ai/memory/ACTIVE_MEMORY_DESIGN.md`. Do not confuse physical vector staging with cognitive episodic memory.
+> **⚠️ LEGACY / PREDECESSOR COMPONENT ⚠️**
+> This document describes the bare-metal physical setup of the predecessor Vector DB in SOP (Inverted File Index using B-Trees).
+> 
+> **Recommendation:** The **Active Memory & Dynamic Vector Store** is the recommended vector architecture moving forward. It is fully supported by the UI's KnowledgeBase Studio. For the recommended high-level AI cognitive architecture (STM/LTM, Episodic memory, and dynamic vector stores), please see `ai/memory/ACTIVE_MEMORY_DESIGN.md`.
 
 ## 1. Core Problem: Indexing High-Dimensional Vectors
 We explored why standard B-Tree indexing fails for raw vectors:

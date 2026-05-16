@@ -1,10 +1,8 @@
 # Active Memory
-
-## Objective
-Implement Phase 2: LongTermMemory Provisioning & ShortTermMemory Interception to emulate human cognition within the SOP AI engine, acting as a deeply aware "Butler".
+This document outlines the LongTermMemory Provisioning & ShortTermMemory Interception architecture that emulates human cognition within the SOP AI engine, acting as a deeply aware "Butler". This architecture is fully implemented.
 
 ## Architectural Philosophy
-The core design relies on **Conceptual Bounding** and mimicking human memory processing. The system separates the immediate capture of events (Short-Term Memory / ShortTermMemory) from deep, interconnected semantic structuring (Long-Term Memory / LongTermMemory). 
+The core architecture relies on **Conceptual Bounding** and mimicking human memory processing. The system separates the immediate capture of events (Short-Term Memory / ShortTermMemory) from deep, interconnected semantic structuring (Long-Term Memory / LongTermMemory). 
 
 The "Butler" metaphor perfectly encapsulates what an Agentic Copilot should be: deeply aware of its tools (SOP), intimately familiar with its master (LongTermMemory), and focused on the immediate task (Selected KB/Domain). To achieve this "Omni" behavior without Context Overload, we rely on **Intent-Based Routing** and **Tool-Driven Retrieval**.
 
@@ -96,7 +94,8 @@ Adding Categorical data to the `TextIndex` creates a lifecycle coupling issue wh
 * **Slower Category Management:** This couples the fast B-Tree vector re-assignments with heavier Text Index I/O operations, potentially slowing down the previously streamlined Background `SleepCycle` consolidation.
 
 **Strategy:**
-We will implement this in the far future, when we have stabilized the LLM-managed Categories to the point where the semantic clustering creates a stable ontology. Once the `SleepCycle` matures and noWeonger requires frequent "movements" or re-associations of items across Categories, the I/O penalty of re-indexing text will become negligible, making this safe to implemeWe will implement this in the far future, when we have stabilized the LLM-managed Categories to the point where the semantic clustering creates a stable ontology. Once the `SleepCycle` matures and noWeonger requires frequent "movements" or re-associations of items across Categories, the I/O penalty of re-indexing text will become negligible, making this safe to implemeWe will implement this in the far future, when wentic taxonomy graph (`Category.ChildrenIDs` and `Category.ParentIDs`), we can potentially achieve near O(log C) traversal at query time to rapidly eliminate broad swaths of vector space.
+We will implement category-to-text-index synchronization in the future, when we have stabilized the LLM-managed Categories to the point where the semantic clustering creates a stable ontology. Once the `SleepCycle` matures and no longer requires frequent "movements" or re-associations of items across Categories, the I/O penalty of re-indexing text will become negligible.
+
+Furthermore, by combining this with the semantic taxonomy graph (`Category.ChildrenIDs` and `Category.ParentIDs`), we can potentially achieve near O(log C) traversal at query time to rapidly eliminate broad swaths of vector space.
 
 We have opted to delay the implementation of this advanced crawler/search for now, but the B-Tree underlying structure and dynamic vector boundaries are fully prepared to support it when necessary.
-
