@@ -17,18 +17,6 @@ import (
 	"github.com/sharedcode/sop/ai/memory"
 )
 
-type TemplateMetadata struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	IsDefault   bool   `json:"is_default"`
-}
-
-type PreloadSpaceRequest struct {
-	TemplateID   string `json:"template_id"`
-	DatabaseName string `json:"database_name"`
-}
-
 func handlePreloadSpace(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -116,27 +104,7 @@ func handlePreloadSpace(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type IngestSpaceRequest struct {
-	DatabaseName    string                      `json:"database_name"`
-	SpaceName       string                      `json:"space_name,omitempty"`
-	URL             string                      `json:"url,omitempty"`
-	PreloadFilePath string                      `json:"preload_filepath,omitempty"`
-	Attributes      *memory.KnowledgeBaseConfig `json:"attributes,omitempty"`
-	CustomData      json.RawMessage             `json:"custom_data,omitempty"`
-}
-
-type ingestChunk struct {
-	ID               string         `json:"id"`
-	Category         string         `json:"category"`
-	Text             string         `json:"text"`
-	Description      string         `json:"description"`
-	Summaries        interface{}    `json:"summaries"`
-	Vectors          [][]float32    `json:"vectors"`
-	SummariesVectors [][]float32    `json:"summaries_vectors,omitempty"`
-	Data             map[string]any `json:"data,omitempty"`
-}
-
-func extractSummaries(chunk ingestChunk) []string {
+func extractSummaries(chunk SpaceIngestChunk) []string {
 	summaries := chunk.Summaries
 	var sentences []string
 	if sArr, ok := summaries.([]interface{}); ok && len(sArr) > 0 {
@@ -196,12 +164,6 @@ func extractSummaries(chunk ingestChunk) []string {
 	}
 
 	return sentences
-}
-
-type CreateSpaceRequest struct {
-	DatabaseName string                      `json:"database_name"`
-	SpaceName    string                      `json:"space_name"`
-	Attributes   *memory.KnowledgeBaseConfig `json:"attributes,omitempty"`
 }
 
 func handleCreateSpace(w http.ResponseWriter, r *http.Request) {
@@ -404,7 +366,7 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 
 								// read items
 								for decoder.More() {
-									var chunk ingestChunk
+									var chunk SpaceIngestChunk
 									if err := decoder.Decode(&chunk); err != nil {
 										break
 									}
@@ -437,7 +399,7 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 					} else if delim == '[' {
 						// It's an array directly
 						for decoder.More() {
-							var chunk ingestChunk
+							var chunk SpaceIngestChunk
 							if err := decoder.Decode(&chunk); err != nil {
 								break
 							}
@@ -594,7 +556,7 @@ func handleIngestImportSpace(w http.ResponseWriter, r *http.Request) {
 			UpdateTask(taskId, "in_progress", 30, 100, "Reading Space data stream...", "")
 
 			enrichCb := func(it *memory.ExportItem[map[string]any]) {
-				it.Summaries = extractSummaries(ingestChunk{
+				it.Summaries = extractSummaries(SpaceIngestChunk{
 					Summaries: it.Summaries,
 					Data:      it.Data,
 				})

@@ -1796,6 +1796,29 @@
                 const kbIsReadOnly = isReadOnlyKB;
 
                 let items = resPayload ? resPayload.data || [] : [];
+                
+                // Sort items natively alphanumerically in the UI for display
+                items.sort((a,b) => {
+                    let valA = (a.summaries && a.summaries.length ? a.summaries[0] : "") || a.text || a.description || "";
+                    let valB = (b.summaries && b.summaries.length ? b.summaries[0] : "") || b.text || b.description || "";
+                    
+                    let matchA = valA.match(/^\s*(\d+)[\.\)]?\s*/);
+                    let matchB = valB.match(/^\s*(\d+)[\.\)]?\s*/);
+                    
+                    if (matchA && matchB) {
+                        let numA = parseInt(matchA[1], 10);
+                        let numB = parseInt(matchB[1], 10);
+                        if (numA !== numB) {
+                            return numA - numB;
+                        }
+                    } else if (matchA && !matchB) {
+                        return 1;
+                    } else if (!matchA && matchB) {
+                        return -1;
+                    }
+                    return valA.localeCompare(valB);
+                });
+
                 window._lastSpaceItems = items;
                 let totalCount = resPayload ? resPayload.total || items.length : items.length;
                 if (!items || items.length === 0) {

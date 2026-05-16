@@ -20,14 +20,6 @@ func generateDeterministicID(catID sop.UUID, dataStr string) sop.UUID {
 	return id
 }
 
-type addCategoryRequest struct {
-	ID          string `json:"id,omitempty"`
-	Name        string `json:"name"`
-	Path        string `json:"path,omitempty"`
-	Description string `json:"description"`
-	ParentID    string `json:"parent_id,omitempty"`
-}
-
 type addCategoryResponse struct {
 	Success bool   `json:"success"`
 	ID      string `json:"id,omitempty"`
@@ -48,7 +40,7 @@ func handleAddSpaceCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req addCategoryRequest
+	var req AddSpaceCategoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
@@ -270,14 +262,6 @@ func handleDeleteSpaceCategory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-type addItemRequest struct {
-	ID         string         `json:"id,omitempty"`
-	CategoryID string         `json:"category_id"`
-	Summaries  []string       `json:"summaries,omitempty"`
-	Positions  [][]float32    `json:"positions,omitempty"`
-	Data       map[string]any `json:"data"`
-}
-
 func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -292,7 +276,7 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req addItemRequest
+	var req AddSpaceItemRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
@@ -486,10 +470,6 @@ func handleDeleteSpaceItem(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-type addItemsBatchRequest struct {
-	Items []addItemRequest `json:"items"`
-}
-
 type batchResponse struct {
 	Success bool     `json:"success"`
 	Count   int      `json:"count"`
@@ -510,7 +490,7 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req addItemsBatchRequest
+	var req AddSpaceItemsBatchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
@@ -548,7 +528,7 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 	categoriesTree, _ := kb.Store.Categories(ctx)
 
 	type itemState struct {
-		OriginalReq  addItemRequest
+		OriginalReq  AddSpaceItemRequest
 		ParsedCatID  sop.UUID
 		CatName      string
 		Item         memory.Item[map[string]any]

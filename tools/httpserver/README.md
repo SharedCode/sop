@@ -286,3 +286,41 @@ Unzip your bundle and run the manager:
 
 For details on how to configure the server for **Internal (Open)** vs **Public (Secure)** modes, including how to secure the REST API with Bearer tokens, please see [SECURITY.md](SECURITY.md).
 
+
+## API Contracts & Models
+
+The `httpserver` operates as a strictly typed headless REST platform. To guarantee a stable schema that can support third-party integrations, SDK generation, and multiple UI paradigms (e.g., React, Vue, Native Mobile), we have formally decoupled our network Data Transfer Objects (DTOs) from our core Database types. 
+
+All public API models are centralized in `api_models.go`.
+
+### Space Management
+- `CreateSpaceRequest`: The JSON payload required to provision a new standard or AI-enhanced Knowledge Base Space.
+  - Required fields: `database_name`, `space_name`
+  - Optional fields: `attributes` (for Knowledge Base configurations).
+- `PreloadSpaceRequest`: Payload designed to bootstrap a complete Space out of an overarching template.
+- `TemplateMetadata`: A schema describing bundled templates.
+
+### Data Ingest & Streaming
+- `IngestSpaceRequest`: Initiates background chunk/document ingestion into a structured dataset.
+- `SpaceIngestChunk`: Represents a single unified chunk of parsed document data or generalized knowledge, unifying embeddings (`vectors`), textual abstractions (`text`, `description`), and ML derivatives (`summaries`).
+
+### Item CRUD Operations 
+Instead of passing inline schemas, Item Management natively requires explicit struct definitions:
+- `AddSpaceCategoryRequest`: JSON schema for provisioning a new hierarchical B-Tree namespace. 
+- `AddSpaceItemRequest`: Adds a single Item metadata slice inside a Category Namespace.
+  - Critical Fields: `category_id`, `data` (an unconstrained `map[string]any` allowing scalable entity storage decoupled from strictly routed keys).
+- `AddSpaceItemsBatchRequest`: Provides batching mechanisms scaling massive Item loading via an array of the above.
+- `UpdateSpaceItemRequest`: Edits targeted metadata of an existing dataset.
+
+### ViewModels
+- `SpaceItemView`: Decouples our generic, extremely fast internal database types (`Item[T]`) from UI-friendly rendering maps. This restricts massive over-network payloads by curating exact display requirements (`id`, `category`, `text`, `description`, `summaries`).
+
+### Export, Import, and Knowledge Representation Models
+While the `httpserver` package limits bandwidth via `SpaceItemView` for UI interaction, importing and exporting entire Knowledge Bases involves full structural fidelity. To facilitate 3rd-party integrations (like transferring spaces between databases, or cross-platform portability without leaking internal DB UUIDs), we rely on generic engine shapes:
+
+- `ExportItem[T]`: Acts as the canonical network schema for full Item dumps (`/api/v1/spaces/{database_name}/{space_name}/export` and `import`). 
+  - Emits string representations of `Category` paths directly instead of UUIDs, explicitly erasing physical B-Tree indices to allow portability across entirely different Data-Stores or installations.
+  - Retains all structural memory assets (`summaries`, `positions`, `vector_hash` and the deeply typed generic `Data [T]`).
+  - *Note: Our `Ingest` tools and `SpaceIngestChunk` directly mimic this conceptual shape, acting as its programmatic precursor.*
+
+- `Category`: Represents the pure layout of hierarchical nodes (formerly Centroids). Defines a Directed Acyclic Graph (DAG) for categories, ensuring multi-parent (`parents`) linkage, radius, mathematical centroids (`center_vector`), and item tracking (`item_count`).

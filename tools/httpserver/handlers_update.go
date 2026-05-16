@@ -20,13 +20,7 @@ func handleUpdateSpaceItem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var req struct {
-		ID         string         `json:"id"`
-		CategoryID string         `json:"category_id"`
-		Summaries  []string       `json:"summaries,omitempty"`
-		Positions  [][]float32    `json:"positions,omitempty"`
-		Data       map[string]any `json:"data"`
-	}
+	var req UpdateSpaceItemRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

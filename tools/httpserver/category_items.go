@@ -157,15 +157,7 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 	}
 	defer trans.Rollback(ctx)
 
-	type DomainItem struct {
-		ID        string    `json:"id"`
-		Category  string    `json:"category"`
-		Text      string    `json:"text"`
-		Desc      string    `json:"description"`
-		Summaries []string  `json:"summaries,omitempty"`
-		Vector    []float32 `json:"vector,omitempty"`
-	}
-	var items []DomainItem
+	var items []SpaceItemView
 
 	// 1. Try NEW Dynamic Store (from today)
 	db := aidb.NewDatabase(dbOpts)
@@ -173,7 +165,9 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 	dbLLM := GetConfiguredLLM(r)
 
 	memoryDb, errDynamic := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+
 	matchCount := 0
+
 	if errDynamic == nil && memoryDb != nil {
 		itemsTree, errTree := memoryDb.Store.Items(ctx)
 		if errTree == nil && itemsTree != nil {
@@ -189,7 +183,7 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 				// Filter (if user passed category_id)
 				if categoryFilter == "" || val.CategoryID.String() == categoryFilter {
 					if matchCount >= offset && matchCount < offset+limit {
-						t := DomainItem{
+						t := SpaceItemView{
 							ID:        val.ID.String(),
 							Category:  val.CategoryID.String(),
 							Summaries: val.Summaries,
@@ -200,7 +194,7 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 								t.Text = fmt.Sprint(text)
 							}
 							if desc, found := payload["description"]; found {
-								t.Desc = fmt.Sprint(desc)
+								t.Description = fmt.Sprint(desc)
 							}
 							if cat, found := payload["category"]; found {
 								t.Category = fmt.Sprint(cat)
@@ -225,7 +219,7 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 				ok, _ = itemsTree.Next(ctx)
 			}
 			if items == nil {
-				items = make([]DomainItem, 0)
+				items = make([]SpaceItemView, 0)
 			}
 
 			response := map[string]any{
