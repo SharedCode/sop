@@ -3,10 +3,10 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/sharedcode/sop"
 	aidb "github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/embed"
 	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/database"
 )
@@ -165,41 +165,12 @@ func handleUpdateSpaceItem(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		var textsToEmbed []string
-		var textIndices []int
 		vecs = make([][]float32, len(summaries))
 
 		// 2. Identify unchanged vectors to recycle vs changes to embed
 		for i, summary := range summaries {
 			if existingVec, ok := existingSummariesMap[summary]; ok {
 				vecs[i] = existingVec
-			} else {
-				textsToEmbed = append(textsToEmbed, summary)
-				textIndices = append(textIndices, i)
-			}
-		}
-
-		// 3. Batch embed only the actual deltas
-		if len(textsToEmbed) > 0 {
-			var newVectors [][]float32
-			if config.ProductionMode {
-				embedder := embed.NewSimple("simple_hash", 384, nil)
-				v, err := embedder.EmbedTexts(ctx, textsToEmbed)
-				if err != nil || len(v) != len(textsToEmbed) {
-					http.Error(w, "Embedding failed: "+err.Error(), http.StatusInternalServerError)
-					return
-				}
-				newVectors = v
-			} else {
-				for range textsToEmbed {
-					newVectors = append(newVectors, []float32{0.1, 0.2, 0.3})
-				}
-			}
-
-			// 4. Sew delta vectors back into their positional slots
-			for idx, newVec := range newVectors {
-				targetIndex := textIndices[idx]
-				vecs[targetIndex] = newVec
 			}
 		}
 	}
@@ -215,6 +186,11 @@ func handleUpdateSpaceItem(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "Upsert failed: "+err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil {
+		cfg.LastModified = time.Now().Unix()
+		kb.SetConfig(ctx, cfg)
 	}
 
 	if err := trans.Commit(ctx); err != nil {

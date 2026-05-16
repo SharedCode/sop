@@ -74,7 +74,7 @@ func TestCopilotTools_Search_TierRouting(t *testing.T) {
 
 	// 4. Seed Data
 	// system_knowledge MUST be in systemDB
-	prepareKBForSearchTest(ctx, t, systemDB, "system_knowledge", "System Docs: How to use SOP.")
+	prepareKBForSearchTest(ctx, t, systemDB, ai.DefaultKBName, "System Docs: How to use SOP.")
 
 	// Create a shadowed KB. It exists in system AND tenant.
 	prepareKBForSearchTest(ctx, t, systemDB, "shadow_kb", "System Docs: Shadow version.")

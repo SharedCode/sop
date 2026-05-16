@@ -28,27 +28,17 @@ func TestMemoryManager_FailuresAndCoverage(t *testing.T) {
 		t.Fatalf("Expected llm failure, got: %v", err)
 	}
 
-	// 2. Embedder Failure in EnsureCategory
+	// 2. Embedder Failure (Deferred to Vectorize)
 	mgrEmbedFail := NewMemoryManager[string](store, &MockLLM{}, &FailingEmbedder{})
 	kbEmbedFail := &KnowledgeBase[string]{Manager: mgrEmbedFail, Store: store}
-	err = kbEmbedFail.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test"}, Category: "", Data: "data"}}, "")
-	if err == nil || (!strings.Contains(err.Error(), "failed to embed new category") && !strings.Contains(err.Error(), "mock embedder failure")) {
-		t.Fatalf("Expected embedder failure, got: %v", err)
-	}
-
-	// 3. To cover IngestThought's secondary embedder failure
-	goodMgr := NewMemoryManager[string](store, &MockLLM{}, &MockEmbedder{})
-	_, _ = goodMgr.EnsureCategory(ctx, "MockCategory")
-
-	// Now try with failing embedder on store where the category is already ensured
-	mgrEmbedFailLater := NewMemoryManager[string](store, &MockLLM{}, &FailingEmbedder{})
-	kbEmbedFailLater := &KnowledgeBase[string]{Manager: mgrEmbedFailLater, Store: store}
-	err = kbEmbedFailLater.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test"}, Category: "", Data: "data"}}, "")
-	if err == nil || err.Error() != "mock embedder failure" {
-		t.Fatalf("Expected embedder failure on item, got: %v", err)
+	_ = kbEmbedFail.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test"}, Category: "test_category", Data: "data"}}, "")
+	err = kbEmbedFail.Vectorize(ctx)
+	if err == nil || !strings.Contains(err.Error(), "mock embedder failure") {
+		t.Fatalf("Expected embedder failure during Vectorize, got: %v", err)
 	}
 
 	// 4. Test EnsureCategory where the category already exists with mixed case
+	goodMgr := NewMemoryManager[string](store, &MockLLM{}, &MockEmbedder{})
 	cid1, _ := goodMgr.EnsureCategory(ctx, "MockCategory")
 	cid2, _ := goodMgr.EnsureCategory(ctx, "mockcategory") // mixed case
 	if cid1 != cid2 {

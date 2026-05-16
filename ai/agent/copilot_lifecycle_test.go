@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -57,6 +58,8 @@ func TestAgentFullMemoryLifeCycleTest(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Setup DB
+	os.RemoveAll("./test_data/lifecycle")
+	defer os.RemoveAll("./test_data/lifecycle")
 	sysDBOptions := sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{"./test_data/lifecycle"}}
 	sysDB := database.NewDatabase(sysDBOptions)
 

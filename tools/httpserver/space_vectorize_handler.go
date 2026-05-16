@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -103,9 +104,20 @@ func handleVectorizeSpace(w http.ResponseWriter, r *http.Request) {
 
 		if emb != nil {
 			cfg, cfgErr := kb.GetConfig(ctx)
-			if cfgErr == nil && cfg != nil && cfg.EmbedderDimension != emb.Dim() {
-				cfg.EmbedderDimension = emb.Dim()
-				kb.SetConfig(ctx, cfg)
+			if cfgErr == nil && cfg != nil {
+				needsUpdate := false
+				if cfg.EmbedderDimension != emb.Dim() {
+					cfg.EmbedderDimension = emb.Dim()
+					needsUpdate = true
+				}
+				if cfg.LastVectorized <= 0 || true {
+					needsUpdate = true
+				}
+				cfg.LastVectorized = time.Now().Unix()
+
+				if needsUpdate {
+					kb.SetConfig(ctx, cfg)
+				}
 			}
 		}
 

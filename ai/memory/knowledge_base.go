@@ -22,7 +22,6 @@ type KnowledgeBase[T any] struct {
 	// to avoid calling the LLM for category categorization. Set to 0.0 or less to disable
 	// and always rely on "pristine" LLM categorization.
 	MaxMathCategoryDistance float32
-	DidVectorize            bool
 }
 
 func (kb *KnowledgeBase[T]) SearchSemanticsBatch(ctx context.Context, queryVectors [][]float32, opts *SearchOptions[T]) ([][]ai.Hit[T], error) {
@@ -61,13 +60,6 @@ func (kb *KnowledgeBase[T]) IngestThoughts(ctx context.Context, thoughts []Thoug
 		return nil
 	}
 
-	var textsToEmbed []string
-	type embedJob struct {
-		thoughtIdx int
-		summaryIdx int
-	}
-	var jobs []embedJob
-
 	// 0. Resolve missing summaries via LLM LLM Enrichment
 	for i, thought := range thoughts {
 		if len(thought.Summaries) > 0 {
@@ -87,33 +79,6 @@ func (kb *KnowledgeBase[T]) IngestThoughts(ctx context.Context, thoughts []Thoug
 			thoughts[i].Summaries = gen
 		} else {
 			thoughts[i].Summaries = []string{dataStr}
-		}
-	}
-
-	// 1. Resolve missing vectors
-	for i, thought := range thoughts {
-		if len(thought.Vectors) == len(thought.Summaries) {
-			continue
-		}
-		// If length mismatch, re-embed all summaries for this thought
-		thoughts[i].Vectors = make([][]float32, len(thought.Summaries))
-		for j, summary := range thought.Summaries {
-			textsToEmbed = append(textsToEmbed, summary)
-			jobs = append(jobs, embedJob{thoughtIdx: i, summaryIdx: j})
-		}
-	}
-
-	if len(textsToEmbed) > 0 {
-		if kb.Manager.embedder == nil {
-			return errors.New("embedder is nil: cannot vectorize thoughts")
-		}
-		kb.DidVectorize = true
-		vecs, err := kb.Manager.embedder.EmbedTexts(ctx, textsToEmbed)
-		if err != nil {
-			return err
-		}
-		for i, job := range jobs {
-			thoughts[job.thoughtIdx].Vectors[job.summaryIdx] = vecs[i]
 		}
 	}
 

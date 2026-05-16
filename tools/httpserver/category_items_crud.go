@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/sharedcode/sop"
 	aidb "github.com/sharedcode/sop/ai/database"
@@ -377,19 +378,6 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 
 	if len(req.Positions) > 0 {
 		vecs = req.Positions
-	} else if config.ProductionMode {
-		embedder := embed.NewSimple("simple_hash", 384, nil)
-		v, err := embedder.EmbedTexts(ctx, summaries)
-		if err != nil || len(v) == 0 {
-			http.Error(w, "Failed to embed item chunk", http.StatusInternalServerError)
-			return
-		}
-		vecs = v
-	} else {
-		vecs = make([][]float32, len(summaries))
-		for i := range summaries {
-			vecs[i] = []float32{0.4, 0.5, 0.6}
-		}
 	}
 
 	newItem := memory.Item[map[string]any]{
@@ -404,6 +392,12 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to insert item: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil {
+		cfg.LastModified = time.Now().Unix()
+		kb.SetConfig(ctx, cfg)
+	}
+
 	if err := trans.Commit(ctx); err != nil {
 		http.Error(w, "Commit failed", http.StatusInternalServerError)
 		return
@@ -693,6 +687,11 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		generatedIDs = append(generatedIDs, s.Item.ID.String())
+	}
+
+	if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil {
+		cfg.LastModified = time.Now().Unix()
+		kb.SetConfig(ctx, cfg)
 	}
 
 	if err := trans.Commit(ctx); err != nil {

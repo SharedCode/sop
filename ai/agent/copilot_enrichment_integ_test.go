@@ -9,6 +9,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/memory"
 )
 
 func TestExplicitMinting_MintToSpaceTool(t *testing.T) {
@@ -106,6 +107,7 @@ func TestImplicitEnrichment_TriggerSleepCycle(t *testing.T) {
 		defer tx.Rollback(ctx)
 
 		kb, _ := sysDB.OpenKnowledgeBase(ctx, kbName, tx, mockGen, mockEmb)
+		kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{AllowAutoEnrichment: true})
 		kb.IngestThought(ctx, "Why is my docker build failing to find coverage.out? Let's use Dockerfile.nocov instead.", "System Thoughts", "", nil, map[string]any{
 			"raw_thought": "Why is my docker build failing to find coverage.out? Let's use Dockerfile.nocov instead.",
 		})

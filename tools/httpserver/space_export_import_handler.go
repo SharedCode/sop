@@ -102,27 +102,6 @@ func handleImportSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if kb.DidVectorize {
-		dbEmbedder := GetConfiguredEmbedder(r)
-		if dbEmbedder != nil {
-			cfg, cfgErr := kb.GetConfig(ctx)
-			if cfgErr == nil && cfg != nil {
-				needsUpdate := false
-				if cfg.EmbedderDimension != dbEmbedder.Dim() {
-					cfg.EmbedderDimension = dbEmbedder.Dim()
-					needsUpdate = true
-				}
-				if cfg.Embedder != dbEmbedder.Name() {
-					cfg.Embedder = dbEmbedder.Name()
-					needsUpdate = true
-				}
-				if needsUpdate {
-					kb.SetConfig(ctx, cfg)
-				}
-			}
-		}
-	}
-
 	if err := trans.Commit(ctx); err != nil {
 		http.Error(w, "Failed to commit transaction: "+err.Error(), http.StatusInternalServerError)
 		return

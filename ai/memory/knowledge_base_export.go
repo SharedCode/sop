@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/sharedcode/sop"
 )
@@ -144,6 +145,8 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 	}
 	uuidMap := make(map[sop.UUID]sop.UUID)
 
+	hasMissingVectors := false
+
 	for decoder.More() {
 		t, err := decoder.Token()
 		if err != nil {
@@ -168,6 +171,9 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 				var c Category
 				if err := decoder.Decode(&c); err != nil {
 					return err
+				}
+				if len(c.CenterVector) == 0 {
+					hasMissingVectors = true
 				}
 				//	Deduplicate	based	on	Path	instead	of	Name
 				ok, _ := catBtree.First(ctx)
@@ -245,6 +251,10 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 					return err
 				}
 
+				if len(it.SummariesVectors) == 0 {
+					hasMissingVectors = true
+				}
+
 				if parsedID, err := sop.ParseUUID(it.Category); err == nil {
 					if mapped, ok := uuidMap[parsedID]; ok {
 						it.Category = mapped.String()
@@ -286,6 +296,14 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 
 	if _, err := decoder.Token(); err != nil { //	Read	closing	'}'
 		return err
+	}
+	if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil {
+		now := time.Now().Unix()
+		cfg.LastModified = now
+		if !hasMissingVectors {
+			cfg.LastVectorized = now
+		}
+		kb.SetConfig(ctx, cfg)
 	}
 	return nil
 }

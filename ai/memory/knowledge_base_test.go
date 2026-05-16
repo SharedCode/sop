@@ -39,14 +39,17 @@ func TestKnowledgeBase_API(t *testing.T) {
 	manager := NewMemoryManager[string](s, llm, embedder)
 
 	kb := &KnowledgeBase[string]{
-		Store: s,
-		Manager:           manager,
+		Store:   s,
+		Manager: manager,
 	}
 
 	err := kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test_cat"}, Category: "test_id", Data: "payload"}}, "test")
 	if err != nil {
 		t.Fatalf("IngestThought failed: %v", err)
 	}
+
+	// Because vectorization is deferred, we must sweep before Semantic Search
+	_ = kb.Vectorize(ctx)
 
 	hits, err := kb.SearchSemantics(ctx, []float32{1.0, 1.0, 1.0}, &SearchOptions[string]{Limit: 10})
 	if err != nil {
@@ -82,8 +85,8 @@ func TestStaticKnowledgeBase(t *testing.T) {
 	ds.SetTextIndex(&MockTextIndex{})
 
 	kb := KnowledgeBase[string]{
-		Store: ds,
-		Manager:           NewMemoryManager[string](ds, &MockLLM{}, &MockEmbedder{}),
+		Store:   ds,
+		Manager: NewMemoryManager[string](ds, &MockLLM{}, &MockEmbedder{}),
 	}
 
 	err := kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Apple is a fruit"}, Category: "Fruits", Vectors: [][]float32{{0.1, 0.2, 0.3}}, Data: "apple is a fruit"}}, "")

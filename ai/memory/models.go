@@ -13,6 +13,8 @@ type KnowledgeBaseConfig struct {
 	EmbedderDimension   int      `json:"embedder_dimension,omitempty"`
 	AllowAutoEnrichment bool     `json:"allowAutoEnrichment,omitempty"`
 	AllowedTools        []string `json:"allowed_tools,omitempty"`
+	LastModified        int64    `json:"last_modified,omitempty"`   // Unix timestamp
+	LastVectorized      int64    `json:"last_vectorized,omitempty"` // Unix timestamp
 }
 
 // Item represents the actual content (The "Thought" or Document).

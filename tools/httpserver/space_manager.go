@@ -69,10 +69,10 @@ func handlePreloadSpace(w http.ResponseWriter, r *http.Request) {
 		isGoRun := strings.Contains(os.Args[0], "go-build") || strings.HasPrefix(os.Args[0], os.TempDir())
 		if isGoRun {
 			fmt.Printf("SOP Knowledge Base JSON not found. Auto-compiling since running in dev mode...\n")
-			compilerPath := "./ai/cmd/knowledge_compiler" 
-			if _, err := os.Stat("../../ai/cmd/knowledge_compiler"); err == nil { 
+			compilerPath := "./ai/cmd/knowledge_compiler"
+			if _, err := os.Stat("../../ai/cmd/knowledge_compiler"); err == nil {
 				compilerPath = "../../ai/cmd/knowledge_compiler"
-			} else if _, err := os.Stat("../ai/cmd/knowledge_compiler"); err == nil { 
+			} else if _, err := os.Stat("../ai/cmd/knowledge_compiler"); err == nil {
 				compilerPath = "../ai/cmd/knowledge_compiler"
 			}
 			cmd := exec.Command("go", "run", compilerPath)
@@ -474,7 +474,7 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			if kb.DidVectorize && dbEmbedder != nil {
+			if dbEmbedder != nil {
 				cfg, cfgErr := kb.GetConfig(ctx)
 				if cfgErr == nil && cfg != nil {
 					needsUpdate := false
@@ -608,10 +608,11 @@ func handleIngestImportSpace(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		if kb.DidVectorize && dbEmbedder != nil {
+		if dbEmbedder != nil {
 			cfg, cfgErr := kb.GetConfig(ctx)
 			if cfgErr == nil && cfg != nil {
 				needsUpdate := false
+
 				if cfg.EmbedderDimension != dbEmbedder.Dim() {
 					cfg.EmbedderDimension = dbEmbedder.Dim()
 					needsUpdate = true

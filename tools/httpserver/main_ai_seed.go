@@ -41,6 +41,7 @@ func seedSOPKnowledge(ctx context.Context, db *aidb.Database) error {
 		"sop_base_knowledge.json",
 		"ai/sop_base_knowledge.json",
 		"../ai/sop_base_knowledge.json",
+		"../../ai/sop_base_knowledge.json",
 		"ai/cmd/knowledge_compiler/sop_base_knowledge.json",
 		"../ai/cmd/knowledge_compiler/sop_base_knowledge.json",
 		"../../ai/cmd/knowledge_compiler/sop_base_knowledge.json",
