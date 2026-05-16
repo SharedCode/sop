@@ -57,7 +57,7 @@ func TestKnowledgeBase_VectorizeItems(t *testing.T) {
 	}
 	items.Add(id2, item2)
 
-	err := kb.VectorizeItems(ctx, cat.ID, []sop.UUID{id1})
+	_, err := kb.VectorizeItems(ctx, cat.ID, []sop.UUID{id1}, 50)
 	if err != nil {
 		t.Fatalf("VectorizeItems failed: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestKnowledgeBase_VectorizeItems(t *testing.T) {
 		t.Fatalf("Expected item2 positions to be unmodified (nil)")
 	}
 
-	err = kb.VectorizeItems(ctx, cat.ID, nil) // Vectorize all items in the category
+	_, err = kb.VectorizeItems(ctx, cat.ID, nil, 50) // Vectorize all items in the category
 	if err != nil {
 		t.Fatalf("VectorizeItems (all) failed: %v", err)
 	}

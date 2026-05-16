@@ -166,6 +166,71 @@ func (m *MemoryManager[T]) SleepCycle(ctx context.Context) error {
 	return nil
 }
 
+// GenerateSummariesBatch splits a batch of data payloads into logical vectors via LLM
+func (m *MemoryManager[T]) GenerateSummariesBatch(ctx context.Context, payloads []string) ([][]string, error) {
+	if m.llm == nil {
+		res := make([][]string, len(payloads))
+		for i, d := range payloads {
+			res[i] = []string{d}
+		}
+		return res, nil
+	}
+	if len(payloads) == 0 {
+		return nil, nil
+	}
+
+	var prompt strings.Builder
+	prompt.WriteString("Break each of the following data payloads down into distinct logical vectors or small standalone factual observations (sentences or short phrases).\n")
+	prompt.WriteString("For each payload, output its index in brackets, followed by a pipe-separated ( | ) list of these phrases.\n\n")
+
+	for i, p := range payloads {
+		if len(p) > 2000 {
+			p = p[:2000]
+		}
+		prompt.WriteString(fmt.Sprintf("[%d] %s\n", i, p))
+	}
+
+	opts := ai.GenOptions{MaxTokens: 2000, Temperature: 0.1}
+	out, err := m.llm.Generate(ctx, prompt.String(), opts)
+	if err != nil {
+		return nil, err
+	}
+
+	lines := strings.Split(out.Text, "\n")
+	res := make([][]string, len(payloads))
+
+	for _, l := range lines {
+		l = strings.TrimSpace(l)
+		if l == "" {
+			continue
+		}
+		start := strings.Index(l, "[")
+		end := strings.Index(l, "]")
+		if start >= 0 && end > start {
+			var idx int
+			if _, err := fmt.Sscanf(l[start+1:end], "%d", &idx); err == nil && idx >= 0 && idx < len(payloads) {
+				text := l[end+1:]
+				text = strings.TrimPrefix(text, ":")
+				parts := strings.Split(text, "|")
+				for _, p := range parts {
+					p = strings.TrimSpace(p)
+					p = strings.Trim(p, "-*\"'")
+					if p != "" {
+						res[idx] = append(res[idx], p)
+					}
+				}
+			}
+		}
+	}
+
+	for i := range res {
+		if len(res[i]) == 0 {
+			res[i] = []string{payloads[i]}
+		}
+	}
+	return res, nil
+}
+
 func (m *MemoryManager[T]) GenerateSummaries(ctx context.Context, dataStr string) ([]string, error) {
 	if m.llm == nil {
 		return []string{dataStr}, nil

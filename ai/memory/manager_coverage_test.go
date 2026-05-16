@@ -32,7 +32,7 @@ func TestMemoryManager_FailuresAndCoverage(t *testing.T) {
 	mgrEmbedFail := NewMemoryManager[string](store, &MockLLM{}, &FailingEmbedder{})
 	kbEmbedFail := &KnowledgeBase[string]{Manager: mgrEmbedFail, Store: store}
 	_ = kbEmbedFail.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test"}, Category: "test_category", Data: "data"}}, "")
-	err = kbEmbedFail.Vectorize(ctx)
+	_, err = kbEmbedFail.Vectorize(ctx, 50)
 	if err == nil || !strings.Contains(err.Error(), "mock embedder failure") {
 		t.Fatalf("Expected embedder failure during Vectorize, got: %v", err)
 	}

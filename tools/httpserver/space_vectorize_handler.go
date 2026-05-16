@@ -73,29 +73,17 @@ func handleVectorizeSpace(w http.ResponseWriter, r *http.Request) {
 		ctx := context.Background()
 		db := database.NewDatabase(opts)
 
-		trans, err := db.BeginTransaction(ctx, sop.ForWriting)
-		if err != nil {
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to begin transaction: %v", err))
-			return
-		}
-		defer trans.Rollback(ctx)
-
-		kb, err := db.OpenKnowledgeBase(ctx, request.SpaceName, trans, llm, emb)
-		if err != nil {
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to open KnowledgeBase '%s': %v", request.SpaceName, err))
-			return
-		}
-
 		UpdateTask(taskId, "in_progress", 10, 100, "Calculating Embeddings...", "")
 
+		var err error
 		if catId == sop.NilUUID && len(itemIds) == 0 {
-			err = kb.Vectorize(ctx)
+			err = database.Vectorize(ctx, db, request.SpaceName, llm, emb, 50)
 			if err != nil {
 				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Vectorize failed: %v", err))
 				return
 			}
 		} else {
-			err = kb.VectorizeItems(ctx, catId, itemIds)
+			err = database.VectorizeItems(ctx, db, request.SpaceName, llm, emb, 50, catId, itemIds)
 			if err != nil {
 				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("VectorizeItems failed: %v", err))
 				return
@@ -103,28 +91,30 @@ func handleVectorizeSpace(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if emb != nil {
-			cfg, cfgErr := kb.GetConfig(ctx)
-			if cfgErr == nil && cfg != nil {
-				needsUpdate := false
-				if cfg.EmbedderDimension != emb.Dim() {
-					cfg.EmbedderDimension = emb.Dim()
-					needsUpdate = true
-				}
-				if cfg.LastVectorized <= 0 || true {
-					needsUpdate = true
-				}
-				cfg.LastVectorized = time.Now().Unix()
+			// Execute a tiny config transaction
+			txCfg, errTx := db.BeginTransaction(ctx, sop.ForWriting)
+			if errTx == nil {
+				kbCfg, errKb := db.OpenKnowledgeBase(ctx, request.SpaceName, txCfg, llm, emb)
+				if errKb == nil {
+					cfg, cfgErr := kbCfg.GetConfig(ctx)
+					if cfgErr == nil && cfg != nil {
+						needsUpdate := false
+						if cfg.EmbedderDimension != emb.Dim() {
+							cfg.EmbedderDimension = emb.Dim()
+							needsUpdate = true
+						}
+						needsUpdate = true
+						cfg.LastVectorized = time.Now().Unix()
 
-				if needsUpdate {
-					kb.SetConfig(ctx, cfg)
+						if needsUpdate {
+							kbCfg.SetConfig(ctx, cfg)
+						}
+					}
+					txCfg.Commit(ctx)
+				} else {
+					txCfg.Rollback(ctx)
 				}
 			}
-		}
-
-		UpdateTask(taskId, "in_progress", 90, 100, "Committing changes...", "")
-		if err := trans.Commit(ctx); err != nil {
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to commit vectorization: %v", err))
-			return
 		}
 
 		UpdateTask(taskId, "completed", 100, 100, fmt.Sprintf("Successfully vectorized category/items in %s", request.SpaceName), "")

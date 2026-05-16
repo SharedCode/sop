@@ -142,11 +142,11 @@ func (s *Service) enrichSingleKB(ctx context.Context, db *database.Database, kbN
 		return err
 	}
 
-	// Always trigger Vectorize on autonomous agent spaces so internal knowledge syncs immediately
-	err = kb.Vectorize(ctx)
-	if err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 
-	return tx.Commit(ctx)
+	// Always trigger Vectorize on autonomous agent spaces so internal knowledge syncs immediately.
+	// Vectorize maintains its own batch transactions internally.
+	return database.Vectorize(ctx, db, kbName, s.generator, embedder, 50)
 }

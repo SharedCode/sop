@@ -49,7 +49,7 @@ func TestKnowledgeBase_API(t *testing.T) {
 	}
 
 	// Because vectorization is deferred, we must sweep before Semantic Search
-	_ = kb.Vectorize(ctx)
+	_, _ = kb.Vectorize(ctx, 50)
 
 	hits, err := kb.SearchSemantics(ctx, []float32{1.0, 1.0, 1.0}, &SearchOptions[string]{Limit: 10})
 	if err != nil {
