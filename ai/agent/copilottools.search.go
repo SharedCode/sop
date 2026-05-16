@@ -124,10 +124,8 @@ func (a *CopilotAgent) toolSearchSopKB(ctx context.Context, args map[string]any)
 		limit = int(l)
 	}
 
-	// Hardcoded to only scan SystemDB for "system_knowledge" / SOP docs
-	// Assuming the SOP tool KB is named "system_knowledge" or similar.
-	// Will use "system_knowledge" for SystemDB.
-	kbName := "system_knowledge"
+	// Hardcoded to only scan SystemDB for the default SOP docs KB.
+	kbName := ai.DefaultKBName
 
 	// Tier 1 Hardcodes searching exactly the system DB.
 	db := a.systemDB

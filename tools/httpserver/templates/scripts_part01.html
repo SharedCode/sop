@@ -1464,11 +1464,11 @@
         }
 
         let html = `
-            <div style="display: flex; flex-direction: row; gap: 20px; padding: 15px; height: 100%; align-items: flex-start; width: 100%; box-sizing: border-box;">
+            <div style="display: flex; flex-direction: row; gap: 5px; padding: 8px 8px 8px 8px; height: 100%; align-items: flex-start; width: 100%; box-sizing: border-box;">
                 
                 <!-- Left Sidebar Treeview -->
-                <div style="width: 250px; min-width: 250px; border-right: 1px solid var(--border-color); padding-right: 15px; height: 100%; overflow-y: auto;">
-                    <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; margin-bottom: 15px;">
+                <div style="width: 254px; min-width: 254px; border-right: 1px solid var(--border-color); padding-right: 8px; height: 100%; overflow-y: auto;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; margin-bottom: 0px;">
                         <h3 style="margin: 0; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center;">Categories <span onclick="event.stopPropagation(); window.vectorizeSpace('${name}')" title="Vectorize Entire Space" style="background: none; border: none; color: var(--key-color); font-size: 14px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: pointer; transition: transform 0.2s ease-in-out;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">✨</span></h3>
                         <span id="sidebar-view-all-items" title="View All Items" style="cursor: pointer; color: var(--link-color); display: flex; align-items: center; padding: 4px; border-radius: 4px;" onclick="window.fetchItemsForCategory('${name}', '', 'All Items', this)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
@@ -1510,11 +1510,11 @@
         function renderTreeNodes(catList, container, depth=0) {
             catList.forEach(cat => {
                 const li = document.createElement('li');
-                li.style.marginBottom = '8px';
-                li.style.marginLeft = (depth > 0 ? 15 : 0) + 'px';
+                li.style.marginBottom = '6px';
+                li.style.marginLeft = (depth > 0 ? 10 : 0) + 'px';
                 li.style.cursor = 'pointer';
                 li.style.color = 'var(--text-color)';
-                li.style.padding = '4px';
+                li.style.padding = '4px 1px 4px 0px';
                 li.style.borderRadius = '4px';
                 li.style.display = 'flex';
                 li.style.justifyContent = 'space-between';
@@ -1533,7 +1533,8 @@
                 arrowSpan.style.cursor = hasChildren ? 'pointer' : 'default';
                 arrowSpan.style.display = 'inline-block';
                 arrowSpan.style.width = '16px';
-                arrowSpan.style.textAlign = 'center';
+                arrowSpan.style.textAlign = 'left';
+                arrowSpan.style.flexShrink = '0';
 
                 const titleSpan = document.createElement('span');
                 titleSpan.innerHTML = cat.name;
@@ -1546,10 +1547,10 @@
                 childrenContainer.style.listStyle = 'none';
                 childrenContainer.style.paddingLeft = '0';
                 childrenContainer.style.marginTop = '0px';
-                childrenContainer.style.marginBottom = isExpanded ? '8px' : '0px';
+                childrenContainer.style.marginBottom = isExpanded ? '6px' : '0px';
                 childrenContainer.style.display = isExpanded ? 'block' : 'none';
 
-                li.style.marginBottom = isExpanded ? '2px' : '8px';
+                li.style.marginBottom = isExpanded ? '0px' : '6px';
 
                 arrowSpan.onclick = async (e) => {
                     e.stopPropagation();
@@ -1558,8 +1559,8 @@
                     if (childrenContainer.style.display === 'none') {
                         arrowSpan.innerHTML = '▾ ';
                         childrenContainer.style.display = 'block';
-                        li.style.marginBottom = '2px';
-                        childrenContainer.style.marginBottom = '8px';
+                        li.style.marginBottom = '0px';
+                        childrenContainer.style.marginBottom = '6px';
                         
                         if (childrenContainer.children.length === 0) {
                             arrowSpan.innerHTML = '⌛ ';
@@ -1584,7 +1585,7 @@
                     } else {
                         arrowSpan.innerHTML = '▸ ';
                         childrenContainer.style.display = 'none';
-                        li.style.marginBottom = '8px';
+                        li.style.marginBottom = '6px';
                         childrenContainer.style.marginBottom = '0px';
                     }
                 };
@@ -1636,7 +1637,7 @@
         const totalCatPages = Math.ceil(totalCatCount / catLimit);
         const currentCatPage = Math.floor(catOffset / catLimit) + 1;
         if (totalCatPages > 1) {
-            let pHtml = `<div style="display: flex; gap: 5px; margin-top: 15px; align-items: center; justify-content: center; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--border-color);">`;
+            let pHtml = `<div style="display: flex; gap: 5px; margin-top: 0px; align-items: center; justify-content: center; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--border-color);">`;
             
             if (currentCatPage > 1) {
                 pHtml += `<button onclick="window.selectSpace('${name}', document.querySelector('#sidebar li.active'), false, ${catOffset - catLimit}, ${catLimit})" style="padding: 2px 6px; font-size: 0.85em; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">&lt;</button>`;

@@ -141,22 +141,16 @@ func (m *MemoryManager[T]) EnsureCategory(ctx context.Context, categoryPath stri
 		ok, err = categoriesTree.Next(ctx)
 	}
 
-	vecs, err := m.embedder.EmbedTexts(ctx, []string{categoryPath})
-	if err != nil {
-		return sop.NilUUID, fmt.Errorf("failed to embed new category: %w", err)
-	}
-
 	parts := strings.Split(categoryPath, " / ")
 	leafName := parts[len(parts)-1]
 
 	CID := sop.NewUUID()
 	anchor := &Category{
-		ID:           CID,
-		Name:         leafName,
-		Path:         categoryPath,
-		Description:  "LLM Generated Semantic Anchor",
-		CenterVector: vecs[0],
-		ItemCount:    0,
+		ID:          CID,
+		Name:        leafName,
+		Path:        categoryPath,
+		Description: "",
+		ItemCount:   0,
 	}
 
 	cid, err := m.store.AddCategory(ctx, anchor)

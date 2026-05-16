@@ -55,9 +55,15 @@ A critical feature of the Knowledge Base Studio is empowering users to dictate h
 * **Auto-Synchronized Vector Alignment**: When a user edits a Category's Name or Description, the system automatically updates and re-embeds the Category's `CenterVector`. This ensures that as the organization's nomenclature and domain terminology evolves, the underlying vector math actively stays in sync, preserving the accuracy of semantic search algorithms.
 * **Granular Re-Vectorization**: Workflows allow users to specifically target individual Categories or clusters of Items and re-process/re-vectorize them via background async tasks. This isolates computational cost to only the data boundaries that require updates without having to re-index the entire Space.
 
-## 5. The AI Memory Marketplace (Minting & Trading)
-Bringing all these capabilities together—Isolated Knowledge Silos, BYOM (Bring Your Own Metadata), and Granular Re-Vectorization—SOP AI establishes the foundation for a completely new digital economy: **The AI Memory Marketplace**. 
+## 5. Knowledge Base Lifecycle Management (Import -> Curate -> Vectorize -> Trial)
+Developing a high-quality AI Knowledge Base requires careful curation. Generating vectors is computationally expensive and should not be wasted on noisy, unorganized data or raw string paths. To solve this, the SOP platform promotes a distinct 4-step lifecycle:
 
+1. **Import**: Users initially bulk-import raw payloads (JSON, Markdown, CSVs) into the Space. During this lightning-fast ingestion phase, Category nodes are logically created in the database to maintain hierarchical structure, but expensive mathematical `CenterVector` generation is intentionally deferred.
+2. **Curate**: Users curate the incoming data within the Studio dashboard. They manually fix categorization boundaries, improve folder hierarchies, and add rich semantic paragraphs to Category `Description` fields. The data taxonomy is cleansed *before* any AI matching runs against it.
+3. **Vectorize**: Once the taxonomy is clean, the user explicitly initiates a Vectorize action (e.g., clicking "✨ Vectorize Entire Space" in the UI) or relies on asynchronous background Sleep Cycles. The engine sweeps the Space and calculates canonical vectors, leveraging the high-quality, curated context (preferring `Description` over raw `Name`).
+4. **Avatar Trial**: The user hot-swaps the Copilot to point at their newly built Space and initiates a conversational QA trial. Because the vectors were generated from intentionally curated, rich descriptions, the semantic retrieval accuracy is exceptionally high.
+
+## 6. The AI Memory Marketplace (Minting & Trading)
 Because Knowledge Bases (Spaces) are deterministic, purely isolated, and perfectly structured, they become highly valuable, portable assets. Users can effectively package and sell high-value "AI Memories."
 
 * **Invest & Mint**: Users "mint" high-quality AI memories by investing their resources (LLM API calls for vectorization) and human expertise (BYOM curating and structuring) to create clean, specialized data silos (e.g., a highly-tuned space for Medical Case Law).
