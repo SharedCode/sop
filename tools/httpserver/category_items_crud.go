@@ -393,7 +393,10 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil {
+	if cfg, err := kb.GetConfig(ctx); err == nil {
+		if cfg == nil {
+			cfg = &memory.KnowledgeBaseConfig{}
+		}
 		cfg.LastModified = time.Now().Unix()
 		kb.SetConfig(ctx, cfg)
 	}
@@ -689,7 +692,10 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 		generatedIDs = append(generatedIDs, s.Item.ID.String())
 	}
 
-	if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil {
+	if cfg, err := kb.GetConfig(ctx); err == nil {
+		if cfg == nil {
+			cfg = &memory.KnowledgeBaseConfig{}
+		}
 		cfg.LastModified = time.Now().Unix()
 		kb.SetConfig(ctx, cfg)
 	}

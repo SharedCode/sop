@@ -77,6 +77,9 @@ func handleGetSpaceConfig(w http.ResponseWriter, r *http.Request) {
 		response.KnowledgeBaseConfig = *cfg
 	}
 
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	w.Header().Set("Pragma", "no-cache")
+	w.Header().Set("Expires", "0")
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		http.Error(w, "Failed to encode config: "+err.Error(), http.StatusInternalServerError)

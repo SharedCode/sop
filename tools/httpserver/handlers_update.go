@@ -188,7 +188,10 @@ func handleUpdateSpaceItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil {
+	if cfg, err := kb.GetConfig(ctx); err == nil {
+		if cfg == nil {
+			cfg = &memory.KnowledgeBaseConfig{}
+		}
 		cfg.LastModified = time.Now().Unix()
 		kb.SetConfig(ctx, cfg)
 	}

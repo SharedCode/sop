@@ -2714,7 +2714,7 @@ window.vectorizeSpace = async function(spaceName, skipDimensionCheck = false) {
 
     let overrideHeaders = null;
     try {
-        const res = await fetch(`/api/spaces/config/get?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(cleanName)}`);
+        const res = await fetch(`/api/spaces/config/get?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(cleanName)}&_t=${new Date().getTime()}`);
         if (res.ok) {
             const config = await res.json();
             
@@ -2737,6 +2737,11 @@ window.vectorizeSpace = async function(spaceName, skipDimensionCheck = false) {
                             showAlert(`Space '${cleanName}' vectorization completed successfully!`);
                             if (window._lastFetchItemsArgs) {
                                 window.fetchItemsForCategory(window._lastFetchItemsArgs.spaceName, window._lastFetchItemsArgs.categoryId, window._lastFetchItemsArgs.categoryName, window._lastFetchItemsArgs.liElement, window._lastFetchItemsArgs.catObj);
+                            }
+                            if (document.getElementById('edit-kb-modal') && document.getElementById('edit-kb-modal').style.display === 'flex') {
+                                if (document.getElementById('edit-kb-name').value === cleanName) {
+                                    showEditKB(cleanName, false);
+                                }
                             }
                         });
                     }
@@ -2826,6 +2831,11 @@ window.vectorizeSpace = async function(spaceName, skipDimensionCheck = false) {
                     if (window._lastFetchItemsArgs) {
                         selectSpace(cleanName, null, true);
                     }
+                    if (document.getElementById('edit-kb-modal') && document.getElementById('edit-kb-modal').style.display === 'flex') {
+                        if (document.getElementById('edit-kb-name').value === cleanName) {
+                            showEditKB(cleanName, false);
+                        }
+                    }
                 }).catch(err => {
                     showAlert(`Vectorization failed: ${err.message}`);
                 });
@@ -2852,7 +2862,7 @@ window.showEditKB = async function() {
     // Fetch config
     let config = null;
     try {
-        const res = await fetch(`/api/spaces/config/get?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`);
+        const res = await fetch(`/api/spaces/config/get?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}&_=${Date.now()}`);
         if (res.ok) {
             config = await res.json();
         }
@@ -2872,6 +2882,13 @@ window.showEditKB = async function() {
 
     // Pre-fill
     if (config) {
+        let warningEl = document.getElementById('edit-kb-vector-warning');
+        if (warningEl) {
+            // Track if it hasn't been vectorized or if it was modified since last vectorization
+            let needsVectorization = !config.last_vectorized || (config.last_modified && config.last_vectorized < config.last_modified);
+            warningEl.style.display = needsVectorization ? 'flex' : 'none';
+        }
+
         if(document.getElementById('edit-kb-sysprompt')) document.getElementById('edit-kb-sysprompt').value = config.system_prompt || '';
         if(document.getElementById('edit-kb-is-persona')) document.getElementById('edit-kb-is-persona').checked = !!config.is_persona;
         

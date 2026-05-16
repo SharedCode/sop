@@ -10,6 +10,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/memory"
 )
 
 type VectorizeRequest struct {
@@ -91,29 +92,36 @@ func handleVectorizeSpace(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if emb != nil {
-			// Execute a tiny config transaction
-			txCfg, errTx := db.BeginTransaction(ctx, sop.ForWriting)
-			if errTx == nil {
-				kbCfg, errKb := db.OpenKnowledgeBase(ctx, request.SpaceName, txCfg, llm, emb)
-				if errKb == nil {
-					cfg, cfgErr := kbCfg.GetConfig(ctx)
-					if cfgErr == nil && cfg != nil {
-						needsUpdate := false
-						if cfg.EmbedderDimension != emb.Dim() {
-							cfg.EmbedderDimension = emb.Dim()
-							needsUpdate = true
+			// Execute a tiny config transaction with retries to avoid lock conflicts
+			for retry := 0; retry < 5; retry++ {
+				txCfg, errTx := db.BeginTransaction(ctx, sop.ForWriting)
+				if errTx == nil {
+					kbCfg, errKb := db.OpenKnowledgeBase(ctx, request.SpaceName, txCfg, llm, emb)
+					if errKb == nil {
+						cfg, cfgErr := kbCfg.GetConfig(ctx)
+						if cfgErr == nil {
+							if cfg == nil {
+								cfg = &memory.KnowledgeBaseConfig{}
+							}
+							needsUpdate := true
+							if cfg.EmbedderDimension != emb.Dim() {
+								cfg.EmbedderDimension = emb.Dim()
+							}
+							cfg.LastVectorized = time.Now().Unix()
+							if needsUpdate {
+								_ = kbCfg.SetConfig(ctx, cfg)
+							}
 						}
-						needsUpdate = true
-						cfg.LastVectorized = time.Now().Unix()
-
-						if needsUpdate {
-							kbCfg.SetConfig(ctx, cfg)
+						errCommit := txCfg.Commit(ctx)
+						if errCommit == nil {
+							break // Success
 						}
+					} else {
+						txCfg.Rollback(ctx)
 					}
-					txCfg.Commit(ctx)
-				} else {
-					txCfg.Rollback(ctx)
 				}
+				// Wait a bit before retrying if there's a lock contention from Vectorize
+				time.Sleep(200 * time.Millisecond)
 			}
 		}
 

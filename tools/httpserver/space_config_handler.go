@@ -64,6 +64,12 @@ func handleSaveSpaceConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if existingCfg, err := kb.GetConfig(ctx); err == nil && existingCfg != nil {
+		req.LastVectorized = existingCfg.LastVectorized
+		req.LastModified = existingCfg.LastModified
+		req.EmbedderDimension = existingCfg.EmbedderDimension
+	}
+
 	if err := kb.SetConfig(ctx, &req); err != nil {
 		http.Error(w, "Failed to save Space config: "+err.Error(), http.StatusInternalServerError)
 		return
