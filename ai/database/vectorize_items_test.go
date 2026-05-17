@@ -101,6 +101,9 @@ func TestVectorizeItems(t *testing.T) {
 	if len(catVal.CenterVector) == 0 {
 		t.Errorf("Category was not vectorized")
 	}
+	if catVal.ItemCount != 1 {
+		t.Errorf("Expected ItemCount to be 1, got %d", catVal.ItemCount)
+	}
 
 	items2, _ := kb2.Store.Items(ctx)
 	foundItem, _ := items2.Find(ctx, itemID1, false)

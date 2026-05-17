@@ -33,7 +33,7 @@ type Vector struct {
 	ID         sop.UUID  `json:"id"`
 	Data       []float32 `json:"data"`        // Math coordinate
 	ItemID     sop.UUID  `json:"item_id"`     // Points to the actual Item
-	CategoryID sop.UUID  `json:"category_id"` // Redundant, but helps validation
+	CategoryID sop.UUID  `json:"category_id"` // Critical for category-partitioned semantic searches
 }
 
 // CategoryParent represents a relationship to a parent category,

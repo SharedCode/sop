@@ -75,10 +75,12 @@ func VectorizeItems(
 	var catItemsNoLLM []*memory.Item[map[string]any]
 
 	if len(itemIDs) == 0 {
+		itemCount := 0
 		ok, _ := itemsBtree.First(ctx)
 		for ok {
 			item, err := itemsBtree.GetCurrentValue(ctx)
 			if err == nil && item.CategoryID == categoryID {
+				itemCount++
 				dataStr := ""
 				if len(item.Summaries) == 0 {
 					if str, isStr := any(item.Data).(string); isStr {
@@ -103,6 +105,12 @@ func VectorizeItems(
 				}
 			}
 			ok, _ = itemsBtree.Next(ctx)
+		}
+
+		if category.ItemCount != itemCount {
+			category.ItemCount = itemCount
+			catBtree.Update(ctx, category.ID, category)
+			catUpdated = true
 		}
 	} else {
 		for _, id := range itemIDs {

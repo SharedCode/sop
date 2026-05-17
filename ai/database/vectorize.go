@@ -21,6 +21,9 @@ func Vectorize(
 	var cursorPos sop.UUID = sop.NilUUID
 	var isFirstBatch = true
 
+	// Tally counts as we process items in batches
+	categoryCounts := make(map[sop.UUID]int)
+
 	for {
 		tx, err := db.BeginTransaction(ctx, sop.ForWriting)
 		if err != nil {
@@ -42,7 +45,7 @@ func Vectorize(
 			isFirstBatch = false
 		}
 
-		hasMore, newCursor, err := processVectorizeBatch(ctx, kb, embedder, batchSize, cursorPos)
+		hasMore, newCursor, err := processVectorizeBatch(ctx, kb, embedder, batchSize, cursorPos, categoryCounts)
 		if err != nil {
 			tx.Rollback(ctx)
 			return err
@@ -59,7 +62,50 @@ func Vectorize(
 		}
 	}
 
-	return nil
+	return updateCategoryCountsFromMap(ctx, db, name, llm, embedder, categoryCounts)
+}
+
+// updateCategoryCountsFromMap receives pre-tallied item frequencies and flushes them to the categories B-Tree.
+// This avoids needing a completely separate scan of the items B-Tree.
+func updateCategoryCountsFromMap(
+	ctx context.Context,
+	db *Database,
+	name string,
+	llm ai.Generator,
+	embedder ai.Embeddings,
+	counts map[sop.UUID]int,
+) error {
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	kb, err := db.OpenKnowledgeBase(ctx, name, tx, llm, embedder)
+	if err != nil {
+		return err
+	}
+
+	catBtree, err := kb.Store.Categories(ctx)
+	if err != nil {
+		return err
+	}
+
+	ok, _ := catBtree.First(ctx)
+	for ok {
+		if cat, err := catBtree.GetCurrentValue(ctx); err == nil {
+			if count, exists := counts[cat.ID]; exists && cat.ItemCount != count {
+				cat.ItemCount = count
+				catBtree.UpdateCurrentItem(ctx, cat.ID, cat)
+			} else if !exists && cat.ItemCount != 0 {
+				cat.ItemCount = 0
+				catBtree.UpdateCurrentItem(ctx, cat.ID, cat)
+			}
+		}
+		ok, _ = catBtree.Next(ctx)
+	}
+
+	return tx.Commit(ctx)
 }
 
 func vectorizeAllCategories(ctx context.Context, kb *memory.KnowledgeBase[map[string]any], embedder ai.Embeddings) error {
@@ -118,12 +164,13 @@ func processVectorizeBatch(
 	embedder ai.Embeddings,
 	batchSize int,
 	startCursor sop.UUID,
+	categoryCounts map[sop.UUID]int,
 ) (bool, sop.UUID, error) {
 	itemsBtree, err := kb.Store.Items(ctx)
 	if err != nil {
 		return false, startCursor, err
 	}
-	
+
 	catBtree, err := kb.Store.Categories(ctx)
 	if err != nil {
 		return false, startCursor, err
@@ -151,6 +198,12 @@ func processVectorizeBatch(
 		item, err := itemsBtree.GetCurrentValue(ctx)
 		if err == nil {
 			currentCursor = item.ID
+
+			// Tally category items as we encounter them
+			if categoryCounts != nil {
+				categoryCounts[item.CategoryID]++
+			}
+
 			itemCopy := item
 			batch = append(batch, &itemCopy)
 			processedCount++
@@ -185,16 +238,16 @@ func processVectorizeBatch(
 		}
 
 		expectedHash := memory.ComputeVectorHash(embedderDim, hashTexts...)
-		
+
 		// If the vector hash is mismatched or it lacks a vector position, vectorize it.
 		// Note: The LLM step might be skipped entirely if we just need to re-embed.
 		if item.VectorHash != expectedHash || len(item.Positions) == 0 {
 			item.VectorHash = expectedHash
-			
+
 			if len(item.Summaries) == 0 {
 				item.Summaries = []string{dataStr}
 			}
-			
+
 			itemsNeedingEmbeddings = append(itemsNeedingEmbeddings, item)
 			batchSummaries = append(batchSummaries, item.Summaries...)
 			itemSummaryCounts = append(itemSummaryCounts, len(item.Summaries))
