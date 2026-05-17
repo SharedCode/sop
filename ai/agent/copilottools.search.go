@@ -29,7 +29,12 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 		embedder = a.service.Domain().Embedder()
 	}
 
-	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder)
+	searchEnabled := false
+	if a.Config.Requirements != nil {
+		searchEnabled = a.Config.Requirements.Search
+	}
+
+	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, searchEnabled)
 	if err != nil {
 		// KB might not exist, silently return empty or error
 		return "", fmt.Errorf("failed to open kb %s: %w", kbName, err)

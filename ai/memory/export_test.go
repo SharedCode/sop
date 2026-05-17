@@ -17,12 +17,12 @@ func TestExportImportJSON(t *testing.T) {
 	// Create a new Knowledge Base
 	cats := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecs := inmemory.NewBtree[VectorKey, Vector](true)
-	items := inmemory.NewBtree[sop.UUID, Item[string]](true)
-	st := NewStore[string](cats.Btree, vecs.Btree, items.Btree).(*store[string])
+	items := inmemory.NewBtree[ItemKey, Item[string]](true)
+	st := NewStore[string](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecs.Btree, items.Btree).(*store[string])
 	st.SetTextIndex(&MockTextIndex{})
 	kb := &KnowledgeBase[string]{
-		Store: st,
-		Manager:           NewMemoryManager[string](st, llm, embedder),
+		Store:   st,
+		Manager: NewMemoryManager[string](st, llm, embedder),
 	}
 
 	// Ingest some thoughts
@@ -54,12 +54,12 @@ func TestExportImportJSON(t *testing.T) {
 	// Create a new empty KnowledgeBase and Import the JSON
 	cats2 := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecs2 := inmemory.NewBtree[VectorKey, Vector](true)
-	items2 := inmemory.NewBtree[sop.UUID, Item[string]](true)
-	st2 := NewStore[string](cats2.Btree, vecs2.Btree, items2.Btree).(*store[string])
+	items2 := inmemory.NewBtree[ItemKey, Item[string]](true)
+	st2 := NewStore[string](cats2.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecs2.Btree, items2.Btree).(*store[string])
 	st2.SetTextIndex(&MockTextIndex{})
 	kb2 := &KnowledgeBase[string]{
-		Store: st2,
-		Manager:           NewMemoryManager[string](st2, llm, embedder),
+		Store:   st2,
+		Manager: NewMemoryManager[string](st2, llm, embedder),
 	}
 
 	err = kb2.ImportJSON(ctx, &buf, "test")

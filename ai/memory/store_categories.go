@@ -25,6 +25,10 @@ func (s *store[T]) AddCategory(ctx context.Context, c *Category) (sop.UUID, erro
 	if err != nil {
 		return sop.UUID{}, fmt.Errorf("failed to insert new category: %w", err)
 	}
+	// Maintain the Name index so it can be dynamically resolved by Upsert
+	if c.Name != "" && s.categoriesByName != nil {
+		s.categoriesByName.Add(ctx, c.Name, c.ID)
+	}
 	if !ok {
 		return sop.UUID{}, fmt.Errorf("category with ID %v already exists", c.ID)
 	}

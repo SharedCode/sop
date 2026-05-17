@@ -341,7 +341,7 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 	detID := generateDeterministicID(parsedCatID, dataStr)
 	itemsTree, err := kb.Store.Items(ctx)
 	if err == nil {
-		if found, _ := itemsTree.Find(ctx, detID, false); found {
+		if found, _ := itemsTree.Find(ctx, memory.ItemKey{CategoryID: parsedCatID, ItemID: detID}, false); found {
 			// Item already exists. Skip summarization and vector generation.
 			if err := trans.Commit(ctx); err != nil {
 				http.Error(w, "Commit failed", http.StatusInternalServerError)
@@ -399,7 +399,8 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 }
 
 type deleteItemRequest struct {
-	ID string `json:"id"`
+	ID         string `json:"id"`
+	CategoryID string `json:"category_id"`
 }
 
 func handleDeleteSpaceItem(w http.ResponseWriter, r *http.Request) {
@@ -452,7 +453,47 @@ func handleDeleteSpaceItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = kb.Store.Delete(ctx, parsedID)
+	itemsTree, err := kb.Store.Items(ctx)
+	if err != nil {
+		http.Error(w, "Failed to access items", http.StatusInternalServerError)
+		return
+	}
+
+	var foundKey memory.ItemKey
+	var found bool
+
+	if req.CategoryID != "" {
+		parsedCatID, catErr := sop.ParseUUID(req.CategoryID)
+		if catErr == nil {
+			foundKey = memory.ItemKey{CategoryID: parsedCatID, ItemID: parsedID}
+			if ok, _ := itemsTree.Find(ctx, foundKey, false); ok {
+				found = true
+			}
+		}
+	}
+
+	// Fallback to sequential scan if CategoryID is missing or not found
+	if !found {
+		itemsTree.First(ctx)
+		for {
+			k := itemsTree.GetCurrentKey()
+			if k.Key.ItemID == parsedID {
+				foundKey = k.Key
+				found = true
+				break
+			}
+			if ok, _ := itemsTree.Next(ctx); !ok {
+				break
+			}
+		}
+	}
+
+	if !found {
+		http.Error(w, "Item not found", http.StatusNotFound)
+		return
+	}
+
+	err = kb.Store.Delete(ctx, foundKey)
 	if err != nil {
 		http.Error(w, "Failed to delete item", http.StatusInternalServerError)
 		return
@@ -573,7 +614,7 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 		detID := generateDeterministicID(parsedCatID, dataStr)
 		itemsTree, err := kb.Store.Items(ctx)
 		if err == nil {
-			if found, _ := itemsTree.Find(ctx, detID, false); found {
+			if found, _ := itemsTree.Find(ctx, memory.ItemKey{CategoryID: parsedCatID, ItemID: detID}, false); found {
 				state := itemState{
 					OriginalReq:  itm,
 					ParsedCatID:  parsedCatID,

@@ -459,17 +459,14 @@
             </div>
             
             <!-- AI Configuration Section for Agentic Data -->
-            <div id="edit-kb-sysprompt-container" style="display:none; margin-bottom: 15px; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.02);">
-                <div style="font-size: 13px; font-weight: bold; margin-bottom: 8px; color: var(--key-color);">🤖 Agentic Data Configuration</div>
-                <div style="font-size: 11px; margin-bottom: 10px; color: var(--text-muted);">
-                    Configure the AI that manages and draws persona from this data space.
-                </div>
+            <div id="edit-kb-sysprompt-container" style="display:none; margin-bottom: 0px; padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; background: rgba(0,0,0,0.02);">
+                <div style="font-size: 13px; font-weight: bold; margin-bottom: 8px; color: var(--key-color);" title="Configure the AI that manages and draws persona from this data space.">🤖 Agentic Data Configuration</div>
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                     <label class="form-label" style="font-size: 12px; margin: 0;">System Prompt (Persona Focus):</label>
                     <button onclick="enhanceTextWithAI(this, 'edit-kb-sysprompt', 'system_prompt', ['edit-kb-name'])" style="background: none; border: none; color: var(--key-color); cursor: pointer; font-size: 11px; padding: 0;">✨ Enhance with AI</button>
                 </div>
-                <textarea id="edit-kb-sysprompt" class="form-input" style="width: 100%; height: 60px; box-sizing: border-box; resize: vertical; margin-bottom: 10px;" placeholder="Describe how the AI should think, search, and synthesize data from this Space. (e.g., 'You are a strict Legal Auditor. Cite references...') Click ✨ Enhance with AI to automatically expand your draft!"></textarea>
+                <textarea id="edit-kb-sysprompt" class="form-input" style="width: 100%; height: 65px; box-sizing: border-box; resize: vertical; margin-bottom: 0px;" placeholder="Describe how the AI should think, search, and synthesize data from this Space. (e.g., 'You are a strict Legal Auditor. Cite references...') Click ✨ Enhance with AI to automatically expand your draft!"></textarea>
             </div>
         </div>
         <div class="modal-footer">

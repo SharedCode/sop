@@ -49,19 +49,20 @@ func TestVectorize(t *testing.T) {
 	cats.Add(ctx, catID, &cat)
 
 	itemID1 := sop.NewUUID()
+	itemKey1 := memory.ItemKey{CategoryID: catID, ItemID: itemID1}
 	item1 := memory.Item[map[string]any]{
 		ID:         itemID1,
 		CategoryID: catID,
 		Data:       map[string]any{"content": "test item 1"},
 	}
-	items.Add(ctx, itemID1, item1)
+	items.Add(ctx, itemKey1, item1)
 
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Setup Commit: %v", err)
 	}
 
 	// 1) Test Vectorize (scan entire category + specific items dynamically if we had to, but it handles all)
-	err = database.Vectorize(ctx, db, "test_kb", llm, emb, 10)
+	err = db.Vectorize(ctx, "test_kb", llm, emb, 10)
 	if err != nil {
 		t.Fatalf("Vectorize failed: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestVectorize(t *testing.T) {
 	}
 
 	items2, _ := kb2.Store.Items(ctx)
-	foundItem, _ := items2.Find(ctx, itemID1, false)
+	foundItem, _ := items2.Find(ctx, itemKey1, false)
 	if !foundItem {
 		t.Errorf("Item not found")
 	}

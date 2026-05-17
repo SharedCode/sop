@@ -14,10 +14,6 @@ import (
 	core "github.com/sharedcode/sop/database"
 )
 
-func uuidComparer(a, b sop.UUID) int {
-	return a.Compare(b)
-}
-
 func vectorKeyComparer(a, b memory.VectorKey) int {
 	if cmp := a.CategoryID.Compare(b.CategoryID); cmp != 0 {
 		return cmp
@@ -29,6 +25,13 @@ func vectorKeyComparer(a, b memory.VectorKey) int {
 		return 1
 	}
 	return a.VectorID.Compare(b.VectorID)
+}
+
+func itemKeyComparer(a, b memory.ItemKey) int {
+	if cmp := a.CategoryID.Compare(b.CategoryID); cmp != 0 {
+		return cmp
+	}
+	return a.ItemID.Compare(b.ItemID)
 }
 
 // KnowledgeBaseExists checks if the underlying physical tables for a knowledge base have been created.
@@ -54,90 +57,58 @@ func (db *Database) KnowledgeBaseExists(ctx context.Context, name string) (bool,
 
 // OpenKnowledgeBase intelligently provisions or opens the physical tables
 // and returns the clean KnowledgeBase facade.
-//
-// DESIGN DIFFERENCE vs OpenVectorStore:
-//   - KnowledgeBase (ai/memory) uses an LLM to generate semantic "Categories"
-//     (human readable folders) that determine clustering and relationship logic.
-//     It is the preferred database backend for the UI and Copilot because it
-//     provides superior, deterministic, label-based pre-filtering before any math.
-//     Additionally, it eliminates the rigid "Optimize" rebuild phases required by legacy systems.
-//   - VectorStore (ai/vector) uses unguided K-Means mathematical centroids. It
-//     is retained for zero-LLM high-throughput ingestion and cross-language
-//     FII bindings where blind mathematical data-dumping is required. However, it
-//     suffers from needing periodic, IO intensive `Optimize()` calls to rebalance clusters.
+// KnowledgeBase leverages LLM or human generated semantic Categories for clustering,
+// avoiding the periodic rebuilds (Optimize) required by standard VectorStores.
 func (db *Database) OpenKnowledgeBase(
 	ctx context.Context,
 	name string,
 	t sop.Transaction,
 	llm ai.Generator,
 	embedder ai.Embeddings,
+	enableTextSearch ...bool,
 ) (*memory.KnowledgeBase[map[string]any], error) {
-
-	isRead := t.GetPhasedTransaction().GetMode() == sop.ForReading
 
 	// 1. Open Categories Store
 	catsStore := sop.ConfigureStore(fmt.Sprintf("%s/categories", name), true, btree.DefaultSlotLength, "dynamic categories store", sop.SmallData, "")
-	var catsTree btree.BtreeInterface[sop.UUID, *memory.Category]
-	var err error
-	if isRead {
-		catsTree, err = core.OpenBtree[sop.UUID, *memory.Category](ctx, db.config, catsStore.Name, t, uuidComparer)
-	} else {
-		catsTree, err = core.NewBtree[sop.UUID, *memory.Category](ctx, db.config, catsStore.Name, t, uuidComparer, catsStore)
-		if err != nil {
-			if err.Error() == fmt.Sprintf("b-tree '%s' is already in the transaction's b-tree instances list", catsStore.Name) {
-				catsTree, err = core.OpenBtree[sop.UUID, *memory.Category](ctx, db.config, catsStore.Name, t, uuidComparer)
-			}
-		}
+	catsTree, err := core.NewBtree[sop.UUID, *memory.Category](ctx, db.config, catsStore.Name, t, nil, catsStore)
+	if err != nil {
+		return nil, err
 	}
+
+	// 1.1 Open CategoriesByName Store
+	catsByNameStore := sop.ConfigureStore(fmt.Sprintf("%s/categoriesByName", name), true, btree.DefaultSlotLength, "dynamic categoriesByName store", sop.SmallData, "")
+	catsByNameTree, err := core.NewBtree[string, sop.UUID](ctx, db.config, catsByNameStore.Name, t, nil, catsByNameStore)
 	if err != nil {
 		return nil, err
 	}
 
 	// 2. Open Vectors Store
-	vecsStore := sop.ConfigureStore(fmt.Sprintf("%s/vectors", name), true, 10000, "active memorys store", sop.SmallData, "")
-	var vecsTree btree.BtreeInterface[memory.VectorKey, memory.Vector]
-	if isRead {
-		vecsTree, err = core.OpenBtree[memory.VectorKey, memory.Vector](ctx, db.config, vecsStore.Name, t, vectorKeyComparer)
-	} else {
-		vecsTree, err = core.NewBtree[memory.VectorKey, memory.Vector](ctx, db.config, vecsStore.Name, t, vectorKeyComparer, vecsStore)
-		if err != nil {
-			if err.Error() == fmt.Sprintf("b-tree '%s' is already in the transaction's b-tree instances list", vecsStore.Name) {
-				vecsTree, err = core.OpenBtree[memory.VectorKey, memory.Vector](ctx, db.config, vecsStore.Name, t, vectorKeyComparer)
-			}
-		}
-	}
+	vecsStore := sop.ConfigureStore(fmt.Sprintf("%s/vectors", name), true, 10000, "dynamic vectors store", sop.SmallData, "")
+	vecsTree, err := core.NewBtree[memory.VectorKey, memory.Vector](ctx, db.config, vecsStore.Name, t, vectorKeyComparer, vecsStore)
 	if err != nil {
 		return nil, err
 	}
 
 	// 3. Open Items Store
-	itemsStore := sop.ConfigureStore(fmt.Sprintf("%s/items", name), true, btree.DefaultSlotLength, "dynamic items store", sop.SmallData, "")
-	var itemsTree btree.BtreeInterface[sop.UUID, memory.Item[map[string]any]]
-	if isRead {
-		itemsTree, err = core.OpenBtree[sop.UUID, memory.Item[map[string]any]](ctx, db.config, itemsStore.Name, t, uuidComparer)
-	} else {
-		itemsTree, err = core.NewBtree[sop.UUID, memory.Item[map[string]any]](ctx, db.config, itemsStore.Name, t, uuidComparer, itemsStore)
-		if err != nil {
-			if err.Error() == fmt.Sprintf("b-tree '%s' is already in the transaction's b-tree instances list", itemsStore.Name) {
-				itemsTree, err = core.OpenBtree[sop.UUID, memory.Item[map[string]any]](ctx, db.config, itemsStore.Name, t, uuidComparer)
-			}
-		}
-	}
+	itemsStore := sop.ConfigureStore(fmt.Sprintf("%s/items", name), true, btree.DefaultSlotLength, "dynamic items store", sop.MediumData, "")
+	itemsTree, err := core.NewBtree[memory.ItemKey, memory.Item[map[string]any]](ctx, db.config, itemsStore.Name, t, itemKeyComparer, itemsStore)
 	if err != nil {
 		return nil, err
 	}
 
 	// Assemble the storage engine
-	store := memory.NewStore[map[string]any](catsTree, vecsTree, itemsTree)
+	store := memory.NewStore(catsTree, catsByNameTree, vecsTree, itemsTree)
 
-	textIndex, err := db.OpenSearch(ctx, fmt.Sprintf("%s/text", name), t)
-	if err == nil && textIndex != nil {
-		if st, ok := store.(interface{ SetTextIndex(idx ai.TextIndex) }); ok {
-			st.SetTextIndex(textIndex)
+	if len(enableTextSearch) > 0 && enableTextSearch[0] {
+		textIndex, err := db.OpenSearch(ctx, fmt.Sprintf("%s/text", name), t)
+		if err == nil && textIndex != nil {
+			if st, ok := store.(interface{ SetTextIndex(idx ai.TextIndex) }); ok {
+				st.SetTextIndex(textIndex)
+			}
 		}
 	}
 
-	manager := memory.NewMemoryManager[map[string]any](store, llm, embedder)
+	manager := memory.NewMemoryManager(store, llm, embedder)
 
 	return &memory.KnowledgeBase[map[string]any]{
 		Store:   store,

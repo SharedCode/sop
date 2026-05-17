@@ -49,14 +49,7 @@ type Architecture struct {
 
 // newBtree is a helper to create a B-Tree that automatically selects between standard and replicated modes.
 func newBtree[TK btree.Ordered, TV any](ctx context.Context, config Config, so sop.StoreOptions, t sop.Transaction, comparer btree.ComparerFunc[TK]) (btree.BtreeInterface[TK, TV], error) {
-	b3, err := database.NewBtree[TK, TV](ctx, config.TransactionOptions.GetDatabaseOptions(), so.Name, t, comparer, so)
-
-	if err != nil {
-		if err.Error() == fmt.Sprintf("b-tree '%s' is already in the transaction's b-tree instances list", so.Name) {
-			return database.OpenBtree[TK, TV](ctx, config.TransactionOptions.GetDatabaseOptions(), so.Name, t, comparer)
-		}
-	}
-	return b3, err
+	return database.NewBtree[TK, TV](ctx, config.TransactionOptions.GetDatabaseOptions(), so.Name, t, comparer, so)
 }
 
 // OpenDomainStore initializes the B-Trees for the vertical.

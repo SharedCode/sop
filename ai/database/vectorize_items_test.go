@@ -54,10 +54,6 @@ func TestVectorizeItems(t *testing.T) {
 		t.Fatalf("OpenKnowledgeBase: %v", err)
 	}
 
-	cats, err := kb.Store.Categories(ctx)
-	if err != nil {
-		t.Fatalf("Categories: %v", err)
-	}
 	items, err := kb.Store.Items(ctx)
 	if err != nil {
 		t.Fatalf("Items: %v", err)
@@ -69,22 +65,23 @@ func TestVectorizeItems(t *testing.T) {
 		Name:        "Test Category",
 		Description: "A category for test",
 	}
-	cats.Add(ctx, catID, &cat)
+	kb.Store.AddCategory(ctx, &cat)
 
 	itemID1 := sop.NewUUID()
+	itemKey1 := memory.ItemKey{CategoryID: catID, ItemID: itemID1}
 	item1 := memory.Item[map[string]any]{
 		ID:         itemID1,
 		CategoryID: catID,
 		Data:       map[string]any{"content": "test item 1"},
 	}
-	items.Add(ctx, itemID1, item1)
+	items.Add(ctx, itemKey1, item1)
 
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Setup Commit: %v", err)
 	}
 
 	// 1) Test VectorizeItems with itemIDs=nil (scan by category)
-	err = database.VectorizeItems(ctx, db, "test_kb", llm, emb, 10, catID, nil)
+	err = db.VectorizeItems(ctx, "test_kb", llm, emb, 10, catID, nil)
 	if err != nil {
 		t.Fatalf("VectorizeItems (category scan) failed: %v", err)
 	}
@@ -106,7 +103,7 @@ func TestVectorizeItems(t *testing.T) {
 	}
 
 	items2, _ := kb2.Store.Items(ctx)
-	foundItem, _ := items2.Find(ctx, itemID1, false)
+	foundItem, _ := items2.Find(ctx, itemKey1, false)
 	if !foundItem {
 		t.Errorf("Item not found")
 	}
@@ -121,15 +118,16 @@ func TestVectorizeItems(t *testing.T) {
 	kb3, _ := db.OpenKnowledgeBase(ctx, "test_kb", tx3, llm, emb)
 	items3, _ := kb3.Store.Items(ctx)
 	itemID2 := sop.NewUUID()
+	itemKey2 := memory.ItemKey{CategoryID: catID, ItemID: itemID2}
 	item2 := memory.Item[map[string]any]{
 		ID:         itemID2,
 		CategoryID: catID,
 		Data:       map[string]any{"content": "explicit item 2"},
 	}
-	items3.Add(ctx, itemID2, item2)
+	items3.Add(ctx, itemKey2, item2)
 	tx3.Commit(ctx)
 
-	err = database.VectorizeItems(ctx, db, "test_kb", llm, emb, 10, catID, []sop.UUID{itemID2})
+	err = db.VectorizeItems(ctx, "test_kb", llm, emb, 10, catID, []sop.UUID{itemID2})
 	if err != nil {
 		t.Fatalf("VectorizeItems (explicit items) failed: %v", err)
 	}
@@ -137,7 +135,7 @@ func TestVectorizeItems(t *testing.T) {
 	tx4, _ := db.BeginTransaction(ctx, sop.ForReading)
 	kb4, _ := db.OpenKnowledgeBase(ctx, "test_kb", tx4, llm, emb)
 	items4, _ := kb4.Store.Items(ctx)
-	items4.Find(ctx, itemID2, false)
+	items4.Find(ctx, itemKey2, false)
 	item2Val, _ := items4.GetCurrentValue(ctx)
 	if len(item2Val.Positions) == 0 {
 		t.Errorf("Explicit Item 2 was not vectorized")

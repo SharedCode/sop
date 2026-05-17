@@ -157,8 +157,38 @@ type KeyValueStore[TK any, TV any] interface {
 	Remove(context.Context, string, []TK) KeyValueStoreResponse[TK]
 }
 
+// Locker defines lightweight lock management facade.
+type Locker interface {
+	// FormatLockKey creates a lock key name from an arbitrary string.
+	FormatLockKey(k string) string
+	// CreateLockKeys builds LockKey objects from a set of key names.
+	CreateLockKeys(keys []string) []*LockKey
+	// CreateLockKeysForIDs builds LockKey objects for ID tuples (e.g., Transaction ID scoped locks).
+	CreateLockKeysForIDs(keys []Tuple[string, UUID]) []*LockKey
+
+	// IsLockedTTL reports whether all keys are locked and refreshes TTL with the provided duration.
+	IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
+
+	// Lock attempts to lock all keys; returns success, lock owner UUID, and any error encountered.
+	Lock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, UUID, error)
+	// DualLock attempts to lock all keys; returns success, lock owner UUID, and any error encountered.
+	// It calls Lock then IsLocked to ensure the lock is acquired and persisted.
+	DualLock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, UUID, error)
+	// IsLocked reports whether all keys are currently locked.
+	IsLocked(ctx context.Context, lockKeys []*LockKey) (bool, error)
+	// IsLockedByOthers reports whether the keys are locked by other processes.
+	IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error)
+	// IsLockedByOthersTTL reports whether the keys are locked by other processes and refreshes TTL with the provided duration.
+	IsLockedByOthersTTL(ctx context.Context, lockKeyNames []string, duration time.Duration) (bool, error)
+	// Unlock releases a set of keys.
+	Unlock(ctx context.Context, lockKeys []*LockKey) error
+}
+
 // L2Cache abstracts an out-of-process cache (e.g., Redis) and its locking facilities.
 type L2Cache interface {
+	// Inherit Locking interface.
+	Locker
+
 	// Implement to return the CacheType.
 	GetType() L2CacheType
 
@@ -189,30 +219,6 @@ type L2Cache interface {
 	Delete(ctx context.Context, keys []string) (bool, error)
 	// Ping checks connectivity to the cache backend.
 	Ping(ctx context.Context) error
-
-	// FormatLockKey creates a lock key name from an arbitrary string.
-	FormatLockKey(k string) string
-	// CreateLockKeys builds LockKey objects from a set of key names.
-	CreateLockKeys(keys []string) []*LockKey
-	// CreateLockKeysForIDs builds LockKey objects for ID tuples (e.g., Transaction ID scoped locks).
-	CreateLockKeysForIDs(keys []Tuple[string, UUID]) []*LockKey
-
-	// IsLockedTTL reports whether all keys are locked and refreshes TTL with the provided duration.
-	IsLockedTTL(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, error)
-
-	// Lock attempts to lock all keys; returns success, lock owner UUID, and any error encountered.
-	Lock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, UUID, error)
-	// DualLock attempts to lock all keys; returns success, lock owner UUID, and any error encountered.
-	// It calls Lock then IsLocked to ensure the lock is acquired and persisted.
-	DualLock(ctx context.Context, duration time.Duration, lockKeys []*LockKey) (bool, UUID, error)
-	// IsLocked reports whether all keys are currently locked.
-	IsLocked(ctx context.Context, lockKeys []*LockKey) (bool, error)
-	// IsLockedByOthers reports whether the keys are locked by other processes.
-	IsLockedByOthers(ctx context.Context, lockKeyNames []string) (bool, error)
-	// IsLockedByOthersTTL reports whether the keys are locked by other processes and refreshes TTL with the provided duration.
-	IsLockedByOthersTTL(ctx context.Context, lockKeyNames []string, duration time.Duration) (bool, error)
-	// Unlock releases a set of keys.
-	Unlock(ctx context.Context, lockKeys []*LockKey) error
 
 	// Clear purges the entire cache database.
 	Clear(ctx context.Context) error

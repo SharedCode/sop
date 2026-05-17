@@ -11,9 +11,8 @@ import (
 
 // VectorizeItems processes specific items or an entire category within a single isolated transaction.
 // It is intended for real-time web-handlers and granular hooks, avoiding the full Space scan.
-func VectorizeItems(
+func  (db *Database)VectorizeItems(
 	ctx context.Context,
-	db *Database,
 	name string,
 	llm ai.Generator,
 	embedder ai.Embeddings,
@@ -114,7 +113,7 @@ func VectorizeItems(
 		}
 	} else {
 		for _, id := range itemIDs {
-			if ok, _ := itemsBtree.Find(ctx, id, false); ok {
+			if ok, _ := itemsBtree.Find(ctx, memory.ItemKey{CategoryID: categoryID, ItemID: id}, false); ok {
 				item, err := itemsBtree.GetCurrentValue(ctx)
 				if err == nil && item.CategoryID == categoryID {
 					dataStr := ""

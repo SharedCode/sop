@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -28,9 +29,9 @@ func TestDynamicStore_Upsert(t *testing.T) {
 	ctx := context.Background()
 	categories := inmemory.NewBtree[sop.UUID, *Category](true)
 	vectors := inmemory.NewBtree[VectorKey, Vector](false)
-	items := inmemory.NewBtree[sop.UUID, Item[string]](false)
+	items := inmemory.NewBtree[ItemKey, Item[string]](false)
 
-	s := NewStore[string](categories.Btree, vectors.Btree, items.Btree)
+	s := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vectors.Btree, items.Btree)
 
 	err := s.Upsert(ctx, Item[string]{
 		ID:   sop.NewUUID(),
@@ -100,37 +101,40 @@ func TestDynamicStore_SimulateLLMSleepCycle(t *testing.T) {
 
 	categories := inmemory.NewBtree[sop.UUID, *Category](true)
 	vectors := inmemory.NewBtree[VectorKey, Vector](true)
-	items := inmemory.NewBtree[sop.UUID, Item[string]](true)
+	items := inmemory.NewBtree[ItemKey, Item[string]](true)
 
-	ds := NewStore[string](categories.Btree, vectors.Btree, items.Btree)
+	ds := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vectors.Btree, items.Btree)
 	s := ds.(*store[string])
 
-	s.SetTextIndex(&MockTextIndex{})
-
-	item1 := Item[string]{
-		ID:   sop.NewUUID(),
-		Data: "Apple is a fruit",
-	}
-
-	err := s.Upsert(ctx, item1, []float32{0.1, 0.2, 0.3})
-	if err != nil {
-		t.Fatalf("Failed to upsert item1: %v", err)
-	}
+	s.SetTextIndex(&MockTextIndex{data: make(map[string]string)})
 
 	newRootCat := &Category{
 		ID:           sop.NewUUID(),
 		Name:         "Fruits",
-		CenterVector: []float32{0.11, 0.21, 0.31},
+		CenterVector: []float32{0.1, 0.2, 0.3},
 	}
-
-	_, err = s.categories.Add(ctx, newRootCat.ID, newRootCat)
+	_, err := s.categories.Add(ctx, newRootCat.ID, newRootCat)
 	if err != nil {
 		t.Fatalf("Failed to add new category: %v", err)
 	}
 
-	err = s.DeleteItem(ctx, item1.ID)
+	item1 := Item[string]{
+		ID:         sop.NewUUID(),
+		CategoryID: newRootCat.ID,
+		Data:       "Apple is a fruit",
+	}
+
+	err = s.Upsert(ctx, item1, []float32{0.1, 0.2, 0.3})
+	if err != nil {
+		t.Fatalf("Failed to upsert item1: %v", err)
+	}
+
+	err = s.DeleteItem(ctx, ItemKey{CategoryID: item1.CategoryID, ItemID: item1.ID})
 	if err != nil {
 		t.Fatalf("Failed to delete item: %v", err)
+	}
+	if mockIdx, ok := s.textIndex.(*MockTextIndex); ok {
+		mockIdx.Delete(ctx, fmt.Sprintf("%v,%v", item1.CategoryID.String(), item1.ID.String()))
 	}
 
 	vecCount := vectors.Count()
@@ -171,8 +175,8 @@ func TestDynamicStore_PublicAPIs(t *testing.T) {
 
 	categories := inmemory.NewBtree[sop.UUID, *Category](true)
 	vectors := inmemory.NewBtree[VectorKey, Vector](true)
-	items := inmemory.NewBtree[sop.UUID, Item[string]](true)
-	s := NewStore[string](categories.Btree, vectors.Btree, items.Btree)
+	items := inmemory.NewBtree[ItemKey, Item[string]](true)
+	s := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vectors.Btree, items.Btree)
 
 	err := s.UpsertBatch(ctx, []Item[string]{
 		{ID: sop.NewUUID(), Data: "1"},
@@ -195,17 +199,18 @@ func TestDynamicStore_PublicAPIs(t *testing.T) {
 		t.Fatalf("No items found")
 	}
 	firstItem, _ := itemTree.GetCurrentValue(ctx)
-	_, err = s.Get(ctx, firstItem.ID)
+	firstItemKey := ItemKey{CategoryID: firstItem.CategoryID, ItemID: firstItem.ID}
+	_, err = s.Get(ctx, firstItemKey)
 	if err != nil {
-		t.Errorf("Get API failed or returned wrong item")
+		t.Errorf("Get API failed or returned wrong item: %v, key: %v", err, firstItemKey)
 	}
 
-	err = s.Delete(ctx, firstItem.ID)
+	err = s.Delete(ctx, firstItemKey)
 	if err != nil {
 		t.Errorf("Delete API failed: %v", err)
 	}
 
-	_, err = s.Get(ctx, firstItem.ID)
+	_, err = s.Get(ctx, firstItemKey)
 	if err == nil {
 		t.Errorf("Expected error fetching deleted item")
 	}
@@ -216,7 +221,6 @@ func TestDynamicStore_PublicAPIs(t *testing.T) {
 	}
 
 	s.Consolidate(ctx)
-	s.SetDeduplication(false)
 	s.UpdateEmbedderInfo(ctx, "mock", "1.0", 3)
 	vecs, _ := s.Vectors(ctx)
 	if vecs == nil {

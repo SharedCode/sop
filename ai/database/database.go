@@ -54,6 +54,12 @@ func (db *Database) Cache() sop.L2Cache {
 	return db.cache
 }
 
+// Locker returns a Lock facet fronting the L2 cache used in the database.
+// Useful for implementing Optimistic locking.
+func (db *Database) Locker() sop.Locker {
+	return db.cache
+}
+
 // Options returns the database options.
 func (db *Database) Options() sop.DatabaseOptions {
 	return db.config

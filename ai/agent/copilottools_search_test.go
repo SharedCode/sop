@@ -18,7 +18,7 @@ func prepareKBForSearchTest(ctx context.Context, t *testing.T, db *database.Data
 	}
 	defer tx.Rollback(ctx)
 
-	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, nil, &MockEmbedder{})
+	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, nil, &MockEmbedder{}, true)
 	if err != nil {
 		t.Fatalf("OpenKnowledgeBase failed: %v", err)
 	}
@@ -68,7 +68,9 @@ func TestCopilotTools_Search_TierRouting(t *testing.T) {
 	}
 
 	// 3. Create Agent
-	agent := NewCopilotAgent(Config{}, dbs, systemDB)
+	agent := NewCopilotAgent(Config{
+		Requirements: &Requirements{Search: true},
+	}, dbs, systemDB)
 	ctx := context.Background()
 	agent.Open(ctx) // initialize maps
 

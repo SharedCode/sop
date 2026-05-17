@@ -3,6 +3,8 @@ package memory
 import (
 	"context"
 	"fmt"
+	log "log/slog"
+	"strings"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -11,25 +13,26 @@ import (
 
 // store implements MemoryStore.
 type store[T any] struct {
-	categories btree.BtreeInterface[sop.UUID, *Category]
-	vectors    btree.BtreeInterface[VectorKey, Vector]
-	items      btree.BtreeInterface[sop.UUID, Item[T]]
-	textIndex  ai.TextIndex
-	llm        LLM[T]
-	dedup      bool
+	categories       btree.BtreeInterface[sop.UUID, *Category]
+	categoriesByName btree.BtreeInterface[string, sop.UUID]
+	vectors          btree.BtreeInterface[VectorKey, Vector]
+	items            btree.BtreeInterface[ItemKey, Item[T]]
+	textIndex        ai.TextIndex
+	llm              LLM[T]
 }
 
 // NewStore creates a new instance of MemoryStore.
 func NewStore[T any](
 	categories btree.BtreeInterface[sop.UUID, *Category],
+	categoriesByName btree.BtreeInterface[string, sop.UUID],
 	vectors btree.BtreeInterface[VectorKey, Vector],
-	items btree.BtreeInterface[sop.UUID, Item[T]],
+	items btree.BtreeInterface[ItemKey, Item[T]],
 ) MemoryStore[T] {
 	return &store[T]{
-		categories: categories,
-		vectors:    vectors,
-		items:      items,
-		dedup:      true,
+		categories:       categories,
+		categoriesByName: categoriesByName,
+		vectors:          vectors,
+		items:            items,
 	}
 }
 
@@ -133,7 +136,8 @@ func (s *store[T]) Upsert(ctx context.Context, item Item[T], vec []float32) erro
 	}
 
 	// 3. Insert into items tree
-	foundItem, err := s.items.Find(ctx, id, false)
+	itemKey := ItemKey{CategoryID: bestCategory, ItemID: id}
+	foundItem, err := s.items.Find(ctx, itemKey, false)
 	if err != nil {
 		return err
 	}
@@ -144,17 +148,18 @@ func (s *store[T]) Upsert(ctx context.Context, item Item[T], vec []float32) erro
 			return err
 		}
 		existingItem.Positions = append(existingItem.Positions, vk)
-		_, err = s.items.UpdateCurrentItem(ctx, id, existingItem)
+		_, err = s.items.UpdateCurrentItem(ctx, itemKey, existingItem)
 		if err != nil {
 			return err
 		}
 	} else {
 		itemObj := Item[T]{
-			ID:        id,
-			Data:      item.Data,
-			Positions: []VectorKey{vk},
-		}
-		_, err = s.items.Add(ctx, id, itemObj)
+ID:        id,
+CategoryID: bestCategory,
+Data:      item.Data,
+Positions: []VectorKey{vk},
+}
+		_, err = s.items.Add(ctx, itemKey, itemObj)
 		if err != nil {
 			return err
 		}
@@ -171,7 +176,7 @@ func (s *store[T]) Upsert(ctx context.Context, item Item[T], vec []float32) erro
 		} else {
 			strData = fmt.Sprintf("%v", item.Data)
 		}
-		err = s.textIndex.Add(ctx, id.String(), strData)
+		err = s.textIndex.Add(ctx, fmt.Sprintf("%v,%v", bestCategory.String(), id.String()), strData)
 		if err != nil {
 			return err
 		}
@@ -182,19 +187,25 @@ func (s *store[T]) Upsert(ctx context.Context, item Item[T], vec []float32) erro
 
 // UpsertByCategory strictly inserts data assuming an explicit, fixed Category.
 func (s *store[T]) UpsertByCategory(ctx context.Context, categoryName string, item Item[T], vecs [][]float32) error {
-	// Ensure the Category exists
 	var c *Category
-	ok, _ := s.categories.First(ctx)
+
+	ok, err := s.categoriesByName.Find(ctx, categoryName, false)
+	if err != nil {
+		return err
+	}
 	if ok {
-		for {
-			cat, err := s.categories.GetCurrentValue(ctx)
-			if err == nil && cat != nil && cat.Name == categoryName {
-				c = cat
-				break
-			}
-			ok, _ := s.categories.Next(ctx)
-			if !ok {
-				break
+		catID, err := s.categoriesByName.GetCurrentValue(ctx)
+		if err != nil {
+			return err
+		}
+		found, err := s.categories.Find(ctx, catID, false)
+		if err != nil {
+			return err
+		}
+		if found {
+			c, err = s.categories.GetCurrentValue(ctx)
+			if err != nil {
+				return err
 			}
 		}
 	}
@@ -202,50 +213,56 @@ func (s *store[T]) UpsertByCategory(ctx context.Context, categoryName string, it
 	if c == nil {
 		// Auto-vivify static category
 		c = &Category{ID: sop.NewUUID(), Name: categoryName}
-		s.categories.Add(ctx, c.ID, c)
+		_, err = s.categories.Add(ctx, c.ID, c)
+		if err != nil {
+			return err
+		}
+		_, err = s.categoriesByName.Add(ctx, categoryName, c.ID)
+		if err != nil {
+			return err
+		}
 	}
 
-	return s.UpsertByCategoryID(ctx, c.ID, item, vecs)
+	return s.UpsertByCategoryID(ctx, c.ID, c.CenterVector, item, vecs)
 }
 
-// UpsertByCategoryID securely inserts data bypassing string name lookup.
-func (s *store[T]) UpsertByCategoryID(ctx context.Context, catID sop.UUID, item Item[T], vecs [][]float32) error {
-	id := item.ID
+// UpsertByCategoryID inserts data bypassing Category lookup.
+func (s *store[T]) UpsertByCategoryID(ctx context.Context, catID sop.UUID, catCenterVector []float32,
+	item Item[T], vecs [][]float32) error {
 
-	// Ensure the Category exists
-	var c *Category
-	ok, err := s.categories.Find(ctx, catID, false)
-	if err != nil {
-		return err
+	if catID == sop.NilUUID {
+		return fmt.Errorf("catID can't be nil")
 	}
-	if ok {
-		c, _ = s.categories.GetCurrentValue(ctx)
-	} else {
-		return fmt.Errorf("category ID %v not found", catID)
-	}
+
+	id := item.ID
 
 	// Insert Vector links
 	var keys []VectorKey
 	for _, vec := range vecs {
 		dist := float32(0)
-		if len(c.CenterVector) > 0 {
-			dist = EuclideanDistance(vec, c.CenterVector)
+		if len(catCenterVector) > 0 {
+			dist = EuclideanDistance(vec, catCenterVector)
 		}
-		vk := VectorKey{CategoryID: c.ID, VectorID: sop.NewUUID(), DistanceToCategory: dist}
-		s.vectors.Add(ctx, vk, Vector{ID: vk.VectorID, ItemID: id, CategoryID: c.ID, Data: vec})
+		vk := VectorKey{CategoryID: catID, VectorID: sop.NewUUID(), DistanceToCategory: dist}
+
+		log.Debug("s.vectors.Add call")
+		s.vectors.Add(ctx, vk, Vector{ID: vk.VectorID, ItemID: id, CategoryID: catID, Data: vec})
 		keys = append(keys, vk)
 	}
 
 	// Insert Item
-	if found, _ := s.items.Find(ctx, id, false); found {
+	itemKey := ItemKey{CategoryID: catID, ItemID: id}
+	if found, _ := s.items.Find(ctx, itemKey, false); found {
 		oldItem, _ := s.items.GetCurrentValue(ctx)
-		// Clean up obsolete vectors from the B-Tree
 		for _, pos := range oldItem.Positions {
+			log.Debug("s.vectors.Remove call")
 			s.vectors.Remove(ctx, pos)
 		}
-		s.items.UpdateCurrentItem(ctx, id, Item[T]{ID: id, CategoryID: c.ID, Summaries: item.Summaries, Data: item.Data, Positions: keys})
+		log.Debug("s.items.UpdateCurrentItem call")
+		s.items.UpdateCurrentItem(ctx, itemKey, Item[T]{ID: id, CategoryID: catID, Summaries: item.Summaries, Data: item.Data, Positions: keys, VectorHash: item.VectorHash})
 	} else {
-		s.items.Add(ctx, id, Item[T]{ID: id, CategoryID: c.ID, Summaries: item.Summaries, Data: item.Data, Positions: keys})
+		log.Debug("s.items.Add call")
+		s.items.Add(ctx, itemKey, Item[T]{ID: id, CategoryID: catID, Summaries: item.Summaries, Data: item.Data, Positions: keys, VectorHash: item.VectorHash})
 	}
 
 	// Update global text index
@@ -259,13 +276,14 @@ func (s *store[T]) UpsertByCategoryID(ctx context.Context, catID sop.UUID, item 
 		} else {
 			strData = fmt.Sprintf("%v", item.Data)
 		}
-		s.textIndex.Add(ctx, id.String(), strData) // Assumes item.ID actually contained textual representation.
+		log.Debug("s.textIndex.Add call")
+		s.textIndex.Add(ctx, fmt.Sprintf("%v,%v", catID.String(), id.String()), strData) // Assumes item.ID actually contained textual representation.
 	}
 
 	return nil
 }
 
-func (s *store[T]) DeleteItem(ctx context.Context, itemID sop.UUID) error {
+func (s *store[T]) DeleteItem(ctx context.Context, itemID ItemKey) error {
 	found, err := s.items.Find(ctx, itemID, false)
 	if err != nil {
 		return err
@@ -301,7 +319,7 @@ func (s *store[T]) UpsertBatch(ctx context.Context, items []Item[T], vecs [][]fl
 	return nil
 }
 
-func (s *store[T]) Get(ctx context.Context, id sop.UUID) (*Item[T], error) {
+func (s *store[T]) Get(ctx context.Context, id ItemKey) (*Item[T], error) {
 	found, err := s.items.Find(ctx, id, false)
 	if err != nil {
 		return nil, err
@@ -318,7 +336,7 @@ func (s *store[T]) Get(ctx context.Context, id sop.UUID) (*Item[T], error) {
 	return &item, nil
 }
 
-func (s *store[T]) Delete(ctx context.Context, id sop.UUID) error {
+func (s *store[T]) Delete(ctx context.Context, id ItemKey) error {
 	return s.DeleteItem(ctx, id)
 }
 
@@ -403,7 +421,8 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, opts *SearchOptions
 
 	// Fetch items after we're done iterating vectors to avoid ANY cursor conflict
 	for _, v := range matchingVectors {
-		foundItem, err := s.items.Find(ctx, v.ItemID, false)
+		itemKeySearch := ItemKey{CategoryID: v.CategoryID, ItemID: v.ItemID}
+		foundItem, err := s.items.Find(ctx, itemKeySearch, false)
 		if foundItem && err == nil {
 			item, err := s.items.GetCurrentValue(ctx)
 			if err == nil {
@@ -449,15 +468,12 @@ func (s *store[T]) UpdateEmbedderInfo(ctx context.Context, provider string, mode
 	return nil
 }
 
-func (s *store[T]) SetDeduplication(enabled bool) {
-	s.dedup = enabled
-}
 
 func (s *store[T]) Vectors(ctx context.Context) (btree.BtreeInterface[VectorKey, Vector], error) {
 	return s.vectors, nil
 }
 
-func (s *store[T]) Items(ctx context.Context) (btree.BtreeInterface[sop.UUID, Item[T]], error) {
+func (s *store[T]) Items(ctx context.Context) (btree.BtreeInterface[ItemKey, Item[T]], error) {
 	return s.items, nil
 }
 
@@ -520,11 +536,14 @@ func (s *store[T]) QueryText(ctx context.Context, text string, opts *SearchOptio
 			break
 		}
 
-		id, err := sop.ParseUUID(res.DocID)
-		if err != nil {
-			continue
-		}
-		foundItem, err := s.items.Find(ctx, id, false)
+		parts := strings.Split(res.DocID, ",")
+		if len(parts) != 2 { continue }
+		catID, err := sop.ParseUUID(parts[0])
+		if err != nil { continue }
+		id, err := sop.ParseUUID(parts[1])
+		if err != nil { continue }
+		itemKeySearch := ItemKey{CategoryID: catID, ItemID: id}
+		foundItem, err := s.items.Find(ctx, itemKeySearch, false)
 		var payload T
 		if foundItem && err == nil {
 			item, err := s.items.GetCurrentValue(ctx)
