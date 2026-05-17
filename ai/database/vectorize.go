@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -18,13 +19,18 @@ func Vectorize(
 	embedder ai.Embeddings,
 	batchSize int,
 ) error {
+	slog.Info("Vectorize started", "kb_name", name, "batchSize", batchSize)
+
 	var cursorPos sop.UUID = sop.NilUUID
 	var isFirstBatch = true
 
 	// Tally counts as we process items in batches
 	categoryCounts := make(map[sop.UUID]int)
+	loopCount := 0
 
 	for {
+		loopCount++
+		slog.Debug("Vectorize processing batch", "kb_name", name, "batch_number", loopCount)
 		tx, err := db.BeginTransaction(ctx, sop.ForWriting)
 		if err != nil {
 			return err
@@ -144,6 +150,7 @@ func vectorizeAllCategories(ctx context.Context, kb *memory.KnowledgeBase[map[st
 	}
 
 	if len(catNames) > 0 {
+		slog.Info("Vectorize embedding categories", "count", len(catNames))
 		catVecs, err := embedder.EmbedTexts(ctx, catNames)
 		if err == nil && len(catVecs) == len(catNames) {
 			for i, c := range categoriesToUpdate {
@@ -257,6 +264,7 @@ func processVectorizeBatch(
 	// 3. Generate embeddings
 	var allVecs [][]float32
 	if len(batchSummaries) > 0 {
+		slog.Info("Vectorize embedding items", "count", len(batchSummaries))
 		allVecs, err = embedder.EmbedTexts(ctx, batchSummaries)
 		if err != nil {
 			return false, currentCursor, err

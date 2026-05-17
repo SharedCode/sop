@@ -110,21 +110,51 @@ func parseMarkdownToTree(filePath string, defaultTitle string) *Section {
 	root := &Section{Level: 0, Title: defaultTitle, FilePath: filePath}
 	stack := []*Section{root}
 
+	ignoring := false
+	ignoredLevel := 0
+
 	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
 		switch node := n.(type) {
 		case *ast.Heading:
 			level := node.Level
+
+			if ignoring && level <= ignoredLevel {
+				ignoring = false
+			}
+
+			title := getHeadingText(node, source)
+			if strings.EqualFold(title, "table of contents") {
+				ignoring = true
+				ignoredLevel = level
+				continue
+			}
+
+			if ignoring {
+				continue
+			}
+
 			for len(stack) > 1 && stack[len(stack)-1].Level >= level {
 				stack = stack[:len(stack)-1]
 			}
-			sec := &Section{
-				Level:    level,
-				Title:    getHeadingText(node, source),
-				FilePath: filePath,
+
+			if len(stack) >= 3 {
+				// Flatten any heading deeper than L3 directly into the L3 body
+				prefix := strings.Repeat("#", level)
+				textStr := prefix + " " + title
+				stack[len(stack)-1].Paragraphs = append(stack[len(stack)-1].Paragraphs, textStr)
+			} else {
+				sec := &Section{
+					Level:    level,
+					Title:    title,
+					FilePath: filePath,
+				}
+				stack[len(stack)-1].Children = append(stack[len(stack)-1].Children, sec)
+				stack = append(stack, sec)
 			}
-			stack[len(stack)-1].Children = append(stack[len(stack)-1].Children, sec)
-			stack = append(stack, sec)
 		default:
+			if ignoring {
+				continue
+			}
 			textStr, links := extractTextAndLinks(node, source)
 			if len(textStr) > 0 {
 				stack[len(stack)-1].Paragraphs = append(stack[len(stack)-1].Paragraphs, textStr)
@@ -135,28 +165,6 @@ func parseMarkdownToTree(filePath string, defaultTitle string) *Section {
 
 	// Cache tree for this file to prevent infinite recursions early
 	parsedFiles[absPath] = root
-
-	// Pre-process cross-file links recursively and attach their trees
-	var crawlTree func(node *Section)
-	crawlTree = func(node *Section) {
-		for _, link := range node.LinkedFiles {
-			targetPath := filepath.Clean(filepath.Join(filepath.Dir(filePath), link))
-			if _, found := parsedFiles[targetPath]; found {
-				continue
-			}
-
-			if childRoot := parseMarkdownToTree(targetPath, strings.TrimSuffix(filepath.Base(targetPath), filepath.Ext(targetPath))); childRoot != nil {
-				// Inject the linked file's sections directly as children
-				node.Children = append(node.Children, childRoot.Children...)
-				// Absorb its root paragraphs
-				node.Paragraphs = append(node.Paragraphs, childRoot.Paragraphs...)
-			}
-		}
-		for _, child := range node.Children {
-			crawlTree(child)
-		}
-	}
-	crawlTree(root)
 
 	return root
 }
@@ -246,7 +254,6 @@ func parseUnlinkedFiles(repoRoot string) {
 			strings.Contains(upperName, "POST") ||
 			strings.Contains(upperName, "ANNOUNCEMENT") ||
 			strings.Contains(upperName, "RELEASE") ||
-			strings.Contains(upperName, "README2") ||
 			strings.Contains(upperName, "PROPOSAL") ||
 			strings.Contains(upperName, "CONTRIBUTING") ||
 			strings.Contains(upperName, "LINKEDIN") ||

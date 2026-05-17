@@ -1176,8 +1176,13 @@ func (a *CopilotAgent) InitializePhysicalMemory(ctx context.Context) error {
 		}
 	}
 
+	var embedder ai.Embeddings
+	if a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
+		embedder = a.service.Domain().Embedder()
+	}
+
 	ltmStoreName := fmt.Sprintf("ltm_%s", a.Memory.AgentID)
-	ltm, err := a.systemDB.OpenKnowledgeBase(ctx, ltmStoreName, tx, a.brain, nil)
+	ltm, err := a.systemDB.OpenKnowledgeBase(ctx, ltmStoreName, tx, a.brain, embedder)
 	if err != nil {
 		tx.Rollback(ctx)
 		return fmt.Errorf("failed to open isolated LTM KnowledgeBase: %w", err)
@@ -1191,6 +1196,71 @@ func (a *CopilotAgent) InitializePhysicalMemory(ctx context.Context) error {
 	a.Memory.STM = store
 	a.Memory.LTM = ltm
 	log.Debug("Initialized Isolated Physical Memory for Avatar", "agent_id", a.Memory.AgentID, "stm_store", stmStoreName, "ltm_store", ltmStoreName)
+
+	// Hook up SOP KB's system tools directly into the Avatar's semantic LTM using background Vector Search
+	if embedder != nil {
+		go func() {
+			bgCtx := context.Background()
+
+			txRead, err := a.systemDB.BeginTransaction(bgCtx, sop.ForReading)
+			if err != nil {
+				return
+			}
+
+			sopKB, err := a.systemDB.OpenKnowledgeBase(bgCtx, ai.DefaultKBName, txRead, a.brain, embedder)
+			if err != nil {
+				txRead.Rollback(bgCtx)
+				return
+			}
+
+			toolQueries := []string{
+				"tool execute_script operational pipeline blocks",
+				"tool search_sop knowledge base query",
+				"tool search_custom_kbs custom domain knowledge retrieval",
+			}
+
+			vecs, err := embedder.EmbedTexts(bgCtx, toolQueries)
+			if err == nil {
+				var toolThoughts []memory.Thought[map[string]any]
+				seen := make(map[string]bool)
+
+				for _, vec := range vecs {
+					hits, _ := sopKB.Store.Query(bgCtx, vec, &memory.SearchOptions[map[string]any]{Limit: 2})
+					for _, hit := range hits {
+						if !seen[hit.ID] {
+							seen[hit.ID] = true
+
+							toolThoughts = append(toolThoughts, memory.Thought[map[string]any]{
+								Summaries: []string{"System Tool Semantic Interface"},
+								Category:  "System_Tools",
+								Data:      hit.Payload,
+							})
+						}
+					}
+				}
+
+				txRead.Rollback(bgCtx)
+
+				if len(toolThoughts) > 0 {
+					txWrite, err := a.systemDB.BeginTransaction(bgCtx, sop.ForWriting)
+					if err == nil {
+						ltmWrite, err := a.systemDB.OpenKnowledgeBase(bgCtx, ltmStoreName, txWrite, a.brain, embedder)
+						if err == nil {
+							if err := ltmWrite.IngestThoughts(bgCtx, toolThoughts, a.Memory.AgentID); err == nil {
+								_ = txWrite.Commit(bgCtx)
+							} else {
+								txWrite.Rollback(bgCtx)
+							}
+						} else {
+							txWrite.Rollback(bgCtx)
+						}
+					}
+				}
+			} else {
+				txRead.Rollback(bgCtx)
+			}
+		}()
+	}
 
 	// Wire up Cognitive Memory background workers for the Avatar
 	// 1. Batch short-term flushing (Working Memory -> STM)
@@ -1440,6 +1510,7 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 
 	// Execute specific tool
 	if toolDef, ok := a.registry.Get(toolName); ok {
+		log.Info("LLM Tool Call", "tool", toolName)
 		return toolDef.Handler(ctx, args)
 	}
 

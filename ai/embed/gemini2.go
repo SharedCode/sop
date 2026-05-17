@@ -107,8 +107,9 @@ func (e *GeminiEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]fl
 			}
 
 			if resp.StatusCode == 429 {
+				body, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
-				fmt.Println("\n[Gemini Embedder] Rate limit 429 reached. Sleeping 30 seconds...")
+				fmt.Printf("\n[Gemini Embedder] Rate limit 429 reached. Response: %s\nSleeping 30 seconds...\n", string(body))
 				time.Sleep(30 * time.Second)
 				continue
 			}
