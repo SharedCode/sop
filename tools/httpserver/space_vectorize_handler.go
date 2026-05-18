@@ -5,12 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/memory"
 )
 
 type VectorizeRequest struct {
@@ -78,50 +76,16 @@ func handleVectorizeSpace(w http.ResponseWriter, r *http.Request) {
 
 		var err error
 		if catId == sop.NilUUID && len(itemIds) == 0 {
-			err = database.Vectorize(ctx, db, request.SpaceName, llm, emb, 50)
+			err = db.Vectorize(ctx, request.SpaceName, llm, emb, 100)
 			if err != nil {
 				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Vectorize failed: %v", err))
 				return
 			}
 		} else {
-			err = database.VectorizeItems(ctx, db, request.SpaceName, llm, emb, 50, catId, itemIds)
+			err = db.VectorizeItems(ctx, request.SpaceName, llm, emb, 50, catId, itemIds)
 			if err != nil {
 				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("VectorizeItems failed: %v", err))
 				return
-			}
-		}
-
-		if emb != nil {
-			// Execute a tiny config transaction with retries to avoid lock conflicts
-			for retry := 0; retry < 5; retry++ {
-				txCfg, errTx := db.BeginTransaction(ctx, sop.ForWriting)
-				if errTx == nil {
-					kbCfg, errKb := db.OpenKnowledgeBase(ctx, request.SpaceName, txCfg, llm, emb)
-					if errKb == nil {
-						cfg, cfgErr := kbCfg.GetConfig(ctx)
-						if cfgErr == nil {
-							if cfg == nil {
-								cfg = &memory.KnowledgeBaseConfig{}
-							}
-							needsUpdate := true
-							if cfg.EmbedderDimension != emb.Dim() {
-								cfg.EmbedderDimension = emb.Dim()
-							}
-							cfg.LastVectorized = time.Now().Unix()
-							if needsUpdate {
-								_ = kbCfg.SetConfig(ctx, cfg)
-							}
-						}
-						errCommit := txCfg.Commit(ctx)
-						if errCommit == nil {
-							break // Success
-						}
-					} else {
-						txCfg.Rollback(ctx)
-					}
-				}
-				// Wait a bit before retrying if there's a lock contention from Vectorize
-				time.Sleep(200 * time.Millisecond)
 			}
 		}
 

@@ -28,6 +28,11 @@ type Item[T any] struct {
 	VectorHash string      `json:"vector_hash,omitempty"` // Hash of EmbedderName + Content to avoid re-vectorizing unchanged items
 }
 
+// Returns true if Item is considered the KnowledgeBase's Config item.
+func (item *Item[T]) IsConfig() bool {
+	return item.ID == sop.NilUUID
+}
+
 // Vector represents the pointer/index fragment mapping the math to the Item.
 type Vector struct {
 	ID         sop.UUID  `json:"id"`
@@ -69,4 +74,22 @@ type VectorKey struct {
 	CategoryID         sop.UUID // Points to the hierarchical Category ID
 	DistanceToCategory float32
 	VectorID           sop.UUID // Points to the specific Vector ID
+}
+
+// ItemKey composites the Category and Item identity for physical clustering
+type ItemKey struct {
+	CategoryID sop.UUID
+	ItemID     sop.UUID
+}
+
+// Compare implements btree.Comparer for ItemKey to ensure fast B-Tree physical clustering.
+func (k ItemKey) Compare(other any) int {
+	o, ok := other.(ItemKey)
+	if !ok {
+		return -1
+	}
+	if c := k.CategoryID.Compare(o.CategoryID); c != 0 {
+		return c
+	}
+	return k.ItemID.Compare(o.ItemID)
 }

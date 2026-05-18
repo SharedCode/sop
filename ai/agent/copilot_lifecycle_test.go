@@ -131,7 +131,7 @@ func TestAgentFullMemoryLifeCycleTest(t *testing.T) {
 	}
 	ag.Memory.STM.Remove(ctx, "ep_1")
 	tx3.Commit(ctx)
-	database.Vectorize(ctx, sysDB, "ltm_agent123", llm, embedder, 50)
+	sysDB.Vectorize(ctx, "ltm_agent123", llm, embedder, 50)
 
 	// Verify LTM count
 	tx4, _ := sysDB.BeginTransaction(ctx, sop.ForReading)

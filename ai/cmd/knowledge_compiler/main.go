@@ -368,6 +368,44 @@ func main() {
 	fmt.Println("Sweeping unlinked Markdown files...")
 	parseUnlinkedFiles(repoRoot)
 
+	fmt.Println("Rolling up single-item sub-categories...")
+	changed := true
+	for changed {
+		changed = false
+		itemsPerCat := make(map[string][]int)
+		for i, chunk := range allChunks {
+			itemsPerCat[chunk.Category] = append(itemsPerCat[chunk.Category], i)
+		}
+
+		for catPath, indices := range itemsPerCat {
+			if len(indices) == 1 && strings.Contains(catPath, " / ") {
+				hasChildren := false
+				for otherCat := range itemsPerCat {
+					if strings.HasPrefix(otherCat, catPath+" / ") {
+						hasChildren = true
+						break
+					}
+				}
+
+				if !hasChildren {
+					parts := strings.Split(catPath, " / ")
+					parentPath := strings.Join(parts[:len(parts)-1], " / ")
+
+					idx := indices[0]
+
+					// Prepend the sub-category name if it's different from the title to preserve context
+					subCatName := parts[len(parts)-1]
+					if allChunks[idx].Text != subCatName {
+						allChunks[idx].Text = subCatName + " - " + allChunks[idx].Text
+					}
+
+					allChunks[idx].Category = parentPath
+					changed = true
+				}
+			}
+		}
+	}
+
 	var exportItems []memory.ExportItem[map[string]any]
 	for _, chunk := range allChunks {
 		cat := getCat(chunk.Category)

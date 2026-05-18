@@ -23,9 +23,9 @@ func TestKnowledgeBase_API(t *testing.T) {
 
 	cats := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecs := inmemory.NewBtree[VectorKey, Vector](true)
-	items := inmemory.NewBtree[sop.UUID, Item[string]](true)
+	items := inmemory.NewBtree[ItemKey, Item[string]](true)
 
-	s := NewStore[string](cats.Btree, vecs.Btree, items.Btree).(*store[string])
+	s := NewStore[string](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecs.Btree, items.Btree).(*store[string])
 	s.SetTextIndex(&MockTextIndex{})
 
 	embedder := &MockPlaybookEmbedder{Rules: []PlaybookRule{
@@ -43,13 +43,11 @@ func TestKnowledgeBase_API(t *testing.T) {
 		Manager: manager,
 	}
 
-	err := kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test_cat"}, Category: "test_id", Data: "payload"}}, "test")
+	// We inject vectors during IngestThoughts for this test to bypass vectorize
+	err := kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test_cat"}, Category: "test_id", Vectors: [][]float32{{1.0, 1.0, 1.0}}, Data: "payload"}}, "test")
 	if err != nil {
 		t.Fatalf("IngestThought failed: %v", err)
 	}
-
-	// Because vectorization is deferred, we must sweep before Semantic Search
-	_, _ = kb.Vectorize(ctx, 50)
 
 	hits, err := kb.SearchSemantics(ctx, []float32{1.0, 1.0, 1.0}, &SearchOptions[string]{Limit: 10})
 	if err != nil {
@@ -78,9 +76,9 @@ func TestStaticKnowledgeBase(t *testing.T) {
 
 	categories := inmemory.NewBtree[sop.UUID, *Category](true)
 	vectors := inmemory.NewBtree[VectorKey, Vector](false)
-	items := inmemory.NewBtree[sop.UUID, Item[string]](false)
+	items := inmemory.NewBtree[ItemKey, Item[string]](false)
 
-	memStore := NewStore[string](categories.Btree, vectors.Btree, items.Btree)
+	memStore := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vectors.Btree, items.Btree)
 	ds := memStore.(*store[string])
 	ds.SetTextIndex(&MockTextIndex{})
 

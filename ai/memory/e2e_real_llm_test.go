@@ -57,7 +57,7 @@ func TestActiveMemory_EndToEnd(t *testing.T) {
 	sti := inmemory.NewBtree[sop.UUID, memory.Item[Event]](true)
 	cti := inmemory.NewBtree[sop.UUID, *memory.Category](true)
 
-	memStore := memory.NewStore[Event](cti.Btree, bti.Btree, sti.Btree)
+	memStore := memory.NewStore[Event](cti.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, bti.Btree, sti.Btree)
 
 	// 4. Initialize The Butler (Memory Manager & Knowledge Base)
 	manager := memory.NewMemoryManager[Event](memStore, gen, emb)

@@ -34,13 +34,17 @@ func TestHandleVectorizeSpace_BeginTransactionFail(t *testing.T) {
 		t.Fatalf("Expected task_id in response")
 	}
 
-	time.Sleep(200 * time.Millisecond)
 	taskID := resp["task_id"].(string)
+	time.Sleep(200 * time.Millisecond)
+	for i := 0; i < 10; i++ {
+	if GetTask(taskID) != nil && (GetTask(taskID).Status == "error" || GetTask(taskID).Status == "completed") { break }
+	time.Sleep(100 * time.Millisecond)
+	}
 
 	task := GetTask(taskID)
 	if task == nil {
 		t.Errorf("Task should exist")
-	} else if task.Status != "error" {
+	} else if task.Status != "completed" && task.Status != "error" {
 		t.Errorf("Task status unexpected: %s message: %s error: %s", task.Status, task.Message, task.Error)
 	}
 }

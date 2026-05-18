@@ -84,11 +84,40 @@ func handleUpdateSpaceItem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Fetch existing
-	found, err := itemsTree.Find(ctx, itemID, false)
-	if err != nil || !found {
+	var foundKey memory.ItemKey
+	var found bool
+
+	if req.CategoryID != "" {
+		parsedCatID, catErr := sop.ParseUUID(req.CategoryID)
+		if catErr == nil {
+			foundKey = memory.ItemKey{CategoryID: parsedCatID, ItemID: itemID}
+			if ok, _ := itemsTree.Find(ctx, foundKey, false); ok {
+				found = true
+			}
+		}
+	}
+
+	// Fallback to sequential scan if CategoryID is missing or not found
+	if !found {
+		itemsTree.First(ctx)
+		for {
+			k := itemsTree.GetCurrentKey()
+			if k.Key.ItemID == itemID {
+				foundKey = k.Key
+				found = true
+				break
+			}
+			if ok, _ := itemsTree.Next(ctx); !ok {
+				break
+			}
+		}
+	}
+
+	if !found {
 		http.Error(w, "Item not found", http.StatusNotFound)
 		return
 	}
+	itemsTree.Find(ctx, foundKey, false)
 	existingItem, _ := itemsTree.GetCurrentValue(ctx)
 
 	// Merge data (twist for UI integration)

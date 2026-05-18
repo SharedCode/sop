@@ -21,8 +21,7 @@ type KnowledgeBase[T any] struct {
 	// to avoid calling the LLM for category categorization. Set to 0.0 or less to disable
 	// and always rely on "pristine" LLM categorization.
 	MaxMathCategoryDistance float32
-
-	}
+}
 
 func (kb *KnowledgeBase[T]) SearchSemanticsBatch(ctx context.Context, queryVectors [][]float32, opts *SearchOptions[T]) ([][]ai.Hit[T], error) {
 	return kb.Store.QueryBatch(ctx, queryVectors, opts)
@@ -126,7 +125,6 @@ func (kb *KnowledgeBase[T]) IngestThoughts(ctx context.Context, thoughts []Thoug
 
 	// 4. Ensure Categories and Store
 	catCache := make(map[string]sop.UUID)
-
 	for _, thought := range thoughts {
 		catID, exists := catCache[thought.Category]
 		if !exists {
@@ -146,7 +144,7 @@ func (kb *KnowledgeBase[T]) IngestThoughts(ctx context.Context, thoughts []Thoug
 			VectorHash: thought.VectorHash,
 		}
 
-		err := kb.Store.UpsertByCategoryID(ctx, catID, item, thought.Vectors)
+		err := kb.Store.UpsertByCategoryID(ctx, catID, nil, item, thought.Vectors)
 		if err != nil {
 			return err
 		}
@@ -180,10 +178,6 @@ func (kb *KnowledgeBase[T]) TriggerSleepCycle(ctx context.Context) error {
 	return nil
 }
 
-
-
-
-
 // GetConfig retrieves the metadata configuration for this KnowledgeBase.
 func (kb *KnowledgeBase[T]) GetConfig(ctx context.Context) (*KnowledgeBaseConfig, error) {
 	itemsBtree, err := kb.Store.Items(ctx)
@@ -191,7 +185,8 @@ func (kb *KnowledgeBase[T]) GetConfig(ctx context.Context) (*KnowledgeBaseConfig
 		return nil, err
 	}
 
-	found, err := itemsBtree.Find(ctx, sop.NilUUID, false)
+	nilKey := ItemKey{CategoryID: sop.NilUUID, ItemID: sop.NilUUID}
+	found, err := itemsBtree.Find(ctx, nilKey, false)
 	if err != nil {
 		return nil, err
 	}
@@ -224,12 +219,7 @@ func (kb *KnowledgeBase[T]) SetConfig(ctx context.Context, config *KnowledgeBase
 		return err
 	}
 
-	found, err := itemsBtree.FindWithID(ctx, sop.NilUUID, sop.NilUUID)
-	if err != nil && err.Error() == "not found" {
-		found = false
-	} else if err != nil {
-		return err
-	}
+	nilKey := ItemKey{CategoryID: sop.NilUUID, ItemID: sop.NilUUID}
 
 	var v T
 	configBytes, err := json.Marshal(config)
@@ -246,11 +236,7 @@ func (kb *KnowledgeBase[T]) SetConfig(ctx context.Context, config *KnowledgeBase
 		Data:       v,
 	}
 
-	if found {
-		_, err = itemsBtree.UpdateCurrentItem(ctx, sop.NilUUID, configItem)
-		return err
-	}
-	_, err = itemsBtree.Add(ctx, sop.NilUUID, configItem)
+	_, err = itemsBtree.Upsert(ctx, nilKey, configItem)
 	return err
 }
 

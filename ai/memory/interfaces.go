@@ -12,18 +12,20 @@ import (
 type MemoryStore[T any] interface {
 	// Upsert adds or updates a single item in the store.
 	Upsert(ctx context.Context, item Item[T], vec []float32) error
-	// UpsertBatch adds or updates multiple items in the store efficiently.
+
 	// UpsertByCategory explicitly assigns a category ignoring spatial routing.
 	UpsertByCategory(ctx context.Context, categoryName string, item Item[T], vecs [][]float32) error
 
-	// UpsertByCategoryID securely inserts data bypassing string name lookup.
-	UpsertByCategoryID(ctx context.Context, catID sop.UUID, item Item[T], vecs [][]float32) error
+	// UpsertByCategoryID inserts data bypassing Category lookup.
+	UpsertByCategoryID(ctx context.Context, catID sop.UUID, catCenterVector []float32, item Item[T], vecs [][]float32) error
+
+	// UpsertBatch adds or updates multiple items in the store efficiently.
 	UpsertBatch(ctx context.Context, items []Item[T], vecs [][]float32) error
 
 	// Get retrieves a item by its logical ID.
-	Get(ctx context.Context, id sop.UUID) (*Item[T], error)
+	Get(ctx context.Context, key ItemKey) (*Item[T], error)
 	// Delete removes an item by its logical ID.
-	Delete(ctx context.Context, id sop.UUID) error
+	Delete(ctx context.Context, key ItemKey) error
 
 	// Query searches for the nearest neighbors to the given vector coordinates.
 	// filters is a function that returns true if the item should be included.
@@ -61,9 +63,6 @@ type MemoryStore[T any] interface {
 	// to index the vectors, persisting it in the system configuration of the store.
 	UpdateEmbedderInfo(ctx context.Context, provider string, model string, dimensions int) error
 
-	// SetDeduplication enables or disables the internal deduplication check during Upsert.
-	SetDeduplication(enabled bool)
-
 	// SetLLM sets the LLM interface used to generate categories dynamically.
 	SetLLM(llm LLM[T])
 
@@ -71,7 +70,7 @@ type MemoryStore[T any] interface {
 	Vectors(ctx context.Context) (btree.BtreeInterface[VectorKey, Vector], error)
 
 	// Content returns the Content B-Tree for advanced manipulation (The actual Item Data).
-	Items(ctx context.Context) (btree.BtreeInterface[sop.UUID, Item[T]], error)
+	Items(ctx context.Context) (btree.BtreeInterface[ItemKey, Item[T]], error)
 
 	// Version returns the Vector store's version number, which is a unix elapsed time.
 	Version(ctx context.Context) (int64, error)

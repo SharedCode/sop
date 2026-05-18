@@ -16,8 +16,8 @@ func TestImportJSON_NestedCategories(t *testing.T) {
 	embedder := &MockEmbedder{}
 	cats := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecs := inmemory.NewBtree[VectorKey, Vector](true)
-	items := inmemory.NewBtree[sop.UUID, Item[string]](true)
-	st := NewStore[string](cats.Btree, vecs.Btree, items.Btree).(*store[string])
+	items := inmemory.NewBtree[ItemKey, Item[string]](true)
+	st := NewStore[string](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecs.Btree, items.Btree).(*store[string])
 	st.SetTextIndex(&MockTextIndex{})
 	kb := &KnowledgeBase[string]{
 		Store:   st,
@@ -83,8 +83,8 @@ func TestImportJSON_RealSOPKnowledgeBase(t *testing.T) {
 	embedder := &MockEmbedder{}
 	cats := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecs := inmemory.NewBtree[VectorKey, Vector](true)
-	items := inmemory.NewBtree[sop.UUID, Item[map[string]any]](true)
-	st := NewStore[map[string]any](cats.Btree, vecs.Btree, items.Btree).(*store[map[string]any])
+	items := inmemory.NewBtree[ItemKey, Item[map[string]any]](true)
+	st := NewStore[map[string]any](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecs.Btree, items.Btree).(*store[map[string]any])
 	st.SetTextIndex(&MockTextIndex{})
 	kb := &KnowledgeBase[map[string]any]{
 		Store:   st,

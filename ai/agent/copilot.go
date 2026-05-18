@@ -370,12 +370,12 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 
 	// 4. Fast-path routing: If Avatar, execute Avatar Sub-Agent
 	if intent != "OMNI" {
-		log.Info("Ask: Request classified for Avatar routing", "avatar", intent)
+		log.Info("Ask: Request classified for Avatar", "avatar", intent)
 		return a.executeAvatarSubAgent(ctx, intent, query)
 	}
 
 	// 5. Omni routing: Load heavy baseline tools, compile system prompt, execute
-	log.Info("Ask: Request classified for OMNI baseline")
+	log.Info("Ask: Request classified for OMNI")
 
 	// Determine current target KB
 	currentKBTrack := "sop"

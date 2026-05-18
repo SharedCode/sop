@@ -598,7 +598,7 @@ func handleIngestImportSpace(w http.ResponseWriter, r *http.Request) {
 		// Vectorize if "SOP" KB ingest (preloading).
 		if request.SpaceName == "SOP" && emb != nil {
 			UpdateTask(taskId, "in_progress", 95, 100, "Calculating Embeddings (Auto Vectorize)...", "")
-			if err := database.Vectorize(ctx, db, request.SpaceName, llm, emb, 50); err != nil {
+			if err := db.Vectorize(ctx, request.SpaceName, llm, emb, 100); err != nil {
 				UpdateTask(taskId, "error", 100, 100, "", fmt.Sprintf("Import successful, but vectorization failed: %v", err))
 				return
 			}
