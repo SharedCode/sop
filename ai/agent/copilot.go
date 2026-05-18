@@ -1213,19 +1213,30 @@ func (a *CopilotAgent) InitializePhysicalMemory(ctx context.Context) error {
 				return
 			}
 
-			toolQueries := []string{
-				"tool execute_script operational pipeline blocks",
-				"tool search_sop knowledge base query",
-				"tool search_custom_kbs custom domain knowledge retrieval",
+			// Map query titles directly to their strict Categories to eliminate probabilistic Vector Space matching
+			toolQueries := []struct {
+				Category string
+				Query    string
+			}{
+				{"Execute Script Tool", "Execute Script Tool"},
+				{"Execute Script Tool", "execute_script Tool Operations:"},
+				{"Knowledge Base Search Tools", "tool search_sop"},
+				{"Knowledge Base Search Tools", "tool search_custom_kbs"},
 			}
 
-			vecs, err := embedder.EmbedTexts(bgCtx, toolQueries)
+			var rawQueries []string
+			for _, t := range toolQueries {
+				rawQueries = append(rawQueries, t.Query)
+			}
+
+			vecs, err := embedder.EmbedTexts(bgCtx, rawQueries)
 			if err == nil {
 				var toolThoughts []memory.Thought[map[string]any]
 				seen := make(map[string]bool)
 
-				for _, vec := range vecs {
-					hits, _ := sopKB.Store.Query(bgCtx, vec, &memory.SearchOptions[map[string]any]{Limit: 2})
+				for i, vec := range vecs {
+					opts := &memory.SearchOptions[map[string]any]{Limit: 2, Category: toolQueries[i].Category}
+					hits, _ := sopKB.Store.Query(bgCtx, vec, opts)
 					for _, hit := range hits {
 						if !seen[hit.ID] {
 							seen[hit.ID] = true

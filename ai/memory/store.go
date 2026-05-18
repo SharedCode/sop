@@ -154,11 +154,11 @@ func (s *store[T]) Upsert(ctx context.Context, item Item[T], vec []float32) erro
 		}
 	} else {
 		itemObj := Item[T]{
-ID:        id,
-CategoryID: bestCategory,
-Data:      item.Data,
-Positions: []VectorKey{vk},
-}
+			ID:         id,
+			CategoryID: bestCategory,
+			Data:       item.Data,
+			Positions:  []VectorKey{vk},
+		}
 		_, err = s.items.Add(ctx, itemKey, itemObj)
 		if err != nil {
 			return err
@@ -356,37 +356,48 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, opts *SearchOptions
 		opts = &SearchOptions[T]{Limit: 10}
 	}
 	var targetCategory *Category
-	var categories []*Category
-	ok, err := s.categories.First(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, nil // No data
-	}
-
-	for {
-		c, err := s.categories.GetCurrentValue(ctx)
-		if err == nil && c != nil {
-			if opts.Category != "" && c.Name == opts.Category {
-				targetCategory = c
-				break
-			}
-			if opts.Category == "" {
-				categories = append(categories, c)
-			}
-		}
-		nextOk, nextErr := s.categories.Next(ctx)
-		if nextErr != nil || !nextOk {
-			break
-		}
-	}
 
 	if opts.Category != "" {
+		ok, err := s.categoriesByName.Find(ctx, opts.Category, false)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			catID, err := s.categoriesByName.GetCurrentValue(ctx)
+			if err != nil {
+				return nil, err
+			}
+			found, err := s.categories.Find(ctx, catID, false)
+			if err != nil {
+				return nil, err
+			}
+			if found {
+				targetCategory, _ = s.categories.GetCurrentValue(ctx)
+			}
+		}
 		if targetCategory == nil {
 			return nil, nil // Category strictly required but not found
 		}
 	} else {
+		var categories []*Category
+		ok, err := s.categories.First(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			return nil, nil // No data
+		}
+
+		for {
+			c, err := s.categories.GetCurrentValue(ctx)
+			if err == nil && c != nil {
+				categories = append(categories, c)
+			}
+			nextOk, nextErr := s.categories.Next(ctx)
+			if nextErr != nil || !nextOk {
+				break
+			}
+		}
 		targetCategory, _ = FindClosestCategory(vec, categories)
 	}
 
@@ -395,27 +406,59 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, opts *SearchOptions
 	}
 
 	var hits []ai.Hit[T]
-	ok, err = s.vectors.First(ctx)
+
+	// Find the start of the vectors for this Category ID in O(log N) time
+	// By submitting a search key with -1.0 distance, we fall immediately before or precisely
+	// at the first vector for this CategoryID in the B-Tree.
+	searchKey := VectorKey{
+		CategoryID:         targetCategory.ID,
+		DistanceToCategory: -1.0,
+	}
+
+	found, err := s.vectors.Find(ctx, searchKey, false)
 	if err != nil {
 		return nil, err
 	}
 
 	var matchingVectors []Vector
-	if ok {
-		for {
-			vk := s.vectors.GetCurrentKey()
-			// Need to verify CategoryID equality properly
-			if vk.Key.CategoryID.Compare(targetCategory.ID) == 0 {
-				v, err := s.vectors.GetCurrentValue(ctx)
-				if err == nil {
-					matchingVectors = append(matchingVectors, v)
+
+	// If it didn't find an exact match (almost definitely false due to dummy -1 distance),
+	// the cursor is likely left on the nearest neighbour (smaller node). We need to advance
+	// until we are inside our target Category ID.
+	if !found {
+		currKey := s.vectors.GetCurrentKey()
+		if currKey.Key.CategoryID.Compare(targetCategory.ID) < 0 {
+			// Fast forward to first node >= targetCategory.ID
+			for {
+				ok, err := s.vectors.Next(ctx)
+				if err != nil || !ok {
+					break
+				}
+				if s.vectors.GetCurrentKey().Key.CategoryID.Compare(targetCategory.ID) >= 0 {
+					break
 				}
 			}
+		}
+	}
 
-			nextOk, nextErr := s.vectors.Next(ctx)
-			if nextErr != nil || !nextOk {
-				break
+	for {
+		vk := s.vectors.GetCurrentKey()
+
+		// If we've passed our target category, we can stop evaluating entirely
+		if vk.Key.CategoryID.Compare(targetCategory.ID) > 0 {
+			break
+		}
+
+		if vk.Key.CategoryID.Compare(targetCategory.ID) == 0 {
+			v, err := s.vectors.GetCurrentValue(ctx)
+			if err == nil {
+				matchingVectors = append(matchingVectors, v)
 			}
+		}
+
+		nextOk, nextErr := s.vectors.Next(ctx)
+		if nextErr != nil || !nextOk {
+			break
 		}
 	}
 
@@ -467,7 +510,6 @@ func (s *store[T]) Consolidate(ctx context.Context) error {
 func (s *store[T]) UpdateEmbedderInfo(ctx context.Context, provider string, model string, dimensions int) error {
 	return nil
 }
-
 
 func (s *store[T]) Vectors(ctx context.Context) (btree.BtreeInterface[VectorKey, Vector], error) {
 	return s.vectors, nil
@@ -537,11 +579,17 @@ func (s *store[T]) QueryText(ctx context.Context, text string, opts *SearchOptio
 		}
 
 		parts := strings.Split(res.DocID, ",")
-		if len(parts) != 2 { continue }
+		if len(parts) != 2 {
+			continue
+		}
 		catID, err := sop.ParseUUID(parts[0])
-		if err != nil { continue }
+		if err != nil {
+			continue
+		}
 		id, err := sop.ParseUUID(parts[1])
-		if err != nil { continue }
+		if err != nil {
+			continue
+		}
 		itemKeySearch := ItemKey{CategoryID: catID, ItemID: id}
 		foundItem, err := s.items.Find(ctx, itemKeySearch, false)
 		var payload T
