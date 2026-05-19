@@ -823,13 +823,13 @@ func (s *Service) InitializeUserSession(ctx context.Context, userID string) erro
 
 	// OpenKnowledgeBase safely ensures DDL (creates B-Trees if they don't exist)
 	// Because this is a ForWriting transaction, the NewBtree calls deep inside will succeed.
-	ltmKB, err := s.systemDB.OpenKnowledgeBase(ctx, ltmName, tx, s.generator, nil)
+	ltmKB, err := s.systemDB.OpenKnowledgeBase(ctx, ltmName, tx, s.generator, nil, false)
 	if err != nil {
 		return fmt.Errorf("failed to initialize user LTM '%s': %w", ltmName, err)
 	}
 
 	// Sync SystemPrompt from the SOP KB config to the LTM KB config
-	sopKB, err := s.systemDB.OpenKnowledgeBase(ctx, "sop", tx, s.generator, nil)
+	sopKB, err := s.systemDB.OpenKnowledgeBase(ctx, "sop", tx, s.generator, nil, false)
 	if err == nil && sopKB != nil {
 		sopCfg, _ := sopKB.GetConfig(ctx)
 		if sopCfg != nil && sopCfg.SystemPrompt != "" {
@@ -1036,7 +1036,7 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	if p := ai.GetSessionPayload(ctx); p != nil && p.UserID != "" && s.systemDB != nil {
 		kbName := p.GetMemoryKBName()
 		if tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-			if kb, err := s.systemDB.OpenKnowledgeBase(ctx, kbName, tx, s.generator, nil); err == nil {
+			if kb, err := s.systemDB.OpenKnowledgeBase(ctx, kbName, tx, s.generator, nil, false); err == nil {
 				// We search the user's Long-Term memory kb for implicitly learned preferences related to the query
 				if userHits, err := kb.SearchKeywords(ctx, query, &memory.SearchOptions[map[string]any]{Limit: 5}); err == nil && len(userHits) > 0 {
 					var prefText strings.Builder

@@ -201,7 +201,7 @@ func handleCreateSpace(w http.ResponseWriter, r *http.Request) {
 	dbEmbedder := GetConfiguredEmbedder(r)
 	dbLLM := GetConfiguredLLM(r)
 
-	kb, err := db.OpenKnowledgeBase(ctx, req.SpaceName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, req.SpaceName, trans, dbLLM, dbEmbedder, false)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to open Space '%s': %v", req.SpaceName, err), http.StatusInternalServerError)
 		return
@@ -288,7 +288,7 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		kb, err := db.OpenKnowledgeBase(ctx, request.SpaceName, trans, llm, emb)
+		kb, err := db.OpenKnowledgeBase(ctx, request.SpaceName, trans, llm, emb, false)
 		if err != nil {
 			trans.Rollback(ctx)
 			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to open KnowledgeBase '%s': %v", request.SpaceName, err))
@@ -334,6 +334,13 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 			const batchSize = 500
 			totalProcessed := 0
 
+			// Track current config, fetch existing KB config or default to what's defined in the stream
+			currentKBConfig, _ := kb.GetConfig(ctx)
+			documentMode := false
+			if currentKBConfig != nil {
+				documentMode = currentKBConfig.DocumentMode
+			}
+
 			t, err := decoder.Token()
 			if err == nil {
 				if delim, ok := t.(json.Delim); ok {
@@ -353,6 +360,7 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 								var cfg memory.KnowledgeBaseConfig
 								if err := decoder.Decode(&cfg); err == nil {
 									kb.SetConfig(ctx, &cfg)
+									documentMode = cfg.DocumentMode
 								}
 							} else if keyStr == "items" {
 								// read opening '['
@@ -377,7 +385,8 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 									}
 
 									batch = append(batch, memory.Thought[map[string]any]{
-										Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+										DocID:     chunk.DocID,
+										Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, CategoryPath: chunk.Category, Data: buildChunkData(cid, chunk, documentMode),
 									})
 									totalProcessed++
 
@@ -410,7 +419,8 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 							}
 
 							batch = append(batch, memory.Thought[map[string]any]{
-								Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, Category: chunk.Category, Data: map[string]any{"text": chunk.Text, "description": chunk.Description, "category": chunk.Category, "original_id": cid},
+								DocID:     chunk.DocID,
+								Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, CategoryPath: chunk.Category, Data: buildChunkData(cid, chunk, documentMode),
 							})
 							totalProcessed++
 
@@ -521,7 +531,7 @@ func handleIngestImportSpace(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		kb, err := db.OpenKnowledgeBase(ctx, request.SpaceName, trans, llm, emb)
+		kb, err := db.OpenKnowledgeBase(ctx, request.SpaceName, trans, llm, emb, false)
 		if err != nil {
 			trans.Rollback(ctx)
 			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to open KnowledgeBase '%s': %v", request.SpaceName, err))
@@ -556,9 +566,24 @@ func handleIngestImportSpace(w http.ResponseWriter, r *http.Request) {
 			UpdateTask(taskId, "in_progress", 30, 100, "Reading Space data stream...", "")
 
 			enrichCb := func(it *memory.ExportItem[map[string]any]) {
+				var textStr, descStr string
+				if txt, ok := it.Data["text"].(string); ok {
+					textStr = txt
+				} else if txt, ok := it.Data["title"].(string); ok {
+					textStr = txt
+				} // In compiler, text is exported in Summaries, but other systems might put it in Data
+
+				if desc, ok := it.Data["description"].(string); ok {
+					descStr = desc
+				} else if cnt, ok := it.Data["content"].(string); ok {
+					descStr = cnt
+				}
+
 				it.Summaries = extractSummaries(SpaceIngestChunk{
-					Summaries: it.Summaries,
-					Data:      it.Data,
+					Summaries:   it.Summaries,
+					Text:        textStr,
+					Description: descStr,
+					Data:        it.Data,
 				})
 			}
 

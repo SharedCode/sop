@@ -17,7 +17,7 @@ func TestImportJSON_NestedCategories(t *testing.T) {
 	cats := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecs := inmemory.NewBtree[VectorKey, Vector](true)
 	items := inmemory.NewBtree[ItemKey, Item[string]](true)
-	st := NewStore[string](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecs.Btree, items.Btree).(*store[string])
+	st := NewStore[string](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[string])
 	st.SetTextIndex(&MockTextIndex{})
 	kb := &KnowledgeBase[string]{
 		Store:   st,
@@ -65,7 +65,7 @@ func TestImportJSON_NestedCategories(t *testing.T) {
 				}
 			}
 		} else {
-			t.Logf("Category: %+v", cat)
+			t.Logf("CategoryPath: %+v", cat)
 		}
 		ok, _ := catBtree.Next(ctx)
 		if !ok {
@@ -84,7 +84,7 @@ func TestImportJSON_RealSOPKnowledgeBase(t *testing.T) {
 	cats := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecs := inmemory.NewBtree[VectorKey, Vector](true)
 	items := inmemory.NewBtree[ItemKey, Item[map[string]any]](true)
-	st := NewStore[map[string]any](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecs.Btree, items.Btree).(*store[map[string]any])
+	st := NewStore[map[string]any](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[map[string]any])
 	st.SetTextIndex(&MockTextIndex{})
 	kb := &KnowledgeBase[map[string]any]{
 		Store:   st,
@@ -111,39 +111,18 @@ func TestImportJSON_RealSOPKnowledgeBase(t *testing.T) {
 		t.Errorf("Expected >0 items, got %d", itemCount)
 	}
 
-	hasParents := false
+	hasNestedPath := false
 	catBtree, _ := st.Categories(ctx)
 	ok, _ := catBtree.First(ctx)
 	for ok {
 		cat, _ := catBtree.GetCurrentValue(ctx)
-		if cat != nil && len(cat.ParentIDs) > 0 {
-			hasParents = true
-			for _, p := range cat.ParentIDs {
-				found, _ := catBtree.Find(ctx, p.ParentID, false)
-				if !found {
-					t.Errorf("Category %s (%s) references non-existent ParentID: %s", cat.Name, cat.ID.String(), p.ParentID.String())
-				} else {
-					parent, _ := catBtree.GetCurrentValue(ctx)
-					if parent != nil {
-						childFound := false
-						for _, childID := range parent.ChildrenIDs {
-							if childID == cat.ID {
-								childFound = true
-								break
-							}
-						}
-						if !childFound {
-							t.Errorf("Parent %s does not contain child %s in ChildrenIDs array", parent.Name, cat.Name)
-						}
-					}
-				}
-				catBtree.Find(ctx, cat.ID, false)
-			}
+		if cat != nil && cat.Path != "" {
+			hasNestedPath = true
 		}
 		ok, _ = catBtree.Next(ctx)
 	}
 
-	if !hasParents {
-		t.Errorf("Expected at least one category to have a parent in the real sop_base_knowledge.json")
+	if !hasNestedPath {
+		t.Errorf("Expected at least one category to have a Path in the real sop_base_knowledge.json")
 	}
 }

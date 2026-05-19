@@ -71,7 +71,7 @@ func (d *GenericDomain[T]) Memory(ctx context.Context, tx sop.Transaction) (any,
 	}
 
 	fmt.Printf("genericDomain %s Generator is nil: %v\n", d.cfg.Name, d.cfg.Generator == nil)
-		kb, err := d.cfg.DB.OpenKnowledgeBase(ctx, kbName, tx, d.cfg.Generator, d.cfg.Embedder)
+		kb, err := d.cfg.DB.OpenKnowledgeBase(ctx, kbName, tx, d.cfg.Generator, d.cfg.Embedder, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open domain knowledge base %s: %w", kbName, err)
 	}

@@ -29,7 +29,7 @@ func (db *Database) Vectorize(
 		return err
 	}
 
-	kb, err := db.OpenKnowledgeBase(ctx, name, tx, llm, embedder)
+	kb, err := db.OpenKnowledgeBase(ctx, name, tx, llm, embedder, false)
 	if err != nil {
 		tx.Rollback(ctx)
 		return err
@@ -194,7 +194,7 @@ func (db *Database) Vectorize(
 				if err != nil {
 					return err
 				}
-				kb, err = db.OpenKnowledgeBase(ctx, name, tx, llm, embedder)
+				kb, err = db.OpenKnowledgeBase(ctx, name, tx, llm, embedder, false)
 				if err != nil {
 					tx.Rollback(ctx)
 					return err

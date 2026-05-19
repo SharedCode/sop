@@ -112,7 +112,7 @@ func (a *CopilotAgent) StartSleepCycle(ctx context.Context, hourlyInterval int, 
 			embedder = a.service.Domain().Embedder()
 		}
 
-		ltm, err := a.systemDB.OpenKnowledgeBase(ctx, ltmStoreName, tx, a.brain, embedder)
+		ltm, err := a.systemDB.OpenKnowledgeBase(ctx, ltmStoreName, tx, a.brain, embedder, false)
 		if err != nil {
 			tx.Rollback(ctx)
 			return

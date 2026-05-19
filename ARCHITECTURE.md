@@ -329,3 +329,15 @@ As SOP scales to handle **trillion to hundreds of trillions of items**, the curr
     *   **Throughput**: Reduces the "Worst Case" lookup from $O(N)$ file headers to $O(\log N)$, significantly conserving IOPS for these hyper-scale deployments.
 
 
+
+---
+
+## Agentic Routing & Context
+SOP implements a unique **Cascading Router** pattern for agent and AI workflows. This completely removes the overhead of complex, monolithic K-Means Vector databases. Intent routing operates in four rapid phases:
+
+1. **Prefix Matching (O(1))**: Immediate override for commands routing to specific domains.
+2. **Contextual MRU Momentum (O(N))**: Inherited context sequences based on conversational history.
+3. **Centroid Vector Proximity**: Low-latency Cosine Similarity distance matches against precomputed `DomainReference` target bounds.
+4. **Targeted Agent Tiebreaker**: Bounded LLM inference fallback.
+
+This keeps all AI-driven persistence highly deterministic and drastically reduces computing and token costs.

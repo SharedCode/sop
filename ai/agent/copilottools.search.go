@@ -29,12 +29,8 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 		embedder = a.service.Domain().Embedder()
 	}
 
-	searchEnabled := false
-	if a.Config.Requirements != nil {
-		searchEnabled = a.Config.Requirements.Search
-	}
-
-	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, searchEnabled)
+	// We pass documentMode=false. TextSearch configuration is now inferred natively within the DB.
+	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, false)
 	if err != nil {
 		// KB might not exist, silently return empty or error
 		return "", fmt.Errorf("failed to open kb %s: %w", kbName, err)
@@ -66,7 +62,13 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 					if catVal, ok := h.Payload["category"].(string); ok {
 						category = catVal
 					}
-					results = append(results, fmt.Sprintf("Score: %.2f | Category: %s\nText: %s", h.Score, category, text))
+
+					link := ""
+					if h.DocID != "" {
+						link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", h.DocID)
+					}
+
+					results = append(results, fmt.Sprintf("Score: %.2f | CategoryPath: %s\nText: %s%s", h.Score, category, text, link))
 				}
 			}
 		}
@@ -91,7 +93,13 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 			if catVal, ok := h.Payload["category"].(string); ok {
 				category = catVal
 			}
-			results = append(results, fmt.Sprintf("Score: %.2f | Category: %s\nText: %s", h.Score, category, text))
+
+			link := ""
+			if h.DocID != "" {
+				link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", h.DocID)
+			}
+
+			results = append(results, fmt.Sprintf("Score: %.2f | CategoryPath: %s\nText: %s%s", h.Score, category, text, link))
 		}
 	}
 

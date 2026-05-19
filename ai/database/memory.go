@@ -34,6 +34,16 @@ func itemKeyComparer(a, b memory.ItemKey) int {
 	return a.ItemID.Compare(b.ItemID)
 }
 
+func distanceKeyComparer(a, b memory.DistanceKey) int {
+	if a.Distance < b.Distance {
+		return -1
+	}
+	if a.Distance > b.Distance {
+		return 1
+	}
+	return a.ID.Compare(b.ID)
+}
+
 // KnowledgeBaseExists checks if the underlying physical tables for a knowledge base have been created.
 func (db *Database) KnowledgeBaseExists(ctx context.Context, name string) (bool, error) {
 	tx, err := db.BeginTransaction(ctx, sop.ForReading)
@@ -65,8 +75,20 @@ func (db *Database) OpenKnowledgeBase(
 	t sop.Transaction,
 	llm ai.Generator,
 	embedder ai.Embeddings,
+	documentMode bool,
 	enableTextSearch ...bool,
 ) (*memory.KnowledgeBase[map[string]any], error) {
+
+	// Resurrect DocumentMode if the items store was physically provisioned in a prior lifecycle
+	if trans, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
+		sr := trans.GetStoreRepository()
+		if sr != nil {
+			infos, err := sr.Get(ctx, fmt.Sprintf("%s/items", name))
+			if err == nil && len(infos) > 0 && !infos[0].IsEmpty() {
+				documentMode = infos[0].IsValueDataInNodeSegment
+			}
+		}
+	}
 
 	// 1. Open Categories Store
 	catsStore := sop.ConfigureStore(fmt.Sprintf("%s/categories", name), true, btree.DefaultSlotLength, "dynamic categories store", sop.SmallData, "")
@@ -75,9 +97,9 @@ func (db *Database) OpenKnowledgeBase(
 		return nil, err
 	}
 
-	// 1.1 Open CategoriesByName Store
-	catsByNameStore := sop.ConfigureStore(fmt.Sprintf("%s/categoriesByName", name), true, btree.DefaultSlotLength, "dynamic categoriesByName store", sop.SmallData, "")
-	catsByNameTree, err := core.NewBtree[string, sop.UUID](ctx, db.config, catsByNameStore.Name, t, nil, catsByNameStore)
+	// 1.1 Open CategoriesByPath Store
+	catsByPathStore := sop.ConfigureStore(fmt.Sprintf("%s/categoriesByPath", name), true, btree.DefaultSlotLength, "dynamic categoriesByPath store", sop.SmallData, "")
+	catsByPathTree, err := core.NewBtree[string, sop.UUID](ctx, db.config, catsByPathStore.Name, t, nil, catsByPathStore)
 	if err != nil {
 		return nil, err
 	}
@@ -90,16 +112,50 @@ func (db *Database) OpenKnowledgeBase(
 	}
 
 	// 3. Open Items Store
-	itemsStore := sop.ConfigureStore(fmt.Sprintf("%s/items", name), true, btree.DefaultSlotLength, "dynamic items store", sop.MediumData, "")
+	itemsSize := sop.MediumData
+	if documentMode {
+		itemsSize = sop.SmallData
+	}
+	itemsStore := sop.ConfigureStore(fmt.Sprintf("%s/items", name), true, btree.DefaultSlotLength, "dynamic items store", itemsSize, "")
 	itemsTree, err := core.NewBtree[memory.ItemKey, memory.Item[map[string]any]](ctx, db.config, itemsStore.Name, t, itemKeyComparer, itemsStore)
 	if err != nil {
 		return nil, err
 	}
 
-	// Assemble the storage engine
-	store := memory.NewStore(catsTree, catsByNameTree, vecsTree, itemsTree)
+	// 4. Open Categories By Distance Store
+	catsByDistStore := sop.ConfigureStore(fmt.Sprintf("%s/categoriesByDistance", name), true, btree.DefaultSlotLength, "dynamic categoriesByDistance store", sop.SmallData, "")
+	catsByDistTree, err := core.NewBtree[memory.DistanceKey, byte](ctx, db.config, catsByDistStore.Name, t, distanceKeyComparer, catsByDistStore)
+	if err != nil {
+		return nil, err
+	}
 
-	if len(enableTextSearch) > 0 && enableTextSearch[0] {
+	// 5. Open Documents Store
+	docsStore := sop.ConfigureStore(fmt.Sprintf("%s/documents", name), true, btree.DefaultSlotLength, "dynamic canonical documents store", sop.BigData, "")
+	docsTree, err := core.NewBtree[sop.UUID, memory.Document](ctx, db.config, docsStore.Name, t, nil, docsStore)
+	if err != nil {
+		return nil, err
+	}
+
+	// Assemble the storage engine
+	store := memory.NewStore(catsTree, catsByPathTree, catsByDistTree, vecsTree, itemsTree, docsTree)
+
+	manager := memory.NewMemoryManager(store, llm, embedder)
+
+	kb := &memory.KnowledgeBase[map[string]any]{
+		Store:   store,
+		Manager: manager,
+	}
+
+	cfg, _ := kb.GetConfig(ctx)
+
+	useTextSearch := false
+	if len(enableTextSearch) > 0 {
+		useTextSearch = enableTextSearch[0]
+	} else if cfg != nil && cfg.TextSearchEnabled {
+		useTextSearch = true
+	}
+
+	if useTextSearch {
 		textIndex, err := db.OpenSearch(ctx, fmt.Sprintf("%s/text", name), t)
 		if err == nil && textIndex != nil {
 			if st, ok := store.(interface{ SetTextIndex(idx ai.TextIndex) }); ok {
@@ -108,12 +164,11 @@ func (db *Database) OpenKnowledgeBase(
 		}
 	}
 
-	manager := memory.NewMemoryManager(store, llm, embedder)
+	if cfg != nil && len(cfg.DomainReference) > 0 {
+		store.SetDomainReference(cfg.DomainReference)
+	}
 
-	return &memory.KnowledgeBase[map[string]any]{
-		Store:   store,
-		Manager: manager,
-	}, nil
+	return kb, nil
 }
 
 // MigrateVectorToKnowledgeBase reads an existing pure-math VectorStore index,
@@ -137,7 +192,7 @@ func (db *Database) MigrateVectorToKnowledgeBase(
 	}
 
 	// 2. Instantiate a fresh new KnowledgeBase
-	kb, err := db.OpenKnowledgeBase(ctx, knowledgeBaseName, t, llm, embedder)
+	kb, err := db.OpenKnowledgeBase(ctx, knowledgeBaseName, t, llm, embedder, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open knowledge base: %w", err)
 	}

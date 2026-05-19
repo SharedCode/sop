@@ -82,6 +82,7 @@ func getHeadingText(n *ast.Heading, source []byte) string {
 }
 
 var parsedFiles = make(map[string]*Section)
+var baseURL string
 
 func parseMarkdownToTree(filePath string, defaultTitle string) *Section {
 	absPath, err := filepath.Abs(filePath)
@@ -191,14 +192,16 @@ func findRepoRoot() string {
 }
 
 var allChunks []KnowledgeChunk
+var allDocuments []*memory.Document
 var catGraphMap = make(map[string]*memory.Category)
 var catDescriptions = make(map[string]string)
 
 type KnowledgeChunk struct {
-	ID          string `json:"id"`
-	Category    string `json:"category"`
-	Text        string `json:"text"`
-	Description string `json:"description"`
+	ID          string   `json:"id"`
+	Category    string   `json:"category"`
+	Text        string   `json:"text"`
+	Description string   `json:"description"`
+	DocumentID  sop.UUID `json:"document_id"`
 }
 
 func getCat(catPath string) *memory.Category {
@@ -265,9 +268,35 @@ func parseUnlinkedFiles(repoRoot string) {
 		}
 
 		fmt.Printf("Sweeping file as L1 Category: %s\n", absPath)
-		title := strings.TrimSuffix(filepath.Base(absPath), filepath.Ext(absPath))
+		docTitle := strings.TrimSuffix(filepath.Base(absPath), filepath.Ext(absPath))
+		title := docTitle
 		tree := parseMarkdownToTree(absPath, title)
 		if tree != nil {
+			// --- Build Document metadata for Import ---
+			// Since we intend to KEEP these docs out of the blob limits
+			// and just process them dynamically on queries, we generate URLs
+			// representing their local existence in repo, without pushing huge text chunks.
+			relPath, _ := filepath.Rel(repoRoot, absPath)
+			docID := sop.NewUUID()
+
+			urlVal := "file://" + relPath
+			if baseURL != "" {
+				if strings.HasSuffix(baseURL, "/") {
+					urlVal = baseURL + relPath
+				} else {
+					urlVal = baseURL + "/" + relPath
+				}
+			}
+
+			doc := &memory.Document{
+				ID:          docID,
+				Title:       title,
+				URL:         urlVal,
+				ContentType: "text/markdown",
+				Content:     "", // Omitted from physical DB storage because we referenced its filesystem URL
+			}
+			allDocuments = append(allDocuments, doc)
+
 			// Extract title from top heading (H1, H2, H3, etc.) and description from its first paragraph
 			if len(tree.Children) > 0 {
 				title = tree.Children[0].Title
@@ -283,10 +312,10 @@ func parseUnlinkedFiles(repoRoot string) {
 					tree.Children[0].Paragraphs = append(tree.Paragraphs, tree.Children[0].Paragraphs...)
 				}
 				for _, child := range tree.Children {
-					processFlattenedTreeIntoChunks(child, title)
+					processFlattenedTreeIntoChunks(child, title, docID)
 				}
 			} else {
-				processFlattenedTreeIntoChunks(tree, title)
+				processFlattenedTreeIntoChunks(tree, title, docID)
 			}
 		}
 
@@ -294,7 +323,7 @@ func parseUnlinkedFiles(repoRoot string) {
 	})
 }
 
-func processFlattenedTreeIntoChunks(node *Section, fixedCategory string) {
+func processFlattenedTreeIntoChunks(node *Section, fixedCategory string, docID sop.UUID) {
 	body := strings.TrimSpace(strings.Join(node.Paragraphs, "\n"))
 
 	// Create an Item if we have substantial content
@@ -305,11 +334,12 @@ func processFlattenedTreeIntoChunks(node *Section, fixedCategory string) {
 			Category:    fixedCategory,
 			Text:        node.Title,
 			Description: body,
+			DocumentID:  docID,
 		})
 	}
 
 	for _, child := range node.Children {
-		processFlattenedTreeIntoChunks(child, fixedCategory)
+		processFlattenedTreeIntoChunks(child, fixedCategory, docID)
 	}
 }
 
@@ -346,6 +376,14 @@ func processTreeIntoChunks(node *Section, currentPathContext []string) {
 }
 
 func main() {
+	for i, arg := range os.Args {
+		if arg == "-base-url" || arg == "--base-url" {
+			if i+1 < len(os.Args) {
+				baseURL = os.Args[i+1]
+			}
+		}
+	}
+
 	repoRoot := findRepoRoot()
 	rootReadme := filepath.Join(repoRoot, "README.md")
 
@@ -410,8 +448,12 @@ func main() {
 	for _, chunk := range allChunks {
 		cat := getCat(chunk.Category)
 		exportItems = append(exportItems, memory.ExportItem[map[string]any]{
-			Category:  cat.ID.String(),
-			Data:      map[string]any{"description": chunk.Description, "original_id": chunk.ID},
+			CategoryPath: cat.ID.String(),
+			DocID:        chunk.DocumentID.String(),
+			Data: map[string]any{
+				"description": chunk.Description,
+				"original_id": chunk.ID,
+			},
 			Summaries: []string{chunk.Text},
 		})
 	}
@@ -436,8 +478,10 @@ func main() {
 		Config: &memory.KnowledgeBaseConfig{
 			IsPersona:    true,
 			SystemPrompt: systemPrompt,
+			DocumentMode: true,
 		},
 		Categories: categories,
+		Documents:  allDocuments,
 		Items:      exportItems,
 	}
 

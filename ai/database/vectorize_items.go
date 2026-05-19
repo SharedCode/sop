@@ -26,7 +26,7 @@ func  (db *Database)VectorizeItems(
 	}
 	defer tx.Rollback(ctx)
 
-	kb, err := db.OpenKnowledgeBase(ctx, name, tx, llm, embedder)
+	kb, err := db.OpenKnowledgeBase(ctx, name, tx, llm, embedder, false)
 	if err != nil {
 		return err
 	}
@@ -183,7 +183,7 @@ func  (db *Database)VectorizeItems(
 			itemVecs := allVecs[vecIdx : vecIdx+count]
 			vecIdx += count
 
-			err = kb.Store.UpsertByCategory(ctx, category.Name, *item, itemVecs)
+			err = kb.Store.UpsertByCategoryPath(ctx, category.Name, *item, itemVecs)
 			if err != nil {
 				return err
 			}
@@ -202,7 +202,7 @@ func  (db *Database)VectorizeItems(
 				}
 			}
 			if len(itemVecs) > 0 {
-				err = kb.Store.UpsertByCategory(ctx, category.Name, *item, itemVecs)
+				err = kb.Store.UpsertByCategoryPath(ctx, category.Name, *item, itemVecs)
 				if err != nil {
 					return err
 				}

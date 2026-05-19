@@ -49,7 +49,7 @@ func TestVectorizeItems(t *testing.T) {
 		t.Fatalf("BeginTransaction: %v", err)
 	}
 
-	kb, err := db.OpenKnowledgeBase(ctx, "test_kb", tx, llm, emb)
+	kb, err := db.OpenKnowledgeBase(ctx, "test_kb", tx, llm, emb, false)
 	if err != nil {
 		t.Fatalf("OpenKnowledgeBase: %v", err)
 	}
@@ -88,7 +88,7 @@ func TestVectorizeItems(t *testing.T) {
 
 	// Read check
 	tx2, _ := db.BeginTransaction(ctx, sop.ForReading)
-	kb2, _ := db.OpenKnowledgeBase(ctx, "test_kb", tx2, llm, emb)
+	kb2, _ := db.OpenKnowledgeBase(ctx, "test_kb", tx2, llm, emb, false)
 	cats2, _ := kb2.Store.Categories(ctx)
 	found, _ := cats2.Find(ctx, catID, false)
 	if !found {
@@ -115,7 +115,7 @@ func TestVectorizeItems(t *testing.T) {
 
 	// 2) Add a second item and test VectorizeItems with explicit itemIDs
 	tx3, _ := db.BeginTransaction(ctx, sop.ForWriting)
-	kb3, _ := db.OpenKnowledgeBase(ctx, "test_kb", tx3, llm, emb)
+	kb3, _ := db.OpenKnowledgeBase(ctx, "test_kb", tx3, llm, emb, false)
 	items3, _ := kb3.Store.Items(ctx)
 	itemID2 := sop.NewUUID()
 	itemKey2 := memory.ItemKey{CategoryID: catID, ItemID: itemID2}
@@ -133,7 +133,7 @@ func TestVectorizeItems(t *testing.T) {
 	}
 
 	tx4, _ := db.BeginTransaction(ctx, sop.ForReading)
-	kb4, _ := db.OpenKnowledgeBase(ctx, "test_kb", tx4, llm, emb)
+	kb4, _ := db.OpenKnowledgeBase(ctx, "test_kb", tx4, llm, emb, false)
 	items4, _ := kb4.Store.Items(ctx)
 	items4.Find(ctx, itemKey2, false)
 	item2Val, _ := items4.GetCurrentValue(ctx)

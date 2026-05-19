@@ -200,14 +200,14 @@ func (a *CopilotAgent) getSystemInstructions(ctx context.Context, query string) 
 
 	// Use Category based semantic search lookup on SOP if query exists
 	if query != "" && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
-		if kb, err := a.systemDB.OpenKnowledgeBase(ctx, ai.DefaultKBName, tx, nil, nil); err == nil {
+		if kb, err := a.systemDB.OpenKnowledgeBase(ctx, ai.DefaultKBName, tx, nil, nil, false); err == nil {
 			if vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query}); err == nil && len(vecs) > 0 {
 				closestCat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
 				catFilter := ""
 				if err == nil && closestCat != nil {
 					catFilter = closestCat.Name
 				}
-				if hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: 10, Category: catFilter}); err == nil {
+				if hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: 10, CategoryPath: catFilter}); err == nil {
 					for _, h := range hits {
 						if content, ok := h.Payload["Content"].(string); ok {
 							sb.WriteString(fmt.Sprintf("- [%s] %s: %s\n", h.Payload["Category"], h.Payload["Name"], content))

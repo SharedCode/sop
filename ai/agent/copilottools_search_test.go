@@ -9,6 +9,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/memory"
 )
 
 func prepareKBForSearchTest(ctx context.Context, t *testing.T, db *database.Database, kbName string, docText string) {
@@ -18,7 +19,13 @@ func prepareKBForSearchTest(ctx context.Context, t *testing.T, db *database.Data
 	}
 	defer tx.Rollback(ctx)
 
-	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, nil, &MockEmbedder{}, true)
+	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, nil, &MockEmbedder{}, false, true)
+	cfg, err := kb.GetConfig(ctx)
+	if err != nil || cfg == nil {
+		cfg = &memory.KnowledgeBaseConfig{}
+	}
+	cfg.TextSearchEnabled = true
+	kb.SetConfig(ctx, cfg)
 	if err != nil {
 		t.Fatalf("OpenKnowledgeBase failed: %v", err)
 	}

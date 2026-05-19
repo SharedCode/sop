@@ -71,7 +71,7 @@ func handleUpdateSpaceItem(w http.ResponseWriter, r *http.Request) {
 	dbEmbedder := GetConfiguredEmbedder(r)
 	dbLLM := GetConfiguredLLM(r)
 
-	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder, false)
 	if err != nil {
 		http.Error(w, "Failed to open knowledge base", http.StatusInternalServerError)
 		return
@@ -205,7 +205,7 @@ func handleUpdateSpaceItem(w http.ResponseWriter, r *http.Request) {
 		Data:       mergedData,
 	}
 
-	err = kb.Store.UpsertByCategory(ctx, categoryName, newItem, vecs)
+	err = kb.Store.UpsertByCategoryPath(ctx, categoryName, newItem, vecs)
 	if err != nil {
 		http.Error(w, "Upsert failed: "+err.Error(), http.StatusInternalServerError)
 		return

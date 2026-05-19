@@ -97,12 +97,13 @@
                 height: -webkit-fill-available;
             }
         }
-        #sidebar { width: 250px; min-width: 150px; max-width: 50%; background: var(--sidebar-bg); border-right: 1px solid var(--border-color); padding: 6px 7px; display: flex; flex-direction: column; flex-shrink: 0; box-sizing: border-box; }
-        #resizer { width: 5px; background: var(--border-color); cursor: col-resize; user-select: none; transition: background 0.2s; flex-shrink: 0; }
-        #resizer:hover, #resizer.resizing { background: var(--active-bg); }
-        #detail-resizer { width: 5px; background: var(--border-color); cursor: col-resize; user-select: none; transition: background 0.2s; flex-shrink: 0; display: none; }
-        #detail-resizer:hover, #detail-resizer.resizing { background: var(--active-bg); }
-        #main { flex: 1; padding: 6px 7px; overflow-y: auto; display: flex; flex-direction: column; min-width: 0; }
+
+        #sidebar { width: 250px; min-width: 150px; max-width: 50%; background: var(--sidebar-bg); padding: 6px 7px; display: flex; flex-direction: column; flex-shrink: 0; box-sizing: border-box; }
+        #resizer { width: 4px; background-color: transparent; border-right: 1px solid var(--border-color); cursor: col-resize; user-select: none; transition: background-color 0.2s; flex-shrink: 0; }
+        #resizer:hover, #resizer.resizing { background-color: var(--success-bg); }
+        #detail-resizer { width: 4px; background-color: transparent; border-right: 1px solid var(--border-color); cursor: col-resize; user-select: none; transition: background-color 0.2s; flex-shrink: 0; display: none; }
+        #detail-resizer:hover, #detail-resizer.resizing { background-color: var(--success-bg); }
+        #main { flex: 1; padding: 6px 0px 6px 7px; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; min-width: 0; box-sizing: border-box; }
         h1, h2 { margin-top: 0; margin-bottom: 10px; }
         h3 { margin-top: 0; margin-bottom: 10px; }
         ul { list-style: none; padding: 9px 0 0 0; margin: 0; }
@@ -115,12 +116,12 @@
         th { position: relative; background-color: var(--table-header-bg); text-transform: capitalize; }
         th.th-key { color: var(--key-color); font-weight: bold; }
         th.th-val { }
-        .col-resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 5px; cursor: col-resize; user-select: none; }
-        .col-resizer:hover { background: var(--active-bg); }
+        .col-resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 4px; background-color: transparent; border-right: 1px solid var(--border-color); cursor: col-resize; user-select: none; transition: background-color 0.2s; }
+        .col-resizer:hover { background-color: var(--success-bg); }
         tr:nth-child(even) { background-color: var(--table-row-even); }
         tr:hover { background-color: var(--table-row-hover); cursor: pointer; }
         tr.selected-row { background-color: var(--table-row-selected) !important; }
-        #detail-panel { width: 400px; border-left: 1px solid var(--border-color); padding: 0; background: var(--detail-panel-bg); display: none; overflow-x: hidden; overflow-y: hidden; box-sizing: border-box; flex-shrink: 0; flex-direction: column; }
+        #detail-panel { width: 400px; padding: 0; background: var(--detail-panel-bg); display: none; overflow-x: hidden; overflow-y: hidden; box-sizing: border-box; flex-shrink: 0; flex-direction: column; }
         pre, code, .data-table { font-family: inherit; }
         pre { background: var(--pre-bg); padding: 5px 6px; border-radius: 4px; overflow-x: auto; color: var(--text-color); font-size: 13px; margin: 0; }
         .toolbar { display: flex; gap: 10px; margin-bottom: 20px; }

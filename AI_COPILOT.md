@@ -194,3 +194,21 @@ We bypassed this by structuring memory deeply into **Episodes (Interactions).**
 *   **The SOP Architecture Solution (Dynamic Semantic Injection):** Working Memory (`sess.MRU`) is decoupled from Long-Term and Short-Term structures. We have eliminated all hardcoded parser instructions from the Go backend. Instead, the backend engine evaluates the *Metadata of the Previous Interaction* and natively searches the exact Semantic Knowledge Base chunk corresponding to the execution sequence.
     *   If a user continues a domain-specific conversation that utilizes the same Avatar or the same Knowledge Base (Space), and the prompt is too bare to retrieve new context chunks, the system automatically pulls the `Carried-Over Playbook Context` from the immediate prior interaction.
     *   **The Result:** Completely agnostic capabilities. By actively fetching boundaries and domain-rules natively from RAG rather than Go-binary strings, the AI seamlessly "remembers" its temporary working skills (like AST format constraints) dynamically, without permanently token-bloating the global system or sacrificing framework agnosticism.
+
+## Advanced RAG: Decoupled Document Contexts (Document Mode)
+SOP Knowledge Bases natively support an advanced **Document Mode**, significantly improving search quality and Retrieval-Augmented Generation (RAG) capabilities.
+
+Instead of bloating indexes with massive payloads, Knowledge Bases decouple the semantic mapping from the canonical text:
+*   **Many-to-One Relationships:** Multiple Categories and distinct Indexes (represented as Items' Summaries vectors) can securely reference the exact same canonical `Document`.
+*   **High-Quality Search Hits:** By vectorizing specific, highly-distinct summaries or contextual chunks that point back to a single overarching source document, searches become hyper-focused. This design guarantees higher quality hits without losing the broader source context during generation.
+*   **Untampered Source Delivery:** Because the raw reference points to the full document, it allows the LLM to ingest and share the source document exactly as is, completely untampered, without requiring complex and often inaccurate reassembly of fragmented bits and pieces.
+
+## The Cascading Router Architecture
+Moving beyond simple pure-LLM classifications or expensive K-Means VectorDB routing, the Copilot has evolved to use a highly deterministic, resource-efficient **Cascading Router**. When interacting through the AI, the query navigates through up to four specialized phases:
+
+1. **Explicit Prefix Match (O(1))**: A constant-time check assessing whether the prompt prefixes match any defined `RoutingPrefix` configuration within the available Domain/Persona Playbooks.
+2. **Global MRU Momentum Match (O(N))**: Scans the most recent conversation threads (Most Recently Used). If consecutive exchanges resolve to the same Avatar/Knowledge Base, the Copilot assumes that context and routing remains locked—avoiding unnecessary LLM overhead.
+3. **Domain Reference Centroid Match (Vector Math)**: The query vector is mapped against localized, pre-calculated `DomainReference` target vectors specific to each Knowledge Base using Cosine Similarity thresholds.
+4. **LLM Fallback (Heuristic Tiebreaker)**: Only defaults into LLM reasoning if the query fails to hit any of the deterministic thresholds or explicit patterns above. 
+
+This Cascading strategy eliminates reliance on unstructured indexes and ensures extreme low-latency when determining user intent, acting purely as an ultra-fast structural heuristic rather than an unpredictably expensive LLM router.

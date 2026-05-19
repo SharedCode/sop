@@ -13,27 +13,38 @@ import (
 
 // store implements MemoryStore.
 type store[T any] struct {
-	categories       btree.BtreeInterface[sop.UUID, *Category]
-	categoriesByName btree.BtreeInterface[string, sop.UUID]
-	vectors          btree.BtreeInterface[VectorKey, Vector]
-	items            btree.BtreeInterface[ItemKey, Item[T]]
-	textIndex        ai.TextIndex
-	llm              LLM[T]
+	categories           btree.BtreeInterface[sop.UUID, *Category]
+	categoriesByPath     btree.BtreeInterface[string, sop.UUID]
+	categoriesByDistance btree.BtreeInterface[DistanceKey, byte]
+	vectors              btree.BtreeInterface[VectorKey, Vector]
+	items                btree.BtreeInterface[ItemKey, Item[T]]
+	documents            btree.BtreeInterface[sop.UUID, Document]
+	textIndex            ai.TextIndex
+	llm                  LLM[T]
+	domainReference      []float32
 }
 
 // NewStore creates a new instance of MemoryStore.
 func NewStore[T any](
 	categories btree.BtreeInterface[sop.UUID, *Category],
-	categoriesByName btree.BtreeInterface[string, sop.UUID],
+	categoriesByPath btree.BtreeInterface[string, sop.UUID],
+	categoriesByDistance btree.BtreeInterface[DistanceKey, byte],
 	vectors btree.BtreeInterface[VectorKey, Vector],
 	items btree.BtreeInterface[ItemKey, Item[T]],
+	documents btree.BtreeInterface[sop.UUID, Document],
 ) MemoryStore[T] {
 	return &store[T]{
-		categories:       categories,
-		categoriesByName: categoriesByName,
-		vectors:          vectors,
-		items:            items,
+		categories:           categories,
+		categoriesByPath:     categoriesByPath,
+		categoriesByDistance: categoriesByDistance,
+		vectors:              vectors,
+		items:                items,
+		documents:            documents,
 	}
+}
+
+func (s *store[T]) SetDomainReference(vec []float32) {
+	s.domainReference = vec
 }
 
 func (s *store[T]) SetTextIndex(idx ai.TextIndex) {
@@ -185,16 +196,16 @@ func (s *store[T]) Upsert(ctx context.Context, item Item[T], vec []float32) erro
 	return nil
 }
 
-// UpsertByCategory strictly inserts data assuming an explicit, fixed Category.
-func (s *store[T]) UpsertByCategory(ctx context.Context, categoryName string, item Item[T], vecs [][]float32) error {
+// UpsertByCategoryPath strictly inserts data assuming an explicit, fixed Category.
+func (s *store[T]) UpsertByCategoryPath(ctx context.Context, categoryName string, item Item[T], vecs [][]float32) error {
 	var c *Category
 
-	ok, err := s.categoriesByName.Find(ctx, categoryName, false)
+	ok, err := s.categoriesByPath.Find(ctx, categoryName, false)
 	if err != nil {
 		return err
 	}
 	if ok {
-		catID, err := s.categoriesByName.GetCurrentValue(ctx)
+		catID, err := s.categoriesByPath.GetCurrentValue(ctx)
 		if err != nil {
 			return err
 		}
@@ -217,7 +228,7 @@ func (s *store[T]) UpsertByCategory(ctx context.Context, categoryName string, it
 		if err != nil {
 			return err
 		}
-		_, err = s.categoriesByName.Add(ctx, categoryName, c.ID)
+		_, err = s.categoriesByPath.Add(ctx, categoryName, c.ID)
 		if err != nil {
 			return err
 		}
@@ -357,13 +368,13 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, opts *SearchOptions
 	}
 	var targetCategory *Category
 
-	if opts.Category != "" {
-		ok, err := s.categoriesByName.Find(ctx, opts.Category, false)
+	if opts.CategoryPath != "" {
+		ok, err := s.categoriesByPath.Find(ctx, opts.CategoryPath, false)
 		if err != nil {
 			return nil, err
 		}
 		if ok {
-			catID, err := s.categoriesByName.GetCurrentValue(ctx)
+			catID, err := s.categoriesByPath.GetCurrentValue(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -472,6 +483,7 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, opts *SearchOptions
 				if opts.Filter == nil || opts.Filter(item.Data) {
 					hits = append(hits, ai.Hit[T]{
 						ID:      item.ID.String(),
+						DocID:   item.DocID,
 						Score:   EuclideanDistance(vec, v.Data),
 						Payload: item.Data,
 					})
@@ -547,12 +559,12 @@ func (s *store[T]) QueryText(ctx context.Context, text string, opts *SearchOptio
 	}
 
 	var targetCategoryID sop.UUID
-	if opts.Category != "" {
+	if opts.CategoryPath != "" {
 		ok, err := s.categories.First(ctx)
 		if err == nil && ok {
 			for {
 				c, err := s.categories.GetCurrentValue(ctx)
-				if err == nil && c != nil && c.Name == opts.Category {
+				if err == nil && c != nil && c.Name == opts.CategoryPath {
 					targetCategoryID = c.ID
 					break
 				}
@@ -593,15 +605,17 @@ func (s *store[T]) QueryText(ctx context.Context, text string, opts *SearchOptio
 		itemKeySearch := ItemKey{CategoryID: catID, ItemID: id}
 		foundItem, err := s.items.Find(ctx, itemKeySearch, false)
 		var payload T
+		var docID string
 		if foundItem && err == nil {
 			item, err := s.items.GetCurrentValue(ctx)
 			if err == nil {
 				// Category strictly requested, filtering...
-				if opts.Category != "" && item.CategoryID.Compare(targetCategoryID) != 0 {
+				if opts.CategoryPath != "" && item.CategoryID.Compare(targetCategoryID) != 0 {
 					continue
 				}
 
 				payload = item.Data
+				docID = item.DocID
 				if opts.Filter != nil && !opts.Filter(payload) {
 					continue
 				}
@@ -609,7 +623,8 @@ func (s *store[T]) QueryText(ctx context.Context, text string, opts *SearchOptio
 		}
 
 		results = append(results, ai.Hit[T]{
-			ID:      res.DocID,
+			ID:      parts[1], // We use item ID here since res.DocID is formatted as "catID:itemID"
+			DocID:   docID,
 			Score:   float32(res.Score),
 			Payload: payload,
 		})

@@ -39,7 +39,7 @@ func handleExportSpace(w http.ResponseWriter, r *http.Request) {
 	}
 	defer trans.Rollback(ctx)
 
-	kb, err := db.OpenKnowledgeBase(ctx, spaceName, trans, nil, nil)
+	kb, err := db.OpenKnowledgeBase(ctx, spaceName, trans, nil, nil, false)
 	if err != nil {
 		http.Error(w, "Failed to load Knowledge Base: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -91,7 +91,7 @@ func handleImportSpace(w http.ResponseWriter, r *http.Request) {
 	}
 	defer trans.Rollback(ctx)
 
-	kb, err := db.OpenKnowledgeBase(ctx, spaceName, trans, nil, nil)
+	kb, err := db.OpenKnowledgeBase(ctx, spaceName, trans, nil, nil, false)
 	if err != nil {
 		http.Error(w, "Failed to load Knowledge Base: "+err.Error(), http.StatusInternalServerError)
 		return

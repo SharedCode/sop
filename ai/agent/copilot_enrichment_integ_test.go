@@ -50,7 +50,7 @@ func TestExplicitMinting_MintToSpaceTool(t *testing.T) {
 	}
 	defer tx.Rollback(ctx)
 
-	kb, err := sysDB.OpenKnowledgeBase(ctx, "DevOps_Playbook", tx, mockGen, mockEmb)
+	kb, err := sysDB.OpenKnowledgeBase(ctx, "DevOps_Playbook", tx, mockGen, mockEmb, false)
 	if err != nil {
 		t.Fatalf("Failed to open DevOps_Playbook KB: %v", err)
 	}
@@ -106,7 +106,7 @@ func TestImplicitEnrichment_TriggerSleepCycle(t *testing.T) {
 		tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 		defer tx.Rollback(ctx)
 
-		kb, _ := sysDB.OpenKnowledgeBase(ctx, kbName, tx, mockGen, mockEmb)
+		kb, _ := sysDB.OpenKnowledgeBase(ctx, kbName, tx, mockGen, mockEmb, false)
 		kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{AllowAutoEnrichment: true})
 		kb.IngestThought(ctx, "Why is my docker build failing to find coverage.out? Let's use Dockerfile.nocov instead.", "System Thoughts", "", nil, map[string]any{
 			"raw_thought": "Why is my docker build failing to find coverage.out? Let's use Dockerfile.nocov instead.",
@@ -122,7 +122,7 @@ func TestImplicitEnrichment_TriggerSleepCycle(t *testing.T) {
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForReading)
 	defer tx.Rollback(ctx)
 
-	kb, _ := sysDB.OpenKnowledgeBase(ctx, kbName, tx, mockGen, mockEmb)
+	kb, _ := sysDB.OpenKnowledgeBase(ctx, kbName, tx, mockGen, mockEmb, false)
 
 	items, _ := kb.Store.Items(ctx)
 	ok, _ := items.First(ctx)

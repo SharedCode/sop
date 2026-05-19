@@ -311,6 +311,7 @@ func main() {
 
 	// Setup Routes
 	http.HandleFunc("/", handleIndex)
+http.HandleFunc("/viewer", handleViewer)
 	http.HandleFunc("/api/databases", handleDatabases)
 	http.HandleFunc("/api/databases/update", handleUpdateDatabase)
 	http.HandleFunc("/api/stores", handleListStores)

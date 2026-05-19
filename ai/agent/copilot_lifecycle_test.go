@@ -114,7 +114,7 @@ func TestAgentFullMemoryLifeCycleTest(t *testing.T) {
 
 	// 4. Sleep Cycle Consolidation logic (inline trigger)
 	tx3, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
-	kbWrite, _ := sysDB.OpenKnowledgeBase(ctx, "ltm_agent123", tx3, llm, embedder)
+	kbWrite, _ := sysDB.OpenKnowledgeBase(ctx, "ltm_agent123", tx3, llm, embedder, false)
 	ag.Memory.LTM = kbWrite
 	stmWrite, _ := sysDB.NewBtree(ctx, "stm_agent123", tx3)
 	ag.Memory.STM = stmWrite
@@ -135,7 +135,7 @@ func TestAgentFullMemoryLifeCycleTest(t *testing.T) {
 
 	// Verify LTM count
 	tx4, _ := sysDB.BeginTransaction(ctx, sop.ForReading)
-	kbRead, _ := sysDB.OpenKnowledgeBase(ctx, "ltm_agent123", tx4, llm, embedder)
+	kbRead, _ := sysDB.OpenKnowledgeBase(ctx, "ltm_agent123", tx4, llm, embedder, false)
 	count, _ := kbRead.Store.Count(ctx)
 	if count == 0 {
 		t.Fatalf("LTM did not ingest thought")

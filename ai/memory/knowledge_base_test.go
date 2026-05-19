@@ -25,7 +25,7 @@ func TestKnowledgeBase_API(t *testing.T) {
 	vecs := inmemory.NewBtree[VectorKey, Vector](true)
 	items := inmemory.NewBtree[ItemKey, Item[string]](true)
 
-	s := NewStore[string](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecs.Btree, items.Btree).(*store[string])
+	s := NewStore[string](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[string])
 	s.SetTextIndex(&MockTextIndex{})
 
 	embedder := &MockPlaybookEmbedder{Rules: []PlaybookRule{
@@ -44,7 +44,7 @@ func TestKnowledgeBase_API(t *testing.T) {
 	}
 
 	// We inject vectors during IngestThoughts for this test to bypass vectorize
-	err := kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test_cat"}, Category: "test_id", Vectors: [][]float32{{1.0, 1.0, 1.0}}, Data: "payload"}}, "test")
+	err := kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test_cat"}, CategoryPath: "test_id", Vectors: [][]float32{{1.0, 1.0, 1.0}}, Data: "payload"}}, "test")
 	if err != nil {
 		t.Fatalf("IngestThought failed: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestStaticKnowledgeBase(t *testing.T) {
 	vectors := inmemory.NewBtree[VectorKey, Vector](false)
 	items := inmemory.NewBtree[ItemKey, Item[string]](false)
 
-	memStore := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vectors.Btree, items.Btree)
+	memStore := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vectors.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 	ds := memStore.(*store[string])
 	ds.SetTextIndex(&MockTextIndex{})
 
@@ -87,17 +87,17 @@ func TestStaticKnowledgeBase(t *testing.T) {
 		Manager: NewMemoryManager[string](ds, &MockLLM{}, &MockEmbedder{}),
 	}
 
-	err := kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Apple is a fruit"}, Category: "Fruits", Vectors: [][]float32{{0.1, 0.2, 0.3}}, Data: "apple is a fruit"}}, "")
+	err := kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Apple is a fruit"}, CategoryPath: "Fruits", Vectors: [][]float32{{0.1, 0.2, 0.3}}, Data: "apple is a fruit"}}, "")
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
-	err = kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Car is a vehicle"}, Category: "Vehicles", Vectors: [][]float32{{0.9, 0.8, 0.7}}, Data: "car"}}, "")
+	err = kb.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Car is a vehicle"}, CategoryPath: "Vehicles", Vectors: [][]float32{{0.9, 0.8, 0.7}}, Data: "car"}}, "")
 	if err != nil {
 		t.Fatalf("Insert failed: %v", err)
 	}
 
-	hits, err := kb.SearchSemantics(ctx, []float32{0.1, 0.2, 0.3}, &SearchOptions[string]{Limit: 10, Category: "Fruits"})
+	hits, err := kb.SearchSemantics(ctx, []float32{0.1, 0.2, 0.3}, &SearchOptions[string]{Limit: 10, CategoryPath: "Fruits"})
 	if err != nil {
 		t.Fatalf("SearchSemantics failed: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestStaticKnowledgeBase(t *testing.T) {
 		t.Errorf("Expected apple is a fruit hit, got %v", hits[0].Payload)
 	}
 
-	hitsVehicles, err := kb.SearchSemantics(ctx, []float32{0.1, 0.2, 0.3}, &SearchOptions[string]{Limit: 10, Category: "Vehicles"})
+	hitsVehicles, err := kb.SearchSemantics(ctx, []float32{0.1, 0.2, 0.3}, &SearchOptions[string]{Limit: 10, CategoryPath: "Vehicles"})
 	if err != nil {
 		t.Fatalf("SearchSemantics failed: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestStaticKnowledgeBase(t *testing.T) {
 		t.Errorf("Expected hits from SearchSemantics in Vehicles category")
 	}
 
-	khits, err := kb.SearchKeywords(ctx, "fruit", &SearchOptions[string]{Category: "Fruits", Limit: 10})
+	khits, err := kb.SearchKeywords(ctx, "fruit", &SearchOptions[string]{CategoryPath: "Fruits", Limit: 10})
 	if err != nil {
 		t.Fatalf("SearchKeywords failed: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestStaticKnowledgeBase(t *testing.T) {
 		t.Errorf("Expected hits from SearchKeywords, got 0")
 	}
 
-	khitsEmpty, err := kb.SearchKeywords(ctx, "fruit", &SearchOptions[string]{Category: "NonExistent", Limit: 10})
+	khitsEmpty, err := kb.SearchKeywords(ctx, "fruit", &SearchOptions[string]{CategoryPath: "NonExistent", Limit: 10})
 	if err != nil {
 		t.Fatalf("SearchKeywords failed: %v", err)
 	}
