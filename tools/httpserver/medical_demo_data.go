@@ -20,7 +20,7 @@ func PopulateMedicalKnowledgeBase(ctx context.Context, opts sop.DatabaseOptions)
 	dbEmbedder := GetConfiguredEmbedder(nil)
 	dbLLM := GetConfiguredLLM(nil)
 
-	_, err = db.OpenKnowledgeBase(ctx, "medical", trans, dbLLM, dbEmbedder)
+	_, err = db.OpenKnowledgeBase(ctx, "medical", trans, dbLLM, dbEmbedder, false)
 	if err != nil {
 		trans.Rollback(ctx)
 		return fmt.Errorf("failed to create 'medical' knowledge base: %v", err)

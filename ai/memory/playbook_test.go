@@ -206,7 +206,7 @@ func TestPlaybookSimulation_Harness(t *testing.T) {
 			vecs := inmemory.NewBtree[VectorKey, Vector](true)
 			items := inmemory.NewBtree[ItemKey, Item[string]](true)
 
-			s := NewStore[string](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecs.Btree, items.Btree).(*store[string])
+			s := NewStore[string](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[string])
 			s.SetTextIndex(&MockTextIndex{})
 
 			embedder := &MockPlaybookEmbedder{Rules: tt.Rules}

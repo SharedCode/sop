@@ -68,7 +68,7 @@ func TestOmni_HandoffToAvatar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BeginTransaction failed: %v", err)
 	}
-	kb, err := sysDB.OpenKnowledgeBase(ctx, avatarName, tx, nil, nil)
+	kb, err := sysDB.OpenKnowledgeBase(ctx, avatarName, tx, nil, nil, false)
 	if err != nil {
 		t.Fatalf("OpenKnowledgeBase failed: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestOmni_RestrictedAvatarTools(t *testing.T) {
 	})
 
 	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
-	kb, _ := sysDB.OpenKnowledgeBase(ctx, "restricted_kb", tx, nil, nil)
+	kb, _ := sysDB.OpenKnowledgeBase(ctx, "restricted_kb", tx, nil, nil, false)
 	kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{
 		SystemPrompt: "You are the restricted avatar.",
 		AllowedTools: []string{"route_to_multi_kb"},

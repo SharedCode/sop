@@ -106,7 +106,7 @@ func (a *CopilotAgent) executeAvatarSubAgent(ctx context.Context, avatarName, ta
 
 	if a.systemDB != nil {
 		if tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-			if kb, err := a.systemDB.OpenKnowledgeBase(ctx, avatarName, tx, nil, nil); err == nil {
+			if kb, err := a.systemDB.OpenKnowledgeBase(ctx, avatarName, tx, nil, nil, false); err == nil {
 				if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil {
 					if cfg.SystemPrompt != "" {
 						avatarPrompt = cfg.SystemPrompt

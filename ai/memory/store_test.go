@@ -31,7 +31,7 @@ func TestDynamicStore_Upsert(t *testing.T) {
 	vectors := inmemory.NewBtree[VectorKey, Vector](false)
 	items := inmemory.NewBtree[ItemKey, Item[string]](false)
 
-	s := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vectors.Btree, items.Btree)
+	s := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vectors.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 
 	err := s.Upsert(ctx, Item[string]{
 		ID:   sop.NewUUID(),
@@ -103,7 +103,7 @@ func TestDynamicStore_SimulateLLMSleepCycle(t *testing.T) {
 	vectors := inmemory.NewBtree[VectorKey, Vector](true)
 	items := inmemory.NewBtree[ItemKey, Item[string]](true)
 
-	ds := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vectors.Btree, items.Btree)
+	ds := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vectors.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 	s := ds.(*store[string])
 
 	s.SetTextIndex(&MockTextIndex{data: make(map[string]string)})
@@ -176,7 +176,7 @@ func TestDynamicStore_PublicAPIs(t *testing.T) {
 	categories := inmemory.NewBtree[sop.UUID, *Category](true)
 	vectors := inmemory.NewBtree[VectorKey, Vector](true)
 	items := inmemory.NewBtree[ItemKey, Item[string]](true)
-	s := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vectors.Btree, items.Btree)
+	s := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vectors.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 
 	err := s.UpsertBatch(ctx, []Item[string]{
 		{ID: sop.NewUUID(), Data: "1"},

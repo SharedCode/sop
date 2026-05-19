@@ -137,7 +137,7 @@ func ingestKBFile(ctx context.Context, db *database.Database, kbName string, fil
 	defer tx.Rollback(ctx)
 
 	// Open the KB, generator handles real embeddings if configured
-	kbStore, err := db.OpenKnowledgeBase(ctx, kbName, tx, generator, embedder)
+	kbStore, err := db.OpenKnowledgeBase(ctx, kbName, tx, generator, embedder, false)
 	if err != nil || kbStore == nil {
 		return fmt.Errorf("failed to open KB %s: %v", kbName, err)
 	}

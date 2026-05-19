@@ -14,12 +14,14 @@ import (
 type ExportData[T any] struct {
 	Config     *KnowledgeBaseConfig `json:"config,omitempty"`
 	Categories []*Category          `json:"categories"`
+	Documents  []*Document          `json:"documents,omitempty"`
 	Items      []ExportItem[T]      `json:"items"`
 }
 
 // ExportItem	dictates	what	fields	from	the	item	are	serialized.
 type ExportItem[T any] struct {
-	Category         string      `json:"category"`
+	CategoryPath     string      `json:"category"`
+	DocID            string      `json:"doc_id,omitempty"`
 	Data             T           `json:"data"`
 	Summaries        []string    `json:"summaries,omitempty"`
 	SummariesVectors [][]float32 `json:"summaries_vectors,omitempty"`
@@ -111,7 +113,8 @@ func (kb *KnowledgeBase[T]) ExportJSON(ctx context.Context, writer io.Writer) er
 			}
 			firstItem = false
 			encoder.Encode(ExportItem[T]{
-				Category:         catName,
+				CategoryPath:     catName,
+				DocID:            item.DocID,
 				Data:             item.Data,
 				Summaries:        item.Summaries,
 				SummariesVectors: vectors,
@@ -239,6 +242,26 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 			if _, err := decoder.Token(); err != nil { // Read closing ']'
 				return err
 			}
+		} else if key == "documents" {
+			// Read opening '['
+			if _, err := decoder.Token(); err != nil { // '['
+				return err
+			}
+			for decoder.More() {
+				var doc Document
+				if err := decoder.Decode(&doc); err != nil {
+					return err
+				}
+				if doc.ID.IsNil() {
+					doc.ID = sop.NewUUID()
+				}
+				if err := kb.Store.UpsertDocument(ctx, doc); err != nil {
+					return err
+				}
+			}
+			if _, err := decoder.Token(); err != nil { // Read closing ']'
+				return err
+			}
 		} else if key == "items" {
 			//	Read	opening	'['
 			if _, err := decoder.Token(); err != nil { //	'['
@@ -255,18 +278,45 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 					hasMissingVectors = true
 				}
 
-				if parsedID, err := sop.ParseUUID(it.Category); err == nil {
+				for _, enrich := range onEnrich {
+					if enrich != nil {
+						enrich(&it)
+					}
+				}
+
+				// If DocumentMode is true, we truncate the generic text/description metadata
+				// after enrichment (so embeddings/summaries are generated fairly), but before storage.
+				if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil && cfg.DocumentMode {
+					if dataMap, ok := any(it.Data).(map[string]any); ok {
+						if txt, ok := dataMap["text"].(string); ok && len(txt) > 800 {
+							runes := []rune(txt)
+							if len(runes) > 800 {
+								dataMap["text"] = string(runes[:800]) + "... (truncated)"
+							}
+						}
+						if desc, ok := dataMap["description"].(string); ok && len(desc) > 800 {
+							runes := []rune(desc)
+							if len(runes) > 800 {
+								dataMap["description"] = string(runes[:800]) + "... (truncated)"
+							}
+						}
+						it.Data = any(dataMap).(T)
+					}
+				}
+
+				if parsedID, err := sop.ParseUUID(it.CategoryPath); err == nil {
 					if mapped, ok := uuidMap[parsedID]; ok {
-						it.Category = mapped.String()
+						it.CategoryPath = mapped.String()
 					}
 				}
 				thoughts = append(thoughts, Thought[T]{
-					Category:   it.Category,
-					Data:       it.Data,
-					Vectors:    it.SummariesVectors,
-					Summaries:  it.Summaries,
-					Positions:  it.Positions,
-					VectorHash: it.VectorHash,
+					CategoryPath: it.CategoryPath,
+					DocID:        it.DocID,
+					Data:         it.Data,
+					Vectors:      it.SummariesVectors,
+					Summaries:    it.Summaries,
+					Positions:    it.Positions,
+					VectorHash:   it.VectorHash,
 				})
 
 				//	Submit	in	batches	to	keep	memory	usage	low

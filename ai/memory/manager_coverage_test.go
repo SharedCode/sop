@@ -18,12 +18,12 @@ func TestMemoryManager_FailuresAndCoverage(t *testing.T) {
 	catTree := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecTree := inmemory.NewBtree[VectorKey, Vector](true)
 	itemTree := inmemory.NewBtree[ItemKey, Item[string]](true)
-	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecTree.Btree, itemTree.Btree)
+	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecTree.Btree, itemTree.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 
 	// 1. LLM Failure in Ingest
 	mgrLLMFail := NewMemoryManager[string](store, &FailingLLM{}, &MockEmbedder{})
 	kbLLM := &KnowledgeBase[string]{Manager: mgrLLMFail, Store: store}
-	err := kbLLM.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test"}, Category: "", Data: "data"}}, "")
+	err := kbLLM.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test"}, CategoryPath: "", Data: "data"}}, "")
 	if err == nil || !strings.Contains(err.Error(), "llm batch classification failed:") {
 		t.Fatalf("Expected llm failure, got: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestMemoryManager_FailuresAndCoverage(t *testing.T) {
 	// 2. Embedder Failure
 	mgrEmbedFail := NewMemoryManager[string](store, &MockLLM{}, &FailingEmbedder{})
 	kbEmbedFail := &KnowledgeBase[string]{Manager: mgrEmbedFail, Store: store}
-	_ = kbEmbedFail.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test"}, Category: "test_category", Data: "data"}}, "")
+	_ = kbEmbedFail.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"test"}, CategoryPath: "test_category", Data: "data"}}, "")
 	// We no longer call kbEmbedFail.Vectorize(ctx, 50) since it was moved.
 	// Instead, just verify IngestThoughts doesn't panic on its own logic.
 
@@ -76,7 +76,7 @@ func TestMemoryManager_StoreFailures(t *testing.T) {
 	catTree := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecTree := inmemory.NewBtree[VectorKey, Vector](true)
 	itemTree := inmemory.NewBtree[ItemKey, Item[string]](true)
-	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecTree.Btree, itemTree.Btree)
+	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecTree.Btree, itemTree.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 
 	failingStore := &FailingStore{store}
 	mgr := NewMemoryManager[string](failingStore, &MockLLM{}, &MockEmbedder{})
@@ -106,7 +106,7 @@ func TestMemoryManager_AddCategoryFailures(t *testing.T) {
 	catTree := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecTree := inmemory.NewBtree[VectorKey, Vector](true)
 	itemTree := inmemory.NewBtree[ItemKey, Item[string]](true)
-	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecTree.Btree, itemTree.Btree)
+	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecTree.Btree, itemTree.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 
 	failingStore := &AddCategoryFailingStore{store}
 	mgr := NewMemoryManager[string](failingStore, &MockLLM{}, &MockEmbedder{})
@@ -123,7 +123,7 @@ func TestMemoryManager_LoopCoverage(t *testing.T) {
 	catTree := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecTree := inmemory.NewBtree[VectorKey, Vector](true)
 	itemTree := inmemory.NewBtree[ItemKey, Item[string]](true)
-	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecTree.Btree, itemTree.Btree)
+	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecTree.Btree, itemTree.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 
 	mgr := NewMemoryManager[string](store, &MockLLM{}, &MockEmbedder{})
 
@@ -144,7 +144,7 @@ func TestMemoryManager_ReflectionFailure(t *testing.T) {
 	catTree := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecTree := inmemory.NewBtree[VectorKey, Vector](true)
 	itemTree := inmemory.NewBtree[ItemKey, Item[string]](true)
-	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecTree.Btree, itemTree.Btree)
+	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecTree.Btree, itemTree.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 
 	mgr := NewMemoryManager[string](store, &MockLLM{}, &MockEmbedder{})
 
@@ -168,13 +168,13 @@ func TestIngestThought_DefinedCategory(t *testing.T) {
 	catTree := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecTree := inmemory.NewBtree[VectorKey, Vector](true)
 	itemTree := inmemory.NewBtree[ItemKey, Item[string]](true)
-	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecTree.Btree, itemTree.Btree)
+	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecTree.Btree, itemTree.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 
 	failingLLM := &FailingLLM{} // should not be called
 	mgr := NewMemoryManager[string](store, failingLLM, &MockEmbedder{})
 
 	kbMgr := &KnowledgeBase[string]{Manager: mgr, Store: store}
-	err := kbMgr.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Text"}, Category: "DirectCat", Data: "Data"}}, "Persona")
+	err := kbMgr.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Text"}, CategoryPath: "DirectCat", Data: "Data"}}, "Persona")
 	if err != nil {
 		t.Fatalf("Failed to ingest directly with category: %v", err)
 	}
@@ -186,12 +186,12 @@ func TestIngestThought_PersonaContext(t *testing.T) {
 	catTree := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecTree := inmemory.NewBtree[VectorKey, Vector](true)
 	itemTree := inmemory.NewBtree[ItemKey, Item[string]](true)
-	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, vecTree.Btree, itemTree.Btree)
+	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecTree.Btree, itemTree.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 
 	mgr := NewMemoryManager[string](store, &MockLLM{}, &MockEmbedder{})
 
 	kbMgr := &KnowledgeBase[string]{Manager: mgr, Store: store}
-	err := kbMgr.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Text"}, Category: "", Data: "Data"}}, "Persona")
+	err := kbMgr.IngestThoughts(ctx, []Thought[string]{{Summaries: []string{"Text"}, CategoryPath: "", Data: "Data"}}, "Persona")
 	if err != nil {
 		t.Fatalf("Failed to ingest with persona: %v", err)
 	}

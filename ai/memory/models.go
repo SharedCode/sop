@@ -5,16 +5,22 @@ import (
 )
 
 type KnowledgeBaseConfig struct {
-	Type                string   `json:"type,omitempty"`
-	IsPersona           bool     `json:"is_persona,omitempty"`
-	IsExclusive         bool     `json:"is_exclusive,omitempty"`
-	SystemPrompt        string   `json:"system_prompt,omitempty"`
-	Embedder            string   `json:"embedder,omitempty"`
-	EmbedderDimension   int      `json:"embedder_dimension,omitempty"`
-	AllowAutoEnrichment bool     `json:"allowAutoEnrichment,omitempty"`
-	AllowedTools        []string `json:"allowed_tools,omitempty"`
-	LastModified        int64    `json:"last_modified,omitempty"`   // Unix timestamp
-	LastVectorized      int64    `json:"last_vectorized,omitempty"` // Unix timestamp
+	Type                string    `json:"type,omitempty"`
+	IsPersona           bool      `json:"is_persona,omitempty"`
+	IsExclusive         bool      `json:"is_exclusive,omitempty"`
+	SystemPrompt        string    `json:"system_prompt,omitempty"`
+	Embedder            string    `json:"embedder,omitempty"`
+	EmbedderDimension   int       `json:"embedder_dimension,omitempty"`
+	AllowAutoEnrichment bool      `json:"allowAutoEnrichment,omitempty"`
+	AllowedTools        []string  `json:"allowed_tools,omitempty"`
+	LastModified        int64     `json:"last_modified,omitempty"`   // Unix timestamp
+	LastVectorized      int64     `json:"last_vectorized,omitempty"` // Unix timestamp
+	RoutingPrefix       string    `json:"routing_prefix,omitempty"`
+	DomainReference     []float32 `json:"domain_reference,omitempty"`
+	// DocumentMode flags whether this KB operates in traditional payload mode (Item.Data holds data),
+	// or in decoupled RAG references mode where Item.Data points to the canonical large Document(MD).
+	DocumentMode      bool `json:"document_mode,omitempty"`
+	TextSearchEnabled bool `json:"text_search_enabled,omitempty"` // Controls if keyword/BM25 search is indexed and available
 }
 
 // Item represents the actual content (The "Thought" or Document).
@@ -22,6 +28,7 @@ type KnowledgeBaseConfig struct {
 type Item[T any] struct {
 	ID         sop.UUID    `json:"id"`
 	CategoryID sop.UUID    `json:"category_id"`
+	DocID      string      `json:"doc_id,omitempty"`      // UUID of uploaded documents OR string URI for external docs
 	Summaries  []string    `json:"summaries,omitempty"`   // 1 or more distinct, clean sentences for vector indexing
 	Data       T           `json:"data"`                  // The application data or structured thought
 	Positions  []VectorKey `json:"positions,omitempty"`   // Direct links to its Vectors for O(1) cleanup during Category moves
@@ -31,6 +38,24 @@ type Item[T any] struct {
 // Returns true if Item is considered the KnowledgeBase's Config item.
 func (item *Item[T]) IsConfig() bool {
 	return item.ID == sop.NilUUID
+}
+
+// IsInternalDocument returns true if the DocID is a valid SOP UUID, meaning the document is stored natively in the KB.
+func (item *Item[T]) IsInternalDocument() bool {
+	if item.DocID == "" {
+		return false
+	}
+	_, err := sop.ParseUUID(item.DocID)
+	return err == nil
+}
+
+// IsExternalDocument returns true if the DocID is populated but is not a valid SOP UUID (e.g. an HTTP/File URI).
+func (item *Item[T]) IsExternalDocument() bool {
+	if item.DocID == "" {
+		return false
+	}
+	_, err := sop.ParseUUID(item.DocID)
+	return err != nil
 }
 
 // Vector represents the pointer/index fragment mapping the math to the Item.
@@ -92,4 +117,46 @@ func (k ItemKey) Compare(other any) int {
 		return c
 	}
 	return k.ItemID.Compare(o.ItemID)
+}
+
+// DistanceKey represents a distance-based index for sorting categories by distance to the Domain Reference CenterVector.
+type DistanceKey struct {
+	Distance float32
+	ID       sop.UUID // ID of the Category
+}
+
+// Compare implements btree.Comparer for DistanceKey to enable fast distance-based indexing.
+func (k DistanceKey) Compare(other any) int {
+	o, ok := other.(DistanceKey)
+	if !ok {
+		return -1
+	}
+	if k.Distance < o.Distance {
+		return -1
+	}
+	if k.Distance > o.Distance {
+		return 1
+	}
+	return k.ID.Compare(o.ID)
+}
+
+// Document represents a large source asset (markdown file, text blob, PDF parsed text, etc).
+// It acts as the canonical reading interface to prevent bloated indexes and context-loss in RAG.
+// Multiple Items (with unique Vectors/Summaries) can point back to this same Document.
+type Document struct {
+	ID          sop.UUID `json:"id"`
+	Title       string   `json:"title,omitempty"`
+	URL         string   `json:"url,omitempty"`
+	Source      string   `json:"source,omitempty"`
+	ContentType string   `json:"content_type,omitempty"` // e.g. "text/markdown", "text/plain"
+	Content     string   `json:"content,omitempty"`
+	Data        []byte   `json:"data,omitempty"` // For pure blobs, pdf binaries, etc
+}
+
+// ChunkData is a standard struct designed for the generic T in Item[T],
+// specifically formulated for two-stage Retrieval-Augmented Generation (RAG).
+type ChunkData struct {
+	Text        string   `json:"text,omitempty"`        // Small snippet or chunk directly answerable
+	Description string   `json:"description,omitempty"` // Contextual description or rationale
+	DocumentID  sop.UUID `json:"document_id,omitempty"` // Pointer to the heavyweight Document/Blob (can be NilUUID)
 }

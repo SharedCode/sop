@@ -97,7 +97,7 @@ func TestHandleVectorizeSpace_ItemIDsSuccess(t *testing.T) {
 	defer trans.Rollback(context.Background())
 	llm := &MockGenerator{}
 	emb := &MockEmbedder{}
-	kb, _ := db.OpenKnowledgeBase(context.Background(), "testspace", trans, llm, emb)
+	kb, _ := db.OpenKnowledgeBase(context.Background(), "testspace", trans, llm, emb, false)
 	if kb != nil && kb.Store != nil {
 		kb.Store.AddCategory(context.Background(), &memory.Category{ID: uid, Name: "Test Category"})
 	}
@@ -179,7 +179,7 @@ func TestHandleVectorizeSpace_Success(t *testing.T) {
 	defer trans.Rollback(context.Background())
 	llm := &MockGenerator{}
 	emb := &MockEmbedder{}
-	kb, _ := db.OpenKnowledgeBase(context.Background(), "testspace", trans, llm, emb)
+	kb, _ := db.OpenKnowledgeBase(context.Background(), "testspace", trans, llm, emb, false)
 	if kb != nil && kb.Store != nil {
 		kb.Store.AddCategory(context.Background(), &memory.Category{ID: uid, Name: "Test Category"})
 	}

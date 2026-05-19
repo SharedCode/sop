@@ -44,12 +44,13 @@ func (kb *KnowledgeBase[T]) SearchKeywords(ctx context.Context, textQuery string
 
 // Thought represents the individual entity of data in a batch categorization execution.
 type Thought[T any] struct {
-	Summaries  []string
-	Category   string
-	Data       T
-	Vectors    [][]float32
-	Positions  []VectorKey
-	VectorHash string
+	Summaries    []string
+	CategoryPath string
+	DocID        string
+	Data         T
+	Vectors      [][]float32
+	Positions    []VectorKey
+	VectorHash   string
 }
 
 // IngestThoughts securely categorizes and stores an array of thoughts, optimizing latency
@@ -86,7 +87,7 @@ func (kb *KnowledgeBase[T]) IngestThoughts(ctx context.Context, thoughts []Thoug
 
 	// 2. Evaluate if we need to categorize
 	for i, thought := range thoughts {
-		if thought.Category != "" {
+		if thought.CategoryPath != "" {
 			continue // Already formally categorized
 		}
 
@@ -94,7 +95,7 @@ func (kb *KnowledgeBase[T]) IngestThoughts(ctx context.Context, thoughts []Thoug
 		if kb.MaxMathCategoryDistance > 0 && len(thought.Vectors) > 0 {
 			closest, dist, err := kb.Manager.FindClosestCategory(ctx, thought.Vectors[0])
 			if err == nil && closest != nil && dist <= kb.MaxMathCategoryDistance {
-				thoughts[i].Category = closest.Name
+				thoughts[i].CategoryPath = closest.Name
 				categorizedByMath = true
 			}
 		}
@@ -119,25 +120,26 @@ func (kb *KnowledgeBase[T]) IngestThoughts(ctx context.Context, thoughts []Thoug
 
 		// Re-align the generated outputs with the original array
 		for idx, origIdx := range uncategorizedIdx {
-			thoughts[origIdx].Category = generated[idx]
+			thoughts[origIdx].CategoryPath = generated[idx]
 		}
 	}
 
 	// 4. Ensure Categories and Store
 	catCache := make(map[string]sop.UUID)
 	for _, thought := range thoughts {
-		catID, exists := catCache[thought.Category]
+		catID, exists := catCache[thought.CategoryPath]
 		if !exists {
 			var err error
-			catID, err = kb.Manager.EnsureCategory(ctx, thought.Category)
+			catID, err = kb.Manager.EnsureCategory(ctx, thought.CategoryPath)
 			if err != nil {
 				return err
 			}
-			catCache[thought.Category] = catID
+			catCache[thought.CategoryPath] = catID
 		}
 
 		item := Item[T]{
 			ID:         sop.NewUUID(),
+			DocID:      thought.DocID,
 			Summaries:  thought.Summaries,
 			Data:       thought.Data,
 			Positions:  thought.Positions,
@@ -167,7 +169,7 @@ func (kb *KnowledgeBase[T]) IngestThought(
 	if vector != nil {
 		vectors = [][]float32{vector}
 	}
-	return kb.IngestThoughts(ctx, []Thought[T]{{Summaries: []string{text}, Category: category, Data: data, Vectors: vectors}}, persona)
+	return kb.IngestThoughts(ctx, []Thought[T]{{Summaries: []string{text}, CategoryPath: category, Data: data, Vectors: vectors}}, persona)
 }
 
 // TriggerSleepCycle forces the LLM to scan, reflect, and re-organize dense categories.

@@ -122,7 +122,7 @@ func (s *Service) enrichSingleKB(ctx context.Context, db *database.Database, kbN
 		embedder = s.domain.Embedder()
 	}
 
-	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, s.generator, embedder)
+	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, s.generator, embedder, false)
 	if err != nil {
 		return err
 	}

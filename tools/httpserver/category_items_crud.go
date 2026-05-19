@@ -64,7 +64,7 @@ func handleAddSpaceCategory(w http.ResponseWriter, r *http.Request) {
 	dbEmbedder := GetConfiguredEmbedder(r)
 	dbLLM := GetConfiguredLLM(r)
 
-	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder, false)
 	if err != nil {
 		http.Error(w, "Failed to open knowledge base: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -232,7 +232,7 @@ func handleDeleteSpaceCategory(w http.ResponseWriter, r *http.Request) {
 	dbEmbedder := GetConfiguredEmbedder(r)
 	dbLLM := GetConfiguredLLM(r)
 
-	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder, false)
 	if err != nil {
 		http.Error(w, "Failed to open knowledge base", http.StatusInternalServerError)
 		return
@@ -306,7 +306,7 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 	dbEmbedder := GetConfiguredEmbedder(r)
 	dbLLM := GetConfiguredLLM(r)
 
-	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder, false)
 	if err != nil {
 		http.Error(w, "Failed to open knowledge base", http.StatusInternalServerError)
 		return
@@ -366,12 +366,13 @@ func handleAddSpaceItem(w http.ResponseWriter, r *http.Request) {
 
 	newItem := memory.Item[map[string]any]{
 		ID:         detID,
+		DocID:      req.DocID,
 		CategoryID: parsedCatID,
 		Summaries:  summaries,
 		Data:       req.Data,
 	}
 
-	err = kb.Store.UpsertByCategory(ctx, cat.Name, newItem, vecs)
+	err = kb.Store.UpsertByCategoryPath(ctx, cat.Name, newItem, vecs)
 	if err != nil {
 		http.Error(w, "Failed to insert item: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -447,7 +448,7 @@ func handleDeleteSpaceItem(w http.ResponseWriter, r *http.Request) {
 	dbEmbedder := GetConfiguredEmbedder(r)
 	dbLLM := GetConfiguredLLM(r)
 
-	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder, false)
 	if err != nil {
 		http.Error(w, "Failed to open knowledge base", http.StatusInternalServerError)
 		return
@@ -560,7 +561,7 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 	dbEmbedder := GetConfiguredEmbedder(r)
 	dbLLM := GetConfiguredLLM(r)
 
-	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder, false)
 	if err != nil {
 		http.Error(w, "Failed to open knowledge base", http.StatusInternalServerError)
 		return
@@ -624,6 +625,7 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 					Skip:         true,
 					Item: memory.Item[map[string]any]{
 						ID:         detID,
+						DocID:      itm.DocID,
 						CategoryID: parsedCatID,
 						Data:       itm.Data,
 					},
@@ -644,6 +646,7 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 			Skip:         false,
 			Item: memory.Item[map[string]any]{
 				ID:         detID,
+				DocID:      itm.DocID,
 				CategoryID: parsedCatID,
 				Summaries:  summaries,
 				Data:       itm.Data,
@@ -705,7 +708,7 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		err = kb.Store.UpsertByCategory(ctx, s.CatName, s.Item, vecs)
+		err = kb.Store.UpsertByCategoryPath(ctx, s.CatName, s.Item, vecs)
 		if err != nil {
 			http.Error(w, "Failed to insert batch item: "+err.Error(), http.StatusInternalServerError)
 			return

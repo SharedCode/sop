@@ -51,7 +51,7 @@ func handleListSpaceCategories(w http.ResponseWriter, r *http.Request) {
 	dbEmbedder := GetConfiguredEmbedder(r)
 	dbLLM := GetConfiguredLLM(r)
 
-	memoryDb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	memoryDb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder, false)
 	if err != nil {
 		json.NewEncoder(w).Encode(make([]map[string]any, 0))
 		return
@@ -164,7 +164,7 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 	dbEmbedder := GetConfiguredEmbedder(r)
 	dbLLM := GetConfiguredLLM(r)
 
-	memoryDb, errDynamic := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder)
+	memoryDb, errDynamic := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder, false)
 
 	matchCount := 0
 

@@ -272,7 +272,7 @@ create_bundle windows arm64 "windows-arm64"
 # ------------------------------------------
 echo "Compiling SOP AI Base Knowledge..."
 cd "$SOP_ROOT/ai"
-go run ./cmd/knowledge_compiler/main.go
+go run ./cmd/knowledge_compiler/main.go -base-url "https://github.com/sharedcode/sop/blob/master/"
 # Copy it alongside all bundles so users can utilize it in setup wizard!
 cp sop_base_knowledge.json "$SOP_ROOT/$OUTPUT_DIR/"
 cd "$SOP_ROOT"

@@ -26,7 +26,7 @@ func TestVectorize(t *testing.T) {
 		t.Fatalf("BeginTransaction: %v", err)
 	}
 
-	kb, err := db.OpenKnowledgeBase(ctx, "test_kb", tx, llm, emb)
+	kb, err := db.OpenKnowledgeBase(ctx, "test_kb", tx, llm, emb, false)
 	if err != nil {
 		t.Fatalf("OpenKnowledgeBase: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestVectorize(t *testing.T) {
 
 	// Read check
 	tx2, _ := db.BeginTransaction(ctx, sop.ForReading)
-	kb2, _ := db.OpenKnowledgeBase(ctx, "test_kb", tx2, llm, emb)
+	kb2, _ := db.OpenKnowledgeBase(ctx, "test_kb", tx2, llm, emb, false)
 	cats2, _ := kb2.Store.Categories(ctx)
 	found, _ := cats2.Find(ctx, catID, false)
 	if !found {

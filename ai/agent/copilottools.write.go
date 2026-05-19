@@ -728,7 +728,7 @@ func (a *CopilotAgent) toolMintToSpace(ctx context.Context, args map[string]any)
 	if a.service != nil && a.service.Domain() != nil {
 		embedder = a.service.Domain().Embedder()
 	}
-	kb, err := targetDB.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder)
+	kb, err := targetDB.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, false)
 	if err != nil {
 		return "", fmt.Errorf("failed to open knowledge base '%s': %w", kbName, err)
 	}

@@ -13,8 +13,8 @@ type MemoryStore[T any] interface {
 	// Upsert adds or updates a single item in the store.
 	Upsert(ctx context.Context, item Item[T], vec []float32) error
 
-	// UpsertByCategory explicitly assigns a category ignoring spatial routing.
-	UpsertByCategory(ctx context.Context, categoryName string, item Item[T], vecs [][]float32) error
+	// UpsertByCategoryPath explicitly assigns a category ignoring spatial routing.
+	UpsertByCategoryPath(ctx context.Context, categoryName string, item Item[T], vecs [][]float32) error
 
 	// UpsertByCategoryID inserts data bypassing Category lookup.
 	UpsertByCategoryID(ctx context.Context, catID sop.UUID, catCenterVector []float32, item Item[T], vecs [][]float32) error
@@ -63,6 +63,9 @@ type MemoryStore[T any] interface {
 	// to index the vectors, persisting it in the system configuration of the store.
 	UpdateEmbedderInfo(ctx context.Context, provider string, model string, dimensions int) error
 
+	// SetDomainReference sets the anchor vector for O(log N) category indexing.
+	SetDomainReference(vec []float32)
+
 	// SetLLM sets the LLM interface used to generate categories dynamically.
 	SetLLM(llm LLM[T])
 
@@ -72,13 +75,22 @@ type MemoryStore[T any] interface {
 	// Content returns the Content B-Tree for advanced manipulation (The actual Item Data).
 	Items(ctx context.Context) (btree.BtreeInterface[ItemKey, Item[T]], error)
 
+	// Documents returns the Documents B-Tree for reading the raw canonical documents.
+	Documents(ctx context.Context) (btree.BtreeInterface[sop.UUID, Document], error)
+
+	// UpsertDocument adds or updates a full canonical document.
+	UpsertDocument(ctx context.Context, doc Document) error
+
+	// GetDocument retrieves a full document by its ID.
+	GetDocument(ctx context.Context, id sop.UUID) (*Document, error)
+
 	// Version returns the Vector store's version number, which is a unix elapsed time.
 	Version(ctx context.Context) (int64, error)
 }
 
 // SearchOptions provides optional parameters for querying the vector store
 type SearchOptions[T any] struct {
-	Limit    int
-	Category string
-	Filter   func(T) bool
+	Limit        int
+	CategoryPath string
+	Filter       func(T) bool
 }

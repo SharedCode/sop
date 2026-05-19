@@ -19,6 +19,7 @@ type AddSpaceCategoryRequest struct {
 // It allows for flexible payload mapping via the Data field.
 type AddSpaceItemRequest struct {
 	ID         string         `json:"id,omitempty"`
+	DocID      string         `json:"doc_id,omitempty"`
 	CategoryID string         `json:"category_id"`
 	Summaries  []string       `json:"summaries,omitempty"`
 	Positions  [][]float32    `json:"positions,omitempty"`
@@ -77,6 +78,7 @@ type IngestSpaceRequest struct {
 // SpaceIngestChunk represents a discrete chunk of data/knowledge for ingestion.
 type SpaceIngestChunk struct {
 	ID               string         `json:"id"`
+	DocID            string         `json:"doc_id,omitempty"`
 	Category         string         `json:"category"`
 	Text             string         `json:"text"`
 	Description      string         `json:"description"`

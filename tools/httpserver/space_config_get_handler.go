@@ -40,7 +40,7 @@ func handleGetSpaceConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	defer trans.Rollback(ctx)
 
-	kb, err := db.OpenKnowledgeBase(ctx, spaceName, trans, nil, nil)
+	kb, err := db.OpenKnowledgeBase(ctx, spaceName, trans, nil, nil, false)
 	if err != nil {
 		http.Error(w, "Failed to open Space: "+err.Error(), http.StatusInternalServerError)
 		return

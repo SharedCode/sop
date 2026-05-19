@@ -64,7 +64,7 @@ func seedMetaCognitionAsync(userID, kbName string, sysOpts sop.DatabaseOptions) 
 	}
 
 	embedder := GetConfiguredEmbedder(nil)
-	kb, err := sysDB.OpenKnowledgeBase(ctx, kbName, trans, nil, embedder)
+	kb, err := sysDB.OpenKnowledgeBase(ctx, kbName, trans, nil, embedder, false)
 	if err != nil {
 		trans.Rollback(ctx)
 		return
@@ -82,7 +82,7 @@ func seedMetaCognitionAsync(userID, kbName string, sysOpts sop.DatabaseOptions) 
 		return
 	}
 	defer wTrans.Rollback(ctx)
-	wKb, err := sysDB.OpenKnowledgeBase(ctx, kbName, wTrans, nil, embedder)
+	wKb, err := sysDB.OpenKnowledgeBase(ctx, kbName, wTrans, nil, embedder, false)
 	if err != nil {
 		return
 	}
@@ -219,7 +219,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 			dbEmbedder := GetConfiguredEmbedder(nil)
 			dbLLM := GetConfiguredLLM(nil)
 
-			sysDB.OpenKnowledgeBase(ctx, kbName, trans, dbLLM, dbEmbedder)
+			sysDB.OpenKnowledgeBase(ctx, kbName, trans, dbLLM, dbEmbedder, false)
 			trans.Commit(ctx)
 			go seedMetaCognitionAsync(req.UserID, kbName, sysOpts)
 		}
@@ -303,7 +303,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 			db := aidb.NewDatabase(opts)
 			trans, _ := db.BeginTransaction(r.Context(), sop.ForReading)
 			if trans != nil {
-				kb, err := db.OpenKnowledgeBase(r.Context(), kbID, trans, nil, nil)
+				kb, err := db.OpenKnowledgeBase(r.Context(), kbID, trans, nil, nil, false)
 				if err == nil {
 					cfg, err := kb.GetConfig(r.Context())
 					if err == nil && cfg != nil && cfg.IsExclusive {
@@ -1048,7 +1048,7 @@ func handleAIFeedback(w http.ResponseWriter, r *http.Request) {
 			// Don't fail the request, just skip vectorization
 		} else if len(vecs) > 0 {
 			sysDB := aidb.NewDatabase(opts)
-			kb, err := sysDB.OpenKnowledgeBase(ctx, "llm_feedback", trans, nil, embedder)
+			kb, err := sysDB.OpenKnowledgeBase(ctx, "llm_feedback", trans, nil, embedder, false)
 			if err != nil {
 				log.Error("Failed to open physical knowledge base", "error", err)
 				http.Error(w, "Knowledge base open error", http.StatusInternalServerError)

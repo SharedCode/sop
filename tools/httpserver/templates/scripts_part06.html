@@ -234,8 +234,8 @@
             e.preventDefault();
             sendChatMessage();
         } else if (e.key === 'ArrowUp') {
-            // History Up
-            if (chatHistory.length > 0) {
+            // History Up ONLY if cursor is at the very beginning (top-left)
+            if (input.selectionStart === 0 && input.selectionEnd === 0 && chatHistory.length > 0) {
                 if (historyIndex === -1) {
                     historyIndex = chatHistory.length - 1;
                 } else if (historyIndex > 0) {
@@ -246,8 +246,8 @@
                 e.preventDefault();
             }
         } else if (e.key === 'ArrowDown') {
-            // History Down
-            if (historyIndex !== -1) {
+            // History Down ONLY if cursor is at the very end (bottom-right)
+            if (input.selectionStart === input.value.length && input.selectionEnd === input.value.length && historyIndex !== -1) {
                 if (historyIndex < chatHistory.length - 1) {
                     historyIndex++;
                     input.value = chatHistory[historyIndex];
