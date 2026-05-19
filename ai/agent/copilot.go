@@ -639,7 +639,7 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string) stri
 	if p := ai.GetSessionPayload(ctx); p != nil && p.UserID != "" && a.systemDB != nil {
 		kbName := p.GetMemoryKBName()
 		if tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-			if kb, err := a.systemDB.OpenKnowledgeBase(ctx, kbName, tx, nil, nil, false); err == nil {
+			if kb, err := a.systemDB.OpenKnowledgeBase(ctx, kbName, tx, nil, nil, false, true); err == nil {
 				if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil && cfg.SystemPrompt != "" {
 					persona = cfg.SystemPrompt + "\n\n"
 				}
@@ -697,7 +697,7 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string) stri
 	if a.systemDB != nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil && a.Memory.AgentID != "" {
 		if tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
 			kbName := fmt.Sprintf("ltm_%s", a.Memory.AgentID)
-			kb, err := a.systemDB.OpenKnowledgeBase(ctx, kbName, tx, nil, nil, false)
+			kb, err := a.systemDB.OpenKnowledgeBase(ctx, kbName, tx, nil, nil, false, true)
 			if err == nil {
 				vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query})
 				if err == nil && len(vecs) > 0 {
@@ -1182,7 +1182,7 @@ func (a *CopilotAgent) InitializePhysicalMemory(ctx context.Context) error {
 	}
 
 	ltmStoreName := fmt.Sprintf("ltm_%s", a.Memory.AgentID)
-	ltm, err := a.systemDB.OpenKnowledgeBase(ctx, ltmStoreName, tx, a.brain, embedder, false)
+	ltm, err := a.systemDB.OpenKnowledgeBase(ctx, ltmStoreName, tx, a.brain, embedder, false, true)
 	if err != nil {
 		tx.Rollback(ctx)
 		return fmt.Errorf("failed to open isolated LTM KnowledgeBase: %w", err)
@@ -1255,7 +1255,7 @@ func (a *CopilotAgent) InitializePhysicalMemory(ctx context.Context) error {
 				if len(toolThoughts) > 0 {
 					txWrite, err := a.systemDB.BeginTransaction(bgCtx, sop.ForWriting)
 					if err == nil {
-						ltmWrite, err := a.systemDB.OpenKnowledgeBase(bgCtx, ltmStoreName, txWrite, a.brain, embedder, false)
+						ltmWrite, err := a.systemDB.OpenKnowledgeBase(bgCtx, ltmStoreName, txWrite, a.brain, embedder, false, true)
 						if err == nil {
 							if err := ltmWrite.IngestThoughts(bgCtx, toolThoughts, a.Memory.AgentID); err == nil {
 								_ = txWrite.Commit(bgCtx)
@@ -1382,7 +1382,7 @@ func (a *CopilotAgent) logThought(ctx context.Context, query string, toolsExecut
 			return
 		}
 
-		kb, err := a.systemDB.OpenKnowledgeBase(embedCtx, kbName, tx, a.brain, embedder, false)
+		kb, err := a.systemDB.OpenKnowledgeBase(embedCtx, kbName, tx, a.brain, embedder, false, true)
 		if err != nil {
 			tx.Rollback(embedCtx)
 			return
