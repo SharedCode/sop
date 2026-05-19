@@ -631,7 +631,7 @@
         });
 
         // Send feedback to server (Mock for now)
-        apiCall('/api/ai/feedback', 'POST', { msgId, type })
+        apiCall('/api/ai/feedback', 'POST', { msgId, type, user_id: currentUserID, session_id: currentSessionID })
         .catch(err => console.log('Feedback API not implemented yet, but UI updated.'));
     }
 

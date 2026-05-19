@@ -1,6 +1,7 @@
 package main
 
 import (
+	"sync"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -52,9 +53,16 @@ func (d *DirectFlushingWriter) Write(p []byte) (n int, err error) {
 	return
 }
 
+var seededKBs sync.Map
+
 func seedMetaCognitionAsync(userID, kbName string, sysOpts sop.DatabaseOptions) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+
+	_, loaded := seededKBs.LoadOrStore(kbName, true)
+	if loaded {
+		return // Already seeding or seeded this KB
+	}
 
 	sysDB := aidb.NewDatabase(sysOpts)
 
@@ -64,7 +72,7 @@ func seedMetaCognitionAsync(userID, kbName string, sysOpts sop.DatabaseOptions) 
 	}
 
 	embedder := GetConfiguredEmbedder(nil)
-	kb, err := sysDB.OpenKnowledgeBase(ctx, kbName, trans, nil, embedder, false)
+	kb, err := sysDB.OpenKnowledgeBase(ctx, kbName, trans, nil, embedder, false, true)
 	if err != nil {
 		trans.Rollback(ctx)
 		return
@@ -82,7 +90,7 @@ func seedMetaCognitionAsync(userID, kbName string, sysOpts sop.DatabaseOptions) 
 		return
 	}
 	defer wTrans.Rollback(ctx)
-	wKb, err := sysDB.OpenKnowledgeBase(ctx, kbName, wTrans, nil, embedder, false)
+	wKb, err := sysDB.OpenKnowledgeBase(ctx, kbName, wTrans, nil, embedder, false, true)
 	if err != nil {
 		return
 	}
@@ -219,7 +227,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 			dbEmbedder := GetConfiguredEmbedder(nil)
 			dbLLM := GetConfiguredLLM(nil)
 
-			sysDB.OpenKnowledgeBase(ctx, kbName, trans, dbLLM, dbEmbedder, false)
+			sysDB.OpenKnowledgeBase(ctx, kbName, trans, dbLLM, dbEmbedder, false, true)
 			trans.Commit(ctx)
 			go seedMetaCognitionAsync(req.UserID, kbName, sysOpts)
 		}
@@ -303,7 +311,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 			db := aidb.NewDatabase(opts)
 			trans, _ := db.BeginTransaction(r.Context(), sop.ForReading)
 			if trans != nil {
-				kb, err := db.OpenKnowledgeBase(r.Context(), kbID, trans, nil, nil, false)
+				kb, err := db.OpenKnowledgeBase(r.Context(), kbID, trans, nil, nil, false, true)
 				if err == nil {
 					cfg, err := kb.GetConfig(r.Context())
 					if err == nil && cfg != nil && cfg.IsExclusive {
@@ -964,6 +972,8 @@ func handleAIFeedback(w http.ResponseWriter, r *http.Request) {
 		UserContent string `json:"user_content"`
 		Database    string `json:"database"`
 		Agent       string `json:"agent"`
+		UserID      string `json:"user_id"`
+		SessionID   string `json:"session_id"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -993,6 +1003,11 @@ func handleAIFeedback(w http.ResponseWriter, r *http.Request) {
 	}
 	// Ensure rollback if not committed
 	defer trans.Rollback(ctx)
+
+	kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, req.UserID)
+	if req.UserID == "" {
+		kbName = "llm_feedback"
+	}
 
 	// 3. Open Store "llm_feedback"
 	storeName := "llm_feedback"
@@ -1048,7 +1063,7 @@ func handleAIFeedback(w http.ResponseWriter, r *http.Request) {
 			// Don't fail the request, just skip vectorization
 		} else if len(vecs) > 0 {
 			sysDB := aidb.NewDatabase(opts)
-			kb, err := sysDB.OpenKnowledgeBase(ctx, "llm_feedback", trans, nil, embedder, false)
+			kb, err := sysDB.OpenKnowledgeBase(ctx, kbName, trans, nil, embedder, false, true)
 			if err != nil {
 				log.Error("Failed to open physical knowledge base", "error", err)
 				http.Error(w, "Knowledge base open error", http.StatusInternalServerError)
