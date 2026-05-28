@@ -1,4 +1,4 @@
-You are a strict, objective Context Classifier.
+Classify whether the user is continuing the current context or switching.
 
 The user is potentially continuing a previous topic or switching to a new one.
 
@@ -8,7 +8,7 @@ CURRENT ACTIVE CONTEXT:
 USER'S LATEST QUERY:
 %s
 
-Your job is to determine if the user's latest query requires expanding or modifying the current active state (e.g., adding new CRUD operations, accessing new database artifacts within the same domain), OR if they are switching to a completely new domain (e.g., from Stores programmatic tools to Spaces knowledge base search). If the user explicitly changes the domain (e.g., asks to use 'Spaces' while in 'Stores'), it is a SWITCH.
+Determine whether the user's latest query expands the current state or switches to a new domain/topic.
 
 If the user is switching to a new domain or topic entirely, set intent to "SWITCH".
 If they are continuing the current topic, set intent to "CONTINUE" and output the updated context.
@@ -18,9 +18,9 @@ For Cross-Domain requests, populate `stores_artifacts` and `spaces_artifacts` se
 Operational Layers definition:
 - "Single-Domain": Operations restricted to a single domain (either Stores or Spaces).
 - "Cross-Domain": Operations coordinating across multiple domains (mixing Stores and Spaces).
-  *Important Disambiguation: If the user uses the words "store" or "space" merely as a normal data value, category name, or textual topic (e.g., "add the 'store' category to my space"), do NOT classify as Cross-Domain. Cross-Domain strictly requires executing functional operations across both the Stores databases AND Spaces knowledge bases.*
+  *Disambiguation: If the words "store" or "space" are just part of normal content or a category name, keep the request Single-Domain. Use Cross-Domain only when the request operates across both Stores and Spaces.*
 
-Respond ONLY with a JSON object matching this schema:
+Respond with JSON only in this schema:
 {
   "intent": "SWITCH",
   "entity": "Omni",

@@ -15,7 +15,7 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-const ExecuteScriptInstruction = `Execute a JSON AST script for multi-step store operations. Always use explicit pipeline variables with result_var/input_var when chaining scan/filter/join/project/limit steps. For joins, the engine expects explicit store-based joins such as join/store/on or join_right/store/on; relation metadata in the focused context tells you which bridge store and key mapping to use, but you must still compose concrete join steps.`
+const ExecuteScriptInstruction = `Execute a JSON AST script for multi-step store operations. Always use explicit pipeline variables with result_var/input_var when chaining scan/filter/join/project/limit steps. For joins, the engine expects explicit store-based joins such as join/store/on or join_right/store/on; relation metadata in the focused context tells you which bridge store and key mapping to use, but you must still compose concrete join steps. After a join, reference joined fields by their namespaced path such as users.first_name, users_orders.value, or orders.total_amount.`
 
 const (
 	SelectInstruction = "Selects data from a store. See SOP KB for instructions."
@@ -24,7 +24,7 @@ const (
 
 	AddInstruction               = "Adds data to a store. See SOP KB for instructions."
 	UpdateInstruction            = "Updates data in a store. See SOP KB for instructions."
-	DeleteInstruction            = "Deletes data from a store. See SOP KB for instructions."
+	DeleteInstruction            = "Deletes data from a store by key. See SOP KB for instructions."
 	ManageTransactionInstruction = "Manages transactions (begin, commit, rollback). See SOP KB for instructions."
 )
 

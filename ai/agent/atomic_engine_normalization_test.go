@@ -57,6 +57,87 @@ func TestNormalizeScriptStepForCompatibility_SortFieldDescendingShape(t *testing
 	}
 }
 
+func TestNormalizeScriptStepForCompatibility_FilterStringPredicateShape(t *testing.T) {
+	step := map[string]any{
+		"op": "filter",
+		"args": map[string]any{
+			"condition": map[string]any{
+				"first_name": "$eq:John",
+				"orders":     "total_amount>500",
+			},
+		},
+	}
+
+	normalizeScriptStepForCompatibility(step)
+
+	args := step["args"].(map[string]any)
+	condition := args["condition"].(map[string]any)
+	firstName := condition["first_name"].(map[string]any)
+	if firstName["$eq"] != "John" {
+		t.Fatalf("expected first_name eq condition, got %#v", firstName)
+	}
+	ordersAmount := condition["orders.total_amount"].(map[string]any)
+	if ordersAmount["$gt"] != 500 {
+		t.Fatalf("expected orders.total_amount gt condition, got %#v", ordersAmount)
+	}
+}
+
+func TestNormalizeScriptStepForCompatibility_JoinStringOnShape(t *testing.T) {
+	step := map[string]any{
+		"op": "join",
+		"args": map[string]any{
+			"on": map[string]any{
+				"users_orders": "users.key=key",
+				"orders":       "users_orders.value=key",
+			},
+		},
+	}
+
+	normalizeScriptStepForCompatibility(step)
+
+	args := step["args"].(map[string]any)
+	on := args["on"].(map[string]any)
+	if on["users.key"] != "key" {
+		t.Fatalf("expected users.key join mapping, got %#v", on)
+	}
+	if on["users_orders.value"] != "key" {
+		t.Fatalf("expected users_orders.value join mapping, got %#v", on)
+	}
+}
+
+func TestNormalizeScriptStepForCompatibility_FlattenedFieldPaths(t *testing.T) {
+	step := map[string]any{
+		"op": "filter",
+		"args": map[string]any{
+			"condition": map[string]any{
+				"orders_total_amount": map[string]any{"$gt": 500},
+			},
+		},
+	}
+
+	normalizeScriptStepForCompatibility(step)
+
+	args := step["args"].(map[string]any)
+	condition := args["condition"].(map[string]any)
+	if _, ok := condition["orders.total_amount"]; !ok {
+		t.Fatalf("expected flattened condition field to normalize, got %#v", condition)
+	}
+
+	joinStep := map[string]any{
+		"op": "join",
+		"args": map[string]any{
+			"on": map[string]any{"users_orders_value": "key"},
+		},
+	}
+
+	normalizeScriptStepForCompatibility(joinStep)
+	joinArgs := joinStep["args"].(map[string]any)
+	on := joinArgs["on"].(map[string]any)
+	if on["users_orders.value"] != "key" {
+		t.Fatalf("expected flattened join field to normalize, got %#v", on)
+	}
+}
+
 func TestPreserveLastResultOnNil(t *testing.T) {
 	if !preserveLastResultOnNil("commit_tx") {
 		t.Fatalf("expected commit_tx to preserve last result")

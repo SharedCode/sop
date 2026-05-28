@@ -1,14 +1,14 @@
 # Script Authoring Tools
-Use these tools when the user asks to create, save, update, or refactor a reusable script rather than only execute a one-off query.
+Use these tools when the user wants to create or update a reusable script instead of only running a one-off query.
 
-## Tool Selection Rules
+## Tool Choice
 - Use `create_script` to create a brand-new named script.
 - Use `save_script` to replace or overwrite a full existing script definition.
 - Use `save_last_step` to append the most recent executed tool call into an existing script.
 - Use `refactor_last_interaction` when the last interaction already contains multiple tool calls that should be converted into a reusable script or block.
 - Use `get_script_details` or `list_scripts` before overwriting when you need to inspect an existing script.
 
-## Required Payload Shape
+## Payload Shape
 For `create_script` and `save_script`, provide the reusable script steps as `script`.
 Legacy alias `steps` is accepted, but prefer `script`.
 

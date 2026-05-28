@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	log "log/slog"
 	"strings"
@@ -20,6 +22,10 @@ const nativeReActMaxToolIterations = 4
 type nativeToolResult struct {
 	Name   string
 	Result string
+}
+
+type pendingToolRepair struct {
+	ToolName string
 }
 
 type progressSink func(string)
@@ -53,6 +59,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 
 	executedToolCalls := make([]ai.ToolCall, 0)
 	toolResults := make([]nativeToolResult, 0)
+	var pendingRepair *pendingToolRepair
 	for iteration := 0; iteration < nativeReActMaxToolIterations; iteration++ {
 		emitVerboseProgress(ctx, "Reasoning iteration %d of %d.", iteration+1, nativeReActMaxToolIterations)
 		mainPrompt := buildNativeReActPrompt(req, toolResults)
@@ -93,6 +100,15 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 		}
 
 		toolCall := output.ToolCalls[0]
+		if pendingRepair != nil && toolCall.Name != pendingRepair.ToolName {
+			emitVerboseProgress(ctx, "Tool `%s` must be corrected before other actions.", pendingRepair.ToolName)
+			toolResults = append(toolResults, nativeToolResult{
+				Name:   pendingRepair.ToolName,
+				Result: formatPendingRepairReminder(pendingRepair.ToolName, toolCall.Name),
+			})
+			log.Warn("Native ReAct Engine Deferred Non-Repair Tool Call", "expected_tool", pendingRepair.ToolName, "received_tool", toolCall.Name)
+			continue
+		}
 		emitVerboseProgress(ctx, "Calling tool `%s`.", toolCall.Name)
 		log.Info("Native ReAct Engine Tool Call",
 			"iteration", iteration+1,
@@ -117,9 +133,10 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 			})
 			if isRecoverableToolExecutionError(err) {
 				emitVerboseProgress(ctx, "Tool `%s` needs corrected arguments; retrying.", toolCall.Name)
+				pendingRepair = &pendingToolRepair{ToolName: toolCall.Name}
 				toolResults = append(toolResults, nativeToolResult{
 					Name:   toolCall.Name,
-					Result: fmt.Sprintf("Tool execution error: %v", err),
+					Result: formatRecoverableToolError(toolCall.Name, toolCall.Args, err),
 				})
 				log.Warn("Native ReAct Engine Recoverable Tool Failure", "tool", toolCall.Name, "error", err)
 				continue
@@ -128,6 +145,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 			return ai.ReasoningResponse{}, fmt.Errorf("tool execution failed: %w", err)
 		}
 		emitVerboseProgress(ctx, "Tool `%s` completed.", toolCall.Name)
+		pendingRepair = nil
 		log.Info("Native ReAct Engine Tool Success", "iteration", iteration+1, "tool", toolCall.Name, "result_chars", len(result))
 		emitReasoningEvent(req, "tool_result", map[string]any{
 			"tool":         toolCall.Name,
@@ -254,6 +272,10 @@ func buildNativeReActPrompt(req ai.ReasoningRequest, toolResults []nativeToolRes
 		return sb.String()
 	}
 
+	if last := toolResults[len(toolResults)-1]; strings.Contains(last.Result, "Retry instruction:") {
+		sb.WriteString(fmt.Sprintf("\n\nRepair directive: The last tool call to %s failed because its arguments were invalid. Your next step should be to call the same tool again with corrected arguments using the repair guidance below. Do not summarize the error as a final answer unless correction is impossible.", last.Name))
+	}
+
 	sb.WriteString("\n\nTool results:\n")
 	for i, result := range toolResults {
 		sb.WriteString(fmt.Sprintf("Step %d Tool: %s\n[System Tool Response]:\n%s\n\n", i+1, result.Name, result.Result))
@@ -262,14 +284,59 @@ func buildNativeReActPrompt(req ai.ReasoningRequest, toolResults []nativeToolRes
 	return sb.String()
 }
 
+func formatRecoverableToolError(toolName string, args map[string]any, err error) string {
+	argsJSON := "{}"
+	if len(args) > 0 {
+		if b, marshalErr := json.MarshalIndent(args, "", "  "); marshalErr == nil {
+			argsJSON = string(b)
+		}
+	}
+
+	categoryLine := ""
+	exampleLine := ""
+	var validationErr *executeScriptValidationError
+	if errors.As(err, &validationErr) {
+		if validationErr.Category != "" {
+			categoryLine = fmt.Sprintf("\nRepair category: %s", validationErr.Category)
+		}
+		if validationErr.Example != "" {
+			exampleLine = fmt.Sprintf("\nSuggested fix example:\n%s", validationErr.Example)
+		}
+	}
+
+	return fmt.Sprintf(
+		"Tool execution error: %v\nTool: %s%s%s\nAttempted args:\n%s\nRetry instruction: Return a corrected call for the same tool. Preserve valid arguments, fix invalid or missing arguments, and do not repeat the same malformed shape.",
+		err,
+		toolName,
+		categoryLine,
+		exampleLine,
+		argsJSON,
+	)
+}
+
+func formatPendingRepairReminder(expectedToolName, attemptedToolName string) string {
+	return fmt.Sprintf(
+		"Repair required before continuing. The previous call to %s failed with recoverable argument errors and must be corrected first. The model attempted %s instead. Retry instruction: Call %s next with corrected arguments. Do not switch tools or provide a final answer until the repair attempt is made.",
+		expectedToolName,
+		attemptedToolName,
+		expectedToolName,
+	)
+}
+
 func sanitizeToolCallArgs(args map[string]any, enableObfuscation bool) {
+	cleanToken := func(s string) string {
+		s = strings.Trim(s, "*_`")
+		s = strings.ReplaceAll(s, "\u00a0", " ")
+		s = strings.TrimSpace(s)
+		s = strings.Trim(s, "\"'")
+		return strings.TrimSpace(s)
+	}
+
 	var sanitize func(any) any
 	sanitize = func(v any) any {
 		switch val := v.(type) {
 		case string:
-			val = strings.Trim(val, "*_`")
-			val = strings.ReplaceAll(val, "\u00a0", " ")
-			val = strings.TrimSpace(val)
+			val = cleanToken(val)
 			if enableObfuscation {
 				val = obfuscation.GlobalObfuscator.DeobfuscateText(val)
 			}
@@ -280,10 +347,11 @@ func sanitizeToolCallArgs(args map[string]any, enableObfuscation bool) {
 			}
 			return val
 		case map[string]any:
+			cleaned := make(map[string]any, len(val))
 			for k, item := range val {
-				val[k] = sanitize(item)
+				cleaned[cleanToken(k)] = sanitize(item)
 			}
-			return val
+			return cleaned
 		default:
 			return val
 		}

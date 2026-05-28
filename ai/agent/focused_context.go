@@ -247,6 +247,9 @@ func buildStoresCRUDOperationsContext(flags map[string]bool) string {
 			"- R = Read. Prefer read-only transactions. MANDATORY Sequence: begin_tx(mode=read) -> open_store -> scan/filter/project/sort/limit -> commit_tx or rollback_tx.",
 			"- Note: Calling open_db is OPTIONAL because begin_tx automatically uses the active Current Database by default.",
 			"- If you still emit open_db, use the active Current Database name from context instead of inventing one. In AST, either omit open_db or set open_db.args.name to the active database.",
+			"- For filter, keep the real predicate shape with operator and value, for example {condition:{first_name:{\"$eq\":\"John\"}}} or {condition:{orders.total_amount:{\"$gt\":500}}}. Do not emit boolean placeholders like {first_name:true}.",
+			"- For bridge joins, keep exact dotted field paths in the on map, for example join users to users_orders with {\"users.key\":\"key\"} and then users_orders to orders with {\"users_orders.value\":\"key\"}. Do not flatten dotted field paths into underscore names.",
+			"- If a filter or join shape is rejected, preserve the valid store names, field paths, and operators you already have. Only replace the malformed placeholder or join mapping with the corrected AST shape.",
 			"- Read AST ops: begin_tx, open_store, find, get_current_value, scan, filter, sort, project, limit, join, join_right, return, commit_tx, rollback_tx.",
 		)
 	}
@@ -324,6 +327,8 @@ func buildScriptAuthoringContext(domain string, flags map[string]bool) string {
 		"- Use create_script for a new named reusable script; use save_script only to replace an existing full script definition.",
 		"- Provide reusable script steps under the `script` field. Legacy alias `steps` is accepted but should not be preferred.",
 		"- For reusable data workflows, prefer a command step whose command is execute_script and whose args.script contains the inner AST.",
+		"- In stored execute_script AST, preserve real filter predicates and exact dotted field paths for joins and joined-field filters. Do not turn conditions into boolean placeholders or flatten dotted paths into underscore names.",
+		"- When correcting a stored execute_script AST, keep the valid stores, step order, and field names intact. Only rewrite the invalid filter or join shape that caused the validation failure.",
 	}
 	if strings.EqualFold(domain, StoresDomain) && flags["R"] && !flags["C"] && !flags["U"] && !flags["D"] {
 		sections = append(sections, "- This request is read-oriented. Keep the stored execute_script AST read-only unless the user explicitly asks for mutations.")

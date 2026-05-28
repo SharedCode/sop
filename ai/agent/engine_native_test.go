@@ -287,6 +287,12 @@ func (m *recoverableArgErrorGenerator) Generate(ctx context.Context, prompt stri
 		if !strings.Contains(prompt, "Tool execution error: argument 'content' is missing or not a string") {
 			return ai.GenOutput{Text: "missing repair context"}, nil
 		}
+		if !strings.Contains(prompt, "Tool: mint_to_space") || !strings.Contains(prompt, "Attempted args:") || !strings.Contains(prompt, "Retry instruction:") {
+			return ai.GenOutput{Text: "missing structured retry context"}, nil
+		}
+		if !strings.Contains(prompt, "Repair directive: The last tool call to mint_to_space failed because its arguments were invalid.") {
+			return ai.GenOutput{Text: "missing repair directive"}, nil
+		}
 		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
 			Name: "mint_to_space",
 			Args: map[string]any{
@@ -348,6 +354,355 @@ func TestNativeReActEngine_RetriesRecoverableToolArgumentErrors(t *testing.T) {
 	}
 	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "mint_to_space" {
 		t.Fatalf("expected only the successful repaired tool call to be recorded, got %#v", resp.ToolCalls)
+	}
+}
+
+type delayedRepairGenerator struct {
+	calls int
+}
+
+func (m *delayedRepairGenerator) Name() string { return "delayed_repair_mock" }
+
+func (m *delayedRepairGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *delayedRepairGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	switch m.calls {
+	case 1:
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "mint_to_space",
+			Args: map[string]any{},
+		}}}, nil
+	case 2:
+		if !strings.Contains(prompt, "Retry instruction:") {
+			return ai.GenOutput{Text: "missing initial repair guidance"}, nil
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "list_tools",
+			Args: map[string]any{},
+		}}}, nil
+	case 3:
+		if !strings.Contains(prompt, "Repair required before continuing.") {
+			return ai.GenOutput{Text: "missing enforcement reminder"}, nil
+		}
+		if !strings.Contains(prompt, "The model attempted list_tools instead.") {
+			return ai.GenOutput{Text: "missing attempted tool reminder"}, nil
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "mint_to_space",
+			Args: map[string]any{
+				"kb_name": "Tasks",
+				"content": "Task 1: Define scope",
+			},
+		}}}, nil
+	default:
+		return ai.GenOutput{Text: "Final answer: Added sample task to Tasks."}, nil
+	}
+}
+
+type delayedRepairExecutor struct {
+	callCount int
+	tools     []string
+}
+
+func (e *delayedRepairExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	e.callCount++
+	e.tools = append(e.tools, tool)
+	if tool == "list_tools" {
+		return "mint_to_space, list_tools", nil
+	}
+	content, _ := args["content"].(string)
+	if strings.TrimSpace(content) == "" {
+		return "", fmt.Errorf("argument 'content' is missing or not a string")
+	}
+	return "Successfully minted content to Knowledge Base 'Tasks'.", nil
+}
+
+func (e *delayedRepairExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "mint_to_space"}, {Name: "list_tools"}}, nil
+}
+
+func TestNativeReActEngine_RequiresRepairBeforeSwitchingTools(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &delayedRepairGenerator{}
+	executor := &delayedRepairExecutor{}
+	var progress []string
+	ctx := context.WithValue(context.Background(), ai.CtxKeyProgressSink, func(msg string) {
+		progress = append(progress, msg)
+	})
+
+	resp, err := engine.Run(ctx, ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Generate sample tasks and add them to my Tasks space",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer: Added sample task to Tasks." {
+		t.Fatalf("expected repaired final answer, got %q", resp.FinalText)
+	}
+	if gen.calls != 4 {
+		t.Fatalf("expected four generator calls after enforced repair, got %d", gen.calls)
+	}
+	if executor.callCount != 2 {
+		t.Fatalf("expected only failing and repaired tool executions, got %d", executor.callCount)
+	}
+	if !reflect.DeepEqual(executor.tools, []string{"mint_to_space", "mint_to_space"}) {
+		t.Fatalf("expected only mint_to_space to execute, got %#v", executor.tools)
+	}
+	if !containsProgressMessage(progress, "Tool `mint_to_space` must be corrected before other actions.") {
+		t.Fatalf("expected repair enforcement progress message, got %#v", progress)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "mint_to_space" {
+		t.Fatalf("expected only the successful repaired tool call to be recorded, got %#v", resp.ToolCalls)
+	}
+}
+
+func TestFormatRecoverableToolError_IncludesValidationCategoryAndExample(t *testing.T) {
+	err := newExecuteScriptValidationError(
+		"invalid_filter_placeholder",
+		"invalid type for filter condition field \"first_name\": got boolean placeholder true; expected an operator/value predicate",
+		`{"op":"filter","args":{"condition":{"first_name":{"$eq":"<value>"}}}}`,
+	)
+
+	formatted := formatRecoverableToolError("execute_script", map[string]any{
+		"script": []any{map[string]any{"op": "filter"}},
+	}, err)
+
+	if !strings.Contains(formatted, "Repair category: invalid_filter_placeholder") {
+		t.Fatalf("expected repair category in formatted error, got %q", formatted)
+	}
+	if !strings.Contains(formatted, "Suggested fix example:") {
+		t.Fatalf("expected suggested fix example in formatted error, got %q", formatted)
+	}
+	if !strings.Contains(formatted, `"first_name":{"$eq":"<value>"}`) {
+		t.Fatalf("expected example predicate in formatted error, got %q", formatted)
+	}
+}
+
+type executeScriptRepairGenerator struct {
+	calls int
+}
+
+func (m *executeScriptRepairGenerator) Name() string { return "execute_script_repair_mock" }
+
+func (m *executeScriptRepairGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *executeScriptRepairGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	switch m.calls {
+	case 1:
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{
+				"script": []any{
+					map[string]any{
+						"op": "filter",
+						"args": map[string]any{
+							"condition": map[string]any{"first_name": true},
+						},
+					},
+				},
+			},
+		}}}, nil
+	case 2:
+		checks := []string{
+			"Tool: execute_script",
+			"Repair category: invalid_filter_placeholder",
+			"Suggested fix example:",
+			`"first_name":{"$eq":"<value>"}`,
+			"Repair directive: The last tool call to execute_script failed because its arguments were invalid.",
+		}
+		for _, check := range checks {
+			if !strings.Contains(prompt, check) {
+				return ai.GenOutput{Text: "missing execute_script retry context: " + check}, nil
+			}
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{
+				"script": []any{
+					map[string]any{
+						"op": "filter",
+						"args": map[string]any{
+							"condition": map[string]any{"first_name": map[string]any{"$eq": "John"}},
+						},
+					},
+				},
+			},
+		}}}, nil
+	default:
+		return ai.GenOutput{Text: "Final answer: Found matching records for John."}, nil
+	}
+}
+
+type executeScriptRepairExecutor struct {
+	callCount int
+}
+
+func (e *executeScriptRepairExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	e.callCount++
+	if e.callCount == 1 {
+		return "", newExecuteScriptValidationError(
+			"invalid_filter_placeholder",
+			"invalid type for filter condition field \"first_name\": got boolean placeholder true; expected an operator/value predicate",
+			`{"op":"filter","args":{"condition":{"first_name":{"$eq":"<value>"}}}}`,
+		)
+	}
+	return `[{"first_name":"John"}]`, nil
+}
+
+func (e *executeScriptRepairExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+func TestNativeReActEngine_RetriesExecuteScriptWithValidationGuidance(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &executeScriptRepairGenerator{}
+	executor := &executeScriptRepairExecutor{}
+	var progress []string
+	ctx := context.WithValue(context.Background(), ai.CtxKeyProgressSink, func(msg string) {
+		progress = append(progress, msg)
+	})
+
+	resp, err := engine.Run(ctx, ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find users named John",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer: Found matching records for John." {
+		t.Fatalf("expected repaired final answer, got %q", resp.FinalText)
+	}
+	if gen.calls != 3 {
+		t.Fatalf("expected three generator calls after execute_script repair, got %d", gen.calls)
+	}
+	if executor.callCount != 2 {
+		t.Fatalf("expected two execute_script attempts, got %d", executor.callCount)
+	}
+	if !containsProgressMessage(progress, "Tool `execute_script` needs corrected arguments; retrying.") {
+		t.Fatalf("expected execute_script retry progress message, got %#v", progress)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "execute_script" {
+		t.Fatalf("expected only the successful repaired execute_script call to be recorded, got %#v", resp.ToolCalls)
+	}
+}
+
+type executeScriptJoinRepairGenerator struct {
+	calls int
+}
+
+func (m *executeScriptJoinRepairGenerator) Name() string { return "execute_script_join_repair_mock" }
+
+func (m *executeScriptJoinRepairGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *executeScriptJoinRepairGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	switch m.calls {
+	case 1:
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{
+				"script": []any{
+					map[string]any{
+						"op": "join",
+						"args": map[string]any{
+							"store": "users_orders",
+							"on":    map[string]any{"users.key": true},
+						},
+					},
+				},
+			},
+		}}}, nil
+	case 2:
+		checks := []string{
+			"Tool: execute_script",
+			"Repair category: invalid_join_on_placeholder",
+			"Suggested fix example:",
+			`"on":{"users.key":"key"}`,
+			"Repair directive: The last tool call to execute_script failed because its arguments were invalid.",
+		}
+		for _, check := range checks {
+			if !strings.Contains(prompt, check) {
+				return ai.GenOutput{Text: "missing execute_script join retry context: " + check}, nil
+			}
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{
+				"script": []any{
+					map[string]any{
+						"op": "join",
+						"args": map[string]any{
+							"store": "users_orders",
+							"on":    map[string]any{"users.key": "key"},
+						},
+					},
+				},
+			},
+		}}}, nil
+	default:
+		return ai.GenOutput{Text: "Final answer: Joined users with users_orders successfully."}, nil
+	}
+}
+
+type executeScriptJoinRepairExecutor struct {
+	callCount int
+}
+
+func (e *executeScriptJoinRepairExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	e.callCount++
+	if e.callCount == 1 {
+		return "", newExecuteScriptValidationError(
+			"invalid_join_on_placeholder",
+			"invalid type for join.on[\"users.key\"]: got boolean placeholder true; expected a field path string such as \"key\"",
+			`{"op":"join","args":{"store":"users_orders","on":{"users.key":"key"}}}`,
+		)
+	}
+	return `[{"users.key":"u1","users_orders.value":"o1"}]`, nil
+}
+
+func (e *executeScriptJoinRepairExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+func TestNativeReActEngine_RetriesExecuteScriptJoinWithValidationGuidance(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &executeScriptJoinRepairGenerator{}
+	executor := &executeScriptJoinRepairExecutor{}
+	var progress []string
+	ctx := context.WithValue(context.Background(), ai.CtxKeyProgressSink, func(msg string) {
+		progress = append(progress, msg)
+	})
+
+	resp, err := engine.Run(ctx, ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Join users with users_orders",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer: Joined users with users_orders successfully." {
+		t.Fatalf("expected repaired final answer, got %q", resp.FinalText)
+	}
+	if gen.calls != 3 {
+		t.Fatalf("expected three generator calls after execute_script join repair, got %d", gen.calls)
+	}
+	if executor.callCount != 2 {
+		t.Fatalf("expected two execute_script attempts, got %d", executor.callCount)
+	}
+	if !containsProgressMessage(progress, "Tool `execute_script` needs corrected arguments; retrying.") {
+		t.Fatalf("expected execute_script retry progress message, got %#v", progress)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "execute_script" {
+		t.Fatalf("expected only the successful repaired execute_script call to be recorded, got %#v", resp.ToolCalls)
 	}
 }
 
