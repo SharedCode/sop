@@ -837,10 +837,11 @@ func (s *Service) InitializeUserSession(ctx context.Context, userID string) erro
 	}
 	defer tx.Rollback(ctx)
 
-	ltmName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, userID)
-	if p := ai.GetSessionPayload(ctx); p != nil && p.GetMemoryKBName() != "" {
-		ltmName = p.GetMemoryKBName()
+	agentID := ai.AgentIDOmni
+	if p := ai.GetSessionPayload(ctx); p != nil && p.AgentID != "" {
+		agentID = p.AgentID
 	}
+	ltmName := memory.BuildLTMStoreName(agentID, userID)
 
 	// OpenKnowledgeBase safely ensures DDL (creates B-Trees if they don't exist)
 	// Because this is a ForWriting transaction, the NewBtree calls deep inside will succeed.
@@ -1066,7 +1067,11 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 
 	// 2_0. Inject User Preferences (Long-Term Memory Search via pre-prompt fetch)
 	if p := ai.GetSessionPayload(ctx); p != nil && p.UserID != "" && s.systemDB != nil {
-		kbName := p.GetMemoryKBName()
+		agentID := p.AgentID
+		if agentID == "" {
+			agentID = ai.AgentIDOmni
+		}
+		kbName := memory.BuildLTMStoreName(agentID, p.UserID)
 		if tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
 			if kb, err := s.systemDB.OpenKnowledgeBase(ctx, kbName, tx, s.generator, nil, false, true); err == nil {
 				// We search the user's Long-Term memory kb for implicitly learned preferences related to the query

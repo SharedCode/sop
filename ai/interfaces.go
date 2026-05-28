@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
@@ -456,19 +455,6 @@ func (sp *SessionPayload) Close(ctx context.Context) error {
 		}
 	}
 	return nil
-}
-
-// GetDatabase returns the effective current Database name.
-// GetMemoryKBName constructs the correct Long-Term Memory namespace.
-// It branches the user's vector store namespace if AvatarScope is present.
-func (s *SessionPayload) GetMemoryKBName() string {
-	if s.UserID == "" {
-		return ""
-	}
-	if s.AvatarScope != "" {
-		return fmt.Sprintf("%s%s_Avatar_%s", MemoryKBPrefix, s.UserID, s.AvatarScope)
-	}
-	return fmt.Sprintf("%s%s", MemoryKBPrefix, s.UserID)
 }
 
 func (s *SessionPayload) GetDatabase() string {

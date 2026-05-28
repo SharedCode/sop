@@ -39,12 +39,190 @@ const (
 	MRUSourcePlaybook    = "playbook"
 )
 
+const (
+	maxProjectedPersonaEntries    = 2
+	maxProjectedSystemToolEntries = 1
+	maxProjectedPlaybookEntries   = 4
+)
+
 // MRUItem represents a single category currently in working memory
 type MRUItem struct {
 	Category     string
 	LastAccessed int64
 	Context      string
 	Source       string
+}
+
+func cloneTaskContextClassification(taskCtx *TaskContextClassification) *TaskContextClassification {
+	if taskCtx == nil {
+		return nil
+	}
+	cloned := *taskCtx
+	if taskCtx.DBArtifacts != nil {
+		cloned.DBArtifacts = append([]string(nil), taskCtx.DBArtifacts...)
+	}
+	if taskCtx.StoresArtifacts != nil {
+		cloned.StoresArtifacts = append([]string(nil), taskCtx.StoresArtifacts...)
+	}
+	if taskCtx.SpacesArtifacts != nil {
+		cloned.SpacesArtifacts = append([]string(nil), taskCtx.SpacesArtifacts...)
+	}
+	if taskCtx.Layers != nil {
+		cloned.Layers = append([]LayerInfo(nil), taskCtx.Layers...)
+	}
+	return &cloned
+}
+
+func shouldPreserveMRUOnTopicSwitch(item MRUItem) bool {
+	return item.Source == MRUSourcePersona || strings.HasPrefix(item.Category, "PERSONA_")
+}
+
+func isRehydratableMRUItem(item MRUItem) bool {
+	switch item.Source {
+	case MRUSourcePersona, MRUSourceSystemTools, MRUSourcePlaybook:
+		return true
+	default:
+		return strings.HasPrefix(item.Category, "PERSONA_")
+	}
+}
+
+func projectedMRUSourcePriority(source string) int {
+	switch source {
+	case MRUSourcePersona:
+		return 0
+	case MRUSourceSystemTools:
+		return 1
+	case MRUSourcePlaybook:
+		return 2
+	default:
+		return 3
+	}
+}
+
+func projectedMRUSourceLimit(source string) int {
+	switch source {
+	case MRUSourcePersona:
+		return maxProjectedPersonaEntries
+	case MRUSourceSystemTools:
+		return maxProjectedSystemToolEntries
+	case MRUSourcePlaybook:
+		return maxProjectedPlaybookEntries
+	default:
+		return 0
+	}
+}
+
+func projectMRUItemsFromSTM(snapshot []MRUItem, activeKB string) []MRUItem {
+	if len(snapshot) == 0 && strings.TrimSpace(activeKB) == "" {
+		return nil
+	}
+
+	candidates := make([]MRUItem, 0, len(snapshot)+4)
+	for _, item := range snapshot {
+		if !isRehydratableMRUItem(item) {
+			continue
+		}
+		candidates = append(candidates, item)
+	}
+
+	for _, kb := range strings.Split(activeKB, ",") {
+		kb = strings.TrimSpace(kb)
+		if kb == "" {
+			continue
+		}
+		candidates = append(candidates, MRUItem{
+			Category: playbookMRUCategory(kb),
+			Source:   MRUSourcePlaybook,
+		})
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		leftPriority := projectedMRUSourcePriority(candidates[i].Source)
+		rightPriority := projectedMRUSourcePriority(candidates[j].Source)
+		if leftPriority != rightPriority {
+			return leftPriority < rightPriority
+		}
+		if candidates[i].LastAccessed != candidates[j].LastAccessed {
+			return candidates[i].LastAccessed > candidates[j].LastAccessed
+		}
+		return candidates[i].Category < candidates[j].Category
+	})
+
+	seenCategories := make(map[string]bool, len(candidates))
+	perSourceCounts := make(map[string]int, 3)
+	projected := make([]MRUItem, 0, len(candidates))
+	for _, item := range candidates {
+		if seenCategories[item.Category] {
+			continue
+		}
+		limit := projectedMRUSourceLimit(item.Source)
+		if limit == 0 || perSourceCounts[item.Source] >= limit {
+			continue
+		}
+		seenCategories[item.Category] = true
+		perSourceCounts[item.Source]++
+		projected = append(projected, item)
+	}
+
+	return projected
+}
+
+func summarizeProjectedMRU(items []MRUItem) string {
+	if len(items) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		label := item.Category
+		if item.Source != "" {
+			label = item.Source + ":" + item.Category
+		}
+		parts = append(parts, label)
+	}
+	return strings.Join(parts, ",")
+}
+
+func summarizePromptComponentsPresent(report PromptBudgetReport) string {
+	present := make([]string, 0, len(report.ComponentStats))
+	for _, stat := range report.ComponentStats {
+		if stat.FinalChars > 0 {
+			present = append(present, string(stat.Component))
+		}
+	}
+	return strings.Join(present, ",")
+}
+
+func (a *CopilotAgent) rehydrateMRUFromMemory(ctx context.Context) {
+	if a.service == nil || a.service.session == nil || a.service.session.Memory == nil {
+		return
+	}
+
+	session := a.service.session
+	stm := session.Memory
+
+	if payload := ai.GetSessionPayload(ctx); payload != nil {
+		if payload.Variables == nil {
+			payload.Variables = make(map[string]any)
+		}
+		if _, ok := payload.Variables["RoutingState"].(*TaskContextClassification); !ok {
+			if restored := stm.GetRoutingState(); restored != nil {
+				payload.Variables["RoutingState"] = restored
+			}
+		}
+	}
+
+	activeKB := ""
+	if thread := stm.GetCurrentThread(); thread != nil && len(thread.Exchanges) > 0 {
+		activeKB = thread.Exchanges[len(thread.Exchanges)-1].ActiveKB
+	}
+
+	projected := projectMRUItemsFromSTM(stm.GetMRUSnapshot(), activeKB)
+	for _, item := range projected {
+		a.markMRUCategoryWithSource(item.Category, item.Context, item.Source)
+	}
+	if summary := summarizeProjectedMRU(projected); summary != "" {
+		log.Info("STM MRU Projection", "projected_items", summary)
+	}
 }
 
 // CopilotAgent is a specialized agent for database administration tasks.
@@ -170,11 +348,14 @@ func (a *CopilotAgent) clearMRUForTopicSwitch() {
 
 	filtered := sess.MRU[:0]
 	for _, item := range sess.MRU {
-		if item.Source == MRUSourcePersona || strings.HasPrefix(item.Category, "PERSONA_") {
+		if shouldPreserveMRUOnTopicSwitch(item) {
 			filtered = append(filtered, item)
 		}
 	}
 	sess.MRU = filtered
+	if sess.Memory != nil {
+		sess.Memory.ResetProjectionForTopicSwitch()
+	}
 }
 
 func playbookMRUCategory(domain string) string {
@@ -737,6 +918,8 @@ func lastNonEmptyQueryLine(query string) string {
 }
 
 func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, gen ai.Generator) *TaskContextClassification {
+	a.rehydrateMRUFromMemory(ctx)
+
 	isTest := false
 	if gen != nil {
 		if strings.Contains(fmt.Sprintf("%T", gen), "mock") || strings.Contains(fmt.Sprintf("%T", gen), "Mock") || strings.Contains(fmt.Sprintf("%T", gen), "Smart") {
@@ -776,6 +959,9 @@ func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, g
 			}
 			p.Variables["RoutingState"] = taskCtx
 		}
+		if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+			a.service.session.Memory.SetRoutingState(taskCtx)
+		}
 		return taskCtx
 	}
 
@@ -811,6 +997,9 @@ func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, g
 					updatedRS.RoutingGate = RoutingGateContinuity
 					a.injectToolsForDomain(ctx, updatedRS)
 					p.Variables["RoutingState"] = updatedRS
+					if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+						a.service.session.Memory.SetRoutingState(updatedRS)
+					}
 					return updatedRS
 				}
 			} else {
@@ -819,6 +1008,9 @@ func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, g
 				annotateTaskContextIntent(rs, query)
 				rs.RoutingGate = RoutingGateContinuity
 				a.injectToolsForDomain(ctx, rs)
+				if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+					a.service.session.Memory.SetRoutingState(rs)
+				}
 				return rs
 			}
 		}
@@ -840,6 +1032,9 @@ func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, g
 					p.Variables = make(map[string]any)
 				}
 				p.Variables["RoutingState"] = taskCtx
+			}
+			if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+				a.service.session.Memory.SetRoutingState(taskCtx)
 			}
 			return taskCtx
 		} else {
@@ -986,10 +1181,14 @@ func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, int
 
 	}
 
-	// 7. Log Episode for SleepCycle (Episodic Memory)
-	if a.service != nil && a.service.EnableShortTermMemory {
-		mruSnapshot := a.getMRUSnapshot()
+	// 7. Persist compact session projection back into STM.
+	mruSnapshot := a.getMRUSnapshot()
+	if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+		a.service.session.Memory.SetMRUSnapshot(mruSnapshot)
+	}
 
+	// 8. Log Episode for SleepCycle (Episodic Memory)
+	if a.service != nil && a.service.EnableShortTermMemory {
 		thoughtPayload := map[string]any{
 			"query":          query,
 			"response":       finalText,
@@ -1242,47 +1441,48 @@ func (a *CopilotAgent) getLTMSemanticContext(ctx context.Context, query string) 
 	toolsDef := ""
 	if a.systemDB != nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil && a.Memory.AgentID != "" {
 		if tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-			kbName := fmt.Sprintf("ltm_%s", a.Memory.AgentID)
+			a.Memory.BindSession(ctx)
+			kbName := a.Memory.LongTermMemoryName()
 			kb, err := a.systemDB.OpenKnowledgeBase(ctx, kbName, tx, nil, nil, false, true)
 			if err == nil {
-				vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query})
-				if err == nil && len(vecs) > 0 {
-					closestCat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
-					catFilter := ""
-					if err == nil && closestCat != nil {
-						catFilter = closestCat.Name
+				hits, err := memory.DigestKnowledgeBase(ctx, kb, a.service.Domain().Embedder(), memory.KBDigestRequest{
+					Queries:            []string{query},
+					PerQueryLimit:      5,
+					MaxResults:         5,
+					MinScore:           0.6,
+					UseClosestCategory: true,
+				})
+				if err == nil && len(hits) > 0 {
+					knowledgeStr := ""
+					for _, hit := range hits {
+						knowledgeStr += fmt.Sprintf("- (Score: %.2f) %s\n", hit.Score, hit.Text)
 					}
-					hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: 5, CategoryPath: catFilter})
-					if err == nil && len(hits) > 0 {
-						hasKnowledge := false
-						knowledgeStr := ""
-						for _, hit := range hits {
-							if hit.Score < 0.6 {
-								continue
-							}
-							valStr := ""
-							if str, ok := hit.Payload["_raw_content"].(string); ok {
-								valStr = str
-							} else if str, ok := hit.Payload["content"].(string); ok {
-								valStr = str
-							} else {
-								valStr = fmt.Sprintf("%v", hit.Payload)
-							}
-							if valStr != "" {
-								hasKnowledge = true
-								knowledgeStr += fmt.Sprintf("- (Score: %.2f) %s\n", hit.Score, valStr)
-							}
-						}
-						if hasKnowledge {
-							toolsDef += "\nContext Section (Learned Knowledge):\n" + knowledgeStr
-						}
-					}
+					toolsDef += "\nContext Section (Learned Knowledge):\n" + knowledgeStr
 				}
 			}
 			tx.Rollback(ctx)
 		}
 	}
 	return toolsDef
+}
+
+func buildKnowledgeMiningQueries(domain string, query string) []string {
+	queries := []string{query}
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		return queries
+	}
+
+	queries = append(queries, domain+" "+query)
+	if strings.EqualFold(domain, "sop") {
+		queries = append(queries,
+			"SOP architecture "+query,
+			"SOP SDLC "+query,
+			"SOP onboarding "+query,
+			"SOP tech stack "+query,
+		)
+	}
+	return queries
 }
 
 func (a *CopilotAgent) getPlaybooksContext(ctx context.Context, query string, targetDomains []string) string {
@@ -1339,31 +1539,19 @@ func (a *CopilotAgent) getPlaybooksContext(ctx context.Context, query string, ta
 			if tx, err := domainDB.BeginTransaction(ctx, sop.ForReading); err == nil {
 				kb, err := domainDB.OpenKnowledgeBase(ctx, domain, tx, nil, nil, false)
 				if err == nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
-					vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query})
-					if err == nil && len(vecs) > 0 {
-						closestCat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
-						catFilter := ""
-						if err == nil && closestCat != nil {
-							catFilter = closestCat.Name
-						}
-						hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: 5, CategoryPath: catFilter})
-						accumStr := ""
-						if err == nil && len(hits) > 0 {
-							for _, hit := range hits {
-								if hit.Score < 0.6 {
-									continue
-								}
-								hasGoodHits = true
-								valStr := ""
-								if str, ok := hit.Payload["_raw_content"].(string); ok {
-									valStr = str
-								} else if str, ok := hit.Payload["content"].(string); ok {
-									valStr = str
-								} else {
-									valStr = fmt.Sprintf("%v", hit.Payload)
-								}
-								accumStr += fmt.Sprintf("- Context (Score: %.2f): %s\n", hit.Score, valStr)
-							}
+					hits, err := memory.DigestKnowledgeBase(ctx, kb, a.service.Domain().Embedder(), memory.KBDigestRequest{
+						Queries:            buildKnowledgeMiningQueries(domain, query),
+						PerQueryLimit:      5,
+						MaxResults:         5,
+						MinScore:           0.6,
+						UseClosestCategory: true,
+						KeywordFallback:    strings.EqualFold(domain, "sop"),
+					})
+					accumStr := ""
+					if err == nil && len(hits) > 0 {
+						for _, hit := range hits {
+							hasGoodHits = true
+							accumStr += fmt.Sprintf("- Context (Score: %.2f): %s\n", hit.Score, hit.Text)
 						}
 
 						if hasGoodHits {
@@ -1442,6 +1630,8 @@ func (a *CopilotAgent) getSchemaInjectionContext(ctx context.Context) string {
 // buildSystemPrompt, on top of generated System Prompt(below), we rely on native Tool Calling via ListTools,
 // which specifies each tool's basic info & supported JSON schema.
 func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, taskClassification TaskContextClassification) string {
+	a.rehydrateMRUFromMemory(ctx)
+
 	builder := NewSystemPromptBuilder()
 
 	// 1. Resolve Avatar / Custom KB Persona or Fallback
@@ -1485,6 +1675,7 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 		"routing_gate", taskClassification.RoutingGate,
 		"original_chars", budgetReport.OriginalTotalChars,
 		"final_chars", budgetReport.FinalTotalChars,
+		"components_present", summarizePromptComponentsPresent(budgetReport),
 		"trimmed_components", summarizePromptBudgetTrim(budgetReport),
 	)
 	log.Info("LLM Context (OMNI)", "SystemPrompt", fullPrompt)
@@ -1651,7 +1842,11 @@ func (b *BaselineReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) 
 		}
 
 		text := strings.TrimSpace(resp.Text)
-		isToolCall := false
+		type localToolCall struct {
+			Tool string         `json:"tool"`
+			Args map[string]any `json:"args"`
+		}
+		var toolCalls []localToolCall
 		var cleanText string
 		if start := strings.Index(text, "```"); start != -1 {
 			cleanText = text[start:]
@@ -1663,43 +1858,11 @@ func (b *BaselineReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) 
 			if end := strings.LastIndex(cleanText, "```"); end != -1 {
 				cleanText = cleanText[:end]
 			}
-			isToolCall = true
 		} else {
+			cleanText = text
 			idxOb := strings.Index(text, "{")
 			idxAr := strings.Index(text, "[")
 			if idxOb != -1 && (idxAr == -1 || idxOb < idxAr) {
-				cleanText = text[idxOb:]
-				isToolCall = true
-			} else if idxAr != -1 {
-				cleanText = text[idxAr:]
-				isToolCall = true
-			}
-		}
-
-		if isToolCall && (strings.Contains(cleanText, "\"tool\"") || strings.Contains(cleanText, "\"op\"")) {
-			cleanText = strings.TrimSpace(cleanText)
-			type localToolCall struct {
-				Tool string         `json:"tool"`
-				Args map[string]any `json:"args"`
-			}
-			var toolCalls []localToolCall
-
-			if err := json.Unmarshal([]byte(cleanText), &toolCalls); err == nil {
-				validToolCalls := true
-				if len(toolCalls) > 0 {
-					for _, tc := range toolCalls {
-						if tc.Tool == "" {
-							validToolCalls = false
-							break
-						}
-					}
-				}
-				if !validToolCalls || len(toolCalls) == 0 {
-					toolCalls = nil
-				}
-			}
-
-			if len(toolCalls) == 0 {
 				var scriptSteps []any
 				if err := json.Unmarshal([]byte(cleanText), &scriptSteps); err == nil && len(scriptSteps) > 0 {
 					isScript := true
@@ -2058,13 +2221,11 @@ func (a *CopilotAgent) logThought(ctx context.Context, query string, toolsExecut
 		return
 	}
 
-	payloadInfo := ai.GetSessionPayload(ctx)
-	userID := "default"
-	kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, userID)
-	if payloadInfo != nil && payloadInfo.UserID != "" {
-		userID = payloadInfo.UserID
-		kbName = payloadInfo.GetMemoryKBName()
+	if a.Memory == nil {
+		return
 	}
+	a.Memory.BindSession(ctx)
+	kbName := a.Memory.LongTermMemoryName()
 
 	var embedder ai.Embeddings
 	if a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {

@@ -173,4 +173,25 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 			t.Errorf("Gate 3 should mark discovery routing gate, got %q", taskCtx.RoutingGate)
 		}
 	})
+
+	t.Run("Gate 2: Rehydrates Routing State From STM", func(t *testing.T) {
+		gen := &RouterTestGen{}
+		payload := &ai.SessionPayload{Variables: make(map[string]any)}
+		ctx = context.WithValue(ctx, "session_payload", payload)
+		ag.service.session.Memory = NewShortTermMemory()
+		ag.service.session.Memory.SetRoutingState(&TaskContextClassification{
+			Entity:      "Omni",
+			Domain:      StoresDomain,
+			DBArtifacts: []string{"users"},
+			Layers:      []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}},
+		})
+
+		taskCtx := ag.evaluateRoutingGates(ctx, "show users again", gen)
+		if taskCtx == nil || taskCtx.RoutingGate != RoutingGateContinuity {
+			t.Fatalf("expected continuity routing gate after STM rehydration, got %+v", taskCtx)
+		}
+		if rs, ok := payload.Variables["RoutingState"].(*TaskContextClassification); !ok || rs == nil || rs.Domain != "TestInherited" {
+			t.Fatalf("expected routing state to be restored and updated through Gate 2, got %v", payload.Variables["RoutingState"])
+		}
+	})
 }

@@ -24,10 +24,11 @@ type MockPlaybookEmbedder struct {
 func (e *MockPlaybookEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]float32, error) {
 	var results [][]float32
 	for _, text := range texts {
+		lowerText := strings.ToLower(text)
 		matched := false
 		for _, rule := range e.Rules {
 			for _, kw := range rule.Keywords {
-				if strings.Contains(text, kw) {
+				if strings.Contains(lowerText, strings.ToLower(kw)) {
 					results = append(results, rule.Vector)
 					matched = true
 					break // matched rule keyword

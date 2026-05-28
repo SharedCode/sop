@@ -131,3 +131,25 @@ func TestStaticKnowledgeBase(t *testing.T) {
 		t.Errorf("Expected no hits for non-existent category, got %v", khitsEmpty)
 	}
 }
+
+func TestKnowledgeBase_SearchKeywords_NoTextSearchEnabledReturnsNoHits(t *testing.T) {
+	ctx := context.Background()
+
+	categories := inmemory.NewBtree[sop.UUID, *Category](true)
+	vectors := inmemory.NewBtree[VectorKey, Vector](true)
+	items := inmemory.NewBtree[ItemKey, Item[string]](true)
+
+	store := NewStore[string]("test_kb", nil, categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vectors.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
+	kb := KnowledgeBase[string]{
+		Store:   store,
+		Manager: NewMemoryManager[string](store, &MockLLM{}, &MockEmbedder{}),
+	}
+
+	hits, err := kb.SearchKeywords(ctx, "fruit", &SearchOptions[string]{Limit: 10})
+	if err != nil {
+		t.Fatalf("SearchKeywords should not fail when text search is disabled: %v", err)
+	}
+	if len(hits) != 0 {
+		t.Fatalf("expected no keyword hits when text search is disabled, got %v", hits)
+	}
+}

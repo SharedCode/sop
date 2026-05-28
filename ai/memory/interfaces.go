@@ -113,7 +113,9 @@ type MemoryStore[T any] interface {
 
 // SearchOptions provides optional parameters for querying the vector store
 type SearchOptions[T any] struct {
-	Limit                  int
+	Limit int
+	// CategoryPath can serve as a cheaper SearchByPath-style alternative to TextSearch
+	// when the use-case has a stable, meaningful category taxonomy to route through.
 	CategoryPath           string
 	CategoryDistanceVector []float32
 	Filter                 func(T) bool

@@ -86,9 +86,11 @@ type ConversationThread struct {
 
 // ShortTermMemory manages the history of conversation threads.
 type ShortTermMemory struct {
-	Threads         map[sop.UUID]*ConversationThread
-	Order           []sop.UUID // Maintains the sequence of threads
-	CurrentThreadID sop.UUID   // The currently active thread
+	Threads          map[sop.UUID]*ConversationThread
+	Order            []sop.UUID // Maintains the sequence of threads
+	CurrentThreadID  sop.UUID   // The currently active thread
+	LastRoutingState *TaskContextClassification
+	LastMRUSnapshot  []MRUItem
 }
 
 // NewShortTermMemory initializes the memory structure.
@@ -140,6 +142,43 @@ func (stm *ShortTermMemory) GetCurrentThread() *ConversationThread {
 		return nil
 	}
 	return stm.Threads[stm.CurrentThreadID]
+}
+
+func (stm *ShortTermMemory) SetRoutingState(taskCtx *TaskContextClassification) {
+	stm.LastRoutingState = cloneTaskContextClassification(taskCtx)
+}
+
+func (stm *ShortTermMemory) GetRoutingState() *TaskContextClassification {
+	return cloneTaskContextClassification(stm.LastRoutingState)
+}
+
+func (stm *ShortTermMemory) SetMRUSnapshot(items []MRUItem) {
+	if len(items) == 0 {
+		stm.LastMRUSnapshot = nil
+		return
+	}
+	stm.LastMRUSnapshot = append([]MRUItem(nil), items...)
+}
+
+func (stm *ShortTermMemory) GetMRUSnapshot() []MRUItem {
+	if len(stm.LastMRUSnapshot) == 0 {
+		return nil
+	}
+	return append([]MRUItem(nil), stm.LastMRUSnapshot...)
+}
+
+func (stm *ShortTermMemory) ResetProjectionForTopicSwitch() {
+	stm.LastRoutingState = nil
+	if len(stm.LastMRUSnapshot) == 0 {
+		return
+	}
+	filtered := stm.LastMRUSnapshot[:0]
+	for _, item := range stm.LastMRUSnapshot {
+		if shouldPreserveMRUOnTopicSwitch(item) {
+			filtered = append(filtered, item)
+		}
+	}
+	stm.LastMRUSnapshot = append([]MRUItem(nil), filtered...)
 }
 
 // RefinementProposal holds the proposed changes for a script.

@@ -182,6 +182,15 @@ When `AllowAutoEnrichment` is actively enabled for a KB, the background memory w
 4. **Fallback Formative Cataloging (`GenerateCategories`)**: If facts are "orphaned" by mathematical distance, they are batched to the LLM taxonomy organizer. The LLM evaluates the batch, incorporating the `PersonaContext`, and actively assigns (or generates) formal category labels.
 5. **Schema Stabilization**: Center Vectors and `VectorHash` boundaries are recalculating, organically solidifying the Space matrix for future querying.
 
+#### 3. Future Direction: Knowledge Base Absorption into LTM
+Beyond implicit enrichment, SOP's long-term direction is to allow a Knowledge Base to be absorbed into Long-Term Memory as distilled expertise.
+* **Current Default:** Right now, the practical model is still Avatar + KB + STM + LTM. The mounted KB is the active grounding surface for the LLM, and the product needs to keep stabilizing how that helps before we reduce dependence on live KB attachment.
+* **Goal:** Let the AI accumulate multiple durable skills from curated Spaces, effectively creating a reusable internal depot of expertise.
+* **Method:** Absorption should summarize and refine a Space into durable thoughts, rules, and skill fragments rather than naively copying the entire Space into prompt-time working memory.
+* **Benefit:** The AI can become multi-talented over time while still respecting routing, prompt budgets, and isolation boundaries.
+* **Constraint:** Absorbed knowledge must retain lineage to the source Knowledge Base so it can be refreshed, governed, or removed later if the source changes.
+* **Operating-Model Shift:** If absorption matures, the system can evolve from an Avatar that is primarily defined by one mounted KB into an Avatar that carries its own STM/LTM plus previously absorbed expertise, then later absorbs additional KBs as new skills.
+
 ### Episodic Working Memory (Context Carry-over)
 
 One of the great challenges of interacting with LLMs is the tendency to lose vital execution context—or "skills"—between prompts. Often called "Context Collapse", an LLM might successfully use a database grammar or a complex prompt instruction in turn one, only to forget those precise rules in turn two, requiring the user to re-prompt. 

@@ -392,7 +392,7 @@ func constructPayload(ctx context.Context, req *aiChatRequest, sendEvent func(st
 func executeAgentLifecycle(ctx context.Context, agentSvc ai.Agent[map[string]any], req *aiChatRequest, sendEvent func(string, any)) error {
 	if sysOpts, err := getSystemDBOptions(ctx); err == nil {
 		sysDB := aidb.NewDatabase(sysOpts)
-		kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, req.UserID)
+		kbName := memory.BuildLTMStoreName(ai.AgentIDOmni, req.UserID)
 		trans, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 		if trans != nil {
 			dbEmbedder := GetConfiguredEmbedder(nil)
@@ -974,7 +974,7 @@ func handleAIFeedback(w http.ResponseWriter, r *http.Request) {
 	// Ensure rollback if not committed
 	defer trans.Rollback(ctx)
 
-	kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, req.UserID)
+	kbName := memory.BuildLTMStoreName(ai.AgentIDOmni, req.UserID)
 	if req.UserID == "" {
 		kbName = "llm_feedback"
 	}

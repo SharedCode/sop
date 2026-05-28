@@ -255,6 +255,10 @@ SOP introduces a novel architecture for AI Agents, distinguishing itself from st
 
 ### 3. Declarative Long-Term Memory (LTM) & Sleep Cycle
 *   **Mechanism**: The Avatar has private Vector DBs (`ltm_<agent_id>`) for its own semantic procedural learnings swept during its private **Sleep Cycle**. By balancing "Minted" UI Knowledge Bases (Declarative) against Auto-Enriched Conversational Memory (Episodic LTM), SOP bridges unstructured interactions into structured vectors through a rigorous summarization, clustering, and fallback-LLM cataloging pipeline.
+*   **Direction**: LTM is intended to evolve from a passive vector store into a managed cognitive asset. User interaction should drive what gets captured, Sleep Cycle should refine and re-categorize thoughts, and the resulting LTM should continuously influence future LLM behavior. LTM itself will eventually require MRU/LRU-like lifecycle policies so cold or superseded thoughts can be archived, compacted, or purged while high-value thoughts remain behaviorally active.
+*   **Current Default**: The present runtime composition is Avatar + KB + STM + LTM. The KB is still the primary grounding surface, and we need to stabilize exactly how that mounted KB benefits the LLM before making absorption a dominant operating mode.
+*   **Knowledge Absorption**: Curated Knowledge Bases should eventually be absorbable into LTM as distilled skills/expertise, giving the AI a durable internal depot of reusable competencies rather than forcing every capability to remain tied to an actively mounted Space.
+*   **Long-Term Shift**: This enables a future transition from an "Avatar of a KB" to an Avatar simply carrying STM/LTM plus absorbed expertise, with additional KBs assimilated over time as new competencies.
 
 ### 4. Hybrid Scripting Engine (Explicit Execution)
 The SOP Scripting Engine (`ai/agent`) follows a unique **"Explicit Execution"** design pattern.

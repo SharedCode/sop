@@ -59,6 +59,59 @@ To prevent LongTermMemory from becoming bloated with redundant data, the AI must
     - *Rule 2 (Generalization):* "If the user solves a bug, generalize the solution instead of memorizing the exact stack trace."
 *   **Rollout:** Begin simply by injecting a few hardcoded meta-rules into this category upon session creation. Over time, allow the LLM to update this section based on explicit user feedback (e.g. "Don't save this," or "Always remember this pattern").
 
+### 5. Thought Capture, Refinement, and Category Minting
+LongTermMemory is not intended to be a passive archive of raw transcripts. Its purpose is to act as a continuous refinement layer over the LLM's future decisions. For that reason, the system must capture rich user-driven content, refine it over time, and continuously re-organize that content into better thoughts and categories.
+*   **Capture Principle:** User interaction drives what becomes eligible for memory. Successful patterns, repeated preferences, useful corrections, and high-signal domain observations should be preserved. Low-value transient noise should remain in ShortTermMemory or be discarded during consolidation.
+*   **Refinement Principle:** Thoughts are not immutable. During Sleep Cycles, the system should merge duplicates, generalize narrow observations into reusable guidance, and split overly broad thoughts into smaller, more precise units.
+*   **Minting Principle:** Categories and thoughts are both first-class evolving assets. The LLM is allowed to mint new Categories, broaden old ones, narrow dense ones, and rewrite thought descriptions when this improves future retrieval and behavioral alignment.
+*   **Behavioral Goal:** The output of this process is not merely better search recall. The refined LTM should actively bias future LLM choices, tool usage, style, and decision boundaries.
+
+### 5.5. Knowledge Base Absorption into LTM
+LongTermMemory should also reserve explicit capacity for absorbed Knowledge Bases. The intent is to let the agent internalize reusable skills, expertise, and durable domain knowledge from curated Spaces without forcing every future Ask loop to depend on that Space remaining actively mounted.
+*   **Current Operating Model:** Today, the default composition is still Avatar + mounted KB + STM + LTM. The mounted Knowledge Base remains the primary way to give the LLM grounded domain context, and that flow must be stabilized before absorption becomes a primary runtime mode.
+*   **Future Operating Model:** Over time, the system should support an Avatar simply carrying STM/LTM after a Knowledge Base has been absorbed. In that mode, the Avatar is no longer defined by a single live KB binding; it can later absorb another KB and accumulate additional expertise incrementally.
+*   **Skill Depot Concept:** Inside LTM, we should carve out a dedicated logical depot for absorbed expertise. This depot can hold refined skills, procedural knowledge, domain heuristics, and high-value summaries that were originally curated inside a Knowledge Base.
+*   **Absorption Model:** A Knowledge Base is not copied blindly into LTM. The absorption process should summarize, distill, and re-categorize its contents into durable thoughts and skills suitable for influencing future behavior.
+*   **Resulting Capability:** By absorbing multiple Spaces into this depot, the AI can become multi-talented over time, carrying forward expertise from many domains while still respecting prompt budgets and routing boundaries.
+*   **Governance Rule:** Absorbed KB content must remain attributable. We should preserve lineage back to the originating Space/Knowledge Base so the system can explain where a skill or expertise fragment came from, and so future refresh/rebuild operations can reconcile source changes.
+*   **Future Retrieval Role:** This absorbed depot is a first-class part of LTM and should eventually participate in MRU projection alongside other LTM signals, but under explicit policy so absorbed skills do not crowd out fresher STM continuity.
+*   **Near-Term Priority:** Before this transition is made first-class, we need to capture and stabilize exactly how a mounted KB benefits the LLM today: retrieval patterns, prompt contribution, continuity behavior, and the practical boundaries between KB-grounded execution and absorbed long-term skill.
+
+### 6. LTM as a Managed Cognitive Asset
+LongTermMemory must itself have lifecycle management characteristics similar to MRU/LRU systems.
+*   **Bounded Growth:** LTM cannot grow forever without quality degradation. We will impose capacity and quality limits on retained thoughts and categories.
+*   **Recency and Utility:** Thoughts that are recent, repeatedly useful, or behavior-shaping should stay near the active working frontier. Thoughts that become cold, superseded, or redundant should be archived, compacted, or purged.
+*   **Refinement over Hoarding:** The system should prefer a smaller number of refined, high-signal thoughts over a large pile of raw observations.
+*   **Archive Strategy:** Old thoughts do not have to disappear immediately. They may be moved into colder archival structures first, then eventually purged if they no longer contribute to future behavior or retrieval quality.
+
+### 7. STM -> LTM -> MRU Feedback Loop
+The intended direction is a closed loop rather than three isolated memory systems.
+1.  **STM captures** the live interaction, immediate routing state, compact execution context, and raw thought candidates.
+2.  **Sleep Cycle refines** STM into LTM by deduplicating, generalizing, categorizing, and re-writing thoughts into durable forms.
+3.  **MRU rehydrates** from the most relevant STM and LTM entries for the next Ask loop.
+4.  **Prompt assembly projects** only the highest-value working subset into the LLM prompt under budget.
+
+Architectural rule:
+- STM and LTM are the systems of record for memory.
+- MRU is the transient projection layer for the next turn.
+- Restart/reboot should rebuild MRU consciously from persisted STM/LTM rather than blindly replaying stale MRU snapshots.
+
+### 8. Persona-Influenced Refinement
+Later Sleep Cycle phases will incorporate persona influence deliberately.
+*   **Persona as Flavor, not Leakage:** Persona influence should shape how thoughts are summarized, grouped, and prioritized without contaminating unrelated domains or violating sandbox boundaries.
+*   **Scoped Refinement:** A Medical persona may prefer compliance-oriented summaries, while an Engineering persona may favor operational heuristics and debugging rules. The same raw episode may therefore be refined differently depending on persona scope.
+*   **Identity Formation:** Over time, persona-influenced refinement gives the memory system a stable behavioral flavor. This is how LongTermMemory helps express identity and not just recall facts.
+
+### 9. Evolution Drivers for LongTermMemory
+The evolution of LTM is driven by the following goals:
+*   **Continuity:** Preserve useful context across turns, sessions, restart, and domain switching.
+*   **Refinement:** Improve the quality of stored thoughts rather than merely increasing quantity.
+*   **Behavior Shaping:** Influence future LLM decisions, not just retrieval results.
+*   **Compression:** Convert noisy episodic data into fewer, stronger, reusable thoughts.
+*   **Identity:** Allow future persona-aware refinement to shape a stable behavioral style over time.
+*   **Operational Safety:** Keep memory bounded, partitioned, and explainable enough to debug and govern.
+*   **Skill Acquisition:** Allow curated Knowledge Bases to be absorbed into LTM as reusable expertise so the AI can accumulate multiple durable competencies over time.
+
 ## Component Architecture (Engine Level)
 
 ### 1. ShortTermMemory (STM - Scratchpad)
@@ -87,6 +140,16 @@ To prevent LongTermMemory from becoming bloated with redundant data, the AI must
 *   **`logEpisode` Execution:** The `logEpisode` function (the interception point) MUST write its serialized outcomes directly to the raw `user_active_scratchpad` buffer. It MUST NOT call `KnowledgeBase` methods (like `IngestThought`) because doing so bypasses the buffer, incorrectly routing thoughts directly into LongTermMemory in real-time.
 
 ## Future Enhancements & Roadmap
+
+### Memory Evolution Roadmap
+The long-term direction of the memory system is:
+*   **Phase 1:** Introduce explicit STM/MRU projection seams so Ask-loop continuity and restart rehydration do not depend on ad hoc in-process state.
+*   **Phase 2:** Separate STM-derived and LTM-derived working-memory contributions so recent continuity signals do not get crowded out by older long-term carry-over.
+*   **Phase 3:** Add stronger thought lifecycle management in LTM, including refinement, archival, compaction, and purge policies.
+*   **Phase 4:** Expand Sleep Cycle into a persona-aware refinement engine that can shape how durable thoughts are written back into LTM.
+*   **Phase 5:** Use the refined LTM not only for retrieval but as a durable mechanism for continuously steering LLM behavior and decision quality.
+*   **Phase 6:** Support controlled Knowledge Base absorption into LTM so curated Spaces can be distilled into a durable skill/expertise depot.
+*   **Phase 7:** Evolve from "Avatar of a KB" toward "Avatar with accumulated expertise," where absorbed KBs become durable capabilities and live KB attachment becomes optional rather than defining.
 
 **Performance & Architectural Considerations:**
 Adding Categorical data to the `TextIndex` creates a lifecycle coupling issue when Categories are managed/refactored.

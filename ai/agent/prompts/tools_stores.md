@@ -28,7 +28,7 @@ Every step in the script array is a JSON object that strictly follows this forma
 *   **`begin_tx`**: `{"database": "string", "mode": "read" | "write"}` -> tx
 *   **`commit_tx`**: `{"transaction": "string"}` 
 *   **`rollback_tx`**: `{"transaction": "string"}`
-*   **`open_store`**: `{"transaction": "string", "name": "string"}` -> store
+*   **`open_store`**: `{"transaction": "string", "name": "string"}` -> store. If you set `result_var`, later `store`/`with` references should normally reuse that exact variable name.
 *   **`add`**: `{"store": "string", "key": any, "value": any}` -> inserts a new record
 *   **`find`**: `{"store": "string", "key": any}` -> seeks to a record by key
 *   **`get_current_value`**: `{"store": "string"}` -> gets the value of the found/focused record
@@ -37,14 +37,16 @@ Every step in the script array is a JSON object that strictly follows this forma
 *   **`filter`**: `{"condition": "string"}` -> cursor/list
 *   **`project`**: `{"fields": ["string"]}` -> cursor/list
 *   **`limit`**: `{"limit": number}` -> cursor/list
-*   **`join`**: `{"with": "string", "type": "inner"|"left"|"right", "on": object}` -> cursor/list
-*   **`join_right`**: `{"store": "string", "on": object}` -> cursor/list (Pipeline alias for join)
+*   **`join`**: `{"with": "string", "type": "inner"|"left"|"right", "on": object}` -> cursor/list. The right-side store reference may be either the exact `result_var` returned by `open_store` or the literal underlying store name, but prefer one naming style consistently within the script.
+*   **`join_right`**: `{"store": "string", "on": object}` -> cursor/list (Pipeline alias for join). The `store` value follows the same rule: prefer the exact `open_store.result_var`; literal store names are also accepted when they match the opened store.
 *   **`update`**: `{"store": "string"}` -> bulk updates from piped list
 *   **`delete`**: `{"store": "string"}` -> bulk deletes from piped list
 *   **`return`**: `{"value": any}` -> gracefully halting early
 
 <h2> Few-Shot Example: Querying, Joining, and Filtering</h2>
 When pipelining data, chain variables using `result_var` on step N and `input_var` on step N+1.
+
+For store handles, be explicit and consistent: if `open_store` uses `"result_var": "users_store"`, then prefer `"store": "users_store"` in later `scan`, `find`, `join`, `join_right`, `update`, and `delete` steps. Do not invent a second alias for the same opened store inside one script unless you are deliberately referring to the literal underlying store name.
 
 ```json
 [
@@ -71,6 +73,7 @@ When pipelining data, chain variables using `result_var` on step N and `input_va
 - **Tool Choice Discipline**: Do not call `list_tools` for ordinary store/database requests. The relevant Stores operations are already injected in this context. Use `list_tools` only if the user explicitly asks about available tools or capabilities.
 - **Database Choice Rule**: The active Current Database from context is the default database. Prefer `begin_tx` directly on that database. If you still emit `open_db`, use the active database name exactly as provided by context.
 - **Strict AST Sequencing**: When you explicitly switch databases, open the DB (`open_db`), then begin a transaction (`begin_tx`), then open any required data stores (`open_store`) before you can scan them.
+- **Store Alias Discipline**: After `open_store`, keep later references stable. Best practice is to reuse the same `result_var` in every later `store` or `with` field for that handle.
 - **Projection Order for UX:** When a user requests data to be sorted or filtered by a specific field, always ensure that the operation `project` places that specific field as the **first item** in the `fields` array. This makes the sorting/filtering immediately obvious to the user in the resulting output.
 - **Relational Joins:** The dynamic Context payload will supply `Relations: [foreign_key] -> target_store([primary_key])`. Look at these carefully when invoking `join` or `join_right`; your `on` condition must match these constraints exactly to map entities successfully.
 

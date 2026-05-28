@@ -265,6 +265,75 @@ func TestPromptBudgetProfile_UsesRoutingGate(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPrompt_RehydratesSystemToolsFromSTMProjection(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession()}
+	ag.service.session.Memory.SetMRUSnapshot([]MRUItem{{
+		Category: SYSTEM_TOOLS,
+		Context:  "STM_REHYDRATED_TOOLS",
+		Source:   MRUSourceSystemTools,
+	}})
+
+	prompt := ag.buildSystemPrompt(context.Background(), "List stores", TaskContextClassification{})
+	if !strings.Contains(prompt, "STM_REHYDRATED_TOOLS") {
+		t.Fatalf("expected buildSystemPrompt to rehydrate system tools from STM projection, got %s", prompt)
+	}
+}
+
+func TestProjectMRUItemsFromSTM_AppliesSourceCapsAndPriority(t *testing.T) {
+	projected := projectMRUItemsFromSTM([]MRUItem{
+		{Category: "PLAYBOOK_old", Source: MRUSourcePlaybook, LastAccessed: 10},
+		{Category: "PLAYBOOK_new", Source: MRUSourcePlaybook, LastAccessed: 20},
+		{Category: "PLAYBOOK_extra1", Source: MRUSourcePlaybook, LastAccessed: 30},
+		{Category: "PLAYBOOK_extra2", Source: MRUSourcePlaybook, LastAccessed: 40},
+		{Category: "PLAYBOOK_extra3", Source: MRUSourcePlaybook, LastAccessed: 50},
+		{Category: SYSTEM_TOOLS, Source: MRUSourceSystemTools, Context: "tools-a", LastAccessed: 60},
+		{Category: "SYSTEM_TOOLS_OLD", Source: MRUSourceSystemTools, Context: "tools-b", LastAccessed: 10},
+		{Category: "PERSONA_a", Source: MRUSourcePersona, LastAccessed: 5},
+		{Category: "PERSONA_b", Source: MRUSourcePersona, LastAccessed: 15},
+		{Category: "PERSONA_c", Source: MRUSourcePersona, LastAccessed: 25},
+		{Category: "UNSCOPED", Source: MRUSourceUnknown, LastAccessed: 100},
+	}, "sop,Spaces")
+
+	if len(projected) != 7 {
+		t.Fatalf("expected capped projection size of 7, got %d (%+v)", len(projected), projected)
+	}
+	if projected[0].Source != MRUSourcePersona || projected[1].Source != MRUSourcePersona {
+		t.Fatalf("expected persona entries to lead projection order, got %+v", projected)
+	}
+	if projected[2].Source != MRUSourceSystemTools {
+		t.Fatalf("expected system tools to follow persona entries, got %+v", projected)
+	}
+	playbookCount := 0
+	for _, item := range projected {
+		if item.Category == "UNSCOPED" {
+			t.Fatalf("unexpected unknown-source MRU item in projection: %+v", projected)
+		}
+		if item.Source == MRUSourcePlaybook {
+			playbookCount++
+		}
+	}
+	if playbookCount != maxProjectedPlaybookEntries {
+		t.Fatalf("expected playbook entries to be capped at %d, got %d (%+v)", maxProjectedPlaybookEntries, playbookCount, projected)
+	}
+}
+
+func TestEpilogueAndCleanup_PersistsMRUSnapshotWithoutSleepCycleLogging(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.markMRUCategoryWithSource(SYSTEM_TOOLS, "TOOLS_FOR_RESTART", MRUSourceSystemTools)
+
+	ag.epilogueAndCleanup(context.Background(), "List stores", "Omni", "Done")
+
+	snapshot := ag.service.session.Memory.GetMRUSnapshot()
+	if len(snapshot) == 0 {
+		t.Fatalf("expected epilogue to persist MRU snapshot even when sleep-cycle logging is disabled")
+	}
+	if snapshot[0].Category != SYSTEM_TOOLS || snapshot[0].Context != "TOOLS_FOR_RESTART" {
+		t.Fatalf("unexpected MRU snapshot persisted to STM: %+v", snapshot)
+	}
+}
+
 func TestSystemPromptBuilder_BudgetReportTracksTrimmedComponents(t *testing.T) {
 	builder := NewSystemPromptBuilder().
 		With(ComponentSystemTools, strings.Repeat("TOOL_RULE ", 200)).
@@ -303,5 +372,19 @@ func TestSystemPromptBuilder_BudgetReportTracksTrimmedComponents(t *testing.T) {
 	}
 	if summary := summarizePromptBudgetTrim(report); !strings.Contains(summary, "system_tools") || !strings.Contains(summary, "conversation_history") {
 		t.Fatalf("expected trim summary to mention reduced components, got %q", summary)
+	}
+	if present := summarizePromptComponentsPresent(report); !strings.Contains(present, "system_tools") || !strings.Contains(present, "user_query") {
+		t.Fatalf("expected present-components summary to mention retained components, got %q", present)
+	}
+}
+
+func TestSummarizeProjectedMRU_IncludesSourceAndCategory(t *testing.T) {
+	summary := summarizeProjectedMRU([]MRUItem{
+		{Category: "PERSONA_omni", Source: MRUSourcePersona},
+		{Category: SYSTEM_TOOLS, Source: MRUSourceSystemTools},
+		{Category: playbookMRUCategory("sop"), Source: MRUSourcePlaybook},
+	})
+	if !strings.Contains(summary, "persona:PERSONA_omni") || !strings.Contains(summary, "system_tools:System_Tools") || !strings.Contains(summary, "playbook:PLAYBOOK_sop") {
+		t.Fatalf("unexpected projected MRU summary: %q", summary)
 	}
 }

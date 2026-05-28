@@ -15,6 +15,5 @@ const (
 	IntentOmni       = "OMNI"
 
 	// Knowledge Base Constants
-	DefaultKBName  = "SOP"
-	MemoryKBPrefix = "memory_"
+	DefaultKBName = "SOP"
 )
