@@ -29,7 +29,8 @@ func TestExplicitMinting_MintToSpaceTool(t *testing.T) {
 
 	ag.brain = mockGen
 	ag.service = &Service{
-		domain: &mockDomain{emb: mockEmb},
+		domain:    &mockDomain{emb: mockEmb},
+		generator: mockGen,
 	}
 
 	args := map[string]any{
@@ -80,6 +81,107 @@ func TestExplicitMinting_MintToSpaceTool(t *testing.T) {
 	}
 }
 
+func TestExplicitMinting_MintToSpaceTool_InfersKBNameFromCurrentUserQuery(t *testing.T) {
+	ctx := context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{
+		UserID:           "test",
+		SessionID:        "sess",
+		CurrentDB:        "sop",
+		CurrentUserQuery: "Generate sample tasks and add them to my Tasks2 space",
+	})
+	testDir := "./test_data/minting_infer_kb_test"
+	os.RemoveAll(testDir)
+	defer os.RemoveAll(testDir)
+
+	sysDBOptions := sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{testDir}}
+	sysDB := database.NewDatabase(sysDBOptions)
+
+	cfg := Config{}
+	ag := NewCopilotAgent(cfg, map[string]sop.DatabaseOptions{"sop": sysDBOptions}, sysDB)
+
+	mockGen := &mockGenerator{}
+	mockEmb := &mockEmbeddings{}
+
+	ag.brain = mockGen
+	ag.service = &Service{
+		domain:    &mockDomain{emb: mockEmb},
+		generator: mockGen,
+	}
+
+	args := map[string]any{
+		"content":  "Task 1: Define project scope\nTask 2: Break work into milestones\nTask 3: Assign owners and due dates",
+		"category": "Tasks",
+	}
+
+	if _, err := ag.toolMintToSpace(ctx, args); err != nil {
+		t.Fatalf("toolMintToSpace should infer kb_name from the user query, got error: %v", err)
+	}
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("Failed to open tx: %v", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := sysDB.OpenKnowledgeBase(ctx, "Tasks2", tx, mockGen, mockEmb, false); err != nil {
+		t.Fatalf("Expected inferred KB 'Tasks2' to be created/opened, got: %v", err)
+	}
+}
+
+func TestDeleteSpaceTool_InfersKBNameFromCurrentUserQuery(t *testing.T) {
+	ctx := context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{
+		UserID:           "test",
+		SessionID:        "sess",
+		CurrentDB:        "sop",
+		CurrentUserQuery: "delete Tasks2 space",
+	})
+	testDir := "./test_data/delete_infer_kb_test"
+	os.RemoveAll(testDir)
+	defer os.RemoveAll(testDir)
+
+	sysDBOptions := sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{testDir}}
+	sysDB := database.NewDatabase(sysDBOptions)
+
+	cfg := Config{}
+	ag := NewCopilotAgent(cfg, map[string]sop.DatabaseOptions{"sop": sysDBOptions}, sysDB)
+
+	mockGen := &mockGenerator{}
+	mockEmb := &mockEmbeddings{}
+
+	ag.brain = mockGen
+	ag.service = &Service{
+		domain:    &mockDomain{emb: mockEmb},
+		generator: mockGen,
+	}
+
+	func() {
+		tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+		if err != nil {
+			t.Fatalf("failed to begin transaction: %v", err)
+		}
+		defer tx.Rollback(ctx)
+		if _, err := sysDB.OpenKnowledgeBase(ctx, "Tasks2", tx, mockGen, mockEmb, false); err != nil {
+			t.Fatalf("failed to create Tasks2 KB: %v", err)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			t.Fatalf("failed to commit Tasks2 creation: %v", err)
+		}
+	}()
+
+	if _, err := ag.toolDeleteSpace(ctx, map[string]any{}); err != nil {
+		t.Fatalf("toolDeleteSpace should infer kb_name from delete request, got error: %v", err)
+	}
+
+	domains, err := sysDB.GetDomains(ctx)
+	if err != nil {
+		t.Fatalf("failed to list domains after delete: %v", err)
+	}
+	for _, domain := range domains {
+		if domain == "Tasks2" {
+			t.Fatalf("expected Tasks2 to be deleted, domains=%v", domains)
+		}
+	}
+}
+
 func TestImplicitEnrichment_TriggerSleepCycle(t *testing.T) {
 	ctx := context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{UserID: "test", SessionID: "sess", CurrentDB: "sop"})
 	testDir := "./test_data/sleepcycle_test"
@@ -97,7 +199,8 @@ func TestImplicitEnrichment_TriggerSleepCycle(t *testing.T) {
 
 	ag.brain = mockGen
 	ag.service = &Service{
-		domain: &mockDomain{emb: mockEmb},
+		domain:    &mockDomain{emb: mockEmb},
+		generator: mockGen,
 	}
 
 	kbName := "ltm_agent123"

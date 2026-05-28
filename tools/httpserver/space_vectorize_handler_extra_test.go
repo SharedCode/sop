@@ -37,8 +37,10 @@ func TestHandleVectorizeSpace_BeginTransactionFail(t *testing.T) {
 	taskID := resp["task_id"].(string)
 	time.Sleep(200 * time.Millisecond)
 	for i := 0; i < 10; i++ {
-	if GetTask(taskID) != nil && (GetTask(taskID).Status == "error" || GetTask(taskID).Status == "completed") { break }
-	time.Sleep(100 * time.Millisecond)
+		if GetTask(taskID) != nil && (GetTask(taskID).Status == "error" || GetTask(taskID).Status == "completed") {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	task := GetTask(taskID)

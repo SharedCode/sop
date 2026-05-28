@@ -4,7 +4,7 @@ The **Model Store** is a specialized component of the SOP AI Kit designed to per
 
 Unlike a generic file system, the Model Store is **Transactional**. This means you can update your AI model and your Vector Database in a single, atomic operation. If your training process crashes halfway through, you are guaranteed never to have a "ghost" state where the index is updated but the model weights are not.
 
-## Key Features
+<h2>Key Features</h2>
 *   **ACID Compliance**: Updates are atomic, consistent, isolated, and durable.
 *   **Categorization**: Models are organized by `Category` and `Name`.
 *   **JSON Serialization**: Automatically handles marshaling/unmarshaling of any Go struct.
@@ -12,7 +12,7 @@ Unlike a generic file system, the Model Store is **Transactional**. This means y
 
 ---
 
-## 1. Basic Usage: Saving and Loading
+<h2>1. Basic Usage: Saving and Loading</h2>
 
 ### Step 1: Define Your Model
 You can store any serializable Go struct.
@@ -95,7 +95,7 @@ func load() {
 
 ---
 
-## 2. Advanced: Storing Model Weights (LoRA Adapters)
+<h2>2. Advanced: Storing Model Weights (LoRA Adapters)</h2>
 
 The Model Store is perfect for storing small-to-medium sized model artifacts, such as LoRA (Low-Rank Adaptation) adapters or simple neural network weights.
 
@@ -130,7 +130,7 @@ func saveAdapter(ctx context.Context, db *database.Database, name string, weight
 
 ---
 
-## 3. The "Atomic Training" Pattern
+<h2>3. The "Atomic Training" Pattern</h2>
 
 This is the most powerful pattern enabled by SOP. When you fine-tune a model or update an embedding index, you often need to update two things at once:
 1.  The **Vector Index** (new embeddings).
@@ -145,6 +145,7 @@ func UpdateKnowledgeBase(ctx context.Context, db *database.Database, docID strin
 	defer trans.Rollback(ctx)
 
 	// 2. Open Both Stores bound to the SAME transaction
+    // Open the legacy Vector Store.
 	vecStore, _ := db.OpenVectorStore(ctx, "documents", trans, vector.Config{})
 	metaStore, _ := db.OpenModelStore(ctx, "metadata", trans)
 
@@ -171,7 +172,7 @@ func UpdateKnowledgeBase(ctx context.Context, db *database.Database, docID strin
 }
 ```
 
-## 4. Listing and Management
+<h2>4. Listing and Management</h2>
 
 You can use the `List` and `Delete` methods to manage your model registry.
 

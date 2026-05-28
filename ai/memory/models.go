@@ -5,18 +5,19 @@ import (
 )
 
 type KnowledgeBaseConfig struct {
-	Type                string    `json:"type,omitempty"`
-	IsPersona           bool      `json:"is_persona,omitempty"`
-	IsExclusive         bool      `json:"is_exclusive,omitempty"`
-	SystemPrompt        string    `json:"system_prompt,omitempty"`
-	Embedder            string    `json:"embedder,omitempty"`
-	EmbedderDimension   int       `json:"embedder_dimension,omitempty"`
-	AllowAutoEnrichment bool      `json:"allowAutoEnrichment,omitempty"`
-	AllowedTools        []string  `json:"allowed_tools,omitempty"`
-	LastModified        int64     `json:"last_modified,omitempty"`   // Unix timestamp
-	LastVectorized      int64     `json:"last_vectorized,omitempty"` // Unix timestamp
-	RoutingPrefix       string    `json:"routing_prefix,omitempty"`
-	DomainReference     []float32 `json:"domain_reference,omitempty"`
+	Type                string            `json:"type,omitempty"`
+	IsPersona           bool              `json:"is_persona,omitempty"`
+	IsExclusive         bool              `json:"is_exclusive,omitempty"`
+	SystemPrompt        string            `json:"system_prompt,omitempty"`
+	Embedder            string            `json:"embedder,omitempty"`
+	EmbedderDimension   int               `json:"embedder_dimension,omitempty"`
+	AllowAutoEnrichment bool              `json:"allowAutoEnrichment,omitempty"`
+	AllowedTools        []string          `json:"allowed_tools,omitempty"`
+	ToolQueries         []PathSearchParam `json:"tool_queries,omitempty"`
+	LastModified        int64             `json:"last_modified,omitempty"`   // Unix timestamp
+	LastVectorized      int64             `json:"last_vectorized,omitempty"` // Unix timestamp
+	RoutingPrefix       string            `json:"routing_prefix,omitempty"`
+	DomainReference     []float32         `json:"domain_reference,omitempty"`
 	// DocumentMode flags whether this KB operates in traditional payload mode (Item.Data holds data),
 	// or in decoupled RAG references mode where Item.Data points to the canonical large Document(MD).
 	DocumentMode      bool `json:"document_mode,omitempty"`
@@ -121,22 +122,29 @@ func (k ItemKey) Compare(other any) int {
 
 // DistanceKey represents a distance-based index for sorting categories by distance to the Domain Reference CenterVector.
 type DistanceKey struct {
-	Distance float32
+	ParentID sop.UUID // NilUUID for Level 1 Macro-Categories
+	Distance float32  // Mathematical distance relative to the bounding anchor
 	ID       sop.UUID // ID of the Category
 }
 
-// Compare implements btree.Comparer for DistanceKey to enable fast distance-based indexing.
+// Compare implements btree.Comparer for DistanceKey to enable fast distance-based in
+// indexing, grouped by taxonomy depth and parent node.
 func (k DistanceKey) Compare(other any) int {
 	o, ok := other.(DistanceKey)
 	if !ok {
 		return -1
 	}
+
+	if c := k.ParentID.Compare(o.ParentID); c != 0 {
+		return c
+	}
+
 	if k.Distance < o.Distance {
 		return -1
-	}
-	if k.Distance > o.Distance {
+	} else if k.Distance > o.Distance {
 		return 1
 	}
+
 	return k.ID.Compare(o.ID)
 }
 

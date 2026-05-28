@@ -337,9 +337,7 @@ func TestToolSelect_OutputFormat(t *testing.T) {
 	tx.Commit(ctx)
 
 	// Invoke Select
-	cfg := Config{
-		EnableObfuscation: false,
-	}
+	cfg := Config{}
 	agent := NewCopilotAgent(cfg, nil, nil)
 	agent.databases = map[string]sop.DatabaseOptions{"test": dbOpts}
 

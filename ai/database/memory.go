@@ -137,7 +137,7 @@ func (db *Database) OpenKnowledgeBase(
 	}
 
 	// Assemble the storage engine
-	store := memory.NewStore(catsTree, catsByPathTree, catsByDistTree, vecsTree, itemsTree, docsTree)
+	store := memory.NewStore(name, db, catsTree, catsByPathTree, catsByDistTree, vecsTree, itemsTree, docsTree)
 
 	manager := memory.NewMemoryManager(store, llm, embedder)
 

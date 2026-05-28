@@ -25,6 +25,7 @@ type contextKey string
 const CtxKeyJSONStreamer contextKey = "json_streamer"
 const CtxKeyUseNDJSON contextKey = "use_ndjson"
 const CtxKeyCurrentScriptCategory contextKey = "current_script_category"
+const CtxKeySuppressInternalStepStart contextKey = "suppress_internal_step_start"
 
 type StepExecutionResult struct {
 	Type    string `json:"type"`
@@ -484,6 +485,7 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 
 		// Prepare streamer if available
 		var stepStreamer *StepStreamer
+		preAnnouncedStep := false
 		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
 			stepIndex, _ := ctx.Value("step_index").(int)
 			log.Debug("runStepCommand: StartStreamingStep", "index", stepIndex, "command", step.Command, "name", step.Name)
@@ -493,8 +495,20 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 			if step.Name != "" {
 				displayName = step.Name
 			}
-			stepStreamer = streamer.StartStreamingStep("command", displayName, "", stepIndex)
-			ctx = context.WithValue(ctx, ai.CtxKeyResultStreamer, stepStreamer)
+
+			isVerbose, _ := ctx.Value("verbose").(bool)
+			if step.Command == "execute_script" && isVerbose {
+				streamer.Write(StepExecutionResult{
+					Type:      "step_start",
+					Command:   displayName,
+					StepIndex: stepIndex,
+				})
+				ctx = context.WithValue(ctx, CtxKeySuppressInternalStepStart, true)
+				preAnnouncedStep = true
+			} else {
+				stepStreamer = streamer.StartStreamingStep("command", displayName, "", stepIndex)
+				ctx = context.WithValue(ctx, ai.CtxKeyResultStreamer, stepStreamer)
+			}
 		}
 
 		resp, err := executor.Execute(ctx, step.Command, resolvedArgs)
@@ -511,6 +525,51 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 
 		if err != nil {
 			return fmt.Errorf("command execution failed: %w", err)
+		}
+
+		if preAnnouncedStep {
+			if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+				trimmed := strings.TrimSpace(resp)
+				stepIndex, _ := ctx.Value("step_index").(int)
+				if trimmed != "" {
+					if strings.HasPrefix(trimmed, "[") {
+						var list []json.RawMessage
+						if err := json.Unmarshal([]byte(trimmed), &list); err == nil {
+							for _, item := range list {
+								streamer.Write(StepExecutionResult{
+									Type:      "record",
+									Record:    item,
+									StepIndex: stepIndex,
+								})
+							}
+						} else {
+							streamer.Write(StepExecutionResult{
+								Type:      "record",
+								Record:    resp,
+								StepIndex: stepIndex,
+							})
+						}
+					} else {
+						var resultAny any = resp
+						if strings.HasPrefix(trimmed, "{") {
+							resultAny = json.RawMessage(resp)
+						}
+						streamer.Write(StepExecutionResult{
+							Type:      "record",
+							Record:    resultAny,
+							StepIndex: stepIndex,
+						})
+					}
+				}
+			}
+			if step.OutputVariable != "" {
+				if scopeMu != nil {
+					scopeMu.Lock()
+					defer scopeMu.Unlock()
+				}
+				scope[step.OutputVariable] = strings.TrimSpace(resp)
+			}
+			return nil
 		}
 
 		// Stream result if streamer is present (and wasn't used by tool)
@@ -556,15 +615,13 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 							})
 						}
 
-						// 2. Emit Records (only if verbose)
-						if isVerbose {
-							for _, item := range list {
-								streamer.Write(StepExecutionResult{
-									Type:      "record",
-									Record:    item,
-									StepIndex: stepIndex,
-								})
-							}
+						// 2. Emit Records regardless of verbose; verbose only controls step narration.
+						for _, item := range list {
+							streamer.Write(StepExecutionResult{
+								Type:      "record",
+								Record:    item,
+								StepIndex: stepIndex,
+							})
 						}
 						// Return nil here strictly for the List path which is a special display-optimized path
 						// (NOTE: This implies list results aren't captured in variables currently, preserving existing behavior)
@@ -588,12 +645,12 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 						Command:   displayName,
 						StepIndex: stepIndex,
 					})
-					streamer.Write(StepExecutionResult{
-						Type:      "record",
-						Record:    resultAny,
-						StepIndex: stepIndex,
-					})
 				}
+				streamer.Write(StepExecutionResult{
+					Type:      "record",
+					Record:    resultAny,
+					StepIndex: stepIndex,
+				})
 			}
 		} else {
 			// Fallback to string builder if no streamer (standard output mode)
@@ -884,7 +941,53 @@ type ServiceToolExecutor struct {
 	s *Service
 }
 
+type chainedToolExecutor struct {
+	primary  ai.ToolExecutor
+	fallback ai.ToolExecutor
+}
+
+func (e *chainedToolExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	if e.primary != nil {
+		resp, err := e.primary.Execute(ctx, toolName, args)
+		if err == nil {
+			return resp, nil
+		}
+		if !isToolUnavailableError(err) || e.fallback == nil || e.fallback == e.primary {
+			return "", err
+		}
+	}
+	if e.fallback == nil {
+		return "", fmt.Errorf("tool '%s' not found in any registered agent", toolName)
+	}
+	return e.fallback.Execute(ctx, toolName, args)
+}
+
+func (e *chainedToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	if e.primary != nil {
+		tools, err := e.primary.ListTools(ctx)
+		if err == nil && len(tools) > 0 {
+			return tools, nil
+		}
+	}
+	if e.fallback != nil {
+		return e.fallback.ListTools(ctx)
+	}
+	return nil, nil
+}
+
+func isToolUnavailableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unknown tool") ||
+		strings.Contains(msg, "not found") ||
+		strings.Contains(msg, "no executor available")
+}
+
 func (e *ServiceToolExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	log.Info("Executing Tool call", "tool", toolName, "args", args)
+
 	// Handle "gettoolinfo" explicitly as it's a meta-tool served by Service from LLM Knowledge
 	if toolName == "gettoolinfo" {
 		targetTool, _ := args["tool"].(string)
@@ -930,9 +1033,11 @@ func (s *Service) executeScript(ctx context.Context, script *ai.Script, scope ma
 	// ctx = context.WithValue(ctx, ai.CtxKeyScriptRecorder, nil)
 
 	// Ensure we have a tool executor
-	if ctx.Value(ai.CtxKeyExecutor) == nil {
-		executor := &ServiceToolExecutor{s: s}
-		ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
+	serviceExecutor := &ServiceToolExecutor{s: s}
+	if existing, ok := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor); ok && existing != nil {
+		ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &chainedToolExecutor{primary: existing, fallback: serviceExecutor})
+	} else {
+		ctx = context.WithValue(ctx, ai.CtxKeyExecutor, serviceExecutor)
 	}
 
 	// Explicit Execution Mode:
@@ -1110,8 +1215,11 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map
 			cancel() // Cancel context for async tasks
 			break
 		}
-		if p != nil && p.Transaction == nil {
-			fmt.Println("DEBUG: runSteps - Transaction cleared after step execution!")
+		// Synchronize state back from stepCtx cloned payload if mutated
+		if stepPayload := ai.GetSessionPayload(stepCtx); stepPayload != nil && p != nil && stepPayload != p {
+			p.ExplicitTransaction = stepPayload.ExplicitTransaction
+			p.Transaction = stepPayload.Transaction
+			p.CurrentDB = stepPayload.CurrentDB
 		}
 	}
 

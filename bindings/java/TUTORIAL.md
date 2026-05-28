@@ -2,13 +2,13 @@
 
 This tutorial guides you through building a simple inventory management system using SOP with Java.
 
-## Prerequisites
+<h2> Prerequisites</h2>
 
 *   Java 11+
 *   Maven
 *   (Optional) Redis for Clustered mode
 
-## Step 1: Project Setup
+<h2>Step 1: Project Setup</h2>
 
 Create a new Maven project and add the `sop-java` dependency (assuming you have built and installed it locally).
 
@@ -22,7 +22,7 @@ Create a new Maven project and add the `sop-java` dependency (assuming you have 
 </dependencies>
 ```
 
-## Step 2: Define Your Data Model
+<h2>Step 2: Define Your Data Model</h2>
 
 SOP stores POJOs (Plain Old Java Objects). Let's define a `Product` class.
 
@@ -51,7 +51,7 @@ public class Product implements Serializable {
 }
 ```
 
-## Step 3: Initialize the Database
+<h2>Step 3: Initialize the Database</h2>
 
 We'll start in **Standalone Mode** (local file system, no Redis).
 
@@ -79,7 +79,7 @@ public class InventoryApp {
 }
 ```
 
-## Step 4: Create and Populate the B-Tree
+<h2>Step 4: Create and Populate the B-Tree</h2>
 
 We'll create a B-Tree named "products" where the Key is the Product ID (`String`) and the Value is the `Product` object.
 
@@ -103,7 +103,7 @@ We'll create a B-Tree named "products" where the Key is the Product ID (`String`
             }
 ```
 
-## Step 5: Read and Update Data
+<h2>Step 5: Read and Update Data</h2>
 
 Now let's read a product, update its stock, and save it back.
 
@@ -131,7 +131,7 @@ Now let's read a product, update its stock, and save it back.
             }
 ```
 
-## Step 6: Range Query (Iterate)
+<h2>Step 6: Range Query (Iterate)</h2>
 
 Let's list all products.
 
@@ -149,11 +149,11 @@ Let's list all products.
             }
 ```
 
-## Step 7: Modeling Relations
+<h2>Step 7: Modeling Relations</h2>
 
 In SOP, **Relations Metadata** is the primary way to link stores. Link Stores are reserved for complex Many-to-Many scenarios.
 
-### 1. Logical Relations (Metadata)
+**1. Logical Relations (Metadata)**
 Register relations in `BTreeOptions`. This tells the system how to link records (e.g., Product's `supplier_id` -> Supplier's `id`).
 
 ```java
@@ -174,10 +174,9 @@ Register relations in `BTreeOptions`. This tells the system how to link records 
             }
 ```
 
-**Benefit:**
-This metadata allows the system to auto-resolve lookups for 1:1, 1:N, and N:1 relationships automatically.
+Benefit: This metadata allows the system to auto-resolve lookups for 1:1, 1:N, and N:1 relationships automatically.
 
-### 2. Link Stores (Many-to-Many)
+**2. Link Stores (Many-to-Many)**
 For **Many-to-Many** relationships (e.g., Doctors <-> Patients, where valid links are many on both sides), use a **Link Store**.
 
 *   **Store: Doctors**: Key=`DoctorID`
@@ -199,7 +198,7 @@ For **Many-to-Many** relationships (e.g., Doctors <-> Patients, where valid link
 *   Use **Metadata** for standard Foreign Key relationships.
 *   Use **Link Stores** only for Many-to-Many mapping tables.
 
-## Step 8: Scaling to Clustered Mode
+<h2>Step 8: Scaling to Clustered Mode</h2>
 
 To switch to **Clustered Mode** (multiple app instances sharing data via Redis):
 
@@ -218,7 +217,7 @@ dbOpts.type = DatabaseType.Clustered;
 Redis.close();
 ```
 
-## Next Steps
+<h2>Next Steps</h2>
 
 *   **Composite Keys**: Use `BTreeComplexKey` to create multi-part keys (e.g., `Region/Category/ID`) for advanced sorting.
 *   **Batch Operations**: Use `add(List<Item>)` for high-performance bulk inserts.

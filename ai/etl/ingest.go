@@ -109,7 +109,7 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 		deps.AgentRegistry[targetID] = depSvc
 	}
 
-	emb, db, storeName, vCfg, err := agent.SetupInfrastructure(ctx, *cfg, deps)
+	_, db, storeName, vCfg, err := agent.SetupInfrastructure(ctx, *cfg, deps)
 	if err != nil {
 		return fmt.Errorf("failed to setup infrastructure: %w", err)
 	}
@@ -131,13 +131,15 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 
 	// Open Text Index (if required)
 	var textIdx *search.Index
-	req := cfg.Requirements
-	// If req is nil, factory defaults to false, so db is nil, but we checked db!=nil above.
-	// However, factory might have returned db!=nil if VectorStore=true but Search=false.
-	// We need to check if Search is required.
-	// Since we don't have the "defaulted" req from factory here, we check cfg.Requirements directly.
-	// If cfg.Requirements is nil, we assume false (safe default).
-	if req != nil && req.Search {
+	// Text Search is implicitly enabled if we are doing data ingestion here
+	searchEnabled := true
+	if val, ok := cfg.Params["search"]; ok {
+		if b, ok := val.(bool); ok {
+			searchEnabled = b
+		}
+	}
+
+	if searchEnabled {
 		textIdx, err = search.NewIndex(ctx, db.Options(), tx, storeName)
 		if err != nil {
 			return fmt.Errorf("failed to open text index: %w", err)
@@ -154,16 +156,6 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 		}
 		fmt.Printf("Processing batch of %d items (Total: %d)...\n", len(batch), totalProcessed+len(batch))
 
-		texts := make([]string, len(batch))
-		for i, item := range batch {
-			texts[i] = fmt.Sprintf("%s %s", item.Text, item.Description)
-		}
-
-		vecs, err := emb.EmbedTexts(ctx, texts)
-		if err != nil {
-			return fmt.Errorf("failed to generate embeddings: %w", err)
-		}
-
 		items := make([]ai.Item[map[string]any], len(batch))
 		for i, item := range batch {
 			// Generate deterministic ID based on content if not provided or if we want to enforce it
@@ -173,7 +165,7 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 
 			items[i] = ai.Item[map[string]any]{
 				ID:     id,
-				Vector: vecs[i],
+				Vector: nil, // We do not auto vectorize on import or Ingest
 				Payload: map[string]any{
 					"text":        item.Text,
 					"description": item.Description,
@@ -183,7 +175,7 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 
 			// Index Text
 			if textIdx != nil {
-				if err := textIdx.Add(ctx, id, texts[i]); err != nil {
+				if err := textIdx.Add(ctx, id, contentToEmbed); err != nil {
 					return fmt.Errorf("failed to index text for item %s: %w", id, err)
 				}
 			}
@@ -266,48 +258,6 @@ func IngestAgent(ctx context.Context, configPath, dataFile, targetAgentID string
 	// Commit
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
-	}
-
-	// 4. Auto-Optimize (if enabled)
-	// Check both the deprecated field and the new Params map
-	autoOptimize := cfg.AutoOptimize
-	if val, ok := cfg.Params["auto_optimize"]; ok {
-		if b, ok := val.(bool); ok {
-			autoOptimize = b
-		}
-	}
-
-	if autoOptimize {
-		fmt.Println("Auto-Optimize enabled. Running optimization...")
-		// Optimization requires its own transaction management (it commits internally)
-		// We need to open the store again in a new transaction context just to call Optimize.
-		// Note: Optimize() takes a context and handles transactions internally, but we need an instance.
-
-		txOpt, err := db.BeginTransaction(ctx, sop.ForWriting)
-		if err != nil {
-			return fmt.Errorf("failed to begin optimization transaction: %w", err)
-		}
-		// We don't defer rollback here because Optimize commits.
-		// If Optimize fails, we might need to rollback manually if it didn't commit.
-
-		idxOpt, err := vector.Open[map[string]any](ctx, txOpt, storeName, vCfg)
-		if err != nil {
-			if rbErr := txOpt.Rollback(ctx); rbErr != nil {
-				return fmt.Errorf("failed to open index for optimization: %w, rollback failed: %v", err, rbErr)
-			}
-			return fmt.Errorf("failed to open index for optimization: %w", err)
-		}
-
-		if err := idxOpt.Optimize(ctx); err != nil {
-			// Optimize might have committed or not depending on where it failed.
-			// Attempt rollback just in case (safe to call if already committed/rolled back? SOP handles it?)
-			// SOP transactions are usually safe to rollback if already committed (no-op).
-			if rbErr := txOpt.Rollback(ctx); rbErr != nil {
-				return fmt.Errorf("optimization failed: %w, rollback failed: %v", err, rbErr)
-			}
-			return fmt.Errorf("optimization failed: %w", err)
-		}
-		fmt.Println("Optimization complete.")
 	}
 
 	// 5. Verify (New Transaction)

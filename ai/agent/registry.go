@@ -95,7 +95,11 @@ func (r *Registry) GeneratePrompt() string {
 		if t.Hidden {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("%d. %s%s - %s\n", i+1, t.Name, t.ArgsSchema, t.Description))
+		schemaStr := t.ArgsSchema
+		if len(schemaStr) > 0 && schemaStr[0] == '{' {
+			schemaStr = "(args: " + schemaStr + ")"
+		}
+		sb.WriteString(fmt.Sprintf("%d. %s%s - %s\n", i+1, t.Name, schemaStr, t.Description))
 	}
 	return sb.String()
 }

@@ -1,4 +1,4 @@
-# Scalable Objects Persistence (SOP) Data & Compute Platform
+# SOP Data & Compute Platform
 
 **SOP** is a comprehensive **Data & Compute Platform** designed for the modern enterprise and high-performance applications.
 
@@ -139,6 +139,36 @@ Instead of a single monolithic Vector Database, SOP utilizes **Spaces**—isolat
 *   **Stateless Backend (BYOK)**: Connect to any Space safely using **Bring Your Own Key (BYOK)** architecture. The frontend injects credentials per-request via headers (`X-LLM-XX` and `X-Embedder-XX`), ensuring maximum security and a completely stateless backend.
 *   **Active Memory**: "The Butler" (our orchestrator) maintains bio-mimicked conceptual context retention via vector centroids, meaning conversations remember the *idea* of what you were talking about without requiring enormous token windows.
 
+### Partitioned Vector Search
+SOP is uniquely positioned to serve as a high-performance Vector Database for AI/RAG applications. Recent findings demonstrate that SOP B-Trees can outperform specialized vector stores (like HNSW) for specific partitioned workloads by leveraging its efficient blob storage and range query capabilities.
+
+**The Architecture:**
+1.  **Partitioning**: Vectors are grouped by a "Partition ID" (e.g., `DocumentID`, `UserID`, or a clustering centroid).
+2.  **Key Structure**: The B-Tree key is a composite of `{PartitionID, VectorID}`. This ensures that all vectors belonging to a partition are stored contiguously on disk.
+3.  **Blob Storage**: We configure the store with `IsValueDataInNodeSegment = false`.
+    *   **Why?**: This keeps the B-Tree index nodes (containing only keys) extremely compact and cache-friendly.
+    *   **Value**: The actual high-dimensional vector data (e.g., `[]float32`) is stored in the "Value" part, which SOP offloads to separate data segments (blobs).
+4.  **Streaming/Chunking**: For massive partitions, the value can be a "chunked blob" (using `StreamingDataStore`), allowing efficient retrieval of vector batches without loading the entire dataset into memory.
+
+**The Benefit**:
+When querying, you can perform a "Partition Scan":
+*   `b3.FindOne({PartitionID, MinVectorID})` jumps instantly to the start of the partition.
+*   `b3.Next()` iterates through the vectors in that partition with sequential I/O speed.
+    *   **Chunked Iteration**: For massive partitions, you can divide the vectors into chunks (e.g., 10MB blocks) and iterate through them efficiently. `b3.Next()` will seamlessly move from one chunk to the next, allowing you to process gigabytes of vector data without memory pressure.
+*   Since the index is compact, the traversal is lightning fast, and you only load the vector blobs you need.
+
+This approach eliminates the "random walk" overhead of graph-based indexes (like HNSW) when you can scope your search to a partition, making SOP an optimal storage engine for hybrid search (Metadata Filter + Vector Similarity).
+
+### Rich Key Structures (Metadata Carrier)
+SOP allows you to use complex structs as B-Tree keys, enabling a powerful pattern where the Key itself acts as a persistent metadata carrier.
+
+*   **Concept**: Instead of just an ID, your Key can contain `Version`, `Status`, `Category`, or other metadata.
+*   **Benefit**: You can perform complex filtering and structural operations (e.g., "Find all active items in Category X") by scanning only the B-Tree nodes (Keys).
+*   **Efficiency**: This avoids the I/O cost of fetching the Value (which might be a large JSON blob or vector) until you actually need it.
+*   **ACID**: The Key and Value are updated atomically in the same transaction.
+
+This is heavily used in the **AI Vector Database** module, where the `ContentKey` stores `CentroidID`, `Distance`, and `Version` information, allowing the system to manage clustering and migrations purely via key traversal.
+
 ### AI Copilot & Scripts
 The Data Manager includes an integrated AI Copilot that supports **Natural Language Programming**.
 *   **Natural Language Queries**: Ask "Show me all active users" or "Join users with their last order", and the system acts on it.
@@ -168,6 +198,17 @@ sop-httpserver
 *   **[Programming with SOP](PROGRAMMING_WITH_SOP_ARTICLE.md)** - A conceptual guide to building applications on the SOP platform.
 *   **[Scalability & Limits](SCALABILITY.md)** - Understanding the theoretical and practical limits of the system.
 *   **[Swarm Computing](SWARM_COMPUTING.md)** - Learn how SOP enables distributed, coordinated computing without a central brain.
+*   **External Links & Presentations**:
+    *   [Google Slides Presentation](https://docs.google.com/presentation/d/17BWiLXcz1fPGVtCkAwvE9wR0cDq_dJPjxKgzMcWKkp4/edit#slide=id.p)
+    *   [SOP's Swarm Computing Proposition](https://www.linkedin.com/pulse/geminis-analysis-sops-swarm-computing-gerardo-recinto-cqzqc)
+    *   [Revolutionary Storage & Cache Strategy](https://www.linkedin.com/pulse/revolutionizing-b-tree-performance-universal-l1-cache-gerardo-recinto-87jjc)
+    *   [SOP as AI Vector Database](https://www.linkedin.com/pulse/sop-ai-database-engine-gerardo-recinto-tzlbc/?trackingId=yRXnbOEGSvS2knwVOAyxCA%3D%3D)
+    *   [Anatomy of a Video Blob](https://www.linkedin.com/pulse/sop-anatomy-video-blob-gerardo-recinto-4170c/?trackingId=mXG7oM1IRVyP4yIZtWWlmg%3D%3D)
+    *   [B-Tree, a Native of the Cluster](https://www.linkedin.com/pulse/b-tree-native-cluster-gerardo-recinto-chmjc/?trackingId=oZmC6tUHSiCBcYXUqwfGUQ%3D%3D)
+    *   [SOP in File System](https://www.linkedin.com/pulse/scaleable-object-persistencesop-file-system-gerardo-recinto-zplbc/?trackingId=jPp8ccwvQEydxt3pppa8eg%3D%3D)
+    *   [Hash Map on Disk](https://www.linkedin.com/posts/coolguru_hash-map-on-a-file-can-offer-up-to-13-activity-7313645523024891905-8yem?utm_source=share&utm_medium=member_desktop&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0)
+    *   [Master less cluster wide distributed locking (RSRR algorithm)](https://www.linkedin.com/posts/coolguru_new-master-less-cluster-wide-resource-locking-activity-7322020975674302465-lUjl?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0)
+    *   [RSRR as compared to DynamoDB's distributed locking](https://www.linkedin.com/posts/coolguru_i-just-found-out-thanks-to-my-eldest-that-activity-7325255314474250241-f07g?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0)
 
 ## 🚀 Getting Started
 
@@ -347,12 +388,12 @@ See [ai/README.md](ai/README.md) for a deep dive into the AI capabilities.
 - [API Cookbook](COOKBOOK.md)
 - [Examples (Go)](examples/README.md)
 - [Quick start](#quick-start)
-- [Lifecycle: failures, failover, reinstate, EC auto-repair](README2.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair)
+- [Lifecycle: failures, failover, reinstate, EC auto-repair](GO_CORE_ENGINE.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair)
 - [Prerequisites](#prerequisites)
 - [Running integration tests (Docker)](#running-integration-tests)
  - [Testing (unit, integration, stress)](#testing-unit-integration-stress)
-- [Usability](README2.md#usability)
-- [SOP API discussions](README2.md#simple-usage)
+- [Usability](GO_CORE_ENGINE.md#usability)
+- [SOP API discussions](GO_CORE_ENGINE.md#simple-usage)
 - [SOP for Python (sop4py)](bindings/python/README.md)
 - [SOP for Java (sop4j)](bindings/java/README.md)
 - [SOP for C# (sop4cs)](bindings/csharp/README.md)
@@ -404,7 +445,7 @@ Notes:
 - SOP relies on Redis for coordination (locks, recovery bookkeeping). Bringing Redis up before SOP apps prevents unnecessary failovers or stale-lock handling during app startup.
 - If any node was force-killed, SOP’s stale-lock and rollback paths will repair on next write; starting Redis first ensures that path has the needed state.
 
-# Introduction
+## Introduction
 What is SOP?
 
 Scalable Objects Persistence (SOP) is a **bare metal storage engine** that bakes together a set of storage related features & algorithms in order to provide the most efficient & reliable (ACID attributes of transactions) technique (known) of storage management and rich search. It brings to the application the raw muscle of "raw storage" via direct I/O communications with disk drives, bypassing the overhead of intermediate database layers.
@@ -545,7 +586,7 @@ For operational best practices (failover, backups), see the [Operational Guide](
 
 For code examples, check out the [API Cookbook](COOKBOOK.md).
 
-See more details here that describe further, the different qualities & attributes/features of SOP, and why it is a good choice as a storage engine for your applications today: [Summary](README2.md)
+See more details here that describe further, the different qualities & attributes/features of SOP, and why it is a good choice as a storage engine for your applications today: [Summary](GO_CORE_ENGINE.md)
 
 Before I go, I would like to say, SOP is a green field, totally new. What is being shipped in V2 is just the start of this new product. We are barely scratching the surface of what can be done that will help storage management at super scale. SOP is a super computing enabler. The way its architecture was laid out, independent features and together, they are meant to give us the best/most efficient performance & IO of a group of computers (cluster), network & their storage, that can possibly give us.
 
@@ -553,7 +594,6 @@ Before I go, I would like to say, SOP is a green field, totally new. What is bei
 - [**New!** AI Copilot: A "Local Expert" for your Data](AI_COPILOT.md) - How we built a secure, RAG-based agent into the SOP Data Manager.
 - [SOP: The Modern Database Library](SOP_MODERN_DB_ARTICLE.md) - Why "Database-as-a-Library" is the future of cloud-native storage.
 
-See the entire list & details here: https://github.com/sharedcode/sop/blob/master/README2.md#high-level-features-articles-about-sop
 
 ## The Database Abstraction
 SOP provides a high-level `database` package that simplifies configuration and management of your storage artifacts.
@@ -621,9 +661,9 @@ SOP is designed to keep your app online through common storage failures.
 - Registry and StoreRepository: These metadata files use Active/Passive replication. Only I/O errors on Registry/StoreRepository can generate a failover. On a failover, SOP flips to the passive path and continues. When you restore the failed drive, reinstate it as the passive side; SOP will fast‑forward any missing deltas and return it to rotation.
 - Auto‑repair: With EC repair enabled, after replacing a failed blob drive, SOP reconstructs missing shards automatically and restores full redundancy in the background.
 
-See the detailed lifecycle guide (failures, observability, reinstate/fast‑forward, and drive replacement) in README2.md: https://github.com/SharedCode/sop/blob/master/README2.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair
+See the detailed lifecycle guide (failures, observability, reinstate/fast‑forward, and drive replacement) in GO_CORE_ENGINE.md: https://github.com/SharedCode/sop/blob/master/GO_CORE_ENGINE.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair
 
-Also see Operational caveats: https://github.com/SharedCode/sop/blob/master/README2.md#operational-caveats
+Also see Operational caveats: https://github.com/SharedCode/sop/blob/master/GO_CORE_ENGINE.md#operational-caveats
 
 For planned maintenance, see Cluster reboot procedure: [Cluster reboot procedure](#cluster-reboot-procedure).
 
@@ -692,17 +732,17 @@ VS Code tasks provided:
 
 CI note: GitHub Actions runs unit tests on pushes/PRs; a nightly/manual job runs the stress suite with -tags=stress.
 
-# Usability
-See details here: https://github.com/sharedcode/sop/blob/master/README2.md#usability
+<h2> Usability</h2>
+See details here: https://github.com/sharedcode/sop/blob/master/GO_CORE_ENGINE.md#usability
 
-# SOP API Discussions
-See details here: https://github.com/sharedcode/sop/blob/master/README2.md#simple-usage
+<h2> SOP API Discussions</h2>
+See details here: https://github.com/sharedcode/sop/blob/master/GO_CORE_ENGINE.md#simple-usage
 
-# SOP for Python (sop4py)
+<h2> SOP for Python (sop4py)</h2>
 See details here: https://github.com/sharedcode/sop/tree/master/jsondb/python#readme
 Check out the [Python Cookbook](jsondb/python/COOKBOOK.md) for code recipes.
 
-# SOP for AI Kit
+<h2> SOP for AI Kit</h2>
 SOP includes a comprehensive AI toolkit for building local, privacy-first expert systems.
 - **AI Documentation**: [ai/README.md](ai/README.md) - Overview of the AI module, Vector Store, and Agent framework.
 - **AI Tutorial**: [ai/TUTORIAL.md](ai/TUTORIAL.md) - Step-by-step guide to building the "Doctor & Nurse" expert system.

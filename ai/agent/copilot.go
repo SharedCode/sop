@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"text/template"
 	"time"
 
@@ -25,7 +24,6 @@ import (
 	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/ai/obfuscation"
-	"github.com/sharedcode/sop/btree"
 	"github.com/sharedcode/sop/jsondb"
 )
 
@@ -34,21 +32,19 @@ const (
 	MaxExchangesInHistory = 20
 )
 
+const (
+	MRUSourceUnknown     = ""
+	MRUSourcePersona     = "persona"
+	MRUSourceSystemTools = "system_tools"
+	MRUSourcePlaybook    = "playbook"
+)
+
 // MRUItem represents a single category currently in working memory
 type MRUItem struct {
 	Category     string
 	LastAccessed int64
 	Context      string
-}
-
-// MemoryUnit encapsulates the cognitive state and boundaries of an Agent instance.
-type MemoryUnit struct {
-	AgentID    string
-	AllowedKBs []string // LTM scoping boundaries
-
-	// Physical On-Disk Memory Structures
-	STM btree.BtreeInterface[string, any]     // Episodic B-Tree buffer for the cognitive footprint
-	LTM *memory.KnowledgeBase[map[string]any] // Declarative Vector Database (Sellable knowledge mapping)
+	Source       string
 }
 
 // CopilotAgent is a specialized agent for database administration tasks.
@@ -63,9 +59,7 @@ type CopilotAgent struct {
 	service      *Service // Reference back to main service for cache invalidation
 
 	// Encapsulated memory and context boundaries
-	Memory        *MemoryUnit
-	episodeQueue  chan map[string]any // Agent-scoped STM batching queue
-	lastEpisodeTS atomic.Int64        // Tracks the last time an episode was logged to STM for idle sleep cycles
+	Memory *memory.MemoryUnit
 
 	// Compiled Scripts Cache
 	compiledScripts   map[string]CachedScript
@@ -87,8 +81,8 @@ func (a *CopilotAgent) Clone() ai.Agent[map[string]any] {
 		registry:  a.registry, // Pointer to registry
 		databases: a.databases,
 		systemDB:  a.systemDB,
-		Memory: &MemoryUnit{
-			AgentID: "omni", // By default Clone behaves as Omni, Avatars explicitly override
+		Memory: &memory.MemoryUnit{
+			AgentID: ai.AgentIDOmni, // By default Clone behaves as Omni, Avatars explicitly override
 		},
 		lastToolCall:    nil,
 		service:         nil, // Caller should populate this
@@ -106,6 +100,10 @@ func (a *CopilotAgent) SetGenerator(gen ai.Generator) {
 
 // MarkMRUCategory adds or updates a category in the global working memory MRU
 func (a *CopilotAgent) MarkMRUCategory(category string, context string) {
+	a.markMRUCategoryWithSource(category, context, MRUSourceUnknown)
+}
+
+func (a *CopilotAgent) markMRUCategoryWithSource(category string, context string, source string) {
 	if a.service == nil || a.service.session == nil {
 		return
 	}
@@ -122,6 +120,9 @@ func (a *CopilotAgent) MarkMRUCategory(category string, context string) {
 			if context != "" {
 				sess.MRU[i].Context = context
 			}
+			if source != "" {
+				sess.MRU[i].Source = source
+			}
 			return
 		}
 	}
@@ -131,8 +132,8 @@ func (a *CopilotAgent) MarkMRUCategory(category string, context string) {
 		Category:     category,
 		LastAccessed: ts,
 		Context:      context,
+		Source:       source,
 	})
-
 	// Sort by newest and shrink if > MaxMRUSize
 	if len(sess.MRU) > MaxMRUSize {
 		sort.Slice(sess.MRU, func(i, j int) bool {
@@ -140,6 +141,97 @@ func (a *CopilotAgent) MarkMRUCategory(category string, context string) {
 		})
 		sess.MRU = sess.MRU[:MaxMRUSize]
 	}
+}
+
+func (a *CopilotAgent) clearMRUCategory(category string) {
+	if a.service == nil || a.service.session == nil {
+		return
+	}
+	sess := a.service.session
+	sess.MRUMu.Lock()
+	defer sess.MRUMu.Unlock()
+
+	filtered := sess.MRU[:0]
+	for _, item := range sess.MRU {
+		if item.Category != category {
+			filtered = append(filtered, item)
+		}
+	}
+	sess.MRU = filtered
+}
+
+func (a *CopilotAgent) clearMRUForTopicSwitch() {
+	if a.service == nil || a.service.session == nil {
+		return
+	}
+	sess := a.service.session
+	sess.MRUMu.Lock()
+	defer sess.MRUMu.Unlock()
+
+	filtered := sess.MRU[:0]
+	for _, item := range sess.MRU {
+		if item.Source == MRUSourcePersona || strings.HasPrefix(item.Category, "PERSONA_") {
+			filtered = append(filtered, item)
+		}
+	}
+	sess.MRU = filtered
+}
+
+func playbookMRUCategory(domain string) string {
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		return ""
+	}
+	return "PLAYBOOK_" + domain
+}
+
+// GetMRUCategory retrieves a category from the global working memory MRU
+func (a *CopilotAgent) GetMRUCategory(category string) (string, bool) {
+	return a.getMRUCategoryBySource(category, MRUSourceUnknown, false)
+}
+
+func (a *CopilotAgent) getMRUCategoryBySource(category string, source string, allowLegacyUnknown bool) (string, bool) {
+	if item, ok := a.findMRUItem(category, source, allowLegacyUnknown); ok {
+		return item.Context, true
+	}
+	return "", false
+}
+
+func (a *CopilotAgent) findMRUItem(category string, source string, allowLegacyUnknown bool) (MRUItem, bool) {
+	if a.service == nil || a.service.session == nil {
+		return MRUItem{}, false
+	}
+	sess := a.service.session
+	sess.MRUMu.RLock()
+	defer sess.MRUMu.RUnlock()
+
+	var legacyFallback MRUItem
+	var hasLegacyFallback bool
+	for _, item := range sess.MRU {
+		if item.Category == category {
+			if source == MRUSourceUnknown || item.Source == source {
+				return item, true
+			}
+			if allowLegacyUnknown && item.Source == MRUSourceUnknown && !hasLegacyFallback {
+				legacyFallback = item
+				hasLegacyFallback = true
+			}
+		}
+	}
+	if hasLegacyFallback {
+		return legacyFallback, true
+	}
+	return MRUItem{}, false
+}
+
+func (a *CopilotAgent) getMRUSnapshot() []MRUItem {
+	if a.service == nil || a.service.session == nil {
+		return nil
+	}
+	sess := a.service.session
+	sess.MRUMu.RLock()
+	defer sess.MRUMu.RUnlock()
+	return append([]MRUItem(nil), sess.MRU...)
 }
 
 // NewCopilotAgent creates a new instance of CopilotAgent.
@@ -244,15 +336,12 @@ func NewCopilotAgent(cfg Config, databases map[string]sop.DatabaseOptions, syste
 		registry:  NewRegistry(),
 		databases: databases,
 		systemDB:  systemDB,
-		Memory: &MemoryUnit{
-			AgentID: "omni", // Root loop defaults to omni
-		},
+		Memory:    memory.NewMemoryUnit(ai.AgentIDOmni),
 		// API Keys are less relevant now that we use the Generator interface mostly,
 		// but we keep them empty or fill them if we really need them for direct calls later.
 		// geminiKey:       geminiKey,
 		// openAIKey:       openAIKey,
 		compiledScripts: make(map[string]CachedScript),
-		episodeQueue:    make(chan map[string]any, 100),
 	}
 	// Tools are registered dynamically in Open() or Ask() to ensure context propagation
 	// context.Background() is used here to ensure tools are available even if Open() is not called or context context is missing
@@ -329,11 +418,8 @@ func (a *CopilotAgent) Open(ctx context.Context) error {
 // Close cleans up the agent's resources.
 func (a *CopilotAgent) Close(ctx context.Context) error {
 	p := ai.GetSessionPayload(ctx)
-	if p == nil || p.Transaction == nil {
-		return nil
-	}
-	if tx, ok := p.Transaction.(sop.Transaction); ok {
-		return tx.Commit(ctx)
+	if p != nil {
+		p.Close(ctx)
 	}
 	return nil
 }
@@ -343,44 +429,453 @@ func (a *CopilotAgent) Search(ctx context.Context, query string, limit int) ([]a
 	return []ai.Hit[map[string]any]{}, nil
 }
 
-// Ask processes a query and returns a response.
+// Ask is the primary entry point for processing a user's conversational query to the AI Copilot.
+//
+// The functional flow follows a multi-layered ReAct architecture:
+//
+//  1. Generator Resolution:
+//     Dynamically selects the appropriate LLM provider (e.g., Gemini, OpenAI, Claude) based on
+//     the active session context or falling back to the system default configuration.
+//
+//  2. Direct Invocation Handling:
+//     Checks if the query is a direct tool invocation (e.g., "/help" or "/clear_memory").
+//     If so, it bypasses the LLM reasoning loop to immediately execute the deterministic command.
+//
+//  3. Intent Classification (Router):
+//     Evaluates if the query should be routed to a specific sub-agent (Avatar/Persona).
+//     If the intent indicates a specialized Avatar (e.g., a "Legal Auditor" persona), it delegates
+//     execution entirely to that sub-agent.
+//
+//  4. Context Classification (Domain Injection):
+//     For generic queries (intent == "OMNI"), it performs a lightweight classification to identify
+//     the semantic domain (e.g., "Spaces" or "Stores"). Based on this domain, it forcefully injects
+//     relevant tool documentations (from the system KB) into the semantic memory buffer.
+//
+//  5. Episode Metadata Tracking (MRU Cache):
+//     Analyzes the user's prior chat exchange inside the short-term episodic memory. If the user
+//     remains engaged in the same topic and database context, it pulls the Most-Recently-Used (MRU)
+//     semantic boundaries so the LLM retains coherent situational context across turns.
+//
+//  6. System Prompt Construction:
+//     Assembles the massive multi-part context prompt (using SystemPromptBuilder) linking the
+//     Core Persona, Active Playbooks/KBs, injected Tool Descriptions, semantic memory boundaries,
+//     and chronological conversation history.
+//
+//  7. Reasoning Engine Delegation:
+//     Packages the assembled context and delegates execution to the ReAct engine. The engine loops
+//     autonomously over the LLM generation and local tool executions (API-level tool calling) until
+//     it produces a final answer.
+//
+//  8. Epilogue & Cleanup:
+//     Records the completed dialogue and active track-state into the short-term memory transcript,
+//     clears the volatile MRU buffer, and returns the final text response to the client.
 func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
-	// 1. Determine Generator to use (Dynamic Switching)
-	gen := a.resolveGenerator(ctx)
+	if len(opts) > 0 {
+		cfg := ai.NewAskConfig(opts...)
+		if format, ok := cfg.Values["default_format"].(string); ok && strings.TrimSpace(format) != "" {
+			ctx = context.WithValue(ctx, ai.CtxKeyDefaultFormat, strings.TrimSpace(format))
+		}
+	}
 
-	// 2. Handle Direct Tool Invocations (Slash Commands)
+	// 1. Generator Resolution
+	gen := a.resolveGenerator(ctx)
+	if gen == nil {
+		return "⚠️ **AI Copilot Disabled**: No valid API Key found.\n\nPlease go to **Environment Settings** (HDD icon in bottom left) -> **LLM API Key** to configure your Google Gemini or OpenAI key.", nil
+	}
+
+	var sessionID string
+	var currentDB string
+	var activeDomain string
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		sessionID = p.SessionID
+		currentDB = p.CurrentDB
+		activeDomain = p.ActiveDomain
+	}
+	currentThreadID := ""
+	if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+		if thread := a.service.session.Memory.GetCurrentThread(); thread != nil {
+			currentThreadID = fmt.Sprintf("%v", thread.ID)
+		}
+	}
+	log.Info("Copilot Ask Start",
+		"generator", gen.Name(),
+		"default_format", getRequestedOutputFormat(ctx),
+		"session_id", sessionID,
+		"current_db", currentDB,
+		"active_domain", activeDomain,
+		"thread_id", currentThreadID,
+		"query_chars", len(query),
+	)
+
+	if handled, res, err := a.handlePendingUserConfirmation(ctx, query); handled {
+		return res, err
+	}
+
+	// 2. Direct Invocation Handling
+	if handled, res, err := a.handleDirectInvocation(ctx, query, gen); handled {
+		return res, err
+	}
+
+	// 3. Intent Classification (Router)
+	intent := a.classifyIntent(ctx, query, gen)
+
+	// Fast-path routing: If Avatar, execute Avatar Sub-Agent
+	if intent != ai.IntentOmni {
+		log.Info("Ask: Request classified for Avatar", "avatar", intent)
+		return a.executeAvatarSubAgent(ctx, intent, query)
+	}
+	log.Info("Ask: Request classified for OMNI")
+
+	// 4. Three-Gate Context Classification (Domain & Tool Injection)
+	taskContext := a.evaluateRoutingGates(ctx, query, gen)
+	if taskContext == nil {
+		taskContext = &TaskContextClassification{Domain: "General"}
+	}
+	log.Info("Copilot Ask Routing",
+		"routing_gate", taskContext.RoutingGate,
+		"task_context", summarizeTaskContextForLog(*taskContext),
+	)
+
+	// 5. Episode Metadata Tracking (MRU Cache)
+	a.trackEpisodeMetadata(ctx, intent)
+
+	a.registerTools(ctx)
+
+	// 6. System Prompt Construction
+	fullPrompt := a.buildSystemPrompt(ctx, query, *taskContext)
+
+	// 7. Reasoning Engine Delegation
+	finalText, err := a.delegateToReasoningEngine(ctx, query, gen, fullPrompt)
+	if err != nil {
+		return "", err
+	}
+	log.Info("Copilot Ask Complete",
+		"session_id", sessionID,
+		"response_chars", len(finalText),
+	)
+
+	// 8. Epilogue & Cleanup
+	a.epilogueAndCleanup(ctx, query, intent, finalText)
+
+	return finalText, nil
+}
+
+func (a *CopilotAgent) handleDirectInvocation(ctx context.Context, query string, gen ai.Generator) (bool, string, error) {
 	if strings.HasPrefix(strings.TrimSpace(query), "/") {
 		// Register tools for local command parsing
 		a.registerTools(ctx)
 		handled, res, err := a.handleSlashCommand(ctx, query, gen)
 		if handled {
 			if err != nil {
-				return res, nil // Return the error message string directly as per original flow
+				return true, res, err
 			}
-			return res, nil
+			return true, res, nil
+		}
+	}
+	return false, "", nil
+}
+
+func (a *CopilotAgent) handlePendingUserConfirmation(ctx context.Context, query string) (bool, string, error) {
+	if a.service == nil || a.service.session == nil {
+		return false, "", nil
+	}
+
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return false, "", nil
+	}
+
+	session := a.service.session
+	session.mu.Lock()
+
+	if pending := session.PendingConfirmation; pending != nil {
+		if isAffirmativeConfirmation(trimmed) {
+			session.PendingConfirmation = nil
+			session.mu.Unlock()
+			args := map[string]any{"kb_name": pending.SpaceName}
+			if pending.DatabaseName != "" {
+				args["database"] = pending.DatabaseName
+			}
+			res, err := a.toolDeleteSpace(ctx, args)
+			if err == nil {
+				res = "[[CLEAR_PENDING_CONFIRMATION]]\n" + res
+			}
+			return true, res, err
+		}
+		if isNegativeConfirmation(trimmed) {
+			session.PendingConfirmation = nil
+			session.mu.Unlock()
+			return true, fmt.Sprintf("[[CLEAR_PENDING_CONFIRMATION]]\nCancelled deletion of Space '%s'.", pending.SpaceName), nil
+		}
+		session.mu.Unlock()
+		return true, fmt.Sprintf("Pending deletion confirmation for Space '%s'. Reply 'yes' to confirm or 'no' to cancel.", pending.SpaceName), nil
+	}
+
+	spaceName, ok := parseDeleteSpaceRequest(trimmed)
+	if !ok {
+		session.mu.Unlock()
+		return false, "", nil
+	}
+
+	dbName := ""
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		dbName = p.CurrentDB
+	}
+	session.PendingConfirmation = &PendingUserConfirmation{
+		Kind:         "delete_space",
+		SpaceName:    spaceName,
+		DatabaseName: dbName,
+	}
+	session.mu.Unlock()
+	if dbName != "" {
+		return true, fmt.Sprintf("Delete Space '%s' from database '%s'? Reply 'yes' to confirm or 'no' to cancel.", spaceName, dbName), nil
+	}
+	return true, fmt.Sprintf("Delete Space '%s'? Reply 'yes' to confirm or 'no' to cancel.", spaceName), nil
+}
+
+func parseDeleteSpaceRequest(query string) (string, bool) {
+	trimmed := strings.TrimSpace(strings.TrimRight(lastNonEmptyQueryLine(query), ".!?"))
+	if trimmed == "" {
+		return "", false
+	}
+	lower := strings.ToLower(trimmed)
+	patterns := []string{
+		"delete space ",
+		"delete the space ",
+		"remove space ",
+		"remove the space ",
+		"delete knowledge base ",
+		"delete the knowledge base ",
+		"remove knowledge base ",
+		"remove the knowledge base ",
+		"delete kb ",
+		"remove kb ",
+	}
+	for _, pattern := range patterns {
+		idx := strings.Index(lower, pattern)
+		if idx >= 0 {
+			name := strings.TrimSpace(trimmed[idx+len(pattern):])
+			name = strings.TrimPrefix(name, ":")
+			name = strings.TrimSpace(name)
+			name = strings.Trim(name, "\"'`")
+			if cut := strings.IndexAny(name, ".!?"); cut >= 0 {
+				name = strings.TrimSpace(name[:cut])
+			}
+			if name != "" {
+				return name, true
+			}
 		}
 	}
 
-	if gen == nil {
-		return "⚠️ **AI Copilot Disabled**: No valid API Key found.\n\nPlease go to **Environment Settings** (HDD icon in bottom left) -> **LLM API Key** to configure your Google Gemini or OpenAI key.", nil
+	reversePrefixes := []string{"delete ", "remove "}
+	reverseSuffixes := []string{" space", " kb", " knowledge base"}
+	for _, prefix := range reversePrefixes {
+		if !strings.HasPrefix(lower, prefix) {
+			continue
+		}
+		remainder := strings.TrimSpace(trimmed[len(prefix):])
+		lowerRemainder := strings.ToLower(remainder)
+		for _, suffix := range reverseSuffixes {
+			if !strings.HasSuffix(lowerRemainder, suffix) {
+				continue
+			}
+			name := strings.TrimSpace(remainder[:len(remainder)-len(suffix)])
+			name = strings.Trim(name, "\"'`")
+			if cut := strings.IndexAny(name, ".!?"); cut >= 0 {
+				name = strings.TrimSpace(name[:cut])
+			}
+			if name != "" {
+				return name, true
+			}
+		}
+	}
+	return "", false
+}
+
+func isAffirmativeConfirmation(query string) bool {
+	switch confirmationReplyToken(query) {
+	case "yes", "y", "confirm", "confirmed", "delete", "delete it", "do it", "proceed":
+		return true
+	default:
+		return false
+	}
+}
+
+func isNegativeConfirmation(query string) bool {
+	switch confirmationReplyToken(query) {
+	case "no", "n", "cancel", "abort", "stop", "don't", "do not":
+		return true
+	default:
+		return false
+	}
+}
+
+func confirmationReplyToken(query string) string {
+	trimmed := strings.TrimSpace(lastNonEmptyQueryLine(query))
+	if trimmed == "" {
+		return ""
 	}
 
-	// 3. Classify Intent Router (OMNI vs specific Avatar)
-	intent := a.classifyIntent(ctx, query, gen)
+	return strings.ToLower(trimmed)
+}
 
-	// 4. Fast-path routing: If Avatar, execute Avatar Sub-Agent
-	if intent != "OMNI" {
-		log.Info("Ask: Request classified for Avatar", "avatar", intent)
-		return a.executeAvatarSubAgent(ctx, intent, query)
+func lastNonEmptyQueryLine(query string) string {
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return ""
 	}
 
-	// 5. Omni routing: Load heavy baseline tools, compile system prompt, execute
-	log.Info("Ask: Request classified for OMNI")
+	lines := strings.Split(trimmed, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line != "" {
+			return line
+		}
+	}
 
+	return ""
+}
+
+func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, gen ai.Generator) *TaskContextClassification {
+	isTest := false
+	if gen != nil {
+		if strings.Contains(fmt.Sprintf("%T", gen), "mock") || strings.Contains(fmt.Sprintf("%T", gen), "Mock") || strings.Contains(fmt.Sprintf("%T", gen), "Smart") {
+			isTest = true
+		}
+	}
+
+	parts := strings.Split(query, ":")
+
+	// Gate 1: Telescoping Prefix Verification
+	if len(parts) > 1 && (strings.EqualFold(parts[0], "omni") || strings.EqualFold(parts[0], "medical") || strings.EqualFold(parts[0], "support")) {
+		log.Info("Gate 1 Activated: Prefix match", "prefix", parts[0])
+
+		var taskCtx *TaskContextClassification
+		parsedEntity := parts[0]
+		parsedDomain := ""
+		parsedArtifact := ""
+		if len(parts) >= 2 {
+			parsedDomain = strings.TrimSpace(parts[1])
+		}
+		if len(parts) >= 3 {
+			parsedArtifact = strings.TrimSpace(parts[2])
+		}
+
+		if !isTest && gen != nil {
+			taskCtx, _ = a.ClassifyFocusedTaskContext(ctx, query, parsedEntity, parsedDomain, parsedArtifact, gen)
+		}
+
+		taskCtx = enrichFocusedTaskContext(taskCtx, parsedEntity, parsedDomain, parsedArtifact)
+		annotateTaskContextIntent(taskCtx, query)
+		taskCtx.RoutingGate = RoutingGateFocused
+
+		a.injectToolsForDomain(ctx, taskCtx)
+		if p := ai.GetSessionPayload(ctx); p != nil {
+			if p.Variables == nil {
+				p.Variables = make(map[string]any)
+			}
+			p.Variables["RoutingState"] = taskCtx
+		}
+		return taskCtx
+	}
+
+	// Gate 2: MRU Context Inheritance (Context Momentum)
+	if p := ai.GetSessionPayload(ctx); p != nil && p.Variables != nil {
+		if rs, ok := p.Variables["RoutingState"].(*TaskContextClassification); ok && rs != nil {
+			if !isTest && gen != nil {
+				updatedRS, isSwitch, err := a.ClassifyContinuityTaskContext(ctx, query, rs, gen)
+				if err == nil && isSwitch {
+					log.Info("Gate 2 Detected Topic Switch. Falling through to Gate 3.")
+					delete(p.Variables, "RoutingState")
+					a.clearMRUForTopicSwitch()
+
+					// Clear the episodic memory thread to avoid context poisoning
+					if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+						newThreadID := sop.NewUUID()
+						thread := &ConversationThread{
+							ID:         newThreadID,
+							RootPrompt: query,
+							Label:      "Topic Switch",
+							Category:   "General",
+							Exchanges:  make([]Interaction, 0),
+							Status:     "active",
+						}
+						a.service.session.Memory.AddThread(thread)
+						a.service.session.Memory.CurrentThreadID = newThreadID
+					}
+
+					// Fall through to Gate 3
+				} else if err == nil && updatedRS != nil {
+					log.Info("Gate 2 Activated: Inheriting MRU Context with Updates", "domain", updatedRS.Domain)
+					annotateTaskContextIntent(updatedRS, query)
+					updatedRS.RoutingGate = RoutingGateContinuity
+					a.injectToolsForDomain(ctx, updatedRS)
+					p.Variables["RoutingState"] = updatedRS
+					return updatedRS
+				}
+			} else {
+				// Test fallback
+				log.Info("Gate 2 Activated: Inheriting MRU Context (Test Mode)", "domain", rs.Domain)
+				annotateTaskContextIntent(rs, query)
+				rs.RoutingGate = RoutingGateContinuity
+				a.injectToolsForDomain(ctx, rs)
+				return rs
+			}
+		}
+	}
+
+	// Gate 3: Cold Start & Context Outline Classification
+	if len(parts) == 1 {
+		log.Info("Gate 3 Activated: Cold Start Classification")
+	}
+
+	if gen != nil && !isTest {
+		if taskCtx, err := a.ClassifyTaskContext(ctx, query, gen); err == nil && taskCtx != nil {
+			log.Info("Gate 3 Classification Success", "domain", taskCtx.Domain)
+			annotateTaskContextIntent(taskCtx, query)
+			taskCtx.RoutingGate = RoutingGateDiscovery
+			a.injectToolsForDomain(ctx, taskCtx)
+			if p := ai.GetSessionPayload(ctx); p != nil {
+				if p.Variables == nil {
+					p.Variables = make(map[string]any)
+				}
+				p.Variables["RoutingState"] = taskCtx
+			}
+			return taskCtx
+		} else {
+			log.Warn("Gate 3 classification failed or returned nil", "error", err)
+		}
+	}
+
+	return nil
+}
+
+func (a *CopilotAgent) injectToolsForDomain(ctx context.Context, taskCtx *TaskContextClassification) {
+	if taskCtx == nil {
+		return
+	}
+
+	if focused := a.buildFocusedToolContext(taskCtx); focused != "" {
+		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\n"+focused, MRUSourceSystemTools)
+		return
+	}
+
+	if strings.EqualFold(taskCtx.Domain, "Stores") {
+		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\nStructured Context: Stores Tools\n"+toolsStoresManual, MRUSourceSystemTools)
+	} else if strings.EqualFold(taskCtx.Domain, "Spaces") {
+		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\nStructured Context: Spaces Tools\n"+toolsSpacesManual, MRUSourceSystemTools)
+	}
+}
+
+func (a *CopilotAgent) trackEpisodeMetadata(ctx context.Context, intent string) {
 	// Determine current target KB
 	currentKBTrack := "sop"
 	if p := ai.GetSessionPayload(ctx); p != nil && len(p.SelectedKBs) > 0 {
-		currentKBTrack = strings.Join(p.SelectedKBs, ",")
+		var names []string
+		for _, kb := range p.SelectedKBs {
+			names = append(names, kb.Name)
+		}
+		currentKBTrack = "sop," + strings.Join(names, ",")
 	}
 
 	// --- DYNAMIC MRU INJECTION FROM PREVIOUS EPISODE ---
@@ -398,48 +893,36 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 					for _, kb := range kbs {
 						kb = strings.TrimSpace(kb)
 						if kb != "" {
-							a.MarkMRUCategory(kb, "")
+							a.markMRUCategoryWithSource(playbookMRUCategory(kb), "", MRUSourcePlaybook)
 						}
 					}
 				}
 			}
 		}
 	}
+}
 
-	a.registerTools(ctx)
-
-	// 6. Construct System Prompt with Persona & Tools & Context
-	fullPrompt := a.buildSystemPrompt(ctx, query)
-
-	// Obfuscate Prompt if enabled
+func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query string, gen ai.Generator, fullPrompt string) (string, error) {
 	currentDB := ""
 	if p := ai.GetSessionPayload(ctx); p != nil {
 		currentDB = p.CurrentDB
 	}
+
+	// Obfuscate Prompt if enabled
 	if a.shouldObfuscate(currentDB) {
 		fullPrompt = obfuscation.GlobalObfuscator.ObfuscateText(fullPrompt)
 	}
 
-	// 5. Delegate to Reasoning Engine
-
-	var engine ai.ReasoningEngine
-	if a.Config.UseLegacyBaselineEngine {
-		engine = &BaselineReActEngine{
-			Agent: a,
-		}
-	} else {
-		// Active Implementation: Native Tools (API-level tool calling)
-		engine = &NativeReActEngine{
-			EnableObfuscation: a.shouldObfuscate(currentDB),
-		}
+	// Active Implementation: Native Tools (API-level tool calling)
+	engine := &NativeReActEngine{
+		EnableObfuscation: a.shouldObfuscate(currentDB),
 	}
 
 	req := ai.ReasoningRequest{
-		SystemPrompt: fullPrompt, // For baseline, the system prompt contains the full aggregated state
+		SystemPrompt: fullPrompt, // For baseline, this contains the full aggregated state
 		UserQuery:    query,
 		Executor:     a, // CopilotAgent implements Executor
 		Generator:    gen,
-		// ContextText and HistoryText are pre-injected into fullPrompt in this legacy baseline
 	}
 
 	resp, err := engine.Run(ctx, req)
@@ -447,12 +930,15 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 		return "", err
 	}
 
-	// 6. Post-Processing
 	finalText := resp.FinalText
 	if a.shouldObfuscate(currentDB) {
 		finalText = obfuscation.GlobalObfuscator.DeobfuscateText(finalText)
 	}
 
+	return finalText, nil
+}
+
+func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, intent string, finalText string) {
 	if a.service != nil && a.service.session != nil {
 		if a.service.session.Memory == nil {
 			a.service.session.Memory = NewShortTermMemory()
@@ -474,7 +960,11 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 
 		kbTrack := "sop"
 		if p := ai.GetSessionPayload(ctx); p != nil && len(p.SelectedKBs) > 0 {
-			kbTrack = strings.Join(p.SelectedKBs, ",")
+			var names []string
+			for _, kb := range p.SelectedKBs {
+				names = append(names, kb.Name)
+			}
+			kbTrack = strings.Join(names, ",")
 		}
 
 		// Track User
@@ -498,12 +988,7 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 
 	// 7. Log Episode for SleepCycle (Episodic Memory)
 	if a.service != nil && a.service.EnableShortTermMemory {
-		var mruSnapshot []MRUItem
-		if a.service.session != nil {
-			a.service.session.MRUMu.RLock()
-			mruSnapshot = append([]MRUItem(nil), a.service.session.MRU...)
-			a.service.session.MRUMu.RUnlock()
-		}
+		mruSnapshot := a.getMRUSnapshot()
 
 		thoughtPayload := map[string]any{
 			"query":          query,
@@ -511,10 +996,8 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 			"active_context": mruSnapshot,
 		}
 
-		go a.logEpisodeToSTM(context.Background(), "user_interaction", thoughtPayload, "Interacted with user", nil)
+		go a.Memory.LogEpisodeToSTM(context.Background(), "user_interaction", thoughtPayload, "Interacted with user", nil)
 	}
-
-	return finalText, nil
 }
 
 // ----------------------------------------------------------------------------
@@ -634,42 +1117,102 @@ func (a *CopilotAgent) handleSlashCommand(ctx context.Context, query string, gen
 	return false, "", nil
 }
 
-func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string) string {
+func (a *CopilotAgent) resolvePersona(ctx context.Context) string {
+	agentID := ai.AgentIDOmni
+	if a.Memory != nil && a.Memory.AgentID != "" {
+		agentID = a.Memory.AgentID
+	}
+	cacheKey := "PERSONA_" + agentID
+
+	// 1. Try MRU Cache
+	if cachedVal, ok := a.getMRUCategoryBySource(cacheKey, MRUSourcePersona, true); ok && cachedVal != "" {
+		return cachedVal
+	}
+
+	p := ai.GetSessionPayload(ctx)
+
 	persona := ""
-	if p := ai.GetSessionPayload(ctx); p != nil && p.UserID != "" && a.systemDB != nil {
-		kbName := p.GetMemoryKBName()
-		if tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-			if kb, err := a.systemDB.OpenKnowledgeBase(ctx, kbName, tx, nil, nil, false, true); err == nil {
-				if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil && cfg.SystemPrompt != "" {
-					persona = cfg.SystemPrompt + "\n\n"
+	if agentID != ai.AgentIDOmni {
+		if p == nil {
+			log.Error("Routed to an Avatar but there is no selected KB")
+		} else {
+			// If Avatar, use its exact KB as the Persona config source
+			var matchingRef *ai.ArtifactReference
+			for _, ref := range p.SelectedKBs {
+				if ref.Name == agentID && ref.Type == ai.ArtifactTypeSpace {
+					matchingRef = &ref
+					break
 				}
 			}
-			tx.Rollback(ctx)
+
+			if matchingRef != nil {
+				dbName := matchingRef.DatabaseName
+				if dbName == "" {
+					dbName = p.CurrentDB
+				}
+
+				var dbOpts sop.DatabaseOptions
+				var found bool
+				if dbOpts, found = a.databases[dbName]; found {
+					// Use found opts
+				} else if dbName == SystemDBName && a.systemDB != nil {
+					dbOpts = a.systemDB.Config()
+					found = true
+				}
+
+				if found && dbOpts.Type >= 0 {
+					tempDB := database.NewDatabase(dbOpts)
+					if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+						if kb, err := tempDB.OpenKnowledgeBase(ctx, matchingRef.Name, tx, nil, nil, false, true); err == nil {
+							if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil && cfg.SystemPrompt != "" {
+								persona = cfg.SystemPrompt + "\n\n"
+							}
+						}
+						tx.Rollback(ctx)
+					}
+				}
+			}
+		}
+	} else {
+		// If Omni, strictly use the SOP KB as the Persona config source
+		if a.systemDB != nil {
+			tempDB := database.NewDatabase(a.systemDB.Config())
+			if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+				if kb, err := tempDB.OpenKnowledgeBase(ctx, ai.DefaultKBName, tx, nil, nil, false, false); err == nil {
+					if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil && cfg.SystemPrompt != "" {
+						persona = cfg.SystemPrompt + "\n\n"
+					}
+				}
+				tx.Rollback(ctx)
+			}
 		}
 	}
 
-	// Fallback persona
 	if persona == "" {
 		persona = "You are a general-purpose intelligent AI Copilot equipped with a human-like 'active memory' system. " +
-			"You specialize in SOP AI (SOP for AI), which is primarily a platform and toolset for Knowledge Bases (KBs). " +
-			"SOP allows users to author KBs, and you can be instructed to consult all KBs in the current DB and/or SystemDB to provide informed answers. " +
-			"You also aid in SOP library adoption, technology integration, Spaces management, and data management. " +
-			"As a true SOP (Scalable Objects Persistence) expert, your core knowledge covers Databases, B-Trees, strict ACID Transactions, Swarm Computing, and advanced Storage mechanisms including Erasure Coding. " +
-			"You also understand that a 'Space' or 'Knowledge Base' is a new AI memory subsystem combining VectorDB, Text Search, and a specialized schema (Thoughts: Category/Items), and you manage it differently than raw technical tables. " +
+			"Your primary expertise is in a platform named SOP (which stands for 'Scalable Objects Persistence'). " +
+			"SOP is an advanced data and AI platform that provides robust tooling for Knowledge Bases (KBs). " +
+			"You aid users in SOP library adoption, technology integration, Spaces management, and data management. " +
+			"As an expert in Scalable Objects Persistence, your core knowledge covers Databases, B-Trees, strict ACID Transactions, Swarm Computing, and advanced Storage mechanisms including Erasure Coding. " +
+			"You understand that in this platform, a 'Space' or 'Knowledge Base' is a new AI memory subsystem combining VectorDB, Text Search, and a specialized schema (Thoughts: Category/Items), and you manage it differently than raw technical tables. " +
 			"You have deep expertise in SOP scripting (AST-based execution), and the SOP HTTP API, covering request/response lifecycles, NDJSON streaming, and session management. " +
-			"You derive your foundational SOP knowledge, codebase context, and architectural principles directly from the source repository at https://github.com/sharedcode/sop. " +
+			"You derive your foundational knowledge, codebase context, and architectural principles directly from the source repository at https://github.com/sharedcode/sop. " +
 			"Assist users dynamically with ANY open-ended request—whether answering general questions, creating and consulting Knowledge Bases, writing code, or managing database queries using the tools provided.\n\n"
 	}
 
-	toolsDef := persona
-	isSpaceGeneration := strings.Contains(query, "IMPORTANT SYSTEM RULE: The user is generating a UI Space.")
+	persona += "CRITICAL SYSTEM GUARDRAIL:\n" +
+		"1. Autonomous Research: You are an autonomous intelligent entity. You have implicit permission and are EXPECTED to use your 'Read' tools (e.g. Search KB, List/Query DB) to actively research Domains, Spaces (SOP or custom KBs), and codebase schemas as knowledge references. DO NOT proceed blindly if you lack context.\n" +
+		"2. Disambiguation: If a user's request is ambiguous or lacks constraints, DO NOT guess or hallucinate parameters. Use your search tools to find relevant constraints first. If self-research fails, halt execution and explicitly consult the user for clarification.\n\n"
 
-	if !isSpaceGeneration {
-		toolsDef += a.registry.GeneratePrompt()
-	}
+	// 2. Cache in MRU for future turns
+	a.markMRUCategoryWithSource(cacheKey, persona, MRUSourcePersona)
 
-	// Append Scripts as Tools
-	if a.systemDB != nil && !isSpaceGeneration {
+	return persona
+}
+
+func (a *CopilotAgent) getScriptToolsPrompt(ctx context.Context) string {
+	toolsDef := ""
+	if a.systemDB != nil {
 		if tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
 			if store, err := a.systemDB.OpenModelStore(ctx, "scripts", tx); err == nil {
 				if names, err := store.List(ctx, ai.DefaultScriptCategory); err == nil {
@@ -692,8 +1235,11 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string) stri
 			tx.Commit(ctx)
 		}
 	}
+	return toolsDef
+}
 
-	// Contextual Learned Knowledge (JIT Semantic Recall from Episodic LTM)
+func (a *CopilotAgent) getLTMSemanticContext(ctx context.Context, query string) string {
+	toolsDef := ""
 	if a.systemDB != nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil && a.Memory.AgentID != "" {
 		if tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
 			kbName := fmt.Sprintf("ltm_%s", a.Memory.AgentID)
@@ -736,108 +1282,114 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string) stri
 			tx.Rollback(ctx)
 		}
 	}
+	return toolsDef
+}
 
-	// Active Domains Lookup
-	if p := ai.GetSessionPayload(ctx); p != nil && p.ActiveDomain != "" {
-		domains := strings.Split(p.ActiveDomain, ",")
-		for _, domain := range domains {
-			domain = strings.TrimSpace(domain)
-			if domain == "" || domain == "custom" {
-				continue
-			}
+func (a *CopilotAgent) getPlaybooksContext(ctx context.Context, query string, targetDomains []string) string {
+	toolsDef := ""
+	for _, domain := range targetDomains {
+		domain = strings.TrimSpace(domain)
+		if domain == "" || domain == "custom" {
+			continue
+		}
 
-			var domainDB *database.Database
-			dbOptsList := []sop.DatabaseOptions{a.systemDB.Config()}
-			for _, dbOpts := range a.databases {
-				dbOptsList = append(dbOptsList, dbOpts)
-			}
+		var domainDB *database.Database
 
-			for _, dbOpts := range dbOptsList {
-				tempDB := database.NewDatabase(dbOpts)
-				kbs := func(ctx context.Context, tempDB *database.Database) []string {
-					var kbs []string
-					if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-						if stores, err := tx.GetStores(ctx); err == nil {
-							for _, s := range stores {
-								if strings.HasSuffix(s, "/sys_config") {
-									kbs = append(kbs, strings.TrimSuffix(s, "/sys_config"))
-								}
-							}
-						}
-						tx.Rollback(ctx)
-					}
-					return kbs
-				}(ctx, tempDB)
+		var dbOptsList []sop.DatabaseOptions
+		if a.systemDB != nil {
+			dbOptsList = append(dbOptsList, a.systemDB.Config())
+		}
 
-				hasDomain := false
-				for _, kb := range kbs {
-					if kb == domain {
-						hasDomain = true
-						break
-					}
-				}
-				if hasDomain {
-					domainDB = tempDB
-					break
-				}
-			}
+		for _, dbOpts := range a.databases {
+			dbOptsList = append(dbOptsList, dbOpts)
+		}
 
-			if domainDB != nil {
-				if tx, err := domainDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-					kb, err := domainDB.OpenKnowledgeBase(ctx, domain, tx, nil, nil, false)
-					if err == nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
-						vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query})
-						if err == nil && len(vecs) > 0 {
-							closestCat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
-							catFilter := ""
-							if err == nil && closestCat != nil {
-								catFilter = closestCat.Name
-							}
-							hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: 5, CategoryPath: catFilter})
-							hasGoodHits := false
-							accumStr := ""
-							if err == nil && len(hits) > 0 {
-								for _, hit := range hits {
-									if hit.Score < 0.6 {
-										continue
-									}
-									hasGoodHits = true
-									valStr := ""
-									if str, ok := hit.Payload["_raw_content"].(string); ok {
-										valStr = str
-									} else if str, ok := hit.Payload["content"].(string); ok {
-										valStr = str
-									} else {
-										valStr = fmt.Sprintf("%v", hit.Payload)
-									}
-									accumStr += fmt.Sprintf("- Context (Score: %.2f): %s\n", hit.Score, valStr)
-								}
-							}
-
-							if hasGoodHits {
-								toolsDef += fmt.Sprintf("\nActive Playbook Context (%s):\n%s", domain, accumStr)
-								a.MarkMRUCategory(domain, fmt.Sprintf("Retrieved Semantics:\n%s", accumStr))
-							} else {
-								if a.service != nil && a.service.session != nil {
-									a.service.session.MRUMu.RLock()
-									for _, item := range a.service.session.MRU {
-										if item.Category == domain && item.Context != "" {
-											toolsDef += fmt.Sprintf("\nCarried-Over Playbook Context (%s):\n%s\n", domain, item.Context)
-											break
-										}
-									}
-									a.service.session.MRUMu.RUnlock()
-								}
+		for _, dbOpts := range dbOptsList {
+			tempDB := database.NewDatabase(dbOpts)
+			kbs := func(ctx context.Context, tempDB *database.Database) []string {
+				var kbs []string
+				if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+					if stores, err := tx.GetStores(ctx); err == nil {
+						for _, s := range stores {
+							if strings.HasSuffix(s, "/sys_config") {
+								kbs = append(kbs, strings.TrimSuffix(s, "/sys_config"))
 							}
 						}
 					}
 					tx.Rollback(ctx)
 				}
+				return kbs
+			}(ctx, tempDB)
+
+			hasDomain := false
+			for _, kb := range kbs {
+				if kb == domain {
+					hasDomain = true
+					break
+				}
+			}
+			if hasDomain {
+				domainDB = tempDB
+				break
+			}
+		}
+
+		hasGoodHits := false
+		if domainDB != nil {
+			if tx, err := domainDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+				kb, err := domainDB.OpenKnowledgeBase(ctx, domain, tx, nil, nil, false)
+				if err == nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
+					vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query})
+					if err == nil && len(vecs) > 0 {
+						closestCat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
+						catFilter := ""
+						if err == nil && closestCat != nil {
+							catFilter = closestCat.Name
+						}
+						hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: 5, CategoryPath: catFilter})
+						accumStr := ""
+						if err == nil && len(hits) > 0 {
+							for _, hit := range hits {
+								if hit.Score < 0.6 {
+									continue
+								}
+								hasGoodHits = true
+								valStr := ""
+								if str, ok := hit.Payload["_raw_content"].(string); ok {
+									valStr = str
+								} else if str, ok := hit.Payload["content"].(string); ok {
+									valStr = str
+								} else {
+									valStr = fmt.Sprintf("%v", hit.Payload)
+								}
+								accumStr += fmt.Sprintf("- Context (Score: %.2f): %s\n", hit.Score, valStr)
+							}
+						}
+
+						if hasGoodHits {
+							toolsDef += fmt.Sprintf("\nActive Playbook Context (%s):\n%s", domain, accumStr)
+							a.markMRUCategoryWithSource(playbookMRUCategory(domain), fmt.Sprintf("Retrieved Semantics:\n%s", accumStr), MRUSourcePlaybook)
+						}
+					}
+				}
+				tx.Rollback(ctx)
+			}
+		}
+
+		if !hasGoodHits {
+			if a.service != nil && a.service.session != nil {
+				if carriedOver, ok := a.getMRUCategoryBySource(playbookMRUCategory(domain), MRUSourcePlaybook, true); ok && carriedOver != "" {
+					toolsDef += fmt.Sprintf("\nCarried-Over Playbook Context (%s):\n%s\n", domain, carriedOver)
+				}
 			}
 		}
 	}
+	return toolsDef
+}
 
-	if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" && !isSpaceGeneration {
+func (a *CopilotAgent) getSchemaInjectionContext(ctx context.Context) string {
+	toolsDef := ""
+	if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
 		var db *database.Database
 		if p.CurrentDB == SystemDBName {
 			db = a.systemDB
@@ -884,10 +1436,156 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string) stri
 			}
 		}
 	}
+	return toolsDef
+}
 
-	toolsDef += a.getSystemInstructions(ctx, query)
+// buildSystemPrompt, on top of generated System Prompt(below), we rely on native Tool Calling via ListTools,
+// which specifies each tool's basic info & supported JSON schema.
+func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, taskClassification TaskContextClassification) string {
+	builder := NewSystemPromptBuilder()
 
-	// Reconstruct the active transcript dynamically from episodic Short-Term Memory
+	// 1. Resolve Avatar / Custom KB Persona or Fallback
+	builder.With(ComponentPersona, a.resolvePersona(ctx))
+
+	// 2. LTM Semantic Resolution (Self-Correction / Working Memory)
+	builder.With(ComponentSemanticMemory, a.getLTMSemanticContext(ctx, query))
+
+	// 3. Always inject System Tools loaded into LTM
+	systemTools := a.getSystemToolsContext(ctx)
+	if focusedTools := a.buildFocusedToolContext(&taskClassification); focusedTools != "" && !strings.Contains(systemTools, focusedTools) {
+		if systemTools != "" {
+			systemTools += "\n\n"
+		}
+		systemTools += focusedTools
+	}
+	builder.With(ComponentSystemTools, systemTools)
+
+	// 4. Active Custom KBs / Playbooks Lookups
+	domains := []string{"sop"}
+	if p := ai.GetSessionPayload(ctx); p != nil && p.ActiveDomain != "" {
+		domains = append(domains, strings.Split(p.ActiveDomain, ",")...)
+	}
+	builder.With(ComponentPlaybooks, a.getPlaybooksContext(ctx, query, domains))
+	builder.With(ComponentFocusedContext, a.getFocusedExecutionContext(ctx, taskClassification))
+
+	// 5. Generic schema fallback only when no specific store targets were classified.
+	if taskClassification.Domain == StoresDomain && len(taskClassification.DBArtifacts) == 0 {
+		builder.With(ComponentSchema, a.getSchemaInjectionContext(ctx))
+	}
+
+	// 6. Reconstruct the active transcript dynamically from episodic Short-Term Memory
+	builder.With(ComponentHistory, a.getSessionMemoryContext())
+
+	// 7. Inject Final Trigger query
+	builder.With(ComponentUserQuery, "User: "+query)
+
+	// Render as highly structured JSON elements to prevent Prompt confusion
+	fullPrompt, budgetReport := builder.ToJSONWithBudgetReport(a.promptBudgetProfile(taskClassification))
+	log.Info("LLM Context Budget",
+		"routing_gate", taskClassification.RoutingGate,
+		"original_chars", budgetReport.OriginalTotalChars,
+		"final_chars", budgetReport.FinalTotalChars,
+		"trimmed_components", summarizePromptBudgetTrim(budgetReport),
+	)
+	log.Info("LLM Context (OMNI)", "SystemPrompt", fullPrompt)
+
+	return fullPrompt
+}
+
+func (a *CopilotAgent) promptBudgetProfile(taskClassification TaskContextClassification) PromptBudgetProfile {
+	profile := PromptBudgetProfile{
+		TotalChars: 14000,
+		ComponentCharBudgets: map[PromptComponent]int{
+			ComponentPersona:        2800,
+			ComponentSemanticMemory: 1400,
+			ComponentSystemTools:    2600,
+			ComponentPlaybooks:      1600,
+			ComponentFocusedContext: 2600,
+			ComponentSchema:         1800,
+			ComponentHistory:        1800,
+			ComponentUserQuery:      1200,
+		},
+		TrimPriorityLowToHigh: []PromptComponent{
+			ComponentHistory,
+			ComponentSchema,
+			ComponentPlaybooks,
+			ComponentSemanticMemory,
+			ComponentSystemTools,
+			ComponentPersona,
+			ComponentFocusedContext,
+			ComponentUserQuery,
+		},
+	}
+
+	switch taskClassification.RoutingGate {
+	case RoutingGateFocused:
+		profile.TotalChars = 12500
+		profile.ComponentCharBudgets[ComponentSemanticMemory] = 1000
+		profile.ComponentCharBudgets[ComponentSystemTools] = 3200
+		profile.ComponentCharBudgets[ComponentPlaybooks] = 1200
+		profile.ComponentCharBudgets[ComponentFocusedContext] = 3400
+		profile.ComponentCharBudgets[ComponentHistory] = 1200
+	case RoutingGateContinuity:
+		profile.TotalChars = 15000
+		profile.ComponentCharBudgets[ComponentSemanticMemory] = 1800
+		profile.ComponentCharBudgets[ComponentSystemTools] = 2400
+		profile.ComponentCharBudgets[ComponentPlaybooks] = 1800
+		profile.ComponentCharBudgets[ComponentHistory] = 2600
+	}
+
+	if isCrossDomain(taskClassification.Layers) {
+		profile.TotalChars = 16500
+		profile.ComponentCharBudgets[ComponentSystemTools] = 3600
+		profile.ComponentCharBudgets[ComponentFocusedContext] = 3200
+		profile.ComponentCharBudgets[ComponentPlaybooks] = 1800
+	}
+
+	if taskClassification.Domain == StoresDomain && len(taskClassification.DBArtifacts) == 0 {
+		profile.ComponentCharBudgets[ComponentSchema] = 2200
+	}
+
+	if len(taskClassification.DBArtifacts) > 0 || len(taskClassification.StoresArtifacts) > 0 || len(taskClassification.SpacesArtifacts) > 0 {
+		profile.ComponentCharBudgets[ComponentSchema] = 0
+		profile.ComponentCharBudgets[ComponentHistory] = 1400
+	}
+
+	if taskClassification.RoutingGate == RoutingGateContinuity {
+		profile.ComponentCharBudgets[ComponentHistory] = 2600
+	}
+
+	return profile
+}
+
+func summarizePromptBudgetTrim(report PromptBudgetReport) string {
+	trimmed := report.TrimmedComponents()
+	if len(trimmed) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(trimmed))
+	for _, stat := range trimmed {
+		parts = append(parts, fmt.Sprintf("%s:%d->%d", stat.Component, stat.OriginalChars, stat.FinalChars))
+	}
+	return strings.Join(parts, ",")
+}
+
+func summarizeTaskContextForLog(taskClassification TaskContextClassification) string {
+	artifacts := taskClassification.DBArtifacts
+	if len(artifacts) == 0 {
+		artifacts = append(artifacts, taskClassification.StoresArtifacts...)
+		artifacts = append(artifacts, taskClassification.SpacesArtifacts...)
+	}
+	if len(artifacts) > 4 {
+		artifacts = append(append([]string(nil), artifacts[:4]...), "...")
+	}
+	layers := make([]string, 0, len(taskClassification.Layers))
+	for _, layer := range taskClassification.Layers {
+		layers = append(layers, fmt.Sprintf("%s[%s]", layer.Name, strings.Join(layer.CRUD, "")))
+	}
+	return fmt.Sprintf("entity=%s domain=%s artifacts=%s layers=%s", taskClassification.Entity, taskClassification.Domain, strings.Join(artifacts, ","), strings.Join(layers, ","))
+}
+
+func (a *CopilotAgent) getSessionMemoryContext() string {
 	convHistory := ""
 	if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
 		if thread := a.service.session.Memory.GetCurrentThread(); thread != nil && len(thread.Exchanges) > 0 {
@@ -900,9 +1598,28 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string) stri
 
 			for _, ex := range exchanges {
 				if ex.Role == RoleUser {
-					sb.WriteString(fmt.Sprintf("User: %s\n", ex.Content))
+					userText := ex.Content
+					if len(userText) > 1000 {
+						userText = userText[:1000] + "... [truncated for brevity]"
+					}
+					sb.WriteString(fmt.Sprintf("User: %s\n", userText))
 				} else if ex.Role == RoleAssistant {
-					sb.WriteString(fmt.Sprintf("Assistant: %s\n", ex.Content))
+					astText := ex.Content
+					for {
+						start := strings.Index(astText, "```json")
+						if start == -1 {
+							break
+						}
+						end := strings.Index(astText[start+7:], "```")
+						if end == -1 {
+							break
+						}
+						astText = astText[:start] + "```json\n[... AST Script/JSON Payload stripped for brevity ...]\n```" + astText[start+7+end+3:]
+					}
+					if len(astText) > 800 {
+						astText = astText[:800] + "... [Assistant response truncated for brevity]"
+					}
+					sb.WriteString(fmt.Sprintf("Assistant: %s\n", astText))
 				}
 			}
 			if sb.Len() > 0 {
@@ -910,8 +1627,7 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string) stri
 			}
 		}
 	}
-
-	return toolsDef + "\n" + convHistory + "User: " + query
+	return convHistory
 }
 
 // ============================================================================
@@ -1078,12 +1794,95 @@ func (b *BaselineReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) 
 func (a *CopilotAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
 	var tools []ai.ToolDefinition
 
+	var routingState *TaskContextClassification
+	if p := ai.GetSessionPayload(ctx); p != nil && p.Variables != nil {
+		if rs, ok := p.Variables["RoutingState"].(*TaskContextClassification); ok {
+			routingState = rs
+		}
+	}
+
+	allowedSpacesTools := make(map[string]bool)
+	allowedStoresTools := make(map[string]bool)
+
+	if routingState != nil {
+		crudParams := collectCRUDFlags(routingState.Layers)
+		cross := isCrossDomain(routingState.Layers)
+
+		// Foundational scripts/tools that should always be present
+		allowedStoresTools["execute_script"] = true
+
+		if cross || strings.EqualFold(routingState.Domain, SpacesDomain) {
+			if crudParams["R"] {
+				allowedSpacesTools["read_space_config"] = true
+				allowedSpacesTools["search_space"] = true
+			}
+			if crudParams["C"] || crudParams["U"] {
+				allowedSpacesTools["mint_to_space"] = true
+				allowedSpacesTools["enrich_space"] = true
+				allowedSpacesTools["update_space_config"] = true
+				allowedSpacesTools["vectorize_space"] = true
+				allowedSpacesTools["vectorize_space_categories"] = true
+				allowedSpacesTools["vectorize_space_items"] = true
+			}
+			if crudParams["D"] {
+				allowedSpacesTools["delete_space"] = true
+			}
+		}
+
+		if cross || strings.EqualFold(routingState.Domain, StoresDomain) {
+			if crudParams["R"] {
+				allowedStoresTools["select"] = true
+				allowedStoresTools["join"] = true
+				allowedStoresTools["explain_join"] = true
+				allowedStoresTools["scan"] = true
+			}
+			if crudParams["C"] {
+				allowedStoresTools["add"] = true
+			}
+			if crudParams["U"] {
+				allowedStoresTools["update"] = true
+			}
+			if crudParams["D"] {
+				allowedStoresTools["delete"] = true
+			}
+			allowedStoresTools["manage_transaction"] = true
+		}
+	}
+
+	isSpaceTool := func(name string) bool {
+		switch name {
+		case "mint_to_space", "delete_space", "enrich_space", "update_space_config", "read_space_config", "vectorize_space", "vectorize_space_categories", "vectorize_space_items", "search_space":
+			return true
+		}
+		return false
+	}
+
+	isStoreTool := func(name string) bool {
+		switch name {
+		case "select", "join", "explain_join", "add", "update", "delete", "manage_transaction", "scan":
+			return true
+		}
+		return false
+	}
+
 	// Append compiled go tools
 	if a.registry != nil {
 		for _, t := range a.registry.List() {
 			if t.Hidden {
 				continue // Skip hidden for the LLM natively as well
 			}
+
+			// Apply RoutingState Filter if available
+			if routingState != nil {
+				name := t.Name
+				if isSpaceTool(name) && !allowedSpacesTools[name] {
+					continue
+				}
+				if isStoreTool(name) && !allowedStoresTools[name] {
+					continue
+				}
+			}
+
 			tools = append(tools, ai.ToolDefinition{
 				Name:        t.Name,
 				Description: t.Description,
@@ -1139,41 +1938,12 @@ func (a *CopilotAgent) InitializePhysicalMemory(ctx context.Context) error {
 		return nil
 	}
 	if a.Memory.AgentID == "" {
-		a.Memory.AgentID = "omni"
+		a.Memory.AgentID = ai.AgentIDOmni
 	}
-
-	// Dynamic store naming based on Avatar ID to ensure physical strict isolation
-	stmStoreName := fmt.Sprintf("stm_%s", a.Memory.AgentID)
 
 	tx, err := a.systemDB.BeginTransaction(ctx, sop.ForWriting)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction for isolated STM: %w", err)
-	}
-
-	// In the real system, you might want a specialized Opener or B-Tree logic. B-Tree auto creates if not exist (using NewBtree if Open fails).
-	store, err := a.systemDB.OpenBtree(ctx, stmStoreName, tx)
-	if err != nil {
-		if strings.Contains(err.Error(), "does not exist") || strings.Contains(err.Error(), "not found") {
-			// Because OpenBtree failed, SOP likely rolled back the transaction. Create a new one.
-			tx, err = a.systemDB.BeginTransaction(ctx, sop.ForWriting)
-			if err != nil {
-				return fmt.Errorf("failed to begin new transaction for isolated STM: %w", err)
-			}
-			if !tx.HasBegun() {
-				if err := tx.Begin(ctx); err != nil {
-					tx.Rollback(ctx)
-					return fmt.Errorf("failed to start transaction: %w", err)
-				}
-			}
-			store, err = a.systemDB.NewBtree(ctx, stmStoreName, tx)
-			if err != nil {
-				tx.Rollback(ctx)
-				return fmt.Errorf("failed to create isolated STM BTree: %w", err)
-			}
-		} else {
-			tx.Rollback(ctx)
-			return fmt.Errorf("failed to open isolated STM BTree: %w", err)
-		}
 	}
 
 	var embedder ai.Embeddings
@@ -1181,101 +1951,98 @@ func (a *CopilotAgent) InitializePhysicalMemory(ctx context.Context) error {
 		embedder = a.service.Domain().Embedder()
 	}
 
-	ltmStoreName := fmt.Sprintf("ltm_%s", a.Memory.AgentID)
-	ltm, err := a.systemDB.OpenKnowledgeBase(ctx, ltmStoreName, tx, a.brain, embedder, false, true)
+	// Initialize Memory Unit.
+	_, err = a.Memory.OpenShortTermMemory(ctx, a.systemDB, tx)
 	if err != nil {
 		tx.Rollback(ctx)
-		return fmt.Errorf("failed to open isolated LTM KnowledgeBase: %w", err)
+		return fmt.Errorf("failed to open STM: %w", err)
+	}
+	_, err = a.Memory.OpenLongTermMemory(ctx, a.systemDB, tx, a.brain, embedder)
+	if err != nil {
+		tx.Rollback(ctx)
+		return fmt.Errorf("failed to open LTM: %w", err)
 	}
 
 	err = tx.Commit(ctx)
+	a.Memory.CloseShortTermMemory()
 	if err != nil {
 		return fmt.Errorf("failed to commit isolated physical memory initialization: %w", err)
 	}
 
-	a.Memory.STM = store
-	a.Memory.LTM = ltm
-	log.Debug("Initialized Isolated Physical Memory for Avatar", "agent_id", a.Memory.AgentID, "stm_store", stmStoreName, "ltm_store", ltmStoreName)
+	tx, err = a.systemDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return fmt.Errorf("failed 2nd begin transaction for isolated STM: %w", err)
+	}
 
-	// Hook up SOP KB's system tools directly into the Avatar's semantic LTM using background Vector Search
+	log.Info("Initialized Isolated Physical Memory for Avatar", "agent_id", a.Memory.AgentID,
+		"stm_store", a.Memory.ShortTermMemoryName(), "ltm_store", a.Memory.LongTermMemoryName())
+
+	// Hook up SOP KB's system tools directly into the Avatar's semantic LTM synchronously
 	if embedder != nil {
-		go func() {
-			bgCtx := context.Background()
+		alreadySeeded := false
+		opts := &memory.SearchOptions[map[string]any]{Limit: 1, CategoryPath: "System_Tools"}
+		dummyVec := make([]float32, embedder.Dim())
+		ltm, err := a.Memory.OpenLongTermMemory(ctx, a.systemDB, tx, a.brain, embedder)
+		if err != nil {
+			tx.Rollback(ctx)
+			return fmt.Errorf("failed to open LTM: %w", err)
+		}
 
-			txRead, err := a.systemDB.BeginTransaction(bgCtx, sop.ForReading)
+		if hits, err := ltm.Store.Query(ctx, dummyVec, opts); err == nil && len(hits) > 0 {
+			alreadySeeded = true
+		}
+
+		if !alreadySeeded {
+			sopKB, err := a.systemDB.OpenKnowledgeBase(ctx, ai.DefaultKBName, tx, a.brain, embedder, false)
 			if err != nil {
-				return
+				tx.Rollback(ctx)
+				return err
 			}
 
-			sopKB, err := a.systemDB.OpenKnowledgeBase(bgCtx, ai.DefaultKBName, txRead, a.brain, embedder, false)
+			config, err := sopKB.GetConfig(ctx)
 			if err != nil {
-				txRead.Rollback(bgCtx)
-				return
+				tx.Rollback(ctx)
+				return err
 			}
 
-			// Map query titles directly to their strict Categories to eliminate probabilistic Vector Space matching
-			toolQueries := []struct {
-				Category string
-				Query    string
-			}{
-				{"Execute Script Tool", "Execute Script Tool"},
-				{"Execute Script Tool", "execute_script Tool Operations:"},
-				{"Knowledge Base Search Tools", "tool search_sop"},
-				{"Knowledge Base Search Tools", "tool search_custom_kbs"},
+			var toolThoughts []memory.Thought[map[string]any]
+			seen := make(map[sop.UUID]bool)
+
+			//opts := &memory.SearchOptions[map[string]any]{Limit: 2, CategoryPath: toolQueries[i].Category}
+			result, err := sopKB.SearchByPath(ctx, config.ToolQueries)
+			if err != nil {
+				tx.Rollback(ctx)
+				return err
 			}
-
-			var rawQueries []string
-			for _, t := range toolQueries {
-				rawQueries = append(rawQueries, t.Query)
-			}
-
-			vecs, err := embedder.EmbedTexts(bgCtx, rawQueries)
-			if err == nil {
-				var toolThoughts []memory.Thought[map[string]any]
-				seen := make(map[string]bool)
-
-				for i, vec := range vecs {
-					opts := &memory.SearchOptions[map[string]any]{Limit: 2, CategoryPath: toolQueries[i].Category}
-					hits, _ := sopKB.Store.Query(bgCtx, vec, opts)
-					for _, hit := range hits {
-						if !seen[hit.ID] {
-							seen[hit.ID] = true
-
-							toolThoughts = append(toolThoughts, memory.Thought[map[string]any]{
-								Summaries: []string{"System Tool Semantic Interface"},
-								CategoryPath:  "System_Tools",
-								Data:      hit.Payload,
-							})
-						}
-					}
+			for _, res := range result {
+				if !seen[res.ID] {
+					seen[res.ID] = true
+					toolThoughts = append(toolThoughts, memory.Thought[map[string]any]{
+						Summaries:    []string{"System Tool Semantic Interface"},
+						CategoryPath: "System_Tools",
+						Data:         res.Data,
+					})
 				}
-
-				txRead.Rollback(bgCtx)
-
-				if len(toolThoughts) > 0 {
-					txWrite, err := a.systemDB.BeginTransaction(bgCtx, sop.ForWriting)
-					if err == nil {
-						ltmWrite, err := a.systemDB.OpenKnowledgeBase(bgCtx, ltmStoreName, txWrite, a.brain, embedder, false, true)
-						if err == nil {
-							if err := ltmWrite.IngestThoughts(bgCtx, toolThoughts, a.Memory.AgentID); err == nil {
-								_ = txWrite.Commit(bgCtx)
-							} else {
-								txWrite.Rollback(bgCtx)
-							}
-						} else {
-							txWrite.Rollback(bgCtx)
-						}
-					}
-				}
-			} else {
-				txRead.Rollback(bgCtx)
 			}
-		}()
+
+			if len(toolThoughts) > 0 {
+				if err := ltm.IngestThoughts(ctx, toolThoughts, a.Memory.AgentID); err != nil {
+					tx.Rollback(ctx)
+					return err
+				}
+			}
+		}
+	}
+
+	err = tx.Commit(ctx)
+	a.Memory.CloseShortTermMemory()
+	if err != nil {
+		return err
 	}
 
 	// Wire up Cognitive Memory background workers for the Avatar
 	// 1. Batch short-term flushing (Working Memory -> STM)
-	a.StartMemoryWorkers(ctx)
+	a.Memory.StartMemoryWorkers(ctx, a.systemDB)
 
 	// 2. Schedule Sleep Cycle consolidator (STM -> LTM)
 	hourlyInterval := a.Config.SleepCycleIntervalHours
@@ -1284,63 +2051,6 @@ func (a *CopilotAgent) InitializePhysicalMemory(ctx context.Context) error {
 	a.StartSleepCycle(ctx, hourlyInterval, idleTimeout, nil)
 
 	return nil
-}
-
-// logEpisodeToSTM directly writes to the Agent's physical STM structure
-func (a *CopilotAgent) logEpisodeToSTM(ctx context.Context, intent string, astPayload any, outcome string, executeErr error) {
-	if a.Memory == nil || a.Memory.STM == nil {
-		return
-	}
-
-	astBytes, err := json.Marshal(astPayload)
-	var astStr string
-	if err == nil {
-		astStr = string(astBytes)
-	} else {
-		astStr = fmt.Sprintf("%T", astPayload)
-	}
-
-	status := "Success"
-	errorDesc := ""
-	if executeErr != nil {
-		status = "Error"
-		errorDesc = executeErr.Error()
-	}
-
-	// Combine into a structured representation for embedding and retrieval
-	thought := fmt.Sprintf("Intent: %s\nAST: %s\nStatus: %s\n", intent, astStr, status)
-	if errorDesc != "" {
-		thought += fmt.Sprintf("Error: %s\n", errorDesc)
-	}
-	if status == "Success" && outcome != "" {
-		outLog := outcome
-		if len(outLog) > 100 {
-			outLog = outLog[:100] + "..."
-		}
-		thought += fmt.Sprintf("Outcome: %s\n", outLog)
-	}
-
-	hash := sha256.Sum256([]byte(thought))
-	itemID := fmt.Sprintf("%x", hash)
-
-	payload := map[string]any{
-		"id":         itemID,
-		"intent":     intent,
-		"thought":    thought,
-		"status":     status,
-		"outcome":    outcome,
-		"created_at": time.Now().UnixMilli(),
-		"agent_id":   a.Memory.AgentID,
-	}
-
-	a.lastEpisodeTS.Store(time.Now().UnixMilli())
-
-	select {
-	case a.episodeQueue <- payload:
-		log.Debug("Isolated STM: Buffered thought snippet to queue successfully", "agent_id", a.Memory.AgentID)
-	default:
-		log.Warn("Isolated STM: Episode queue is full, dropping thought snippet", "agent_id", a.Memory.AgentID)
-	}
 }
 
 func (a *CopilotAgent) logThought(ctx context.Context, query string, toolsExecuted string, outcome string) {
@@ -1820,42 +2530,41 @@ func deepCopyValue(v any) any {
 
 func (a *CopilotAgent) classifyIntent(ctx context.Context, query string, gen ai.Generator) string {
 	if flag.Lookup("test.v") != nil {
-		// Bypass LLM-based intent routing in unit tests
-		return "OMNI"
+		// Bypass intent routing in unit tests
+		return ai.IntentOmni
 	}
 
-	availableKBs := ""
-	if p := ai.GetSessionPayload(ctx); p != nil && len(p.SelectedKBs) > 0 {
-		availableKBs = strings.Join(p.SelectedKBs, ", ")
+	p := ai.GetSessionPayload(ctx)
+
+	// 1. Prefix is the overarching router
+	parts := strings.Split(query, ":")
+	if len(parts) > 1 {
+		prefix := strings.ToUpper(strings.TrimSpace(parts[0]))
+
+		if prefix == ai.IntentOmni {
+			return ai.IntentOmni
+		}
+
+		if p != nil && len(p.SelectedKBs) > 0 {
+			for _, kb := range p.SelectedKBs {
+				// We compare case-insensitively just in case, but return the canonical KB name
+				if prefix == strings.ToUpper(kb.Name) || prefix == kb.Name {
+					return kb.Name
+				}
+			}
+		}
 	}
 
-	sysPrompt := `You are an ultra-fast Intent Classifier Router. Determine if the user is asking a general Omni Copilot question, or explicitly directing a query to a domain-specific Avatar or Persona.`
-	if availableKBs != "" {
-		sysPrompt += fmt.Sprintf("\n\nAvailable Avatars/KBs in the user's current workspace dropdown context: [%s].", availableKBs)
+	// 2. Without prefix, fall back to explicit UI selected state
+	if p != nil {
+		if len(p.SelectedKBs) == 1 {
+			// Exactly one KB selected -> route to that Avatar
+			return p.SelectedKBs[0].Name
+		}
+		// len(p.SelectedKBs) > 1 -> Future-proofing: multiple KBs selected means we need Omni's cross-KB capabilities
+		// len(p.SelectedKBs) == 0 -> No explicit scope, default to Omni
 	}
 
-	sysPrompt += `
-Note: The "OMNI" Copilot is the primary expert on the SOP platform itself. Any questions regarding general SOP configuration, Data Stores, Spaces, SOP in SDLC, platform troubleshooting, or core platform tools should be classified as "OMNI".
-
-If the request is general or pertains to the SOP platform, output EXACTLY the word "OMNI".
-If they specifically name or target an Avatar/domain from the Available Avatars list, output ONLY the exact name of that Avatar. Do not output any other formatting or punctuation.`
-
-	opts := ai.GenOptions{
-		SystemPrompt: sysPrompt,
-		Temperature:  0.1, // Fast, deterministic routing
-	}
-
-	out, err := gen.Generate(ctx, query, opts)
-	if err != nil {
-		log.Warn("Intent Classification failed, defaulting to OMNI", "error", err)
-		return "OMNI"
-	}
-
-	res := strings.TrimSpace(out.Text)
-	res = strings.Trim(res, "\"'*")
-
-	if strings.ToUpper(res) == "OMNI" || res == "" {
-		return "OMNI"
-	}
-	return res
+	// 3. Final Default
+	return ai.IntentOmni
 }

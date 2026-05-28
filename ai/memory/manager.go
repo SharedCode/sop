@@ -89,28 +89,7 @@ func (m *MemoryManager[T]) GenerateCategories(ctx context.Context, texts []strin
 // FindClosestCategory evaluates the spatial coordinates logically mapped into categories.
 // This executes mathematically without LLM inference, serving as the fast-path.
 func (m *MemoryManager[T]) FindClosestCategory(ctx context.Context, vector []float32) (*Category, float32, error) {
-	categoriesTree, err := m.store.Categories(ctx)
-	if err != nil {
-		return nil, 0, err
-	}
-	var closest *Category
-	var minDist float32 = -1.0
-
-	ok, err := categoriesTree.First(ctx)
-	for ok && err == nil {
-		c, _ := categoriesTree.GetCurrentValue(ctx)
-		// Assuming categories dynamically track their CenterVector based on members
-		if c != nil && len(c.CenterVector) > 0 {
-			dist := EuclideanDistance(vector, c.CenterVector)
-			if minDist < 0 || dist < minDist {
-				minDist = dist
-				closest = c
-			}
-		}
-		ok, err = categoriesTree.Next(ctx)
-	}
-
-	return closest, minDist, nil
+	return m.store.FindClosestCategory(ctx, vector)
 }
 
 // EnsureCategory guarantees a Semantic Anchor physically exists in the B-Tree for a string noun.

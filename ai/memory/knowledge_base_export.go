@@ -146,6 +146,10 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 	if err != nil {
 		return err
 	}
+	catsByPath, err := kb.Store.CategoriesByPath(ctx)
+	if err != nil {
+		return err
+	}
 	uuidMap := make(map[sop.UUID]sop.UUID)
 
 	hasMissingVectors := false
@@ -206,6 +210,13 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 						}
 					}
 					catBtree.Add(ctx, c.ID, &c)
+					path := c.Path
+					if path == "" {
+						path = c.Name
+					}
+					if path != "" {
+						catsByPath.Add(ctx, path, c.ID)
+					}
 				}
 			} // Rebuild Bi-Directional Children Links
 			updates := make(map[sop.UUID][]sop.UUID)

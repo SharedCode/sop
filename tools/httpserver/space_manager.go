@@ -106,7 +106,22 @@ func handlePreloadSpace(w http.ResponseWriter, r *http.Request) {
 
 func extractSummaries(chunk SpaceIngestChunk) []string {
 	summaries := chunk.Summaries
-	var sentences []string
+	var finalParagraphs []string
+	seen := make(map[string]bool)
+
+	addParagraph := func(toAdd []string) {
+		for _, s := range toAdd {
+			s = strings.TrimSpace(s)
+			if s == "" || seen[s] {
+				continue
+			}
+			seen[s] = true
+			if len(finalParagraphs) < MAX_ITEM_SUMMARIES {
+				finalParagraphs = append(finalParagraphs, s)
+			}
+		}
+	}
+
 	if sArr, ok := summaries.([]interface{}); ok && len(sArr) > 0 {
 		var res []string
 		for _, s := range sArr {
@@ -114,32 +129,35 @@ func extractSummaries(chunk SpaceIngestChunk) []string {
 				res = append(res, str)
 			}
 		}
-		if len(res) >= MAX_ITEM_SUMMARIES {
-			return res
-		}
-		sentences = res
+		addParagraph(res)
+	} else if sArr2, ok := summaries.([]string); ok && len(sArr2) > 0 {
+		addParagraph(sArr2)
 	} else if sStr, ok := summaries.(string); ok && sStr != "" {
-		parts := strings.Split(sStr, ".")
+		sStr = strings.ReplaceAll(sStr, "\r\n", "\n")
+		parts := strings.Split(sStr, "\n\n")
 		var res []string
 		for _, p := range parts {
 			p = strings.TrimSpace(p)
 			if p != "" {
+				if len(p) > MAX_PARAGRAPH_LENGTH {
+					p = p[:MAX_PARAGRAPH_LENGTH]
+				}
 				res = append(res, p)
 			}
 		}
-		if len(res) >= MAX_ITEM_SUMMARIES {
-			return res
-		}
-		sentences = append(sentences, res...)
+		addParagraph(res)
+	}
+
+	if len(finalParagraphs) >= MAX_ITEM_SUMMARIES {
+		return finalParagraphs
 	}
 
 	// Check if we can apply some heuristics and come up with decent Summaries.
 	s := determineSummaries(chunk.Text, chunk.Description, MAX_ITEM_SUMMARIES)
-	if len(s) > 0 {
-		sentences = append(sentences, s...)
-	}
-	if len(sentences) > MAX_ITEM_SUMMARIES {
-		return sentences[:MAX_ITEM_SUMMARIES]
+	addParagraph(s)
+
+	if len(finalParagraphs) >= MAX_ITEM_SUMMARIES {
+		return finalParagraphs
 	}
 
 	// Check if there is Text, Description in Data.
@@ -153,17 +171,11 @@ func extractSummaries(chunk SpaceIngestChunk) []string {
 		}
 		if dataText != "" || dataDesc != "" {
 			s = determineSummaries(dataText, dataDesc, MAX_ITEM_SUMMARIES)
-			if len(s) > 0 {
-				sentences = append(sentences, s...)
-			}
+			addParagraph(s)
 		}
 	}
 
-	if len(sentences) > MAX_ITEM_SUMMARIES {
-		sentences = sentences[:MAX_ITEM_SUMMARIES]
-	}
-
-	return sentences
+	return finalParagraphs
 }
 
 func handleCreateSpace(w http.ResponseWriter, r *http.Request) {
@@ -623,7 +635,7 @@ func handleIngestImportSpace(w http.ResponseWriter, r *http.Request) {
 		// Vectorize if "SOP" KB ingest (preloading).
 		if request.SpaceName == "SOP" && emb != nil {
 			UpdateTask(taskId, "in_progress", 95, 100, "Calculating Embeddings (Auto Vectorize)...", "")
-			if err := db.Vectorize(ctx, request.SpaceName, llm, emb, 100); err != nil {
+			if err := db.Vectorize(ctx, kb.Name(), llm, emb, 100); err != nil {
 				UpdateTask(taskId, "error", 100, 100, "", fmt.Sprintf("Import successful, but vectorization failed: %v", err))
 				return
 			}

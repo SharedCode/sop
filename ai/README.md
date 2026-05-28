@@ -90,7 +90,7 @@ A unique **Hybrid Execution** engine that runs inside the Agent.
 A conversational interface for interacting with your data, building scripts, and managing AI Spaces.
 *   **Natural Language Queries**: "Select all users where role is admin".
 *   **CRUD Operations**: Add, update, and delete records using plain English.
-*   **AI Spaces Management**: Effortlessly generate, import, and manage "Spaces". A Space (or Knowledge Base) is a new AI memory subsystem combining VectorDB, Text Search, and a specialized schema (Thoughts: Category/Items). The AI natively outputs structured `ExportData` JSON rather than running raw technical database tools for this domain.
+*   **AI Spaces Management**: Effortlessly generate, import, and manage "Spaces". A Space (or Knowledge Base) is a new AI memory subsystem combining VectorDB, Text Search, and a specialized schema (Thoughts: Category/Items).
 *   **Script Drafting**: Teach the assistant workflows by defining them step-by-step.
 *   [Read the User Guide](AI_COPILOT_USAGE.md).
 
@@ -225,7 +225,7 @@ func main() {
 }
 ```
 
-# The Doctor Demo: A Real RAG Pipeline powered by Gemini
+## The Doctor Demo: A Real RAG Pipeline powered by Gemini
 
 This demo showcases a complete, real-world RAG (Retrieval-Augmented Generation) pipeline. It demonstrates how to chain agents and vector databases together using the SOP AI framework.
 

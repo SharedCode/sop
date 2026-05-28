@@ -443,9 +443,12 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 		storeList[i] = k
 		i++
 	}
+	sort.Strings(storeList)
 	ba, _ := encoding.Marshal(storeList)
 
-	storeWriter.write(ctx, storeListFilename, ba)
+	if err := storeWriter.write(ctx, storeListFilename, ba); err != nil {
+		return fmt.Errorf("StoreRepository Remove (write store list) failed, details: %v", err)
+	}
 
 	// Replicate the files if configured to.
 	if err := storeWriter.replicate(ctx); err != nil {

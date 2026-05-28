@@ -254,7 +254,7 @@ func (jc *JoinRightCursor) Close() error {
 // FilterCursor filters a stream.
 type FilterCursor struct {
 	source ScriptCursor
-	filter map[string]any
+	filter any
 	engine *ScriptEngine
 	closed bool
 }

@@ -75,10 +75,10 @@ Scripts often fail because context (like "which transaction is active?") is lost
 *   **Our Solution**: The execution engine maintains a "Context Stickiness" layer. If a step requires a transaction but none is provided, the engine intelligently resolves the safest active context.
 *   **Benefit**: Scripts are robust against minor syntax errors or "forgetful" AI models.
 
-### 3. Self-Correcting Knowledge Base
-Most AI tools reset their memory after every session. If you teach it "Don't use X," you have to repeat yourself tomorrow.
-*   **Our Solution**: The `manage_knowledge` tool allows the agent to permanently store corrections (e.g., "Users table is actually called 'client_profiles'") into a dedicated system database.
-*   **Benefit**: The system gets smarter the more you use it.
+### 3. Self-Correcting Knowledge Base (Evolution to Omni Protocol)
+Most AI tools reset their memory after every session or depend on heavily loaded monolithic system prompts that bloat context. In our V1 architecture, we introduced `manage_knowledge` to store rules persistently.
+*   **Our Solution (V2)**: SOP uses the Butler Architecture. Knowledge constraints and vocabulary are embedded in dynamic Vector spaces (e.g. SOP KB) derived natively from markdown. When the agent plans execution, "The Butler" fetches precise contextual nodes. 
+*   **Benefit**: The system naturally self-corrects its trajectory based on current architectural instructions without manual prompt rewiring or bulky prompt pollution, remaining lightweight and highly tailored per-query.
 
 ---
 

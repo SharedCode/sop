@@ -16,7 +16,6 @@ import (
 	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/ai/obfuscation"
-	sopdb "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/search"
 )
 
@@ -207,6 +206,16 @@ func (s *Service) Open(ctx context.Context) error {
 		return nil
 	}
 
+	// Delegate Open to all registered sub-agents so they can initialize (e.g. CopilotAgent memory/tools)
+	openRegistryAgents := func() error {
+		for _, subAgent := range s.registry {
+			if err := subAgent.Open(ctx); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	// If we are recording, we do NOT use the session transaction.
 	// The user requirement is that during recording, each step is an isolated transaction (auto-commit).
 	// Explicit transaction commands (begin/commit) are recorded as steps but do not affect the recording session.
@@ -221,7 +230,7 @@ func (s *Service) Open(ctx context.Context) error {
 			// but let's be safe. Actually, Close only saves it if it WAS explicit.
 			// So we can set it to true here.
 			p.ExplicitTransaction = true
-			return nil
+			return openRegistryAgents()
 		}
 		// If DB mismatch, we commit the previous transaction as we are switching context.
 		if s.session.CurrentDB != "" && s.session.CurrentDB != p.CurrentDB {
@@ -238,7 +247,7 @@ func (s *Service) Open(ctx context.Context) error {
 	}
 
 	if p.CurrentDB == "" {
-		return nil
+		return openRegistryAgents()
 	}
 
 	// Check if configured System DB matches
@@ -259,11 +268,21 @@ func (s *Service) Open(ctx context.Context) error {
 	} else {
 		return fmt.Errorf("database '%s' not found in agent configuration", p.CurrentDB)
 	}
-	return nil
+	return openRegistryAgents()
 }
 
 // Close cleans up the agent service.
 func (s *Service) Close(ctx context.Context) error {
+	// Delegate Close to all registered sub-agents
+	closeRegistryAgents := func() error {
+		for _, subAgent := range s.registry {
+			if err := subAgent.Close(ctx); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	// We no longer clear the Memory here to support cross-request short-term memory (Conversation Graphs).
 	// The LRU limit (20 items) prevents unbounded growth.
 	if s.session != nil {
@@ -276,7 +295,7 @@ func (s *Service) Close(ctx context.Context) error {
 
 	p := ai.GetSessionPayload(ctx)
 	if p == nil || p.Transaction == nil {
-		return nil
+		return closeRegistryAgents()
 	}
 	if tx, ok := p.Transaction.(sop.Transaction); ok {
 		// If the transaction was explicitly started by the user, we persist it.
@@ -284,7 +303,7 @@ func (s *Service) Close(ctx context.Context) error {
 			s.session.Transaction = tx
 			s.session.CurrentDB = p.CurrentDB
 			s.session.Variables = p.Variables
-			return nil
+			return closeRegistryAgents()
 		}
 		// Otherwise, we commit it as it's an implicit transaction for this request/script.
 		if tx.HasBegun() {
@@ -295,9 +314,9 @@ func (s *Service) Close(ctx context.Context) error {
 		// Clear session state
 		s.session.Transaction = nil
 		s.session.Variables = nil
-		return nil
+		return closeRegistryAgents()
 	}
-	return nil
+	return closeRegistryAgents()
 }
 
 // Domain returns the underlying domain of the service.
@@ -479,6 +498,85 @@ func (s *Service) RunPipeline(ctx context.Context, input string) (string, error)
 	return currentInput, nil
 }
 
+func (s *Service) handlePendingUserConfirmation(ctx context.Context, query string) (bool, string, error) {
+	if s.session == nil {
+		return false, "", nil
+	}
+
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return false, "", nil
+	}
+
+	s.session.mu.Lock()
+	if pending := s.session.PendingConfirmation; pending != nil {
+		if isAffirmativeConfirmation(trimmed) {
+			s.session.PendingConfirmation = nil
+			s.session.mu.Unlock()
+			res, err := s.executeDeleteSpaceDirect(ctx, pending.SpaceName, pending.DatabaseName)
+			if err == nil {
+				res = "[[CLEAR_PENDING_CONFIRMATION]]\n" + res
+			}
+			return true, res, err
+		}
+		if isNegativeConfirmation(trimmed) {
+			s.session.PendingConfirmation = nil
+			s.session.mu.Unlock()
+			return true, fmt.Sprintf("[[CLEAR_PENDING_CONFIRMATION]]\nCancelled deletion of Space '%s'.", pending.SpaceName), nil
+		}
+		s.session.mu.Unlock()
+		return true, fmt.Sprintf("Pending deletion confirmation for Space '%s'. Reply 'yes' to confirm or 'no' to cancel.", pending.SpaceName), nil
+	}
+
+	spaceName, ok := parseDeleteSpaceRequest(trimmed)
+	if !ok {
+		s.session.mu.Unlock()
+		return false, "", nil
+	}
+
+	dbName := ""
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		dbName = p.CurrentDB
+	}
+	s.session.PendingConfirmation = &PendingUserConfirmation{
+		Kind:         "delete_space",
+		SpaceName:    spaceName,
+		DatabaseName: dbName,
+	}
+	s.session.mu.Unlock()
+
+	if dbName != "" {
+		return true, fmt.Sprintf("Delete Space '%s' from database '%s'? Reply 'yes' to confirm or 'no' to cancel.", spaceName, dbName), nil
+	}
+	return true, fmt.Sprintf("Delete Space '%s'? Reply 'yes' to confirm or 'no' to cancel.", spaceName), nil
+}
+
+func (s *Service) executeDeleteSpaceDirect(ctx context.Context, spaceName string, databaseName string) (string, error) {
+	args := map[string]any{"kb_name": spaceName}
+	if databaseName != "" {
+		args["database"] = databaseName
+	}
+
+	for _, agent := range s.registry {
+		if copilotAgent, ok := agent.(*CopilotAgent); ok {
+			copilotAgent.registerTools(ctx)
+			return copilotAgent.Execute(ctx, "delete_space", args)
+		}
+		if provider, ok := agent.(ToolProvider); ok {
+			res, err := provider.Execute(ctx, "delete_space", args)
+			if err == nil {
+				return res, nil
+			}
+			if strings.Contains(strings.ToLower(err.Error()), "unknown tool") {
+				continue
+			}
+			return "", err
+		}
+	}
+
+	return "", fmt.Errorf("delete_space tool is unavailable")
+}
+
 // GetLastToolInstructions returns the JSON instructions of the last executed tool.
 func (s *Service) GetLastToolInstructions() string {
 	if s.session == nil {
@@ -586,6 +684,15 @@ func (s *Service) RefactorLastSteps(count int, mode string, name string) error {
 	return fmt.Errorf("not implemented")
 }
 
+func (s *Service) LastInteractionToolCallsSnapshot() []ai.ScriptStep {
+	if s == nil || s.session == nil {
+		return nil
+	}
+	steps := make([]ai.ScriptStep, len(s.session.LastInteractionToolCalls))
+	copy(steps, s.session.LastInteractionToolCalls)
+	return steps
+}
+
 func (s *Service) saveScript(ctx context.Context, name string, script ai.Script) error {
 	scriptDB := s.getScriptDB()
 	if scriptDB == nil {
@@ -607,97 +714,6 @@ func (s *Service) saveScript(ctx context.Context, name string, script ai.Script)
 	return tx.Commit(ctx)
 }
 
-func (s *Service) getLLMKnowledge(ctx context.Context) string {
-	if s.systemDB == nil {
-		return ""
-	}
-	// Use a short-lived read transaction
-	tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading)
-	if err != nil {
-		return ""
-	}
-	defer tx.Rollback(ctx)
-
-	var sb strings.Builder
-
-	// Open Knowledge Store
-	ks, err := OpenKnowledgeStore(ctx, tx, s.systemDB.Options())
-	if err != nil {
-		return ""
-	}
-
-	// SCALABILITY FIX: Instead of loading everything, we only load "Core" namespaces.
-	// We load 'memory' (General instructions) and 'term' (Business glossary).
-	// Other namespaces (like 'schema' or domain-specifics) must be requested by the agent via tools.
-
-	namespacesToLoad := []string{"memory", "term"}
-
-	// SCALABILITY FIX 2: Load Semantic Memory namespaces
-	semanticNamespaces := []string{"vocabulary", "rule", "correction", "persona"}
-
-	// Add current DB domain if applicable
-	if p := ai.GetSessionPayload(ctx); p != nil && p.CurrentDB != "" {
-		// e.g. "finance" for "finance_db"
-		// Simple heuristic: usage of db name as namespace
-		namespacesToLoad = append(namespacesToLoad, p.CurrentDB)
-	}
-
-	sb.WriteString("\n[Global Instructions/Knowledge]\n")
-
-	for _, ns := range namespacesToLoad {
-		// ListContent is optimized to only scan the namespace
-		items, _ := ks.ListContent(ctx, ns)
-		if len(items) > 0 {
-			for k, v := range items {
-				// Format: "term:EBITDA: ..."
-				sb.WriteString(fmt.Sprintf("%s:%s:\n%s\n\n", ns, k, v))
-			}
-		}
-	}
-
-	// [Semantic Memory Injection]
-	// We explicitly format these for the LLM to use as rules, rather than raw dumps.
-	didHeader := false
-	for _, ns := range semanticNamespaces {
-		items, _ := ks.ListContent(ctx, ns)
-		if len(items) > 0 {
-			if !didHeader {
-				sb.WriteString("\n[Semantic Memory & Rules]\n(You MUST apply these mappings and rules when interpreting queries)\n")
-				didHeader = true
-			}
-			for k, v := range items {
-				// Try to parse JSON for cleaner display, otherwise fallback to raw
-				var parsed map[string]any
-				if err := json.Unmarshal([]byte(v), &parsed); err == nil {
-					// Format based on namespace
-					if ns == "vocabulary" {
-						target, _ := parsed["target"].(string)
-						desc, _ := parsed["description"].(string)
-						sb.WriteString(fmt.Sprintf("- Term '%s' -> Maps to field: '%s' (%s)\n", k, target, desc))
-					} else if ns == "rule" {
-						cond, _ := parsed["condition"].(string)
-						desc, _ := parsed["description"].(string)
-						sb.WriteString(fmt.Sprintf("- Rule '%s': Apply condition \"%s\" (%s)\n", k, cond, desc))
-					} else if ns == "correction" {
-						instr, _ := parsed["instruction"].(string)
-						sb.WriteString(fmt.Sprintf("- Correction '%s': %s\n", k, instr))
-					} else {
-						sb.WriteString(fmt.Sprintf("- %s:%s: %s\n", ns, k, v))
-					}
-				} else {
-					// Fallback for non-JSON strings
-					sb.WriteString(fmt.Sprintf("- %s:%s: %s\n", ns, k, v))
-				}
-			}
-		}
-	}
-
-	// Add tip about how to get more
-	sb.WriteString("Note: Extended knowledge (schemas, other domains) is available via explicit namespace search.\n")
-
-	return sb.String()
-}
-
 func (s *Service) getToolInfo(ctx context.Context, toolName string) (string, error) {
 	if s.systemDB == nil {
 		return "", fmt.Errorf("system DB not available")
@@ -708,17 +724,22 @@ func (s *Service) getToolInfo(ctx context.Context, toolName string) (string, err
 	}
 	defer tx.Rollback(ctx)
 
-	store, err := sopdb.OpenBtree[KnowledgeKey, string](ctx, s.systemDB.Options(), KnowledgeStore, tx, nil)
+	kb, err := s.systemDB.OpenKnowledgeBase(ctx, "sop", tx, s.generator, nil, false, true)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to open sop KB: %w", err)
 	}
 
-	if found, err := store.Find(ctx, KnowledgeKey{Category: "tool", Name: toolName}, false); found && err == nil {
-		val, err := store.GetCurrentValue(ctx)
-		if err != nil {
-			return "", err
+	searchQuery := fmt.Sprintf("%s Tool Operations", toolName)
+	options := &memory.SearchOptions[map[string]any]{Limit: 1}
+	hits, err := kb.SearchKeywords(ctx, searchQuery, options)
+	if err == nil && len(hits) > 0 {
+		if content, ok := hits[0].Payload["Content"].(string); ok {
+			return content, nil
 		}
-		return val, nil
+		// Fallback if Content isn't formatted that way
+		if txt, ok := hits[0].Payload["text"].(string); ok {
+			return txt, nil
+		}
 	}
 	return "", fmt.Errorf("tool info for '%s' not found", toolName)
 }
@@ -869,6 +890,9 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	cfg := ai.NewAskConfig(opts...)
 	var db *database.Database
 	var forcedDBName string
+	if format, ok := cfg.Values["default_format"].(string); ok && strings.TrimSpace(format) != "" {
+		ctx = context.WithValue(ctx, ai.CtxKeyDefaultFormat, strings.TrimSpace(format))
+	}
 
 	if val, ok := cfg.Values["database"]; ok {
 		if d, ok := val.(*database.Database); ok {
@@ -892,6 +916,9 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	// Inject SessionPayload into context if present
 	if val, ok := cfg.Values["payload"]; ok {
 		if p, ok := val.(*ai.SessionPayload); ok {
+			if strings.TrimSpace(p.CurrentUserQuery) == "" {
+				p.CurrentUserQuery = query
+			}
 			ctx = context.WithValue(ctx, "session_payload", p)
 			// Also set db from payload if not already set
 			if db == nil && p.CurrentDB != "" {
@@ -919,7 +946,8 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		}
 
 		p := &ai.SessionPayload{
-			CurrentDB: targetDB,
+			CurrentDB:        targetDB,
+			CurrentUserQuery: query,
 		}
 		if s.session.Transaction != nil {
 			p.Transaction = s.session.Transaction
@@ -976,6 +1004,10 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	// Obfuscate Query if enabled
 	if s.EnableObfuscation {
 		query = obfuscation.GlobalObfuscator.ObfuscateText(query)
+	}
+
+	if handled, resp, err := s.handlePendingUserConfirmation(ctx, query); handled {
+		return resp, err
 	}
 
 	// 0. Pipeline Execution (if configured)
@@ -1058,17 +1090,23 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		}
 	}
 
-	// 2a. Inject LLM Knowledge (Lifecycle "On Init" simulation)
-	if known := s.getLLMKnowledge(ctx); known != "" {
-		systemPrompt = fmt.Sprintf("%s\n\n%s", systemPrompt, known)
-	}
-
-	// 2b. Inject KnowledgeBase (Lifecycle "On Init" simulation)
-	// Knowledge scoping (Global vs Domain-Specific) is handled implicitly by the System DB connection.
-	// getLLMKnowledge loads relevant namespaces (memory, term, schema) from that DB.
-
 	// 2c. Tool Usage Hint for Knowledge Retrieval
 	systemPrompt = fmt.Sprintf("%s\n\n[Tool Usage Note]\nYou can use the tool \"gettoolinfo\" with argument \"tool\" (e.g., \"gettoolinfo('execute_script')\") to get detailed usage instructions for any tool if you are unsure about its parameters or behavior.", systemPrompt)
+
+	// 2d. Inject execute_script tool details directly to help LLM formulate queries
+	if s.systemDB != nil {
+		if tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+			if kb, err := s.systemDB.OpenKnowledgeBase(ctx, "sop", tx, s.generator, nil, false, true); err == nil {
+				hits, searchErr := kb.SearchKeywords(ctx, "execute_script Tool Operations", &memory.SearchOptions[map[string]any]{Limit: 1})
+				if searchErr == nil && len(hits) > 0 {
+					if content, ok := hits[0].Payload["Content"].(string); ok {
+						systemPrompt = fmt.Sprintf("%s\n\n[execute_script Tool Operations]\n%s", systemPrompt, content)
+					}
+				}
+			}
+			tx.Rollback(ctx)
+		}
+	}
 
 	// Filter and inject heavy architectural protocols ONLY if the query or topic warrants it.
 	// This prevents LLM "memory tax" and bloat for casual conversational threads.
@@ -1160,6 +1198,9 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		// DB passing strategy: The ServiceToolExecutor currently runs Execution and does AutoTX inside Service.Ask.
 		// For proper isolation while maintaining auto-tx flow matching the legacy codebase,
 		// we pass the DB securely down via context inside ServiceToolExecutor or wrap it here.
+	}
+	if streamer, ok := ctx.Value(ai.CtxKeyEventStreamer).(func(string, any)); ok && streamer != nil {
+		req.Streamer = streamer
 	}
 
 	// Because we want to retain the EXACT auto-transaction logic that was tightly coupled inside Service.Ask,

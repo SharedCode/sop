@@ -180,7 +180,7 @@ func TestSessionPayloadPropagation(t *testing.T) {
 	}
 
 	// Test passing SelectedKBs and Domain
-	reqBody := `{"message": "Hello", "domain": "Finance", "selected_kbs": ["sys:SOP", "curr:Finance"], "agent": "payload_tester"}`
+	reqBody := `{"message": "Hello", "domain": "Finance", "selected_kbs": [{"name": "sys:SOP"}, {"name": "curr:Finance"}], "agent": "payload_tester"}`
 	req := httptest.NewRequest("POST", "/ai/chat", bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 
@@ -243,7 +243,63 @@ func TestSessionPayloadPropagation(t *testing.T) {
 	if len(payload.SelectedKBs) != 2 {
 		t.Fatalf("Expected 2 SelectedKBs, got %d", len(payload.SelectedKBs))
 	}
-	if payload.SelectedKBs[0] != "sys:SOP" || payload.SelectedKBs[1] != "curr:Finance" {
+	if payload.SelectedKBs[0].Name != "sys:SOP" || payload.SelectedKBs[1].Name != "curr:Finance" {
 		t.Errorf("SelectedKBs mismatch: %v", payload.SelectedKBs)
+	}
+}
+
+type eventStreamingMockAgent struct{}
+
+func (m *eventStreamingMockAgent) Open(ctx context.Context) error  { return nil }
+func (m *eventStreamingMockAgent) Close(ctx context.Context) error { return nil }
+func (m *eventStreamingMockAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
+	return nil, nil
+}
+func (m *eventStreamingMockAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+	if streamer, ok := ctx.Value(ai.CtxKeyEventStreamer).(func(string, any)); ok && streamer != nil {
+		streamer("tool_call", map[string]any{
+			"tool": "mint_to_space",
+			"args": map[string]any{"kb_name": "Tasks2"},
+		})
+		streamer("tool_result", map[string]any{
+			"tool":   "mint_to_space",
+			"args":   map[string]any{"kb_name": "Tasks2"},
+			"result": "ok",
+		})
+	}
+	return "Plain final answer.", nil
+}
+func (m *eventStreamingMockAgent) Clone() ai.Agent[map[string]any] { return &eventStreamingMockAgent{} }
+
+func TestHandleAIChat_StreamsStructuredToolEvents(t *testing.T) {
+	activeSessions = NewSessionManager(100)
+	loadedAgents = map[string]ai.Agent[map[string]any]{
+		"event_tester": &eventStreamingMockAgent{},
+	}
+
+	reqBody := `{"message": "Create tasks", "database": "devdb", "agent": "event_tester"}`
+	req := httptest.NewRequest("POST", "/ai/chat", bytes.NewBufferString(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	w := httptest.NewRecorder()
+	handleAIChat(w, req)
+
+	res := w.Result()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("Expected status OK, got %v", res.Status)
+	}
+
+	body := w.Body.String()
+	if !strings.Contains(body, `"type":"tool_call"`) {
+		t.Fatalf("expected tool_call event in NDJSON stream, got: %s", body)
+	}
+	if !strings.Contains(body, `"type":"tool_result"`) {
+		t.Fatalf("expected tool_result event in NDJSON stream, got: %s", body)
+	}
+	if !strings.Contains(body, `"kb_name":"Tasks2"`) {
+		t.Fatalf("expected structured tool args in NDJSON stream, got: %s", body)
+	}
+	if !strings.Contains(body, `Plain final answer.`) {
+		t.Fatalf("expected final answer content to still be streamed, got: %s", body)
 	}
 }

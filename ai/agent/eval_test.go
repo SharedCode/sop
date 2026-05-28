@@ -28,7 +28,7 @@ func TestOmniAIConversationalMemoryHarness(t *testing.T) {
 		return
 	}
 
-	cfg := agent.Config{UseLegacyBaselineEngine: true, 
+	cfg := agent.Config{UseLegacyBaselineEngine: true,
 		ID: t.TempDir(), // Temporary ID for testing
 	}
 	copilot := agent.NewCopilotAgent(cfg, nil, nil)

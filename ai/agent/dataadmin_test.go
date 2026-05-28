@@ -9,9 +9,7 @@ import (
 )
 
 func TestCopilotAgent_Registry(t *testing.T) {
-	cfg := Config{
-		EnableObfuscation: false,
-	}
+	cfg := Config{}
 	agent := NewCopilotAgent(cfg, nil, nil)
 	agent.registerTools(context.Background())
 
@@ -34,9 +32,7 @@ func TestCopilotAgent_Registry(t *testing.T) {
 }
 
 func TestCopilotAgent_Execute(t *testing.T) {
-	cfg := Config{
-		EnableObfuscation: false,
-	}
+	cfg := Config{}
 	dbs := map[string]sop.DatabaseOptions{
 		"test_db": {},
 	}

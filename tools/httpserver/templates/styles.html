@@ -270,10 +270,10 @@
 
         .chat-toggle-btn {
             position: fixed;
-            bottom: 5px;
-            left: 5px;
-            width: 48px;
-            height: 48px;
+            bottom: 5px; /* match env icon padding */
+            left: 5px;   /* match sidebar padding */
+            width: 32px;
+            height: 32px;
             border-radius: 0;
             background: transparent;
             color: var(--text-color);
@@ -283,8 +283,14 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 4px; /* Matches env icon button padding */
             z-index: 1000;
             transition: transform 0.2s;
+        }
+        
+        .chat-toggle-btn svg {
+            width: 16px; /* Matched to env icon sizing */
+            height: 16px;
         }
 
         .chat-toggle-btn:hover {
@@ -317,7 +323,7 @@
             overflow-wrap: anywhere; 
         }
         .chat-message.user { background-color: #007bff; color: white; align-self: flex-end; margin-left: auto; margin-right:7px; text-align: left; border: 1px solid #0056b3; }
-        .chat-message.ai { background: var(--pre-bg); color: var(--text-color); align-self: flex-start; margin-right: auto; border: 1px solid var(--border-color); }
+        .chat-message.ai { background: var(--pre-bg); color: var(--text-color); align-self: flex-start; margin-right: auto; border: none; }
         .chat-feedback {
             opacity: 0.6;
             transition: opacity 0.2s;

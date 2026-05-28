@@ -81,13 +81,12 @@ func TestAgentFullMemoryLifeCycleTest(t *testing.T) {
 	}
 
 	// 2. Initialize Memory
-	ag.Memory = &MemoryUnit{
-		AgentID: "agent123",
-	}
+	ag.Memory = memory.NewMemoryUnit("agent123")
 
 	llm := &mockGenerator{}
 	embedder := &mockEmbeddings{}
 	ag.brain = llm
+	ag.service.generator = llm
 
 	err := ag.InitializePhysicalMemory(ctx)
 	if err != nil {
@@ -95,7 +94,7 @@ func TestAgentFullMemoryLifeCycleTest(t *testing.T) {
 	}
 
 	// 3. Queue an episode via official logger
-	ag.logEpisodeToSTM(ctx, "test_intent", map[string]any{"action": "learn"}, "I learned something new today", nil)
+	ag.Memory.LogEpisodeToSTM(ctx, "test_intent", map[string]any{"action": "learn"}, "I learned something new today", nil)
 
 	time.Sleep(6 * time.Second) // wait for worker to batch and commit
 
@@ -115,21 +114,19 @@ func TestAgentFullMemoryLifeCycleTest(t *testing.T) {
 	// 4. Sleep Cycle Consolidation logic (inline trigger)
 	tx3, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 	kbWrite, _ := sysDB.OpenKnowledgeBase(ctx, "ltm_agent123", tx3, llm, embedder, false)
-	ag.Memory.LTM = kbWrite
 	stmWrite, _ := sysDB.NewBtree(ctx, "stm_agent123", tx3)
-	ag.Memory.STM = stmWrite
 
 	var thoughts []memory.Thought[map[string]any]
 	thoughts = append(thoughts, memory.Thought[map[string]any]{
 		Summaries: []string{"I learned something new today"},
 		Data:      episode,
 	})
-	ag.Memory.LTM.IngestThoughts(ctx, thoughts, "agent123")
-	err = ag.Memory.LTM.TriggerSleepCycle(ctx)
+	kbWrite.IngestThoughts(ctx, thoughts, "agent123")
+	err = kbWrite.TriggerSleepCycle(ctx)
 	if err != nil {
 		t.Fatalf("TriggerSleepCycle failed: %v", err)
 	}
-	ag.Memory.STM.Remove(ctx, "ep_1")
+	stmWrite.Remove(ctx, "ep_1")
 	tx3.Commit(ctx)
 	sysDB.Vectorize(ctx, "ltm_agent123", llm, embedder, 50)
 
@@ -149,7 +146,8 @@ func TestAgentFullMemoryLifeCycleTest(t *testing.T) {
 	})
 	ag.service.domain = &mockDomain{emb: embedder}
 
-	res, err := ag.toolSearchDomainKB(ctx, map[string]any{"query": "learned something"})
+	db := ag.resolveDBForKB(ctx, "ltm_agent123")
+	res, err := ag.searchKnowledgeBase(ctx, db, "ltm_agent123", "learned something", "", "", false, 5)
 	if err != nil {
 		t.Fatalf("toolSearchDomainKB failed: %v", err)
 	}
@@ -157,20 +155,19 @@ func TestAgentFullMemoryLifeCycleTest(t *testing.T) {
 		t.Fatalf("Search failed to find LTM item")
 	}
 
-	ag.service.session.MRUMu.RLock()
-	defer ag.service.session.MRUMu.RUnlock()
+	mruSnapshot := ag.getMRUSnapshot()
 
-	if len(ag.service.session.MRU) == 0 {
+	if len(mruSnapshot) == 0 {
 		t.Fatalf("MRU was not updated")
 	}
 
 	found := false
-	for _, item := range ag.service.session.MRU {
+	for _, item := range mruSnapshot {
 		if item.Category == "ltm_agent123" {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("Category ltm_agent123 not injected into MRU, got: %+v", ag.service.session.MRU)
+		t.Fatalf("Category ltm_agent123 not injected into MRU, got: %+v", mruSnapshot)
 	}
 }

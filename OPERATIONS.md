@@ -99,6 +99,19 @@ For more details, see the [SOP Data Manager Documentation](tools/httpserver/READ
 
 ## Troubleshooting & Best Practices
 
+### Cluster reboot procedure
+When rebooting an entire cluster running applications that use SOP, follow this order to avoid stale locks and ensure clean recovery:
+
+1) Gracefully stop all apps that use SOP across the cluster.
+2) Stop the Redis service(s) used by these SOP apps.
+3) Reboot hosts if needed (or proceed directly if not).
+4) Start the Redis service(s) first and verify they are healthy.
+5) Start the apps that use SOP.
+
+Notes:
+- SOP relies on Redis for coordination (locks and recovery bookkeeping). Bringing Redis up before SOP apps prevents unnecessary failovers or stale-lock handling during app startup.
+- If any node was force-killed, SOP’s stale-lock and rollback paths will repair on next write; starting Redis first ensures the required state is available.
+
 ### Clustered Mode: Data Deletion
 
 When running SOP in **Clustered Mode** (using Redis + Disk Storage), it is critical to maintain synchronization between the persistent data on disk and the ephemeral locks/cache in Redis.

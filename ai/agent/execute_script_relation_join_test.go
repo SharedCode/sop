@@ -1,0 +1,227 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/database"
+	core_database "github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/jsondb"
+)
+
+func TestExecuteScript_RelationTargetJoinCompatibility(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbOpts := sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{tmpDir},
+		CacheType:     sop.InMemory,
+	}
+
+	sysDB := database.NewDatabase(dbOpts)
+	ctx := context.Background()
+	tx, err := core_database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("begin setup tx: %v", err)
+	}
+
+	users, _ := core_database.NewBtree[any, any](ctx, dbOpts, "users", tx, nil)
+	users.Add(ctx, "u1", map[string]any{"first_name": "John", "last_name": "Jones", "age": 30})
+	users.Add(ctx, "u2", map[string]any{"first_name": "Jane", "last_name": "Doe", "age": 25})
+
+	orders, _ := core_database.NewBtree[any, any](ctx, dbOpts, "orders", tx, nil)
+	orders.Add(ctx, "o1", map[string]any{"total_amount": 831, "order_date": "2026-01-01"})
+	orders.Add(ctx, "o2", map[string]any{"total_amount": 100, "order_date": "2026-01-02"})
+
+	usersOrders, _ := core_database.NewBtree[any, any](ctx, dbOpts, "users_orders", tx, nil)
+	usersOrders.Add(ctx, "u1", "o1")
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit setup tx: %v", err)
+	}
+
+	agent := &CopilotAgent{
+		systemDB: sysDB,
+		databases: map[string]sop.DatabaseOptions{
+			"dev_db": dbOpts,
+		},
+		StoreOpener: func(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (jsondb.StoreAccessor, error) {
+			s, _ := core_database.NewBtree[any, any](ctx, dbOpts, storeName, tx, nil)
+			return &testStoreWrapper{s}, nil
+		},
+	}
+
+	script := []map[string]any{
+		{"args": map[string]any{"database": "dev_db", "mode": "read"}, "op": "begin_tx", "result_var": "tx"},
+		{"args": map[string]any{"name": "users", "transaction": "tx"}, "op": "open_store", "result_var": "users_store"},
+		{"args": map[string]any{"name": "orders", "transaction": "tx"}, "op": "open_store", "result_var": "orders_store"},
+		{"args": map[string]any{"store": "users_store"}, "op": "scan"},
+		{"args": map[string]any{"field": "first_name", "op": "==", "value": "John"}, "op": "filter"},
+		{"args": map[string]any{"relation": "users_orders", "target": "orders_store"}, "op": "join"},
+		{"args": map[string]any{"field": "total_amount", "op": ">", "value": 500}, "op": "filter"},
+		{"args": map[string]any{"transaction": "tx"}, "op": "commit_tx"},
+	}
+
+	scriptBytes, err := json.Marshal(script)
+	if err != nil {
+		t.Fatalf("marshal script: %v", err)
+	}
+
+	ctxWithPayload := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
+	result, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
+	if err != nil {
+		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+
+	if !strings.Contains(result, "John") {
+		t.Fatalf("expected joined result to contain John, got %s", result)
+	}
+	if !strings.Contains(result, "831") {
+		t.Fatalf("expected joined result to contain matching order total, got %s", result)
+	}
+	if strings.Contains(result, "100") {
+		t.Fatalf("expected low-value order to be filtered out, got %s", result)
+	}
+}
+
+func TestExecuteScript_JoinResolvesStoreByUnderlyingNameWhenResultVarDiffers(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbOpts := sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{tmpDir},
+		CacheType:     sop.InMemory,
+	}
+
+	sysDB := database.NewDatabase(dbOpts)
+	ctx := context.Background()
+	tx, err := core_database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("begin setup tx: %v", err)
+	}
+
+	usersByAge, _ := core_database.NewBtree[any, any](ctx, dbOpts, "users_by_age", tx, nil)
+	usersByAge.Add(ctx, 30, "u1")
+	usersByAge.Add(ctx, 25, "u2")
+
+	users, _ := core_database.NewBtree[any, any](ctx, dbOpts, "users", tx, nil)
+	users.Add(ctx, "u1", map[string]any{"first_name": "John", "age": 30})
+	users.Add(ctx, "u2", map[string]any{"first_name": "Jane", "age": 25})
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit setup tx: %v", err)
+	}
+
+	agent := &CopilotAgent{
+		systemDB: sysDB,
+		databases: map[string]sop.DatabaseOptions{
+			"dev_db": dbOpts,
+		},
+		StoreOpener: func(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (jsondb.StoreAccessor, error) {
+			s, _ := core_database.NewBtree[any, any](ctx, dbOpts, storeName, tx, nil)
+			return &testStoreWrapper{s}, nil
+		},
+	}
+
+	script := []map[string]any{
+		{"args": map[string]any{"database": "dev_db", "mode": "read"}, "op": "begin_tx", "result_var": "tx"},
+		{"args": map[string]any{"name": "users_by_age", "transaction": "tx"}, "op": "open_store", "result_var": "idx_store"},
+		{"args": map[string]any{"name": "users", "transaction": "tx"}, "op": "open_store", "result_var": "users_store"},
+		{"args": map[string]any{"direction": "desc", "store": "idx_store"}, "op": "scan", "result_var": "idx_records"},
+		{"args": map[string]any{"on": map[string]any{"value": "key"}, "store": "users"}, "input_var": "idx_records", "op": "join", "result_var": "users_list"},
+		{"args": map[string]any{"transaction": "tx"}, "op": "commit_tx"},
+		{"input_var": "users_list", "op": "return"},
+	}
+
+	scriptBytes, err := json.Marshal(script)
+	if err != nil {
+		t.Fatalf("marshal script: %v", err)
+	}
+
+	ctxWithPayload := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
+	result, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
+	if err != nil {
+		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+
+	if !strings.Contains(result, "John") {
+		t.Fatalf("expected joined result to contain John, got %s", result)
+	}
+	if !strings.Contains(result, "Jane") {
+		t.Fatalf("expected joined result to contain Jane, got %s", result)
+	}
+}
+
+func TestExecuteScript_OpenStoreWithoutResultVarCompatibility(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbOpts := sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{tmpDir},
+		CacheType:     sop.InMemory,
+	}
+
+	sysDB := database.NewDatabase(dbOpts)
+	ctx := context.Background()
+	tx, err := core_database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("begin setup tx: %v", err)
+	}
+
+	users, _ := core_database.NewBtree[any, any](ctx, dbOpts, "users", tx, nil)
+	users.Add(ctx, "u1", map[string]any{"first_name": "John", "last_name": "Jones", "age": 30})
+
+	usersOrders, _ := core_database.NewBtree[any, any](ctx, dbOpts, "users_orders", tx, nil)
+	usersOrders.Add(ctx, "u1", "o1")
+
+	orders, _ := core_database.NewBtree[any, any](ctx, dbOpts, "orders", tx, nil)
+	orders.Add(ctx, "o1", map[string]any{"total_amount": 831, "order_date": "2026-01-01"})
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit setup tx: %v", err)
+	}
+
+	agent := &CopilotAgent{
+		systemDB: sysDB,
+		databases: map[string]sop.DatabaseOptions{
+			"dev_db": dbOpts,
+		},
+		StoreOpener: func(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (jsondb.StoreAccessor, error) {
+			s, _ := core_database.NewBtree[any, any](ctx, dbOpts, storeName, tx, nil)
+			return &testStoreWrapper{s}, nil
+		},
+	}
+
+	script := []map[string]any{
+		{"args": map[string]any{"mode": "read"}, "op": "begin_tx", "result_var": "tx"},
+		{"args": map[string]any{"name": "users", "transaction": "tx"}, "op": "open_store"},
+		{"args": map[string]any{"name": "users_orders", "transaction": "tx"}, "op": "open_store"},
+		{"args": map[string]any{"name": "orders", "transaction": "tx"}, "op": "open_store"},
+		{"args": map[string]any{"store": "users"}, "op": "scan", "result_var": "users_stream"},
+		{"args": map[string]any{"condition": map[string]any{"first_name": map[string]any{"$eq": "John"}}}, "input_var": "users_stream", "op": "filter", "result_var": "john_users"},
+		{"args": map[string]any{"on": map[string]any{"key": "key"}, "store": "users_orders"}, "input_var": "john_users", "op": "join_right", "result_var": "user_orders_bridge"},
+		{"args": map[string]any{"on": map[string]any{"value": "key"}, "store": "orders"}, "input_var": "user_orders_bridge", "op": "join_right", "result_var": "orders_stream"},
+		{"args": map[string]any{"condition": map[string]any{"total_amount": map[string]any{"$gt": 500}}}, "input_var": "orders_stream", "op": "filter", "result_var": "final_orders"},
+		{"args": map[string]any{"transaction": "tx"}, "op": "commit_tx"},
+		{"args": map[string]any{"value": map[string]any{"$var": "final_orders"}}, "op": "return"},
+	}
+
+	scriptBytes, err := json.Marshal(script)
+	if err != nil {
+		t.Fatalf("marshal script: %v", err)
+	}
+
+	ctxWithPayload := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
+	result, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
+	if err != nil {
+		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+
+	if !strings.Contains(result, "John") {
+		t.Fatalf("expected joined result to contain John, got %s", result)
+	}
+	if !strings.Contains(result, "831") {
+		t.Fatalf("expected joined result to contain matching order total, got %s", result)
+	}
+}

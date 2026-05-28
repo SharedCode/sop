@@ -701,3 +701,27 @@ func Test_StoreRepository_Add_WriteStoreList_Error(t *testing.T) {
 		t.Fatalf("expected Add error due to store list write failure")
 	}
 }
+
+func Test_StoreRepository_Remove_WriteStoreList_Error(t *testing.T) {
+	ctx := context.Background()
+	a := t.TempDir()
+	cache := mocks.NewMockClient()
+	rt, _ := NewReplicationTracker(ctx, []string{a}, false, cache)
+	sr, _ := NewStoreRepository(ctx, rt, nil, cache, 0)
+
+	s := *sop.NewStoreInfo(sop.StoreOptions{Name: "rerr", SlotLength: 4})
+	if err := sr.Add(ctx, s); err != nil {
+		t.Fatalf("seed add: %v", err)
+	}
+
+	if err := os.Remove(filepath.Join(a, storeListFilename)); err != nil {
+		t.Fatalf("remove storelist file: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(a, storeListFilename), 0o755); err != nil {
+		t.Fatalf("prep directory storelist: %v", err)
+	}
+
+	if err := sr.Remove(ctx, s.Name); err == nil {
+		t.Fatalf("expected Remove error due to store list write failure")
+	}
+}

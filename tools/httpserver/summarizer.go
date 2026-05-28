@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+const MAX_PARAGRAPH_LENGTH = 500
+
 type LLMClient interface {
 	Generate(prompt string) (string, error)
 }
@@ -17,19 +19,52 @@ type Summarizer interface {
 type sentenceSummarizer struct{}
 
 func (s *sentenceSummarizer) Summarize(ctx context.Context, text string, maxChunks int) ([]string, error) {
-	sentences := strings.Split(text, ".")
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	paragraphs := strings.Split(text, "\n\n")
 	var chunks []string
-	for _, sentence := range sentences {
-		clean := strings.TrimSpace(sentence)
+
+	for _, paragraph := range paragraphs {
+		clean := strings.TrimSpace(paragraph)
 		if len(clean) > 5 {
-			chunks = append(chunks, clean+".")
+			if len(clean) <= MAX_PARAGRAPH_LENGTH {
+				chunks = append(chunks, clean)
+			} else {
+				subsentences := strings.Split(clean, ".")
+				var currentChunk string
+				for _, sub := range subsentences {
+					subClean := strings.TrimSpace(sub)
+					if len(subClean) == 0 {
+						continue
+					}
+					if currentChunk == "" {
+						currentChunk = subClean + "."
+					} else if len(currentChunk)+len(subClean)+1 <= MAX_PARAGRAPH_LENGTH {
+						currentChunk += " " + subClean + "."
+					} else {
+						chunks = append(chunks, currentChunk)
+						currentChunk = subClean + "."
+					}
+				}
+				if currentChunk != "" {
+					chunks = append(chunks, currentChunk)
+				}
+			}
 		}
 		if len(chunks) >= maxChunks {
 			break
 		}
 	}
+
+	if len(chunks) > maxChunks {
+		chunks = chunks[:maxChunks]
+	}
+
 	if len(chunks) == 0 && len(strings.TrimSpace(text)) > 0 {
-		chunks = append(chunks, strings.TrimSpace(text))
+		cleanText := strings.TrimSpace(text)
+		if len(cleanText) > MAX_PARAGRAPH_LENGTH {
+			cleanText = cleanText[:MAX_PARAGRAPH_LENGTH]
+		}
+		chunks = append(chunks, cleanText)
 	}
 	return chunks, nil
 }

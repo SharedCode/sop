@@ -44,11 +44,13 @@ type UpdateSpaceItemRequest struct {
 // It acts as a ViewModel rendering data originally stored generically inside Item[T].
 type SpaceItemView struct {
 	ID          string    `json:"id"`
+	DocID       string    `json:"doc_id,omitempty"`
 	Category    string    `json:"category"`
 	Text        string    `json:"text"`
 	Description string    `json:"description"`
 	Summaries   []string  `json:"summaries,omitempty"`
 	Vector      []float32 `json:"vector,omitempty"`
+	VectorSize  int       `json:"vector_size,omitempty"`
 }
 
 // TemplateMetadata defines the structure for space template info.

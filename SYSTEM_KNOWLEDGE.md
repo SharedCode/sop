@@ -15,6 +15,8 @@
 
 ## 2. Command Processing Rules
 
+
+
 The system has a hybrid command processing engine that prioritizes explicit tool invocations over Natural Language Understanding (NLU).
 
 ### Slash Command Priority
@@ -31,12 +33,14 @@ The system has a hybrid command processing engine that prioritizes explicit tool
 
 The AI Agent is a "ReAct" (Reason + Act) style agent defined in `ai/agent/`.
 
-### Tool Registry (`ai/agent/dataadmintools.go`)
-The agent exposes tools to the LLM via a registry.
-*   **`list_tools`**: Lists all available tools and usage in a Markdown table.
-*   **`select`**: High-level tool to query data.
-*   **`join`**: High-level tool to join two stores.
-*   **`execute_script`**: A low-level, powerful tool that executes a pipeline of atomic operations ("Lego Blocks").
+### Context Injection & Intent Classification
+To avoid prompt bloating and token exhaustion, the AI agent dynamically selects the context it needs via an overarching outline (`ai/memory/CONTEXT_OUTLINE.md`). During the **ClassifyTaskIntent** phase, the LLM maps the user's request against this outline to determine the target **Domains** (Stores, Spaces) and the required **Layers** (API Tools, Domain Manuals, or Cross-Domain Orchestration) needed to satisfy the request.
+
+### Tool Registry (`ai/agent/copilottools.go`)
+The agent exposes tools to the LLM via a registry. The specific semantics of these operations are defined in independent knowledge bases to avoid bloating the compiled binary.
+*   **Stores**: Manage B-Tree items using operations like `add`, `update`, `delete`, `select`, `join`, and `execute_script`. (See context: `ai/memory/STORES_MANAGEMENT.md`)
+*   **Spaces**: Manage Abstract Knowledge instances using tools like `mint_to_space`, `create_space`, `vectorize_space`. (See context: `ai/memory/SPACE_MANAGEMENT.md`)
+*   **Cross-Domain Orchestration**: Handled dynamically without direct codebase contamination. (See context: `ai/memory/DOMAIN_MIX_AND_MATCH.md`)
 
 ### Scripting Engine (`ai/agent/dataadmintools.atomic.go`)
 The `execute_script` tool accepts a JSON array of operations. This is the "Assembly Language" of the agent.
@@ -78,13 +82,16 @@ The `return` opcode is the designated exit mechanism for scripts. It has logic t
 *   **Regression History**: In Jan 2026, a refactor inadvertently removed the post-execution unpacking logic. This was restored by embedding `resolveVarName` directly into the `return` opcode handler, ensuring atomic correctness within the engine itself rather than relying on the caller.
 
 ### Self-Correction & Knowledge Management
-The agent possesses a specialized `manage_knowledge` tool that allows it to persist learned rules, vocabulary, and corrections across sessions.
-*   **Mechanism**: The `Service.Ask` loop (in `ai/agent/service.go`) includes a "System Prompt" (or "Active Learning Protocol") that instructs the LLM to use `manage_knowledge` whenever the user corrects it.
-*   **Storage**: Knowledge is stored in a `system` database under a `knowledge_base` store, partitioned by `namespace`.
+While the Omni Protocol's "Butler architecture" serves many advanced orchestration and system goals, one of its core functionalities is driving autonomous knowledge management. It maintains strict separation between structural framework expertise and interactive self-correction.
+
+*   **V1 Implementation**: The agent possessed a specialized `manage_knowledge` tool that allowed it to persist learned rules explicitly into a B-Tree store.
+*   **V2 Mechanism (Current)**:
+    1.  **SOP KB Queries**: The `Service` uses dynamic `SearchKeywords` routines to fetch underlying operations (tool definitions, code usage) offline from domain Markdown docs.
+    2.  **Memory Subsystem (LTM KB)**: User corrections and evolving contextual vocabulary are automatically routed by the Butler into the active Long-Term Memory (LTM KB), effectively bypassing the archaic `manage_knowledge` tool constraint.
 *   **Loop**:
-    1.  User corrects agent ("Use 'Client' not 'User'").
-    2.  Agent analyzes input, calls `manage_knowledge(namespace='vocabulary', ...)`
-    3.  Future prompts automatically retrieve this knowledge (via RAG or context injection) to prevent repeat errors.
+    1.  User supplies an active correction (e.g., "Use 'Client' not 'User'").
+    2.  The engine semantically anchors this constraint natively within the active LTM KB store during operations.
+    3.  Future LLM prompts dynamically inject these specific semantic constraints when matching relevance, bypassing static Prompt Builder congestion.
 
 ### Script Parameterization
 scripts serve as "Frozen Reasoning". To make them reusable, we support **Dynamic Parameterization**.
@@ -326,12 +333,18 @@ The system implements a distinct separation between transient context and persis
     *   **CurrentScript**: Buffer for script lines being drafted before execution.
 
 ### Long-Term Memory (System Knowledge)
-*   **Implementation**: `llm_knowledge` B-Tree store in the `system` database. Managed via `KnowledgeStore` in `ai/agent/memory_longterm.go`.
+*   **V1 Implementation (Legacy)**: Initially implemented as an `llm_knowledge` B-Tree store. The `manage_knowledge` tool exposed this B-Tree to the agent for saving self-corrections.
+*   **V2 Implementation (Omni Protocol)**: Operates on a **generic blueprint**: **Expertise KB + Memory (STM/LTM)**. Deeply curated by "The Butler" architecture, it adapts based on the agent's profile:
+    *   **Omni (The System Agent)**: Uses the **SOP KB** (static expertise detailing the SOP library and tech stack) + **Memory System**. Additionally, Omni can be configured to execute data lookups against custom user-defined KBs.
+    *   **Avatars**: Can have their own **Custom KB** (user-defined rules/domain knowledge) + **Memory System** for their specific user/LLM interactions.
+*   The generic architecture is conceptually composed of:
+    1.  **Expertise KB (e.g. SOP KB)**: A static generic knowledge base generated offline from domain Markdown docs detailing how to use tools and library parameters.
+    2.  **Memory System (Global MRU, STM, and LTM KB)**: An active layer responding to conversation patterns and caching recent/persistent context or user corrections organically.
 *   **Scope**: Persistent. Survives server restarts and spans across sessions/users.
-*   **Structure**: Uses a composite key (`Category`, `Name`).
+*   **Structure**: Vector chunks with semantic metadata tags.
 *   **Mechanism**:
-    *   **Dynamic Instruction Loading**: The `DataAdminAgent` uses `getToolInstruction` (`ai/agent/dataadmintools.go`) to look up tool descriptions in the knowledge store (Category: "tool") before registering them. This allows the agent's behavior (prompts) to be patched or improved without recompiling the code.
-    *   **Self-Correction**: The `manage_knowledge` tool exposes this B-Tree to the agent, allowing it to save new terms, definitions, or instructions (Self-learning loop).
+    *   **Dynamic Instruction Loading**: The orchestrator searches the SOP KB at query time using tools like `SearchKeywords` (e.g. searching for `execute_script Tool Operations`). This keeps instructions out of monolithic static prompts and fetches them only when contextually relevant.
+    *   **Self-Correction**: Instead of the LLM manually pushing corrections to a legacy B-Tree, it relies on the Memory System tracking context contextually (into STM/LTM KB). The Copilot naturally and seamlessly self-corrects without manual user intervention based on the most relevant vectors dynamically retrieved by the Butler.
 
 ---
 
@@ -339,13 +352,6 @@ The system implements a distinct separation between transient context and persis
 
 The **System Database** is a dedicated SOP database used to store internal metadata, configuration, and the Agent's own operating manual.
 
-### "Self-Correcting" Storage (`llm_knowledge`)
-The Agent does not rely solely on hardcoded prompts. It fetches tool usage instructions from a B-Tree store named `llm_knowledge` located within the System DB.
-*   **Structure:** Composite Key B-Tree (`Category`, `Name` -> `Content`).
-*   **Key:** Tool Name (e.g., `"execute_script"`).
-*   **Value:** Complete instruction text/prompt.
-*   **Seeding:** On server startup (`tools/httpserver/main.ai.go`), the system checks if instructions exist. If not, it seeds them with defaults hardcoded in the binary.
-*   **Self-Correction:** The Agent has a tool `update_instruction` that allows it to rewrite these entries, effectively updating its own "brain" persistently.
 
 ### Setup Wizard Configuration
 The Setup Wizard (`tools/httpserver/templates/index.html`) supports three configuration modes for the System DB:

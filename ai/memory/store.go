@@ -13,6 +13,8 @@ import (
 
 // store implements MemoryStore.
 type store[T any] struct {
+	db                   Database
+	name                 string
 	categories           btree.BtreeInterface[sop.UUID, *Category]
 	categoriesByPath     btree.BtreeInterface[string, sop.UUID]
 	categoriesByDistance btree.BtreeInterface[DistanceKey, byte]
@@ -26,6 +28,8 @@ type store[T any] struct {
 
 // NewStore creates a new instance of MemoryStore.
 func NewStore[T any](
+	name string,
+	db Database,
 	categories btree.BtreeInterface[sop.UUID, *Category],
 	categoriesByPath btree.BtreeInterface[string, sop.UUID],
 	categoriesByDistance btree.BtreeInterface[DistanceKey, byte],
@@ -34,6 +38,8 @@ func NewStore[T any](
 	documents btree.BtreeInterface[sop.UUID, Document],
 ) MemoryStore[T] {
 	return &store[T]{
+		name:                 name,
+		db:                   db,
 		categories:           categories,
 		categoriesByPath:     categoriesByPath,
 		categoriesByDistance: categoriesByDistance,
@@ -45,6 +51,14 @@ func NewStore[T any](
 
 func (s *store[T]) SetDomainReference(vec []float32) {
 	s.domainReference = vec
+}
+
+func (s *store[T]) DomainReference() []float32 {
+	return s.domainReference
+}
+
+func (s *store[T]) Name() string {
+	return s.name
 }
 
 func (s *store[T]) SetTextIndex(idx ai.TextIndex) {
@@ -265,15 +279,21 @@ func (s *store[T]) UpsertByCategoryID(ctx context.Context, catID sop.UUID, catCe
 	itemKey := ItemKey{CategoryID: catID, ItemID: id}
 	if found, _ := s.items.Find(ctx, itemKey, false); found {
 		oldItem, _ := s.items.GetCurrentValue(ctx)
+		var newPositions []VectorKey
 		for _, pos := range oldItem.Positions {
-			log.Debug("s.vectors.Remove call")
-			s.vectors.Remove(ctx, pos)
+			if pos.CategoryID == catID {
+				log.Debug("s.vectors.Remove call")
+				s.vectors.Remove(ctx, pos)
+			} else {
+				newPositions = append(newPositions, pos)
+			}
 		}
+		newPositions = append(newPositions, keys...)
 		log.Debug("s.items.UpdateCurrentItem call")
-		s.items.UpdateCurrentItem(ctx, itemKey, Item[T]{ID: id, CategoryID: catID, Summaries: item.Summaries, Data: item.Data, Positions: keys, VectorHash: item.VectorHash})
+		s.items.UpdateCurrentItem(ctx, itemKey, Item[T]{ID: id, DocID: item.DocID, CategoryID: catID, Summaries: item.Summaries, Data: item.Data, Positions: newPositions, VectorHash: item.VectorHash})
 	} else {
 		log.Debug("s.items.Add call")
-		s.items.Add(ctx, itemKey, Item[T]{ID: id, CategoryID: catID, Summaries: item.Summaries, Data: item.Data, Positions: keys, VectorHash: item.VectorHash})
+		s.items.Add(ctx, itemKey, Item[T]{ID: id, DocID: item.DocID, CategoryID: catID, Summaries: item.Summaries, Data: item.Data, Positions: keys, VectorHash: item.VectorHash})
 	}
 
 	// Update global text index
@@ -362,13 +382,115 @@ func (s *store[T]) QueryBatch(ctx context.Context, vectors [][]float32, opts *Se
 	}
 	return results, nil
 }
+
+func (s *store[T]) FindClosestCategory(ctx context.Context, qVec []float32) (*Category, float32, error) {
+	type candidate struct {
+		ParentID sop.UUID
+		Anchor   []float32
+		Dist     float32
+	}
+	queue := []candidate{
+		{ParentID: sop.NilUUID, Anchor: s.domainReference, Dist: 0},
+	}
+	var bestGlobalCat *Category
+	var bestGlobalDist float32 = -1.0
+
+	for {
+		var nextQueue []candidate
+
+		for _, cand := range queue {
+			qDist := EuclideanDistance(cand.Anchor, qVec)
+			_, err := s.categoriesByDistance.Find(ctx, DistanceKey{ParentID: cand.ParentID, Distance: qDist, ID: sop.NilUUID}, false)
+			if err != nil {
+				continue
+			}
+
+			if s.categoriesByDistance.GetCurrentKey().Key.ID == sop.NilUUID {
+				// No item selected but find succeeded...
+			}
+
+			backSteps := 0
+			for i := 0; i < 5; i++ {
+				ok, _ := s.categoriesByDistance.Previous(ctx)
+				if !ok || s.categoriesByDistance.GetCurrentKey().Key.ParentID.Compare(cand.ParentID) != 0 {
+					if ok {
+						s.categoriesByDistance.Next(ctx)
+					} else {
+						s.categoriesByDistance.First(ctx)
+					}
+					break
+				}
+				backSteps++
+			}
+
+			maxForward := backSteps + 1 + 5
+			for i := 0; i < maxForward; i++ {
+				curr := s.categoriesByDistance.GetCurrentKey()
+				if curr.Key.ParentID.Compare(cand.ParentID) != 0 {
+					break
+				}
+				if curr.Key.ID != sop.NilUUID {
+					f, err := s.categories.Find(ctx, curr.Key.ID, false)
+					if f && err == nil {
+						cat, _ := s.categories.GetCurrentValue(ctx)
+						if cat != nil && len(cat.CenterVector) > 0 {
+							mDist := EuclideanDistance(qVec, cat.CenterVector)
+							nextQueue = append(nextQueue, candidate{ParentID: cat.ID, Anchor: cat.CenterVector, Dist: mDist})
+							if bestGlobalDist < 0 || mDist < bestGlobalDist {
+								bestGlobalDist = mDist
+								bestGlobalCat = cat
+							}
+						}
+					}
+				}
+				ok, _ := s.categoriesByDistance.Next(ctx)
+				if !ok {
+					break
+				}
+			}
+		}
+
+		if len(nextQueue) == 0 {
+			break
+		}
+
+		// Beam search: keep top 3 closest categories to explore next level
+		for i := 0; i < len(nextQueue); i++ {
+			for j := i + 1; j < len(nextQueue); j++ {
+				if nextQueue[i].Dist > nextQueue[j].Dist {
+					nextQueue[i], nextQueue[j] = nextQueue[j], nextQueue[i]
+				}
+			}
+		}
+		if len(nextQueue) > 3 {
+			nextQueue = nextQueue[:3]
+		}
+		queue = nextQueue
+	}
+	return bestGlobalCat, bestGlobalDist, nil
+}
+
+func (s *store[T]) resolveTargetCategory(ctx context.Context, qVec []float32) *Category {
+	cat, _, _ := s.FindClosestCategory(ctx, qVec)
+	return cat
+}
+
 func (s *store[T]) Query(ctx context.Context, vec []float32, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
 	if opts == nil {
 		opts = &SearchOptions[T]{Limit: 10}
 	}
 	var targetCategory *Category
 
-	if opts.CategoryPath != "" {
+	if len(opts.CategoryDistanceVector) > 0 {
+		qVec := opts.CategoryDistanceVector
+		if len(qVec) == 0 {
+			qVec = vec
+		}
+		targetCategory = s.resolveTargetCategory(ctx, qVec)
+		if targetCategory == nil {
+			return nil, nil // Error or not found
+		}
+	} else if opts.CategoryPath != "" {
 		ok, err := s.categoriesByPath.Find(ctx, opts.CategoryPath, false)
 		if err != nil {
 			return nil, err
@@ -559,7 +681,16 @@ func (s *store[T]) QueryText(ctx context.Context, text string, opts *SearchOptio
 	}
 
 	var targetCategoryID sop.UUID
-	if opts.CategoryPath != "" {
+
+	if len(opts.CategoryDistanceVector) > 0 {
+		targetCat := s.resolveTargetCategory(ctx, opts.CategoryDistanceVector)
+		if targetCat != nil {
+			targetCategoryID = targetCat.ID
+		}
+		if targetCategoryID == sop.NilUUID {
+			return nil, nil
+		}
+	} else if opts.CategoryPath != "" {
 		ok, err := s.categories.First(ctx)
 		if err == nil && ok {
 			for {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"sync"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -12,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -109,52 +109,125 @@ func seedMetaCognitionAsync(userID, kbName string, sysOpts sop.DatabaseOptions) 
 	}
 }
 
+// handleAIChat manages the HTTP UI integration for the AI Agent.
+//
+// Step-by-Step Flow:
+// 1. Request Initialization: Validates HTTP POST, reads raw body, and unmarshals JSON to extract Message, SessionID, UserID, Agent, etc.
+// 2. Stream Setup: Initializes an NDJSON event writer (sendEvent) that flushes backend progress (logs, content, records) dynamically to the UI.
+// 3. Context & Agent Resolution: Defaults to "copilot" if no agent specified, verifies agent exists, and handles zero-day session bootstrapping via UUID.
+// 4. Session Mutex Locking: Isolates and locks the active session via activeSessions.GetOrCreate(), applying Agent.Clone() to ensure thread safety.
+// 5. Payload Construction: Determines the 'AvatarScope' based on selected knowledge bases, bundles DB contexts, and anchors security via GlobalObfuscator.
+// 6. Agent Execution Lifecycle: Uses `agentSvc.Open()` to bind physical memory contexts natively and asynchronously fires the `seedMetaCognitionAsync` task.
+// 7. RAG Execution: Delegates the complex query processing to `agentSvc.Ask()`.
+// 8. Output Interpretation (Heuristics): Scans response strings for required actions, valid JSON array/object structures, or NDJSON Script streams, rendering them gracefully as distinct UI records or standard MarkDown messages.
 func handleAIChat(w http.ResponseWriter, r *http.Request) {
+	req, err := initializeRequest(w, r)
+	if err != nil {
+		return
+	}
+
+	sendEvent := setupStream(w)
+
+	blueprint, err := resolveContextAndAgent(r.Context(), req, sendEvent)
+	if err != nil {
+		return
+	}
+
+	agentSvc, sessionMu := lockSession(req, blueprint)
+	sessionMu.Lock()
+	defer sessionMu.Unlock()
+	log.Info("HTTP AI Chat Request",
+		"session_id", req.SessionID,
+		"agent", req.Agent,
+		"agent_type", fmt.Sprintf("%T", agentSvc),
+		"provider", req.Provider,
+		"database", req.Database,
+		"domain", req.Domain,
+		"selected_kb_count", len(req.SelectedKBs),
+		"message_chars", len(req.Message),
+	)
+
+	sendEvent("session_id", req.SessionID)
+
+	ctx, payload, askOpts, fullMessage := constructPayload(r.Context(), req, sendEvent)
+	log.Info("HTTP AI Chat Payload",
+		"session_id", req.SessionID,
+		"current_db", payload.CurrentDB,
+		"active_domain", payload.ActiveDomain,
+		"avatar_scope", payload.AvatarScope,
+		"selected_kbs", len(payload.SelectedKBs),
+		"full_message_chars", len(fullMessage),
+	)
+
+	// Inject streaming writer bypass
+	ctx = context.WithValue(ctx, ai.CtxKeyWriter, &DirectFlushingWriter{w: w})
+
+	if err := executeAgentLifecycle(ctx, agentSvc, req, sendEvent); err != nil {
+		return
+	}
+	defer func() {
+		if err := agentSvc.Close(ctx); err != nil {
+			log.Error(fmt.Sprintf("Agent '%s' failed to close session: %v", req.Agent, err))
+		}
+	}()
+
+	response, err := executeRAG(ctx, agentSvc, req, fullMessage, askOpts, sendEvent)
+	if err != nil {
+		return
+	}
+	log.Info("HTTP AI Chat Response",
+		"session_id", req.SessionID,
+		"response_chars", len(response),
+	)
+
+	interpretOutput(response, sendEvent)
+}
+
+type aiChatRequest struct {
+	Message     string                 `json:"message"`
+	Database    string                 `json:"database"`
+	StoreName   string                 `json:"store"`
+	Agent       string                 `json:"agent"`
+	Provider    string                 `json:"provider"`
+	Format      string                 `json:"format"`
+	Verbose     *bool                  `json:"verbose"`
+	SessionID   string                 `json:"session_id"`
+	UserID      string                 `json:"user_id"`
+	ClientID    string                 `json:"client_id"`
+	Domain      string                 `json:"domain"`
+	SelectedKBs []ai.ArtifactReference `json:"selected_kbs"`
+}
+
+func initializeRequest(w http.ResponseWriter, r *http.Request) (*aiChatRequest, error) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
+		return nil, fmt.Errorf("method not allowed")
 	}
 
 	bodyBytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	log.Debug("Received AIChat Request", "body", string(bodyBytes))
 
-	var req struct {
-		Message     string   `json:"message"`
-		Database    string   `json:"database"`
-		StoreName   string   `json:"store"`
-		Agent       string   `json:"agent"`
-		Provider    string   `json:"provider"`
-		Format      string   `json:"format"`
-		Verbose     bool     `json:"verbose"`
-		SessionID   string   `json:"session_id"`
-		UserID      string   `json:"user_id"`
-		ClientID    string   `json:"client_id"`
-		Domain      string   `json:"domain"`
-		SelectedKBs []string `json:"selected_kbs"`
-	}
-
+	var req aiChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		log.Error("Invalid JSON body", "error", err)
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
-		return
+		return nil, err
 	}
 
-	// Trim inputs to avoid mismatch issues
 	req.Database = strings.TrimSpace(req.Database)
 	req.StoreName = strings.TrimSpace(req.StoreName)
+	return &req, nil
+}
 
-	// Helper to send NDJSON event
-	sendEvent := func(eventType string, payload any) {
-		// LOGGING FOR ORDERING
+func setupStream(w http.ResponseWriter) func(string, any) {
+	return func(eventType string, payload any) {
 		if eventType == "records" || eventType == "record" || eventType == "preview" {
-			// Try to detect if payload has ordered structure
-			// Using json.Marshal to mimic wire format
 			b, _ := json.Marshal(payload)
 			log.Debug("UI: Sending Payload (WIRE)", "type", eventType, "json_preview", string(b))
 		} else if eventType == "content" {
@@ -163,16 +236,6 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		}
 
 		w.Header().Set("Content-Type", "application/x-ndjson")
-		// WriteHeader is idempotent in Go's http server (only first call matters),
-		// but we should set headers before the first write.
-		// Since we only send one event for now, this is fine.
-		// If we stream multiple, we must check if headers were written.
-		// But for now, let's just write header if we haven't?
-		// Actually, standard library handles WriteHeader(200) implicitly on first Write.
-		// But we want to be explicit about 200.
-
-		// Note: We don't check if we already wrote, assuming this helper is used once or
-		// we accept that headers are sent on first call.
 
 		if err := json.NewEncoder(w).Encode(map[string]any{
 			"type":    eventType,
@@ -186,53 +249,34 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 			f.Flush()
 		}
 	}
+}
 
-	// Validate Database if provided
+func resolveContextAndAgent(ctx context.Context, req *aiChatRequest, sendEvent func(string, any)) (ai.Agent[map[string]any], error) {
 	if req.Database != "" {
-		if _, err := getDBOptions(r.Context(), req.Database); err != nil {
+		if _, err := getDBOptions(ctx, req.Database); err != nil {
 			msg := fmt.Sprintf("Invalid database '%s': %v", req.Database, err)
 			log.Info("Response: Invalid Database", "error", msg)
 			sendEvent("error", msg)
-			return
+			return nil, err
 		}
 	}
-
-	// Default to the RAG Agent "copilot" if not specified
 	if req.Agent == "" {
 		req.Agent = "copilot"
 	}
-
-	// Check if a specific RAG Agent is requested
 	blueprint, exists := loadedAgents[req.Agent]
 	if !exists {
 		msg := fmt.Sprintf("Agent '%s' is not initialized or not found.", req.Agent)
 		log.Info("Response: Agent Not Found", "error", msg)
 		sendEvent("error", msg)
-		return
+		return nil, fmt.Errorf("agent not found")
 	}
-
-	var agentSvc ai.Agent[map[string]any]
 	if req.SessionID == "" {
-		req.SessionID = uuid.New().String() // Client lifecycle zero-day bootstrapping
+		req.SessionID = uuid.New().String()
 	}
+	return blueprint, nil
+}
 
-	// Provision LTM (memory_<user_id>)
-	if sysOpts, err := getSystemDBOptions(r.Context()); err == nil {
-		sysDB := aidb.NewDatabase(sysOpts)
-		ctx := r.Context()
-		kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, req.UserID)
-		trans, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
-		if trans != nil {
-			// Just open it to ensure it is created
-			dbEmbedder := GetConfiguredEmbedder(nil)
-			dbLLM := GetConfiguredLLM(nil)
-
-			sysDB.OpenKnowledgeBase(ctx, kbName, trans, dbLLM, dbEmbedder, false, true)
-			trans.Commit(ctx)
-			go seedMetaCognitionAsync(req.UserID, kbName, sysOpts)
-		}
-	}
-
+func lockSession(req *aiChatRequest, blueprint ai.Agent[map[string]any]) (ai.Agent[map[string]any], *sync.Mutex) {
 	agentSvc, sessionMu := activeSessions.GetOrCreate(req.SessionID, func() ai.Agent[map[string]any] {
 		if cloneable, ok := blueprint.(interface {
 			Clone() ai.Agent[map[string]any]
@@ -240,105 +284,93 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 			log.Debug("Cloned new pristine agent instance for session", "session_id", req.SessionID)
 			return cloneable.Clone()
 		}
-		return blueprint // Fallback if not cloneable
+		return blueprint
 	})
+	return agentSvc, sessionMu
+}
 
-	// Uniqueness / creation has been safely handled.
-	// We MUST lock the agent before asking it anything, else concurrent requests on the same ID scramble it!
-	sessionMu.Lock()
-	defer sessionMu.Unlock()
-
-	// Always enforce uniqueness and tell the client their active session ID
-	// BEFORE long LLM wait so they can anchor to it immediately.
-	sendEvent("session_id", req.SessionID)
-
-	ctx := r.Context()
-	// Pass provider override via context
+func constructPayload(ctx context.Context, req *aiChatRequest, sendEvent func(string, any)) (context.Context, *ai.SessionPayload, []ai.Option, string) {
 	if req.Provider != "" {
 		ctx = context.WithValue(ctx, ai.CtxKeyProvider, req.Provider)
 	}
-	// Pass Verbose flag
-	if req.Verbose {
-		ctx = context.WithValue(ctx, "verbose", true)
+	verbose := true
+	if req.Verbose != nil {
+		verbose = *req.Verbose
 	}
-	// Pass ToolExecutor via context
+	ctx = context.WithValue(ctx, "verbose", verbose)
+	ctx = context.WithValue(ctx, ai.CtxKeyProgressSink, func(msg string) {
+		sendEvent("content", msg+"\n")
+	})
+	ctx = context.WithValue(ctx, ai.CtxKeyEventStreamer, sendEvent)
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &DefaultToolExecutor{Agents: loadedAgents})
 
 	var askOpts []ai.Option
-
-	// Pass Database via options if provided
 	if req.Database != "" {
-		// We pass the database name as string. The agent service will resolve it.
 		askOpts = append(askOpts, ai.WithDatabase(req.Database))
 	}
-
-	// Set Default Format (default to CSV if not specified)
 	format := req.Format
 	if format == "" {
 		format = "csv"
 	}
 	askOpts = append(askOpts, ai.WithDefaultFormat(format))
 
-	// Construct SessionPayload
-	// For now, we populate Databases with just the current one if available,
-	// or we could list all available DBs if we want to support cross-db queries.
-	// Populate all known DBs from config
 	databases := make(map[string]any)
 	for _, dbCfg := range config.Databases {
-		if opts, err := getDBOptions(r.Context(), dbCfg.Name); err == nil {
+		if opts, err := getDBOptions(ctx, dbCfg.Name); err == nil {
 			databases[dbCfg.Name] = opts
 		}
 	}
-	// Ensure the requested database is also there (it should be in config, but just in case)
 	if req.Database != "" {
-		// If we already have it as options, great. If not, we might need to add it?
-		// But getDBOptions(req.Database) should have covered it if it's valid.
-		// If it's not in config.Databases but getDBOptions works (e.g. memory?), add it.
 		if _, exists := databases[req.Database]; !exists {
-			if opts, err := getDBOptions(r.Context(), req.Database); err == nil {
+			if opts, err := getDBOptions(ctx, req.Database); err == nil {
 				databases[req.Database] = opts
 			}
 		}
 	}
 
-	// Also add "system" db if needed?
-
-	// Determine AvatarScope (if any selected KB is flagged as IsExclusive)
 	var avatarScope string
-	for _, kbID := range req.SelectedKBs {
-		opts, err := getDBOptions(r.Context(), req.Database)
+	for i, kbRef := range req.SelectedKBs {
+		if req.SelectedKBs[i].DatabaseName == "" {
+			// Fallback to request's main database if DBName is not provided in reference
+			req.SelectedKBs[i].DatabaseName = req.Database
+		}
+
+		resolvedOpts, err := getDBOptions(ctx, req.SelectedKBs[i].DatabaseName)
 		if err == nil {
-			db := aidb.NewDatabase(opts)
-			trans, _ := db.BeginTransaction(r.Context(), sop.ForReading)
-			if trans != nil {
-				kb, err := db.OpenKnowledgeBase(r.Context(), kbID, trans, nil, nil, false, true)
-				if err == nil {
-					cfg, err := kb.GetConfig(r.Context())
-					if err == nil && cfg != nil && cfg.IsExclusive {
-						avatarScope = kbID
-						log.Info("[Copilot] Avatar Mode Active. LLM Sandboxed to: " + kbID)
+			// Use the resolved options to check for Avatar exclusivity
+			if resolvedOpts.Type >= 0 {
+				db := aidb.NewDatabase(resolvedOpts)
+				trans, _ := db.BeginTransaction(ctx, sop.ForReading)
+				if trans != nil {
+					kb, err := db.OpenKnowledgeBase(ctx, kbRef.Name, trans, nil, nil, false, true)
+					if err == nil {
+						cfg, err := kb.GetConfig(ctx)
+						if err == nil && cfg != nil && cfg.IsExclusive {
+							avatarScope = kbRef.Name
+							log.Info("[Copilot] Avatar Mode Active. LLM Sandboxed to: " + kbRef.Name)
+						}
 					}
-				}
-				trans.Rollback(r.Context())
-				if avatarScope != "" {
-					break
+					trans.Rollback(ctx)
+					if avatarScope != "" {
+						break
+					}
 				}
 			}
 		}
 	}
 
 	payload := &ai.SessionPayload{
-		CurrentDB:    req.Database,
-		ActiveDomain: req.Domain,
-		SelectedKBs:  req.SelectedKBs,
-		UserID:       req.UserID,
-		ClientID:     req.ClientID,
-		SessionID:    req.SessionID,
-		AvatarScope:  avatarScope,
+		CurrentDB:        req.Database,
+		CurrentUserQuery: req.Message,
+		ActiveDomain:     req.Domain,
+		SelectedKBs:      req.SelectedKBs,
+		UserID:           req.UserID,
+		ClientID:         req.ClientID,
+		SessionID:        req.SessionID,
+		AvatarScope:      avatarScope,
 	}
 	askOpts = append(askOpts, ai.WithSessionPayload(payload))
 
-	// Register resources so the agent knows them for obfuscation
 	if req.Database != "" {
 		obfuscation.GlobalObfuscator.RegisterResource(req.Database, "DB")
 	}
@@ -346,57 +378,54 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		obfuscation.GlobalObfuscator.RegisterResource(req.StoreName, "STORE")
 	}
 
-	// Prepend context information to the message
 	fullMessage := req.Message
-	// Only prepend context if it's not a system command
 	msgTrimmed := strings.TrimSpace(req.Message)
 	if req.Database != "" && !strings.HasPrefix(msgTrimmed, "/") && msgTrimmed != "last-tool" && msgTrimmed != "last_tool" {
 		fullMessage = fmt.Sprintf("Current Database: %s\n%s", req.Database, req.Message)
 	}
 
-	// Inject payload into context for Open/Close
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
-	// Inject streaming writer so Agent commands (like /run) can stream directly
-	// bypassing the blocking Ask() return.
-	// We implement the Writer interface but ensure we flush.
-	// NOTE: This writes RAW bytes. The client must handle mixed content if Ask()
-	// also returns text. But usually if a command streams, it returns empty text.
-	streamWriter := &DirectFlushingWriter{w: w}
-	ctx = context.WithValue(ctx, ai.CtxKeyWriter, streamWriter)
+	return ctx, payload, askOpts, fullMessage
+}
 
-	// Initialize Agent Session (Transaction)
+func executeAgentLifecycle(ctx context.Context, agentSvc ai.Agent[map[string]any], req *aiChatRequest, sendEvent func(string, any)) error {
+	if sysOpts, err := getSystemDBOptions(ctx); err == nil {
+		sysDB := aidb.NewDatabase(sysOpts)
+		kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, req.UserID)
+		trans, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
+		if trans != nil {
+			dbEmbedder := GetConfiguredEmbedder(nil)
+			dbLLM := GetConfiguredLLM(nil)
+			sysDB.OpenKnowledgeBase(ctx, kbName, trans, dbLLM, dbEmbedder, false, true)
+			trans.Commit(ctx)
+			go seedMetaCognitionAsync(req.UserID, kbName, sysOpts)
+		}
+	}
+
 	if err := agentSvc.Open(ctx); err != nil {
 		msg := fmt.Sprintf("Agent '%s' failed to open session: %v", req.Agent, err)
 		log.Error("Response: Session Open Failed", "error", msg)
 		sendEvent("error", msg)
-		return
+		return err
 	}
-	defer func() {
-		if err := agentSvc.Close(ctx); err != nil {
-			log.Error(fmt.Sprintf("Agent '%s' failed to close session: %v", req.Agent, err))
-		}
-	}()
+	return nil
+}
 
-	// agentSvc delegates to dataadmin agent as necessary for LLM ask.
+func executeRAG(ctx context.Context, agentSvc ai.Agent[map[string]any], req *aiChatRequest, fullMessage string, askOpts []ai.Option, sendEvent func(string, any)) (string, error) {
 	response, err := agentSvc.Ask(ctx, fullMessage, askOpts...)
 	if err != nil {
 		msg := fmt.Sprintf("Agent '%s' failed: %v", req.Agent, err)
 		log.Error("Response: Agent Ask Failed", "error", msg)
 		sendEvent("error", msg)
-		return
+		return "", err
 	}
+	return response, nil
+}
 
-	// Detect Database Switch
-	// if payload.CurrentDB != "" && payload.CurrentDB != req.Database {
-	// 	log.Info("Agent switched database", "from", req.Database, "to", payload.CurrentDB)
-	// 	sendEvent("switch_database", payload.CurrentDB)
-	// }
-
-	// Process the response from LLM as returned by the agent.
+func interpretOutput(response string, sendEvent func(string, any)) {
 	text := strings.TrimSpace(response)
 
-	// Intercept Action Required directives from the LLM (e.g., local execution tools)
 	if idxStart := strings.Index(text, "<<<ACTION_REQUIRED:"); idxStart >= 0 {
 		if idxEnd := strings.LastIndex(text, ">>>"); idxEnd > idxStart {
 			candidate := text[idxStart+len("<<<ACTION_REQUIRED:") : idxEnd]
@@ -410,8 +439,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var toolCall struct {
-		Tool string `json:"tool"`
-
+		Tool string         `json:"tool"`
 		Args map[string]any `json:"args"`
 	}
 	cleanText := strings.TrimPrefix(text, "```json")
@@ -420,30 +448,16 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	cleanText = strings.TrimSpace(cleanText)
 
 	if err := json.Unmarshal([]byte(cleanText), &toolCall); err == nil && toolCall.Tool != "" {
-		// If we get a raw tool call here, it means the Agent didn't execute it.
-		// This shouldn't happen with the new architecture where agents execute their own tools.
-		// But if it does (e.g. legacy agent or fallback), we log it.
 		log.Debug(fmt.Sprintf("Agent returned raw tool call (unexpected): %s", toolCall.Tool))
-
-		// We no longer execute tools here. We return the raw response.
-		// Or should we error?
-		// Let's return it as a response so the user sees what the agent tried to do.
 		msg := fmt.Sprintf("Agent attempted to call tool '%s' but failed to execute it internally.", toolCall.Tool)
 		log.Info("Response: Raw Tool Call", "response", msg)
 		sendEvent("content", msg)
 		return
 	}
 
-	// Try to interpret the response as Data (JSON Array)
-	// Many agents return a JSON array of objects for data queries.
-	// Try to interpret the response as Data (JSON Array)
-	// Many agents return a JSON array of objects for data queries.
-	// NOTE: We use RawMessage to preserve field ordering within the records.
 	var rawRecords []json.RawMessage
 	var mapRecords []map[string]any
 	if err := json.Unmarshal([]byte(cleanText), &mapRecords); err == nil && len(mapRecords) > 0 {
-		// It's a valid list of maps (objects).
-		// Re-unmarshal as RawMessage to get the ordered bytes source
 		if err := json.Unmarshal([]byte(cleanText), &rawRecords); err == nil {
 			log.Debug("Response: Detected JSON Records", "count", len(rawRecords))
 			for _, rec := range rawRecords {
@@ -453,16 +467,11 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// HEURISTIC: Check for Embedded JSON Array in conversational text
-	// e.g. "Here is the result: [{...}]"
 	if idxStart := strings.Index(cleanText, "["); idxStart >= 0 {
 		if idxEnd := strings.LastIndex(cleanText, "]"); idxEnd > idxStart {
 			candidate := cleanText[idxStart : idxEnd+1]
-			// Try to unmarshal the candidate
 			var embeddedMapRecords []map[string]any
 			if err := json.Unmarshal([]byte(candidate), &embeddedMapRecords); err == nil && len(embeddedMapRecords) > 0 {
-				// Success! It's a valid JSON array embedded in text.
-				// Re-unmarshal as RawMessage on the CANDIDATE string
 				if err := json.Unmarshal([]byte(candidate), &rawRecords); err == nil {
 					log.Debug("Response: Detected Embedded JSON Records", "count", len(rawRecords))
 					for _, rec := range rawRecords {
@@ -474,33 +483,19 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Try to interpret as single object?
-	// Sometimes an agent returns a single object.
 	var singleRecord map[string]any
-	// Ensure it's not just a string disguised as object? No, json.Unmarshal handles that.
-	// But check if it starts with '{' to avoid false positives with numbers or strings if cleanText was weird found.
 	if strings.HasPrefix(cleanText, "{") {
 		if err := json.Unmarshal([]byte(cleanText), &singleRecord); err == nil {
 			log.Debug("Response: Detected Single JSON Record")
-			// Check if it's a KV pair structure?
-			// The UI treats 'kv' as generic key-value, but 'record' works too.
-			// Let's just send as record.
 			sendEvent("record", singleRecord)
 			return
 		}
 	}
 
-	// Try to interpret as NDJSON (Newline Delimited JSON)
-	// This handles script outputs that now default to NDJSON stream format.
 	lines := strings.Split(cleanText, "\n")
 	var ndjsonEvents []map[string]any
 	isNDJSON := false
 
-	// Heuristic: If we have multiple lines and the first non-empty one parses as JSON, try to parse all.
-	// Or even if just one line parses? No, "Hello" isn't JSON. "{...}" is.
-	// If it contains at least one valid JSON object line, treating it as NDJSON might be valid,
-	// but we should fail gracefully if lines are mixed.
-	// Actually, if PlayScript returns NDJSON, every line is JSON.
 	if len(lines) > 0 {
 		validCount := 0
 		for _, line := range lines {
@@ -513,16 +508,10 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 				ndjsonEvents = append(ndjsonEvents, obj)
 				validCount++
 			} else {
-				// Found a non-JSON line. If we already found JSON, this is mixed content (bad).
-				// But maybe it's just some text at the start/end?
-				// For now, if we encounter ANY non-JSON line, cancel NDJSON detection to be partial?
-				// No, let's treat it as text if it's not 100% NDJSON (ignoring empty lines).
-				// Exception: "Error: ..." sometimes creeps in.
 				isNDJSON = false
 				break
 			}
 		}
-		// If we found valid JSON lines and didn't break (meaning all non-empty lines were JSON)
 		if validCount > 0 && len(ndjsonEvents) == validCount {
 			isNDJSON = true
 		}
@@ -531,10 +520,6 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	if isNDJSON {
 		log.Debug("Response: Detected NDJSON Stream", "count", len(ndjsonEvents))
 		for _, evt := range ndjsonEvents {
-			// Map specific event types from PlayScript to UI events
-			// PlayScript types: "log", "record", "error", "step_start", "outputs"
-			// UI events: "record", "content", "error", "tool_call"
-
 			rawType, _ := evt["type"].(string)
 
 			switch rawType {
@@ -542,27 +527,21 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 				if rec, ok := evt["record"]; ok {
 					sendEvent("record", rec)
 				} else if rec, ok := evt["data"]; ok {
-					// Fallback for older scripts
 					sendEvent("record", rec)
 				}
 			case "log":
 				msg, _ := evt["message"].(string)
-				// Send as markdown content? or console log?
-				// UI parses 'content' as markdown.
-				// Let's prefix logs given they are debug info usually.
 				sendEvent("content", fmt.Sprintf("> *Log:* %s\n", msg))
 			case "error":
 				msg, _ := evt["error"].(string)
 				sendEvent("error", msg)
 			case "step_start":
-				// Maybe ignore or show simple header?
 				name, _ := evt["name"].(string)
 				if name == "" {
 					name, _ = evt["command"].(string)
 				}
 				stepIndexVal := evt["step_index"]
 
-				// Handle different types for step_index (float64 if from JSON unmarshal)
 				var stepIndex int
 				if f, ok := stepIndexVal.(float64); ok {
 					stepIndex = int(f)
@@ -576,29 +555,20 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 					sendEvent("content", fmt.Sprintf("**Step:** `%s`\n", name))
 				}
 			case "outputs":
-				// This is usually the final result or step result.
-				// If it's a list, we might want to iterate?
 				if list, ok := evt["outputs"].([]any); ok {
-					// Check if these are records
 					for _, item := range list {
 						sendEvent("record", item)
 					}
 				} else {
-					// Send as content
 					b, _ := json.MarshalIndent(evt["outputs"], "", "  ")
 					sendEvent("content", fmt.Sprintf("```json\n%s\n```", string(b)))
 				}
 			default:
-				// Fallback: send the whole event payload as a record or content?
-				// If it has 'payload' or 'data', send that.
-				// If not, just send the event object itself as a record (for debugging)
 				sendEvent("record", evt)
 			}
 		}
 		return
 	}
-
-	//log.Debug("Response: Success (Text)", "response", response)
 
 	if response != "" {
 		sendEvent("content", response)

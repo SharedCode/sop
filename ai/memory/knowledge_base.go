@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 
 	"strings"
 
@@ -21,24 +22,47 @@ type KnowledgeBase[T any] struct {
 	// to avoid calling the LLM for category categorization. Set to 0.0 or less to disable
 	// and always rely on "pristine" LLM categorization.
 	MaxMathCategoryDistance float32
+
+	configCache *KnowledgeBaseConfig
+}
+
+// Returns this KnowledgeBase's name.
+func (kb *KnowledgeBase[T]) Name() string {
+	return kb.Store.Name()
 }
 
 func (kb *KnowledgeBase[T]) SearchSemanticsBatch(ctx context.Context, queryVectors [][]float32, opts *SearchOptions[T]) ([][]ai.Hit[T], error) {
+	config, err := kb.GetConfig(ctx)
+	if err == nil && config != nil && config.LastVectorized == 0 {
+		return nil, fmt.Errorf("Knowledge base is not vectorized")
+	}
 	return kb.Store.QueryBatch(ctx, queryVectors, opts)
 }
 
 // SearchKeywordsBatch executes textual BM25 text-matched sparse searches for multiple text payloads.
 func (kb *KnowledgeBase[T]) SearchKeywordsBatch(ctx context.Context, textQueries []string, opts *SearchOptions[T]) ([][]ai.Hit[T], error) {
+	config, err := kb.GetConfig(ctx)
+	if err == nil && config != nil && config.LastVectorized == 0 {
+		return nil, fmt.Errorf("Knowledge base is not vectorized")
+	}
 	return kb.Store.QueryTextBatch(ctx, textQueries, opts)
 }
 
 // SearchSemantics executes a spatial search (vector matching against mathematical bounds).
 func (kb *KnowledgeBase[T]) SearchSemantics(ctx context.Context, queryVector []float32, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
+	config, err := kb.GetConfig(ctx)
+	if err == nil && config != nil && config.LastVectorized == 0 {
+		return nil, fmt.Errorf("Knowledge base is not vectorized")
+	}
 	return kb.Store.Query(ctx, queryVector, opts)
 }
 
 // SearchKeywords executes a traditional textual BM25 text-matched sparse search.
 func (kb *KnowledgeBase[T]) SearchKeywords(ctx context.Context, textQuery string, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
+	config, err := kb.GetConfig(ctx)
+	if err == nil && config != nil && config.LastVectorized == 0 {
+		return nil, fmt.Errorf("Knowledge base is not vectorized")
+	}
 	return kb.Store.QueryText(ctx, textQuery, opts)
 }
 
@@ -182,6 +206,10 @@ func (kb *KnowledgeBase[T]) TriggerSleepCycle(ctx context.Context) error {
 
 // GetConfig retrieves the metadata configuration for this KnowledgeBase.
 func (kb *KnowledgeBase[T]) GetConfig(ctx context.Context) (*KnowledgeBaseConfig, error) {
+	if kb.configCache != nil {
+		return kb.configCache, nil
+	}
+
 	itemsBtree, err := kb.Store.Items(ctx)
 	if err != nil {
 		return nil, err
@@ -211,6 +239,7 @@ func (kb *KnowledgeBase[T]) GetConfig(ctx context.Context) (*KnowledgeBaseConfig
 		return nil, err
 	}
 
+	kb.configCache = &cfg
 	return &cfg, nil
 }
 
@@ -239,6 +268,9 @@ func (kb *KnowledgeBase[T]) SetConfig(ctx context.Context, config *KnowledgeBase
 	}
 
 	_, err = itemsBtree.Upsert(ctx, nilKey, configItem)
+	if err == nil {
+		kb.configCache = config
+	}
 	return err
 }
 

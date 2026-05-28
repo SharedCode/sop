@@ -35,7 +35,30 @@ const (
 	CtxKeyScriptRecorder ContextKey = "ai_script_recorder"
 	// CtxKeyAutoFlush is the context key for enabling/disabling auto-flush (boolean).
 	CtxKeyAutoFlush ContextKey = "ai_auto_flush"
+	// CtxKeyDefaultFormat is the context key for carrying the requested default output format.
+	CtxKeyDefaultFormat ContextKey = "ai_default_format"
+	// CtxKeyProgressSink is the context key for passing a structured progress emitter callback.
+	CtxKeyProgressSink ContextKey = "ai_progress_sink"
+	// CtxKeyEventStreamer is the context key for passing a structured event emitter callback.
+	CtxKeyEventStreamer ContextKey = "ai_event_streamer"
 )
+
+// ArtifactType represents the type of a database artifact.
+type ArtifactType string
+
+const (
+	ArtifactTypeSpace ArtifactType = "Space"
+	ArtifactTypeStore ArtifactType = "Store"
+)
+
+// ArtifactReference is a unified structure to pass globally referenced DB Artifacts (KB, Space, etc.)
+// containing the exact location, avoiding the need to cycle through available databases.
+type ArtifactReference struct {
+	Name            string              `json:"name"`
+	Type            ArtifactType        `json:"type"`
+	DatabaseName    string              `json:"db_name"`
+	DatabaseOptions sop.DatabaseOptions `json:"db_opts,omitempty"`
+}
 
 // KnowledgeDocument represents a single unit of embeddable contextual information
 // commonly used to standardize preloading Vector DBs and RAG pipelines.
@@ -369,6 +392,9 @@ type Agent[T any] interface {
 type SessionPayload struct {
 	// CurrentDB is the active database name for the session.
 	CurrentDB string
+	// CurrentUserQuery stores the raw user request for the current Ask interaction.
+	// It is used sparingly for narrow tool fallbacks when the model omits a required arg.
+	CurrentUserQuery string
 	// UserID identifies the user for privacy and memory isolation.
 	UserID string
 	// ClientID tags the origin client device or application.
@@ -383,11 +409,14 @@ type SessionPayload struct {
 	// ActiveDomain is the knowledge domain selected by the user.
 	ActiveDomain string
 	// SelectedKBs are the explicit Knowledge Bases selected by the user from the dropdown.
-	SelectedKBs []string
+	SelectedKBs []ArtifactReference
 	// Transaction holds the active transaction for the session.
-	// Deprecated: Use Transactions map instead for multi-db support.
+	// Deprecated: Migrate usage to TransactionPool.
 	Transaction any
+	// TransactionPool manages active transactions, their configurations, and pooling across the session.
+	TransactionPool *TransactionPool
 	// Transactions holds active transactions keyed by database name.
+	// Deprecated: Migrate usage to TransactionPool.
 	Transactions map[string]any
 	// Variables holds session-scoped variables (e.g. cached store instances).
 	Variables map[string]any
@@ -397,6 +426,36 @@ type SessionPayload struct {
 	LastInteractionSteps int
 	// ConversationHistory stores the active memory/transcript for the session.
 	ConversationHistory string
+}
+
+// Manages Payload's cleanup, e.g. Transaction Commit/Rollback.
+func (sp *SessionPayload) Close(ctx context.Context) error {
+	if sp.Transaction == nil {
+		return nil
+	}
+	defer func() {
+		sp.Transaction = nil
+	}()
+
+	if sp.Transactions != nil {
+		// Iterate to remove if any global dbName holds this tx
+		for k, v := range sp.Transactions {
+			if v == sp.Transaction {
+				delete(sp.Transactions, k)
+			}
+		}
+	}
+
+	if sp.ExplicitTransaction {
+		// Explicit transactions span multiple requests. We must NOT rollback here.
+		return nil
+	}
+	if tx, ok := sp.Transaction.(sop.Transaction); ok {
+		if tx.HasBegun() {
+			return tx.Commit(ctx)
+		}
+	}
+	return nil
 }
 
 // GetDatabase returns the effective current Database name.

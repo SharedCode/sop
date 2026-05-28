@@ -11,9 +11,7 @@ import (
 
 func TestCopilotAgent_Ask_SlashCommand(t *testing.T) {
 	// Setup Agent with NO databases
-	cfg := Config{
-		EnableObfuscation: false,
-	}
+	cfg := Config{}
 	agent := NewCopilotAgent(cfg, nil, nil)
 	ctx := context.Background()
 	agent.Open(ctx)

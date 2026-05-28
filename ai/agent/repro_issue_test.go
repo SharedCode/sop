@@ -50,6 +50,7 @@ func (m *reproMockGenerator) Generate(ctx context.Context, prompt string, opts a
 }
 
 func TestReproLoadFailedError_Legacy(t *testing.T) {
+	t.Skip("Legacy tools removed")
 	// 1. Setup DB
 	ctx := context.Background()
 	dbPath := "test_repro_load_failed"
@@ -145,7 +146,7 @@ func TestReproLoadFailedError_Legacy(t *testing.T) {
 	systemDB := database.NewDatabase(systemDBOpts)
 
 	// Create CopilotAgent
-	daAgent := NewCopilotAgent(Config{UseLegacyBaselineEngine: true}, map[string]sop.DatabaseOptions{"testdb": dbOpts}, systemDB)
+	daAgent := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{"testdb": dbOpts}, systemDB)
 	daAgent.SetGenerator(gen)
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "testdb"})
 	daAgent.Open(ctx)

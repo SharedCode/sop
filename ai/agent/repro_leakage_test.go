@@ -110,6 +110,7 @@ func populateDevDB(t *testing.T, ctx context.Context, db *database.Database) {
 }
 
 func TestRepro_Leakage_StateCleaning_Legacy(t *testing.T) {
+	t.Skip("Legacy tools removed")
 	// 1. Setup Environment
 	tempDir := t.TempDir()
 
@@ -161,9 +162,8 @@ func TestRepro_Leakage_StateCleaning_Legacy(t *testing.T) {
 
 	databases := map[string]sop.DatabaseOptions{"dev_db": dbOpts}
 	svc := agent.NewCopilotAgent(agent.Config{
-		UseLegacyBaselineEngine: true,
-		ID:                      "repro-agent",
-		Name:                    "Repro",
+		ID:   "repro-agent",
+		Name: "Repro",
 	}, databases, systemDB)
 
 	ctx = context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
@@ -337,6 +337,7 @@ func TestRepro_Leakage_StateCleaning_Native(t *testing.T) {
 }
 
 func TestAliasProjection_JoinRight_Legacy(t *testing.T) {
+	t.Skip("Legacy tools removed")
 	// Setup
 	tempDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -377,9 +378,8 @@ func TestAliasProjection_JoinRight_Legacy(t *testing.T) {
 
 	databases := map[string]sop.DatabaseOptions{"dev_db": dbOpts}
 	svc := agent.NewCopilotAgent(agent.Config{
-		UseLegacyBaselineEngine: true,
-		ID:                      "repro-agent-alias",
-		Name:                    "ReproAlias",
+		ID:   "repro-agent-alias",
+		Name: "ReproAlias",
 	}, databases, systemDB)
 	svc.Open(ctx)
 	svc.SetGenerator(mockBrain)

@@ -10,7 +10,7 @@ This acts as a full, live RAG pipeline:
 3. **Context-Aware Ranking (Active Memory)**: The BM25+Vector scoring algorithm evaluates the current `Active Memory` thread (what the user was just talking about). Matching documents get a mathematical multiplier to prioritize them, preventing the pipeline from "forgetting" the ongoing diagnosis context between prompts.
 4. **Generation**: We use the Gemini LLM as the main agent ("The Doctor") to reason over the retrieved documents and offer diagnosis.
 
-## The Concept: Why Two Agents?
+<h2>The Concept: Why Two Agents?</h2>
 
 Most RAG (Retrieval-Augmented Generation) systems fail because users speak casually ("my tummy hurts"), but the database contains technical facts ("abdominal pain causes").
 
@@ -25,7 +25,7 @@ We solve this with two specialized roles:
 
 ---
 
-## The SOP Advantage: Why Not Just Use a Generic Vector DB?
+<h2>The SOP Advantage: Why Not Just Use a Generic Vector DB?</h2>
 
 Before we code, it is crucial to understand why SOP produces **higher quality results** than standard vector stores.
 
@@ -44,7 +44,7 @@ SOP implements a **Transactional Lookup B-Tree**.
 
 ---
 
-## Step 1: The Setup
+<h2>Step 1: The Setup</h2>
 
 You need Go (1.24+) and the SOP library.
 
@@ -57,7 +57,7 @@ go get github.com/sharedcode/sop
 ollama pull llama3
 ```
 
-## Step 2: The Data (ETL)
+<h2>Step 2: The Data (ETL)</h2>
 
 First, we need to teach our Doctor. We will ingest "medical knowledge" (text chunks). SOP handles the heavy lifting of chunking and indexing.
 
@@ -112,7 +112,7 @@ func main() {
 }
 ```
 
-## Step 3: The Nurse (The Translator)
+<h2>Step 3: The Nurse (The Translator)</h2>
 
 The Nurse intercepts the user's raw query.
 
@@ -132,7 +132,7 @@ func NurseTranslate(userQuery string) []float32 {
 }
 ```
 
-## Step 4: The Consultation (Search)
+<h2>Step 4: The Consultation (Search)</h2>
 
 Now we put it together. The user speaks to the Nurse, the Nurse speaks to the Doctor.
 
@@ -163,8 +163,9 @@ func main() {
 		fmt.Println("Doctor: I need more information.")
 	}
 }
+```
 
-## Step 5: Long-Term Health (Rebalancing & Self-Healing)
+<h2>Step 5: Long-Term Health (Rebalancing & Self-Healing)</h2>
 
 A Vector Database is a living organism. As you add more knowledge, your initial clusters (Centroids) might become unbalanced—one topic might get too huge while others remain empty.
 
@@ -196,7 +197,7 @@ This triggers a process that:
 
 This ensures your Expert System gets *smarter* and *faster* as it grows, rather than degrading like traditional vector stores.
 
-## Step 6: Performance Tuning (Modes & Caching)
+<h2>Step 6: Performance Tuning (Modes & Caching)</h2>
 
 SOP gives you two powerful knobs to tune your Expert System for its specific role.
 
@@ -240,7 +241,7 @@ store.SetDeduplication(false)
 
 All of these enterprise-grade features—Transactional Integrity, Self-Healing Indexes, and In-Memory Caching—come **for free** just by using the SOP library.
 
-## Step 7: Zero-Code Agents (JSON Config & ETL)
+<h2>Step 7: Zero-Code Agents (JSON Config & ETL)</h2>
 
 You don't always need to write Go code to build an agent. SOP includes a powerful configuration system that lets you define agents using simple JSON files. It is a prebuilt expert system, just needing your content! And has ability to delegate to LLM (Gemini, ChatGPT) or local heuristics right out of the box.
 
@@ -356,7 +357,7 @@ Now you can run your agent using the pre-populated database:
 ./sop-ai -config data/doctor_pipeline.json
 ```
 
-## Step 8: Running the Full Example
+<h2>Step 8: Running the Full Example</h2>
 
 We have included a complete, working example in the repository. You can build the tools, ingest the data, and run the "Doctor & Nurse" agents in an interactive terminal REPL using Google's Gemini Flash.
 
@@ -385,7 +386,7 @@ go run ai/cmd/demo_doctor/main.go
 *   The RRF engine scores result sets—multiplying and prioritizing matches mathematically bound to your **Active Memory** thread topics.
 *   The agent generates an educated medical diagnostic based on actual vector matches and its system instructions.
 
-## Step 9: The Developer's Toolkit (Go API)
+<h2>Step 9: The Developer's Toolkit (Go API)</h2>
 
 The `sop/ai` module is a modular kit. You can use the high-level `agent` package, or pick and choose the components you need.
 
@@ -501,10 +502,10 @@ func main() {
 }
 ```
 
-## Going Further: Hosting Other Experts
+<h2>Going Further: Hosting Other Experts</h2>
 ```
 
-## The Vision: Building "Smart Systems" of Any Scale
+<h2>The Vision: Building "Smart Systems" of Any Scale</h2>
 
 The SOP AI Kit is designed to address the entire chain of building intelligent software, from simple automation to enterprise-class AI.
 
@@ -519,7 +520,7 @@ By leveraging SOP's core **Clustered Database** features, software teams can bui
 *   **Collaborative AI**: The kit treats Gemini, ChatGPT, and Local Agents as interoperable components. They can reuse each other's capabilities to solve problems that no single model could handle alone.
 *   **Transactional Integrity**: Unlike simple vector libraries, SOP ensures your AI's memory is ACID-compliant, making it suitable for critical enterprise applications.
 
-## Step 10: Going Enterprise (Clustered Mode)
+<h2>Step 10: Going Enterprise (Clustered Mode)</h2>
 
 While `database.Standalone` is perfect for local development and single-node deployments, SOP AI also supports a **Clustered** mode for high availability and scale.
 
@@ -557,7 +558,7 @@ SOP is designed to support your Software Development Life Cycle (SDLC) from loca
 
 The next time your application runs, it will automatically pick up the existing data and start using the Redis cache for coordination. No data migration or export/import is required.
 
-## Step 11: Advanced - Atomic Updates (Transactional Integrity)
+<h2>Step 11: Advanced - Atomic Updates (Transactional Integrity)</h2>
 
 One of SOP's unique superpowers is the ability to update **multiple** stores (e.g., the Vector DB and the Model Registry) in a single, atomic transaction.
 
@@ -596,7 +597,7 @@ func AtomicTrainAndIndex(ctx context.Context, doc ai.Item[any], newWeights []flo
 
 This pattern is essential for building robust, enterprise-grade AI systems that can recover from failures without data corruption.
 
-## Step 12: Unified Architecture (The Bridge)
+<h2>Step 12: Unified Architecture (The Bridge)</h2>
 
 SOP's architecture is "Layered". The AI package is a specialized layer built on top of the General Purpose engine. This means you can mix low-level Key-Value operations with high-level Vector operations in the **same atomic transaction**.
 
@@ -640,7 +641,7 @@ func RegisterUser(ctx context.Context, userID string, bio string) error {
 
 This unification allows you to build complex, data-intensive applications without needing separate databases for your structured data (SQL/KV) and your AI data (Vectors).
 
-## Summary
+<h2>Summary</h2>
 
 By using SOP, you aren't just storing vectors; you are managing a **Transactional Knowledge Base**. 
 

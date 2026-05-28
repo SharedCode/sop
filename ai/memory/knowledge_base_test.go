@@ -25,7 +25,7 @@ func TestKnowledgeBase_API(t *testing.T) {
 	vecs := inmemory.NewBtree[VectorKey, Vector](true)
 	items := inmemory.NewBtree[ItemKey, Item[string]](true)
 
-	s := NewStore[string](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[string])
+	s := NewStore[string]("test_kb", nil, cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[string])
 	s.SetTextIndex(&MockTextIndex{})
 
 	embedder := &MockPlaybookEmbedder{Rules: []PlaybookRule{
@@ -78,7 +78,7 @@ func TestStaticKnowledgeBase(t *testing.T) {
 	vectors := inmemory.NewBtree[VectorKey, Vector](false)
 	items := inmemory.NewBtree[ItemKey, Item[string]](false)
 
-	memStore := NewStore[string](categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vectors.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
+	memStore := NewStore[string]("test_kb", nil, categories.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vectors.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 	ds := memStore.(*store[string])
 	ds.SetTextIndex(&MockTextIndex{})
 

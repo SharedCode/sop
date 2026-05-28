@@ -8,8 +8,19 @@ import (
 	"github.com/sharedcode/sop/btree"
 )
 
+// Database is an interface that allows the memory layer to orchestrate its own batched transactions.
+type Database interface {
+	ai.Database
+	OpenKnowledgeBase(ctx context.Context, name string, tx sop.Transaction, llm ai.Generator, embedder ai.Embeddings, documentMode bool, enableTextSearch ...bool) (*KnowledgeBase[map[string]any], error)
+	NewBtree(ctx context.Context, name string, t sop.Transaction) (btree.BtreeInterface[string, any], error)
+}
+
 // MemoryStore is the m-way tree dynamic capability database interface.
 type MemoryStore[T any] interface {
+
+	// Returns this Memory Store's name.
+	Name() string
+
 	// Upsert adds or updates a single item in the store.
 	Upsert(ctx context.Context, item Item[T], vec []float32) error
 
@@ -21,6 +32,9 @@ type MemoryStore[T any] interface {
 
 	// UpsertBatch adds or updates multiple items in the store efficiently.
 	UpsertBatch(ctx context.Context, items []Item[T], vecs [][]float32) error
+
+	// FindClosestCategory explores the category tree using spatial distance to find the closest matching category.
+	FindClosestCategory(ctx context.Context, vector []float32) (*Category, float32, error)
 
 	// Get retrieves a item by its logical ID.
 	Get(ctx context.Context, key ItemKey) (*Item[T], error)
@@ -46,6 +60,12 @@ type MemoryStore[T any] interface {
 	// Categories returns a B-Tree interface to manually read/update hierarchical categories.
 	Categories(ctx context.Context) (btree.BtreeInterface[sop.UUID, *Category], error)
 
+	// CategoriesByPath returns a B-Tree interface to manually read/update path-indexed categories.
+	CategoriesByPath(ctx context.Context) (btree.BtreeInterface[string, sop.UUID], error)
+
+	// CategoriesByDistance returns a B-Tree interface for reading/updating distance-indexed categories.
+	CategoriesByDistance(ctx context.Context) (btree.BtreeInterface[DistanceKey, byte], error)
+
 	// AddCategory adds a new category to the store dynamically.
 	// This allows for runtime expansion of the concept space without full rebalancing.
 	AddCategory(ctx context.Context, c *Category) (sop.UUID, error)
@@ -65,6 +85,9 @@ type MemoryStore[T any] interface {
 
 	// SetDomainReference sets the anchor vector for O(log N) category indexing.
 	SetDomainReference(vec []float32)
+
+	// DomainReference returns the anchor vector for O(log N) category indexing.
+	DomainReference() []float32
 
 	// SetLLM sets the LLM interface used to generate categories dynamically.
 	SetLLM(llm LLM[T])
@@ -90,7 +113,8 @@ type MemoryStore[T any] interface {
 
 // SearchOptions provides optional parameters for querying the vector store
 type SearchOptions[T any] struct {
-	Limit        int
-	CategoryPath string
-	Filter       func(T) bool
+	Limit                  int
+	CategoryPath           string
+	CategoryDistanceVector []float32
+	Filter                 func(T) bool
 }
