@@ -13,7 +13,7 @@ import (
 )
 
 // searchKnowledgeBase searches a specified knowledge base in the given DB.
-func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Database, kbName string, query string, limit int) (string, error) {
+func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Database, kbName string, query string, catPath string, category string, textSearchEnabled bool, limit int) (string, error) {
 	if db == nil {
 		return "", fmt.Errorf("database is null")
 	}
@@ -38,18 +38,56 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 
 	var results []string
 
-	// 1. Semantic Search
-	if embedder != nil {
+	if catPath != "" {
+		pathHits, err := kb.SearchByPath(ctx, []memory.PathSearchParam{{CategoryPath: catPath, SearchText: query}})
+		if err == nil && len(pathHits) > 0 {
+			results = append(results, "--- Lexical Path Matches ---")
+			limitHit := 0
+			for _, h := range pathHits {
+				if limitHit >= limit {
+					break
+				}
+				text := ""
+				categoryVal := ""
+				if h.Data != nil {
+					if descVal, ok := h.Data["description"].(string); ok {
+						text = descVal
+					} else if textVal, ok := h.Data["text"].(string); ok {
+						text = textVal
+					}
+					if text == "" {
+						b, _ := json.Marshal(h.Data)
+						text = string(b)
+					}
+					if catVal, ok := h.Data["category"].(string); ok {
+						categoryVal = catVal
+					}
+				} else if len(h.Summaries) > 0 {
+					text = strings.Join(h.Summaries, " ")
+				}
+
+				if text == "" {
+					continue
+				}
+
+				link := ""
+				if h.DocID != "" {
+					link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", h.DocID)
+				}
+
+				results = append(results, fmt.Sprintf("CategoryPath: %s\nText: %s%s", categoryVal, text, link))
+				limitHit++
+			}
+		}
+	} else if category != "" && embedder != nil {
 		vecs, err := embedder.EmbedTexts(ctx, []string{query})
 		if err == nil && len(vecs) > 0 {
-			hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: limit})
+			hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{CategoryPath: category, Limit: limit})
 			if err == nil && len(hits) > 0 {
 				results = append(results, "--- Semantic Matches ---")
 				for _, h := range hits {
-					// We only have Payload dynamically. In KnowledgeBase, it natively returns map[string]any payload representing the thought?
-					// Wait, the payload might contain the category and text? Yes, IngestThought puts it there or it's the raw data.
 					text := ""
-					category := ""
+					categoryVal := ""
 					if descVal, ok := h.Payload["description"].(string); ok {
 						text = descVal
 					} else if textVal, ok := h.Payload["text"].(string); ok {
@@ -60,7 +98,7 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 						text = string(b)
 					}
 					if catVal, ok := h.Payload["category"].(string); ok {
-						category = catVal
+						categoryVal = catVal
 					}
 
 					link := ""
@@ -68,38 +106,68 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 						link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", h.DocID)
 					}
 
-					results = append(results, fmt.Sprintf("Score: %.2f | CategoryPath: %s\nText: %s%s", h.Score, category, text, link))
+					results = append(results, fmt.Sprintf("Score: %.2f | CategoryPath: %s\nText: %s%s", h.Score, categoryVal, text, link))
 				}
 			}
 		}
-	}
+	} else if textSearchEnabled {
+		keywordHits, err := kb.SearchKeywords(ctx, query, &memory.SearchOptions[map[string]any]{Limit: limit})
+		if err == nil && len(keywordHits) > 0 {
+			results = append(results, "--- Keyword Matches ---")
+			for _, h := range keywordHits {
+				text := ""
+				categoryVal := ""
+				if descVal, ok := h.Payload["description"].(string); ok {
+					text = descVal
+				} else if textVal, ok := h.Payload["text"].(string); ok {
+					text = textVal
+				}
+				if text == "" {
+					b, _ := json.Marshal(h.Payload)
+					text = string(b)
+				}
+				if catVal, ok := h.Payload["category"].(string); ok {
+					categoryVal = catVal
+				}
 
-	// 2. Keyword Search
-	keywordHits, err := kb.SearchKeywords(ctx, query, &memory.SearchOptions[map[string]any]{Limit: limit})
-	if err == nil && len(keywordHits) > 0 {
-		results = append(results, "--- Keyword Matches ---")
-		for _, h := range keywordHits {
-			text := ""
-			category := ""
-			if descVal, ok := h.Payload["description"].(string); ok {
-				text = descVal
-			} else if textVal, ok := h.Payload["text"].(string); ok {
-				text = textVal
-			}
-			if text == "" {
-				b, _ := json.Marshal(h.Payload)
-				text = string(b)
-			}
-			if catVal, ok := h.Payload["category"].(string); ok {
-				category = catVal
-			}
+				link := ""
+				if h.DocID != "" {
+					link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", h.DocID)
+				}
 
-			link := ""
-			if h.DocID != "" {
-				link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", h.DocID)
+				results = append(results, fmt.Sprintf("Score: %.2f | CategoryPath: %s\nText: %s%s", h.Score, categoryVal, text, link))
 			}
+		}
+	} else if embedder != nil {
+		vecs, err := embedder.EmbedTexts(ctx, []string{query})
+		if err == nil && len(vecs) > 0 {
+			hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: limit})
+			if err == nil && len(hits) > 0 {
+				results = append(results, "--- Semantic Matches ---")
+				for _, h := range hits {
+					text := ""
+					categoryVal := ""
+					if descVal, ok := h.Payload["description"].(string); ok {
+						text = descVal
+					} else if textVal, ok := h.Payload["text"].(string); ok {
+						text = textVal
+					}
+					if text == "" {
+						b, _ := json.Marshal(h.Payload)
+						text = string(b)
+					}
+					if catVal, ok := h.Payload["category"].(string); ok {
+						categoryVal = catVal
+					}
 
-			results = append(results, fmt.Sprintf("Score: %.2f | CategoryPath: %s\nText: %s%s", h.Score, category, text, link))
+					link := ""
+					if h.DocID != "" {
+						link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", h.DocID)
+					}
+
+					results = append(results, fmt.Sprintf("Score: %.2f | CategoryPath: %s\nText: %s%s", h.Score, categoryVal, text, link))
+				}
+			}
 		}
 	}
 
@@ -124,76 +192,4 @@ func (a *CopilotAgent) resolveDBForKB(ctx context.Context, kbName string) *datab
 	}
 
 	return a.systemDB
-}
-
-// toolSearchSopKB scans the SystemDB for SOP platform instructions.
-func (a *CopilotAgent) toolSearchSopKB(ctx context.Context, args map[string]any) (string, error) {
-	query, _ := args["query"].(string)
-	if query == "" {
-		return "", fmt.Errorf("query is required")
-	}
-	limit := 5
-	if l, ok := args["limit"].(float64); ok {
-		limit = int(l)
-	}
-
-	// Hardcoded to only scan SystemDB for the default SOP docs KB.
-	kbName := ai.DefaultKBName
-
-	// Tier 1 Hardcodes searching exactly the system DB.
-	db := a.systemDB
-
-	return a.searchKnowledgeBase(ctx, db, kbName, query, limit)
-}
-
-// toolSearchDomainKB maps to the primary KB selected by the user.
-func (a *CopilotAgent) toolSearchDomainKB(ctx context.Context, args map[string]any) (string, error) {
-	query, _ := args["query"].(string)
-	if query == "" {
-		return "", fmt.Errorf("query is required")
-	}
-	limit := 5
-	if l, ok := args["limit"].(float64); ok {
-		limit = int(l)
-	}
-
-	p := ai.GetSessionPayload(ctx)
-	if p == nil || p.ActiveDomain == "" {
-		return "No active domain KB selected by user.", nil
-	}
-
-	db := a.resolveDBForKB(ctx, p.ActiveDomain)
-	return a.searchKnowledgeBase(ctx, db, p.ActiveDomain, query, limit)
-}
-
-// toolSearchCustomKBs iterates over the SelectedKBs array.
-func (a *CopilotAgent) toolSearchCustomKBs(ctx context.Context, args map[string]any) (string, error) {
-	query, _ := args["query"].(string)
-	if query == "" {
-		return "", fmt.Errorf("query is required")
-	}
-	limit := 3
-	if l, ok := args["limit"].(float64); ok {
-		limit = int(l)
-	}
-
-	p := ai.GetSessionPayload(ctx)
-	if p == nil || len(p.SelectedKBs) == 0 {
-		return "No custom KBs selected.", nil
-	}
-
-	var allResults []string
-	for _, kbName := range p.SelectedKBs {
-		db := a.resolveDBForKB(ctx, kbName)
-		res, err := a.searchKnowledgeBase(ctx, db, kbName, query, limit)
-		if err == nil && res != "No results found." {
-			allResults = append(allResults, fmt.Sprintf("=== Results from %s ===\n%s", kbName, res))
-		}
-	}
-
-	if len(allResults) == 0 {
-		return "No results found in any selected KBs.", nil
-	}
-
-	return strings.Join(allResults, "\n\n"), nil
 }

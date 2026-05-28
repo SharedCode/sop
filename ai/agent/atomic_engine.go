@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	log "log/slog"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -38,6 +39,9 @@ func (e *ScriptEngine) getStore(name string) (jsondb.StoreAccessor, bool) {
 	}
 	for k, s := range e.Context.Stores {
 		if strings.EqualFold(k, name) {
+			return s, true
+		}
+		if s != nil && strings.EqualFold(strings.TrimSpace(s.GetStoreInfo().Name), strings.TrimSpace(name)) {
 			return s, true
 		}
 	}
@@ -145,6 +149,7 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 	}
 
 	for _, step := range rawSteps {
+		normalizeScriptStepForCompatibility(step)
 
 		if _, hasOp := step["op"]; !hasOp {
 			if cmd, ok := step["command"].(string); ok && cmd != "" {
@@ -264,8 +269,12 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 
 	if scriptCtx.LastUpdatedVar != "" {
 		if val, ok := scriptCtx.Variables[scriptCtx.LastUpdatedVar]; ok && val != nil {
-			log.Debug("toolExecuteScript: Returning last updated variable", "var", scriptCtx.LastUpdatedVar)
-			return serializeResult(ctx, val)
+			if isInternalScriptHandle(val) {
+				log.Debug("toolExecuteScript: Skipping internal last updated variable", "var", scriptCtx.LastUpdatedVar, "type", fmt.Sprintf("%T", val))
+			} else {
+				log.Debug("toolExecuteScript: Returning last updated variable", "var", scriptCtx.LastUpdatedVar)
+				return serializeResult(ctx, val)
+			}
 		}
 	}
 
@@ -300,10 +309,12 @@ func (e *ScriptEngine) Compile(script []ScriptInstruction) (CompiledScript, erro
 
 func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 	type compiledStep struct {
-		Name string
-		Op   string
-		Args map[string]any
-		Func func(context.Context, *ScriptEngine) error
+		Name      string
+		Op        string
+		Args      map[string]any
+		InputVar  string
+		ResultVar string
+		Func      func(context.Context, *ScriptEngine) error
 	}
 	var steps []compiledStep
 
@@ -355,7 +366,9 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 				return fmt.Errorf("operation '%s' failed: %v", instr.Op, err)
 			}
 
-			e.LastResult = result
+			if result != nil || !preserveLastResultOnNil(instr.Op) {
+				e.LastResult = result
+			}
 
 			if instr.ResultVar != "" {
 				e.Context.Variables[instr.ResultVar] = result
@@ -374,10 +387,12 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 			return nil
 		}
 		steps = append(steps, compiledStep{
-			Name: instr.Name,
-			Op:   instr.Op,
-			Args: instr.Args,
-			Func: stepFn,
+			Name:      instr.Name,
+			Op:        instr.Op,
+			Args:      instr.Args,
+			InputVar:  instr.InputVar,
+			ResultVar: instr.ResultVar,
+			Func:      stepFn,
 		})
 	}
 
@@ -434,6 +449,14 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 				break
 			}
 			log.Debug("ExecuteStep", "step", i+1, "op", step.Op)
+			log.Info("Script Engine Tool Call",
+				"step", i+1,
+				"op", step.Op,
+				"name", step.Name,
+				"input_var", step.InputVar,
+				"result_var", step.ResultVar,
+				"arg_keys", summarizeScriptArgKeys(step.Args),
+			)
 
 			// Streaming Setup
 			var stepStreamer interface {
@@ -443,6 +466,7 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 
 			if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
 				isVerbose, _ := ctx.Value("verbose").(bool)
+				suppressInternalStepStart, _ := ctx.Value(CtxKeySuppressInternalStepStart).(bool)
 
 				isSystemOp := false
 				switch step.Op {
@@ -450,7 +474,7 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 					isSystemOp = true
 				}
 
-				if isVerbose && !isSystemOp {
+				if isVerbose && !isSystemOp && !suppressInternalStepStart {
 
 					streamer.SetSuppressStepStart(false)
 
@@ -759,9 +783,25 @@ func bindOperation(op string) (func(context.Context, *ScriptEngine, map[string]a
 
 			return nil, nil
 		}, nil
+	case "search_space", "upsert_space_items", "delete_space_categories", "delete_space_items", "vectorize_space", "vectorize_space_categories", "vectorize_space_items", "list_space_categories", "list_space_items":
+		return func(ctx context.Context, e *ScriptEngine, args map[string]any, input any) (any, error) {
+			return e.ExecuteKBManagement(ctx, op, args, input)
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown operation: %s", op)
 	}
+}
+
+func summarizeScriptArgKeys(args map[string]any) string {
+	if len(args) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(args))
+	for key := range args {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, ",")
 }
 
 func serializeResult(ctx context.Context, val any) (string, error) {
@@ -1062,17 +1102,94 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 	return nil
 }
 
+func normalizeScriptStepForCompatibility(step map[string]any) {
+	op, _ := step["op"].(string)
+	if op == "" {
+		if cmd, ok := step["command"].(string); ok {
+			op = cmd
+		}
+	}
+	if !strings.EqualFold(op, "sort") {
+		return
+	}
+
+	argsObj, hasArgs := step["args"].(map[string]any)
+	if !hasArgs {
+		argsObj = make(map[string]any)
+		step["args"] = argsObj
+	}
+
+	if inputVar, _ := step["input_var"].(string); inputVar == "" {
+		if pipe, ok := argsObj["pipe"].(string); ok && strings.TrimSpace(pipe) != "" {
+			step["input_var"] = strings.TrimSpace(pipe)
+			delete(argsObj, "pipe")
+		}
+	}
+
+	if _, hasFields := argsObj["fields"]; hasFields {
+		return
+	}
+
+	key, _ := argsObj["key"].(string)
+	if strings.TrimSpace(key) == "" {
+		key, _ = argsObj["field"].(string)
+	}
+	if strings.TrimSpace(key) == "" {
+		return
+	}
+	field := strings.TrimSpace(key)
+	desc, _ := argsObj["desc"].(bool)
+	if !desc {
+		desc, _ = argsObj["descending"].(bool)
+	}
+	if desc {
+		field += " desc"
+	}
+	argsObj["fields"] = []any{field}
+	delete(argsObj, "key")
+	delete(argsObj, "field")
+	delete(argsObj, "desc")
+	delete(argsObj, "descending")
+}
+
+func preserveLastResultOnNil(op string) bool {
+	switch strings.ToLower(strings.TrimSpace(op)) {
+	case "commit_tx", "rollback_tx":
+		return true
+	default:
+		return false
+	}
+}
+
+func isInternalScriptHandle(v any) bool {
+	if v == nil {
+		return false
+	}
+	switch v.(type) {
+	case Database, sop.Transaction, jsondb.StoreAccessor:
+		return true
+	default:
+		return false
+	}
+}
+
 // resolveVarName strips the optional '@' or '$' prefix from a variable name.
 func (e *ScriptEngine) resolveVarName(name string) string {
 	name = strings.TrimPrefix(name, "@")
 	return strings.TrimPrefix(name, "$")
 }
 
-func (e *ScriptEngine) OpenDB(args map[string]any) (Database, error) {
-	name, _ := args["name"].(string)
-	if name == "" {
-		return nil, fmt.Errorf("database name required")
+func normalizeOpenDBName(args map[string]any) string {
+	for _, key := range []string{"name", "database", "db", "db_name", "database_name", "current_db", "currentDatabase"} {
+		if value, ok := args[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
 	}
+	return "current"
+}
+
+func (e *ScriptEngine) OpenDB(args map[string]any) (Database, error) {
+	name := normalizeOpenDBName(args)
 	if e.ResolveDatabase == nil {
 		return nil, fmt.Errorf("database resolver not configured")
 	}
@@ -1186,6 +1303,10 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 		}
 	}
 
+	if _, ok := e.Context.Variables["output"]; !ok && e.LastResult != nil && !isInternalScriptHandle(e.LastResult) {
+		e.Context.Variables["output"] = e.LastResult
+	}
+
 	return tx.Commit(ctx)
 }
 
@@ -1196,6 +1317,7 @@ func (e *ScriptEngine) RollbackTx(ctx context.Context, args map[string]any) erro
 	if !ok {
 		return fmt.Errorf("transaction '%s' not found", txName)
 	}
+
 	return tx.Rollback(ctx)
 }
 
@@ -1516,11 +1638,26 @@ func (e *ScriptEngine) evaluateCondition(item any, condition any) (bool, error) 
 	}
 
 	if expr, ok := condition.(string); ok {
-		env, err := cel.NewEnv(
-			cel.Variable("key", cel.AnyType),
-			cel.Variable("value", cel.AnyType),
-			cel.Variable("item", cel.AnyType),
-		)
+		// Extract variables dynamically to satisfy CEL strict compilation
+		identRegex := regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*`)
+		matches := identRegex.FindAllString(expr, -1)
+
+		var celVars []cel.EnvOption
+		declared := map[string]bool{
+			"key": true, "value": true, "item": true, "true": true, "false": true, "null": true,
+		}
+		celVars = append(celVars, cel.Variable("key", cel.AnyType))
+		celVars = append(celVars, cel.Variable("value", cel.AnyType))
+		celVars = append(celVars, cel.Variable("item", cel.AnyType))
+
+		for _, m := range matches {
+			if !declared[m] {
+				declared[m] = true
+				celVars = append(celVars, cel.Variable(m, cel.AnyType))
+			}
+		}
+
+		env, err := cel.NewEnv(celVars...)
 		if err != nil {
 			return false, err
 		}
@@ -1533,9 +1670,15 @@ func (e *ScriptEngine) evaluateCondition(item any, condition any) (bool, error) 
 			return false, err
 		}
 
-		itemMap, ok := item.(map[string]any)
-		if !ok {
-			return false, fmt.Errorf("item is not a map")
+		itemMap, isMap := item.(map[string]any)
+		if !isMap {
+			if om, ok := item.(*OrderedMap); ok && om != nil {
+				itemMap = om.m
+			} else if om, ok := item.(OrderedMap); ok {
+				itemMap = om.m
+			} else {
+				return false, fmt.Errorf("item is not a map, got %T", item)
+			}
 		}
 
 		// Build a robust context map that supports "value.x", "orders.x", or just "x"
@@ -1605,15 +1748,11 @@ func (e *ScriptEngine) Filter(ctx context.Context, input any, args map[string]an
 	}
 
 	if cursor, ok := input.(ScriptCursor); ok {
-		if condMap, ok := conditionRaw.(map[string]any); ok {
-			return &FilterCursor{
-				source: cursor,
-				filter: condMap,
-				engine: e,
-			}, nil
-		}
-
-		return nil, fmt.Errorf("cursor filter currently passes map conditions only")
+		return &FilterCursor{
+			source: cursor,
+			filter: conditionRaw,
+			engine: e,
+		}, nil
 	}
 
 	var list []any
@@ -2561,8 +2700,26 @@ func (e *ScriptEngine) Loop(ctx context.Context, args map[string]any) error {
 	return nil
 }
 
+func normalizeCallFunctionName(args map[string]any) string {
+	for _, key := range []string{"name", "function", "function_name", "functionName", "tool", "tool_name", "toolName", "command"} {
+		if value, ok := args[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func normalizeCallFunctionParams(args map[string]any) map[string]any {
+	for _, key := range []string{"params", "arguments", "args", "input"} {
+		if value, ok := args[key].(map[string]any); ok {
+			return value
+		}
+	}
+	return nil
+}
+
 func (e *ScriptEngine) CallFunction(ctx context.Context, args map[string]any) (any, error) {
-	functionName, _ := args["name"].(string)
+	functionName := normalizeCallFunctionName(args)
 	if functionName == "" {
 		return nil, fmt.Errorf("function name required")
 	}
@@ -2572,7 +2729,8 @@ func (e *ScriptEngine) CallFunction(ctx context.Context, args map[string]any) (a
 	}
 
 	savedVars := make(map[string]any)
-	if params, ok := args["params"].(map[string]any); ok {
+	params := normalizeCallFunctionParams(args)
+	if params != nil {
 		for k, v := range params {
 			if oldVal, exists := e.Context.Variables[k]; exists {
 				savedVars[k] = oldVal
@@ -2582,10 +2740,6 @@ func (e *ScriptEngine) CallFunction(ctx context.Context, args map[string]any) (a
 	}
 
 	// Call Handler
-	var params map[string]any
-	if p, ok := args["params"].(map[string]any); ok {
-		params = p
-	}
 	res, err := e.FunctionHandler(ctx, functionName, params)
 
 	for k, v := range savedVars {

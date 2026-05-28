@@ -139,8 +139,7 @@ func TestJoinRightReproduction(t *testing.T) {
 
 	// 2. Setup CopilotAgent
 	cfg := agent.Config{
-		EnableObfuscation: false,
-		Verbose:           true,
+		Verbose: true,
 	}
 	databases := make(map[string]sop.DatabaseOptions)
 	databases["mydb"] = dbOpts

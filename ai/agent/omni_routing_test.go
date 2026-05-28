@@ -35,6 +35,10 @@ func (m *omniMockGenerator) Generate(ctx context.Context, prompt string, opts ai
 		}, nil
 	}
 
+	if strings.Contains(prompt, "Analyze the tool response") {
+		return ai.GenOutput{Text: m.AvatarOutput + " via legal_kb"}, nil
+	}
+
 	// Second pass: The Avatar is executing
 	// We can assert what SystemPrompt was passed to the sub-execution
 	if !strings.Contains(opts.SystemPrompt, "You are the Legal Avatar.") {
@@ -78,9 +82,7 @@ func TestOmni_HandoffToAvatar(t *testing.T) {
 	_ = tx.Commit(ctx)
 
 	// 3. Setup Agent Context
-	agent := NewCopilotAgent(Config{
-		UseLegacyBaselineEngine: false,
-	}, map[string]sop.DatabaseOptions{}, sysDB)
+	agent := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
 
 	mockGen := &omniMockGenerator{
 		Step:         0,
@@ -123,8 +125,8 @@ func TestOmni_HandoffToAvatar(t *testing.T) {
 		t.Errorf("Expected result to contain Avatar name, got: %s", res.FinalText)
 	}
 
-	if mockGen.Step != 2 {
-		t.Errorf("Expected mock generator to be called exactly twice, was called %d times", mockGen.Step)
+	if mockGen.Step != 3 {
+		t.Errorf("Expected mock generator to be called exactly three times, was called %d times", mockGen.Step)
 	}
 }
 
@@ -187,7 +189,7 @@ func TestOmni_RestrictedAvatarTools(t *testing.T) {
 	})
 	_ = tx.Commit(ctx)
 
-	agent := NewCopilotAgent(Config{UseLegacyBaselineEngine: false}, map[string]sop.DatabaseOptions{}, sysDB)
+	agent := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
 
 	mockGen := &restrictedMockGenerator{}
 	agent.brain = mockGen

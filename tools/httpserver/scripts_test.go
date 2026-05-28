@@ -148,6 +148,50 @@ func TestHandleExecuteScript(t *testing.T) {
 	}
 }
 
+func TestHandleExecuteScript_DefaultsVerboseTrue(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbOpts := sop.DatabaseOptions{
+		Type:          sop.Clustered,
+		StoresFolders: []string{tmpDir},
+		CacheType:     sop.NoCache,
+	}
+	sysDB := database.NewDatabase(dbOpts)
+	registry := map[string]ai.Agent[map[string]any]{
+		"mock": &MockAgent{},
+	}
+	svc := agent.NewService(&GenericDomain{}, sysDB, map[string]sop.DatabaseOptions{"system": dbOpts}, &MockGenerator{}, nil, registry, false)
+	loadedAgents = map[string]ai.Agent[map[string]any]{"copilot": svc}
+
+	ctx := context.Background()
+	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	store, _ := sysDB.OpenModelStore(ctx, "scripts", tx)
+	store.Save(ctx, "general", "test_script", ai.Script{
+		Description: "A test script",
+		Parameters:  []string{"name"},
+		Steps: []ai.ScriptStep{{
+			Type:    "command",
+			Command: "echo",
+			Args:    map[string]any{"msg": "Hello {{.name}}"},
+		}},
+	})
+	tx.Commit(ctx)
+
+	reqBody := `{"name": "test_script", "args": {"name": "World"}}`
+	req, _ := http.NewRequest("POST", "/api/scripts/execute", strings.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handleExecuteScript(w, req)
+
+	body := w.Body.String()
+	if strings.Contains(body, `"type": "step_start"`) {
+		t.Fatalf("expected single-step execution to suppress step output, got: %s", body)
+	}
+	if !strings.Contains(body, "Echo: Hello World") {
+		t.Fatalf("expected script output, got: %s", body)
+	}
+}
+
 func TestHandleExecuteScript_Auth(t *testing.T) {
 	// Setup Config
 	config.EnableRestAuth = true

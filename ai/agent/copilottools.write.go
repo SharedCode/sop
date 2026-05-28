@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -13,6 +14,64 @@ import (
 	"github.com/sharedcode/sop/common"
 	"github.com/sharedcode/sop/jsondb"
 )
+
+var inferSpaceNamePatterns = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)["']([^"']+)["']\s+space\b`),
+	regexp.MustCompile(`(?i)\b(?:to|into|in|within|under|inside|for)\s+(?:my|the)\s+([A-Za-z0-9_.-]+(?:\s+[A-Za-z0-9_.-]+){0,3})\s+space\b`),
+	regexp.MustCompile(`(?i)\b(?:my|the)\s+([A-Za-z0-9_.-]+(?:\s+[A-Za-z0-9_.-]+){0,3})\s+space\b`),
+}
+
+var inferredSpaceNameStopwords = map[string]struct{}{
+	"current":  {},
+	"existing": {},
+	"new":      {},
+	"same":     {},
+	"selected": {},
+	"target":   {},
+	"this":     {},
+	"that":     {},
+}
+
+func resolveSpaceKBName(args map[string]any, payload *ai.SessionPayload) string {
+	for _, key := range []string{"kb_name", "name", "space_name", "space"} {
+		if value, ok := args[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	if payload == nil {
+		return ""
+	}
+	return inferSpaceKBNameFromQuery(payload.CurrentUserQuery)
+}
+
+func inferSpaceKBNameFromQuery(query string) string {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return ""
+	}
+	if strings.HasPrefix(strings.ToLower(query), "current database:") {
+		if idx := strings.Index(query, "\n"); idx >= 0 {
+			query = strings.TrimSpace(query[idx+1:])
+		}
+	}
+
+	for _, pattern := range inferSpaceNamePatterns {
+		matches := pattern.FindStringSubmatch(query)
+		if len(matches) < 2 {
+			continue
+		}
+		candidate := strings.TrimSpace(matches[1])
+		candidate = strings.Trim(candidate, " .,:;!?()[]{}")
+		if candidate == "" {
+			continue
+		}
+		if _, blocked := inferredSpaceNameStopwords[strings.ToLower(candidate)]; blocked {
+			continue
+		}
+		return candidate
+	}
+	return ""
+}
 
 func (a *CopilotAgent) toolAdd(ctx context.Context, args map[string]any) (string, error) {
 	// Stub Mode Check
@@ -70,6 +129,7 @@ func (a *CopilotAgent) toolAdd(ctx context.Context, args map[string]any) (string
 	var localTx bool
 
 	tx, localTx, err := a.resolveTransaction(ctx, db, dbName, sop.ForWriting)
+
 	if err != nil {
 		return "", err
 	}
@@ -226,6 +286,7 @@ func (a *CopilotAgent) toolUpdate(ctx context.Context, args map[string]any) (str
 	var localTx bool
 
 	tx, localTx, err := a.resolveTransaction(ctx, db, dbName, sop.ForWriting)
+
 	if err != nil {
 		return "", err
 	}
@@ -374,6 +435,7 @@ func (a *CopilotAgent) toolDelete(ctx context.Context, args map[string]any) (str
 	var localTx bool
 
 	tx, localTx, err := a.resolveTransaction(ctx, db, dbName, sop.ForWriting)
+
 	if err != nil {
 		return "", err
 	}
@@ -639,7 +701,7 @@ func (a *CopilotAgent) toolManageTransaction(ctx context.Context, args map[strin
 	}
 }
 
-func (a *CopilotAgent) toolEnrichKnowledgeBase(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolEnrichSpace(ctx context.Context, args map[string]any) (string, error) {
 	kbName, _ := args["kb_name"].(string)
 	if kbName == "" {
 		return "", fmt.Errorf("kb_name is required")
@@ -684,17 +746,9 @@ func (a *CopilotAgent) toolMintToSpace(ctx context.Context, args map[string]any)
 		return "", fmt.Errorf("session payload is missing")
 	}
 
-	kbName, ok := args["kb_name"].(string)
-	if !ok || kbName == "" {
-		if fallback, ok2 := args["name"].(string); ok2 && fallback != "" {
-			kbName = fallback
-		} else if fallback3, ok3 := args["space_name"].(string); ok3 && fallback3 != "" {
-			kbName = fallback3
-		} else if fallback4, ok4 := args["space"].(string); ok4 && fallback4 != "" {
-			kbName = fallback4
-		} else {
-			return "", fmt.Errorf("argument 'kb_name' is missing or not a string")
-		}
+	kbName := resolveSpaceKBName(args, p)
+	if kbName == "" {
+		return "", fmt.Errorf("argument 'kb_name' is missing or not a string")
 	}
 
 	content, ok := args["content"].(string)
@@ -745,6 +799,7 @@ func (a *CopilotAgent) toolMintToSpace(ctx context.Context, args map[string]any)
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("failed to commit transaction: %w", err)
 	}
+	emitSpaceMutationEvent(ctx, "mint", p.CurrentDB, kbName)
 
 	if a.service != nil {
 		// Optional: Trigger background enrichment for the created thought
@@ -755,5 +810,5 @@ func (a *CopilotAgent) toolMintToSpace(ctx context.Context, args map[string]any)
 		}()
 	}
 
-	return fmt.Sprintf("Successfully minted content to Knowledge Base '%s'.\n[[REFRESH_SPACES]]", kbName), nil
+	return fmt.Sprintf("Successfully minted content to Knowledge Base '%s'.\n[[REFRESH_SPACES:%s]]\n[[REFRESH_SPACE_VIEW:%s]]", kbName, kbName, kbName), nil
 }

@@ -63,7 +63,7 @@ func TestMemoryManager_IngestAndSleep(t *testing.T) {
 	itemTree := inmemory.NewBtree[ItemKey, Item[string]](true)
 
 	// Pull out the core Btree interface
-	store := NewStore[string](catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecTree.Btree, itemTree.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
+	store := NewStore[string]("test_kb", nil, catTree.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecTree.Btree, itemTree.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree)
 	mgr := NewMemoryManager[string](store, &MockLLM{}, &MockEmbedder{})
 
 	// 1. Test IngestThought

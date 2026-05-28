@@ -1,8 +1,11 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -23,6 +26,15 @@ type MockScriptedGenerator struct {
 
 func (m *MockScriptedGenerator) Name() string { return "mock_scripted" }
 func (m *MockScriptedGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	if strings.Contains(prompt, "Analyze the tool response") {
+		blocks := strings.Split(prompt, "[System Tool Response]:\n")
+		if len(blocks) > 1 {
+			sysResp := strings.SplitN(blocks[len(blocks)-1], "\n\nUser:", 2)[0]
+			return ai.GenOutput{Text: strings.TrimSpace(sysResp)}, nil
+		}
+		return ai.GenOutput{Text: "Task complete."}, nil
+	}
+
 	if m.Index >= len(m.Responses) {
 		return ai.GenOutput{Text: "No more mock responses"}, nil
 	}
@@ -406,6 +418,7 @@ func TestScriptSaveAs(t *testing.T) {
 }
 
 func TestScriptRecording_SelectTwice_Legacy(t *testing.T) {
+	t.Skip("Legacy tools removed")
 	// 1. Setup Temp DB
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
@@ -452,10 +465,9 @@ func TestScriptRecording_SelectTwice_Legacy(t *testing.T) {
 	}
 
 	agentCfg := Config{
-		ID:                      "copilot",
-		Name:                    "SQL Admin",
-		Description:             "SQL Admin",
-		UseLegacyBaselineEngine: true,
+		ID:          "copilot",
+		Name:        "SQL Admin",
+		Description: "SQL Admin",
 	}
 
 	dbName := filepath.Base(tmpDir)
@@ -906,6 +918,50 @@ type ErrorMockToolExecutor struct {
 	executed []string
 }
 
+type UnavailableMockToolExecutor struct{}
+
+func (m *UnavailableMockToolExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	return "", fmt.Errorf("tool '%s' not found or no executor available", toolName)
+}
+
+func (m *UnavailableMockToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return nil, nil
+}
+
+type FallbackExecuteScriptAgent struct{}
+
+func (a *FallbackExecuteScriptAgent) Open(ctx context.Context) error  { return nil }
+func (a *FallbackExecuteScriptAgent) Close(ctx context.Context) error { return nil }
+func (a *FallbackExecuteScriptAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
+	return nil, nil
+}
+func (a *FallbackExecuteScriptAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+	return "", nil
+}
+func (a *FallbackExecuteScriptAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	if toolName == "execute_script" {
+		return "ok", nil
+	}
+	return "", fmt.Errorf("unknown tool: %s", toolName)
+}
+
+type StreamingExecuteScriptMock struct{}
+
+func (m *StreamingExecuteScriptMock) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	streamer, _ := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer)
+	suppressInternalStepStart, _ := ctx.Value(CtxKeySuppressInternalStepStart).(bool)
+	if toolName == "execute_script" && streamer != nil && !suppressInternalStepStart {
+		streamer.Write(StepExecutionResult{Type: "step_start", Command: "scan", StepIndex: 3})
+		streamer.Write(StepExecutionResult{Type: "step_start", Command: "filter", StepIndex: 4})
+		streamer.Write(StepExecutionResult{Type: "step_start", Command: "return", StepIndex: 6})
+	}
+	return "done", nil
+}
+
+func (m *StreamingExecuteScriptMock) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return nil, nil
+}
+
 func (m *ErrorMockToolExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -976,6 +1032,177 @@ func TestScriptAsyncErrorPropagation(t *testing.T) {
 	// Fail should have executed.
 	// We can't easily check if sleep was cancelled without more complex mocking,
 	// but we can check that the test finished quickly (sleep didn't block for full duration).
+}
+
+func TestRunScript_ExecuteScriptFallsBackToServiceExecutor(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbOpts := sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{tmpDir},
+		CacheType:     sop.InMemory,
+	}
+	sysDB := database.NewDatabase(dbOpts)
+
+	ctx := context.Background()
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	store, err := sysDB.OpenModelStore(ctx, "scripts", tx)
+	if err != nil {
+		t.Fatalf("open scripts store: %v", err)
+	}
+	script := ai.Script{
+		Steps: []ai.ScriptStep{{
+			Type:    "command",
+			Command: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "return", "args": map[string]any{"value": "ok"}},
+			}},
+		}},
+	}
+	if err := store.Save(ctx, ai.DefaultScriptCategory, "expensive_orders", script); err != nil {
+		t.Fatalf("save script: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit tx: %v", err)
+	}
+
+	registry := map[string]ai.Agent[map[string]any]{"copilot": &FallbackExecuteScriptAgent{}}
+	svc := NewService(&MockDomain{}, sysDB, nil, nil, nil, registry, false)
+
+	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &UnavailableMockToolExecutor{})
+	resp, err := svc.Ask(ctx, "/run expensive_orders")
+	if err != nil {
+		t.Fatalf("/run failed: %v", err)
+	}
+	if !strings.Contains(resp, "ok") {
+		t.Fatalf("expected script output to contain ok, got: %s", resp)
+	}
+	if len(svc.session.LastInteractionToolCalls) == 0 {
+		t.Fatalf("expected script run to record executed tool calls, got none; response=%s", resp)
+	}
+	if svc.session.LastInteractionToolCalls[0].Command != "execute_script" {
+		t.Fatalf("expected first recorded command to be execute_script, got %#v", svc.session.LastInteractionToolCalls[0])
+	}
+}
+
+func TestRunStepCommand_ExecuteScriptSuppressesInnerStepHeaders(t *testing.T) {
+	svc := NewService(&MockDomain{}, nil, nil, nil, nil, nil, false)
+	var buf bytes.Buffer
+	streamer := NewNDJSONStreamer(&buf)
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &StreamingExecuteScriptMock{})
+	ctx = context.WithValue(ctx, CtxKeyJSONStreamer, streamer)
+	ctx = context.WithValue(ctx, "verbose", true)
+	ctx = context.WithValue(ctx, "step_index", 1)
+
+	var sb strings.Builder
+	step := ai.ScriptStep{Type: "command", Command: "execute_script", Args: map[string]any{"script": []any{}}}
+	if err := svc.runStepCommand(ctx, step, map[string]any{}, nil, &sb); err != nil {
+		t.Fatalf("runStepCommand failed: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected step header plus result record, got %d: %s", len(lines), buf.String())
+	}
+
+	var first StepExecutionResult
+	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil {
+		t.Fatalf("unmarshal first event: %v", err)
+	}
+	if first.Type != "step_start" || first.Command != "execute_script" || first.StepIndex != 1 {
+		t.Fatalf("expected first event to be execute_script step_start, got %#v", first)
+	}
+
+	countExecuteScript := 0
+	countInner := 0
+	countRecords := 0
+	for _, line := range lines {
+		var evt StepExecutionResult
+		if err := json.Unmarshal([]byte(line), &evt); err != nil {
+			t.Fatalf("unmarshal event: %v", err)
+		}
+		if evt.Type == "step_start" && evt.Command == "execute_script" {
+			countExecuteScript++
+		}
+		if evt.Type == "step_start" && (evt.Command == "scan" || evt.Command == "filter" || evt.Command == "return") {
+			countInner++
+		}
+		if evt.Type == "record" {
+			countRecords++
+		}
+	}
+	if countExecuteScript != 1 {
+		t.Fatalf("expected execute_script step_start once, got %d: %s", countExecuteScript, buf.String())
+	}
+	if countInner != 0 {
+		t.Fatalf("expected inner atomic step headers to be suppressed, got %d: %s", countInner, buf.String())
+	}
+	if countRecords != 1 {
+		t.Fatalf("expected execute_script result record once, got %d: %s", countRecords, buf.String())
+	}
+}
+
+func TestPlayScript_SingleStepSuppressesTopLevelStepStart(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbOpts := sop.DatabaseOptions{
+		Type:          sop.Standalone,
+		StoresFolders: []string{tmpDir},
+		CacheType:     sop.InMemory,
+	}
+	sysDB := database.NewDatabase(dbOpts)
+	ctx := context.Background()
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	store, err := sysDB.OpenModelStore(ctx, "scripts", tx)
+	if err != nil {
+		t.Fatalf("open scripts store: %v", err)
+	}
+	script := ai.Script{Steps: []ai.ScriptStep{{Type: "command", Command: "execute_script", Args: map[string]any{"script": []any{}}}}}
+	if err := store.Save(ctx, ai.DefaultScriptCategory, "expensive_orders", script); err != nil {
+		t.Fatalf("save script: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit tx: %v", err)
+	}
+
+	svc := NewService(&MockDomain{}, sysDB, nil, nil, nil, nil, false)
+	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &StreamingExecuteScriptMock{})
+	ctx = context.WithValue(ctx, "verbose", true)
+	ctx = context.WithValue(ctx, CtxKeyUseNDJSON, true)
+
+	var buf bytes.Buffer
+	if err := svc.PlayScript(ctx, "expensive_orders", ai.DefaultScriptCategory, map[string]any{}, &buf); err != nil {
+		t.Fatalf("PlayScript failed: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
+		t.Fatalf("expected streamed events, got: %q", buf.String())
+	}
+	hasRecord := false
+
+	for _, line := range lines {
+		var evt StepExecutionResult
+		if err := json.Unmarshal([]byte(line), &evt); err != nil {
+			t.Fatalf("unmarshal event: %v", err)
+		}
+		if evt.Type == "step_start" {
+			t.Fatalf("expected single-step playback to suppress step_start, got %s", buf.String())
+		}
+		if evt.Type == "record" {
+			hasRecord = true
+		}
+	}
+	if !hasRecord {
+		t.Fatalf("expected single-step playback to stream a result record, got %s", buf.String())
+	}
 }
 
 func TestToolScriptAddStepFromLast_MetaToolExclusion(t *testing.T) {

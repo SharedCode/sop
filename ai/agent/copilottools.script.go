@@ -128,8 +128,7 @@ func (a *CopilotAgent) toolCreateScript(ctx context.Context, args map[string]any
 	}
 
 	description, _ := args["description"].(string)
-	stepsList, _ := args["steps"].([]any)
-	steps, err := mapToScriptSteps(stepsList)
+	steps, err := mapScriptStepsArg(args, true)
 	if err != nil {
 		return "", fmt.Errorf("invalid steps: %v", err)
 	}
@@ -221,9 +220,7 @@ func (a *CopilotAgent) toolSaveScript(ctx context.Context, args map[string]any) 
 	}
 
 	description, _ := args["description"].(string)
-
-	stepsList, _ := args["steps"].([]any)
-	steps, err := mapToScriptSteps(stepsList)
+	steps, err := mapScriptStepsArg(args, false)
 	if err != nil {
 		return "", fmt.Errorf("invalid steps: %v", err)
 	}
@@ -272,6 +269,30 @@ func (a *CopilotAgent) toolSaveScript(ctx context.Context, args map[string]any) 
 	}
 
 	return fmt.Sprintf("Script '%s' saved successfully with %d steps.", name, len(steps)), nil
+}
+
+func mapScriptStepsArg(args map[string]any, allowEmpty bool) ([]ai.ScriptStep, error) {
+	if stepsRaw, ok := args["steps"]; ok {
+		stepsList, ok := stepsRaw.([]any)
+		if !ok {
+			return nil, fmt.Errorf("'steps' must be an array of step objects")
+		}
+		return mapToScriptSteps(stepsList)
+	}
+
+	if scriptRaw, ok := args["script"]; ok {
+		scriptList, ok := scriptRaw.([]any)
+		if !ok {
+			return nil, fmt.Errorf("'script' must be an array of step objects")
+		}
+		return mapToScriptSteps(scriptList)
+	}
+
+	if allowEmpty {
+		return nil, nil
+	}
+
+	return nil, fmt.Errorf("missing required script steps: provide 'script' or legacy alias 'steps'")
 }
 
 func printSteps(sb *strings.Builder, steps []ai.ScriptStep, indent int) {
@@ -828,4 +849,23 @@ func (a *CopilotAgent) toolScriptAddStepFromLast(ctx context.Context, args map[s
 	}
 
 	return fmt.Sprintf("Step added to script '%s'", scriptName), nil
+}
+
+func (a *CopilotAgent) registerScriptTools(ctx context.Context) {
+	a.registry.Register("list_scripts", "Lists all available scripts.", "()", a.toolListScripts)
+	a.registry.Register("create_script", "Creates a new named script. Use this when the script does not already exist. Provide the full script as `script` (preferred) or legacy alias `steps`.", "(name: string, description?: string, script?: list<object>, steps?: list<object>)", a.toolCreateScript)
+	a.registry.Register("save_script", "Saves or replaces a full script definition. Use this to overwrite/update an existing script. Provide the full script as `script` (preferred) or legacy alias `steps`.", "(name: string, description?: string, script?: list<object>, steps?: list<object>)", a.toolSaveScript)
+	a.registry.Register("get_script_details", "Get details of a specific script.", "(name: string)", a.toolGetScriptDetails)
+	a.registry.Register("save_step", "Appends a new step to a script. Usage: save_step(script='MyScript', type='command', command='select', ...).", "(script: string, ...step_def)", a.toolScriptSaveStep)
+	a.registry.Register("insert_step", "Insert a step into a script.", "(script: string, index: number, type: string, description: string, name: string, ...params)", a.toolScriptInsertStep)
+	a.registry.Register("delete_step", "Delete a step from a script.", "(script: string, index: number)", a.toolScriptDeleteStep)
+	a.registry.Register("update_step", "Update a step in a script.", "(script: string, index: number, description: string, name: string, ...params)", a.toolScriptUpdateStep)
+	a.registry.Register("reorder_steps", "Move a step in a script to a new position.", "(script: string, from_index: number, to_index: number)", a.toolScriptReorderSteps)
+	a.registry.Register("save_last_step", "Add the last executed tool call as a new step to a script. If 'index' is not provided, it appends to the end. If 'index' is provided, it inserts 'after' that index by default, unless 'position' is set to 'before'.", "(script: string, index: number, position: string, description: string, name: string)", a.toolScriptAddStepFromLast)
+	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new script or block.", "(mode: string, name: string)", a.toolRefactorScript)
+
+	var ops = `["open_db", "begin_tx", "commit_tx", "rollback_tx", "open_store", "scan", "select", "filter", "sort", "project", "limit", "join", "join_right", "update", "delete", "inspect", "defer", "assign", "if", "loop", "call_script", "script", "call_function", "list_new", "list_append", "map_merge", "first", "last", "next", "previous", "find", "add", "get_current_key", "get_current_value", "return"]`
+	var schemaTemplate = `{"type": "object", "properties": {"script": {"type": "array", "description": "Ordered AST steps. Use result_var on a data-producing step and input_var on the next step to preserve pipeline flow.", "items": {"type": "object", "properties": {"op": {"type": "string", "enum": %s, "description": "Operation name. For joins, use explicit store-based joins like join/store/on or join_right/store/on."}, "args": {"type": "object", "description": "Operation arguments. Examples: filter uses {condition:{field:{\"$eq\":value}}}; sort uses {fields:[\"age desc\"]}; join uses {store:\"users_orders\", on:{\"user_id\":\"key\"}}."}, "input_var": {"type": "string", "description": "Optional variable name used as input for pipeline chaining."}, "result_var": {"type": "string", "description": "Optional variable name to store the result for later steps; set this before any inserted control step can overwrite LastResult."}}, "required": ["op"]}}}, "required": ["script"]}`
+	schema := fmt.Sprintf(schemaTemplate, ops)
+	a.registry.RegisterWithUI("execute_script", "Executes a multi-step programmatic script for advanced queries.", ExecuteScriptInstruction, schema, a.toolExecuteScript)
 }

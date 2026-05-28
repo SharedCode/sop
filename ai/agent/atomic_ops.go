@@ -282,11 +282,16 @@ func toFloat(v any) (float64, bool) {
 // sanitizeScript performs a pass over the script instructions to clean up common LLM errors.
 // This is the "Compiler/Linter" phase before execution.
 func sanitizeScript(script []ScriptInstruction) []ScriptInstruction {
+	script = normalizeScriptCompatibilityShapes(script)
 
 	varOrigins := make(map[string]string)
+	hasExplicitOutput := false
 
 	for i := range script {
 		instr := &script[i]
+		if instr.Op == "return" || instr.ResultVar == "output" || instr.ResultVar == "final_result" || instr.ResultVar == "result" {
+			hasExplicitOutput = true
+		}
 
 		if instr.Op == "scan" || instr.Op == "open_store" {
 			if store, ok := instr.Args["store"].(string); ok {
@@ -432,5 +437,271 @@ func sanitizeScript(script []ScriptInstruction) []ScriptInstruction {
 			}
 		}
 	}
+	if !hasExplicitOutput && scriptEndsWithTerminalControl(script) {
+		for i := len(script) - 1; i >= 0; i-- {
+			if isTerminalControlOp(script[i].Op) {
+				continue
+			}
+			if isImplicitOutputCandidate(script[i].Op) && script[i].ResultVar == "" {
+				script[i].ResultVar = "output"
+			}
+			break
+		}
+	}
 	return script
+}
+
+func normalizeScriptCompatibilityShapes(script []ScriptInstruction) []ScriptInstruction {
+	normalized := make([]ScriptInstruction, 0, len(script)+2)
+	openStores := make(map[string]string)
+	currentTxVar := ""
+
+	for _, instr := range script {
+		instr := instr
+		instr.Args = cloneAnyMap(instr.Args)
+
+		normalizeLegacyFilterArgs(&instr)
+		normalizeReturnVariableReference(&instr)
+
+		if strings.EqualFold(instr.Op, "begin_tx") && strings.TrimSpace(instr.ResultVar) != "" {
+			currentTxVar = strings.TrimSpace(instr.ResultVar)
+		}
+
+		normalizeImplicitOpenStoreResultVar(&instr)
+
+		if strings.EqualFold(instr.Op, "open_store") {
+			if storeName, _ := instr.Args["name"].(string); strings.TrimSpace(storeName) != "" && strings.TrimSpace(instr.ResultVar) != "" {
+				openStores[strings.TrimSpace(storeName)] = strings.TrimSpace(instr.ResultVar)
+			}
+		}
+
+		if expanded, ok := expandRelationTargetJoin(instr, openStores, currentTxVar); ok {
+			if strings.TrimSpace(instr.InputVar) == "" && len(expanded) > 0 {
+				compatInputVar := captureImplicitPipelineInput(normalized, len(normalized))
+				if compatInputVar != "" {
+					for idx := range expanded {
+						if strings.EqualFold(expanded[idx].Op, "join") {
+							expanded[idx].InputVar = compatInputVar
+							break
+						}
+					}
+				}
+			}
+			normalized = append(normalized, expanded...)
+			for _, step := range expanded {
+				if strings.EqualFold(step.Op, "open_store") {
+					if storeName, _ := step.Args["name"].(string); strings.TrimSpace(storeName) != "" && strings.TrimSpace(step.ResultVar) != "" {
+						openStores[strings.TrimSpace(storeName)] = strings.TrimSpace(step.ResultVar)
+					}
+				}
+			}
+			continue
+		}
+
+		normalized = append(normalized, instr)
+	}
+
+	return normalized
+}
+
+func normalizeImplicitOpenStoreResultVar(instr *ScriptInstruction) {
+	if instr == nil || !strings.EqualFold(instr.Op, "open_store") {
+		return
+	}
+	if strings.TrimSpace(instr.ResultVar) != "" || instr.Args == nil {
+		return
+	}
+	storeName, _ := instr.Args["name"].(string)
+	if strings.TrimSpace(storeName) == "" {
+		storeName, _ = instr.Args["store"].(string)
+	}
+	storeName = strings.TrimSpace(storeName)
+	if storeName == "" {
+		return
+	}
+	instr.ResultVar = storeName
+}
+
+func normalizeReturnVariableReference(instr *ScriptInstruction) {
+	if instr == nil || !strings.EqualFold(instr.Op, "return") || instr.Args == nil {
+		return
+	}
+	valueMap, ok := instr.Args["value"].(map[string]any)
+	if !ok || len(valueMap) != 1 {
+		return
+	}
+	varName, ok := valueMap["$var"].(string)
+	if !ok || strings.TrimSpace(varName) == "" {
+		return
+	}
+	instr.Args["value"] = "@" + strings.TrimSpace(varName)
+}
+
+func captureImplicitPipelineInput(script []ScriptInstruction, stepIndex int) string {
+	if len(script) == 0 {
+		return ""
+	}
+	last := &script[len(script)-1]
+	if strings.TrimSpace(last.ResultVar) != "" {
+		return strings.TrimSpace(last.ResultVar)
+	}
+	if !isImplicitOutputCandidate(last.Op) {
+		return ""
+	}
+	compatVar := fmt.Sprintf("__compat_input_%d", stepIndex)
+	last.ResultVar = compatVar
+	return compatVar
+}
+
+func normalizeLegacyFilterArgs(instr *ScriptInstruction) {
+	if instr == nil || !strings.EqualFold(instr.Op, "filter") {
+		return
+	}
+	if instr.Args == nil {
+		return
+	}
+	if _, hasCondition := instr.Args["condition"]; hasCondition {
+		return
+	}
+	field, _ := instr.Args["field"].(string)
+	operator, _ := instr.Args["op"].(string)
+	value, hasValue := instr.Args["value"]
+	field = strings.TrimSpace(field)
+	operator = strings.TrimSpace(operator)
+	if field == "" || operator == "" || !hasValue {
+		return
+	}
+
+	condition := map[string]any{}
+	switch operator {
+	case "==", "=":
+		condition[field] = map[string]any{"$eq": value}
+	case "!=":
+		condition[field] = map[string]any{"$ne": value}
+	case ">":
+		condition[field] = map[string]any{"$gt": value}
+	case ">=":
+		condition[field] = map[string]any{"$gte": value}
+	case "<":
+		condition[field] = map[string]any{"$lt": value}
+	case "<=":
+		condition[field] = map[string]any{"$lte": value}
+	default:
+		condition[field] = value
+	}
+	instr.Args["condition"] = condition
+	delete(instr.Args, "field")
+	delete(instr.Args, "op")
+	delete(instr.Args, "value")
+}
+
+func expandRelationTargetJoin(instr ScriptInstruction, openStores map[string]string, currentTxVar string) ([]ScriptInstruction, bool) {
+	if !(strings.EqualFold(instr.Op, "join") || strings.EqualFold(instr.Op, "join_right")) {
+		return nil, false
+	}
+	if instr.Args == nil {
+		return nil, false
+	}
+	if _, hasDirectStore := instr.Args["with"]; hasDirectStore {
+		return nil, false
+	}
+	if _, hasDirectStore := instr.Args["store"]; hasDirectStore {
+		return nil, false
+	}
+	if _, hasDirectStore := instr.Args["right_store"]; hasDirectStore {
+		return nil, false
+	}
+	relationName, _ := instr.Args["relation"].(string)
+	targetVar, _ := instr.Args["target"].(string)
+	relationName = strings.TrimSpace(relationName)
+	targetVar = strings.TrimSpace(targetVar)
+	if relationName == "" || targetVar == "" {
+		return nil, false
+	}
+
+	relationVar := openStores[relationName]
+	steps := make([]ScriptInstruction, 0, 3)
+	if relationVar == "" {
+		relationVar = relationName
+		openArgs := map[string]any{"name": relationName}
+		if currentTxVar != "" {
+			openArgs["transaction"] = currentTxVar
+		}
+		steps = append(steps, ScriptInstruction{
+			Op:        "open_store",
+			Args:      openArgs,
+			ResultVar: relationVar,
+		})
+	}
+
+	joinType, _ := instr.Args["type"].(string)
+	joinType = strings.TrimSpace(joinType)
+	if joinType == "" {
+		joinType = "inner"
+	}
+
+	intermediateVar := relationName + "__joined"
+	if strings.TrimSpace(instr.ResultVar) != "" {
+		intermediateVar = instr.ResultVar + "__bridge"
+	}
+
+	steps = append(steps,
+		ScriptInstruction{
+			Op:        "join",
+			Args:      map[string]any{"store": relationVar, "type": joinType, "on": map[string]any{"key": "key"}},
+			InputVar:  instr.InputVar,
+			ResultVar: intermediateVar,
+		},
+		ScriptInstruction{
+			Op:        "join",
+			Args:      map[string]any{"store": targetVar, "type": joinType, "on": map[string]any{"value": "key"}},
+			InputVar:  intermediateVar,
+			ResultVar: instr.ResultVar,
+		},
+	)
+
+	return steps, true
+}
+
+func cloneAnyMap(input map[string]any) map[string]any {
+	if input == nil {
+		return nil
+	}
+	cloned := make(map[string]any, len(input))
+	for key, value := range input {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func scriptEndsWithTerminalControl(script []ScriptInstruction) bool {
+	for i := len(script) - 1; i >= 0; i-- {
+		op := strings.TrimSpace(script[i].Op)
+		if op == "" {
+			continue
+		}
+		return isTerminalControlOp(op)
+	}
+	return false
+}
+
+func isTerminalControlOp(op string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(op))
+	switch normalized {
+	case "commit_tx", "rollback_tx":
+		return true
+	case "defer":
+		return true
+	default:
+		return false
+	}
+}
+
+func isImplicitOutputCandidate(op string) bool {
+	switch strings.ToLower(strings.TrimSpace(op)) {
+	case "scan", "select", "filter", "sort", "project", "limit", "join", "join_right", "find", "first", "last", "next", "previous", "get_current_key", "get_current_value", "inspect":
+		return true
+	default:
+		return false
+	}
 }

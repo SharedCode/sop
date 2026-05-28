@@ -125,6 +125,32 @@ func init() {
 				if lower == "sop" || strings.HasPrefix(lower, "memory_") || lower == "longtermmemory" || lower == "long_term_memory" {
 					return false
 				}
+
+				// Check if the Space has been vectorized, otherwise it cannot be used by AI.
+				// For performance, handleListSpaces injects a map of vectorized spaces into the context.
+				type vecMapKey struct{}
+				if vMap, ok := ctx.Value("vectorized_spaces").(map[string]bool); ok {
+					return vMap[entCtx.AssetID]
+				}
+
+				// Fallback slow path (if evaluated outside of handleListSpaces)
+				dbOpts, err := getDBOptions(ctx, entCtx.Database)
+				if err == nil {
+					db := aidb.NewDatabase(dbOpts)
+					tx, _ := db.BeginTransaction(ctx, sop.ForReading)
+					if tx != nil {
+						kb, errKB := db.OpenKnowledgeBase(ctx, entCtx.AssetID, tx, nil, nil, false)
+						if errKB == nil && kb != nil {
+							cfg, cfgErr := kb.GetConfig(ctx)
+							if cfgErr == nil && cfg != nil && cfg.LastVectorized == 0 {
+								tx.Rollback(ctx)
+								return false
+							}
+						}
+						tx.Rollback(ctx)
+					}
+				}
+
 				return true
 			}
 
@@ -311,7 +337,7 @@ func main() {
 
 	// Setup Routes
 	http.HandleFunc("/", handleIndex)
-http.HandleFunc("/viewer", handleViewer)
+	http.HandleFunc("/viewer", handleViewer)
 	http.HandleFunc("/api/databases", handleDatabases)
 	http.HandleFunc("/api/databases/update", handleUpdateDatabase)
 	http.HandleFunc("/api/stores", handleListStores)
@@ -1220,6 +1246,23 @@ func handleListSpaces(w http.ResponseWriter, r *http.Request) {
 		// Ensure we output [] instead of null in JSON if no playbooks exist
 		filtered = make([]string, 0)
 	}
+
+	// PRE-FETCH vectorization status in one transaction for performance
+	vectorizedMap := make(map[string]bool)
+	tx, _ := db.BeginTransaction(ctx, sop.ForReading)
+	if tx != nil {
+		for _, name := range filtered {
+			kb, errKB := db.OpenKnowledgeBase(ctx, name, tx, nil, nil, false)
+			if errKB == nil && kb != nil {
+				cfg, cfgErr := kb.GetConfig(ctx)
+				if cfgErr == nil && cfg != nil && cfg.LastVectorized > 0 {
+					vectorizedMap[name] = true
+				}
+			}
+		}
+		tx.Rollback(ctx)
+	}
+	ctx = context.WithValue(ctx, "vectorized_spaces", vectorizedMap)
 
 	itemRBAC := make(map[string]sop.ContextRBACMap)
 	for _, name := range filtered {

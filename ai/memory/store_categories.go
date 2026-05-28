@@ -5,7 +5,12 @@ import (
 	"fmt"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/btree"
 )
+
+func (s *store[T]) CategoriesByDistance(ctx context.Context) (btree.BtreeInterface[DistanceKey, byte], error) {
+	return s.categoriesByDistance, nil
+}
 
 // AddCategory dynamically inserts a new explicit sub-category directly into the B-Tree.
 // During creation, it only links to the Primary Parent (the first parent in the array).
@@ -155,4 +160,8 @@ func (s *store[T]) updateCategoryParent(ctx context.Context, categoryID sop.UUID
 
 	_, err = s.categories.UpdateCurrentItem(ctx, categoryID, category)
 	return err
+}
+
+func (s *store[T]) CategoriesByPath(ctx context.Context) (btree.BtreeInterface[string, sop.UUID], error) {
+	return s.categoriesByPath, nil
 }

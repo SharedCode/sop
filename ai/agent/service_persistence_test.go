@@ -4,6 +4,10 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/database"
 )
 
 func TestScriptDrafting_Persistence(t *testing.T) {
@@ -98,5 +102,89 @@ func TestScriptDrafting_Persistence(t *testing.T) {
 		if lastStep.Prompt != "explicit-instruction" {
 			t.Errorf("Expected last step 'explicit-instruction', got '%s'", lastStep.Prompt)
 		}
+	}
+}
+
+func TestSaveDraft_BootstrapsFromLastInteractionToolCalls(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+	svc := NewService(&MockDomain{}, sysDB, nil, &MockGenerator{Response: "OK"}, nil, nil, false)
+
+	svc.session.CurrentScript = &ai.Script{Steps: []ai.ScriptStep{}}
+	svc.session.CurrentScriptName = "expensive_orders"
+	svc.session.CurrentScriptCategory = ai.DefaultScriptCategory
+	svc.session.LastInteractionToolCalls = []ai.ScriptStep{{
+		Type:    "command",
+		Command: "execute_script",
+		Args: map[string]any{
+			"script": []any{
+				map[string]any{"op": "begin_tx", "args": map[string]any{"mode": "read"}, "result_var": "tx"},
+				map[string]any{"op": "open_store", "args": map[string]any{"name": "orders", "transaction": "tx"}, "result_var": "orders_store"},
+			},
+		},
+	}}
+
+	if err := svc.saveDraft(ctx); err != nil {
+		t.Fatalf("saveDraft failed: %v", err)
+	}
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("begin read tx: %v", err)
+	}
+	store, err := sysDB.OpenModelStore(ctx, "scripts", tx)
+	if err != nil {
+		t.Fatalf("open scripts store: %v", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var saved ai.Script
+	if err := store.Load(ctx, ai.DefaultScriptCategory, "expensive_orders", &saved); err != nil {
+		t.Fatalf("load saved script: %v", err)
+	}
+	if len(saved.Steps) != 1 {
+		t.Fatalf("expected 1 bootstrapped step, got %d", len(saved.Steps))
+	}
+	if saved.Steps[0].Type != "command" || saved.Steps[0].Command != "execute_script" {
+		t.Fatalf("expected execute_script command step, got %#v", saved.Steps[0])
+	}
+}
+
+func TestToolSaveScript_AcceptsScriptAlias(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+	agent := NewCopilotAgent(Config{}, nil, sysDB)
+
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
+	resp, err := agent.toolSaveScript(ctx, map[string]any{
+		"name":        "expensive_orders",
+		"description": "Find orders over 1000",
+		"script": []any{
+			map[string]any{"type": "command", "command": "execute_script", "args": map[string]any{"script": []any{map[string]any{"op": "begin_tx", "args": map[string]any{"mode": "read"}, "result_var": "tx"}}}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("toolSaveScript failed: %v", err)
+	}
+	if !strings.Contains(resp, "saved successfully with 1 steps") {
+		t.Fatalf("unexpected response: %s", resp)
+	}
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("begin read tx: %v", err)
+	}
+	store, err := sysDB.OpenModelStore(ctx, "scripts", tx)
+	if err != nil {
+		t.Fatalf("open scripts store: %v", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var saved ai.Script
+	if err := store.Load(ctx, ai.DefaultScriptCategory, "expensive_orders", &saved); err != nil {
+		t.Fatalf("load saved script: %v", err)
+	}
+	if len(saved.Steps) != 1 {
+		t.Fatalf("expected 1 saved step, got %d", len(saved.Steps))
 	}
 }

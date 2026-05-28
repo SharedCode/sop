@@ -77,13 +77,28 @@ type geminiFunctionCall struct {
 
 type geminiResponse struct {
 	Candidates []struct {
-		Content struct {
+		FinishReason string `json:"finishReason,omitempty"`
+		Content      struct {
 			Parts []geminiPart `json:"parts"`
 		} `json:"content"`
 	} `json:"candidates"`
+	PromptFeedback *struct {
+		BlockReason string `json:"blockReason,omitempty"`
+	} `json:"promptFeedback,omitempty"`
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error,omitempty"`
+}
+
+func describeGeminiEmptyResponse(resp geminiResponse) string {
+	parts := []string{"no candidates returned from gemini"}
+	if resp.PromptFeedback != nil && strings.TrimSpace(resp.PromptFeedback.BlockReason) != "" {
+		parts = append(parts, fmt.Sprintf("block_reason=%s", resp.PromptFeedback.BlockReason))
+	}
+	if len(resp.Candidates) > 0 && strings.TrimSpace(resp.Candidates[0].FinishReason) != "" {
+		parts = append(parts, fmt.Sprintf("finish_reason=%s", resp.Candidates[0].FinishReason))
+	}
+	return strings.Join(parts, "; ")
 }
 
 // Generate sends a prompt to the Gemini API and returns the generated text.
@@ -165,7 +180,7 @@ func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions
 	}
 
 	if len(geminiResp.Candidates) == 0 || len(geminiResp.Candidates[0].Content.Parts) == 0 {
-		return ai.GenOutput{}, fmt.Errorf("no candidates returned from gemini")
+		return ai.GenOutput{}, fmt.Errorf("%s", describeGeminiEmptyResponse(geminiResp))
 	}
 
 	var out ai.GenOutput

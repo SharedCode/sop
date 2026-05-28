@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
 )
 
 func (a *CopilotAgent) toolRouteToMultiKB(ctx context.Context, args map[string]any) (string, error) {
@@ -55,7 +52,7 @@ func (a *CopilotAgent) toolRouteToMultiKB(ctx context.Context, args map[string]a
 				return
 			}
 
-			res, err := a.searchKnowledgeBase(ctx, db, kbName, query, limit)
+			res, err := a.searchKnowledgeBase(ctx, db, kbName, query, "", "", true, limit)
 
 			mu.Lock()
 			defer mu.Unlock()
@@ -100,94 +97,9 @@ func (a *CopilotAgent) toolHandoffToAvatar(ctx context.Context, args map[string]
 	return a.executeAvatarSubAgent(ctx, avatarName, string(taskContextBytes))
 }
 
-func (a *CopilotAgent) executeAvatarSubAgent(ctx context.Context, avatarName, taskContext string) (string, error) {
-	avatarPrompt := ""
-	var allowedTools []string
+func (a *CopilotAgent) registerRoutingTools(ctx context.Context) {
+	a.registry.RegisterWithUI("route_to_multi_kb", "Routes a query to multiple specific knowledge bases.", "Executes query across given KBs", "(kb_names: Array<string>, optimized_query: string)", a.toolRouteToMultiKB)
+	a.registry.RegisterWithUI("handoff_to_avatar", "Yields control to an Avatar-specific Knowledge Base to execute a task.", "Handoff to an Avatar", "(avatar_kb_name: string, task_context: object)", a.toolHandoffToAvatar)
 
-	if a.systemDB != nil {
-		if tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-			if kb, err := a.systemDB.OpenKnowledgeBase(ctx, avatarName, tx, nil, nil, false); err == nil {
-				if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil {
-					if cfg.SystemPrompt != "" {
-						avatarPrompt = cfg.SystemPrompt
-					}
-					allowedTools = cfg.AllowedTools
-				}
-			}
-			tx.Rollback(ctx)
-		}
-	}
-
-	if avatarPrompt == "" {
-		avatarPrompt = fmt.Sprintf("You are the %s Avatar. Your task is strictly limited to your domain.", avatarName)
-	}
-
-	avatarPrompt += fmt.Sprintf("\n\nTask Context from Omni Supervisor:\n%s", taskContext)
-
-	engine := &NativeReActEngine{
-		EnableObfuscation: false, // Inherit or check ctx if needed
-	}
-
-	// Wrapper to restrict tools based on the KB config.
-	var executor ai.ToolExecutor = a
-	if allowedTools != nil {
-		executor = &restrictedExecutor{
-			base:         a,
-			allowedTools: allowedTools,
-		}
-	}
-
-	req := ai.ReasoningRequest{
-		SystemPrompt: avatarPrompt,
-		UserQuery:    "Execute the task outlined in your context.",
-		Executor:     executor,
-		Generator:    a.resolveGenerator(ctx),
-	}
-
-	resp, err := engine.Run(ctx, req)
-	if err != nil {
-		return "", fmt.Errorf("avatar execution failed: %w", err)
-	}
-
-	return fmt.Sprintf("Avatar %s completed task: \n%s", avatarName, resp.FinalText), nil
-}
-
-type restrictedExecutor struct {
-	base         ai.ToolExecutor
-	allowedTools []string
-}
-
-func (re *restrictedExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
-	allowed := false
-	for _, t := range re.allowedTools {
-		if t == toolName {
-			allowed = true
-			break
-		}
-	}
-	if !allowed {
-		return "", fmt.Errorf("access denied: tool '%s' is not in the allowed list for this Avatar", toolName)
-	}
-	return re.base.Execute(ctx, toolName, args)
-}
-
-func (re *restrictedExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
-	all, err := re.base.ListTools(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var filtered []ai.ToolDefinition
-	for _, def := range all {
-		allowed := false
-		for _, t := range re.allowedTools {
-			if t == def.Name {
-				allowed = true
-				break
-			}
-		}
-		if allowed {
-			filtered = append(filtered, def)
-		}
-	}
-	return filtered, nil
+	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", "(summary: string, topic_label: string)", a.toolConcludeTopic)
 }

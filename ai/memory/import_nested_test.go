@@ -17,7 +17,7 @@ func TestImportJSON_NestedCategories(t *testing.T) {
 	cats := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecs := inmemory.NewBtree[VectorKey, Vector](true)
 	items := inmemory.NewBtree[ItemKey, Item[string]](true)
-	st := NewStore[string](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[string])
+	st := NewStore[string]("test_kb", nil, cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[string])
 	st.SetTextIndex(&MockTextIndex{})
 	kb := &KnowledgeBase[string]{
 		Store:   st,
@@ -84,7 +84,7 @@ func TestImportJSON_RealSOPKnowledgeBase(t *testing.T) {
 	cats := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecs := inmemory.NewBtree[VectorKey, Vector](true)
 	items := inmemory.NewBtree[ItemKey, Item[map[string]any]](true)
-	st := NewStore[map[string]any](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[map[string]any])
+	st := NewStore[map[string]any]("test_kb", nil, cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[map[string]any])
 	st.SetTextIndex(&MockTextIndex{})
 	kb := &KnowledgeBase[map[string]any]{
 		Store:   st,

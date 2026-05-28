@@ -18,7 +18,7 @@ func TestExportImportJSON(t *testing.T) {
 	cats := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecs := inmemory.NewBtree[VectorKey, Vector](true)
 	items := inmemory.NewBtree[ItemKey, Item[string]](true)
-	st := NewStore[string](cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[string])
+	st := NewStore[string]("test_kb", nil, cats.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs.Btree, items.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[string])
 	st.SetTextIndex(&MockTextIndex{})
 	kb := &KnowledgeBase[string]{
 		Store:   st,
@@ -55,7 +55,7 @@ func TestExportImportJSON(t *testing.T) {
 	cats2 := inmemory.NewBtree[sop.UUID, *Category](true)
 	vecs2 := inmemory.NewBtree[VectorKey, Vector](true)
 	items2 := inmemory.NewBtree[ItemKey, Item[string]](true)
-	st2 := NewStore[string](cats2.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs2.Btree, items2.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[string])
+	st2 := NewStore[string]("test_kb", nil, cats2.Btree, inmemory.NewBtree[string, sop.UUID](false).Btree, inmemory.NewBtree[DistanceKey, byte](false).Btree, vecs2.Btree, items2.Btree, inmemory.NewBtree[sop.UUID, Document](false).Btree).(*store[string])
 	st2.SetTextIndex(&MockTextIndex{})
 	kb2 := &KnowledgeBase[string]{
 		Store:   st2,

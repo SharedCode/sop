@@ -1046,11 +1046,13 @@ async function saveNewKB() {
     };
     
     apiCall('/api/spaces/create', 'POST', createData)
-    .then(() => {
+    .then(async () => {
         showAlert("Space created successfully!");
         closeAddKBModal();
-        if (typeof selectDatabase === "function") {
-            selectDatabase(currentDatabase, true, kbName);
+        if (typeof refreshSpacesList === "function" && currentDatabase) {
+            await refreshSpacesList(currentDatabase, kbName);
+        } else if (typeof selectDatabase === "function") {
+            await selectDatabase(currentDatabase, true, kbName);
         }
     }).catch(err => {
         showAlert("Error creating Space: " + err.message);

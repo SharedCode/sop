@@ -60,17 +60,6 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 		emb = embed.NewSimple(cfg.ID+"-embed", 1024, cfg.Synonyms)
 	}
 
-	// Check requirements
-	req := cfg.Requirements
-	if req == nil {
-		// Default behavior: Disable all storage if not explicitly required
-		req = &Requirements{VectorStore: false, Search: false, ModelStore: false}
-	}
-
-	if !req.VectorStore && !req.ModelStore && !req.Search {
-		return emb, nil, cfg.ID, vector.Config{}, nil
-	}
-
 	// 2. Initialize Vector Database
 	storagePath := cfg.StoragePath
 	if storagePath != "" {
@@ -151,7 +140,7 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (ai.Agent
 	if cfg.Generator.Type != "" {
 		var err error
 		// Pass global obfuscation setting to generator options
-		if cfg.EnableObfuscation {
+		if enableObf, _ := cfg.Params["enable_obfuscation"].(bool); enableObf {
 			if cfg.Generator.Options == nil {
 				cfg.Generator.Options = make(map[string]any)
 			}
@@ -292,8 +281,9 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (ai.Agent
 	// 4. Create Agent Service
 	// If the generator is "copilot" and obfuscation is enabled, the generator handles it internally.
 	// Therefore, we disable Service-level obfuscation to avoid double-obfuscation.
-	serviceObfuscation := cfg.EnableObfuscation
-	if cfg.Generator.Type == ai.AgentTypeCopilot && cfg.EnableObfuscation {
+	enableObf, _ := cfg.Params["enable_obfuscation"].(bool)
+	serviceObfuscation := enableObf
+	if cfg.Generator.Type == ai.AgentTypeCopilot && enableObf {
 		serviceObfuscation = false
 	}
 

@@ -1347,6 +1347,11 @@ func (s *Service) saveDraft(ctx context.Context) error {
 	if s.session.CurrentScript == nil {
 		return fmt.Errorf("no active script draft")
 	}
+	if len(s.session.CurrentScript.Steps) == 0 && len(s.session.LastInteractionToolCalls) > 0 {
+		bootstrapped := make([]ai.ScriptStep, len(s.session.LastInteractionToolCalls))
+		copy(bootstrapped, s.session.LastInteractionToolCalls)
+		s.session.CurrentScript.Steps = RefineScriptSteps(bootstrapped)
+	}
 	scriptDB := s.getScriptDB()
 	if scriptDB == nil {
 		return fmt.Errorf("no database configured")

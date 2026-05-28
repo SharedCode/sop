@@ -50,6 +50,10 @@ func RunLoop(ctx context.Context, agent ai.Agent[map[string]any], r io.Reader, w
 
 		// Inject writer into context for streaming output
 		loopCtx := context.WithValue(ctx, ai.CtxKeyWriter, w)
+		loopCtx = context.WithValue(loopCtx, "verbose", true)
+		loopCtx = context.WithValue(loopCtx, ai.CtxKeyProgressSink, func(msg string) {
+			fmt.Fprintf(w, "\n[Progress] %s\n", msg)
+		})
 
 		answer, err := agent.Ask(loopCtx, input)
 		if err != nil {

@@ -196,7 +196,7 @@ with db.begin_transaction(ctx) as t:
 
     k2 = DocKey(doc_id=101, is_deleted=True, timestamp=int(time.time()))
     store.add(ctx, Item(key=k2, value="Large Content B..."))
-
+```
 ## 5. Simplified Lookup (Dictionary Keys)
 
 While the Producer application (which creates the store) should use strict Dataclasses and IndexSpecifications to ensure data integrity, Consumer applications can be loosely coupled. You can search for items using plain Python dictionaries as long as the keys match the structure defined in the B-Tree.
@@ -367,7 +367,7 @@ with db.begin_transaction(ctx) as t:
         print(f"Doc: {r.DocID}, Score: {r.Score}")
 ```
 
-## 4. Managing Stores (Remove Btree)
+## 9. Managing Stores (Remove Btree)
 
 You can remove a B-Tree store from the database. This action is permanent and deletes all data associated with the store.
 
@@ -404,7 +404,7 @@ with db.begin_transaction(ctx) as t:
 ```
 
 
-## 4. Concurrent Transactions (Swarm Computing)
+## 10. Concurrent Transactions (Swarm Computing)
 
 SOP supports "Swarm Computing" where multiple threads or processes can modify the same B-Tree concurrently without external locks. SOP handles conflict detection and merging automatically.
 
@@ -462,7 +462,7 @@ for t in threads:
     t.join()
 ```
 
-## 5. Modeling Relations
+## 11. Modeling Relations
 
 SOP uses **Relations Metadata** to define connections between stores. This metadata is sufficient for the Join Tool and AI Agents to navigate most relationships (One-to-One, One-to-Many, Many-to-One).
 

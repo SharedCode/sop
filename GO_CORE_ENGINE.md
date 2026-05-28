@@ -1,11 +1,22 @@
-# Scalable Objects Persistence (SOP) Library — Golang V2
+# SOP Core Engine (Golang API Guide)
+
+The SOP Core Engine is a native, low-level B-Tree storage engine written in Go. Unlike traditional databases that run as separate network services, SOP embeds directly into your application. This effectively turns your distributed microservices into a unified storage engine capable of coordinating massive datasets across nodes.
+
+By leveraging **direct I/O** rather than delegating to third-party database engines, SOP provides raw storage execution directly at your fingertips. It pairs this native B-Tree structure with **Redis** for distributed locking, active caching, and real-time transaction orchestration. This eliminates heavy across-the-wire data transfers and enables lightning-fast, ACID-compliant transactions across your cluster.
+
+<h3> Key Architectural Benefits</h3>
+
+*   **Embedded B-Tree Muscle**: Built entirely from the ground up, SOP gives Go developers the raw, efficient disk mechanics previously hidden deep inside monolithic DBMS products.
+*   **True Multi-Modal Execution**: Handles arbitrary data sizes effortlessly—from tiny metadata keys to massive streaming blobs (like video files)—all within the same storage interface.
+*   **Hybrid Storage Backends (`incfs`)**: Choose between standard local file systems, or utilize a hybrid backend that pairs **Cassandra** (for registry and metadata) with your **File System** (for heavy data blobs).
+
+> Terminology: In this document, “B-tree” refers to the balanced M-ary (multiway) search tree (per Bayer & McCreight). A trie (prefix tree) is a different structure; SOP uses a B-tree, not a trie.
 
 Code coverage: https://app.codecov.io/github/sharedcode/sop
 
 ## Table of contents
 
 - [Summary](#summary)
-- [High-level features and articles](#high-level-features-articles-about-sop)
 - [Simple usage (transaction + B-tree + replication)](#simple-usage)
 - [Replication: Active/Passive and Erasure Coding (EC)](#software-based-efficient-replication)
 - [Lifecycle: Failures, Failover, Reinstate, and EC Auto-Repair](#lifecycle-failures-failover-reinstate-and-ec-auto-repair)
@@ -32,85 +43,7 @@ Code coverage: https://app.codecov.io/github/sharedcode/sop
 - [Brief Background](#brief-background)
 - [SOP in-memory](#sop-in-memory)
 
-## Cluster reboot procedure
-When rebooting an entire cluster running applications that use SOP, follow this order to avoid stale locks and ensure clean recovery:
-
-1) Gracefully stop all apps that use SOP across the cluster.
-2) Stop the Redis service(s) used by these SOP apps.
-3) Reboot hosts if needed (or proceed directly if not).
-4) Start the Redis service(s) first and verify they are healthy.
-5) Start the apps that use SOP.
-
-Notes:
-- SOP relies on Redis for coordination (locks and recovery bookkeeping). Bringing Redis up before SOP apps prevents unnecessary failovers or stale-lock handling during app startup.
-- If any node was force-killed, SOP’s stale-lock and rollback paths will repair on next write; starting Redis first ensures the required state is available.
-
-# Summary
-
-SOP has the low-level B-tree storage engine in it to offer raw muscle in direct IO based data management. Adds Redis for out of process caching, "ultra fast realtime" orchestration and to provide ultra fast "data merging" surface. Combined with ACID transactions, formed a tightly woven code library that turns your applications/micro-services "cluster" into the (raw!) storage engine (cluster) itself, no across the wire sending of data (other than what Redis is for).
-
-With the introduction of `incfs`, SOP now also supports a hybrid backend using Cassandra for metadata and the File System for data blobs, giving developers more choices for their infrastructure needs.
-
-Plus, SOP is multi-modal, not what the industry calls as multi-modal, SOP was built from the ground up & ships with its own B-tree & such. No reuse of 3rd party libraries, re-written storage engine and makes it as a base for other higher level constructs, or for direct IO, raw storage uses!
-
-Multi-modal in the sense that, it supports varying data sizes, from small to huge data, it has features to scale management and rich search capabilities. The similarity with other multi-modal databases in the market ends there. Because they do just repackage existing other specialized storage engines and surfaces an API that commands these.
-
-SOP is not, it is a newly architected raw storage engine! No delegation, pure raw storage execution! at your finger tips! In the past, only DBMS like Clipper, DBase 3+, Oracle, C++ Rtree & such, can use or has B-tree to do efficient raw storage mgmt. SOP breaks all of these, it brings to your fingertips the raw storage power of B-trees and more, a complete architecture of a new beast of raw storage management & rich search.
-
-> Terminology: In this document, “B-tree” refers to the balanced M-ary (multiway) search tree (per Bayer & McCreight). A trie (prefix tree) is a different structure; SOP uses a B-tree, not a trie.
-
-# High level features articles about SOP
-SOP's Swarm Computing Proposition: https://www.linkedin.com/pulse/geminis-analysis-sops-swarm-computing-gerardo-recinto-cqzqc
-
-Revolutionary Storage & Cache Strategy: https://www.linkedin.com/pulse/revolutionizing-b-tree-performance-universal-l1-cache-gerardo-recinto-87jjc
-
-Google Slides Presentation: https://docs.google.com/presentation/d/17BWiLXcz1fPGVtCkAwvE9wR0cDq_dJPjxKgzMcWKkp4/edit#slide=id.p
-
-SOP as AI database: https://www.linkedin.com/pulse/sop-ai-database-engine-gerardo-recinto-tzlbc/?trackingId=yRXnbOEGSvS2knwVOAyxCA%3D%3D
-
-## SOP as AI Vector Database (Partitioned Vector Search)
-SOP is uniquely positioned to serve as a high-performance Vector Database for AI/RAG applications. Recent findings demonstrate that SOP B-Trees can outperform specialized vector stores (like HNSW) for specific partitioned workloads by leveraging its efficient blob storage and range query capabilities.
-
-**The Architecture:**
-1.  **Partitioning**: Vectors are grouped by a "Partition ID" (e.g., `DocumentID`, `UserID`, or a clustering centroid).
-2.  **Key Structure**: The B-Tree key is a composite of `{PartitionID, VectorID}`. This ensures that all vectors belonging to a partition are stored contiguously on disk.
-3.  **Blob Storage**: We configure the store with `IsValueDataInNodeSegment = false`.
-    *   **Why?**: This keeps the B-Tree index nodes (containing only keys) extremely compact and cache-friendly.
-    *   **Value**: The actual high-dimensional vector data (e.g., `[]float32`) is stored in the "Value" part, which SOP offloads to separate data segments (blobs).
-4.  **Streaming/Chunking**: For massive partitions, the value can be a "chunked blob" (using `StreamingDataStore`), allowing efficient retrieval of vector batches without loading the entire dataset into memory.
-
-**The Benefit**:
-When querying, you can perform a "Partition Scan":
-*   `b3.FindOne({PartitionID, MinVectorID})` jumps instantly to the start of the partition.
-*   `b3.Next()` iterates through the vectors in that partition with sequential I/O speed.
-    *   **Chunked Iteration**: For massive partitions, you can divide the vectors into chunks (e.g., 10MB blocks) and iterate through them efficiently. `b3.Next()` will seamlessly move from one chunk to the next, allowing you to process gigabytes of vector data without memory pressure.
-*   Since the index is compact, the traversal is lightning fast, and you only load the vector blobs you need.
-
-This approach eliminates the "random walk" overhead of graph-based indexes (like HNSW) when you can scope your search to a partition, making SOP an optimal storage engine for hybrid search (Metadata Filter + Vector Similarity).
-
-Anatomy of a Video Blob: https://www.linkedin.com/pulse/sop-anatomy-video-blob-gerardo-recinto-4170c/?trackingId=mXG7oM1IRVyP4yIZtWWlmg%3D%3D
-
-B-Tree, a Native of the Cluster: https://www.linkedin.com/pulse/b-tree-native-cluster-gerardo-recinto-chmjc/?trackingId=oZmC6tUHSiCBcYXUqwfGUQ%3D%3D
-
-SOP in File System: https://www.linkedin.com/pulse/scaleable-object-persistencesop-file-system-gerardo-recinto-zplbc/?trackingId=jPp8ccwvQEydxt3pppa8eg%3D%3D
-
-Hash Map on Disk: https://www.linkedin.com/posts/coolguru_hash-map-on-a-file-can-offer-up-to-13-activity-7313645523024891905-8yem?utm_source=share&utm_medium=member_desktop&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
-
-Master less cluster wide distributed locking (RSRR algorithm) :https://www.linkedin.com/posts/coolguru_new-master-less-cluster-wide-resource-locking-activity-7322020975674302465-lUjl?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
-
-RSRR as compared to DynamoDB's distributed locking: https://www.linkedin.com/posts/coolguru_i-just-found-out-thanks-to-my-eldest-that-activity-7325255314474250241-f07g?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0
-
-## Rich Key Structures (Metadata Carrier)
-SOP allows you to use complex structs as B-Tree keys, enabling a powerful pattern where the Key itself acts as a persistent metadata carrier.
-
-*   **Concept**: Instead of just an ID, your Key can contain `Version`, `Status`, `Category`, or other metadata.
-*   **Benefit**: You can perform complex filtering and structural operations (e.g., "Find all active items in Category X") by scanning only the B-Tree nodes (Keys).
-*   **Efficiency**: This avoids the I/O cost of fetching the Value (which might be a large JSON blob or vector) until you actually need it.
-*   **ACID**: The Key and Value are updated atomically in the same transaction.
-
-This is heavily used in the **AI Vector Database** module, where the `ContentKey` stores `CentroidID`, `Distance`, and `Version` information, allowing the system to manage clustering and migrations purely via key traversal.
-
-# Simple Usage
+## Simple Usage
 In this tutorial, we will be showing how to configure and code with a transaction & a B-tree that has replication feature.
 a. setup the Erasure Coding (EC) config in the module "init" function so it can be made available in all of the functions/code blocks
 ```
@@ -193,7 +126,7 @@ The code above:
 * adds an item to the b-tree, shows how to find an item using the FindOne function of the B-tree,
 * and then commit (trans.Commit) the transaction.
 
-# Software Based Efficient Replication
+## Software Based Efficient Replication
 There are two types of replication in SOP, they are:
 * Active/Passive replication for the metadata, i.e. - StoreRepository & Handles' (a.k.a. virtual IDs) Registry
 * Erasure Coding (EC) based replication for the B-tree & large data nodes
@@ -278,7 +211,7 @@ What to look for
 - After a flip: Immediately after an Active/Passive flip, some in‑flight or lingering operations aimed at the old active can encounter errors. Design clients for idempotent retry: start a fresh transaction and retry the operation.
 
 
-# Store Caching Config Guide
+## Store Caching Config Guide
 Below examples illustrate how to configure the Store caching config feature. This feature provides automatic Redis based caching of data store's different data sets, both internal, for use to accelerate IO on internal needs of the B-trees and external, the enduser large data.
 
 Sample code for customization of store level caching:
@@ -342,13 +275,13 @@ The StoreOption field (**IsValueDataInNodeSegment**) defaults to false, which is
 
 Of course, you have to do fine tuning as there are tradeoffs :), determine what works best in your particular situation. As there are quite a few "knobs" you can tweak in SOP to achieve what you want. See below discussions for more details in this area.
 
-# Data Partitioning
+## Data Partitioning
 * SOP in File System has the following to address data partitioning:
   - Vertical partitioning (per B-tree/table) is built-in, you can take advantage of this by specifying different drives set in the "storesFolders" & "EC config" of the TransactionOptionsWithReplication. For example, use a different "storesFolders" value & an entry in EC config params (map) for B-tree "store1" and another set for "store2".
   EC config is a map that can have a different set of disk drives/paths for each key. E.g. - "store1" key w/ different drives & "store2" key with another set.
   - Horizontal partitioning, this is also built-in, EC based replication divides into shards each B-tree node & large data node and thus, spreading out to different disks storage. And causing optimal IO as data writers & readers use multi-threads to efficiently save or read data from these files across drives. So, nothing to do here as it is built-in, 'just specify correctly the EC config you wanted based on your Stores vs. Disk drives data allocations & replication needs.
 
-# Usability
+## Usability
 SOP can be used in a wide, diverse storage usability scenarios. Ranging from general purpose data storage - search & management, to highly scalable and performant version of the same, to domain specific use-cases. As SOP has many feature knobs you can turn on or off, it can be used and get customized with very little to no coding required. Some examples bundled out of the box are:
   * A. General purpose data/object storage management system
   * B. Large data storage and management, where your data is stored in its own data segment. See StoreInfo.IsValueDataInNodeSegment = false (default) flag
@@ -368,7 +301,7 @@ Above list already covers most data storage scenarios one can think of. Traditio
 
 In all of these, ACID transactions, high speed, scalable searches and management comes built-in. As SOP turned the B-tree (an M-ary, multiway search tree) into a commodity available in all of its usage scenarios. Horizontally scalable in the cluster, meaning, there is no single point of failure. SOP offers a decentralized approach in searching & management of your data. It works with optimal efficiency in the cluster. It fully parallelize I/O in the cluster, not needing any communication for "orchestration"(see new "communication free" OOA algorithm section below) to detect conflict and auto-merging of changes across transactions occuring simultaneously or in time.
 
-# Best Practices
+## Best Practices
 Following are the best practices using SOP outlined so you can get a good understanding of best outcome from SOP for your implementation use-cases:
 
 ## As a general purpose DB engine
@@ -383,7 +316,7 @@ For these three use-cases, there is not much competition for what SOP has to off
 
 Please feel free to file a request/discussion entry if you have a special domain-use in mind, as perhaps we can further optimize. Today, SOP piggy backs on the global cache(Redis) re-seeding the local cache of each transaction. It has a lot of advantages including solving data synchronization requirements among different instances running in the cluster without requiring to communicate & "orchestrate" with one another thus, maintaining a fully parallelized execution model with sustained throughput for each instance.
 
-# SOP in Redis, Cassandra & File System (incfs)
+## SOP in Redis, Cassandra & File System (incfs)
 This package (`incfs`) offers a hybrid storage approach:
 - **Registry (Cassandra)**: Stored in Cassandra. This provides robust, scalable management for B-tree node virtual IDs (handles).
 - **Data Blobs (Nodes & Values)**: Stored in the File System (local disk or network mount). This retains the raw performance and cost benefits of filesystem storage for bulk data.
@@ -393,7 +326,7 @@ This hybrid model is available for environments that prefer Cassandra for metada
 
 Usage is very similar to `infs`, but you import `github.com/sharedcode/sop/incfs` and provide Cassandra configuration in `Initialize`.
 
-# SOP in Redis & File System
+## SOP in Redis & File System
 **The Recommended Backend for Distributed & Local Workloads**
 
 B-tree–based object persistence (balanced M-ary, multiway search tree), File System as backend storage & Redis for caching, orchestration & node/data merging. Sporting ACID transactions and two phase commit for seamless 3rd party database integration. SOP uses a new, unique algorithm(see OOA) for orchestration where it uses Redis I/O for attaining locks. NOT the `Redis Lock API`, but just simple Redis "fetch and set" operations. That is it. Ultra high speed algorithm brought by in-memory database for locking, and thus, not constrained by any client/server communication limits.

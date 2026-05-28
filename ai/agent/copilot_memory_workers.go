@@ -11,75 +11,6 @@ import (
 	"github.com/sharedcode/sop/ai/memory"
 )
 
-// StartMemoryWorkers launches the dedicated background worker that
-// reads episodes from the channel and flushes them to STM.
-func (a *CopilotAgent) StartMemoryWorkers(ctx context.Context) {
-	go func() {
-		log.Info("CopilotAgent: STM Batch Writer Worker Started", "agent_id", a.Memory.AgentID)
-
-		stmStoreName := "stm_" + a.Memory.AgentID
-
-		for {
-			select {
-			case <-ctx.Done():
-				log.Info("CopilotAgent: STM Batch Writer Worker Interrupted", "agent_id", a.Memory.AgentID)
-				return
-			case firstPayload := <-a.episodeQueue:
-				if a.systemDB == nil {
-					continue
-				}
-
-				tx, err := a.systemDB.BeginTransaction(ctx, sop.ForWriting)
-				if err != nil {
-					log.Warn("CopilotAgent batcher: tx begin failed", "error", err)
-					continue
-				}
-
-				stm, err := a.systemDB.OpenBtree(ctx, stmStoreName, tx)
-				if err != nil {
-					tx.Rollback(ctx)
-					continue
-				}
-
-				batchCount := 0
-				pk := firstPayload["id"].(string)
-				ok, err := stm.Add(ctx, pk, firstPayload)
-				if err != nil {
-					log.Warn("CopilotAgent batcher: Failed to add item", "error", err)
-				} else if !ok {
-					stm.Update(ctx, pk, firstPayload)
-				}
-				batchCount++
-
-				timeout := time.After(5 * time.Second)
-				batching := true
-				for batching && batchCount < 500 {
-					select {
-					case nextPayload := <-a.episodeQueue:
-						pk := nextPayload["id"].(string)
-						ok, err := stm.Add(ctx, pk, nextPayload)
-						if err != nil {
-							log.Warn("CopilotAgent batcher: Failed to add item", "error", err)
-							continue
-						}
-						if !ok {
-							stm.Update(ctx, pk, nextPayload)
-						}
-						batchCount++
-					case <-timeout:
-						batching = false
-					case <-ctx.Done():
-						batching = false
-					}
-				}
-
-				tx.Commit(ctx)
-				log.Debug("CopilotAgent: Episode batch buffered to STM successfully", "count", batchCount, "agent_id", a.Memory.AgentID)
-			}
-		}
-	}()
-}
-
 // StartSleepCycle launches background consolidators over the isolated Avatar STM
 // migrating Short-Term episodic memories into Semantic Long-Term memory.
 func (a *CopilotAgent) StartSleepCycle(ctx context.Context, hourlyInterval int, idleTimeoutMinutes int, nowFn func() time.Time) {
@@ -180,7 +111,7 @@ func (a *CopilotAgent) StartSleepCycle(ctx context.Context, hourlyInterval int, 
 				case <-ctx.Done():
 					return
 				case <-ticker.C:
-					lastLog := a.lastEpisodeTS.Load()
+					lastLog := a.Memory.LastEpisodeTS.Load()
 					if shouldTriggerQuickNap(lastLog, idleTimeoutMinutes, nowFn()) {
 						// Perform a safe check: are there items in STM unvectorized?
 						tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
@@ -192,7 +123,7 @@ func (a *CopilotAgent) StartSleepCycle(ctx context.Context, hourlyInterval int, 
 								if count > 1 {
 									log.Info("CopilotAgent: Avatar is IDLE. Triggering 'Quick Nap' memory consolidation.", "agent_id", a.Memory.AgentID)
 									runSleepCycle()
-									a.lastEpisodeTS.Store(0) // Reset after sweeping
+									a.Memory.LastEpisodeTS.Store(0) // Reset after sweeping
 								}
 							}
 							tx.Rollback(ctx)
@@ -224,7 +155,7 @@ func (a *CopilotAgent) StartSleepCycle(ctx context.Context, hourlyInterval int, 
 				if shouldTriggerDeepSleep(t.Hour(), hourlyInterval) {
 					log.Info("CopilotAgent: Running Scheduled Deep Sleep Cycle", "agent_id", a.Memory.AgentID, "hour", t.Hour())
 					runSleepCycle()
-					a.lastEpisodeTS.Store(0) // Reset idle sensor
+					a.Memory.LastEpisodeTS.Store(0) // Reset idle sensor
 				}
 			}
 		}

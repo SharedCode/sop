@@ -74,13 +74,13 @@ Because Knowledge Bases (Spaces) are deterministic, purely isolated, and perfect
 
 This transforms highly structured digital knowledge into a financial hotcake—a tradeable asset where users are directly rewarded for their data organization and vectorization investments.
 
-## 6. Future Refinements & Roadmap
+## 7. Future Refinements & Roadmap
 *(This section is reserved for future planning as we iterate on the MVP design)*
 - [ ] Implement granular Role-Based Access Control (RBAC) at the KB level.
 - [ ] Define the exact UI flow for uploading, chunking, and previewing documents before they embed.
 - [ ] Develop the exchange protocols for the AI Memory Marketplace.
 
-## 9. Standardized Knowledge Base Interchange Format
+## 8. Standardized Knowledge Base Interchange Format
 
 To ensure seamless integration with the broader AI ecosystem, SOP officially supports industry-standard JSON formats for knowledge base (KB) payloads. This guarantees that datasets exported from popular frameworks like **LangChain**, **LlamaIndex**, or standard embeddings APIs can simply be copy-pasted and ingested without complex transformations.
 
@@ -111,4 +111,22 @@ SOP expects an array of `documents`, where each document seamlessly maps to indu
 ```
 
 This ensures enterprise teams can directly bridge SOP's Vector Store into their existing LangChain loaders, maintaining clean boundaries for interchange, migrations, and backups.
+
+## 9. Data-Driven Tool Parameterization (`ToolQueries`)
+To further the vision of treating a Knowledge Base as an isolated, self-describing entity, SOP supports **Data-Driven Tool Parameterization**.
+
+Rather than hardcoding tool instructions or API endpoints in the system prompts, KBs support a `ToolQueries` map inside their configuration (`KnowledgeBaseConfig`).
+This allows authors to map specific tools to dynamic URLs, instructions, or internal paths. 
+
+```json
+{
+  "system_prompt": "You are a technical support agent.",
+  "allowed_tools": ["ExecuteScript", "ReadDocument"],
+  "tool_queries": {
+    "ExecuteScriptInstruction": "CategoryPath: 'Execute Script Tool'"
+  }
+}
+```
+
+This ensures that the AI's behavior and the tools it relies on adapt dynamically based on the Knowledge Base (Space) that is loaded. Authors can redefine how the AI acts without requiring a deployment, establishing an infrastructure that is strictly **Space data-driven**.
 

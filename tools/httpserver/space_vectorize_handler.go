@@ -81,6 +81,12 @@ func handleVectorizeSpace(w http.ResponseWriter, r *http.Request) {
 				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Vectorize failed: %v", err))
 				return
 			}
+		} else if catId != sop.NilUUID && len(itemIds) == 0 {
+			err = db.VectorizeCategories(ctx, request.SpaceName, llm, emb, 50, []sop.UUID{catId})
+			if err != nil {
+				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("VectorizeCategories failed: %v", err))
+				return
+			}
 		} else {
 			err = db.VectorizeItems(ctx, request.SpaceName, llm, emb, 50, catId, itemIds)
 			if err != nil {

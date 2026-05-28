@@ -656,6 +656,75 @@
         // Initialization handled during setup wizard now
     });
 
+    async function refreshSpacesList(databaseName, spaceToSelect = null) {
+        const normalizedSpaceToSelect = typeof spaceToSelect === 'string'
+            ? spaceToSelect.replace(/\/data$/, '')
+            : null;
+        const res = await fetch(`/api/spaces?database=${encodeURIComponent(databaseName)}&user_id=${encodeURIComponent(currentUserID)}&_=${Date.now()}`);
+        const bundle = await res.json();
+        let kbs = bundle.data || [];
+        const kbList = document.getElementById('kb-list');
+        const domainSelect = document.getElementById('domain-select');
+
+        kbList.innerHTML = '';
+
+        if (domainSelect) {
+            Array.from(domainSelect.options).forEach(opt => {
+                if (opt.getAttribute('data-dynamic') === 'true') {
+                    domainSelect.removeChild(opt);
+                }
+            });
+        }
+
+        if (!kbs || kbs.length === 0) {
+            kbList.innerHTML = '<li>No Spaces found</li>';
+            return;
+        }
+
+        let selectedElement = null;
+        let selectedName = null;
+        kbs.forEach(kb => {
+            const li = document.createElement('li');
+            li.textContent = kb.charAt(0).toUpperCase() + kb.slice(1);
+            li.title = kb;
+            li.classList.add('truncate-text');
+            li.onclick = () => selectSpace(kb, li);
+            kbList.appendChild(li);
+
+            if (normalizedSpaceToSelect && kb === normalizedSpaceToSelect) {
+                selectedElement = li;
+                selectedName = kb;
+            }
+
+            if (domainSelect) {
+                const existing = Array.from(domainSelect.options).find(o => o.value === kb);
+                let canSelect = true;
+                if (bundle.item_rbac && bundle.item_rbac[kb] && bundle.item_rbac[kb]["can_ai_select"] === false) {
+                    canSelect = false;
+                }
+                if (!existing && canSelect) {
+                    const opt = document.createElement('option');
+                    opt.value = kb;
+                    opt.textContent = kb.charAt(0).toUpperCase() + kb.slice(1);
+                    opt.setAttribute('data-dynamic', 'true');
+                    domainSelect.appendChild(opt);
+                }
+            }
+        });
+
+        if (selectedElement && selectedName) {
+            const kbContainer = document.getElementById('kb-list-container');
+            const kbCaret = document.getElementById('kb-caret');
+            if (kbContainer && kbContainer.style.display === 'none') {
+                kbContainer.style.display = 'block';
+            }
+            if (kbCaret) {
+                kbCaret.textContent = '▼';
+            }
+            setTimeout(() => selectSpace(selectedName, selectedElement), 50);
+        }
+    }
+
     async function selectDatabase(name, forceRefresh = false, storeToSelect = null) {
         if (!forceRefresh && currentDatabase === name) return;
 
@@ -742,55 +811,7 @@
             });
 
         // Fetch Spaces
-        fetch(`/api/spaces?database=${encodeURIComponent(name)}&user_id=${encodeURIComponent(currentUserID)}&_=${Date.now()}`)
-            .then(res => res.json())
-            .then(bundle => {
-                let kbs = bundle.data || [];
-                const kbList = document.getElementById('kb-list');
-                const domainSelect = document.getElementById('domain-select');
-                
-                kbList.innerHTML = '';
-                
-                if (domainSelect) {
-                    Array.from(domainSelect.options).forEach(opt => {
-                        if (opt.getAttribute('data-dynamic') === 'true') {
-                            domainSelect.removeChild(opt);
-                        }
-                    });
-                }
-                
-                if (!kbs || kbs.length === 0) {
-                    kbList.innerHTML = '<li>No Spaces found</li>';
-                    return;
-                }
-                kbs.forEach(kb => {
-                    const li = document.createElement('li');
-                    li.textContent = kb.charAt(0).toUpperCase() + kb.slice(1);
-                    li.title = kb;
-                    li.classList.add('truncate-text');
-                    li.onclick = () => selectSpace(kb, li);
-                    kbList.appendChild(li);
-                    
-                    if (storeToSelect && kb === storeToSelect) {
-                        setTimeout(() => selectSpace(kb, li), 50);
-                    }
-                    
-                    if (domainSelect) {
-                        const existing = Array.from(domainSelect.options).find(o => o.value === kb);
-                        let canSelect = true;
-                        if (bundle.item_rbac && bundle.item_rbac[kb] && bundle.item_rbac[kb]["can_ai_select"] === false) {
-                            canSelect = false;
-                        }
-                        if (!existing && canSelect) {
-                            const opt = document.createElement('option');
-                            opt.value = kb;
-                            opt.textContent = kb.charAt(0).toUpperCase() + kb.slice(1);
-                            opt.setAttribute('data-dynamic', 'true');
-                            domainSelect.appendChild(opt);
-                        }
-                    }
-                });
-            })
+        refreshSpacesList(name, storeToSelect)
             .catch(err => {
                 const kbList = document.getElementById('kb-list');
                 kbList.innerHTML = `<li class="error-text">Error: ${err.message}</li>`;
@@ -1320,6 +1341,7 @@
         nameInput.focus();
     };
 
+
     window.toggleDomainItemVector = function(link) {
         const parent = link.parentElement;
         const vectorBox = parent.querySelector('.vector-array-box');
@@ -1711,8 +1733,8 @@
             treeRoot.parentNode.appendChild(pagingWrap);
         }
 
-        window.fetchItemsForCategory = async function(spaceName, categoryId, categoryName, liElement, catObj, offset = 0, limit = (window._currentLimit || 50)) {
-            window._lastFetchItemsArgs = { spaceName, categoryId, categoryName, liElement, catObj, offset, limit };
+        window.fetchItemsForCategory = async function(spaceName, categoryId, categoryName, liElement, catObj, offset = 0, limit = (window._currentLimit || 50), lastCatId = "", lastItemId = "") {
+            window._lastFetchItemsArgs = { spaceName, categoryId, categoryName, liElement, catObj, offset, limit, lastCatId, lastItemId };
             window._currentSelectedCategoryName = categoryName;
             document.querySelectorAll('#kb-category-tree li').forEach(li => {
                 li.style.fontWeight = 'normal';
@@ -1819,6 +1841,7 @@
             try {
                 let url = `/api/spaces/items?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(spaceName)}&offset=${offset}&limit=${limit}`;
                 if (categoryId) url += `&category_id=${encodeURIComponent(categoryId)}`;
+                if (lastCatId && lastItemId) url += `&last_cat_id=${encodeURIComponent(lastCatId)}&last_item_id=${encodeURIComponent(lastItemId)}`;
                 
                 const res = await fetch(url);
                 if (!res.ok) throw new Error("Failed to fetch items");
@@ -1862,22 +1885,19 @@
                 }
 
                 let contentHtml = '';
+                
                 items.forEach(t => {
                     let fullDesc = t.description || t.text || "";
                     let isLongDesc = fullDesc.length > 150;
                     let shortDesc = isLongDesc ? fullDesc.substring(0, 150) + "..." : fullDesc;
 
-                    let vectorCount = t.vector ? t.vector.length : 0;
                     let vectorBox = "";
-                    if(vectorCount > 0) {
+                    if(t.vector && t.vector.length > 0) {
+                        let vSize = t.vector_size || 0;
+                        let tooltip = `Vector [${Number(t.vector[0]).toFixed(5)},...] size ${vSize}`;
                         vectorBox = `
-                            <div style="margin-left: auto;">
-                                <a href="javascript:void(0)" onclick="toggleDomainItemVector(this)" style="color:var(--link-color); text-decoration:none; display:flex; align-items:center; gap:3px; font-size:0.85em;">
-                                   <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 16 16"><path fill="currentColor" d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM4.5 7.5a.5.5 0 0 0 0 1h7a.5.5 0 0 0 0-1h-7z"/></svg> Vector [${vectorCount}]
-                                </a>
-                                <div class="vector-array-box" style="display:none; font-size:0.9em; text-align: left; background:var(--input-bg); color:var(--text-color); margin-top:5px; padding:5px; border-radius:4px; max-height:80px; overflow-y:auto; word-break:break-all; border:1px solid var(--border-color); position: absolute; max-width: 250px; right: 0; z-index: 10; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-                                    [ ${t.vector.map(n => Number(n).toFixed(5)).join(", ")} ]
-                                </div>
+                            <div title="${tooltip}" style="display: inline-block; font-size: 0.85em; color: var(--text-color); margin-top: 5px; cursor: help; user-select: none;">
+                                V[${Number(t.vector[0]).toFixed(5)}...]
                             </div>
                         `;
                     }
@@ -1900,14 +1920,17 @@
                                     <span class="desc-full" style="display:none; white-space:pre-wrap;">${fullDesc.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span>
                                 </div>
                                 <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
-                                    <a href="javascript:void(0)" class="read-more-btn" onclick="toggleDomainItemDesc(this)" data-item-id="${window.escapeHTML(t.id || '')}" data-item-category="${window.escapeHTML(t.category_id || t.category || '')}" style="color:var(--link-color); font-size:0.85em; text-decoration:underline;">Read More</a>
+                                    <a class="read-more-btn" onclick="toggleDomainItemDesc(this)" data-item-id="${window.escapeHTML(t.id || '')}" data-item-category="${window.escapeHTML(t.category_id || t.category || '')}" style="cursor:pointer; color:var(--link-color); font-size:0.85em; text-decoration:underline;">Read More</a>
                                     ${kbIsReadOnly ? 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="View Details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></a>` 
+                                        `<a class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="cursor:pointer; color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="View Details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></a>` 
                                         : 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
-                                         <a href="javascript:void(0)" class="delete-item-btn" data-item-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-item-name="${window.escapeHTML(((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id || '')).substring(0, 100))}" onclick="window.deleteSpaceItem(this)" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
+                                        `<a class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="cursor:pointer; color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
+                                         <a class="delete-item-btn" data-item-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-item-name="${window.escapeHTML(((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id || '')).substring(0, 100))}" onclick="window.deleteSpaceItem(this)" style="cursor:pointer; color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
                                     }
-                                    ${vectorBox}
+                                    <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+                                        ${t.doc_id ? `<a href="/viewer?docID=${window.escapeHTML(t.doc_id)}&db=${encodeURIComponent(currentDatabase)}&space=${encodeURIComponent(spaceName)}&text=${encodeURIComponent(t.text || '')}" target="_blank" style="color:var(--text-color); display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; padding: 4px; background: rgba(100,100,100,0.1); line-height: 1;" title="View Source Document"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg></a>` : ""}
+                                        ${vectorBox}
+                                    </div>
                                 </div>
                             </div>
                         `;
@@ -1920,12 +1943,15 @@
                                 </div>
                                 <div style="margin-top: 8px; display: flex; align-items: center; position: relative;">
                                     ${kbIsReadOnly ? 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="color:var(--text-color); display: inline-flex; align-items: center;" title="View Details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></a>` 
+                                        `<a class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="cursor:pointer; color:var(--text-color); display: inline-flex; align-items: center;" title="View Details"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/><path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/></svg></a>` 
                                         : 
-                                        `<a href="javascript:void(0)" class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
-                                         <a href="javascript:void(0)" class="delete-item-btn" data-item-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-item-name="${window.escapeHTML(((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id || '')).substring(0, 100))}" onclick="window.deleteSpaceItem(this)" style="color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
+                                        `<a class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="cursor:pointer; color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
+                                         <a class="delete-item-btn" data-item-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-item-name="${window.escapeHTML(((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id || '')).substring(0, 100))}" onclick="window.deleteSpaceItem(this)" style="cursor:pointer; color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
                                     }
-                                    ${vectorBox}
+                                    <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+                                        ${t.doc_id ? `<a href="/viewer?docID=${window.escapeHTML(t.doc_id)}&db=${encodeURIComponent(currentDatabase)}&space=${encodeURIComponent(spaceName)}&text=${encodeURIComponent(t.text || '')}" target="_blank" style="color:var(--text-color); display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; padding: 4px; background: rgba(100,100,100,0.1); line-height: 1;" title="View Source Document"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg></a>` : ""}
+                                        ${vectorBox}
+                                    </div>
                                 </div>
                             </div>
                         `;
@@ -1993,9 +2019,17 @@
                 	}
 
                 	// Next
-                	if (currentPage < totalPages) {
-                		paginationHtml += `<button onclick="window.fetchItemsForCategory('${spaceName}', '${categoryId || ''}', '${categoryName.replace(/'/g, "\\'")}', null, null, ${offset + limit}, ${limit})" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">Next</button>`;
-                	} else {
+			let lastRenderedCatId = "";
+			let lastRenderedItemId = "";
+			if (items && items.length > 0) {
+				lastRenderedCatId = items[items.length - 1].category || "";
+				if (!lastRenderedCatId) lastRenderedCatId = items[items.length - 1].Category || ""; // Fallback mapping
+				lastRenderedItemId = items[items.length - 1].id || "";
+				if (!lastRenderedItemId) lastRenderedItemId = items[items.length - 1].ID || ""; // Fallback mapping
+			}
+
+			if (currentPage < totalPages) {
+				paginationHtml += `<button onclick="window.fetchItemsForCategory('${spaceName}', '${categoryId || ''}', '${categoryName.replace(/'/g, "\\'")}', null, null, ${offset + limit}, ${limit}, '${lastRenderedCatId}', '${lastRenderedItemId}')" style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--button-bg); color: var(--text-color); cursor: pointer;">Next</button>`;
                 		paginationHtml += `<button disabled style="padding: 5px 10px; border-radius: 4px; border: 1px solid var(--border-color); background: var(--secondary-bg); color: var(--text-muted); cursor: not-allowed; opacity: 0.5;">Next</button>`;
                 	}
 
@@ -2796,7 +2830,17 @@ window.vectorizeSpace = async function(spaceName, skipDimensionCheck = false) {
                         pollLongRunningTask(result.task_id, "Vectorizing Space", `Vectorizing Space: ${cleanName}`, "Vectorize").then(() => {
                             showAlert(`Space '${cleanName}' vectorization completed successfully!`);
                             if (window._lastFetchItemsArgs) {
-                                window.fetchItemsForCategory(window._lastFetchItemsArgs.spaceName, window._lastFetchItemsArgs.categoryId, window._lastFetchItemsArgs.categoryName, window._lastFetchItemsArgs.liElement, window._lastFetchItemsArgs.catObj);
+                                window.fetchItemsForCategory(
+                                    window._lastFetchItemsArgs.spaceName, 
+                                    window._lastFetchItemsArgs.categoryId, 
+                                    window._lastFetchItemsArgs.categoryName, 
+                                    window._lastFetchItemsArgs.liElement, 
+                                    window._lastFetchItemsArgs.catObj,
+                                    window._lastFetchItemsArgs.offset,
+                                    window._lastFetchItemsArgs.limit,
+                                    window._lastFetchItemsArgs.lastCatId,
+                                    window._lastFetchItemsArgs.lastItemId
+                                );
                             }
                             if (document.getElementById('edit-kb-modal') && document.getElementById('edit-kb-modal').style.display === 'flex') {
                                 if (document.getElementById('edit-kb-name').value === cleanName) {
@@ -2889,7 +2933,17 @@ window.vectorizeSpace = async function(spaceName, skipDimensionCheck = false) {
                     showAlert(`Space '${cleanName}' vectorization completed successfully!`);
                     // Refresh current view (categories and items) to show updated vectors
                     if (window._lastFetchItemsArgs) {
-                        selectSpace(cleanName, null, true);
+                        window.fetchItemsForCategory(
+                            window._lastFetchItemsArgs.spaceName, 
+                            window._lastFetchItemsArgs.categoryId, 
+                            window._lastFetchItemsArgs.categoryName, 
+                            window._lastFetchItemsArgs.liElement, 
+                            window._lastFetchItemsArgs.catObj,
+                            window._lastFetchItemsArgs.offset,
+                            window._lastFetchItemsArgs.limit,
+                            window._lastFetchItemsArgs.lastCatId,
+                            window._lastFetchItemsArgs.lastItemId
+                        );
                     }
                     if (document.getElementById('edit-kb-modal') && document.getElementById('edit-kb-modal').style.display === 'flex') {
                         if (document.getElementById('edit-kb-name').value === cleanName) {
@@ -2999,14 +3053,21 @@ window.showEditKB = async function() {
                 }
 
                 try {
-                    const r = await fetch('/api/spaces/config', {
+                    const r = await fetch(`/api/spaces/config?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
                     });
                     if (!r.ok) {
-                        const err = await r.json();
-                        showAlert('Error saving space configuration: ' + (err.error || 'Unknown error'));
+                        const errText = await r.text();
+                        let errMsg = errText;
+                        try {
+                            const errObj = JSON.parse(errText);
+                            if (errObj && (errObj.error || errObj.message)) {
+                                errMsg = errObj.error || errObj.message;
+                            }
+                        } catch(parseErr) { }
+                        throw new Error(errMsg || 'Unknown error');
                     } else {
                         window.closeEditKBModal();
                     }

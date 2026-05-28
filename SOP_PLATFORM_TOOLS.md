@@ -194,7 +194,7 @@ Welcome to the era of **Deterministic AI**.
 
 ---
 
-# SOP "Self-Correcting" AI Copilot Reaches Beta
+## SOP "Self-Correcting" AI Copilot Reaches Beta
 
 **January 20, 2026** — We are proud to announce a major milestone for the SOP platform. Today, we are officially moving the **SOP "Self-Correcting" AI Copilot** to **Beta status**. 
 

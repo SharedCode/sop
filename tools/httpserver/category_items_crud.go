@@ -238,14 +238,8 @@ func handleDeleteSpaceCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	categoriesTree, err := kb.Store.Categories(ctx)
+	err = kb.DeleteCategories(ctx, []sop.UUID{parsedID})
 	if err != nil {
-		http.Error(w, "Failed to get categories tree", http.StatusInternalServerError)
-		return
-	}
-
-	found, err := categoriesTree.Remove(ctx, parsedID)
-	if err != nil || !found {
 		http.Error(w, "Category not found or delete fail", http.StatusInternalServerError)
 		return
 	}
@@ -494,7 +488,7 @@ func handleDeleteSpaceItem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = kb.Store.Delete(ctx, foundKey)
+	err = kb.DeleteItems(ctx, []memory.ItemKey{{CategoryID: foundKey.CategoryID, ItemID: foundKey.ItemID}})
 	if err != nil {
 		http.Error(w, "Failed to delete item", http.StatusInternalServerError)
 		return

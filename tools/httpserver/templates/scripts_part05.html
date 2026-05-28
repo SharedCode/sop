@@ -293,6 +293,38 @@
     let historyIndex = -1;
     let currentAiMsgId = null;
 
+    function isPendingDeleteConfirmationText(text) {
+        const normalized = String(text || '').trim();
+        return normalized.includes('Pending deletion confirmation for Space')
+            && normalized.includes("Reply 'yes' to confirm or 'no' to cancel.");
+    }
+
+    function findLatestPendingConfirmationMessage() {
+        const history = document.getElementById('chat-history');
+        if (!history) return null;
+
+        const messages = Array.from(history.children);
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const node = messages[i];
+            if (!(node instanceof HTMLElement)) continue;
+            if (!node.classList.contains('chat-message') || !node.classList.contains('ai')) continue;
+
+            const text = node.textContent || node.innerText || '';
+            if (isPendingDeleteConfirmationText(text)) {
+                return node;
+            }
+        }
+
+        return null;
+    }
+
+    function removePendingConfirmationPrompt() {
+        const pendingMessage = findLatestPendingConfirmationMessage();
+        if (pendingMessage) {
+            pendingMessage.remove();
+        }
+    }
+
     function updateHeaderFeedbackVisibility(visible) {
         const el = document.getElementById('header-feedback-controls');
         if (el) el.style.display = visible ? 'flex' : 'none';
@@ -605,6 +637,10 @@
 
         if (!message) return;
 
+        if (/^(yes|no)$/i.test(message) && findLatestPendingConfirmationMessage()) {
+            removePendingConfirmationPrompt();
+        }
+
         // Save to history
         chatHistory.push(message);
         historyIndex = -1; // Reset index
@@ -661,14 +697,17 @@
             let currentTableContainer = null;
             let currentTableRecords = [];
             let currentTableType = null; // 'record' or 'kv'
+            let pendingChunk = '';
+            const yieldToBrowser = () => new Promise(resolve => requestAnimationFrame(() => resolve()));
 
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
                 
-                const chunk = decoder.decode(value, { stream: true });
-                // Split by newline to handle multiple objects in one chunk
+                const chunk = pendingChunk + decoder.decode(value, { stream: true });
+                // Split by newline to handle multiple objects in one chunk while preserving partial lines.
                 const lines = chunk.split('\n');
+                pendingChunk = lines.pop() || '';
                 
                 for (const line of lines) {
                     if (!line.trim()) continue;
@@ -795,13 +834,36 @@
                                 }
                             }
 
-                            const refreshSpacesRegex = /\[\[REFRESH_SPACES\]\]/;
-                            if (refreshSpacesRegex.test(textPayload)) {
-                                console.log("Detected Client-Side Refresh Spaces Action");
-                                if (typeof selectDatabase === 'function' && currentDatabase) {
-                                    await selectDatabase(currentDatabase, true, currentStore);
+                            const refreshSpacesRegex = /\[\[REFRESH_SPACES(?::\s*([^\]]+))?\]\]/;
+                            const refreshSpacesMatch = textPayload.match(refreshSpacesRegex);
+                            if (refreshSpacesMatch) {
+                                const targetSpaceName = refreshSpacesMatch[1] ? refreshSpacesMatch[1].trim() : currentStore;
+                                console.log("Detected Client-Side Refresh Spaces Action", targetSpaceName);
+                                if (typeof refreshSpacesList === 'function' && currentDatabase) {
+                                    await refreshSpacesList(currentDatabase, targetSpaceName);
+                                } else if (typeof selectDatabase === 'function' && currentDatabase) {
+                                    await selectDatabase(currentDatabase, true, targetSpaceName);
                                 }
                                 textPayload = textPayload.replace(refreshSpacesRegex, '');
+                            }
+
+                            const clearPendingConfirmationRegex = /\[\[CLEAR_PENDING_CONFIRMATION\]\]/;
+                            if (clearPendingConfirmationRegex.test(textPayload)) {
+                                removePendingConfirmationPrompt();
+                                textPayload = textPayload.replace(clearPendingConfirmationRegex, '');
+                            }
+
+                            const refreshSpaceViewRegex = /\[\[REFRESH_SPACE_VIEW:\s*([a-zA-Z0-9_-]+)\s*\]\]/;
+                            const refreshSpaceViewMatch = textPayload.match(refreshSpaceViewRegex);
+                            if (refreshSpaceViewMatch) {
+                                const targetSpaceName = refreshSpaceViewMatch[1];
+                                console.log("Detected Client-Side Refresh Space View Action:", targetSpaceName);
+                                const activeSpaceName = currentStore ? currentStore.replace('/data', '') : '';
+                                if (activeSpaceName === targetSpaceName && typeof selectSpace === 'function') {
+                                    const targetLi = Array.from(document.querySelectorAll('#kb-list li')).find(li => li.title === targetSpaceName);
+                                    await selectSpace(targetSpaceName, targetLi || document.querySelector('#sidebar li.active'), true);
+                                }
+                                textPayload = textPayload.replace(refreshSpaceViewRegex, '');
                             }
 
                             // For now basic accumulation, markdown later?
@@ -811,6 +873,16 @@
                             // Handle Markdown
                             const markdownHtml = marked.parse(textPayload);
                             currentContentSpan.innerHTML += markdownHtml;
+
+                            const parentDiv = currentContentSpan.parentElement;
+                            if (parentDiv) {
+                                const accumulatedText = currentContentSpan.textContent || currentContentSpan.innerText || '';
+                                if (isPendingDeleteConfirmationText(accumulatedText)) {
+                                    parentDiv.classList.add('pending-confirmation-message');
+                                } else {
+                                    parentDiv.classList.remove('pending-confirmation-message');
+                                }
+                            }
                             
                             // Post-process the ai message to inject the "Import to Space" button for JSON blocks
                             const preBlocks = currentContentSpan.querySelectorAll('pre code.language-json');
@@ -881,6 +953,7 @@
                             });
 
                             document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
+                            await yieldToBrowser();
                         } 
                         else if (event.type === 'record' || event.type === 'kv') {
                             // Collect records
@@ -892,6 +965,106 @@
                         else if (event.type === 'tool_call') {
                             flushRecords();
                             appendChatMessage('ai', '🛠️ Calling Tool: ' + event.payload.tool);
+                            currentContentSpan = null;
+                        }
+                        else if (event.type === 'tool_result') {
+                            flushRecords();
+
+                            const payload = event.payload || {};
+                            const args = payload.args || {};
+                            let targetSpaceName = null;
+                            ['kb_name', 'name', 'space_name', 'space'].some(key => {
+                                const value = args[key];
+                                if (typeof value === 'string' && value.trim()) {
+                                    targetSpaceName = value.trim();
+                                    return true;
+                                }
+                                return false;
+                            });
+
+                            if (!targetSpaceName && typeof payload.result === 'string') {
+                                const kbResultMatch = payload.result.match(/Knowledge Base '([^']+)'/i)
+                                    || payload.result.match(/Space\/KnowledgeBase '([^']+)'/i)
+                                    || payload.result.match(/Space '([^']+)'/i);
+                                if (kbResultMatch && kbResultMatch[1]) {
+                                    targetSpaceName = kbResultMatch[1].trim();
+                                }
+                            }
+
+                            const refreshTargetDatabase = currentDatabase || (typeof args.database === 'string' ? args.database.trim() : '');
+                            const runStructuredSpaceRefresh = async () => {
+                                if (!refreshTargetDatabase) {
+                                    return;
+                                }
+                                if (typeof refreshSpacesList === 'function') {
+                                    await refreshSpacesList(refreshTargetDatabase, payload.tool === 'delete_space' ? null : targetSpaceName);
+                                } else if (typeof selectDatabase === 'function') {
+                                    await selectDatabase(refreshTargetDatabase, true, payload.tool === 'delete_space' ? null : targetSpaceName);
+                                }
+                            };
+
+                            if (payload.tool === 'create_space' || payload.tool === 'mint_to_space' || payload.tool === 'delete_space') {
+                                await runStructuredSpaceRefresh();
+
+                                // A short follow-up refresh hardens the sidebar against small post-commit timing races.
+                                if (refreshTargetDatabase && payload.tool !== 'delete_space') {
+                                    setTimeout(() => {
+                                        runStructuredSpaceRefresh().catch(err => console.error('Structured space refresh retry failed', err));
+                                    }, 250);
+                                }
+                            }
+
+                            if (payload.tool === 'mint_to_space' && targetSpaceName) {
+                                const activeSpaceName = currentStore ? currentStore.replace('/data', '') : '';
+                                if (activeSpaceName === targetSpaceName && typeof selectSpace === 'function') {
+                                    const targetLi = Array.from(document.querySelectorAll('#kb-list li')).find(li => li.title === targetSpaceName);
+                                    await selectSpace(targetSpaceName, targetLi || document.querySelector('#sidebar li.active'), true);
+                                }
+                            }
+
+                            currentContentSpan = null;
+                        }
+                        else if (event.type === 'space_mutation') {
+                            flushRecords();
+
+                            const payload = event.payload || {};
+                            const targetDatabase = (typeof payload.database === 'string' && payload.database.trim())
+                                ? payload.database.trim()
+                                : currentDatabase;
+                            const targetSpaceName = (typeof payload.kb_name === 'string' && payload.kb_name.trim())
+                                ? payload.kb_name.trim()
+                                : null;
+
+                            if (targetDatabase) {
+                                if (typeof refreshSpacesList === 'function') {
+                                    await refreshSpacesList(targetDatabase, payload.action === 'delete' ? null : targetSpaceName);
+                                } else if (typeof selectDatabase === 'function') {
+                                    await selectDatabase(targetDatabase, true, payload.action === 'delete' ? null : targetSpaceName);
+                                }
+
+                                if (payload.action !== 'delete') {
+                                    setTimeout(() => {
+                                        if (typeof refreshSpacesList === 'function') {
+                                            refreshSpacesList(targetDatabase, targetSpaceName).catch(err => console.error('space_mutation refresh retry failed', err));
+                                        } else if (typeof selectDatabase === 'function') {
+                                            selectDatabase(targetDatabase, true, targetSpaceName).catch(err => console.error('space_mutation select retry failed', err));
+                                        }
+                                    }, 250);
+                                }
+                            }
+
+                            if (payload.action === 'mint' && targetSpaceName) {
+                                const activeSpaceName = currentStore ? currentStore.replace('/data', '') : '';
+                                if (activeSpaceName === targetSpaceName && typeof selectSpace === 'function') {
+                                    const targetLi = Array.from(document.querySelectorAll('#kb-list li')).find(li => li.title === targetSpaceName);
+                                    await selectSpace(targetSpaceName, targetLi || document.querySelector('#sidebar li.active'), true);
+                                }
+                            }
+
+                            currentContentSpan = null;
+                        }
+                        else if (event.type === 'tool_error') {
+                            flushRecords();
                             currentContentSpan = null;
                         }
                         else if (event.type === 'step_start') {
@@ -906,6 +1079,7 @@
                                 appendChatMessage('ai', prefix + ': ' + label);
                             }
                             currentContentSpan = null;
+                            await yieldToBrowser();
                         }
                         else if (event.type === 'action_required') {
                             flushRecords();
@@ -962,10 +1136,29 @@
                             flushRecords();
                             appendChatMessage('ai', 'Error: ' + event.payload);
                             currentContentSpan = null;
+                            await yieldToBrowser();
                         }
                     } catch (e) {
                         console.error("Failed to parse stream line:", line, e);
                     }
+                }
+            }
+
+            if (pendingChunk.trim()) {
+                try {
+                    const event = JSON.parse(pendingChunk);
+                    if (event.payload === undefined) {
+                        if (event.record !== undefined) event.payload = event.record;
+                        else if (event.result !== undefined) event.payload = event.result;
+                    }
+                    if (event.type === 'result') {
+                        event.type = 'content';
+                    }
+                    if (event.type === 'error') {
+                        appendChatMessage('ai', 'Error: ' + event.payload);
+                    }
+                } catch (e) {
+                    console.error('Failed to parse final stream line:', pendingChunk, e);
                 }
             }
             

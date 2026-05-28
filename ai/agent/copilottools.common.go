@@ -45,11 +45,14 @@ func (a *CopilotAgent) resolveTransaction(ctx context.Context, db *database.Data
 	if tx == nil {
 		if db != nil {
 			var err error
+			fmt.Println("DEBUG: resolveTransaction starting NEW local transaction")
 			tx, err = db.BeginTransaction(ctx, mode)
 			if err != nil {
 				return nil, false, fmt.Errorf("failed to begin transaction: %w", err)
 			}
-			localTx = true
+			if p == nil || !p.ExplicitTransaction {
+				localTx = true
+			}
 		} else {
 			return nil, false, fmt.Errorf("no active transaction and no database to start one")
 		}

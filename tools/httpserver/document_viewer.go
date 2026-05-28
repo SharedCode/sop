@@ -2,6 +2,8 @@ package main
 
 import (
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai/database"
@@ -69,7 +71,34 @@ func handleViewer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	if documentVal.URL != "" && documentVal.Content == "" && len(documentVal.Data) == 0 {
+		redirectURL := documentVal.URL
+		highlightText := r.URL.Query().Get("text")
+
+		if highlightText != "" && !strings.Contains(redirectURL, "#") {
+			// Limit text to a reasonable length for the browser URI
+			if len(highlightText) > 60 {
+				highlightText = highlightText[:60]
+			}
+			encodedText := url.QueryEscape(highlightText)
+			encodedText = strings.ReplaceAll(encodedText, "+", "%20")
+			redirectURL += "#:~:text=" + encodedText
+		}
+
+		http.Redirect(w, r, redirectURL, http.StatusFound)
+		return
+	}
+
+	if documentVal.ContentType != "" {
+		w.Header().Set("Content-Type", documentVal.ContentType)
+	} else {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	}
+
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(documentVal.Content))
+	if len(documentVal.Data) > 0 {
+		w.Write(documentVal.Data)
+	} else {
+		w.Write([]byte(documentVal.Content))
+	}
 }

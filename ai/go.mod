@@ -5,6 +5,7 @@ go 1.24.3
 require (
 	github.com/google/cel-go v0.25.0
 	github.com/google/uuid v1.6.0
+	github.com/sethvargo/go-retry v0.3.0
 	github.com/sharedcode/sop v1.2.0
 	github.com/sharedcode/sop/infs v0.0.0
 	github.com/sharedcode/sop/jsondb v0.0.0-20251228215734-8fde503e747f
@@ -28,7 +29,6 @@ require (
 	github.com/ncw/directio v1.0.5 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/redis/go-redis/v9 v9.8.0 // indirect
-	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/sharedcode/sop/adapters/cassandra v0.0.0-20251228215734-8fde503e747f // indirect
 	github.com/sharedcode/sop/adapters/redis v0.0.0-00010101000000-000000000000 // indirect
 	github.com/sharedcode/sop/incfs v0.0.0-20251228215734-8fde503e747f // indirect

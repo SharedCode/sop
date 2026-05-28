@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai/memory"
 
 	aidb "github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/database"
@@ -57,51 +58,42 @@ func handleListSpaceCategories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	catsTree, err := memoryDb.Store.Categories(ctx)
+	parentPath := ""
+	if parentIDStr == "root" {
+		parentPath = "/"
+	} else if parentIDStr != "" {
+		parentPath = parentIDStr
+	}
+
+	var parentCatID sop.UUID
+	parentUUID, errP := sop.ParseUUID(parentPath)
+	if errP == nil {
+		parentCatID = parentUUID
+		parentPath = ""
+	}
+
+	catList, totalCount, err := memoryDb.ListCategories(ctx, memory.ListCategoriesParam{Limit: limit, Offset: offset, ParentPath: parentPath, ParentID: parentCatID})
 	if err != nil {
 		json.NewEncoder(w).Encode(make([]map[string]any, 0))
 		return
 	}
 
-	var categories []map[string]any
-	matchCount := 0
-	ok, _ := catsTree.First(ctx)
-	for ok {
-		cat, _ := catsTree.GetCurrentValue(ctx)
-		if cat != nil {
-			isMatch := false
-			if parentIDStr == "" {
-				isMatch = true
-			} else if parentIDStr == "root" {
-				if len(cat.ParentIDs) == 0 {
-					isMatch = true
-				}
-			} else {
-				for _, p := range cat.ParentIDs {
-					if p.ParentID.String() == parentIDStr {
-						isMatch = true
-						break
-					}
-				}
-			}
-
-			if isMatch {
-				if matchCount >= offset && matchCount < offset+limit {
-					categories = append(categories, map[string]any{
-						"id":            cat.ID.String(),
-						"name":          cat.Name,
-						"path":          cat.Path,
-						"description":   cat.Description,
-						"item_count":    cat.ItemCount,
-						"children":      cat.ChildrenIDs,
-						"parents":       cat.ParentIDs,
-						"center_vector": cat.CenterVector,
-					})
-				}
-				matchCount++
-			}
+	categories := make([]map[string]any, len(catList))
+	for i, cat := range catList {
+		children := cat.ChildrenIDs
+		if len(children) == 0 {
+			children = make([]sop.UUID, 0)
 		}
-		ok, _ = catsTree.Next(ctx)
+		categories[i] = map[string]any{
+			"id":            cat.ID.String(),
+			"name":          cat.Name,
+			"path":          cat.Path,
+			"description":   cat.Description,
+			"item_count":    cat.ItemCount,
+			"children":      children,
+			"parents":       cat.ParentIDs,
+			"center_vector": cat.CenterVector,
+		}
 	}
 
 	if categories == nil {
@@ -112,7 +104,7 @@ func handleListSpaceCategories(w http.ResponseWriter, r *http.Request) {
 
 	response := map[string]any{
 		"data":   categories,
-		"total":  matchCount,
+		"total":  totalCount,
 		"offset": offset,
 		"limit":  limit,
 		// When a Space is about to be displayed, it calls handleListSpaceCategories. Thus we can send the RBAC for the Space here.
@@ -166,71 +158,70 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 
 	memoryDb, errDynamic := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder, false)
 
-	matchCount := 0
+	totalItemsCount := 0
 
 	if errDynamic == nil && memoryDb != nil {
-		itemsTree, errTree := memoryDb.Store.Items(ctx)
-		if errTree == nil && itemsTree != nil {
-			ok, _ := itemsTree.First(ctx)
-			for ok {
-				val, _ := itemsTree.GetCurrentValue(ctx)
-
-				if val.ID == sop.NilUUID {
-					ok, _ = itemsTree.Next(ctx)
-					continue
-				}
-
-				// Filter (if user passed category_id)
-				if categoryFilter == "" || val.CategoryID.String() == categoryFilter {
-					if matchCount >= offset && matchCount < offset+limit {
-						t := SpaceItemView{
-							ID:        val.ID.String(),
-							Category:  val.CategoryID.String(),
-							Summaries: val.Summaries,
-						}
-						if val.Data != nil {
-							payload := val.Data
-							if text, found := payload["text"]; found {
-								t.Text = fmt.Sprint(text)
-							}
-							if desc, found := payload["description"]; found {
-								t.Description = fmt.Sprint(desc)
-							}
-							if cat, found := payload["category"]; found {
-								t.Category = fmt.Sprint(cat)
-							}
-						}
-						// Fetch Vector Data
-						if len(val.Positions) > 0 {
-							vecTree, errVec := memoryDb.Store.Vectors(ctx)
-							if errVec == nil && vecTree != nil {
-								found, _ := vecTree.Find(ctx, val.Positions[0], false)
-								if found {
-									vVal, _ := vecTree.GetCurrentValue(ctx)
-									t.Vector = vVal.Data
-								}
-							}
-						}
-						items = append(items, t)
-					}
-					matchCount++
-				}
-
-				ok, _ = itemsTree.Next(ctx)
-			}
-			if items == nil {
-				items = make([]SpaceItemView, 0)
-			}
-
-			response := map[string]any{
-				"data":   items,
-				"total":  matchCount,
-				"offset": offset,
-				"limit":  limit,
-			}
-			json.NewEncoder(w).Encode(response)
-			return
+		var catIDFilter sop.UUID
+		if categoryFilter != "" {
+			catIDFilter, _ = sop.ParseUUID(categoryFilter)
 		}
+
+		rawItems, count, _ := memoryDb.ListItems(ctx, memory.ListItemsParam{CategoryID: catIDFilter, Limit: limit, Offset: offset})
+		totalItemsCount = count
+
+		for _, val := range rawItems {
+			if val.ID.IsNil() {
+				continue
+			}
+			t := SpaceItemView{
+				ID:        val.ID.String(),
+				Category:  val.CategoryID.String(),
+				Summaries: val.Summaries,
+				DocID:     val.DocID,
+			}
+			if val.Data != nil {
+				payload := val.Data
+				if docID, found := payload["doc_id"]; found && t.DocID == "" {
+					t.DocID = fmt.Sprint(docID)
+				}
+				if text, found := payload["text"]; found {
+					t.Text = fmt.Sprint(text)
+				}
+				if desc, found := payload["description"]; found {
+					t.Description = fmt.Sprint(desc)
+				}
+				if cat, found := payload["category"]; found {
+					t.Category = fmt.Sprint(cat)
+				}
+			}
+			if len(val.Positions) > 0 {
+				vecTree, errVec := memoryDb.Store.Vectors(ctx)
+				if errVec == nil && vecTree != nil {
+					found, _ := vecTree.Find(ctx, val.Positions[0], false)
+					if found {
+						vVal, _ := vecTree.GetCurrentValue(ctx)
+						if len(vVal.Data) > 0 {
+							t.Vector = []float32{vVal.Data[0]}
+							t.VectorSize = len(vVal.Data)
+						}
+					}
+				}
+			}
+			items = append(items, t)
+		}
+
+		if items == nil {
+			items = make([]SpaceItemView, 0)
+		}
+
+		response := map[string]any{
+			"data":   items,
+			"total":  totalItemsCount,
+			"offset": offset,
+			"limit":  limit,
+		}
+		json.NewEncoder(w).Encode(response)
+		return
 	}
 	http.Error(w, "Failed to open KnowledgeBase or items tree not found", http.StatusInternalServerError)
 }

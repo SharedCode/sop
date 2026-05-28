@@ -84,7 +84,9 @@ func (s *Service) PlayScript(ctx context.Context, name string, category string, 
 		fmt.Fprint(w, "[\n") // Start JSON array
 	}
 	streamer.SetFlush(shouldFlush)
-	streamer.SetSuppressStepStart(true)
+	if len(script.Steps) == 1 {
+		streamer.SetSuppressStepStart(true)
+	}
 	scriptCtx = context.WithValue(scriptCtx, CtxKeyJSONStreamer, streamer)
 
 	if script.Database != "" && !script.Portable {

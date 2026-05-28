@@ -267,6 +267,30 @@ We have strictly banned the practice of hardcoding prompt engineering limits ins
 *   **Semantic Overrides**: Instead of injecting engine-agnostic DSL parameters (like "NEVER use JSONLogic, use CEL" inside `copilottools.go`), these architectural constraints are codified natively inside the Playbooks/Knowledge Bases (like `SYSTEM_KNOWLEDGE.md` / `sop_base_knowledge.json`).
 *   **Dynamic Brain Alignment**: This ensures the "Dynamic Brain" Retrieval-Augmented Generation execution can natively map and constrain LLM boundaries per-domain without redeploying backend Go binaries. The LLM must "learn" the platform syntaxes directly (and solely) through semantic retrieval context injection.
 
+### 6. Dynamic Context Injection and Intent Classification
+To manage token bandwidth and prevent instruction contamination, SOP uses a two-stage architecture: classification first, deterministic expansion second.
+
+Stage A: Three-Gate classification
+
+- Gate 1 (Focused Prefix): parse explicit constraints and classify only missing layers and CRUD intent.
+- Gate 2 (MRU Continuity/Switch): validate continuation vs switch and update layers/CRUD.
+- Gate 3 (Cold Start Discovery): classify from a bounded context outline of entities/domains/artifacts.
+
+Stage B: Focused context expansion
+
+- Classification remains coarse by design (entity/domain/db_artifacts/layers).
+- A deterministic assembler expands classification into execution-ready prompt context.
+- Expansion is scoped by domain, artifact, CRUD, and relation metadata.
+- The expanded payload is injected as a dedicated prompt component rather than broad domain dumps.
+
+Architectural rule:
+
+- Classification decides what is relevant.
+- Expansion fetches the exact context.
+- Prompt builder injects only the expanded focused context.
+
+This eliminates prompt bloat and minimizes structural hallucinations while preserving deterministic routing behavior.
+
 ## Backend Comparison: Isolation & Concurrency
 
 When choosing a backend, it is crucial to understand how they handle isolation, locking, and multi-tenancy. Both backends support high concurrency, but their locking scopes differ.
@@ -332,12 +356,13 @@ As SOP scales to handle **trillion to hundreds of trillions of items**, the curr
 
 ---
 
-## Agentic Routing & Context
-SOP implements a unique **Cascading Router** pattern for agent and AI workflows. This completely removes the overhead of complex, monolithic K-Means Vector databases. Intent routing operates in four rapid phases:
+## Agentic Routing and Prompt Assembly
+The active OMNI routing and prompt path is intentionally explicit:
 
-1. **Prefix Matching (O(1))**: Immediate override for commands routing to specific domains.
-2. **Contextual MRU Momentum (O(N))**: Inherited context sequences based on conversational history.
-3. **Centroid Vector Proximity**: Low-latency Cosine Similarity distance matches against precomputed `DomainReference` target bounds.
-4. **Targeted Agent Tiebreaker**: Bounded LLM inference fallback.
+1. Route with Three-Gate classification.
+2. Persist routing state for continuity.
+3. Build focused execution context from classification.
+4. Inject focused execution context as a dedicated prompt component.
+5. Fall back to broad schema injection only when no specific artifacts are classified.
 
-This keeps all AI-driven persistence highly deterministic and drastically reduces computing and token costs.
+This design keeps routing deterministic while giving the LLM laser-focused execution context for fluent script generation.

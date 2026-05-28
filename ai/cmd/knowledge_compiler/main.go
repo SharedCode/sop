@@ -2,17 +2,19 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/google/uuid"
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai/memory"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/text"
+
+	"github.com/google/uuid"
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai/memory"
 )
 
 type Section struct {
@@ -40,6 +42,20 @@ func extractTextAndLinks(n ast.Node, source []byte) (string, []string) {
 			// Natively extract all text from all children regardless of what they are (Lists, Code, P)
 			if c.Kind() == ast.KindText {
 				buf.Write(c.(*ast.Text).Text(source))
+			} else if c.Kind() == ast.KindHTMLBlock {
+				lines := c.Lines()
+				for i := 0; i < lines.Len(); i++ {
+					seg := lines.At(i)
+					buf.Write(seg.Value(source))
+				}
+			} else if c.Kind() == ast.KindRawHTML {
+				rawHtml := c.(*ast.RawHTML)
+				if rawHtml.Segments != nil {
+					for i := 0; i < rawHtml.Segments.Len(); i++ {
+						seg := rawHtml.Segments.At(i)
+						buf.Write(seg.Value(source))
+					}
+				}
 			} else if c.Kind() == ast.KindCodeSpan {
 				buf.Write(c.Text(source))
 				buf.WriteString(" ")
@@ -138,7 +154,7 @@ func parseMarkdownToTree(filePath string, defaultTitle string) *Section {
 				stack = stack[:len(stack)-1]
 			}
 
-			if len(stack) >= 3 {
+			if level >= 4 {
 				// Flatten any heading deeper than L3 directly into the L3 body
 				prefix := strings.Repeat("#", level)
 				textStr := prefix + " " + title
@@ -212,7 +228,7 @@ func getCat(catPath string) *memory.Category {
 	id := sop.UUID(uuid.New())
 	c := &memory.Category{
 		ID:   id,
-		Name: parts[len(parts)-1],
+		Name: removePrefix(parts[len(parts)-1], prefix),
 		Path: catPath,
 	}
 	if len(parts) > 1 {
@@ -301,10 +317,10 @@ func parseUnlinkedFiles(repoRoot string) {
 			if len(tree.Children) > 0 {
 				title = tree.Children[0].Title
 				if len(tree.Children[0].Paragraphs) > 0 {
-					catDescriptions[title] = tree.Children[0].Paragraphs[0]
+					catDescriptions[normalizeCategoryName(title)] = cleanText(title + "\n\n" + tree.Children[0].Paragraphs[0])
 				}
 			} else if len(tree.Paragraphs) > 0 {
-				catDescriptions[title] = tree.Paragraphs[0]
+				catDescriptions[normalizeCategoryName(title)] = cleanText(title + "\n\n" + tree.Paragraphs[0])
 			}
 
 			if len(tree.Children) > 0 {
@@ -312,10 +328,20 @@ func parseUnlinkedFiles(repoRoot string) {
 					tree.Children[0].Paragraphs = append(tree.Paragraphs, tree.Children[0].Paragraphs...)
 				}
 				for _, child := range tree.Children {
-					processFlattenedTreeIntoChunks(child, title, docID)
+					if strings.EqualFold(title, child.Title) {
+						if len(child.Children) == 0 && len(child.Paragraphs) == 0 {
+							continue
+						}
+						processFlattenedTreeIntoChunks(child, []string{title}, docID)
+					} else {
+						if len(child.Children) == 0 && len(child.Paragraphs) == 0 {
+							continue
+						}
+						processFlattenedTreeIntoChunks(child, []string{title, child.Title}, docID)
+					}
 				}
 			} else {
-				processFlattenedTreeIntoChunks(tree, title, docID)
+				processFlattenedTreeIntoChunks(tree, []string{title}, docID)
 			}
 		}
 
@@ -323,85 +349,64 @@ func parseUnlinkedFiles(repoRoot string) {
 	})
 }
 
-func processFlattenedTreeIntoChunks(node *Section, fixedCategory string, docID sop.UUID) {
-	body := strings.TrimSpace(strings.Join(node.Paragraphs, "\n"))
-
-	// Create an Item if we have substantial content
-	if len(body) >= 10 {
-		idPrefix := strings.ReplaceAll(node.Title, " ", "_")
-		allChunks = append(allChunks, KnowledgeChunk{
-			ID:          fmt.Sprintf("%s_section_%d", idPrefix, len(allChunks)),
-			Category:    fixedCategory,
-			Text:        node.Title,
-			Description: body,
-			DocumentID:  docID,
-		})
+func processFlattenedTreeIntoChunks(node *Section, currentPathContext []string, docID sop.UUID) {
+	var normalizedPaths []string
+	for _, p := range currentPathContext {
+		normalizedPaths = append(normalizedPaths, normalizeCategoryName(p))
 	}
 
-	for _, child := range node.Children {
-		processFlattenedTreeIntoChunks(child, fixedCategory, docID)
-	}
-}
-
-func processTreeIntoChunks(node *Section, currentPathContext []string) {
 	var catPath string
-	if len(currentPathContext) > 0 {
-		catPath = strings.Join(currentPathContext, " / ")
+	if len(normalizedPaths) > 0 {
+		catPath = strings.Join(normalizedPaths, " / ")
 	} else {
-		catPath = node.Title
+		catPath = normalizeCategoryName(node.Title)
 	}
 
+	desc := node.Title
 	if len(node.Paragraphs) > 0 {
-		catDescriptions[catPath] = node.Paragraphs[0]
+		desc = node.Paragraphs[0]
 	}
+	cleanedDesc := cleanText(desc)
+	if len(cleanedDesc) > 500 {
+		runes := []rune(cleanedDesc)
+		if len(runes) > 500 {
+			cleanedDesc = string(runes[:500]) + "..."
+		}
+	}
+	catDescriptions[catPath] = cleanedDesc
 
 	body := strings.TrimSpace(strings.Join(node.Paragraphs, "\n"))
 
-	// Create an Item if we have substantial content
-	if len(body) >= 10 {
+	if strings.Contains(node.Title, "Execute Script Tool") {
+		fmt.Printf("Execute Script Tool -> bodyLen: %d, children: %d\n", len(body), len(node.Children))
+	}
+	// Create an Item if we have substantial content AND (length > 500 OR it's a leaf node)
+	if len(body) >= 10 && (len(body) > 500 || len(node.Children) == 0) {
 		idPrefix := strings.ReplaceAll(node.Title, " ", "_")
 		allChunks = append(allChunks, KnowledgeChunk{
 			ID:          fmt.Sprintf("%s_section_%d", idPrefix, len(allChunks)),
 			Category:    catPath,
-			Text:        node.Title,
-			Description: body,
+			Text:        removePrefix(cleanText(node.Title), prefix),
+			Description: cleanText(body),
+			DocumentID:  docID,
 		})
 	}
 
 	for _, child := range node.Children {
 		childPathContext := append([]string{}, currentPathContext...)
 		childPathContext = append(childPathContext, child.Title)
-		processTreeIntoChunks(child, childPathContext)
+		processFlattenedTreeIntoChunks(child, childPathContext, docID)
 	}
 }
 
+var prefix string
+
 func main() {
-	for i, arg := range os.Args {
-		if arg == "-base-url" || arg == "--base-url" {
-			if i+1 < len(os.Args) {
-				baseURL = os.Args[i+1]
-			}
-		}
-	}
+	flag.StringVar(&baseURL, "base-url", "", "Base URL for documents")
+	flag.StringVar(&prefix, "prefix", "", "Prefix to remove from category names")
+	flag.Parse()
 
 	repoRoot := findRepoRoot()
-	rootReadme := filepath.Join(repoRoot, "README.md")
-
-	fmt.Println("Starting AST Crawl from Root README.md...")
-	rootTree := parseMarkdownToTree(rootReadme, "README")
-
-	if rootTree != nil {
-		if len(rootTree.Children) > 0 {
-			if len(rootTree.Paragraphs) > 0 {
-				rootTree.Children[0].Paragraphs = append(rootTree.Paragraphs, rootTree.Children[0].Paragraphs...)
-			}
-			for _, child := range rootTree.Children {
-				processTreeIntoChunks(child, []string{child.Title})
-			}
-		} else {
-			processTreeIntoChunks(rootTree, []string{rootTree.Title})
-		}
-	}
 
 	fmt.Println("Sweeping unlinked Markdown files...")
 	parseUnlinkedFiles(repoRoot)
@@ -431,10 +436,12 @@ func main() {
 
 					idx := indices[0]
 
-					// Prepend the sub-category name if it's different from the title to preserve context
-					subCatName := parts[len(parts)-1]
-					if allChunks[idx].Text != subCatName {
-						allChunks[idx].Text = subCatName + " - " + allChunks[idx].Text
+					// Ensure the original ## header name is not lost when flattening
+					headerName := parts[len(parts)-1]
+					if !strings.HasPrefix(allChunks[idx].Text, headerName) {
+						if allChunks[idx].Text != headerName {
+							allChunks[idx].Text = headerName + " - " + allChunks[idx].Text
+						}
 					}
 
 					allChunks[idx].Category = parentPath
@@ -478,7 +485,7 @@ func main() {
 		Config: &memory.KnowledgeBaseConfig{
 			IsPersona:    true,
 			SystemPrompt: systemPrompt,
-			DocumentMode: true,
+			DocumentMode: baseURL != "",
 		},
 		Categories: categories,
 		Documents:  allDocuments,
@@ -491,3 +498,4 @@ func main() {
 
 	fmt.Printf("Success! Compiled %d knowledge items and %d categories into %s\n", len(exportItems), len(categories), outputPath)
 }
+

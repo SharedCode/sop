@@ -177,12 +177,12 @@ func TestHarness_ReAct_MedicalKBSimulation(t *testing.T) {
 
 	// Load 1 KB using the medical.json file
 	kbs := map[string]string{
-		"medical_kb": "medical.json", // Setup looks natively in root or via fallback
+		{Name: "medical_kb", Type: ai.ArtifactTypeSpace}: "medical.json", // Setup looks natively in root or via fallback
 	}
 	svc := setupIntegHarness(t, ctx, kbs)
 
 	options := []ai.Option{
-		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []string{"medical_kb"}}),
+		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "medical_kb", Type: ai.ArtifactTypeSpace}}}),
 	}
 
 	// Query requiring it to fetch from the loaded medical KB
@@ -201,15 +201,15 @@ func TestHarness_ReAct_MultiKBSimulation(t *testing.T) {
 
 	// Load multiple KBs
 	kbs := map[string]string{
-		"medical_kb": "medical.json",
-		"sop_kb":     "sop_base_knowledge.json",
-		"empty_kb1":  "",
-		"empty_kb2":  "",
+		{Name: "medical_kb", Type: ai.ArtifactTypeSpace}: "medical.json",
+		{Name: "sop_kb", Type: ai.ArtifactTypeSpace}:     "sop_base_knowledge.json",
+		{Name: "empty_kb1", Type: ai.ArtifactTypeSpace}:  "",
+		{Name: "empty_kb2", Type: ai.ArtifactTypeSpace}:  "",
 	}
 	svc := setupIntegHarness(t, ctx, kbs)
 
 	options := []ai.Option{
-		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []string{"medical_kb", "sop_kb", "empty_kb1", "empty_kb2"}}),
+		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "medical_kb", Type: ai.ArtifactTypeSpace}, {Name: "sop_kb", Type: ai.ArtifactTypeSpace}, {Name: "empty_kb1", Type: ai.ArtifactTypeSpace}, {Name: "empty_kb2", Type: ai.ArtifactTypeSpace}}}),
 	}
 
 	t.Log("Asking complex multi-KB query...")
@@ -248,8 +248,8 @@ func TestHarness_ReAct_LongConversation_50Turns(t *testing.T) {
 	defer cancel()
 
 	kbs := map[string]string{
-		"medical_kb": "medical.json",
-		"sop_kb":     "sop_base_knowledge.json",
+		{Name: "medical_kb", Type: ai.ArtifactTypeSpace}: "medical.json",
+		{Name: "sop_kb", Type: ai.ArtifactTypeSpace}:     "sop_base_knowledge.json",
 	}
 	svc := setupIntegHarness(t, ctx, kbs)
 	svc.EnableShortTermMemory = true
@@ -258,7 +258,7 @@ func TestHarness_ReAct_LongConversation_50Turns(t *testing.T) {
 	}
 
 	options := []ai.Option{
-		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []string{"medical_kb", "sop_kb"}}),
+		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "medical_kb", Type: ai.ArtifactTypeSpace}, {Name: "sop_kb", Type: ai.ArtifactTypeSpace}}}),
 	}
 
 	questions := []string{
@@ -305,7 +305,7 @@ func TestHarness_ReAct_MultiSleepCycles(t *testing.T) {
 	defer cancel()
 
 	kbs := map[string]string{
-		"sop_kb": "sop_base_knowledge.json",
+		{Name: "sop_kb", Type: ai.ArtifactTypeSpace}: "sop_base_knowledge.json",
 	}
 	svc := setupIntegHarness(t, ctx, kbs)
 	svc.EnableShortTermMemory = true
@@ -314,7 +314,7 @@ func TestHarness_ReAct_MultiSleepCycles(t *testing.T) {
 	}
 
 	options := []ai.Option{
-		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []string{"sop_kb"}}),
+		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "sop_kb", Type: ai.ArtifactTypeSpace}}}),
 	}
 
 	// Manually initiate constant background sleep cycle
@@ -375,14 +375,14 @@ func TestHarness_ReAct_OmniSearch(t *testing.T) {
 	defer os.Remove(testKBFile)
 
 	kbs := map[string]string{
-		"omni_kb": testKBFile,
-		// "sop_kb":  "sop_base_knowledge.json", // Omitted to avoid long vectorization during test
+		{Name: "omni_kb", Type: ai.ArtifactTypeSpace}: testKBFile,
+		// {Name: "sop_kb", Type: ai.ArtifactTypeSpace}:  "sop_base_knowledge.json", // Omitted to avoid long vectorization during test
 	}
 	svc := setupIntegHarness(t, ctx, kbs)
 	svc.EnableShortTermMemory = false // Avoid write conflicts
 
 	options := []ai.Option{
-		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []string{"omni_kb"}}),
+		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "omni_kb", Type: ai.ArtifactTypeSpace}}}),
 	}
 
 	t.Log("Asking question about apple iPhones...")

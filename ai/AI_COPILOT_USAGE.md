@@ -102,9 +102,9 @@ You can modify data directly.
 
 The AI acts as an **Omni Persona**—managing both underlying B-Trees as a Database Engineer and recognizing "Spaces" or "Knowledge Bases" explicitly.
 
-A "Space" or "Knowledge Base" (often represented as a single word like "Notes" or "Contacts") is a new AI memory subsystem comprised of a VectorDB, Text Search, and a special schema (Thoughts: Category/Items) along with its memory management. When a user asks to generate, translate, upload, or import data into a target Space, the AI **DOES NOT USE ANY DATABASE TOOLS** (e.g., `open_store`, `list_stores`). Treating Spaces like raw B-Trees will result in schema validation errors. 
+A "Space" or "Knowledge Base" (often represented as a single word like "Notes" or "Contacts") is a new AI memory subsystem comprised of a VectorDB, Text Search, and a special schema (Thoughts: Category/Items) along with its memory management. When a user asks to generate, translate, upload, or import data into a target Space, the AI **DOES NOT USE ANY RAW DATABASE TOOLS** (e.g., `open_store`, `list_stores`, `execute_script`). Treating Spaces like raw B-Trees will result in schema validation errors. 
 
-Instead, the AI must immediately output a JSON codeblock matching the `ExportData` schema. The JSON must have a top-level `target_space` string indicating the name, along with `categories` (string array) and `items`. The Space APIs will intercept this JSON and automatically provision the AI Memory for the user.
+Instead, the AI should use its Space APIs such as `upsert_space_items` natively to manage the categories and items, ensuring correct memory ingestion sequences.
 
 ## 4. Memory & Learning: The Self-Correcting Copilot
 
@@ -120,16 +120,25 @@ This is the **Working Memory**. It holds the immediate context of your current c
 *   **Privacy**: Session data is isolated. It doesn't leak into the global brain unless explicitly saved.
 
 ### Long-Term Memory (The "System Knowledge")
-This is the **Enterprise Brain**. It persists facts, business rules, and corrections across all sessions and users. It effectively turns the AI into a "Self-Correcting" system.
+This memory architecture operates on a **generic blueprint**: **Expertise KB + Memory System (STM/LTM)**. 
 
-*   **Storage**: Rules are stored in the `llm_instructions` B-Tree in the `SystemDB`. They are transactional and durable.
-*   **The "Intelligent Librarian"**: The AI doesn't load *everything* at once. It maintains a "Table of Contents" (namespaces like `finance`, `hr`, `schema`) and dynamically fetches the relevant rules only when needed.
-*   **How to Teach (Self-Correction)**:
-    1.  **Direct Instruction**: "Remember that 'EBITDA' means 'Earnings Before Interest...'"
-    2.  **Correction**: If the AI fails (e.g., queries `status="Active"`), correct it: *"Status is an integer! 1=Active."* The AI will then **update its own instructions** to ensure it never makes that mistake again.
-    3.  **Explicit Rules**: "Save this instruction in the 'finance' category: Fiscal year starts in April."
+Depending on the agent profile, it behaves as follows:
+*   **Omni (The System Agent)**: Uses the **SOP KB (Shared Expertise)** for static architectural wisdom compiled from offline Markdown files + **Memory System**. Omni can additionally be given setups containing multiple custom KBs for data lookup.
+*   **Avatars**: Utilize **Custom KBs** (specific domain knowledge) + **Memory System** for distinct LLM interactions.
 
-**Why this matters**: You don't need to write perfect prompts every time. If the AI gets it wrong, you fix it once, and it stays fixed—for you and your team.
+This generic blueprint breaks down into two core engines with strict privacy scopes:
+1. **Expertise KB (e.g. SOP KB)**: Houses static knowledge. SOP KB is shared across instances detailing tech stack operations.
+2. **Memory System (Private STM/LTM KB)**: Persists live conversational facts, transient rules, and self-correction constraints privately per user.
+
+*   **V1 Implementation**: Originally used an `llm_instructions` B-Tree in the `SystemDB` where the LLM explicitly managed knowledge via transactional tools (like `manage_knowledge`).
+*   **V2 Storage (Current)**: Rules are now stored semantically via the Omni Protocol in dynamic Vector KBs in the `SystemDB`. The Butler Architecture separates hard instruction fetching (SOP KB) from interactive learning paths (LTM KB).
+*   **The "Butler Architecture"**: The AI doesn't load *everything* into massive static prompts. It uses dynamic queries to automatically fetch exact capability parameters from SOP KB and actively checks the Memory System for session corrections.
+*   **Self-Correction (One of many Omni capabilities)**:
+    1.  **Passive Corrections**: If the AI makes a mistake and you correct it, the active context is seamlessly committed to the LTM KB without explicit tool calls.
+    2.  **Structural Domain Rules**: Drop broad rules directly into domain `.md` files in the repository. Native compilation extracts them into `sop_base_knowledge.json`.
+    3.  **Active Lookup**: Upon relevant conversational triggers, Copilot simultaneously consults both the SOP KB and LTM KB via `SearchKeywords` bypassing rigid prompt structures.
+
+**Why this matters**: You don't need to write perfect monolithic prompts. The system dynamically tailors context to your exact situation seamlessly.
 
 ---
 
@@ -179,7 +188,7 @@ When defining scripts manually (or asking the Assistant to edit them), you can m
 
 ---
 
-## Example Session
+### Example Session
 
 ```text
 User: /record onboard_user
@@ -198,7 +207,7 @@ User: /play onboard_user
 Copilot: Executing 'onboard_user'...
 1. Added user...
 2. Added log entry...
-
+```
 ---
 
 ## 6. Mobile & Small Device Support ("Pocket Admin")

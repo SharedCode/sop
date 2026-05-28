@@ -84,13 +84,9 @@ The following logic applies when the AI loads this knowledge:
 1.  **Direct Match**: If the user's term matches a `vocabulary` Key exactly, AUTOMATICALLY replace the term with the `target` in the Value.
 2.  **Context Match**: If the user mentions a Concept found in the `rule` namespace, AUTOMATICALLY append the `condition` to the query filter.
 
-### Rule 2: Active Learning
-- If the user corrects the AI (e.g., "No, by 'cost' I mean the 'total_amount' field"), the AI MUST:
-    1.  Generate a `manage_knowledge` call.
-    2.  Set `namespace="vocabulary"`.
-    3.  Set `key="{Store}:cost"`.
-    4.  Set `value` to the structure defined above.
-    5.  Confirm to the user: "I have learnt that 'cost' refers to 'total_amount' for future queries."
+### Rule 2: Active Learning (Evolution Tracker)
+- **V1 Handling**: The AI was previously instructed to generate a `manage_knowledge` tool call to insert corrections (e.g. "by 'cost' I mean 'total_amount'") directly into the B-Tree.
+- **V2 Handling (Omni Protocol)**: Explicit tool calls for manual knowledge insertion are deprecated. Instead, corrections should be recorded inside the repository's Markdown documents by the architect (or handled automatically natively by the backend pipeline). The Copilot will automatically inherit this during the next vector compilation cycle without needing explicit system prompt triggers.
 
 ### Rule 3: Transparency
 - When applying a Semantic Mapping or Rule, the AI should optionally include a comment in the reasoning (e.g., "Applying learnt rule: 'vip_user'").

@@ -33,10 +33,18 @@ type RunnerSession struct {
 
 	// PendingRefinement holds the proposed changes for a script from /script refine
 	PendingRefinement *RefinementProposal
+	// PendingConfirmation holds a user confirmation gate for destructive actions.
+	PendingConfirmation *PendingUserConfirmation
 
 	// Memory holds the structured Short-Term Memory of the session.
 	// It replaces the flat History slice with threaded topics.
 	Memory *ShortTermMemory
+}
+
+type PendingUserConfirmation struct {
+	Kind         string
+	SpaceName    string
+	DatabaseName string
 }
 
 // ConversationRole enum

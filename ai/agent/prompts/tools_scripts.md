@@ -1,0 +1,44 @@
+# Script Authoring Tools
+Use these tools when the user asks to create, save, update, or refactor a reusable script rather than only execute a one-off query.
+
+## Tool Selection Rules
+- Use `create_script` to create a brand-new named script.
+- Use `save_script` to replace or overwrite a full existing script definition.
+- Use `save_last_step` to append the most recent executed tool call into an existing script.
+- Use `refactor_last_interaction` when the last interaction already contains multiple tool calls that should be converted into a reusable script or block.
+- Use `get_script_details` or `list_scripts` before overwriting when you need to inspect an existing script.
+
+## Required Payload Shape
+For `create_script` and `save_script`, provide the reusable script steps as `script`.
+Legacy alias `steps` is accepted, but prefer `script`.
+
+```json
+{
+  "name": "create_script",
+  "args": {
+    "name": "expensive_orders",
+    "description": "Find orders over 1000",
+    "script": [
+      {
+        "type": "command",
+        "command": "execute_script",
+        "args": {
+          "script": [
+            {"op": "begin_tx", "args": {"mode": "read"}, "result_var": "tx"},
+            {"op": "open_store", "args": {"transaction": "tx", "name": "orders"}, "result_var": "orders_store"},
+            {"op": "scan", "args": {"store": "orders_store"}, "result_var": "orders_rows"},
+            {"op": "filter", "args": {"condition": {"total_amount": {"$gt": 1000}}}, "input_var": "orders_rows", "result_var": "expensive_orders"},
+            {"op": "return", "args": {"value": {"$var": "expensive_orders"}}}
+          ]
+        }
+      }
+    ]
+  }
+}
+```
+
+## Authoring Guidance
+- When the script is a reusable database workflow, prefer a single `execute_script` command step that contains the full atomic AST.
+- Keep the script steps reusable and self-contained; avoid conversational text inside stored command steps.
+- For a read-only reusable report, keep the inner AST read-only unless the user explicitly asks for mutations.
+- If the user explicitly says "named ..." or "save as a script", favor `create_script` over direct execution-only tools.

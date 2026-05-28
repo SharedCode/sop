@@ -210,20 +210,62 @@ func (db *Database) RemoveModelStore(ctx context.Context, name string) error {
 
 // RemoveKnowledgeBase removes the Knowledge Base and its underlying B-Trees.
 func (db *Database) RemoveKnowledgeBase(ctx context.Context, name string) error {
-	suffixes := []string{
-		"/categories",
-		"/vectors",
-		"/items",
-		"/text/postings",
-		"/text/term_stats",
-		"/text/doc_stats",
-		"/text/global",
+	name = strings.TrimSpace(name)
+	if strings.HasSuffix(strings.ToLower(name), "/data") {
+		name = name[:len(name)-len("/data")]
 	}
-	var lastErr error
-	for _, suffix := range suffixes {
-		if err := database.RemoveBtree(ctx, db.config, fmt.Sprintf("%s%s", name, suffix)); err != nil {
-			lastErr = err
+	if name == "" {
+		return fmt.Errorf("knowledge base name is required")
+	}
+
+	trans, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		return err
+	}
+
+	stores, err := trans.GetStores(ctx)
+	_ = trans.Rollback(ctx)
+	if err != nil {
+		return err
+	}
+
+	suggestion := ""
+	for _, store := range stores {
+		baseName, _, hasSlash := strings.Cut(store, "/")
+		if !hasSlash {
+			continue
 		}
+		if baseName == name {
+			suggestion = ""
+			break
+		}
+		if suggestion == "" && strings.EqualFold(baseName, name) {
+			suggestion = baseName
+		}
+	}
+
+	prefix := name + "/"
+	var lastErr error
+	removedAny := false
+	for _, store := range stores {
+		if !strings.HasPrefix(store, prefix) {
+			continue
+		}
+		if err := database.RemoveBtree(ctx, db.config, store); err != nil {
+			lastErr = err
+			continue
+		}
+		removedAny = true
+	}
+
+	if removedAny {
+		return nil
+	}
+	if lastErr == nil {
+		if suggestion != "" {
+			return fmt.Errorf("knowledge base '%s' not found: names are case-sensitive; did you mean '%s'?", name, suggestion)
+		}
+		return fmt.Errorf("knowledge base '%s' not found", name)
 	}
 	return lastErr
 }
