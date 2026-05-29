@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	log "log/slog"
@@ -15,7 +16,7 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-const ExecuteScriptInstruction = `Execute a JSON AST script for multi-step store operations. Always use explicit pipeline variables with result_var/input_var when chaining scan/filter/join/project/limit steps. For joins, the engine expects explicit store-based joins such as join/store/on or join_right/store/on; relation metadata in the focused context tells you which bridge store and key mapping to use, but you must still compose concrete join steps. After a join, reference joined fields by their namespaced path such as users.first_name, users_orders.value, or orders.total_amount.`
+const ExecuteScriptInstruction = `Execute a JSON AST script for multi-step store operations. Focus on orchestration semantics: begin a transaction, read or mutate stores, then commit or rollback. Chain multi-step reads with result_var/input_var. If schema or join mapping is ambiguous, call list_stores first and treat relations=[...] as the source of truth. If the AST shape is ambiguous, call gettoolinfo('execute_script'). Use concrete predicate objects and concrete join mappings; do not guess missing values.`
 
 const (
 	SelectInstruction = "Selects data from a store. See SOP KB for instructions."
@@ -31,7 +32,7 @@ const (
 // registerSystemTools registers the core system inspection tools.
 func (a *CopilotAgent) registerSystemTools(ctx context.Context) {
 	a.registry.Register("list_databases", "Lists all available databases.", "()", a.toolListDatabases)
-	a.registry.Register("list_stores", "Lists all stores in the current or specified database.", "(database: string)", a.toolListStores)
+	a.registry.Register("list_stores", "Lists all stores in the current or specified database, optionally filtered to specific store names.", "(database?: string, stores?: Array<string>)", a.toolListStores)
 	a.registry.Register("list_tools", "Lists all available tools and their usage instructions.", "()", a.toolListTools)
 }
 
@@ -140,6 +141,21 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 		return "", fmt.Errorf("no session payload found")
 	}
 
+	requestedStores := make(map[string]struct{})
+	if rawStores, ok := args["stores"].([]any); ok {
+		for _, raw := range rawStores {
+			if name, ok := raw.(string); ok && strings.TrimSpace(name) != "" {
+				requestedStores[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
+			}
+		}
+	} else if rawStores, ok := args["stores"].([]string); ok {
+		for _, name := range rawStores {
+			if strings.TrimSpace(name) != "" {
+				requestedStores[strings.ToLower(strings.TrimSpace(name))] = struct{}{}
+			}
+		}
+	}
+
 	// Resolve Database
 	var db *database.Database
 	dbName, _ := args["database"].(string)
@@ -211,6 +227,11 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 		if strings.Contains(sName, "/") {
 			continue
 		}
+		if len(requestedStores) > 0 {
+			if _, ok := requestedStores[strings.ToLower(strings.TrimSpace(sName))]; !ok {
+				continue
+			}
+		}
 		desc := sName
 		if hasOpts {
 			// Peek for schema to guide the LLM
@@ -241,13 +262,66 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 		}
 		descriptions = append(descriptions, desc)
 	}
+	if len(requestedStores) > 0 && len(descriptions) == 0 {
+		return "", fmt.Errorf("requested stores not found in database '%s'", dbName)
+	}
 
 	if autoCommit {
 		if err := tx.Commit(ctx); err != nil {
 			return "", fmt.Errorf("failed to commit transaction: %w", err)
 		}
 	}
-	return fmt.Sprintf("Stores:\n%s", strings.Join(descriptions, "\n")), nil
+	result := fmt.Sprintf("Stores:\n%s", strings.Join(descriptions, "\n"))
+	if nativeToolHintsEnabled(ctx) {
+		return wrapToolResultWithListStoresHint(result, descriptions), nil
+	}
+	return result, nil
+}
+
+func wrapToolResultWithListStoresHint(result string, descriptions []string) string {
+	hint := &ai.ToolProgressHint{
+		Status:             "progressing",
+		CompletionDelta:    0.25,
+		Tips:               []string{"Reuse the exact store names, grounded schema fields, and relations from list_stores in the next tool call."},
+		SuggestedNextTools: []string{"execute_script"},
+	}
+	for _, desc := range descriptions {
+		trimmed := strings.TrimSpace(desc)
+		if trimmed == "" {
+			continue
+		}
+		hint.Clues = append(hint.Clues, "Grounded store info: "+trimmed)
+		if len(hint.Clues) == 3 {
+			break
+		}
+	}
+	return wrapNativeToolResultEnvelope(result, hint)
+}
+
+func nativeToolHintsEnabled(ctx context.Context) bool {
+	return ctx.Value(ai.CtxKeyNativeToolHints) == true
+}
+
+func wrapNativeTerminalToolResult(ctx context.Context, result string, status string, tips ...string) string {
+	if !nativeToolHintsEnabled(ctx) {
+		return result
+	}
+	return wrapNativeToolResultEnvelope(result, &ai.ToolProgressHint{
+		Status: strings.TrimSpace(status),
+		Tips:   append([]string(nil), tips...),
+	})
+}
+
+func wrapNativeToolResultEnvelope(result string, hint *ai.ToolProgressHint) string {
+	envelope := ai.ToolResultEnvelope{
+		ToolResult:   json.RawMessage(strconv.Quote(result)),
+		ProgressHint: hint,
+	}
+	bytes, err := json.Marshal(envelope)
+	if err != nil {
+		return result
+	}
+	return string(bytes)
 }
 
 func (a *CopilotAgent) toolSwitchDatabase(ctx context.Context, args map[string]any) (string, error) {

@@ -36,13 +36,35 @@ const (
 	MRUSourceUnknown     = ""
 	MRUSourcePersona     = "persona"
 	MRUSourceSystemTools = "system_tools"
+	MRUSourceAskOutcome  = "ask_outcome"
 	MRUSourcePlaybook    = "playbook"
+)
+
+const (
+	MRUScopeSession = "session"
+	MRUScopeAsk     = "ask"
 )
 
 const (
 	maxProjectedPersonaEntries    = 2
 	maxProjectedSystemToolEntries = 1
+	maxProjectedAskOutcomeEntries = 10
 	maxProjectedPlaybookEntries   = 4
+)
+
+const (
+	askOutcomeMRUCategoryHeader          = "ASK_OUTCOME_HEADER"
+	askOutcomeMRUCategoryDatabase        = "ASK_OUTCOME_DATABASE"
+	askOutcomeMRUCategoryDomain          = "ASK_OUTCOME_DOMAIN"
+	askOutcomeMRUCategoryQuery           = "ASK_OUTCOME_QUERY"
+	askOutcomeMRUCategoryResult          = "ASK_OUTCOME_RESULT"
+	askOutcomeMRUCategoryStoreSchema     = "ASK_OUTCOME_STORE_SCHEMA"
+	askOutcomeMRUCategoryRelations       = "ASK_OUTCOME_STORE_RELATIONS"
+	askOutcomeMRUCategoryJoinSelection   = "ASK_OUTCOME_JOIN_SELECTION"
+	askOutcomeMRUCategoryFilterSelection = "ASK_OUTCOME_FILTER_SELECTION"
+	askOutcomeMRUCategoryConfirmed       = "ASK_OUTCOME_CONFIRMED"
+	askOutcomeMRUCategoryToolPattern     = "ASK_OUTCOME_TOOL_PATTERN"
+	askOutcomeMRUCategoryGuidance        = "ASK_OUTCOME_GUIDANCE"
 )
 
 // MRUItem represents a single category currently in working memory
@@ -51,6 +73,7 @@ type MRUItem struct {
 	LastAccessed int64
 	Context      string
 	Source       string
+	Scope        string
 }
 
 func cloneTaskContextClassification(taskCtx *TaskContextClassification) *TaskContextClassification {
@@ -78,8 +101,11 @@ func shouldPreserveMRUOnTopicSwitch(item MRUItem) bool {
 }
 
 func isRehydratableMRUItem(item MRUItem) bool {
+	if normalizeMRUScope(item.Scope) != MRUScopeSession {
+		return false
+	}
 	switch item.Source {
-	case MRUSourcePersona, MRUSourceSystemTools, MRUSourcePlaybook:
+	case MRUSourcePersona, MRUSourceSystemTools, MRUSourceAskOutcome, MRUSourcePlaybook:
 		return true
 	default:
 		return strings.HasPrefix(item.Category, "PERSONA_")
@@ -92,10 +118,12 @@ func projectedMRUSourcePriority(source string) int {
 		return 0
 	case MRUSourceSystemTools:
 		return 1
-	case MRUSourcePlaybook:
+	case MRUSourceAskOutcome:
 		return 2
-	default:
+	case MRUSourcePlaybook:
 		return 3
+	default:
+		return 4
 	}
 }
 
@@ -105,6 +133,8 @@ func projectedMRUSourceLimit(source string) int {
 		return maxProjectedPersonaEntries
 	case MRUSourceSystemTools:
 		return maxProjectedSystemToolEntries
+	case MRUSourceAskOutcome:
+		return maxProjectedAskOutcomeEntries
 	case MRUSourcePlaybook:
 		return maxProjectedPlaybookEntries
 	default:
@@ -133,6 +163,7 @@ func projectMRUItemsFromSTM(snapshot []MRUItem, activeKB string) []MRUItem {
 		candidates = append(candidates, MRUItem{
 			Category: playbookMRUCategory(kb),
 			Source:   MRUSourcePlaybook,
+			Scope:    MRUScopeSession,
 		})
 	}
 
@@ -282,6 +313,10 @@ func (a *CopilotAgent) MarkMRUCategory(category string, context string) {
 }
 
 func (a *CopilotAgent) markMRUCategoryWithSource(category string, context string, source string) {
+	a.markMRUCategory(category, context, source, MRUScopeSession)
+}
+
+func (a *CopilotAgent) markMRUCategory(category string, context string, source string, scope string) {
 	if a.service == nil || a.service.session == nil {
 		return
 	}
@@ -290,6 +325,7 @@ func (a *CopilotAgent) markMRUCategoryWithSource(category string, context string
 	defer sess.MRUMu.Unlock()
 
 	ts := time.Now().UnixMilli()
+	scope = normalizeMRUScope(scope)
 
 	// Update if exists
 	for i, item := range sess.MRU {
@@ -301,6 +337,7 @@ func (a *CopilotAgent) markMRUCategoryWithSource(category string, context string
 			if source != "" {
 				sess.MRU[i].Source = source
 			}
+			sess.MRU[i].Scope = scope
 			return
 		}
 	}
@@ -311,6 +348,7 @@ func (a *CopilotAgent) markMRUCategoryWithSource(category string, context string
 		LastAccessed: ts,
 		Context:      context,
 		Source:       source,
+		Scope:        scope,
 	})
 	// Sort by newest and shrink if > MaxMRUSize
 	if len(sess.MRU) > MaxMRUSize {
@@ -318,6 +356,17 @@ func (a *CopilotAgent) markMRUCategoryWithSource(category string, context string
 			return sess.MRU[i].LastAccessed > sess.MRU[j].LastAccessed
 		})
 		sess.MRU = sess.MRU[:MaxMRUSize]
+	}
+}
+
+func normalizeMRUScope(scope string) string {
+	switch strings.TrimSpace(scope) {
+	case "", MRUScopeSession:
+		return MRUScopeSession
+	case MRUScopeAsk:
+		return MRUScopeAsk
+	default:
+		return MRUScopeSession
 	}
 }
 
@@ -334,6 +383,25 @@ func (a *CopilotAgent) clearMRUCategory(category string) {
 		if item.Category != category {
 			filtered = append(filtered, item)
 		}
+	}
+	sess.MRU = filtered
+}
+
+func (a *CopilotAgent) clearMRUBySourceAndScope(source string, scope string) {
+	if a.service == nil || a.service.session == nil {
+		return
+	}
+	sess := a.service.session
+	sess.MRUMu.Lock()
+	defer sess.MRUMu.Unlock()
+
+	scope = normalizeMRUScope(scope)
+	filtered := sess.MRU[:0]
+	for _, item := range sess.MRU {
+		if item.Source == source && normalizeMRUScope(item.Scope) == scope {
+			continue
+		}
+		filtered = append(filtered, item)
 	}
 	sess.MRU = filtered
 }
@@ -726,7 +794,7 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 	fullPrompt := a.buildSystemPrompt(ctx, query, *taskContext)
 
 	// 7. Reasoning Engine Delegation
-	finalText, err := a.delegateToReasoningEngine(ctx, query, gen, fullPrompt)
+	finalText, toolCalls, outcomeFacts, outcomeRecipes, err := a.delegateToReasoningEngine(ctx, query, gen, fullPrompt)
 	if err != nil {
 		return "", err
 	}
@@ -736,7 +804,7 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 	)
 
 	// 8. Epilogue & Cleanup
-	a.epilogueAndCleanup(ctx, query, intent, finalText)
+	a.epilogueAndCleanup(ctx, query, intent, finalText, toolCalls, outcomeFacts, outcomeRecipes)
 
 	return finalText, nil
 }
@@ -928,27 +996,57 @@ func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, g
 	}
 
 	parts := strings.Split(query, ":")
-
-	// Gate 1: Telescoping Prefix Verification
+	var gate1Anchor *TaskContextClassification
+	parsedEntity := ""
+	parsedDomain := ""
+	parsedArtifact := ""
 	if len(parts) > 1 && (strings.EqualFold(parts[0], "omni") || strings.EqualFold(parts[0], "medical") || strings.EqualFold(parts[0], "support")) {
-		log.Info("Gate 1 Activated: Prefix match", "prefix", parts[0])
-
-		var taskCtx *TaskContextClassification
-		parsedEntity := parts[0]
-		parsedDomain := ""
-		parsedArtifact := ""
+		parsedEntity = parts[0]
 		if len(parts) >= 2 {
 			parsedDomain = strings.TrimSpace(parts[1])
 		}
 		if len(parts) >= 3 {
 			parsedArtifact = strings.TrimSpace(parts[2])
 		}
+		gate1Anchor = enrichFocusedTaskContext(nil, parsedEntity, parsedDomain, parsedArtifact)
+	}
+
+	// Gate 1: Telescoping Prefix Verification
+	if gate1Anchor != nil {
+		log.Info("Gate 1 Activated: Prefix match", "prefix", parts[0])
+
+		var taskCtx *TaskContextClassification
 
 		if !isTest && gen != nil {
 			taskCtx, _ = a.ClassifyFocusedTaskContext(ctx, query, parsedEntity, parsedDomain, parsedArtifact, gen)
 		}
 
 		taskCtx = enrichFocusedTaskContext(taskCtx, parsedEntity, parsedDomain, parsedArtifact)
+		if p := ai.GetSessionPayload(ctx); p != nil && p.Variables != nil {
+			if rs, ok := p.Variables["RoutingState"].(*TaskContextClassification); ok && rs != nil && !isTest && gen != nil {
+				updatedRS, isSwitch, err := a.ClassifyContinuityTaskContext(ctx, query, rs, taskCtx, gen)
+				if err == nil && isSwitch {
+					log.Info("Gate 1 Anchor Triggered Topic Switch Reset")
+					delete(p.Variables, "RoutingState")
+					a.clearMRUForTopicSwitch()
+					if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+						newThreadID := sop.NewUUID()
+						thread := &ConversationThread{
+							ID:         newThreadID,
+							RootPrompt: query,
+							Label:      "Topic Switch",
+							Category:   "General",
+							Exchanges:  make([]Interaction, 0),
+							Status:     "active",
+						}
+						a.service.session.Memory.AddThread(thread)
+						a.service.session.Memory.CurrentThreadID = newThreadID
+					}
+				} else if err == nil && updatedRS != nil {
+					taskCtx = enforceFocusedConstraints(updatedRS, parsedEntity, parsedDomain, parsedArtifact)
+				}
+			}
+		}
 		annotateTaskContextIntent(taskCtx, query)
 		taskCtx.RoutingGate = RoutingGateFocused
 
@@ -969,7 +1067,7 @@ func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, g
 	if p := ai.GetSessionPayload(ctx); p != nil && p.Variables != nil {
 		if rs, ok := p.Variables["RoutingState"].(*TaskContextClassification); ok && rs != nil {
 			if !isTest && gen != nil {
-				updatedRS, isSwitch, err := a.ClassifyContinuityTaskContext(ctx, query, rs, gen)
+				updatedRS, isSwitch, err := a.ClassifyContinuityTaskContext(ctx, query, rs, gate1Anchor, gen)
 				if err == nil && isSwitch {
 					log.Info("Gate 2 Detected Topic Switch. Falling through to Gate 3.")
 					delete(p.Variables, "RoutingState")
@@ -1056,7 +1154,7 @@ func (a *CopilotAgent) injectToolsForDomain(ctx context.Context, taskCtx *TaskCo
 	}
 
 	if strings.EqualFold(taskCtx.Domain, "Stores") {
-		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\nStructured Context: Stores Tools\n"+toolsStoresManual, MRUSourceSystemTools)
+		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\nStructured Context: Stores Tools\n"+buildCompactStoresToolContext(toolsStoresManual), MRUSourceSystemTools)
 	} else if strings.EqualFold(taskCtx.Domain, "Spaces") {
 		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\nStructured Context: Spaces Tools\n"+toolsSpacesManual, MRUSourceSystemTools)
 	}
@@ -1097,7 +1195,7 @@ func (a *CopilotAgent) trackEpisodeMetadata(ctx context.Context, intent string) 
 	}
 }
 
-func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query string, gen ai.Generator, fullPrompt string) (string, error) {
+func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query string, gen ai.Generator, fullPrompt string) (string, []ai.ToolCall, []string, []ai.LearnedRecipe, error) {
 	currentDB := ""
 	if p := ai.GetSessionPayload(ctx); p != nil {
 		currentDB = p.CurrentDB
@@ -1122,7 +1220,7 @@ func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query stri
 
 	resp, err := engine.Run(ctx, req)
 	if err != nil {
-		return "", err
+		return "", nil, nil, nil, err
 	}
 
 	finalText := resp.FinalText
@@ -1130,10 +1228,10 @@ func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query stri
 		finalText = obfuscation.GlobalObfuscator.DeobfuscateText(finalText)
 	}
 
-	return finalText, nil
+	return finalText, resp.ToolCalls, resp.OutcomeFacts, resp.OutcomeRecipes, nil
 }
 
-func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, intent string, finalText string) {
+func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, intent string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string, outcomeRecipes []ai.LearnedRecipe) {
 	if a.service != nil && a.service.session != nil {
 		if a.service.session.Memory == nil {
 			a.service.session.Memory = NewShortTermMemory()
@@ -1180,11 +1278,15 @@ func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, int
 		})
 
 	}
+	a.persistAskOutcomeMRU(ctx, query, finalText, toolCalls, outcomeFacts)
 
 	// 7. Persist compact session projection back into STM.
 	mruSnapshot := a.getMRUSnapshot()
 	if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
 		a.service.session.Memory.SetMRUSnapshot(mruSnapshot)
+		existingRecipes := a.service.session.Memory.GetRecipeSnapshot()
+		learnedRecipes := recipeItemsFromLearned(outcomeRecipes)
+		a.service.session.Memory.SetRecipeSnapshot(mergeRecipeSnapshots(existingRecipes, learnedRecipes))
 	}
 
 	// 8. Log Episode for SleepCycle (Episodic Memory)
@@ -1196,6 +1298,318 @@ func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, int
 		}
 
 		go a.Memory.LogEpisodeToSTM(context.Background(), "user_interaction", thoughtPayload, "Interacted with user", nil)
+	}
+}
+
+func summarizeAskOutcomeMRU(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) string {
+	return renderAskOutcomeMRUItems(buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts))
+}
+
+func buildAskOutcomeMRUItems(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) []MRUItem {
+	query = compactMRUText(query, 180)
+	finalText = compactMRUText(finalText, 260)
+	if query == "" && finalText == "" {
+		return nil
+	}
+
+	items := []MRUItem{{Category: askOutcomeMRUCategoryHeader, Context: "Recent Ask Outcome:", Source: MRUSourceAskOutcome, Scope: MRUScopeSession}}
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		if currentDB := strings.TrimSpace(p.CurrentDB); currentDB != "" {
+			items = append(items, MRUItem{Category: askOutcomeMRUCategoryDatabase, Context: fmt.Sprintf("- Database: %s", currentDB), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+		}
+		if activeDomain := strings.TrimSpace(p.ActiveDomain); activeDomain != "" {
+			items = append(items, MRUItem{Category: askOutcomeMRUCategoryDomain, Context: fmt.Sprintf("- Domain: %s", activeDomain), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+		}
+	}
+	if query != "" {
+		items = append(items, MRUItem{Category: askOutcomeMRUCategoryQuery, Context: fmt.Sprintf("- Last user ask: %s", query), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+	}
+	if finalText != "" {
+		items = append(items, MRUItem{Category: askOutcomeMRUCategoryResult, Context: fmt.Sprintf("- Last outcome: %s", finalText), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+	}
+	items = append(items, buildAskOutcomeFactMRUItems(outcomeFacts)...)
+	if toolPattern := summarizeAskOutcomeToolPattern(toolCalls); toolPattern != "" {
+		items = append(items, MRUItem{Category: askOutcomeMRUCategoryToolPattern, Context: fmt.Sprintf("- Tool pattern: %s", toolPattern), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+	}
+	items = append(items, MRUItem{Category: askOutcomeMRUCategoryGuidance, Context: "- Reuse confirmed facts and successful patterns from this outcome before broadening scope.", Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+	return items
+}
+
+func buildAskOutcomeFactMRUItems(outcomeFacts []string) []MRUItem {
+	facts := compactOutcomeFacts(outcomeFacts)
+	if len(facts) == 0 {
+		return nil
+	}
+
+	items := make([]MRUItem, 0, len(facts))
+	genericIndex := 1
+	for _, fact := range facts {
+		category := ""
+		if joinSelectionKey, ok := classifyExecuteScriptJoinFactKey(fact); ok {
+			category = fmt.Sprintf("%s_%s", askOutcomeMRUCategoryJoinSelection, normalizeMRUFactKey(joinSelectionKey))
+		} else if filterSelectionKey, ok := classifyExecuteScriptFilterFactKey(fact); ok {
+			category = fmt.Sprintf("%s_%s", askOutcomeMRUCategoryFilterSelection, normalizeMRUFactKey(filterSelectionKey))
+		} else if details, ok := classifyConfirmedStoreFact(fact); ok && details.FactType == confirmedStoreFactTypeSchema {
+			category = fmt.Sprintf("%s_%s", askOutcomeMRUCategoryStoreSchema, normalizeMRUFactKey(details.StoreName))
+		} else if details, ok := classifyConfirmedStoreFact(fact); ok && details.FactType == confirmedStoreFactTypeRelations {
+			category = fmt.Sprintf("%s_%s", askOutcomeMRUCategoryRelations, normalizeMRUFactKey(details.CategoryKey()))
+		} else {
+			category = fmt.Sprintf("%s_%02d", askOutcomeMRUCategoryConfirmed, genericIndex)
+			genericIndex++
+		}
+		items = append(items, MRUItem{Category: category, Context: fmt.Sprintf("- Confirmed: %s", fact), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+	}
+	return items
+}
+
+const (
+	confirmedStoreFactTypeSchema    = "schema"
+	confirmedStoreFactTypeRelations = "relations"
+)
+
+type confirmedStoreFactDetails struct {
+	StoreName      string
+	FactType       string
+	FactValue      string
+	RelationTarget string
+}
+
+func (d confirmedStoreFactDetails) CategoryKey() string {
+	if d.FactType != confirmedStoreFactTypeRelations || strings.TrimSpace(d.RelationTarget) == "" {
+		return d.StoreName
+	}
+	return d.StoreName + "__" + d.RelationTarget + "__" + trimRelationFactValue(d.FactValue)
+}
+
+func classifyConfirmedStoreFact(fact string) (confirmedStoreFactDetails, bool) {
+	fact = strings.TrimSpace(fact)
+	if !strings.HasPrefix(fact, "list_stores confirmed ") {
+		return confirmedStoreFactDetails{}, false
+	}
+	remainder := strings.TrimPrefix(fact, "list_stores confirmed ")
+	if storeName, factValue, ok := classifyConfirmedStoreFactByMarker(remainder, "schema="); ok {
+		return confirmedStoreFactDetails{StoreName: storeName, FactType: confirmedStoreFactTypeSchema, FactValue: factValue}, true
+	}
+	if storeName, factValue, ok := classifyConfirmedStoreFactByMarker(remainder, "relations="); ok {
+		return confirmedStoreFactDetails{StoreName: storeName, FactType: confirmedStoreFactTypeRelations, FactValue: factValue, RelationTarget: extractPrimaryRelationTarget(factValue)}, true
+	}
+	return confirmedStoreFactDetails{}, false
+}
+
+func classifyExecuteScriptJoinFactKey(fact string) (string, bool) {
+	fact = strings.TrimSpace(fact)
+	if !strings.HasPrefix(fact, "execute_script confirmed ") {
+		return "", false
+	}
+	remainder := strings.TrimPrefix(fact, "execute_script confirmed ")
+	storeIdx := strings.Index(remainder, " store=")
+	onIdx := strings.Index(remainder, " on=")
+	if storeIdx <= 0 || onIdx <= storeIdx {
+		return "", false
+	}
+	op := strings.TrimSpace(remainder[:storeIdx])
+	store := strings.TrimSpace(remainder[storeIdx+len(" store=") : onIdx])
+	on := strings.TrimSpace(remainder[onIdx+len(" on="):])
+	if op == "" || store == "" || on == "" {
+		return "", false
+	}
+	return op + "__" + store + "__" + on, true
+}
+
+func classifyExecuteScriptFilterFactKey(fact string) (string, bool) {
+	fact = strings.TrimSpace(fact)
+	if !strings.HasPrefix(fact, "execute_script confirmed filter ") {
+		return "", false
+	}
+	remainder := strings.TrimPrefix(fact, "execute_script confirmed filter ")
+	fieldIdx := strings.Index(remainder, "field=")
+	opIdx := strings.Index(remainder, " op=")
+	if fieldIdx != 0 || opIdx <= len("field=") {
+		return "", false
+	}
+	field := strings.TrimSpace(remainder[len("field="):opIdx])
+	op := strings.TrimSpace(remainder[opIdx+len(" op="):])
+	if field == "" || op == "" {
+		return "", false
+	}
+	return field + "__" + op, true
+}
+
+func classifyConfirmedStoreFactByMarker(remainder string, marker string) (string, string, bool) {
+	idx := strings.Index(remainder, " "+marker)
+	if idx <= 0 {
+		return "", "", false
+	}
+	storeName := strings.TrimSpace(remainder[:idx])
+	if storeName == "" {
+		return "", "", false
+	}
+	factValue := strings.TrimSpace(remainder[idx+1+len(marker):])
+	if factValue == "" {
+		return "", "", false
+	}
+	return storeName, factValue, true
+}
+
+func extractPrimaryRelationTarget(factValue string) string {
+	factValue = trimRelationFactValue(factValue)
+	if factValue == "" {
+		return ""
+	}
+	entry := factValue
+	if idx := strings.Index(entry, ","); idx >= 0 {
+		entry = entry[:idx]
+	}
+	entry = strings.TrimSpace(entry)
+	if idx := strings.Index(entry, "("); idx > 0 {
+		return strings.TrimSpace(entry[:idx])
+	}
+	return entry
+}
+
+func trimRelationFactValue(factValue string) string {
+	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(factValue), "]"), "["))
+}
+
+func normalizeMRUFactKey(key string) string {
+	key = strings.TrimSpace(strings.ToUpper(key))
+	if key == "" {
+		return "UNKNOWN"
+	}
+	var b strings.Builder
+	b.Grow(len(key))
+	for _, r := range key {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteByte('_')
+	}
+	normalized := strings.Trim(b.String(), "_")
+	if normalized == "" {
+		return "UNKNOWN"
+	}
+	return normalized
+}
+
+func compactOutcomeFacts(facts []string) []string {
+	if len(facts) == 0 {
+		return nil
+	}
+	compacted := make([]string, 0, len(facts))
+	seen := make(map[string]bool, len(facts))
+	for _, fact := range facts {
+		fact = compactMRUText(fact, 180)
+		if fact == "" || seen[fact] {
+			continue
+		}
+		seen[fact] = true
+		compacted = append(compacted, fact)
+	}
+	return compacted
+}
+
+func renderAskOutcomeMRUItems(items []MRUItem) string {
+	if len(items) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item.Context) == "" {
+			continue
+		}
+		parts = append(parts, item.Context)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func summarizeAskOutcomeToolPattern(toolCalls []ai.ToolCall) string {
+	if len(toolCalls) == 0 {
+		return ""
+	}
+	pattern := make([]string, 0, len(toolCalls))
+	for _, toolCall := range toolCalls {
+		name := strings.TrimSpace(toolCall.Name)
+		if name == "" {
+			continue
+		}
+		pattern = append(pattern, name)
+	}
+	if len(pattern) == 0 {
+		return ""
+	}
+	return strings.Join(pattern, " -> ")
+}
+
+func compactMRUText(text string, maxLen int) string {
+	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if maxLen <= 0 || len(text) <= maxLen {
+		return text
+	}
+	return text[:maxLen-3] + "..."
+}
+
+func (a *CopilotAgent) getAskOutcomeContext() string {
+	if a.service == nil || a.service.session == nil {
+		return ""
+	}
+	orderedCategories := []string{
+		askOutcomeMRUCategoryHeader,
+		askOutcomeMRUCategoryDatabase,
+		askOutcomeMRUCategoryDomain,
+		askOutcomeMRUCategoryQuery,
+		askOutcomeMRUCategoryResult,
+	}
+	items := make([]MRUItem, 0, len(orderedCategories))
+	for _, category := range orderedCategories {
+		if item, ok := a.findMRUItem(category, MRUSourceAskOutcome, true); ok && normalizeMRUScope(item.Scope) == MRUScopeSession {
+			items = append(items, item)
+		}
+	}
+	items = append(items, a.collectAskOutcomeItemsByPrefix(askOutcomeMRUCategoryStoreSchema+"_")...)
+	items = append(items, a.collectAskOutcomeItemsByPrefix(askOutcomeMRUCategoryRelations+"_")...)
+	items = append(items, a.collectAskOutcomeItemsByPrefix(askOutcomeMRUCategoryJoinSelection+"_")...)
+	items = append(items, a.collectAskOutcomeItemsByPrefix(askOutcomeMRUCategoryFilterSelection+"_")...)
+	items = append(items, a.collectAskOutcomeItemsByPrefix(askOutcomeMRUCategoryConfirmed+"_")...)
+	if item, ok := a.findMRUItem(askOutcomeMRUCategoryToolPattern, MRUSourceAskOutcome, true); ok && normalizeMRUScope(item.Scope) == MRUScopeSession {
+		items = append(items, item)
+	}
+	if item, ok := a.findMRUItem(askOutcomeMRUCategoryGuidance, MRUSourceAskOutcome, true); ok && normalizeMRUScope(item.Scope) == MRUScopeSession {
+		items = append(items, item)
+	}
+	return renderAskOutcomeMRUItems(items)
+}
+
+func (a *CopilotAgent) collectAskOutcomeItemsByPrefix(prefix string) []MRUItem {
+	if prefix == "" {
+		return nil
+	}
+	snapshot := a.getMRUSnapshot()
+	items := make([]MRUItem, 0, len(snapshot))
+	for _, item := range snapshot {
+		if item.Source != MRUSourceAskOutcome || normalizeMRUScope(item.Scope) != MRUScopeSession {
+			continue
+		}
+		if strings.HasPrefix(item.Category, prefix) {
+			items = append(items, item)
+		}
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Category != items[j].Category {
+			return items[i].Category < items[j].Category
+		}
+		return items[i].LastAccessed < items[j].LastAccessed
+	})
+	if len(items) > maxProjectedAskOutcomeEntries {
+		items = items[:maxProjectedAskOutcomeEntries]
+	}
+	return items
+}
+
+func (a *CopilotAgent) persistAskOutcomeMRU(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) {
+	a.clearMRUBySourceAndScope(MRUSourceAskOutcome, MRUScopeSession)
+	for _, item := range buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts) {
+		a.markMRUCategory(item.Category, item.Context, item.Source, item.Scope)
 	}
 }
 
@@ -1656,7 +2070,16 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 		domains = append(domains, strings.Split(p.ActiveDomain, ",")...)
 	}
 	builder.With(ComponentPlaybooks, a.getPlaybooksContext(ctx, query, domains))
-	builder.With(ComponentFocusedContext, a.getFocusedExecutionContext(ctx, taskClassification))
+	builder.With(ComponentRecipes, a.getRecipeContext(taskClassification))
+	focusedExecutionContext := a.getFocusedExecutionContext(ctx, taskClassification)
+	if askOutcome := a.getAskOutcomeContext(); askOutcome != "" {
+		if focusedExecutionContext != "" {
+			focusedExecutionContext = askOutcome + "\n\n" + focusedExecutionContext
+		} else {
+			focusedExecutionContext = askOutcome
+		}
+	}
+	builder.With(ComponentFocusedContext, focusedExecutionContext)
 
 	// 5. Generic schema fallback only when no specific store targets were classified.
 	if taskClassification.Domain == StoresDomain && len(taskClassification.DBArtifacts) == 0 {
@@ -1690,6 +2113,7 @@ func (a *CopilotAgent) promptBudgetProfile(taskClassification TaskContextClassif
 			ComponentPersona:        2800,
 			ComponentSemanticMemory: 1400,
 			ComponentSystemTools:    2600,
+			ComponentRecipes:        3200,
 			ComponentPlaybooks:      1600,
 			ComponentFocusedContext: 2600,
 			ComponentSchema:         1800,
@@ -1702,6 +2126,7 @@ func (a *CopilotAgent) promptBudgetProfile(taskClassification TaskContextClassif
 			ComponentPlaybooks,
 			ComponentSemanticMemory,
 			ComponentSystemTools,
+			ComponentRecipes,
 			ComponentPersona,
 			ComponentFocusedContext,
 			ComponentUserQuery,
@@ -1964,53 +2389,7 @@ func (a *CopilotAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, erro
 		}
 	}
 
-	allowedSpacesTools := make(map[string]bool)
-	allowedStoresTools := make(map[string]bool)
-
-	if routingState != nil {
-		crudParams := collectCRUDFlags(routingState.Layers)
-		cross := isCrossDomain(routingState.Layers)
-
-		// Foundational scripts/tools that should always be present
-		allowedStoresTools["execute_script"] = true
-
-		if cross || strings.EqualFold(routingState.Domain, SpacesDomain) {
-			if crudParams["R"] {
-				allowedSpacesTools["read_space_config"] = true
-				allowedSpacesTools["search_space"] = true
-			}
-			if crudParams["C"] || crudParams["U"] {
-				allowedSpacesTools["mint_to_space"] = true
-				allowedSpacesTools["enrich_space"] = true
-				allowedSpacesTools["update_space_config"] = true
-				allowedSpacesTools["vectorize_space"] = true
-				allowedSpacesTools["vectorize_space_categories"] = true
-				allowedSpacesTools["vectorize_space_items"] = true
-			}
-			if crudParams["D"] {
-				allowedSpacesTools["delete_space"] = true
-			}
-		}
-
-		if cross || strings.EqualFold(routingState.Domain, StoresDomain) {
-			if crudParams["R"] {
-				allowedStoresTools["select"] = true
-				allowedStoresTools["join"] = true
-				allowedStoresTools["explain_join"] = true
-				allowedStoresTools["scan"] = true
-			}
-			if crudParams["C"] {
-				allowedStoresTools["add"] = true
-			}
-			if crudParams["U"] {
-				allowedStoresTools["update"] = true
-			}
-			if crudParams["D"] {
-				allowedStoresTools["delete"] = true
-			}
-			allowedStoresTools["manage_transaction"] = true
-		}
-	}
+	allowedSpacesTools, allowedStoresTools := allowedNativeDomainTools(routingState)
 
 	isSpaceTool := func(name string) bool {
 		switch name {
@@ -2022,7 +2401,7 @@ func (a *CopilotAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, erro
 
 	isStoreTool := func(name string) bool {
 		switch name {
-		case "select", "join", "explain_join", "add", "update", "delete", "manage_transaction", "scan":
+		case "execute_script", "list_stores", "select", "join", "explain_join", "add", "update", "delete", "manage_transaction", "scan":
 			return true
 		}
 		return false
@@ -2089,6 +2468,52 @@ func (a *CopilotAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, erro
 	}
 
 	return tools, nil
+}
+
+func allowedNativeDomainTools(routingState *TaskContextClassification) (map[string]bool, map[string]bool) {
+	allowedSpacesTools := make(map[string]bool)
+	allowedStoresTools := make(map[string]bool)
+	if routingState == nil {
+		return allowedSpacesTools, allowedStoresTools
+	}
+
+	crudParams := collectCRUDFlags(routingState.Layers)
+	cross := isCrossDomain(routingState.Layers)
+	allow := func(target map[string]bool, names ...string) {
+		for _, name := range names {
+			target[name] = true
+		}
+	}
+
+	if cross || strings.EqualFold(routingState.Domain, SpacesDomain) {
+		if crudParams["R"] {
+			allow(allowedSpacesTools, "read_space_config", "search_space")
+		}
+		if crudParams["C"] || crudParams["U"] {
+			allow(allowedSpacesTools, "mint_to_space", "enrich_space", "update_space_config", "vectorize_space", "vectorize_space_categories", "vectorize_space_items")
+		}
+		if crudParams["D"] {
+			allow(allowedSpacesTools, "delete_space")
+		}
+	}
+
+	if cross || strings.EqualFold(routingState.Domain, StoresDomain) {
+		allow(allowedStoresTools, "execute_script", "list_stores", "manage_transaction")
+		if crudParams["R"] {
+			allow(allowedStoresTools, "select", "join", "explain_join", "scan")
+		}
+		if crudParams["C"] {
+			allow(allowedStoresTools, "add")
+		}
+		if crudParams["U"] {
+			allow(allowedStoresTools, "update")
+		}
+		if crudParams["D"] {
+			allow(allowedStoresTools, "delete")
+		}
+	}
+
+	return allowedSpacesTools, allowedStoresTools
 }
 
 // InitializePhysicalMemory creates strictly isolated B-Tree (STM) and Vector (LTM) structures for this Agent ID

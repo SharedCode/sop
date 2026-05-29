@@ -375,7 +375,11 @@ func (a *CopilotAgent) toolUpdate(ctx context.Context, args map[string]any) (str
 		if localTx {
 			tx.Rollback(ctx)
 		}
-		return fmt.Sprintf("Item with key '%v' not found in store '%s'", key, storeName), nil
+		return wrapNativeTerminalToolResult(ctx,
+			fmt.Sprintf("Item with key '%v' not found in store '%s'", key, storeName),
+			"terminal_error",
+			"Stop retrying this exact update until the key or target store changes.",
+		), nil
 	}
 
 	if localTx {
@@ -512,7 +516,11 @@ func (a *CopilotAgent) toolDelete(ctx context.Context, args map[string]any) (str
 		if localTx {
 			tx.Rollback(ctx)
 		}
-		return fmt.Sprintf("Item '%v' not found in store '%s'", key, storeName), nil
+		return wrapNativeTerminalToolResult(ctx,
+			fmt.Sprintf("Item '%v' not found in store '%s'", key, storeName),
+			"terminal_error",
+			"Stop retrying this exact delete until the key or target store changes.",
+		), nil
 	}
 
 	if localTx {

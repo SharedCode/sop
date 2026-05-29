@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
@@ -40,6 +41,8 @@ const (
 	CtxKeyProgressSink ContextKey = "ai_progress_sink"
 	// CtxKeyEventStreamer is the context key for passing a structured event emitter callback.
 	CtxKeyEventStreamer ContextKey = "ai_event_streamer"
+	// CtxKeyNativeToolHints marks native Ask-loop tool execution that can consume structured progress hints.
+	CtxKeyNativeToolHints ContextKey = "ai_native_tool_hints"
 )
 
 // ArtifactType represents the type of a database artifact.
@@ -276,9 +279,26 @@ type ReasoningRequest struct {
 	Streamer     func(eventType string, data any) // Optional NDJSON callback
 }
 
+// LearnedRecipe captures a reusable protocol distilled from successful reasoning behavior.
+// It is intentionally separate from grounded facts.
+type LearnedRecipe struct {
+	ID         string
+	Kind       string
+	Scope      string
+	Domain     string
+	Topic      string
+	Trigger    string
+	Protocol   []string
+	Invariants []string
+	Confidence float64
+	Source     string
+}
+
 type ReasoningResponse struct {
-	FinalText string
-	ToolCalls []ToolCall // For audit/logging
+	FinalText      string
+	ToolCalls      []ToolCall // For audit/logging
+	OutcomeFacts   []string   // Compact grounded facts safe to carry into outer MRU continuity
+	OutcomeRecipes []LearnedRecipe
 }
 
 // PolicyEngine defines the interface for evaluating content against safety policies.
@@ -485,6 +505,26 @@ type ToolExecutor interface {
 	Execute(ctx context.Context, toolName string, args map[string]any) (string, error)
 	// ListTools returns the list of available tools.
 	ListTools(ctx context.Context) ([]ToolDefinition, error)
+}
+
+// ToolProgressHint is an optional progress envelope that a tool can return to guide
+// the native Ask loop toward the next narrowing step without directly mutating scratchpad state.
+type ToolProgressHint struct {
+	Status             string   `json:"status,omitempty"`
+	CompletionDelta    float64  `json:"completion_delta,omitempty"`
+	Confidence         float64  `json:"confidence,omitempty"`
+	Missing            []string `json:"missing,omitempty"`
+	Tips               []string `json:"tips,omitempty"`
+	Clues              []string `json:"clues,omitempty"`
+	SuggestedNextTools []string `json:"suggested_next_tools,omitempty"`
+}
+
+// ToolResultEnvelope is an optional JSON result shape that tools can return.
+// If present, `tool_result` remains the user-visible payload while `progress_hint`
+// feeds the engine's internal progress and retry budgeting.
+type ToolResultEnvelope struct {
+	ToolResult   json.RawMessage   `json:"tool_result,omitempty"`
+	ProgressHint *ToolProgressHint `json:"progress_hint,omitempty"`
 }
 
 // ToolDefinition describes a tool available to the agent.

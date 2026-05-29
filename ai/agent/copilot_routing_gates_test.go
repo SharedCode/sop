@@ -90,6 +90,10 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 
 	t.Run("Gate 2: MRU Context Inheritance", func(t *testing.T) {
 		gen := &RouterTestGen{}
+		ag.service.session.MRU = []MRUItem{
+			{Category: askOutcomeMRUCategoryQuery, Context: "- Last user ask: Find John orders", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+			{Category: askOutcomeMRUCategoryToolPattern, Context: "- Tool pattern: list_stores -> execute_script", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		}
 		// Seed payload with existing context
 		payload := &ai.SessionPayload{Variables: make(map[string]any)}
 		payload.Variables["RoutingState"] = &TaskContextClassification{
@@ -112,6 +116,12 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 		}
 		if taskCtx.RoutingGate != RoutingGateContinuity {
 			t.Errorf("Gate 2 should mark continuity routing gate, got %q", taskCtx.RoutingGate)
+		}
+		if !strings.Contains(gen.CapturedPrompt, "CONTINUITY DIGEST:") {
+			t.Fatalf("expected Gate 2 prompt to include continuity digest, got: %s", gen.CapturedPrompt)
+		}
+		if !strings.Contains(gen.CapturedPrompt, "Find John orders") || !strings.Contains(gen.CapturedPrompt, "list_stores -") || !strings.Contains(gen.CapturedPrompt, "execute_script") {
+			t.Fatalf("expected Gate 2 prompt to include MRU-derived digest signals, got: %s", gen.CapturedPrompt)
 		}
 	})
 

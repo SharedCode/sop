@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -107,5 +108,124 @@ func TestToolListStores_SchemaEnrichment(t *testing.T) {
 	}
 	if !strings.Contains(res, "age") {
 		t.Error("Result should contain schema field 'age'")
+	}
+}
+
+func TestToolListStores_FiltersRequestedStores(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sop_schema_filter_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbName := "test_db_schema_filter"
+	opts := sop.DatabaseOptions{StoresFolders: []string{tmpDir}}
+	agent := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{dbName: opts}, nil)
+	ctx := context.Background()
+	agent.Open(ctx)
+
+	db := database.NewDatabase(opts)
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	users, err := jsondb.CreateObjectStore(ctx, opts, "users", tx)
+	if err != nil {
+		tx.Rollback(ctx)
+		t.Fatalf("CreateObjectStore users failed: %v", err)
+	}
+	if _, err := users.Add(ctx, "u1", map[string]interface{}{"first_name": "John"}); err != nil {
+		tx.Rollback(ctx)
+		t.Fatalf("Add users failed: %v", err)
+	}
+
+	orders, err := jsondb.CreateObjectStore(ctx, opts, "orders", tx)
+	if err != nil {
+		tx.Rollback(ctx)
+		t.Fatalf("CreateObjectStore orders failed: %v", err)
+	}
+	if _, err := orders.Add(ctx, "o1", map[string]interface{}{"total_amount": 1500}); err != nil {
+		tx.Rollback(ctx)
+		t.Fatalf("Add orders failed: %v", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: dbName})
+	res, err := agent.toolListStores(ctx, map[string]any{"database": dbName, "stores": []any{"orders"}})
+	if err != nil {
+		t.Fatalf("toolListStores failed: %v", err)
+	}
+
+	if !strings.Contains(res, "orders") {
+		t.Fatalf("expected filtered result to contain orders, got %s", res)
+	}
+	if strings.Contains(res, "users") {
+		t.Fatalf("expected filtered result to exclude users, got %s", res)
+	}
+	if !strings.Contains(res, "total_amount") {
+		t.Fatalf("expected filtered result to contain orders schema, got %s", res)
+	}
+}
+
+func TestToolListStores_ReturnsProgressEnvelopeForNativeHints(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sop_schema_native_hint_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbName := "test_db_schema_native_hint"
+	opts := sop.DatabaseOptions{StoresFolders: []string{tmpDir}}
+	agent := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{dbName: opts}, nil)
+	ctx := context.Background()
+	agent.Open(ctx)
+
+	db := database.NewDatabase(opts)
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	users, err := jsondb.CreateObjectStore(ctx, opts, "users", tx)
+	if err != nil {
+		tx.Rollback(ctx)
+		t.Fatalf("CreateObjectStore users failed: %v", err)
+	}
+	if _, err := users.Add(ctx, "u1", map[string]interface{}{"first_name": "John"}); err != nil {
+		tx.Rollback(ctx)
+		t.Fatalf("Add users failed: %v", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: dbName})
+	ctx = context.WithValue(ctx, ai.CtxKeyNativeToolHints, true)
+
+	res, err := agent.toolListStores(ctx, map[string]any{"database": dbName})
+	if err != nil {
+		t.Fatalf("toolListStores failed: %v", err)
+	}
+
+	var envelope ai.ToolResultEnvelope
+	if err := json.Unmarshal([]byte(res), &envelope); err != nil {
+		t.Fatalf("expected native hint envelope, got %q: %v", res, err)
+	}
+	if envelope.ProgressHint == nil || envelope.ProgressHint.Status != "progressing" {
+		t.Fatalf("expected progressing hint, got %+v", envelope.ProgressHint)
+	}
+	if len(envelope.ProgressHint.SuggestedNextTools) != 1 || envelope.ProgressHint.SuggestedNextTools[0] != "execute_script" {
+		t.Fatalf("expected execute_script as suggested next tool, got %+v", envelope.ProgressHint)
+	}
+	if !strings.Contains(string(envelope.ToolResult), "Stores:") || !strings.Contains(string(envelope.ToolResult), "users") {
+		t.Fatalf("expected tool result payload to preserve list_stores output, got %s", string(envelope.ToolResult))
+	}
+	if len(envelope.ProgressHint.Clues) == 0 || !strings.Contains(envelope.ProgressHint.Clues[0], "users") {
+		t.Fatalf("expected grounded clue in progress hint, got %+v", envelope.ProgressHint)
 	}
 }

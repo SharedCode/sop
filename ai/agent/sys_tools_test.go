@@ -77,3 +77,25 @@ func TestSystemTools_OmniAndAvatar_Injections(t *testing.T) {
 		t.Fatalf("Avatar Prompt failed to include System Tools from MRU/getSystemToolsContext")
 	}
 }
+
+func TestInjectToolsForDomain_StoresUsesCompactProtocolSlice(t *testing.T) {
+	ctx := context.Background()
+	sysDBOptions := sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}}
+	sysDB := database.NewDatabase(sysDBOptions)
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}}}
+
+	ag.injectToolsForDomain(ctx, &TaskContextClassification{Domain: StoresDomain})
+	tools := ag.getSystemToolsContext(ctx)
+
+	if !strings.Contains(tools, "Structured Context: Stores Tools") {
+		t.Fatalf("expected Stores tools context to be injected, got: %s", tools)
+	}
+	if strings.Contains(tools, "<h2> Example</h2>") || strings.Contains(tools, "join_right") {
+		t.Fatalf("expected injected Stores tools context to omit the large example block, got: %s", tools)
+	}
+	if !strings.Contains(tools, "Research & Orchestration Rules") || !strings.Contains(tools, "Use `list_stores` to research schema and relations") {
+		t.Fatalf("expected injected Stores tools context to retain compact research guidance, got: %s", tools)
+	}
+}

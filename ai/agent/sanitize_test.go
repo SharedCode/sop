@@ -226,3 +226,37 @@ func TestValidateExecuteScriptPlaceholders_RejectsOperatorOnlyFilterPlaceholder(
 	assert.Contains(t, err.Error(), "execute_script validation error [invalid_filter_operator_placeholder]")
 	assert.Contains(t, err.Error(), `"orders.total_amount":{"$gt":"<value>"}`)
 }
+
+func TestValidateExecuteScriptPlaceholders_RejectsNullFilterValuePlaceholder(t *testing.T) {
+	ctx := context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{CurrentUserQuery: "Find orders for users with first_name 'John' with total amount > 500"})
+	script := []ScriptInstruction{
+		{Op: "filter", Args: map[string]any{"condition": map[string]any{"first_name": nil}}},
+	}
+
+	err := validateExecuteScriptPlaceholders(ctx, script)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "execute_script validation error [invalid_filter_placeholder]")
+	assert.Contains(t, err.Error(), `"first_name":{"$eq":"<value>"}`)
+}
+
+func TestValidateExecuteScriptPlaceholders_RejectsNullFilterFieldPlaceholder(t *testing.T) {
+	script := []ScriptInstruction{
+		{Op: "filter", Args: map[string]any{"condition": map[string]any{"null": nil}}},
+	}
+
+	err := validateExecuteScriptPlaceholders(context.Background(), script)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "execute_script validation error [invalid_filter_field_placeholder]")
+	assert.Contains(t, err.Error(), `"first_name":{"$eq":"<value>"}`)
+}
+
+func TestValidateExecuteScriptPlaceholders_RejectsNullJoinFieldPlaceholder(t *testing.T) {
+	script := []ScriptInstruction{
+		{Op: "join_right", Args: map[string]any{"store": "users_orders", "on": map[string]any{"null": "key"}}},
+	}
+
+	err := validateExecuteScriptPlaceholders(context.Background(), script)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "execute_script validation error [invalid_join_on_field_placeholder]")
+	assert.Contains(t, err.Error(), `"on":{"users.key":"key"}`)
+}

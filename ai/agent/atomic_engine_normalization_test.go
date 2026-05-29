@@ -138,6 +138,34 @@ func TestNormalizeScriptStepForCompatibility_FlattenedFieldPaths(t *testing.T) {
 	}
 }
 
+func TestNormalizeScriptStepForCompatibilityWithQuery_InfersBooleanFilterPredicates(t *testing.T) {
+	step := map[string]any{
+		"op": "filter",
+		"args": map[string]any{
+			"condition": map[string]any{
+				"first_name":          true,
+				"orders_total_amount": true,
+			},
+		},
+	}
+
+	normalizeScriptStepForCompatibilityWithQuery(step, "Find orders for users with first_name 'John' with total amount > 500")
+
+	args := step["args"].(map[string]any)
+	condition := args["condition"].(map[string]any)
+	firstName := condition["first_name"].(map[string]any)
+	if firstName["$eq"] != "John" {
+		t.Fatalf("expected first_name boolean placeholder to infer John, got %#v", firstName)
+	}
+	amount := condition["orders.total_amount"].(map[string]any)
+	if amount["$gt"] != 500 {
+		t.Fatalf("expected orders.total_amount boolean placeholder to infer > 500, got %#v", amount)
+	}
+	if _, ok := condition["orders_total_amount"]; ok {
+		t.Fatalf("expected flattened amount field to normalize to dotted path, got %#v", condition)
+	}
+}
+
 func TestPreserveLastResultOnNil(t *testing.T) {
 	if !preserveLastResultOnNil("commit_tx") {
 		t.Fatalf("expected commit_tx to preserve last result")

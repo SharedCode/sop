@@ -11,31 +11,7 @@ Use these tools when the user wants to create or update a reusable script instea
 ## Payload Shape
 For `create_script` and `save_script`, provide the reusable script steps as `script`.
 Legacy alias `steps` is accepted, but prefer `script`.
-
-```json
-{
-  "name": "create_script",
-  "args": {
-    "name": "expensive_orders",
-    "description": "Find orders over 1000",
-    "script": [
-      {
-        "type": "command",
-        "command": "execute_script",
-        "args": {
-          "script": [
-            {"op": "begin_tx", "args": {"mode": "read"}, "result_var": "tx"},
-            {"op": "open_store", "args": {"transaction": "tx", "name": "orders"}, "result_var": "orders_store"},
-            {"op": "scan", "args": {"store": "orders_store"}, "result_var": "orders_rows"},
-            {"op": "filter", "args": {"condition": {"total_amount": {"$gt": 1000}}}, "input_var": "orders_rows", "result_var": "expensive_orders"},
-            {"op": "return", "args": {"value": {"$var": "expensive_orders"}}}
-          ]
-        }
-      }
-    ]
-  }
-}
-```
+- Provide reusable script steps under the `script` field.
 
 ## Authoring Guidance
 - When the script is a reusable database workflow, prefer a single `execute_script` command step that contains the full atomic AST.

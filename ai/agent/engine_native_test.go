@@ -30,10 +30,105 @@ func (m *loopMockGenerator) Generate(ctx context.Context, prompt string, opts ai
 		}}}, nil
 	}
 
-	if !strings.Contains(prompt, "Tool results:") || !strings.Contains(prompt, "[System Tool Response]:") || !strings.Contains(prompt, "Analyze the tool response") {
-		return ai.GenOutput{Text: "missing synthesis prompt context"}, nil
+	checks := []string{
+		"Ask-anchored MRU:",
+		"- Last tool: execute_script",
+		"- Last outcome: tool_completed",
+		"- Confirmed: execute_script returned:",
+		"Tool results:",
+		"[System Tool Response]:",
+		"Analyze the tool response",
+	}
+	for _, check := range checks {
+		if !strings.Contains(prompt, check) {
+			return ai.GenOutput{Text: "missing synthesis prompt context: " + check}, nil
+		}
 	}
 	return ai.GenOutput{Text: "Final answer: Found John Doe in the database"}, nil
+}
+
+type toolTemperatureMockGenerator struct {
+	temperatures []float32
+	calls        int
+}
+
+func (m *toolTemperatureMockGenerator) Name() string { return "tool_temperature_mock" }
+
+func (m *toolTemperatureMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *toolTemperatureMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.temperatures = append(m.temperatures, opts.Temperature)
+	m.calls++
+	if m.calls == 1 {
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{map[string]any{"op": "scan"}}},
+		}}}, nil
+	}
+	return ai.GenOutput{Text: "Final answer"}, nil
+}
+
+type recoverableTempMockGenerator struct {
+	temperatures []float32
+	calls        int
+}
+
+func (m *recoverableTempMockGenerator) Name() string { return "recoverable_temp_mock" }
+
+func (m *recoverableTempMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *recoverableTempMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.temperatures = append(m.temperatures, opts.Temperature)
+	m.calls++
+	if m.calls <= 2 {
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{map[string]any{"op": "scan"}}},
+		}}}, nil
+	}
+	return ai.GenOutput{Text: "Final answer"}, nil
+}
+
+type malformedFunctionCallRecoveryGenerator struct {
+	calls int
+}
+
+func (m *malformedFunctionCallRecoveryGenerator) Name() string { return "malformed_function_call_mock" }
+
+func (m *malformedFunctionCallRecoveryGenerator) EstimateCost(inTokens, outTokens int) float64 {
+	return 0
+}
+
+func (m *malformedFunctionCallRecoveryGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	switch m.calls {
+	case 1:
+		return ai.GenOutput{}, fmt.Errorf("no candidates returned from gemini; finish_reason=MALFORMED_FUNCTION_CALL")
+	case 2:
+		checks := []string{
+			"Ask-anchored MRU:",
+			"- Last outcome: repair_required",
+			"- Current focus: Preserve valid work, classify the failure, and change only the broken slice in the next call.",
+			"- Next delta: Return exactly one valid tool call and avoid malformed function-call output.",
+			"Model generation error:",
+			"Retry instruction:",
+			"Repair directive: The last model output produced an invalid native tool call.",
+		}
+		for _, check := range checks {
+			if !strings.Contains(prompt, check) {
+				return ai.GenOutput{Text: "missing malformed function call retry context: " + check}, nil
+			}
+		}
+		if opts.Temperature != nativeReActRepairTemperature {
+			return ai.GenOutput{Text: fmt.Sprintf("wrong retry temperature: %v", opts.Temperature)}, nil
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{map[string]any{"op": "scan"}}},
+		}}}, nil
+	default:
+		return ai.GenOutput{Text: "Final answer: Found John Doe in the database"}, nil
+	}
 }
 
 type loopMockExecutor struct{}
@@ -43,6 +138,31 @@ func (e *loopMockExecutor) Execute(ctx context.Context, tool string, args map[st
 }
 
 func (e *loopMockExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+type recoverableLoopMockExecutor struct{ calls int }
+
+func (e *recoverableLoopMockExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	e.calls++
+	if e.calls == 1 {
+		return "", fmt.Errorf("invalid type for filter condition field \"first_name\": got boolean placeholder true")
+	}
+	return `[{"name":"John Doe"}]`, nil
+}
+
+func (e *recoverableLoopMockExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+type nativeHintContextExecutor struct{ sawNativeHints bool }
+
+func (e *nativeHintContextExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	e.sawNativeHints = ctx.Value(ai.CtxKeyNativeToolHints) == true
+	return `[1]`, nil
+}
+
+func (e *nativeHintContextExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
 	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
 }
 
@@ -66,6 +186,88 @@ func TestNativeReActEngine_SynthesizesAfterToolResult(t *testing.T) {
 	}
 	if gen.calls != 2 {
 		t.Fatalf("expected two generator calls, got %d", gen.calls)
+	}
+}
+
+func TestNativeReActEngine_UsesLowTemperatureForToolCalls(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &toolTemperatureMockGenerator{}
+	_, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Show me users",
+		Executor:     &loopMockExecutor{},
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if len(gen.temperatures) == 0 || gen.temperatures[0] != nativeReActToolCallTemperature {
+		t.Fatalf("expected first tool-call temperature %v, got %#v", nativeReActToolCallTemperature, gen.temperatures)
+	}
+}
+
+func TestNativeReActEngine_UsesZeroTemperatureForRepairRetry(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &recoverableTempMockGenerator{}
+	_, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Show me users",
+		Executor:     &recoverableLoopMockExecutor{},
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if len(gen.temperatures) < 2 {
+		t.Fatalf("expected at least two generation calls, got %#v", gen.temperatures)
+	}
+	if gen.temperatures[0] != nativeReActToolCallTemperature {
+		t.Fatalf("expected initial tool-call temperature %v, got %#v", nativeReActToolCallTemperature, gen.temperatures)
+	}
+	if gen.temperatures[1] != nativeReActRepairTemperature {
+		t.Fatalf("expected repair temperature %v, got %#v", nativeReActRepairTemperature, gen.temperatures)
+	}
+}
+
+func TestNativeReActEngine_MarksToolExecutionForNativeHints(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &toolTemperatureMockGenerator{}
+	executor := &nativeHintContextExecutor{}
+
+	_, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Show me users",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if !executor.sawNativeHints {
+		t.Fatal("expected native tool execution to carry the native hint context flag")
+	}
+}
+
+func TestNativeReActEngine_RetriesRecoverableMalformedFunctionCall(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &malformedFunctionCallRecoveryGenerator{}
+	resp, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Show me users",
+		Executor:     &loopMockExecutor{},
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer: Found John Doe in the database" {
+		t.Fatalf("expected recovered final answer, got %q", resp.FinalText)
+	}
+	if gen.calls != 3 {
+		t.Fatalf("expected three generator calls after malformed function call recovery, got %d", gen.calls)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "execute_script" {
+		t.Fatalf("expected recovered execute_script tool call to be recorded, got %#v", resp.ToolCalls)
 	}
 }
 
@@ -188,11 +390,12 @@ func TestNativeReActEngine_EmitsVerboseProgressByDefault(t *testing.T) {
 	}
 	want := []string{
 		"Planning request with native multi-step loop.",
-		"Reasoning iteration 1 of 4.",
+		"Reasoning iteration 1 of 5.",
 		"Waiting for model response.",
 		"Calling tool `execute_script`.",
 		"Tool `execute_script` completed.",
-		"Reasoning iteration 2 of 4.",
+		"Loop budget extended to 6 because the Ask is progressing.",
+		"Reasoning iteration 2 of 6.",
 		"Waiting for model response.",
 		"No further tools required; preparing final answer.",
 	}
@@ -467,7 +670,7 @@ func TestFormatRecoverableToolError_IncludesValidationCategoryAndExample(t *test
 		`{"op":"filter","args":{"condition":{"first_name":{"$eq":"<value>"}}}}`,
 	)
 
-	formatted := formatRecoverableToolError("execute_script", map[string]any{
+	formatted := formatRecoverableToolError(pendingToolRepair{ToolName: "execute_script", Strategy: nativeRepairStrategySameTool}, map[string]any{
 		"script": []any{map[string]any{"op": "filter"}},
 	}, err)
 
@@ -509,6 +712,10 @@ func (m *executeScriptRepairGenerator) Generate(ctx context.Context, prompt stri
 		}}}, nil
 	case 2:
 		checks := []string{
+			"Ask-anchored MRU:",
+			"- Last outcome: repair_required",
+			"- Preserve: Reuse the valid structure from attempted args before changing invalid fields:",
+			"- Next delta: Repair execute_script without restarting the whole plan or broadening scope.",
 			"Tool: execute_script",
 			"Repair category: invalid_filter_placeholder",
 			"Suggested fix example:",
@@ -621,15 +828,41 @@ func (m *executeScriptJoinRepairGenerator) Generate(ctx context.Context, prompt 
 		}}}, nil
 	case 2:
 		checks := []string{
+			"Ask-anchored MRU:",
+			"- Last outcome: repair_required",
+			"- Next delta: Research missing schema or relation facts with list_stores before retrying execute_script.",
+			"Repair strategy: research_first",
+			"Research reason:",
+			"- Preserve: Reuse the valid structure from attempted args before changing invalid fields:",
 			"Tool: execute_script",
 			"Repair category: invalid_join_on_placeholder",
 			"Suggested fix example:",
 			`"on":{"users.key":"key"}`,
-			"Repair directive: The last tool call to execute_script failed because its arguments were invalid.",
+			"Repair directive: The last tool call to execute_script failed because grounded schema or relation facts are still missing.",
 		}
 		for _, check := range checks {
 			if !strings.Contains(prompt, check) {
 				return ai.GenOutput{Text: "missing execute_script join retry context: " + check}, nil
+			}
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "list_stores",
+			Args: map[string]any{
+				"stores": []any{"users", "users_orders"},
+			},
+		}}}, nil
+	case 3:
+		checks := []string{
+			"Ask-anchored MRU:",
+			"- Last tool: list_stores",
+			"- Last outcome: tool_completed",
+			"- Confirmed: list_stores confirmed users schema=key:string, first_name:string",
+			"- Confirmed: list_stores confirmed users relations=[users_orders(key->users.key)]",
+			"- Confirmed: list_stores confirmed users_orders schema=key:string, user_id:string",
+		}
+		for _, check := range checks {
+			if !strings.Contains(prompt, check) {
+				return ai.GenOutput{Text: "missing post-research context: " + check}, nil
 			}
 		}
 		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
@@ -657,6 +890,9 @@ type executeScriptJoinRepairExecutor struct {
 
 func (e *executeScriptJoinRepairExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
 	e.callCount++
+	if tool == "list_stores" {
+		return "users schema=key:string, first_name:string relations=[users_orders(key->users.key)]\nusers_orders schema=key:string, user_id:string", nil
+	}
 	if e.callCount == 1 {
 		return "", newExecuteScriptValidationError(
 			"invalid_join_on_placeholder",
@@ -668,7 +904,7 @@ func (e *executeScriptJoinRepairExecutor) Execute(ctx context.Context, tool stri
 }
 
 func (e *executeScriptJoinRepairExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
-	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+	return []ai.ToolDefinition{{Name: "execute_script"}, {Name: "list_stores"}}, nil
 }
 
 func TestNativeReActEngine_RetriesExecuteScriptJoinWithValidationGuidance(t *testing.T) {
@@ -692,17 +928,729 @@ func TestNativeReActEngine_RetriesExecuteScriptJoinWithValidationGuidance(t *tes
 	if resp.FinalText != "Final answer: Joined users with users_orders successfully." {
 		t.Fatalf("expected repaired final answer, got %q", resp.FinalText)
 	}
-	if gen.calls != 3 {
-		t.Fatalf("expected three generator calls after execute_script join repair, got %d", gen.calls)
+	if gen.calls != 4 {
+		t.Fatalf("expected four generator calls after execute_script join research+repair, got %d", gen.calls)
 	}
-	if executor.callCount != 2 {
-		t.Fatalf("expected two execute_script attempts, got %d", executor.callCount)
+	if executor.callCount != 3 {
+		t.Fatalf("expected execute_script failure, list_stores research, and execute_script retry, got %d calls", executor.callCount)
 	}
 	if !containsProgressMessage(progress, "Tool `execute_script` needs corrected arguments; retrying.") {
 		t.Fatalf("expected execute_script retry progress message, got %#v", progress)
 	}
+	if len(resp.ToolCalls) != 2 || resp.ToolCalls[0].Name != "list_stores" || resp.ToolCalls[1].Name != "execute_script" {
+		t.Fatalf("expected list_stores research followed by repaired execute_script, got %#v", resp.ToolCalls)
+	}
+	if len(resp.OutcomeFacts) == 0 {
+		t.Fatalf("expected grounded outcome facts to be returned, got %#v", resp.OutcomeFacts)
+	}
+	factsText := strings.Join(resp.OutcomeFacts, "\n")
+	if !strings.Contains(factsText, "list_stores confirmed users schema=key:string, first_name:string") {
+		t.Fatalf("expected outcome facts to carry confirmed store schema, got %#v", resp.OutcomeFacts)
+	}
+	if !strings.Contains(factsText, "list_stores confirmed users relations=[users_orders(key->users.key)]") {
+		t.Fatalf("expected outcome facts to carry confirmed relation mapping, got %#v", resp.OutcomeFacts)
+	}
+}
+
+func TestBuildAskAnchoredMRUState_TypesConfirmedStoreFacts(t *testing.T) {
+	state := buildAskAnchoredMRUState([]nativeToolResult{{
+		Name:   "list_stores",
+		Result: "users schema=key:string, first_name:string relations=[users_orders(key->users.key)]\nusers_orders schema=key:string, user_id:string",
+	}})
+
+	seenCategories := map[string]bool{}
+	for _, item := range state {
+		seenCategories[item.Category] = true
+	}
+
+	if !seenCategories[askMRUCategoryConfirmedStoreSchema+"_USERS"] {
+		t.Fatalf("expected typed ask-scoped schema category, got %+v", state)
+	}
+	if !seenCategories[askMRUCategoryConfirmedStoreRelation+"_USERS__USERS_ORDERS__USERS_ORDERS_KEY__USERS_KEY"] {
+		t.Fatalf("expected typed ask-scoped relations category, got %+v", state)
+	}
+	if !seenCategories[askMRUCategoryConfirmedStoreSchema+"_USERS_ORDERS"] {
+		t.Fatalf("expected typed ask-scoped schema category for joined store, got %+v", state)
+	}
+
+	formatted := formatAskAnchoredMRUState(state)
+	if !strings.Contains(formatted, "- Confirmed: list_stores confirmed users schema=key:string, first_name:string") {
+		t.Fatalf("expected typed ask-scoped facts to preserve prompt rendering, got %s", formatted)
+	}
+	if !strings.Contains(formatted, "- Confirmed: list_stores confirmed users relations=[users_orders(key->users.key)]") {
+		t.Fatalf("expected typed ask-scoped relation fact to preserve prompt rendering, got %s", formatted)
+	}
+	if !strings.Contains(formatted, "- Confirmed: list_stores confirmed users_orders schema=key:string, user_id:string") {
+		t.Fatalf("expected typed ask-scoped joined-store schema fact to preserve prompt rendering, got %s", formatted)
+	}
+}
+
+func TestBuildAskAnchoredMRUState_TypesExecuteScriptJoinSelection(t *testing.T) {
+	state := buildAskAnchoredMRUState([]nativeToolResult{{
+		Name:   "execute_script",
+		Result: `[{"users.key":"u1","users_orders.value":"o1"}]`,
+		Args: map[string]any{"script": []any{
+			map[string]any{
+				"op": "join",
+				"args": map[string]any{
+					"store": "users_orders",
+					"on":    map[string]any{"users.key": "key"},
+				},
+			},
+		}},
+	}})
+
+	seenCategories := map[string]bool{}
+	for _, item := range state {
+		seenCategories[item.Category] = true
+	}
+
+	if !seenCategories[askMRUCategoryConfirmedJoinSelection+"_JOIN__USERS_ORDERS__USERS_KEY__KEY"] {
+		t.Fatalf("expected typed ask-scoped join-selection category, got %+v", state)
+	}
+
+	formatted := formatAskAnchoredMRUState(state)
+	if !strings.Contains(formatted, "- Confirmed: execute_script confirmed join store=users_orders on=users.key->key") {
+		t.Fatalf("expected ask-scoped join-selection fact to preserve prompt rendering, got %s", formatted)
+	}
+	if !strings.Contains(formatted, "- Confirmed: execute_script returned:") {
+		t.Fatalf("expected generic execute_script result summary to remain present, got %s", formatted)
+	}
+}
+
+func TestBuildAskAnchoredMRUState_TypesExecuteScriptFilterSelection(t *testing.T) {
+	state := buildAskAnchoredMRUState([]nativeToolResult{{
+		Name:   "execute_script",
+		Result: `[{"first_name":"John"}]`,
+		Args: map[string]any{"script": []any{
+			map[string]any{
+				"op": "filter",
+				"args": map[string]any{
+					"condition": map[string]any{"first_name": map[string]any{"$eq": "John"}},
+				},
+			},
+		}},
+	}})
+
+	seenCategories := map[string]bool{}
+	for _, item := range state {
+		seenCategories[item.Category] = true
+	}
+
+	if !seenCategories[askMRUCategoryConfirmedFilterSelection+"_FIRST_NAME___EQ"] {
+		t.Fatalf("expected typed ask-scoped filter-selection category, got %+v", state)
+	}
+
+	formatted := formatAskAnchoredMRUState(state)
+	if !strings.Contains(formatted, "- Confirmed: execute_script confirmed filter field=first_name op=$eq") {
+		t.Fatalf("expected ask-scoped filter-selection fact to preserve prompt rendering, got %s", formatted)
+	}
+	if !strings.Contains(formatted, "- Confirmed: execute_script returned:") {
+		t.Fatalf("expected generic execute_script result summary to remain present, got %s", formatted)
+	}
+}
+
+func TestSummarizeOutcomeRecipes_ExtractsExecuteScriptRepairPatterns(t *testing.T) {
+	recipes := summarizeOutcomeRecipes([]nativeToolResult{
+		{
+			Name:   "execute_script",
+			Result: "Tool execution error: missing schema\nTool: execute_script\nRepair strategy: research_first\nAttempted args:\n{}\nRetry instruction: Call list_stores first to research the missing schema or relation facts, then return to execute_script with corrected grounded arguments. Preserve valid arguments and do not restart the whole plan.",
+		},
+		{
+			Name:   "list_stores",
+			Result: "users schema=key:string, first_name:string relations=[users_orders(key->users.key)]",
+		},
+		{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "filter", "args": map[string]any{"condition": map[string]any{"first_name": map[string]any{"$eq": "John"}}}},
+			}},
+			Result: `[ {"first_name":"John"} ]`,
+		},
+		{
+			Name:   "execute_script",
+			Result: "Tool execution error: invalid join\nTool: execute_script\nRepair strategy: same_tool\nAttempted args:\n{}\nRetry instruction: Return a corrected call for the same tool. Preserve valid arguments, fix invalid or missing arguments, and do not repeat the same malformed shape.",
+		},
+		{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": "key"}}},
+			}},
+			Result: `[ {"users.key":"u1"} ]`,
+		},
+	})
+
+	seen := map[string]bool{}
+	for _, recipe := range recipes {
+		seen[recipe.ID] = true
+	}
+
+	if !seen["implicit.execute_script.research_then_retry"] {
+		t.Fatalf("expected research-first repair recipe, got %+v", recipes)
+	}
+	if !seen["implicit.execute_script.repair_in_place"] {
+		t.Fatalf("expected in-place repair recipe, got %+v", recipes)
+	}
+	if len(recipes) != 2 {
+		t.Fatalf("expected exactly 2 distinct recipes, got %+v", recipes)
+	}
+}
+
+func TestDetectAskLoopProgress_TreatsNewRecipeAsProgressWithoutFreshHint(t *testing.T) {
+	previousResults := []nativeToolResult{
+		{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": "key"}}},
+			}},
+			Result: `[ {"users.key":"u1"} ]`,
+		},
+	}
+
+	currentResults := []nativeToolResult{
+		{
+			Name:   "execute_script",
+			Result: "Tool execution error: invalid join\nTool: execute_script\nRepair strategy: same_tool\nAttempted args:\n{}\nRetry instruction: Return a corrected call for the same tool. Preserve valid arguments, fix invalid or missing arguments, and do not repeat the same malformed shape.",
+		},
+		{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": "key"}}},
+			}},
+			Result: `[ {"users.key":"u1"} ]`,
+		},
+	}
+
+	delta := detectAskLoopProgress(previousResults, currentResults)
+	if !delta.Progressing {
+		t.Fatalf("expected new learned recipe to count as progress, got %+v", delta)
+	}
+	if len(delta.NewFacts) != 0 {
+		t.Fatalf("expected no new facts in this control case, got %+v", delta.NewFacts)
+	}
+	if len(delta.NewRecipes) != 1 || delta.NewRecipes[0] != "implicit.execute_script.repair_in_place" {
+		t.Fatalf("expected in-place repair recipe delta, got %+v", delta.NewRecipes)
+	}
+	if delta.HintSignal != nil {
+		t.Fatalf("expected no fresh hint signal in this control case, got %+v", delta.HintSignal)
+	}
+
+	budget := newAskLoopBudgetState()
+	if !budget.extendIfProgressing(delta) {
+		t.Fatal("expected retry budget to extend from recipe-only progress")
+	}
+	if budget.allowedIterations != nativeReActBaseToolIterations+1 {
+		t.Fatalf("expected budget to extend to %d, got %d", nativeReActBaseToolIterations+1, budget.allowedIterations)
+	}
+}
+
+func TestEngineNative_HelperClassifiers(t *testing.T) {
+	if !isRecoverableToolExecutionError(fmt.Errorf("missing required field")) {
+		t.Fatal("expected missing/required message to be recoverable")
+	}
+	if isRecoverableToolExecutionError(fmt.Errorf("permission denied")) {
+		t.Fatal("did not expect unrelated tool error to be recoverable")
+	}
+	if !isRecoverableGenerationError(fmt.Errorf("finish_reason=MALFORMED_FUNCTION_CALL")) {
+		t.Fatal("expected malformed function call error to be recoverable")
+	}
+	if isRecoverableGenerationError(fmt.Errorf("rate limit exceeded")) {
+		t.Fatal("did not expect unrelated generation error to be recoverable")
+	}
+}
+
+func TestBuildNativeReActPrompt_IncludesRepairDirectiveVariants(t *testing.T) {
+	baseReq := ai.ReasoningRequest{ContextText: "ctx", UserQuery: "query"}
+
+	nativeCallPrompt := buildNativeReActPrompt(baseReq, []nativeToolResult{{
+		Name:   "native_tool_call",
+		Result: "Model generation error: bad call\nRetry instruction: Return exactly one valid native tool call.",
+	}}, buildAskAnchoredMRUState([]nativeToolResult{{
+		Name:   "native_tool_call",
+		Result: "Model generation error: bad call\nRetry instruction: Return exactly one valid native tool call.",
+	}}))
+	if !strings.Contains(nativeCallPrompt, "Repair directive: The last model output produced an invalid native tool call.") {
+		t.Fatalf("expected native tool call repair directive, got %s", nativeCallPrompt)
+	}
+
+	researchPrompt := buildNativeReActPrompt(baseReq, []nativeToolResult{{
+		Name:   "execute_script",
+		Result: "Tool execution error\nRepair strategy: research_first\nRetry instruction: Call list_stores first",
+	}}, buildAskAnchoredMRUState([]nativeToolResult{{
+		Name:   "execute_script",
+		Result: "Tool execution error\nRepair strategy: research_first\nRetry instruction: Call list_stores first",
+	}}))
+	if !strings.Contains(researchPrompt, "call list_stores first") {
+		t.Fatalf("expected research-first repair directive, got %s", researchPrompt)
+	}
+
+	sameToolPrompt := buildNativeReActPrompt(baseReq, []nativeToolResult{{
+		Name:   "execute_script",
+		Result: "Tool execution error\nRetry instruction: Return a corrected call for the same tool.",
+	}}, buildAskAnchoredMRUState([]nativeToolResult{{
+		Name:   "execute_script",
+		Result: "Tool execution error\nRetry instruction: Return a corrected call for the same tool.",
+	}}))
+	if !strings.Contains(sameToolPrompt, "call the same tool again with corrected arguments") {
+		t.Fatalf("expected same-tool repair directive, got %s", sameToolPrompt)
+	}
+}
+
+func TestBuildNativeReActPrompt_ExposesToolArgsWithRetryContext(t *testing.T) {
+	baseReq := ai.ReasoningRequest{ContextText: "ctx", UserQuery: "query"}
+	prompt := buildNativeReActPrompt(baseReq, []nativeToolResult{
+		{
+			Name: "list_stores",
+			Args: map[string]any{"database": "system", "store": "users"},
+			Hint: &ai.ToolProgressHint{
+				Status:             "progressing",
+				CompletionDelta:    0.25,
+				SuggestedNextTools: []string{"execute_script"},
+				Missing:            []string{"join key mapping"},
+			},
+			Result: "users schema=key:string, first_name:string relations=[users_orders(key->users.key)]",
+		},
+		{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": "key"}}},
+			}},
+			Result: "Tool execution error: invalid filter\nTool: execute_script\nAttempted args:\n{}\nRetry instruction: Return a corrected call for the same tool.",
+		},
+	}, buildAskAnchoredMRUState([]nativeToolResult{
+		{
+			Name: "list_stores",
+			Args: map[string]any{"database": "system", "store": "users"},
+			Hint: &ai.ToolProgressHint{
+				Status:             "progressing",
+				CompletionDelta:    0.25,
+				SuggestedNextTools: []string{"execute_script"},
+				Missing:            []string{"join key mapping"},
+			},
+			Result: "users schema=key:string, first_name:string relations=[users_orders(key->users.key)]",
+		},
+		{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": "key"}}},
+			}},
+			Result: "Tool execution error: invalid filter\nTool: execute_script\nAttempted args:\n{}\nRetry instruction: Return a corrected call for the same tool.",
+		},
+	}))
+
+	checks := []string{
+		"Ask-anchored MRU:",
+		"Progression history:",
+		"\"ingredients\"",
+		"\"progression\"",
+		"\"tool_info\": \"list_stores\"",
+		"\"generated_call\"",
+		"\"result\"",
+		"\"completion_delta\": 0.25",
+		"- Suggested tool: execute_script",
+		"- Missing: join key mapping",
+		"Step 1 Tool: list_stores",
+		"[Tool Args]:",
+		"\"database\": \"system\"",
+		"\"store\": \"users\"",
+		"Step 2 Tool: execute_script",
+		"\"script\"",
+		"\"users_orders\"",
+		"Retry instruction: Return a corrected call for the same tool.",
+	}
+	for _, check := range checks {
+		if !strings.Contains(prompt, check) {
+			t.Fatalf("expected prompt to include %q, got %s", check, prompt)
+		}
+	}
+}
+
+func TestFormatNativeProgressionHistory_UsesStructuredIngredientsCallAndResult(t *testing.T) {
+	history := formatNativeProgressionHistory([]nativeToolResult{
+		{
+			Name: "list_stores",
+			Args: map[string]any{"database": "system", "store": "users"},
+			Hint: &ai.ToolProgressHint{
+				Status:             "progressing",
+				CompletionDelta:    0.25,
+				Clues:              []string{"users_orders relation confirmed"},
+				Missing:            []string{"join key mapping"},
+				SuggestedNextTools: []string{"execute_script"},
+			},
+			Result: "users schema=key:string, first_name:string relations=[users_orders(key->users.key)]",
+		},
+		{
+			Name:   "execute_script",
+			Args:   map[string]any{"script": []any{map[string]any{"op": "join"}}},
+			Result: "Tool execution error: invalid join\nRepair strategy: research_first\nRetry instruction: Call list_stores first",
+		},
+	})
+
+	checks := []string{
+		"\"step\": 1",
+		"\"tool\": \"list_stores\"",
+		"\"tool_info\": \"list_stores\"",
+		"\"confirmed_facts\"",
+		"\"progression\"",
+		"\"status\": \"progressing\"",
+		"\"completion_delta\": 0.25",
+		"\"clues\"",
+		"\"missing\"",
+		"\"suggested_next_tools\"",
+		"\"generated_call\"",
+		"\"database\": \"system\"",
+		"\"result\": \"users schema=key:string, first_name:string relations=[users_orders(key-\\u003eusers.key)]\"",
+		"\"repair_strategy\": \"research_first\"",
+		"\"retry_instruction\": \"Call list_stores first\"",
+	}
+	for _, check := range checks {
+		if !strings.Contains(history, check) {
+			t.Fatalf("expected progression history to include %q, got %s", check, history)
+		}
+	}
+}
+
+func TestEngineNative_RepairHelpers(t *testing.T) {
+	if got := summarizeNextRepairNeed(nativeToolResult{Name: "native_tool_call"}); !strings.Contains(got, "valid tool call") {
+		t.Fatalf("unexpected native tool next-repair summary: %q", got)
+	}
+	if got := summarizeNextRepairNeed(nativeToolResult{Name: "execute_script", Result: "Repair strategy: research_first"}); !strings.Contains(got, "list_stores") {
+		t.Fatalf("unexpected research-first next-repair summary: %q", got)
+	}
+	if got := summarizeAttemptedArgs("Tool execution error\nAttempted args:\n{\n  \"script\": []\n}\nRetry instruction: fix it"); !strings.Contains(got, "Reuse the valid structure") {
+		t.Fatalf("expected attempted args reuse summary, got %q", got)
+	}
+	if got := summarizeAttemptedArgs("Tool execution error\nAttempted args:\n{}\nRetry instruction: fix it"); !strings.Contains(got, "no reusable arguments") {
+		t.Fatalf("expected empty attempted args summary, got %q", got)
+	}
+	if got := summarizeAttemptedArgs("no attempted args marker"); got != "" {
+		t.Fatalf("expected no attempted args summary, got %q", got)
+	}
+
+	repairResult := nativeToolResult{Name: "execute_script", Result: "Repair strategy: same_tool\nRetry instruction: fix"}
+	if !isRecoverableRepairResult(repairResult, "execute_script", nativeRepairStrategySameTool) {
+		t.Fatal("expected recoverable same-tool result to match")
+	}
+	if isRecoverableRepairResult(repairResult, "list_stores", nativeRepairStrategySameTool) {
+		t.Fatal("did not expect tool-name mismatch to match")
+	}
+	if !hasSuccessfulTool([]nativeToolResult{{Name: "execute_script", Result: "ok"}}, "execute_script") {
+		t.Fatal("expected successful tool detection")
+	}
+	if hasSuccessfulTool([]nativeToolResult{{Name: "execute_script", Result: "Retry instruction: fix"}}, "execute_script") {
+		t.Fatal("did not expect repair-only result to count as successful")
+	}
+	if !hasSuccessfulToolSequence([]nativeToolResult{{Name: "execute_script", Result: "Retry instruction: fix"}, {Name: "list_stores", Result: "ok"}, {Name: "execute_script", Result: "ok"}}, "list_stores", "execute_script") {
+		t.Fatal("expected successful tool sequence to ignore repair-only entries")
+	}
+	if hasSuccessfulToolSequence(nil, "list_stores") {
+		t.Fatal("did not expect empty tool sequence to match")
+	}
+}
+
+func TestEngineNative_RepairFormattingAndClassification(t *testing.T) {
+	validationErr := newExecuteScriptValidationError(
+		"invalid_join_on_placeholder",
+		"join mapping placeholder",
+		`{"on":{"users.key":"key"}}`,
+	)
+	researchRepair := classifyRecoverableToolRepair("execute_script", validationErr)
+	if researchRepair.Strategy != nativeRepairStrategyResearchFirst || researchRepair.ResearchTool != "list_stores" {
+		t.Fatalf("expected validation error to trigger research-first repair, got %+v", researchRepair)
+	}
+	sameToolRepair := classifyRecoverableToolRepair("execute_script", fmt.Errorf("missing required args"))
+	if sameToolRepair.Strategy != nativeRepairStrategySameTool {
+		t.Fatalf("expected generic arg error to stay same-tool, got %+v", sameToolRepair)
+	}
+	if !researchRepair.allowsTool("list_stores") || researchRepair.allowsTool("execute_script") {
+		t.Fatalf("expected research-first repair to allow only the research tool, got %+v", researchRepair)
+	}
+	if !sameToolRepair.allowsTool("execute_script") || sameToolRepair.allowsTool("list_stores") {
+		t.Fatalf("expected same-tool repair to allow only the original tool, got %+v", sameToolRepair)
+	}
+
+	formatted := formatRecoverableToolError(researchRepair, map[string]any{"script": []any{"scan"}}, validationErr)
+	if !strings.Contains(formatted, "Repair category: invalid_join_on_placeholder") || !strings.Contains(formatted, "Suggested fix example") || !strings.Contains(formatted, "Research reason:") {
+		t.Fatalf("expected formatted recoverable tool error to include validation and research guidance, got %s", formatted)
+	}
+	if !strings.Contains(formatRecoverableGenerationError(fmt.Errorf("bad tool call")), "Retry instruction: Return exactly one valid native tool call") {
+		t.Fatal("expected recoverable generation error to include retry guidance")
+	}
+	if !strings.Contains(formatPendingRepairReminder(researchRepair, "search_space"), "Call list_stores next") {
+		t.Fatal("expected research-first reminder to point to list_stores")
+	}
+	if !strings.Contains(formatPendingRepairReminder(sameToolRepair, "list_stores"), "Call execute_script next with corrected arguments") {
+		t.Fatal("expected same-tool reminder to point back to execute_script")
+	}
+}
+
+func TestUnwrapToolResultEnvelope_ExtractsProgressHint(t *testing.T) {
+	result, hint := unwrapToolResultEnvelope(`{"tool_result":{"rows":[{"name":"John"}]},"progress_hint":{"status":"progressing","completion_delta":0.25,"tips":["Use execute_script next"],"clues":["users_orders relation confirmed"],"suggested_next_tools":["execute_script"]}}`)
+	if !strings.Contains(result, `"rows":[{"name":"John"}]`) {
+		t.Fatalf("expected unwrapped tool result payload, got %q", result)
+	}
+	if hint == nil || hint.Status != "progressing" || len(hint.SuggestedNextTools) != 1 || hint.SuggestedNextTools[0] != "execute_script" {
+		t.Fatalf("expected progress hint to be extracted, got %+v", hint)
+	}
+
+	raw, noHint := unwrapToolResultEnvelope(`[1,2,3]`)
+	if raw != `[1,2,3]` || noHint != nil {
+		t.Fatalf("expected raw non-envelope result to pass through unchanged, got %q %+v", raw, noHint)
+	}
+}
+
+func TestBuildAskAnchoredMRUState_IncludesProgressHints(t *testing.T) {
+	state := buildAskAnchoredMRUState([]nativeToolResult{{
+		Name:   "list_stores",
+		Result: "users schema=key:string, first_name:string",
+		Hint: &ai.ToolProgressHint{
+			Status:             "progressing",
+			CompletionDelta:    0.25,
+			Tips:               []string{"Retry execute_script with grounded fields."},
+			Clues:              []string{"users_orders relation is available."},
+			SuggestedNextTools: []string{"execute_script"},
+			Missing:            []string{"join key mapping"},
+		},
+	}})
+
+	formatted := formatAskAnchoredMRUState(state)
+	if !strings.Contains(formatted, "- Progress: progressing (+0.25)") {
+		t.Fatalf("expected progress hint in ask MRU state, got %s", formatted)
+	}
+	if !strings.Contains(formatted, "- Tip: Retry execute_script with grounded fields.") || !strings.Contains(formatted, "- Clue: users_orders relation is available.") || !strings.Contains(formatted, "- Suggested tool: execute_script") || !strings.Contains(formatted, "- Missing: join key mapping") {
+		t.Fatalf("expected tool hint details in ask MRU state, got %s", formatted)
+	}
+}
+
+type progressBudgetGenerator struct{ calls int }
+
+func (m *progressBudgetGenerator) Name() string                                 { return "progress_budget_mock" }
+func (m *progressBudgetGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+func (m *progressBudgetGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	if m.calls <= 6 {
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{map[string]any{"op": "scan"}}},
+		}}}, nil
+	}
+	return ai.GenOutput{Text: "Final answer after progress-aware extension."}, nil
+}
+
+type progressBudgetExecutor struct{ callCount int }
+
+func (e *progressBudgetExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	e.callCount++
+	return fmt.Sprintf(`{"tool_result":[{"step":%d}],"progress_hint":{"status":"progressing","completion_delta":0.20,"clues":["step %d narrowed the path"],"suggested_next_tools":["execute_script"]}}`, e.callCount, e.callCount), nil
+}
+
+func (e *progressBudgetExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+func TestNativeReActEngine_ExtendsLoopBudgetWhenProgressing(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &progressBudgetGenerator{}
+	executor := &progressBudgetExecutor{}
+	var progress []string
+	ctx := context.WithValue(context.Background(), ai.CtxKeyProgressSink, func(msg string) { progress = append(progress, msg) })
+
+	resp, err := engine.Run(ctx, ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Keep narrowing until you can answer.",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer after progress-aware extension." {
+		t.Fatalf("expected final answer after extension, got %q", resp.FinalText)
+	}
+	if executor.callCount != 6 {
+		t.Fatalf("expected loop budget to extend beyond base and execute 6 tool calls, got %d", executor.callCount)
+	}
+	if !containsProgressMessage(progress, "Loop budget extended to 6 because the Ask is progressing.") {
+		t.Fatalf("expected loop budget extension progress message, got %#v", progress)
+	}
+	if len(resp.ToolCalls) != 6 {
+		t.Fatalf("expected all progressing tool calls to be recorded, got %#v", resp.ToolCalls)
+	}
+}
+
+type stalledBudgetGenerator struct{ calls int }
+
+func (m *stalledBudgetGenerator) Name() string                                 { return "stalled_budget_mock" }
+func (m *stalledBudgetGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+func (m *stalledBudgetGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	if strings.Contains(prompt, "Do not call any more tools.") {
+		return ai.GenOutput{Text: "Final answer after capped retries."}, nil
+	}
+	return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+		Name: "execute_script",
+		Args: map[string]any{"script": []any{map[string]any{"op": "scan"}}},
+	}}}, nil
+}
+
+type stalledBudgetExecutor struct{ callCount int }
+
+func (e *stalledBudgetExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	e.callCount++
+	return "", fmt.Errorf("missing required field")
+}
+
+func (e *stalledBudgetExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+func TestNativeReActEngine_DoesNotExtendLoopBudgetWithoutProgress(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &stalledBudgetGenerator{}
+	executor := &stalledBudgetExecutor{}
+
+	resp, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Try until you hit the retry cap.",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer after capped retries." {
+		t.Fatalf("expected final synthesis after capped retries, got %q", resp.FinalText)
+	}
+	if executor.callCount != nativeReActBaseToolIterations {
+		t.Fatalf("expected no progress to stop at base loop budget %d, got %d", nativeReActBaseToolIterations, executor.callCount)
+	}
+	if gen.calls != nativeReActBaseToolIterations+1 {
+		t.Fatalf("expected capped retries plus one final synthesis call, got %d", gen.calls)
+	}
+}
+
+type cappedBudgetGenerator struct{ calls int }
+
+func (m *cappedBudgetGenerator) Name() string                                 { return "capped_budget_mock" }
+func (m *cappedBudgetGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+func (m *cappedBudgetGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	if strings.Contains(prompt, "Do not call any more tools.") {
+		return ai.GenOutput{Text: "Final answer after hard cap."}, nil
+	}
+	return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+		Name: "execute_script",
+		Args: map[string]any{"script": []any{map[string]any{"op": "scan"}}},
+	}}}, nil
+}
+
+type cappedBudgetExecutor struct{ callCount int }
+
+func (e *cappedBudgetExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	e.callCount++
+	return fmt.Sprintf(`{"tool_result":[{"step":%d}],"progress_hint":{"status":"progressing","completion_delta":0.10,"tips":["continue narrowing"],"suggested_next_tools":["execute_script"]}}`, e.callCount), nil
+}
+
+func (e *cappedBudgetExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+type antiSuccessGenerator struct{ calls int }
+
+func (m *antiSuccessGenerator) Name() string                                 { return "anti_success_mock" }
+func (m *antiSuccessGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+func (m *antiSuccessGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	if m.calls == 1 {
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{map[string]any{"op": "scan"}}},
+		}}}, nil
+	}
+	return ai.GenOutput{Text: "unexpected follow-up generation after hard error"}, nil
+}
+
+type antiSuccessExecutor struct{ callCount int }
+
+func (e *antiSuccessExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	e.callCount++
+	return `{"tool_result":"Permission denied: write access is blocked for this operation.","progress_hint":{"status":"hard_error","tips":["Stop retrying this tool until permissions change."]}}`, nil
+}
+
+func (e *antiSuccessExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+func TestNativeReActEngine_ProgressAwareBudgetStillCapsAtHardLimit(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &cappedBudgetGenerator{}
+	executor := &cappedBudgetExecutor{}
+
+	resp, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Keep progressing until the hard cap.",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer after hard cap." {
+		t.Fatalf("expected final synthesis after hard cap, got %q", resp.FinalText)
+	}
+	if executor.callCount != nativeReActMaxToolIterations {
+		t.Fatalf("expected progressing loop to stop at hard cap %d, got %d", nativeReActMaxToolIterations, executor.callCount)
+	}
+	if gen.calls != nativeReActMaxToolIterations+1 {
+		t.Fatalf("expected hard cap plus final synthesis call, got %d", gen.calls)
+	}
+}
+
+func TestNativeReActEngine_ShortCircuitsOnAntiSuccessHardErrorHint(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &antiSuccessGenerator{}
+	executor := &antiSuccessExecutor{}
+	var progress []string
+	ctx := context.WithValue(context.Background(), ai.CtxKeyProgressSink, func(msg string) { progress = append(progress, msg) })
+
+	resp, err := engine.Run(ctx, ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Try the blocked operation.",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Permission denied: write access is blocked for this operation." {
+		t.Fatalf("expected terminal tool result to be returned immediately, got %q", resp.FinalText)
+	}
+	if gen.calls != 1 {
+		t.Fatalf("expected hard error hint to stop after the first generation call, got %d", gen.calls)
+	}
+	if executor.callCount != 1 {
+		t.Fatalf("expected only one tool execution before short-circuit, got %d", executor.callCount)
+	}
 	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "execute_script" {
-		t.Fatalf("expected only the successful repaired execute_script call to be recorded, got %#v", resp.ToolCalls)
+		t.Fatalf("expected the terminal tool call to be recorded, got %#v", resp.ToolCalls)
+	}
+	if !containsProgressMessage(progress, "Tool `execute_script` reported a terminal hard error; short-circuiting the Ask loop.") {
+		t.Fatalf("expected terminal hard-error progress message, got %#v", progress)
+	}
+}
+
+func TestEngineNative_HelperClassifiers_RecognizeTerminalHintStatuses(t *testing.T) {
+	if !shouldShortCircuitAskLoopOnToolHint(&ai.ToolProgressHint{Status: "hard_error"}) {
+		t.Fatal("expected hard_error to short-circuit the Ask loop")
+	}
+	if !shouldShortCircuitAskLoopOnToolHint(&ai.ToolProgressHint{Status: "anti_success"}) {
+		t.Fatal("expected anti_success to short-circuit the Ask loop")
+	}
+	if !shouldShortCircuitAskLoopOnToolHint(&ai.ToolProgressHint{Status: "terminal_error"}) {
+		t.Fatal("expected terminal_error to short-circuit the Ask loop")
+	}
+	if shouldShortCircuitAskLoopOnToolHint(&ai.ToolProgressHint{Status: "progressing"}) {
+		t.Fatal("did not expect progressing to short-circuit the Ask loop")
 	}
 }
 

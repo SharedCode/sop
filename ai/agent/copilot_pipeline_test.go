@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -129,12 +130,21 @@ func TestCopilotPipeline_Phases(t *testing.T) {
 	// --- Phase 5: Delegating to Engine ---
 	// Mock a JSON payload wrapped in code blocks to simulate reasoning layer tool use output
 	fakeGen.Response = "I can definitely help with that. ```json\n[{\"tool\":\"search_space\",\"args\":{}}]\n```"
-	finalText, err := ag.delegateToReasoningEngine(ctx, query, fakeGen, prompt)
+	finalText, toolCalls, outcomeFacts, outcomeRecipes, err := ag.delegateToReasoningEngine(ctx, query, fakeGen, prompt)
 	if err != nil {
 		t.Fatalf("Engine delegation failed: %v", err)
 	}
 	if !strings.Contains(finalText, "I can definitely help") && !strings.Contains(finalText, "search_space") {
 		t.Errorf("Unexpected delegation output: %s", finalText)
+	}
+	if len(toolCalls) != 0 {
+		t.Fatalf("expected no native tool calls from baseline mock delegation path, got %#v", toolCalls)
+	}
+	if len(outcomeFacts) != 0 {
+		t.Fatalf("expected no grounded outcome facts from baseline mock delegation path, got %#v", outcomeFacts)
+	}
+	if len(outcomeRecipes) != 0 {
+		t.Fatalf("expected no learned outcome recipes from baseline mock delegation path, got %#v", outcomeRecipes)
 	}
 }
 
@@ -265,6 +275,45 @@ func TestPromptBudgetProfile_UsesRoutingGate(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPrompt_IncludesWorkflowRecipesComponent(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}}}
+
+	prompt := ag.buildSystemPrompt(ctx, "Create a script named expensive_orders to find orders over 1000", TaskContextClassification{
+		Domain:          StoresDomain,
+		DBArtifacts:     []string{"orders"},
+		Layers:          []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}},
+		ScriptAuthoring: true,
+	})
+
+	var elements []PromptElement
+	if err := json.Unmarshal([]byte(prompt), &elements); err != nil {
+		t.Fatalf("expected buildSystemPrompt to return JSON prompt elements: %v\nPrompt: %s", err, prompt)
+	}
+
+	recipeContent := ""
+	for _, element := range elements {
+		if element.Component == ComponentRecipes {
+			recipeContent = element.Content
+			break
+		}
+	}
+	if recipeContent == "" {
+		t.Fatalf("expected workflow_recipes component in prompt: %s", prompt)
+	}
+	if strings.Contains(recipeContent, "[truncated]") {
+		t.Fatalf("expected explicit recipe component to fit without truncation, got: %s", recipeContent)
+	}
+	if !strings.Contains(recipeContent, "Reusable script authoring") || !strings.Contains(recipeContent, "Stores schema-first research") || !strings.Contains(recipeContent, "Stores read transaction flow") || !strings.Contains(recipeContent, "Stores join slice repair") || !strings.Contains(recipeContent, "Stores predicate grounding") {
+		t.Fatalf("expected workflow recipes to include script-authoring and stores protocols, got: %s", recipeContent)
+	}
+	if !strings.Contains(recipeContent, "begin_tx(mode=read)") || !strings.Contains(recipeContent, "create_script") {
+		t.Fatalf("expected workflow recipes to retain protocol anchors, got: %s", recipeContent)
+	}
+}
+
 func TestBuildSystemPrompt_RehydratesSystemToolsFromSTMProjection(t *testing.T) {
 	ag := NewCopilotAgent(Config{}, nil, nil)
 	ag.service = &Service{session: NewRunnerSession()}
@@ -277,6 +326,77 @@ func TestBuildSystemPrompt_RehydratesSystemToolsFromSTMProjection(t *testing.T) 
 	prompt := ag.buildSystemPrompt(context.Background(), "List stores", TaskContextClassification{})
 	if !strings.Contains(prompt, "STM_REHYDRATED_TOOLS") {
 		t.Fatalf("expected buildSystemPrompt to rehydrate system tools from STM projection, got %s", prompt)
+	}
+}
+
+func TestBuildSystemPrompt_RehydratesAskOutcomeFromSTMProjection(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession()}
+	ag.service.session.Memory.SetMRUSnapshot([]MRUItem{
+		{Category: askOutcomeMRUCategoryHeader, Context: "Recent Ask Outcome:", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		{Category: askOutcomeMRUCategoryQuery, Context: "- Last user ask: Find users named John", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		{Category: askOutcomeMRUCategoryResult, Context: "- Last outcome: Found matching users", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		{Category: askOutcomeMRUCategoryStoreSchema + "_USERS", Context: "- Confirmed: list_stores confirmed users schema=key:string, first_name:string", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		{Category: askOutcomeMRUCategoryRelations + "_USERS__USERS_ORDERS__USERS_ORDERS_KEY__USERS_KEY", Context: "- Confirmed: list_stores confirmed users relations=[users_orders(key->users.key)]", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		{Category: askOutcomeMRUCategoryGuidance, Context: "- Reuse confirmed facts and successful patterns from this outcome before broadening scope.", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+	})
+
+	prompt := ag.buildSystemPrompt(context.Background(), "Find orders for those users", TaskContextClassification{})
+	if !strings.Contains(prompt, "Recent Ask Outcome:") || !strings.Contains(prompt, "Find users named John") || !strings.Contains(prompt, "list_stores confirmed users schema=key:string, first_name:string") || !strings.Contains(prompt, "list_stores confirmed users relations=[users_orders(key-") {
+		t.Fatalf("expected buildSystemPrompt to rehydrate ask outcome from STM projection, got %s", prompt)
+	}
+}
+
+func TestBuildSystemPrompt_RehydratesImplicitRecipesFromSTM(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession()}
+	ag.service.session.Memory.SetRecipeSnapshot([]RecipeItem{{
+		ID:         "implicit.execute_script.research_then_retry",
+		Kind:       RecipeKindImplicit,
+		Scope:      RecipeScopeMicro,
+		Domain:     StoresDomain,
+		Topic:      "Research grounded schema before execute_script retry",
+		Trigger:    "execute_script repair requires missing schema or relation facts",
+		Protocol:   []string{"Call list_stores first to confirm schema and relations.", "Retry execute_script with corrected grounded arguments."},
+		Invariants: []string{"Preserve valid script slices.", "Do not broaden scope before the retry."},
+		Confidence: 0.95,
+		Source:     "inner_loop_success",
+	}})
+
+	prompt := ag.buildSystemPrompt(context.Background(), "Find users named John", TaskContextClassification{Domain: StoresDomain})
+	if !strings.Contains(prompt, "workflow_recipes") || !strings.Contains(prompt, "Research grounded schema before execute_script retry") || !strings.Contains(prompt, "Retry execute_script with corrected grounded arguments") {
+		t.Fatalf("expected buildSystemPrompt to include implicit recipe snapshot, got %s", prompt)
+	}
+}
+
+func TestBuildAskOutcomeMRUItems_TypesConfirmedStoreFacts(t *testing.T) {
+	items := buildAskOutcomeMRUItems(context.Background(), "Find users", "Found users", []ai.ToolCall{{Name: "list_stores"}}, []string{
+		"list_stores confirmed users schema=key:string, first_name:string",
+		"list_stores confirmed users relations=[users_orders(key->users.key)]",
+		"execute_script confirmed join store=users_orders on=users.key->key",
+		"execute_script confirmed filter field=first_name op=$eq",
+		"execute_script returned: [{\"first_name\":\"John\"}]",
+	})
+
+	seenCategories := map[string]bool{}
+	for _, item := range items {
+		seenCategories[item.Category] = true
+	}
+
+	if !seenCategories[askOutcomeMRUCategoryStoreSchema+"_USERS"] {
+		t.Fatalf("expected typed schema category, got %+v", items)
+	}
+	if !seenCategories[askOutcomeMRUCategoryRelations+"_USERS__USERS_ORDERS__USERS_ORDERS_KEY__USERS_KEY"] {
+		t.Fatalf("expected typed relations category, got %+v", items)
+	}
+	if !seenCategories[askOutcomeMRUCategoryJoinSelection+"_JOIN__USERS_ORDERS__USERS_KEY__KEY"] {
+		t.Fatalf("expected typed join selection category, got %+v", items)
+	}
+	if !seenCategories[askOutcomeMRUCategoryFilterSelection+"_FIRST_NAME___EQ"] {
+		t.Fatalf("expected typed filter selection category, got %+v", items)
+	}
+	if !seenCategories[askOutcomeMRUCategoryConfirmed+"_01"] {
+		t.Fatalf("expected generic fallback category for unstructured confirmed fact, got %+v", items)
 	}
 }
 
@@ -323,14 +443,94 @@ func TestEpilogueAndCleanup_PersistsMRUSnapshotWithoutSleepCycleLogging(t *testi
 	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
 	ag.markMRUCategoryWithSource(SYSTEM_TOOLS, "TOOLS_FOR_RESTART", MRUSourceSystemTools)
 
-	ag.epilogueAndCleanup(context.Background(), "List stores", "Omni", "Done")
+	ag.epilogueAndCleanup(context.Background(), "List stores", "Omni", "Done", []ai.ToolCall{{Name: "list_stores"}, {Name: "execute_script"}}, []string{"list_stores confirmed users schema=key:string, first_name:string", "list_stores confirmed users relations=[users_orders(key->users.key)]"}, []ai.LearnedRecipe{{
+		ID:         "implicit.execute_script.research_then_retry",
+		Kind:       RecipeKindImplicit,
+		Scope:      RecipeScopeMicro,
+		Domain:     StoresDomain,
+		Topic:      "Research grounded schema before execute_script retry",
+		Trigger:    "execute_script repair requires missing schema or relation facts",
+		Protocol:   []string{"Call list_stores first to confirm schema and relations.", "Retry execute_script with corrected grounded arguments."},
+		Invariants: []string{"Preserve valid script slices."},
+		Confidence: 0.95,
+		Source:     "inner_loop_success",
+	}})
 
 	snapshot := ag.service.session.Memory.GetMRUSnapshot()
 	if len(snapshot) == 0 {
 		t.Fatalf("expected epilogue to persist MRU snapshot even when sleep-cycle logging is disabled")
 	}
+	recipeSnapshot := ag.service.session.Memory.GetRecipeSnapshot()
+	if len(recipeSnapshot) != 1 || recipeSnapshot[0].ID != "implicit.execute_script.research_then_retry" {
+		t.Fatalf("expected epilogue to persist learned recipe snapshot, got %+v", recipeSnapshot)
+	}
 	if snapshot[0].Category != SYSTEM_TOOLS || snapshot[0].Context != "TOOLS_FOR_RESTART" {
 		t.Fatalf("unexpected MRU snapshot persisted to STM: %+v", snapshot)
+	}
+	foundAskOutcomeQuery := false
+	foundAskOutcomeResult := false
+	foundAskOutcomeSchema := false
+	foundAskOutcomeRelations := false
+	foundAskOutcomePattern := false
+	for _, item := range snapshot {
+		if item.Source == MRUSourceAskOutcome {
+			if item.Category == askOutcomeMRUCategoryQuery {
+				foundAskOutcomeQuery = strings.Contains(item.Context, "List stores")
+			}
+			if item.Category == askOutcomeMRUCategoryResult {
+				foundAskOutcomeResult = strings.Contains(item.Context, "Done")
+			}
+			if strings.HasPrefix(item.Category, askOutcomeMRUCategoryStoreSchema+"_") {
+				foundAskOutcomeSchema = foundAskOutcomeSchema || strings.Contains(item.Context, "list_stores confirmed users schema=key:string, first_name:string")
+			}
+			if strings.HasPrefix(item.Category, askOutcomeMRUCategoryRelations+"_") {
+				foundAskOutcomeRelations = foundAskOutcomeRelations || strings.Contains(item.Context, "list_stores confirmed users relations=[users_orders(key->users.key)]")
+			}
+			if item.Category == askOutcomeMRUCategoryToolPattern {
+				foundAskOutcomePattern = strings.Contains(item.Context, "Tool pattern: list_stores -> execute_script")
+			}
+		}
+	}
+	if !foundAskOutcomeQuery || !foundAskOutcomeResult || !foundAskOutcomeSchema || !foundAskOutcomeRelations || !foundAskOutcomePattern {
+		t.Fatalf("expected epilogue to persist compact ask outcome into MRU snapshot, got %+v", snapshot)
+	}
+}
+
+func TestEpilogueAndCleanup_MergesRecipeSnapshotsAcrossAsks(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.Memory.SetRecipeSnapshot([]RecipeItem{{
+		ID:         "implicit.execute_script.research_then_retry",
+		Kind:       RecipeKindImplicit,
+		Scope:      RecipeScopeMicro,
+		Domain:     StoresDomain,
+		Topic:      "Research grounded schema before execute_script retry",
+		Trigger:    "execute_script repair requires missing schema or relation facts",
+		Protocol:   []string{"Call list_stores first to confirm schema and relations."},
+		Invariants: []string{"Preserve valid script slices."},
+		Confidence: 0.75,
+		Source:     "inner_loop_success",
+	}})
+
+	ag.epilogueAndCleanup(context.Background(), "Find orders", "Omni", "Done", []ai.ToolCall{{Name: "execute_script"}}, []string{"execute_script returned: []"}, []ai.LearnedRecipe{{
+		ID:         "implicit.execute_script.repair_in_place",
+		Kind:       RecipeKindImplicit,
+		Scope:      RecipeScopeMicro,
+		Domain:     StoresDomain,
+		Topic:      "Repair execute_script in place",
+		Trigger:    "execute_script has a recoverable argument-shape error",
+		Protocol:   []string{"Retry the same tool instead of abandoning the plan."},
+		Invariants: []string{"Do not switch to unrelated tools before the repair attempt."},
+		Confidence: 0.9,
+		Source:     "inner_loop_success",
+	}})
+
+	recipeSnapshot := ag.service.session.Memory.GetRecipeSnapshot()
+	if len(recipeSnapshot) != 2 {
+		t.Fatalf("expected epilogue to merge recipe snapshots across asks, got %+v", recipeSnapshot)
+	}
+	if recipeSnapshot[0].ID != "implicit.execute_script.repair_in_place" || recipeSnapshot[1].ID != "implicit.execute_script.research_then_retry" {
+		t.Fatalf("expected merged recipe snapshot ordered by confidence, got %+v", recipeSnapshot)
 	}
 }
 

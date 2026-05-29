@@ -46,9 +46,16 @@ func init() {
 func (g *gemini) Name() string { return "gemini" }
 
 type geminiRequest struct {
-	SystemInstruction *geminiContent  `json:"systemInstruction,omitempty"`
-	Contents          []geminiContent `json:"contents"`
-	Tools             []geminiTool    `json:"tools,omitempty"`
+	SystemInstruction *geminiContent          `json:"systemInstruction,omitempty"`
+	Contents          []geminiContent         `json:"contents"`
+	Tools             []geminiTool            `json:"tools,omitempty"`
+	GenerationConfig  *geminiGenerationConfig `json:"generationConfig,omitempty"`
+}
+
+type geminiGenerationConfig struct {
+	Temperature     float32 `json:"temperature,omitempty"`
+	TopP            float32 `json:"topP,omitempty"`
+	MaxOutputTokens int     `json:"maxOutputTokens,omitempty"`
 }
 
 type geminiContent struct {
@@ -101,16 +108,7 @@ func describeGeminiEmptyResponse(resp geminiResponse) string {
 	return strings.Join(parts, "; ")
 }
 
-// Generate sends a prompt to the Gemini API and returns the generated text.
-func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
-	if g.apiKey == "" || g.apiKey == "YOUR_API_KEY" {
-		return ai.GenOutput{
-			Text: fmt.Sprintf("[Gemini Stub] Missing API Key. Please set LLM_API_KEY or GEMINI_API_KEY environment variable. Would send: %q", prompt),
-		}, nil
-	}
-
-	apiURL := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", g.model)
-
+func buildGeminiRequest(prompt string, opts ai.GenOptions) geminiRequest {
 	reqBody := geminiRequest{
 		Contents: []geminiContent{
 			{Parts: []geminiPart{{Text: prompt}}},
@@ -130,10 +128,7 @@ func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions
 			if t.Schema != "" && strings.HasPrefix(strings.TrimSpace(t.Schema), "{") {
 				json.Unmarshal([]byte(t.Schema), &params)
 			} else if t.Schema != "" {
-				// Provide a generic object schema if it's a TS string signature
-				params = map[string]any{
-					"type": "object",
-				}
+				params = map[string]any{"type": "object"}
 			}
 			funcs = append(funcs, geminiFunction{
 				Name:        t.Name,
@@ -141,10 +136,31 @@ func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions
 				Parameters:  params,
 			})
 		}
-		reqBody.Tools = []geminiTool{
-			{FunctionDeclarations: funcs},
+		reqBody.Tools = []geminiTool{{FunctionDeclarations: funcs}}
+	}
+
+	if opts.Temperature > 0 || opts.TopP > 0 || opts.MaxTokens > 0 {
+		reqBody.GenerationConfig = &geminiGenerationConfig{
+			Temperature:     opts.Temperature,
+			TopP:            opts.TopP,
+			MaxOutputTokens: opts.MaxTokens,
 		}
 	}
+
+	return reqBody
+}
+
+// Generate sends a prompt to the Gemini API and returns the generated text.
+func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	if g.apiKey == "" || g.apiKey == "YOUR_API_KEY" {
+		return ai.GenOutput{
+			Text: fmt.Sprintf("[Gemini Stub] Missing API Key. Please set LLM_API_KEY or GEMINI_API_KEY environment variable. Would send: %q", prompt),
+		}, nil
+	}
+
+	apiURL := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", g.model)
+
+	reqBody := buildGeminiRequest(prompt, opts)
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {

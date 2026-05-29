@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -86,6 +87,89 @@ func TestBuildSystemPrompt_IncludesFocusedStoreContext(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPrompt_StoresFocusedContext_StaysWithinBudgetGuardrail(t *testing.T) {
+	ctx := context.Background()
+	dbDir := t.TempDir()
+	dbOpts := sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{dbDir}}
+	appDB := database.NewDatabase(dbOpts)
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+
+	tx, err := appDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+
+	usersOpts := sop.StoreOptions{
+		Name:           "users",
+		SlotLength:     10,
+		IsPrimitiveKey: true,
+		Relations: []sop.Relation{{
+			SourceFields: []string{"key"},
+			TargetStore:  "users_orders",
+			TargetFields: []string{"key"},
+		}},
+	}
+	users, err := sopdb.NewBtree[string, any](ctx, dbOpts, "users", tx, nil, usersOpts)
+	if err != nil {
+		t.Fatalf("create users store: %v", err)
+	}
+	orders, err := sopdb.NewBtree[string, any](ctx, dbOpts, "users_orders", tx, nil, sop.StoreOptions{Name: "users_orders", SlotLength: 10, IsPrimitiveKey: true})
+	if err != nil {
+		t.Fatalf("create users_orders store: %v", err)
+	}
+	if ok, err := users.Add(ctx, "u1", map[string]any{"first_name": "John", "user_id": "u1"}); err != nil || !ok {
+		t.Fatalf("add users record: %v", err)
+	}
+	if ok, err := orders.Add(ctx, "u1", map[string]any{"user_id": "u1", "value": "o1"}); err != nil || !ok {
+		t.Fatalf("add users_orders record: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit setup: %v", err)
+	}
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{"appdb": dbOpts}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}}}
+
+	payload := &ai.SessionPayload{CurrentDB: "appdb", Variables: make(map[string]any)}
+	ctx = context.WithValue(ctx, "session_payload", payload)
+
+	prompt := ag.buildSystemPrompt(ctx, "Find John and inspect related orders", TaskContextClassification{
+		Domain:      StoresDomain,
+		DBArtifacts: []string{"users"},
+		Layers:      []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}},
+	})
+
+	var elements []PromptElement
+	if err := json.Unmarshal([]byte(prompt), &elements); err != nil {
+		t.Fatalf("expected buildSystemPrompt to return JSON prompt elements: %v\nPrompt: %s", err, prompt)
+	}
+
+	focusedContent := ""
+	for _, element := range elements {
+		if element.Component == ComponentFocusedContext {
+			focusedContent = element.Content
+			break
+		}
+	}
+	if focusedContent == "" {
+		t.Fatalf("expected focused execution context component in prompt: %s", prompt)
+	}
+	if len(focusedContent) > 900 {
+		t.Fatalf("expected stores focused execution context to stay within 900 chars after prompt reductions, got %d\nContent: %s", len(focusedContent), focusedContent)
+	}
+	if !strings.Contains(focusedContent, "Target Stores") || !strings.Contains(focusedContent, "Relevant Store Operations") {
+		t.Fatalf("expected focused execution context to retain core Stores anchors: %s", focusedContent)
+	}
+	for _, element := range elements {
+		if element.Component == ComponentSystemTools && strings.Contains(element.Content, "Execution Flow Engine Guardrails") {
+			t.Fatalf("expected execution guardrails to live only in focused execution context, got duplicated system tools content: %s", element.Content)
+		}
+		if element.Component == ComponentSystemTools && strings.Contains(element.Content, "[truncated]") {
+			t.Fatalf("expected stores system tools context to fit without truncation after prompt reductions, got: %s", element.Content)
+		}
+	}
+}
+
 func TestBuildSystemPrompt_IncludesCrossDomainFocusedContext(t *testing.T) {
 	ctx := context.Background()
 	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
@@ -117,6 +201,25 @@ func TestBuildSystemPrompt_IncludesCrossDomainFocusedContext(t *testing.T) {
 	if !strings.Contains(prompt, "Target Spaces: release_notes") {
 		t.Fatalf("expected spaces targets in cross-domain prompt: %s", prompt)
 	}
+
+	var elements []PromptElement
+	if err := json.Unmarshal([]byte(prompt), &elements); err != nil {
+		t.Fatalf("expected buildSystemPrompt to return JSON prompt elements: %v\nPrompt: %s", err, prompt)
+	}
+	for _, element := range elements {
+		if element.Component != ComponentSystemTools {
+			continue
+		}
+		if strings.Contains(element.Content, "Execution Flow Engine Guardrails") {
+			t.Fatalf("expected cross-domain system tools to avoid duplicated execution guardrails, got: %s", element.Content)
+		}
+		if strings.Contains(element.Content, "[truncated]") {
+			t.Fatalf("expected cross-domain system tools context to fit without truncation after prompt reductions, got: %s", element.Content)
+		}
+		if !strings.Contains(element.Content, "# Execute Script Tool") || !strings.Contains(element.Content, "# Spaces Manual") {
+			t.Fatalf("expected cross-domain system tools to retain both stores and spaces manuals, got: %s", element.Content)
+		}
+	}
 }
 
 func TestBuildSystemPrompt_IncludesScriptAuthoringContextForStores(t *testing.T) {
@@ -146,6 +249,60 @@ func TestBuildSystemPrompt_IncludesScriptAuthoringContextForStores(t *testing.T)
 	}
 	if !strings.Contains(prompt, "Provide reusable script steps under the `script` field") {
 		t.Fatalf("expected script payload shape guidance in prompt: %s", prompt)
+	}
+
+	var elements []PromptElement
+	if err := json.Unmarshal([]byte(prompt), &elements); err != nil {
+		t.Fatalf("expected buildSystemPrompt to return JSON prompt elements: %v\nPrompt: %s", err, prompt)
+	}
+	for _, element := range elements {
+		if element.Component != ComponentSystemTools {
+			continue
+		}
+		if strings.Contains(element.Content, "[truncated]") {
+			t.Fatalf("expected script-authoring system tools context to fit without truncation after prompt reductions, got: %s", element.Content)
+		}
+		if !strings.Contains(element.Content, "Structured Context: Script Authoring Tools") {
+			t.Fatalf("expected script-authoring manual to remain present in system tools, got: %s", element.Content)
+		}
+	}
+}
+
+func TestBuildSystemPrompt_StoresSystemTools_PrefersCompactProtocolSlice(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}}}
+
+	prompt := ag.buildSystemPrompt(ctx, "Find John orders over 500", TaskContextClassification{
+		Domain:      StoresDomain,
+		DBArtifacts: []string{"users", "orders"},
+		Layers:      []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}},
+	})
+
+	var elements []PromptElement
+	if err := json.Unmarshal([]byte(prompt), &elements); err != nil {
+		t.Fatalf("expected buildSystemPrompt to return JSON prompt elements: %v\nPrompt: %s", err, prompt)
+	}
+
+	systemTools := ""
+	for _, element := range elements {
+		if element.Component == ComponentSystemTools {
+			systemTools = element.Content
+			break
+		}
+	}
+	if systemTools == "" {
+		t.Fatalf("expected system tools component in prompt: %s", prompt)
+	}
+	if strings.Contains(systemTools, "<h2> Example</h2>") || strings.Contains(systemTools, "join_right") {
+		t.Fatalf("expected stores system tools to omit the large execute_script example block, got: %s", systemTools)
+	}
+	if !strings.Contains(systemTools, "Research & Orchestration Rules") || !strings.Contains(systemTools, "Use `list_stores` to research schema and relations") {
+		t.Fatalf("expected stores system tools to retain compact research guidance, got: %s", systemTools)
+	}
+	if !strings.Contains(systemTools, "Use `result_var` and `input_var` to chain multi-step reads") {
+		t.Fatalf("expected stores system tools to retain minimal protocol reminders, got: %s", systemTools)
 	}
 }
 

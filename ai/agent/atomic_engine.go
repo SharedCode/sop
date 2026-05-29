@@ -149,8 +149,13 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 		return "", fmt.Errorf("script must be a JSON string or array")
 	}
 
+	currentQuery := ""
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		currentQuery = strings.TrimSpace(p.CurrentUserQuery)
+	}
+
 	for _, step := range rawSteps {
-		normalizeScriptStepForCompatibility(step)
+		normalizeScriptStepForCompatibilityWithQuery(step, currentQuery)
 
 		if _, hasOp := step["op"]; !hasOp {
 			if cmd, ok := step["command"].(string); ok && cmd != "" {
@@ -311,10 +316,32 @@ func validateExecuteScriptPlaceholders(ctx context.Context, script []ScriptInstr
 		if (instr.Op == "join" || instr.Op == "join_right") && instr.Args != nil {
 			if onMap, ok := instr.Args["on"].(map[string]any); ok {
 				for leftField, rightField := range onMap {
+					if isInvalidPlaceholderFieldName(leftField) {
+						return newExecuteScriptValidationError(
+							"invalid_join_on_field_placeholder",
+							fmt.Sprintf("invalid join.on field %q: expected a real left-hand field path such as %q", leftField, "users.key"),
+							fmt.Sprintf(`{"op":"%s","args":{"store":"users_orders","on":{"users.key":"key"}}}`, instr.Op),
+						)
+					}
+
 					if placeholder, ok := rightField.(bool); ok {
 						return newExecuteScriptValidationError(
 							"invalid_join_on_placeholder",
 							fmt.Sprintf("invalid type for join.on[%q]: got boolean placeholder %t; expected a field path string such as %q", leftField, placeholder, "key"),
+							fmt.Sprintf(`{"op":"%s","args":{"store":"users_orders","on":{"%s":"key"}}}`, instr.Op, leftField),
+						)
+					}
+					if rightField == nil {
+						return newExecuteScriptValidationError(
+							"invalid_join_on_placeholder",
+							fmt.Sprintf("invalid type for join.on[%q]: got null placeholder; expected a field path string such as %q", leftField, "key"),
+							fmt.Sprintf(`{"op":"%s","args":{"store":"users_orders","on":{"%s":"key"}}}`, instr.Op, leftField),
+						)
+					}
+					if rightFieldStr, ok := rightField.(string); ok && isInvalidPlaceholderFieldName(rightFieldStr) {
+						return newExecuteScriptValidationError(
+							"invalid_join_on_placeholder",
+							fmt.Sprintf("invalid join.on[%q] field path %q: expected a real right-hand field path such as %q", leftField, rightFieldStr, "key"),
 							fmt.Sprintf(`{"op":"%s","args":{"store":"users_orders","on":{"%s":"key"}}}`, instr.Op, leftField),
 						)
 					}
@@ -352,6 +379,30 @@ func validateFilterConditionPlaceholders(condition map[string]any, currentQuery 
 				}
 			}
 			continue
+		}
+
+		if isInvalidPlaceholderFieldName(field) {
+			queryHint := ""
+			if currentQuery != "" {
+				queryHint = fmt.Sprintf(" for current query %q", currentQuery)
+			}
+			return newExecuteScriptValidationError(
+				"invalid_filter_field_placeholder",
+				fmt.Sprintf("invalid filter condition field %q: expected a real field path such as %q%s", field, "first_name", queryHint),
+				fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":{"$eq":"<value>"}}}}`, "first_name"),
+			)
+		}
+
+		if raw == nil {
+			queryHint := ""
+			if currentQuery != "" {
+				queryHint = fmt.Sprintf(" for current query %q", currentQuery)
+			}
+			return newExecuteScriptValidationError(
+				"invalid_filter_placeholder",
+				fmt.Sprintf("invalid type for filter condition field %q: got null placeholder; expected an operator/value predicate such as {\"$eq\": value}%s", field, queryHint),
+				fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":{"$eq":"<value>"}}}}`, field),
+			)
 		}
 
 		if placeholder, ok := raw.(bool); ok {
@@ -433,6 +484,20 @@ func isLikelyBooleanFieldName(field string) bool {
 
 	switch field {
 	case "active", "enabled", "disabled", "deleted", "archived", "visible", "public", "private", "verified", "locked", "done", "complete", "completed":
+		return true
+	default:
+		return false
+	}
+}
+
+func isInvalidPlaceholderFieldName(field string) bool {
+	field = strings.ToLower(strings.TrimSpace(strings.Trim(field, "\"'")))
+	if field == "" {
+		return true
+	}
+
+	switch field {
+	case "null", "nil", "<nil>", "undefined", "none":
 		return true
 	default:
 		return false
@@ -1286,6 +1351,10 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 }
 
 func normalizeScriptStepForCompatibility(step map[string]any) {
+	normalizeScriptStepForCompatibilityWithQuery(step, "")
+}
+
+func normalizeScriptStepForCompatibilityWithQuery(step map[string]any, currentQuery string) {
 	op, _ := step["op"].(string)
 	if op == "" {
 		if cmd, ok := step["command"].(string); ok {
@@ -1304,7 +1373,7 @@ func normalizeScriptStepForCompatibility(step map[string]any) {
 		normalizeCompatibilitySortStep(step, argsObj)
 	case strings.EqualFold(op, "filter"):
 		if condition, ok := argsObj["condition"].(map[string]any); ok {
-			argsObj["condition"] = normalizeCompatibilityConditionMap(condition)
+			argsObj["condition"] = normalizeCompatibilityConditionMapWithQuery(condition, currentQuery)
 		}
 	case strings.EqualFold(op, "join"), strings.EqualFold(op, "join_right"):
 		if onMap, ok := argsObj["on"].(map[string]any); ok {
@@ -1352,6 +1421,10 @@ func normalizeCompatibilitySortStep(step map[string]any, argsObj map[string]any)
 }
 
 func normalizeCompatibilityConditionMap(condition map[string]any) map[string]any {
+	return normalizeCompatibilityConditionMapWithQuery(condition, "")
+}
+
+func normalizeCompatibilityConditionMapWithQuery(condition map[string]any, currentQuery string) map[string]any {
 	normalized := make(map[string]any, len(condition))
 	for field, raw := range condition {
 		field = normalizeCompatibilityFieldPath(field)
@@ -1361,8 +1434,15 @@ func normalizeCompatibilityConditionMap(condition map[string]any) map[string]any
 		}
 
 		if nested, ok := raw.(map[string]any); ok {
-			normalized[field] = normalizeCompatibilityConditionMap(nested)
+			normalized[field] = normalizeCompatibilityConditionMapWithQuery(nested, currentQuery)
 			continue
+		}
+
+		if placeholder, ok := raw.(bool); ok && placeholder && !isLikelyBooleanFieldName(field) {
+			if inferred, changed := inferPredicateFromCurrentQuery(field, currentQuery); changed {
+				normalized[field] = inferred
+				continue
+			}
 		}
 
 		if rawStr, ok := raw.(string); ok {
@@ -1490,6 +1570,103 @@ func parseCompatibilityLiteral(raw string) any {
 		return f
 	}
 	return raw
+}
+
+func inferPredicateFromCurrentQuery(field string, currentQuery string) (map[string]any, bool) {
+	query := strings.TrimSpace(currentQuery)
+	if query == "" {
+		return nil, false
+	}
+
+	field = normalizeCompatibilityFieldPath(field)
+	leaf := field
+	if idx := strings.LastIndex(leaf, "."); idx >= 0 {
+		leaf = leaf[idx+1:]
+	}
+	leaf = strings.TrimSpace(leaf)
+	if leaf == "" {
+		return nil, false
+	}
+
+	fieldPattern := queryFieldPattern(field)
+	leafPattern := queryFieldPattern(leaf)
+	patterns := []string{fieldPattern}
+	if leafPattern != fieldPattern {
+		patterns = append(patterns, leafPattern)
+	}
+
+	for _, pattern := range patterns {
+		if predicate, ok := inferNumericPredicateFromQueryPattern(query, pattern); ok {
+			return predicate, true
+		}
+		if predicate, ok := inferQuotedStringPredicateFromQueryPattern(query, pattern); ok {
+			return predicate, true
+		}
+	}
+
+	return nil, false
+}
+
+func queryFieldPattern(field string) string {
+	parts := strings.FieldsFunc(strings.ToLower(strings.TrimSpace(field)), func(r rune) bool {
+		switch r {
+		case '.', '_', ' ':
+			return true
+		default:
+			return false
+		}
+	})
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, `[\s_\.]+`)
+}
+
+func inferQuotedStringPredicateFromQueryPattern(query string, fieldPattern string) (map[string]any, bool) {
+	if fieldPattern == "" {
+		return nil, false
+	}
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?i)` + fieldPattern + `\s*(?:is|=|==|equals?)?\s*['"]([^'"]+)['"]`),
+	}
+	for _, pattern := range patterns {
+		if matches := pattern.FindStringSubmatch(query); len(matches) == 2 {
+			value := strings.TrimSpace(matches[1])
+			if value != "" {
+				return map[string]any{"$eq": value}, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func inferNumericPredicateFromQueryPattern(query string, fieldPattern string) (map[string]any, bool) {
+	if fieldPattern == "" {
+		return nil, false
+	}
+	patterns := []struct {
+		re *regexp.Regexp
+		op string
+	}{
+		{re: regexp.MustCompile(`(?i)` + fieldPattern + `\s*(>=|<=|>|<|=|==)\s*(-?\d+(?:\.\d+)?)`), op: ""},
+		{re: regexp.MustCompile(`(?i)` + fieldPattern + `\s*(?:is\s+)?greater\s+than\s+(-?\d+(?:\.\d+)?)`), op: "$gt"},
+		{re: regexp.MustCompile(`(?i)` + fieldPattern + `\s*(?:is\s+)?less\s+than\s+(-?\d+(?:\.\d+)?)`), op: "$lt"},
+	}
+	for _, pattern := range patterns {
+		matches := pattern.re.FindStringSubmatch(query)
+		if len(matches) == 0 {
+			continue
+		}
+		op := pattern.op
+		valueIndex := 1
+		if op == "" {
+			op = comparisonOperatorToAST(matches[1])
+			valueIndex = 2
+		}
+		value := parseCompatibilityLiteral(matches[valueIndex])
+		return map[string]any{op: value}, true
+	}
+	return nil, false
 }
 
 func isAliasPlaceholderField(field string) bool {
@@ -2367,6 +2544,25 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	}
 
 	rightStore, isRightStore := e.getStore(rightVar)
+	if !isRightStore && rightVar != "" {
+		if rightInput, ok := e.Context.Variables[rightVar]; ok {
+			if store, ok := rightInput.(jsondb.StoreAccessor); ok && store != nil {
+				rightStore = store
+				isRightStore = true
+			}
+		}
+	}
+	if !isRightStore && rightVar != "" {
+		openedStore, openErr := e.OpenStore(ctx, map[string]any{"name": rightVar})
+		if openErr == nil && openedStore != nil {
+			rightStore = openedStore
+			isRightStore = true
+			if e.Context.Stores == nil {
+				e.Context.Stores = make(map[string]jsondb.StoreAccessor)
+			}
+			e.Context.Stores[rightVar] = openedStore
+		}
+	}
 
 	rightAlias, _ := args["right_alias"].(string)
 	if rightAlias == "" {

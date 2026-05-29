@@ -295,6 +295,285 @@ Architectural rule:
 
 This eliminates prompt bloat and minimizes structural hallucinations while preserving deterministic routing behavior.
 
+### 7. Progressive Native ReAct Loop
+
+Once routing and focused context assembly finish, the native ReAct engine takes over as the inner micro loop.
+
+System split:
+
+- Macro loop: Gate 1, Gate 2, and Gate 3 prepare the Ask frame.
+- Micro loop: the native reasoning engine executes bounded tool-based progression inside that frame.
+
+This separation is intentional. Routing gates do not run on every retry. They shape the Ask once, then the inner loop progresses from actual execution evidence.
+
+Core loop model:
+
+- The inner loop's source of truth is the ordered history of tool attempts and tool results for the current Ask.
+- After each step, the engine compacts that history into an Ask-anchored MRU summary.
+- The next LLM call sees a compact current truth rather than a replay of the original broad prompt.
+
+The Ask-anchored MRU carries the execution delta that matters most:
+
+- current focus
+- preserved valid work
+- grounded confirmed facts
+- what is still missing
+- suggested next tools
+- latest repair requirement when applicable
+
+Structured tool envelopes:
+
+- Tools can return a user-visible `tool_result` together with an internal `progress_hint`.
+- `progress_hint` communicates convergence evidence such as status, completion delta, clues, missing fields, and suggested next tools.
+- The engine consumes those hints; tools do not mutate MRU or scratchpad state directly.
+
+Retry architecture:
+
+- Recoverable failures are converted into constrained repair paths rather than immediate hard failure.
+- Malformed native tool calls trigger a repair retry that demands exactly one valid tool call.
+- Schema or relation uncertainty triggers research-first retry, typically `list_stores -> execute_script`.
+- Same-tool argument defects trigger in-place repair: preserve valid arguments and rewrite only the broken slice.
+- If the model tries to switch to an unrelated tool while repair is pending, the engine blocks the diversion and reasserts the allowed repair path.
+
+Progressive visibility for the model:
+
+- Retry prompts expose concrete prior tool arguments together with system tool responses.
+- The prompt also carries the latest failure detail and the most recent successful hint context.
+- The prompt now also includes an explicit `Progression history` array so the model can inspect each prior step as:
+    - `ingredients`
+    - `generated_call`
+    - `result`
+    - `progression`
+- `progression` carries live convergence metadata such as status, completion delta, tips, clues, missing fields, suggested next tools, and retry instruction when present.
+- This allows the model to refine the next internal ask or tool call from what improved, what remains missing, and which script slices should be preserved.
+
+Bounded progression:
+
+- The loop starts with a small retry budget.
+- It extends only when grounded progress is detected.
+- Grounded progress currently means at least one of:
+    - new confirmed facts
+    - a new positive `progress_hint`
+    - a newly learned implicit repair recipe
+- This keeps the loop progressive without allowing indefinite wandering.
+
+Recipe interplay:
+
+- When a repair path succeeds, the engine distills that successful sequence into an implicit micro recipe.
+- Those learned recipes are persisted for later asks, but they also matter inside the current Ask.
+- A newly learned recipe counts as live progress, so the retry controller can grant one more bounded step even without a fresh hint on that exact iteration.
+
+Hard-stop semantics:
+
+- Tools can explicitly report terminal negative states such as `blocked`, `anti_success`, `hard_error`, or `terminal_error`.
+- Those statuses short-circuit the inner loop immediately.
+- User-meaningful terminal outcomes are returned as tool results; infrastructure failures remain typed backend errors.
+
+Architectural result:
+
+- The macro loop decides the initial frame.
+- The micro loop advances from grounded evidence.
+- MRU compaction makes retries progressive.
+- structured hints and learned recipes steer bounded convergence.
+- terminal signals prevent pointless retry spirals.
+
+Execution sequence:
+
+1. User Ask enters Gate 1 / Gate 2 / Gate 3.
+2. Routing and deterministic expansion build the Ask frame.
+3. Native ReAct iteration 1 chooses the best next tool from that frame.
+4. Tool result returns user payload plus optional `progress_hint`.
+5. Engine classifies the step as progress, repair-required, stall, or terminal stop.
+6. Engine compacts ordered tool history into Ask-anchored MRU.
+7. Next LLM call sees preserved valid args, grounded facts, missing clues, and repair delta.
+8. Loop either narrows again, enters research-first repair, repairs in place, or exits with final answer.
+9. Successful repair paths are distilled into implicit recipes and persisted as later continuity signals.
+
+Worked example: `Find John > 500`
+
+This is the canonical Stores path that motivated the current progressive loop design.
+
+1. Initial Ask frame.
+
+- The user asks for users named John with orders greater than 500.
+- Routing resolves this as Stores-focused read behavior.
+- Gate 3 contributes compact Stores protocol context and relevant recipe slices.
+
+2. First tool attempt is plausible but under-grounded.
+
+- The model emits an `execute_script` call before relations or exact field mappings are fully grounded.
+- The backend validates the call and recognizes a recoverable schema or join-shape defect.
+- Instead of hard failing, the engine converts the failure into a repair-required result with explicit retry guidance.
+
+3. The retry frame becomes narrower.
+
+- The next prompt does not replay the whole manual.
+- It carries:
+    - repair directive
+    - the failing tool result
+    - the attempted script shape
+    - Ask-anchored MRU telling the model to preserve valid work and change only the broken slice
+- If the defect indicates missing schema or relation grounding, the engine forces research-first behavior.
+
+4. Research step grounds the query.
+
+- The next valid step becomes `list_stores`.
+- `list_stores` returns schema and relation facts such as the relevant stores and join mapping surface.
+- Its structured `progress_hint` tells the engine that the Ask is progressing and suggests the next tool.
+
+5. Ask-anchored MRU compacts the new truth.
+
+- The loop now carries grounded stores, relations, suggested next tool, and any remaining missing pieces.
+- The prompt also preserves the previous valid script slices rather than discarding them.
+
+6. Repaired execution reuses what was already correct.
+
+- The model retries `execute_script` with corrected grounded arguments.
+- The repaired call uses the researched schema and relations instead of guessing.
+- The loop avoids broadening scope because the repair path is explicitly constrained.
+
+7. Success produces both an answer and a learned pattern.
+
+- The corrected query succeeds and returns the user-visible result.
+- The engine recognizes the successful `execute_script` failure -> `list_stores` -> `execute_script` sequence.
+- That sequence becomes an implicit micro recipe: research grounded schema before retrying `execute_script`.
+
+8. The retry controller learns during execution, not only after it.
+
+- That newly proven recipe counts as progress for the current Ask.
+- If one more bounded step were needed, the controller could extend the retry budget based on that learned pattern even without a fresh hint on the same step.
+
+Why this example matters:
+
+- The loop does not treat retries as identical retries of the same broad prompt.
+- Failure detail, returned context, concrete script args, missing signals, and grounded research all become input to the next micro step.
+- The result is a loop that progressively narrows the problem until the model can either answer safely or stop explicitly.
+
+Sequence sketch:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Gates as Gate 1 / 2 / 3
+    participant Prompt as Ask Frame
+    participant Engine as Native ReAct Engine
+    participant Tools as Local Tools
+    participant MRU as Ask-Anchored MRU
+    participant STM as Session Continuity
+
+    User->>Gates: Ask
+    Gates->>Prompt: routed frame + focused context + recipes
+    Prompt->>Engine: start inner loop
+    Engine->>Tools: tool call
+    Tools-->>Engine: tool_result + progress_hint
+    Engine->>MRU: compact progress / repair / missing / preserve
+    MRU-->>Engine: current truth for next iteration
+    Engine->>Tools: narrowed retry or research-first step
+    Tools-->>Engine: grounded success
+    Engine->>STM: persist Ask outcome + learned recipes
+    Engine-->>User: final answer
+```
+
+Failure and progression taxonomy:
+
+| Loop signal | Meaning | Engine response |
+| :--- | :--- | :--- |
+| `progress` | The Ask became more grounded through facts, hints, or a proven repair pattern. | Preserve valid work, compact the new delta into Ask MRU, and allow another bounded step. |
+| `repair_required` | The last step failed in a recoverable way. | Constrain the next iteration to same-tool repair or research-first repair instead of broad replanning. |
+| `stall` | A step completed but produced no new facts, no positive hint, and no new recipe. | Do not extend the retry budget; continue only within the remaining cap. |
+| `success` | The model can answer from accumulated grounded state without another tool. | Exit the loop with a final answer or structured tool result. |
+| `terminal_error` | The tool reported a meaningful user-facing terminal stop. | Short-circuit the loop and surface the tool result directly. |
+| `hard_error` / `blocked` / `anti_success` | The tool explicitly signaled that continuing would be counterproductive. | Stop immediately and do not spend more retry budget. |
+| non-recoverable backend error | Infrastructure or orchestration failure, not a user-facing tool outcome. | Return a typed backend error rather than converting it into loop-local retry guidance. |
+
+### 8. Macro Data Flow (Outer Multi-Ask Loop)
+
+The micro loop explains how one Ask converges. The macro data flow explains how one Ask becomes the starting continuity surface for the next Ask.
+
+Primary macro artifacts:
+
+- user Ask
+- routing state
+- Ask frame
+- Ask outcome
+- session MRU projection
+- recipe snapshot
+- next Ask frame
+
+Macro flow:
+
+1. User Ask arrives.
+
+- The query enters the routing layer with any available session continuity.
+- Session MRU provides recent successful patterns, active domains, prior Ask outcomes, and follow-up hints.
+
+2. Routing resolves the Ask entry point.
+
+- Gate 1 contributes explicit anchors when the user names a focused path.
+- Gate 2 decides continuation versus topic switch from continuity digest plus fresh anchor evidence.
+- Gate 3 completes cold-start discovery and recipe-oriented prompt handoff when prior continuity is insufficient.
+
+3. Prompt assembly builds the Ask frame.
+
+- The Ask frame is assembled from persona, focused tools, playbooks, recipes, focused execution context, and user query.
+- This is the macro loop's main output into the micro loop.
+
+4. Native ReAct engine executes the Ask.
+
+- The inner loop performs repair, research, retries, and final answer synthesis inside the Ask frame.
+- During this phase, Ask-anchored MRU is local to the current Ask only.
+
+5. Ask finishes and emits an Ask outcome.
+
+- The Ask outcome is the compact bridge object from one Ask into later continuity.
+- It contains the user-visible result plus the most useful compacted execution signals, such as:
+    - tools used
+    - confirmed facts
+    - successful repair or research pattern
+    - failure summary when the Ask ended imperfectly
+    - learned implicit recipes
+
+6. Session continuity is updated.
+
+- The Ask outcome is projected into session MRU.
+- Learned implicit recipes are merged into the bounded recipe snapshot.
+- Existing STM episode logging remains orthogonal and does not drive the active macro loop yet.
+
+7. Next Ask starts from delta, not replay.
+
+- A follow-up Ask does not need the full previous prompt replayed.
+- The macro loop re-enters from compact continuity: recent Ask outcome, active domain, prior successful pattern, and remaining uncertainty.
+- This is what allows follow-ups such as "same query but > 1000" to behave as continuations instead of cold starts.
+
+Macro design rule:
+
+- The macro loop carries continuity between Asks.
+- The micro loop carries convergence within one Ask.
+- Ask-anchored MRU must not leak upward as raw inner-loop noise.
+- Session MRU should carry only compacted outcomes and reusable patterns that improve the next Ask.
+
+Macro sequence sketch:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Session as Session MRU
+    participant Gates as Gate 1 / 2 / 3
+    participant Prompt as Ask Frame Builder
+    participant Engine as Native ReAct Loop
+    participant Outcome as Ask Outcome
+    participant Recipes as Recipe Snapshot
+
+    User->>Session: new Ask with possible follow-up intent
+    Session->>Gates: continuity digest + recent patterns
+    Gates->>Prompt: routed scope + focused context handoff
+    Prompt->>Engine: Ask frame
+    Engine->>Outcome: final result + compacted facts + learned recipes
+    Outcome->>Session: update MRU continuity
+    Outcome->>Recipes: merge bounded implicit recipes
+    Session-->>User: next Ask starts from compact continuity
+```
+
 ## Backend Comparison: Isolation & Concurrency
 
 When choosing a backend, it is crucial to understand how they handle isolation, locking, and multi-tenancy. Both backends support high concurrency, but their locking scopes differ.

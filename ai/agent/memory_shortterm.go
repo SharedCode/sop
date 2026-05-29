@@ -86,11 +86,12 @@ type ConversationThread struct {
 
 // ShortTermMemory manages the history of conversation threads.
 type ShortTermMemory struct {
-	Threads          map[sop.UUID]*ConversationThread
-	Order            []sop.UUID // Maintains the sequence of threads
-	CurrentThreadID  sop.UUID   // The currently active thread
-	LastRoutingState *TaskContextClassification
-	LastMRUSnapshot  []MRUItem
+	Threads            map[sop.UUID]*ConversationThread
+	Order              []sop.UUID // Maintains the sequence of threads
+	CurrentThreadID    sop.UUID   // The currently active thread
+	LastRoutingState   *TaskContextClassification
+	LastMRUSnapshot    []MRUItem
+	LastRecipeSnapshot []RecipeItem
 }
 
 // NewShortTermMemory initializes the memory structure.
@@ -165,6 +166,29 @@ func (stm *ShortTermMemory) GetMRUSnapshot() []MRUItem {
 		return nil
 	}
 	return append([]MRUItem(nil), stm.LastMRUSnapshot...)
+}
+
+func (stm *ShortTermMemory) SetRecipeSnapshot(items []RecipeItem) {
+	if len(items) == 0 {
+		stm.LastRecipeSnapshot = nil
+		return
+	}
+	cloned := make([]RecipeItem, 0, len(items))
+	for _, item := range items {
+		cloned = append(cloned, cloneRecipeItem(item))
+	}
+	stm.LastRecipeSnapshot = cloned
+}
+
+func (stm *ShortTermMemory) GetRecipeSnapshot() []RecipeItem {
+	if len(stm.LastRecipeSnapshot) == 0 {
+		return nil
+	}
+	cloned := make([]RecipeItem, 0, len(stm.LastRecipeSnapshot))
+	for _, item := range stm.LastRecipeSnapshot {
+		cloned = append(cloned, cloneRecipeItem(item))
+	}
+	return cloned
 }
 
 func (stm *ShortTermMemory) ResetProjectionForTopicSwitch() {

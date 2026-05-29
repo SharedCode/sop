@@ -44,6 +44,20 @@ We purposely designed a **Retrieval-Augmented Generation (RAG)** pipeline to add
 3.  **Policy Enforcement**: By decoupling the reasoning (LLM) from the execution (Local Tools), we can enforce strict policies on what the agent can and cannot do, removing the risks associated with giving an AI direct access to corporate data.
 4.  **ReAct Loop**: The LLM reasons about which tool to use, but the Go backend intercepts these calls, validates them, and executes them safely using ACID transactions.
 
+### Progressive ReAct Loop
+
+The ReAct loop in SOP is progressive by design, not a blind repeat-until-success loop.
+
+*   **Macro Then Micro**: Routing gates prepare the Ask frame first. The inner native ReAct loop then executes inside that frame without re-running the gates on every retry.
+*   **Ask-Anchored Working State**: After each inner tool step, the engine compacts the current grounded state into an Ask-local MRU summary. The next LLM call sees current focus, preserved valid work, confirmed facts, missing pieces, and suggested next tools.
+*   **Structured Tool Guidance**: Tools can return both a user-visible payload and an internal `progress_hint`. That hint can say what improved, what is still missing, and which tool should come next.
+*   **Concrete Retry Visibility**: The retry prompt now includes the actual generated tool arguments together with failure details and the most recent successful context, so the model can refine the next step from the improving script rather than regenerate the whole plan.
+*   **Bounded Repair, Not Infinite Retry**: The loop starts with a small retry budget and only extends it when new grounded facts, a proven recovery pattern, or positive progress hints show real convergence.
+*   **Recipe Learning Inside the Loop**: When a repair pattern succeeds, the engine learns an implicit recipe from that success. That recipe is not just stored for later asks; it also counts as live progress in the current Ask.
+*   **Hard Stop Semantics**: Tools can explicitly signal terminal outcomes such as blocked, anti-success, or hard error. In those cases, the loop stops immediately instead of wasting retries.
+
+In practical terms, this means SOP's ReAct loop can see the returned agent context, the script it already tried, the exact failure, the grounded facts it has accumulated, and the missing pieces that still need research. That is what allows the LLM to preserve what is already correct and refine only the next delta.
+
 ## Why This Matters
 This architecture allows us to create a **fully controllable, customizable AI** necessary for enterprise databases.
 *   **Agentic Interfaces**: We build a robust set of tools and give an AI agent the agency to use them, but within a secure sandbox.

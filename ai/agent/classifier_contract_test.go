@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/sharedcode/sop/ai"
@@ -62,9 +63,11 @@ func TestNormalizeTaskContext_InfersCrossDomainFromPerDomainArtifacts(t *testing
 
 type continuityIntentMockGen struct {
 	response string
+	prompt   string
 }
 
 func (m *continuityIntentMockGen) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.prompt = opts.SystemPrompt
 	return ai.GenOutput{Text: m.response}, nil
 }
 
@@ -74,8 +77,64 @@ func (m *continuityIntentMockGen) EstimateCost(inTokens, outTokens int) float64 
 
 func TestClassifyContinuityTaskContext_RejectsInvalidIntent(t *testing.T) {
 	ag := &CopilotAgent{}
-	_, _, err := ag.ClassifyContinuityTaskContext(context.Background(), "same task", &TaskContextClassification{Entity: "Omni", Domain: StoresDomain}, &continuityIntentMockGen{response: `{"intent":"maybe","layers":[]}`})
+	_, _, err := ag.ClassifyContinuityTaskContext(context.Background(), "same task", &TaskContextClassification{Entity: "Omni", Domain: StoresDomain}, nil, &continuityIntentMockGen{response: `{"intent":"maybe","layers":[]}`})
 	if err == nil {
 		t.Fatal("expected invalid continuity intent to return an error")
+	}
+}
+
+func TestBuildContinuityDigest_UsesAskOutcomeSignals(t *testing.T) {
+	ag := &CopilotAgent{}
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{
+		{Category: askOutcomeMRUCategoryQuery, Context: "- Last user ask: Find users named John", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		{Category: askOutcomeMRUCategoryResult, Context: "- Last outcome: Found matching orders", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		{Category: askOutcomeMRUCategoryToolPattern, Context: "- Tool pattern: list_stores -> execute_script", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		{Category: askOutcomeMRUCategoryFilterSelection + "_first_name", Context: "- Confirmed: execute_script confirmed filter field=first_name op=$eq", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		{Category: askOutcomeMRUCategoryGuidance, Context: "- Reuse confirmed facts and successful patterns from this outcome before broadening scope.", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+	}}}
+
+	digest := ag.buildContinuityDigest("show me more", &TaskContextClassification{Domain: StoresDomain, DBArtifacts: []string{"users"}}, nil)
+
+	if digest.CurrentGoal != "Find users named John" {
+		t.Fatalf("expected current goal from ask outcome query, got %q", digest.CurrentGoal)
+	}
+	if digest.Summary != "Found matching orders" {
+		t.Fatalf("expected summary from ask outcome result, got %q", digest.Summary)
+	}
+	if len(digest.RecentPatterns) != 1 || digest.RecentPatterns[0] != "list_stores -> execute_script" {
+		t.Fatalf("expected tool pattern in digest, got %#v", digest.RecentPatterns)
+	}
+	if len(digest.ConfirmedFacts) != 1 || !strings.Contains(digest.ConfirmedFacts[0], "first_name") {
+		t.Fatalf("expected confirmed fact in digest, got %#v", digest.ConfirmedFacts)
+	}
+	if len(digest.SuggestedNextMoves) != 1 || !strings.Contains(digest.SuggestedNextMoves[0], "Reuse confirmed facts") {
+		t.Fatalf("expected guidance in digest, got %#v", digest.SuggestedNextMoves)
+	}
+	if len(digest.ActiveDomains) != 1 || digest.ActiveDomains[0] != StoresDomain {
+		t.Fatalf("expected active domain in digest, got %#v", digest.ActiveDomains)
+	}
+	if len(digest.ActiveArtifacts) != 1 || digest.ActiveArtifacts[0] != "users" {
+		t.Fatalf("expected active artifact in digest, got %#v", digest.ActiveArtifacts)
+	}
+	if digest.CurrentQuerySignal != "show me more" {
+		t.Fatalf("expected current query signal in digest, got %q", digest.CurrentQuerySignal)
+	}
+}
+
+func TestClassifyContinuityTaskContext_IncludesExplicitAnchorInPrompt(t *testing.T) {
+	ag := &CopilotAgent{}
+	gen := &continuityIntentMockGen{response: `{"intent":"CONTINUE","domain":"Stores","db_artifacts":["users"],"stores_artifacts":["users"],"layers":[{"name":"Single-Domain","crud":["R"]}]}`}
+	_, _, err := ag.ClassifyContinuityTaskContext(
+		context.Background(),
+		"Omni:Stores:users show me recent orders",
+		&TaskContextClassification{Entity: "Omni", Domain: StoresDomain},
+		&TaskContextClassification{Entity: "Omni", Domain: StoresDomain, DBArtifacts: []string{"users"}, StoresArtifacts: []string{"users"}, Layers: []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}}},
+		gen,
+	)
+	if err != nil {
+		t.Fatalf("expected continuity classification to succeed, got %v", err)
+	}
+	if !strings.Contains(gen.prompt, "CURRENT EXPLICIT ANCHOR:") || !strings.Contains(gen.prompt, "artifacts=users") {
+		t.Fatalf("expected continuity prompt to include explicit anchor, got: %s", gen.prompt)
 	}
 }

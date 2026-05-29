@@ -242,38 +242,34 @@ func (a *CopilotAgent) describeFocusedStores(ctx context.Context, db *database.D
 
 func buildStoresCRUDOperationsContext(flags map[string]bool) string {
 	sections := make([]string, 0, len(flags))
+	dbNote := "- open_db is OPTIONAL because begin_tx already uses the active Current Database by default. If you still emit open_db, use the active Current Database name from context in open_db.args.name."
 	if flags["R"] {
 		sections = append(sections,
 			"- R = Read. Prefer read-only transactions. MANDATORY Sequence: begin_tx(mode=read) -> open_store -> scan/filter/project/sort/limit -> commit_tx or rollback_tx.",
-			"- Note: Calling open_db is OPTIONAL because begin_tx automatically uses the active Current Database by default.",
-			"- If you still emit open_db, use the active Current Database name from context instead of inventing one. In AST, either omit open_db or set open_db.args.name to the active database.",
-			"- For filter, keep the real predicate shape with operator and value, for example {condition:{first_name:{\"$eq\":\"John\"}}} or {condition:{orders.total_amount:{\"$gt\":500}}}. Do not emit boolean placeholders like {first_name:true}.",
-			"- For bridge joins, keep exact dotted field paths in the on map, for example join users to users_orders with {\"users.key\":\"key\"} and then users_orders to orders with {\"users_orders.value\":\"key\"}. Do not flatten dotted field paths into underscore names.",
-			"- If a filter or join shape is rejected, preserve the valid store names, field paths, and operators you already have. Only replace the malformed placeholder or join mapping with the corrected AST shape.",
-			"- Read AST ops: begin_tx, open_store, find, get_current_value, scan, filter, sort, project, limit, join, join_right, return, commit_tx, rollback_tx.",
+			dbNote,
+			"- Keep filters and joins concrete. Reuse researched schema/relations and confirmed MRU facts.",
+			"- If a filter or join shape is rejected, preserve confirmed MRU facts and replace only the malformed slice.",
+			"- Read AST ops: begin_tx, open_store, scan, filter, sort, project, limit, join, join_right, return, commit_tx, rollback_tx.",
 		)
 	}
 	if flags["C"] {
 		sections = append(sections,
 			"- C = Create. Use write transactions and persist via create/update-oriented scripts after opening the target store.",
-			"- Note: Calling open_db is OPTIONAL because begin_tx automatically uses the active Current Database by default.",
-			"- If you still emit open_db, use the active Current Database name from context instead of inventing one. In AST, either omit open_db or set open_db.args.name to the active database.",
+			dbNote,
 			"- Create AST ops: begin_tx(mode=write), open_store, add, update, commit_tx, rollback_tx.",
 		)
 	}
 	if flags["U"] {
 		sections = append(sections,
 			"- U = Update. Use write transactions and pipe the filtered records into update for targeted mutations.",
-			"- Note: Calling open_db is OPTIONAL because begin_tx automatically uses the active Current Database by default.",
-			"- If you still emit open_db, use the active Current Database name from context instead of inventing one. In AST, either omit open_db or set open_db.args.name to the active database.",
+			dbNote,
 			"- Update AST ops: begin_tx(mode=write), open_store, scan, filter, update, commit_tx, rollback_tx.",
 		)
 	}
 	if flags["D"] {
 		sections = append(sections,
 			"- D = Delete. Use write transactions and narrow the record set before delete.",
-			"- Note: Calling open_db is OPTIONAL because begin_tx automatically uses the active Current Database by default.",
-			"- If you still emit open_db, use the active Current Database name from context instead of inventing one. In AST, either omit open_db or set open_db.args.name to the active database.",
+			dbNote,
 			"- Delete AST ops: begin_tx(mode=write), open_store, scan, filter, delete, commit_tx, rollback_tx.",
 		)
 	}
@@ -357,33 +353,82 @@ func isCrossDomain(layers []LayerInfo) bool {
 	return false
 }
 
+func trimManualSection(manual string, heading string) string {
+	idx := strings.Index(manual, heading)
+	if idx < 0 {
+		return manual
+	}
+	return strings.TrimSpace(manual[:idx])
+}
+
+func extractManualSection(manual string, heading string, nextHeading string) string {
+	start := strings.Index(manual, heading)
+	if start < 0 {
+		return ""
+	}
+	section := manual[start:]
+	if nextHeading != "" {
+		if end := strings.Index(section, nextHeading); end >= 0 {
+			section = section[:end]
+		}
+	}
+	return strings.TrimSpace(section)
+}
+
+func buildCompactStoresToolContext(manual string) string {
+	heading := trimManualSection(manual, "<h2> Core Conventions</h2>")
+	if heading == "" {
+		heading = manual
+	}
+
+	coreSection := extractManualSection(manual, "<h2> Core Conventions</h2>", "<h2> Research & Orchestration Rules</h2>")
+	researchSection := extractManualSection(manual, "<h2> Research & Orchestration Rules</h2>", "<h2> Example</h2>")
+
+	coreLines := []string{
+		"<h2> Core Conventions</h2>",
+		"- Use `result_var` and `input_var` to chain multi-step reads.",
+		"- Use concrete predicate objects such as `{\"first_name\":{\"$eq\":\"John\"}}`, not placeholder booleans or nulls.",
+	}
+	if coreSection != "" && strings.Contains(coreSection, "begin_tx") {
+		// Keep only the minimal execution-shape reminder; orchestration details live in recipes and focused execution context.
+		coreLines = append(coreLines, "- Keep `execute_script` focused on orchestration; rely on workflow recipes and focused execution context for the full read/write flow.")
+	}
+
+	parts := []string{strings.TrimSpace(heading), strings.Join(coreLines, "\n")}
+	if researchSection != "" {
+		parts = append(parts, researchSection)
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n\n"))
+}
+
+func trimStoresManualForCombinedContext(manual string) string {
+	return buildCompactStoresToolContext(manual)
+}
+
 func (a *CopilotAgent) buildFocusedToolContext(taskCtx *TaskContextClassification) string {
 	if taskCtx == nil {
 		return ""
 	}
-
-	crudFlags := collectCRUDFlags(taskCtx.Layers)
 
 	if isCrossDomain(taskCtx.Layers) {
 		scriptSection := ""
 		if taskCtx.ScriptAuthoring {
 			scriptSection = "Structured Context: Script Authoring Tools\n" + toolsScriptsManual + "\n\n"
 		}
+		storesManual := trimStoresManualForCombinedContext(toolsStoresManual)
 		return "Structured Context: Cross-Domain Tools (Stores & Spaces)\n" +
-			scriptSection + toolsStoresManual + "\n\n" + toolsSpacesManual +
-			"\n## Execution Flow Engine Guardrails (Stores)\n" + buildStoresCRUDOperationsContext(crudFlags) +
-			"\n## Execution Flow Engine Guardrails (Spaces)\n" + buildSpacesCRUDOperationsContext(crudFlags)
+			scriptSection + storesManual + "\n\n" + toolsSpacesManual
 	}
 
 	switch {
 	case strings.EqualFold(taskCtx.Domain, StoresDomain):
-		manual := "Structured Context: Stores Tools\n" + toolsStoresManual
+		manual := "Structured Context: Stores Tools\n" + buildCompactStoresToolContext(toolsStoresManual)
 		if taskCtx.ScriptAuthoring {
-			manual = "Structured Context: Script Authoring Tools\n" + toolsScriptsManual + "\n\n" + manual
+			manual = "Structured Context: Script Authoring Tools\n" + toolsScriptsManual + "\n\n" + "Structured Context: Stores Tools\n" + trimStoresManualForCombinedContext(toolsStoresManual)
 		}
-		return manual + "\n## Execution Flow Engine Guardrails\n" + buildStoresCRUDOperationsContext(crudFlags)
+		return manual
 	case strings.EqualFold(taskCtx.Domain, SpacesDomain):
-		return "Structured Context: Spaces Tools\n" + toolsSpacesManual + "\n## Execution Flow Engine Guardrails\n" + buildSpacesCRUDOperationsContext(crudFlags)
+		return "Structured Context: Spaces Tools\n" + toolsSpacesManual
 	default:
 		return ""
 	}

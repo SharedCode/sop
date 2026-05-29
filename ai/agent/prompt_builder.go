@@ -13,6 +13,7 @@ const (
 	ComponentPersona        PromptComponent = "persona"
 	ComponentSemanticMemory PromptComponent = "semantic_memory"
 	ComponentSystemTools    PromptComponent = "system_tools"
+	ComponentRecipes        PromptComponent = "workflow_recipes"
 	ComponentPlaybooks      PromptComponent = "playbooks"
 	ComponentFocusedContext PromptComponent = "focused_execution_context"
 	ComponentSchema         PromptComponent = "schema"
