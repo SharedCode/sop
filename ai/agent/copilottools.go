@@ -17,21 +17,23 @@ import (
 )
 
 const (
-	ExecuteScriptInstruction = `Execute a full ordered JSON AST under script for multi-step store operations. Each step should be an object such as {op, args?, input_var?, result_var?}. Focus on orchestration semantics: begin a transaction, read or mutate stores, then commit or rollback. Chain multi-step reads with result_var/input_var. Use list_stores to research stores before multi-store joins or whenever schema is uncertain. Prefer scoped calls such as stores:["users","users_orders","orders"] so research stays compact on large databases. list_stores returns grounded per-store lines with schema=... and optional relations=[...]. Read schema=... for exact field names and value types, and read relations=[...] for related-store and join-field semantics. Treat those returned relations=[...] entries as the source of truth. join and join_right emit a combined flat record by default, so reuse dotted store-qualified field paths unless a later project step reshapes the output. If the AST shape is ambiguous, call gettoolinfo('execute_script'). Use concrete predicate objects and concrete join mappings; do not guess missing values.`
+	ExecuteScriptInstruction = `Execute a full ordered JSON AST under script for multi-step store operations. Each step should be an object such as {op, args?, input_var?, result_var?}. Focus on orchestration semantics: begin a transaction, read or mutate stores, then commit or rollback. Chain multi-step reads with result_var/input_var. Use list_stores to research stores before multi-store joins or whenever schema is uncertain. Prefer scoped calls such as stores:["users","users_orders","orders"] so research stays compact on large databases. list_stores returns grounded per-store lines with schema=... and optional relations=[...]. Read schema=... for exact field names and value types, and read relations=[...] for related-store and join-field semantics. Treat those returned relations=[...] entries as the source of truth. When list_stores confirms a relation path, prefer relation + target for join repair instead of inventing a fresh on mapping; if on is still needed, rewrite only the invalid join slice with confirmed concrete field strings. join and join_right emit a combined flat record by default, so reuse dotted store-qualified field paths unless a later project step reshapes the output. If the AST shape is ambiguous, call gettoolinfo('execute_script'). Use concrete predicate objects and concrete join mappings; do not guess missing values.`
 	ListStoresInstruction    = "Research store structure before writing multi-store reads or repairs. Pass stores:[...] to scope the response to likely targets. The result returns grounded schema=... and optional relations=[...] lines; reuse those returned relations as the source of truth for join mappings and field paths rather than guessing them."
 )
 
-const listStoresArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"stores":{"type":"array","description":"Optional list of likely target store names to keep the research response compact.","items":{"type":"string"}}}}`
+const emptyObjectArgsSchema = `{"type":"object","properties":{}}`
+
+const listStoresArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"stores":{"type":"array","description":"Optional exact store names to research. Use likely target names such as [\"users\",\"users_orders\",\"orders\"] to keep research compact instead of listing the whole database.","items":{"type":"string"}}}}`
 
 const (
-	SelectInstruction                   = "Read or mutate one store directly when you do not need a multi-step AST. Provide the store name plus optional key/value criteria, fields, limit, and direction. For mutations set action=delete or action=update and include grounded update_values instead of placeholder objects."
+	SelectInstruction                   = "Read or mutate one store directly when you do not need a multi-step AST. Provide the store name plus optional key/value criteria, fields, limit, and direction. For mutations set action=delete or action=update and include grounded update_values instead of placeholder objects. This tool still executes inside a transaction: it reuses an explicit transaction when one is active, otherwise it opens and auto-commits its own local transaction. Prefer execute_script when you need multi-step transaction orchestration."
 	JoinInstruction                     = "Join two stores directly when the join fields are already grounded. Provide left_store, right_store, aligned join field arrays, and optional fields/limit/direction. Prefer execute_script plus list_stores first when join mappings or field paths are still uncertain."
-	ExplainJoinInstruction              = "Preview how a join will execute before running it. Provide the target right_store and a grounded on mapping to see whether the engine can use an index scan or will fall back to a full scan. Use this after list_stores research when join-key selection or performance is still uncertain."
-	AddInstruction                      = "Insert one record into a store by providing store, key, and value. Use this for single-record writes; use execute_script when the write must be part of a larger transaction or multi-step flow."
-	UpdateInstruction                   = "Replace or update one record in a store by key. Provide the exact store, key, and value payload. Use execute_script when the update depends on prior reads or must participate in a broader transaction."
-	DeleteInstruction                   = "Delete one record from a store by exact key. Use execute_script when deletion depends on researched predicates, joins, or transaction orchestration rather than a single known key."
+	ExplainJoinInstruction              = "Preview how a join will execute before running it. Provide the target right_store and a grounded on mapping to see whether the engine can use an index scan or will fall back to a full scan. This is a single read-oriented operation and will use a local read transaction when no explicit transaction is active. Use this after list_stores research when join-key selection or performance is still uncertain."
+	AddInstruction                      = "Insert one record into a store by providing store, key, and value. Use this for single-record writes; use execute_script when the write must be part of a larger transaction or multi-step flow. This tool reuses an explicit transaction when one is active, otherwise it opens and auto-commits its own local write transaction."
+	UpdateInstruction                   = "Replace or update one record in a store by key. Provide the exact store, key, and value payload. Use execute_script when the update depends on prior reads or must participate in a broader transaction. This tool reuses an explicit transaction when one is active, otherwise it opens and auto-commits its own local write transaction."
+	DeleteInstruction                   = "Delete one record from a store by exact key. Use execute_script when deletion depends on researched predicates, joins, or transaction orchestration rather than a single known key. This tool reuses an explicit transaction when one is active, otherwise it opens and auto-commits its own local write transaction."
 	ManageTransactionInstruction        = "Control a transaction directly with action=begin, commit, or rollback. Use this only for explicit transaction control outside execute_script; for multi-step read/write orchestration, prefer execute_script and keep begin_tx/commit_tx/rollback_tx inside the AST."
-	MintToSpaceInstruction              = "Store durable generated or discovered knowledge in a Space for future retrieval. Provide the exact kb_name the user asked for plus the content to persist; optional category groups related entries. Use this for facts, notes, solutions, or generated content that should live beyond the current chat. Do not replace it with an external import workflow, and do not wrap it in begin_tx or commit_tx because mint_to_space manages its own transaction."
+	MintToSpaceInstruction              = "Store durable generated or discovered knowledge in a Space for future retrieval. Provide the exact kb_name the user asked for plus the content to persist; optional category groups related entries. Use this for facts, notes, solutions, or generated content that should persist beyond the current chat. Do not replace it with an external import workflow, and do not wrap it in begin_tx or commit_tx because mint_to_space manages its own transaction."
 	DeleteSpaceInstruction              = "Delete an entire Space and all of its stored knowledge. Use only when the user explicitly wants the whole knowledge base removed, not when they only want to change content or configuration. Provide the exact kb_name to remove, and do not wrap delete_space in begin_tx or commit_tx because it runs through its own deletion path."
 	EnrichSpaceInstruction              = "Run the Space enrichment pipeline so stored items can be normalized, linked, or expanded by the knowledge workflow. Use this after meaningful content changes only when the user explicitly wants derived knowledge refreshed or enrichment rerun; it is not the default follow-up to every mint or config change."
 	UpdateSpaceConfigInstruction        = "Change Space-level configuration such as routing, system prompts, persona behavior, or enabled tool access. Provide the exact kb_name and a grounded config object with the intended settings. Read the current config first when you need to inspect or preserve existing values instead of guessing a partial patch from natural language alone."
@@ -43,9 +45,9 @@ const (
 
 // registerSystemTools registers the core system inspection tools.
 func (a *CopilotAgent) registerSystemTools(ctx context.Context) {
-	a.registry.Register("list_databases", "Lists all available databases.", "()", a.toolListDatabases)
+	a.registry.Register("list_databases", "Lists all available databases.", emptyObjectArgsSchema, a.toolListDatabases)
 	a.registry.Register("list_stores", ListStoresInstruction, listStoresArgsSchema, a.toolListStores)
-	a.registry.Register("list_tools", "Lists all available tools and their usage instructions.", "()", a.toolListTools)
+	a.registry.Register("list_tools", "Lists all available tools and their usage instructions.", emptyObjectArgsSchema, a.toolListTools)
 }
 
 // registerTools registers all available tools for the CopilotAgent.
@@ -98,21 +100,33 @@ func (a *CopilotAgent) toolListTools(ctx context.Context, args map[string]any) (
 		}
 
 		// Simplify ArgsSchema for CLI display
-		// Convert "(arg1: type, arg2: type)" -> "arg1, arg2"
 		argsSchema := t.ArgsSchema
-		argsSchema = strings.TrimPrefix(argsSchema, "(")
-		argsSchema = strings.TrimSuffix(argsSchema, ")")
-
-		// Remove types (primitive heuristic)
 		var simpleArgs []string
-		if len(argsSchema) > 0 {
-			parts := strings.Split(argsSchema, ",")
-			for _, p := range parts {
-				// Get arg name
-				argName := strings.Split(p, ":")[0]
-				argName = strings.TrimSpace(argName)
-				if argName != "" {
-					simpleArgs = append(simpleArgs, "<"+argName+">")
+		if strings.HasPrefix(strings.TrimSpace(argsSchema), "{") {
+			var schema map[string]any
+			if err := json.Unmarshal([]byte(argsSchema), &schema); err == nil {
+				if props, ok := schema["properties"].(map[string]any); ok {
+					names := make([]string, 0, len(props))
+					for name := range props {
+						names = append(names, name)
+					}
+					sort.Strings(names)
+					for _, name := range names {
+						simpleArgs = append(simpleArgs, "<"+name+">")
+					}
+				}
+			}
+		} else {
+			argsSchema = strings.TrimPrefix(argsSchema, "(")
+			argsSchema = strings.TrimSuffix(argsSchema, ")")
+			if len(argsSchema) > 0 {
+				parts := strings.Split(argsSchema, ",")
+				for _, p := range parts {
+					argName := strings.Split(p, ":")[0]
+					argName = strings.TrimSpace(argName)
+					if argName != "" {
+						simpleArgs = append(simpleArgs, "<"+argName+">")
+					}
 				}
 			}
 		}

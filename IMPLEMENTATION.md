@@ -44,6 +44,8 @@ Conventions for this document:
 - CRUD-driven native tool exposure is now centralized behind an explicit gating helper and covered by focused Stores and Spaces routing tests.
 - The native retry controller now treats newly learned implicit recipes as live progress signals, so a successful repair pattern can extend the current Ask budget even when no fresh tool hint arrives on that step.
 - Native retry prompts now expose concrete tool args together with repair detail and the most recent successful hint context, so the model can refine the next Ask/tool call from what improved, what remains missing, and which script slices should be preserved.
+- `execute_script` join guidance is now explicit in both tool schema and stable instruction text: after `list_stores` confirms a relation path, prefer `relation + target` for join repair, and only rewrite the invalid join slice when a concrete `on` mapping is still needed.
+- Join-related recoverable repair and clarification payloads now preserve validation category, suggested fix example, attempted args, and a join-specific repair note, so routed ambiguity escalation stays grounded in the actual failed mapping instead of collapsing into a generic clarification request.
 
 ### Open TODO
 
@@ -265,7 +267,7 @@ Prevent unknown-unknown hallucinations when schema links or constraints are miss
 2. Allow Gate 1 focused anchors to flow into Gate 2 so continuity is judged against fresh explicit query signals.
 3. Update the Gate 2 prompt contract to consume the digest first and typed routing second.
 4. Add focused tests for digest rendering, Gate 1 and Gate 2 handoff, and continuity classification behavior.
-5. Slice `tools_stores.md` into smaller recipe-oriented units and prefer those units during prompt assembly.
+5. Slice generated Stores recipe content into smaller recipe-oriented units and prefer those units during prompt assembly.
 6. Add prompt assembly regressions for single-Ask progression and follow-up Ask reuse.
 7. Add a Gate 3 low-confidence / ambiguity outcome that can explicitly defer to clarification mode instead of forcing a cold-start classification guess.
 
@@ -344,11 +346,11 @@ Objective: restore routing fidelity and reduce prompt tax while preserving tool-
 - For Stores read-oriented flows, the primary tools should be `list_stores` and `execute_script`.
 - Mutation-oriented flows can expose the minimal additional mutation tools needed.
 
-3. Reduce always-injected manual bulk.
+3. Reduce always-injected prompt bulk.
 
-- `tools_stores.md` and `tools_spaces.md` should remain compact invariant manuals, not large reference documents.
+- Generated Stores and Spaces tool-description slices should remain compact invariant context, not large reference documents.
 - Remove duplicated guidance already covered by runtime validation, retry hints, or tool schemas.
-- Avoid injecting multiple overlapping `execute_script` manuals from different paths.
+- Avoid injecting multiple overlapping `execute_script` guidance slices from different paths.
 
 4. Prefer tool-based precision over prompt-based overexplanation.
 
@@ -368,14 +370,14 @@ Objective: restore routing fidelity and reduce prompt tax while preserving tool-
 - Facts and recipes are not the same thing.
 - Facts tell the model what is true: schema, relations, active database, confirmed join mappings, confirmed filter shapes.
 - Recipes tell the model how to proceed: which tools to call, in what order, under what invariants, and what must be preserved during repair.
-- Manuals are curated seed material for explicit recipes, but manuals themselves should remain light and topic-scoped.
+- Structured tool descriptions and curated recipe slices are seed material for explicit recipes, and the runtime payload should stay light and topic-scoped.
 
 ### Recipe Types
 
 1. Explicit recipes
 
 - Curated, human-authored protocols such as Stores read orchestration, Spaces discovery/mutation, or script authoring.
-- Current tool manuals like `tools_stores.md` are explicit recipe sources, but they should be injected as compact recipe summaries rather than broad manuals.
+- Generated Stores/Spaces tool-description context and explicit recipe slices are the runtime recipe sources, and they should be injected as compact recipe summaries rather than broad manuals.
 - Custom Spaces must be able to define their own explicit recipes later.
 
 2. Implicit recipes
@@ -615,6 +617,7 @@ Progression-history contract:
 - Malformed native tool call: retry with a directive to emit exactly one valid tool call.
 - Same-tool repair: preserve valid arguments and rewrite only the broken slice.
 - Research-first repair: require `list_stores` before retrying `execute_script` when schema or relation grounding is missing.
+- For join repair after `list_stores`, prefer `relation + target` when the researched relation path is confirmed; keep `on` only for concrete grounded field mappings and rewrite only the malformed join slice.
 - If the model attempts an unrelated tool while repair is pending, the engine blocks the diversion and reasserts the repair path.
 
 6. Progress is evidence-driven and bounded.
@@ -700,9 +703,9 @@ Objective: let each Ask final result shape the next Ask without replaying static
 
 ### Open Implementation TODOs
 
-- [ ] TODO: Remove remaining duplicate `execute_script` manual injection paths outside the compact Stores slice.
-- [ ] TODO: Continue slicing `tools_stores.md` into more granular recipe-oriented units for Gate 3 retrieval and prompt assembly beyond the current research/read/join/predicate split.
-- [ ] TODO: Slice manual guidance into smaller recipe-oriented units for Gate 3 retrieval and prompt assembly.
+- [ ] TODO: Remove remaining duplicate `execute_script` guidance injection paths outside the compact Stores slice.
+- [ ] TODO: Continue slicing generated Stores recipe content into more granular units for Gate 3 retrieval and prompt assembly beyond the current research/read/join/predicate split.
+- [ ] TODO: Slice runtime guidance into smaller recipe-oriented units for Gate 3 retrieval and prompt assembly.
 - [ ] TODO: Add per-session Ask Outcome storage and rolling working summary.
 - [ ] TODO: Add prompt assembly tests for single-Ask progression and follow-up Ask reuse.
 - [ ] TODO: Continue converting user-visible hard-stop tool outcomes from plain text to structured native terminal envelopes; keep infrastructure failures as typed Go errors.

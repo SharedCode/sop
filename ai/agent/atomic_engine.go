@@ -336,7 +336,7 @@ func validateExecuteScriptPlaceholders(ctx context.Context, script []ScriptInstr
 						return newExecuteScriptValidationError(
 							"invalid_join_on_field_placeholder",
 							fmt.Sprintf("invalid join.on field %q: expected a real left-hand field path such as %q", leftField, "users.key"),
-							fmt.Sprintf(`{"op":"%s","args":{"store":"users_orders","on":{"users.key":"key"}}}`, instr.Op),
+							fmt.Sprintf(`{"op":"%s","args":{"relation":"users_orders","target":"orders_store"}}`, instr.Op),
 						)
 					}
 
@@ -344,21 +344,21 @@ func validateExecuteScriptPlaceholders(ctx context.Context, script []ScriptInstr
 						return newExecuteScriptValidationError(
 							"invalid_join_on_placeholder",
 							fmt.Sprintf("invalid type for join.on[%q]: got boolean placeholder %t; expected a field path string such as %q", leftField, placeholder, "key"),
-							fmt.Sprintf(`{"op":"%s","args":{"store":"users_orders","on":{"%s":"key"}}}`, instr.Op, leftField),
+							fmt.Sprintf(`{"op":"%s","args":{"relation":"users_orders","target":"orders_store"}}`, instr.Op),
 						)
 					}
 					if rightField == nil {
 						return newExecuteScriptValidationError(
 							"invalid_join_on_placeholder",
 							fmt.Sprintf("invalid type for join.on[%q]: got null placeholder; expected a field path string such as %q", leftField, "key"),
-							fmt.Sprintf(`{"op":"%s","args":{"store":"users_orders","on":{"%s":"key"}}}`, instr.Op, leftField),
+							fmt.Sprintf(`{"op":"%s","args":{"relation":"users_orders","target":"orders_store"}}`, instr.Op),
 						)
 					}
 					if rightFieldStr, ok := rightField.(string); ok && isInvalidPlaceholderFieldName(rightFieldStr) {
 						return newExecuteScriptValidationError(
 							"invalid_join_on_placeholder",
 							fmt.Sprintf("invalid join.on[%q] field path %q: expected a real right-hand field path such as %q", leftField, rightFieldStr, "key"),
-							fmt.Sprintf(`{"op":"%s","args":{"store":"users_orders","on":{"%s":"key"}}}`, instr.Op, leftField),
+							fmt.Sprintf(`{"op":"%s","args":{"relation":"users_orders","target":"orders_store"}}`, instr.Op),
 						)
 					}
 				}

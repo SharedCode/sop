@@ -289,7 +289,7 @@ func TestBuildSystemPrompt_DedupesFocusedToolSectionsAgainstSystemToolsBaseline(
 	payload := &ai.SessionPayload{CurrentDB: SystemDBName, Variables: make(map[string]any)}
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
-	ag.markMRUCategoryWithSource(SYSTEM_TOOLS, "Structured Context: Script Authoring Tools\n"+toolsScriptsManual, MRUSourceSystemTools)
+	ag.markMRUCategoryWithSource(SYSTEM_TOOLS, buildScriptToolDescriptionContext(StoresDomain, map[string]bool{"R": true}), MRUSourceSystemTools)
 
 	prompt := ag.buildSystemPrompt(ctx, "Create a script named expensive_orders to find orders over 1000", TaskContextClassification{
 		Domain:          StoresDomain,
@@ -379,6 +379,20 @@ func TestBuildSpacesCRUDOperationsContext_DoesNotRequireVectorizationByDefault(t
 	}
 	if !strings.Contains(ctx, "Do NOT call vectorization APIs unless the user explicitly asks") {
 		t.Fatalf("expected update guidance to avoid default vectorization: %s", ctx)
+	}
+}
+
+func TestBuildSpacesCRUDOperationsContext_ReadToolsManageOwnTransactions(t *testing.T) {
+	ctx := buildSpacesCRUDOperationsContext(map[string]bool{"R": true})
+
+	if !strings.Contains(ctx, "list_space_categories, list_space_items, search_space, and read_space_config") {
+		t.Fatalf("expected read guidance to mention Space discovery tools: %s", ctx)
+	}
+	if !strings.Contains(ctx, "manage their own read transactions") {
+		t.Fatalf("expected read guidance to describe direct Space API transaction ownership: %s", ctx)
+	}
+	if !strings.Contains(ctx, "Do NOT wrap") {
+		t.Fatalf("expected read guidance to forbid begin_tx wrapping for direct Space API tools: %s", ctx)
 	}
 }
 

@@ -1420,30 +1420,32 @@ func (a *CopilotAgent) renderToolDefinitionContext(title string, toolNames []str
 }
 
 func (a *CopilotAgent) buildStoresToolDescriptionContext() string {
-	return a.renderToolDefinitionContext("Structured Context: Stores Tools", []string{
-		"execute_script",
-		"list_stores",
-		"select",
-		"join",
-		"explain_join",
-		"add",
-		"update",
-		"delete",
-		"manage_transaction",
-	})
+	return strings.Join([]string{
+		"Structured Context: Stores Tools",
+		"- execute_script: Use a full AST under script for multi-step transactional store workflows and chain steps with result_var/input_var. Research with list_stores first when schema, field paths, or joins are uncertain, and prefer grounded relation + target join repair.",
+		"- list_stores: Returns grounded schema=... and optional relations=[...]. Scope with stores:[...] and reuse those returned relations as the source of truth.",
+		"- select: Direct single-store read or targeted mutation. It reuses an explicit transaction when present or opens and auto-commits a local one.",
+		"- join: Direct join only when both stores and join fields are already grounded.",
+		"- explain_join: Preview a grounded join plan before execution; it uses a local read transaction when no explicit transaction is active.",
+		"- add: Direct single-record insert. Reuses an explicit transaction or opens and auto-commits a local write transaction.",
+		"- update: Direct single-record replace or update. Reuses an explicit transaction or opens and auto-commits a local write transaction.",
+		"- delete: Direct single-record delete by exact key. Reuses an explicit transaction or opens and auto-commits a local write transaction.",
+		"- manage_transaction: Explicit begin, commit, or rollback for direct-tool flows outside execute_script.",
+	}, "\n")
 }
 
 func (a *CopilotAgent) buildSpacesToolDescriptionContext() string {
-	return a.renderToolDefinitionContext("Structured Context: Spaces Tools", []string{
-		"mint_to_space",
-		"delete_space",
-		"enrich_space",
-		"update_space_config",
-		"read_space_config",
-		"vectorize_space",
-		"vectorize_space_categories",
-		"vectorize_space_items",
-	})
+	return strings.Join([]string{
+		"Structured Context: Spaces Tools",
+		"- mint_to_space: Persist generated or discovered content in a Space. Use the exact kb_name requested by the user; this tool manages its own write transaction.",
+		"- delete_space: Remove an entire Space only when the user explicitly wants full deletion; it manages its own deletion path.",
+		"- enrich_space: Run the enrichment pipeline only when the user explicitly wants derived knowledge refreshed.",
+		"- update_space_config: Change Space routing, persona, or tool settings with a grounded config object.",
+		"- read_space_config: Inspect current Space configuration before changing it or when the user asks how it behaves.",
+		"- vectorize_space: Refresh embeddings for the whole Space only when the user explicitly asks for vectorization or semantic refresh.",
+		"- vectorize_space_categories: Refresh embeddings for specific categories when the request is narrower than full-space vectorization.",
+		"- vectorize_space_items: Refresh embeddings for specific items when the user wants the tightest possible vectorization scope.",
+	}, "\n")
 }
 
 func (a *CopilotAgent) trackEpisodeMetadata(ctx context.Context, intent string) {

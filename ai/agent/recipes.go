@@ -223,7 +223,7 @@ func buildExplicitRecipes(taskClassification TaskContextClassification) []Recipe
 			Invariants: []string{"keep stored execute_script ASTs reusable and self-contained", "keep read-oriented stored ASTs read-only unless the user explicitly asks for mutations"},
 			Tags:       []string{"script", "authoring", "reusable"},
 			Confidence: 1.0,
-			Source:     "tools_scripts.md",
+			Source:     "script_tool_descriptions",
 		})
 	}
 
@@ -239,7 +239,7 @@ func buildExplicitRecipes(taskClassification TaskContextClassification) []Recipe
 			Invariants: []string{"preserve confirmed schema, relation, and MRU facts during repair", "do not guess missing join mappings when list_stores can ground them"},
 			Tags:       []string{"stores", "research", "schema", "research_first"},
 			Confidence: 1.0,
-			Source:     "tools_stores.md",
+			Source:     "stores_tool_descriptions",
 		})
 		items = append(items, RecipeItem{
 			ID:         "explicit.stores.read_transaction_flow",
@@ -252,7 +252,7 @@ func buildExplicitRecipes(taskClassification TaskContextClassification) []Recipe
 			Invariants: []string{"keep execute_script focused on orchestration rather than conversational explanation", "replace only the malformed filter or join slice instead of rewriting the whole plan"},
 			Tags:       []string{"stores", "read", "transaction", "execute_script"},
 			Confidence: 1.0,
-			Source:     "tools_stores.md",
+			Source:     "stores_tool_descriptions",
 		})
 		items = append(items, RecipeItem{
 			ID:         "explicit.stores.join_slice_repair",
@@ -265,7 +265,7 @@ func buildExplicitRecipes(taskClassification TaskContextClassification) []Recipe
 			Invariants: []string{"do not flatten dotted join field paths into invented names", "do not discard already confirmed relation mappings"},
 			Tags:       []string{"stores", "join", "repair", "execute_script"},
 			Confidence: 1.0,
-			Source:     "tools_stores.md",
+			Source:     "stores_tool_descriptions",
 		})
 		items = append(items, RecipeItem{
 			ID:         "explicit.stores.predicate_grounding",
@@ -278,7 +278,7 @@ func buildExplicitRecipes(taskClassification TaskContextClassification) []Recipe
 			Invariants: []string{"do not use boolean placeholders or nulls as predicate stand-ins", "do not broaden the filter scope while repairing one malformed condition"},
 			Tags:       []string{"stores", "filter", "predicate", "grounding"},
 			Confidence: 1.0,
-			Source:     "tools_stores.md",
+			Source:     "stores_tool_descriptions",
 		})
 	}
 
@@ -290,11 +290,11 @@ func buildExplicitRecipes(taskClassification TaskContextClassification) []Recipe
 			Domain:     SpacesDomain,
 			Topic:      "Spaces discovery and mutation",
 			Trigger:    "The ask needs Space discovery, generated knowledge storage, configuration lookup, or vectorization decisions.",
-			Protocol:   []string{"use begin_tx(mode=read) around list_space_categories, list_space_items, search_space, and read_space_config", "use mint_to_space for generated content and pass the exact kb_name the user asked for", "only call vectorization tools when the user explicitly asks for embeddings, reindexing, or semantic refresh"},
-			Invariants: []string{"mint_to_space manages its own transaction", "delete_space runs directly and should not be wrapped in begin_tx or commit_tx"},
+			Protocol:   []string{"use list_space_categories, list_space_items, search_space, and read_space_config directly for discovery because those Space API tools manage their own read transactions", "use mint_to_space for generated content and pass the exact kb_name the user asked for", "only call vectorization tools when the user explicitly asks for embeddings, reindexing, or semantic refresh"},
+			Invariants: []string{"direct Space API tools manage their own transaction paths unless a specific contract says otherwise", "mint_to_space manages its own transaction", "delete_space runs directly and should not be wrapped in begin_tx or commit_tx"},
 			Tags:       []string{"spaces", "read", "write", "vectorization"},
 			Confidence: 1.0,
-			Source:     "tools_spaces.md",
+			Source:     "spaces_tool_descriptions",
 		})
 	}
 

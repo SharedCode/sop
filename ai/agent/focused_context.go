@@ -295,7 +295,7 @@ func buildSpacesCRUDOperationsContext(flags map[string]bool) string {
 	if flags["R"] {
 		sections = append(sections,
 			"- R = Read. Use list_space_categories, list_space_items, search_space, and read_space_config for discovery before asking follow-up questions.",
-			"- Note: Space reading operations require an enclosing read transaction. MANDATORY Sequence: begin_tx(mode=read) -> [Space Operation] -> commit_tx.",
+			"- Note: list_space_categories, list_space_items, search_space, and read_space_config manage their own read transactions. Do NOT wrap these direct Space API tools in begin_tx/commit_tx.",
 		)
 	}
 	if flags["C"] {
@@ -324,7 +324,7 @@ func buildSpacesCRUDOperationsContext(flags map[string]bool) string {
 		)
 	}
 	if len(sections) == 0 {
-		sections = append(sections, "- No CRUD flags were classified. Default to search_space or list operations before mutating a space. Assume all non-vectorization Operations require a transaction.")
+		sections = append(sections, "- No CRUD flags were classified. Default to search_space or list operations before mutating a space. Direct Space API tools manage their own transactions; do not add begin_tx/commit_tx unless a specific tool contract says otherwise.")
 	}
 	return strings.Join(sections, "\n")
 }
@@ -341,6 +341,10 @@ func buildScriptAuthoringContext(domain string, flags map[string]bool) string {
 		sections = append(sections, "- This request is read-oriented. Keep the stored execute_script AST read-only unless the user explicitly asks for mutations.")
 	}
 	return strings.Join(sections, "\n")
+}
+
+func buildScriptToolDescriptionContext(domain string, flags map[string]bool) string {
+	return "Structured Context: Script Authoring Tools\n" + buildScriptAuthoringContext(domain, flags)
 }
 
 func isOnlyLayer1(layers []LayerInfo) bool {
@@ -499,7 +503,7 @@ func (a *CopilotAgent) buildFocusedToolContext(taskCtx *TaskContextClassificatio
 	if isCrossDomain(taskCtx.Layers) {
 		scriptSection := ""
 		if taskCtx.ScriptAuthoring {
-			scriptSection = "Structured Context: Script Authoring Tools\n" + toolsScriptsManual + "\n\n"
+			scriptSection = buildScriptToolDescriptionContext(taskCtx.Domain, collectCRUDFlags(taskCtx.Layers)) + "\n\n"
 		}
 		parts := make([]string, 0, 3)
 		if scriptSection != "" {
@@ -518,7 +522,7 @@ func (a *CopilotAgent) buildFocusedToolContext(taskCtx *TaskContextClassificatio
 	case strings.EqualFold(taskCtx.Domain, StoresDomain):
 		manual := a.buildStoresToolDescriptionContext()
 		if taskCtx.ScriptAuthoring {
-			manual = "Structured Context: Script Authoring Tools\n" + toolsScriptsManual + "\n\n" + a.buildStoresToolDescriptionContext()
+			manual = buildScriptToolDescriptionContext(taskCtx.Domain, collectCRUDFlags(taskCtx.Layers)) + "\n\n" + a.buildStoresToolDescriptionContext()
 		}
 		return manual
 	case strings.EqualFold(taskCtx.Domain, SpacesDomain):

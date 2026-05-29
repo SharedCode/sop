@@ -2114,6 +2114,7 @@ func formatRecoverableToolError(repair pendingToolRepair, args map[string]any, e
 	categoryLine := ""
 	exampleLine := ""
 	strategyLine := ""
+	guidanceLine := ""
 	var validationErr *executeScriptValidationError
 	if errors.As(err, &validationErr) {
 		if validationErr.Category != "" {
@@ -2121,6 +2122,10 @@ func formatRecoverableToolError(repair pendingToolRepair, args map[string]any, e
 		}
 		if validationErr.Example != "" {
 			exampleLine = fmt.Sprintf("\nSuggested fix example:\n%s", validationErr.Example)
+		}
+		switch validationErr.Category {
+		case "invalid_join_on_placeholder", "invalid_join_on_field_placeholder":
+			guidanceLine = "\nJoin repair note: After list_stores confirms a relation path, prefer relation+target for relation-driven joins. If you keep join.on, rewrite only the invalid join slice and use concrete field strings from the confirmed relation mapping."
 		}
 	}
 	if repair.Strategy != "" {
@@ -2140,12 +2145,13 @@ func formatRecoverableToolError(repair pendingToolRepair, args map[string]any, e
 	}
 
 	return fmt.Sprintf(
-		"Tool execution error: %v\nTool: %s%s%s%s\nAttempted args:\n%s\n%s",
+		"Tool execution error: %v\nTool: %s%s%s%s%s\nAttempted args:\n%s\n%s",
 		err,
 		repair.ToolName,
 		categoryLine,
 		exampleLine,
 		strategyLine,
+		guidanceLine,
 		argsJSON,
 		retryInstruction,
 	)
@@ -2164,11 +2170,31 @@ func formatClarificationRequiredToolError(repair pendingToolRepair, args map[str
 		reason = repair.ResearchReason
 	}
 
+	categoryLine := ""
+	exampleLine := ""
+	guidanceLine := ""
+	var validationErr *executeScriptValidationError
+	if errors.As(err, &validationErr) {
+		if validationErr.Category != "" {
+			categoryLine = fmt.Sprintf("\nRepair category: %s", validationErr.Category)
+		}
+		if validationErr.Example != "" {
+			exampleLine = fmt.Sprintf("\nSuggested fix example:\n%s", validationErr.Example)
+		}
+		switch validationErr.Category {
+		case "invalid_join_on_placeholder", "invalid_join_on_field_placeholder":
+			guidanceLine = "\nJoin repair note: The researched relation still does not fully resolve this join. Ask for the missing join mapping instead of inventing a new one."
+		}
+	}
+
 	return fmt.Sprintf(
-		"Clarification required: %s\nTool execution error: %v\nTool: %s\nAttempted args:\n%s\nUser-facing next step: Ask one short clarification question that resolves the ambiguity blocking this tool call. Do not call more tools until the user answers.",
+		"Clarification required: %s\nTool execution error: %v\nTool: %s%s%s%s\nAttempted args:\n%s\nUser-facing next step: Ask one short clarification question that resolves the ambiguity blocking this tool call. Do not call more tools until the user answers.",
 		reason,
 		err,
 		repair.ToolName,
+		categoryLine,
+		exampleLine,
+		guidanceLine,
 		argsJSON,
 	)
 }

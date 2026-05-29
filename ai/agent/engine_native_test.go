@@ -833,11 +833,12 @@ func (m *executeScriptJoinRepairGenerator) Generate(ctx context.Context, prompt 
 			"- Next delta: Research missing schema or relation facts with scoped list_stores calls before retrying execute_script.",
 			"Repair strategy: research_first",
 			"Research reason:",
+			"Join repair note: After list_stores confirms a relation path, prefer relation+target for relation-driven joins.",
 			"- Preserve: Reuse the valid structure from attempted args before changing invalid fields:",
 			"Tool: execute_script",
 			"Repair category: invalid_join_on_placeholder",
 			"Suggested fix example:",
-			`"on":{"users.key":"key"}`,
+			`"relation":"users_orders","target":"orders_store"`,
 			"Repair directive: The last tool call to execute_script failed because grounded schema or relation facts are still missing.",
 		}
 		for _, check := range checks {
@@ -872,8 +873,8 @@ func (m *executeScriptJoinRepairGenerator) Generate(ctx context.Context, prompt 
 					map[string]any{
 						"op": "join",
 						"args": map[string]any{
-							"store": "users_orders",
-							"on":    map[string]any{"users.key": "key"},
+							"relation": "users_orders",
+							"target":   "orders_store",
 						},
 					},
 				},
@@ -897,7 +898,7 @@ func (e *executeScriptJoinRepairExecutor) Execute(ctx context.Context, tool stri
 		return "", newExecuteScriptValidationError(
 			"invalid_join_on_placeholder",
 			"invalid type for join.on[\"users.key\"]: got boolean placeholder true; expected a field path string such as \"key\"",
-			`{"op":"join","args":{"store":"users_orders","on":{"users.key":"key"}}}`,
+			`{"op":"join","args":{"relation":"users_orders","target":"orders_store"}}`,
 		)
 	}
 	return `[{"users.key":"u1","users_orders.value":"o1"}]`, nil
@@ -963,6 +964,19 @@ func (m *discoveryClarificationGenerator) Generate(ctx context.Context, prompt s
 		if !strings.Contains(prompt, "Clarification required:") {
 			return ai.GenOutput{Text: "missing clarification result context"}, nil
 		}
+		checks := []string{
+			"Repair category: invalid_join_on_placeholder",
+			"Suggested fix example:",
+			`"relation":"users_orders","target":"orders_store"`,
+			"Join repair note: The researched relation still does not fully resolve this join. Ask for the missing join mapping instead of inventing a new one.",
+			`"on": {`,
+			`"users.key": "user_id"`,
+		}
+		for _, check := range checks {
+			if !strings.Contains(prompt, check) {
+				return ai.GenOutput{Text: "missing clarification detail: " + check}, nil
+			}
+		}
 		return ai.GenOutput{Text: "Which join mapping should I use between users and users_orders: users.key -> users_orders.user_id, or a different relation?"}, nil
 	}
 }
@@ -981,7 +995,7 @@ func (e *discoveryClarificationExecutor) Execute(ctx context.Context, tool strin
 	return "", newExecuteScriptValidationError(
 		"invalid_join_on_placeholder",
 		"invalid join mapping: users.key -> users_orders.user_id is still ambiguous for this ask; expected a confirmed relation mapping before proceeding",
-		`{"op":"join","args":{"store":"users_orders","on":{"users.key":"user_id"}}}`,
+		`{"op":"join","args":{"relation":"users_orders","target":"orders_store"}}`,
 	)
 }
 
@@ -1261,7 +1275,7 @@ func (e *progressionHistoryJoinRepairExecutor) Execute(ctx context.Context, tool
 		return "", newExecuteScriptValidationError(
 			"invalid_join_on_placeholder",
 			"invalid type for join.on[\"users.key\"]: got boolean placeholder true; expected a field path string such as \"key\"",
-			`{"op":"join","args":{"store":"users_orders","on":{"users.key":"key"}}}`,
+			`{"op":"join","args":{"relation":"users_orders","target":"orders_store"}}`,
 		)
 	}
 	return `[{"users.key":"u1","users_orders.value":"o1"}]`, nil
@@ -1987,7 +2001,7 @@ func TestEngineNative_RepairFormattingAndClassification(t *testing.T) {
 	validationErr := newExecuteScriptValidationError(
 		"invalid_join_on_placeholder",
 		"join mapping placeholder",
-		`{"on":{"users.key":"key"}}`,
+		`{"relation":"users_orders","target":"orders_store"}`,
 	)
 	researchRepair := classifyRecoverableToolRepair("execute_script", validationErr)
 	if researchRepair.Strategy != nativeRepairStrategyResearchFirst || researchRepair.ResearchTool != "list_stores" {
@@ -2008,6 +2022,9 @@ func TestEngineNative_RepairFormattingAndClassification(t *testing.T) {
 	if !strings.Contains(formatted, "Repair category: invalid_join_on_placeholder") || !strings.Contains(formatted, "Suggested fix example") || !strings.Contains(formatted, "Research reason:") {
 		t.Fatalf("expected formatted recoverable tool error to include validation and research guidance, got %s", formatted)
 	}
+	if !strings.Contains(formatted, "Join repair note: After list_stores confirms a relation path, prefer relation+target for relation-driven joins.") {
+		t.Fatalf("expected formatted recoverable tool error to include join-specific repair guidance, got %s", formatted)
+	}
 	if !strings.Contains(formatted, `stores:["users","orders"]`) {
 		t.Fatalf("expected generic scoped list_stores guidance, got %s", formatted)
 	}
@@ -2027,7 +2044,7 @@ func TestFormatRecoverableToolError_ResearchFirstInfersScopedStoresFromAttempted
 	err := newExecuteScriptValidationError(
 		"invalid_join_on_placeholder",
 		"invalid type for join.on[\"users.key\"]: got boolean placeholder true",
-		`{"op":"join","args":{"store":"users_orders","on":{"users.key":"key"}}}`,
+		`{"op":"join","args":{"relation":"users_orders","target":"orders_store"}}`,
 	)
 	formatted := formatRecoverableToolError(repair, map[string]any{"script": []any{
 		map[string]any{"op": "open_store", "args": map[string]any{"name": "users"}},

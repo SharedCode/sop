@@ -204,7 +204,7 @@ func TestValidateExecuteScriptPlaceholders_RejectsBooleanJoinWithCategoryAndExam
 	err := validateExecuteScriptPlaceholders(context.Background(), script)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "execute_script validation error [invalid_join_on_placeholder]")
-	assert.Contains(t, err.Error(), `"on":{"users.key":"key"}`)
+	assert.Contains(t, err.Error(), `"relation":"users_orders","target":"orders_store"`)
 }
 
 func TestValidateExecuteScriptPlaceholders_AllowsBooleanFilterForBooleanField(t *testing.T) {
@@ -259,7 +259,18 @@ func TestValidateExecuteScriptPlaceholders_RejectsNullJoinFieldPlaceholder(t *te
 	err := validateExecuteScriptPlaceholders(context.Background(), script)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "execute_script validation error [invalid_join_on_field_placeholder]")
-	assert.Contains(t, err.Error(), `"on":{"users.key":"key"}`)
+	assert.Contains(t, err.Error(), `"relation":"users_orders","target":"orders_store"`)
+}
+
+func TestValidateExecuteScriptPlaceholders_RejectsStringJoinValuePlaceholder(t *testing.T) {
+	script := []ScriptInstruction{
+		{Op: "join", Args: map[string]any{"store": "users_orders", "on": map[string]any{"users.key": "undefined"}}},
+	}
+
+	err := validateExecuteScriptPlaceholders(context.Background(), script)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "execute_script validation error [invalid_join_on_placeholder]")
+	assert.Contains(t, err.Error(), `"relation":"users_orders","target":"orders_store"`)
 }
 
 func TestSanitizeScript_NormalizesLiveJohnQueryShapes(t *testing.T) {
