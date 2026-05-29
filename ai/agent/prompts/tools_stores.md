@@ -10,8 +10,14 @@ Use `execute_script` for multi-step store operations. Provide a JSON array of AS
 
 <h2> Research & Orchestration Rules</h2>
 - Use `list_stores` to research schema and relations when field names, value types, predicate shapes, or join mappings are ambiguous.
-- Pass `stores: ["users", "orders"]` to `list_stores` when you only need a few stores.
+- `list_stores` accepts a `stores` parameter containing the exact store names you want to research.
+- Pass `stores: ["users", "users_orders", "orders"]` to `list_stores` when you only need a few stores.
+- Prefer scoped `stores: [...]` lookups over listing the whole database when the ask already suggests likely target stores; this keeps research compact and avoids scale issues.
+- `list_stores` returns one grounded line per store, for example `users schema={...}` or `orders schema={...} relations=[...]`.
+- Read `schema=...` to get exact field names and likely value types.
+- Read `relations=[...]` to get relationship semantics: which store is related, and which source/target fields define the join path.
 - Treat `relations=[...]` from `list_stores` as the source of truth for related stores and join key mapping details.
+- For multi-store reads, call `list_stores` first, inspect the returned `schema=...` and `relations=...` lines, then build `execute_script` from those grounded names instead of guessing.
 - Use `gettoolinfo('execute_script')` only when the AST shape itself is unclear.
 - Keep the script focused on orchestration: begin a transaction, read or mutate stores, then commit or rollback.
 

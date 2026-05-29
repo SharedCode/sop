@@ -188,6 +188,7 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 	}
 
 	script = sanitizeScript(script)
+	writeNormalizedScriptArgs(args, script)
 
 	if a.Config.StubMode {
 
@@ -249,6 +250,21 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 		return choice.SuccessMessage, nil
 	}
 	return serializeResult(ctx, choice.Value)
+}
+
+func writeNormalizedScriptArgs(args map[string]any, script []ScriptInstruction) {
+	if args == nil {
+		return
+	}
+	bytes, err := json.Marshal(script)
+	if err != nil {
+		return
+	}
+	var normalized []any
+	if err := json.Unmarshal(bytes, &normalized); err != nil {
+		return
+	}
+	args["script"] = normalized
 }
 
 type executeScriptReturnChoice struct {
@@ -1443,6 +1459,10 @@ func normalizeCompatibilityConditionMapWithQuery(condition map[string]any, curre
 				normalized[field] = inferred
 				continue
 			}
+			if inferredField, inferredValue, changed := inferAliasPredicateFromCurrentQuery(field, currentQuery); changed {
+				normalized[inferredField] = inferredValue
+				continue
+			}
 		}
 
 		if rawStr, ok := raw.(string); ok {
@@ -1451,11 +1471,126 @@ func normalizeCompatibilityConditionMapWithQuery(condition map[string]any, curre
 				normalized[newField] = newValue
 				continue
 			}
+
+			if inferredField, inferredValue, changed := normalizeCompatibilityAliasConditionEntry(field, rawStr, currentQuery); changed {
+				normalized[inferredField] = inferredValue
+				continue
+			}
+
+			if !isAliasPlaceholderField(field) {
+				normalized[field] = map[string]any{"$eq": parseCompatibilityLiteral(rawStr)}
+				continue
+			}
 		}
 
 		normalized[field] = raw
 	}
 	return normalized
+}
+
+func normalizeCompatibilityAliasConditionEntry(fieldHint string, raw string, currentQuery string) (string, any, bool) {
+	raw = strings.TrimSpace(strings.Trim(raw, "\"'"))
+	fieldHint = strings.TrimSpace(strings.Trim(fieldHint, "\"'"))
+	if raw == "" || fieldHint == "" || !isAliasPlaceholderField(fieldHint) {
+		return fieldHint, raw, false
+	}
+
+	combinedField := normalizeCompatibilityFieldPath(fieldHint + "." + raw)
+	if predicate, ok := inferPredicateFromCurrentQuery(combinedField, currentQuery); ok {
+		return combinedField, predicate, true
+	}
+
+	return combinedField, map[string]any{"$eq": parseCompatibilityLiteral(raw)}, true
+}
+
+func inferAliasPredicateFromCurrentQuery(fieldHint string, currentQuery string) (string, map[string]any, bool) {
+	fieldHint = strings.TrimSpace(strings.Trim(fieldHint, "\"'"))
+	if fieldHint == "" || !isAliasPlaceholderField(fieldHint) {
+		return fieldHint, nil, false
+	}
+
+	if inferredField, predicate, ok := inferAliasPredicateFromQueryPattern(fieldHint, currentQuery); ok {
+		return inferredField, predicate, true
+	}
+
+	return fieldHint, nil, false
+}
+
+func inferAliasPredicateFromQueryPattern(alias string, currentQuery string) (string, map[string]any, bool) {
+	query := strings.TrimSpace(currentQuery)
+	if query == "" {
+		return alias, nil, false
+	}
+
+	patterns := []struct {
+		re *regexp.Regexp
+		op string
+	}{
+		{re: regexp.MustCompile(`(?i)([a-zA-Z][a-zA-Z0-9_]*(?:[\s_]+[a-zA-Z0-9_]+){0,2})\s*(>=|<=|>|<|=|==)\s*(-?\d+(?:\.\d+)?)`), op: ""},
+		{re: regexp.MustCompile(`(?i)([a-zA-Z][a-zA-Z0-9_]*(?:[\s_]+[a-zA-Z0-9_]+){0,2})\s*(?:is\s+)?greater\s+than\s+(-?\d+(?:\.\d+)?)`), op: "$gt"},
+		{re: regexp.MustCompile(`(?i)([a-zA-Z][a-zA-Z0-9_]*(?:[\s_]+[a-zA-Z0-9_]+){0,2})\s*(?:is\s+)?less\s+than\s+(-?\d+(?:\.\d+)?)`), op: "$lt"},
+		{re: regexp.MustCompile(`(?i)([a-zA-Z][a-zA-Z0-9_]*(?:[\s_]+[a-zA-Z0-9_]+){0,2})\s*(?:is|=|==|equals?)?\s*['"]([^'"]+)['"]`), op: "$eq"},
+	}
+
+	for _, pattern := range patterns {
+		matches := pattern.re.FindAllStringSubmatch(query, -1)
+		for _, match := range matches {
+			if len(match) < 3 {
+				continue
+			}
+			leaf := normalizeAliasLeafCandidate(match[1])
+			if leaf == "" {
+				continue
+			}
+			field := alias + "." + leaf
+			op := pattern.op
+			valueIndex := 2
+			if op == "" {
+				op = comparisonOperatorToAST(match[2])
+				valueIndex = 3
+			}
+			value := parseCompatibilityLiteral(match[valueIndex])
+			return field, map[string]any{op: value}, true
+		}
+	}
+
+	return alias, nil, false
+}
+
+func normalizeAliasLeafCandidate(raw string) string {
+	raw = strings.ToLower(strings.TrimSpace(strings.Trim(raw, "\"'")))
+	if raw == "" {
+		return ""
+	}
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		switch r {
+		case ' ', '_', '.':
+			return true
+		default:
+			return false
+		}
+	})
+	if len(parts) == 0 {
+		return ""
+	}
+	stopWords := map[string]struct{}{
+		"a": {}, "an": {}, "and": {}, "by": {}, "find": {}, "for": {}, "from": {}, "in": {},
+		"is": {}, "of": {}, "on": {}, "or": {}, "the": {}, "to": {}, "where": {}, "with": {},
+	}
+	filtered := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if _, isStopWord := stopWords[part]; isStopWord {
+			continue
+		}
+		filtered = append(filtered, part)
+	}
+	if len(filtered) > 0 {
+		parts = filtered
+	}
+	if len(parts) > 3 {
+		parts = parts[len(parts)-3:]
+	}
+	return strings.Join(parts, "_")
 }
 
 func normalizeCompatibilityConditionEntry(fieldHint string, raw string) (string, any, bool) {
@@ -1510,6 +1645,10 @@ func normalizeCompatibilityJoinOn(onMap map[string]any) map[string]any {
 					continue
 				}
 			}
+			if isAliasPlaceholderField(left) && rawStr != "" && !strings.Contains(rawStr, ".") {
+				normalized[left+"."+rawStr] = "key"
+				continue
+			}
 		}
 		normalized[left] = raw
 	}
@@ -1518,21 +1657,6 @@ func normalizeCompatibilityJoinOn(onMap map[string]any) map[string]any {
 
 func normalizeCompatibilityFieldPath(field string) string {
 	field = strings.TrimSpace(strings.Trim(field, "\"'"))
-	if field == "" || strings.Contains(field, ".") || !strings.Contains(field, "_") {
-		return field
-	}
-
-	aliases := []string{"users_orders", "users", "orders", "products", "customers", "items", "payments", "invoices", "details"}
-	for _, alias := range aliases {
-		prefix := alias + "_"
-		if strings.HasPrefix(field, prefix) {
-			remainder := strings.TrimPrefix(field, prefix)
-			if remainder != "" {
-				return alias + "." + remainder
-			}
-		}
-	}
-
 	return field
 }
 

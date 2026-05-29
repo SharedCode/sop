@@ -11,7 +11,10 @@ func TestBuildExecuteScriptArgsSchema_IncludesResearchAndOrchestrationGuidance(t
 	checks := []string{
 		`multi-step store orchestration`,
 		`call list_stores first`,
-		`relations=[...] output as the source of truth`,
+		`schema=... and optional relations=[...]`,
+		`read schema=... for exact field names`,
+		`read relations=[...] for related-store and join-field semantics`,
+		`returned relations=[...] entries as the source of truth`,
 		`call gettoolinfo('execute_script')`,
 		`filter expects {condition: object}`,
 		`{\"first_name\":{\"$eq\":\"John\"}}`,
@@ -27,7 +30,7 @@ func TestBuildExecuteScriptArgsSchema_IncludesResearchAndOrchestrationGuidance(t
 }
 
 func TestExecuteScriptInstruction_MentionsResearchAndConcreteShapes(t *testing.T) {
-	checks := []string{"begin a transaction", "result_var/input_var", "list_stores", "relations=[...]", "gettoolinfo('execute_script')", "concrete predicate objects", "concrete join mappings"}
+	checks := []string{"begin a transaction", "result_var/input_var", "list_stores", "schema=...", "relations=[...]", "join-field semantics", "gettoolinfo('execute_script')", "concrete predicate objects", "concrete join mappings"}
 	for _, check := range checks {
 		if !strings.Contains(ExecuteScriptInstruction, check) {
 			t.Fatalf("expected ExecuteScriptInstruction to contain %q\nInstruction: %s", check, ExecuteScriptInstruction)

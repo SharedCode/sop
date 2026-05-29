@@ -540,6 +540,9 @@ This is the current architecture of the inner progressive Ask loop.
 		- `generated_call`
 		- `result`
 		- `progression`
+- The combined retry prompt is now also under a hard total character budget.
+- When that budget is exceeded, trimming happens in a fixed order: Ask-anchored MRU first, then older history, then progression history, then focused context, while the latest actionable tool results, repair directive, and user query are kept longest.
+- The engine logs which section trimmed first and the per-section reductions, so prompt overflows are diagnosable without changing STM/LTM state.
 - This is what lets the model refine the next call from actual improving script slices and returned agent context instead of re-solving the whole problem from scratch.
 
 Progression-history contract:

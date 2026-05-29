@@ -73,6 +73,9 @@ func TestBuildSystemPrompt_IncludesFocusedStoreContext(t *testing.T) {
 	if !strings.Contains(prompt, "Target Stores") || !strings.Contains(prompt, "- users") {
 		t.Fatalf("expected focused users store details in prompt: %s", prompt)
 	}
+	if !strings.Contains(prompt, `stores:[\"users\"]`) {
+		t.Fatalf("expected focused prompt to include scoped list_stores research hint: %s", prompt)
+	}
 	if !strings.Contains(prompt, "Relations:") || !strings.Contains(prompt, "orders([user_id])") {
 		t.Fatalf("expected relations metadata for users store: %s", prompt)
 	}
@@ -159,6 +162,9 @@ func TestBuildSystemPrompt_StoresFocusedContext_StaysWithinBudgetGuardrail(t *te
 	}
 	if !strings.Contains(focusedContent, "Target Stores") || !strings.Contains(focusedContent, "Relevant Store Operations") {
 		t.Fatalf("expected focused execution context to retain core Stores anchors: %s", focusedContent)
+	}
+	if !strings.Contains(focusedContent, `stores:["users"]`) {
+		t.Fatalf("expected focused execution context to retain scoped list_stores hint, got %s", focusedContent)
 	}
 	for _, element := range elements {
 		if element.Component == ComponentSystemTools && strings.Contains(element.Content, "Execution Flow Engine Guardrails") {
@@ -265,6 +271,47 @@ func TestBuildSystemPrompt_IncludesScriptAuthoringContextForStores(t *testing.T)
 		if !strings.Contains(element.Content, "Structured Context: Script Authoring Tools") {
 			t.Fatalf("expected script-authoring manual to remain present in system tools, got: %s", element.Content)
 		}
+	}
+}
+
+func TestBuildSystemPrompt_DedupesFocusedToolSectionsAgainstSystemToolsBaseline(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}}}
+
+	payload := &ai.SessionPayload{CurrentDB: SystemDBName, Variables: make(map[string]any)}
+	ctx = context.WithValue(ctx, "session_payload", payload)
+
+	ag.markMRUCategoryWithSource(SYSTEM_TOOLS, "Structured Context: Script Authoring Tools\n"+toolsScriptsManual, MRUSourceSystemTools)
+
+	prompt := ag.buildSystemPrompt(ctx, "Create a script named expensive_orders to find orders over 1000", TaskContextClassification{
+		Domain:          StoresDomain,
+		DBArtifacts:     []string{"orders"},
+		Layers:          []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}},
+		ScriptAuthoring: true,
+	})
+
+	var elements []PromptElement
+	if err := json.Unmarshal([]byte(prompt), &elements); err != nil {
+		t.Fatalf("expected buildSystemPrompt to return JSON prompt elements: %v\nPrompt: %s", err, prompt)
+	}
+
+	systemTools := ""
+	for _, element := range elements {
+		if element.Component == ComponentSystemTools {
+			systemTools = element.Content
+			break
+		}
+	}
+	if systemTools == "" {
+		t.Fatalf("expected system tools component in prompt: %s", prompt)
+	}
+	if count := strings.Count(systemTools, "Structured Context: Script Authoring Tools"); count != 1 {
+		t.Fatalf("expected script authoring tools section once after baseline dedupe, got %d\n%s", count, systemTools)
+	}
+	if count := strings.Count(systemTools, "Structured Context: Stores Tools"); count != 1 {
+		t.Fatalf("expected stores tools section once after baseline merge, got %d\n%s", count, systemTools)
 	}
 }
 

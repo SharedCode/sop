@@ -235,7 +235,7 @@ func buildExplicitRecipes(taskClassification TaskContextClassification) []Recipe
 			Domain:     StoresDomain,
 			Topic:      "Stores schema-first research",
 			Trigger:    "The ask needs store reads, filters, joins, or repair around schema, field, or relation ambiguity.",
-			Protocol:   []string{"research with list_stores first when schema, field paths, value types, or join mappings are ambiguous", "treat list_stores relations as the source of truth for related stores and join key mapping details", "use gettoolinfo('execute_script') only when the AST shape itself is unclear"},
+			Protocol:   []string{"research with list_stores first when schema, field paths, value types, or join mappings are ambiguous", "scope list_stores with stores:[...] when likely target stores are already known", "treat list_stores relations as the source of truth for related stores and join key mapping details", "use gettoolinfo('execute_script') only when the AST shape itself is unclear"},
 			Invariants: []string{"preserve confirmed schema, relation, and MRU facts during repair", "do not guess missing join mappings when list_stores can ground them"},
 			Tags:       []string{"stores", "research", "schema", "research_first"},
 			Confidence: 1.0,

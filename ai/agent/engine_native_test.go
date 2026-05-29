@@ -830,7 +830,7 @@ func (m *executeScriptJoinRepairGenerator) Generate(ctx context.Context, prompt 
 		checks := []string{
 			"Ask-anchored MRU:",
 			"- Last outcome: repair_required",
-			"- Next delta: Research missing schema or relation facts with list_stores before retrying execute_script.",
+			"- Next delta: Research missing schema or relation facts with scoped list_stores calls before retrying execute_script.",
 			"Repair strategy: research_first",
 			"Research reason:",
 			"- Preserve: Reuse the valid structure from attempted args before changing invalid fields:",
@@ -952,6 +952,161 @@ func TestNativeReActEngine_RetriesExecuteScriptJoinWithValidationGuidance(t *tes
 	}
 }
 
+type progressionHistoryJoinRepairGenerator struct {
+	calls int
+}
+
+func (m *progressionHistoryJoinRepairGenerator) Name() string {
+	return "progression_history_join_repair_mock"
+}
+
+func (m *progressionHistoryJoinRepairGenerator) EstimateCost(inTokens, outTokens int) float64 {
+	return 0
+}
+
+func (m *progressionHistoryJoinRepairGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	switch m.calls {
+	case 1:
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{
+				"script": []any{
+					map[string]any{
+						"op": "join",
+						"args": map[string]any{
+							"store": "users_orders",
+							"on":    map[string]any{"users.key": true},
+						},
+					},
+				},
+			},
+		}}}, nil
+	case 2:
+		checks := []string{
+			"Progression history:",
+			"\"tool\": \"execute_script\"",
+			"\"ingredients\"",
+			"\"repair_strategy\": \"research_first\"",
+			"\"generated_call\"",
+			"\"script_summary\"",
+			"users.key-\\u003etrue",
+			"\"progression\"",
+			"\"retry_instruction\": \"Call list_stores first using stores:[\\\"users_orders\\\"] to research the missing schema or relation facts, then return to execute_script with corrected grounded arguments. Preserve valid arguments and do not restart the whole plan.\"",
+		}
+		for _, check := range checks {
+			if !strings.Contains(prompt, check) {
+				return ai.GenOutput{Text: "missing progression-history repair context: " + check}, nil
+			}
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "list_stores",
+			Args: map[string]any{"stores": []any{"users", "users_orders"}},
+		}}}, nil
+	case 3:
+		checks := []string{
+			"Progression history:",
+			"\"tool\": \"list_stores\"",
+			"\"tool_info\": \"list_stores\"",
+			"\"envelope_hash\"",
+			"\"generated_call\"",
+			"\"stores\"",
+			"users_orders",
+			"\"status\": \"progressing\"",
+			"\"suggested_next_tools\"",
+			"\"execute_script\"",
+			"users schema=key:string, first_name:string relations=[users_orders(key->users.key)]",
+			"users_orders schema=key:string, user_id:string",
+		}
+		for _, check := range checks {
+			if !strings.Contains(prompt, check) {
+				return ai.GenOutput{Text: "missing progression-history grounded context: " + check}, nil
+			}
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{
+				"script": []any{
+					map[string]any{
+						"op": "join",
+						"args": map[string]any{
+							"store": "users_orders",
+							"on":    map[string]any{"users.key": "key"},
+						},
+					},
+				},
+			},
+		}}}, nil
+	default:
+		return ai.GenOutput{Text: "Final answer: Joined users with users_orders successfully from progression history."}, nil
+	}
+}
+
+type progressionHistoryJoinRepairExecutor struct {
+	callCount int
+}
+
+func (e *progressionHistoryJoinRepairExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	e.callCount++
+	if tool == "list_stores" {
+		result := "users schema=key:string, first_name:string relations=[users_orders(key->users.key)]\nusers_orders schema=key:string, user_id:string"
+		return wrapToolResultWithListStoresHint(result, []string{
+			"users schema=key:string, first_name:string relations=[users_orders(key->users.key)]",
+			"users_orders schema=key:string, user_id:string",
+		}), nil
+	}
+	if e.callCount == 1 {
+		return "", newExecuteScriptValidationError(
+			"invalid_join_on_placeholder",
+			"invalid type for join.on[\"users.key\"]: got boolean placeholder true; expected a field path string such as \"key\"",
+			`{"op":"join","args":{"store":"users_orders","on":{"users.key":"key"}}}`,
+		)
+	}
+	return `[{"users.key":"u1","users_orders.value":"o1"}]`, nil
+}
+
+func (e *progressionHistoryJoinRepairExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "execute_script"}, {Name: "list_stores"}}, nil
+}
+
+func TestNativeReActEngine_UsesProgressionHistoryToRepairExecuteScriptJoin(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &progressionHistoryJoinRepairGenerator{}
+	executor := &progressionHistoryJoinRepairExecutor{}
+
+	resp, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Join users with users_orders",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer: Joined users with users_orders successfully from progression history." {
+		t.Fatalf("expected final answer from progression-history repair, got %q", resp.FinalText)
+	}
+	if gen.calls != 4 {
+		t.Fatalf("expected four generator calls for repair, research, corrected execution, and synthesis; got %d", gen.calls)
+	}
+	if executor.callCount != 3 {
+		t.Fatalf("expected execute_script failure, list_stores research, and execute_script retry, got %d calls", executor.callCount)
+	}
+	if len(resp.ToolCalls) != 2 || resp.ToolCalls[0].Name != "list_stores" || resp.ToolCalls[1].Name != "execute_script" {
+		t.Fatalf("expected list_stores research followed by repaired execute_script, got %#v", resp.ToolCalls)
+	}
+	seenRecipe := false
+	for _, recipe := range resp.OutcomeRecipes {
+		if recipe.ID == "implicit.execute_script.research_then_retry" {
+			seenRecipe = true
+			break
+		}
+	}
+	if !seenRecipe {
+		t.Fatalf("expected research-then-retry recipe to be learned, got %#v", resp.OutcomeRecipes)
+	}
+}
+
 func TestBuildAskAnchoredMRUState_TypesConfirmedStoreFacts(t *testing.T) {
 	state := buildAskAnchoredMRUState([]nativeToolResult{{
 		Name:   "list_stores",
@@ -1054,7 +1209,7 @@ func TestSummarizeOutcomeRecipes_ExtractsExecuteScriptRepairPatterns(t *testing.
 	recipes := summarizeOutcomeRecipes([]nativeToolResult{
 		{
 			Name:   "execute_script",
-			Result: "Tool execution error: missing schema\nTool: execute_script\nRepair strategy: research_first\nAttempted args:\n{}\nRetry instruction: Call list_stores first to research the missing schema or relation facts, then return to execute_script with corrected grounded arguments. Preserve valid arguments and do not restart the whole plan.",
+			Result: "Tool execution error: missing schema\nTool: execute_script\nRepair strategy: research_first\nAttempted args:\n{}\nRetry instruction: Call list_stores first and prefer scoped args like stores:[\"users\",\"orders\"] when likely targets are already known to research the missing schema or relation facts, then return to execute_script with corrected grounded arguments. Preserve valid arguments and do not restart the whole plan.",
 		},
 		{
 			Name:   "list_stores",
@@ -1175,10 +1330,10 @@ func TestBuildNativeReActPrompt_IncludesRepairDirectiveVariants(t *testing.T) {
 
 	researchPrompt := buildNativeReActPrompt(baseReq, []nativeToolResult{{
 		Name:   "execute_script",
-		Result: "Tool execution error\nRepair strategy: research_first\nRetry instruction: Call list_stores first",
+		Result: "Tool execution error\nRepair strategy: research_first\nRetry instruction: Call list_stores first and prefer scoped args like stores:[\"users\",\"orders\"] when likely targets are already known",
 	}}, buildAskAnchoredMRUState([]nativeToolResult{{
 		Name:   "execute_script",
-		Result: "Tool execution error\nRepair strategy: research_first\nRetry instruction: Call list_stores first",
+		Result: "Tool execution error\nRepair strategy: research_first\nRetry instruction: Call list_stores first and prefer scoped args like stores:[\"users\",\"orders\"] when likely targets are already known",
 	}}))
 	if !strings.Contains(researchPrompt, "call list_stores first") {
 		t.Fatalf("expected research-first repair directive, got %s", researchPrompt)
@@ -1244,6 +1399,7 @@ func TestBuildNativeReActPrompt_ExposesToolArgsWithRetryContext(t *testing.T) {
 		"\"ingredients\"",
 		"\"progression\"",
 		"\"tool_info\": \"list_stores\"",
+		"\"envelope_hash\"",
 		"\"generated_call\"",
 		"\"result\"",
 		"\"completion_delta\": 0.25",
@@ -1254,8 +1410,9 @@ func TestBuildNativeReActPrompt_ExposesToolArgsWithRetryContext(t *testing.T) {
 		"\"database\": \"system\"",
 		"\"store\": \"users\"",
 		"Step 2 Tool: execute_script",
-		"\"script\"",
-		"\"users_orders\"",
+		"\"script_summary\"",
+		"\"step_count\": 1",
+		"store=users_orders",
 		"Retry instruction: Return a corrected call for the same tool.",
 	}
 	for _, check := range checks {
@@ -1282,7 +1439,7 @@ func TestFormatNativeProgressionHistory_UsesStructuredIngredientsCallAndResult(t
 		{
 			Name:   "execute_script",
 			Args:   map[string]any{"script": []any{map[string]any{"op": "join"}}},
-			Result: "Tool execution error: invalid join\nRepair strategy: research_first\nRetry instruction: Call list_stores first",
+			Result: "Tool execution error: invalid join\nRepair strategy: research_first\nRetry instruction: Call list_stores first and prefer scoped args like stores:[\"users\",\"orders\"] when likely targets are already known",
 		},
 	})
 
@@ -1290,7 +1447,10 @@ func TestFormatNativeProgressionHistory_UsesStructuredIngredientsCallAndResult(t
 		"\"step\": 1",
 		"\"tool\": \"list_stores\"",
 		"\"tool_info\": \"list_stores\"",
-		"\"confirmed_facts\"",
+		"\"envelope_hash\"",
+		"\"schema_snapshot\"",
+		"\"name\": \"first_name\"",
+		"\"type\": \"string\"",
 		"\"progression\"",
 		"\"status\": \"progressing\"",
 		"\"completion_delta\": 0.25",
@@ -1299,14 +1459,287 @@ func TestFormatNativeProgressionHistory_UsesStructuredIngredientsCallAndResult(t
 		"\"suggested_next_tools\"",
 		"\"generated_call\"",
 		"\"database\": \"system\"",
-		"\"result\": \"users schema=key:string, first_name:string relations=[users_orders(key-\\u003eusers.key)]\"",
+		"\"script_summary\"",
+		"\"step_count\": 1",
+		"\"result\": \"users schema=key:string, first_name:string relations=[users_orders(key-\\u003eusers.key)]",
 		"\"repair_strategy\": \"research_first\"",
-		"\"retry_instruction\": \"Call list_stores first\"",
+		"\"retry_instruction\": \"Call list_stores first and prefer scoped args like stores:[\\\"users\\\",\\\"orders\\\"] when likely targets are already known\"",
 	}
 	for _, check := range checks {
 		if !strings.Contains(history, check) {
 			t.Fatalf("expected progression history to include %q, got %s", check, history)
 		}
+	}
+}
+
+func TestExtractListStoresSchemaSnapshot_PreservesFieldTypes(t *testing.T) {
+	snapshot := extractListStoresSchemaSnapshot("users schema=key:string, first_name:string, age:int relations=[users_orders(key->users.key)]\norders schema=key:string, total_amount:float64")
+	if len(snapshot) != 2 {
+		t.Fatalf("expected two store snapshots, got %#v", snapshot)
+	}
+	if snapshot[0]["store"] != "users" {
+		t.Fatalf("expected first snapshot to be users, got %#v", snapshot[0])
+	}
+	fields, ok := snapshot[0]["fields"].([]map[string]string)
+	if !ok {
+		t.Fatalf("expected typed fields slice, got %#v", snapshot[0]["fields"])
+	}
+	if len(fields) != 3 {
+		t.Fatalf("expected three parsed user fields, got %#v", fields)
+	}
+	if fields[1]["name"] != "first_name" || fields[1]["type"] != "string" {
+		t.Fatalf("expected first_name:string, got %#v", fields[1])
+	}
+	relations, ok := snapshot[0]["relations"].([]string)
+	if !ok || len(relations) != 1 || relations[0] != "users_orders(key->users.key)" {
+		t.Fatalf("expected parsed relation, got %#v", snapshot[0]["relations"])
+	}
+}
+
+func TestFormatNativePromptArgs_CompactsExecuteScriptPayload(t *testing.T) {
+	formatted := formatNativePromptArgs(map[string]any{"script": []any{
+		map[string]any{"op": "begin_tx", "args": map[string]any{"mode": "read"}, "result_var": "tx"},
+		map[string]any{"op": "open_store", "args": map[string]any{"name": "users", "transaction": "tx"}, "result_var": "users_store"},
+		map[string]any{"op": "filter", "args": map[string]any{"condition": map[string]any{"first_name": map[string]any{"$eq": "John"}}}, "input_var": "users_store", "result_var": "john_users"},
+	}}, false)
+
+	checks := []string{
+		"\"script_summary\"",
+		"\"step_count\": 3",
+		"\"ops\"",
+		"begin_tx",
+		"open_store",
+		"filter",
+		"1. begin_tx | mode=read | -\\u003e tx",
+		"2. open_store | store=users, tx=tx | -\\u003e users_store",
+		"3. filter | condition=first_name:$eq=John | input=users_store | -\\u003e john_users",
+	}
+	for _, check := range checks {
+		if !strings.Contains(formatted, check) {
+			t.Fatalf("expected compact args to include %q, got %s", check, formatted)
+		}
+	}
+	if strings.Contains(formatted, "\"script\": [") {
+		t.Fatalf("expected raw script array to be removed from prompt args, got %s", formatted)
+	}
+}
+
+func TestFormatNativeProgressionHistory_KeepsAnchorAndLatestCompactsMiddle(t *testing.T) {
+	history := formatNativeProgressionHistory([]nativeToolResult{
+		{
+			Name:   "list_stores",
+			Args:   map[string]any{"stores": []any{"users", "users_orders"}},
+			Result: "users schema=key:string, first_name:string relations=[users_orders(key->users.key)]",
+		},
+		{
+			Name:   "execute_script",
+			Args:   map[string]any{"script": []any{map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": true}}}}},
+			Result: "Tool execution error: invalid join\nRetry instruction: Return a corrected call for the same tool.",
+		},
+		{
+			Name:   "execute_script",
+			Args:   map[string]any{"script": []any{map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": "key"}}}}},
+			Result: `[ {"users.key":"u1","users_orders.value":"o1"} ]`,
+		},
+	})
+
+	checks := []string{
+		"\"stores\"",
+		"\"anchor_hash\"",
+		"\"anchor_rendered\": false",
+		"\"script_summary\"",
+		"\"anchor_ref\"",
+		"\"envelope_hash\"",
+		"\"envelope_rendered\": true",
+		"\"envelope\"",
+		"\"tool_info\": \"execute_script\"",
+		"users.key-\\u003etrue",
+		"\"script\"",
+		"\"users.key\": \"key\"",
+	}
+	for _, check := range checks {
+		if !strings.Contains(history, check) {
+			t.Fatalf("expected history to include %q, got %s", check, history)
+		}
+	}
+}
+
+func TestBuildNativeReActPrompt_CollapsesMiddleToolResults(t *testing.T) {
+	prompt := buildNativeReActPrompt(ai.ReasoningRequest{ContextText: "ctx", UserQuery: "query"}, []nativeToolResult{
+		{
+			Name:   "list_stores",
+			Args:   map[string]any{"stores": []any{"users"}},
+			Result: "users schema=key:string, first_name:string",
+		},
+		{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": true}}},
+			}},
+			Result: "Tool execution error: invalid join\nRetry instruction: Return a corrected call for the same tool.",
+		},
+		{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": "key"}}},
+			}},
+			Result: `[ {"users.key":"u1"} ]`,
+		},
+	}, buildAskAnchoredMRUState([]nativeToolResult{
+		{
+			Name:   "list_stores",
+			Args:   map[string]any{"stores": []any{"users"}},
+			Result: "users schema=key:string, first_name:string",
+		},
+		{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": true}}},
+			}},
+			Result: "Tool execution error: invalid join\nRetry instruction: Return a corrected call for the same tool.",
+		},
+		{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": "key"}}},
+			}},
+			Result: `[ {"users.key":"u1"} ]`,
+		},
+	}))
+
+	checks := []string{
+		"Step 1 Tool: list_stores",
+		"[Tool Args]:",
+		"Step 2 Tool: execute_script",
+		"[Tool Summary]:",
+		"\"response\": \"Tool execution error: invalid join",
+		"\"script_summary\"",
+		"Step 3 Tool: execute_script",
+		"\"script\"",
+		"\"users.key\": \"key\"",
+	}
+	for _, check := range checks {
+		if !strings.Contains(prompt, check) {
+			t.Fatalf("expected prompt to include %q, got %s", check, prompt)
+		}
+	}
+	if strings.Contains(prompt, "Step 2 Tool: execute_script\n[Tool Args]:") {
+		t.Fatalf("expected middle tool result to avoid detailed Tool Args block, got %s", prompt)
+	}
+}
+
+func TestBuildNativeReActPrompt_EnforcesHardBudgetAndReportsFirstTrim(t *testing.T) {
+	profile := PromptBudgetProfile{
+		TotalChars: 1200,
+		ComponentCharBudgets: map[PromptComponent]int{
+			ComponentFocusedContext:        250,
+			ComponentHistory:               180,
+			ComponentUserQuery:             120,
+			componentNativeAskAnchoredMRU:  180,
+			componentNativeProgression:     320,
+			componentNativeRepairDirective: 220,
+			componentNativeToolResults:     320,
+		},
+		TrimPriorityLowToHigh: []PromptComponent{
+			componentNativeAskAnchoredMRU,
+			ComponentHistory,
+			componentNativeProgression,
+			ComponentFocusedContext,
+			componentNativeToolResults,
+			componentNativeRepairDirective,
+			ComponentUserQuery,
+		},
+	}
+	prompt, report := buildNativeReActPromptWithReport(ai.ReasoningRequest{
+		ContextText: strings.Join([]string{
+			"Focused execution context:",
+			"- keep joins grounded in list_stores",
+			"- preserve valid transaction flow",
+			strings.Repeat("context detail ", 80),
+		}, "\n"),
+		HistoryText: strings.Repeat("history detail ", 120),
+		UserQuery:   "Find orders for John over 500",
+	}, []nativeToolResult{
+		{
+			Name:   "list_stores",
+			Args:   map[string]any{"database": "system", "store": "users"},
+			Result: strings.Repeat("users schema=key:string, first_name:string relations=[users_orders(key->users.key)]\n", 12),
+		},
+		{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": true}}},
+			}},
+			Result: strings.Repeat("Tool execution error: invalid join\nRetry instruction: Return a corrected call for the same tool.\n", 15),
+		},
+		{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{
+				map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": "key"}}},
+			}},
+			Result: strings.Repeat(`[ {"users.key":"u1","users_orders.value":"o1"} ]`, 20),
+		},
+	}, buildAskAnchoredMRUState([]nativeToolResult{
+		{Name: "list_stores", Args: map[string]any{"database": "system", "store": "users"}, Result: strings.Repeat("users schema=key:string, first_name:string\n", 8)},
+		{Name: "execute_script", Args: map[string]any{"script": []any{map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": true}}}}}, Result: strings.Repeat("Tool execution error: invalid join\nRetry instruction: Return a corrected call for the same tool.\n", 10)},
+		{Name: "execute_script", Args: map[string]any{"script": []any{map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": "key"}}}}}, Result: strings.Repeat(`[ {"users.key":"u1"} ]`, 10)},
+	}), profile)
+
+	if len(prompt) > profile.TotalChars {
+		t.Fatalf("expected prompt to honor hard budget, got %d chars: %s", len(prompt), prompt)
+	}
+	if report.OriginalTotalChars <= report.FinalTotalChars {
+		t.Fatalf("expected budgeting to reduce prompt, got original=%d final=%d", report.OriginalTotalChars, report.FinalTotalChars)
+	}
+	if firstTrimmed := firstTrimmedPromptComponent(profile, report); firstTrimmed != componentNativeAskAnchoredMRU {
+		t.Fatalf("expected ask-anchored MRU to trim first, got %q with report %+v", firstTrimmed, report)
+	}
+	checks := []string{
+		"User Query: Find orders for John over 500",
+		"Tool results:",
+		"Progression history:",
+		"[truncated]",
+	}
+	for _, check := range checks {
+		if !strings.Contains(prompt, check) {
+			t.Fatalf("expected budgeted prompt to retain %q, got %s", check, prompt)
+		}
+	}
+}
+
+func TestCompactNativePromptSectionText_PreservesSectionShape(t *testing.T) {
+	text := strings.Join([]string{
+		"Focused execution context:",
+		"- stores: users, orders, users_orders",
+		"- keep joins grounded in list_stores",
+		"- avoid placeholder predicates",
+		"- preserve valid transaction flow",
+		"- extra detail that can be compacted",
+		"Recipe notes:",
+		"- list_stores before execute_script when relations are ambiguous",
+		"- reuse confirmed join mappings",
+		"- preserve valid args on repair",
+		"- another detail that can be compacted",
+	}, "\n")
+
+	formatted := compactNativePromptSectionText(text, 220)
+	checks := []string{
+		"Focused execution context:",
+		"- stores: users, orders, users_orders",
+		"- keep joins grounded in list_stores",
+		"Recipe notes:",
+		"- list_stores before execute_script when relations are ambiguous",
+	}
+	for _, check := range checks {
+		if !strings.Contains(formatted, check) {
+			t.Fatalf("expected structured compact context to preserve %q, got %s", check, formatted)
+		}
+	}
+	if len(formatted) > 220 {
+		t.Fatalf("expected structured compact context to stay within budget, got %d chars: %s", len(formatted), formatted)
+	}
+	if strings.Contains(formatted, "- another detail that can be compacted") {
+		t.Fatalf("expected lowest-priority lines to be removed before truncating structured context, got %s", formatted)
 	}
 }
 
@@ -1373,14 +1806,34 @@ func TestEngineNative_RepairFormattingAndClassification(t *testing.T) {
 	if !strings.Contains(formatted, "Repair category: invalid_join_on_placeholder") || !strings.Contains(formatted, "Suggested fix example") || !strings.Contains(formatted, "Research reason:") {
 		t.Fatalf("expected formatted recoverable tool error to include validation and research guidance, got %s", formatted)
 	}
+	if !strings.Contains(formatted, `stores:["users","orders"]`) {
+		t.Fatalf("expected generic scoped list_stores guidance, got %s", formatted)
+	}
 	if !strings.Contains(formatRecoverableGenerationError(fmt.Errorf("bad tool call")), "Retry instruction: Return exactly one valid native tool call") {
 		t.Fatal("expected recoverable generation error to include retry guidance")
 	}
-	if !strings.Contains(formatPendingRepairReminder(researchRepair, "search_space"), "Call list_stores next") {
+	if !strings.Contains(formatPendingRepairReminder(researchRepair, "search_space"), "Call list_stores next") || !strings.Contains(formatPendingRepairReminder(researchRepair, "search_space"), "scoped stores:[...]") {
 		t.Fatal("expected research-first reminder to point to list_stores")
 	}
 	if !strings.Contains(formatPendingRepairReminder(sameToolRepair, "list_stores"), "Call execute_script next with corrected arguments") {
 		t.Fatal("expected same-tool reminder to point back to execute_script")
+	}
+}
+
+func TestFormatRecoverableToolError_ResearchFirstInfersScopedStoresFromAttemptedArgs(t *testing.T) {
+	repair := pendingToolRepair{ToolName: "execute_script", Strategy: nativeRepairStrategyResearchFirst, ResearchTool: "list_stores"}
+	err := newExecuteScriptValidationError(
+		"invalid_join_on_placeholder",
+		"invalid type for join.on[\"users.key\"]: got boolean placeholder true",
+		`{"op":"join","args":{"store":"users_orders","on":{"users.key":"key"}}}`,
+	)
+	formatted := formatRecoverableToolError(repair, map[string]any{"script": []any{
+		map[string]any{"op": "open_store", "args": map[string]any{"name": "users"}},
+		map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"users.key": true}}},
+		map[string]any{"op": "join", "args": map[string]any{"store": "orders", "on": map[string]any{"value": "key"}}},
+	}}, err)
+	if !strings.Contains(formatted, `Call list_stores first using stores:["orders","users","users_orders"]`) {
+		t.Fatalf("expected inferred scoped store hint, got %s", formatted)
 	}
 }
 

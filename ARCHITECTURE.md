@@ -346,6 +346,8 @@ Progressive visibility for the model:
     - `progression`
 - `progression` carries live convergence metadata such as status, completion delta, tips, clues, missing fields, suggested next tools, and retry instruction when present.
 - This allows the model to refine the next internal ask or tool call from what improved, what remains missing, and which script slices should be preserved.
+- The retry frame is also bounded by a hard total prompt budget with deterministic trim order, so the loop reduces low-priority replay first instead of letting payload grow until the model degrades.
+- Trim diagnostics record which section was reduced first and what else was shortened, making prompt-pressure regressions observable during live runs.
 
 Bounded progression:
 

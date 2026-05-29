@@ -105,12 +105,12 @@ func TestNormalizeScriptStepForCompatibility_JoinStringOnShape(t *testing.T) {
 	}
 }
 
-func TestNormalizeScriptStepForCompatibility_FlattenedFieldPaths(t *testing.T) {
+func TestNormalizeScriptStepForCompatibility_PreservesExplicitDottedFieldPaths(t *testing.T) {
 	step := map[string]any{
 		"op": "filter",
 		"args": map[string]any{
 			"condition": map[string]any{
-				"orders_total_amount": map[string]any{"$gt": 500},
+				"orders.total_amount": map[string]any{"$gt": 500},
 			},
 		},
 	}
@@ -120,13 +120,16 @@ func TestNormalizeScriptStepForCompatibility_FlattenedFieldPaths(t *testing.T) {
 	args := step["args"].(map[string]any)
 	condition := args["condition"].(map[string]any)
 	if _, ok := condition["orders.total_amount"]; !ok {
-		t.Fatalf("expected flattened condition field to normalize, got %#v", condition)
+		t.Fatalf("expected explicit dotted condition field to be preserved, got %#v", condition)
+	}
+	if _, ok := condition["orders_total_amount"]; ok {
+		t.Fatalf("did not expect underscore field fallback, got %#v", condition)
 	}
 
 	joinStep := map[string]any{
 		"op": "join",
 		"args": map[string]any{
-			"on": map[string]any{"users_orders_value": "key"},
+			"on": map[string]any{"users_orders.value": "key"},
 		},
 	}
 
@@ -134,7 +137,10 @@ func TestNormalizeScriptStepForCompatibility_FlattenedFieldPaths(t *testing.T) {
 	joinArgs := joinStep["args"].(map[string]any)
 	on := joinArgs["on"].(map[string]any)
 	if on["users_orders.value"] != "key" {
-		t.Fatalf("expected flattened join field to normalize, got %#v", on)
+		t.Fatalf("expected explicit dotted join field to be preserved, got %#v", on)
+	}
+	if _, ok := on["users_orders_value"]; ok {
+		t.Fatalf("did not expect underscore join field fallback, got %#v", on)
 	}
 }
 
@@ -144,7 +150,7 @@ func TestNormalizeScriptStepForCompatibilityWithQuery_InfersBooleanFilterPredica
 		"args": map[string]any{
 			"condition": map[string]any{
 				"first_name":          true,
-				"orders_total_amount": true,
+				"orders.total_amount": true,
 			},
 		},
 	}
@@ -162,7 +168,75 @@ func TestNormalizeScriptStepForCompatibilityWithQuery_InfersBooleanFilterPredica
 		t.Fatalf("expected orders.total_amount boolean placeholder to infer > 500, got %#v", amount)
 	}
 	if _, ok := condition["orders_total_amount"]; ok {
-		t.Fatalf("expected flattened amount field to normalize to dotted path, got %#v", condition)
+		t.Fatalf("did not expect underscore amount field fallback, got %#v", condition)
+	}
+}
+
+func TestNormalizeScriptStepForCompatibilityWithQuery_InfersAliasFieldPredicateFromLeafHint(t *testing.T) {
+	step := map[string]any{
+		"op": "filter",
+		"args": map[string]any{
+			"condition": map[string]any{
+				"orders": "total_amount",
+			},
+		},
+	}
+
+	normalizeScriptStepForCompatibilityWithQuery(step, "Find orders for users with first_name 'John' with total amount > 500")
+
+	args := step["args"].(map[string]any)
+	condition := args["condition"].(map[string]any)
+	amount := condition["orders.total_amount"].(map[string]any)
+	if amount["$gt"] != 500 {
+		t.Fatalf("expected orders.total_amount predicate inferred from query, got %#v", amount)
+	}
+	if _, ok := condition["orders"]; ok {
+		t.Fatalf("expected alias-only field to be normalized, got %#v", condition)
+	}
+}
+
+func TestNormalizeScriptStepForCompatibilityWithQuery_InfersAliasBooleanPredicateFromQuery(t *testing.T) {
+	step := map[string]any{
+		"op": "filter",
+		"args": map[string]any{
+			"condition": map[string]any{
+				"orders": true,
+			},
+		},
+	}
+
+	normalizeScriptStepForCompatibilityWithQuery(step, "Find orders for users with first_name 'John' with total amount > 500")
+
+	args := step["args"].(map[string]any)
+	condition := args["condition"].(map[string]any)
+	amount := condition["orders.total_amount"].(map[string]any)
+	if amount["$gt"] != 500 {
+		t.Fatalf("expected alias boolean placeholder to infer orders.total_amount > 500, got %#v", amount)
+	}
+	if _, ok := condition["orders"]; ok {
+		t.Fatalf("expected alias boolean placeholder to be replaced, got %#v", condition)
+	}
+}
+
+func TestNormalizeScriptStepForCompatibility_InfersAliasJoinLeafOnShape(t *testing.T) {
+	step := map[string]any{
+		"op": "join",
+		"args": map[string]any{
+			"on": map[string]any{
+				"users_orders": "value",
+			},
+		},
+	}
+
+	normalizeScriptStepForCompatibility(step)
+
+	args := step["args"].(map[string]any)
+	on := args["on"].(map[string]any)
+	if on["users_orders.value"] != "key" {
+		t.Fatalf("expected alias-only join leaf to normalize to users_orders.value=key, got %#v", on)
+	}
+	if _, ok := on["users_orders"]; ok {
+		t.Fatalf("expected alias-only join field to be removed, got %#v", on)
 	}
 }
 
@@ -202,5 +276,30 @@ func TestSanitizeScript_CapturesImplicitOutputBeforeCommit(t *testing.T) {
 	sanitized := sanitizeScript(script)
 	if got := sanitized[3].ResultVar; got != "output" {
 		t.Fatalf("expected last data-producing step to capture implicit output, got %q", got)
+	}
+}
+
+func TestSanitizeScript_InjectsImplicitTransactionWiring(t *testing.T) {
+	script := []ScriptInstruction{
+		{Op: "begin_tx", Args: map[string]any{"mode": "read"}},
+		{Op: "open_store", Args: map[string]any{"name": "users"}},
+		{Op: "commit_tx", Args: map[string]any{}},
+	}
+
+	sanitized := sanitizeScript(script)
+	if got := sanitized[0].ResultVar; got != "tx" {
+		t.Fatalf("expected implicit begin_tx result_var to normalize to tx, got %q", got)
+	}
+	if got, _ := sanitized[1].Args["transaction"].(string); got != "tx" {
+		t.Fatalf("expected open_store to inherit implicit tx, got %#v", sanitized[1].Args)
+	}
+	if got, _ := sanitized[1].Args["name"].(string); got != "users" {
+		t.Fatalf("expected open_store name to remain intact, got %#v", sanitized[1].Args)
+	}
+	if got, _ := sanitized[2].Args["transaction"].(string); got != "tx" {
+		t.Fatalf("expected commit_tx to inherit implicit tx, got %#v", sanitized[2].Args)
+	}
+	if got := sanitized[1].ResultVar; got != "users" {
+		t.Fatalf("expected open_store result_var to normalize to store name, got %q", got)
 	}
 }

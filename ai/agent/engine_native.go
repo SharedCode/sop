@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -104,7 +106,12 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 	var pendingMalformedCall *pendingGenerationRepair
 	for iteration := 0; iteration < budgetState.maxIterations && iteration < budgetState.allowedIterations; iteration++ {
 		emitVerboseProgress(ctx, "Reasoning iteration %d of %d.", iteration+1, budgetState.allowedIterations)
-		mainPrompt := buildNativeReActPrompt(req, toolResults, buildAskAnchoredMRUState(toolResults))
+		promptProfile := nativeReActPromptBudgetProfile()
+		mainPrompt, promptReport := buildNativeReActPromptWithReport(req, toolResults, buildAskAnchoredMRUState(toolResults), promptProfile)
+		if firstTrimmed := firstTrimmedPromptComponent(promptProfile, promptReport); firstTrimmed != "" {
+			emitVerboseProgress(ctx, "Prompt budget trimmed %s first; reduced components: %s.", firstTrimmed, summarizePromptBudgetTrim(promptReport))
+			log.Info("Native ReAct Prompt Budget Applied", "phase", "iteration", "iteration", iteration+1, "trimmed_first", firstTrimmed, "trimmed", summarizePromptBudgetTrim(promptReport), "final_chars", len(mainPrompt))
+		}
 		emitVerboseProgress(ctx, "Waiting for model response.")
 		temperature := nativeReActToolCallTemperature
 		if pendingRepair != nil || pendingMalformedCall != nil {
@@ -201,6 +208,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 				toolResults = append(toolResults, nativeToolResult{
 					Name:   toolCall.Name,
 					Result: formatRecoverableToolError(repairPlan, toolCall.Args, err),
+					Args:   cloneToolEventMap(toolCall.Args),
 				})
 				log.Warn("Native ReAct Engine Recoverable Tool Failure", "tool", toolCall.Name, "error", err)
 				continue
@@ -261,7 +269,13 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 	}
 
 	log.Warn("Native ReAct Engine Reached Tool Iteration Limit", "limit", budgetState.allowedIterations, "hard_cap", budgetState.maxIterations)
-	finalPrompt := buildNativeReActPrompt(req, toolResults, buildAskAnchoredMRUState(toolResults)) + "\n\nUser: Analyze the tool response and provide the final answer to the user. Do not call any more tools."
+	promptProfile := nativeReActPromptBudgetProfile()
+	finalPrompt, promptReport := buildNativeReActPromptWithReport(req, toolResults, buildAskAnchoredMRUState(toolResults), promptProfile)
+	if firstTrimmed := firstTrimmedPromptComponent(promptProfile, promptReport); firstTrimmed != "" {
+		emitVerboseProgress(ctx, "Prompt budget trimmed %s first; reduced components: %s.", firstTrimmed, summarizePromptBudgetTrim(promptReport))
+		log.Info("Native ReAct Prompt Budget Applied", "phase", "final", "trimmed_first", firstTrimmed, "trimmed", summarizePromptBudgetTrim(promptReport), "final_chars", len(finalPrompt))
+	}
+	finalPrompt += "\n\nUser: Analyze the tool response and provide the final answer to the user. Do not call any more tools."
 	emitVerboseProgress(ctx, "Waiting for model response.")
 	output, err := req.Generator.Generate(ctx, finalPrompt, ai.GenOptions{
 		SystemPrompt: req.SystemPrompt,
@@ -386,45 +400,286 @@ func isVerboseEnabled(ctx context.Context) bool {
 	return true
 }
 
+const (
+	componentNativeAskAnchoredMRU  PromptComponent = "ask_anchored_mru"
+	componentNativeProgression     PromptComponent = "progression_history"
+	componentNativeRepairDirective PromptComponent = "repair_directive"
+	componentNativeToolResults     PromptComponent = "tool_results"
+	nativeReActPromptTotalChars                    = 16000
+)
+
 func buildNativeReActPrompt(req ai.ReasoningRequest, toolResults []nativeToolResult, askState askAnchoredMRUState) string {
-	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Context:\n%s%s\n\nUser Query: %s", req.ContextText, req.HistoryText, req.UserQuery))
-	if len(toolResults) == 0 {
-		return sb.String()
-	}
-
-	sb.WriteString("\n\nAsk-anchored MRU:\n")
-	sb.WriteString(formatAskAnchoredMRUState(askState))
-	sb.WriteString("\nProgression history:\n")
-	sb.WriteString(formatNativeProgressionHistory(toolResults))
-
-	if last := toolResults[len(toolResults)-1]; strings.Contains(last.Result, "Retry instruction:") {
-		if last.Name == "native_tool_call" {
-			sb.WriteString("\n\nRepair directive: The last model output produced an invalid native tool call. Your next step should be to call exactly one valid tool using arguments that conform to the provided tool schema and repair guidance below. Do not summarize the error as a final answer unless correction is impossible.")
-		} else if strings.Contains(last.Result, "Repair strategy: research_first") {
-			sb.WriteString(fmt.Sprintf("\n\nRepair directive: The last tool call to %s failed because grounded schema or relation facts are still missing. Your next step should be to call list_stores first, reuse its schema/relations output as the source of truth, and only then return to %s if needed. Do not summarize the error as a final answer unless correction is impossible.", last.Name, last.Name))
-		} else {
-			sb.WriteString(fmt.Sprintf("\n\nRepair directive: The last tool call to %s failed because its arguments were invalid. Your next step should be to call the same tool again with corrected arguments using the repair guidance below. Do not summarize the error as a final answer unless correction is impossible.", last.Name))
-		}
-	}
-
-	sb.WriteString("\n\nTool results:\n")
-	for i, result := range toolResults {
-		sb.WriteString(fmt.Sprintf("Step %d Tool: %s\n", i+1, result.Name))
-		if formattedArgs := formatNativePromptArgs(result.Args); formattedArgs != "" {
-			sb.WriteString(fmt.Sprintf("[Tool Args]:\n%s\n", formattedArgs))
-		}
-		sb.WriteString(fmt.Sprintf("[System Tool Response]:\n%s\n\n", result.Result))
-	}
-	sb.WriteString("User: Analyze the tool response and continue the task. If another tool is required, call it. Otherwise provide the final answer to the user.")
-	return sb.String()
+	rendered, _ := buildNativeReActPromptWithReport(req, toolResults, askState, nativeReActPromptBudgetProfile())
+	return rendered
 }
 
-func formatNativePromptArgs(args map[string]any) string {
+func buildNativeReActPromptWithReport(req ai.ReasoningRequest, toolResults []nativeToolResult, askState askAnchoredMRUState, profile PromptBudgetProfile) (string, PromptBudgetReport) {
+	sections := buildNativeReActPromptSections(req, toolResults, askState)
+	trimmed, report := budgetNativePromptSections(sections, profile)
+	return renderNativePromptSections(trimmed), report
+}
+
+func buildNativeReActPromptSections(req ai.ReasoningRequest, toolResults []nativeToolResult, askState askAnchoredMRUState) []PromptElement {
+	sections := make([]PromptElement, 0, 7)
+	if contextText := compactNativePromptSectionText(req.ContextText, 6000); contextText != "" {
+		sections = append(sections, PromptElement{Component: ComponentFocusedContext, Content: "Context:\n" + contextText})
+	}
+	if historyText := compactNativePromptSectionText(req.HistoryText, 2500); historyText != "" {
+		sections = append(sections, PromptElement{Component: ComponentHistory, Content: "History:\n" + historyText})
+	}
+	sections = append(sections, PromptElement{Component: ComponentUserQuery, Content: fmt.Sprintf("User Query: %s", strings.TrimSpace(req.UserQuery))})
+	if len(toolResults) == 0 {
+		return sections
+	}
+
+	sections = append(sections,
+		PromptElement{Component: componentNativeAskAnchoredMRU, Content: "Ask-anchored MRU:\n" + formatAskAnchoredMRUState(askState)},
+		PromptElement{Component: componentNativeProgression, Content: "Progression history:\n" + strings.TrimSpace(formatNativeProgressionHistory(toolResults))},
+	)
+	if directive := buildNativeRepairDirective(toolResults[len(toolResults)-1]); directive != "" {
+		sections = append(sections, PromptElement{Component: componentNativeRepairDirective, Content: directive})
+	}
+	sections = append(sections,
+		PromptElement{Component: componentNativeToolResults, Content: buildNativeToolResultsSection(toolResults)},
+		PromptElement{Component: ComponentUserQuery, Content: "User: Analyze the tool response and continue the task. If another tool is required, call it. Otherwise provide the final answer to the user."},
+	)
+	return sections
+}
+
+func nativeReActPromptBudgetProfile() PromptBudgetProfile {
+	return PromptBudgetProfile{
+		TotalChars: nativeReActPromptTotalChars,
+		ComponentCharBudgets: map[PromptComponent]int{
+			ComponentFocusedContext:        6000,
+			ComponentHistory:               2500,
+			ComponentUserQuery:             900,
+			componentNativeAskAnchoredMRU:  1800,
+			componentNativeProgression:     5200,
+			componentNativeRepairDirective: 1100,
+			componentNativeToolResults:     5200,
+		},
+		TrimPriorityLowToHigh: []PromptComponent{
+			componentNativeAskAnchoredMRU,
+			ComponentHistory,
+			componentNativeProgression,
+			ComponentFocusedContext,
+			componentNativeToolResults,
+			componentNativeRepairDirective,
+			ComponentUserQuery,
+		},
+	}
+}
+
+func budgetNativePromptSections(sections []PromptElement, profile PromptBudgetProfile) ([]PromptElement, PromptBudgetReport) {
+	if len(sections) == 0 {
+		return nil, PromptBudgetReport{}
+	}
+
+	working := make([]PromptElement, 0, len(sections))
+	report := PromptBudgetReport{ComponentStats: make([]PromptComponentBudgetStat, 0, len(sections))}
+	for _, section := range sections {
+		original := strings.TrimSpace(section.Content)
+		content := original
+		if maxChars, ok := profile.ComponentCharBudgets[section.Component]; ok && maxChars > 0 {
+			content = trimNativePromptSectionContent(section.Component, content, maxChars)
+		}
+		content = strings.TrimSpace(content)
+		report.OriginalTotalChars += len(original)
+		report.FinalTotalChars += len(content)
+		working = append(working, PromptElement{Component: section.Component, Content: content})
+		report.ComponentStats = append(report.ComponentStats, PromptComponentBudgetStat{
+			Component:     section.Component,
+			OriginalChars: len(original),
+			FinalChars:    len(content),
+		})
+	}
+
+	if profile.TotalChars <= 0 {
+		return filterEmptyPromptElements(working), report
+	}
+
+	working, report = trimNativePromptSectionsToTotalBudget(working, profile, report, true)
+	if renderedNativePromptChars(working) > profile.TotalChars {
+		working, report = trimNativePromptSectionsToTotalBudget(working, profile, report, false)
+	}
+	return filterEmptyPromptElements(working), report
+}
+
+func trimNativePromptSectionsToTotalBudget(sections []PromptElement, profile PromptBudgetProfile, report PromptBudgetReport, useFloor bool) ([]PromptElement, PromptBudgetReport) {
+	working := append([]PromptElement(nil), sections...)
+	excess := renderedNativePromptChars(working) - profile.TotalChars
+	if excess <= 0 {
+		report.FinalTotalChars = renderedNativePromptChars(working)
+		return filterEmptyPromptElements(working), report
+	}
+
+	for _, component := range profile.TrimPriorityLowToHigh {
+		for i := range working {
+			if working[i].Component != component || excess <= 0 {
+				continue
+			}
+			floor := 0
+			if useFloor {
+				if budget, ok := profile.ComponentCharBudgets[component]; ok && budget > 0 {
+					floor = minPromptChars(budget / 3)
+				}
+			}
+			if len(working[i].Content) <= floor {
+				continue
+			}
+
+			target := len(working[i].Content) - excess
+			if target < floor {
+				target = floor
+			}
+			trimmed := trimNativePromptSectionContent(component, working[i].Content, target)
+			reducedBy := len(working[i].Content) - len(trimmed)
+			working[i].Content = strings.TrimSpace(trimmed)
+			for idx := range report.ComponentStats {
+				if report.ComponentStats[idx].Component == component {
+					report.ComponentStats[idx].FinalChars = len(working[i].Content)
+					break
+				}
+			}
+			excess -= reducedBy
+		}
+	}
+
+	working = filterEmptyPromptElements(working)
+	report.FinalTotalChars = renderedNativePromptChars(working)
+	return working, report
+}
+
+func trimNativePromptSectionContent(component PromptComponent, content string, maxChars int) string {
+	content = strings.TrimSpace(content)
+	if maxChars <= 0 || len(content) <= maxChars {
+		return content
+	}
+	if maxChars < 32 {
+		return content[:maxChars]
+	}
+
+	switch component {
+	case ComponentFocusedContext, componentNativeAskAnchoredMRU:
+		return compactNativePromptSectionText(content, maxChars)
+	case ComponentHistory:
+		return trimPromptComponentContent(component, content, maxChars)
+	case componentNativeProgression, componentNativeToolResults:
+		return compactNativePromptText(content, maxChars)
+	default:
+		return trimPromptComponentContent(component, content, maxChars)
+	}
+}
+
+func filterEmptyPromptElements(elements []PromptElement) []PromptElement {
+	filtered := make([]PromptElement, 0, len(elements))
+	for _, el := range elements {
+		if strings.TrimSpace(el.Content) == "" {
+			continue
+		}
+		filtered = append(filtered, el)
+	}
+	return filtered
+}
+
+func renderedNativePromptChars(sections []PromptElement) int {
+	filtered := filterEmptyPromptElements(sections)
+	if len(filtered) == 0 {
+		return 0
+	}
+	total := 0
+	for _, section := range filtered {
+		total += len(section.Content)
+	}
+	total += (len(filtered) - 1) * len("\n\n")
+	return total
+}
+
+func renderNativePromptSections(sections []PromptElement) string {
+	filtered := filterEmptyPromptElements(sections)
+	parts := make([]string, 0, len(filtered))
+	for _, section := range filtered {
+		parts = append(parts, strings.TrimSpace(section.Content))
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+func buildNativeRepairDirective(last nativeToolResult) string {
+	if !strings.Contains(last.Result, "Retry instruction:") {
+		return ""
+	}
+	if last.Name == "native_tool_call" {
+		return "Repair directive: The last model output produced an invalid native tool call. Your next step should be to call exactly one valid tool using arguments that conform to the provided tool schema and repair guidance below. Do not summarize the error as a final answer unless correction is impossible."
+	}
+	if strings.Contains(last.Result, "Repair strategy: research_first") {
+		return fmt.Sprintf("Repair directive: The last tool call to %s failed because grounded schema or relation facts are still missing. Your next step should be to call list_stores first, prefer scoped stores:[...] for likely targets, reuse its schema/relations output as the source of truth, and only then return to %s if needed. Do not summarize the error as a final answer unless correction is impossible.", last.Name, last.Name)
+	}
+	return fmt.Sprintf("Repair directive: The last tool call to %s failed because its arguments were invalid. Your next step should be to call the same tool again with corrected arguments using the repair guidance below. Do not summarize the error as a final answer unless correction is impossible.", last.Name)
+}
+
+func buildNativeToolResultsSection(toolResults []nativeToolResult) string {
+	var sb strings.Builder
+	sb.WriteString("Tool results:\n")
+	for i, result := range toolResults {
+		keepExpanded := shouldRetainNativePromptBlob(i, len(toolResults))
+		sb.WriteString(fmt.Sprintf("Step %d Tool: %s\n", i+1, result.Name))
+		if len(toolResults) > 2 && !keepExpanded {
+			if summary := formatNativeToolResultSummary(result); summary != "" {
+				sb.WriteString(fmt.Sprintf("[Tool Summary]:\n%s\n\n", summary))
+				continue
+			}
+		}
+		if formattedArgs := formatNativePromptArgs(result.Args, keepExpanded); formattedArgs != "" {
+			sb.WriteString(fmt.Sprintf("[Tool Args]:\n%s\n", formattedArgs))
+		}
+		sb.WriteString(fmt.Sprintf("[System Tool Response]:\n%s\n\n", formatNativePromptToolResponse(result.Result, keepExpanded)))
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+func firstTrimmedPromptComponent(profile PromptBudgetProfile, report PromptBudgetReport) PromptComponent {
+	for _, component := range profile.TrimPriorityLowToHigh {
+		for _, stat := range report.ComponentStats {
+			if stat.Component == component && stat.Trimmed() {
+				return component
+			}
+		}
+	}
+	return ""
+}
+
+func formatNativePromptArgs(args map[string]any, keepExpanded bool) string {
 	if len(args) == 0 {
 		return ""
 	}
-	bytes, err := json.MarshalIndent(args, "", "  ")
+	payload := compactNativePromptArgs(args)
+	if keepExpanded {
+		payload = expandNativePromptArgs(args)
+	}
+	bytes, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(bytes)
+}
+
+func formatNativeToolResultSummary(result nativeToolResult) string {
+	summary := make(map[string]any, 3)
+	if len(result.Args) > 0 {
+		summary["args"] = compactNativePromptArgs(result.Args)
+	}
+	if response := formatNativePromptToolResponse(result.Result, false); response != "" {
+		summary["response"] = response
+	}
+	if result.Hint != nil {
+		if metadata := buildNativeProgressionMetadata(result); len(metadata) > 0 {
+			summary["progression"] = metadata
+		}
+	}
+	if len(summary) == 0 {
+		return ""
+	}
+	bytes, err := json.MarshalIndent(summary, "", "  ")
 	if err != nil {
 		return ""
 	}
@@ -433,14 +688,23 @@ func formatNativePromptArgs(args map[string]any) string {
 
 func formatNativeProgressionHistory(toolResults []nativeToolResult) string {
 	entries := make([]map[string]any, 0, len(toolResults))
+	anchorHash := ""
 	for i, result := range toolResults {
+		keepExpanded := shouldRetainNativePromptBlob(i, len(toolResults))
+		ingredients, nextAnchorHash := buildNativeProgressionIngredients(result, i, len(toolResults), anchorHash)
+		if anchorHash == "" && nextAnchorHash != "" {
+			anchorHash = nextAnchorHash
+		}
 		entry := map[string]any{
 			"step":           i + 1,
 			"tool":           result.Name,
-			"ingredients":    buildNativeProgressionIngredients(result),
-			"generated_call": result.Args,
-			"result":         strings.TrimSpace(result.Result),
+			"ingredients":    ingredients,
+			"generated_call": compactNativePromptArgs(result.Args),
+			"result":         formatNativePromptToolResponse(result.Result, keepExpanded),
 			"progression":    buildNativeProgressionMetadata(result),
+		}
+		if keepExpanded {
+			entry["generated_call"] = expandNativePromptArgs(result.Args)
 		}
 		entries = append(entries, entry)
 	}
@@ -451,19 +715,524 @@ func formatNativeProgressionHistory(toolResults []nativeToolResult) string {
 	return string(bytes) + "\n"
 }
 
-func buildNativeProgressionIngredients(result nativeToolResult) map[string]any {
+func shouldRetainNativePromptBlob(index int, total int) bool {
+	if total <= 2 {
+		return false
+	}
+	return index == 0 || index == total-1
+}
+
+func compactNativePromptArgs(args map[string]any) map[string]any {
+	if len(args) == 0 {
+		return nil
+	}
+	compacted := make(map[string]any, len(args))
+	for key, value := range args {
+		if key == "script" {
+			compacted["script_summary"] = summarizeNativeScriptArg(value)
+			continue
+		}
+		compacted[key] = compactNativePromptValue(value)
+	}
+	return compacted
+}
+
+func expandNativePromptArgs(args map[string]any) map[string]any {
+	if len(args) == 0 {
+		return nil
+	}
+	bytes, err := json.Marshal(args)
+	if err != nil {
+		return compactNativePromptArgs(args)
+	}
+	var expanded map[string]any
+	if err := json.Unmarshal(bytes, &expanded); err != nil {
+		return compactNativePromptArgs(args)
+	}
+	return expanded
+}
+
+func compactNativePromptValue(value any) any {
+	switch typed := value.(type) {
+	case string:
+		return compactNativePromptText(typed, 240)
+	case []string:
+		if len(typed) <= 8 {
+			return typed
+		}
+		items := append([]string(nil), typed[:8]...)
+		items = append(items, fmt.Sprintf("... (+%d more)", len(typed)-8))
+		return items
+	case []any:
+		if len(typed) <= 8 {
+			items := make([]any, 0, len(typed))
+			for _, item := range typed {
+				items = append(items, compactNativePromptValue(item))
+			}
+			return items
+		}
+		items := make([]any, 0, 9)
+		for _, item := range typed[:8] {
+			items = append(items, compactNativePromptValue(item))
+		}
+		items = append(items, fmt.Sprintf("... (+%d more)", len(typed)-8))
+		return items
+	case map[string]any:
+		mapped := make(map[string]any, len(typed))
+		for key, item := range typed {
+			mapped[key] = compactNativePromptValue(item)
+		}
+		return mapped
+	default:
+		return value
+	}
+}
+
+func summarizeNativeScriptArg(raw any) map[string]any {
+	steps := coerceNativeScriptSteps(raw)
+	if len(steps) == 0 {
+		return map[string]any{"step_count": 0}
+	}
+	ops := make([]string, 0, len(steps))
+	digests := make([]string, 0, len(steps))
+	for i, step := range steps {
+		op := strings.TrimSpace(firstNativeString(step, "op", "command"))
+		if op == "" {
+			op = fmt.Sprintf("step_%d", i+1)
+		}
+		ops = append(ops, op)
+		digests = append(digests, summarizeNativeScriptStep(i+1, step))
+	}
+	return map[string]any{
+		"step_count": len(steps),
+		"ops":        ops,
+		"steps":      digests,
+	}
+}
+
+func coerceNativeScriptSteps(raw any) []map[string]any {
+	switch typed := raw.(type) {
+	case []any:
+		steps := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			if step, ok := item.(map[string]any); ok {
+				steps = append(steps, step)
+			}
+		}
+		return steps
+	case []map[string]any:
+		return typed
+	case []ScriptInstruction:
+		steps := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			step := map[string]any{"op": item.Op}
+			if item.Args != nil {
+				step["args"] = item.Args
+			}
+			if item.InputVar != "" {
+				step["input_var"] = item.InputVar
+			}
+			if item.ResultVar != "" {
+				step["result_var"] = item.ResultVar
+			}
+			steps = append(steps, step)
+		}
+		return steps
+	default:
+		var steps []map[string]any
+		bytes, err := json.Marshal(raw)
+		if err != nil {
+			return nil
+		}
+		if err := json.Unmarshal(bytes, &steps); err != nil {
+			return nil
+		}
+		return steps
+	}
+}
+
+func summarizeNativeScriptStep(index int, step map[string]any) string {
+	op := strings.TrimSpace(firstNativeString(step, "op", "command"))
+	parts := []string{fmt.Sprintf("%d. %s", index, op)}
+	if args, _ := step["args"].(map[string]any); len(args) > 0 {
+		switch strings.ToLower(op) {
+		case "begin_tx":
+			parts = append(parts, summarizeBeginTxArgs(args))
+		case "open_store":
+			parts = append(parts, summarizeOpenStoreArgs(args))
+		case "filter":
+			parts = append(parts, summarizeFilterArgs(args))
+		case "join", "join_right":
+			parts = append(parts, summarizeJoinArgs(args))
+		case "project":
+			parts = append(parts, summarizeProjectArgs(args))
+		case "limit":
+			parts = append(parts, summarizeLimitArgs(args))
+		case "return":
+			parts = append(parts, summarizeReturnArgs(args))
+		default:
+			parts = append(parts, summarizeGenericArgs(args))
+		}
+	}
+	if inputVar := strings.TrimSpace(firstNativeString(step, "input_var")); inputVar != "" {
+		parts = append(parts, "input="+inputVar)
+	}
+	if resultVar := strings.TrimSpace(firstNativeString(step, "result_var")); resultVar != "" {
+		parts = append(parts, "-> "+resultVar)
+	}
+	return compactNativePromptText(strings.Join(filterEmptyStrings(parts), " | "), 180)
+}
+
+func summarizeBeginTxArgs(args map[string]any) string {
+	parts := make([]string, 0, 2)
+	if mode := strings.TrimSpace(firstNativeString(args, "mode")); mode != "" {
+		parts = append(parts, "mode="+mode)
+	}
+	if database := strings.TrimSpace(firstNativeString(args, "database")); database != "" {
+		parts = append(parts, "db="+database)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func summarizeOpenStoreArgs(args map[string]any) string {
+	parts := make([]string, 0, 2)
+	if name := strings.TrimSpace(firstNativeString(args, "name", "store", "store_name")); name != "" {
+		parts = append(parts, "store="+name)
+	}
+	if tx := strings.TrimSpace(firstNativeString(args, "transaction")); tx != "" {
+		parts = append(parts, "tx="+tx)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func summarizeFilterArgs(args map[string]any) string {
+	if condition, ok := args["condition"].(map[string]any); ok && len(condition) > 0 {
+		return "condition=" + summarizeConditionMap(condition)
+	}
+	return summarizeGenericArgs(args)
+}
+
+func summarizeJoinArgs(args map[string]any) string {
+	parts := make([]string, 0, 3)
+	if store := strings.TrimSpace(firstNativeString(args, "store", "with", "right_store")); store != "" {
+		parts = append(parts, "store="+store)
+	}
+	if on, ok := args["on"].(map[string]any); ok && len(on) > 0 {
+		parts = append(parts, "on="+summarizeJoinOnMap(on))
+	}
+	if joinType := strings.TrimSpace(firstNativeString(args, "type")); joinType != "" {
+		parts = append(parts, "type="+joinType)
+	}
+	return strings.Join(parts, ", ")
+}
+
+func summarizeProjectArgs(args map[string]any) string {
+	fields, ok := args["fields"]
+	if !ok {
+		return summarizeGenericArgs(args)
+	}
+	return "fields=" + compactNativePromptText(fmt.Sprintf("%v", fields), 80)
+}
+
+func summarizeLimitArgs(args map[string]any) string {
+	if limit, ok := args["count"]; ok {
+		return fmt.Sprintf("count=%v", limit)
+	}
+	if limit, ok := args["limit"]; ok {
+		return fmt.Sprintf("limit=%v", limit)
+	}
+	return summarizeGenericArgs(args)
+}
+
+func summarizeReturnArgs(args map[string]any) string {
+	if value := strings.TrimSpace(firstNativeString(args, "value")); value != "" {
+		return "value=" + value
+	}
+	return summarizeGenericArgs(args)
+}
+
+func summarizeGenericArgs(args map[string]any) string {
+	parts := make([]string, 0, len(args))
+	keys := make([]string, 0, len(args))
+	for key := range args {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", key, compactNativePromptValue(args[key])))
+	}
+	return compactNativePromptText(strings.Join(parts, ", "), 120)
+}
+
+func summarizeConditionMap(condition map[string]any) string {
+	keys := make([]string, 0, len(condition))
+	for key := range condition {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s:%s", key, summarizeConditionValue(condition[key])))
+	}
+	return compactNativePromptText(strings.Join(parts, "; "), 120)
+}
+
+func summarizeConditionValue(value any) string {
+	if mapped, ok := value.(map[string]any); ok && len(mapped) > 0 {
+		keys := make([]string, 0, len(mapped))
+		for key := range mapped {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		parts := make([]string, 0, len(keys))
+		for _, key := range keys {
+			parts = append(parts, fmt.Sprintf("%s=%v", key, mapped[key]))
+		}
+		return strings.Join(parts, ",")
+	}
+	return fmt.Sprintf("%v", value)
+}
+
+func summarizeJoinOnMap(on map[string]any) string {
+	keys := make([]string, 0, len(on))
+	for key := range on {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s->%v", key, on[key]))
+	}
+	return compactNativePromptText(strings.Join(parts, "; "), 100)
+}
+
+func formatNativePromptToolResponse(result string, keepExpanded bool) string {
+	trimmed := strings.TrimSpace(result)
+	if trimmed == "" {
+		return ""
+	}
+	if keepExpanded {
+		return trimmed
+	}
+	if strings.Contains(trimmed, "Retry instruction:") {
+		lines := strings.Split(trimmed, "\n")
+		kept := make([]string, 0, len(lines))
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" {
+				continue
+			}
+			if len(kept) == 0 || strings.HasPrefix(line, "Tool:") || strings.HasPrefix(line, "Repair ") || strings.HasPrefix(line, "Research ") || strings.HasPrefix(line, "Retry instruction:") || strings.HasPrefix(line, "Suggested fix example:") {
+				kept = append(kept, compactNativePromptText(line, 260))
+			}
+		}
+		return strings.Join(kept, "\n")
+	}
+	lines := strings.Split(trimmed, "\n")
+	if len(lines) <= 6 && len(trimmed) <= 1200 {
+		return trimmed
+	}
+	kept := make([]string, 0, 7)
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		kept = append(kept, compactNativePromptText(line, 220))
+		if len(kept) == 6 {
+			break
+		}
+	}
+	remaining := len(lines) - len(kept)
+	if remaining > 0 {
+		kept = append(kept, fmt.Sprintf("... (+%d more lines)", remaining))
+	}
+	return strings.Join(kept, "\n")
+}
+
+func compactNativePromptText(text string, maxChars int) string {
+	trimmed := strings.TrimSpace(text)
+	if maxChars <= 0 || len(trimmed) <= maxChars {
+		return trimmed
+	}
+	head := (maxChars * 2) / 3
+	tail := maxChars - head - len("\n... [truncated] ...\n")
+	if tail < 32 {
+		tail = 32
+		head = maxChars - tail - len("\n... [truncated] ...\n")
+		if head < 32 {
+			head = maxChars / 2
+			tail = maxChars / 2
+		}
+	}
+	return trimmed[:head] + "\n... [truncated] ...\n" + trimmed[len(trimmed)-tail:]
+}
+
+func compactNativePromptSectionText(text string, maxChars int) string {
+	trimmed := strings.TrimSpace(text)
+	if maxChars <= 0 || len(trimmed) <= maxChars {
+		return trimmed
+	}
+	lines := strings.Split(trimmed, "\n")
+	selected := make([]string, 0, len(lines))
+	contentInSection := 0
+	for _, line := range lines {
+		line = strings.TrimRight(line, " \t")
+		plain := strings.TrimSpace(line)
+		if plain == "" {
+			continue
+		}
+		if isNativePromptSectionHeader(plain) {
+			selected = append(selected, plain)
+			contentInSection = 0
+			continue
+		}
+		if contentInSection < 4 {
+			selected = append(selected, plain)
+			contentInSection++
+		}
+	}
+	if len(selected) == 0 {
+		return compactNativePromptText(trimmed, maxChars)
+	}
+	for len(selected) > 0 {
+		joined := strings.Join(selected, "\n")
+		if len(joined) <= maxChars {
+			return joined
+		}
+		removeIdx := lastRemovableNativePromptLine(selected)
+		if removeIdx == -1 {
+			break
+		}
+		selected = append(selected[:removeIdx], selected[removeIdx+1:]...)
+	}
+	return compactNativePromptText(strings.Join(selected, "\n"), maxChars)
+}
+
+func isNativePromptSectionHeader(line string) bool {
+	if line == "" {
+		return false
+	}
+	if strings.HasPrefix(line, "#") || strings.HasPrefix(line, "[") {
+		return true
+	}
+	if strings.HasSuffix(line, ":") {
+		return true
+	}
+	if strings.HasPrefix(line, "-") || strings.HasPrefix(line, "*") {
+		return false
+	}
+	return strings.ToUpper(line) == line && len(line) <= 80
+}
+
+func lastRemovableNativePromptLine(lines []string) int {
+	protected := make(map[int]bool, len(lines))
+	awaitingFirstContent := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if isNativePromptSectionHeader(trimmed) {
+			protected[i] = true
+			awaitingFirstContent = true
+			continue
+		}
+		if awaitingFirstContent {
+			protected[i] = true
+			awaitingFirstContent = false
+		}
+	}
+	for i := len(lines) - 1; i >= 0; i-- {
+		if !protected[i] {
+			return i
+		}
+	}
+	return -1
+}
+
+func firstNativeString(source map[string]any, keys ...string) string {
+	for _, key := range keys {
+		if value, ok := source[key].(string); ok && strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func filterEmptyStrings(values []string) []string {
+	filtered := values[:0]
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			filtered = append(filtered, value)
+		}
+	}
+	return filtered
+}
+
+func buildNativeProgressionIngredients(result nativeToolResult, index int, total int, anchorHash string) (map[string]any, string) {
+	envelope := buildNativeIngredientEnvelope(result)
+	envelopeHash := hashNativeIngredientEnvelope(envelope)
+	keepAnchorOutsideHistory := index == 0 && shouldRetainNativePromptBlob(index, total)
+	if keepAnchorOutsideHistory {
+		payload := map[string]any{
+			"anchor_hash":          envelopeHash,
+			"anchor_rendered":      false,
+			"anchor_render_reason": "covered_by_retained_context",
+		}
+		return payload, envelopeHash
+	}
+
 	ingredients := map[string]any{
+		"tool_info":         result.Name,
+		"envelope_hash":     envelopeHash,
+		"envelope_rendered": true,
+	}
+	if anchorHash != "" && index > 0 {
+		ingredients["anchor_ref"] = anchorHash
+	}
+	if anchorHash != "" && index < total-1 && envelopeHash == anchorHash {
+		ingredients["envelope_rendered"] = false
+		ingredients["render_suppressed_reason"] = "duplicate_of_anchor"
+		return ingredients, anchorHash
+	}
+	if len(envelope) > 0 {
+		ingredients["envelope"] = envelope
+	}
+	return ingredients, anchorHash
+}
+
+func buildNativeIngredientEnvelope(result nativeToolResult) map[string]any {
+	envelope := map[string]any{
 		"tool_info": result.Name,
 	}
 	if !strings.Contains(result.Result, "Retry instruction:") {
 		if facts := summarizeSuccessfulToolResult(result); len(facts) > 0 {
-			ingredients["confirmed_facts"] = facts
+			envelope["confirmed_facts"] = facts
+		}
+		if result.Name == "list_stores" {
+			if schemaSnapshot := extractListStoresSchemaSnapshot(result.Result); len(schemaSnapshot) > 0 {
+				envelope["schema_snapshot"] = schemaSnapshot
+			}
 		}
 	}
 	if repairStrategy := extractRepairStrategy(result.Result); repairStrategy != "" {
-		ingredients["repair_strategy"] = repairStrategy
+		envelope["repair_strategy"] = repairStrategy
 	}
-	return ingredients
+	return envelope
+}
+
+func hashNativeIngredientEnvelope(envelope map[string]any) string {
+	if len(envelope) == 0 {
+		return ""
+	}
+	bytes, err := json.Marshal(envelope)
+	if err != nil {
+		return ""
+	}
+	return "ing_env_" + shortNativeIngredientHash(string(bytes))
+}
+
+func shortNativeIngredientHash(value string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(value)))
+	return hex.EncodeToString(sum[:6])
 }
 
 func buildNativeProgressionMetadata(result nativeToolResult) map[string]any {
@@ -676,9 +1445,73 @@ func summarizeNextRepairNeed(result nativeToolResult) string {
 		return "Return exactly one valid tool call and avoid malformed function-call output."
 	}
 	if strings.Contains(result.Result, "Repair strategy: research_first") {
-		return "Research missing schema or relation facts with list_stores before retrying execute_script."
+		return "Research missing schema or relation facts with scoped list_stores calls before retrying execute_script."
 	}
 	return fmt.Sprintf("Repair %s without restarting the whole plan or broadening scope.", result.Name)
+}
+
+func inferLikelyResearchStores(args map[string]any) []string {
+	if len(args) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	addStore := func(raw any) {
+		name, ok := raw.(string)
+		if !ok {
+			return
+		}
+		name = strings.TrimSpace(name)
+		if name == "" || strings.HasPrefix(name, "@") || strings.HasPrefix(name, "$") {
+			return
+		}
+		seen[name] = struct{}{}
+	}
+	if stores, ok := args["stores"].([]any); ok {
+		for _, store := range stores {
+			addStore(store)
+		}
+	}
+	addStore(args["store"])
+	if script, ok := args["script"].([]any); ok {
+		for _, stepRaw := range script {
+			step, ok := stepRaw.(map[string]any)
+			if !ok {
+				continue
+			}
+			stepArgs, _ := step["args"].(map[string]any)
+			if stepArgs == nil {
+				continue
+			}
+			addStore(stepArgs["store"])
+			addStore(stepArgs["name"])
+			if stores, ok := stepArgs["stores"].([]any); ok {
+				for _, store := range stores {
+					addStore(store)
+				}
+			}
+		}
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	stores := make([]string, 0, len(seen))
+	for store := range seen {
+		stores = append(stores, store)
+	}
+	sort.Strings(stores)
+	return stores
+}
+
+func formatScopedListStoresHint(args map[string]any) string {
+	stores := inferLikelyResearchStores(args)
+	if len(stores) == 0 {
+		return " and prefer scoped args like stores:[\"users\",\"orders\"] when likely targets are already known"
+	}
+	quoted := make([]string, 0, len(stores))
+	for _, store := range stores {
+		quoted = append(quoted, fmt.Sprintf("%q", store))
+	}
+	return fmt.Sprintf(" using stores:[%s]", strings.Join(quoted, ","))
 }
 
 func summarizeAttemptedArgs(resultText string) string {
@@ -1134,6 +1967,94 @@ func extractListStoresFacts(resultText string) []string {
 	return facts
 }
 
+func extractListStoresSchemaSnapshot(resultText string) []map[string]any {
+	trimmed := strings.TrimSpace(resultText)
+	if trimmed == "" {
+		return nil
+	}
+	lines := strings.Split(trimmed, "\n")
+	snapshot := make([]map[string]any, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.EqualFold(line, "Stores:") {
+			continue
+		}
+		entry := extractListStoresSchemaLineSnapshot(line)
+		if len(entry) == 0 {
+			continue
+		}
+		snapshot = append(snapshot, entry)
+	}
+	return snapshot
+}
+
+func extractListStoresSchemaLineSnapshot(line string) map[string]any {
+	idx := strings.Index(line, " schema=")
+	if idx <= 0 {
+		return nil
+	}
+	storeName := strings.TrimSpace(line[:idx])
+	remainder := strings.TrimSpace(line[idx+len(" schema="):])
+	if storeName == "" || remainder == "" {
+		return nil
+	}
+	entry := map[string]any{"store": storeName}
+	relationsIdx := strings.Index(remainder, " relations=")
+	schemaPart := remainder
+	if relationsIdx >= 0 {
+		schemaPart = strings.TrimSpace(remainder[:relationsIdx])
+		relationsPart := strings.TrimSpace(remainder[relationsIdx+len(" relations="):])
+		if relations := parseListStoresRelations(relationsPart); len(relations) > 0 {
+			entry["relations"] = relations
+		}
+	}
+	if fields := parseListStoresFields(schemaPart); len(fields) > 0 {
+		entry["fields"] = fields
+	}
+	return entry
+}
+
+func parseListStoresFields(schemaPart string) []map[string]string {
+	fieldsRaw := strings.Split(strings.TrimSpace(schemaPart), ",")
+	fields := make([]map[string]string, 0, len(fieldsRaw))
+	for _, rawField := range fieldsRaw {
+		rawField = strings.TrimSpace(rawField)
+		if rawField == "" {
+			continue
+		}
+		name, fieldType, ok := strings.Cut(rawField, ":")
+		if !ok {
+			continue
+		}
+		name = strings.TrimSpace(name)
+		fieldType = strings.TrimSpace(fieldType)
+		if name == "" || fieldType == "" {
+			continue
+		}
+		fields = append(fields, map[string]string{"name": name, "type": fieldType})
+	}
+	return fields
+}
+
+func parseListStoresRelations(relationsPart string) []string {
+	relationsPart = strings.TrimSpace(relationsPart)
+	relationsPart = strings.TrimPrefix(relationsPart, "[")
+	relationsPart = strings.TrimSuffix(relationsPart, "]")
+	if relationsPart == "" {
+		return nil
+	}
+	relationItems := strings.Split(relationsPart, ",")
+	relations := make([]string, 0, len(relationItems))
+	for _, relation := range relationItems {
+		relation = strings.TrimSpace(relation)
+		if relation == "" {
+			continue
+		}
+		relations = append(relations, relation)
+	}
+	return relations
+}
+
 func formatRecoverableToolError(repair pendingToolRepair, args map[string]any, err error) string {
 	argsJSON := "{}"
 	if len(args) > 0 {
@@ -1167,7 +2088,7 @@ func formatRecoverableToolError(repair pendingToolRepair, args map[string]any, e
 		if researchTool == "" {
 			researchTool = "list_stores"
 		}
-		retryInstruction = fmt.Sprintf("Retry instruction: Call %s first to research the missing schema or relation facts, then return to %s with corrected grounded arguments. Preserve valid arguments and do not restart the whole plan.", researchTool, repair.ToolName)
+		retryInstruction = fmt.Sprintf("Retry instruction: Call %s first%s to research the missing schema or relation facts, then return to %s with corrected grounded arguments. Preserve valid arguments and do not restart the whole plan.", researchTool, formatScopedListStoresHint(args), repair.ToolName)
 	}
 
 	return fmt.Sprintf(
@@ -1196,7 +2117,7 @@ func formatPendingRepairReminder(repair pendingToolRepair, attemptedToolName str
 			allowedTool = "list_stores"
 		}
 		return fmt.Sprintf(
-			"Repair required before continuing. The previous call to %s failed with recoverable argument errors and needs grounded research first. The model attempted %s instead. Retry instruction: Call %s next, use its schema/relations output as source of truth, then return to %s. Do not switch to unrelated tools or provide a final answer until the research attempt is made.",
+			"Repair required before continuing. The previous call to %s failed with recoverable argument errors and needs grounded research first. The model attempted %s instead. Retry instruction: Call %s next, preferably with scoped stores:[...] for the likely targets, use its schema/relations output as source of truth, then return to %s. Do not switch to unrelated tools or provide a final answer until the research attempt is made.",
 			repair.ToolName,
 			attemptedToolName,
 			allowedTool,

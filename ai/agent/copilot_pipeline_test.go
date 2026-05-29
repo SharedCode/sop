@@ -25,6 +25,94 @@ func (m *pipelineFakeGen) Generate(ctx context.Context, prompt string, opts ai.G
 func (m *pipelineFakeGen) Name() string                                 { return "fake_pipeline" }
 func (m *pipelineFakeGen) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
 
+type retryMetaAskMockGen struct {
+	CapturedPrompt string
+}
+
+func (m *retryMetaAskMockGen) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.CapturedPrompt = prompt
+	return ai.GenOutput{Text: "Retried previous ask."}, nil
+}
+
+func (m *retryMetaAskMockGen) Name() string                                 { return "retry_meta_ask_mock" }
+func (m *retryMetaAskMockGen) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
+
+func TestRewriteRetryMetaAsk_UsesLatestAskOutcomeQuery(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.MRU = []MRUItem{{
+		Category: askOutcomeMRUCategoryQuery,
+		Context:  "- Last user ask: Find orders for users with first_name 'John' with total amount > 500",
+		Source:   MRUSourceAskOutcome,
+		Scope:    MRUScopeSession,
+	}}
+	payload := &ai.SessionPayload{Variables: make(map[string]any)}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+
+	rewritten, ok := ag.rewriteRetryMetaAsk(ctx, "Can we retry the same ask?")
+	if !ok {
+		t.Fatalf("expected retry meta ask to rewrite")
+	}
+	if rewritten != "Find orders for users with first_name 'John' with total amount > 500" {
+		t.Fatalf("unexpected rewritten query: %q", rewritten)
+	}
+	if payload.CurrentUserQuery != rewritten {
+		t.Fatalf("expected payload current query to update, got %q", payload.CurrentUserQuery)
+	}
+	if payload.Variables["MetaAskOriginalQuery"] != "Can we retry the same ask?" {
+		t.Fatalf("expected original meta ask to be preserved, got %#v", payload.Variables["MetaAskOriginalQuery"])
+	}
+}
+
+func TestRewriteRetryMetaAsk_IgnoresNonRetryQuery(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ctx := context.Background()
+
+	rewritten, ok := ag.rewriteRetryMetaAsk(ctx, "Show me users")
+	if ok {
+		t.Fatalf("did not expect plain query to rewrite, got %q", rewritten)
+	}
+	if rewritten != "Show me users" {
+		t.Fatalf("expected plain query to remain unchanged, got %q", rewritten)
+	}
+}
+
+func TestCopilotAsk_RewritesRetryMetaAskBeforeRoutingAndEngine(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.Memory = NewShortTermMemory()
+	ag.service.session.MRU = []MRUItem{{
+		Category: askOutcomeMRUCategoryQuery,
+		Context:  "- Last user ask: Find John orders",
+		Source:   MRUSourceAskOutcome,
+		Scope:    MRUScopeSession,
+	}}
+	gen := &retryMetaAskMockGen{}
+	ag.SetGenerator(gen)
+	payload := &ai.SessionPayload{Variables: map[string]any{
+		"RoutingState": &TaskContextClassification{Entity: "Omni", Domain: StoresDomain, DBArtifacts: []string{"users"}, StoresArtifacts: []string{"users"}, Layers: []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}}},
+	}}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+
+	resp, err := ag.Ask(ctx, "Can we retry the same ask?")
+	if err != nil {
+		t.Fatalf("Ask failed: %v", err)
+	}
+	if resp != "Retried previous ask." {
+		t.Fatalf("unexpected response: %q", resp)
+	}
+	if !strings.Contains(gen.CapturedPrompt, "User Query: Find John orders") {
+		t.Fatalf("expected native loop prompt to use rewritten query, got: %s", gen.CapturedPrompt)
+	}
+	if strings.Contains(gen.CapturedPrompt, "Can we retry the same ask?") {
+		t.Fatalf("did not expect meta ask to reach native loop prompt, got: %s", gen.CapturedPrompt)
+	}
+	if payload.CurrentUserQuery != "Find John orders" {
+		t.Fatalf("expected payload current query to match rewritten ask, got %q", payload.CurrentUserQuery)
+	}
+}
+
 func TestCopilotPipeline_Phases(t *testing.T) {
 	ctx := context.Background()
 
@@ -275,6 +363,188 @@ func TestPromptBudgetProfile_UsesRoutingGate(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPrompt_UsesLeanAssemblyForGroundedStoresAsk(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}, Memory: NewShortTermMemory()}}
+	ag.markMRUCategoryWithSource("PERSONA_omni", strings.Repeat("persona rule ", 400), MRUSourcePersona)
+	ag.markMRUCategoryWithSource(playbookMRUCategory("sop"), strings.Repeat("playbook context ", 200), MRUSourcePlaybook)
+
+	prompt := ag.buildSystemPrompt(ctx, "Find orders for users named John", TaskContextClassification{
+		Domain:      StoresDomain,
+		DBArtifacts: []string{"users", "orders"},
+		Layers:      []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}},
+	})
+
+	var elements []PromptElement
+	if err := json.Unmarshal([]byte(prompt), &elements); err != nil {
+		t.Fatalf("expected buildSystemPrompt to return JSON prompt elements: %v\nPrompt: %s", err, prompt)
+	}
+
+	personaChars := 0
+	hasSemantic := false
+	hasPlaybooks := false
+	hasFocused := false
+	for _, element := range elements {
+		switch element.Component {
+		case ComponentPersona:
+			personaChars = len(element.Content)
+		case ComponentSemanticMemory:
+			hasSemantic = true
+		case ComponentPlaybooks:
+			hasPlaybooks = true
+		case ComponentFocusedContext:
+			hasFocused = strings.Contains(element.Content, "Domain: Stores")
+		}
+	}
+	if personaChars == 0 || personaChars > 920 {
+		t.Fatalf("expected lean assembly to cap persona content, got %d chars", personaChars)
+	}
+	if hasSemantic {
+		t.Fatalf("expected lean grounded Stores assembly to omit semantic memory, got %+v", elements)
+	}
+	if hasPlaybooks {
+		t.Fatalf("expected lean grounded Stores assembly to omit playbooks, got %+v", elements)
+	}
+	if !hasFocused {
+		t.Fatalf("expected focused execution context to remain present, got %+v", elements)
+	}
+	if !strings.Contains(prompt, "Find orders for users named John") {
+		t.Fatalf("expected user query to remain intact: %s", prompt)
+	}
+}
+
+func TestBuildSystemPrompt_SkipsSOPPlaybooksWhenOmniPersonaComesFromSOPKB(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	kb, err := sysDB.OpenKnowledgeBase(ctx, ai.DefaultKBName, tx, nil, nil, false)
+	if err != nil {
+		t.Fatalf("open kb: %v", err)
+	}
+	if err := kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{SystemPrompt: "You are Omni from SOP KB."}); err != nil {
+		t.Fatalf("set config: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit tx: %v", err)
+	}
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}, Memory: NewShortTermMemory()}}
+	ag.markMRUCategoryWithSource(playbookMRUCategory("sop"), "Retrieved Semantics:\n- Context (Score: 1.00): SOP playbook context", MRUSourcePlaybook)
+
+	prompt := ag.buildSystemPrompt(ctx, "Explain SOP architecture", TaskContextClassification{
+		Domain: StoresDomain,
+		Layers: []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}},
+	})
+
+	var elements []PromptElement
+	if err := json.Unmarshal([]byte(prompt), &elements); err != nil {
+		t.Fatalf("expected buildSystemPrompt to return JSON prompt elements: %v\nPrompt: %s", err, prompt)
+	}
+	hasPlaybooks := false
+	hasPersona := false
+	for _, element := range elements {
+		if element.Component == ComponentPlaybooks {
+			hasPlaybooks = true
+		}
+		if element.Component == ComponentPersona && strings.Contains(element.Content, "You are Omni from SOP KB.") {
+			hasPersona = true
+		}
+	}
+	if !hasPersona {
+		t.Fatalf("expected SOP KB persona to be loaded, got %+v", elements)
+	}
+	if hasPlaybooks {
+		t.Fatalf("expected SOP playbooks to be skipped when persona already comes from SOP KB, got %+v", elements)
+	}
+}
+
+func TestBuildSystemPrompt_DoesNotUseSelectedKBPersonaForOmni(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("begin tx: %v", err)
+	}
+	sopKB, err := sysDB.OpenKnowledgeBase(ctx, ai.DefaultKBName, tx, nil, nil, false)
+	if err != nil {
+		t.Fatalf("open sop kb: %v", err)
+	}
+	if err := sopKB.SetConfig(ctx, &memory.KnowledgeBaseConfig{SystemPrompt: "You are Omni from SOP KB."}); err != nil {
+		t.Fatalf("set sop config: %v", err)
+	}
+	avatarKB, err := sysDB.OpenKnowledgeBase(ctx, "legal_kb", tx, nil, nil, false)
+	if err != nil {
+		t.Fatalf("open avatar kb: %v", err)
+	}
+	if err := avatarKB.SetConfig(ctx, &memory.KnowledgeBaseConfig{SystemPrompt: "You are the Legal Avatar."}); err != nil {
+		t.Fatalf("set avatar config: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit tx: %v", err)
+	}
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}, Memory: NewShortTermMemory()}}
+	ag.Memory.AgentID = "legal_kb"
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{
+		CurrentDB: SystemDBName,
+		SelectedKBs: []ai.ArtifactReference{{
+			Name:         "legal_kb",
+			Type:         ai.ArtifactTypeSpace,
+			DatabaseName: SystemDBName,
+		}},
+	})
+
+	prompt := ag.buildSystemPrompt(ctx, "Explain the platform", TaskContextClassification{Domain: StoresDomain})
+
+	var elements []PromptElement
+	if err := json.Unmarshal([]byte(prompt), &elements); err != nil {
+		t.Fatalf("expected buildSystemPrompt to return JSON prompt elements: %v\nPrompt: %s", err, prompt)
+	}
+	personaText := ""
+	for _, element := range elements {
+		if element.Component == ComponentPersona {
+			personaText = element.Content
+			break
+		}
+	}
+	if !strings.Contains(personaText, "You are Omni from SOP KB.") {
+		t.Fatalf("expected Omni persona from SOP KB, got %q", personaText)
+	}
+	if strings.Contains(personaText, "You are the Legal Avatar.") {
+		t.Fatalf("expected selected KB persona not to override Omni, got %q", personaText)
+	}
+}
+
+func TestPromptBudgetProfile_UsesLeanStoresAssembly(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	profile := ag.promptBudgetProfile(TaskContextClassification{
+		Domain:      StoresDomain,
+		DBArtifacts: []string{"users", "orders"},
+		Layers:      []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}},
+	})
+
+	if profile.ComponentCharBudgets[ComponentPersona] != 900 {
+		t.Fatalf("expected lean stores persona budget, got %d", profile.ComponentCharBudgets[ComponentPersona])
+	}
+	if profile.ComponentCharBudgets[ComponentSemanticMemory] != 0 {
+		t.Fatalf("expected lean stores semantic memory budget 0, got %d", profile.ComponentCharBudgets[ComponentSemanticMemory])
+	}
+	if profile.ComponentCharBudgets[ComponentPlaybooks] != 0 {
+		t.Fatalf("expected lean stores playbooks budget 0, got %d", profile.ComponentCharBudgets[ComponentPlaybooks])
+	}
+	if profile.ComponentCharBudgets[ComponentFocusedContext] <= profile.ComponentCharBudgets[ComponentSystemTools] {
+		t.Fatalf("expected focused context to outrank system tools in lean stores budget, got focused=%d tools=%d", profile.ComponentCharBudgets[ComponentFocusedContext], profile.ComponentCharBudgets[ComponentSystemTools])
+	}
+}
+
 func TestBuildSystemPrompt_IncludesWorkflowRecipesComponent(t *testing.T) {
 	ctx := context.Background()
 	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
@@ -311,6 +581,9 @@ func TestBuildSystemPrompt_IncludesWorkflowRecipesComponent(t *testing.T) {
 	}
 	if !strings.Contains(recipeContent, "begin_tx(mode=read)") || !strings.Contains(recipeContent, "create_script") {
 		t.Fatalf("expected workflow recipes to retain protocol anchors, got: %s", recipeContent)
+	}
+	if !strings.Contains(recipeContent, "scope list_stores with stores:[...]") {
+		t.Fatalf("expected workflow recipes to include scoped list_stores guidance, got: %s", recipeContent)
 	}
 }
 

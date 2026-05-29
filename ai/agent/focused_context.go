@@ -109,6 +109,17 @@ func (a *CopilotAgent) buildStoresFocusedExecutionContext(ctx context.Context, t
 				sb.WriteString(fmt.Sprintf("- %s\n", artifact))
 			}
 		}
+		quotedStores := make([]string, 0, len(taskClassification.DBArtifacts))
+		for _, artifact := range taskClassification.DBArtifacts {
+			artifact = strings.TrimSpace(artifact)
+			if artifact == "" {
+				continue
+			}
+			quotedStores = append(quotedStores, fmt.Sprintf("%q", artifact))
+		}
+		if len(quotedStores) > 0 {
+			sb.WriteString(fmt.Sprintf("Research Hint: If uncertain, call list_stores with stores:[%s] before execute_script.\n", strings.Join(quotedStores, ",")))
+		}
 	}
 
 	if ops := buildStoresCRUDOperationsContext(crudFlags); ops != "" {
@@ -242,13 +253,13 @@ func (a *CopilotAgent) describeFocusedStores(ctx context.Context, db *database.D
 
 func buildStoresCRUDOperationsContext(flags map[string]bool) string {
 	sections := make([]string, 0, len(flags))
-	dbNote := "- open_db is OPTIONAL because begin_tx already uses the active Current Database by default. If you still emit open_db, use the active Current Database name from context in open_db.args.name."
+	dbNote := "- open_db is optional; begin_tx already uses the active Current Database. If you emit open_db, use the active Current Database name from context."
 	if flags["R"] {
 		sections = append(sections,
-			"- R = Read. Prefer read-only transactions. MANDATORY Sequence: begin_tx(mode=read) -> open_store -> scan/filter/project/sort/limit -> commit_tx or rollback_tx.",
+			"- R = Read. Prefer read-only transactions. Flow: begin_tx(mode=read) -> open_store -> scan/filter/project/sort/limit -> commit_tx or rollback_tx.",
 			dbNote,
 			"- Keep filters and joins concrete. Reuse researched schema/relations and confirmed MRU facts.",
-			"- If a filter or join shape is rejected, preserve confirmed MRU facts and replace only the malformed slice.",
+			"- If a filter or join shape is rejected, replace only the malformed slice.",
 			"- Read AST ops: begin_tx, open_store, scan, filter, sort, project, limit, join, join_right, return, commit_tx, rollback_tx.",
 		)
 	}
@@ -382,7 +393,6 @@ func buildCompactStoresToolContext(manual string) string {
 	}
 
 	coreSection := extractManualSection(manual, "<h2> Core Conventions</h2>", "<h2> Research & Orchestration Rules</h2>")
-	researchSection := extractManualSection(manual, "<h2> Research & Orchestration Rules</h2>", "<h2> Example</h2>")
 
 	coreLines := []string{
 		"<h2> Core Conventions</h2>",
@@ -393,16 +403,91 @@ func buildCompactStoresToolContext(manual string) string {
 		// Keep only the minimal execution-shape reminder; orchestration details live in recipes and focused execution context.
 		coreLines = append(coreLines, "- Keep `execute_script` focused on orchestration; rely on workflow recipes and focused execution context for the full read/write flow.")
 	}
-
-	parts := []string{strings.TrimSpace(heading), strings.Join(coreLines, "\n")}
-	if researchSection != "" {
-		parts = append(parts, researchSection)
+	researchLines := []string{
+		"<h2> Research & Orchestration Rules</h2>",
+		"- Use `list_stores` to research schema and relations when field names, value types, predicate shapes, or join mappings are ambiguous.",
+		"- Scope research with `stores:[...]` when likely target stores are already known.",
+		"- `list_stores` returns grounded `schema=...` and optional `relations=[...]` per store; reuse those as the source of truth.",
+		"- Use `gettoolinfo('execute_script')` only when the AST shape itself is unclear.",
 	}
+
+	parts := []string{strings.TrimSpace(heading), strings.Join(coreLines, "\n"), strings.Join(researchLines, "\n")}
 	return strings.TrimSpace(strings.Join(parts, "\n\n"))
 }
 
 func trimStoresManualForCombinedContext(manual string) string {
 	return buildCompactStoresToolContext(manual)
+}
+
+func compactFocusedToolContextAgainstBaseline(baseline string, focused string) string {
+	baseline = strings.TrimSpace(baseline)
+	focused = strings.TrimSpace(focused)
+	if focused == "" {
+		return ""
+	}
+	if baseline == "" || !strings.Contains(focused, "Structured Context:") {
+		return focused
+	}
+
+	sections := splitStructuredContextSections(focused)
+	if len(sections) == 0 {
+		if strings.Contains(baseline, focused) {
+			return ""
+		}
+		return focused
+	}
+
+	kept := make([]string, 0, len(sections))
+	for _, section := range sections {
+		heading := structuredContextSectionHeading(section)
+		if heading != "" && strings.Contains(baseline, heading) {
+			continue
+		}
+		if heading == "" && strings.Contains(baseline, section) {
+			continue
+		}
+		kept = append(kept, strings.TrimSpace(section))
+	}
+	return strings.TrimSpace(strings.Join(kept, "\n\n"))
+}
+
+func splitStructuredContextSections(text string) []string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	lines := strings.Split(text, "\n")
+	sections := make([]string, 0, 4)
+	var current []string
+	flush := func() {
+		if len(current) == 0 {
+			return
+		}
+		sections = append(sections, strings.TrimSpace(strings.Join(current, "\n")))
+		current = nil
+	}
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "Structured Context:") && len(current) > 0 {
+			flush()
+		}
+		current = append(current, line)
+	}
+	flush()
+	return sections
+}
+
+func structuredContextSectionHeading(section string) string {
+	for _, line := range strings.Split(section, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "Structured Context:") {
+			return trimmed
+		}
+		if trimmed != "" {
+			break
+		}
+	}
+	return ""
 }
 
 func (a *CopilotAgent) buildFocusedToolContext(taskCtx *TaskContextClassification) string {

@@ -16,7 +16,7 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-const ExecuteScriptInstruction = `Execute a JSON AST script for multi-step store operations. Focus on orchestration semantics: begin a transaction, read or mutate stores, then commit or rollback. Chain multi-step reads with result_var/input_var. If schema or join mapping is ambiguous, call list_stores first and treat relations=[...] as the source of truth. If the AST shape is ambiguous, call gettoolinfo('execute_script'). Use concrete predicate objects and concrete join mappings; do not guess missing values.`
+const ExecuteScriptInstruction = `Execute a JSON AST script for multi-step store operations. Focus on orchestration semantics: begin a transaction, read or mutate stores, then commit or rollback. Chain multi-step reads with result_var/input_var. Use list_stores to research stores before multi-store joins or whenever schema is uncertain. Prefer scoped calls such as stores:["users","users_orders","orders"] so research stays compact on large databases. list_stores returns grounded per-store lines with schema=... and optional relations=[...]. Read schema=... for exact field names and value types, and read relations=[...] for related-store and join-field semantics. Treat those returned relations=[...] entries as the source of truth. If the AST shape is ambiguous, call gettoolinfo('execute_script'). Use concrete predicate objects and concrete join mappings; do not guess missing values.`
 
 const (
 	SelectInstruction = "Selects data from a store. See SOP KB for instructions."
@@ -32,7 +32,7 @@ const (
 // registerSystemTools registers the core system inspection tools.
 func (a *CopilotAgent) registerSystemTools(ctx context.Context) {
 	a.registry.Register("list_databases", "Lists all available databases.", "()", a.toolListDatabases)
-	a.registry.Register("list_stores", "Lists all stores in the current or specified database, optionally filtered to specific store names.", "(database?: string, stores?: Array<string>)", a.toolListStores)
+	a.registry.Register("list_stores", "Lists stores in the current or specified database. Pass stores=[...] to scope research to specific store names and return grounded schema/relations only for those targets.", "(database?: string, stores?: Array<string>)", a.toolListStores)
 	a.registry.Register("list_tools", "Lists all available tools and their usage instructions.", "()", a.toolListTools)
 }
 

@@ -67,6 +67,8 @@ const (
 	askOutcomeMRUCategoryGuidance        = "ASK_OUTCOME_GUIDANCE"
 )
 
+const personaSourceMRUCategoryPrefix = "PERSONA_SOURCE_"
+
 // MRUItem represents a single category currently in working memory
 type MRUItem struct {
 	Category     string
@@ -765,6 +767,11 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 		return res, err
 	}
 
+	if rewrittenQuery, rewritten := a.rewriteRetryMetaAsk(ctx, query); rewritten {
+		log.Info("Copilot Ask Gate 0 Retry Rewrite", "original_query", query, "effective_query", rewrittenQuery)
+		query = rewrittenQuery
+	}
+
 	// 3. Intent Classification (Router)
 	intent := a.classifyIntent(ctx, query, gen)
 
@@ -807,6 +814,75 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 	a.epilogueAndCleanup(ctx, query, intent, finalText, toolCalls, outcomeFacts, outcomeRecipes)
 
 	return finalText, nil
+}
+
+func (a *CopilotAgent) rewriteRetryMetaAsk(ctx context.Context, query string) (string, bool) {
+	if !isRetryMetaAsk(query) {
+		return query, false
+	}
+
+	a.rehydrateMRUFromMemory(ctx)
+	resolved, ok := a.latestAskOutcomeQuery()
+	if !ok || strings.TrimSpace(resolved) == "" {
+		return query, false
+	}
+
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		if p.Variables == nil {
+			p.Variables = make(map[string]any)
+		}
+		p.Variables["MetaAskOriginalQuery"] = query
+		p.Variables["MetaAskResolvedQuery"] = resolved
+		p.CurrentUserQuery = resolved
+	}
+
+	return resolved, true
+}
+
+func (a *CopilotAgent) latestAskOutcomeQuery() (string, bool) {
+	item, ok := a.findMRUItem(askOutcomeMRUCategoryQuery, MRUSourceAskOutcome, true)
+	if !ok || normalizeMRUScope(item.Scope) != MRUScopeSession {
+		return "", false
+	}
+	query := trimMRUPrefix(item.Context)
+	query = strings.TrimSpace(strings.TrimPrefix(query, "Last user ask:"))
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return "", false
+	}
+	return query, true
+}
+
+func isRetryMetaAsk(query string) bool {
+	normalized := normalizeRetryMetaAskPhrase(query)
+	if normalized == "" {
+		return false
+	}
+	known := map[string]struct{}{
+		"retry same ask":              {},
+		"retry the same ask":          {},
+		"can we retry same ask":       {},
+		"can we retry the same ask":   {},
+		"could we retry same ask":     {},
+		"could we retry the same ask": {},
+		"repeat same ask":             {},
+		"repeat the same ask":         {},
+		"can we repeat same ask":      {},
+		"can we repeat the same ask":  {},
+		"rerun same ask":              {},
+		"rerun the same ask":          {},
+		"run same ask again":          {},
+		"run the same ask again":      {},
+	}
+	_, ok := known[normalized]
+	return ok
+}
+
+func normalizeRetryMetaAskPhrase(query string) string {
+	line := strings.TrimSpace(lastNonEmptyQueryLine(query))
+	line = strings.TrimSpace(strings.Trim(line, ".!?"))
+	line = strings.ToLower(line)
+	return strings.Join(strings.Fields(line), " ")
 }
 
 func (a *CopilotAgent) handleDirectInvocation(ctx context.Context, query string, gen ai.Generator) (bool, string, error) {
@@ -1731,73 +1807,38 @@ func (a *CopilotAgent) handleSlashCommand(ctx context.Context, query string, gen
 }
 
 func (a *CopilotAgent) resolvePersona(ctx context.Context) string {
+	persona, _ := a.resolvePersonaWithMetadata(ctx)
+	return persona
+}
+
+func personaSourceCacheKey(agentID string) string {
+	return personaSourceMRUCategoryPrefix + agentID
+}
+
+func (a *CopilotAgent) resolvePersonaWithMetadata(ctx context.Context) (string, bool) {
 	agentID := ai.AgentIDOmni
-	if a.Memory != nil && a.Memory.AgentID != "" {
-		agentID = a.Memory.AgentID
-	}
 	cacheKey := "PERSONA_" + agentID
+	sourceKey := personaSourceCacheKey(agentID)
 
 	// 1. Try MRU Cache
 	if cachedVal, ok := a.getMRUCategoryBySource(cacheKey, MRUSourcePersona, true); ok && cachedVal != "" {
-		return cachedVal
+		personaSource, _ := a.getMRUCategoryBySource(sourceKey, MRUSourcePersona, true)
+		return cachedVal, strings.EqualFold(strings.TrimSpace(personaSource), "kb")
 	}
 
-	p := ai.GetSessionPayload(ctx)
-
 	persona := ""
-	if agentID != ai.AgentIDOmni {
-		if p == nil {
-			log.Error("Routed to an Avatar but there is no selected KB")
-		} else {
-			// If Avatar, use its exact KB as the Persona config source
-			var matchingRef *ai.ArtifactReference
-			for _, ref := range p.SelectedKBs {
-				if ref.Name == agentID && ref.Type == ai.ArtifactTypeSpace {
-					matchingRef = &ref
-					break
+	personaFromKB := false
+	// buildSystemPrompt is the Omni supervisor path. Avatar persona loading stays in avatar.go.
+	if a.systemDB != nil {
+		tempDB := database.NewDatabase(a.systemDB.Config())
+		if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+			if kb, err := tempDB.OpenKnowledgeBase(ctx, ai.DefaultKBName, tx, nil, nil, false, false); err == nil {
+				if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil && cfg.SystemPrompt != "" {
+					persona = cfg.SystemPrompt + "\n\n"
+					personaFromKB = true
 				}
 			}
-
-			if matchingRef != nil {
-				dbName := matchingRef.DatabaseName
-				if dbName == "" {
-					dbName = p.CurrentDB
-				}
-
-				var dbOpts sop.DatabaseOptions
-				var found bool
-				if dbOpts, found = a.databases[dbName]; found {
-					// Use found opts
-				} else if dbName == SystemDBName && a.systemDB != nil {
-					dbOpts = a.systemDB.Config()
-					found = true
-				}
-
-				if found && dbOpts.Type >= 0 {
-					tempDB := database.NewDatabase(dbOpts)
-					if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-						if kb, err := tempDB.OpenKnowledgeBase(ctx, matchingRef.Name, tx, nil, nil, false, true); err == nil {
-							if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil && cfg.SystemPrompt != "" {
-								persona = cfg.SystemPrompt + "\n\n"
-							}
-						}
-						tx.Rollback(ctx)
-					}
-				}
-			}
-		}
-	} else {
-		// If Omni, strictly use the SOP KB as the Persona config source
-		if a.systemDB != nil {
-			tempDB := database.NewDatabase(a.systemDB.Config())
-			if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-				if kb, err := tempDB.OpenKnowledgeBase(ctx, ai.DefaultKBName, tx, nil, nil, false, false); err == nil {
-					if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil && cfg.SystemPrompt != "" {
-						persona = cfg.SystemPrompt + "\n\n"
-					}
-				}
-				tx.Rollback(ctx)
-			}
+			tx.Rollback(ctx)
 		}
 	}
 
@@ -1819,8 +1860,13 @@ func (a *CopilotAgent) resolvePersona(ctx context.Context) string {
 
 	// 2. Cache in MRU for future turns
 	a.markMRUCategoryWithSource(cacheKey, persona, MRUSourcePersona)
+	if personaFromKB {
+		a.markMRUCategoryWithSource(sourceKey, "kb", MRUSourcePersona)
+	} else {
+		a.markMRUCategoryWithSource(sourceKey, "fallback", MRUSourcePersona)
+	}
 
-	return persona
+	return persona, personaFromKB
 }
 
 func (a *CopilotAgent) getScriptToolsPrompt(ctx context.Context) string {
@@ -2047,16 +2093,23 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 	a.rehydrateMRUFromMemory(ctx)
 
 	builder := NewSystemPromptBuilder()
+	leanStoresAssembly := shouldUseLeanStoresAssembly(taskClassification)
+	persona, personaFromKB := a.resolvePersonaWithMetadata(ctx)
+	semanticMemory := a.getLTMSemanticContext(ctx, query)
+	if leanStoresAssembly {
+		persona = trimPromptComponentContent(ComponentPersona, persona, 900)
+		semanticMemory = ""
+	}
 
 	// 1. Resolve Avatar / Custom KB Persona or Fallback
-	builder.With(ComponentPersona, a.resolvePersona(ctx))
+	builder.With(ComponentPersona, persona)
 
 	// 2. LTM Semantic Resolution (Self-Correction / Working Memory)
-	builder.With(ComponentSemanticMemory, a.getLTMSemanticContext(ctx, query))
+	builder.With(ComponentSemanticMemory, semanticMemory)
 
 	// 3. Always inject System Tools loaded into LTM
 	systemTools := a.getSystemToolsContext(ctx)
-	if focusedTools := a.buildFocusedToolContext(&taskClassification); focusedTools != "" && !strings.Contains(systemTools, focusedTools) {
+	if focusedTools := compactFocusedToolContextAgainstBaseline(systemTools, a.buildFocusedToolContext(&taskClassification)); focusedTools != "" {
 		if systemTools != "" {
 			systemTools += "\n\n"
 		}
@@ -2069,7 +2122,14 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 	if p := ai.GetSessionPayload(ctx); p != nil && p.ActiveDomain != "" {
 		domains = append(domains, strings.Split(p.ActiveDomain, ",")...)
 	}
-	builder.With(ComponentPlaybooks, a.getPlaybooksContext(ctx, query, domains))
+	if personaFromKB {
+		domains = filterPromptDomains(domains, ai.DefaultKBName)
+	}
+	playbooks := ""
+	if !leanStoresAssembly {
+		playbooks = a.getPlaybooksContext(ctx, query, domains)
+	}
+	builder.With(ComponentPlaybooks, playbooks)
 	builder.With(ComponentRecipes, a.getRecipeContext(taskClassification))
 	focusedExecutionContext := a.getFocusedExecutionContext(ctx, taskClassification)
 	if askOutcome := a.getAskOutcomeContext(); askOutcome != "" {
@@ -2104,6 +2164,34 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 	log.Info("LLM Context (OMNI)", "SystemPrompt", fullPrompt)
 
 	return fullPrompt
+}
+
+func filterPromptDomains(domains []string, skip string) []string {
+	skip = strings.TrimSpace(skip)
+	if skip == "" {
+		return domains
+	}
+	filtered := make([]string, 0, len(domains))
+	for _, domain := range domains {
+		if strings.EqualFold(strings.TrimSpace(domain), skip) {
+			continue
+		}
+		filtered = append(filtered, domain)
+	}
+	return filtered
+}
+
+func shouldUseLeanStoresAssembly(taskClassification TaskContextClassification) bool {
+	if !strings.EqualFold(taskClassification.Domain, StoresDomain) {
+		return false
+	}
+	if taskClassification.RoutingGate == RoutingGateContinuity {
+		return false
+	}
+	if isCrossDomain(taskClassification.Layers) || taskClassification.ScriptAuthoring {
+		return false
+	}
+	return len(taskClassification.DBArtifacts) > 0 || len(taskClassification.StoresArtifacts) > 0
 }
 
 func (a *CopilotAgent) promptBudgetProfile(taskClassification TaskContextClassification) PromptBudgetProfile {
@@ -2167,6 +2255,29 @@ func (a *CopilotAgent) promptBudgetProfile(taskClassification TaskContextClassif
 
 	if taskClassification.RoutingGate == RoutingGateContinuity {
 		profile.ComponentCharBudgets[ComponentHistory] = 2600
+	}
+
+	if shouldUseLeanStoresAssembly(taskClassification) {
+		profile.TotalChars = 11200
+		profile.ComponentCharBudgets[ComponentPersona] = 900
+		profile.ComponentCharBudgets[ComponentSemanticMemory] = 0
+		profile.ComponentCharBudgets[ComponentSystemTools] = 1800
+		profile.ComponentCharBudgets[ComponentRecipes] = 2200
+		profile.ComponentCharBudgets[ComponentPlaybooks] = 0
+		profile.ComponentCharBudgets[ComponentFocusedContext] = 4200
+		profile.ComponentCharBudgets[ComponentHistory] = 900
+		profile.ComponentCharBudgets[ComponentUserQuery] = 1400
+		profile.TrimPriorityLowToHigh = []PromptComponent{
+			ComponentPlaybooks,
+			ComponentSemanticMemory,
+			ComponentHistory,
+			ComponentSchema,
+			ComponentPersona,
+			ComponentSystemTools,
+			ComponentRecipes,
+			ComponentFocusedContext,
+			ComponentUserQuery,
+		}
 	}
 
 	return profile

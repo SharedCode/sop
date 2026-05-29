@@ -185,6 +185,9 @@ func TestBuildExplicitRecipesAndFormatRecipeContext(t *testing.T) {
 	if !strings.Contains(formatted, "Reusable script authoring") || !strings.Contains(formatted, "Cross-domain narrowing") || !strings.Contains(formatted, "Stores schema-first research") || !strings.Contains(formatted, "Stores read transaction flow") || !strings.Contains(formatted, "Stores join slice repair") || !strings.Contains(formatted, "Stores predicate grounding") {
 		t.Fatalf("expected formatted recipe context to include recipe topics, got %s", formatted)
 	}
+	if !strings.Contains(formatted, "scope list_stores with stores:[...]") {
+		t.Fatalf("expected formatted recipe context to include scoped list_stores guidance, got %s", formatted)
+	}
 	if got := formatRecipeContext(nil); got != "" {
 		t.Fatalf("expected empty recipe context for nil input, got %q", got)
 	}

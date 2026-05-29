@@ -38,7 +38,7 @@ func (m *johnOrdersOver500Generator) Generate(ctx context.Context, prompt string
 		checks := []string{
 			"Ask-anchored MRU:",
 			"- Last outcome: repair_required",
-			"- Next delta: Research missing schema or relation facts with list_stores before retrying execute_script.",
+			"- Next delta: Research missing schema or relation facts with scoped list_stores calls before retrying execute_script.",
 			"Repair strategy: research_first",
 			"Repair directive: The last tool call to execute_script failed because grounded schema or relation facts are still missing.",
 		}

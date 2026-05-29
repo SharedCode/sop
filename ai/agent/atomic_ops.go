@@ -462,6 +462,8 @@ func normalizeScriptCompatibilityShapes(script []ScriptInstruction) []ScriptInst
 
 		normalizeLegacyFilterArgs(&instr)
 		normalizeReturnVariableReference(&instr)
+		normalizeImplicitBeginTxResultVar(&instr, len(normalized))
+		normalizeImplicitTransactionReference(&instr, currentTxVar)
 
 		if strings.EqualFold(instr.Op, "begin_tx") && strings.TrimSpace(instr.ResultVar) != "" {
 			currentTxVar = strings.TrimSpace(instr.ResultVar)
@@ -502,6 +504,34 @@ func normalizeScriptCompatibilityShapes(script []ScriptInstruction) []ScriptInst
 	}
 
 	return normalized
+}
+
+func normalizeImplicitBeginTxResultVar(instr *ScriptInstruction, stepIndex int) {
+	if instr == nil || !strings.EqualFold(instr.Op, "begin_tx") {
+		return
+	}
+	if strings.TrimSpace(instr.ResultVar) != "" {
+		return
+	}
+	if stepIndex == 0 {
+		instr.ResultVar = "tx"
+		return
+	}
+	instr.ResultVar = fmt.Sprintf("tx_%d", stepIndex+1)
+}
+
+func normalizeImplicitTransactionReference(instr *ScriptInstruction, currentTxVar string) {
+	if instr == nil || strings.TrimSpace(currentTxVar) == "" || instr.Args == nil {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(instr.Op)) {
+	case "open_store", "commit_tx", "rollback_tx":
+		if txName, _ := instr.Args["transaction"].(string); strings.TrimSpace(txName) == "" {
+			instr.Args["transaction"] = currentTxVar
+		} else {
+			instr.Args["transaction"] = strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(txName), "@"), "$")
+		}
+	}
 }
 
 func normalizeImplicitOpenStoreResultVar(instr *ScriptInstruction) {
