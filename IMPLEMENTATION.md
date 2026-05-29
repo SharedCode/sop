@@ -18,6 +18,10 @@ Conventions for this document:
 
 ### Implemented
 
+- Gate 0 now exists as an explicit pre-routing Ask mode layer for retry-the-same-ask and clarification-resume behavior.
+- Gate 0 state is typed in session payload via explicit retry and clarification state rather than relying only on ad-hoc variable keys and thread heuristics.
+- Clarification-first Ask flow is implemented: when the assistant emits a real clarification question with no tool calls, the session persists a pending clarification state and the next user reply resumes the original target ask deterministically.
+- Retry-the-same-ask rewrites are now tracked as explicit typed retry state and feed the next Ask as a resumed target query.
 - Three-gate intent routing is active.
 - Focused context assembly runs after classification.
 - Stores prompt context is artifact-scoped and relation-aware.
@@ -166,6 +170,26 @@ Prevent unknown-unknown hallucinations when schema links or constraints are miss
 
 1. Autonomous research first using read/search tools.
 2. If unresolved, explicitly ask the user for missing constraints.
+3. Persist the clarification as explicit session state tied to the current target ask.
+4. Rewrite the user's next reply back onto the target ask and resume the normal Ask lifecycle.
+
+### Current Gate 0 Model
+
+- Gate 0 runs before Gate 1, Gate 2, and Gate 3.
+- Gate 0 is not a separate execution engine; it is a turn-mode controller.
+- Gate 0 currently owns:
+- retry-the-same-ask detection and rewrite
+- clarification-resume detection and rewrite
+- stable target-ask preservation across clarification turns
+- Gate 0 does not execute tools itself.
+- After Gate 0 rewrites the effective query, the normal Ask pipeline continues through routing, prompt assembly, native ReAct, tool execution, and epilogue.
+
+### Current Clarification Completion Rule
+
+- A clarification round remains pending only when the assistant returns a real clarification question and emits no tool calls.
+- When the resumed Ask later emits tool calls, the native reasoning engine executes them normally.
+- When the resumed Ask later returns a normal non-question answer, the clarification state is cleared.
+- Readiness for tool execution is therefore detected structurally by native tool-call presence in the downstream reasoning engine, not by a separate Gate 0 semantic classifier.
 
 ### Open TODO
 
@@ -202,6 +226,9 @@ Prevent unknown-unknown hallucinations when schema links or constraints are miss
 - Gate 2 remains the continuity or topic-switch decision point, but its input should become a generic continuity digest built from MRU plus the last routing state instead of relying primarily on raw domain-shaped routing JSON.
 - Gate 1 and Gate 2 should enrich each other rather than behaving like isolated filters. Gate 1 provides an explicit anchor signal from the current query; Gate 2 decides whether that anchor continues, narrows, extends, or replaces prior continuity.
 - Gate 3 remains the cold-start discovery and prompt-assembly handoff, but it should consume the merged gate result and retrieve smaller recipe slices instead of replaying broad manuals.
+- Gate 3 is still active, but it is now narrower than before because conversation-mode control has shifted into Gate 0.
+- Gate 3 remains a cold-start routing/classification surface, not a clarification surface.
+- Low-confidence or underspecified cold starts are better handled by deferring into clarification mode than by forcing Gate 3 to infer user-preference choices internally.
 - Each gate should operate on protocol-level signals and recipes so the same control flow can serve Omni, Avatar, and future domain-specific agents without binding the loop to Stores and Spaces internals.
 - The gates belong at Ask activation time as macro-loop setup. They should shape the initial Ask frame and follow-up Ask continuity, but they should not run inside the inner native ReAct micro-loop.
 - The micro multi-loop should remain owned by the reasoning engine and Ask-anchored MRU. Gate outputs are inputs to the Ask frame, not per-iteration control logic.
@@ -240,6 +267,7 @@ Prevent unknown-unknown hallucinations when schema links or constraints are miss
 4. Add focused tests for digest rendering, Gate 1 and Gate 2 handoff, and continuity classification behavior.
 5. Slice `tools_stores.md` into smaller recipe-oriented units and prefer those units during prompt assembly.
 6. Add prompt assembly regressions for single-Ask progression and follow-up Ask reuse.
+7. Add a Gate 3 low-confidence / ambiguity outcome that can explicitly defer to clarification mode instead of forcing a cold-start classification guess.
 
 ### Ask-Anchored MRU
 

@@ -274,11 +274,28 @@ We have strictly banned the practice of hardcoding prompt engineering limits ins
 ### 6. Dynamic Context Injection and Intent Classification
 To manage token bandwidth and prevent instruction contamination, SOP uses a two-stage architecture: classification first, deterministic expansion second.
 
+Pre-stage: Gate 0 conversational mode control
+
+- Gate 0 runs before the three routing gates.
+- Gate 0 is responsible for turn normalization, not domain routing.
+- Gate 0 currently handles:
+    - retry-the-same-ask rewrites
+    - clarification-resume rewrites
+    - preserving the stable target ask across clarification turns
+- Gate 0 is explicitly stateful through typed session payload state for retry and clarification rounds.
+- Gate 0 does not directly execute tools. It prepares the effective Ask that then enters the normal routing and native tool-calling pipeline.
+
 Stage A: Three-Gate classification
 
 - Gate 1 (Focused Prefix): parse explicit constraints and classify only missing layers and CRUD intent.
 - Gate 2 (MRU Continuity/Switch): validate continuation vs switch and update layers/CRUD.
 - Gate 3 (Cold Start Discovery): classify from a bounded context outline of entities/domains/artifacts.
+
+Architectural constraint:
+
+- Gate 1, Gate 2, and Gate 3 remain routing/classification gates.
+- They do not own clarification-first conversation control.
+- Gate 3 is inherently lower-confidence on underspecified asks because it must infer rather than interact; clarification-first resolution should be preferred when unresolved user-choice ambiguity remains.
 
 Stage B: Focused context expansion
 
@@ -301,10 +318,18 @@ Once routing and focused context assembly finish, the native ReAct engine takes 
 
 System split:
 
+- Gate 0: pre-routing conversational mode selection and target-ask rewrite.
 - Macro loop: Gate 1, Gate 2, and Gate 3 prepare the Ask frame.
 - Micro loop: the native reasoning engine executes bounded tool-based progression inside that frame.
 
 This separation is intentional. Routing gates do not run on every retry. They shape the Ask once, then the inner loop progresses from actual execution evidence.
+
+Clarification-first consequence:
+
+- If the assistant asks a clarification question with no tool calls, that turn is persisted as pending clarification state.
+- The user's next reply is rewritten onto the original target ask by Gate 0.
+- The resumed Ask then enters the same macro-plus-micro path as any other Ask.
+- The native reasoning engine decides it is ready to execute when the model emits a real native tool call payload, not when Gate 0 semantically concludes that clarification is over.
 
 Core loop model:
 
@@ -381,6 +406,7 @@ Architectural result:
 
 Execution sequence:
 
+0. Gate 0 may rewrite the incoming Ask if it is a retry or clarification-resume turn.
 1. User Ask enters Gate 1 / Gate 2 / Gate 3.
 2. Routing and deterministic expansion build the Ask frame.
 3. Native ReAct iteration 1 chooses the best next tool from that frame.
@@ -390,6 +416,8 @@ Execution sequence:
 7. Next LLM call sees preserved valid args, grounded facts, missing clues, and repair delta.
 8. Loop either narrows again, enters research-first repair, repairs in place, or exits with final answer.
 9. Successful repair paths are distilled into implicit recipes and persisted as later continuity signals.
+
+If the Ask was resumed from clarification mode, this same loop is where execution convergence happens. Gate 0 resumes the Ask; the native loop still decides whether the next step is another textual answer or a concrete tool call.
 
 Worked example: `Find John > 500`
 
@@ -514,6 +542,7 @@ Macro flow:
 - Gate 1 contributes explicit anchors when the user names a focused path.
 - Gate 2 decides continuation versus topic switch from continuity digest plus fresh anchor evidence.
 - Gate 3 completes cold-start discovery and recipe-oriented prompt handoff when prior continuity is insufficient.
+- Gate 0 sits ahead of all three and handles retry/clarification turn modes without changing persona or routing identity.
 
 3. Prompt assembly builds the Ask frame.
 

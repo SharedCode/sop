@@ -1095,24 +1095,6 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		}
 	}
 
-	// 2c. Tool Usage Hint for Knowledge Retrieval
-	systemPrompt = fmt.Sprintf("%s\n\n[Tool Usage Note]\nYou can use the tool \"gettoolinfo\" with argument \"tool\" (e.g., \"gettoolinfo('execute_script')\") to get detailed usage instructions for any tool if you are unsure about its parameters or behavior.", systemPrompt)
-
-	// 2d. Inject execute_script tool details directly to help LLM formulate queries
-	if s.systemDB != nil {
-		if tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-			if kb, err := s.systemDB.OpenKnowledgeBase(ctx, "sop", tx, s.generator, nil, false, true); err == nil {
-				hits, searchErr := kb.SearchKeywords(ctx, "execute_script Tool Operations", &memory.SearchOptions[map[string]any]{Limit: 1})
-				if searchErr == nil && len(hits) > 0 {
-					if content, ok := hits[0].Payload["Content"].(string); ok {
-						systemPrompt = fmt.Sprintf("%s\n\n[execute_script Tool Operations]\n%s", systemPrompt, content)
-					}
-				}
-			}
-			tx.Rollback(ctx)
-		}
-	}
-
 	// Filter and inject heavy architectural protocols ONLY if the query or topic warrants it.
 	// This prevents LLM "memory tax" and bloat for casual conversational threads.
 	// (Omni protocol logic removed or delegated to KB)

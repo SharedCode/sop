@@ -490,7 +490,7 @@ func (m *recoverableArgErrorGenerator) Generate(ctx context.Context, prompt stri
 		if !strings.Contains(prompt, "Tool execution error: argument 'content' is missing or not a string") {
 			return ai.GenOutput{Text: "missing repair context"}, nil
 		}
-		if !strings.Contains(prompt, "Tool: mint_to_space") || !strings.Contains(prompt, "Attempted args:") || !strings.Contains(prompt, "Retry instruction:") {
+		if !strings.Contains(prompt, "Tool: mint_to_space") || !strings.Contains(prompt, "Retry instruction:") {
 			return ai.GenOutput{Text: "missing structured retry context"}, nil
 		}
 		if !strings.Contains(prompt, "Repair directive: The last tool call to mint_to_space failed because its arguments were invalid.") {
@@ -907,6 +907,166 @@ func (e *executeScriptJoinRepairExecutor) ListTools(ctx context.Context) ([]ai.T
 	return []ai.ToolDefinition{{Name: "execute_script"}, {Name: "list_stores"}}, nil
 }
 
+type discoveryClarificationGenerator struct {
+	calls int
+}
+
+func (m *discoveryClarificationGenerator) Name() string { return "discovery_clarification_mock" }
+
+func (m *discoveryClarificationGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *discoveryClarificationGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	switch m.calls {
+	case 1:
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{
+				"script": []any{
+					map[string]any{
+						"op": "join",
+						"args": map[string]any{
+							"store": "users_orders",
+							"on":    map[string]any{"users.key": true},
+						},
+					},
+				},
+			},
+		}}}, nil
+	case 2:
+		if !strings.Contains(prompt, "Repair directive: The last tool call to execute_script failed because grounded schema or relation facts are still missing.") {
+			return ai.GenOutput{Text: "missing research repair directive"}, nil
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "list_stores",
+			Args: map[string]any{"stores": []any{"users", "users_orders"}},
+		}}}, nil
+	case 3:
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{
+				"script": []any{
+					map[string]any{
+						"op": "join",
+						"args": map[string]any{
+							"store": "users_orders",
+							"on":    map[string]any{"users.key": "user_id"},
+						},
+					},
+				},
+			},
+		}}}, nil
+	default:
+		if !strings.Contains(prompt, "Clarification directive: The last tool failure still remains unresolved after the first repair attempt in a routed ask.") {
+			return ai.GenOutput{Text: "missing clarification directive"}, nil
+		}
+		if !strings.Contains(prompt, "Clarification required:") {
+			return ai.GenOutput{Text: "missing clarification result context"}, nil
+		}
+		return ai.GenOutput{Text: "Which join mapping should I use between users and users_orders: users.key -> users_orders.user_id, or a different relation?"}, nil
+	}
+}
+
+type discoveryClarificationExecutor struct {
+	callCount int
+	tools     []string
+}
+
+func (e *discoveryClarificationExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	e.callCount++
+	e.tools = append(e.tools, tool)
+	if tool == "list_stores" {
+		return "users schema=key:string, first_name:string relations=[users_orders(user_id->users.key)]\nusers_orders schema=key:string, user_id:string", nil
+	}
+	return "", newExecuteScriptValidationError(
+		"invalid_join_on_placeholder",
+		"invalid join mapping: users.key -> users_orders.user_id is still ambiguous for this ask; expected a confirmed relation mapping before proceeding",
+		`{"op":"join","args":{"store":"users_orders","on":{"users.key":"user_id"}}}`,
+	)
+}
+
+func (e *discoveryClarificationExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "execute_script"}, {Name: "list_stores"}}, nil
+}
+
+type routedSameToolClarificationGenerator struct {
+	calls int
+}
+
+func (m *routedSameToolClarificationGenerator) Name() string {
+	return "routed_same_tool_clarification_mock"
+}
+
+func (m *routedSameToolClarificationGenerator) EstimateCost(inTokens, outTokens int) float64 {
+	return 0
+}
+
+func (m *routedSameToolClarificationGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	switch m.calls {
+	case 1:
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "mint_to_space",
+			Args: map[string]any{},
+		}}}, nil
+	case 2:
+		if !strings.Contains(prompt, "Repair directive: The last tool call to mint_to_space failed because its arguments were invalid.") {
+			return ai.GenOutput{Text: "missing same-tool repair directive"}, nil
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "mint_to_space",
+			Args: map[string]any{"kb_name": "Tasks"},
+		}}}, nil
+	default:
+		if !strings.Contains(prompt, "Clarification directive: The last tool failure still remains unresolved after the first repair attempt in a routed ask.") {
+			return ai.GenOutput{Text: "missing clarification directive"}, nil
+		}
+		if !strings.Contains(prompt, "Clarification required:") {
+			return ai.GenOutput{Text: "missing clarification result context"}, nil
+		}
+		return ai.GenOutput{Text: "What content should I mint into the Tasks space?"}, nil
+	}
+}
+
+func TestNativeReActEngine_RoutedSameToolRepairEscalatesToClarificationAfterFirstRetry(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &routedSameToolClarificationGenerator{}
+	executor := &recoverableArgErrorExecutor{}
+	var progress []string
+	payload := &ai.SessionPayload{Variables: map[string]any{
+		"RoutingState": &TaskContextClassification{RoutingGate: RoutingGateFocused, Domain: SpacesDomain},
+	}}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+	ctx = context.WithValue(ctx, ai.CtxKeyProgressSink, func(msg string) {
+		progress = append(progress, msg)
+	})
+
+	resp, err := engine.Run(ctx, ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Add content to my Tasks space",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "What content should I mint into the Tasks space?" {
+		t.Fatalf("expected clarification question, got %q", resp.FinalText)
+	}
+	if gen.calls != 3 {
+		t.Fatalf("expected three generator calls before clarification handoff, got %d", gen.calls)
+	}
+	if executor.callCount != 2 {
+		t.Fatalf("expected two mint_to_space attempts before clarification, got %d", executor.callCount)
+	}
+	if !containsProgressMessage(progress, "Routed Ask repair remained unresolved after the first retry; switching to clarification.") {
+		t.Fatalf("expected routed same-tool clarification escalation progress message, got %#v", progress)
+	}
+	if len(resp.ToolCalls) != 0 {
+		t.Fatalf("expected no successful tool calls to be recorded, got %#v", resp.ToolCalls)
+	}
+}
+
 func TestNativeReActEngine_RetriesExecuteScriptJoinWithValidationGuidance(t *testing.T) {
 	engine := &NativeReActEngine{}
 	gen := &executeScriptJoinRepairGenerator{}
@@ -949,6 +1109,48 @@ func TestNativeReActEngine_RetriesExecuteScriptJoinWithValidationGuidance(t *tes
 	}
 	if !strings.Contains(factsText, "list_stores confirmed users relations=[users_orders(key->users.key)]") {
 		t.Fatalf("expected outcome facts to carry confirmed relation mapping, got %#v", resp.OutcomeFacts)
+	}
+}
+
+func TestNativeReActEngine_RoutedAmbiguityEscalatesToClarificationAfterFirstRepairAttempt(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &discoveryClarificationGenerator{}
+	executor := &discoveryClarificationExecutor{}
+	var progress []string
+	payload := &ai.SessionPayload{Variables: map[string]any{
+		"RoutingState": &TaskContextClassification{RoutingGate: RoutingGateFocused, Domain: StoresDomain},
+	}}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+	ctx = context.WithValue(ctx, ai.CtxKeyProgressSink, func(msg string) {
+		progress = append(progress, msg)
+	})
+
+	resp, err := engine.Run(ctx, ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Join users with users_orders",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Which join mapping should I use between users and users_orders: users.key -> users_orders.user_id, or a different relation?" {
+		t.Fatalf("expected clarification question, got %q", resp.FinalText)
+	}
+	if gen.calls != 4 {
+		t.Fatalf("expected four generator calls before clarification handoff, got %d", gen.calls)
+	}
+	if executor.callCount != 3 {
+		t.Fatalf("expected execute_script, list_stores, execute_script before clarification, got %d", executor.callCount)
+	}
+	if !containsProgressMessage(progress, "Routed Ask repair remained unresolved after the first retry; switching to clarification.") {
+		t.Fatalf("expected clarification escalation progress message, got %#v", progress)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "list_stores" {
+		t.Fatalf("expected only the successful research tool call to be recorded, got %#v", resp.ToolCalls)
+	}
+	if len(executor.tools) != 3 || executor.tools[0] != "execute_script" || executor.tools[1] != "list_stores" || executor.tools[2] != "execute_script" {
+		t.Fatalf("expected routed clarification flow to attempt execute_script, research, then execute_script, got %#v", executor.tools)
 	}
 }
 

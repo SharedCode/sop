@@ -222,8 +222,14 @@ func TestBuildSystemPrompt_IncludesCrossDomainFocusedContext(t *testing.T) {
 		if strings.Contains(element.Content, "[truncated]") {
 			t.Fatalf("expected cross-domain system tools context to fit without truncation after prompt reductions, got: %s", element.Content)
 		}
-		if !strings.Contains(element.Content, "# Execute Script Tool") || !strings.Contains(element.Content, "# Spaces Manual") {
-			t.Fatalf("expected cross-domain system tools to retain both stores and spaces manuals, got: %s", element.Content)
+		if !strings.Contains(element.Content, "Structured Context: Stores Tools") || !strings.Contains(element.Content, "Structured Context: Spaces Tools") {
+			t.Fatalf("expected cross-domain system tools to use generated stores and spaces tool context, got: %s", element.Content)
+		}
+		if !strings.Contains(element.Content, "- join:") || !strings.Contains(element.Content, "- mint_to_space:") {
+			t.Fatalf("expected generated tool descriptions for both stores and spaces, got: %s", element.Content)
+		}
+		if strings.Contains(element.Content, "# Spaces Manual") {
+			t.Fatalf("expected cross-domain system tools to avoid the old spaces manual blob, got: %s", element.Content)
 		}
 	}
 }
@@ -342,14 +348,14 @@ func TestBuildSystemPrompt_StoresSystemTools_PrefersCompactProtocolSlice(t *test
 	if systemTools == "" {
 		t.Fatalf("expected system tools component in prompt: %s", prompt)
 	}
-	if strings.Contains(systemTools, "<h2> Example</h2>") || strings.Contains(systemTools, "join_right") {
+	if strings.Contains(systemTools, "<h2> Example</h2>") || strings.Contains(systemTools, "Execution Flow Engine Guardrails") {
 		t.Fatalf("expected stores system tools to omit the large execute_script example block, got: %s", systemTools)
 	}
-	if !strings.Contains(systemTools, "Research & Orchestration Rules") || !strings.Contains(systemTools, "Use `list_stores` to research schema and relations") {
-		t.Fatalf("expected stores system tools to retain compact research guidance, got: %s", systemTools)
+	if !strings.Contains(systemTools, "- execute_script:") || !strings.Contains(systemTools, "- list_stores:") {
+		t.Fatalf("expected stores system tools to be generated from tool descriptions, got: %s", systemTools)
 	}
-	if !strings.Contains(systemTools, "Use `result_var` and `input_var` to chain multi-step reads") {
-		t.Fatalf("expected stores system tools to retain minimal protocol reminders, got: %s", systemTools)
+	if !strings.Contains(systemTools, "result_var/input_var") || !strings.Contains(systemTools, "schema=...") {
+		t.Fatalf("expected execute_script description guidance to remain visible in system tools, got: %s", systemTools)
 	}
 }
 

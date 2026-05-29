@@ -102,8 +102,10 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 	executedToolCalls := make([]ai.ToolCall, 0)
 	toolResults := make([]nativeToolResult, 0)
 	budgetState := newAskLoopBudgetState()
+	routedRepairAttempts := 0
 	var pendingRepair *pendingToolRepair
 	var pendingMalformedCall *pendingGenerationRepair
+	var pendingContinuation *ai.NativeToolContinuation
 	for iteration := 0; iteration < budgetState.maxIterations && iteration < budgetState.allowedIterations; iteration++ {
 		emitVerboseProgress(ctx, "Reasoning iteration %d of %d.", iteration+1, budgetState.allowedIterations)
 		promptProfile := nativeReActPromptBudgetProfile()
@@ -122,7 +124,14 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 			MaxTokens:    1024,
 			Temperature:  temperature,
 			Tools:        tools,
+			NativeToolContinuations: func() []ai.NativeToolContinuation {
+				if pendingContinuation == nil {
+					return nil
+				}
+				return []ai.NativeToolContinuation{*pendingContinuation}
+			}(),
 		})
+		pendingContinuation = nil
 		if err != nil {
 			if isRecoverableGenerationError(err) {
 				emitVerboseProgress(ctx, "Model emitted a malformed native tool call; retrying.")
@@ -193,6 +202,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 		})
 
 		execCtx := context.WithValue(ctx, ai.CtxKeyNativeToolHints, true)
+		priorRepair := pendingRepair
 		rawResult, err := req.Executor.Execute(execCtx, toolCall.Name, toolCall.Args)
 		if err != nil {
 			emitReasoningEvent(req, "tool_error", map[string]any{
@@ -203,6 +213,20 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 			})
 			if isRecoverableToolExecutionError(err) {
 				repairPlan := classifyRecoverableToolRepair(toolCall.Name, err)
+				if shouldEscalateRoutedRepairToClarification(ctx, routedRepairAttempts) {
+					emitVerboseProgress(ctx, "Routed Ask repair remained unresolved after the first retry; switching to clarification.")
+					pendingRepair = nil
+					toolResults = append(toolResults, nativeToolResult{
+						Name:   toolCall.Name,
+						Result: formatClarificationRequiredToolError(repairPlan, toolCall.Args, err),
+						Args:   cloneToolEventMap(toolCall.Args),
+					})
+					log.Warn("Native ReAct Engine Escalated Routed Repair To Clarification", "tool", toolCall.Name, "error", err)
+					continue
+				}
+				if isRoutedAskContext(ctx) {
+					routedRepairAttempts++
+				}
 				emitVerboseProgress(ctx, "Tool `%s` needs corrected arguments; retrying.", toolCall.Name)
 				pendingRepair = &repairPlan
 				toolResults = append(toolResults, nativeToolResult{
@@ -218,6 +242,9 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 		}
 		result, hint := unwrapToolResultEnvelope(rawResult)
 		emitVerboseProgress(ctx, "Tool `%s` completed.", toolCall.Name)
+		if shouldResetRoutedRepairAttempts(priorRepair, toolCall.Name) {
+			routedRepairAttempts = 0
+		}
 		pendingRepair = nil
 		log.Info("Native ReAct Engine Tool Success", "iteration", iteration+1, "tool", toolCall.Name, "result_chars", len(result))
 		emitReasoningEvent(req, "tool_result", map[string]any{
@@ -232,6 +259,10 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 		executedToolCalls = append(executedToolCalls, toolCall)
 		previousResults := append([]nativeToolResult(nil), toolResults...)
 		toolResults = append(toolResults, nativeToolResult{Name: toolCall.Name, Result: result, Args: cloneToolEventMap(toolCall.Args), Hint: cloneToolProgressHint(hint)})
+		pendingContinuation = &ai.NativeToolContinuation{
+			ToolCall: toolCall,
+			Response: coerceNativeToolContinuationResponse(result),
+		}
 		if shouldShortCircuitAskLoopOnToolHint(hint) {
 			emitVerboseProgress(ctx, "Tool `%s` reported a terminal hard error; short-circuiting the Ask loop.", toolCall.Name)
 			outcomeRecipes := summarizeOutcomeRecipes(toolResults)
@@ -295,6 +326,20 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 		OutcomeFacts:   summarizeOutcomeFacts(toolResults),
 		OutcomeRecipes: summarizeOutcomeRecipes(toolResults),
 	}, nil
+}
+
+func coerceNativeToolContinuationResponse(result string) any {
+	trimmed := strings.TrimSpace(result)
+	if trimmed == "" {
+		return map[string]any{"result": ""}
+	}
+
+	var decoded any
+	if json.Unmarshal([]byte(trimmed), &decoded) == nil {
+		return decoded
+	}
+
+	return map[string]any{"result": result}
 }
 
 func newAskLoopBudgetState() askLoopBudgetState {
@@ -605,6 +650,9 @@ func renderNativePromptSections(sections []PromptElement) string {
 }
 
 func buildNativeRepairDirective(last nativeToolResult) string {
+	if strings.Contains(last.Result, "Clarification required:") {
+		return "Clarification directive: The last tool failure still remains unresolved after the first repair attempt in a routed ask. Do not call another tool yet. Ask the user one short, concrete clarification question that names the blocker and wait for the answer."
+	}
 	if !strings.Contains(last.Result, "Retry instruction:") {
 		return ""
 	}
@@ -621,7 +669,7 @@ func buildNativeToolResultsSection(toolResults []nativeToolResult) string {
 	var sb strings.Builder
 	sb.WriteString("Tool results:\n")
 	for i, result := range toolResults {
-		keepExpanded := shouldRetainNativePromptBlob(i, len(toolResults))
+		keepExpanded := shouldRetainNativePromptBlob(i, len(toolResults)) || len(toolResults) == 1
 		sb.WriteString(fmt.Sprintf("Step %d Tool: %s\n", i+1, result.Name))
 		if len(toolResults) > 2 && !keepExpanded {
 			if summary := formatNativeToolResultSummary(result); summary != "" {
@@ -2103,6 +2151,28 @@ func formatRecoverableToolError(repair pendingToolRepair, args map[string]any, e
 	)
 }
 
+func formatClarificationRequiredToolError(repair pendingToolRepair, args map[string]any, err error) string {
+	argsJSON := "{}"
+	if len(args) > 0 {
+		if b, marshalErr := json.MarshalIndent(args, "", "  "); marshalErr == nil {
+			argsJSON = string(b)
+		}
+	}
+
+	reason := "The routed ask still failed after one repair attempt and now needs user clarification before more tool calls."
+	if repair.ResearchReason != "" {
+		reason = repair.ResearchReason
+	}
+
+	return fmt.Sprintf(
+		"Clarification required: %s\nTool execution error: %v\nTool: %s\nAttempted args:\n%s\nUser-facing next step: Ask one short clarification question that resolves the ambiguity blocking this tool call. Do not call more tools until the user answers.",
+		reason,
+		err,
+		repair.ToolName,
+		argsJSON,
+	)
+}
+
 func formatRecoverableGenerationError(err error) string {
 	return fmt.Sprintf(
 		"Model generation error: %v\nRetry instruction: Return exactly one valid native tool call that conforms to the provided tool schema. Do not emit malformed function calls, partial arguments, or placeholder-only argument shapes.",
@@ -2117,7 +2187,7 @@ func formatPendingRepairReminder(repair pendingToolRepair, attemptedToolName str
 			allowedTool = "list_stores"
 		}
 		return fmt.Sprintf(
-			"Repair required before continuing. The previous call to %s failed with recoverable argument errors and needs grounded research first. The model attempted %s instead. Retry instruction: Call %s next, preferably with scoped stores:[...] for the likely targets, use its schema/relations output as source of truth, then return to %s. Do not switch to unrelated tools or provide a final answer until the research attempt is made.",
+			"Repair required before continuing.\nTool: %s\nRepair note: The model attempted %s instead.\nRetry instruction: Call %s next, preferably with scoped stores:[...] for the likely targets, use its schema/relations output as source of truth, then return to %s. Do not switch to unrelated tools or provide a final answer until the research attempt is made.",
 			repair.ToolName,
 			attemptedToolName,
 			allowedTool,
@@ -2125,11 +2195,46 @@ func formatPendingRepairReminder(repair pendingToolRepair, attemptedToolName str
 		)
 	}
 	return fmt.Sprintf(
-		"Repair required before continuing. The previous call to %s failed with recoverable argument errors and must be corrected first. The model attempted %s instead. Retry instruction: Call %s next with corrected arguments. Do not switch tools or provide a final answer until the repair attempt is made.",
+		"Repair required before continuing.\nTool: %s\nRepair note: The model attempted %s instead.\nRetry instruction: Call %s next with corrected arguments. Do not switch tools or provide a final answer until the repair attempt is made.",
 		repair.ToolName,
 		attemptedToolName,
 		repair.ToolName,
 	)
+}
+
+func shouldEscalateRoutedRepairToClarification(ctx context.Context, routedRepairAttempts int) bool {
+	if !isRoutedAskContext(ctx) {
+		return false
+	}
+	return routedRepairAttempts >= 1
+}
+
+func isRoutedAskContext(ctx context.Context) bool {
+	p := ai.GetSessionPayload(ctx)
+	if p == nil || p.Variables == nil {
+		return false
+	}
+	routingState, ok := p.Variables["RoutingState"].(*TaskContextClassification)
+	if !ok || routingState == nil {
+		return false
+	}
+	return strings.TrimSpace(routingState.RoutingGate) != ""
+}
+
+func shouldResetRoutedRepairAttempts(priorRepair *pendingToolRepair, toolName string) bool {
+	if priorRepair == nil {
+		return true
+	}
+	if priorRepair.Strategy == nativeRepairStrategyResearchFirst {
+		researchTool := priorRepair.ResearchTool
+		if researchTool == "" {
+			researchTool = "list_stores"
+		}
+		if toolName == researchTool {
+			return false
+		}
+	}
+	return true
 }
 
 func (r pendingToolRepair) allowsTool(toolName string) bool {

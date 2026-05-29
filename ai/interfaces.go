@@ -248,12 +248,30 @@ type GenOptions struct {
 	TopP         float32
 	Stop         []string
 	Tools        []ToolDefinition // NEW: Pass the schemas via Native API
+	// NativeToolContinuations carries provider-neutral native tool-call/result turns
+	// that a generator can translate into its provider-specific continuation format.
+	NativeToolContinuations []NativeToolContinuation
+}
+
+// NativeToolContinuation preserves a completed native tool turn so generators can
+// continue a provider-native function-calling exchange without flattening the
+// tool response back into plain prompt text.
+type NativeToolContinuation struct {
+	ToolCall ToolCall
+	Response any
 }
 
 // ToolCall represents a native tool call requested by the LLM.
 type ToolCall struct {
 	Name string
 	Args map[string]any
+	// NativeID carries the provider-native tool/function call identifier when one exists.
+	// It is intentionally transport-agnostic so engines can round-trip tool continuity
+	// across Gemini, OpenAI, Anthropic, or future providers without hard-coding one API shape.
+	NativeID string
+	// TransportMeta preserves provider-specific fields that may be needed to continue a
+	// native tool-calling session without flattening everything into prompt text.
+	TransportMeta map[string]any
 }
 
 // GenOutput represents the result of a generation.
@@ -439,12 +457,33 @@ type SessionPayload struct {
 	Transactions map[string]any
 	// Variables holds session-scoped variables (e.g. cached store instances).
 	Variables map[string]any
+	// RetryRewriteState tracks an explicit retry-the-same-ask rewrite.
+	RetryRewriteState *RetryRewriteState
+	// ClarificationState tracks an explicit pending clarification round before execution resumes.
+	ClarificationState *ClarificationState
 	// ExplicitTransaction indicates if the transaction was explicitly started by the user.
 	ExplicitTransaction bool
 	// LastInteractionSteps tracks the number of steps added/executed in the last user interaction.
 	LastInteractionSteps int
 	// ConversationHistory stores the active memory/transcript for the session.
 	ConversationHistory string
+}
+
+// ClarificationState tracks a pending assistant clarification before the target ask resumes.
+type ClarificationState struct {
+	TargetQuery        string
+	AssistantQuestion  string
+	OriginalUserQuery  string
+	UserClarification  string
+	EffectiveResumeAsk string
+	Status             string
+}
+
+// RetryRewriteState tracks a retry-the-same-ask rewrite through Gate 0.
+type RetryRewriteState struct {
+	OriginalQuery string
+	ResolvedQuery string
+	Status        string
 }
 
 // Manages Payload's cleanup, e.g. Transaction Commit/Rollback.

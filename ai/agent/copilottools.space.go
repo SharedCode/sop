@@ -12,15 +12,19 @@ import (
 	"github.com/sharedcode/sop/ai/memory"
 )
 
+const mintToSpaceArgsSchema = `{"type":"object","properties":{"kb_name":{"type":"string","description":"Target knowledge base name."},"content":{"type":"string","description":"Durable content to persist in the target knowledge base."},"category":{"type":"string","description":"Optional category label for the persisted content."}},"required":["kb_name","content"]}`
+
+const updateSpaceConfigArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"kb_name":{"type":"string","description":"Target knowledge base name."},"config":{"type":"object","description":"Knowledge base configuration object to persist."}},"required":["kb_name","config"]}`
+
 func (a *CopilotAgent) registerSpaceTools(ctx context.Context) {
-	a.registry.RegisterWithUI("mint_to_space", "Mints a declarative fact, observation, or solution directly into a designated UI Knowledge Base (Space) to scale learning to other users.", "Directly stores information as a permanent KnowledgeChunk.", "(kb_name: string, content: string, category?: string)", a.toolMintToSpace)
-	a.registry.RegisterWithUI("delete_space", "Deletes an entire Space (Knowledge Base).", "Removes a space and all of its contents.", "(kb_name: string)", a.toolDeleteSpace)
-	a.registry.RegisterWithUI("enrich_space", "Forces the background process or directly executes knowledge base enrichment on a given item or entire KB.", "Executes knowledge base sleep cycle compilation.", "(kb_name: string)", a.toolEnrichSpace)
-	a.registry.RegisterWithUI("update_space_config", "Updates the configuration of a specified Space (Knowledge Base). Needs JSON config map.", "Sets the routing rules, system prompts, and tool access for a specific Space.", "(kb_name: string, config: object)", a.toolUpdateSpaceConfig)
-	a.registry.RegisterWithUI("read_space_config", "Retrieves the current configuration rules of a specified Space (Knowledge Base).", "Returns the routing rules, system prompts, and tool access applied to the space.", "(kb_name: string)", a.toolReadSpaceConfig)
-	a.registry.RegisterWithUI("vectorize_space", "Triggers vectorization for the entire Space (Knowledge Base) to compute semantic embeddings.", "Generates AI embeddings for all unvectorized items in the space.", "(kb_name: string)", a.toolVectorizeSpace)
-	a.registry.RegisterWithUI("vectorize_space_categories", "Triggers vectorization for specific Categories within the Space.", "Generates AI embeddings for items scoped to specific categories.", "(kb_name: string, categories: []string)", a.toolVectorizeCategories)
-	a.registry.RegisterWithUI("vectorize_space_items", "Triggers vectorization for specific Items within a Category.", "Generates AI embeddings for specific items.", "(kb_name: string, category: string, item_names: []string)", a.toolVectorizeItems)
+	a.registry.RegisterWithUI("mint_to_space", "Stores generated or durable knowledge in a target Space.", MintToSpaceInstruction, mintToSpaceArgsSchema, a.toolMintToSpace)
+	a.registry.RegisterWithUI("delete_space", "Deletes an entire Space after explicit user intent.", DeleteSpaceInstruction, "(kb_name: string)", a.toolDeleteSpace)
+	a.registry.RegisterWithUI("enrich_space", "Reruns Space enrichment when derived knowledge needs refresh.", EnrichSpaceInstruction, "(kb_name: string)", a.toolEnrichSpace)
+	a.registry.RegisterWithUI("update_space_config", "Changes routing or behavior settings for a Space.", UpdateSpaceConfigInstruction, updateSpaceConfigArgsSchema, a.toolUpdateSpaceConfig)
+	a.registry.RegisterWithUI("read_space_config", "Reads the current config for a Space before changes.", ReadSpaceConfigInstruction, "(kb_name: string)", a.toolReadSpaceConfig)
+	a.registry.RegisterWithUI("vectorize_space", "Refreshes embeddings for an entire Space on explicit request.", VectorizeSpaceInstruction, "(kb_name: string)", a.toolVectorizeSpace)
+	a.registry.RegisterWithUI("vectorize_space_categories", "Refreshes embeddings for selected Space categories.", VectorizeSpaceCategoriesInstruction, "(kb_name: string, categories: []string)", a.toolVectorizeCategories)
+	a.registry.RegisterWithUI("vectorize_space_items", "Refreshes embeddings for specific items in a Space category.", VectorizeSpaceItemsInstruction, "(kb_name: string, category: string, item_names: []string)", a.toolVectorizeItems)
 }
 
 func emitSpaceMutationEvent(ctx context.Context, action string, databaseName string, kbName string) {

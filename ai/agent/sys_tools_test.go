@@ -92,10 +92,38 @@ func TestInjectToolsForDomain_StoresUsesCompactProtocolSlice(t *testing.T) {
 	if !strings.Contains(tools, "Structured Context: Stores Tools") {
 		t.Fatalf("expected Stores tools context to be injected, got: %s", tools)
 	}
-	if strings.Contains(tools, "<h2> Example</h2>") || strings.Contains(tools, "join_right") {
+	if strings.Contains(tools, "<h2> Example</h2>") || strings.Contains(tools, "Execution Flow Engine Guardrails") {
 		t.Fatalf("expected injected Stores tools context to omit the large example block, got: %s", tools)
 	}
-	if !strings.Contains(tools, "Research & Orchestration Rules") || !strings.Contains(tools, "Use `list_stores` to research schema and relations") {
-		t.Fatalf("expected injected Stores tools context to retain compact research guidance, got: %s", tools)
+	if !strings.Contains(tools, "- execute_script:") || !strings.Contains(tools, "- list_stores:") {
+		t.Fatalf("expected injected Stores tools context to be generated from tool descriptions, got: %s", tools)
+	}
+	if !strings.Contains(tools, "- join:") || !strings.Contains(tools, "- explain_join:") {
+		t.Fatalf("expected injected Stores tools context to include grounded join guidance, got: %s", tools)
+	}
+}
+
+func TestInjectToolsForDomain_SpacesUsesDescriptionContext(t *testing.T) {
+	ctx := context.Background()
+	sysDBOptions := sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}}
+	sysDB := database.NewDatabase(sysDBOptions)
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}}}
+
+	ag.injectToolsForDomain(ctx, &TaskContextClassification{Domain: SpacesDomain})
+	tools := ag.getSystemToolsContext(ctx)
+
+	if !strings.Contains(tools, "Structured Context: Spaces Tools") {
+		t.Fatalf("expected Spaces tools context to be injected, got: %s", tools)
+	}
+	if !strings.Contains(tools, "- mint_to_space:") || !strings.Contains(tools, "- update_space_config:") {
+		t.Fatalf("expected injected Spaces tools context to be generated from tool descriptions, got: %s", tools)
+	}
+	if !strings.Contains(tools, "manages its own transaction") || !strings.Contains(tools, "do not call it automatically after normal content writes") {
+		t.Fatalf("expected injected Spaces tools context to retain behavioral guidance from tool descriptions, got: %s", tools)
+	}
+	if strings.Contains(tools, "# Spaces Manual") || strings.Contains(tools, "<h2> Core Conventions</h2>") {
+		t.Fatalf("expected injected Spaces tools context to avoid the old manual blob, got: %s", tools)
 	}
 }

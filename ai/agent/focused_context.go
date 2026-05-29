@@ -408,6 +408,7 @@ func buildCompactStoresToolContext(manual string) string {
 		"- Use `list_stores` to research schema and relations when field names, value types, predicate shapes, or join mappings are ambiguous.",
 		"- Scope research with `stores:[...]` when likely target stores are already known.",
 		"- `list_stores` returns grounded `schema=...` and optional `relations=[...]` per store; reuse those as the source of truth.",
+		"- `join` and `join_right` emit a combined flat record by default; reuse dotted store-qualified field paths unless a later `project` reshapes the output.",
 		"- Use `gettoolinfo('execute_script')` only when the AST shape itself is unclear.",
 	}
 
@@ -500,20 +501,28 @@ func (a *CopilotAgent) buildFocusedToolContext(taskCtx *TaskContextClassificatio
 		if taskCtx.ScriptAuthoring {
 			scriptSection = "Structured Context: Script Authoring Tools\n" + toolsScriptsManual + "\n\n"
 		}
-		storesManual := trimStoresManualForCombinedContext(toolsStoresManual)
-		return "Structured Context: Cross-Domain Tools (Stores & Spaces)\n" +
-			scriptSection + storesManual + "\n\n" + toolsSpacesManual
+		parts := make([]string, 0, 3)
+		if scriptSection != "" {
+			parts = append(parts, strings.TrimSpace(scriptSection))
+		}
+		if storesContext := a.buildStoresToolDescriptionContext(); storesContext != "" {
+			parts = append(parts, storesContext)
+		}
+		if spacesContext := a.buildSpacesToolDescriptionContext(); spacesContext != "" {
+			parts = append(parts, spacesContext)
+		}
+		return strings.Join(parts, "\n\n")
 	}
 
 	switch {
 	case strings.EqualFold(taskCtx.Domain, StoresDomain):
-		manual := "Structured Context: Stores Tools\n" + buildCompactStoresToolContext(toolsStoresManual)
+		manual := a.buildStoresToolDescriptionContext()
 		if taskCtx.ScriptAuthoring {
-			manual = "Structured Context: Script Authoring Tools\n" + toolsScriptsManual + "\n\n" + "Structured Context: Stores Tools\n" + trimStoresManualForCombinedContext(toolsStoresManual)
+			manual = "Structured Context: Script Authoring Tools\n" + toolsScriptsManual + "\n\n" + a.buildStoresToolDescriptionContext()
 		}
 		return manual
 	case strings.EqualFold(taskCtx.Domain, SpacesDomain):
-		return "Structured Context: Spaces Tools\n" + toolsSpacesManual
+		return a.buildSpacesToolDescriptionContext()
 	default:
 		return ""
 	}

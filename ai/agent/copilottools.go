@@ -16,23 +16,35 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-const ExecuteScriptInstruction = `Execute a JSON AST script for multi-step store operations. Focus on orchestration semantics: begin a transaction, read or mutate stores, then commit or rollback. Chain multi-step reads with result_var/input_var. Use list_stores to research stores before multi-store joins or whenever schema is uncertain. Prefer scoped calls such as stores:["users","users_orders","orders"] so research stays compact on large databases. list_stores returns grounded per-store lines with schema=... and optional relations=[...]. Read schema=... for exact field names and value types, and read relations=[...] for related-store and join-field semantics. Treat those returned relations=[...] entries as the source of truth. If the AST shape is ambiguous, call gettoolinfo('execute_script'). Use concrete predicate objects and concrete join mappings; do not guess missing values.`
+const (
+	ExecuteScriptInstruction = `Execute a full ordered JSON AST under script for multi-step store operations. Each step should be an object such as {op, args?, input_var?, result_var?}. Focus on orchestration semantics: begin a transaction, read or mutate stores, then commit or rollback. Chain multi-step reads with result_var/input_var. Use list_stores to research stores before multi-store joins or whenever schema is uncertain. Prefer scoped calls such as stores:["users","users_orders","orders"] so research stays compact on large databases. list_stores returns grounded per-store lines with schema=... and optional relations=[...]. Read schema=... for exact field names and value types, and read relations=[...] for related-store and join-field semantics. Treat those returned relations=[...] entries as the source of truth. join and join_right emit a combined flat record by default, so reuse dotted store-qualified field paths unless a later project step reshapes the output. If the AST shape is ambiguous, call gettoolinfo('execute_script'). Use concrete predicate objects and concrete join mappings; do not guess missing values.`
+	ListStoresInstruction    = "Research store structure before writing multi-store reads or repairs. Pass stores:[...] to scope the response to likely targets. The result returns grounded schema=... and optional relations=[...] lines; reuse those returned relations as the source of truth for join mappings and field paths rather than guessing them."
+)
+
+const listStoresArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"stores":{"type":"array","description":"Optional list of likely target store names to keep the research response compact.","items":{"type":"string"}}}}`
 
 const (
-	SelectInstruction = "Selects data from a store. See SOP KB for instructions."
-
-	JoinInstruction = "Joins data from two stores. See SOP KB for instructions."
-
-	AddInstruction               = "Adds data to a store. See SOP KB for instructions."
-	UpdateInstruction            = "Updates data in a store. See SOP KB for instructions."
-	DeleteInstruction            = "Deletes data from a store by key. See SOP KB for instructions."
-	ManageTransactionInstruction = "Manages transactions (begin, commit, rollback). See SOP KB for instructions."
+	SelectInstruction                   = "Read or mutate one store directly when you do not need a multi-step AST. Provide the store name plus optional key/value criteria, fields, limit, and direction. For mutations set action=delete or action=update and include grounded update_values instead of placeholder objects."
+	JoinInstruction                     = "Join two stores directly when the join fields are already grounded. Provide left_store, right_store, aligned join field arrays, and optional fields/limit/direction. Prefer execute_script plus list_stores first when join mappings or field paths are still uncertain."
+	ExplainJoinInstruction              = "Preview how a join will execute before running it. Provide the target right_store and a grounded on mapping to see whether the engine can use an index scan or will fall back to a full scan. Use this after list_stores research when join-key selection or performance is still uncertain."
+	AddInstruction                      = "Insert one record into a store by providing store, key, and value. Use this for single-record writes; use execute_script when the write must be part of a larger transaction or multi-step flow."
+	UpdateInstruction                   = "Replace or update one record in a store by key. Provide the exact store, key, and value payload. Use execute_script when the update depends on prior reads or must participate in a broader transaction."
+	DeleteInstruction                   = "Delete one record from a store by exact key. Use execute_script when deletion depends on researched predicates, joins, or transaction orchestration rather than a single known key."
+	ManageTransactionInstruction        = "Control a transaction directly with action=begin, commit, or rollback. Use this only for explicit transaction control outside execute_script; for multi-step read/write orchestration, prefer execute_script and keep begin_tx/commit_tx/rollback_tx inside the AST."
+	MintToSpaceInstruction              = "Store durable generated or discovered knowledge in a Space for future retrieval. Provide the exact kb_name the user asked for plus the content to persist; optional category groups related entries. Use this for facts, notes, solutions, or generated content that should live beyond the current chat. Do not replace it with an external import workflow, and do not wrap it in begin_tx or commit_tx because mint_to_space manages its own transaction."
+	DeleteSpaceInstruction              = "Delete an entire Space and all of its stored knowledge. Use only when the user explicitly wants the whole knowledge base removed, not when they only want to change content or configuration. Provide the exact kb_name to remove, and do not wrap delete_space in begin_tx or commit_tx because it runs through its own deletion path."
+	EnrichSpaceInstruction              = "Run the Space enrichment pipeline so stored items can be normalized, linked, or expanded by the knowledge workflow. Use this after meaningful content changes only when the user explicitly wants derived knowledge refreshed or enrichment rerun; it is not the default follow-up to every mint or config change."
+	UpdateSpaceConfigInstruction        = "Change Space-level configuration such as routing, system prompts, persona behavior, or enabled tool access. Provide the exact kb_name and a grounded config object with the intended settings. Read the current config first when you need to inspect or preserve existing values instead of guessing a partial patch from natural language alone."
+	ReadSpaceConfigInstruction          = "Read the current configuration for a Space before changing it or when the user asks how the Space behaves. Use this to inspect routing rules, system prompts, persona settings, and enabled tool access for the target kb_name so later updates stay grounded."
+	VectorizeSpaceInstruction           = "Generate or refresh embeddings for every eligible item in a Space. Use this only when the user explicitly asks for vectorization, embeddings, semantic refresh, or full reindexing of the whole knowledge base; do not call it automatically after normal content writes."
+	VectorizeSpaceCategoriesInstruction = "Generate or refresh embeddings for specific categories within a Space. Provide kb_name and categories when the user wants semantic refresh for selected sections instead of the whole Space, and prefer this over full-space vectorization when the request is narrower."
+	VectorizeSpaceItemsInstruction      = "Generate or refresh embeddings for specific items inside a Space category. Provide kb_name, category, and item_names when the refresh should stay tightly scoped to known changed items, and prefer this over category-wide or full-space vectorization when possible."
 )
 
 // registerSystemTools registers the core system inspection tools.
 func (a *CopilotAgent) registerSystemTools(ctx context.Context) {
 	a.registry.Register("list_databases", "Lists all available databases.", "()", a.toolListDatabases)
-	a.registry.Register("list_stores", "Lists stores in the current or specified database. Pass stores=[...] to scope research to specific store names and return grounded schema/relations only for those targets.", "(database?: string, stores?: Array<string>)", a.toolListStores)
+	a.registry.Register("list_stores", ListStoresInstruction, listStoresArgsSchema, a.toolListStores)
 	a.registry.Register("list_tools", "Lists all available tools and their usage instructions.", "()", a.toolListTools)
 }
 

@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -194,5 +195,46 @@ func TestListTools_SpacesUpdateRoutingExposesSpaceMutationTools(t *testing.T) {
 	}
 	if names["execute_script"] || names["list_stores"] {
 		t.Fatalf("expected Spaces update routing to keep Stores protocol tools hidden, got %#v", names)
+	}
+}
+
+func TestListTools_LowRiskExposedToolsUseJSONSchemas(t *testing.T) {
+	agent := NewCopilotAgent(Config{}, nil, nil)
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
+
+	agent.registerTools(ctx)
+	tools, err := agent.ListTools(ctx)
+	if err != nil {
+		t.Fatalf("ListTools failed: %v", err)
+	}
+
+	expectedJSON := map[string]bool{
+		"list_stores":           false,
+		"manage_transaction":    false,
+		"mint_to_space":         false,
+		"update_space_config":   false,
+		"execute_local_command": false,
+		"send_email":            false,
+	}
+
+	for _, tool := range tools {
+		if _, ok := expectedJSON[tool.Name]; !ok {
+			continue
+		}
+		if !strings.HasPrefix(strings.TrimSpace(tool.Schema), "{") {
+			t.Fatalf("expected %s schema to be JSON, got %q", tool.Name, tool.Schema)
+		}
+		var decoded map[string]any
+		if err := json.Unmarshal([]byte(tool.Schema), &decoded); err != nil {
+			t.Fatalf("expected %s schema to decode as JSON: %v\nSchema: %s", tool.Name, err, tool.Schema)
+		}
+		expectedJSON[tool.Name] = true
+	}
+
+	for name, found := range expectedJSON {
+		if !found {
+			t.Fatalf("expected tool %s to be exposed with a JSON schema", name)
+		}
 	}
 }

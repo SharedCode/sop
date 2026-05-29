@@ -59,8 +59,42 @@ func TestRewriteRetryMetaAsk_UsesLatestAskOutcomeQuery(t *testing.T) {
 	if payload.CurrentUserQuery != rewritten {
 		t.Fatalf("expected payload current query to update, got %q", payload.CurrentUserQuery)
 	}
-	if payload.Variables["MetaAskOriginalQuery"] != "Can we retry the same ask?" {
-		t.Fatalf("expected original meta ask to be preserved, got %#v", payload.Variables["MetaAskOriginalQuery"])
+	if payload.RetryRewriteState == nil || payload.RetryRewriteState.ResolvedQuery != rewritten {
+		t.Fatalf("expected typed retry rewrite state to be set, got %+v", payload.RetryRewriteState)
+	}
+	if payload.RetryRewriteState.OriginalQuery != "Can we retry the same ask?" {
+		t.Fatalf("expected typed retry state to preserve original query, got %+v", payload.RetryRewriteState)
+	}
+}
+
+func TestRewriteRetryMetaAsk_AcceptsQualifiedRetryQuery(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.MRU = []MRUItem{{
+		Category: askOutcomeMRUCategoryQuery,
+		Context:  "- Last user ask: Find orders for users with first_name 'John' with total amount > 500",
+		Source:   MRUSourceAskOutcome,
+		Scope:    MRUScopeSession,
+	}}
+	payload := &ai.SessionPayload{Variables: make(map[string]any)}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+
+	query := "Since you failed, can you retry the same ask? perhaps I can supply missing info you need."
+	rewritten, ok := ag.rewriteRetryMetaAsk(ctx, query)
+	if !ok {
+		t.Fatalf("expected qualified retry meta ask to rewrite")
+	}
+	if rewritten != "Find orders for users with first_name 'John' with total amount > 500" {
+		t.Fatalf("unexpected rewritten query: %q", rewritten)
+	}
+	if payload.CurrentUserQuery != rewritten {
+		t.Fatalf("expected payload current query to update, got %q", payload.CurrentUserQuery)
+	}
+	if payload.RetryRewriteState == nil || payload.RetryRewriteState.ResolvedQuery != rewritten {
+		t.Fatalf("expected typed retry rewrite state to be set, got %+v", payload.RetryRewriteState)
+	}
+	if payload.RetryRewriteState.OriginalQuery != query {
+		t.Fatalf("expected typed retry state to preserve original query, got %+v", payload.RetryRewriteState)
 	}
 }
 
@@ -110,6 +144,310 @@ func TestCopilotAsk_RewritesRetryMetaAskBeforeRoutingAndEngine(t *testing.T) {
 	}
 	if payload.CurrentUserQuery != "Find John orders" {
 		t.Fatalf("expected payload current query to match rewritten ask, got %q", payload.CurrentUserQuery)
+	}
+	if payload.RetryRewriteState != nil {
+		t.Fatalf("expected retry rewrite state to clear after epilogue, got %+v", payload.RetryRewriteState)
+	}
+}
+
+func TestCopilotAsk_RewritesQualifiedRetryMetaAskBeforeRoutingAndEngine(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.Memory = NewShortTermMemory()
+	ag.service.session.MRU = []MRUItem{{
+		Category: askOutcomeMRUCategoryQuery,
+		Context:  "- Last user ask: Find John orders",
+		Source:   MRUSourceAskOutcome,
+		Scope:    MRUScopeSession,
+	}}
+	gen := &retryMetaAskMockGen{}
+	ag.SetGenerator(gen)
+	payload := &ai.SessionPayload{Variables: map[string]any{
+		"RoutingState": &TaskContextClassification{Entity: "Omni", Domain: StoresDomain, DBArtifacts: []string{"users"}, StoresArtifacts: []string{"users"}, Layers: []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}}},
+	}}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+
+	query := "Since you failed, can you retry the same ask? perhaps I can supply missing info you need."
+	resp, err := ag.Ask(ctx, query)
+	if err != nil {
+		t.Fatalf("Ask failed: %v", err)
+	}
+	if resp != "Retried previous ask." {
+		t.Fatalf("unexpected response: %q", resp)
+	}
+	if !strings.Contains(gen.CapturedPrompt, "User Query: Find John orders") {
+		t.Fatalf("expected native loop prompt to use rewritten query, got: %s", gen.CapturedPrompt)
+	}
+	if strings.Contains(gen.CapturedPrompt, query) {
+		t.Fatalf("did not expect qualified meta ask to reach native loop prompt, got: %s", gen.CapturedPrompt)
+	}
+	if payload.CurrentUserQuery != "Find John orders" {
+		t.Fatalf("expected payload current query to match rewritten ask, got %q", payload.CurrentUserQuery)
+	}
+	if payload.RetryRewriteState != nil {
+		t.Fatalf("expected retry rewrite state to clear after epilogue, got %+v", payload.RetryRewriteState)
+	}
+}
+
+func TestRewriteConversationalMetaAsk_UsesLastAssistantQuestionAndTargetAsk(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.Memory = NewShortTermMemory()
+	ag.service.session.MRU = []MRUItem{{
+		Category: askOutcomeMRUCategoryQuery,
+		Context:  "- Last user ask: Find John orders",
+		Source:   MRUSourceAskOutcome,
+		Scope:    MRUScopeSession,
+	}}
+	ag.service.session.Memory.AddThread(&ConversationThread{ID: sop.NewUUID(), RootPrompt: "Find John orders", Exchanges: []Interaction{{Role: RoleUser, Content: "Find John orders"}, {Role: RoleAssistant, Content: "Wait, join outputs a combined record. Do you want flat joined fields or nested objects?"}}})
+	payload := &ai.SessionPayload{Variables: make(map[string]any), ClarificationState: &ai.ClarificationState{TargetQuery: "Find John orders", AssistantQuestion: "Wait, join outputs a combined record. Do you want flat joined fields or nested objects?", Status: "pending"}}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+
+	rewritten, ok := ag.rewriteConversationalMetaAsk(ctx, "Flat joined fields. Keep dotted names.")
+	if !ok {
+		t.Fatalf("expected conversational meta ask to rewrite")
+	}
+	if !strings.Contains(rewritten, "Target ask: Find John orders") || !strings.Contains(rewritten, "Assistant clarification question: Wait, join outputs a combined record. Do you want flat joined fields or nested objects?") || !strings.Contains(rewritten, "User clarification: Flat joined fields. Keep dotted names.") {
+		t.Fatalf("unexpected conversational rewrite: %q", rewritten)
+	}
+	if payload.CurrentUserQuery != rewritten {
+		t.Fatalf("expected payload current query to update, got %q", payload.CurrentUserQuery)
+	}
+	if payload.ClarificationState == nil {
+		t.Fatal("expected explicit clarification state to remain until epilogue persists the resumed ask")
+	}
+	if payload.ClarificationState.TargetQuery != "Find John orders" || payload.ClarificationState.UserClarification != "Flat joined fields. Keep dotted names." || payload.ClarificationState.Status != "resolved" {
+		t.Fatalf("unexpected explicit clarification state after rewrite: %+v", payload.ClarificationState)
+	}
+}
+
+func TestIsLikelyMetaQuestion_DetectsClarifyingQuestionVariants(t *testing.T) {
+	positives := []string{
+		"Before I proceed, which output shape do you want for joined rows: flat dotted fields or nested objects?",
+		"To answer this correctly, should I return flat joined fields or nested objects?",
+		"Can you confirm which fields you want projected after the join?",
+		"How would you like the joined result formatted?",
+		"Do you want me to continue with flat joined fields?",
+		"Is your goal to remove the hardcoded queries from Go and adjust the MD file so the agent searches the KB naturally based on the use case?",
+	}
+	for _, text := range positives {
+		if !isLikelyMetaQuestion(text) {
+			t.Fatalf("expected meta question detector to accept %q", text)
+		}
+	}
+
+	negatives := []string{
+		"Found matching orders.",
+		"The join returns flat joined fields by default.",
+		"Users and orders were matched successfully.",
+	}
+	for _, text := range negatives {
+		if isLikelyMetaQuestion(text) {
+			t.Fatalf("did not expect meta question detector to accept %q", text)
+		}
+	}
+}
+
+func TestIsLikelyMetaConversationFollowUp_UsesQuestionMarkAndClarificationMarkers(t *testing.T) {
+	positives := []string{
+		"Should I go with flat joined fields?",
+		"Flat joined fields. Keep dotted names.",
+		"Yes, remove the hardcoded queries and let the agent search on demand.",
+		"Use nested objects instead.",
+	}
+	for _, text := range positives {
+		if !isLikelyMetaConversationFollowUp(text) {
+			t.Fatalf("expected follow-up detector to accept %q", text)
+		}
+	}
+
+	negatives := []string{
+		"Explain SOP architecture",
+		"Find users in the orders database",
+		"Create a script named expensive_orders",
+	}
+	for _, text := range negatives {
+		if isLikelyMetaConversationFollowUp(text) {
+			t.Fatalf("did not expect follow-up detector to accept %q", text)
+		}
+	}
+}
+
+func TestRewriteConversationalMetaAsk_DetectsUserQuestionReply(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.Memory = NewShortTermMemory()
+	ag.service.session.MRU = []MRUItem{{
+		Category: askOutcomeMRUCategoryQuery,
+		Context:  "- Last user ask: Find John orders",
+		Source:   MRUSourceAskOutcome,
+		Scope:    MRUScopeSession,
+	}}
+	ag.service.session.Memory.AddThread(&ConversationThread{ID: sop.NewUUID(), RootPrompt: "Find John orders", Exchanges: []Interaction{{Role: RoleUser, Content: "Find John orders"}, {Role: RoleAssistant, Content: "Before I proceed, which output shape do you want for joined rows: flat dotted fields or nested objects?"}}})
+	payload := &ai.SessionPayload{Variables: make(map[string]any)}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+
+	rewritten, ok := ag.rewriteConversationalMetaAsk(ctx, "Should I go with flat joined fields?")
+	if !ok {
+		t.Fatalf("expected user question reply to rewrite as meta follow-up")
+	}
+	if !strings.Contains(rewritten, "User clarification: Should I go with flat joined fields?") {
+		t.Fatalf("expected rewritten query to preserve user question reply, got %q", rewritten)
+	}
+}
+
+func TestRewriteConversationalMetaAsk_DetectsBroaderClarifyingQuestionStyle(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.Memory = NewShortTermMemory()
+	ag.service.session.MRU = []MRUItem{{
+		Category: askOutcomeMRUCategoryQuery,
+		Context:  "- Last user ask: Find John orders",
+		Source:   MRUSourceAskOutcome,
+		Scope:    MRUScopeSession,
+	}}
+	ag.service.session.Memory.AddThread(&ConversationThread{ID: sop.NewUUID(), RootPrompt: "Find John orders", Exchanges: []Interaction{{Role: RoleUser, Content: "Find John orders"}, {Role: RoleAssistant, Content: "Before I proceed, which output shape do you want for joined rows: flat dotted fields or nested objects?"}}})
+	payload := &ai.SessionPayload{Variables: make(map[string]any)}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+
+	rewritten, ok := ag.rewriteConversationalMetaAsk(ctx, "Flat dotted fields.")
+	if !ok {
+		t.Fatalf("expected broader clarifying question style to rewrite")
+	}
+	if !strings.Contains(rewritten, "Assistant clarification question: Before I proceed, which output shape do you want for joined rows: flat dotted fields or nested objects?") {
+		t.Fatalf("expected rewritten query to include broader clarifying question style, got %q", rewritten)
+	}
+}
+
+func TestRewriteConversationalMetaAsk_DetectsTranscriptStyleGoalQuestion(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.Memory = NewShortTermMemory()
+	ag.service.session.MRU = []MRUItem{{
+		Category: askOutcomeMRUCategoryQuery,
+		Context:  "- Last user ask: Should the agent search the KB naturally for execute_script docs?",
+		Source:   MRUSourceAskOutcome,
+		Scope:    MRUScopeSession,
+	}}
+	ag.service.session.Memory.AddThread(&ConversationThread{ID: sop.NewUUID(), RootPrompt: "Should the agent search the KB naturally for execute_script docs?", Exchanges: []Interaction{{Role: RoleUser, Content: "Should the agent search the KB naturally for execute_script docs?"}, {Role: RoleAssistant, Content: "Is your goal to remove the hardcoded queries from Go and adjust the MD file so the agent searches the KB naturally based on the use case?"}}})
+	payload := &ai.SessionPayload{Variables: make(map[string]any)}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+
+	rewritten, ok := ag.rewriteConversationalMetaAsk(ctx, "Yes, remove the hardcoded queries and let the agent search on demand.")
+	if !ok {
+		t.Fatalf("expected transcript-style goal question to rewrite")
+	}
+	if !strings.Contains(rewritten, "Target ask: Should the agent search the KB naturally for execute_script docs?") || !strings.Contains(rewritten, "Assistant clarification question: Is your goal to remove the hardcoded queries from Go and adjust the MD file so the agent searches the KB naturally based on the use case?") {
+		t.Fatalf("expected transcript-style goal question to be preserved in rewrite, got %q", rewritten)
+	}
+}
+
+func TestRewriteConversationalMetaAsk_IgnoresNonMetaAssistantTurn(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.Memory = NewShortTermMemory()
+	ag.service.session.Memory.AddThread(&ConversationThread{ID: sop.NewUUID(), RootPrompt: "Find John orders", Exchanges: []Interaction{{Role: RoleUser, Content: "Find John orders"}, {Role: RoleAssistant, Content: "Found matching orders."}}})
+	ctx := context.Background()
+
+	rewritten, ok := ag.rewriteConversationalMetaAsk(ctx, "Flat joined fields.")
+	if ok {
+		t.Fatalf("did not expect non-meta assistant turn to rewrite, got %q", rewritten)
+	}
+	if rewritten != "Flat joined fields." {
+		t.Fatalf("expected plain query to remain unchanged, got %q", rewritten)
+	}
+}
+
+func TestEpilogueAndCleanup_SetsPendingClarificationState(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	payload := &ai.SessionPayload{Variables: make(map[string]any)}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+
+	ag.epilogueAndCleanup(ctx, "Find John orders", ai.IntentOmni, "Before I proceed, which output shape do you want for joined rows: flat dotted fields or nested objects?", nil, nil, nil)
+
+	if payload.ClarificationState == nil {
+		t.Fatal("expected pending clarification state to be set")
+	}
+	if payload.ClarificationState.TargetQuery != "Find John orders" || payload.ClarificationState.Status != "pending" {
+		t.Fatalf("unexpected clarification state: %+v", payload.ClarificationState)
+	}
+}
+
+func TestEpilogueAndCleanup_ClearsPendingClarificationStateOnNormalAnswer(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	payload := &ai.SessionPayload{Variables: make(map[string]any), ClarificationState: &ai.ClarificationState{TargetQuery: "Find John orders", AssistantQuestion: "Which output shape?", Status: "pending"}}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+
+	ag.epilogueAndCleanup(ctx, "Find John orders", ai.IntentOmni, "Found matching orders.", nil, nil, nil)
+
+	if payload.ClarificationState != nil {
+		t.Fatalf("expected pending clarification state to clear on normal answer, got %+v", payload.ClarificationState)
+	}
+}
+
+func TestCopilotAsk_RewritesConversationalMetaAskBeforeRoutingAndEngine(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.Memory = NewShortTermMemory()
+	ag.service.session.MRU = []MRUItem{{
+		Category: askOutcomeMRUCategoryQuery,
+		Context:  "- Last user ask: Find John orders",
+		Source:   MRUSourceAskOutcome,
+		Scope:    MRUScopeSession,
+	}}
+	ag.service.session.Memory.AddThread(&ConversationThread{ID: sop.NewUUID(), RootPrompt: "Find John orders", Exchanges: []Interaction{{Role: RoleUser, Content: "Find John orders"}, {Role: RoleAssistant, Content: "Wait, join outputs a combined record. Do you want flat joined fields or nested objects?"}}})
+	gen := &retryMetaAskMockGen{}
+	ag.SetGenerator(gen)
+	payload := &ai.SessionPayload{Variables: map[string]any{
+		"RoutingState": &TaskContextClassification{Entity: "Omni", Domain: StoresDomain, DBArtifacts: []string{"users"}, StoresArtifacts: []string{"users"}, Layers: []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}}},
+	}}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+
+	resp, err := ag.Ask(ctx, "Flat joined fields. Keep dotted names.")
+	if err != nil {
+		t.Fatalf("Ask failed: %v", err)
+	}
+	if resp != "Retried previous ask." {
+		t.Fatalf("unexpected response: %q", resp)
+	}
+	if !strings.Contains(gen.CapturedPrompt, "Target ask: Find John orders") || !strings.Contains(gen.CapturedPrompt, "Assistant clarification question: Wait, join outputs a combined record. Do you want flat joined fields or nested objects?") || !strings.Contains(gen.CapturedPrompt, "User clarification: Flat joined fields. Keep dotted names.") {
+		t.Fatalf("expected native loop prompt to use conversational rewrite, got: %s", gen.CapturedPrompt)
+	}
+	if strings.Contains(gen.CapturedPrompt, "User Query: Flat joined fields. Keep dotted names.") {
+		t.Fatalf("did not expect raw meta reply to reach native loop prompt, got: %s", gen.CapturedPrompt)
+	}
+	if payload.ClarificationState != nil {
+		t.Fatalf("expected clarification state to clear after resumed ask completes, got %+v", payload.ClarificationState)
+	}
+}
+
+func TestBuildAskOutcomeMRUItems_UsesAskOutcomeOverride(t *testing.T) {
+	payload := &ai.SessionPayload{Variables: make(map[string]any), ClarificationState: &ai.ClarificationState{TargetQuery: "Find John orders", Status: "resolved"}}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+	items := buildAskOutcomeMRUItems(ctx, "Flat joined fields. Keep dotted names.", "Found orders", nil, nil)
+	found := false
+	for _, item := range items {
+		if item.Category == askOutcomeMRUCategoryQuery {
+			found = strings.Contains(item.Context, "Find John orders") && !strings.Contains(item.Context, "Flat joined fields")
+		}
+	}
+	if !found {
+		t.Fatalf("expected ask outcome MRU to persist the override target ask, got %+v", items)
+	}
+}
+
+func TestBuildAskOutcomeMRUItems_UsesRetryRewriteState(t *testing.T) {
+	payload := &ai.SessionPayload{Variables: make(map[string]any), RetryRewriteState: &ai.RetryRewriteState{OriginalQuery: "Can we retry the same ask?", ResolvedQuery: "Find John orders", Status: "resolved"}}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+	items := buildAskOutcomeMRUItems(ctx, "Can we retry the same ask?", "Found orders", nil, nil)
+	found := false
+	for _, item := range items {
+		if item.Category == askOutcomeMRUCategoryQuery {
+			found = strings.Contains(item.Context, "Find John orders") && !strings.Contains(item.Context, "Can we retry")
+		}
+	}
+	if !found {
+		t.Fatalf("expected ask outcome MRU to persist the typed retry target ask, got %+v", items)
 	}
 }
 
@@ -584,6 +922,37 @@ func TestBuildSystemPrompt_IncludesWorkflowRecipesComponent(t *testing.T) {
 	}
 	if !strings.Contains(recipeContent, "scope list_stores with stores:[...]") {
 		t.Fatalf("expected workflow recipes to include scoped list_stores guidance, got: %s", recipeContent)
+	}
+}
+
+func TestBuildSystemPrompt_IncludesClarificationQuestionStyleGuidance(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}}}
+
+	prompt := ag.buildSystemPrompt(ctx, "Explain SOP architecture", TaskContextClassification{Domain: StoresDomain})
+
+	var elements []PromptElement
+	if err := json.Unmarshal([]byte(prompt), &elements); err != nil {
+		t.Fatalf("expected buildSystemPrompt to return JSON prompt elements: %v\nPrompt: %s", err, prompt)
+	}
+
+	personaContent := ""
+	for _, element := range elements {
+		if element.Component == ComponentPersona {
+			personaContent = element.Content
+			break
+		}
+	}
+	if personaContent == "" {
+		t.Fatalf("expected persona component in prompt: %s", prompt)
+	}
+	checks := []string{"Ask one short direct clarification question", "Do you want...", "Which...", "Is your goal...", "Before I proceed..."}
+	for _, check := range checks {
+		if !strings.Contains(personaContent, check) {
+			t.Fatalf("expected persona guardrail to retain clarification style guidance %q, got: %s", check, personaContent)
+		}
 	}
 }
 

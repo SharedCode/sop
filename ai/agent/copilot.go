@@ -767,8 +767,12 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 		return res, err
 	}
 
+	rawQuery := query
 	if rewrittenQuery, rewritten := a.rewriteRetryMetaAsk(ctx, query); rewritten {
 		log.Info("Copilot Ask Gate 0 Retry Rewrite", "original_query", query, "effective_query", rewrittenQuery)
+		query = rewrittenQuery
+	} else if rewrittenQuery, rewritten := a.rewriteConversationalMetaAsk(ctx, query); rewritten {
+		log.Info("Copilot Ask Gate 0 Meta Conversation Rewrite", "original_query", query, "effective_query", rewrittenQuery)
 		query = rewrittenQuery
 	}
 
@@ -811,7 +815,7 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 	)
 
 	// 8. Epilogue & Cleanup
-	a.epilogueAndCleanup(ctx, query, intent, finalText, toolCalls, outcomeFacts, outcomeRecipes)
+	a.epilogueAndCleanup(ctx, rawQuery, intent, finalText, toolCalls, outcomeFacts, outcomeRecipes)
 
 	return finalText, nil
 }
@@ -828,15 +832,83 @@ func (a *CopilotAgent) rewriteRetryMetaAsk(ctx context.Context, query string) (s
 	}
 
 	if p := ai.GetSessionPayload(ctx); p != nil {
-		if p.Variables == nil {
-			p.Variables = make(map[string]any)
+		p.RetryRewriteState = &ai.RetryRewriteState{
+			OriginalQuery: query,
+			ResolvedQuery: resolved,
+			Status:        "resolved",
 		}
-		p.Variables["MetaAskOriginalQuery"] = query
-		p.Variables["MetaAskResolvedQuery"] = resolved
 		p.CurrentUserQuery = resolved
 	}
 
 	return resolved, true
+}
+
+func (a *CopilotAgent) rewriteConversationalMetaAsk(ctx context.Context, query string) (string, bool) {
+	if !isLikelyMetaConversationFollowUp(query) {
+		return query, false
+	}
+
+	a.rehydrateMRUFromMemory(ctx)
+	question, targetQuery, ok := a.pendingOrAnchoredClarification(ctx)
+	if !ok {
+		return query, false
+	}
+
+	effective := fmt.Sprintf("Target ask: %s\nAssistant clarification question: %s\nUser clarification: %s\nAnswer the clarification using the target ask context, then continue the target ask if the clarification resolves it.", targetQuery, question, strings.TrimSpace(query))
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		if p.ClarificationState == nil {
+			p.ClarificationState = &ai.ClarificationState{}
+		}
+		p.ClarificationState.TargetQuery = targetQuery
+		p.ClarificationState.AssistantQuestion = question
+		if strings.TrimSpace(p.ClarificationState.OriginalUserQuery) == "" {
+			p.ClarificationState.OriginalUserQuery = targetQuery
+		}
+		p.ClarificationState.UserClarification = strings.TrimSpace(query)
+		p.ClarificationState.EffectiveResumeAsk = effective
+		p.ClarificationState.Status = "resolved"
+		p.CurrentUserQuery = effective
+	}
+
+	return effective, true
+}
+
+func (a *CopilotAgent) pendingOrAnchoredClarification(ctx context.Context) (string, string, bool) {
+	if p := ai.GetSessionPayload(ctx); p != nil && p.ClarificationState != nil {
+		state := p.ClarificationState
+		if strings.EqualFold(strings.TrimSpace(state.Status), "pending") && strings.TrimSpace(state.AssistantQuestion) != "" && strings.TrimSpace(state.TargetQuery) != "" {
+			return strings.TrimSpace(state.AssistantQuestion), strings.TrimSpace(state.TargetQuery), true
+		}
+	}
+	return a.latestMetaConversationAnchor(ctx)
+}
+
+func (a *CopilotAgent) latestMetaConversationAnchor(ctx context.Context) (string, string, bool) {
+	if a.service == nil || a.service.session == nil || a.service.session.Memory == nil {
+		return "", "", false
+	}
+	thread := a.service.session.Memory.GetCurrentThread()
+	if thread == nil || len(thread.Exchanges) == 0 {
+		return "", "", false
+	}
+	last := thread.Exchanges[len(thread.Exchanges)-1]
+	if last.Role != RoleAssistant || !isLikelyMetaQuestion(last.Content) {
+		return "", "", false
+	}
+	targetQuery, ok := a.latestAskOutcomeQuery()
+	if !ok || strings.TrimSpace(targetQuery) == "" {
+		for i := len(thread.Exchanges) - 2; i >= 0; i-- {
+			if thread.Exchanges[i].Role == RoleUser && strings.TrimSpace(thread.Exchanges[i].Content) != "" {
+				targetQuery = strings.TrimSpace(thread.Exchanges[i].Content)
+				ok = true
+				break
+			}
+		}
+	}
+	if !ok || strings.TrimSpace(targetQuery) == "" {
+		return "", "", false
+	}
+	return strings.TrimSpace(last.Content), strings.TrimSpace(targetQuery), true
 }
 
 func (a *CopilotAgent) latestAskOutcomeQuery() (string, bool) {
@@ -874,8 +946,20 @@ func isRetryMetaAsk(query string) bool {
 		"run same ask again":          {},
 		"run the same ask again":      {},
 	}
-	_, ok := known[normalized]
-	return ok
+	if _, ok := known[normalized]; ok {
+		return true
+	}
+
+	hasSameAsk := strings.Contains(normalized, "same ask") || strings.Contains(normalized, "previous ask")
+	if !hasSameAsk {
+		return false
+	}
+	for _, marker := range []string{"retry", "repeat", "rerun", "run again", "try again"} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeRetryMetaAskPhrase(query string) string {
@@ -883,6 +967,86 @@ func normalizeRetryMetaAskPhrase(query string) string {
 	line = strings.TrimSpace(strings.Trim(line, ".!?"))
 	line = strings.ToLower(line)
 	return strings.Join(strings.Fields(line), " ")
+}
+
+func isLikelyMetaConversationFollowUp(query string) bool {
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" || strings.HasPrefix(trimmed, "/") {
+		return false
+	}
+	if strings.HasSuffix(trimmed, "?") {
+		return true
+	}
+	if len(trimmed) > 280 {
+		return false
+	}
+	lower := strings.ToLower(trimmed)
+	for _, prefix := range []string{"yes", "no", "use ", "prefer ", "it is ", "it's ", "flatten", "nested", "only ", "just ", "the ", "this ", "that ", "those ", "these ", "keep ", "make it ", "return ", "show ", "remove ", "add ", "continue ", "proceed ", "go with ", "let's use ", "lets use ", "i want ", "we want "} {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+	for _, marker := range []string{"flat", "flattened", "nested", "dotted", "same ask", "hardcoded queries", "on demand", "that shape", "those fields", "that option", "the first option", "the second option"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func isLikelyMetaQuestion(text string) bool {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" || !strings.Contains(trimmed, "?") {
+		return false
+	}
+	normalized := normalizeMetaQuestionText(trimmed)
+	for _, marker := range []string{
+		"do you mean",
+		"are you asking",
+		"should i",
+		"should we",
+		"should i continue",
+		"should i proceed",
+		"should we continue",
+		"would you like",
+		"do you want",
+		"do you want me to",
+		"which",
+		"which output shape",
+		"which fields",
+		"what kind",
+		"what should",
+		"what format",
+		"can you clarify",
+		"can you confirm",
+		"is your goal",
+		"is the goal",
+		"before i proceed",
+		"before i continue",
+		"to answer this correctly",
+		"to continue correctly",
+		"so i can continue",
+		"how would you like",
+		"how should",
+		"is it",
+		"nested",
+		"flattened",
+		"flat",
+		"projection",
+		"join outputs",
+	} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeMetaQuestionText(text string) string {
+	text = strings.ToLower(strings.TrimSpace(text))
+	replacer := strings.NewReplacer("\n", " ", "\t", " ", ",", " ", ":", " ", ";", " ", "(", " ", ")", " ", "`", " ")
+	text = replacer.Replace(text)
+	return strings.Join(strings.Fields(text), " ")
 }
 
 func (a *CopilotAgent) handleDirectInvocation(ctx context.Context, query string, gen ai.Generator) (bool, string, error) {
@@ -1226,14 +1390,60 @@ func (a *CopilotAgent) injectToolsForDomain(ctx context.Context, taskCtx *TaskCo
 
 	if focused := a.buildFocusedToolContext(taskCtx); focused != "" {
 		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\n"+focused, MRUSourceSystemTools)
-		return
 	}
+}
 
-	if strings.EqualFold(taskCtx.Domain, "Stores") {
-		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\nStructured Context: Stores Tools\n"+buildCompactStoresToolContext(toolsStoresManual), MRUSourceSystemTools)
-	} else if strings.EqualFold(taskCtx.Domain, "Spaces") {
-		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\nStructured Context: Spaces Tools\n"+toolsSpacesManual, MRUSourceSystemTools)
+func (a *CopilotAgent) renderToolDefinitionContext(title string, toolNames []string) string {
+	if a == nil || a.registry == nil || strings.TrimSpace(title) == "" {
+		return ""
 	}
+	var lines []string
+	for _, name := range toolNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		toolDef, ok := a.registry.Get(name)
+		if !ok {
+			continue
+		}
+		description := strings.Join(strings.Fields(strings.TrimSpace(toolDef.Description)), " ")
+		if description == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("- %s: %s", toolDef.Name, description))
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return title + "\n" + strings.Join(lines, "\n")
+}
+
+func (a *CopilotAgent) buildStoresToolDescriptionContext() string {
+	return a.renderToolDefinitionContext("Structured Context: Stores Tools", []string{
+		"execute_script",
+		"list_stores",
+		"select",
+		"join",
+		"explain_join",
+		"add",
+		"update",
+		"delete",
+		"manage_transaction",
+	})
+}
+
+func (a *CopilotAgent) buildSpacesToolDescriptionContext() string {
+	return a.renderToolDefinitionContext("Structured Context: Spaces Tools", []string{
+		"mint_to_space",
+		"delete_space",
+		"enrich_space",
+		"update_space_config",
+		"read_space_config",
+		"vectorize_space",
+		"vectorize_space_categories",
+		"vectorize_space_items",
+	})
 }
 
 func (a *CopilotAgent) trackEpisodeMetadata(ctx context.Context, intent string) {
@@ -1355,6 +1565,8 @@ func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, int
 
 	}
 	a.persistAskOutcomeMRU(ctx, query, finalText, toolCalls, outcomeFacts)
+	a.updateClarificationState(ctx, query, finalText, toolCalls)
+	a.clearRetryRewriteState(ctx)
 
 	// 7. Persist compact session projection back into STM.
 	mruSnapshot := a.getMRUSnapshot()
@@ -1377,11 +1589,44 @@ func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, int
 	}
 }
 
+func (a *CopilotAgent) clearRetryRewriteState(ctx context.Context) {
+	if p := ai.GetSessionPayload(ctx); p != nil && p.RetryRewriteState != nil {
+		p.RetryRewriteState = nil
+	}
+}
+
+func (a *CopilotAgent) updateClarificationState(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall) {
+	p := ai.GetSessionPayload(ctx)
+	if p == nil {
+		return
+	}
+	if strings.TrimSpace(finalText) == "" {
+		return
+	}
+	if len(toolCalls) == 0 && isLikelyMetaQuestion(finalText) {
+		targetQuery := strings.TrimSpace(askOutcomeQueryForPersistence(ctx, query))
+		if targetQuery == "" {
+			targetQuery = strings.TrimSpace(query)
+		}
+		p.ClarificationState = &ai.ClarificationState{
+			TargetQuery:       targetQuery,
+			AssistantQuestion: strings.TrimSpace(finalText),
+			OriginalUserQuery: strings.TrimSpace(query),
+			Status:            "pending",
+		}
+		return
+	}
+	if p.ClarificationState != nil {
+		p.ClarificationState = nil
+	}
+}
+
 func summarizeAskOutcomeMRU(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) string {
 	return renderAskOutcomeMRUItems(buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts))
 }
 
 func buildAskOutcomeMRUItems(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) []MRUItem {
+	query = askOutcomeQueryForPersistence(ctx, query)
 	query = compactMRUText(query, 180)
 	finalText = compactMRUText(finalText, 260)
 	if query == "" && finalText == "" {
@@ -1409,6 +1654,18 @@ func buildAskOutcomeMRUItems(ctx context.Context, query string, finalText string
 	}
 	items = append(items, MRUItem{Category: askOutcomeMRUCategoryGuidance, Context: "- Reuse confirmed facts and successful patterns from this outcome before broadening scope.", Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
 	return items
+}
+
+func askOutcomeQueryForPersistence(ctx context.Context, fallback string) string {
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		if p.ClarificationState != nil && strings.TrimSpace(p.ClarificationState.TargetQuery) != "" {
+			return strings.TrimSpace(p.ClarificationState.TargetQuery)
+		}
+		if p.RetryRewriteState != nil && strings.TrimSpace(p.RetryRewriteState.ResolvedQuery) != "" {
+			return strings.TrimSpace(p.RetryRewriteState.ResolvedQuery)
+		}
+	}
+	return fallback
 }
 
 func buildAskOutcomeFactMRUItems(outcomeFacts []string) []MRUItem {
@@ -1856,7 +2113,7 @@ func (a *CopilotAgent) resolvePersonaWithMetadata(ctx context.Context) (string, 
 
 	persona += "CRITICAL SYSTEM GUARDRAIL:\n" +
 		"1. Autonomous Research: You are an autonomous intelligent entity. You have implicit permission and are EXPECTED to use your 'Read' tools (e.g. Search KB, List/Query DB) to actively research Domains, Spaces (SOP or custom KBs), and codebase schemas as knowledge references. DO NOT proceed blindly if you lack context.\n" +
-		"2. Disambiguation: If a user's request is ambiguous or lacks constraints, DO NOT guess or hallucinate parameters. Use your search tools to find relevant constraints first. If self-research fails, halt execution and explicitly consult the user for clarification.\n\n"
+		"2. Disambiguation: If a user's request is ambiguous or lacks constraints, DO NOT guess or hallucinate parameters. Use your search tools to find relevant constraints first. If self-research fails, halt execution and explicitly consult the user for clarification. Ask one short direct clarification question that starts with a recognizable lead such as 'Do you want...', 'Which...', 'Is your goal...', or 'Before I proceed...'. Keep the clarification question specific to the unresolved choice.\n\n"
 
 	// 2. Cache in MRU for future turns
 	a.markMRUCategoryWithSource(cacheKey, persona, MRUSourcePersona)

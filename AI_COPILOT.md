@@ -48,6 +48,7 @@ We purposely designed a **Retrieval-Augmented Generation (RAG)** pipeline to add
 
 The ReAct loop in SOP is progressive by design, not a blind repeat-until-success loop.
 
+*   **Clarification First When Needed**: Before routing and execution, Gate 0 can now keep the interaction in a clarification-first mode. If the assistant asks a focused clarification question, the next user reply is rewritten back onto the original target ask and the normal execution path resumes.
 *   **Macro Then Micro**: Routing gates prepare the Ask frame first. The inner native ReAct loop then executes inside that frame without re-running the gates on every retry.
 *   **Ask-Anchored Working State**: After each inner tool step, the engine compacts the current grounded state into an Ask-local MRU summary. The next LLM call sees current focus, preserved valid work, confirmed facts, missing pieces, and suggested next tools.
 *   **Structured Tool Guidance**: Tools can return both a user-visible payload and an internal `progress_hint`. That hint can say what improved, what is still missing, and which tool should come next.
@@ -55,6 +56,8 @@ The ReAct loop in SOP is progressive by design, not a blind repeat-until-success
 *   **Bounded Repair, Not Infinite Retry**: The loop starts with a small retry budget and only extends it when new grounded facts, a proven recovery pattern, or positive progress hints show real convergence.
 *   **Recipe Learning Inside the Loop**: When a repair pattern succeeds, the engine learns an implicit recipe from that success. That recipe is not just stored for later asks; it also counts as live progress in the current Ask.
 *   **Hard Stop Semantics**: Tools can explicitly signal terminal outcomes such as blocked, anti-success, or hard error. In those cases, the loop stops immediately instead of wasting retries.
+
+In practical terms, this means a user can supplement or redirect a failed or incomplete Ask on the next turn without restating the whole task. Gate 0 carries the target ask forward, and the resumed Ask can continue into grounded research or tool execution once the model emits a native tool call.
 
 In practical terms, this means SOP's ReAct loop can see the returned agent context, the script it already tried, the exact failure, the grounded facts it has accumulated, and the missing pieces that still need research. That is what allows the LLM to preserve what is already correct and refine only the next delta.
 
