@@ -19,6 +19,7 @@ Determine whether the user's latest query expands the current state or switches 
 Use the continuity digest as the primary signal surface. Use the typed routing hint as a secondary compatibility hint.
 When an explicit anchor is present, use it as fresh evidence that may confirm, refine, or replace stale continuity.
 The digest fields are generic signals, not domain-specific hard constraints.
+When the active or candidate domain is Stores, parse likely store names from the latest query and match singular/plural variants against anchored or remembered store artifacts before dropping store selection.
 
 If the user is switching to a new domain or topic entirely, set intent to "SWITCH".
 If they are continuing the current topic, set intent to "CONTINUE" and output the updated context.

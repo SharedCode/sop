@@ -141,6 +141,62 @@ func (e *loopMockExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, 
 	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
 }
 
+type textualToolCallRecoveryGenerator struct {
+	calls int
+}
+
+func (m *textualToolCallRecoveryGenerator) Name() string { return "textual_tool_call_mock" }
+
+func (m *textualToolCallRecoveryGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *textualToolCallRecoveryGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	if m.calls == 1 {
+		return ai.GenOutput{Text: "Would you like me to rewrite and re-run the query with the correct scan operations to find John's orders over $500?\n\ncall:default_api:execute_script{\"script\":[{\"op\":\"scan\"}]}"}, nil
+	}
+	if !strings.Contains(prompt, "Tool results:") {
+		return ai.GenOutput{Text: "missing tool result follow-up"}, nil
+	}
+	return ai.GenOutput{Text: "Final answer: Found John Doe in the database"}, nil
+}
+
+type truncatedTextualToolCallRecoveryGenerator struct {
+	calls int
+}
+
+func (m *truncatedTextualToolCallRecoveryGenerator) Name() string {
+	return "truncated_textual_tool_call_mock"
+}
+
+func (m *truncatedTextualToolCallRecoveryGenerator) EstimateCost(inTokens, outTokens int) float64 {
+	return 0
+}
+
+func (m *truncatedTextualToolCallRecoveryGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	switch m.calls {
+	case 1:
+		return ai.GenOutput{Text: "call:default_api:execute_script{\"script\":[{\"op\":\"scan\"}]"}, nil
+	case 2:
+		checks := []string{
+			"Model generation error:",
+			"Retry instruction: Return exactly one valid native tool call",
+			"Repair directive: The last model output produced an invalid native tool call.",
+		}
+		for _, check := range checks {
+			if !strings.Contains(prompt, check) {
+				return ai.GenOutput{Text: "missing truncated textual call retry context: " + check}, nil
+			}
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{map[string]any{"op": "scan"}}},
+		}}}, nil
+	default:
+		return ai.GenOutput{Text: "Final answer: Found John Doe in the database"}, nil
+	}
+}
+
 type recoverableLoopMockExecutor struct{ calls int }
 
 func (e *recoverableLoopMockExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
@@ -226,6 +282,21 @@ func TestNativeReActEngine_UsesZeroTemperatureForRepairRetry(t *testing.T) {
 	}
 	if gen.temperatures[1] != nativeReActRepairTemperature {
 		t.Fatalf("expected repair temperature %v, got %#v", nativeReActRepairTemperature, gen.temperatures)
+	}
+}
+
+func TestFormatLLMGeneratedScriptForLog_ExecuteScript(t *testing.T) {
+	got := formatLLMGeneratedScriptForLog("execute_script", map[string]any{
+		"script": []any{map[string]any{"op": "scan"}, map[string]any{"op": "return"}},
+	})
+	if !strings.Contains(got, `{"op":"scan"}`) || !strings.Contains(got, `{"op":"return"}`) {
+		t.Fatalf("expected execute_script log payload to include serialized script steps, got %q", got)
+	}
+}
+
+func TestFormatLLMGeneratedScriptForLog_NonExecuteScript(t *testing.T) {
+	if got := formatLLMGeneratedScriptForLog("list_stores", map[string]any{"stores": []any{"users"}}); got != "" {
+		t.Fatalf("expected non-execute_script tool logs to omit script payload, got %q", got)
 	}
 }
 
@@ -400,6 +471,51 @@ func TestNativeReActEngine_EmitsVerboseProgressByDefault(t *testing.T) {
 	}
 	if !reflect.DeepEqual(progress, want) {
 		t.Fatalf("unexpected progress messages:\nwant=%#v\ngot=%#v", want, progress)
+	}
+}
+
+func TestNativeReActEngine_RecoversPrintedTextualToolCall(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &textualToolCallRecoveryGenerator{}
+
+	resp, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find John orders over 500",
+		Executor:     &loopMockExecutor{},
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer: Found John Doe in the database" {
+		t.Fatalf("expected recovered final answer, got %q", resp.FinalText)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "execute_script" {
+		t.Fatalf("expected printed textual tool call to be recovered and executed, got %#v", resp.ToolCalls)
+	}
+}
+
+func TestNativeReActEngine_RepairsTruncatedPrintedTextualToolCall(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &truncatedTextualToolCallRecoveryGenerator{}
+
+	resp, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find John orders over 500",
+		Executor:     &loopMockExecutor{},
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer: Found John Doe in the database" {
+		t.Fatalf("expected repaired final answer, got %q", resp.FinalText)
+	}
+	if gen.calls != 3 {
+		t.Fatalf("expected truncated printed call to trigger repair retry before final answer, got %d calls", gen.calls)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "execute_script" {
+		t.Fatalf("expected repaired tool call to execute after truncated printed call, got %#v", resp.ToolCalls)
 	}
 }
 
@@ -681,6 +797,84 @@ func TestFormatRecoverableToolError_IncludesValidationCategoryAndExample(t *test
 	}
 	if !strings.Contains(formatted, `"first_name":{"$eq":"<value>"}`) {
 		t.Fatalf("expected example predicate in formatted error, got %q", formatted)
+	}
+}
+
+func TestFormatRecoverableToolError_IncludesMultipleValidationIssues(t *testing.T) {
+	err := collapseExecuteScriptValidationErrors([]*executeScriptValidationError{
+		newExecuteScriptValidationError(
+			"invalid_filter_input_shape",
+			"filter input_var \"users_store\" resolves to an open_store handle",
+			`{"op":"scan","args":{"store":"users_store"},"result_var":"users_cursor"}`,
+		),
+		newExecuteScriptValidationError(
+			"invalid_filter_query_mismatch",
+			"filter condition field \"total_amount\" uses scalar value 500 but the current query implies $gt 500",
+			`{"op":"filter","args":{"condition":{"total_amount":{"$gt":500}}}}`,
+		),
+	})
+
+	formatted := formatRecoverableToolError(pendingToolRepair{ToolName: "execute_script", Strategy: nativeRepairStrategySameTool}, map[string]any{
+		"script": []any{map[string]any{"op": "filter"}},
+	}, err)
+
+	if !strings.Contains(formatted, "Repair categories: invalid_filter_input_shape, invalid_filter_query_mismatch") {
+		t.Fatalf("expected aggregated repair categories in formatted error, got %q", formatted)
+	}
+	if !strings.Contains(formatted, "Suggested fix examples:") {
+		t.Fatalf("expected aggregated suggested fix examples in formatted error, got %q", formatted)
+	}
+	if !strings.Contains(formatted, `{"op":"scan","args":{"store":"users_store"},"result_var":"users_cursor"}`) {
+		t.Fatalf("expected scan repair example in formatted error, got %q", formatted)
+	}
+	if !strings.Contains(formatted, `"total_amount":{"$gt":500}`) {
+		t.Fatalf("expected predicate repair example in formatted error, got %q", formatted)
+	}
+}
+
+func TestAppendOrReplaceRetriedToolResult_ReplacesLatestSameTool(t *testing.T) {
+	results := []nativeToolResult{
+		{Name: "list_stores", Result: "grounded"},
+		{Name: "execute_script", Result: "Retry instruction: fix first attempt"},
+	}
+	updated := appendOrReplaceRetriedToolResult(
+		results,
+		nativeToolResult{Name: "execute_script", Result: "ok"},
+		&pendingToolRepair{ToolName: "execute_script", Strategy: nativeRepairStrategySameTool},
+		"execute_script",
+	)
+	if len(updated) != 2 {
+		t.Fatalf("expected replacement to preserve slice length, got %#v", updated)
+	}
+	if updated[0].Name != "list_stores" || updated[0].Result != "grounded" {
+		t.Fatalf("expected unrelated tool result to remain intact, got %#v", updated)
+	}
+	if updated[1].Name != "execute_script" || updated[1].Result != "ok" {
+		t.Fatalf("expected latest execute_script retry result to replace prior entry, got %#v", updated)
+	}
+}
+
+func TestAppendOrReplaceRetriedToolResult_ExecuteScriptRetryDropsEarlierExecuteScriptEntries(t *testing.T) {
+	results := []nativeToolResult{
+		{Name: "list_stores", Result: "grounded users/orders"},
+		{Name: "execute_script", Result: "first bad script"},
+		{Name: "list_stores", Result: "grounded bridge relation"},
+		{Name: "execute_script", Result: "second bad script"},
+	}
+	updated := appendOrReplaceRetriedToolResult(
+		results,
+		nativeToolResult{Name: "execute_script", Result: "final repaired script"},
+		&pendingToolRepair{ToolName: "execute_script", Strategy: nativeRepairStrategySameTool},
+		"execute_script",
+	)
+	if len(updated) != 3 {
+		t.Fatalf("expected only non-execute_script entries plus the latest execute_script, got %#v", updated)
+	}
+	if updated[0].Name != "list_stores" || updated[1].Name != "list_stores" {
+		t.Fatalf("expected research tool entries to remain, got %#v", updated)
+	}
+	if updated[2].Name != "execute_script" || updated[2].Result != "final repaired script" {
+		t.Fatalf("expected only the latest execute_script entry to remain, got %#v", updated)
 	}
 }
 
@@ -1746,6 +1940,39 @@ func TestExtractListStoresSchemaSnapshot_PreservesFieldTypes(t *testing.T) {
 	relations, ok := snapshot[0]["relations"].([]string)
 	if !ok || len(relations) != 1 || relations[0] != "users_orders(key->users.key)" {
 		t.Fatalf("expected parsed relation, got %#v", snapshot[0]["relations"])
+	}
+}
+
+func TestExtractListStoresSchemaSnapshot_PreservesBracedSchemaAndJSONRelations(t *testing.T) {
+	result := "Stores:\n" +
+		"orders schema={items: list, key: uuid, order_date: string, status: string, total_amount: number} relations=[{\"source_fields\":[\"key\"],\"target_store\":\"users_orders\",\"target_fields\":[\"value\"]}]\n" +
+		"users schema={age: number, country: string, email: string, first_name: string, gender: string, key: uuid, last_name: string} relations=[{\"source_fields\":[\"age\"],\"target_store\":\"users_by_age\",\"target_fields\":[\"key\"]},{\"source_fields\":[\"key\"],\"target_store\":\"users_orders\",\"target_fields\":[\"key\"]}]\n" +
+		"users_orders schema={key: uuid, value: uuid} description=\"Link table: UserID -> OrderID\" relations=[{\"source_fields\":[\"key\"],\"target_store\":\"users\",\"target_fields\":[\"key\"]},{\"source_fields\":[\"value\"],\"target_store\":\"orders\",\"target_fields\":[\"key\"]}]"
+
+	snapshot := extractListStoresSchemaSnapshot(result)
+	if len(snapshot) != 3 {
+		t.Fatalf("expected three store snapshots, got %#v", snapshot)
+	}
+	ordersFields, ok := snapshot[0]["fields"].([]map[string]string)
+	if !ok || len(ordersFields) != 5 {
+		t.Fatalf("expected five parsed order fields, got %#v", snapshot[0]["fields"])
+	}
+	if ordersFields[0]["name"] != "items" || ordersFields[0]["type"] != "list" {
+		t.Fatalf("expected items:list, got %#v", ordersFields[0])
+	}
+	usersRelations, ok := snapshot[1]["relations"].([]string)
+	if !ok || len(usersRelations) != 2 {
+		t.Fatalf("expected two parsed user relations, got %#v", snapshot[1]["relations"])
+	}
+	if usersRelations[0] != `{"source_fields":["age"],"target_store":"users_by_age","target_fields":["key"]}` {
+		t.Fatalf("expected intact JSON relation object, got %#v", usersRelations[0])
+	}
+	bridgeFields, ok := snapshot[2]["fields"].([]map[string]string)
+	if !ok || len(bridgeFields) != 2 {
+		t.Fatalf("expected two parsed bridge fields, got %#v", snapshot[2]["fields"])
+	}
+	if bridgeFields[1]["name"] != "value" || bridgeFields[1]["type"] != "uuid" {
+		t.Fatalf("expected value:uuid, got %#v", bridgeFields[1])
 	}
 }
 

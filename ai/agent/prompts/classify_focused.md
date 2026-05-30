@@ -9,6 +9,7 @@ CONSTRAINTS:
 
 Your job is to identify the intent layers and requested CRUD operations based on the user's query: "%s".
 If the Domain or DB Artifact is missing in the constraints, deduce them from the query and the available artifacts.
+When the Domain is or may be Stores, parse likely store names from the user's query and match singular/plural variants against available store artifacts before leaving artifact arrays empty.
 
 For Cross-Domain requests, populate `stores_artifacts` and `spaces_artifacts` separately. Use `db_artifacts` only for single-domain compatibility or when there is only one relevant domain-specific artifact list.
 

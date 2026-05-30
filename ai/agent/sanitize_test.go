@@ -273,6 +273,26 @@ func TestValidateExecuteScriptPlaceholders_RejectsStringJoinValuePlaceholder(t *
 	assert.Contains(t, err.Error(), `"relation":"users_orders","target":"orders_store"`)
 }
 
+func TestValidateExecuteScriptPlaceholders_AggregatesMultipleIssues(t *testing.T) {
+	ctx := context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{CurrentUserQuery: "Find orders for users with first_name 'John' with total amount > 500"})
+	script := []ScriptInstruction{
+		{Op: "open_store", ResultVar: "users_store", Args: map[string]any{"name": "users", "transaction": "tx"}},
+		{Op: "filter", InputVar: "users_store", Args: map[string]any{"condition": map[string]any{"first_name": true}}, ResultVar: "john_users"},
+		{Op: "filter", InputVar: "john_users", Args: map[string]any{"condition": map[string]any{"total_amount": 500}}, ResultVar: "expensive_orders"},
+	}
+
+	err := validateExecuteScriptPlaceholders(ctx, script)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "execute_script validation error [invalid_filter_input_shape]")
+	assert.Contains(t, err.Error(), "execute_script validation error [invalid_filter_placeholder]")
+	assert.Contains(t, err.Error(), "execute_script validation error [invalid_filter_query_mismatch]")
+	assert.Contains(t, err.Error(), `{"op":"scan","args":{"store":"<store_var>"},"result_var":"users_store_cursor"}`)
+	assert.Contains(t, err.Error(), `"first_name":{"$eq":"<value>"}`)
+	assert.Contains(t, err.Error(), `"total_amount":{"$gt":500}`)
+	validationIssues := collectExecuteScriptValidationIssues(err)
+	assert.Len(t, validationIssues, 3)
+}
+
 func TestSanitizeScript_NormalizesLiveJohnQueryShapes(t *testing.T) {
 	rawSteps := []map[string]any{
 		{"op": "begin_tx", "args": map[string]any{"database": "dev_db", "mode": "read"}, "result_var": "tx"},

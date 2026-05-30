@@ -61,6 +61,31 @@ In practical terms, this means a user can supplement or redirect a failed or inc
 
 In practical terms, this means SOP's ReAct loop can see the returned agent context, the script it already tried, the exact failure, the grounded facts it has accumulated, and the missing pieces that still need research. That is what allows the LLM to preserve what is already correct and refine only the next delta.
 
+### Current Provider Reality
+
+The current Ask/ReAct loop is still one shared engine across providers. That means the loop policy is common, but provider-native continuity support is not equally mature.
+
+*   **Gemini**: Closest to a native tool loop. Gemini receives tool schemas, returns parsed native tool calls, and round-trips prior function call/function response turns with native call IDs and thought signatures.
+*   **OpenAI ChatGPT**: Currently used as a plain prompt wrapper in this codebase. It does not yet participate in the native tool continuation path used by the Ask/ReAct loop.
+*   **Anthropic**: Also currently used as a plain prompt wrapper in this codebase. It does not yet participate in the native tool continuation path used by the Ask/ReAct loop.
+
+The operational consequence is that Gemini is currently a **hybrid** implementation here: it preserves provider-native tool-call transport, but the Ask/ReAct engine still rebuilds a compact retry frame on each turn instead of delegating the full conversation state to a provider-owned loop.
+
+### Dynamic Tool Registration Boundary
+
+The correct architectural seam is between:
+
+1.  **Stage 1: Focused retrieval / schema grounding**
+2.  **Stage 2: Inner Ask/ReAct execution**
+
+Today SOP already narrows the prompt heavily through routing, focused context, and recipes. However, the tool contract itself is still broader than ideal. The next refinement is to let focused retrieval not only narrow prompt text, but also narrow the tool registration payload handed to the provider so the LLM reasons inside a smaller, grounded schema sandbox before the loop starts.
+
+This matters because dynamic tool registration:
+
+*   keeps token pressure lower than replaying broad schema text in every retry frame
+*   reduces guessed tables, fields, and join mappings
+*   gives runtime validation a smaller and more accurate contract to enforce
+
 ## Why This Matters
 This architecture allows us to create a **fully controllable, customizable AI** necessary for enterprise databases.
 *   **Agentic Interfaces**: We build a robust set of tools and give an AI agent the agency to use them, but within a secure sandbox.

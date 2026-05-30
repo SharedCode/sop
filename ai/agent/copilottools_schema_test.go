@@ -171,6 +171,118 @@ func TestToolListStores_FiltersRequestedStores(t *testing.T) {
 	}
 }
 
+func TestToolListStores_FuzzyMatchesRequestedStores(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sop_schema_fuzzy_filter_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbName := "test_db_schema_fuzzy_filter"
+	opts := sop.DatabaseOptions{StoresFolders: []string{tmpDir}}
+	agent := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{dbName: opts}, nil)
+	ctx := context.Background()
+	agent.Open(ctx)
+
+	db := database.NewDatabase(opts)
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	orders, err := jsondb.CreateObjectStore(ctx, opts, "orders", tx)
+	if err != nil {
+		tx.Rollback(ctx)
+		t.Fatalf("CreateObjectStore orders failed: %v", err)
+	}
+	if _, err := orders.Add(ctx, "o1", map[string]interface{}{"total_amount": 1500}); err != nil {
+		tx.Rollback(ctx)
+		t.Fatalf("Add orders failed: %v", err)
+	}
+
+	usersOrders, err := jsondb.CreateObjectStore(ctx, opts, "users_orders", tx)
+	if err != nil {
+		tx.Rollback(ctx)
+		t.Fatalf("CreateObjectStore users_orders failed: %v", err)
+	}
+	if _, err := usersOrders.Add(ctx, "uo1", map[string]interface{}{"user_id": "u1"}); err != nil {
+		tx.Rollback(ctx)
+		t.Fatalf("Add users_orders failed: %v", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: dbName, CurrentUserQuery: "Find order totals"})
+	res, err := agent.toolListStores(ctx, map[string]any{"database": dbName, "stores": []any{"order"}})
+	if err != nil {
+		t.Fatalf("toolListStores failed: %v", err)
+	}
+
+	if !strings.Contains(res, "orders") {
+		t.Fatalf("expected fuzzy matched result to contain orders, got %s", res)
+	}
+	if strings.Contains(res, "users_orders") {
+		t.Fatalf("expected fuzzy matched result to prefer exact singular/plural match over join table, got %s", res)
+	}
+}
+
+func TestToolListStores_InfersLikelyStoresFromUserQuery(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sop_schema_query_filter_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbName := "test_db_schema_query_filter"
+	opts := sop.DatabaseOptions{StoresFolders: []string{tmpDir}}
+	agent := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{dbName: opts}, nil)
+	ctx := context.Background()
+	agent.Open(ctx)
+
+	db := database.NewDatabase(opts)
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	fixtures := map[string]map[string]interface{}{
+		"users":        {"first_name": "John"},
+		"orders":       {"total_amount": 1500},
+		"users_orders": {"user_id": "u1", "order_id": "o1"},
+		"payments":     {"status": "paid"},
+	}
+	for name, sample := range fixtures {
+		store, err := jsondb.CreateObjectStore(ctx, opts, name, tx)
+		if err != nil {
+			tx.Rollback(ctx)
+			t.Fatalf("CreateObjectStore %s failed: %v", name, err)
+		}
+		if _, err := store.Add(ctx, name+"_1", sample); err != nil {
+			tx.Rollback(ctx)
+			t.Fatalf("Add %s failed: %v", name, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: dbName, CurrentUserQuery: "Find orders for users named John"})
+	res, err := agent.toolListStores(ctx, map[string]any{"database": dbName})
+	if err != nil {
+		t.Fatalf("toolListStores failed: %v", err)
+	}
+
+	if !strings.Contains(res, "users") || !strings.Contains(res, "orders") || !strings.Contains(res, "users_orders") {
+		t.Fatalf("expected query-derived narrowing to keep likely related stores, got %s", res)
+	}
+	if strings.Contains(res, "payments") {
+		t.Fatalf("expected query-derived narrowing to exclude unrelated stores, got %s", res)
+	}
+}
+
 func TestToolListStores_ReturnsProgressEnvelopeForNativeHints(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "sop_schema_native_hint_test")
 	if err != nil {

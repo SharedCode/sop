@@ -116,3 +116,26 @@ func TestClassifyFocusedTaskContext_EnforcesExplicitConstraints(t *testing.T) {
 		t.Fatalf("expected Cross-Domain layer to be removed under explicit single-domain constraint, got %#v", taskCtx.Layers)
 	}
 }
+
+func TestClassifyFocusedTaskContext_PromptEncouragesStoreNameParsing(t *testing.T) {
+	ctx := context.Background()
+	sysDBOptions := sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}}
+	sysDB := database.NewDatabase(sysDBOptions)
+	tx, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	sysDB.NewBtree(ctx, "users", tx)
+	sysDB.NewBtree(ctx, "orders", tx)
+	tx.Commit(ctx)
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	mock := &gate1MockGen{Response: `{"entity":"Omni","domain":"Stores","db_artifacts":["orders"],"stores_artifacts":["orders"],"spaces_artifacts":[],"layers":[]}`}
+
+	if _, err := ag.ClassifyFocusedTaskContext(ctx, "Omni:Stores:", "Omni", "Stores", "", mock); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(mock.CapturedPrompt, "parse likely store names from the user's query") {
+		t.Fatalf("expected focused classifier prompt to encourage store-name parsing, got: %s", mock.CapturedPrompt)
+	}
+	if !strings.Contains(mock.CapturedPrompt, "singular/plural variants") {
+		t.Fatalf("expected focused classifier prompt to mention singular/plural matching, got: %s", mock.CapturedPrompt)
+	}
+}

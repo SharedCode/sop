@@ -17,6 +17,7 @@ Context Outline Options:
 - Domains: 
   - "Stores": Programmatic access to databases, building AST scripts, querying JSON data, mutating records in a Store.
     Available Store Artifacts: [%s]
+    Parse likely store names directly from the user's query and match singular/plural variants against these artifacts before leaving artifact arrays empty.
   - "Spaces": Searching knowledge bases, platform documentation, answering business model questions, OR explicitly managing data within a "Space". If the user explicitly mentions "Space" or "Spaces" (e.g. "my Tasks space"), route to Spaces.
     Available SpaceArtifacts: [%s]
 - Operational Layers:

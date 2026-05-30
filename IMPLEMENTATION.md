@@ -651,6 +651,19 @@ Progression-history contract:
 - User-visible terminal outcomes stay in `tool_result`; infrastructure failures stay typed Go errors.
 - This preserves a clean distinction between productive bounded retry and conditions where the loop should stop instead of spiraling.
 
+10. Current provider support is intentionally uneven and should be tracked explicitly.
+
+- The Ask/ReAct loop currently runs through one shared `Generator` interface with no provider-specific strategy layer at the loop boundary.
+- Gemini is currently the closest implementation to a native loop: it accepts tool schemas, emits parsed native tool calls, and round-trips provider-native function call/function response continuity metadata.
+- OpenAI ChatGPT and Anthropic are currently prompt wrappers in this implementation. They do not yet consume the same native continuation path.
+- Operational consequence: Gemini is a hybrid model here. It preserves native tool-call transport, but the engine still reconstructs a compact retry frame each pass.
+
+11. Focused retrieval already narrows prompts, but not yet the tool contract itself.
+
+- Current implementation narrows the Ask through routing, focused context, recipes, and grounded tool results.
+- The next missing optimization is to narrow provider tool registration at the same boundary, so Stage 1 retrieval constrains Stage 2 tool descriptions/schemas before the Ask/ReAct loop begins.
+- This should reduce prompt bulk, lower hallucinated schema usage, and give runtime validation a tighter contract.
+
 ### Session Progression Plan (Multi-Ask)
 
 Objective: let each Ask final result shape the next Ask without replaying static prompt bulk.
@@ -709,6 +722,9 @@ Objective: let each Ask final result shape the next Ask without replaying static
 - [ ] TODO: Add per-session Ask Outcome storage and rolling working summary.
 - [ ] TODO: Add prompt assembly tests for single-Ask progression and follow-up Ask reuse.
 - [ ] TODO: Continue converting user-visible hard-stop tool outcomes from plain text to structured native terminal envelopes; keep infrastructure failures as typed Go errors.
+- [ ] TODO: Introduce a provider-strategy interface at the Ask/ReAct loop boundary so Gemini, OpenAI, and Anthropic do not all depend on one shared retry/continuation path.
+- [ ] TODO: Let Stage 1 focused retrieval dynamically narrow provider tool registration before Stage 2 Ask/ReAct execution, instead of relying primarily on prompt-side narrowing.
+- [ ] TODO: Move Gemini toward a continuation-first message/tool loop and reduce synthetic retry-frame reconstruction to app-owned policy state only.
 
 ## 3. Roadmap and Release Details
 

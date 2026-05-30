@@ -14,13 +14,18 @@ func TestBuildExecuteScriptArgsSchema_IncludesResearchAndOrchestrationGuidance(t
 		`call list_stores first`,
 		`schema=... and optional relations=[...]`,
 		`read schema=... for exact field names`,
-		`read relations=[...] for related-store and join-field semantics`,
+		`align those researched field names with the user's criteria values`,
+		`Read relations=[...] literally`,
+		`users_orders(key->users.key)`,
+		`target-store join field`,
+		`current-store field path`,
 		`returned relations=[...] entries as the source of truth`,
 		`emit a combined flat record by default`,
 		`call gettoolinfo('execute_script')`,
 		`filter expects {condition: object}`,
 		`{\"first_name\":{\"$eq\":\"John\"}}`,
 		`{\"orders.total_amount\":{\"$gt\":500}}`,
+		`do not emit booleans such as {\"first_name\":true}`,
 		`join and join_right must reuse researched relation mappings instead of inventing field pairs.`,
 		`Relation-target store variable for relation-driven joins`,
 		`Concrete left-to-right join mapping.`,
@@ -84,7 +89,7 @@ func TestBuildExecuteScriptArgsSchema_DeclaresJoinSpecificArgs(t *testing.T) {
 }
 
 func TestExecuteScriptInstruction_MentionsResearchAndConcreteShapes(t *testing.T) {
-	checks := []string{"full ordered JSON AST", "{op, args?, input_var?, result_var?}", "begin a transaction", "result_var/input_var", "list_stores", "schema=...", "relations=[...]", "join-field semantics", "prefer relation + target for join repair", "rewrite only the invalid join slice", "combined flat record by default", "gettoolinfo('execute_script')", "concrete predicate objects", "concrete join mappings"}
+	checks := []string{"full ordered JSON AST", "{op, args?, input_var?, result_var?}", "begin a transaction", "result_var/input_var", "list_stores", "schema=...", "relations=[...]", "align those researched field names with the user's criteria values", "join-field semantics", "prefer relation + target for join repair", "rewrite only the invalid join slice", "combined flat record by default", "gettoolinfo('execute_script')", "concrete predicate objects", "concrete join mappings", "boolean placeholders"}
 	for _, check := range checks {
 		if !strings.Contains(ExecuteScriptInstruction, check) {
 			t.Fatalf("expected ExecuteScriptInstruction to contain %q\nInstruction: %s", check, ExecuteScriptInstruction)
@@ -96,10 +101,15 @@ func TestExecuteScriptInstruction_MentionsResearchAndConcreteShapes(t *testing.T
 }
 
 func TestStoresAndSpacesInstructions_AreRichEnoughForToolContext(t *testing.T) {
-	storesChecks := []string{"stores:[...]", "schema=...", "relations=[...]"}
+	storesChecks := []string{"stores:[...]", "schema=...", "relations=[...]", "user's criteria", "infer likely store names", "singular/plural"}
 	for _, check := range storesChecks {
 		if !strings.Contains(ListStoresInstruction, check) {
 			t.Fatalf("expected ListStoresInstruction to contain %q\nInstruction: %s", check, ListStoresInstruction)
+		}
+	}
+	for _, check := range []string{"users_orders(key->users.key)", "target store", "current-store field path"} {
+		if !strings.Contains(ListStoresInstruction, check) {
+			t.Fatalf("expected ListStoresInstruction to explain concrete relations consumption with %q\nInstruction: %s", check, ListStoresInstruction)
 		}
 	}
 	spacesChecks := []string{"persist beyond the current chat", "exact kb_name", "semantic refresh"}
@@ -136,7 +146,7 @@ func TestStoreInstructions_MentionTransactionBehavior(t *testing.T) {
 }
 
 func TestStoresAndSpacesSchemas_CaptureScopedOperationalGuidance(t *testing.T) {
-	storesChecks := []string{"exact store names", "keep research compact", "users_orders"}
+	storesChecks := []string{"keep research compact", "users_orders", "Infer likely targets from the user's ask", "Close singular/plural forms are narrowed internally"}
 	for _, check := range storesChecks {
 		if !strings.Contains(listStoresArgsSchema, check) {
 			t.Fatalf("expected listStoresArgsSchema to contain %q\nSchema: %s", check, listStoresArgsSchema)

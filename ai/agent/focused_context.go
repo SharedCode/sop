@@ -402,6 +402,7 @@ func buildCompactStoresToolContext(manual string) string {
 		"<h2> Core Conventions</h2>",
 		"- Use `result_var` and `input_var` to chain multi-step reads.",
 		"- Use concrete predicate objects such as `{\"first_name\":{\"$eq\":\"John\"}}`, not placeholder booleans or nulls.",
+		"- Take predicate field names from researched `schema=...` output and take predicate values/operators from the user's criteria; do not replace either side with placeholders.",
 	}
 	if coreSection != "" && strings.Contains(coreSection, "begin_tx") {
 		// Keep only the minimal execution-shape reminder; orchestration details live in recipes and focused execution context.
@@ -412,6 +413,8 @@ func buildCompactStoresToolContext(manual string) string {
 		"- Use `list_stores` to research schema and relations when field names, value types, predicate shapes, or join mappings are ambiguous.",
 		"- Scope research with `stores:[...]` when likely target stores are already known.",
 		"- `list_stores` returns grounded `schema=...` and optional `relations=[...]` per store; reuse those as the source of truth.",
+		"- Read relations literally: in `users_orders(key->users.key)`, `users_orders` is the target store, `key` is the target-store join field, and `users.key` is the current-store field path.",
+		"- If you must emit `on`, convert those grounded relation fields into the join op's concrete field mapping; never use store names where field paths are required.",
 		"- `join` and `join_right` emit a combined flat record by default; reuse dotted store-qualified field paths unless a later `project` reshapes the output.",
 		"- Use `gettoolinfo('execute_script')` only when the AST shape itself is unclear.",
 	}

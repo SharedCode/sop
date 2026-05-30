@@ -18,6 +18,7 @@ import (
 // NativeReActEngine implements ReasoningEngine using native LLM API tool calling.
 type NativeReActEngine struct {
 	EnableObfuscation bool
+	MaxTokens         int
 }
 
 const nativeReActBaseToolIterations = 3
@@ -110,6 +111,12 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 		emitVerboseProgress(ctx, "Reasoning iteration %d of %d.", iteration+1, budgetState.allowedIterations)
 		promptProfile := nativeReActPromptBudgetProfile()
 		mainPrompt, promptReport := buildNativeReActPromptWithReport(req, toolResults, buildAskAnchoredMRUState(toolResults), promptProfile)
+		log.Info("Native ReAct Iteration Context",
+			"iteration", iteration+1,
+			"tool_results_count", len(toolResults),
+			"prompt_chars", len(mainPrompt),
+			"prompt", formatLogSeparatedMessage("prompt", mainPrompt),
+		)
 		if firstTrimmed := firstTrimmedPromptComponent(promptProfile, promptReport); firstTrimmed != "" {
 			emitVerboseProgress(ctx, "Prompt budget trimmed %s first; reduced components: %s.", firstTrimmed, summarizePromptBudgetTrim(promptReport))
 			log.Info("Native ReAct Prompt Budget Applied", "phase", "iteration", "iteration", iteration+1, "trimmed_first", firstTrimmed, "trimmed", summarizePromptBudgetTrim(promptReport), "final_chars", len(mainPrompt))
@@ -121,7 +128,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 		}
 		output, err := req.Generator.Generate(ctx, mainPrompt, ai.GenOptions{
 			SystemPrompt: req.SystemPrompt,
-			MaxTokens:    1024,
+			MaxTokens:    e.MaxTokens,
 			Temperature:  temperature,
 			Tools:        tools,
 			NativeToolContinuations: func() []ai.NativeToolContinuation {
@@ -146,10 +153,38 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 			return ai.ReasoningResponse{}, fmt.Errorf("generation failed: %w", err)
 		}
 		pendingMalformedCall = nil
+		rawOutputText := output.Text
+		recoveredTextualToolCall := false
+		if len(output.ToolCalls) == 0 {
+			if recoveredCall, ok, recoverErr := extractEmbeddedNativeToolCall(output.Text); ok {
+				if recoverErr != nil {
+					emitVerboseProgress(ctx, "Model emitted a malformed native tool call; retrying.")
+					pendingMalformedCall = &pendingGenerationRepair{}
+					toolResults = append(toolResults, nativeToolResult{
+						Name:   "native_tool_call",
+						Result: formatRecoverableGenerationError(recoverErr),
+					})
+					log.Warn("Native ReAct Engine Recoverable Textual Tool Call Failure", "error", recoverErr)
+					continue
+				}
+				recoveredTextualToolCall = true
+				log.Info("Native ReAct Engine Recovered Textual Tool Call",
+					"iteration", iteration+1,
+					"tool", recoveredCall.Name,
+					"recovered_textual_tool_call", true,
+					"arg_keys", summarizeToolArgKeys(recoveredCall.Args),
+					"llm_generated_script", formatLLMGeneratedScriptForLog(recoveredCall.Name, recoveredCall.Args),
+				)
+				output.ToolCalls = []ai.ToolCall{recoveredCall}
+				output.Text = ""
+			}
+		}
 		log.Info("Native ReAct Engine Output",
 			"iteration", iteration+1,
-			"text_chars", len(output.Text),
+			"text_chars", len(rawOutputText),
+			"text", formatLogSeparatedMessage("model_output", rawOutputText),
 			"tool_call_count", len(output.ToolCalls),
+			"recovered_textual_tool_call", recoveredTextualToolCall,
 		)
 
 		if req.Executor == nil || len(output.ToolCalls) == 0 {
@@ -192,6 +227,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 			"iteration", iteration+1,
 			"tool", toolCall.Name,
 			"arg_keys", summarizeToolArgKeys(toolCall.Args),
+			"llm_generated_script", formatLLMGeneratedScriptForLog(toolCall.Name, toolCall.Args),
 		)
 
 		sanitizeToolCallArgs(toolCall.Args, e.EnableObfuscation)
@@ -216,22 +252,22 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 				if shouldEscalateRepairToClarification(repairAttempts) {
 					emitVerboseProgress(ctx, "Repair remained unresolved after the first retry; switching to clarification.")
 					pendingRepair = nil
-					toolResults = append(toolResults, nativeToolResult{
+					toolResults = appendOrReplaceRetriedToolResult(toolResults, nativeToolResult{
 						Name:   toolCall.Name,
 						Result: formatClarificationRequiredToolError(repairPlan, toolCall.Args, err),
 						Args:   cloneToolEventMap(toolCall.Args),
-					})
+					}, priorRepair, toolCall.Name)
 					log.Warn("Native ReAct Engine Escalated Repair To Clarification", "tool", toolCall.Name, "error", err)
 					continue
 				}
 				repairAttempts++
 				emitVerboseProgress(ctx, "Tool `%s` needs corrected arguments; retrying.", toolCall.Name)
 				pendingRepair = &repairPlan
-				toolResults = append(toolResults, nativeToolResult{
+				toolResults = appendOrReplaceRetriedToolResult(toolResults, nativeToolResult{
 					Name:   toolCall.Name,
 					Result: formatRecoverableToolError(repairPlan, toolCall.Args, err),
 					Args:   cloneToolEventMap(toolCall.Args),
-				})
+				}, priorRepair, toolCall.Name)
 				log.Warn("Native ReAct Engine Recoverable Tool Failure", "tool", toolCall.Name, "error", err)
 				continue
 			}
@@ -256,7 +292,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 
 		executedToolCalls = append(executedToolCalls, toolCall)
 		previousResults := append([]nativeToolResult(nil), toolResults...)
-		toolResults = append(toolResults, nativeToolResult{Name: toolCall.Name, Result: result, Args: cloneToolEventMap(toolCall.Args), Hint: cloneToolProgressHint(hint)})
+		toolResults = appendOrReplaceRetriedToolResult(toolResults, nativeToolResult{Name: toolCall.Name, Result: result, Args: cloneToolEventMap(toolCall.Args), Hint: cloneToolProgressHint(hint)}, priorRepair, toolCall.Name)
 		pendingContinuation = &ai.NativeToolContinuation{
 			ToolCall: toolCall,
 			Response: coerceNativeToolContinuationResponse(result),
@@ -305,7 +341,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 	emitVerboseProgress(ctx, "Waiting for model response.")
 	output, err := req.Generator.Generate(ctx, finalPrompt, ai.GenOptions{
 		SystemPrompt: req.SystemPrompt,
-		MaxTokens:    1024,
+		MaxTokens:    e.MaxTokens,
 		Temperature:  0.7,
 	})
 	if err != nil {
@@ -2045,6 +2081,7 @@ func extractListStoresSchemaLineSnapshot(line string) map[string]any {
 			entry["relations"] = relations
 		}
 	}
+	schemaPart = trimListStoresSchemaMetadata(schemaPart)
 	if fields := parseListStoresFields(schemaPart); len(fields) > 0 {
 		entry["fields"] = fields
 	}
@@ -2052,7 +2089,10 @@ func extractListStoresSchemaLineSnapshot(line string) map[string]any {
 }
 
 func parseListStoresFields(schemaPart string) []map[string]string {
-	fieldsRaw := strings.Split(strings.TrimSpace(schemaPart), ",")
+	schemaPart = strings.TrimSpace(schemaPart)
+	schemaPart = strings.TrimPrefix(schemaPart, "{")
+	schemaPart = strings.TrimSuffix(schemaPart, "}")
+	fieldsRaw := splitTopLevelDelimited(schemaPart, ',')
 	fields := make([]map[string]string, 0, len(fieldsRaw))
 	for _, rawField := range fieldsRaw {
 		rawField = strings.TrimSpace(rawField)
@@ -2080,7 +2120,7 @@ func parseListStoresRelations(relationsPart string) []string {
 	if relationsPart == "" {
 		return nil
 	}
-	relationItems := strings.Split(relationsPart, ",")
+	relationItems := splitTopLevelDelimited(relationsPart, ',')
 	relations := make([]string, 0, len(relationItems))
 	for _, relation := range relationItems {
 		relation = strings.TrimSpace(relation)
@@ -2090,6 +2130,115 @@ func parseListStoresRelations(relationsPart string) []string {
 		relations = append(relations, relation)
 	}
 	return relations
+}
+
+func trimListStoresSchemaMetadata(schemaPart string) string {
+	schemaPart = strings.TrimSpace(schemaPart)
+	if schemaPart == "" {
+		return ""
+	}
+	if strings.HasPrefix(schemaPart, "{") {
+		if end := findBalancedSegmentEnd(schemaPart, '{', '}'); end > 0 {
+			return strings.TrimSpace(schemaPart[:end])
+		}
+	}
+	if descIdx := strings.Index(schemaPart, " description="); descIdx >= 0 {
+		return strings.TrimSpace(schemaPart[:descIdx])
+	}
+	return schemaPart
+}
+
+func splitTopLevelDelimited(text string, delimiter rune) []string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return nil
+	}
+	parts := make([]string, 0, 8)
+	start := 0
+	parenDepth := 0
+	braceDepth := 0
+	bracketDepth := 0
+	inString := false
+	escaped := false
+	for i, r := range text {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if inString {
+			if r == '\\' {
+				escaped = true
+				continue
+			}
+			if r == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch r {
+		case '"':
+			inString = true
+		case '(':
+			parenDepth++
+		case ')':
+			if parenDepth > 0 {
+				parenDepth--
+			}
+		case '{':
+			braceDepth++
+		case '}':
+			if braceDepth > 0 {
+				braceDepth--
+			}
+		case '[':
+			bracketDepth++
+		case ']':
+			if bracketDepth > 0 {
+				bracketDepth--
+			}
+		default:
+			if r == delimiter && parenDepth == 0 && braceDepth == 0 && bracketDepth == 0 {
+				parts = append(parts, strings.TrimSpace(text[start:i]))
+				start = i + 1
+			}
+		}
+	}
+	parts = append(parts, strings.TrimSpace(text[start:]))
+	return parts
+}
+
+func findBalancedSegmentEnd(text string, open, close rune) int {
+	depth := 0
+	inString := false
+	escaped := false
+	for i, r := range text {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if inString {
+			if r == '\\' {
+				escaped = true
+				continue
+			}
+			if r == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch r {
+		case '"':
+			inString = true
+		case open:
+			depth++
+		case close:
+			depth--
+			if depth == 0 {
+				return i + 1
+			}
+		}
+	}
+	return -1
 }
 
 func formatRecoverableToolError(repair pendingToolRepair, args map[string]any, err error) string {
@@ -2104,16 +2253,44 @@ func formatRecoverableToolError(repair pendingToolRepair, args map[string]any, e
 	exampleLine := ""
 	strategyLine := ""
 	guidanceLine := ""
-	var validationErr *executeScriptValidationError
-	if errors.As(err, &validationErr) {
-		if validationErr.Category != "" {
-			categoryLine = fmt.Sprintf("\nRepair category: %s", validationErr.Category)
+	validationIssues := collectExecuteScriptValidationIssues(err)
+	if len(validationIssues) > 0 {
+		categories := make([]string, 0, len(validationIssues))
+		examples := make([]string, 0, len(validationIssues))
+		hasJoinIssue := false
+		seenCategories := map[string]struct{}{}
+		seenExamples := map[string]struct{}{}
+		for _, validationErr := range validationIssues {
+			if validationErr.Category != "" {
+				if _, ok := seenCategories[validationErr.Category]; !ok {
+					seenCategories[validationErr.Category] = struct{}{}
+					categories = append(categories, validationErr.Category)
+				}
+			}
+			if validationErr.Example != "" {
+				if _, ok := seenExamples[validationErr.Example]; !ok {
+					seenExamples[validationErr.Example] = struct{}{}
+					examples = append(examples, validationErr.Example)
+				}
+			}
+			switch validationErr.Category {
+			case "invalid_join_on_placeholder", "invalid_join_on_field_placeholder":
+				hasJoinIssue = true
+			}
 		}
-		if validationErr.Example != "" {
-			exampleLine = fmt.Sprintf("\nSuggested fix example:\n%s", validationErr.Example)
+		if len(categories) > 0 {
+			label := "Repair category"
+			if len(categories) > 1 {
+				label = "Repair categories"
+			}
+			categoryLine = fmt.Sprintf("\n%s: %s", label, strings.Join(categories, ", "))
 		}
-		switch validationErr.Category {
-		case "invalid_join_on_placeholder", "invalid_join_on_field_placeholder":
+		if len(examples) == 1 {
+			exampleLine = fmt.Sprintf("\nSuggested fix example:\n%s", examples[0])
+		} else if len(examples) > 1 {
+			exampleLine = fmt.Sprintf("\nSuggested fix examples:\n- %s", strings.Join(examples, "\n- "))
+		}
+		if hasJoinIssue {
 			guidanceLine = "\nJoin repair note: After list_stores confirms a relation path, prefer relation+target for relation-driven joins. If you keep join.on, rewrite only the invalid join slice and use concrete field strings from the confirmed relation mapping."
 		}
 	}
@@ -2162,16 +2339,44 @@ func formatClarificationRequiredToolError(repair pendingToolRepair, args map[str
 	categoryLine := ""
 	exampleLine := ""
 	guidanceLine := ""
-	var validationErr *executeScriptValidationError
-	if errors.As(err, &validationErr) {
-		if validationErr.Category != "" {
-			categoryLine = fmt.Sprintf("\nRepair category: %s", validationErr.Category)
+	validationIssues := collectExecuteScriptValidationIssues(err)
+	if len(validationIssues) > 0 {
+		categories := make([]string, 0, len(validationIssues))
+		examples := make([]string, 0, len(validationIssues))
+		hasJoinIssue := false
+		seenCategories := map[string]struct{}{}
+		seenExamples := map[string]struct{}{}
+		for _, validationErr := range validationIssues {
+			if validationErr.Category != "" {
+				if _, ok := seenCategories[validationErr.Category]; !ok {
+					seenCategories[validationErr.Category] = struct{}{}
+					categories = append(categories, validationErr.Category)
+				}
+			}
+			if validationErr.Example != "" {
+				if _, ok := seenExamples[validationErr.Example]; !ok {
+					seenExamples[validationErr.Example] = struct{}{}
+					examples = append(examples, validationErr.Example)
+				}
+			}
+			switch validationErr.Category {
+			case "invalid_join_on_placeholder", "invalid_join_on_field_placeholder":
+				hasJoinIssue = true
+			}
 		}
-		if validationErr.Example != "" {
-			exampleLine = fmt.Sprintf("\nSuggested fix example:\n%s", validationErr.Example)
+		if len(categories) > 0 {
+			label := "Repair category"
+			if len(categories) > 1 {
+				label = "Repair categories"
+			}
+			categoryLine = fmt.Sprintf("\n%s: %s", label, strings.Join(categories, ", "))
 		}
-		switch validationErr.Category {
-		case "invalid_join_on_placeholder", "invalid_join_on_field_placeholder":
+		if len(examples) == 1 {
+			exampleLine = fmt.Sprintf("\nSuggested fix example:\n%s", examples[0])
+		} else if len(examples) > 1 {
+			exampleLine = fmt.Sprintf("\nSuggested fix examples:\n- %s", strings.Join(examples, "\n- "))
+		}
+		if hasJoinIssue {
 			guidanceLine = "\nJoin repair note: The researched relation still does not fully resolve this join. Ask for the missing join mapping instead of inventing a new one."
 		}
 	}
@@ -2193,6 +2398,95 @@ func formatRecoverableGenerationError(err error) string {
 		"Model generation error: %v\nRetry instruction: Return exactly one valid native tool call that conforms to the provided tool schema. Do not emit malformed function calls, partial arguments, or placeholder-only argument shapes.",
 		err,
 	)
+}
+
+func formatLLMGeneratedScriptForLog(toolName string, args map[string]any) string {
+	if toolName != "execute_script" || len(args) == 0 {
+		return ""
+	}
+	script, ok := args["script"]
+	if !ok {
+		return ""
+	}
+	bytes, err := json.Marshal(script)
+	if err != nil {
+		return ""
+	}
+	return formatLogSeparatedMessage("execute_script", string(bytes))
+}
+
+func formatLogSeparatedMessage(label, text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return ""
+	}
+	separator := strings.Repeat("=", 24)
+	return fmt.Sprintf("\n%s BEGIN %s %s\n%s\n%s END %s %s", separator, label, separator, trimmed, separator, label, separator)
+}
+
+func extractEmbeddedNativeToolCall(text string) (ai.ToolCall, bool, error) {
+	trimmed := strings.TrimSpace(text)
+	idx := strings.Index(trimmed, "call:")
+	if idx < 0 {
+		return ai.ToolCall{}, false, nil
+	}
+	callText := strings.TrimSpace(trimmed[idx:])
+	braceIdx := strings.Index(callText, "{")
+	if braceIdx < 0 {
+		return ai.ToolCall{}, true, fmt.Errorf("printed native tool call is missing JSON args object")
+	}
+	toolSpec := strings.TrimSpace(callText[len("call:"):braceIdx])
+	if toolSpec == "" {
+		return ai.ToolCall{}, true, fmt.Errorf("printed native tool call is missing tool name")
+	}
+	segments := strings.Split(toolSpec, ":")
+	toolName := strings.TrimSpace(segments[len(segments)-1])
+	if toolName == "" {
+		return ai.ToolCall{}, true, fmt.Errorf("printed native tool call is missing tool name")
+	}
+	jsonPayload, err := extractBalancedJSONObject(callText[braceIdx:])
+	if err != nil {
+		return ai.ToolCall{}, true, err
+	}
+	var args map[string]any
+	if err := json.Unmarshal([]byte(jsonPayload), &args); err != nil {
+		return ai.ToolCall{}, true, fmt.Errorf("printed native tool call has invalid JSON args: %w", err)
+	}
+	return ai.ToolCall{Name: toolName, Args: args}, true, nil
+}
+
+func extractBalancedJSONObject(text string) (string, error) {
+	depth := 0
+	inString := false
+	escaped := false
+	for i, r := range text {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if inString {
+			if r == '\\' {
+				escaped = true
+				continue
+			}
+			if r == '"' {
+				inString = false
+			}
+			continue
+		}
+		switch r {
+		case '"':
+			inString = true
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return text[:i+1], nil
+			}
+		}
+	}
+	return "", fmt.Errorf("printed native tool call contains truncated JSON args")
 }
 
 func formatPendingRepairReminder(repair pendingToolRepair, attemptedToolName string) string {
@@ -2249,6 +2543,31 @@ func shouldResetRepairAttempts(priorRepair *pendingToolRepair, toolName string) 
 	return true
 }
 
+func appendOrReplaceRetriedToolResult(results []nativeToolResult, next nativeToolResult, priorRepair *pendingToolRepair, toolName string) []nativeToolResult {
+	if priorRepair == nil || strings.TrimSpace(priorRepair.ToolName) != strings.TrimSpace(toolName) {
+		return append(results, next)
+	}
+	if strings.EqualFold(strings.TrimSpace(toolName), "execute_script") {
+		collapsed := make([]nativeToolResult, 0, len(results))
+		for _, result := range results {
+			if strings.EqualFold(strings.TrimSpace(result.Name), "execute_script") {
+				continue
+			}
+			collapsed = append(collapsed, result)
+		}
+		return append(collapsed, next)
+	}
+	for index := len(results) - 1; index >= 0; index-- {
+		if strings.TrimSpace(results[index].Name) != strings.TrimSpace(toolName) {
+			continue
+		}
+		replaced := append([]nativeToolResult(nil), results...)
+		replaced[index] = next
+		return replaced
+	}
+	return append(results, next)
+}
+
 func (r pendingToolRepair) allowsTool(toolName string) bool {
 	if r.Strategy == nativeRepairStrategyResearchFirst {
 		researchTool := r.ResearchTool
@@ -2266,13 +2585,15 @@ func classifyRecoverableToolRepair(toolName string, err error) pendingToolRepair
 		return repair
 	}
 
-	if validationErr := new(executeScriptValidationError); errors.As(err, &validationErr) {
+	for _, validationErr := range collectExecuteScriptValidationIssues(err) {
 		switch validationErr.Category {
 		case "invalid_join_on_placeholder", "invalid_join_on_field_placeholder", "invalid_filter_field_placeholder":
 			repair.Strategy = nativeRepairStrategyResearchFirst
 			repair.ResearchTool = "list_stores"
 			repair.ResearchReason = "The failure indicates missing grounded schema or relation mapping facts."
 			return repair
+		case "invalid_filter_input_shape", "invalid_filter_query_mismatch", "invalid_filter_placeholder", "invalid_filter_operator_placeholder":
+			repair.Strategy = nativeRepairStrategySameTool
 		}
 	}
 
@@ -2283,6 +2604,27 @@ func classifyRecoverableToolRepair(toolName string, err error) pendingToolRepair
 		repair.ResearchReason = "The failure text points to unresolved schema or relation ambiguity."
 	}
 	return repair
+}
+
+func collectExecuteScriptValidationIssues(err error) []*executeScriptValidationError {
+	if err == nil {
+		return nil
+	}
+	if aggregate := new(executeScriptValidationErrors); errors.As(err, &aggregate) && aggregate != nil {
+		issues := make([]*executeScriptValidationError, 0, len(aggregate.Errors))
+		for _, item := range aggregate.Errors {
+			if item != nil {
+				issues = append(issues, item)
+			}
+		}
+		if len(issues) > 0 {
+			return issues
+		}
+	}
+	if single := new(executeScriptValidationError); errors.As(err, &single) && single != nil {
+		return []*executeScriptValidationError{single}
+	}
+	return nil
 }
 
 func sanitizeToolCallArgs(args map[string]any, enableObfuscation bool) {

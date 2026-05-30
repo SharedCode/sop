@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	log "log/slog"
+	"reflect"
 	"regexp"
 	"sort"
 	"strconv"
@@ -325,41 +326,49 @@ func selectExecuteScriptReturn(engine *ScriptEngine, scriptCtx *ScriptContext, s
 func validateExecuteScriptPlaceholders(ctx context.Context, script []ScriptInstruction) error {
 	var currentQuery string
 	if p := ai.GetSessionPayload(ctx); p != nil {
-		currentQuery = strings.ToLower(strings.TrimSpace(p.CurrentUserQuery))
+		currentQuery = strings.TrimSpace(p.CurrentUserQuery)
 	}
+	resultOrigins := make(map[string]string, len(script))
+	validationErrors := make([]*executeScriptValidationError, 0)
 
 	for _, instr := range script {
+		if err := validateExecuteScriptInputShape(instr, resultOrigins); err != nil {
+			validationErrors = append(validationErrors, err)
+		}
 		if (instr.Op == "join" || instr.Op == "join_right") && instr.Args != nil {
 			if onMap, ok := instr.Args["on"].(map[string]any); ok {
 				for leftField, rightField := range onMap {
 					if isInvalidPlaceholderFieldName(leftField) {
-						return newExecuteScriptValidationError(
+						validationErrors = append(validationErrors, newExecuteScriptValidationError(
 							"invalid_join_on_field_placeholder",
 							fmt.Sprintf("invalid join.on field %q: expected a real left-hand field path such as %q", leftField, "users.key"),
 							fmt.Sprintf(`{"op":"%s","args":{"relation":"users_orders","target":"orders_store"}}`, instr.Op),
-						)
+						))
+						continue
 					}
 
 					if placeholder, ok := rightField.(bool); ok {
-						return newExecuteScriptValidationError(
+						validationErrors = append(validationErrors, newExecuteScriptValidationError(
 							"invalid_join_on_placeholder",
 							fmt.Sprintf("invalid type for join.on[%q]: got boolean placeholder %t; expected a field path string such as %q", leftField, placeholder, "key"),
 							fmt.Sprintf(`{"op":"%s","args":{"relation":"users_orders","target":"orders_store"}}`, instr.Op),
-						)
+						))
+						continue
 					}
 					if rightField == nil {
-						return newExecuteScriptValidationError(
+						validationErrors = append(validationErrors, newExecuteScriptValidationError(
 							"invalid_join_on_placeholder",
 							fmt.Sprintf("invalid type for join.on[%q]: got null placeholder; expected a field path string such as %q", leftField, "key"),
 							fmt.Sprintf(`{"op":"%s","args":{"relation":"users_orders","target":"orders_store"}}`, instr.Op),
-						)
+						))
+						continue
 					}
 					if rightFieldStr, ok := rightField.(string); ok && isInvalidPlaceholderFieldName(rightFieldStr) {
-						return newExecuteScriptValidationError(
+						validationErrors = append(validationErrors, newExecuteScriptValidationError(
 							"invalid_join_on_placeholder",
 							fmt.Sprintf("invalid join.on[%q] field path %q: expected a real right-hand field path such as %q", leftField, rightFieldStr, "key"),
 							fmt.Sprintf(`{"op":"%s","args":{"relation":"users_orders","target":"orders_store"}}`, instr.Op),
-						)
+						))
 					}
 				}
 			}
@@ -367,32 +376,52 @@ func validateExecuteScriptPlaceholders(ctx context.Context, script []ScriptInstr
 
 		if instr.Op == "filter" && instr.Args != nil {
 			if condition, ok := instr.Args["condition"].(map[string]any); ok {
-				if err := validateFilterConditionPlaceholders(condition, currentQuery); err != nil {
-					return err
-				}
+				validationErrors = append(validationErrors, validateFilterConditionPlaceholders(condition, currentQuery)...)
 			}
+		}
+
+		if instr.ResultVar != "" {
+			resultOrigins[instr.ResultVar] = instr.Op
 		}
 	}
 
-	return nil
+	return collapseExecuteScriptValidationErrors(validationErrors)
 }
 
-func validateFilterConditionPlaceholders(condition map[string]any, currentQuery string) error {
+func validateExecuteScriptInputShape(instr ScriptInstruction, resultOrigins map[string]string) *executeScriptValidationError {
+	if instr.Op != "filter" || strings.TrimSpace(instr.InputVar) == "" {
+		return nil
+	}
+	originOp := strings.TrimSpace(resultOrigins[instr.InputVar])
+	if originOp != "open_store" {
+		return nil
+	}
+	storeName := "<store_var>"
+	if instr.Args != nil {
+		if named, ok := instr.Args["store"].(string); ok && strings.TrimSpace(named) != "" {
+			storeName = strings.TrimSpace(named)
+		}
+	}
+	return newExecuteScriptValidationError(
+		"invalid_filter_input_shape",
+		fmt.Sprintf("filter input_var %q resolves to an open_store handle; expected a scanned cursor or list before filtering", instr.InputVar),
+		fmt.Sprintf(`{"op":"scan","args":{"store":%q},"result_var":"%s_cursor"}`, storeName, instr.InputVar),
+	)
+}
+
+func validateFilterConditionPlaceholders(condition map[string]any, currentQuery string) []*executeScriptValidationError {
+	validationErrors := make([]*executeScriptValidationError, 0)
 	for field, raw := range condition {
 		if strings.HasPrefix(field, "$") {
 			switch nested := raw.(type) {
 			case []any:
 				for _, item := range nested {
 					if nestedMap, ok := item.(map[string]any); ok {
-						if err := validateFilterConditionPlaceholders(nestedMap, currentQuery); err != nil {
-							return err
-						}
+						validationErrors = append(validationErrors, validateFilterConditionPlaceholders(nestedMap, currentQuery)...)
 					}
 				}
 			case map[string]any:
-				if err := validateFilterConditionPlaceholders(nested, currentQuery); err != nil {
-					return err
-				}
+				validationErrors = append(validationErrors, validateFilterConditionPlaceholders(nested, currentQuery)...)
 			}
 			continue
 		}
@@ -402,11 +431,12 @@ func validateFilterConditionPlaceholders(condition map[string]any, currentQuery 
 			if currentQuery != "" {
 				queryHint = fmt.Sprintf(" for current query %q", currentQuery)
 			}
-			return newExecuteScriptValidationError(
+			validationErrors = append(validationErrors, newExecuteScriptValidationError(
 				"invalid_filter_field_placeholder",
 				fmt.Sprintf("invalid filter condition field %q: expected a real field path such as %q%s", field, "first_name", queryHint),
 				fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":{"$eq":"<value>"}}}}`, "first_name"),
-			)
+			))
+			continue
 		}
 
 		if raw == nil {
@@ -414,11 +444,12 @@ func validateFilterConditionPlaceholders(condition map[string]any, currentQuery 
 			if currentQuery != "" {
 				queryHint = fmt.Sprintf(" for current query %q", currentQuery)
 			}
-			return newExecuteScriptValidationError(
+			validationErrors = append(validationErrors, newExecuteScriptValidationError(
 				"invalid_filter_placeholder",
 				fmt.Sprintf("invalid type for filter condition field %q: got null placeholder; expected an operator/value predicate such as {\"$eq\": value}%s", field, queryHint),
 				fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":{"$eq":"<value>"}}}}`, field),
-			)
+			))
+			continue
 		}
 
 		if placeholder, ok := raw.(bool); ok {
@@ -429,11 +460,12 @@ func validateFilterConditionPlaceholders(condition map[string]any, currentQuery 
 			if currentQuery != "" {
 				queryHint = fmt.Sprintf(" for current query %q", currentQuery)
 			}
-			return newExecuteScriptValidationError(
+			validationErrors = append(validationErrors, newExecuteScriptValidationError(
 				"invalid_filter_placeholder",
 				fmt.Sprintf("invalid type for filter condition field %q: got boolean placeholder %t; expected an operator/value predicate such as {\"$eq\": value}%s", field, placeholder, queryHint),
 				fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":{"$eq":"<value>"}}}}`, field),
-			)
+			))
+			continue
 		}
 
 		// CEL remains supported when condition itself is a string expression.
@@ -445,28 +477,62 @@ func validateFilterConditionPlaceholders(condition map[string]any, currentQuery 
 				if currentQuery != "" {
 					queryHint = fmt.Sprintf(" for current query %q", currentQuery)
 				}
-				return newExecuteScriptValidationError(
+				validationErrors = append(validationErrors, newExecuteScriptValidationError(
 					"invalid_filter_operator_placeholder",
 					fmt.Sprintf("invalid filter condition field %q: got operator placeholder %q without a comparison value; expected a predicate object such as {\"%s\": value}%s", field, trimmed, trimmed, queryHint),
 					fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":{"%s":"<value>"}}}}`, field, trimmed),
-				)
+				))
+				continue
 			}
 		}
 
 		if nested, ok := raw.(map[string]any); ok {
-			if err := validateFilterConditionPlaceholders(nested, currentQuery); err != nil {
-				return err
-			}
+			validationErrors = append(validationErrors, validateFilterConditionPlaceholders(nested, currentQuery)...)
+			validationErrors = append(validationErrors, validateFilterConditionGrounding(field, nested, currentQuery)...)
+			continue
 		}
+
+		validationErrors = append(validationErrors, validateScalarFilterConditionGrounding(field, raw, currentQuery)...)
 	}
 
-	return nil
+	return validationErrors
 }
 
 type executeScriptValidationError struct {
 	Category string
 	Message  string
 	Example  string
+}
+
+type executeScriptValidationErrors struct {
+	Errors []*executeScriptValidationError
+}
+
+func (e *executeScriptValidationErrors) Error() string {
+	if e == nil || len(e.Errors) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(e.Errors))
+	for _, item := range e.Errors {
+		if item == nil {
+			continue
+		}
+		parts = append(parts, item.Error())
+	}
+	return strings.Join(parts, "\n")
+}
+
+func (e *executeScriptValidationErrors) Unwrap() []error {
+	if e == nil {
+		return nil
+	}
+	errs := make([]error, 0, len(e.Errors))
+	for _, item := range e.Errors {
+		if item != nil {
+			errs = append(errs, item)
+		}
+	}
+	return errs
 }
 
 func (e *executeScriptValidationError) Error() string {
@@ -479,11 +545,144 @@ func (e *executeScriptValidationError) Error() string {
 	return fmt.Sprintf("execute_script validation error [%s]: %s Example fix: %s", e.Category, e.Message, e.Example)
 }
 
-func newExecuteScriptValidationError(category, message, example string) error {
+func newExecuteScriptValidationError(category, message, example string) *executeScriptValidationError {
 	return &executeScriptValidationError{
 		Category: category,
 		Message:  message,
 		Example:  example,
+	}
+}
+
+func collapseExecuteScriptValidationErrors(validationErrors []*executeScriptValidationError) error {
+	filtered := make([]*executeScriptValidationError, 0, len(validationErrors))
+	seen := make(map[string]struct{}, len(validationErrors))
+	for _, item := range validationErrors {
+		if item == nil {
+			continue
+		}
+		key := item.Category + "\n" + item.Message + "\n" + item.Example
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		filtered = append(filtered, item)
+	}
+	switch len(filtered) {
+	case 0:
+		return nil
+	case 1:
+		return filtered[0]
+	default:
+		return &executeScriptValidationErrors{Errors: filtered}
+	}
+}
+
+func validateFilterConditionGrounding(field string, raw map[string]any, currentQuery string) []*executeScriptValidationError {
+	expected, ok := inferPredicateFromCurrentQuery(field, currentQuery)
+	if !ok || filterPredicateMatchesExpected(raw, expected) {
+		return nil
+	}
+	if len(raw) == 0 {
+		return []*executeScriptValidationError{newExecuteScriptValidationError(
+			"invalid_filter_query_mismatch",
+			fmt.Sprintf("filter condition field %q does not preserve the user-requested predicate from the current query %q; expected %v", field, currentQuery, expected),
+			fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":%s}}}`, field, mustJSON(expected)),
+		)}
+	}
+	for op, value := range expected {
+		actual, ok := raw[op]
+		if ok && valuesEquivalentForFilterGrounding(actual, value) {
+			return nil
+		}
+	}
+	return []*executeScriptValidationError{newExecuteScriptValidationError(
+		"invalid_filter_query_mismatch",
+		fmt.Sprintf("filter condition field %q does not preserve the user-requested predicate from the current query %q; expected %v, got %v", field, currentQuery, expected, raw),
+		fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":%s}}}`, field, mustJSON(expected)),
+	)}
+}
+
+func validateScalarFilterConditionGrounding(field string, raw any, currentQuery string) []*executeScriptValidationError {
+	expected, ok := inferPredicateFromCurrentQuery(field, currentQuery)
+	if !ok {
+		return nil
+	}
+	if eq, hasEq := expected["$eq"]; hasEq && valuesEquivalentForFilterGrounding(eq, raw) {
+		return nil
+	}
+	return []*executeScriptValidationError{newExecuteScriptValidationError(
+		"invalid_filter_query_mismatch",
+		fmt.Sprintf("filter condition field %q uses scalar value %v but the current query %q implies predicate %v", field, raw, currentQuery, expected),
+		fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":%s}}}`, field, mustJSON(expected)),
+	)}
+}
+
+func mustJSON(value any) string {
+	bytes, err := json.Marshal(value)
+	if err != nil {
+		return "{}"
+	}
+	return string(bytes)
+}
+
+func filterPredicateMatchesExpected(raw map[string]any, expected map[string]any) bool {
+	if len(raw) != len(expected) {
+		return false
+	}
+	for op, expectedValue := range expected {
+		actualValue, ok := raw[op]
+		if !ok || !valuesEquivalentForFilterGrounding(actualValue, expectedValue) {
+			return false
+		}
+	}
+	return true
+}
+
+func valuesEquivalentForFilterGrounding(actual, expected any) bool {
+	if reflect.DeepEqual(actual, expected) {
+		return true
+	}
+	actualString, actualIsString := actual.(string)
+	expectedString, expectedIsString := expected.(string)
+	if actualIsString && expectedIsString {
+		return strings.EqualFold(strings.TrimSpace(actualString), strings.TrimSpace(expectedString))
+	}
+	actualNumber, actualIsNumber := coerceFilterGroundingNumber(actual)
+	expectedNumber, expectedIsNumber := coerceFilterGroundingNumber(expected)
+	if actualIsNumber && expectedIsNumber {
+		return actualNumber == expectedNumber
+	}
+	return false
+}
+
+func coerceFilterGroundingNumber(value any) (float64, bool) {
+	switch number := value.(type) {
+	case int:
+		return float64(number), true
+	case int8:
+		return float64(number), true
+	case int16:
+		return float64(number), true
+	case int32:
+		return float64(number), true
+	case int64:
+		return float64(number), true
+	case uint:
+		return float64(number), true
+	case uint8:
+		return float64(number), true
+	case uint16:
+		return float64(number), true
+	case uint32:
+		return float64(number), true
+	case uint64:
+		return float64(number), true
+	case float32:
+		return float64(number), true
+	case float64:
+		return number, true
+	default:
+		return 0, false
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	log "log/slog"
 
@@ -17,13 +18,13 @@ import (
 )
 
 const (
-	ExecuteScriptInstruction = `Execute a full ordered JSON AST under script for multi-step store operations. Each step should be an object such as {op, args?, input_var?, result_var?}. Focus on orchestration semantics: begin a transaction, read or mutate stores, then commit or rollback. begin_tx defines the durability boundary for the workflow, so use it when related mutations must persist or roll back together. For larger mutation runs, batch deliberately under explicit commits, with a practical default of about 50 to 250 CRUD operations per transaction unless business atomicity requires a different boundary. Chain multi-step reads with result_var/input_var. Use list_stores to research stores before multi-store joins or whenever schema is uncertain. Prefer scoped calls such as stores:["users","users_orders","orders"] so research stays compact on large databases. list_stores returns grounded per-store lines with schema=... and optional relations=[...]. Read schema=... for exact field names and value types, and read relations=[...] for related-store and join-field semantics. Treat those returned relations=[...] entries as the source of truth. When list_stores confirms a relation path, prefer relation + target for join repair instead of inventing a fresh on mapping; if on is still needed, rewrite only the invalid join slice with confirmed concrete field strings. join and join_right emit a combined flat record by default, so reuse dotted store-qualified field paths unless a later project step reshapes the output. If the AST shape is ambiguous, call gettoolinfo('execute_script'). Use concrete predicate objects and concrete join mappings; do not guess missing values.`
-	ListStoresInstruction    = "Research store structure before writing multi-store reads or repairs. Pass stores:[...] to scope the response to likely targets. The result returns grounded schema=... and optional relations=[...] lines; reuse those returned relations as the source of truth for join mappings and field paths rather than guessing them."
+	ExecuteScriptInstruction = `Execute a full ordered JSON AST under script for multi-step store operations. Each step should be an object such as {op, args?, input_var?, result_var?}. Focus on orchestration semantics: begin a transaction, read or mutate stores, then commit or rollback. begin_tx defines the durability boundary for the workflow, so use it when related mutations must persist or roll back together. For larger mutation runs, batch deliberately under explicit commits, with a practical default of about 50 to 250 CRUD operations per transaction unless business atomicity requires a different boundary. Chain multi-step reads with result_var/input_var. Use list_stores to research stores before multi-store joins or whenever schema is uncertain. Prefer scoped calls such as stores:["users","users_orders","orders"] so research stays compact on large databases. list_stores returns grounded per-store lines with schema=... and optional relations=[...]. Read schema=... for exact field names and value types, then align those researched field names with the user's criteria values: if schema confirms first_name:string and the ask says first_name John, emit {"first_name":{"$eq":"John"}}; if a joined result uses orders.total_amount:float64 and the ask says total amount > 500, emit {"orders.total_amount":{"$gt":500}}. Read relations=[...] for join-field semantics literally: in users_orders(key->users.key), the token before -> is the target-store join field and the token after -> is the current-store field path. Treat those returned relations=[...] entries as the source of truth. prefer relation + target for join repair instead of inventing a fresh on mapping; if on is still needed, rewrite only the invalid join slice by translating the confirmed relation into the exact concrete field mapping the join op expects, and never use store names where field paths are required. join and join_right emit a combined flat record by default, so reuse dotted store-qualified field paths unless a later project step reshapes the output. If the AST shape is ambiguous, call gettoolinfo('execute_script'). Use concrete predicate objects and concrete join mappings; do not guess missing values or emit boolean placeholders where a researched field plus user value is required.`
+	ListStoresInstruction    = "Research store structure before writing multi-store reads or repairs. Pass stores:[...] to scope the response to likely targets, and infer likely store names from the user's ask instead of leaving stores empty when obvious candidates are available. The tool can narrow close singular/plural matches internally, but you should still pass the most likely store names you can infer. The result returns grounded schema=... and optional relations=[...] lines. Read schema literally to choose the field name, then align that field name with the value or operator from the user's criteria instead of emitting placeholders. Read relations literally: in users_orders(key->users.key), users_orders is the target store, key is the target-store join field, and users.key is the current-store field path. Reuse those grounded relations as the source of truth for join targets, join fields, dotted field paths, and predicate field names rather than guessing them."
 )
 
 const emptyObjectArgsSchema = `{"type":"object","properties":{}}`
 
-const listStoresArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"stores":{"type":"array","description":"Optional exact store names to research. Use likely target names such as [\"users\",\"users_orders\",\"orders\"] to keep research compact instead of listing the whole database.","items":{"type":"string"}}}}`
+const listStoresArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"stores":{"type":"array","description":"Optional likely store names to research. Infer likely targets from the user's ask and pass them here, for example [\"users\",\"users_orders\",\"orders\"], to keep research compact instead of listing the whole database. Close singular/plural forms are narrowed internally, but explicit likely names are preferred.","items":{"type":"string"}}}}`
 
 const (
 	SelectInstruction                   = "Read or mutate one store directly when you do not need a multi-step AST. Provide the store name plus optional key/value criteria, fields, limit, and direction. For mutations set action=delete or action=update and include grounded update_values instead of placeholder objects. This tool still executes inside a transaction: it reuses an explicit transaction when one is active, otherwise it opens and auto-commits its own local transaction. Prefer execute_script when you need multi-step transaction orchestration."
@@ -237,6 +238,7 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 		return "", fmt.Errorf("failed to list stores: %w", err)
 	}
 	sort.Strings(stores)
+	resolvedStores := resolveListStoresScope(stores, requestedStores, p.CurrentUserQuery)
 
 	// Enrich with brief schema info
 	var descriptions []string
@@ -253,8 +255,8 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 		if strings.Contains(sName, "/") {
 			continue
 		}
-		if len(requestedStores) > 0 {
-			if _, ok := requestedStores[strings.ToLower(strings.TrimSpace(sName))]; !ok {
+		if len(resolvedStores) > 0 {
+			if _, ok := resolvedStores[strings.ToLower(strings.TrimSpace(sName))]; !ok {
 				continue
 			}
 		}
@@ -302,6 +304,167 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 		return wrapToolResultWithListStoresHint(result, descriptions), nil
 	}
 	return result, nil
+}
+
+func resolveListStoresScope(availableStores []string, requestedStores map[string]struct{}, userQuery string) map[string]struct{} {
+	if matches := matchRequestedStoreNames(availableStores, requestedStores); len(matches) > 0 {
+		return matches
+	}
+	if len(requestedStores) == 0 {
+		return inferStoreNamesFromQuery(availableStores, userQuery)
+	}
+	return nil
+}
+
+func matchRequestedStoreNames(availableStores []string, requestedStores map[string]struct{}) map[string]struct{} {
+	if len(requestedStores) == 0 {
+		return nil
+	}
+	matches := make(map[string]struct{})
+	for requested := range requestedStores {
+		canonicalRequested := canonicalStorePhrase(requested)
+		if canonicalRequested == "" {
+			continue
+		}
+		var exact []string
+		var close []string
+		for _, available := range availableStores {
+			if strings.Contains(available, "/") {
+				continue
+			}
+			canonicalAvailable := canonicalStorePhrase(available)
+			if canonicalAvailable == canonicalRequested {
+				exact = append(exact, strings.ToLower(strings.TrimSpace(available)))
+				continue
+			}
+			availableTokens := canonicalStoreTokens(available)
+			requestedTokens := canonicalStoreTokens(requested)
+			if len(requestedTokens) == 0 || len(availableTokens) == 0 {
+				continue
+			}
+			if len(requestedTokens) == 1 && len(availableTokens) > 1 {
+				continue
+			}
+			if containsAllCanonicalTokens(availableTokens, requestedTokens) {
+				close = append(close, strings.ToLower(strings.TrimSpace(available)))
+			}
+		}
+		selected := exact
+		if len(selected) == 0 {
+			selected = close
+		}
+		for _, name := range selected {
+			matches[name] = struct{}{}
+		}
+	}
+	if len(matches) == 0 {
+		return nil
+	}
+	return matches
+}
+
+func inferStoreNamesFromQuery(availableStores []string, userQuery string) map[string]struct{} {
+	queryTokens := canonicalStoreTokens(userQuery)
+	if len(queryTokens) == 0 {
+		return nil
+	}
+	querySet := make(map[string]struct{}, len(queryTokens))
+	for _, token := range queryTokens {
+		querySet[token] = struct{}{}
+	}
+	matches := make(map[string]struct{})
+	for _, available := range availableStores {
+		if strings.Contains(available, "/") {
+			continue
+		}
+		availableTokens := canonicalStoreTokens(available)
+		if len(availableTokens) == 0 {
+			continue
+		}
+		allPresent := true
+		for _, token := range availableTokens {
+			if _, ok := querySet[token]; !ok {
+				allPresent = false
+				break
+			}
+		}
+		if allPresent {
+			matches[strings.ToLower(strings.TrimSpace(available))] = struct{}{}
+		}
+	}
+	if len(matches) == 0 {
+		return nil
+	}
+	return matches
+}
+
+func containsAllCanonicalTokens(haystack []string, needles []string) bool {
+	if len(needles) == 0 {
+		return false
+	}
+	haystackSet := make(map[string]struct{}, len(haystack))
+	for _, token := range haystack {
+		haystackSet[token] = struct{}{}
+	}
+	for _, token := range needles {
+		if _, ok := haystackSet[token]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func canonicalStorePhrase(value string) string {
+	return strings.Join(canonicalStoreTokens(value), " ")
+}
+
+func canonicalStoreTokens(value string) []string {
+	normalized := strings.ToLower(strings.TrimSpace(value))
+	if normalized == "" {
+		return nil
+	}
+	var builder strings.Builder
+	builder.Grow(len(normalized))
+	lastSpace := false
+	for _, r := range normalized {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			builder.WriteRune(r)
+			lastSpace = false
+			continue
+		}
+		if !lastSpace {
+			builder.WriteByte(' ')
+			lastSpace = true
+		}
+	}
+	parts := strings.Fields(builder.String())
+	if len(parts) == 0 {
+		return nil
+	}
+	tokens := make([]string, 0, len(parts))
+	for _, part := range parts {
+		singular := singularStoreToken(part)
+		if singular != "" {
+			tokens = append(tokens, singular)
+		}
+	}
+	return tokens
+}
+
+func singularStoreToken(token string) string {
+	if len(token) > 3 && strings.HasSuffix(token, "ies") {
+		return strings.TrimSuffix(token, "ies") + "y"
+	}
+	if len(token) > 2 && strings.HasSuffix(token, "sses") {
+		return strings.TrimSuffix(token, "es")
+	}
+	if len(token) > 2 && strings.HasSuffix(token, "ses") {
+		return strings.TrimSuffix(token, "s")
+	}
+	if len(token) > 1 && strings.HasSuffix(token, "s") && !strings.HasSuffix(token, "ss") {
+		return strings.TrimSuffix(token, "s")
+	}
+	return token
 }
 
 func wrapToolResultWithListStoresHint(result string, descriptions []string) string {
