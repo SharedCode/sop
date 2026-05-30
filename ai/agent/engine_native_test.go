@@ -390,12 +390,11 @@ func TestNativeReActEngine_EmitsVerboseProgressByDefault(t *testing.T) {
 	}
 	want := []string{
 		"Planning request with native multi-step loop.",
-		"Reasoning iteration 1 of 5.",
+		"Reasoning iteration 1 of 3.",
 		"Waiting for model response.",
 		"Calling tool `execute_script`.",
 		"Tool `execute_script` completed.",
-		"Loop budget extended to 6 because the Ask is progressing.",
-		"Reasoning iteration 2 of 6.",
+		"Reasoning iteration 2 of 3.",
 		"Waiting for model response.",
 		"No further tools required; preparing final answer.",
 	}
@@ -958,7 +957,7 @@ func (m *discoveryClarificationGenerator) Generate(ctx context.Context, prompt s
 			},
 		}}}, nil
 	default:
-		if !strings.Contains(prompt, "Clarification directive: The last tool failure still remains unresolved after the first repair attempt in a routed ask.") {
+		if !strings.Contains(prompt, "Clarification directive: The last tool failure still remains unresolved after the first repair attempt.") {
 			return ai.GenOutput{Text: "missing clarification directive"}, nil
 		}
 		if !strings.Contains(prompt, "Clarification required:") {
@@ -1032,7 +1031,7 @@ func (m *routedSameToolClarificationGenerator) Generate(ctx context.Context, pro
 			Args: map[string]any{"kb_name": "Tasks"},
 		}}}, nil
 	default:
-		if !strings.Contains(prompt, "Clarification directive: The last tool failure still remains unresolved after the first repair attempt in a routed ask.") {
+		if !strings.Contains(prompt, "Clarification directive: The last tool failure still remains unresolved after the first repair attempt.") {
 			return ai.GenOutput{Text: "missing clarification directive"}, nil
 		}
 		if !strings.Contains(prompt, "Clarification required:") {
@@ -1073,7 +1072,7 @@ func TestNativeReActEngine_RoutedSameToolRepairEscalatesToClarificationAfterFirs
 	if executor.callCount != 2 {
 		t.Fatalf("expected two mint_to_space attempts before clarification, got %d", executor.callCount)
 	}
-	if !containsProgressMessage(progress, "Routed Ask repair remained unresolved after the first retry; switching to clarification.") {
+	if !containsProgressMessage(progress, "Repair remained unresolved after the first retry; switching to clarification.") {
 		t.Fatalf("expected routed same-tool clarification escalation progress message, got %#v", progress)
 	}
 	if len(resp.ToolCalls) != 0 {
@@ -1157,7 +1156,7 @@ func TestNativeReActEngine_RoutedAmbiguityEscalatesToClarificationAfterFirstRepa
 	if executor.callCount != 3 {
 		t.Fatalf("expected execute_script, list_stores, execute_script before clarification, got %d", executor.callCount)
 	}
-	if !containsProgressMessage(progress, "Routed Ask repair remained unresolved after the first retry; switching to clarification.") {
+	if !containsProgressMessage(progress, "Repair remained unresolved after the first retry; switching to clarification.") {
 		t.Fatalf("expected clarification escalation progress message, got %#v", progress)
 	}
 	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "list_stores" {
@@ -1165,6 +1164,44 @@ func TestNativeReActEngine_RoutedAmbiguityEscalatesToClarificationAfterFirstRepa
 	}
 	if len(executor.tools) != 3 || executor.tools[0] != "execute_script" || executor.tools[1] != "list_stores" || executor.tools[2] != "execute_script" {
 		t.Fatalf("expected routed clarification flow to attempt execute_script, research, then execute_script, got %#v", executor.tools)
+	}
+}
+
+func TestNativeReActEngine_NonRoutedAmbiguityEscalatesToClarificationAfterFirstRepairAttempt(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &discoveryClarificationGenerator{}
+	executor := &discoveryClarificationExecutor{}
+	var progress []string
+	ctx := context.WithValue(context.Background(), ai.CtxKeyProgressSink, func(msg string) {
+		progress = append(progress, msg)
+	})
+
+	resp, err := engine.Run(ctx, ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Join users with users_orders",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Which join mapping should I use between users and users_orders: users.key -> users_orders.user_id, or a different relation?" {
+		t.Fatalf("expected clarification question, got %q", resp.FinalText)
+	}
+	if gen.calls != 4 {
+		t.Fatalf("expected four generator calls before clarification handoff, got %d", gen.calls)
+	}
+	if executor.callCount != 3 {
+		t.Fatalf("expected execute_script, list_stores, execute_script before clarification, got %d", executor.callCount)
+	}
+	if !containsProgressMessage(progress, "Repair remained unresolved after the first retry; switching to clarification.") {
+		t.Fatalf("expected clarification escalation progress message, got %#v", progress)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "list_stores" {
+		t.Fatalf("expected only the successful research tool call to be recorded, got %#v", resp.ToolCalls)
+	}
+	if len(executor.tools) != 3 || executor.tools[0] != "execute_script" || executor.tools[1] != "list_stores" || executor.tools[2] != "execute_script" {
+		t.Fatalf("expected clarification flow to attempt execute_script, research, then execute_script, got %#v", executor.tools)
 	}
 }
 
@@ -1507,11 +1544,11 @@ func TestDetectAskLoopProgress_TreatsNewRecipeAsProgressWithoutFreshHint(t *test
 	}
 
 	budget := newAskLoopBudgetState()
-	if !budget.extendIfProgressing(delta) {
-		t.Fatal("expected retry budget to extend from recipe-only progress")
+	if budget.extendIfProgressing(delta) {
+		t.Fatal("did not expect retry budget to extend from progress")
 	}
-	if budget.allowedIterations != nativeReActBaseToolIterations+1 {
-		t.Fatalf("expected budget to extend to %d, got %d", nativeReActBaseToolIterations+1, budget.allowedIterations)
+	if budget.allowedIterations != nativeReActBaseToolIterations {
+		t.Fatalf("expected budget to remain at %d, got %d", nativeReActBaseToolIterations, budget.allowedIterations)
 	}
 }
 
@@ -2100,13 +2137,16 @@ func (m *progressBudgetGenerator) Name() string                                 
 func (m *progressBudgetGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 func (m *progressBudgetGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
-	if m.calls <= 6 {
+	if strings.Contains(prompt, "We have hit the retry cap.") {
+		return ai.GenOutput{Text: "Which specific store or field should I focus on next to unblock this query?"}, nil
+	}
+	if m.calls <= 3 {
 		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
 			Name: "execute_script",
 			Args: map[string]any{"script": []any{map[string]any{"op": "scan"}}},
 		}}}, nil
 	}
-	return ai.GenOutput{Text: "Final answer after progress-aware extension."}, nil
+	return ai.GenOutput{Text: "unexpected follow-up after retry cap"}, nil
 }
 
 type progressBudgetExecutor struct{ callCount int }
@@ -2120,7 +2160,7 @@ func (e *progressBudgetExecutor) ListTools(ctx context.Context) ([]ai.ToolDefini
 	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
 }
 
-func TestNativeReActEngine_ExtendsLoopBudgetWhenProgressing(t *testing.T) {
+func TestNativeReActEngine_FixedLoopBudgetCapsEvenWhenProgressing(t *testing.T) {
 	engine := &NativeReActEngine{}
 	gen := &progressBudgetGenerator{}
 	executor := &progressBudgetExecutor{}
@@ -2136,17 +2176,20 @@ func TestNativeReActEngine_ExtendsLoopBudgetWhenProgressing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
-	if resp.FinalText != "Final answer after progress-aware extension." {
-		t.Fatalf("expected final answer after extension, got %q", resp.FinalText)
+	if resp.FinalText != "Which specific store or field should I focus on next to unblock this query?" {
+		t.Fatalf("expected clarification after retry cap, got %q", resp.FinalText)
 	}
-	if executor.callCount != 6 {
-		t.Fatalf("expected loop budget to extend beyond base and execute 6 tool calls, got %d", executor.callCount)
+	if executor.callCount != nativeReActBaseToolIterations {
+		t.Fatalf("expected fixed loop budget to stop at %d tool calls, got %d", nativeReActBaseToolIterations, executor.callCount)
 	}
-	if !containsProgressMessage(progress, "Loop budget extended to 6 because the Ask is progressing.") {
-		t.Fatalf("expected loop budget extension progress message, got %#v", progress)
+	if containsProgressMessage(progress, "Loop budget extended to") {
+		t.Fatalf("did not expect loop budget extension progress message, got %#v", progress)
 	}
-	if len(resp.ToolCalls) != 6 {
-		t.Fatalf("expected all progressing tool calls to be recorded, got %#v", resp.ToolCalls)
+	if !containsProgressMessage(progress, "Reached retry cap; switching to clarification.") {
+		t.Fatalf("expected retry-cap clarification progress message, got %#v", progress)
+	}
+	if len(resp.ToolCalls) != nativeReActBaseToolIterations {
+		t.Fatalf("expected capped progressing tool calls to be recorded, got %#v", resp.ToolCalls)
 	}
 }
 
@@ -2156,8 +2199,8 @@ func (m *stalledBudgetGenerator) Name() string                                 {
 func (m *stalledBudgetGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 func (m *stalledBudgetGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
-	if strings.Contains(prompt, "Do not call any more tools.") {
-		return ai.GenOutput{Text: "Final answer after capped retries."}, nil
+	if strings.Contains(prompt, "We have hit the retry cap.") {
+		return ai.GenOutput{Text: "What field or join should I correct to continue this query?"}, nil
 	}
 	return ai.GenOutput{ToolCalls: []ai.ToolCall{{
 		Name: "execute_script",
@@ -2190,14 +2233,14 @@ func TestNativeReActEngine_DoesNotExtendLoopBudgetWithoutProgress(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
-	if resp.FinalText != "Final answer after capped retries." {
-		t.Fatalf("expected final synthesis after capped retries, got %q", resp.FinalText)
+	if resp.FinalText != "What field or join should I correct to continue this query?" {
+		t.Fatalf("expected clarification after capped retries, got %q", resp.FinalText)
 	}
 	if executor.callCount != nativeReActBaseToolIterations {
 		t.Fatalf("expected no progress to stop at base loop budget %d, got %d", nativeReActBaseToolIterations, executor.callCount)
 	}
 	if gen.calls != nativeReActBaseToolIterations+1 {
-		t.Fatalf("expected capped retries plus one final synthesis call, got %d", gen.calls)
+		t.Fatalf("expected capped retries plus one clarification call, got %d", gen.calls)
 	}
 }
 
@@ -2207,8 +2250,8 @@ func (m *cappedBudgetGenerator) Name() string                                 { 
 func (m *cappedBudgetGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 func (m *cappedBudgetGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
-	if strings.Contains(prompt, "Do not call any more tools.") {
-		return ai.GenOutput{Text: "Final answer after hard cap."}, nil
+	if strings.Contains(prompt, "We have hit the retry cap.") {
+		return ai.GenOutput{Text: "What concrete next constraint should I use to continue narrowing the result?"}, nil
 	}
 	return ai.GenOutput{ToolCalls: []ai.ToolCall{{
 		Name: "execute_script",
@@ -2253,7 +2296,7 @@ func (e *antiSuccessExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinitio
 	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
 }
 
-func TestNativeReActEngine_ProgressAwareBudgetStillCapsAtHardLimit(t *testing.T) {
+func TestNativeReActEngine_ProgressAwareBudgetStillCapsAtFixedLimit(t *testing.T) {
 	engine := &NativeReActEngine{}
 	gen := &cappedBudgetGenerator{}
 	executor := &cappedBudgetExecutor{}
@@ -2267,14 +2310,14 @@ func TestNativeReActEngine_ProgressAwareBudgetStillCapsAtHardLimit(t *testing.T)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
-	if resp.FinalText != "Final answer after hard cap." {
-		t.Fatalf("expected final synthesis after hard cap, got %q", resp.FinalText)
+	if resp.FinalText != "What concrete next constraint should I use to continue narrowing the result?" {
+		t.Fatalf("expected clarification after hard cap, got %q", resp.FinalText)
 	}
 	if executor.callCount != nativeReActMaxToolIterations {
-		t.Fatalf("expected progressing loop to stop at hard cap %d, got %d", nativeReActMaxToolIterations, executor.callCount)
+		t.Fatalf("expected progressing loop to stop at fixed cap %d, got %d", nativeReActMaxToolIterations, executor.callCount)
 	}
 	if gen.calls != nativeReActMaxToolIterations+1 {
-		t.Fatalf("expected hard cap plus final synthesis call, got %d", gen.calls)
+		t.Fatalf("expected fixed cap plus one clarification call, got %d", gen.calls)
 	}
 }
 

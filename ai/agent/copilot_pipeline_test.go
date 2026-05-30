@@ -492,22 +492,8 @@ func TestCopilotPipeline_Phases(t *testing.T) {
 		t.Errorf("Expected 'Spaces' domain classification, got %v", taskCtx.Domain)
 	}
 
-	// Because evaluateRoutingGates automatically injects tools into MRU for Spaces,
-	// let's verify that injection occurred in MRU.
-	foundToolsInMRU := false
-	for _, item := range ag.getMRUSnapshot() {
-		if item.Category == SYSTEM_TOOLS {
-			foundToolsInMRU = true
-			if !strings.Contains(item.Context, "Structured Context: Spaces Tools") && !strings.Contains(item.Context, "Relevant Space Operations") {
-				t.Errorf("Expected Spaces-related tools to be injected into MRU based on Spaces classification")
-			}
-			break
-		}
-	}
-
-	if !foundToolsInMRU {
-		t.Log("Note: searchKnowledgeBase failed internally because of missing setup, but classification still works.")
-		ag.MarkMRUCategory(SYSTEM_TOOLS, "\nStructured Context: Knowledge Base Management Tools\nMock KB Tools Definition")
+	if toolsCtx := ag.getSystemToolsContext(ctx); toolsCtx != "" {
+		t.Fatalf("Expected evaluateRoutingGates to avoid mutating System_Tools, got %q", toolsCtx)
 	}
 
 	// --- Phase 3: MRU Tracking & Propagation Verification ---

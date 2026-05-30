@@ -80,6 +80,9 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 		if taskCtx.RoutingGate != RoutingGateFocused {
 			t.Errorf("Gate 1 should mark focused routing gate, got %q", taskCtx.RoutingGate)
 		}
+		if toolsCtx := ag.getSystemToolsContext(ctx); toolsCtx != "" {
+			t.Errorf("Gate 1 should not inject system tools during classification, got %q", toolsCtx)
+		}
 
 		// Verify MRU Session context got updated
 		rs, ok := payload.Variables["RoutingState"].(*TaskContextClassification)
@@ -122,6 +125,9 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 		}
 		if !strings.Contains(gen.CapturedPrompt, "Find John orders") || !strings.Contains(gen.CapturedPrompt, "list_stores -") || !strings.Contains(gen.CapturedPrompt, "execute_script") {
 			t.Fatalf("expected Gate 2 prompt to include MRU-derived digest signals, got: %s", gen.CapturedPrompt)
+		}
+		if toolsCtx := ag.getSystemToolsContext(ctx); toolsCtx != "" {
+			t.Fatalf("expected Gate 2 continuity classification to avoid system tool injection, got %q", toolsCtx)
 		}
 	})
 
@@ -181,6 +187,9 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 		}
 		if taskCtx.RoutingGate != RoutingGateDiscovery {
 			t.Errorf("Gate 3 should mark discovery routing gate, got %q", taskCtx.RoutingGate)
+		}
+		if toolsCtx := ag.getSystemToolsContext(ctx); toolsCtx != "" {
+			t.Errorf("Gate 3 should not inject system tools during classification, got %q", toolsCtx)
 		}
 	})
 

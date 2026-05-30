@@ -354,8 +354,8 @@ func TestBuildSystemPrompt_StoresSystemTools_PrefersCompactProtocolSlice(t *test
 	if !strings.Contains(systemTools, "- execute_script:") || !strings.Contains(systemTools, "- list_stores:") {
 		t.Fatalf("expected stores system tools to be generated from tool descriptions, got: %s", systemTools)
 	}
-	if !strings.Contains(systemTools, "result_var/input_var") || !strings.Contains(systemTools, "schema=...") {
-		t.Fatalf("expected execute_script description guidance to remain visible in system tools, got: %s", systemTools)
+	if !strings.Contains(systemTools, "Never guess store names") || !strings.Contains(systemTools, "retry once") {
+		t.Fatalf("expected simplified stores tool protocol guidance to remain visible in system tools, got: %s", systemTools)
 	}
 }
 

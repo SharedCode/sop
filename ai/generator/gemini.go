@@ -76,6 +76,7 @@ type geminiPart struct {
 	Text             string                  `json:"text,omitempty"`
 	FunctionCall     *geminiFunctionCall     `json:"functionCall,omitempty"`
 	FunctionResponse *geminiFunctionResponse `json:"functionResponse,omitempty"`
+	ThoughtSignature string                  `json:"thoughtSignature,omitempty"`
 }
 
 type geminiTool struct {
@@ -152,10 +153,15 @@ func extractGeminiOutput(resp geminiResponse) (ai.GenOutput, error) {
 				Args:     p.FunctionCall.Args,
 				NativeID: strings.TrimSpace(p.FunctionCall.ID),
 			}
-			if toolCall.NativeID != "" {
+			if toolCall.NativeID != "" || strings.TrimSpace(p.ThoughtSignature) != "" {
 				toolCall.TransportMeta = map[string]any{
-					"provider":         "gemini",
-					"function_call_id": toolCall.NativeID,
+					"provider": "gemini",
+				}
+				if toolCall.NativeID != "" {
+					toolCall.TransportMeta["function_call_id"] = toolCall.NativeID
+				}
+				if signature := strings.TrimSpace(p.ThoughtSignature); signature != "" {
+					toolCall.TransportMeta["thought_signature"] = signature
 				}
 			}
 			out.ToolCalls = append(out.ToolCalls, toolCall)
@@ -186,7 +192,7 @@ func buildGeminiRequest(prompt string, opts ai.GenOptions) geminiRequest {
 					Name: continuation.ToolCall.Name,
 					Args: continuation.ToolCall.Args,
 					ID:   strings.TrimSpace(continuation.ToolCall.NativeID),
-				}}},
+				}, ThoughtSignature: geminiThoughtSignature(continuation.ToolCall)}},
 			},
 			geminiContent{
 				Role: "user",
@@ -236,6 +242,16 @@ func buildGeminiRequest(prompt string, opts ai.GenOptions) geminiRequest {
 	}
 
 	return reqBody
+}
+
+func geminiThoughtSignature(toolCall ai.ToolCall) string {
+	if toolCall.TransportMeta == nil {
+		return ""
+	}
+	if signature, ok := toolCall.TransportMeta["thought_signature"].(string); ok {
+		return strings.TrimSpace(signature)
+	}
+	return ""
 }
 
 func sanitizeGeminiSchema(schema map[string]any) map[string]any {

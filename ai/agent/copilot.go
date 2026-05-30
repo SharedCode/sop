@@ -697,10 +697,11 @@ func (a *CopilotAgent) Search(ctx context.Context, query string, limit int) ([]a
 //     If the intent indicates a specialized Avatar (e.g., a "Legal Auditor" persona), it delegates
 //     execution entirely to that sub-agent.
 //
-//  4. Context Classification (Domain Injection):
-//     For generic queries (intent == "OMNI"), it performs a lightweight classification to identify
-//     the semantic domain (e.g., "Spaces" or "Stores"). Based on this domain, it forcefully injects
-//     relevant tool documentations (from the system KB) into the semantic memory buffer.
+//  4. Context Classification:
+//     For generic queries (intent == "OMNI"), it performs a lightweight three-gate classification to
+//     identify the semantic domain (e.g., "Spaces" or "Stores"), likely artifacts, and CRUD layer.
+//     This stage is classification-only: it updates routing state, but does not assemble prompt slices
+//     or mutate System_Tools context.
 //
 //  5. Episode Metadata Tracking (MRU Cache):
 //     Analyzes the user's prior chat exchange inside the short-term episodic memory. If the user
@@ -708,9 +709,9 @@ func (a *CopilotAgent) Search(ctx context.Context, query string, limit int) ([]a
 //     semantic boundaries so the LLM retains coherent situational context across turns.
 //
 //  6. System Prompt Construction:
-//     Assembles the massive multi-part context prompt (using SystemPromptBuilder) linking the
-//     Core Persona, Active Playbooks/KBs, injected Tool Descriptions, semantic memory boundaries,
-//     and chronological conversation history.
+//     Assembles the multi-part context prompt (using SystemPromptBuilder) linking the Core Persona,
+//     Active Playbooks/KBs, stable System Tools context, targeted focused execution/tool guidance
+//     derived from the current classification, semantic memory boundaries, and conversation history.
 //
 //  7. Reasoning Engine Delegation:
 //     Packages the assembled context and delegates execution to the ReAct engine. The engine loops
@@ -721,58 +722,26 @@ func (a *CopilotAgent) Search(ctx context.Context, query string, limit int) ([]a
 //     Records the completed dialogue and active track-state into the short-term memory transcript,
 //     clears the volatile MRU buffer, and returns the final text response to the client.
 func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
-	if len(opts) > 0 {
-		cfg := ai.NewAskConfig(opts...)
-		if format, ok := cfg.Values["default_format"].(string); ok && strings.TrimSpace(format) != "" {
-			ctx = context.WithValue(ctx, ai.CtxKeyDefaultFormat, strings.TrimSpace(format))
-		}
-	}
+	ctx = a.applyAskOptions(ctx, opts...)
 
-	// 1. Generator Resolution
 	gen := a.resolveGenerator(ctx)
 	if gen == nil {
 		return "⚠️ **AI Copilot Disabled**: No valid API Key found.\n\nPlease go to **Environment Settings** (HDD icon in bottom left) -> **LLM API Key** to configure your Google Gemini or OpenAI key.", nil
 	}
 
-	var sessionID string
-	var currentDB string
-	var activeDomain string
-	if p := ai.GetSessionPayload(ctx); p != nil {
-		sessionID = p.SessionID
-		currentDB = p.CurrentDB
-		activeDomain = p.ActiveDomain
-	}
-	currentThreadID := ""
-	if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
-		if thread := a.service.session.Memory.GetCurrentThread(); thread != nil {
-			currentThreadID = fmt.Sprintf("%v", thread.ID)
-		}
-	}
-	log.Info("Copilot Ask Start",
-		"generator", gen.Name(),
-		"default_format", getRequestedOutputFormat(ctx),
-		"session_id", sessionID,
-		"current_db", currentDB,
-		"active_domain", activeDomain,
-		"thread_id", currentThreadID,
-		"query_chars", len(query),
-	)
+	sessionID := a.logAskStart(ctx, query, gen)
 
 	if handled, res, err := a.handlePendingUserConfirmation(ctx, query); handled {
 		return res, err
 	}
 
-	// 2. Direct Invocation Handling
-	if handled, res, err := a.handleDirectInvocation(ctx, query, gen); handled {
+	if handled, res, err := a.handleDirectToolInvocation(ctx, query, gen); handled {
 		return res, err
 	}
 
 	rawQuery := query
-	if rewrittenQuery, rewritten := a.rewriteRetryMetaAsk(ctx, query); rewritten {
-		log.Info("Copilot Ask Gate 0 Retry Rewrite", "original_query", query, "effective_query", rewrittenQuery)
-		query = rewrittenQuery
-	} else if rewrittenQuery, rewritten := a.rewriteConversationalMetaAsk(ctx, query); rewritten {
-		log.Info("Copilot Ask Gate 0 Meta Conversation Rewrite", "original_query", query, "effective_query", rewrittenQuery)
+	if rewrittenQuery, rewritten := a.tryMetaTalkBasedRouting(ctx, query); rewritten {
+		log.Info("Copilot Ask MetaTalkBasedRouting Rewrite", "original_query", query, "effective_query", rewrittenQuery)
 		query = rewrittenQuery
 	}
 
@@ -786,7 +755,7 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 	}
 	log.Info("Ask: Request classified for OMNI")
 
-	// 4. Three-Gate Context Classification (Domain & Tool Injection)
+	// 4. Three-Gate Context Classification
 	taskContext := a.evaluateRoutingGates(ctx, query, gen)
 	if taskContext == nil {
 		taskContext = &TaskContextClassification{Domain: "General"}
@@ -818,6 +787,46 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 	a.epilogueAndCleanup(ctx, rawQuery, intent, finalText, toolCalls, outcomeFacts, outcomeRecipes)
 
 	return finalText, nil
+}
+
+func (a *CopilotAgent) applyAskOptions(ctx context.Context, opts ...ai.Option) context.Context {
+	if len(opts) > 0 {
+		cfg := ai.NewAskConfig(opts...)
+		if format, ok := cfg.Values["default_format"].(string); ok && strings.TrimSpace(format) != "" {
+			ctx = context.WithValue(ctx, ai.CtxKeyDefaultFormat, strings.TrimSpace(format))
+		}
+	}
+	return ctx
+}
+
+func (a *CopilotAgent) logAskStart(ctx context.Context, query string, gen ai.Generator) string {
+	var sessionID string
+	var currentDB string
+	var activeDomain string
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		sessionID = p.SessionID
+		currentDB = p.CurrentDB
+		activeDomain = p.ActiveDomain
+	}
+	currentThreadID := ""
+	if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+		if thread := a.service.session.Memory.GetCurrentThread(); thread != nil {
+			currentThreadID = fmt.Sprintf("%v", thread.ID)
+		}
+	}
+	log.Info("Copilot Ask Start", "generator", gen.Name(), "default_format", getRequestedOutputFormat(ctx), "session_id", sessionID,
+		"current_db", currentDB, "active_domain", activeDomain, "thread_id", currentThreadID, "query_chars", len(query))
+	return sessionID
+}
+
+func (a *CopilotAgent) tryMetaTalkBasedRouting(ctx context.Context, query string) (string, bool) {
+	if rewrittenQuery, rewritten := a.rewriteRetryMetaAsk(ctx, query); rewritten {
+		return rewrittenQuery, true
+	}
+	if rewrittenQuery, rewritten := a.rewriteConversationalMetaAsk(ctx, query); rewritten {
+		return rewrittenQuery, true
+	}
+	return "", false
 }
 
 func (a *CopilotAgent) rewriteRetryMetaAsk(ctx context.Context, query string) (string, bool) {
@@ -1049,7 +1058,7 @@ func normalizeMetaQuestionText(text string) string {
 	return strings.Join(strings.Fields(text), " ")
 }
 
-func (a *CopilotAgent) handleDirectInvocation(ctx context.Context, query string, gen ai.Generator) (bool, string, error) {
+func (a *CopilotAgent) handleDirectToolInvocation(ctx context.Context, query string, gen ai.Generator) (bool, string, error) {
 	if strings.HasPrefix(strings.TrimSpace(query), "/") {
 		// Register tools for local command parsing
 		a.registerTools(ctx)
@@ -1227,170 +1236,15 @@ func lastNonEmptyQueryLine(query string) string {
 
 func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, gen ai.Generator) *TaskContextClassification {
 	a.rehydrateMRUFromMemory(ctx)
-
-	isTest := false
-	if gen != nil {
-		if strings.Contains(fmt.Sprintf("%T", gen), "mock") || strings.Contains(fmt.Sprintf("%T", gen), "Mock") || strings.Contains(fmt.Sprintf("%T", gen), "Smart") {
-			isTest = true
-		}
-	}
-
-	parts := strings.Split(query, ":")
-	var gate1Anchor *TaskContextClassification
-	parsedEntity := ""
-	parsedDomain := ""
-	parsedArtifact := ""
-	if len(parts) > 1 && (strings.EqualFold(parts[0], "omni") || strings.EqualFold(parts[0], "medical") || strings.EqualFold(parts[0], "support")) {
-		parsedEntity = parts[0]
-		if len(parts) >= 2 {
-			parsedDomain = strings.TrimSpace(parts[1])
-		}
-		if len(parts) >= 3 {
-			parsedArtifact = strings.TrimSpace(parts[2])
-		}
-		gate1Anchor = enrichFocusedTaskContext(nil, parsedEntity, parsedDomain, parsedArtifact)
-	}
-
-	// Gate 1: Telescoping Prefix Verification
-	if gate1Anchor != nil {
-		log.Info("Gate 1 Activated: Prefix match", "prefix", parts[0])
-
-		var taskCtx *TaskContextClassification
-
-		if !isTest && gen != nil {
-			taskCtx, _ = a.ClassifyFocusedTaskContext(ctx, query, parsedEntity, parsedDomain, parsedArtifact, gen)
-		}
-
-		taskCtx = enrichFocusedTaskContext(taskCtx, parsedEntity, parsedDomain, parsedArtifact)
-		if p := ai.GetSessionPayload(ctx); p != nil && p.Variables != nil {
-			if rs, ok := p.Variables["RoutingState"].(*TaskContextClassification); ok && rs != nil && !isTest && gen != nil {
-				updatedRS, isSwitch, err := a.ClassifyContinuityTaskContext(ctx, query, rs, taskCtx, gen)
-				if err == nil && isSwitch {
-					log.Info("Gate 1 Anchor Triggered Topic Switch Reset")
-					delete(p.Variables, "RoutingState")
-					a.clearMRUForTopicSwitch()
-					if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
-						newThreadID := sop.NewUUID()
-						thread := &ConversationThread{
-							ID:         newThreadID,
-							RootPrompt: query,
-							Label:      "Topic Switch",
-							Category:   "General",
-							Exchanges:  make([]Interaction, 0),
-							Status:     "active",
-						}
-						a.service.session.Memory.AddThread(thread)
-						a.service.session.Memory.CurrentThreadID = newThreadID
-					}
-				} else if err == nil && updatedRS != nil {
-					taskCtx = enforceFocusedConstraints(updatedRS, parsedEntity, parsedDomain, parsedArtifact)
-				}
-			}
-		}
-		annotateTaskContextIntent(taskCtx, query)
-		taskCtx.RoutingGate = RoutingGateFocused
-
-		a.injectToolsForDomain(ctx, taskCtx)
-		if p := ai.GetSessionPayload(ctx); p != nil {
-			if p.Variables == nil {
-				p.Variables = make(map[string]any)
-			}
-			p.Variables["RoutingState"] = taskCtx
-		}
-		if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
-			a.service.session.Memory.SetRoutingState(taskCtx)
-		}
+	isTest := isRoutingTestGenerator(gen)
+	anchor := parseRoutingAnchor(query)
+	if taskCtx := a.tryPrefixBasedRouting(ctx, query, gen, isTest, anchor); taskCtx != nil {
 		return taskCtx
 	}
-
-	// Gate 2: MRU Context Inheritance (Context Momentum)
-	if p := ai.GetSessionPayload(ctx); p != nil && p.Variables != nil {
-		if rs, ok := p.Variables["RoutingState"].(*TaskContextClassification); ok && rs != nil {
-			if !isTest && gen != nil {
-				updatedRS, isSwitch, err := a.ClassifyContinuityTaskContext(ctx, query, rs, gate1Anchor, gen)
-				if err == nil && isSwitch {
-					log.Info("Gate 2 Detected Topic Switch. Falling through to Gate 3.")
-					delete(p.Variables, "RoutingState")
-					a.clearMRUForTopicSwitch()
-
-					// Clear the episodic memory thread to avoid context poisoning
-					if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
-						newThreadID := sop.NewUUID()
-						thread := &ConversationThread{
-							ID:         newThreadID,
-							RootPrompt: query,
-							Label:      "Topic Switch",
-							Category:   "General",
-							Exchanges:  make([]Interaction, 0),
-							Status:     "active",
-						}
-						a.service.session.Memory.AddThread(thread)
-						a.service.session.Memory.CurrentThreadID = newThreadID
-					}
-
-					// Fall through to Gate 3
-				} else if err == nil && updatedRS != nil {
-					log.Info("Gate 2 Activated: Inheriting MRU Context with Updates", "domain", updatedRS.Domain)
-					annotateTaskContextIntent(updatedRS, query)
-					updatedRS.RoutingGate = RoutingGateContinuity
-					a.injectToolsForDomain(ctx, updatedRS)
-					p.Variables["RoutingState"] = updatedRS
-					if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
-						a.service.session.Memory.SetRoutingState(updatedRS)
-					}
-					return updatedRS
-				}
-			} else {
-				// Test fallback
-				log.Info("Gate 2 Activated: Inheriting MRU Context (Test Mode)", "domain", rs.Domain)
-				annotateTaskContextIntent(rs, query)
-				rs.RoutingGate = RoutingGateContinuity
-				a.injectToolsForDomain(ctx, rs)
-				if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
-					a.service.session.Memory.SetRoutingState(rs)
-				}
-				return rs
-			}
-		}
+	if taskCtx := a.tryAskContinuationBasedRouting(ctx, query, gen, isTest, anchor); taskCtx != nil {
+		return taskCtx
 	}
-
-	// Gate 3: Cold Start & Context Outline Classification
-	if len(parts) == 1 {
-		log.Info("Gate 3 Activated: Cold Start Classification")
-	}
-
-	if gen != nil && !isTest {
-		if taskCtx, err := a.ClassifyTaskContext(ctx, query, gen); err == nil && taskCtx != nil {
-			log.Info("Gate 3 Classification Success", "domain", taskCtx.Domain)
-			annotateTaskContextIntent(taskCtx, query)
-			taskCtx.RoutingGate = RoutingGateDiscovery
-			a.injectToolsForDomain(ctx, taskCtx)
-			if p := ai.GetSessionPayload(ctx); p != nil {
-				if p.Variables == nil {
-					p.Variables = make(map[string]any)
-				}
-				p.Variables["RoutingState"] = taskCtx
-			}
-			if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
-				a.service.session.Memory.SetRoutingState(taskCtx)
-			}
-			return taskCtx
-		} else {
-			log.Warn("Gate 3 classification failed or returned nil", "error", err)
-		}
-	}
-
-	return nil
-}
-
-func (a *CopilotAgent) injectToolsForDomain(ctx context.Context, taskCtx *TaskContextClassification) {
-	if taskCtx == nil {
-		return
-	}
-
-	if focused := a.buildFocusedToolContext(taskCtx); focused != "" {
-		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\n"+focused, MRUSourceSystemTools)
-	}
+	return a.tryColdStartBasedRouting(ctx, query, gen, isTest)
 }
 
 func (a *CopilotAgent) renderToolDefinitionContext(title string, toolNames []string) string {
@@ -1422,15 +1276,11 @@ func (a *CopilotAgent) renderToolDefinitionContext(title string, toolNames []str
 func (a *CopilotAgent) buildStoresToolDescriptionContext() string {
 	return strings.Join([]string{
 		"Structured Context: Stores Tools",
-		"- execute_script: Use a full AST under script for multi-step transactional store workflows and chain steps with result_var/input_var. Research with list_stores first when schema, field paths, or joins are uncertain, and prefer grounded relation + target join repair.",
-		"- list_stores: Returns grounded schema=... and optional relations=[...]. Scope with stores:[...] and reuse those returned relations as the source of truth.",
-		"- select: Direct single-store read or targeted mutation. It reuses an explicit transaction when present or opens and auto-commits a local one.",
-		"- join: Direct join only when both stores and join fields are already grounded.",
-		"- explain_join: Preview a grounded join plan before execution; it uses a local read transaction when no explicit transaction is active.",
-		"- add: Direct single-record insert. Reuses an explicit transaction or opens and auto-commits a local write transaction.",
-		"- update: Direct single-record replace or update. Reuses an explicit transaction or opens and auto-commits a local write transaction.",
-		"- delete: Direct single-record delete by exact key. Reuses an explicit transaction or opens and auto-commits a local write transaction.",
-		"- manage_transaction: Explicit begin, commit, or rollback for direct-tool flows outside execute_script.",
+		"You are a Stores Database Expert Agent. Translate English requests into executable store operations.",
+		"CRITICAL RULES:",
+		"1. Never guess store names, field names, or join mappings. Use list_stores first whenever schema, relations, or field paths are uncertain.",
+		"2. Think through the read/join/filter plan before writing the operation.",
+		"3. Use execute_script for multi-step workflows. If execution fails, analyze the error, rewrite the operation, and retry once. If it still fails, ask the user a short clarification question.",
 	}, "\n")
 }
 
@@ -2751,91 +2601,10 @@ func (b *BaselineReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) 
 // ListTools returns the list of available tools.
 func (a *CopilotAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
 	var tools []ai.ToolDefinition
-
-	var routingState *TaskContextClassification
-	if p := ai.GetSessionPayload(ctx); p != nil && p.Variables != nil {
-		if rs, ok := p.Variables["RoutingState"].(*TaskContextClassification); ok {
-			routingState = rs
-		}
-	}
-
-	allowedSpacesTools, allowedStoresTools := allowedNativeDomainTools(routingState)
-
-	isSpaceTool := func(name string) bool {
-		switch name {
-		case "mint_to_space", "delete_space", "enrich_space", "update_space_config", "read_space_config", "vectorize_space", "vectorize_space_categories", "vectorize_space_items", "search_space":
-			return true
-		}
-		return false
-	}
-
-	isStoreTool := func(name string) bool {
-		switch name {
-		case "execute_script", "list_stores", "select", "join", "explain_join", "add", "update", "delete", "manage_transaction", "scan":
-			return true
-		}
-		return false
-	}
-
-	// Append compiled go tools
-	if a.registry != nil {
-		for _, t := range a.registry.List() {
-			if t.Hidden {
-				continue // Skip hidden for the LLM natively as well
-			}
-
-			// Apply RoutingState Filter if available
-			if routingState != nil {
-				name := t.Name
-				if isSpaceTool(name) && !allowedSpacesTools[name] {
-					continue
-				}
-				if isStoreTool(name) && !allowedStoresTools[name] {
-					continue
-				}
-			}
-
-			tools = append(tools, ai.ToolDefinition{
-				Name:        t.Name,
-				Description: t.Description,
-				Schema:      t.ArgsSchema,
-			})
-		}
-	}
-
-	// Query systemDB for stored user scripts
-	if a.systemDB != nil {
-		tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
-		if err == nil {
-			defer tx.Rollback(ctx)
-			store, err := a.systemDB.OpenModelStore(ctx, "scripts", tx)
-			if err == nil {
-				// Iterate via Store.List
-				// For simplicity, scripts might not have explicit schema strings yet,
-				// but we build a minimal one if properties are available.
-				var defaultArgsSchema = `{"type": "object", "properties": {"database": {"type": "string", "description": "Target database constraint (optional)"}}}`
-
-				// Attempt to load all scripts under ai.DefaultScriptCategory
-				var keys []string
-				keys, _ = store.List(ctx, ai.DefaultScriptCategory)
-				for _, scriptName := range keys {
-					var script ai.Script
-					if err := store.Load(ctx, ai.DefaultScriptCategory, scriptName, &script); err == nil {
-						desc := script.Description
-						if desc == "" {
-							desc = "Executes the script '" + scriptName + "'"
-						}
-
-						tools = append(tools, ai.ToolDefinition{
-							Name:        scriptName,
-							Description: "Execute pre-saved user script. " + desc,
-							Schema:      defaultArgsSchema,
-						})
-					}
-				}
-			}
-		}
-	}
+	routingState := activeRoutingState(ctx)
+	exposure := buildNativeToolExposure(routingState)
+	tools = append(tools, a.listRegisteredTools(exposure)...)
+	tools = append(tools, a.listStoredScriptTools(ctx)...)
 
 	return tools, nil
 }

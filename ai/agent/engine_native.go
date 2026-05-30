@@ -20,8 +20,8 @@ type NativeReActEngine struct {
 	EnableObfuscation bool
 }
 
-const nativeReActBaseToolIterations = 5
-const nativeReActMaxToolIterations = 15
+const nativeReActBaseToolIterations = 3
+const nativeReActMaxToolIterations = 3
 const nativeReActToolCallTemperature float32 = 0.1
 const nativeReActRepairTemperature float32 = 0.0
 
@@ -102,7 +102,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 	executedToolCalls := make([]ai.ToolCall, 0)
 	toolResults := make([]nativeToolResult, 0)
 	budgetState := newAskLoopBudgetState()
-	routedRepairAttempts := 0
+	repairAttempts := 0
 	var pendingRepair *pendingToolRepair
 	var pendingMalformedCall *pendingGenerationRepair
 	var pendingContinuation *ai.NativeToolContinuation
@@ -213,20 +213,18 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 			})
 			if isRecoverableToolExecutionError(err) {
 				repairPlan := classifyRecoverableToolRepair(toolCall.Name, err)
-				if shouldEscalateRoutedRepairToClarification(ctx, routedRepairAttempts) {
-					emitVerboseProgress(ctx, "Routed Ask repair remained unresolved after the first retry; switching to clarification.")
+				if shouldEscalateRepairToClarification(repairAttempts) {
+					emitVerboseProgress(ctx, "Repair remained unresolved after the first retry; switching to clarification.")
 					pendingRepair = nil
 					toolResults = append(toolResults, nativeToolResult{
 						Name:   toolCall.Name,
 						Result: formatClarificationRequiredToolError(repairPlan, toolCall.Args, err),
 						Args:   cloneToolEventMap(toolCall.Args),
 					})
-					log.Warn("Native ReAct Engine Escalated Routed Repair To Clarification", "tool", toolCall.Name, "error", err)
+					log.Warn("Native ReAct Engine Escalated Repair To Clarification", "tool", toolCall.Name, "error", err)
 					continue
 				}
-				if isRoutedAskContext(ctx) {
-					routedRepairAttempts++
-				}
+				repairAttempts++
 				emitVerboseProgress(ctx, "Tool `%s` needs corrected arguments; retrying.", toolCall.Name)
 				pendingRepair = &repairPlan
 				toolResults = append(toolResults, nativeToolResult{
@@ -242,8 +240,8 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 		}
 		result, hint := unwrapToolResultEnvelope(rawResult)
 		emitVerboseProgress(ctx, "Tool `%s` completed.", toolCall.Name)
-		if shouldResetRoutedRepairAttempts(priorRepair, toolCall.Name) {
-			routedRepairAttempts = 0
+		if shouldResetRepairAttempts(priorRepair, toolCall.Name) {
+			repairAttempts = 0
 		}
 		pendingRepair = nil
 		log.Info("Native ReAct Engine Tool Success", "iteration", iteration+1, "tool", toolCall.Name, "result_chars", len(result))
@@ -273,10 +271,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 				OutcomeRecipes: outcomeRecipes,
 			}, nil
 		}
-		budgetDelta := detectAskLoopProgress(previousResults, toolResults)
-		if budgetState.extendIfProgressing(budgetDelta) {
-			emitVerboseProgress(ctx, "Loop budget extended to %d because the Ask is progressing.", budgetState.allowedIterations)
-		}
+		_ = detectAskLoopProgress(previousResults, toolResults)
 		if shouldPreserveStructuredToolResult(ctx, toolResults) {
 			outcomeRecipes := summarizeOutcomeRecipes(toolResults)
 			return ai.ReasoningResponse{
@@ -288,7 +283,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 		}
 	}
 
-	emitVerboseProgress(ctx, "Reached tool iteration limit; synthesizing final answer.")
+	emitVerboseProgress(ctx, "Reached retry cap; switching to clarification.")
 	if shouldPreserveStructuredToolResult(ctx, toolResults) {
 		outcomeRecipes := summarizeOutcomeRecipes(toolResults)
 		return ai.ReasoningResponse{
@@ -306,7 +301,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 		emitVerboseProgress(ctx, "Prompt budget trimmed %s first; reduced components: %s.", firstTrimmed, summarizePromptBudgetTrim(promptReport))
 		log.Info("Native ReAct Prompt Budget Applied", "phase", "final", "trimmed_first", firstTrimmed, "trimmed", summarizePromptBudgetTrim(promptReport), "final_chars", len(finalPrompt))
 	}
-	finalPrompt += "\n\nUser: Analyze the tool response and provide the final answer to the user. Do not call any more tools."
+	finalPrompt += "\n\nUser: We have hit the retry cap. Do not call any more tools. Briefly explain what is still blocking progress and ask one short, concrete clarification question that would unblock the task."
 	emitVerboseProgress(ctx, "Waiting for model response.")
 	output, err := req.Generator.Generate(ctx, finalPrompt, ai.GenOptions{
 		SystemPrompt: req.SystemPrompt,
@@ -350,14 +345,8 @@ func newAskLoopBudgetState() askLoopBudgetState {
 }
 
 func (s *askLoopBudgetState) extendIfProgressing(delta askLoopProgressDelta) bool {
-	if s == nil || !delta.Progressing || s.allowedIterations >= s.maxIterations {
-		return false
-	}
-	s.allowedIterations++
-	if s.allowedIterations > s.maxIterations {
-		s.allowedIterations = s.maxIterations
-	}
-	return true
+	_ = delta
+	return false
 }
 
 func emitReasoningEvent(req ai.ReasoningRequest, eventType string, data any) {
@@ -651,7 +640,7 @@ func renderNativePromptSections(sections []PromptElement) string {
 
 func buildNativeRepairDirective(last nativeToolResult) string {
 	if strings.Contains(last.Result, "Clarification required:") {
-		return "Clarification directive: The last tool failure still remains unresolved after the first repair attempt in a routed ask. Do not call another tool yet. Ask the user one short, concrete clarification question that names the blocker and wait for the answer."
+		return "Clarification directive: The last tool failure still remains unresolved after the first repair attempt. Do not call another tool yet. Ask the user one short, concrete clarification question that names the blocker and wait for the answer."
 	}
 	if !strings.Contains(last.Result, "Retry instruction:") {
 		return ""
@@ -2165,7 +2154,7 @@ func formatClarificationRequiredToolError(repair pendingToolRepair, args map[str
 		}
 	}
 
-	reason := "The routed ask still failed after one repair attempt and now needs user clarification before more tool calls."
+	reason := "The ask still failed after one repair attempt and now needs user clarification before more tool calls."
 	if repair.ResearchReason != "" {
 		reason = repair.ResearchReason
 	}
@@ -2228,11 +2217,8 @@ func formatPendingRepairReminder(repair pendingToolRepair, attemptedToolName str
 	)
 }
 
-func shouldEscalateRoutedRepairToClarification(ctx context.Context, routedRepairAttempts int) bool {
-	if !isRoutedAskContext(ctx) {
-		return false
-	}
-	return routedRepairAttempts >= 1
+func shouldEscalateRepairToClarification(repairAttempts int) bool {
+	return repairAttempts >= 1
 }
 
 func isRoutedAskContext(ctx context.Context) bool {
@@ -2247,7 +2233,7 @@ func isRoutedAskContext(ctx context.Context) bool {
 	return strings.TrimSpace(routingState.RoutingGate) != ""
 }
 
-func shouldResetRoutedRepairAttempts(priorRepair *pendingToolRepair, toolName string) bool {
+func shouldResetRepairAttempts(priorRepair *pendingToolRepair, toolName string) bool {
 	if priorRepair == nil {
 		return true
 	}

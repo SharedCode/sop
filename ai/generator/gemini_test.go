@@ -97,6 +97,11 @@ func TestBuildGeminiRequest_IncludesNativeToolContinuation(t *testing.T) {
 				Name:     "list_stores",
 				Args:     map[string]any{"store_names": []any{"users"}},
 				NativeID: "call_abc123",
+				TransportMeta: map[string]any{
+					"provider":          "gemini",
+					"function_call_id":  "call_abc123",
+					"thought_signature": "signature_abc123",
+				},
 			},
 			Response: map[string]any{"stores": []any{map[string]any{"name": "users"}}},
 		}},
@@ -113,6 +118,9 @@ func TestBuildGeminiRequest_IncludesNativeToolContinuation(t *testing.T) {
 	}
 	if req.Contents[1].Parts[0].FunctionCall.ID != "call_abc123" {
 		t.Fatalf("expected functionCall id to round-trip, got %#v", req.Contents[1].Parts[0].FunctionCall)
+	}
+	if req.Contents[1].Parts[0].ThoughtSignature != "signature_abc123" {
+		t.Fatalf("expected thought signature to round-trip, got %#v", req.Contents[1].Parts[0])
 	}
 	if req.Contents[2].Role != "user" || req.Contents[2].Parts[0].FunctionResponse == nil {
 		t.Fatalf("expected user functionResponse continuation, got %#v", req.Contents[2])
@@ -254,13 +262,22 @@ func TestExtractGeminiOutput_PreservesFunctionCallIDForTransportContinuity(t *te
 				Parts []geminiPart `json:"parts"`
 			} `json:"content"`
 		}{
-			{Content: struct {
-				Parts []geminiPart `json:"parts"`
-			}{Parts: []geminiPart{{FunctionCall: &geminiFunctionCall{
-				Name: "execute_script",
-				Args: map[string]any{"script": []any{"scan"}},
-				ID:   "call_12345xyz",
-			}}}}},
+			{
+				Content: struct {
+					Parts []geminiPart `json:"parts"`
+				}{
+					Parts: []geminiPart{
+						{
+							FunctionCall: &geminiFunctionCall{
+								Name: "execute_script",
+								Args: map[string]any{"script": []any{"scan"}},
+								ID:   "call_12345xyz",
+							},
+							ThoughtSignature: "signature_12345xyz",
+						},
+					},
+				},
+			},
 		},
 	}
 
@@ -279,5 +296,8 @@ func TestExtractGeminiOutput_PreservesFunctionCallIDForTransportContinuity(t *te
 	}
 	if out.ToolCalls[0].TransportMeta["function_call_id"] != "call_12345xyz" {
 		t.Fatalf("expected Gemini function_call_id transport metadata, got %#v", out.ToolCalls[0].TransportMeta)
+	}
+	if out.ToolCalls[0].TransportMeta["thought_signature"] != "signature_12345xyz" {
+		t.Fatalf("expected Gemini thought_signature transport metadata, got %#v", out.ToolCalls[0].TransportMeta)
 	}
 }

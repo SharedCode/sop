@@ -14,3 +14,13 @@ func (a *CopilotAgent) getSystemToolsContext(ctx context.Context) string {
 	}
 	return ""
 }
+
+func (a *CopilotAgent) injectToolsForDomain(ctx context.Context, taskCtx *TaskContextClassification) {
+	if taskCtx == nil {
+		return
+	}
+
+	if focused := a.buildFocusedToolContext(taskCtx); focused != "" {
+		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\n"+focused, MRUSourceSystemTools)
+	}
+}
