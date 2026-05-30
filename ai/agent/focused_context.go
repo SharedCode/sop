@@ -334,8 +334,10 @@ func buildScriptAuthoringContext(domain string, flags map[string]bool) string {
 		"- Use create_script for a new named reusable script; use save_script only to replace an existing full script definition.",
 		"- Provide reusable script steps under the `script` field. Legacy alias `steps` is accepted but should not be preferred.",
 		"- For reusable data workflows, prefer a command step whose command is execute_script and whose args.script contains the inner AST.",
-		"- In stored execute_script AST, preserve real filter predicates and exact dotted field paths for joins and joined-field filters. Do not turn conditions into boolean placeholders or flatten dotted paths into underscore names.",
-		"- When correcting a stored execute_script AST, keep the valid stores, step order, and field names intact. Only rewrite the invalid filter or join shape that caused the validation failure.",
+		"- Scripts preserve transaction intent as managed logic. For mutating workflows, make commit and rollback boundaries explicit so related changes persist or roll back together.",
+		"- For larger mutation runs, batch about 50 to 250 CRUD operations per transaction before commit, unless business atomicity requires a different unit.",
+		"- In stored execute_script AST, preserve real predicates and exact dotted field paths for joins and joined-field filters. Do not flatten them into placeholders or underscore names.",
+		"- When correcting a stored execute_script AST, keep valid stores, step order, and field names intact. Rewrite only the invalid filter or join shape.",
 	}
 	if strings.EqualFold(domain, StoresDomain) && flags["R"] && !flags["C"] && !flags["U"] && !flags["D"] {
 		sections = append(sections, "- This request is read-oriented. Keep the stored execute_script AST read-only unless the user explicitly asks for mutations.")

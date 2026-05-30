@@ -739,7 +739,7 @@ func TestBuildSystemPrompt_UsesLeanAssemblyForGroundedStoresAsk(t *testing.T) {
 	}
 }
 
-func TestBuildSystemPrompt_SkipsSOPPlaybooksWhenOmniPersonaComesFromSOPKB(t *testing.T) {
+func TestBuildSystemPrompt_IncludesCoreSOPPlaybooksWhenNoKBIsSelected(t *testing.T) {
 	ctx := context.Background()
 	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
 	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
@@ -760,6 +760,9 @@ func TestBuildSystemPrompt_SkipsSOPPlaybooksWhenOmniPersonaComesFromSOPKB(t *tes
 	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
 	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}, Memory: NewShortTermMemory()}}
 	ag.markMRUCategoryWithSource(playbookMRUCategory("sop"), "Retrieved Semantics:\n- Context (Score: 1.00): SOP playbook context", MRUSourcePlaybook)
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{
+		SelectedKBs: nil,
+	})
 
 	prompt := ag.buildSystemPrompt(ctx, "Explain SOP architecture", TaskContextClassification{
 		Domain: StoresDomain,
@@ -773,7 +776,7 @@ func TestBuildSystemPrompt_SkipsSOPPlaybooksWhenOmniPersonaComesFromSOPKB(t *tes
 	hasPlaybooks := false
 	hasPersona := false
 	for _, element := range elements {
-		if element.Component == ComponentPlaybooks {
+		if element.Component == ComponentPlaybooks && strings.Contains(element.Content, "SOP playbook context") {
 			hasPlaybooks = true
 		}
 		if element.Component == ComponentPersona && strings.Contains(element.Content, "You are Omni from SOP KB.") {
@@ -783,8 +786,8 @@ func TestBuildSystemPrompt_SkipsSOPPlaybooksWhenOmniPersonaComesFromSOPKB(t *tes
 	if !hasPersona {
 		t.Fatalf("expected SOP KB persona to be loaded, got %+v", elements)
 	}
-	if hasPlaybooks {
-		t.Fatalf("expected SOP playbooks to be skipped when persona already comes from SOP KB, got %+v", elements)
+	if !hasPlaybooks {
+		t.Fatalf("expected core SOP playbooks to remain available when no KB is selected, got %+v", elements)
 	}
 }
 

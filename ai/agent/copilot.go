@@ -768,8 +768,6 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 	// 5. Episode Metadata Tracking (MRU Cache)
 	a.trackEpisodeMetadata(ctx, intent)
 
-	a.registerTools(ctx)
-
 	// 6. System Prompt Construction
 	fullPrompt := a.buildSystemPrompt(ctx, query, *taskContext)
 
@@ -1280,13 +1278,20 @@ func (a *CopilotAgent) buildStoresToolDescriptionContext() string {
 		"CRITICAL RULES:",
 		"1. Never guess store names, field names, or join mappings. Use list_stores first whenever schema, relations, or field paths are uncertain.",
 		"2. Think through the read/join/filter plan before writing the operation.",
-		"3. Use execute_script for multi-step workflows. If execution fails, analyze the error, rewrite the operation, and retry once. If it still fails, ask the user a short clarification question.",
+		"3. Treat transaction boundaries as first-class. The layer that makes mutations durable must also decide commit or rollback.",
+		"4. Explicit transactions are business-critical for mutating data sets. They determine which related changes persist together and which roll back together on failure.",
+		"5. Batch larger mutations under explicit commits. A good default is about 50 to 250 CRUD operations per transaction, then commit, unless business atomicity requires a different boundary.",
+		"6. For multi-step workflows or mutation sets that must persist or roll back together, use explicit transactions via manage_transaction or execute_script with begin_tx/commit_tx/rollback_tx. Do not treat implicit fallback as the design model.",
+		"7. Use execute_script for multi-step workflows. For non-workflow, simple steps, use list_tools to discover available individual command-line tools.",
+		"8. If execution fails, analyze the error, rewrite the operation, and retry once. If it still fails, ask the user a short clarification question.",
 	}, "\n")
 }
 
 func (a *CopilotAgent) buildSpacesToolDescriptionContext() string {
 	return strings.Join([]string{
 		"Structured Context: Spaces Tools",
+		"- Space mutations are business-critical because they change persisted knowledge. The tool that performs the write also defines the durability boundary for that change.",
+		"- When a Space tool manages its own transaction path, treat that tool call as the commit boundary for the requested knowledge mutation.",
 		"- mint_to_space: Persist generated or discovered content in a Space. Use the exact kb_name requested by the user; this tool manages its own write transaction.",
 		"- delete_space: Remove an entire Space only when the user explicitly wants full deletion; it manages its own deletion path.",
 		"- enrich_space: Run the enrichment pipeline only when the user explicitly wants derived knowledge refreshed.",
@@ -2203,7 +2208,7 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 
 	builder := NewSystemPromptBuilder()
 	leanStoresAssembly := shouldUseLeanStoresAssembly(taskClassification)
-	persona, personaFromKB := a.resolvePersonaWithMetadata(ctx)
+	persona, _ := a.resolvePersonaWithMetadata(ctx)
 	semanticMemory := a.getLTMSemanticContext(ctx, query)
 	if leanStoresAssembly {
 		persona = trimPromptComponentContent(ComponentPersona, persona, 900)
@@ -2227,18 +2232,18 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 	builder.With(ComponentSystemTools, systemTools)
 
 	// 4. Active Custom KBs / Playbooks Lookups
-	domains := []string{"sop"}
+	// In the future, OMNI will be able to lookup multiple KBs, BUT OMNI will always assume persona from SOP.
+	var domains []string
 	if p := ai.GetSessionPayload(ctx); p != nil && p.ActiveDomain != "" {
-		domains = append(domains, strings.Split(p.ActiveDomain, ",")...)
+		domains = strings.Split(p.ActiveDomain, ",")
+	} else {
+		domains = []string{"sop"}
 	}
-	if personaFromKB {
-		domains = filterPromptDomains(domains, ai.DefaultKBName)
-	}
-	playbooks := ""
+	playbooksContext := ""
 	if !leanStoresAssembly {
-		playbooks = a.getPlaybooksContext(ctx, query, domains)
+		playbooksContext = a.getPlaybooksContext(ctx, query, domains)
 	}
-	builder.With(ComponentPlaybooks, playbooks)
+	builder.With(ComponentPlaybooks, playbooksContext)
 	builder.With(ComponentRecipes, a.getRecipeContext(taskClassification))
 	focusedExecutionContext := a.getFocusedExecutionContext(ctx, taskClassification)
 	if askOutcome := a.getAskOutcomeContext(); askOutcome != "" {
@@ -2273,21 +2278,6 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 	log.Info("LLM Context (OMNI)", "SystemPrompt", fullPrompt)
 
 	return fullPrompt
-}
-
-func filterPromptDomains(domains []string, skip string) []string {
-	skip = strings.TrimSpace(skip)
-	if skip == "" {
-		return domains
-	}
-	filtered := make([]string, 0, len(domains))
-	for _, domain := range domains {
-		if strings.EqualFold(strings.TrimSpace(domain), skip) {
-			continue
-		}
-		filtered = append(filtered, domain)
-	}
-	return filtered
 }
 
 func shouldUseLeanStoresAssembly(taskClassification TaskContextClassification) bool {
