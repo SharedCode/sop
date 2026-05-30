@@ -50,7 +50,7 @@ The ReAct loop in SOP is progressive by design, not a blind repeat-until-success
 
 *   **Clarification First When Needed**: Before routing and execution, Gate 0 can now keep the interaction in a clarification-first mode. If the assistant asks a focused clarification question, the next user reply is rewritten back onto the original target ask and the normal execution path resumes.
 *   **Macro Then Micro**: Routing gates prepare the Ask frame first. The inner native ReAct loop then executes inside that frame without re-running the gates on every retry.
-*   **Ask-Anchored Working State**: After each inner tool step, the engine compacts the current grounded state into an Ask-local MRU summary. The next LLM call sees current focus, preserved valid work, confirmed facts, missing pieces, and suggested next tools.
+*   **Ask-Anchored Working State**: After each inner tool step, the engine or provider-owned loop compacts the current grounded state into an Ask-local MRU summary. The next LLM call sees current focus, preserved valid work, confirmed facts, missing pieces, and suggested next tools.
 *   **Structured Tool Guidance**: Tools can return both a user-visible payload and an internal `progress_hint`. That hint can say what improved, what is still missing, and which tool should come next.
 *   **Concrete Retry Visibility**: The retry prompt now includes the actual generated tool arguments together with failure details and the most recent successful context, so the model can refine the next step from the improving script rather than regenerate the whole plan.
 *   **Bounded Repair, Not Infinite Retry**: The loop starts with a small retry budget and only extends it when new grounded facts, a proven recovery pattern, or positive progress hints show real convergence.
@@ -66,6 +66,7 @@ In practical terms, this means SOP's ReAct loop can see the returned agent conte
 The Ask/ReAct system now has an explicit provider-owned loop seam. The generic engine still exists, but providers that can genuinely carry their own volatile thread state can now own the inner loop directly instead of being forced through one shared retry controller.
 
 *   **Gemini**: Now owns a native provider loop in `ai/generator/gemini.go`. The engine delegates to `ReActLoop()` when Gemini is selected. Gemini receives tool schemas, returns parsed native tool calls, accumulates full tool-call continuations across turns, and continues from provider-native function call/function response state instead of replaying a synthetic retry frame on each pass.
+*   **Shared Ask Outcome Summaries**: MRU-facing `OutcomeFacts` and `OutcomeRecipes` now come from the shared helper in `ai/outcome_summary.go`. That keeps MRU continuity behavior aligned between the default engine path and provider-owned Gemini runs.
 *   **OpenAI ChatGPT**: Still currently follows the generic path in this codebase. It does not yet own a native continuation-first ReAct loop here.
 *   **Anthropic**: Also still currently follows the generic path in this codebase. It does not yet own a provider-native loop here.
 
@@ -74,6 +75,16 @@ The operational consequence is that Gemini is no longer the old hybrid described
 *   the provider owns the live conversational/tool thread
 *   the application owns tool execution, event wiring, and hard guardrails
 *   the final clarification turn is an enforced hard stop with no tool schemas exposed
+
+This design is now documented, and the next tracked implementation phase is:
+
+*   **Budgeted Carryover Across Asks**: Bounded Gemini carryover between adjacent Asks is now the next tracked implementation phase. The model should be allowed to reuse its live thread only while the topic, KB, provider, and token budget remain valid. Once that thread grows expensive or stale, SOP should cut over to compact MRU, `OutcomeFacts`, learned recipes, and focused retrieval instead of replaying the whole raw thread.
+
+That means SOP will deliberately treat provider carryover as a short-horizon cache rather than the primary memory layer:
+
+*   live Gemini continuity when it is cheap and still on-topic
+*   compact SOP memory when continuity is still useful but the provider thread is getting expensive
+*   full SOP rebuild when the topic or trust boundary changed
 
 ```mermaid
 flowchart LR
@@ -87,6 +98,20 @@ flowchart LR
     DefaultLoop --> Tools
     Tools --> DefaultLoop
     DefaultLoop --> User
+```
+
+Tracked carryover decision model:
+
+```mermaid
+flowchart TD
+    A[Next user Ask] --> B[Continuity classification]
+    B --> C{Same lane and within budget?}
+    C -- Yes --> D[Reuse live Gemini thread]
+    C -- No, but related --> E[Use compact SOP continuity]
+    C -- No --> F[Fresh Ask rebuilt from SOP memory]
+    D --> G[Minimal prompt delta]
+    E --> H[Compact MRU facts and recipes]
+    F --> I[Full focused Ask frame]
 ```
 
 Gemini-native turn model:

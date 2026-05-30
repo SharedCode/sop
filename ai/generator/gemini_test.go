@@ -694,9 +694,13 @@ func TestGeminiOwnedReActLoop_UnwrapsProgressHintsIntoLoopState(t *testing.T) {
 
 type geminiOwnedLoopTerminalHintGenerator struct{ calls int }
 
-func (m *geminiOwnedLoopTerminalHintGenerator) Name() string { return "gemini_owned_loop_terminal_hint_test" }
+func (m *geminiOwnedLoopTerminalHintGenerator) Name() string {
+	return "gemini_owned_loop_terminal_hint_test"
+}
 
-func (m *geminiOwnedLoopTerminalHintGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+func (m *geminiOwnedLoopTerminalHintGenerator) EstimateCost(inTokens, outTokens int) float64 {
+	return 0
+}
 
 func (m *geminiOwnedLoopTerminalHintGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	_ = ctx
@@ -759,6 +763,97 @@ func TestGeminiOwnedReActLoop_ShortCircuitsOnTerminalHint(t *testing.T) {
 	}
 	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "execute_script" {
 		t.Fatalf("expected the terminal tool call to be recorded, got %#v", resp.ToolCalls)
+	}
+}
+
+type geminiOwnedLoopOutcomeGenerator struct{ calls int }
+
+func (m *geminiOwnedLoopOutcomeGenerator) Name() string { return "gemini_owned_loop_outcome_test" }
+
+func (m *geminiOwnedLoopOutcomeGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *geminiOwnedLoopOutcomeGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	_ = ctx
+	_ = prompt
+	_ = opts
+	m.calls++
+	switch m.calls {
+	case 1:
+		return ai.GenOutput{
+			ToolCalls: []ai.ToolCall{{
+				Name: "execute_script",
+				Args: map[string]any{
+					"script": []any{map[string]any{"op": "scan", "args": map[string]any{"store": "users", "filter": map[string]any{"first_name": map[string]any{"$eq": "John"}}}}},
+				},
+			}},
+		}, nil
+	case 2:
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{Name: "list_stores", Args: map[string]any{}}}}, nil
+	case 3:
+		return ai.GenOutput{
+			ToolCalls: []ai.ToolCall{{
+				Name: "execute_script",
+				Args: map[string]any{
+					"script": []any{map[string]any{"op": "scan", "args": map[string]any{"store": "users", "filter": map[string]any{"first_name": map[string]any{"$eq": "John"}, "orders.total_amount": map[string]any{"$gt": 500}}}}},
+				},
+			}},
+		}, nil
+	default:
+		return ai.GenOutput{Text: "Final answer: John Jones has order o1 with total_amount 831, which is greater than 500."}, nil
+	}
+}
+
+type geminiOwnedLoopOutcomeExecutor struct{ executeScriptCalls int }
+
+func (e *geminiOwnedLoopOutcomeExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	_ = ctx
+	_ = args
+	if toolName == "list_stores" {
+		return "Stores:\nusers schema=id,first_name relations=orders.user_id->users.id\norders schema=id,user_id,total_amount", nil
+	}
+	e.executeScriptCalls++
+	if e.executeScriptCalls == 1 {
+		return "Repair strategy: research_first\nRetry instruction: Call list_stores first to confirm the active store schema and relations.", nil
+	}
+	return `{"tool_result":[{"first_name":"John Jones","order_id":"o1","orders.total_amount":831}]}`, nil
+}
+
+func (e *geminiOwnedLoopOutcomeExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	_ = ctx
+	return []ai.ToolDefinition{{Name: "list_stores"}, {Name: "execute_script"}}, nil
+}
+
+func TestGeminiOwnedReActLoop_PopulatesOutcomeFactsAndRecipes(t *testing.T) {
+	gen := &geminiOwnedLoopOutcomeGenerator{}
+	loop := geminiOwnedReActLoop{
+		generator:     gen,
+		maxIterations: 4,
+	}
+	resp, err := loop.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find orders for John > 500.",
+		Executor:     &geminiOwnedLoopOutcomeExecutor{},
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer: John Jones has order o1 with total_amount 831, which is greater than 500." {
+		t.Fatalf("unexpected final answer: %q", resp.FinalText)
+	}
+	factsText := strings.Join(resp.OutcomeFacts, "\n")
+	if !strings.Contains(factsText, "execute_script confirmed filter field=first_name op=$eq") || !strings.Contains(factsText, "execute_script confirmed filter field=orders.total_amount op=$gt") {
+		t.Fatalf("expected execute_script grounding facts, got %#v", resp.OutcomeFacts)
+	}
+	seenRecipe := false
+	for _, recipe := range resp.OutcomeRecipes {
+		if recipe.ID == "implicit.execute_script.research_then_retry" {
+			seenRecipe = true
+			break
+		}
+	}
+	if !seenRecipe {
+		t.Fatalf("expected research-then-retry recipe to be learned, got %#v", resp.OutcomeRecipes)
 	}
 }
 

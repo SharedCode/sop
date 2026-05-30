@@ -666,6 +666,172 @@ What the Gemini-owned loop now does:
 - forwards `tool_call`, `tool_result`, and `tool_error` events through the request streamer
 - executes tools with native tool-hint context and event-streamer context preserved
 - enforces a real no-tool final clarification turn by clearing tool schemas on the cap-exhausted turn
+- returns MRU-facing `OutcomeFacts` and `OutcomeRecipes` through the shared summarizer in `ai/outcome_summary.go` instead of maintaining a Gemini-only copy
+
+Shared Ask outcome seam:
+
+- `ai/outcome_summary.go` is now the single place that distills successful tool results into compact `OutcomeFacts` and learned `OutcomeRecipes`.
+- `ai/agent/engine_native.go` uses that shared helper for the default path.
+- `ai/generator/gemini.go` uses the same helper for provider-owned Gemini runs.
+- MRU continuity and recipe snapshot behavior should be changed there rather than re-implemented per provider.
+
+12. Carryover continuity design is now documented and should be treated as a bounded L1 cache, not as the primary memory system.
+
+- Gemini-native carryover is valuable for short-horizon continuation across adjacent asks in the same live session.
+- It is also expensive because the provider keeps prior tool payloads and conversational state in the active thread budget.
+- SOP memory remains the durable and provider-neutral system of record: MRU, STM, LTM, and focused RAG retrieval still own compaction, auditability, session restore, and provider portability.
+- The design goal is therefore not "let Gemini remember everything." The goal is "reuse live provider continuity while it is cheap and valid, then cut over to compact SOP memory when the budget or trust boundary says stop."
+
+### Carryover Continuity Design Spec
+
+Current Ask boundary:
+
+- Each top-level Ask currently creates a fresh `ReasoningRequest` with `SystemPrompt`, `ContextText`, `HistoryText`, and `UserQuery`.
+- Gemini already preserves continuity inside one Ask through ordered `ToolCallContinuation` values and provider-owned loop state.
+- The reset happens after `engine.Run(...)` completes: the app persists compact `OutcomeFacts`, `OutcomeRecipes`, and MRU state, then the next Ask is rebuilt from app-owned context.
+
+Implementation boundary for the next carryover phase:
+
+- Inside one Ask, keep the current Gemini-owned loop behavior unchanged.
+- Between adjacent asks, add a continuity policy that decides whether to reuse live Gemini carryover, compact it first, or cut over to a fresh Ask rebuilt from SOP memory.
+- This policy should run before the next `ReasoningRequest` is assembled.
+
+Carryover modes:
+
+- `off`: always start the next Ask from SOP memory and focused retrieval.
+- `compact`: keep only provider continuity metadata plus compact SOP summaries such as `OutcomeFacts`, learned recipe IDs, routing state, and current topic identity.
+- `live`: reuse the live Gemini conversation/tool thread directly when it is still valid and within budget.
+
+Recommended default:
+
+- Default to `compact` as the safe baseline.
+- Allow `live` reuse only when continuity classification, cost budget, and trust boundaries all pass.
+
+Continuity decision inputs:
+
+- Gate 2 continuity result: continuation versus topic switch.
+- provider name and model identity.
+- active KB/domain fingerprint.
+- ask chain length on the current live thread.
+- idle age since the last use of the live thread.
+- estimated carried token cost.
+- estimated raw tool payload burden.
+- safety or policy reset conditions.
+
+Decision rules:
+
+- Reuse `live` only when the next Ask is a true continuation in the same continuity lane.
+- Downgrade to `compact` when the topic is still continuous but the live thread is growing expensive.
+- Fall back to `off` when the topic changed, the provider/model changed, the active KB changed, the session was restored, or the thread exceeded hard limits.
+
+Recommended initial limits:
+
+- `LiveCarryoverMaxAsks = 3`
+- `LiveCarryoverIdleTTL = 15m`
+- `LiveCarryoverSoftTokens = 8000`
+- `LiveCarryoverHardTokens = 12000`
+- `MaxRawToolCarryTokens = 2000` per tool response
+- soft cap heuristic: prefer `compact` once carryover exceeds roughly `20%` of the available input budget
+- hard cap heuristic: force reset once carryover exceeds roughly `35%` of the available input budget
+
+Reset triggers:
+
+- Gate 2 classifies a topic switch.
+- provider or model changes.
+- active KB/domain changes materially.
+- safety/policy state requires a clean frame.
+- carried tool payloads become too large or too stale.
+- idle TTL expires.
+- estimated carryover cost exceeds the hard limit.
+
+What stays app-owned even when live carryover is active:
+
+- system prompt, policy, persona, and tool contract
+- current user query
+- active KB/domain identity
+- compact MRU and recipe deltas when needed
+- reset decisions and cost controls
+
+What should be reduced when live carryover is active:
+
+- broad `HistoryText`
+- repeated thread transcript replay
+- repeated raw tool result restatement
+- duplicated Ask Outcome context that Gemini already still retains natively
+
+Provider carryover state to store in session memory:
+
+- provider name
+- model name
+- provider-native conversation or cache handle
+- topic fingerprint
+- KB/domain fingerprint
+- started-at and last-used timestamps
+- ask chain length
+- estimated carried token cost
+- estimated raw tool token cost
+- last outcome facts and learned recipe IDs
+- last tool names
+- current carryover mode and last reset reason
+
+Repository mapping for the next implementation phase:
+
+- `ai/interfaces.go`: add provider-neutral carryover state and policy types.
+- `ai/agent/memory_shortterm.go`: persist carryover metadata alongside thread, MRU snapshot, and recipe snapshot.
+- `ai/agent/service.go`: run the carryover decision before assembling the next `ReasoningRequest`; suppress broad `HistoryText` replay when a valid live Gemini thread exists.
+- `ai/agent/copilot.go`: persist the final Ask outcome and carryover metadata together at Ask completion.
+- `ai/generator/gemini.go`: consume provider-native conversation handles and live/compact carryover options when building Gemini requests.
+- `ai/outcome_summary.go`: remain the single compaction seam for `OutcomeFacts` and `OutcomeRecipes` used by the fallback path when live carryover is not reused.
+
+Implementation phases:
+
+1. Instrumentation only.
+
+- Add carryover metadata and decision logging without changing request behavior yet.
+- Log `live`, `compact`, or `off` decisions together with token estimates and reset reasons.
+
+2. Compact mode first.
+
+- Keep the current SOP-owned rebuild behavior.
+- Add policy-driven reduction of `HistoryText` and repeated context replay when continuity is confirmed.
+- Use MRU, `OutcomeFacts`, and learned recipes as the compressed continuity surface.
+
+3. True live Gemini reuse.
+
+- Introduce provider-native conversation handles.
+- Reuse them only for the same provider, model, topic, and KB within budget.
+- Reset or compact automatically when thresholds are crossed.
+
+4. Adaptive tuning.
+
+- Tune thresholds using observed token spend, reuse rate, and answer quality.
+- Keep `compact` as the safe degradation path instead of jumping straight from `live` to a full reset.
+
+Required instrumentation:
+
+- continuity decision per Ask: `live`, `compact`, or `off`
+- reason for the decision
+- estimated carryover tokens versus fresh-frame tokens
+- ask chain length
+- raw tool payload token estimate
+- reset cause
+
+This is the intended control loop:
+
+```mermaid
+flowchart TD
+	A[New user Ask] --> B[Gate 1 and Gate 2 continuity check]
+	B --> C{Carryover valid?}
+	C -- No --> D[Fresh Ask from SOP memory]
+	C -- Yes --> E{Within live budget?}
+	E -- Yes --> F[Reuse live Gemini thread]
+	E -- No --> G[Compact from SOP memory]
+	D --> H[Build ReasoningRequest]
+	F --> H
+	G --> H
+	H --> I[Run Ask]
+	I --> J[Persist OutcomeFacts, OutcomeRecipes, MRU, carryover metadata]
+```
 
 Why this architecture is the correct one:
 
@@ -770,12 +936,23 @@ Objective: let each Ask final result shape the next Ask without replaying static
 - LTM: deferred to part 2.
 - Prompt assembly in this phase should prefer MRU as the progression layer.
 
+### Recently Completed
+
+- [x] DONE: Document bounded Gemini carryover design, carryover modes (`off`, `compact`, `live`), budget limits, reset triggers, repository mapping, and instrumentation requirements.
+
 ### Open Implementation TODOs
 
 - [ ] TODO: Remove remaining duplicate `execute_script` guidance injection paths outside the compact Stores slice.
 - [ ] TODO: Continue slicing generated Stores recipe content into more granular units for Gate 3 retrieval and prompt assembly beyond the current research/read/join/predicate split.
 - [ ] TODO: Slice runtime guidance into smaller recipe-oriented units for Gate 3 retrieval and prompt assembly.
 - [ ] TODO: Add per-session Ask Outcome storage and rolling working summary.
+- [ ] TODO: Add provider-neutral carryover state and policy types in `ai/interfaces.go` for mode selection, token estimates, reset reasons, and provider conversation handles.
+- [ ] TODO: Persist carryover metadata in `ai/agent/memory_shortterm.go` so STM can track live-thread validity across adjacent asks.
+- [ ] TODO: Add continuity decision and carryover instrumentation in `ai/agent/service.go` before `ReasoningRequest` assembly.
+- [ ] TODO: Implement `compact` carryover mode first by suppressing broad `HistoryText` replay and relying on MRU, `OutcomeFacts`, and learned recipes.
+- [ ] TODO: Persist final Ask outcome and carryover metadata together in `ai/agent/copilot.go` at Ask completion.
+- [ ] TODO: Add true Gemini live-thread reuse in `ai/generator/gemini.go` behind the carryover policy once compact mode and instrumentation are stable.
+- [ ] TODO: Add tests for carryover mode selection, reset triggers, and reduced prompt replay on same-lane follow-up asks.
 - [ ] TODO: Add prompt assembly tests for single-Ask progression and follow-up Ask reuse.
 - [ ] TODO: Continue converting user-visible hard-stop tool outcomes from plain text to structured native terminal envelopes; keep infrastructure failures as typed Go errors.
 - [ ] TODO: Let Stage 1 focused retrieval dynamically narrow provider tool registration before Stage 2 Ask/ReAct execution, instead of relying primarily on prompt-side narrowing.

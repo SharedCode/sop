@@ -70,7 +70,7 @@ func (l geminiReActTurnStrategy) PrepareTurn(ctx context.Context, turn ai.ReActT
 		base = ai.DefaultReActTurnStrategy{}
 	}
 	turn = base.PrepareTurn(ctx, turn)
-	return prepareGeminiContinuationTurn(turn)
+	return prepareGeminiContinuationTurn(turn, 0)
 }
 
 type geminiOwnedReActLoop struct {
@@ -105,16 +105,6 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 			Iteration: iteration,
 			UserQuery: req.UserQuery,
 			Prompt:    geminiOwnedLoopPrompt(req),
-			LoopState: ai.ReActLoopState{
-				Iteration:             iteration,
-				AllowedIterations:     l.maxIterations,
-				MaxIterations:         l.maxIterations,
-				RemainingToolCalls:    max(0, l.maxIterations-iteration+1),
-				Phase:                 ai.ReActLoopPhaseActive,
-				AllowedNextActions:    []ai.ReActNextAction{ai.ReActNextActionCallTool, ai.ReActNextActionAnswerUser},
-				ToolResults:           cloneGeminiReActToolResults(toolResults),
-				ToolCallContinuations: append([]ai.ToolCallContinuation(nil), continuations...),
-			},
 			Options: ai.GenOptions{
 				SystemPrompt:          req.SystemPrompt,
 				Tools:                 tools,
@@ -123,7 +113,7 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 			},
 			ToolResults: cloneGeminiReActToolResults(toolResults),
 		}
-		turn = prepareGeminiContinuationTurn(turn)
+		turn = prepareGeminiContinuationTurn(turn, l.maxIterations)
 		if l.turnStrategy != nil {
 			turn = l.turnStrategy.PrepareTurn(ctx, turn)
 		}
@@ -136,7 +126,7 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 			return ai.ReasoningResponse{}, fmt.Errorf("generation failed: %w", err)
 		}
 		if req.Executor == nil || len(output.ToolCalls) == 0 {
-			return ai.ReasoningResponse{FinalText: output.Text, ToolCalls: executedToolCalls}, nil
+			return geminiOwnedLoopResponse(output.Text, executedToolCalls, toolResults), nil
 		}
 
 		for _, toolCall := range output.ToolCalls {
@@ -150,7 +140,7 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 			toolResults = append(toolResults, toolResult)
 			continuations = append(continuations, continuation)
 			if shouldShortCircuitGeminiOwnedLoopOnToolHint(toolResult.Hint) {
-				return ai.ReasoningResponse{FinalText: toolResult.Result, ToolCalls: executedToolCalls}, nil
+				return geminiOwnedLoopResponse(toolResult.Result, executedToolCalls, toolResults), nil
 			}
 		}
 	}
@@ -158,16 +148,6 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 	finalTurn := ai.ReActTurn{
 		Iteration: l.maxIterations + 1,
 		UserQuery: req.UserQuery,
-		LoopState: ai.ReActLoopState{
-			Iteration:             l.maxIterations + 1,
-			AllowedIterations:     l.maxIterations,
-			MaxIterations:         l.maxIterations,
-			RemainingToolCalls:    0,
-			Phase:                 ai.ReActLoopPhaseClarification,
-			AllowedNextActions:    []ai.ReActNextAction{ai.ReActNextActionAskClarification, ai.ReActNextActionAnswerUser},
-			ToolResults:           cloneGeminiReActToolResults(toolResults),
-			ToolCallContinuations: append([]ai.ToolCallContinuation(nil), continuations...),
-		},
 		Options: ai.GenOptions{
 			SystemPrompt:          req.SystemPrompt,
 			Temperature:           0.7,
@@ -176,7 +156,7 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 		ToolResults: cloneGeminiReActToolResults(toolResults),
 		FinalTurn:   true,
 	}
-	finalTurn = prepareGeminiContinuationTurn(finalTurn)
+	finalTurn = prepareGeminiContinuationTurn(finalTurn, l.maxIterations)
 	if l.turnStrategy != nil {
 		finalTurn = l.turnStrategy.PrepareTurn(ctx, finalTurn)
 	}
@@ -188,7 +168,16 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 	if err != nil {
 		return ai.ReasoningResponse{}, fmt.Errorf("final generation failed: %w", err)
 	}
-	return ai.ReasoningResponse{FinalText: output.Text, ToolCalls: executedToolCalls}, nil
+	return geminiOwnedLoopResponse(output.Text, executedToolCalls, toolResults), nil
+}
+
+func geminiOwnedLoopResponse(finalText string, toolCalls []ai.ToolCall, toolResults []ai.ReActToolResult) ai.ReasoningResponse {
+	return ai.ReasoningResponse{
+		FinalText:      finalText,
+		ToolCalls:      toolCalls,
+		OutcomeFacts:   ai.SummarizeOutcomeFacts(toolResults),
+		OutcomeRecipes: ai.SummarizeOutcomeRecipes(toolResults),
+	}
 }
 
 func geminiOwnedLoopPrompt(req ai.ReasoningRequest) string {
@@ -205,11 +194,11 @@ func geminiOwnedLoopPrompt(req ai.ReasoningRequest) string {
 	return strings.Join(parts, "\n\n")
 }
 
-func prepareGeminiContinuationTurn(turn ai.ReActTurn) ai.ReActTurn {
+func prepareGeminiContinuationTurn(turn ai.ReActTurn, maxIterations int) ai.ReActTurn {
 	if len(turn.Options.ToolCallContinuations) == 0 {
 		return turn
 	}
-	turn.Options.ToolCallContinuations = geminiToolCallContinuations(turn)
+	turn.Options.ToolCallContinuations = geminiToolCallContinuations(turn, maxIterations)
 	if turn.FinalTurn {
 		turn.Prompt = "Using the supplied tool-call state, do not call more tools. Briefly explain what is still blocking progress and ask one short, concrete clarification question."
 		turn.Options.Tools = nil
@@ -219,7 +208,7 @@ func prepareGeminiContinuationTurn(turn ai.ReActTurn) ai.ReActTurn {
 	return turn
 }
 
-func geminiToolCallContinuations(turn ai.ReActTurn) []ai.ToolCallContinuation {
+func geminiToolCallContinuations(turn ai.ReActTurn, maxIterations int) []ai.ToolCallContinuation {
 	continuations := turn.Options.ToolCallContinuations
 	if len(continuations) == 0 {
 		return nil
@@ -229,7 +218,7 @@ func geminiToolCallContinuations(turn ai.ReActTurn) []ai.ToolCallContinuation {
 	for idx, continuation := range continuations {
 		response := continuation.Response
 		if idx == len(continuations)-1 {
-			phase, actions, remainingToolCalls := geminiLoopMetadata(turn)
+			phase, actions, remainingToolCalls := geminiLoopMetadata(turn, maxIterations)
 			response = map[string]any{
 				"tool_result": continuation.Response,
 				"react_state": map[string]any{
@@ -266,7 +255,7 @@ func geminiTaskStatus(turn ai.ReActTurn) string {
 	return "active"
 }
 
-func geminiLoopMetadata(turn ai.ReActTurn) (ai.ReActLoopPhase, []ai.ReActNextAction, int) {
+func geminiLoopMetadata(turn ai.ReActTurn, maxIterations int) (ai.ReActLoopPhase, []ai.ReActNextAction, int) {
 	if turn.FinalTurn {
 		return ai.ReActLoopPhaseClarification, []ai.ReActNextAction{ai.ReActNextActionAskClarification, ai.ReActNextActionAnswerUser}, 0
 	}
@@ -274,9 +263,11 @@ func geminiLoopMetadata(turn ai.ReActTurn) (ai.ReActLoopPhase, []ai.ReActNextAct
 		return ai.ReActLoopPhaseRepair, []ai.ReActNextAction{ai.ReActNextActionRetrySameTool, ai.ReActNextActionAskClarification}, 0
 	}
 	remainingToolCalls := 0
-	maxIterations := turn.LoopState.MaxIterations
 	if maxIterations <= 0 {
-		maxIterations = turn.LoopState.AllowedIterations
+		maxIterations = turn.LoopState.MaxIterations
+		if maxIterations <= 0 {
+			maxIterations = turn.LoopState.AllowedIterations
+		}
 	}
 	if maxIterations > 0 {
 		remainingToolCalls = max(0, maxIterations-turn.Iteration+1)
