@@ -140,6 +140,14 @@ SOP now uses two distinct MRU layers that share the same live session buffer but
 *   **Inner Ask-Progress MRU**: A provisional, ask-scoped partition used only while a provider-owned loop is still running. Provider loops can emit bounded grounded updates through the shared `MemoryHydrationSink` contract in `ai/interfaces.go`. These updates are limited to grounded progress such as confirmed facts, recent tool pattern, final text so far, and carryover metadata. They are intentionally tagged as ask-scoped and are cleared at the start of each Ask and again during epilogue.
 *   **Session / Carryover MRU**: The canonical between-Ask memory layer. At epilogue, SOP persists the final ask outcome into session-scoped MRU, snapshots that macro MRU into STM, merges learned recipes, and updates carryover metadata. When native provider carryover is unavailable or cut off, this session/STM-backed layer is what reconstructs continuity for the next Ask.
 
+Hydration contract limits:
+
+*   Provider-owned loops should normalize provisional updates through `ai.BuildMemoryHydrationUpdate` in `ai/memory_hydration.go`.
+*   The helper currently retains only the most recent 6 tool calls and 6 grounded facts.
+*   Provisional final text and carryover summaries are trimmed to 600 characters.
+*   Individual grounded facts are trimmed to 240 characters.
+*   Carryover metadata is cloned and bounded as well, including recent tool names and outcome facts.
+
 Operational rule:
 
 *   provisional in-loop MRU may help the running Ask

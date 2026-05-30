@@ -1016,6 +1016,26 @@ func TestBuildSystemPrompt_RehydratesAskOutcomeFromSTMProjection(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPrompt_IgnoresStaleAskProgressWhenRehydratingFromSTM(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession()}
+	ag.service.session.Memory.SetMRUSnapshot([]MRUItem{
+		{Category: askProgressMRUCategoryHeader, Context: "In-Flight Ask Progress:", Source: MRUSourceAskProgress, Scope: MRUScopeSession},
+		{Category: askProgressMRUCategoryResult, Context: "- Working answer so far: stale provisional summary", Source: MRUSourceAskProgress, Scope: MRUScopeSession},
+		{Category: askOutcomeMRUCategoryHeader, Context: "Recent Ask Outcome:", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		{Category: askOutcomeMRUCategoryQuery, Context: "- Last user ask: Find users named John", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		{Category: askOutcomeMRUCategoryResult, Context: "- Last outcome: Found matching users", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+	})
+
+	prompt := ag.buildSystemPrompt(context.Background(), "Find orders for those users", TaskContextClassification{})
+	if strings.Contains(prompt, "stale provisional summary") || strings.Contains(prompt, "In-Flight Ask Progress:") {
+		t.Fatalf("expected buildSystemPrompt to ignore stale ask-progress MRU from STM, got %s", prompt)
+	}
+	if !strings.Contains(prompt, "Recent Ask Outcome:") || !strings.Contains(prompt, "Found matching users") {
+		t.Fatalf("expected buildSystemPrompt to keep canonical ask outcome continuity, got %s", prompt)
+	}
+}
+
 func TestBuildSystemPrompt_RehydratesImplicitRecipesFromSTM(t *testing.T) {
 	ag := NewCopilotAgent(Config{}, nil, nil)
 	ag.service = &Service{session: NewRunnerSession()}

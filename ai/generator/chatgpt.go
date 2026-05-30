@@ -14,8 +14,9 @@ import (
 
 // chatgpt implements the Generator interface for OpenAI's ChatGPT models.
 type chatgpt struct {
-	apiKey string
-	model  string
+	apiKey    string
+	model     string
+	ownedLoop ai.ReActLoop
 }
 
 func init() {
@@ -48,6 +49,10 @@ func (g *chatgpt) CarryoverCapability() ai.CarryoverCapability {
 		SupportsCompact: true,
 		SupportsLive:    false,
 	}
+}
+
+func (g *chatgpt) ReActLoop() ai.ReActLoop {
+	return g.ownedLoop
 }
 
 type openAIMessage struct {

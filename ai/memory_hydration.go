@@ -2,7 +2,12 @@ package ai
 
 import "strings"
 
-const memoryHydrationToolCallLimit = 6
+const (
+	memoryHydrationToolCallLimit    = 6
+	memoryHydrationOutcomeFactLimit = 6
+	memoryHydrationTextCharLimit    = 600
+	memoryHydrationFactCharLimit    = 240
+)
 
 // BuildMemoryHydrationUpdate converts a provider-owned loop response into the
 // bounded, grounded update shape expected by the provisional in-loop memory
@@ -11,12 +16,34 @@ const memoryHydrationToolCallLimit = 6
 // specific in-loop memory paths.
 func BuildMemoryHydrationUpdate(resp ReasoningResponse) MemoryHydrationUpdate {
 	return MemoryHydrationUpdate{
-		FinalText:      strings.TrimSpace(resp.FinalText),
+		FinalText:      trimHydrationText(resp.FinalText, memoryHydrationTextCharLimit),
 		ToolCalls:      cloneHydrationToolCalls(resp.ToolCalls),
-		OutcomeFacts:   append([]string(nil), resp.OutcomeFacts...),
+		OutcomeFacts:   cloneHydrationFacts(resp.OutcomeFacts),
 		OutcomeRecipes: append([]LearnedRecipe(nil), resp.OutcomeRecipes...),
 		CarryoverState: cloneHydrationCarryoverState(resp.CarryoverState),
 	}
+}
+
+func cloneHydrationFacts(facts []string) []string {
+	if len(facts) == 0 {
+		return nil
+	}
+	start := 0
+	if len(facts) > memoryHydrationOutcomeFactLimit {
+		start = len(facts) - memoryHydrationOutcomeFactLimit
+	}
+	cloned := make([]string, 0, len(facts)-start)
+	for _, fact := range facts[start:] {
+		trimmed := trimHydrationText(fact, memoryHydrationFactCharLimit)
+		if trimmed == "" {
+			continue
+		}
+		cloned = append(cloned, trimmed)
+	}
+	if len(cloned) == 0 {
+		return nil
+	}
+	return cloned
 }
 
 func cloneHydrationToolCalls(toolCalls []ToolCall) []ToolCall {
@@ -55,8 +82,46 @@ func cloneHydrationCarryoverState(state *CarryoverState) *CarryoverState {
 		return nil
 	}
 	cloned := *state
-	cloned.LastOutcomeFacts = append([]string(nil), state.LastOutcomeFacts...)
+	cloned.LastOutcomeFacts = cloneHydrationFacts(state.LastOutcomeFacts)
 	cloned.LastRecipeIDs = append([]string(nil), state.LastRecipeIDs...)
-	cloned.LastToolNames = append([]string(nil), state.LastToolNames...)
+	cloned.LastToolNames = cloneHydrationToolNames(state.LastToolNames)
+	cloned.LastAssistantSummary = trimHydrationText(state.LastAssistantSummary, memoryHydrationTextCharLimit)
 	return &cloned
+}
+
+func cloneHydrationToolNames(toolNames []string) []string {
+	if len(toolNames) == 0 {
+		return nil
+	}
+	start := 0
+	if len(toolNames) > memoryHydrationToolCallLimit {
+		start = len(toolNames) - memoryHydrationToolCallLimit
+	}
+	cloned := make([]string, 0, len(toolNames)-start)
+	for _, name := range toolNames[start:] {
+		trimmed := strings.TrimSpace(name)
+		if trimmed == "" {
+			continue
+		}
+		cloned = append(cloned, trimmed)
+	}
+	if len(cloned) == 0 {
+		return nil
+	}
+	return cloned
+}
+
+func trimHydrationText(text string, limit int) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" || limit <= 0 {
+		return ""
+	}
+	runes := []rune(trimmed)
+	if len(runes) <= limit {
+		return trimmed
+	}
+	if limit <= 3 {
+		return string(runes[:limit])
+	}
+	return string(runes[:limit-3]) + "..."
 }

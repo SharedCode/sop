@@ -127,3 +127,24 @@ func TestRehydrateMRUFromMemory_RestoresRoutingAndProjectsActiveKB(t *testing.T)
 		t.Fatalf("expected summary to include projected playbook label, got %q", summary)
 	}
 }
+
+func TestProjectMRUItemsFromSTM_IgnoresSessionScopedAskProgressCorruption(t *testing.T) {
+	projected := projectMRUItemsFromSTM([]MRUItem{
+		{Category: askProgressMRUCategoryHeader, Context: "In-Flight Ask Progress:", Source: MRUSourceAskProgress, Scope: MRUScopeSession, LastAccessed: 100},
+		{Category: askProgressMRUCategoryResult, Context: "- Working answer so far: stale provisional summary", Source: MRUSourceAskProgress, Scope: MRUScopeSession, LastAccessed: 99},
+		{Category: askOutcomeMRUCategoryHeader, Context: "Recent Ask Outcome:", Source: MRUSourceAskOutcome, Scope: MRUScopeSession, LastAccessed: 10},
+		{Category: askOutcomeMRUCategoryResult, Context: "- Last outcome: canonical answer", Source: MRUSourceAskOutcome, Scope: MRUScopeSession, LastAccessed: 9},
+	}, "")
+
+	if len(projected) != 2 {
+		t.Fatalf("expected only canonical ask outcome items to project, got %+v", projected)
+	}
+	for _, item := range projected {
+		if item.Source == MRUSourceAskProgress || strings.Contains(item.Context, "stale provisional summary") {
+			t.Fatalf("expected projection to ignore stale ask-progress corruption, got %+v", projected)
+		}
+	}
+	if projected[0].Source != MRUSourceAskOutcome || projected[1].Source != MRUSourceAskOutcome {
+		t.Fatalf("expected projected continuity to come only from ask outcome MRU, got %+v", projected)
+	}
+}
