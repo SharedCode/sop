@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"strings"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
@@ -288,6 +287,12 @@ type ReasoningEngine interface {
 	Run(ctx context.Context, req ReasoningRequest) (ReasoningResponse, error)
 }
 
+// ReActLoop owns a full multi-turn ReAct loop lifecycle rather than just a
+// single-turn prompt adaptation.
+type ReActLoop interface {
+	Run(ctx context.Context, req ReasoningRequest) (ReasoningResponse, error)
+}
+
 type ReasoningRequest struct {
 	SystemPrompt string
 	ContextText  string
@@ -307,6 +312,48 @@ type ReActToolResult struct {
 	Hint   *ToolProgressHint
 }
 
+// ReActPendingRepair is a provider-neutral snapshot of a pending repair path.
+type ReActPendingRepair struct {
+	ToolName       string
+	Strategy       string
+	ResearchTool   string
+	ResearchReason string
+}
+
+type ReActLoopPhase string
+
+const (
+	ReActLoopPhaseActive            ReActLoopPhase = "active"
+	ReActLoopPhaseRepair            ReActLoopPhase = "repair"
+	ReActLoopPhaseClarification     ReActLoopPhase = "clarification"
+	ReActLoopPhaseMalformedToolCall ReActLoopPhase = "malformed_tool_call"
+)
+
+type ReActNextAction string
+
+const (
+	ReActNextActionCallTool         ReActNextAction = "call_tool"
+	ReActNextActionRetrySameTool    ReActNextAction = "retry_same_tool"
+	ReActNextActionAskClarification ReActNextAction = "ask_clarification"
+	ReActNextActionAnswerUser       ReActNextAction = "answer_user"
+)
+
+// ReActLoopState captures the current loop-owned state so provider-owned loops
+// can observe or eventually own the same transition surface.
+type ReActLoopState struct {
+	Iteration                int
+	AllowedIterations        int
+	MaxIterations            int
+	RemainingToolCalls       int
+	RepairAttempts           int
+	Phase                    ReActLoopPhase
+	AllowedNextActions       []ReActNextAction
+	PendingRepair            *ReActPendingRepair
+	PendingMalformedToolCall bool
+	ToolResults              []ReActToolResult
+	ToolCallContinuations    []ToolCallContinuation
+}
+
 // ReActTurn captures a single ReAct generation turn before it reaches a
 // provider-specific generator. Providers can adapt the prompt/options while the
 // engine retains ownership of retry policy and tool execution.
@@ -315,6 +362,7 @@ type ReActTurn struct {
 	UserQuery       string
 	Prompt          string
 	RepairDirective string
+	LoopState       ReActLoopState
 	Options         GenOptions
 	ToolResults     []ReActToolResult
 	FinalTurn       bool
@@ -339,6 +387,12 @@ type ReActTurnStrategyProvider interface {
 	ReActTurnStrategy() ReActTurnStrategy
 }
 
+// ReActLoopProvider lets generators return a provider-owned ReAct loop that can
+// take over retry, repair, continuation, and termination policy end-to-end.
+type ReActLoopProvider interface {
+	ReActLoop() ReActLoop
+}
+
 // DefaultReActTurnStrategy preserves the generic synthetic-prompt behavior.
 // It exists as an explicit implementation so providers can extend or replace it.
 type DefaultReActTurnStrategy struct{}
@@ -346,77 +400,6 @@ type DefaultReActTurnStrategy struct{}
 func (DefaultReActTurnStrategy) PrepareTurn(ctx context.Context, turn ReActTurn) ReActTurn {
 	_ = ctx
 	return turn
-}
-
-// GeminiReActTurnStrategy lets Gemini continuation turns lean on provider-native tool
-// continuity instead of replaying the full synthetic retry frame every pass.
-type GeminiReActTurnStrategy struct {
-	Base ReActTurnStrategy
-}
-
-func (GeminiReActTurnStrategy) ShouldBypassPrompt(turn ReActTurn) bool {
-	return len(turn.Options.ToolCallContinuations) > 0
-}
-
-func (l GeminiReActTurnStrategy) PrepareTurn(ctx context.Context, turn ReActTurn) ReActTurn {
-	base := l.Base
-	if base == nil {
-		base = DefaultReActTurnStrategy{}
-	}
-	turn = base.PrepareTurn(ctx, turn)
-	if len(turn.Options.ToolCallContinuations) == 0 {
-		return turn
-	}
-	turn.Options.ToolCallContinuations = geminiReActToolCallContinuations(turn)
-	if turn.FinalTurn {
-		turn.Prompt = "Using the supplied tool-call state, do not call more tools. Briefly explain what is still blocking progress and ask one short, concrete clarification question."
-		return turn
-	}
-	turn.Prompt = "Continue from the supplied tool-call state. Use the structured function response as the source of truth, avoid replaying prior history, emit the next tool call if more work is needed, and otherwise answer the user directly."
-	return turn
-}
-
-func geminiReActToolCallContinuations(turn ReActTurn) []ToolCallContinuation {
-	continuations := turn.Options.ToolCallContinuations
-	if len(continuations) == 0 {
-		return nil
-	}
-
-	wrapped := make([]ToolCallContinuation, 0, len(continuations))
-	for idx, continuation := range continuations {
-		response := continuation.Response
-		if idx == len(continuations)-1 {
-			response = map[string]any{
-				"tool_result": continuation.Response,
-				"react_state": map[string]any{
-					"user_query":         strings.TrimSpace(turn.UserQuery),
-					"latest_tool":        strings.TrimSpace(continuation.ToolCall.Name),
-					"repair_directive":   strings.TrimSpace(turn.RepairDirective),
-					"iteration":          turn.Iteration,
-					"task_status":        geminiReActTaskStatus(turn),
-					"has_more_tool_work": !turn.FinalTurn,
-				},
-			}
-		}
-		wrapped = append(wrapped, ToolCallContinuation{
-			ToolCall: continuation.ToolCall,
-			Response: response,
-		})
-	}
-	return wrapped
-}
-
-func geminiReActTaskStatus(turn ReActTurn) string {
-	if turn.FinalTurn {
-		return "clarification_required"
-	}
-	if strings.TrimSpace(turn.RepairDirective) != "" {
-		return "repair_required"
-	}
-	if len(turn.ToolResults) > 0 {
-		return "tool_progressed"
-	}
-	return "active"
 }
 
 // LearnedRecipe captures a reusable protocol distilled from successful reasoning behavior.

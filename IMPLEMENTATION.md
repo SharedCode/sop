@@ -653,10 +653,66 @@ Progression-history contract:
 
 10. Current provider support is intentionally uneven and should be tracked explicitly.
 
-- The Ask/ReAct loop currently runs through one shared `Generator` interface with no provider-specific strategy layer at the loop boundary.
-- Gemini is currently the closest implementation to a native loop: it accepts tool schemas, emits parsed native tool calls, and round-trips provider-native function call/function response continuity metadata.
-- OpenAI ChatGPT and Anthropic are currently prompt wrappers in this implementation. They do not yet consume the same native continuation path.
-- Operational consequence: Gemini is a hybrid model here. It preserves native tool-call transport, but the engine still reconstructs a compact retry frame each pass.
+- The shared layer now exposes both turn-level and loop-level provider seams: `ReActTurnStrategy`, `ReActPromptBypassStrategy`, `ReActLoop`, and `ReActLoopProvider`.
+- The default engine still exists as the provider-neutral implementation and remains the fallback for providers that do not supply an owned loop.
+- Gemini now supplies a real provider-owned loop in `ai/generator/gemini.go` and is no longer just a transport adapter.
+- OpenAI ChatGPT and Anthropic still currently use the default shared path in this implementation.
+
+What the Gemini-owned loop now does:
+
+- delegates from `NativeReActEngine.Run(...)` through `ReActLoop()`
+- accumulates the full ordered `ToolCallContinuation` history across turns
+- executes every native tool call returned in a Gemini turn, not just the first
+- forwards `tool_call`, `tool_result`, and `tool_error` events through the request streamer
+- executes tools with native tool-hint context and event-streamer context preserved
+- enforces a real no-tool final clarification turn by clearing tool schemas on the cap-exhausted turn
+
+Why this architecture is the correct one:
+
+- Gemini retains meaningful volatile thread state across the native conversation/tool exchange.
+- The model therefore sees and mutates state that the app layer cannot reconstruct perfectly after the fact.
+- If the app pretends to own that thread from above, it must re-parse, enrich, and summarize a lossy shadow copy of the true state.
+- The thin-wrapper design fixes that mismatch: provider owns the live thread, app owns guardrails and execution.
+
+Provider-owned loop sketch:
+
+```mermaid
+flowchart TD
+	A[Ask frame] --> B{Provider owns loop?}
+	B -- No --> C[Default shared ReAct loop]
+	B -- Yes --> D[Provider-owned ReAct loop]
+	D --> E[Provider-native tool thread]
+	E --> F[Local tool execution]
+	F --> E
+	E --> G[Final answer or clarification]
+	C --> H[Engine-owned retry and repair]
+```
+
+Gemini-owned loop sequence:
+
+```mermaid
+sequenceDiagram
+	participant Engine as NativeReActEngine
+	participant Gemini as geminiOwnedReActLoop
+	participant Gen as Gemini Generate
+	participant Exec as ToolExecutor
+
+	Engine->>Gemini: Run(req)
+	Gemini->>Exec: ListTools()
+	loop Active iterations
+		Gemini->>Gen: Generate(prompt, tools, carried continuations)
+		alt Tool calls returned
+			Gemini->>Exec: Execute(each tool call)
+			Exec-->>Gemini: raw result / error
+			Gemini->>Gemini: append ToolCallContinuation
+		else Final text returned
+			Gemini-->>Engine: Final answer
+		end
+	end
+	Gemini->>Gen: Final clarification turn with no tools
+	Gen-->>Gemini: clarification or answer
+	Gemini-->>Engine: Final response
+```
 
 11. Focused retrieval already narrows prompts, but not yet the tool contract itself.
 
@@ -722,9 +778,9 @@ Objective: let each Ask final result shape the next Ask without replaying static
 - [ ] TODO: Add per-session Ask Outcome storage and rolling working summary.
 - [ ] TODO: Add prompt assembly tests for single-Ask progression and follow-up Ask reuse.
 - [ ] TODO: Continue converting user-visible hard-stop tool outcomes from plain text to structured native terminal envelopes; keep infrastructure failures as typed Go errors.
-- [ ] TODO: Introduce a provider-strategy interface at the Ask/ReAct loop boundary so Gemini, OpenAI, and Anthropic do not all depend on one shared retry/continuation path.
 - [ ] TODO: Let Stage 1 focused retrieval dynamically narrow provider tool registration before Stage 2 Ask/ReAct execution, instead of relying primarily on prompt-side narrowing.
-- [ ] TODO: Move Gemini toward a continuation-first message/tool loop and reduce synthetic retry-frame reconstruction to app-owned policy state only.
+- [ ] TODO: Extend the provider-owned model to other providers that can genuinely preserve a native tool/thread state.
+- [ ] TODO: Continue moving Gemini-specific progression semantics out of generic shared shaping and into the Gemini-owned loop where the native thread is actually interpreted.
 
 ## 3. Roadmap and Release Details
 

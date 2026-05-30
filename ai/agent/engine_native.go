@@ -75,6 +75,21 @@ type progressSink func(string)
 
 // Run executes the orchestration loop relying on native tool calls.
 func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (ai.ReasoningResponse, error) {
+	if loop := resolveOwnedReActLoop(req); loop != nil {
+		return loop.Run(ctx, req)
+	}
+	return e.runDefaultLoop(ctx, req)
+}
+
+func resolveOwnedReActLoop(req ai.ReasoningRequest) ai.ReActLoop {
+	provider, ok := req.Generator.(ai.ReActLoopProvider)
+	if !ok {
+		return nil
+	}
+	return provider.ReActLoop()
+}
+
+func (e *NativeReActEngine) runDefaultLoop(ctx context.Context, req ai.ReasoningRequest) (ai.ReasoningResponse, error) {
 	if req.Generator == nil {
 		if e.EnableObfuscation {
 			return ai.ReasoningResponse{FinalText: obfuscation.GlobalObfuscator.DeobfuscateText(req.ContextText)}, nil
@@ -130,6 +145,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 			Iteration:       iteration + 1,
 			UserQuery:       req.UserQuery,
 			RepairDirective: latestNativeRepairDirective(toolResults),
+			LoopState:       snapshotReActLoopState(iteration+1, budgetState, repairAttempts, pendingRepair, pendingMalformedCall != nil, toolResults, genOpts.ToolCallContinuations),
 			Options:         genOpts,
 			ToolResults:     cloneReActToolResults(toolResults),
 			FinalTurn:       false,
@@ -364,6 +380,7 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 		Iteration:       budgetState.allowedIterations + 1,
 		UserQuery:       req.UserQuery,
 		RepairDirective: latestNativeRepairDirective(toolResults),
+		LoopState:       snapshotReActLoopState(budgetState.allowedIterations+1, budgetState, repairAttempts, pendingRepair, pendingMalformedCall != nil, toolResults, finalOpts.ToolCallContinuations),
 		Options:         finalOpts,
 		ToolResults:     cloneReActToolResults(toolResults),
 		FinalTurn:       true,
@@ -439,6 +456,47 @@ func cloneReActToolResults(results []nativeToolResult) []ai.ReActToolResult {
 		})
 	}
 	return cloned
+}
+
+func snapshotReActLoopState(iteration int, budgetState askLoopBudgetState, repairAttempts int, pendingRepair *pendingToolRepair, pendingMalformedCall bool, toolResults []nativeToolResult, continuations []ai.ToolCallContinuation) ai.ReActLoopState {
+	phase, allowedNextActions := deriveReActLoopPhase(iteration, budgetState, pendingRepair, pendingMalformedCall)
+	state := ai.ReActLoopState{
+		Iteration:                iteration,
+		AllowedIterations:        budgetState.allowedIterations,
+		MaxIterations:            budgetState.maxIterations,
+		RemainingToolCalls:       max(0, budgetState.allowedIterations-iteration+1),
+		RepairAttempts:           repairAttempts,
+		Phase:                    phase,
+		AllowedNextActions:       allowedNextActions,
+		PendingMalformedToolCall: pendingMalformedCall,
+		ToolResults:              cloneReActToolResults(toolResults),
+		ToolCallContinuations:    append([]ai.ToolCallContinuation(nil), continuations...),
+	}
+	if pendingRepair != nil {
+		state.PendingRepair = &ai.ReActPendingRepair{
+			ToolName:       pendingRepair.ToolName,
+			Strategy:       string(pendingRepair.Strategy),
+			ResearchTool:   pendingRepair.ResearchTool,
+			ResearchReason: pendingRepair.ResearchReason,
+		}
+	}
+	return state
+}
+
+func deriveReActLoopPhase(iteration int, budgetState askLoopBudgetState, pendingRepair *pendingToolRepair, pendingMalformedCall bool) (ai.ReActLoopPhase, []ai.ReActNextAction) {
+	if iteration > budgetState.allowedIterations {
+		return ai.ReActLoopPhaseClarification, []ai.ReActNextAction{ai.ReActNextActionAskClarification, ai.ReActNextActionAnswerUser}
+	}
+	if pendingMalformedCall {
+		return ai.ReActLoopPhaseMalformedToolCall, []ai.ReActNextAction{ai.ReActNextActionCallTool, ai.ReActNextActionAskClarification}
+	}
+	if pendingRepair != nil {
+		if pendingRepair.Strategy == nativeRepairStrategySameTool {
+			return ai.ReActLoopPhaseRepair, []ai.ReActNextAction{ai.ReActNextActionRetrySameTool, ai.ReActNextActionAskClarification}
+		}
+		return ai.ReActLoopPhaseRepair, []ai.ReActNextAction{ai.ReActNextActionCallTool, ai.ReActNextActionAskClarification}
+	}
+	return ai.ReActLoopPhaseActive, []ai.ReActNextAction{ai.ReActNextActionCallTool, ai.ReActNextActionAnswerUser}
 }
 
 func latestNativeRepairDirective(results []nativeToolResult) string {

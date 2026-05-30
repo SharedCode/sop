@@ -63,13 +63,50 @@ In practical terms, this means SOP's ReAct loop can see the returned agent conte
 
 ### Current Provider Reality
 
-The current Ask/ReAct loop is still one shared engine across providers. That means the loop policy is common, but provider-native continuity support is not equally mature.
+The Ask/ReAct system now has an explicit provider-owned loop seam. The generic engine still exists, but providers that can genuinely carry their own volatile thread state can now own the inner loop directly instead of being forced through one shared retry controller.
 
-*   **Gemini**: Closest to a native tool loop. Gemini receives tool schemas, returns parsed native tool calls, and round-trips prior function call/function response turns with native call IDs and thought signatures.
-*   **OpenAI ChatGPT**: Currently used as a plain prompt wrapper in this codebase. It does not yet participate in the native tool continuation path used by the Ask/ReAct loop.
-*   **Anthropic**: Also currently used as a plain prompt wrapper in this codebase. It does not yet participate in the native tool continuation path used by the Ask/ReAct loop.
+*   **Gemini**: Now owns a native provider loop in `ai/generator/gemini.go`. The engine delegates to `ReActLoop()` when Gemini is selected. Gemini receives tool schemas, returns parsed native tool calls, accumulates full tool-call continuations across turns, and continues from provider-native function call/function response state instead of replaying a synthetic retry frame on each pass.
+*   **OpenAI ChatGPT**: Still currently follows the generic path in this codebase. It does not yet own a native continuation-first ReAct loop here.
+*   **Anthropic**: Also still currently follows the generic path in this codebase. It does not yet own a provider-native loop here.
 
-The operational consequence is that Gemini is currently a **hybrid** implementation here: it preserves provider-native tool-call transport, but the Ask/ReAct engine still rebuilds a compact retry frame on each turn instead of delegating the full conversation state to a provider-owned loop.
+The operational consequence is that Gemini is no longer the old hybrid described in earlier drafts. Gemini is now the reference implementation of the thin-wrapper model in SOP:
+
+*   the provider owns the live conversational/tool thread
+*   the application owns tool execution, event wiring, and hard guardrails
+*   the final clarification turn is an enforced hard stop with no tool schemas exposed
+
+```mermaid
+flowchart LR
+    User[User Ask] --> Engine[Native ReAct Engine]
+    Engine --> Decision{Generator exposes ReActLoop?}
+    Decision -- No --> DefaultLoop[Default shared loop\nengine-owned retry and repair]
+    Decision -- Yes --> GeminiLoop[Gemini-owned loop\nprovider-native continuation]
+    GeminiLoop --> Tools[Local tools via executor]
+    Tools --> GeminiLoop
+    GeminiLoop --> User
+    DefaultLoop --> Tools
+    Tools --> DefaultLoop
+    DefaultLoop --> User
+```
+
+Gemini-native turn model:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Engine as Native ReAct Engine
+    participant Gemini as Gemini ReAct Loop
+    participant Tools as Local Tools
+
+    User->>Engine: Ask
+    Engine->>Gemini: delegate via ReActLoop()
+    Gemini->>Gemini: prepare turn with carried continuations
+    Gemini->>Tools: execute all native tool calls from turn
+    Tools-->>Gemini: tool results / tool errors
+    Gemini->>Gemini: append ToolCallContinuations
+    Gemini->>Gemini: continue from provider thread state
+    Gemini-->>User: final answer or clarification
+```
 
 ### Dynamic Tool Registration Boundary
 

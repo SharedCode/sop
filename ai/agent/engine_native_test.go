@@ -83,6 +83,14 @@ type reActTurnStrategyMock struct{}
 func (reActTurnStrategyMock) PrepareTurn(ctx context.Context, turn ai.ReActTurn) ai.ReActTurn {
 	_ = ctx
 	if turn.Iteration > 1 && len(turn.Options.ToolCallContinuations) > 0 {
+		if turn.LoopState.Iteration != turn.Iteration {
+			turn.Prompt = fmt.Sprintf("loop state iteration mismatch: %d vs %d", turn.LoopState.Iteration, turn.Iteration)
+			return turn
+		}
+		if len(turn.LoopState.ToolCallContinuations) != len(turn.Options.ToolCallContinuations) {
+			turn.Prompt = fmt.Sprintf("loop state continuation mismatch: %#v", turn.LoopState.ToolCallContinuations)
+			return turn
+		}
 		turn.Prompt = "adapter prompt: continue with native tool state"
 	}
 	return turn
@@ -113,6 +121,31 @@ func (e *reActTurnStrategyMockExecutor) Execute(ctx context.Context, tool string
 
 func (e *reActTurnStrategyMockExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
 	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+type ownedReActLoopMock struct{}
+
+func (ownedReActLoopMock) Run(ctx context.Context, req ai.ReasoningRequest) (ai.ReasoningResponse, error) {
+	_ = ctx
+	_ = req
+	return ai.ReasoningResponse{FinalText: "Final answer: provider owned loop used"}, nil
+}
+
+type ownedReActLoopMockGenerator struct{}
+
+func (m *ownedReActLoopMockGenerator) Name() string { return "owned_react_loop_mock" }
+
+func (m *ownedReActLoopMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *ownedReActLoopMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	_ = ctx
+	_ = prompt
+	_ = opts
+	return ai.GenOutput{Text: "unexpected default loop execution"}, nil
+}
+
+func (m *ownedReActLoopMockGenerator) ReActLoop() ai.ReActLoop {
+	return ownedReActLoopMock{}
 }
 
 type bypassReActPromptMockGenerator struct {
@@ -378,6 +411,23 @@ func TestNativeReActEngine_UsesProviderReActTurnStrategyForContinuationTurns(t *
 	}
 	if len(gen.options[1].ToolCallContinuations) != 1 {
 		t.Fatalf("expected tool-call continuation to be preserved for strategy turn, got %#v", gen.options[1].ToolCallContinuations)
+	}
+}
+
+func TestNativeReActEngine_DelegatesToOwnedReActLoopWhenProvided(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &ownedReActLoopMockGenerator{}
+
+	resp, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find users",
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer: provider owned loop used" {
+		t.Fatalf("expected provider-owned loop response, got %q", resp.FinalText)
 	}
 }
 

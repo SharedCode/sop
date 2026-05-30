@@ -2,6 +2,7 @@ package generator
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -195,6 +196,16 @@ func TestGeminiReActTurnStrategy_UsesContinuationFirstPrompt(t *testing.T) {
 	if reactState["task_status"] != "repair_required" {
 		t.Fatalf("expected repair task status in carried state, got %#v", reactState)
 	}
+	if reactState["phase"] != string(ai.ReActLoopPhaseRepair) {
+		t.Fatalf("expected repair phase in carried state, got %#v", reactState)
+	}
+	actions, ok := reactState["allowed_next_actions"].([]string)
+	if !ok {
+		t.Fatalf("expected allowed_next_actions in carried state, got %#v", reactState)
+	}
+	if len(actions) != 2 || actions[0] != string(ai.ReActNextActionRetrySameTool) || actions[1] != string(ai.ReActNextActionAskClarification) {
+		t.Fatalf("expected repair actions in carried state, got %#v", actions)
+	}
 }
 
 func TestGeminiReActTurnStrategy_UsesReducedClarificationPromptOnFinalTurn(t *testing.T) {
@@ -234,11 +245,520 @@ func TestGeminiReActTurnStrategy_UsesReducedClarificationPromptOnFinalTurn(t *te
 	if reactState["task_status"] != "clarification_required" {
 		t.Fatalf("expected clarification task status in carried state, got %#v", reactState)
 	}
+	if reactState["phase"] != string(ai.ReActLoopPhaseClarification) {
+		t.Fatalf("expected clarification phase in carried state, got %#v", reactState)
+	}
 	if reactState["has_more_tool_work"] != false {
 		t.Fatalf("expected final turn to disable more tool work, got %#v", reactState)
 	}
+	actions, ok := reactState["allowed_next_actions"].([]string)
+	if !ok {
+		t.Fatalf("expected allowed_next_actions in carried state, got %#v", reactState)
+	}
+	if len(actions) != 2 || actions[0] != string(ai.ReActNextActionAskClarification) || actions[1] != string(ai.ReActNextActionAnswerUser) {
+		t.Fatalf("expected clarification actions in carried state, got %#v", actions)
+	}
 	if reactState["iteration"] != 4 {
 		t.Fatalf("expected iteration in carried state, got %#v", reactState)
+	}
+}
+
+type geminiOwnedLoopTestGenerator struct {
+	calls int
+}
+
+func (m *geminiOwnedLoopTestGenerator) Name() string { return "gemini_owned_loop_test" }
+
+func (m *geminiOwnedLoopTestGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *geminiOwnedLoopTestGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	_ = ctx
+	m.calls++
+	switch m.calls {
+	case 1:
+		if !strings.Contains(prompt, "User Query: Find John") {
+			return ai.GenOutput{Text: "missing initial query prompt"}, nil
+		}
+		if len(opts.ToolCallContinuations) != 0 {
+			return ai.GenOutput{Text: "unexpected initial continuations"}, nil
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{Name: "list_stores", Args: map[string]any{}}}}, nil
+	case 2:
+		if len(opts.ToolCallContinuations) != 1 {
+			return ai.GenOutput{Text: fmt.Sprintf("expected one continuation, got %d", len(opts.ToolCallContinuations))}, nil
+		}
+		response, ok := opts.ToolCallContinuations[0].Response.(map[string]any)
+		if !ok {
+			return ai.GenOutput{Text: fmt.Sprintf("expected structured continuation response, got %#v", opts.ToolCallContinuations[0].Response)}, nil
+		}
+		reactState, ok := response["react_state"].(map[string]any)
+		if !ok {
+			return ai.GenOutput{Text: fmt.Sprintf("expected react_state in continuation response, got %#v", response)}, nil
+		}
+		if reactState["phase"] != string(ai.ReActLoopPhaseActive) {
+			return ai.GenOutput{Text: fmt.Sprintf("expected active phase, got %#v", reactState)}, nil
+		}
+		actions, ok := reactState["allowed_next_actions"].([]string)
+		if !ok || len(actions) != 2 || actions[0] != string(ai.ReActNextActionCallTool) || actions[1] != string(ai.ReActNextActionAnswerUser) {
+			return ai.GenOutput{Text: fmt.Sprintf("unexpected allowed actions: %#v", reactState)}, nil
+		}
+		remaining, ok := reactState["remaining_tool_calls"].(int)
+		if !ok || remaining != 2 {
+			return ai.GenOutput{Text: fmt.Sprintf("expected remaining_tool_calls=2, got %#v", reactState)}, nil
+		}
+		return ai.GenOutput{
+			ToolCalls: []ai.ToolCall{{
+				Name: "execute_script",
+				Args: map[string]any{
+					"script": []any{map[string]any{"op": "scan"}},
+				},
+			}},
+		}, nil
+	case 3:
+		if len(opts.ToolCallContinuations) != 2 {
+			return ai.GenOutput{Text: fmt.Sprintf("expected two continuations, got %d", len(opts.ToolCallContinuations))}, nil
+		}
+		if !strings.Contains(prompt, "Continue from the supplied tool-call state.") {
+			return ai.GenOutput{Text: "missing continuation prompt"}, nil
+		}
+		return ai.GenOutput{Text: "Final answer: Found John"}, nil
+	default:
+		return ai.GenOutput{Text: "unexpected extra call"}, nil
+	}
+}
+
+type geminiOwnedLoopTestExecutor struct{}
+
+func (e *geminiOwnedLoopTestExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	_ = ctx
+	_ = args
+	if toolName == "list_stores" {
+		return `{"stores":[{"name":"users"}]}`, nil
+	}
+	return `{"tool_result":[{"name":"John"}]}`, nil
+}
+
+func (e *geminiOwnedLoopTestExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	_ = ctx
+	return []ai.ToolDefinition{{Name: "list_stores"}, {Name: "execute_script"}}, nil
+}
+
+func TestGeminiOwnedReActLoop_AccumulatesToolCallContinuationsAcrossTurns(t *testing.T) {
+	gen := &geminiOwnedLoopTestGenerator{}
+	loop := geminiOwnedReActLoop{
+		generator:     gen,
+		maxIterations: 3,
+	}
+	resp, err := loop.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find John",
+		Executor:     &geminiOwnedLoopTestExecutor{},
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer: Found John" {
+		t.Fatalf("expected final answer, got %q", resp.FinalText)
+	}
+	if len(resp.ToolCalls) != 2 {
+		t.Fatalf("expected two tool calls, got %#v", resp.ToolCalls)
+	}
+}
+
+type geminiOwnedLoopMultiToolGenerator struct {
+	calls int
+}
+
+func (m *geminiOwnedLoopMultiToolGenerator) Name() string { return "gemini_owned_loop_multi_tool_test" }
+
+func (m *geminiOwnedLoopMultiToolGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *geminiOwnedLoopMultiToolGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	_ = ctx
+	m.calls++
+	switch m.calls {
+	case 1:
+		if len(opts.ToolCallContinuations) != 0 {
+			return ai.GenOutput{Text: "unexpected initial continuations"}, nil
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{
+			{Name: "list_stores", Args: map[string]any{}},
+			{Name: "execute_script", Args: map[string]any{"script": []any{map[string]any{"op": "scan"}}}},
+		}}, nil
+	case 2:
+		if len(opts.ToolCallContinuations) != 2 {
+			return ai.GenOutput{Text: fmt.Sprintf("expected two continuations, got %d", len(opts.ToolCallContinuations))}, nil
+		}
+		if opts.ToolCallContinuations[0].ToolCall.Name != "list_stores" || opts.ToolCallContinuations[1].ToolCall.Name != "execute_script" {
+			return ai.GenOutput{Text: fmt.Sprintf("unexpected continuation order: %#v", opts.ToolCallContinuations)}, nil
+		}
+		return ai.GenOutput{Text: "Final answer after multi-tool turn"}, nil
+	default:
+		return ai.GenOutput{Text: "unexpected extra call"}, nil
+	}
+}
+
+func TestGeminiOwnedReActLoop_ExecutesAllToolCallsInATurn(t *testing.T) {
+	gen := &geminiOwnedLoopMultiToolGenerator{}
+	loop := geminiOwnedReActLoop{
+		generator:     gen,
+		maxIterations: 2,
+	}
+	resp, err := loop.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find John",
+		Executor:     &geminiOwnedLoopTestExecutor{},
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer after multi-tool turn" {
+		t.Fatalf("expected final answer, got %q", resp.FinalText)
+	}
+	if len(resp.ToolCalls) != 2 {
+		t.Fatalf("expected both tool calls to be executed, got %#v", resp.ToolCalls)
+	}
+	if resp.ToolCalls[0].Name != "list_stores" || resp.ToolCalls[1].Name != "execute_script" {
+		t.Fatalf("unexpected tool call order: %#v", resp.ToolCalls)
+	}
+}
+
+type geminiOwnedLoopFinalTurnGuardrailGenerator struct {
+	calls int
+}
+
+func (m *geminiOwnedLoopFinalTurnGuardrailGenerator) Name() string {
+	return "gemini_owned_loop_final_turn_guardrail_test"
+}
+
+func (m *geminiOwnedLoopFinalTurnGuardrailGenerator) EstimateCost(inTokens, outTokens int) float64 {
+	return 0
+}
+
+func (m *geminiOwnedLoopFinalTurnGuardrailGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	_ = ctx
+	m.calls++
+	switch m.calls {
+	case 1:
+		if len(opts.Tools) == 0 {
+			return ai.GenOutput{Text: "expected tools on active turn"}, nil
+		}
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{Name: "list_stores", Args: map[string]any{}}}}, nil
+	case 2:
+		if len(opts.Tools) != 0 {
+			return ai.GenOutput{Text: fmt.Sprintf("expected final turn tools to be disabled, got %d", len(opts.Tools))}, nil
+		}
+		if !strings.Contains(prompt, "do not call more tools") {
+			return ai.GenOutput{Text: "missing final-turn hard-stop prompt"}, nil
+		}
+		if len(opts.ToolCallContinuations) != 1 {
+			return ai.GenOutput{Text: fmt.Sprintf("expected one continuation on final turn, got %d", len(opts.ToolCallContinuations))}, nil
+		}
+		return ai.GenOutput{Text: "Need one clarification before continuing."}, nil
+	default:
+		return ai.GenOutput{Text: "unexpected extra call"}, nil
+	}
+}
+
+func TestGeminiOwnedReActLoop_DisablesToolsOnFinalTurn(t *testing.T) {
+	gen := &geminiOwnedLoopFinalTurnGuardrailGenerator{}
+	loop := geminiOwnedReActLoop{
+		generator:     gen,
+		maxIterations: 1,
+	}
+	resp, err := loop.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find John",
+		Executor:     &geminiOwnedLoopTestExecutor{},
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Need one clarification before continuing." {
+		t.Fatalf("expected clarification text, got %q", resp.FinalText)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "list_stores" {
+		t.Fatalf("unexpected executed tool calls: %#v", resp.ToolCalls)
+	}
+}
+
+type geminiOwnedLoopStreamingGenerator struct {
+	calls int
+}
+
+func (m *geminiOwnedLoopStreamingGenerator) Name() string { return "gemini_owned_loop_streaming_test" }
+
+func (m *geminiOwnedLoopStreamingGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *geminiOwnedLoopStreamingGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	_ = ctx
+	_ = prompt
+	_ = opts
+	m.calls++
+	if m.calls == 1 {
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{Name: "list_stores", Args: map[string]any{"scope": "users"}}}}, nil
+	}
+	return ai.GenOutput{Text: "Final answer after streaming"}, nil
+}
+
+type geminiOwnedLoopStreamingExecutor struct {
+	sawNativeToolHints bool
+	sawEventStreamer   bool
+}
+
+func (e *geminiOwnedLoopStreamingExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	_ = toolName
+	_ = args
+	if hinted, ok := ctx.Value(ai.CtxKeyNativeToolHints).(bool); ok && hinted {
+		e.sawNativeToolHints = true
+	}
+	if streamer, ok := ctx.Value(ai.CtxKeyEventStreamer).(func(string, any)); ok && streamer != nil {
+		e.sawEventStreamer = true
+	}
+	return `[{"name":"John Doe"}]`, nil
+}
+
+func (e *geminiOwnedLoopStreamingExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	_ = ctx
+	return []ai.ToolDefinition{{Name: "list_stores"}}, nil
+}
+
+func TestGeminiOwnedReActLoop_StreamsStructuredToolEventsAndExecutionContext(t *testing.T) {
+	gen := &geminiOwnedLoopStreamingGenerator{}
+	exec := &geminiOwnedLoopStreamingExecutor{}
+	loop := geminiOwnedReActLoop{
+		generator:     gen,
+		maxIterations: 2,
+	}
+
+	type streamedEvent struct {
+		eventType string
+		payload   map[string]any
+	}
+	var events []streamedEvent
+
+	resp, err := loop.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Show me users",
+		Executor:     exec,
+		Generator:    gen,
+		Streamer: func(eventType string, data any) {
+			payload, _ := data.(map[string]any)
+			events = append(events, streamedEvent{eventType: eventType, payload: payload})
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer after streaming" {
+		t.Fatalf("expected final answer, got %q", resp.FinalText)
+	}
+	if !exec.sawNativeToolHints {
+		t.Fatalf("expected native tool hint context to be set")
+	}
+	if !exec.sawEventStreamer {
+		t.Fatalf("expected event streamer context to be set")
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected 2 streamed events, got %#v", events)
+	}
+	if events[0].eventType != "tool_call" || events[0].payload["tool"] != "list_stores" {
+		t.Fatalf("unexpected tool_call event: %#v", events[0])
+	}
+	if events[1].eventType != "tool_result" || events[1].payload["tool"] != "list_stores" {
+		t.Fatalf("unexpected tool_result event: %#v", events[1])
+	}
+	if events[1].payload["result"] != `[{"name":"John Doe"}]` {
+		t.Fatalf("expected raw streamed result payload, got %#v", events[1].payload)
+	}
+}
+
+type geminiOwnedLoopProgressGenerator struct {
+	calls int
+}
+
+func (m *geminiOwnedLoopProgressGenerator) Name() string { return "gemini_owned_loop_progress_test" }
+
+func (m *geminiOwnedLoopProgressGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *geminiOwnedLoopProgressGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	_ = ctx
+	_ = prompt
+	_ = opts
+	m.calls++
+	if m.calls == 1 {
+		return ai.GenOutput{
+			ToolCalls: []ai.ToolCall{{
+				Name: "execute_script",
+				Args: map[string]any{
+					"script": []any{map[string]any{"op": "scan"}},
+				},
+			}},
+		}, nil
+	}
+	return ai.GenOutput{Text: "Done"}, nil
+}
+
+type geminiOwnedLoopProgressExecutor struct{}
+
+func (e *geminiOwnedLoopProgressExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	_ = ctx
+	_ = toolName
+	_ = args
+	return `{"tool_result":{"rows":[{"name":"John"}]},"progress_hint":{"status":"progressing","completion_delta":0.25,"tips":["Use execute_script next"],"clues":["users relation confirmed"],"suggested_next_tools":["execute_script"]}}`, nil
+}
+
+func (e *geminiOwnedLoopProgressExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	_ = ctx
+	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+type geminiOwnedLoopProgressInspectStrategy struct {
+	t          *testing.T
+	inspected  bool
+	seenResult bool
+}
+
+func (s *geminiOwnedLoopProgressInspectStrategy) PrepareTurn(ctx context.Context, turn ai.ReActTurn) ai.ReActTurn {
+	_ = ctx
+	if turn.Iteration == 2 {
+		s.inspected = true
+		if len(turn.ToolResults) != 1 {
+			s.t.Fatalf("expected one prior tool result, got %#v", turn.ToolResults)
+		}
+		result := turn.ToolResults[0]
+		if result.Result != `{"rows":[{"name":"John"}]}` {
+			s.t.Fatalf("expected unwrapped tool_result payload, got %q", result.Result)
+		}
+		if result.Hint == nil {
+			s.t.Fatalf("expected progress hint on prior tool result")
+		}
+		if result.Hint.Status != "progressing" || result.Hint.CompletionDelta != 0.25 {
+			s.t.Fatalf("unexpected progress hint: %#v", result.Hint)
+		}
+		if len(result.Hint.Clues) != 1 || result.Hint.Clues[0] != "users relation confirmed" {
+			s.t.Fatalf("unexpected progress hint clues: %#v", result.Hint)
+		}
+	}
+	return turn
+}
+
+func TestGeminiOwnedReActLoop_UnwrapsProgressHintsIntoLoopState(t *testing.T) {
+	gen := &geminiOwnedLoopProgressGenerator{}
+	strategy := &geminiOwnedLoopProgressInspectStrategy{t: t}
+	loop := geminiOwnedReActLoop{
+		generator:     gen,
+		turnStrategy:  strategy,
+		maxIterations: 2,
+	}
+
+	type streamedEvent struct {
+		eventType string
+		payload   map[string]any
+	}
+	var events []streamedEvent
+
+	resp, err := loop.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find John",
+		Executor:     &geminiOwnedLoopProgressExecutor{},
+		Generator:    gen,
+		Streamer: func(eventType string, data any) {
+			payload, _ := data.(map[string]any)
+			events = append(events, streamedEvent{eventType: eventType, payload: payload})
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Done" {
+		t.Fatalf("expected final text, got %q", resp.FinalText)
+	}
+	if !strategy.inspected {
+		t.Fatalf("expected strategy to inspect second turn state")
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected streamed tool lifecycle events, got %#v", events)
+	}
+	hint, ok := events[1].payload["progress_hint"].(*ai.ToolProgressHint)
+	if !ok || hint == nil {
+		t.Fatalf("expected streamed progress hint, got %#v", events[1].payload)
+	}
+	if hint.Status != "progressing" || len(hint.SuggestedNextTools) != 1 || hint.SuggestedNextTools[0] != "execute_script" {
+		t.Fatalf("unexpected streamed progress hint: %#v", hint)
+	}
+}
+
+type geminiOwnedLoopTerminalHintGenerator struct{ calls int }
+
+func (m *geminiOwnedLoopTerminalHintGenerator) Name() string { return "gemini_owned_loop_terminal_hint_test" }
+
+func (m *geminiOwnedLoopTerminalHintGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *geminiOwnedLoopTerminalHintGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	_ = ctx
+	_ = prompt
+	_ = opts
+	m.calls++
+	if m.calls == 1 {
+		return ai.GenOutput{
+			ToolCalls: []ai.ToolCall{{
+				Name: "execute_script",
+				Args: map[string]any{
+					"script": []any{map[string]any{"op": "scan"}},
+				},
+			}},
+		}, nil
+	}
+	return ai.GenOutput{Text: "unexpected follow-up generation after hard error"}, nil
+}
+
+type geminiOwnedLoopTerminalHintExecutor struct{ callCount int }
+
+func (e *geminiOwnedLoopTerminalHintExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	_ = ctx
+	_ = toolName
+	_ = args
+	e.callCount++
+	return `{"tool_result":"Permission denied: write access is blocked for this operation.","progress_hint":{"status":"hard_error","tips":["Stop retrying this tool until permissions change."]}}`, nil
+}
+
+func (e *geminiOwnedLoopTerminalHintExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	_ = ctx
+	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+func TestGeminiOwnedReActLoop_ShortCircuitsOnTerminalHint(t *testing.T) {
+	gen := &geminiOwnedLoopTerminalHintGenerator{}
+	exec := &geminiOwnedLoopTerminalHintExecutor{}
+	loop := geminiOwnedReActLoop{
+		generator:     gen,
+		maxIterations: 2,
+	}
+
+	resp, err := loop.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Try the blocked operation.",
+		Executor:     exec,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Permission denied: write access is blocked for this operation." {
+		t.Fatalf("expected terminal tool result to be returned immediately, got %q", resp.FinalText)
+	}
+	if gen.calls != 1 {
+		t.Fatalf("expected hard error hint to stop after the first generation call, got %d", gen.calls)
+	}
+	if exec.callCount != 1 {
+		t.Fatalf("expected only one tool execution before short-circuit, got %d", exec.callCount)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "execute_script" {
+		t.Fatalf("expected the terminal tool call to be recorded, got %#v", resp.ToolCalls)
 	}
 }
 

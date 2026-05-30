@@ -45,8 +45,419 @@ func init() {
 // Name returns the name of the generator.
 func (g *gemini) Name() string { return "gemini" }
 
+func (g *gemini) ReActLoop() ai.ReActLoop {
+	return geminiOwnedReActLoop{
+		generator:     g,
+		maxIterations: 3,
+	}
+}
+
 func (g *gemini) ReActTurnStrategy() ai.ReActTurnStrategy {
-	return ai.GeminiReActTurnStrategy{}
+	return geminiReActTurnStrategy{}
+}
+
+type geminiReActTurnStrategy struct {
+	Base ai.ReActTurnStrategy
+}
+
+func (geminiReActTurnStrategy) ShouldBypassPrompt(turn ai.ReActTurn) bool {
+	return len(turn.Options.ToolCallContinuations) > 0
+}
+
+func (l geminiReActTurnStrategy) PrepareTurn(ctx context.Context, turn ai.ReActTurn) ai.ReActTurn {
+	base := l.Base
+	if base == nil {
+		base = ai.DefaultReActTurnStrategy{}
+	}
+	turn = base.PrepareTurn(ctx, turn)
+	return prepareGeminiContinuationTurn(turn)
+}
+
+type geminiOwnedReActLoop struct {
+	generator ai.Generator
+	// turnStrategy is optional in the owned loop and is kept only for narrow
+	// test hooks or explicit local overrides. The owned loop prepares its own
+	// Gemini-native continuation turns instead of depending on shared strategy logic.
+	turnStrategy  ai.ReActTurnStrategy
+	maxIterations int
+}
+
+func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) (ai.ReasoningResponse, error) {
+	if l.generator == nil {
+		return ai.ReasoningResponse{}, fmt.Errorf("gemini owned loop requires a generator")
+	}
+
+	var tools []ai.ToolDefinition
+	var err error
+	if req.Executor != nil {
+		tools, err = req.Executor.ListTools(ctx)
+		if err != nil {
+			return ai.ReasoningResponse{}, fmt.Errorf("failed to list tools: %w", err)
+		}
+	}
+
+	continuations := make([]ai.ToolCallContinuation, 0)
+	toolResults := make([]ai.ReActToolResult, 0)
+	executedToolCalls := make([]ai.ToolCall, 0)
+
+	for iteration := 1; iteration <= l.maxIterations; iteration++ {
+		turn := ai.ReActTurn{
+			Iteration: iteration,
+			UserQuery: req.UserQuery,
+			Prompt:    geminiOwnedLoopPrompt(req),
+			LoopState: ai.ReActLoopState{
+				Iteration:             iteration,
+				AllowedIterations:     l.maxIterations,
+				MaxIterations:         l.maxIterations,
+				RemainingToolCalls:    max(0, l.maxIterations-iteration+1),
+				Phase:                 ai.ReActLoopPhaseActive,
+				AllowedNextActions:    []ai.ReActNextAction{ai.ReActNextActionCallTool, ai.ReActNextActionAnswerUser},
+				ToolResults:           cloneGeminiReActToolResults(toolResults),
+				ToolCallContinuations: append([]ai.ToolCallContinuation(nil), continuations...),
+			},
+			Options: ai.GenOptions{
+				SystemPrompt:          req.SystemPrompt,
+				Tools:                 tools,
+				Temperature:           0.1,
+				ToolCallContinuations: append([]ai.ToolCallContinuation(nil), continuations...),
+			},
+			ToolResults: cloneGeminiReActToolResults(toolResults),
+		}
+		turn = prepareGeminiContinuationTurn(turn)
+		if l.turnStrategy != nil {
+			turn = l.turnStrategy.PrepareTurn(ctx, turn)
+		}
+		if strings.TrimSpace(turn.Prompt) == "" {
+			turn.Prompt = geminiOwnedLoopPrompt(req)
+		}
+
+		output, err := l.generator.Generate(ctx, turn.Prompt, turn.Options)
+		if err != nil {
+			return ai.ReasoningResponse{}, fmt.Errorf("generation failed: %w", err)
+		}
+		if req.Executor == nil || len(output.ToolCalls) == 0 {
+			return ai.ReasoningResponse{FinalText: output.Text, ToolCalls: executedToolCalls}, nil
+		}
+
+		for _, toolCall := range output.ToolCalls {
+			emitGeminiOwnedLoopEvent(req, "tool_call", map[string]any{
+				"tool":      toolCall.Name,
+				"args":      cloneGeminiToolArgs(toolCall.Args),
+				"iteration": iteration,
+			})
+			executedToolCalls = append(executedToolCalls, toolCall)
+			toolResult, continuation := executeGeminiOwnedLoopToolCall(ctx, req, iteration, toolCall)
+			toolResults = append(toolResults, toolResult)
+			continuations = append(continuations, continuation)
+			if shouldShortCircuitGeminiOwnedLoopOnToolHint(toolResult.Hint) {
+				return ai.ReasoningResponse{FinalText: toolResult.Result, ToolCalls: executedToolCalls}, nil
+			}
+		}
+	}
+
+	finalTurn := ai.ReActTurn{
+		Iteration: l.maxIterations + 1,
+		UserQuery: req.UserQuery,
+		LoopState: ai.ReActLoopState{
+			Iteration:             l.maxIterations + 1,
+			AllowedIterations:     l.maxIterations,
+			MaxIterations:         l.maxIterations,
+			RemainingToolCalls:    0,
+			Phase:                 ai.ReActLoopPhaseClarification,
+			AllowedNextActions:    []ai.ReActNextAction{ai.ReActNextActionAskClarification, ai.ReActNextActionAnswerUser},
+			ToolResults:           cloneGeminiReActToolResults(toolResults),
+			ToolCallContinuations: append([]ai.ToolCallContinuation(nil), continuations...),
+		},
+		Options: ai.GenOptions{
+			SystemPrompt:          req.SystemPrompt,
+			Temperature:           0.7,
+			ToolCallContinuations: append([]ai.ToolCallContinuation(nil), continuations...),
+		},
+		ToolResults: cloneGeminiReActToolResults(toolResults),
+		FinalTurn:   true,
+	}
+	finalTurn = prepareGeminiContinuationTurn(finalTurn)
+	if l.turnStrategy != nil {
+		finalTurn = l.turnStrategy.PrepareTurn(ctx, finalTurn)
+	}
+	finalTurn.Options.Tools = nil
+	if strings.TrimSpace(finalTurn.Prompt) == "" {
+		finalTurn.Prompt = "Using the supplied tool-call state, do not call more tools. Briefly explain what is still blocking progress and ask one short, concrete clarification question."
+	}
+	output, err := l.generator.Generate(ctx, finalTurn.Prompt, finalTurn.Options)
+	if err != nil {
+		return ai.ReasoningResponse{}, fmt.Errorf("final generation failed: %w", err)
+	}
+	return ai.ReasoningResponse{FinalText: output.Text, ToolCalls: executedToolCalls}, nil
+}
+
+func geminiOwnedLoopPrompt(req ai.ReasoningRequest) string {
+	parts := make([]string, 0, 3)
+	if contextText := strings.TrimSpace(req.ContextText); contextText != "" {
+		parts = append(parts, "Context:\n"+contextText)
+	}
+	if historyText := strings.TrimSpace(req.HistoryText); historyText != "" {
+		parts = append(parts, "History:\n"+historyText)
+	}
+	if query := strings.TrimSpace(req.UserQuery); query != "" {
+		parts = append(parts, "User Query: "+query)
+	}
+	return strings.Join(parts, "\n\n")
+}
+
+func prepareGeminiContinuationTurn(turn ai.ReActTurn) ai.ReActTurn {
+	if len(turn.Options.ToolCallContinuations) == 0 {
+		return turn
+	}
+	turn.Options.ToolCallContinuations = geminiToolCallContinuations(turn)
+	if turn.FinalTurn {
+		turn.Prompt = "Using the supplied tool-call state, do not call more tools. Briefly explain what is still blocking progress and ask one short, concrete clarification question."
+		turn.Options.Tools = nil
+		return turn
+	}
+	turn.Prompt = "Continue from the supplied tool-call state. Use the structured function response as the source of truth, avoid replaying prior history, emit the next tool call if more work is needed, and otherwise answer the user directly."
+	return turn
+}
+
+func geminiToolCallContinuations(turn ai.ReActTurn) []ai.ToolCallContinuation {
+	continuations := turn.Options.ToolCallContinuations
+	if len(continuations) == 0 {
+		return nil
+	}
+
+	wrapped := make([]ai.ToolCallContinuation, 0, len(continuations))
+	for idx, continuation := range continuations {
+		response := continuation.Response
+		if idx == len(continuations)-1 {
+			phase, actions, remainingToolCalls := geminiLoopMetadata(turn)
+			response = map[string]any{
+				"tool_result": continuation.Response,
+				"react_state": map[string]any{
+					"user_query":           strings.TrimSpace(turn.UserQuery),
+					"latest_tool":          strings.TrimSpace(continuation.ToolCall.Name),
+					"repair_directive":     strings.TrimSpace(turn.RepairDirective),
+					"iteration":            turn.Iteration,
+					"task_status":          geminiTaskStatus(turn),
+					"has_more_tool_work":   !turn.FinalTurn,
+					"phase":                string(phase),
+					"allowed_next_actions": geminiAllowedActions(actions),
+					"remaining_tool_calls": remainingToolCalls,
+				},
+			}
+		}
+		wrapped = append(wrapped, ai.ToolCallContinuation{
+			ToolCall: continuation.ToolCall,
+			Response: response,
+		})
+	}
+	return wrapped
+}
+
+func geminiTaskStatus(turn ai.ReActTurn) string {
+	if turn.FinalTurn {
+		return "clarification_required"
+	}
+	if strings.TrimSpace(turn.RepairDirective) != "" {
+		return "repair_required"
+	}
+	if len(turn.ToolResults) > 0 {
+		return "tool_progressed"
+	}
+	return "active"
+}
+
+func geminiLoopMetadata(turn ai.ReActTurn) (ai.ReActLoopPhase, []ai.ReActNextAction, int) {
+	if turn.FinalTurn {
+		return ai.ReActLoopPhaseClarification, []ai.ReActNextAction{ai.ReActNextActionAskClarification, ai.ReActNextActionAnswerUser}, 0
+	}
+	if strings.TrimSpace(turn.RepairDirective) != "" {
+		return ai.ReActLoopPhaseRepair, []ai.ReActNextAction{ai.ReActNextActionRetrySameTool, ai.ReActNextActionAskClarification}, 0
+	}
+	remainingToolCalls := 0
+	maxIterations := turn.LoopState.MaxIterations
+	if maxIterations <= 0 {
+		maxIterations = turn.LoopState.AllowedIterations
+	}
+	if maxIterations > 0 {
+		remainingToolCalls = max(0, maxIterations-turn.Iteration+1)
+	}
+	return ai.ReActLoopPhaseActive, []ai.ReActNextAction{ai.ReActNextActionCallTool, ai.ReActNextActionAnswerUser}, remainingToolCalls
+}
+
+func geminiAllowedActions(actions []ai.ReActNextAction) []string {
+	if len(actions) == 0 {
+		return nil
+	}
+	allowed := make([]string, 0, len(actions))
+	for _, action := range actions {
+		allowed = append(allowed, string(action))
+	}
+	return allowed
+}
+
+func shouldShortCircuitGeminiOwnedLoopOnToolHint(hint *ai.ToolProgressHint) bool {
+	if hint == nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(hint.Status)) {
+	case "anti_success", "blocked", "error", "failed", "fatal", "hard_error", "terminal_error":
+		return true
+	default:
+		return false
+	}
+}
+
+func cloneGeminiReActToolResults(results []ai.ReActToolResult) []ai.ReActToolResult {
+	if len(results) == 0 {
+		return nil
+	}
+	cloned := make([]ai.ReActToolResult, 0, len(results))
+	for _, result := range results {
+		cloned = append(cloned, ai.ReActToolResult{
+			Name:   result.Name,
+			Args:   cloneGeminiToolArgs(result.Args),
+			Result: result.Result,
+			Hint:   result.Hint,
+		})
+	}
+	return cloned
+}
+
+func cloneGeminiToolArgs(args map[string]any) map[string]any {
+	if len(args) == 0 {
+		return nil
+	}
+	cloned := make(map[string]any, len(args))
+	for key, value := range args {
+		cloned[key] = value
+	}
+	return cloned
+}
+
+func executeGeminiOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequest, iteration int, toolCall ai.ToolCall) (ai.ReActToolResult, ai.ToolCallContinuation) {
+	execCtx := context.WithValue(ctx, ai.CtxKeyNativeToolHints, true)
+	if req.Streamer != nil {
+		execCtx = context.WithValue(execCtx, ai.CtxKeyEventStreamer, req.Streamer)
+	}
+
+	rawResult, execErr := req.Executor.Execute(execCtx, toolCall.Name, toolCall.Args)
+	resultText, hint := unwrapGeminiToolResultEnvelope(rawResult)
+	continuationResponse := coerceGeminiToolContinuationResponse(rawResult)
+	if execErr != nil {
+		emitGeminiOwnedLoopEvent(req, "tool_error", map[string]any{
+			"tool":      toolCall.Name,
+			"args":      cloneGeminiToolArgs(toolCall.Args),
+			"error":     execErr.Error(),
+			"iteration": iteration,
+		})
+		resultText = execErr.Error()
+		continuationResponse = map[string]any{
+			"tool_error": map[string]any{
+				"message": execErr.Error(),
+			},
+		}
+	} else {
+		emitGeminiOwnedLoopEvent(req, "tool_result", map[string]any{
+			"tool":          toolCall.Name,
+			"args":          cloneGeminiToolArgs(toolCall.Args),
+			"result":        resultText,
+			"progress_hint": cloneGeminiToolProgressHint(hint),
+			"result_chars":  len(resultText),
+			"iteration":     iteration,
+		})
+	}
+
+	return ai.ReActToolResult{
+			Name:   toolCall.Name,
+			Args:   cloneGeminiToolArgs(toolCall.Args),
+			Result: resultText,
+			Hint:   cloneGeminiToolProgressHint(hint),
+		}, ai.ToolCallContinuation{
+			ToolCall: toolCall,
+			Response: continuationResponse,
+		}
+}
+
+func emitGeminiOwnedLoopEvent(req ai.ReasoningRequest, eventType string, data any) {
+	if req.Streamer != nil {
+		req.Streamer(eventType, data)
+	}
+}
+
+func unwrapGeminiToolResultEnvelope(rawResult string) (string, *ai.ToolProgressHint) {
+	trimmed := strings.TrimSpace(rawResult)
+	if trimmed == "" {
+		return rawResult, nil
+	}
+
+	var envelope ai.ToolResultEnvelope
+	if err := json.Unmarshal([]byte(trimmed), &envelope); err != nil {
+		return rawResult, nil
+	}
+	if len(envelope.ToolResult) == 0 && envelope.ProgressHint == nil {
+		return rawResult, nil
+	}
+
+	result := formatGeminiEnvelopeToolResult(envelope.ToolResult)
+	if strings.TrimSpace(result) == "" {
+		result = rawResult
+	}
+	return result, cloneGeminiToolProgressHint(envelope.ProgressHint)
+}
+
+func formatGeminiEnvelopeToolResult(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		return text
+	}
+
+	var value any
+	if err := json.Unmarshal(raw, &value); err == nil {
+		if bytes, marshalErr := json.Marshal(value); marshalErr == nil {
+			return string(bytes)
+		}
+	}
+
+	return string(raw)
+}
+
+func cloneGeminiToolProgressHint(hint *ai.ToolProgressHint) *ai.ToolProgressHint {
+	if hint == nil {
+		return nil
+	}
+
+	cloned := *hint
+	cloned.Missing = append([]string(nil), hint.Missing...)
+	cloned.Tips = append([]string(nil), hint.Tips...)
+	cloned.Clues = append([]string(nil), hint.Clues...)
+	cloned.SuggestedNextTools = append([]string(nil), hint.SuggestedNextTools...)
+	return &cloned
+}
+
+func coerceGeminiToolContinuationResponse(rawResult string) any {
+	trimmed := strings.TrimSpace(rawResult)
+	if trimmed == "" {
+		return map[string]any{"result": ""}
+	}
+
+	var envelope ai.ToolResultEnvelope
+	if json.Unmarshal([]byte(trimmed), &envelope) == nil && len(envelope.ToolResult) > 0 {
+		var decoded any
+		if json.Unmarshal(envelope.ToolResult, &decoded) == nil {
+			return decoded
+		}
+	}
+
+	var decoded any
+	if json.Unmarshal([]byte(trimmed), &decoded) == nil {
+		return decoded
+	}
+
+	return map[string]any{"result": rawResult}
 }
 
 type geminiRequest struct {
