@@ -106,38 +106,56 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 	repairAttempts := 0
 	var pendingRepair *pendingToolRepair
 	var pendingMalformedCall *pendingGenerationRepair
-	var pendingContinuation *ai.NativeToolContinuation
+	var pendingContinuation *ai.ToolCallContinuation
+	strategy := resolveReActTurnStrategy(req)
 	for iteration := 0; iteration < budgetState.maxIterations && iteration < budgetState.allowedIterations; iteration++ {
 		emitVerboseProgress(ctx, "Reasoning iteration %d of %d.", iteration+1, budgetState.allowedIterations)
-		promptProfile := nativeReActPromptBudgetProfile()
-		mainPrompt, promptReport := buildNativeReActPromptWithReport(req, toolResults, buildAskAnchoredMRUState(toolResults), promptProfile)
+		temperature := nativeReActToolCallTemperature
+		if pendingRepair != nil || pendingMalformedCall != nil {
+			temperature = nativeReActRepairTemperature
+		}
+		genOpts := ai.GenOptions{
+			SystemPrompt: req.SystemPrompt,
+			MaxTokens:    e.MaxTokens,
+			Temperature:  temperature,
+			Tools:        tools,
+			ToolCallContinuations: func() []ai.ToolCallContinuation {
+				if pendingContinuation == nil {
+					return nil
+				}
+				return []ai.ToolCallContinuation{*pendingContinuation}
+			}(),
+		}
+		turn := ai.ReActTurn{
+			Iteration:       iteration + 1,
+			UserQuery:       req.UserQuery,
+			RepairDirective: latestNativeRepairDirective(toolResults),
+			Options:         genOpts,
+			ToolResults:     cloneReActToolResults(toolResults),
+			FinalTurn:       false,
+		}
+		mainPrompt := ""
+		promptProfile := PromptBudgetProfile{}
+		promptReport := PromptBudgetReport{}
+		if !shouldBypassReActPrompt(strategy, turn) {
+			promptProfile = nativeReActPromptBudgetProfile()
+			mainPrompt, promptReport = buildNativeReActPromptWithReport(req, toolResults, buildAskAnchoredMRUState(toolResults), promptProfile)
+		}
+		effectivePrompt, effectiveOpts := prepareReActTurn(ctx, strategy, turn, mainPrompt)
 		log.Info("Native ReAct Iteration Context",
 			"iteration", iteration+1,
 			"tool_results_count", len(toolResults),
 			"prompt_chars", len(mainPrompt),
 			"prompt", formatLogSeparatedMessage("prompt", mainPrompt),
+			"effective_prompt_chars", len(effectivePrompt),
+			"effective_prompt", formatLogSeparatedMessage("effective_prompt", effectivePrompt),
 		)
 		if firstTrimmed := firstTrimmedPromptComponent(promptProfile, promptReport); firstTrimmed != "" {
 			emitVerboseProgress(ctx, "Prompt budget trimmed %s first; reduced components: %s.", firstTrimmed, summarizePromptBudgetTrim(promptReport))
 			log.Info("Native ReAct Prompt Budget Applied", "phase", "iteration", "iteration", iteration+1, "trimmed_first", firstTrimmed, "trimmed", summarizePromptBudgetTrim(promptReport), "final_chars", len(mainPrompt))
 		}
 		emitVerboseProgress(ctx, "Waiting for model response.")
-		temperature := nativeReActToolCallTemperature
-		if pendingRepair != nil || pendingMalformedCall != nil {
-			temperature = nativeReActRepairTemperature
-		}
-		output, err := req.Generator.Generate(ctx, mainPrompt, ai.GenOptions{
-			SystemPrompt: req.SystemPrompt,
-			MaxTokens:    e.MaxTokens,
-			Temperature:  temperature,
-			Tools:        tools,
-			NativeToolContinuations: func() []ai.NativeToolContinuation {
-				if pendingContinuation == nil {
-					return nil
-				}
-				return []ai.NativeToolContinuation{*pendingContinuation}
-			}(),
-		})
+		output, err := req.Generator.Generate(ctx, effectivePrompt, effectiveOpts)
 		pendingContinuation = nil
 		if err != nil {
 			if isRecoverableGenerationError(err) {
@@ -293,9 +311,9 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 		executedToolCalls = append(executedToolCalls, toolCall)
 		previousResults := append([]nativeToolResult(nil), toolResults...)
 		toolResults = appendOrReplaceRetriedToolResult(toolResults, nativeToolResult{Name: toolCall.Name, Result: result, Args: cloneToolEventMap(toolCall.Args), Hint: cloneToolProgressHint(hint)}, priorRepair, toolCall.Name)
-		pendingContinuation = &ai.NativeToolContinuation{
+		pendingContinuation = &ai.ToolCallContinuation{
 			ToolCall: toolCall,
-			Response: coerceNativeToolContinuationResponse(result),
+			Response: coerceToolCallContinuationResponse(result),
 		}
 		if shouldShortCircuitAskLoopOnToolHint(hint) {
 			emitVerboseProgress(ctx, "Tool `%s` reported a terminal hard error; short-circuiting the Ask loop.", toolCall.Name)
@@ -331,19 +349,40 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 	}
 
 	log.Warn("Native ReAct Engine Reached Tool Iteration Limit", "limit", budgetState.allowedIterations, "hard_cap", budgetState.maxIterations)
-	promptProfile := nativeReActPromptBudgetProfile()
-	finalPrompt, promptReport := buildNativeReActPromptWithReport(req, toolResults, buildAskAnchoredMRUState(toolResults), promptProfile)
+	finalOpts := ai.GenOptions{
+		SystemPrompt: req.SystemPrompt,
+		MaxTokens:    e.MaxTokens,
+		Temperature:  0.7,
+		ToolCallContinuations: func() []ai.ToolCallContinuation {
+			if pendingContinuation == nil {
+				return nil
+			}
+			return []ai.ToolCallContinuation{*pendingContinuation}
+		}(),
+	}
+	finalTurn := ai.ReActTurn{
+		Iteration:       budgetState.allowedIterations + 1,
+		UserQuery:       req.UserQuery,
+		RepairDirective: latestNativeRepairDirective(toolResults),
+		Options:         finalOpts,
+		ToolResults:     cloneReActToolResults(toolResults),
+		FinalTurn:       true,
+	}
+	finalPrompt := ""
+	promptProfile := PromptBudgetProfile{}
+	promptReport := PromptBudgetReport{}
+	if !shouldBypassReActPrompt(strategy, finalTurn) {
+		promptProfile = nativeReActPromptBudgetProfile()
+		finalPrompt, promptReport = buildNativeReActPromptWithReport(req, toolResults, buildAskAnchoredMRUState(toolResults), promptProfile)
+		finalPrompt += "\n\nUser: We have hit the retry cap. Do not call any more tools. Briefly explain what is still blocking progress and ask one short, concrete clarification question that would unblock the task."
+	}
 	if firstTrimmed := firstTrimmedPromptComponent(promptProfile, promptReport); firstTrimmed != "" {
 		emitVerboseProgress(ctx, "Prompt budget trimmed %s first; reduced components: %s.", firstTrimmed, summarizePromptBudgetTrim(promptReport))
 		log.Info("Native ReAct Prompt Budget Applied", "phase", "final", "trimmed_first", firstTrimmed, "trimmed", summarizePromptBudgetTrim(promptReport), "final_chars", len(finalPrompt))
 	}
-	finalPrompt += "\n\nUser: We have hit the retry cap. Do not call any more tools. Briefly explain what is still blocking progress and ask one short, concrete clarification question that would unblock the task."
+	effectiveFinalPrompt, effectiveFinalOpts := prepareReActTurn(ctx, strategy, finalTurn, finalPrompt)
 	emitVerboseProgress(ctx, "Waiting for model response.")
-	output, err := req.Generator.Generate(ctx, finalPrompt, ai.GenOptions{
-		SystemPrompt: req.SystemPrompt,
-		MaxTokens:    e.MaxTokens,
-		Temperature:  0.7,
-	})
+	output, err := req.Generator.Generate(ctx, effectiveFinalPrompt, effectiveFinalOpts)
 	if err != nil {
 		return ai.ReasoningResponse{}, fmt.Errorf("final synthesis generation failed: %w", err)
 	}
@@ -359,7 +398,57 @@ func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (a
 	}, nil
 }
 
-func coerceNativeToolContinuationResponse(result string) any {
+func resolveReActTurnStrategy(req ai.ReasoningRequest) ai.ReActTurnStrategy {
+	strategy := ai.ReActTurnStrategy(ai.DefaultReActTurnStrategy{})
+	if provider, ok := req.Generator.(ai.ReActTurnStrategyProvider); ok {
+		if provided := provider.ReActTurnStrategy(); provided != nil {
+			strategy = provided
+		}
+	}
+	return strategy
+}
+
+func shouldBypassReActPrompt(strategy ai.ReActTurnStrategy, turn ai.ReActTurn) bool {
+	bypass, ok := strategy.(ai.ReActPromptBypassStrategy)
+	if !ok {
+		return false
+	}
+	return bypass.ShouldBypassPrompt(turn)
+}
+
+func prepareReActTurn(ctx context.Context, strategy ai.ReActTurnStrategy, turn ai.ReActTurn, prompt string) (string, ai.GenOptions) {
+	turn.Prompt = prompt
+	turn = strategy.PrepareTurn(ctx, turn)
+	if strings.TrimSpace(turn.Prompt) == "" {
+		turn.Prompt = prompt
+	}
+	return turn.Prompt, turn.Options
+}
+
+func cloneReActToolResults(results []nativeToolResult) []ai.ReActToolResult {
+	if len(results) == 0 {
+		return nil
+	}
+	cloned := make([]ai.ReActToolResult, 0, len(results))
+	for _, result := range results {
+		cloned = append(cloned, ai.ReActToolResult{
+			Name:   result.Name,
+			Args:   cloneToolEventMap(result.Args),
+			Result: result.Result,
+			Hint:   cloneToolProgressHint(result.Hint),
+		})
+	}
+	return cloned
+}
+
+func latestNativeRepairDirective(results []nativeToolResult) string {
+	if len(results) == 0 {
+		return ""
+	}
+	return buildNativeRepairDirective(results[len(results)-1])
+}
+
+func coerceToolCallContinuationResponse(result string) any {
 	trimmed := strings.TrimSpace(result)
 	if trimmed == "" {
 		return map[string]any{"result": ""}

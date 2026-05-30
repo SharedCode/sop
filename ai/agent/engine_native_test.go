@@ -68,6 +68,97 @@ func (m *toolTemperatureMockGenerator) Generate(ctx context.Context, prompt stri
 	return ai.GenOutput{Text: "Final answer"}, nil
 }
 
+type reActTurnStrategyMockGenerator struct {
+	prompts []string
+	options []ai.GenOptions
+	calls   int
+}
+
+func (m *reActTurnStrategyMockGenerator) Name() string { return "react_turn_strategy_mock" }
+
+func (m *reActTurnStrategyMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+type reActTurnStrategyMock struct{}
+
+func (reActTurnStrategyMock) PrepareTurn(ctx context.Context, turn ai.ReActTurn) ai.ReActTurn {
+	_ = ctx
+	if turn.Iteration > 1 && len(turn.Options.ToolCallContinuations) > 0 {
+		turn.Prompt = "adapter prompt: continue with native tool state"
+	}
+	return turn
+}
+
+func (m *reActTurnStrategyMockGenerator) ReActTurnStrategy() ai.ReActTurnStrategy {
+	return reActTurnStrategyMock{}
+}
+
+func (m *reActTurnStrategyMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.prompts = append(m.prompts, prompt)
+	m.options = append(m.options, opts)
+	m.calls++
+	if m.calls == 1 {
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{map[string]any{"op": "scan"}}},
+		}}}, nil
+	}
+	return ai.GenOutput{Text: "Final answer: adapter used"}, nil
+}
+
+type reActTurnStrategyMockExecutor struct{}
+
+func (e *reActTurnStrategyMockExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	return `["ok"]`, nil
+}
+
+func (e *reActTurnStrategyMockExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+type bypassReActPromptMockGenerator struct {
+	calls int
+}
+
+func (m *bypassReActPromptMockGenerator) Name() string { return "bypass_react_prompt_mock" }
+
+func (m *bypassReActPromptMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+type bypassReActPromptMock struct{}
+
+func (bypassReActPromptMock) ShouldBypassPrompt(turn ai.ReActTurn) bool {
+	return turn.Iteration > 1 && len(turn.Options.ToolCallContinuations) > 0
+}
+
+func (bypassReActPromptMock) PrepareTurn(ctx context.Context, turn ai.ReActTurn) ai.ReActTurn {
+	_ = ctx
+	if turn.Iteration > 1 && turn.Prompt != "" {
+		turn.Prompt = "unexpected synthetic prompt was built"
+		return turn
+	}
+	if turn.Iteration > 1 {
+		turn.Prompt = "bypassed prompt: continue with carried tool state"
+	}
+	return turn
+}
+
+func (m *bypassReActPromptMockGenerator) ReActTurnStrategy() ai.ReActTurnStrategy {
+	return bypassReActPromptMock{}
+}
+
+func (m *bypassReActPromptMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	if m.calls == 1 {
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{map[string]any{"op": "scan"}}},
+		}}}, nil
+	}
+	if prompt != "bypassed prompt: continue with carried tool state" {
+		return ai.GenOutput{Text: "unexpected continuation prompt: " + prompt}, nil
+	}
+	return ai.GenOutput{Text: "Final answer: prompt build bypassed"}, nil
+}
+
 type recoverableTempMockGenerator struct {
 	temperatures []float32
 	calls        int
@@ -259,6 +350,53 @@ func TestNativeReActEngine_UsesLowTemperatureForToolCalls(t *testing.T) {
 	}
 	if len(gen.temperatures) == 0 || gen.temperatures[0] != nativeReActToolCallTemperature {
 		t.Fatalf("expected first tool-call temperature %v, got %#v", nativeReActToolCallTemperature, gen.temperatures)
+	}
+}
+
+func TestNativeReActEngine_UsesProviderReActTurnStrategyForContinuationTurns(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &reActTurnStrategyMockGenerator{}
+	executor := &reActTurnStrategyMockExecutor{}
+
+	resp, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find users",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer: adapter used" {
+		t.Fatalf("expected ReAct-turn-strategy-backed final answer, got %q", resp.FinalText)
+	}
+	if len(gen.prompts) != 2 {
+		t.Fatalf("expected two generator calls, got %#v", gen.prompts)
+	}
+	if gen.prompts[1] != "adapter prompt: continue with native tool state" {
+		t.Fatalf("expected adapter prompt on continuation turn, got %q", gen.prompts[1])
+	}
+	if len(gen.options[1].ToolCallContinuations) != 1 {
+		t.Fatalf("expected tool-call continuation to be preserved for strategy turn, got %#v", gen.options[1].ToolCallContinuations)
+	}
+}
+
+func TestNativeReActEngine_BypassesSyntheticPromptWhenStrategyRequestsIt(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &bypassReActPromptMockGenerator{}
+	executor := &reActTurnStrategyMockExecutor{}
+
+	resp, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find users",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Final answer: prompt build bypassed" {
+		t.Fatalf("expected bypass-backed final answer, got %q", resp.FinalText)
 	}
 }
 

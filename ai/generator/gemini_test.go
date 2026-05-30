@@ -1,6 +1,8 @@
 package generator
 
 import (
+	"context"
+	"strings"
 	"testing"
 
 	"github.com/sharedcode/sop/ai"
@@ -90,9 +92,9 @@ func TestBuildGeminiRequest_OmitsToolConfigWithoutTools(t *testing.T) {
 	}
 }
 
-func TestBuildGeminiRequest_IncludesNativeToolContinuation(t *testing.T) {
+func TestBuildGeminiRequest_IncludesToolCallContinuation(t *testing.T) {
 	req := buildGeminiRequest("continue after tool", ai.GenOptions{
-		NativeToolContinuations: []ai.NativeToolContinuation{{
+		ToolCallContinuations: []ai.ToolCallContinuation{{
 			ToolCall: ai.ToolCall{
 				Name:     "list_stores",
 				Args:     map[string]any{"store_names": []any{"users"}},
@@ -110,26 +112,133 @@ func TestBuildGeminiRequest_IncludesNativeToolContinuation(t *testing.T) {
 	if len(req.Contents) != 3 {
 		t.Fatalf("expected prompt plus function call/response continuation, got %#v", req.Contents)
 	}
-	if req.Contents[0].Role != "user" || req.Contents[0].Parts[0].Text != "continue after tool" {
-		t.Fatalf("expected first content to carry the prompt, got %#v", req.Contents[0])
+	if req.Contents[0].Role != "model" || req.Contents[0].Parts[0].FunctionCall == nil {
+		t.Fatalf("expected first content to carry the model functionCall continuation, got %#v", req.Contents[0])
 	}
-	if req.Contents[1].Role != "model" || req.Contents[1].Parts[0].FunctionCall == nil {
-		t.Fatalf("expected model functionCall continuation, got %#v", req.Contents[1])
+	if req.Contents[0].Parts[0].FunctionCall.ID != "call_abc123" {
+		t.Fatalf("expected functionCall id to round-trip, got %#v", req.Contents[0].Parts[0].FunctionCall)
 	}
-	if req.Contents[1].Parts[0].FunctionCall.ID != "call_abc123" {
-		t.Fatalf("expected functionCall id to round-trip, got %#v", req.Contents[1].Parts[0].FunctionCall)
+	if req.Contents[0].Parts[0].ThoughtSignature != "signature_abc123" {
+		t.Fatalf("expected thought signature to round-trip, got %#v", req.Contents[0].Parts[0])
 	}
-	if req.Contents[1].Parts[0].ThoughtSignature != "signature_abc123" {
-		t.Fatalf("expected thought signature to round-trip, got %#v", req.Contents[1].Parts[0])
+	if req.Contents[1].Role != "user" || req.Contents[1].Parts[0].FunctionResponse == nil {
+		t.Fatalf("expected second content to carry the user functionResponse continuation, got %#v", req.Contents[1])
 	}
-	if req.Contents[2].Role != "user" || req.Contents[2].Parts[0].FunctionResponse == nil {
-		t.Fatalf("expected user functionResponse continuation, got %#v", req.Contents[2])
+	if req.Contents[1].Parts[0].FunctionResponse.ID != "call_abc123" {
+		t.Fatalf("expected functionResponse id to match functionCall id, got %#v", req.Contents[1].Parts[0].FunctionResponse)
 	}
-	if req.Contents[2].Parts[0].FunctionResponse.ID != "call_abc123" {
-		t.Fatalf("expected functionResponse id to match functionCall id, got %#v", req.Contents[2].Parts[0].FunctionResponse)
+	if req.Contents[1].Parts[0].FunctionResponse.Name != "list_stores" {
+		t.Fatalf("expected functionResponse name to match tool name, got %#v", req.Contents[1].Parts[0].FunctionResponse)
 	}
-	if req.Contents[2].Parts[0].FunctionResponse.Name != "list_stores" {
-		t.Fatalf("expected functionResponse name to match tool name, got %#v", req.Contents[2].Parts[0].FunctionResponse)
+	if req.Contents[2].Role != "user" || req.Contents[2].Parts[0].Text != "continue after tool" {
+		t.Fatalf("expected final content to carry the resumed prompt, got %#v", req.Contents[2])
+	}
+}
+
+func TestGeminiReActTurnStrategy_UsesContinuationFirstPrompt(t *testing.T) {
+	g := &gemini{}
+	provider, ok := any(g).(ai.ReActTurnStrategyProvider)
+	if !ok {
+		t.Fatalf("expected gemini generator to provide ReAct turn strategy")
+	}
+	turn := provider.ReActTurnStrategy().PrepareTurn(context.Background(), ai.ReActTurn{
+		Iteration:       2,
+		UserQuery:       "Find orders for John",
+		Prompt:          "full synthetic retry frame",
+		RepairDirective: "Repair directive: Retry execute_script with corrected arguments.",
+		Options: ai.GenOptions{
+			ToolCallContinuations: []ai.ToolCallContinuation{{
+				ToolCall: ai.ToolCall{Name: "execute_script", NativeID: "call_123"},
+				Response: map[string]any{"status": "error"},
+			}},
+		},
+		ToolResults: []ai.ReActToolResult{{Name: "execute_script", Result: "repair required"}},
+	})
+	if strings.Contains(turn.Prompt, "full synthetic retry frame") {
+		t.Fatalf("expected Gemini ReAct turn strategy to replace synthetic retry frame, got %q", turn.Prompt)
+	}
+	if !strings.Contains(turn.Prompt, "Continue from the supplied tool-call state.") {
+		t.Fatalf("expected reduced continuation-first Gemini prompt, got %q", turn.Prompt)
+	}
+	if strings.Contains(turn.Prompt, "Original user query:") {
+		t.Fatalf("expected original user query to move into carried state, got %q", turn.Prompt)
+	}
+	if strings.Contains(turn.Prompt, "Latest tool:") {
+		t.Fatalf("expected latest tool summary to move into carried state, got %q", turn.Prompt)
+	}
+	if strings.Contains(turn.Prompt, "Repair directive:") {
+		t.Fatalf("expected repair directive to move into carried state, got %q", turn.Prompt)
+	}
+	if len(turn.Options.ToolCallContinuations) != 1 {
+		t.Fatalf("expected one carried tool-call continuation, got %#v", turn.Options.ToolCallContinuations)
+	}
+	response, ok := turn.Options.ToolCallContinuations[0].Response.(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured continuation response envelope, got %#v", turn.Options.ToolCallContinuations[0].Response)
+	}
+	if response["tool_result"] == nil {
+		t.Fatalf("expected tool_result in continuation response envelope, got %#v", response)
+	}
+	reactState, ok := response["react_state"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected react_state in continuation response envelope, got %#v", response)
+	}
+	if reactState["user_query"] != "Find orders for John" {
+		t.Fatalf("expected user query in carried state, got %#v", reactState)
+	}
+	if reactState["latest_tool"] != "execute_script" {
+		t.Fatalf("expected latest tool in carried state, got %#v", reactState)
+	}
+	if reactState["repair_directive"] != "Repair directive: Retry execute_script with corrected arguments." {
+		t.Fatalf("expected repair directive in carried state, got %#v", reactState)
+	}
+	if reactState["task_status"] != "repair_required" {
+		t.Fatalf("expected repair task status in carried state, got %#v", reactState)
+	}
+}
+
+func TestGeminiReActTurnStrategy_UsesReducedClarificationPromptOnFinalTurn(t *testing.T) {
+	g := &gemini{}
+	provider, ok := any(g).(ai.ReActTurnStrategyProvider)
+	if !ok {
+		t.Fatalf("expected gemini generator to provide ReAct turn strategy")
+	}
+	turn := provider.ReActTurnStrategy().PrepareTurn(context.Background(), ai.ReActTurn{
+		Iteration:       4,
+		UserQuery:       "Find orders for John",
+		Prompt:          "full retry-cap clarification frame",
+		RepairDirective: "Repair directive: Retry execute_script with corrected arguments.",
+		Options: ai.GenOptions{
+			ToolCallContinuations: []ai.ToolCallContinuation{{
+				ToolCall: ai.ToolCall{Name: "execute_script", NativeID: "call_123"},
+				Response: map[string]any{"status": "error"},
+			}},
+		},
+		ToolResults: []ai.ReActToolResult{{Name: "execute_script", Result: "repair required"}},
+		FinalTurn:   true,
+	})
+	if strings.Contains(turn.Prompt, "full retry-cap clarification frame") {
+		t.Fatalf("expected Gemini final turn strategy to replace retry-cap frame, got %q", turn.Prompt)
+	}
+	if !strings.Contains(turn.Prompt, "do not call more tools") {
+		t.Fatalf("expected reduced clarification prompt on final turn, got %q", turn.Prompt)
+	}
+	response, ok := turn.Options.ToolCallContinuations[0].Response.(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured continuation response envelope, got %#v", turn.Options.ToolCallContinuations[0].Response)
+	}
+	reactState, ok := response["react_state"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected react_state in continuation response envelope, got %#v", response)
+	}
+	if reactState["task_status"] != "clarification_required" {
+		t.Fatalf("expected clarification task status in carried state, got %#v", reactState)
+	}
+	if reactState["has_more_tool_work"] != false {
+		t.Fatalf("expected final turn to disable more tool work, got %#v", reactState)
+	}
+	if reactState["iteration"] != 4 {
+		t.Fatalf("expected iteration in carried state, got %#v", reactState)
 	}
 }
 

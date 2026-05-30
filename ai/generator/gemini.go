@@ -45,6 +45,10 @@ func init() {
 // Name returns the name of the generator.
 func (g *gemini) Name() string { return "gemini" }
 
+func (g *gemini) ReActTurnStrategy() ai.ReActTurnStrategy {
+	return ai.GeminiReActTurnStrategy{}
+}
+
 type geminiRequest struct {
 	SystemInstruction *geminiContent          `json:"systemInstruction,omitempty"`
 	Contents          []geminiContent         `json:"contents"`
@@ -174,13 +178,9 @@ func extractGeminiOutput(resp geminiResponse) (ai.GenOutput, error) {
 }
 
 func buildGeminiRequest(prompt string, opts ai.GenOptions) geminiRequest {
-	reqBody := geminiRequest{
-		Contents: []geminiContent{
-			{Role: "user", Parts: []geminiPart{{Text: prompt}}},
-		},
-	}
+	reqBody := geminiRequest{}
 
-	for _, continuation := range opts.NativeToolContinuations {
+	for _, continuation := range opts.ToolCallContinuations {
 		if strings.TrimSpace(continuation.ToolCall.Name) == "" {
 			continue
 		}
@@ -204,6 +204,10 @@ func buildGeminiRequest(prompt string, opts ai.GenOptions) geminiRequest {
 			},
 		)
 	}
+
+	reqBody.Contents = append(reqBody.Contents,
+		geminiContent{Role: "user", Parts: []geminiPart{{Text: prompt}}},
+	)
 
 	if opts.SystemPrompt != "" {
 		reqBody.SystemInstruction = &geminiContent{

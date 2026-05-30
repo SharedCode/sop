@@ -79,7 +79,7 @@ func (g *anthropic) Generate(ctx context.Context, prompt string, opts ai.GenOpti
 
 	maxTokens := opts.MaxTokens
 	if maxTokens <= 0 {
-		maxTokens = 4096 // Anthropic requires max_tokens
+		maxTokens = 10000 // Anthropic requires max_tokens; default to the repo-wide high ceiling.
 	}
 
 	reqBody := anthropicRequest{

@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
@@ -248,15 +249,15 @@ type GenOptions struct {
 	TopP         float32
 	Stop         []string
 	Tools        []ToolDefinition // NEW: Pass the schemas via Native API
-	// NativeToolContinuations carries provider-neutral native tool-call/result turns
-	// that a generator can translate into its provider-specific continuation format.
-	NativeToolContinuations []NativeToolContinuation
+	// ToolCallContinuations carries provider-neutral tool-call/result turns that a
+	// generator can translate into its provider-specific continuation format.
+	ToolCallContinuations []ToolCallContinuation
 }
 
-// NativeToolContinuation preserves a completed native tool turn so generators can
+// ToolCallContinuation preserves a completed tool-call turn so generators can
 // continue a provider-native function-calling exchange without flattening the
 // tool response back into plain prompt text.
-type NativeToolContinuation struct {
+type ToolCallContinuation struct {
 	ToolCall ToolCall
 	Response any
 }
@@ -295,6 +296,127 @@ type ReasoningRequest struct {
 	Executor     ToolExecutor
 	Generator    Generator
 	Streamer     func(eventType string, data any) // Optional NDJSON callback
+}
+
+// ReActToolResult is the provider-neutral per-step state that the ReAct
+// engine can expose to provider-specific loop adapters.
+type ReActToolResult struct {
+	Name   string
+	Args   map[string]any
+	Result string
+	Hint   *ToolProgressHint
+}
+
+// ReActTurn captures a single ReAct generation turn before it reaches a
+// provider-specific generator. Providers can adapt the prompt/options while the
+// engine retains ownership of retry policy and tool execution.
+type ReActTurn struct {
+	Iteration       int
+	UserQuery       string
+	Prompt          string
+	RepairDirective string
+	Options         GenOptions
+	ToolResults     []ReActToolResult
+	FinalTurn       bool
+}
+
+// ReActTurnStrategy is the shared loop-facing contract for shaping a single
+// ReAct generation turn before it reaches the provider transport.
+type ReActTurnStrategy interface {
+	PrepareTurn(ctx context.Context, turn ReActTurn) ReActTurn
+}
+
+// ReActPromptBypassStrategy is an optional strategy hook that lets a provider
+// skip generic synthetic prompt construction when carried tool-call state is
+// sufficient to continue the interaction.
+type ReActPromptBypassStrategy interface {
+	ShouldBypassPrompt(turn ReActTurn) bool
+}
+
+// ReActTurnStrategyProvider lets generators return a provider-specific ReAct
+// loop implementation while the engine keeps ownership of retry and execution policy.
+type ReActTurnStrategyProvider interface {
+	ReActTurnStrategy() ReActTurnStrategy
+}
+
+// DefaultReActTurnStrategy preserves the generic synthetic-prompt behavior.
+// It exists as an explicit implementation so providers can extend or replace it.
+type DefaultReActTurnStrategy struct{}
+
+func (DefaultReActTurnStrategy) PrepareTurn(ctx context.Context, turn ReActTurn) ReActTurn {
+	_ = ctx
+	return turn
+}
+
+// GeminiReActTurnStrategy lets Gemini continuation turns lean on provider-native tool
+// continuity instead of replaying the full synthetic retry frame every pass.
+type GeminiReActTurnStrategy struct {
+	Base ReActTurnStrategy
+}
+
+func (GeminiReActTurnStrategy) ShouldBypassPrompt(turn ReActTurn) bool {
+	return len(turn.Options.ToolCallContinuations) > 0
+}
+
+func (l GeminiReActTurnStrategy) PrepareTurn(ctx context.Context, turn ReActTurn) ReActTurn {
+	base := l.Base
+	if base == nil {
+		base = DefaultReActTurnStrategy{}
+	}
+	turn = base.PrepareTurn(ctx, turn)
+	if len(turn.Options.ToolCallContinuations) == 0 {
+		return turn
+	}
+	turn.Options.ToolCallContinuations = geminiReActToolCallContinuations(turn)
+	if turn.FinalTurn {
+		turn.Prompt = "Using the supplied tool-call state, do not call more tools. Briefly explain what is still blocking progress and ask one short, concrete clarification question."
+		return turn
+	}
+	turn.Prompt = "Continue from the supplied tool-call state. Use the structured function response as the source of truth, avoid replaying prior history, emit the next tool call if more work is needed, and otherwise answer the user directly."
+	return turn
+}
+
+func geminiReActToolCallContinuations(turn ReActTurn) []ToolCallContinuation {
+	continuations := turn.Options.ToolCallContinuations
+	if len(continuations) == 0 {
+		return nil
+	}
+
+	wrapped := make([]ToolCallContinuation, 0, len(continuations))
+	for idx, continuation := range continuations {
+		response := continuation.Response
+		if idx == len(continuations)-1 {
+			response = map[string]any{
+				"tool_result": continuation.Response,
+				"react_state": map[string]any{
+					"user_query":         strings.TrimSpace(turn.UserQuery),
+					"latest_tool":        strings.TrimSpace(continuation.ToolCall.Name),
+					"repair_directive":   strings.TrimSpace(turn.RepairDirective),
+					"iteration":          turn.Iteration,
+					"task_status":        geminiReActTaskStatus(turn),
+					"has_more_tool_work": !turn.FinalTurn,
+				},
+			}
+		}
+		wrapped = append(wrapped, ToolCallContinuation{
+			ToolCall: continuation.ToolCall,
+			Response: response,
+		})
+	}
+	return wrapped
+}
+
+func geminiReActTaskStatus(turn ReActTurn) string {
+	if turn.FinalTurn {
+		return "clarification_required"
+	}
+	if strings.TrimSpace(turn.RepairDirective) != "" {
+		return "repair_required"
+	}
+	if len(turn.ToolResults) > 0 {
+		return "tool_progressed"
+	}
+	return "active"
 }
 
 // LearnedRecipe captures a reusable protocol distilled from successful reasoning behavior.
