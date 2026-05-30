@@ -98,15 +98,6 @@ func TestInjectToolsForDomain_StoresUsesCompactProtocolSlice(t *testing.T) {
 	if !strings.Contains(tools, "Never guess store names") || !strings.Contains(tools, "Think through the read/join/filter plan") {
 		t.Fatalf("expected injected Stores tools context to retain the simplified protocol guidance, got: %s", tools)
 	}
-	if !strings.Contains(tools, "Treat transaction boundaries as first-class") || !strings.Contains(tools, "commit or rollback") {
-		t.Fatalf("expected injected Stores tools context to preserve explicit transaction control guidance, got: %s", tools)
-	}
-	if !strings.Contains(tools, "business-critical") || !strings.Contains(tools, "persist together") {
-		t.Fatalf("expected injected Stores tools context to explain why explicit transactions matter for data mutation sets, got: %s", tools)
-	}
-	if !strings.Contains(tools, "50 to 250 CRUD operations per transaction") || !strings.Contains(tools, "then commit") {
-		t.Fatalf("expected injected Stores tools context to encourage deliberate batching around explicit commits, got: %s", tools)
-	}
 	if !strings.Contains(tools, "retry once") || !strings.Contains(tools, "short clarification question") {
 		t.Fatalf("expected injected Stores tools context to include retry and clarification guidance, got: %s", tools)
 	}

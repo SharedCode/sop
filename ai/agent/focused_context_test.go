@@ -259,17 +259,11 @@ func TestBuildSystemPrompt_IncludesScriptAuthoringContextForStores(t *testing.T)
 	if !strings.Contains(prompt, "Structured Context: Script Authoring Tools") {
 		t.Fatalf("expected system tools to include script authoring manual: %s", prompt)
 	}
-	if !strings.Contains(prompt, "Use create_script for a new named reusable script") {
+	if !strings.Contains(prompt, "Use create_script for new reusable scripts") {
 		t.Fatalf("expected create_script guidance in prompt: %s", prompt)
 	}
-	if !strings.Contains(prompt, "Provide reusable script steps under the `script` field") {
+	if !strings.Contains(prompt, "Put reusable steps under the `script` field") {
 		t.Fatalf("expected script payload shape guidance in prompt: %s", prompt)
-	}
-	if !strings.Contains(prompt, "Scripts preserve transaction intent") || !strings.Contains(prompt, "persist or roll back together") {
-		t.Fatalf("expected script authoring guidance to explain explicit transaction boundaries for managed workflows: %s", prompt)
-	}
-	if !strings.Contains(prompt, "50 to 250 CRUD operations per transaction") || !strings.Contains(prompt, "script explicit batching") {
-		t.Fatalf("expected script authoring guidance to encourage decent-sized explicit batching for mutation runs: %s", prompt)
 	}
 
 	var elements []PromptElement
@@ -285,12 +279,6 @@ func TestBuildSystemPrompt_IncludesScriptAuthoringContextForStores(t *testing.T)
 		}
 		if !strings.Contains(element.Content, "Structured Context: Script Authoring Tools") {
 			t.Fatalf("expected script-authoring manual to remain present in system tools, got: %s", element.Content)
-		}
-		if !strings.Contains(element.Content, "Scripts preserve transaction intent") {
-			t.Fatalf("expected script-authoring system tools to preserve transaction-boundary guidance, got: %s", element.Content)
-		}
-		if !strings.Contains(element.Content, "50 to 250 CRUD operations per transaction") {
-			t.Fatalf("expected script-authoring system tools to preserve batching guidance around explicit commits, got: %s", element.Content)
 		}
 	}
 }
@@ -371,12 +359,6 @@ func TestBuildSystemPrompt_StoresSystemTools_PrefersCompactProtocolSlice(t *test
 	}
 	if !strings.Contains(systemTools, "Never guess store names") || !strings.Contains(systemTools, "retry once") {
 		t.Fatalf("expected simplified stores tool protocol guidance to remain visible in system tools, got: %s", systemTools)
-	}
-	if !strings.Contains(systemTools, "business-critical") || !strings.Contains(systemTools, "persist together") {
-		t.Fatalf("expected stores system tools to explain the business role of explicit transactions for mutation sets, got: %s", systemTools)
-	}
-	if !strings.Contains(systemTools, "50 to 250 CRUD operations per transaction") {
-		t.Fatalf("expected stores system tools to encourage explicit batching around commit boundaries, got: %s", systemTools)
 	}
 }
 

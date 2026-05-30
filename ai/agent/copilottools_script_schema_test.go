@@ -90,6 +90,9 @@ func TestExecuteScriptInstruction_MentionsResearchAndConcreteShapes(t *testing.T
 			t.Fatalf("expected ExecuteScriptInstruction to contain %q\nInstruction: %s", check, ExecuteScriptInstruction)
 		}
 	}
+	if !strings.Contains(ExecuteScriptInstruction, "durability boundary") || !strings.Contains(ExecuteScriptInstruction, "50 to 250 CRUD operations per transaction") {
+		t.Fatalf("expected ExecuteScriptInstruction to carry transaction boundary and batching guidance, got %s", ExecuteScriptInstruction)
+	}
 }
 
 func TestStoresAndSpacesInstructions_AreRichEnoughForToolContext(t *testing.T) {
@@ -126,6 +129,9 @@ func TestStoreInstructions_MentionTransactionBehavior(t *testing.T) {
 	}
 	if !strings.Contains(ManageTransactionInstruction, "explicit transaction control") {
 		t.Fatalf("expected ManageTransactionInstruction to describe explicit transaction control, got %s", ManageTransactionInstruction)
+	}
+	if !strings.Contains(ManageTransactionInstruction, "durability boundary") || !strings.Contains(ManageTransactionInstruction, "50 to 250 CRUD operations per transaction") {
+		t.Fatalf("expected ManageTransactionInstruction to carry transaction boundary and batching guidance, got %s", ManageTransactionInstruction)
 	}
 }
 

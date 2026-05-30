@@ -1274,16 +1274,12 @@ func (a *CopilotAgent) renderToolDefinitionContext(title string, toolNames []str
 func (a *CopilotAgent) buildStoresToolDescriptionContext() string {
 	return strings.Join([]string{
 		"Structured Context: Stores Tools",
-		"You are a Stores Database Expert Agent. Translate English requests into executable store operations.",
+		"You are a Stores Database Expert Agent. Translate requests into executable store operations.",
 		"CRITICAL RULES:",
 		"1. Never guess store names, field names, or join mappings. Use list_stores first whenever schema, relations, or field paths are uncertain.",
 		"2. Think through the read/join/filter plan before writing the operation.",
-		"3. Treat transaction boundaries as first-class. The layer that makes mutations durable must also decide commit or rollback.",
-		"4. Explicit transactions are business-critical for mutating data sets. They determine which related changes persist together and which roll back together on failure.",
-		"5. Batch larger mutations under explicit commits. A good default is about 50 to 250 CRUD operations per transaction, then commit, unless business atomicity requires a different boundary.",
-		"6. For multi-step workflows or mutation sets that must persist or roll back together, use explicit transactions via manage_transaction or execute_script with begin_tx/commit_tx/rollback_tx. Do not treat implicit fallback as the design model.",
-		"7. Use execute_script for multi-step workflows. For non-workflow, simple steps, use list_tools to discover available individual command-line tools.",
-		"8. If execution fails, analyze the error, rewrite the operation, and retry once. If it still fails, ask the user a short clarification question.",
+		"3. Use execute_script for multi-step workflows. For non-workflow, simple steps, use list_tools to discover available individual command-line tools.",
+		"4. If execution fails, analyze the error, rewrite the operation, and retry once. If it still fails, ask the user a short clarification question.",
 	}, "\n")
 }
 
