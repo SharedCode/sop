@@ -142,7 +142,8 @@ SOP now uses two distinct MRU layers that share the same live session buffer but
 
 Hydration contract limits:
 
-*   Provider-owned loops should normalize provisional updates through `ai.BuildMemoryHydrationUpdate` in `ai/memory_hydration.go`.
+*   Provider-owned loops should normalize provisional updates through `ai.BuildMemoryHydrationUpdateFromParts` in `ai/memory_hydration.go`.
+*   `ai.BuildMemoryHydrationUpdate` remains available as a thin adapter from a full `ReasoningResponse`, but new provider-owned loops should prefer the narrower `FromParts` helper.
 *   The helper currently retains only the most recent 6 tool calls and 6 grounded facts.
 *   Provisional final text and carryover summaries are trimmed to 600 characters.
 *   Individual grounded facts are trimmed to 240 characters.

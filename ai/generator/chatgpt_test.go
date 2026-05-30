@@ -34,7 +34,12 @@ func (chatGPTOwnedLoopHydrationStub) Run(ctx context.Context, req ai.ReasoningRe
 		},
 	}
 	if req.HydrationSink != nil {
-		req.HydrationSink(ai.BuildMemoryHydrationUpdate(resp))
+		req.HydrationSink(ai.BuildMemoryHydrationUpdateFromParts(ai.MemoryHydrationUpdate{
+			FinalText:      resp.FinalText,
+			ToolCalls:      resp.ToolCalls,
+			OutcomeFacts:   resp.OutcomeFacts,
+			CarryoverState: resp.CarryoverState,
+		}))
 	}
 	resp.ToolCalls[7].Name = "mutated_tool"
 	resp.CarryoverState.LastToolNames[0] = "mutated_tool"

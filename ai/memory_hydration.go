@@ -3,25 +3,46 @@ package ai
 import "strings"
 
 const (
-	memoryHydrationToolCallLimit    = 6
-	memoryHydrationOutcomeFactLimit = 6
-	memoryHydrationTextCharLimit    = 600
-	memoryHydrationFactCharLimit    = 240
+	// MemoryHydrationToolCallLimit caps the number of recent tool calls retained
+	// in a provisional in-loop hydration update.
+	MemoryHydrationToolCallLimit = 6
+	// MemoryHydrationOutcomeFactLimit caps the number of recent grounded facts
+	// retained in a provisional in-loop hydration update.
+	MemoryHydrationOutcomeFactLimit = 6
+	// MemoryHydrationTextCharLimit caps provisional final text and carryover
+	// assistant summaries retained for in-loop hydration.
+	MemoryHydrationTextCharLimit = 600
+	// MemoryHydrationFactCharLimit caps each grounded fact retained for
+	// provisional in-loop hydration.
+	MemoryHydrationFactCharLimit = 240
 )
 
-// BuildMemoryHydrationUpdate converts a provider-owned loop response into the
-// bounded, grounded update shape expected by the provisional in-loop memory
-// sink. Future provider-owned loops should use this helper so Gemini, Claude,
-// GPT, or others all emit the same contract instead of inventing provider-
-// specific in-loop memory paths.
-func BuildMemoryHydrationUpdate(resp ReasoningResponse) MemoryHydrationUpdate {
+// BuildMemoryHydrationUpdateFromParts normalizes provider-owned in-loop
+// progress into the bounded, grounded shape expected by the provisional MRU
+// sink. Provider-owned loops should prefer this narrower helper so they do not
+// need to manufacture a full ReasoningResponse just to emit hydration.
+func BuildMemoryHydrationUpdateFromParts(update MemoryHydrationUpdate) MemoryHydrationUpdate {
 	return MemoryHydrationUpdate{
-		FinalText:      trimHydrationText(resp.FinalText, memoryHydrationTextCharLimit),
-		ToolCalls:      cloneHydrationToolCalls(resp.ToolCalls),
-		OutcomeFacts:   cloneHydrationFacts(resp.OutcomeFacts),
-		OutcomeRecipes: append([]LearnedRecipe(nil), resp.OutcomeRecipes...),
-		CarryoverState: cloneHydrationCarryoverState(resp.CarryoverState),
+		FinalText:      trimHydrationText(update.FinalText, MemoryHydrationTextCharLimit),
+		ToolCalls:      cloneHydrationToolCalls(update.ToolCalls),
+		OutcomeFacts:   cloneHydrationFacts(update.OutcomeFacts),
+		OutcomeRecipes: append([]LearnedRecipe(nil), update.OutcomeRecipes...),
+		CarryoverState: cloneHydrationCarryoverState(update.CarryoverState),
 	}
+}
+
+// BuildMemoryHydrationUpdate adapts a full provider-owned response into the
+// narrower provisional hydration contract. Prefer
+// BuildMemoryHydrationUpdateFromParts in provider loops when a full response is
+// not otherwise needed.
+func BuildMemoryHydrationUpdate(resp ReasoningResponse) MemoryHydrationUpdate {
+	return BuildMemoryHydrationUpdateFromParts(MemoryHydrationUpdate{
+		FinalText:      resp.FinalText,
+		ToolCalls:      resp.ToolCalls,
+		OutcomeFacts:   resp.OutcomeFacts,
+		OutcomeRecipes: resp.OutcomeRecipes,
+		CarryoverState: resp.CarryoverState,
+	})
 }
 
 func cloneHydrationFacts(facts []string) []string {
@@ -29,12 +50,12 @@ func cloneHydrationFacts(facts []string) []string {
 		return nil
 	}
 	start := 0
-	if len(facts) > memoryHydrationOutcomeFactLimit {
-		start = len(facts) - memoryHydrationOutcomeFactLimit
+	if len(facts) > MemoryHydrationOutcomeFactLimit {
+		start = len(facts) - MemoryHydrationOutcomeFactLimit
 	}
 	cloned := make([]string, 0, len(facts)-start)
 	for _, fact := range facts[start:] {
-		trimmed := trimHydrationText(fact, memoryHydrationFactCharLimit)
+		trimmed := trimHydrationText(fact, MemoryHydrationFactCharLimit)
 		if trimmed == "" {
 			continue
 		}
@@ -51,8 +72,8 @@ func cloneHydrationToolCalls(toolCalls []ToolCall) []ToolCall {
 		return nil
 	}
 	start := 0
-	if len(toolCalls) > memoryHydrationToolCallLimit {
-		start = len(toolCalls) - memoryHydrationToolCallLimit
+	if len(toolCalls) > MemoryHydrationToolCallLimit {
+		start = len(toolCalls) - MemoryHydrationToolCallLimit
 	}
 	cloned := make([]ToolCall, 0, len(toolCalls)-start)
 	for _, toolCall := range toolCalls[start:] {
@@ -85,7 +106,7 @@ func cloneHydrationCarryoverState(state *CarryoverState) *CarryoverState {
 	cloned.LastOutcomeFacts = cloneHydrationFacts(state.LastOutcomeFacts)
 	cloned.LastRecipeIDs = append([]string(nil), state.LastRecipeIDs...)
 	cloned.LastToolNames = cloneHydrationToolNames(state.LastToolNames)
-	cloned.LastAssistantSummary = trimHydrationText(state.LastAssistantSummary, memoryHydrationTextCharLimit)
+	cloned.LastAssistantSummary = trimHydrationText(state.LastAssistantSummary, MemoryHydrationTextCharLimit)
 	return &cloned
 }
 
@@ -94,8 +115,8 @@ func cloneHydrationToolNames(toolNames []string) []string {
 		return nil
 	}
 	start := 0
-	if len(toolNames) > memoryHydrationToolCallLimit {
-		start = len(toolNames) - memoryHydrationToolCallLimit
+	if len(toolNames) > MemoryHydrationToolCallLimit {
+		start = len(toolNames) - MemoryHydrationToolCallLimit
 	}
 	cloned := make([]string, 0, len(toolNames)-start)
 	for _, name := range toolNames[start:] {

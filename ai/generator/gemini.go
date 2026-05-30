@@ -218,7 +218,13 @@ func emitGeminiOwnedLoopHydration(req ai.ReasoningRequest, resp ai.ReasoningResp
 	if req.HydrationSink == nil {
 		return
 	}
-	req.HydrationSink(ai.BuildMemoryHydrationUpdate(resp))
+	req.HydrationSink(ai.BuildMemoryHydrationUpdateFromParts(ai.MemoryHydrationUpdate{
+		FinalText:      resp.FinalText,
+		ToolCalls:      resp.ToolCalls,
+		OutcomeFacts:   resp.OutcomeFacts,
+		OutcomeRecipes: resp.OutcomeRecipes,
+		CarryoverState: resp.CarryoverState,
+	}))
 }
 
 func geminiOwnedLoopPrompt(req ai.ReasoningRequest) string {

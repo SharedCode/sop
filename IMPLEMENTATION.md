@@ -48,7 +48,7 @@ Conventions for this document:
 - Join-related recoverable repair and clarification payloads now preserve validation category, suggested fix example, attempted args, and a join-specific repair note, so routed ambiguity escalation stays grounded in the actual failed mapping instead of collapsing into a generic clarification request.
 - Provider-owned loops now share one provisional in-loop memory sink contract via `MemoryHydrationSink` in `ai/interfaces.go`; provider loops should emit only bounded grounded updates through that shared contract rather than inventing provider-specific in-loop memory paths.
 - MRU now operates as a deliberate two-layer model: ask-progress MRU is ask-scoped and provisional inside a running Ask, while session MRU plus STM snapshot is the canonical between-Ask continuity source. Epilogue clears provisional ask-progress MRU and promotes only the final ask outcome into the session/STM carryover path.
-- The shared hydration helper in `ai/memory_hydration.go` now enforces the provisional payload bounds directly: last 6 tool calls, last 6 grounded facts, 600-character final text / assistant summary cap, and 240-character per-fact cap. Future provider-owned loops should rely on that helper instead of hand-rolling their own truncation rules.
+- The shared hydration helper in `ai/memory_hydration.go` now enforces the provisional payload bounds directly: last 6 tool calls, last 6 grounded facts, 600-character final text / assistant summary cap, and 240-character per-fact cap. Future provider-owned loops should prefer `BuildMemoryHydrationUpdateFromParts`; `BuildMemoryHydrationUpdate` remains as a compatibility adapter from full `ReasoningResponse` values.
 
 ### Open TODO
 
