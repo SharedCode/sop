@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
 )
 
 func TestShortTermMemory_AddThreadPromoteAndGetCurrent(t *testing.T) {
@@ -31,14 +32,17 @@ func TestShortTermMemory_SettersCloneSnapshots(t *testing.T) {
 	routing := &TaskContextClassification{Domain: StoresDomain, DBArtifacts: []string{"main"}}
 	mru := []MRUItem{{Category: "PERSONA_A", Context: "ctx", Source: MRUSourcePersona, Scope: MRUScopeSession}}
 	recipes := []RecipeItem{{ID: "r1", Protocol: []string{"step"}, Confidence: 0.7}}
+	carryover := &ai.CarryoverState{Provider: "gemini", LastOutcomeFacts: []string{"fact"}, LastRecipeIDs: []string{"r1"}}
 
 	stm.SetRoutingState(routing)
 	stm.SetMRUSnapshot(mru)
 	stm.SetRecipeSnapshot(recipes)
+	stm.SetCarryoverState(carryover)
 
 	routing.DBArtifacts[0] = "mutated"
 	mru[0].Context = "mutated"
 	recipes[0].Protocol[0] = "mutated"
+	carryover.LastOutcomeFacts[0] = "mutated"
 
 	if got := stm.GetRoutingState(); got == nil || got.DBArtifacts[0] != "main" {
 		t.Fatalf("expected routing state clone, got %+v", got)
@@ -48,6 +52,9 @@ func TestShortTermMemory_SettersCloneSnapshots(t *testing.T) {
 	}
 	if got := stm.GetRecipeSnapshot(); got == nil || got[0].Protocol[0] != "step" {
 		t.Fatalf("expected recipe snapshot clone, got %+v", got)
+	}
+	if got := stm.GetCarryoverState(); got == nil || got.LastOutcomeFacts[0] != "fact" {
+		t.Fatalf("expected carryover snapshot clone, got %+v", got)
 	}
 }
 
@@ -70,5 +77,8 @@ func TestShortTermMemory_ResetProjectionForTopicSwitch(t *testing.T) {
 	}
 	if got := stm.GetRecipeSnapshot(); len(got) != 1 || got[0].ID != "r1" {
 		t.Fatalf("expected topic switch to leave recipe snapshot intact, got %+v", got)
+	}
+	if got := stm.GetCarryoverState(); got != nil {
+		t.Fatalf("expected carryover state reset on topic switch, got %+v", got)
 	}
 }

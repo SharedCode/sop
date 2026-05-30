@@ -41,6 +41,15 @@ func init() {
 // Name returns the name of the generator.
 func (g *chatgpt) Name() string { return "chatgpt" }
 
+func (g *chatgpt) CarryoverCapability() ai.CarryoverCapability {
+	return ai.CarryoverCapability{
+		Provider:        g.Name(),
+		Model:           g.model,
+		SupportsCompact: true,
+		SupportsLive:    false,
+	}
+}
+
 type openAIMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

@@ -857,6 +857,34 @@ func TestGeminiOwnedReActLoop_PopulatesOutcomeFactsAndRecipes(t *testing.T) {
 	}
 }
 
+func TestGeminiOwnedReActLoop_EmitsHydrationUpdates(t *testing.T) {
+	gen := &geminiOwnedLoopOutcomeGenerator{}
+	loop := geminiOwnedReActLoop{generator: gen, maxIterations: 4}
+	updates := make([]ai.MemoryHydrationUpdate, 0)
+	_, err := loop.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find orders for John > 500.",
+		Executor:     &geminiOwnedLoopOutcomeExecutor{},
+		Generator:    gen,
+		HydrationSink: func(update ai.MemoryHydrationUpdate) {
+			updates = append(updates, update)
+		},
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if len(updates) < 2 {
+		t.Fatalf("expected multiple hydration updates, got %d", len(updates))
+	}
+	last := updates[len(updates)-1]
+	if !strings.Contains(strings.Join(last.OutcomeFacts, "\n"), "execute_script confirmed filter field=orders.total_amount op=$gt") {
+		t.Fatalf("expected final hydration update to carry grounded facts, got %+v", last)
+	}
+	if strings.TrimSpace(last.FinalText) == "" {
+		t.Fatalf("expected final hydration update to include final text, got %+v", last)
+	}
+}
+
 func TestBuildGeminiRequest_SanitizesUnsupportedSchemaKeywords(t *testing.T) {
 	req := buildGeminiRequest("sanitize", ai.GenOptions{
 		Tools: []ai.ToolDefinition{{

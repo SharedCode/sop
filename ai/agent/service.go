@@ -1167,6 +1167,24 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		}
 	}
 
+	carryover := decideCarryover(ctx, s.session, gen, topicAssessment, historyText)
+	if strings.TrimSpace(carryover.Summary) != "" {
+		contextText = appendCarryoverToContext(contextText, carryover.Summary)
+	}
+	if carryover.Mode == ai.CarryoverModeCompact {
+		if carryover.SuppressHistory {
+			historyText = ""
+		}
+	}
+	log.Info("Carryover Decision",
+		"provider", providerName(gen),
+		"mode", carryover.Mode,
+		"reason", carryover.Reason,
+		"history_suppressed", carryover.SuppressHistory,
+		"estimated_carry_tokens", carryover.EstimatedCarryTokens,
+		"estimated_history_tokens", carryover.EstimatedHistoryTokens,
+	)
+
 	// 4. Delegate to the Reasoning Engine
 	executor, _ := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor)
 
@@ -1176,12 +1194,14 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	}
 
 	req := ai.ReasoningRequest{
-		SystemPrompt: systemPrompt,
-		ContextText:  contextText,
-		HistoryText:  historyText,
-		UserQuery:    query,
-		Executor:     executor,
-		Generator:    gen,
+		SystemPrompt:   systemPrompt,
+		ContextText:    contextText,
+		HistoryText:    historyText,
+		UserQuery:      query,
+		Executor:       executor,
+		Generator:      gen,
+		CarryoverMode:  carryover.Mode,
+		CarryoverState: carryover.State,
 		// DB passing strategy: The ServiceToolExecutor currently runs Execution and does AutoTX inside Service.Ask.
 		// For proper isolation while maintaining auto-tx flow matching the legacy codebase,
 		// we pass the DB securely down via context inside ServiceToolExecutor or wrap it here.
@@ -1280,6 +1300,8 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		Content:   assistantContent,
 		Timestamp: time.Now().Unix(),
 	})
+
+	persistCarryoverState(s.session.Memory, buildCarryoverState(ctx, s.session, gen, currentThread, query, finalText, engineResp.ToolCalls, engineResp.OutcomeFacts, engineResp.OutcomeRecipes, engineResp.CarryoverState))
 
 	return finalText, nil
 }

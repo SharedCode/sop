@@ -92,6 +92,7 @@ type ShortTermMemory struct {
 	LastRoutingState   *TaskContextClassification
 	LastMRUSnapshot    []MRUItem
 	LastRecipeSnapshot []RecipeItem
+	LastCarryoverState *ai.CarryoverState
 }
 
 // NewShortTermMemory initializes the memory structure.
@@ -191,8 +192,17 @@ func (stm *ShortTermMemory) GetRecipeSnapshot() []RecipeItem {
 	return cloned
 }
 
+func (stm *ShortTermMemory) SetCarryoverState(state *ai.CarryoverState) {
+	stm.LastCarryoverState = cloneCarryoverState(state)
+}
+
+func (stm *ShortTermMemory) GetCarryoverState() *ai.CarryoverState {
+	return cloneCarryoverState(stm.LastCarryoverState)
+}
+
 func (stm *ShortTermMemory) ResetProjectionForTopicSwitch() {
 	stm.LastRoutingState = nil
+	stm.LastCarryoverState = nil
 	if len(stm.LastMRUSnapshot) == 0 {
 		return
 	}

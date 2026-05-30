@@ -39,6 +39,15 @@ func init() {
 
 func (g *anthropic) Name() string { return "anthropic" }
 
+func (g *anthropic) CarryoverCapability() ai.CarryoverCapability {
+	return ai.CarryoverCapability{
+		Provider:        g.Name(),
+		Model:           g.model,
+		SupportsCompact: true,
+		SupportsLive:    false,
+	}
+}
+
 type anthropicMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`

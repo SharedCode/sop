@@ -37,6 +37,7 @@ const (
 	MRUSourcePersona     = "persona"
 	MRUSourceSystemTools = "system_tools"
 	MRUSourceAskOutcome  = "ask_outcome"
+	MRUSourceAskProgress = "ask_progress"
 	MRUSourcePlaybook    = "playbook"
 )
 
@@ -65,6 +66,11 @@ const (
 	askOutcomeMRUCategoryConfirmed       = "ASK_OUTCOME_CONFIRMED"
 	askOutcomeMRUCategoryToolPattern     = "ASK_OUTCOME_TOOL_PATTERN"
 	askOutcomeMRUCategoryGuidance        = "ASK_OUTCOME_GUIDANCE"
+	askProgressMRUCategoryHeader         = "ASK_PROGRESS_HEADER"
+	askProgressMRUCategoryResult         = "ASK_PROGRESS_RESULT"
+	askProgressMRUCategoryToolPattern    = "ASK_PROGRESS_TOOL_PATTERN"
+	askProgressMRUCategoryConfirmed      = "ASK_PROGRESS_CONFIRMED"
+	askProgressMRUCategoryGuidance       = "ASK_PROGRESS_GUIDANCE"
 )
 
 const personaSourceMRUCategoryPrefix = "PERSONA_SOURCE_"
@@ -723,6 +729,7 @@ func (a *CopilotAgent) Search(ctx context.Context, query string, limit int) ([]a
 //     clears the volatile MRU buffer, and returns the final text response to the client.
 func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
 	ctx = a.applyAskOptions(ctx, opts...)
+	a.clearAskProgressMRU()
 
 	gen := a.resolveGenerator(ctx)
 	if gen == nil {
@@ -772,7 +779,7 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 	fullPrompt := a.buildSystemPrompt(ctx, query, *taskContext)
 
 	// 7. Reasoning Engine Delegation
-	finalText, toolCalls, outcomeFacts, outcomeRecipes, err := a.delegateToReasoningEngine(ctx, query, gen, fullPrompt)
+	finalText, toolCalls, outcomeFacts, outcomeRecipes, carryoverState, err := a.delegateToReasoningEngine(ctx, query, gen, fullPrompt)
 	if err != nil {
 		return "", err
 	}
@@ -782,7 +789,7 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 	)
 
 	// 8. Epilogue & Cleanup
-	a.epilogueAndCleanup(ctx, rawQuery, intent, finalText, toolCalls, outcomeFacts, outcomeRecipes)
+	a.epilogueAndCleanup(ctx, rawQuery, intent, finalText, toolCalls, outcomeFacts, outcomeRecipes, carryoverState)
 
 	return finalText, nil
 }
@@ -1334,7 +1341,7 @@ func (a *CopilotAgent) trackEpisodeMetadata(ctx context.Context, intent string) 
 	}
 }
 
-func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query string, gen ai.Generator, fullPrompt string) (string, []ai.ToolCall, []string, []ai.LearnedRecipe, error) {
+func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query string, gen ai.Generator, fullPrompt string) (string, []ai.ToolCall, []string, []ai.LearnedRecipe, *ai.CarryoverState, error) {
 	currentDB := ""
 	if p := ai.GetSessionPayload(ctx); p != nil {
 		currentDB = p.CurrentDB
@@ -1351,15 +1358,16 @@ func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query stri
 	}
 
 	req := ai.ReasoningRequest{
-		SystemPrompt: fullPrompt, // For baseline, this contains the full aggregated state
-		UserQuery:    query,
-		Executor:     a, // CopilotAgent implements Executor
-		Generator:    gen,
+		SystemPrompt:  fullPrompt, // For baseline, this contains the full aggregated state
+		UserQuery:     query,
+		Executor:      a, // CopilotAgent implements Executor
+		Generator:     gen,
+		HydrationSink: a.buildProviderLoopMRUSink(),
 	}
 
 	resp, err := engine.Run(ctx, req)
 	if err != nil {
-		return "", nil, nil, nil, err
+		return "", nil, nil, nil, nil, err
 	}
 
 	finalText := resp.FinalText
@@ -1367,10 +1375,24 @@ func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query stri
 		finalText = obfuscation.GlobalObfuscator.DeobfuscateText(finalText)
 	}
 
-	return finalText, resp.ToolCalls, resp.OutcomeFacts, resp.OutcomeRecipes, nil
+	return finalText, resp.ToolCalls, resp.OutcomeFacts, resp.OutcomeRecipes, resp.CarryoverState, nil
 }
 
-func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, intent string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string, outcomeRecipes []ai.LearnedRecipe) {
+func (a *CopilotAgent) buildProviderLoopMRUSink() ai.MemoryHydrationSink {
+	if a == nil || a.service == nil || a.service.session == nil {
+		return nil
+	}
+	a.clearAskProgressMRU()
+	return func(update ai.MemoryHydrationUpdate) {
+		a.persistAskProgressMRU(update)
+	}
+}
+
+func (a *CopilotAgent) clearAskProgressMRU() {
+	a.clearMRUBySourceAndScope(MRUSourceAskProgress, MRUScopeAsk)
+}
+
+func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, intent string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string, outcomeRecipes []ai.LearnedRecipe, carryoverState *ai.CarryoverState) {
 	if a.service != nil && a.service.session != nil {
 		if a.service.session.Memory == nil {
 			a.service.session.Memory = NewShortTermMemory()
@@ -1418,16 +1440,19 @@ func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, int
 
 	}
 	a.persistAskOutcomeMRU(ctx, query, finalText, toolCalls, outcomeFacts)
+	a.clearAskProgressMRU()
 	a.updateClarificationState(ctx, query, finalText, toolCalls)
 	a.clearRetryRewriteState(ctx)
 
 	// 7. Persist compact session projection back into STM.
 	mruSnapshot := a.getMRUSnapshot()
 	if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+		thread := a.service.session.Memory.GetCurrentThread()
 		a.service.session.Memory.SetMRUSnapshot(mruSnapshot)
 		existingRecipes := a.service.session.Memory.GetRecipeSnapshot()
 		learnedRecipes := recipeItemsFromLearned(outcomeRecipes)
 		a.service.session.Memory.SetRecipeSnapshot(mergeRecipeSnapshots(existingRecipes, learnedRecipes))
+		persistCarryoverState(a.service.session.Memory, buildCarryoverState(ctx, a.service.session, a.brain, thread, query, finalText, toolCalls, outcomeFacts, outcomeRecipes, carryoverState))
 	}
 
 	// 8. Log Episode for SleepCycle (Episodic Memory)
@@ -1507,6 +1532,33 @@ func buildAskOutcomeMRUItems(ctx context.Context, query string, finalText string
 	}
 	items = append(items, MRUItem{Category: askOutcomeMRUCategoryGuidance, Context: "- Reuse confirmed facts and successful patterns from this outcome before broadening scope.", Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
 	return items
+}
+
+func buildAskProgressMRUItems(finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) []MRUItem {
+	finalText = compactMRUText(finalText, 220)
+	facts := compactOutcomeFacts(outcomeFacts)
+	if finalText == "" && len(facts) == 0 && len(toolCalls) == 0 {
+		return nil
+	}
+	items := []MRUItem{{Category: askProgressMRUCategoryHeader, Context: "In-Flight Ask Progress:", Source: MRUSourceAskProgress, Scope: MRUScopeAsk}}
+	if finalText != "" {
+		items = append(items, MRUItem{Category: askProgressMRUCategoryResult, Context: fmt.Sprintf("- Latest progress: %s", finalText), Source: MRUSourceAskProgress, Scope: MRUScopeAsk})
+	}
+	for index, fact := range facts {
+		items = append(items, MRUItem{Category: fmt.Sprintf("%s_%02d", askProgressMRUCategoryConfirmed, index+1), Context: fmt.Sprintf("- Confirmed so far: %s", fact), Source: MRUSourceAskProgress, Scope: MRUScopeAsk})
+	}
+	if toolPattern := summarizeAskOutcomeToolPattern(toolCalls); toolPattern != "" {
+		items = append(items, MRUItem{Category: askProgressMRUCategoryToolPattern, Context: fmt.Sprintf("- Tool pattern so far: %s", toolPattern), Source: MRUSourceAskProgress, Scope: MRUScopeAsk})
+	}
+	items = append(items, MRUItem{Category: askProgressMRUCategoryGuidance, Context: "- Treat these as provisional in-loop signals until the ask completes.", Source: MRUSourceAskProgress, Scope: MRUScopeAsk})
+	return items
+}
+
+func (a *CopilotAgent) persistAskProgressMRU(update ai.MemoryHydrationUpdate) {
+	a.clearMRUBySourceAndScope(MRUSourceAskProgress, MRUScopeAsk)
+	for _, item := range buildAskProgressMRUItems(update.FinalText, update.ToolCalls, update.OutcomeFacts) {
+		a.markMRUCategory(item.Category, item.Context, item.Source, item.Scope)
+	}
 }
 
 func askOutcomeQueryForPersistence(ctx context.Context, fallback string) string {
@@ -1764,6 +1816,17 @@ func (a *CopilotAgent) getAskOutcomeContext() string {
 		items = append(items, item)
 	}
 	return renderAskOutcomeMRUItems(items)
+}
+
+func (a *CopilotAgent) getMemoryContinuationContext(taskClassification TaskContextClassification) string {
+	if taskClassification.RoutingGate != RoutingGateContinuity {
+		return ""
+	}
+	if a == nil || a.service == nil || a.service.session == nil || a.service.session.Memory == nil {
+		return ""
+	}
+	state := a.service.session.Memory.GetCarryoverState()
+	return memoryContinuationSummary(state, ai.CarryoverResetUnsupportedProvider)
 }
 
 func (a *CopilotAgent) collectAskOutcomeItemsByPrefix(prefix string) []MRUItem {
@@ -2242,6 +2305,13 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 	builder.With(ComponentPlaybooks, playbooksContext)
 	builder.With(ComponentRecipes, a.getRecipeContext(taskClassification))
 	focusedExecutionContext := a.getFocusedExecutionContext(ctx, taskClassification)
+	if memoryContinuation := a.getMemoryContinuationContext(taskClassification); memoryContinuation != "" {
+		if focusedExecutionContext != "" {
+			focusedExecutionContext = memoryContinuation + "\n\n" + focusedExecutionContext
+		} else {
+			focusedExecutionContext = memoryContinuation
+		}
+	}
 	if askOutcome := a.getAskOutcomeContext(); askOutcome != "" {
 		if focusedExecutionContext != "" {
 			focusedExecutionContext = askOutcome + "\n\n" + focusedExecutionContext

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -189,6 +190,40 @@ func TestCopilotAsk_RewritesQualifiedRetryMetaAskBeforeRoutingAndEngine(t *testi
 	}
 }
 
+func TestAsk_ClearsAskProgressMRUBeforeEarlyReturn(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.brain = nil
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.MRU = []MRUItem{
+		{Category: askProgressMRUCategoryHeader, Context: "In-Flight Ask Progress:", Source: MRUSourceAskProgress, Scope: MRUScopeAsk},
+		{Category: askOutcomeMRUCategoryHeader, Context: "Recent Ask Outcome:", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+	}
+
+	resp, err := ag.Ask(context.Background(), "Hello")
+	if err != nil {
+		t.Fatalf("Ask failed: %v", err)
+	}
+	if !strings.Contains(resp, "AI Copilot Disabled") {
+		t.Fatalf("expected disabled response, got %q", resp)
+	}
+
+	snapshot := ag.getMRUSnapshot()
+	for _, item := range snapshot {
+		if item.Source == MRUSourceAskProgress {
+			t.Fatalf("expected ask-progress MRU to be cleared before early return, got %+v", snapshot)
+		}
+	}
+	foundOutcome := false
+	for _, item := range snapshot {
+		if item.Source == MRUSourceAskOutcome {
+			foundOutcome = true
+		}
+	}
+	if !foundOutcome {
+		t.Fatalf("expected session ask outcome MRU to remain after early return, got %+v", snapshot)
+	}
+}
+
 func TestRewriteConversationalMetaAsk_UsesLastAssistantQuestionAndTargetAsk(t *testing.T) {
 	ag := NewCopilotAgent(Config{}, nil, nil)
 	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
@@ -363,7 +398,7 @@ func TestEpilogueAndCleanup_SetsPendingClarificationState(t *testing.T) {
 	payload := &ai.SessionPayload{Variables: make(map[string]any)}
 	ctx := context.WithValue(context.Background(), "session_payload", payload)
 
-	ag.epilogueAndCleanup(ctx, "Find John orders", ai.IntentOmni, "Before I proceed, which output shape do you want for joined rows: flat dotted fields or nested objects?", nil, nil, nil)
+	ag.epilogueAndCleanup(ctx, "Find John orders", ai.IntentOmni, "Before I proceed, which output shape do you want for joined rows: flat dotted fields or nested objects?", nil, nil, nil, nil)
 
 	if payload.ClarificationState == nil {
 		t.Fatal("expected pending clarification state to be set")
@@ -378,7 +413,7 @@ func TestEpilogueAndCleanup_ClearsPendingClarificationStateOnNormalAnswer(t *tes
 	payload := &ai.SessionPayload{Variables: make(map[string]any), ClarificationState: &ai.ClarificationState{TargetQuery: "Find John orders", AssistantQuestion: "Which output shape?", Status: "pending"}}
 	ctx := context.WithValue(context.Background(), "session_payload", payload)
 
-	ag.epilogueAndCleanup(ctx, "Find John orders", ai.IntentOmni, "Found matching orders.", nil, nil, nil)
+	ag.epilogueAndCleanup(ctx, "Find John orders", ai.IntentOmni, "Found matching orders.", nil, nil, nil, nil)
 
 	if payload.ClarificationState != nil {
 		t.Fatalf("expected pending clarification state to clear on normal answer, got %+v", payload.ClarificationState)
@@ -542,9 +577,12 @@ func TestCopilotPipeline_Phases(t *testing.T) {
 	// --- Phase 5: Delegating to Engine ---
 	// Mock a JSON payload wrapped in code blocks to simulate reasoning layer tool use output
 	fakeGen.Response = "I can definitely help with that. ```json\n[{\"tool\":\"search_space\",\"args\":{}}]\n```"
-	finalText, toolCalls, outcomeFacts, outcomeRecipes, err := ag.delegateToReasoningEngine(ctx, query, fakeGen, prompt)
+	finalText, toolCalls, outcomeFacts, outcomeRecipes, carryoverState, err := ag.delegateToReasoningEngine(ctx, query, fakeGen, prompt)
 	if err != nil {
 		t.Fatalf("Engine delegation failed: %v", err)
+	}
+	if carryoverState != nil {
+		t.Fatalf("expected no carryover state from baseline mock delegation path, got %+v", carryoverState)
 	}
 	if !strings.Contains(finalText, "I can definitely help") && !strings.Contains(finalText, "search_space") {
 		t.Errorf("Unexpected delegation output: %s", finalText)
@@ -1000,6 +1038,30 @@ func TestBuildSystemPrompt_RehydratesImplicitRecipesFromSTM(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPrompt_AddsMemoryContinuationFallbackForContinuityRouting(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession()}
+	threadID := sop.NewUUID()
+	ag.service.session.Memory.AddThread(&ConversationThread{ID: threadID, RootPrompt: "Find users named John", Exchanges: []Interaction{{Role: RoleAssistant, Content: "Found John Jones.", ActiveKB: "sop"}}})
+	ag.service.session.Memory.SetCarryoverState(&ai.CarryoverState{
+		Provider:             "gemini",
+		Model:                "gemini-test",
+		TopicFingerprint:     threadID.String(),
+		KBFingerprint:        "sop",
+		LastUsedAtUnixMilli:  time.Now().UnixMilli(),
+		LastOutcomeFacts:     []string{"list_stores confirmed users schema=key:string, first_name:string"},
+		LastRecipeIDs:        []string{"implicit.execute_script.research_then_retry"},
+		LastToolNames:        []string{"list_stores", "execute_script"},
+		LastUserQuery:        "Find users named John",
+		LastAssistantSummary: "Found John Jones.",
+	})
+
+	prompt := ag.buildSystemPrompt(context.Background(), "Find orders for those users", TaskContextClassification{RoutingGate: RoutingGateContinuity, Domain: StoresDomain})
+	if !strings.Contains(prompt, "Memory Continuity Fallback") || !strings.Contains(prompt, "Find users named John") || !strings.Contains(prompt, "Found John Jones") {
+		t.Fatalf("expected continuity prompt to include memory fallback summary, got %s", prompt)
+	}
+}
+
 func TestBuildAskOutcomeMRUItems_TypesConfirmedStoreFacts(t *testing.T) {
 	items := buildAskOutcomeMRUItems(context.Background(), "Find users", "Found users", []ai.ToolCall{{Name: "list_stores"}}, []string{
 		"list_stores confirmed users schema=key:string, first_name:string",
@@ -1028,6 +1090,94 @@ func TestBuildAskOutcomeMRUItems_TypesConfirmedStoreFacts(t *testing.T) {
 	}
 	if !seenCategories[askOutcomeMRUCategoryConfirmed+"_01"] {
 		t.Fatalf("expected generic fallback category for unstructured confirmed fact, got %+v", items)
+	}
+}
+
+func TestPersistAskProgressMRU_UsesAskScopeOnly(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.persistAskProgressMRU(ai.MemoryHydrationUpdate{
+		ToolCalls:    []ai.ToolCall{{Name: "list_stores"}, {Name: "execute_script"}},
+		OutcomeFacts: []string{"list_stores confirmed users schema=key:string, first_name:string"},
+	})
+
+	snapshot := ag.getMRUSnapshot()
+	if len(snapshot) == 0 {
+		t.Fatal("expected ask-progress MRU items")
+	}
+	seenProgress := false
+	for _, item := range snapshot {
+		if item.Source != MRUSourceAskProgress {
+			continue
+		}
+		seenProgress = true
+		if item.Scope != MRUScopeAsk {
+			t.Fatalf("expected ask-progress items to stay ask-scoped, got %+v", item)
+		}
+	}
+	if !seenProgress {
+		t.Fatalf("expected ask-progress items in snapshot, got %+v", snapshot)
+	}
+}
+
+func TestClearAskProgressMRU_RemovesOnlyAskScopedProgress(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.markMRUCategory(askProgressMRUCategoryHeader, "In-Flight Ask Progress:", MRUSourceAskProgress, MRUScopeAsk)
+	ag.markMRUCategory(askOutcomeMRUCategoryHeader, "Recent Ask Outcome:", MRUSourceAskOutcome, MRUScopeSession)
+
+	ag.clearAskProgressMRU()
+
+	snapshot := ag.getMRUSnapshot()
+	for _, item := range snapshot {
+		if item.Source == MRUSourceAskProgress {
+			t.Fatalf("expected ask-progress MRU to be cleared, got %+v", snapshot)
+		}
+	}
+	foundOutcome := false
+	for _, item := range snapshot {
+		if item.Source == MRUSourceAskOutcome {
+			foundOutcome = true
+		}
+	}
+	if !foundOutcome {
+		t.Fatalf("expected session ask outcome MRU to remain, got %+v", snapshot)
+	}
+}
+
+func TestEpilogueAndCleanup_FinalAskOutcomeWinsOverAskProgress(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.brain = nil
+	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
+	ag.service.session.Memory = NewShortTermMemory()
+	ag.persistAskProgressMRU(ai.MemoryHydrationUpdate{
+		FinalText:    "Still researching",
+		ToolCalls:    []ai.ToolCall{{Name: "list_stores"}},
+		OutcomeFacts: []string{"list_stores confirmed users schema=id,first_name"},
+	})
+
+	ag.epilogueAndCleanup(context.Background(), "Find John", ai.IntentOmni, "Found John Jones.", []ai.ToolCall{{Name: "execute_script"}}, []string{"execute_script returned: [{\"first_name\":\"John Jones\"}]"}, nil, nil)
+
+	snapshot := ag.getMRUSnapshot()
+	for _, item := range snapshot {
+		if item.Source == MRUSourceAskProgress {
+			t.Fatalf("expected provisional ask-progress MRU to be cleared after epilogue, got %+v", snapshot)
+		}
+	}
+	seenOutcome := false
+	for _, item := range snapshot {
+		if item.Source == MRUSourceAskOutcome && item.Category == askOutcomeMRUCategoryResult && strings.Contains(item.Context, "Found John Jones") {
+			seenOutcome = true
+		}
+	}
+	if !seenOutcome {
+		t.Fatalf("expected final ask outcome MRU to win after epilogue, got %+v", snapshot)
+	}
+	stmSnapshot := ag.service.session.Memory.GetMRUSnapshot()
+	for _, item := range stmSnapshot {
+		if item.Source == MRUSourceAskProgress {
+			t.Fatalf("expected STM snapshot to exclude ask-progress MRU, got %+v", stmSnapshot)
+		}
 	}
 }
 
@@ -1071,6 +1221,7 @@ func TestProjectMRUItemsFromSTM_AppliesSourceCapsAndPriority(t *testing.T) {
 
 func TestEpilogueAndCleanup_PersistsMRUSnapshotWithoutSleepCycleLogging(t *testing.T) {
 	ag := NewCopilotAgent(Config{}, nil, nil)
+	ag.brain = nil
 	ag.service = &Service{session: NewRunnerSession(), EnableShortTermMemory: false}
 	ag.markMRUCategoryWithSource(SYSTEM_TOOLS, "TOOLS_FOR_RESTART", MRUSourceSystemTools)
 
@@ -1085,7 +1236,7 @@ func TestEpilogueAndCleanup_PersistsMRUSnapshotWithoutSleepCycleLogging(t *testi
 		Invariants: []string{"Preserve valid script slices."},
 		Confidence: 0.95,
 		Source:     "inner_loop_success",
-	}})
+	}}, nil)
 
 	snapshot := ag.service.session.Memory.GetMRUSnapshot()
 	if len(snapshot) == 0 {
@@ -1094,6 +1245,10 @@ func TestEpilogueAndCleanup_PersistsMRUSnapshotWithoutSleepCycleLogging(t *testi
 	recipeSnapshot := ag.service.session.Memory.GetRecipeSnapshot()
 	if len(recipeSnapshot) != 1 || recipeSnapshot[0].ID != "implicit.execute_script.research_then_retry" {
 		t.Fatalf("expected epilogue to persist learned recipe snapshot, got %+v", recipeSnapshot)
+	}
+	carryover := ag.service.session.Memory.GetCarryoverState()
+	if carryover != nil {
+		t.Fatalf("expected epilogue to skip carryover persistence when no generator is configured, got %+v", carryover)
 	}
 	if snapshot[0].Category != SYSTEM_TOOLS || snapshot[0].Context != "TOOLS_FOR_RESTART" {
 		t.Fatalf("unexpected MRU snapshot persisted to STM: %+v", snapshot)
@@ -1154,7 +1309,7 @@ func TestEpilogueAndCleanup_MergesRecipeSnapshotsAcrossAsks(t *testing.T) {
 		Invariants: []string{"Do not switch to unrelated tools before the repair attempt."},
 		Confidence: 0.9,
 		Source:     "inner_loop_success",
-	}})
+	}}, nil)
 
 	recipeSnapshot := ag.service.session.Memory.GetRecipeSnapshot()
 	if len(recipeSnapshot) != 2 {

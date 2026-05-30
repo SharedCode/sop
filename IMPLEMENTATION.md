@@ -46,6 +46,8 @@ Conventions for this document:
 - Native retry prompts now expose concrete tool args together with repair detail and the most recent successful hint context, so the model can refine the next Ask/tool call from what improved, what remains missing, and which script slices should be preserved.
 - `execute_script` join guidance is now explicit in both tool schema and stable instruction text: after `list_stores` confirms a relation path, prefer `relation + target` for join repair, and only rewrite the invalid join slice when a concrete `on` mapping is still needed.
 - Join-related recoverable repair and clarification payloads now preserve validation category, suggested fix example, attempted args, and a join-specific repair note, so routed ambiguity escalation stays grounded in the actual failed mapping instead of collapsing into a generic clarification request.
+- Provider-owned loops now share one provisional in-loop memory sink contract via `MemoryHydrationSink` in `ai/interfaces.go`; provider loops should emit only bounded grounded updates through that shared contract rather than inventing provider-specific in-loop memory paths.
+- MRU now operates as a deliberate two-layer model: ask-progress MRU is ask-scoped and provisional inside a running Ask, while session MRU plus STM snapshot is the canonical between-Ask continuity source. Epilogue clears provisional ask-progress MRU and promotes only the final ask outcome into the session/STM carryover path.
 
 ### Open TODO
 

@@ -45,6 +45,15 @@ func init() {
 // Name returns the name of the generator.
 func (g *gemini) Name() string { return "gemini" }
 
+func (g *gemini) CarryoverCapability() ai.CarryoverCapability {
+	return ai.CarryoverCapability{
+		Provider:        g.Name(),
+		Model:           strings.TrimSpace(g.model),
+		SupportsCompact: true,
+		SupportsLive:    false,
+	}
+}
+
 func (g *gemini) ReActLoop() ai.ReActLoop {
 	return geminiOwnedReActLoop{
 		generator:     g,
@@ -126,7 +135,9 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 			return ai.ReasoningResponse{}, fmt.Errorf("generation failed: %w", err)
 		}
 		if req.Executor == nil || len(output.ToolCalls) == 0 {
-			return geminiOwnedLoopResponse(output.Text, executedToolCalls, toolResults), nil
+			resp := geminiOwnedLoopResponse(output.Text, executedToolCalls, toolResults, continuations)
+			emitGeminiOwnedLoopHydration(req, resp)
+			return resp, nil
 		}
 
 		for _, toolCall := range output.ToolCalls {
@@ -139,8 +150,11 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 			toolResult, continuation := executeGeminiOwnedLoopToolCall(ctx, req, iteration, toolCall)
 			toolResults = append(toolResults, toolResult)
 			continuations = append(continuations, continuation)
+			emitGeminiOwnedLoopHydration(req, geminiOwnedLoopResponse("", executedToolCalls, toolResults, continuations))
 			if shouldShortCircuitGeminiOwnedLoopOnToolHint(toolResult.Hint) {
-				return geminiOwnedLoopResponse(toolResult.Result, executedToolCalls, toolResults), nil
+				resp := geminiOwnedLoopResponse(toolResult.Result, executedToolCalls, toolResults, continuations)
+				emitGeminiOwnedLoopHydration(req, resp)
+				return resp, nil
 			}
 		}
 	}
@@ -168,16 +182,43 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 	if err != nil {
 		return ai.ReasoningResponse{}, fmt.Errorf("final generation failed: %w", err)
 	}
-	return geminiOwnedLoopResponse(output.Text, executedToolCalls, toolResults), nil
+	resp := geminiOwnedLoopResponse(output.Text, executedToolCalls, toolResults, continuations)
+	emitGeminiOwnedLoopHydration(req, resp)
+	return resp, nil
 }
 
-func geminiOwnedLoopResponse(finalText string, toolCalls []ai.ToolCall, toolResults []ai.ReActToolResult) ai.ReasoningResponse {
-	return ai.ReasoningResponse{
+func geminiOwnedLoopResponse(finalText string, toolCalls []ai.ToolCall, toolResults []ai.ReActToolResult, continuations []ai.ToolCallContinuation) ai.ReasoningResponse {
+	resp := ai.ReasoningResponse{
 		FinalText:      finalText,
 		ToolCalls:      toolCalls,
 		OutcomeFacts:   ai.SummarizeOutcomeFacts(toolResults),
 		OutcomeRecipes: ai.SummarizeOutcomeRecipes(toolResults),
 	}
+	if carryState := geminiOwnedLoopCarryoverState(continuations); carryState != nil {
+		resp.CarryoverState = carryState
+	}
+	return resp
+}
+
+func geminiOwnedLoopCarryoverState(continuations []ai.ToolCallContinuation) *ai.CarryoverState {
+	if len(continuations) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(continuations)
+	if err != nil {
+		return &ai.CarryoverState{Mode: ai.CarryoverModeCompact}
+	}
+	return &ai.CarryoverState{
+		Mode:                   ai.CarryoverModeCompact,
+		EstimatedRawToolTokens: (len(raw) + 3) / 4,
+	}
+}
+
+func emitGeminiOwnedLoopHydration(req ai.ReasoningRequest, resp ai.ReasoningResponse) {
+	if req.HydrationSink == nil {
+		return
+	}
+	req.HydrationSink(ai.BuildMemoryHydrationUpdate(resp))
 }
 
 func geminiOwnedLoopPrompt(req ai.ReasoningRequest) string {

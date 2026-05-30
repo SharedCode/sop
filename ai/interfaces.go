@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
@@ -282,6 +283,84 @@ type GenOutput struct {
 	ToolCalls  []ToolCall // NEW: Struct for natively parsed tool requests
 }
 
+type CarryoverMode string
+
+const (
+	CarryoverModeOff     CarryoverMode = "off"
+	CarryoverModeCompact CarryoverMode = "compact"
+	CarryoverModeLive    CarryoverMode = "live"
+)
+
+type CarryoverResetReason string
+
+const (
+	CarryoverResetNone                CarryoverResetReason = ""
+	CarryoverResetDisabled            CarryoverResetReason = "disabled"
+	CarryoverResetUnsupportedProvider CarryoverResetReason = "unsupported_provider"
+	CarryoverResetMissingState        CarryoverResetReason = "missing_state"
+	CarryoverResetTopicSwitch         CarryoverResetReason = "topic_switch"
+	CarryoverResetProviderChanged     CarryoverResetReason = "provider_changed"
+	CarryoverResetModelChanged        CarryoverResetReason = "model_changed"
+	CarryoverResetKBChanged           CarryoverResetReason = "kb_changed"
+	CarryoverResetExpired             CarryoverResetReason = "expired"
+	CarryoverResetBudgetExceeded      CarryoverResetReason = "budget_exceeded"
+	CarryoverResetCompactContinuation CarryoverResetReason = "compact_continuation"
+)
+
+type CarryoverCapability struct {
+	Provider        string
+	Model           string
+	SupportsCompact bool
+	SupportsLive    bool
+}
+
+// CarryoverCapabilityProvider is an optional generator extension that lets a
+// provider declare whether it can participate in compact or live carryover
+// across adjacent asks.
+type CarryoverCapabilityProvider interface {
+	CarryoverCapability() CarryoverCapability
+}
+
+type CarryoverPolicy struct {
+	DefaultMode             CarryoverMode
+	LiveCarryoverMaxAsks    int
+	LiveCarryoverIdleTTL    time.Duration
+	LiveCarryoverSoftTokens int
+	LiveCarryoverHardTokens int
+	MaxRawToolCarryTokens   int
+}
+
+func DefaultCarryoverPolicy() CarryoverPolicy {
+	return CarryoverPolicy{
+		DefaultMode:             CarryoverModeCompact,
+		LiveCarryoverMaxAsks:    3,
+		LiveCarryoverIdleTTL:    15 * time.Minute,
+		LiveCarryoverSoftTokens: 8000,
+		LiveCarryoverHardTokens: 12000,
+		MaxRawToolCarryTokens:   2000,
+	}
+}
+
+type CarryoverState struct {
+	Mode                   CarryoverMode
+	Provider               string
+	Model                  string
+	ConversationHandle     string
+	TopicFingerprint       string
+	KBFingerprint          string
+	StartedAtUnixMilli     int64
+	LastUsedAtUnixMilli    int64
+	AskCount               int
+	EstimatedCarryTokens   int
+	EstimatedRawToolTokens int
+	LastOutcomeFacts       []string
+	LastRecipeIDs          []string
+	LastToolNames          []string
+	LastUserQuery          string
+	LastAssistantSummary   string
+	LastResetReason        CarryoverResetReason
+}
+
 // ReasoningEngine isolates the orchestration loop from the service configuration.
 type ReasoningEngine interface {
 	Run(ctx context.Context, req ReasoningRequest) (ReasoningResponse, error)
@@ -294,14 +373,27 @@ type ReActLoop interface {
 }
 
 type ReasoningRequest struct {
-	SystemPrompt string
-	ContextText  string
-	HistoryText  string
-	UserQuery    string
-	Executor     ToolExecutor
-	Generator    Generator
-	Streamer     func(eventType string, data any) // Optional NDJSON callback
+	SystemPrompt   string
+	ContextText    string
+	HistoryText    string
+	UserQuery      string
+	Executor       ToolExecutor
+	Generator      Generator
+	CarryoverMode  CarryoverMode
+	CarryoverState *CarryoverState
+	HydrationSink  MemoryHydrationSink
+	Streamer       func(eventType string, data any) // Optional NDJSON callback
 }
+
+type MemoryHydrationUpdate struct {
+	FinalText      string
+	ToolCalls      []ToolCall
+	OutcomeFacts   []string
+	OutcomeRecipes []LearnedRecipe
+	CarryoverState *CarryoverState
+}
+
+type MemoryHydrationSink func(update MemoryHydrationUpdate)
 
 // ReActToolResult is the provider-neutral per-step state that the ReAct
 // engine can expose to provider-specific loop adapters.
@@ -422,6 +514,10 @@ type ReasoningResponse struct {
 	ToolCalls      []ToolCall // For audit/logging
 	OutcomeFacts   []string   // Compact grounded facts safe to carry into outer MRU continuity
 	OutcomeRecipes []LearnedRecipe
+	// CarryoverState lets provider-owned loops return updated continuity metadata,
+	// such as a reusable live conversation handle, without exposing transport
+	// details to the service layer.
+	CarryoverState *CarryoverState
 }
 
 // PolicyEngine defines the interface for evaluating content against safety policies.
