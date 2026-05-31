@@ -965,8 +965,38 @@ Objective: let each Ask final result shape the next Ask without replaying static
 
 - [x] DONE: Document bounded Gemini carryover design, carryover modes (`off`, `compact`, `live`), budget limits, reset triggers, repository mapping, and instrumentation requirements.
 
+### Current Priority Shift
+
+The current blocker is not transaction optimization. The immediate blocker is control-surface reliability when an LLM is not sufficiently fluent at strict script AST generation.
+
+Active sequencing decision:
+
+1. Defer `TransactionPool` adoption for now.
+2. Prioritize the documentation, tool-registration groundwork, and control-surface preparation for `execute_script` refinements and first-class lego-block support.
+3. Use GPT support as the first proving ground for this control-surface work because stronger AST/tool fluency may reveal the right seams and failure classes before lower-fluency providers are tuned further.
+
+Interpretation:
+
+- `TransactionPool` remains important because it should eventually improve transaction reuse for runtime session state, lego blocks, and overall transaction efficiency.
+- It is not the prerequisite for solving the current orchestration blocker.
+- The current task is a control-plane reliability track, not a transaction-plane optimization track.
+
+Execution focus for item #2:
+
+- keep `execute_script` documented as the rich-plan surface
+- keep piped native lego blocks registered and documented as the stepwise surface
+- prepare the shared retry and clarification model between those two surfaces before deeper runtime work
+- keep the orchestration policy provider-neutral
+- use GPT support early to expose missing shared abstractions before further provider-specific tuning
+
 ### Open Implementation TODOs
 
+- [ ] TODO: Treat GPT support as the first proving ground for dual-surface Stores execution (`execute_script` + lego blocks) and use its stronger tool/script fluency to expose missing provider-neutral abstractions before deeper Gemini-specific tuning.
+- [ ] TODO: Refine `execute_script` as the rich-plan surface while preserving valid grounded slices across retries and clarification turns instead of regenerating whole plans.
+- [ ] TODO: Make piped native lego blocks first-class in shared Ask/ReAct policy, including stepwise repair, preserved pipeline state, and final emission/execution flow.
+- [ ] TODO: Define the shared provider-neutral switching policy: `execute_script` first, clarification/meta-talk when grounding is missing, richer `execute_script` retry, then optional lego-block mode when whole-plan structural instability persists.
+- [ ] TODO: Keep Stores dual-surface work scoped to Stores for now; do not force Spaces into the same join/filter/pipeline model before Stores-to-Spaces interop is intentionally designed.
+- [ ] TODO: Explicitly defer `TransactionPool` adoption from the current blocker track and revisit it as the next transaction-plane optimization phase once control-surface reliability is stable.
 - [ ] TODO: Remove remaining duplicate `execute_script` guidance injection paths outside the compact Stores slice.
 - [ ] TODO: Continue slicing generated Stores recipe content into more granular units for Gate 3 retrieval and prompt assembly beyond the current research/read/join/predicate split.
 - [ ] TODO: Slice runtime guidance into smaller recipe-oriented units for Gate 3 retrieval and prompt assembly.

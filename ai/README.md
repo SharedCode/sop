@@ -90,6 +90,8 @@ Carryover support is now designed as the next tracked implementation phase:
 - `live` reuse should be allowed only for the same provider, model, topic, and KB when the carryover thread remains within budget.
 - When the live thread is too expensive or stale, SOP should reset to a fresh Ask rebuilt from provider-neutral memory rather than letting provider carryover become the durable source of truth.
 
+For the provider-neutral Stores execution direction that now treats both `execute_script` and piped lego-block assembly as first-class control surfaces, see [STORE_ORCHESTRATION_MODES.md](STORE_ORCHESTRATION_MODES.md).
+
 ```mermaid
 flowchart LR
     Ask[ReasoningRequest] --> Engine[NativeReActEngine]

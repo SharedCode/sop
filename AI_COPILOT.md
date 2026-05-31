@@ -61,6 +61,33 @@ In practical terms, this means a user can supplement or redirect a failed or inc
 
 In practical terms, this means SOP's ReAct loop can see the returned agent context, the script it already tried, the exact failure, the grounded facts it has accumulated, and the missing pieces that still need research. That is what allows the LLM to preserve what is already correct and refine only the next delta.
 
+### Two First-Class Store Control Surfaces
+
+As query reliability work has progressed, one design direction has become explicit: SOP must treat both of its store-control surfaces as first-class rather than assuming one universal tool shape fits every provider and model.
+
+*   **Rich-plan surface: `execute_script`**. This remains the high-bandwidth option when the model can fluently emit one coherent multi-step workflow. It is still the best user experience for strong models because it compresses a complete plan into one tool call.
+*   **Block-assembly surface: piped native lego blocks**. This is the lower-level control surface built from the same atomic operations that the engine already uses internally. Typical steps include `begin_tx`, `open_store`, `scan`, `filter`, `join_right`, `project`, `limit`, `commit_tx`, and `rollback_tx`.
+
+These are not two different engines. `execute_script` is an orchestration envelope over the same underlying execution substrate. The lego blocks are the execution substrate made directly visible to the model.
+
+This policy currently applies to **Stores workflows**. Spaces remain a separate domain centered on knowledge ingestion, enrichment, semantic retrieval, and user-managed memory operations through domain-native tools rather than store-style join/filter orchestration.
+
+Why this matters:
+
+*   Some models are fluent at emitting a complete script AST in one shot.
+*   Some models are much more reliable when they can assemble the same workflow one grounded step at a time.
+*   SOP therefore needs both surfaces well-oiled so the product stays reliable across providers and model quality levels.
+
+Shared policy direction:
+
+1.  Try `execute_script` first when the request looks like one coherent workflow.
+2.  If the failure is recoverable through missing user facts or grounding, enter clarification/meta-talk, gather the missing detail, and retry `execute_script` with a richer grounded plan.
+3.  If the workflow remains structurally unstable, the system should be able to continue in lego-block mode, where the model assembles smaller piped steps over the same transaction/result context.
+
+For Spaces, the design direction is different: keep the domain-specific Space verbs first-class and evolve Stores-to-Spaces interoperability as a separate cross-domain orchestration seam rather than forcing Spaces into the same lego-block story prematurely.
+
+This escalation policy is intentionally provider-neutral. Gemini, ChatGPT, Anthropic, and the generic engine path may transport turns differently, but the orchestration rule should stay the same.
+
 ### Current Provider Reality
 
 The Ask/ReAct system now has an explicit provider-owned loop seam. The generic engine still exists, but providers that can genuinely carry their own volatile thread state can now own the inner loop directly instead of being forced through one shared retry controller.
@@ -69,6 +96,12 @@ The Ask/ReAct system now has an explicit provider-owned loop seam. The generic e
 *   **Shared Ask Outcome Summaries**: MRU-facing `OutcomeFacts` and `OutcomeRecipes` now come from the shared helper in `ai/outcome_summary.go`. That keeps MRU continuity behavior aligned between the default engine path and provider-owned Gemini runs.
 *   **OpenAI ChatGPT**: Now owns the default native provider loop in `ai/generator/chatgpt.go`. The engine delegates through the OpenAI Responses API, preserves `previous_response_id` when available, replays assistant/reasoning/tool items when provider response IDs are missing, executes native `function_call` items locally, and can stream assistant/tool/reasoning events through the shared request streamer. The old scaffold flag is now only an explicit opt-out if someone needs to force the generic path while debugging.
 *   **Anthropic**: Also still currently follows the generic path in this codebase. It does not yet own a provider-native loop here.
+
+Provider-neutral rule:
+
+*   provider code should handle transport, continuation shape, and response parsing
+*   shared Ask/ReAct policy should decide when to stay on `execute_script`, when to ask for clarification, and when to shift into lego-block assembly mode
+*   no provider should require a different user-facing recovery model for the same Stores workflow
 
 The operational consequence is that Gemini is no longer the old hybrid described in earlier drafts. Gemini is now the reference implementation of the thin-wrapper model in SOP:
 

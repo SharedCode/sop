@@ -1287,7 +1287,7 @@ func (a *CopilotAgent) buildStoresToolDescriptionContext() string {
 		"CRITICAL RULES:",
 		"1. Never guess store names, field names, or join mappings. Use list_stores first whenever schema, relations, or field paths are uncertain.",
 		"2. Think through the read/join/filter plan before writing the operation.",
-		"3. Use execute_script for multi-step workflows. For non-workflow, simple steps, use list_tools to discover available individual command-line tools.",
+		"3. For clear chained reads, prefer the native pipeline tools begin_tx, open_store, scan, filter, join_right, project, and commit_tx. Use execute_script as an additive alternative when the flow needs a full AST, branching, loops, or richer orchestration.",
 		"4. If execution fails, analyze the error, rewrite the operation, and retry once. If it still fails, ask the user a short clarification question.",
 	}, "\n")
 }
@@ -2695,9 +2695,9 @@ func allowedNativeDomainTools(routingState *TaskContextClassification) (map[stri
 	}
 
 	if cross || strings.EqualFold(routingState.Domain, StoresDomain) {
-		allow(allowedStoresTools, "execute_script", "list_stores", "manage_transaction")
+		allow(allowedStoresTools, "execute_script", "list_stores", "manage_transaction", "begin_tx", "commit_tx", "rollback_tx")
 		if crudParams["R"] {
-			allow(allowedStoresTools, "select", "join", "explain_join", "scan")
+			allow(allowedStoresTools, "select", "join", "join_right", "explain_join", "open_store", "scan", "filter", "sort", "project", "limit")
 		}
 		if crudParams["C"] {
 			allow(allowedStoresTools, "add")

@@ -68,6 +68,11 @@ func TestListTools_StoresRoutingExposesStoresProtocolTools(t *testing.T) {
 	if !names["select"] || !names["explain_join"] {
 		t.Fatalf("expected Stores routing to expose registered Stores read tools, got %#v", names)
 	}
+	for _, required := range []string{"begin_tx", "open_store", "scan", "filter", "project", "join_right", "commit_tx"} {
+		if !names[required] {
+			t.Fatalf("expected Stores routing to expose %s for native read pipelines, got %#v", required, names)
+		}
+	}
 }
 
 func TestListTools_SpacesRoutingHidesStoresProtocolTools(t *testing.T) {
@@ -213,7 +218,17 @@ func TestListTools_LowRiskExposedToolsUseJSONSchemas(t *testing.T) {
 		"list_databases":             false,
 		"list_tools":                 false,
 		"list_stores":                false,
+		"begin_tx":                   false,
+		"commit_tx":                  false,
+		"rollback_tx":                false,
+		"open_store":                 false,
 		"select":                     false,
+		"scan":                       false,
+		"filter":                     false,
+		"sort":                       false,
+		"project":                    false,
+		"limit":                      false,
+		"join_right":                 false,
 		"explain_join":               false,
 		"add":                        false,
 		"update":                     false,

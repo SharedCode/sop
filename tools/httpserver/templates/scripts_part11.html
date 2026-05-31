@@ -716,29 +716,27 @@
         const bProv = document.getElementById('setup-brain-provider')?.value || '';
         const bApiC = document.getElementById('setup-brain-api-container');
         const bUrlC = document.getElementById('setup-brain-url-container');
+        const bUrlValue = document.getElementById('setup-brain-url')?.value.trim() || '';
+        const isBrainLocal = bProv.startsWith('ollama') || bProv.startsWith('local');
+        const showBrainURL = isBrainLocal || bUrlValue !== '';
         
-        if (bProv.startsWith('ollama') || bProv.startsWith('local')) {
-            if (bApiC) bApiC.style.display = 'none';
-            if (bUrlC) bUrlC.style.display = 'block';
-        } else {
-            if (bApiC) bApiC.style.display = 'block';
-            if (bUrlC) bUrlC.style.display = 'none';
-        }
+        if (bApiC) bApiC.style.display = isBrainLocal ? 'none' : 'block';
+        if (bUrlC) bUrlC.style.display = showBrainURL ? 'block' : 'none';
 
         const eProv = document.getElementById('setup-embedder-provider')?.value || '';
         const eApiC = document.getElementById('setup-embedder-api-container');
         const eUrlC = document.getElementById('setup-embedder-url-container');
+        const eUrlValue = document.getElementById('setup-embedder-url')?.value.trim() || '';
+        const isEmbedderLocal = eProv.startsWith('ollama') || eProv.startsWith('local');
+        const showEmbedderURL = isEmbedderLocal || eUrlValue !== '';
         
         if (eProv === '') {
             // Same as Brain
             if (eApiC) eApiC.style.display = 'none';
             if (eUrlC) eUrlC.style.display = 'none';
-        } else if (eProv.startsWith('ollama') || eProv.startsWith('local')) {
-            if (eApiC) eApiC.style.display = 'none';
-            if (eUrlC) eUrlC.style.display = 'block';
         } else {
-            if (eApiC) eApiC.style.display = 'block';
-            if (eUrlC) eUrlC.style.display = 'none';
+            if (eApiC) eApiC.style.display = isEmbedderLocal ? 'none' : 'block';
+            if (eUrlC) eUrlC.style.display = showEmbedderURL ? 'block' : 'none';
         }
     }
 
@@ -758,20 +756,81 @@
         }
     }
 
+    function handleInlineChatProviderChange() {
+        const providerValue = document.getElementById('chat-settings-provider')?.value || '';
+        const parts = splitProviderValue(providerValue);
+        const nextConfig = mergeStoredAIConfig({
+            brain_provider: parts.provider,
+            brain_model: parts.model
+        });
+        syncChatControlsFromAIConfig(nextConfig);
+        syncSetupWizardControlsFromAIConfig(nextConfig);
+    }
+
+    function saveInlineChatAuth() {
+        const providerValue = document.getElementById('chat-settings-provider')?.value || '';
+        const authInput = document.getElementById('chat-settings-inline-auth');
+        const parts = splitProviderValue(providerValue);
+        if (!authInput) return;
+
+        const value = authInput.value.trim();
+        const isLocal = parts.provider === 'ollama' || parts.provider === 'local';
+        const nextConfig = mergeStoredAIConfig(isLocal ? {
+            brain_provider: parts.provider,
+            brain_model: parts.model,
+            brain_url: value
+        } : {
+            brain_provider: parts.provider,
+            brain_model: parts.model,
+            brain_api_key: value
+        });
+        syncChatControlsFromAIConfig(nextConfig);
+        syncSetupWizardControlsFromAIConfig(nextConfig);
+    }
+
+    function toggleChatSettings() {
+        const overlay = document.getElementById('chat-settings');
+        if (!overlay) return;
+        const isOpen = overlay.style.display !== 'none';
+        if (isOpen) {
+            overlay.style.display = 'none';
+            return;
+        }
+        syncChatControlsFromAIConfig(getStoredAIConfig());
+        overlay.style.display = 'block';
+    }
+
+    function saveChatSettings() {
+        const providerValue = document.getElementById('chat-settings-provider-overlay')?.value || '';
+        const parts = splitProviderValue(providerValue);
+        const apiKey = document.getElementById('chat-settings-overlay-api-key')?.value.trim() || '';
+        const url = document.getElementById('chat-settings-url')?.value.trim() || '';
+
+        const nextConfig = mergeStoredAIConfig({
+            brain_provider: parts.provider,
+            brain_model: parts.model,
+            brain_api_key: apiKey,
+            brain_url: url
+        });
+        syncChatControlsFromAIConfig(nextConfig);
+        syncSetupWizardControlsFromAIConfig(nextConfig);
+        toggleChatSettings();
+    }
+
     function toggleChatSettingsFields() {
         const provider = document.getElementById('chat-settings-provider-overlay')?.value || '';
         const urlContainer = document.getElementById('chat-settings-url-container');
         const apiKeyContainer = document.getElementById('chat-settings-apikey-container');
+        const urlValue = document.getElementById('chat-settings-url')?.value.trim() || '';
+        const isLocalProvider = provider.startsWith('ollama') || provider.startsWith('local');
+        const showURL = isLocalProvider || urlValue !== '';
         
-        if (provider.startsWith('ollama') || provider.startsWith('local')) {
-            if (urlContainer) urlContainer.style.display = 'block';
-            if (apiKeyContainer) apiKeyContainer.style.display = 'none';
-        } else if (provider === '') {
+        if (provider === '') {
             if (urlContainer) urlContainer.style.display = 'none';
             if (apiKeyContainer) apiKeyContainer.style.display = 'none';
         } else {
-            if (urlContainer) urlContainer.style.display = 'none';
-            if (apiKeyContainer) apiKeyContainer.style.display = 'block';
+            if (urlContainer) urlContainer.style.display = showURL ? 'block' : 'none';
+            if (apiKeyContainer) apiKeyContainer.style.display = isLocalProvider ? 'none' : 'block';
         }
     }
 

@@ -1,11 +1,143 @@
 {{define "scripts_part10"}}
 <script>
+    const setupWizardAIConfigDefaults = {{.SetupWizardAIConfigJSON}};
+
     function toggleEnterpriseBrain() {
         // Legacy function, kept for safety if referenced elsewhere, but effectively superseded by toggleManualEnterpriseBrain
     }
 
+    function setupProviderLabel(provider) {
+        switch ((provider || '').toLowerCase()) {
+            case 'openai':
+                return 'OpenAI';
+            case 'anthropic':
+                return 'Anthropic';
+            case 'gemini':
+                return 'Gemini';
+            case 'ollama':
+                return 'Ollama';
+            default:
+                return provider || 'Provider';
+        }
+    }
+
+    function ensureSetupProviderOption(selectId, provider, model) {
+        const select = document.getElementById(selectId);
+        if (!select || !provider) return;
+
+        const value = model ? `${provider}:${model}` : provider;
+        const existing = Array.from(select.options).find(option => option.value === value);
+        if (!existing) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = model ? `${setupProviderLabel(provider)} (${model}) [Env]` : `${setupProviderLabel(provider)} [Env]`;
+            option.dataset.injected = 'env';
+            select.appendChild(option);
+        }
+        select.value = value;
+    }
+
+    function syncChatControlsFromAIConfig(aiConfig) {
+        const cfg = aiConfig || {};
+        if (!cfg.brain_provider) {
+            return;
+        }
+
+        ensureSetupProviderOption('chat-settings-provider', cfg.brain_provider, cfg.brain_model);
+        ensureSetupProviderOption('chat-settings-provider-overlay', cfg.brain_provider, cfg.brain_model);
+
+        const inlineProvider = document.getElementById('chat-settings-provider');
+        const inlineAuth = document.getElementById('chat-settings-inline-auth');
+        const overlayURL = document.getElementById('chat-settings-url');
+        const overlayAPIKey = document.getElementById('chat-settings-overlay-api-key');
+        const isLocal = cfg.brain_provider === 'ollama' || cfg.brain_provider === 'local';
+
+        if (inlineProvider) {
+            inlineProvider.value = buildProviderValue(cfg.brain_provider, cfg.brain_model);
+        }
+        if (inlineAuth) {
+            inlineAuth.value = isLocal ? (cfg.brain_url || '') : (cfg.brain_api_key || '');
+            toggleInlineAuthFields('chat-settings-provider', 'chat-settings-inline-auth');
+        }
+        if (overlayURL) {
+            overlayURL.value = cfg.brain_url || '';
+        }
+        if (overlayAPIKey) {
+            overlayAPIKey.value = cfg.brain_api_key || '';
+        }
+
+        toggleChatSettingsFields();
+    }
+
+    function syncSetupWizardControlsFromAIConfig(aiConfig) {
+        const cfg = aiConfig || {};
+        if (!cfg.brain_provider && !cfg.embedder_provider) {
+            return;
+        }
+
+        ensureSetupProviderOption('setup-brain-provider', cfg.brain_provider, cfg.brain_model);
+        ensureSetupProviderOption('setup-embedder-provider', cfg.embedder_provider, cfg.embedder_model);
+
+        const brainAPIKeyInput = document.getElementById('setup-brain-api-key');
+        const brainURLInput = document.getElementById('setup-brain-url');
+        const embedderAPIKeyInput = document.getElementById('setup-embedder-api-key');
+        const embedderURLInput = document.getElementById('setup-embedder-url');
+
+        if (brainAPIKeyInput) {
+            brainAPIKeyInput.value = cfg.brain_api_key || '';
+        }
+        if (brainURLInput) {
+            brainURLInput.value = cfg.brain_url || '';
+        }
+        if (embedderAPIKeyInput) {
+            embedderAPIKeyInput.value = cfg.embedder_api_key || '';
+        }
+        if (embedderURLInput) {
+            embedderURLInput.value = cfg.embedder_url || '';
+        }
+
+        toggleProviderAuth();
+    }
+
+    function initializeChatAIConfig() {
+        syncChatControlsFromAIConfig(getStoredAIConfig());
+    }
+
+    function mergeSetupAIConfig(storedConfig, envConfig) {
+        return {
+            brain_provider: storedConfig.brain_provider || envConfig.brain_provider || '',
+            brain_model: storedConfig.brain_model || envConfig.brain_model || '',
+            brain_url: storedConfig.brain_url || envConfig.brain_url || '',
+            brain_api_key: storedConfig.brain_api_key || envConfig.brain_api_key || '',
+            embedder_provider: storedConfig.embedder_provider || envConfig.embedder_provider || '',
+            embedder_model: storedConfig.embedder_model || envConfig.embedder_model || '',
+            embedder_url: storedConfig.embedder_url || envConfig.embedder_url || '',
+            embedder_api_key: storedConfig.embedder_api_key || envConfig.embedder_api_key || ''
+        };
+    }
+
+    function initializeSetupWizardAIConfig() {
+        const envConfig = setupWizardAIConfigDefaults || {};
+        const hasEnvDefaults = Object.values(envConfig).some(value => !!value);
+
+        let storedConfig = {};
+        storedConfig = getStoredAIConfig();
+
+        const mergedConfig = mergeSetupAIConfig(storedConfig, envConfig);
+        const hasMergedConfig = Object.values(mergedConfig).some(value => !!value);
+        if (!hasEnvDefaults && !hasMergedConfig) {
+            return;
+        }
+
+        setStoredAIConfig(mergedConfig);
+        syncSetupWizardControlsFromAIConfig(mergedConfig);
+        initializeChatAIConfig();
+    }
+
     // Auto-update DB Path based on Name
     document.addEventListener('DOMContentLoaded', () => {
+        initializeSetupWizardAIConfig();
+        initializeChatAIConfig();
 
         const setupDbNameInput = document.getElementById('setup-db-name');
         const setupDbPathInput = document.getElementById('setup-db-path');

@@ -257,9 +257,11 @@ func buildStoresCRUDOperationsContext(flags map[string]bool) string {
 	if flags["R"] {
 		sections = append(sections,
 			"- R = Read. Prefer read-only transactions. Flow: begin_tx(mode=read) -> open_store -> scan/filter/project/sort/limit -> commit_tx or rollback_tx.",
+			"- Prefer direct native pipeline tool calls for clear chained reads. Use execute_script only when the flow needs a full AST, branching, loops, or larger orchestration.",
 			dbNote,
 			"- Keep filters and joins concrete. Reuse researched schema/relations and confirmed MRU facts.",
 			"- If a filter or join shape is rejected, replace only the malformed slice.",
+			"- Native read pipeline tools: begin_tx, open_store, scan, filter, sort, project, limit, join_right, commit_tx, rollback_tx.",
 			"- Read AST ops: begin_tx, open_store, scan, filter, sort, project, limit, join, join_right, return, commit_tx, rollback_tx.",
 		)
 	}

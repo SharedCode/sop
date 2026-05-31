@@ -26,14 +26,23 @@ var nativeSpaceToolNames = map[string]bool{
 var nativeStoreToolNames = map[string]bool{
 	"execute_script":     true,
 	"list_stores":        true,
+	"begin_tx":           true,
+	"commit_tx":          true,
+	"rollback_tx":        true,
+	"open_store":         true,
 	"select":             true,
 	"join":               true,
+	"join_right":         true,
 	"explain_join":       true,
 	"add":                true,
 	"update":             true,
 	"delete":             true,
 	"manage_transaction": true,
 	"scan":               true,
+	"filter":             true,
+	"sort":               true,
+	"project":            true,
+	"limit":              true,
 }
 
 type nativeToolExposure struct {

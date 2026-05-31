@@ -13,6 +13,7 @@ func TestBuildExecuteScriptArgsSchema_IncludesResearchAndOrchestrationGuidance(t
 		`multi-step store orchestration`,
 		`call list_stores first`,
 		`JSON object with stores:[{name,schema,description,relations,empty}]`,
+		`Use store.schema to choose the field path and value type`,
 		`Read each store.schema object for exact field names`,
 		`align those researched field names with the user's criteria values`,
 		`Read each store.relations entry literally`,
@@ -98,7 +99,7 @@ func TestBuildExecuteScriptArgsSchema_DeclaresJoinSpecificArgs(t *testing.T) {
 }
 
 func TestExecuteScriptInstruction_MentionsResearchAndConcreteShapes(t *testing.T) {
-	checks := []string{"full ordered JSON AST", "{op, args?, input_var?, result_var?}", "begin a transaction", "result_var/input_var", "list_stores", "JSON object with stores:[{name,schema,description,relations,empty}]", "align the expression field name and literal value with that exact schema", "source_fields are the current-store field paths", "target_store is the joined store", "target_fields are the target-store join fields", "Worked example: for the prompt Find orders for users with first_name 'John' with total amount > 500", "stores:[\"users\",\"users_orders\",\"orders\"]", "align expression names to those exact fields", "align literal values to those exact types", "the next AST can be {\"script\":[{\"op\":\"begin_tx\"", "\"condition\":{\"first_name\":{\"$eq\":\"John\"}}", "\"condition\":{\"orders.total_amount\":{\"$gt\":500}}", "Prefer relation + target for join repair", "rewrite only the invalid join slice", "combined flat record by default", "gettoolinfo('execute_script')", "concrete predicate objects", "concrete join mappings", "boolean placeholders"}
+	checks := []string{"full ordered JSON AST", "{op, args?, input_var?, result_var?}", "begin a transaction", "result_var/input_var", "list_stores", "JSON object with stores:[{name,schema,description,relations,empty}]", "write the condition expression the engine should execute", "align the expression field name and literal value with that exact schema", "completed expressions with the operator and literal value already assigned", "source_fields are the current-store field paths", "target_store is the joined store", "target_fields are the target-store join fields", "Worked example: for the prompt Find orders for users with first_name 'John' with total amount > 500", "stores:[\"users\",\"users_orders\",\"orders\"]", "align expression names to those exact fields", "align literal values to those exact types", "the next AST can be {\"script\":[{\"op\":\"begin_tx\"", "\"condition\":{\"first_name\":{\"$eq\":\"John\"}}", "\"condition\":{\"orders.total_amount\":{\"$gt\":500}}", "Prefer relation + target for join repair", "rewrite only the invalid join slice", "combined flat record by default", "gettoolinfo('execute_script')", "concrete predicate objects", "concrete join mappings", "boolean placeholders"}
 	for _, check := range checks {
 		if !strings.Contains(ExecuteScriptInstruction, check) {
 			t.Fatalf("expected ExecuteScriptInstruction to contain %q\nInstruction: %s", check, ExecuteScriptInstruction)
@@ -146,11 +147,20 @@ func TestStoreInstructions_MentionTransactionBehavior(t *testing.T) {
 			t.Fatalf("expected %s to mention local transaction fallback, got %s", name, instruction)
 		}
 	}
+	if !strings.Contains(SelectInstruction, "native pipeline tools") {
+		t.Fatalf("expected SelectInstruction to steer clear chained reads toward native pipeline tools, got %s", SelectInstruction)
+	}
+	if !strings.Contains(JoinInstruction, "join_right") {
+		t.Fatalf("expected JoinInstruction to mention join_right-native chaining guidance, got %s", JoinInstruction)
+	}
 	if !strings.Contains(ManageTransactionInstruction, "explicit transaction control") {
 		t.Fatalf("expected ManageTransactionInstruction to describe explicit transaction control, got %s", ManageTransactionInstruction)
 	}
 	if !strings.Contains(ManageTransactionInstruction, "durability boundary") || !strings.Contains(ManageTransactionInstruction, "50 to 250 CRUD operations per transaction") {
 		t.Fatalf("expected ManageTransactionInstruction to carry transaction boundary and batching guidance, got %s", ManageTransactionInstruction)
+	}
+	if !strings.Contains(ManageTransactionInstruction, "native pipeline tools") {
+		t.Fatalf("expected ManageTransactionInstruction to mention native pipeline tools, got %s", ManageTransactionInstruction)
 	}
 }
 

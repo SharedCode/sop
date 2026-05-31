@@ -218,6 +218,151 @@ func TestNormalizeScriptStepForCompatibilityWithQuery_InfersAliasBooleanPredicat
 	}
 }
 
+func TestNormalizeScriptStepForCompatibilityWithQueryAndState_QualifiesUniqueJoinedLeafField(t *testing.T) {
+	state := &scriptCompatibilityNormalizerState{
+		storeVars: map[string]string{
+			"users_store":        "users",
+			"users_orders_store": "users_orders",
+			"orders_store":       "orders",
+		},
+		resultAliases: map[string][]string{
+			"joined_orders": {"users", "users_orders", "orders"},
+		},
+		storeFields: map[string]map[string]struct{}{
+			"users":        {"first_name": {}},
+			"users_orders": {"user_id": {}},
+			"orders":       {"total_amount": {}},
+		},
+	}
+
+	step := map[string]any{
+		"op":        "filter",
+		"input_var": "joined_orders",
+		"args": map[string]any{
+			"condition": map[string]any{
+				"total_amount": map[string]any{"$gt": 500},
+			},
+		},
+	}
+
+	normalizeScriptStepForCompatibilityWithQueryAndState(step, "Find orders for users with first_name 'John' with total amount > 500", state)
+
+	args := step["args"].(map[string]any)
+	condition := args["condition"].(map[string]any)
+	amount := condition["orders.total_amount"].(map[string]any)
+	if amount["$gt"] != 500 {
+		t.Fatalf("expected orders.total_amount condition to be preserved, got %#v", amount)
+	}
+	if _, ok := condition["total_amount"]; ok {
+		t.Fatalf("expected unprefixed total_amount to be qualified, got %#v", condition)
+	}
+}
+
+func TestQualifyCompatibilityConditionField_PicksFirstMatchingStoreField(t *testing.T) {
+	qualified := qualifyCompatibilityConditionField(
+		"status",
+		[]string{"users", "orders"},
+		map[string]map[string]struct{}{
+			"users":  {"status": {}},
+			"orders": {"status": {}},
+		},
+	)
+	if qualified != "users.status" {
+		t.Fatalf("expected first matching store field to win, got %q", qualified)
+	}
+}
+
+func TestNormalizeScriptStepForCompatibilityWithQueryAndState_CollapsesMalformedSelectPredicateObject(t *testing.T) {
+	state := &scriptCompatibilityNormalizerState{
+		resultAliases: map[string][]string{
+			"users_store": {"users"},
+		},
+		storeFields: map[string]map[string]struct{}{
+			"users": {"first_name": {}, "country": {}, "email": {}, "gender": {}, "key": {}, "last_name": {}},
+		},
+	}
+
+	step := map[string]any{
+		"op": "select",
+		"args": map[string]any{
+			"store": "users_store",
+			"condition": map[string]any{
+				"first_name": map[string]any{
+					"Format":           nil,
+					"age":              nil,
+					"country":          "John",
+					"email":            nil,
+					"first_name":       nil,
+					"first_name_match": nil,
+					"gender":           nil,
+					"key":              nil,
+					"last_name":        nil,
+					"value":            nil,
+				},
+				"first_name_match":       nil,
+				"first_name_value":       nil,
+				"matched_users":          nil,
+				"user_first_name":        nil,
+				"users_first_name":       map[string]any{"format": nil, "value": "John"},
+				"users_store_first_name": nil,
+			},
+		},
+	}
+
+	normalizeScriptStepForCompatibilityWithQueryAndState(step, "Find orders for users with first_name 'John' with total amount > 500", state)
+
+	condition := step["args"].(map[string]any)["condition"].(map[string]any)
+	firstName := condition["first_name"].(map[string]any)
+	if firstName["$eq"] != "John" {
+		t.Fatalf("expected first_name predicate to collapse to eq John, got %#v", firstName)
+	}
+	if _, ok := condition["users.first_name"]; ok {
+		t.Fatalf("did not expect secondary alias field to survive, got %#v", condition)
+	}
+	for _, key := range []string{"first_name_match", "first_name_value", "matched_users", "user_first_name", "users_store_first_name"} {
+		if _, ok := condition[key]; ok {
+			t.Fatalf("expected placeholder field %q to be dropped, got %#v", key, condition)
+		}
+	}
+}
+
+func TestNormalizeScriptStepForCompatibilityWithQueryAndState_CollapsesMalformedJoinedFilterPredicateObject(t *testing.T) {
+	state := &scriptCompatibilityNormalizerState{
+		resultAliases: map[string][]string{
+			"joined_orders": {"users", "users_orders", "orders"},
+		},
+		storeFields: map[string]map[string]struct{}{
+			"users":        {"first_name": {}},
+			"users_orders": {"user_id": {}},
+			"orders":       {"total_amount": {}},
+		},
+	}
+
+	step := map[string]any{
+		"op":        "filter",
+		"input_var": "joined_orders",
+		"args": map[string]any{
+			"condition": map[string]any{
+				"orders_total_amount": map[string]any{
+					"format": nil,
+					"value":  500,
+				},
+			},
+		},
+	}
+
+	normalizeScriptStepForCompatibilityWithQueryAndState(step, "Find orders for users with first_name 'John' with total amount > 500", state)
+
+	condition := step["args"].(map[string]any)["condition"].(map[string]any)
+	amount := condition["orders.total_amount"].(map[string]any)
+	if amount["$gt"] != 500 {
+		t.Fatalf("expected joined malformed predicate to collapse to orders.total_amount > 500, got %#v", amount)
+	}
+	if _, ok := condition["orders_total_amount"]; ok {
+		t.Fatalf("expected underscore key to be normalized away, got %#v", condition)
+	}
+}
+
 func TestNormalizeScriptStepForCompatibility_InfersAliasJoinLeafOnShape(t *testing.T) {
 	step := map[string]any{
 		"op": "join",

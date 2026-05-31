@@ -356,9 +356,18 @@ Retry architecture:
 
 - Recoverable failures are converted into constrained repair paths rather than immediate hard failure.
 - Malformed native tool calls trigger a repair retry that demands exactly one valid tool call.
-- Schema or relation uncertainty triggers research-first retry, typically `list_stores -> execute_script`.
+- Schema or relation uncertainty triggers research-first retry, typically `list_stores -> execute_script` on the rich-plan path.
 - Same-tool argument defects trigger in-place repair: preserve valid arguments and rewrite only the broken slice.
 - If the model tries to switch to an unrelated tool while repair is pending, the engine blocks the diversion and reasserts the allowed repair path.
+
+Dual-surface consequence:
+
+- Stores orchestration should now be treated as two first-class control surfaces over one execution substrate.
+- Rich-plan surface: `execute_script`, used when the model can emit a coherent multi-step AST.
+- Block-assembly surface: piped native lego blocks such as `begin_tx -> open_store -> scan -> filter -> join_right -> project -> commit_tx`.
+- The lego blocks are not a backup engine; they are the same atomic operations already used internally by `execute_script`.
+- The shared policy should prefer `execute_script` first, then clarification-driven retry, and finally lego-block assembly when whole-plan structural coherence remains unstable.
+- This dual-surface consequence is currently scoped to Stores workflows. Spaces remain a separate domain with domain-native knowledge operations and should not yet be forced into the same join/filter/pipeline model.
 
 Progressive visibility for the model:
 
@@ -468,6 +477,12 @@ This is the canonical Stores path that motivated the current progressive loop de
 - The engine recognizes the successful `execute_script` failure -> `list_stores` -> `execute_script` sequence.
 - That sequence becomes an implicit micro recipe: research grounded schema before retrying `execute_script`.
 
+Alternative successful path when the rich plan stays unstable:
+
+- If the script remains structurally unstable after clarification and grounded retry, the same Ask can continue in block-assembly mode instead of repeatedly forcing one whole AST.
+- In that mode, the engine preserves the same grounded facts, transaction state, and result piping, but asks the model for the next valid small step rather than the whole script.
+- A successful block sequence such as `begin_tx -> open_store -> scan -> filter -> join_right -> filter -> project -> commit_tx` should be treated as a first-class learned recovery pattern, not as a degraded fallback.
+
 8. The retry controller learns during execution, not only after it.
 
 - That newly proven recipe counts as progress for the current Ask.
@@ -477,7 +492,7 @@ Why this example matters:
 
 - The loop does not treat retries as identical retries of the same broad prompt.
 - Failure detail, returned context, concrete script args, missing signals, and grounded research all become input to the next micro step.
-- The result is a loop that progressively narrows the problem until the model can either answer safely or stop explicitly.
+- The result is a loop that progressively narrows the problem until the model can either answer safely, recover through richer `execute_script`, or continue through smaller piped lego blocks.
 
 Sequence sketch:
 

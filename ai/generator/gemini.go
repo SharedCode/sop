@@ -291,6 +291,9 @@ func buildGeminiRepairDirective(last ai.ReActToolResult) string {
 	if guidance := geminiValidationRepairGuidance(result); guidance != "" {
 		directive += " " + guidance
 	}
+	if strings.Contains(directive, "Example fix:") {
+		directive += " When an Example fix matches the malformed slice, copy that exact field path, predicate operator, and literal value shape into the retry instead of inventing aliases, placeholders, or paraphrased predicate objects."
+	}
 	return directive
 }
 
@@ -396,7 +399,7 @@ func prepareGeminiContinuationTurn(turn ai.ReActTurn, maxIterations int) ai.ReAc
 		return turn
 	}
 	if strings.TrimSpace(turn.RepairDirective) != "" {
-		turn.Prompt = "Continue from the supplied tool-call state. The latest tool call requires repair. Use react_state.repair_directive and the structured function response as the source of truth, emit exactly one corrected tool call next, preserve valid script slices, and change only the malformed condition or join. Do not answer the user, do not switch tools unless the repair directive explicitly requires it, and do not repeat placeholder-only or previously rejected argument shapes."
+		turn.Prompt = "Continue from the supplied tool-call state. The latest tool call requires repair. Use react_state.repair_directive and the structured function response as the source of truth, emit exactly one corrected tool call next, preserve valid script slices, and change only the malformed condition or join. If the repair directive includes an Example fix for the malformed slice, apply that exact field, operator, and literal value shape directly instead of paraphrasing it. Do not answer the user, do not switch tools unless the repair directive explicitly requires it, and do not repeat placeholder-only or previously rejected argument shapes."
 		return turn
 	}
 	turn.Prompt = "Continue from the supplied tool-call state. Use the structured function response as the source of truth, avoid replaying prior history, emit the next tool call if more work is needed, and otherwise answer the user directly."
@@ -405,7 +408,7 @@ func prepareGeminiContinuationTurn(turn ai.ReActTurn, maxIterations int) ai.ReAc
 
 func geminiFinalTurnPrompt(turn ai.ReActTurn) string {
 	if strings.TrimSpace(turn.RepairDirective) != "" {
-		return "Using the supplied tool-call state, do not call more tools. If the remaining issue is a recoverable retry with no missing user fact, do not ask for permission and do not ask a clarification question. Return the corrected tool call you would make next as a compact executable payload, using the grounded schema, joins, and predicate operators already confirmed by the tool state. Do not describe steps, do not explain intent, and do not include placeholder or dummy fields. Ask one short, concrete clarification question only if a required user fact is genuinely missing."
+		return "Using the supplied tool-call state, do not call more tools. If the remaining issue is a recoverable retry with no missing user fact, do not ask for permission and do not ask a clarification question. Briefly explain what is still malformed and state the corrected filter or join slice the engine would need next, using the grounded schema, joins, and predicate operators already confirmed by the tool state. If react_state.repair_directive includes an Example fix for the malformed slice, reuse that exact field, operator, and literal value shape in the correction you describe. Do not dump a full tool call, do not dump a full script, do not describe steps, and do not include placeholder or dummy fields. Ask one short, concrete clarification question only if a required user fact is genuinely missing."
 	}
 	return "Using the supplied tool-call state, do not call more tools. Briefly explain what is still blocking progress and ask one short, concrete clarification question."
 }

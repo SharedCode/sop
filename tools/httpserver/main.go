@@ -99,6 +99,86 @@ type Config struct {
 	RedisURL     string `json:"-"`
 }
 
+type setupWizardAIConfig struct {
+	BrainProvider    string `json:"brain_provider,omitempty"`
+	BrainModel       string `json:"brain_model,omitempty"`
+	BrainURL         string `json:"brain_url,omitempty"`
+	BrainAPIKey      string `json:"brain_api_key,omitempty"`
+	EmbedderProvider string `json:"embedder_provider,omitempty"`
+	EmbedderModel    string `json:"embedder_model,omitempty"`
+	EmbedderURL      string `json:"embedder_url,omitempty"`
+	EmbedderAPIKey   string `json:"embedder_api_key,omitempty"`
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func readSetupWizardAIConfigFromEnv() setupWizardAIConfig {
+	type providerEnv struct {
+		provider string
+		apiKey   string
+		model    string
+		baseURL  string
+	}
+
+	providers := []providerEnv{
+		{
+			provider: "gemini",
+			apiKey:   firstNonEmpty(os.Getenv("GEMINI_API_KEY"), os.Getenv("LLM_API_KEY")),
+			model:    os.Getenv("GEMINI_MODEL"),
+			baseURL:  firstNonEmpty(os.Getenv("GEMINI_API_BASE_URL"), os.Getenv("GOOGLE_API_BASE_URL")),
+		},
+		{
+			provider: "openai",
+			apiKey:   firstNonEmpty(os.Getenv("OPENAI_API_KEY"), os.Getenv("LLM_API_KEY")),
+			model:    os.Getenv("OPENAI_MODEL"),
+			baseURL:  os.Getenv("OPENAI_API_BASE_URL"),
+		},
+		{
+			provider: "anthropic",
+			apiKey:   firstNonEmpty(os.Getenv("ANTHROPIC_API_KEY"), os.Getenv("LLM_API_KEY")),
+			model:    os.Getenv("ANTHROPIC_MODEL"),
+			baseURL:  os.Getenv("ANTHROPIC_API_BASE_URL"),
+		},
+	}
+
+	for _, provider := range providers {
+		if provider.apiKey == "" && provider.model == "" && provider.baseURL == "" {
+			continue
+		}
+
+		return setupWizardAIConfig{
+			BrainProvider: provider.provider,
+			BrainModel:    provider.model,
+			BrainURL:      provider.baseURL,
+			BrainAPIKey:   provider.apiKey,
+		}
+	}
+
+	if host := firstNonEmpty(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_BASE_URL")); host != "" {
+		return setupWizardAIConfig{
+			BrainProvider: "ollama",
+			BrainURL:      host,
+		}
+	}
+
+	return setupWizardAIConfig{}
+}
+
+func setupWizardAIConfigJSON() template.JS {
+	b, err := json.Marshal(readSetupWizardAIConfigFromEnv())
+	if err != nil {
+		return template.JS("{}")
+	}
+	return template.JS(b)
+}
+
 //go:embed templates/*
 var content embed.FS
 
@@ -682,10 +762,11 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 			}
 			return "gemini"
 		}(), "IsEnterprise": isEnterprise,
-		"SystemDBName": SystemDBName,
-		"ConfigFile":   config.ConfigFile,
-		"MinHashMod":   fs.MinimumModValue,
-		"MaxHashMod":   fs.MaximumModValue,
+		"SystemDBName":            SystemDBName,
+		"ConfigFile":              config.ConfigFile,
+		"SetupWizardAIConfigJSON": setupWizardAIConfigJSON(),
+		"MinHashMod":              fs.MinimumModValue,
+		"MaxHashMod":              fs.MaximumModValue,
 		"Env": map[string]bool{
 			"SOP_ROOT_PASSWORD": os.Getenv("SOP_ROOT_PASSWORD") != "",
 			"LLM_API_KEY":       os.Getenv("LLM_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("ANTHROPIC_API_KEY") != "",

@@ -184,6 +184,7 @@ The Data Manager includes an integrated AI Copilot that supports **Natural Langu
     *   **Natural Language Steps**: Invokes the LLM only when reasoning is required (e.g., "Analyze sentiment").
 *   **Bare-Metal Performance**: Scripts are compiled into efficient engine instructions (Go code), avoiding the overhead of runtime parsing for repeated tasks.
 *   **Documentation**: See the [Execute Script Tool](ai/EXECUTE_SCRIPT_TOOL.md) for technical details on how scripts are parsed and executed by the AI Copilot.
+*   **Store Orchestration Modes**: See [Store Orchestration Modes](ai/STORE_ORCHESTRATION_MODES.md) for the provider-neutral direction that keeps both `execute_script` and piped lego-block tool assembly as first-class control surfaces.
 
 To launch the Data Manager:
 ```bash

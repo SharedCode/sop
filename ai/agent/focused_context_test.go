@@ -360,6 +360,9 @@ func TestBuildSystemPrompt_StoresSystemTools_PrefersCompactProtocolSlice(t *test
 	if !strings.Contains(systemTools, "Never guess store names") || !strings.Contains(systemTools, "retry once") {
 		t.Fatalf("expected simplified stores tool protocol guidance to remain visible in system tools, got: %s", systemTools)
 	}
+	if !strings.Contains(systemTools, "prefer the native pipeline tools") || !strings.Contains(systemTools, "additive alternative") {
+		t.Fatalf("expected stores system tools to prefer native pipelines while keeping execute_script additive, got: %s", systemTools)
+	}
 }
 
 func TestBuildSpacesCRUDOperationsContext_DoesNotRequireVectorizationByDefault(t *testing.T) {

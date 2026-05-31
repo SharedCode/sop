@@ -244,6 +244,9 @@ func TestBuildGeminiRepairDirective_IncludesConcreteValidationGuidance(t *testin
 	if !strings.Contains(directive, `{"op":"filter","args":{"condition":{"total_amount":{"$gt":500}}}}`) {
 		t.Fatalf("expected concrete example fix to be preserved, got %q", directive)
 	}
+	if !strings.Contains(directive, "copy that exact field path, predicate operator, and literal value shape") {
+		t.Fatalf("expected directive to force literal reuse of example fix, got %q", directive)
+	}
 }
 
 func TestGeminiReActTurnStrategy_UsesContinuationFirstPrompt(t *testing.T) {
@@ -270,6 +273,9 @@ func TestGeminiReActTurnStrategy_UsesContinuationFirstPrompt(t *testing.T) {
 	}
 	if !strings.Contains(turn.Prompt, "Continue from the supplied tool-call state.") {
 		t.Fatalf("expected reduced continuation-first Gemini prompt, got %q", turn.Prompt)
+	}
+	if !strings.Contains(turn.Prompt, "apply that exact field, operator, and literal value shape directly") {
+		t.Fatalf("expected repair prompt to require literal example-fix reuse, got %q", turn.Prompt)
 	}
 	if strings.Contains(turn.Prompt, "Original user query:") {
 		t.Fatalf("expected original user query to move into carried state, got %q", turn.Prompt)
@@ -347,11 +353,11 @@ func TestGeminiReActTurnStrategy_UsesReducedClarificationPromptOnFinalTurn(t *te
 	if !strings.Contains(turn.Prompt, "do not ask for permission") {
 		t.Fatalf("expected repair-aware final turn prompt, got %q", turn.Prompt)
 	}
-	if !strings.Contains(turn.Prompt, "Return the corrected tool call you would make next as a compact executable payload") {
-		t.Fatalf("expected final turn to request a corrected executable payload, got %q", turn.Prompt)
+	if !strings.Contains(turn.Prompt, "Briefly explain what is still malformed") {
+		t.Fatalf("expected final turn to request a concise malformed-slice summary, got %q", turn.Prompt)
 	}
-	if strings.Contains(turn.Prompt, "Briefly state the corrected next action") {
-		t.Fatalf("expected final turn to stop asking for next-action prose, got %q", turn.Prompt)
+	if !strings.Contains(turn.Prompt, "Do not dump a full tool call, do not dump a full script") {
+		t.Fatalf("expected final turn to forbid raw tool/script dumps, got %q", turn.Prompt)
 	}
 	response, ok := turn.Options.ToolCallContinuations[0].Response.(map[string]any)
 	if !ok {

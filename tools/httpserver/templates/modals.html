@@ -167,10 +167,10 @@
             <span>AI</span>
             
             <!-- Quick LLM Engine Setup -->
-            <select id="chat-settings-provider" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="LLM Provider" onchange="toggleInlineAuthFields('chat-settings-provider', 'chat-settings-api-key')">
+            <select id="chat-settings-provider" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="LLM Provider" onchange="handleInlineChatProviderChange()">
                 {{template "llmOptions" .}}
             </select>
-            <input type="password" id="chat-settings-api-key" placeholder="API Key" style="width: 80px; padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="API Key / Base URL">
+            <input type="password" id="chat-settings-inline-auth" placeholder="API Key" style="width: 80px; padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="API Key / Base URL" onchange="saveInlineChatAuth()">
 
             <select id="domain-select" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--accent-color); color: white; font-size: 11px; font-weight: normal; margin-left: 4px;" onclick="event.stopPropagation()" onchange="handleDomainChange(this)" title="Active Space">
                 <option value="" selected>None</option>
@@ -216,7 +216,7 @@
         </div>
         <div id="chat-settings-apikey-container" style="margin-bottom: 10px; display: none;">
             <label style="display: block; margin-bottom: 4px; font-weight: bold;">API Key (Auth Token)</label>
-            <input type="password" id="chat-settings-api-key" placeholder="Enter API Key securely" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <input type="password" id="chat-settings-overlay-api-key" placeholder="Enter API Key securely" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
         </div>
         <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px;">
             <button onclick="toggleChatSettings()" style="padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--pre-bg); color: var(--text-color); cursor: pointer;">Cancel</button>
