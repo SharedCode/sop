@@ -67,7 +67,7 @@ The Ask/ReAct system now has an explicit provider-owned loop seam. The generic e
 
 *   **Gemini**: Now owns a native provider loop in `ai/generator/gemini.go`. The engine delegates to `ReActLoop()` when Gemini is selected. Gemini receives tool schemas, returns parsed native tool calls, accumulates full tool-call continuations across turns, and continues from provider-native function call/function response state instead of replaying a synthetic retry frame on each pass.
 *   **Shared Ask Outcome Summaries**: MRU-facing `OutcomeFacts` and `OutcomeRecipes` now come from the shared helper in `ai/outcome_summary.go`. That keeps MRU continuity behavior aligned between the default engine path and provider-owned Gemini runs.
-*   **OpenAI ChatGPT**: Still currently follows the generic path in this codebase. It does not yet own a native continuation-first ReAct loop here.
+*   **OpenAI ChatGPT**: Now owns the default native provider loop in `ai/generator/chatgpt.go`. The engine delegates through the OpenAI Responses API, preserves `previous_response_id` when available, replays assistant/reasoning/tool items when provider response IDs are missing, executes native `function_call` items locally, and can stream assistant/tool/reasoning events through the shared request streamer. The old scaffold flag is now only an explicit opt-out if someone needs to force the generic path while debugging.
 *   **Anthropic**: Also still currently follows the generic path in this codebase. It does not yet own a provider-native loop here.
 
 The operational consequence is that Gemini is no longer the old hybrid described in earlier drafts. Gemini is now the reference implementation of the thin-wrapper model in SOP:
@@ -153,6 +153,27 @@ Operational rule:
 
 *   provisional in-loop MRU may help the running Ask
 *   final ask outcome always wins and becomes the only MRU layer promoted into STM carryover
+
+### GPT / OpenAI Parity Model
+
+The OpenAI/ChatGPT owned loop now follows the same two-layer state model already established for Gemini:
+
+*   **Stateful inside the Ask loop**: provider-owned response/thread state remains local to the running Ask. It may emit bounded provisional hydration through `ai.BuildMemoryHydrationUpdateFromParts`, but it does not become canonical memory.
+*   **Carryover between Asks**: provider-side continuation handles now flow through `CarryoverState` and may reuse OpenAI `previous_response_id` continuity when the thread is still valid. If that handle is unavailable, SOP falls back to replaying compact assistant/reasoning/tool history rather than treating vendor state as durable memory.
+*   **Canonical continuity stays local**: if provider carryover expires, resets, or becomes too expensive, SOP reconstructs continuity from session MRU, STM snapshots, recipes, and LTM/playbooks rather than depending on vendor state.
+
+Current completion status for this GPT phase:
+
+*   the owned loop is now on by default for ChatGPT in this codebase
+*   Gemini, ChatGPT, and the generic native engine now share one backend event contract in `ai/stream_events.go`
+*   focused GPT generator tests and the full `cd /Volumes/BigDrive/sop/ai && go test ./...` suite were green at the end of this phase
+*   the remaining GPT follow-up is not architecture work; it is a live-key smoke test against the real OpenAI API if operational verification is desired later
+
+Design rule:
+
+*   treat provider server-side state as a short-horizon runtime optimization
+*   keep epilogue as the only promotion point into canonical between-Ask memory
+*   keep streamed provider events observational only; they inform UI/runtime progress but do not replace final epilogue promotion
 
 ### Dynamic Tool Registration Boundary
 

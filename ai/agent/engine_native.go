@@ -263,22 +263,13 @@ func (e *NativeReActEngine) runDefaultLoop(ctx context.Context, req ai.Reasoning
 		)
 
 		sanitizeToolCallArgs(toolCall.Args, e.EnableObfuscation)
-		emitReasoningEvent(req, "tool_call", map[string]any{
-			"tool":      toolCall.Name,
-			"args":      cloneToolEventMap(toolCall.Args),
-			"iteration": iteration + 1,
-		})
+		emitReasoningEvent(req, ai.ReasoningEventToolCall, ai.BuildToolCallEvent(toolCall.Name, cloneToolEventMap(toolCall.Args), iteration+1))
 
 		execCtx := context.WithValue(ctx, ai.CtxKeyNativeToolHints, true)
 		priorRepair := pendingRepair
 		rawResult, err := req.Executor.Execute(execCtx, toolCall.Name, toolCall.Args)
 		if err != nil {
-			emitReasoningEvent(req, "tool_error", map[string]any{
-				"tool":      toolCall.Name,
-				"args":      cloneToolEventMap(toolCall.Args),
-				"error":     err.Error(),
-				"iteration": iteration + 1,
-			})
+			emitReasoningEvent(req, ai.ReasoningEventToolError, ai.BuildToolErrorEvent(toolCall.Name, cloneToolEventMap(toolCall.Args), err, iteration+1))
 			if isRecoverableToolExecutionError(err) {
 				repairPlan := classifyRecoverableToolRepair(toolCall.Name, err)
 				if shouldEscalateRepairToClarification(repairAttempts) {
@@ -313,14 +304,7 @@ func (e *NativeReActEngine) runDefaultLoop(ctx context.Context, req ai.Reasoning
 		}
 		pendingRepair = nil
 		log.Info("Native ReAct Engine Tool Success", "iteration", iteration+1, "tool", toolCall.Name, "result_chars", len(result))
-		emitReasoningEvent(req, "tool_result", map[string]any{
-			"tool":          toolCall.Name,
-			"args":          cloneToolEventMap(toolCall.Args),
-			"result":        result,
-			"progress_hint": hint,
-			"result_chars":  len(result),
-			"iteration":     iteration + 1,
-		})
+		emitReasoningEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneToolEventMap(toolCall.Args), result, hint, iteration+1))
 
 		executedToolCalls = append(executedToolCalls, toolCall)
 		previousResults := append([]nativeToolResult(nil), toolResults...)

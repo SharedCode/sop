@@ -49,6 +49,9 @@ Conventions for this document:
 - Provider-owned loops now share one provisional in-loop memory sink contract via `MemoryHydrationSink` in `ai/interfaces.go`; provider loops should emit only bounded grounded updates through that shared contract rather than inventing provider-specific in-loop memory paths.
 - MRU now operates as a deliberate two-layer model: ask-progress MRU is ask-scoped and provisional inside a running Ask, while session MRU plus STM snapshot is the canonical between-Ask continuity source. Epilogue clears provisional ask-progress MRU and promotes only the final ask outcome into the session/STM carryover path.
 - The shared hydration helper in `ai/memory_hydration.go` now enforces the provisional payload bounds directly: last 6 tool calls, last 6 grounded facts, 600-character final text / assistant summary cap, and 240-character per-fact cap. Future provider-owned loops should prefer `BuildMemoryHydrationUpdateFromParts`; `BuildMemoryHydrationUpdate` remains as a compatibility adapter from full `ReasoningResponse` values.
+- OpenAI/ChatGPT now follows the same split-state model as Gemini: provider-owned statefulness during Ask loops, optional provider carryover between Asks through `CarryoverState`, provisional in-loop hydration via `BuildMemoryHydrationUpdateFromParts`, and canonical continuity still committed only at epilogue.
+- OpenAI/ChatGPT owned-loop activation is now default-on in `ai/generator/chatgpt.go`; the old scaffold knob remains only as an explicit disable path for debugging the generic fallback.
+- Shared tool/assistant event payload shaping now lives in `ai/stream_events.go`, and Gemini, ChatGPT, plus the generic native engine all emit the same core backend event contract from that common layer.
 
 ### Open TODO
 
@@ -56,6 +59,7 @@ Conventions for this document:
 - [ ] Clarification fallback tool for unresolved ambiguity after autonomous research.
 - [ ] Additional Omni consumption hardening for cross-database loopback flows.
 - [ ] Medical Space showcase package for deep-domain demonstration.
+- [x] Add a real OpenAI/ChatGPT owned loop that mirrors Gemini's split between in-Ask provider state and between-Ask carryover while preserving epilogue as the only canonical memory promotion point.
 
 ### Document To Space (Declarative vs Episodic Bridge)
 
@@ -659,7 +663,8 @@ Progression-history contract:
 - The shared layer now exposes both turn-level and loop-level provider seams: `ReActTurnStrategy`, `ReActPromptBypassStrategy`, `ReActLoop`, and `ReActLoopProvider`.
 - The default engine still exists as the provider-neutral implementation and remains the fallback for providers that do not supply an owned loop.
 - Gemini now supplies a real provider-owned loop in `ai/generator/gemini.go` and is no longer just a transport adapter.
-- OpenAI ChatGPT and Anthropic still currently use the default shared path in this implementation.
+- OpenAI ChatGPT now supplies a real provider-owned loop in `ai/generator/chatgpt.go`, including OpenAI Responses API continuation, manual replay fallback, and streamed assistant/tool/reasoning event forwarding.
+- Anthropic still currently uses the default shared path in this implementation.
 
 What the Gemini-owned loop now does:
 
@@ -670,6 +675,23 @@ What the Gemini-owned loop now does:
 - executes tools with native tool-hint context and event-streamer context preserved
 - enforces a real no-tool final clarification turn by clearing tool schemas on the cap-exhausted turn
 - returns MRU-facing `OutcomeFacts` and `OutcomeRecipes` through the shared summarizer in `ai/outcome_summary.go` instead of maintaining a Gemini-only copy
+
+What the ChatGPT-owned loop now does:
+
+- delegates from `NativeReActEngine.Run(...)` through `ReActLoop()`
+- calls the OpenAI Responses API with native tool schemas and provider-owned loop control
+- is active on the default ChatGPT path rather than hidden behind a default-off scaffold flag
+- executes local tool calls from native `function_call` items and feeds `function_call_output` back into the loop
+- reuses `previous_response_id` when available and falls back to replaying assistant messages, reasoning items, function calls, and function call outputs when it is not
+- preserves assistant `phase` so commentary versus `final_answer` stays correct in both replay and final extraction
+- forwards streamed partial provider output through the existing `assistant_message` and `tool_call` event channels, marking deltas and finalized streamed payloads with streaming metadata instead of inventing ChatGPT-only event names
+- returns carryover-ready provider metadata including conversation handle and compact assistant summary without promoting vendor state into canonical memory
+
+GPT completion checkpoint:
+
+- architecture and default-path integration are complete in this phase
+- shared event compatibility with Gemini is enforced by `ai/stream_events_test.go` and `ai/generator/provider_event_contract_test.go`
+- the remaining optional follow-up, if this task is resumed later, is a live OpenAI smoke test with a real key rather than more structural code work
 
 Shared Ask outcome seam:
 
@@ -959,7 +981,7 @@ Objective: let each Ask final result shape the next Ask without replaying static
 - [ ] TODO: Add prompt assembly tests for single-Ask progression and follow-up Ask reuse.
 - [ ] TODO: Continue converting user-visible hard-stop tool outcomes from plain text to structured native terminal envelopes; keep infrastructure failures as typed Go errors.
 - [ ] TODO: Let Stage 1 focused retrieval dynamically narrow provider tool registration before Stage 2 Ask/ReAct execution, instead of relying primarily on prompt-side narrowing.
-- [ ] TODO: Extend the provider-owned model to other providers that can genuinely preserve a native tool/thread state.
+- [ ] TODO: Extend the provider-owned model to Anthropic and other providers that can genuinely preserve a native tool/thread state.
 - [ ] TODO: Continue moving Gemini-specific progression semantics out of generic shared shaping and into the Gemini-owned loop where the native thread is actually interpreted.
 
 ## 3. Roadmap and Release Details

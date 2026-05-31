@@ -141,11 +141,7 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 		}
 
 		for _, toolCall := range output.ToolCalls {
-			emitGeminiOwnedLoopEvent(req, "tool_call", map[string]any{
-				"tool":      toolCall.Name,
-				"args":      cloneGeminiToolArgs(toolCall.Args),
-				"iteration": iteration,
-			})
+			emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolCall, ai.BuildToolCallEvent(toolCall.Name, cloneGeminiToolArgs(toolCall.Args), iteration))
 			executedToolCalls = append(executedToolCalls, toolCall)
 			toolResult, continuation := executeGeminiOwnedLoopToolCall(ctx, req, iteration, toolCall)
 			toolResults = append(toolResults, toolResult)
@@ -382,12 +378,7 @@ func executeGeminiOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequest
 	resultText, hint := unwrapGeminiToolResultEnvelope(rawResult)
 	continuationResponse := coerceGeminiToolContinuationResponse(rawResult)
 	if execErr != nil {
-		emitGeminiOwnedLoopEvent(req, "tool_error", map[string]any{
-			"tool":      toolCall.Name,
-			"args":      cloneGeminiToolArgs(toolCall.Args),
-			"error":     execErr.Error(),
-			"iteration": iteration,
-		})
+		emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolError, ai.BuildToolErrorEvent(toolCall.Name, cloneGeminiToolArgs(toolCall.Args), execErr, iteration))
 		resultText = execErr.Error()
 		continuationResponse = map[string]any{
 			"tool_error": map[string]any{
@@ -395,14 +386,7 @@ func executeGeminiOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequest
 			},
 		}
 	} else {
-		emitGeminiOwnedLoopEvent(req, "tool_result", map[string]any{
-			"tool":          toolCall.Name,
-			"args":          cloneGeminiToolArgs(toolCall.Args),
-			"result":        resultText,
-			"progress_hint": cloneGeminiToolProgressHint(hint),
-			"result_chars":  len(resultText),
-			"iteration":     iteration,
-		})
+		emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneGeminiToolArgs(toolCall.Args), resultText, cloneGeminiToolProgressHint(hint), iteration))
 	}
 
 	return ai.ReActToolResult{
