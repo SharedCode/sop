@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	log "log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -115,6 +116,223 @@ func runIngestImportSpace(ctx context.Context, request IngestSpaceRequest, emb a
 		if err := db.Vectorize(ctx, kb.Name(), llm, emb, 100); err != nil {
 			return fmt.Errorf("import successful, but vectorization failed: %w", err)
 		}
+	}
+
+	return nil
+}
+
+func runIngestSpace(ctx context.Context, request IngestSpaceRequest, emb ai.Embeddings, llm ai.Generator, onProgress func(progress int, total int, msg string), beforeCommit func()) error {
+	if onProgress != nil {
+		onProgress(10, 100, "Initializing database connection...")
+	}
+
+	opts, err := getDBOptions(ctx, request.DatabaseName)
+	if err != nil {
+		return fmt.Errorf("failed to get DB config: %w", err)
+	}
+
+	db := database.NewDatabase(opts)
+	trans, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer trans.Rollback(ctx)
+
+	kb, err := db.OpenKnowledgeBase(ctx, request.SpaceName, trans, llm, emb, false)
+	if err != nil {
+		return fmt.Errorf("failed to open KnowledgeBase '%s': %w", request.SpaceName, err)
+	}
+
+	if request.Attributes != nil {
+		if err := kb.SetConfig(ctx, request.Attributes); err != nil {
+			return fmt.Errorf("failed to insert Space attributes: %w", err)
+		}
+	}
+
+	reader, closer, err := ingestImportReader(ctx, request)
+	if err != nil {
+		return err
+	}
+	if closer != nil {
+		defer closer.Close()
+	}
+
+	if reader != nil {
+		if onProgress != nil {
+			onProgress(30, 100, "Reading Space data stream...")
+		}
+
+		decoder := json.NewDecoder(reader)
+		var batch []memory.Thought[map[string]any]
+		const batchSize = 500
+		totalProcessed := 0
+
+		currentKBConfig, cfgErr := kb.GetConfig(ctx)
+		if cfgErr != nil {
+			return fmt.Errorf("failed to read KnowledgeBase config: %w", cfgErr)
+		}
+
+		documentMode := false
+		if currentKBConfig != nil {
+			documentMode = currentKBConfig.DocumentMode
+		}
+
+		ingestBatch := func(final bool) error {
+			if len(batch) == 0 {
+				return nil
+			}
+
+			progressMsg := fmt.Sprintf("Embedding and ingesting batch (processed %d)...", totalProcessed)
+			progressTotal := totalProcessed + 100
+			if final {
+				progressMsg = fmt.Sprintf("Embedding and ingesting final batch (processed %d)...", totalProcessed)
+				progressTotal = totalProcessed
+			}
+			if onProgress != nil {
+				onProgress(50, progressTotal, progressMsg)
+			}
+
+			if err := kb.IngestThoughts(ctx, batch, "expert"); err != nil {
+				return fmt.Errorf("failed to ingest Space batch: %w", err)
+			}
+			batch = batch[:0]
+			return nil
+		}
+
+		t, err := decoder.Token()
+		if err != nil {
+			return fmt.Errorf("failed to read Space data stream: %w", err)
+		}
+
+		delim, ok := t.(json.Delim)
+		if !ok {
+			return fmt.Errorf("failed to parse Space data stream: expected JSON object or array")
+		}
+
+		if delim == '{' {
+			for decoder.More() {
+				keyToken, err := decoder.Token()
+				if err != nil {
+					return fmt.Errorf("failed to read Space data stream: %w", err)
+				}
+				keyStr, ok := keyToken.(string)
+				if !ok {
+					return fmt.Errorf("failed to parse Space data stream: expected object key")
+				}
+
+				switch keyStr {
+				case "config":
+					var cfg memory.KnowledgeBaseConfig
+					if err := decoder.Decode(&cfg); err != nil {
+						return fmt.Errorf("failed to decode Space config: %w", err)
+					}
+					if err := kb.SetConfig(ctx, &cfg); err != nil {
+						return fmt.Errorf("failed to set Space config: %w", err)
+					}
+					documentMode = cfg.DocumentMode
+				case "items":
+					t, err := decoder.Token()
+					if err != nil {
+						return fmt.Errorf("failed to read Space items: %w", err)
+					}
+					if itemsDelim, ok := t.(json.Delim); !ok || itemsDelim != '[' {
+						return fmt.Errorf("failed to parse Space items: expected array")
+					}
+
+					for decoder.More() {
+						var chunk SpaceIngestChunk
+						if err := decoder.Decode(&chunk); err != nil {
+							return fmt.Errorf("failed to decode Space item: %w", err)
+						}
+
+						cid := chunk.ID
+						if cid == "" {
+							cid = fmt.Sprintf("custom_%d", totalProcessed)
+						}
+
+						batch = append(batch, memory.Thought[map[string]any]{
+							DocID:     chunk.DocID,
+							Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, CategoryPath: chunk.Category, Data: buildChunkData(cid, chunk, documentMode),
+						})
+						totalProcessed++
+
+						if len(batch) >= batchSize {
+							if err := ingestBatch(false); err != nil {
+								return err
+							}
+						}
+					}
+				default:
+					var skip any
+					if err := decoder.Decode(&skip); err != nil {
+						return fmt.Errorf("failed to skip Space property %q: %w", keyStr, err)
+					}
+				}
+			}
+		} else if delim == '[' {
+			for decoder.More() {
+				var chunk SpaceIngestChunk
+				if err := decoder.Decode(&chunk); err != nil {
+					return fmt.Errorf("failed to decode Space item: %w", err)
+				}
+
+				cid := chunk.ID
+				if cid == "" {
+					cid = fmt.Sprintf("custom_%d", totalProcessed)
+				}
+
+				batch = append(batch, memory.Thought[map[string]any]{
+					DocID:     chunk.DocID,
+					Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, CategoryPath: chunk.Category, Data: buildChunkData(cid, chunk, documentMode),
+				})
+				totalProcessed++
+
+				if len(batch) >= batchSize {
+					if err := ingestBatch(false); err != nil {
+						return err
+					}
+				}
+			}
+		} else {
+			return fmt.Errorf("failed to parse Space data stream: expected JSON object or array")
+		}
+
+		if err := ingestBatch(true); err != nil {
+			return err
+		}
+
+		if emb != nil {
+			cfg, cfgErr := kb.GetConfig(ctx)
+			if cfgErr != nil {
+				return fmt.Errorf("failed to read KnowledgeBase config: %w", cfgErr)
+			}
+			if cfg != nil {
+				needsUpdate := false
+				if cfg.EmbedderDimension != emb.Dim() {
+					cfg.EmbedderDimension = emb.Dim()
+					needsUpdate = true
+				}
+				if cfg.Embedder != emb.Name() {
+					cfg.Embedder = emb.Name()
+					needsUpdate = true
+				}
+				if needsUpdate {
+					if err := kb.SetConfig(ctx, cfg); err != nil {
+						return fmt.Errorf("failed to update KnowledgeBase config: %w", err)
+					}
+				}
+			}
+		}
+	}
+
+	if onProgress != nil {
+		onProgress(90, 100, "Committing changes...")
+	}
+	if beforeCommit != nil {
+		beforeCommit()
+	}
+	if err := trans.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit vector store initialization: %w", err)
 	}
 
 	return nil
@@ -412,206 +630,18 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 	go func(taskId string, request IngestSpaceRequest, emb ai.Embeddings, llm ai.Generator) {
 		defer func() {
 			if rec := recover(); rec != nil {
+				log.Error("Panic during preload", "task_id", taskId, "space", request.SpaceName, "database", request.DatabaseName, "error", rec)
 				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Panic during preload: %v", rec))
 			}
 		}()
 
 		ctx := context.Background()
-		UpdateTask(taskId, "in_progress", 10, 100, "Initializing database connection...", "")
-		opts, err := getDBOptions(ctx, request.DatabaseName)
+		err := runIngestSpace(ctx, request, emb, llm, func(progress int, total int, msg string) {
+			UpdateTask(taskId, "in_progress", progress, total, msg, "")
+		}, nil)
 		if err != nil {
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to get DB config: %v", err))
-			return
-		}
-
-		db := database.NewDatabase(opts)
-
-		trans, err := db.BeginTransaction(ctx, sop.ForWriting)
-		if err != nil {
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to begin transaction: %v", err))
-			return
-		}
-
-		kb, err := db.OpenKnowledgeBase(ctx, request.SpaceName, trans, llm, emb, false)
-		if err != nil {
-			trans.Rollback(ctx)
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to open KnowledgeBase '%s': %v", request.SpaceName, err))
-			return
-		}
-
-		if request.Attributes != nil {
-			err := kb.SetConfig(ctx, request.Attributes)
-			if err != nil {
-				fmt.Printf("Failed to insert Space Attributes: %v\n", err)
-			}
-		}
-
-		var reader io.Reader
-		var closer io.Closer
-
-		if len(request.CustomData) > 0 {
-			reader = bytes.NewReader(request.CustomData)
-		} else if request.URL != "" {
-			reqHTTP, err := http.NewRequestWithContext(ctx, http.MethodGet, request.URL, nil)
-			if err == nil {
-				resp, err := http.DefaultClient.Do(reqHTTP)
-				if err == nil {
-					reader = resp.Body
-					closer = resp.Body
-					defer closer.Close()
-				}
-			}
-		} else if request.PreloadFilePath != "" {
-			f, err := os.Open(request.PreloadFilePath)
-			if err == nil {
-				reader = f
-				closer = f
-				defer closer.Close()
-			}
-		}
-
-		if reader != nil {
-			UpdateTask(taskId, "in_progress", 30, 100, "Reading Space data stream...", "")
-
-			decoder := json.NewDecoder(reader)
-			var batch []memory.Thought[map[string]any]
-			const batchSize = 500
-			totalProcessed := 0
-
-			// Track current config, fetch existing KB config or default to what's defined in the stream
-			currentKBConfig, _ := kb.GetConfig(ctx)
-			documentMode := false
-			if currentKBConfig != nil {
-				documentMode = currentKBConfig.DocumentMode
-			}
-
-			t, err := decoder.Token()
-			if err == nil {
-				if delim, ok := t.(json.Delim); ok {
-					if delim == '{' {
-						// It's an object, look for 'items' array
-						for decoder.More() {
-							keyToken, err := decoder.Token()
-							if err != nil {
-								break
-							}
-							keyStr, ok := keyToken.(string)
-							if !ok {
-								break
-							}
-
-							if keyStr == "config" {
-								var cfg memory.KnowledgeBaseConfig
-								if err := decoder.Decode(&cfg); err == nil {
-									kb.SetConfig(ctx, &cfg)
-									documentMode = cfg.DocumentMode
-								}
-							} else if keyStr == "items" {
-								// read opening '['
-								t, err := decoder.Token()
-								if err != nil {
-									break
-								}
-								if delim, ok := t.(json.Delim); !ok || delim != '[' {
-									break
-								}
-
-								// read items
-								for decoder.More() {
-									var chunk SpaceIngestChunk
-									if err := decoder.Decode(&chunk); err != nil {
-										break
-									}
-
-									cid := chunk.ID
-									if cid == "" {
-										cid = fmt.Sprintf("custom_%d", totalProcessed)
-									}
-
-									batch = append(batch, memory.Thought[map[string]any]{
-										DocID:     chunk.DocID,
-										Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, CategoryPath: chunk.Category, Data: buildChunkData(cid, chunk, documentMode),
-									})
-									totalProcessed++
-
-									if len(batch) >= batchSize {
-										UpdateTask(taskId, "in_progress", 50, totalProcessed+100, fmt.Sprintf("Embedding and ingesting batch (processed %d)...", totalProcessed), "")
-										err := kb.IngestThoughts(ctx, batch, "expert")
-										if err != nil {
-											fmt.Printf("Failed to ingest batch: %v\n", err)
-										}
-										batch = batch[:0]
-									}
-								}
-							} else {
-								// skip unknown properties
-								var skip any
-								decoder.Decode(&skip)
-							}
-						}
-					} else if delim == '[' {
-						// It's an array directly
-						for decoder.More() {
-							var chunk SpaceIngestChunk
-							if err := decoder.Decode(&chunk); err != nil {
-								break
-							}
-
-							cid := chunk.ID
-							if cid == "" {
-								cid = fmt.Sprintf("custom_%d", totalProcessed)
-							}
-
-							batch = append(batch, memory.Thought[map[string]any]{
-								DocID:     chunk.DocID,
-								Summaries: extractSummaries(chunk), Vectors: chunk.Vectors, CategoryPath: chunk.Category, Data: buildChunkData(cid, chunk, documentMode),
-							})
-							totalProcessed++
-
-							if len(batch) >= batchSize {
-								UpdateTask(taskId, "in_progress", 50, totalProcessed+100, fmt.Sprintf("Embedding and ingesting batch (processed %d)...", totalProcessed), "")
-								err := kb.IngestThoughts(ctx, batch, "expert")
-								if err != nil {
-									fmt.Printf("Failed to ingest batch: %v\n", err)
-								}
-								batch = batch[:0]
-							}
-						}
-					}
-				}
-			}
-
-			// Process remaining batch
-			if len(batch) > 0 {
-				UpdateTask(taskId, "in_progress", 50, totalProcessed, fmt.Sprintf("Embedding and ingesting final batch (processed %d)...", totalProcessed), "")
-				err := kb.IngestThoughts(ctx, batch, "expert")
-				if err != nil {
-					fmt.Printf("Failed to ingest final batch: %v\n", err)
-				}
-			}
-
-			if dbEmbedder != nil {
-				cfg, cfgErr := kb.GetConfig(ctx)
-				if cfgErr == nil && cfg != nil {
-					needsUpdate := false
-					if cfg.EmbedderDimension != dbEmbedder.Dim() {
-						cfg.EmbedderDimension = dbEmbedder.Dim()
-						needsUpdate = true
-					}
-					if cfg.Embedder != dbEmbedder.Name() {
-						cfg.Embedder = dbEmbedder.Name()
-						needsUpdate = true
-					}
-					if needsUpdate {
-						kb.SetConfig(ctx, cfg)
-					}
-				}
-			}
-		}
-
-		UpdateTask(taskId, "in_progress", 90, 100, "Committing changes...", "")
-		if err := trans.Commit(ctx); err != nil {
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to commit vector store initialization: %v", err))
+			log.Error("Space preload failed", "task_id", taskId, "space", request.SpaceName, "database", request.DatabaseName, "error", err)
+			UpdateTask(taskId, "error", 0, 0, "", err.Error())
 			return
 		}
 
@@ -656,6 +686,7 @@ func handleIngestImportSpace(w http.ResponseWriter, r *http.Request) {
 	go func(taskId string, request IngestSpaceRequest, emb ai.Embeddings, llm ai.Generator) {
 		defer func() {
 			if rec := recover(); rec != nil {
+				log.Error("Panic during ingest import", "task_id", taskId, "space", request.SpaceName, "database", request.DatabaseName, "error", rec)
 				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Panic during ingest import: %v", rec))
 			}
 		}()
@@ -665,6 +696,7 @@ func handleIngestImportSpace(w http.ResponseWriter, r *http.Request) {
 			UpdateTask(taskId, "in_progress", progress, total, msg, "")
 		}, nil)
 		if err != nil {
+			log.Error("Space ingest import failed", "task_id", taskId, "space", request.SpaceName, "database", request.DatabaseName, "error", err)
 			UpdateTask(taskId, "error", 0, 0, "", err.Error())
 			return
 		}

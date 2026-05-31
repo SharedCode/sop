@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	log "log/slog"
+	"net"
 	"os"
 	"strings"
 	"syscall"
@@ -67,13 +68,30 @@ func ShouldRetry(err error) bool {
 		errors.Is(err, syscall.ELOOP),
 		errors.Is(err, syscall.EXDEV),  // invalid cross-device link
 		errors.Is(err, syscall.EEXIST), // file exists
-		errors.Is(err, syscall.EINVAL): // invalid argument (for many FS ops typically caller bug)
+		errors.Is(err, syscall.EINVAL), // invalid argument (for many FS ops typically caller bug)
+		errors.Is(err, syscall.ECONNREFUSED),
+		errors.Is(err, syscall.EHOSTUNREACH),
+		errors.Is(err, syscall.ENETUNREACH),
+		errors.Is(err, syscall.ECONNRESET),
+		errors.Is(err, syscall.ETIMEDOUT):
+		return false
+	}
+
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
 		return false
 	}
 
 	// Last-resort heuristic for EROFS text across platforms/drivers.
 	s := err.Error()
 	if strings.Contains(s, "read-only file system") || strings.Contains(s, "readonly file system") {
+		return false
+	}
+	if strings.Contains(s, "connection refused") ||
+		strings.Contains(s, "no such host") ||
+		strings.Contains(s, "network is unreachable") ||
+		strings.Contains(s, "host is unreachable") ||
+		strings.Contains(s, "i/o timeout") {
 		return false
 	}
 

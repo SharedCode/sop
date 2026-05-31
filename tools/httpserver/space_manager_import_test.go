@@ -136,3 +136,59 @@ func TestRunIngestImportSpace_PropagatesCommitError(t *testing.T) {
 		t.Fatalf("expected redis commit error, got %v", err)
 	}
 }
+
+func TestRunIngestSpace_PropagatesCommitError(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	uniqueAddr := fmt.Sprintf("ingest-space-commit-%d:6379", time.Now().UnixNano())
+	config = Config{
+		Databases: []DatabaseConfig{{Name: "testdb", Path: t.TempDir(), Mode: "clustered", RedisURL: uniqueAddr}},
+	}
+
+	cache := newCommitToggleRedisCache()
+	sop.RegisterL2CacheFactory(sop.Redis, func(opts sop.TransactionOptions) sop.L2Cache {
+		return cache
+	})
+	defer sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
+
+	request := IngestSpaceRequest{
+		DatabaseName: "testdb",
+		SpaceName:    "medical",
+		CustomData:   json.RawMessage(`{"items":[{"id":"11111111-1111-1111-1111-111111111111","category":"medical","data":{"text":"Redis failure repro","description":"commit should fail"},"summaries":["medical preload"]}]}`),
+	}
+
+	err := runIngestSpace(context.Background(), request, nil, &MockGenerator{}, nil, cache.EnableCommitFailure)
+	if err == nil {
+		t.Fatal("expected ingest helper to return commit error")
+	}
+	if !strings.Contains(err.Error(), "failed to commit vector store initialization") {
+		t.Fatalf("expected commit wrapper error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "redis unavailable during commit") {
+		t.Fatalf("expected redis commit error, got %v", err)
+	}
+}
+
+func TestRunIngestSpace_PropagatesDecodeError(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	config = Config{
+		Databases: []DatabaseConfig{{Name: "testdb", Path: t.TempDir(), Mode: "standalone"}},
+	}
+
+	request := IngestSpaceRequest{
+		DatabaseName: "testdb",
+		SpaceName:    "medical",
+		CustomData:   json.RawMessage(`{"items":[{"id":"broken"`),
+	}
+
+	err := runIngestSpace(context.Background(), request, nil, &MockGenerator{}, nil, nil)
+	if err == nil {
+		t.Fatal("expected ingest helper to return decode error")
+	}
+	if !strings.Contains(err.Error(), "failed to decode Space item") {
+		t.Fatalf("expected decode error, got %v", err)
+	}
+}
