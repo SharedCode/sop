@@ -634,7 +634,7 @@ func (a *CopilotAgent) toolManageTransaction(ctx context.Context, args map[strin
 				if commitErr != nil {
 					return "", fmt.Errorf("commit failed: %v. AND failed to auto-start new one: %v", commitErr, beginErr)
 				}
-				return "Transaction committed, but failed to auto-start new one: " + beginErr.Error(), nil
+				return "", fmt.Errorf("transaction committed, but failed to auto-start new one: %w", beginErr)
 			}
 
 			if p.Transactions == nil {
@@ -690,7 +690,7 @@ func (a *CopilotAgent) toolManageTransaction(ctx context.Context, args map[strin
 		if db != nil {
 			newTx, err := db.BeginTransaction(ctx, sop.ForWriting)
 			if err != nil {
-				return "Transaction rolled back, but failed to auto-start new one: " + err.Error(), nil
+				return "", fmt.Errorf("transaction rolled back, but failed to auto-start new one: %w", err)
 			}
 			if p.Transactions == nil {
 				p.Transactions = make(map[string]any)

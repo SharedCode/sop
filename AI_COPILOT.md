@@ -78,7 +78,30 @@ The operational consequence is that Gemini is no longer the old hybrid described
 
 This design is now documented, and the next tracked implementation phase is:
 
-*   **Budgeted Carryover Across Asks**: Bounded Gemini carryover between adjacent Asks is now the next tracked implementation phase. The model should be allowed to reuse its live thread only while the topic, KB, provider, and token budget remain valid. Once that thread grows expensive or stale, SOP should cut over to compact MRU, `OutcomeFacts`, learned recipes, and focused retrieval instead of replaying the whole raw thread.
+Current stabilization order for release:
+
+1.  **Queries**: Stabilize store research, joins, filters, script AST generation, tool repair, and provider-owned query execution loops first.
+2.  **Spaces**: After Queries are reliable, stabilize Space lifecycle operations, enrichment, vectorization, and config mutations.
+3.  **KB Searches**: Once Queries and Spaces are stable, harden Knowledge Base search grounding, retrieval ranking, and search-to-action handoff.
+4.  **Memory Injection**: Only after those surfaces are stable should SOP make memory injection a dominant runtime layer for cross-Ask continuity.
+
+That does not mean carryover or provider-owned continuity are out of scope for the current release iteration. Queries still depend on them materially, so they are being actively exercised, traced, and hardened now as part of query stabilization. The deferral is narrower: SOP is postponing memory injection as a dominant cross-Ask runtime layer until Queries, Spaces, and KB Searches are stable enough to sit on top of it.
+
+In other words:
+
+*   **Provider Loop and Carryover (Current Iteration)**: Provider-owned loops, bounded carryover, hydration, repair continuity, and cross-turn tool-call state are part of the active stabilization surface because query reliability depends on them.
+*   **Memory Injection as Primary Runtime Layer (Deferred)**: Broader MRU/STM/LTM injection as the main cross-Ask reasoning substrate remains intentionally sequenced after Queries, Spaces, and KB Searches.
+
+The next deeper memory-focused phase is still planned, but it is not the current release blocker:
+
+*   **Budgeted Carryover Across Asks**: Bounded Gemini carryover between adjacent Asks remains a tracked implementation phase. The model should be allowed to reuse its live thread only while the topic, KB, provider, and token budget remain valid. Once that thread grows expensive or stale, SOP should cut over to compact MRU, `OutcomeFacts`, learned recipes, and focused retrieval instead of replaying the whole raw thread.
+
+When SOP returns to memory injection hardening, that work should be treated as a reliability project rather than prompt tuning. The release gates for that phase are:
+
+1.  **Continuity Gate**: MRU -> STM -> LTM handoff remains correct across normal asks, follow-ups, clarification turns, and provider-owned retries.
+2.  **Grounding Gate**: Schema facts, relations, prior tool outcomes, and learned repair recipes survive between asks and are reused without reintroducing stale or contradictory facts.
+3.  **Repair Gate**: Failed tool calls preserve enough ask-local truth for the next loop to repair the broken slice instead of restarting the whole task.
+4.  **Observability Gate**: Hydration, carryover, and memory-projection paths are inspectable in logs and tests so provider drift can be debugged from evidence instead of guesswork.
 
 That means SOP will deliberately treat provider carryover as a short-horizon cache rather than the primary memory layer:
 

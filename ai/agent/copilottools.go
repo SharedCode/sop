@@ -18,13 +18,36 @@ import (
 )
 
 const (
-	ExecuteScriptInstruction = `Execute a full ordered JSON AST under script for multi-step store operations. Each step should be an object such as {op, args?, input_var?, result_var?}. Focus on orchestration semantics: begin a transaction, read or mutate stores, then commit or rollback. begin_tx defines the durability boundary for the workflow, so use it when related mutations must persist or roll back together. For larger mutation runs, batch deliberately under explicit commits, with a practical default of about 50 to 250 CRUD operations per transaction unless business atomicity requires a different boundary. Chain multi-step reads with result_var/input_var. Use list_stores to research stores before multi-store joins or whenever schema is uncertain. Prefer scoped calls such as stores:["users","users_orders","orders"] so research stays compact on large databases. list_stores returns grounded per-store lines with schema=... and optional relations=[...]. Read schema=... for exact field names and value types, then align those researched field names with the user's criteria values: if schema confirms first_name:string and the ask says first_name John, emit {"first_name":{"$eq":"John"}}; if a joined result uses orders.total_amount:float64 and the ask says total amount > 500, emit {"orders.total_amount":{"$gt":500}}. Read relations=[...] for join-field semantics literally: in users_orders(key->users.key), the token before -> is the target-store join field and the token after -> is the current-store field path. Treat those returned relations=[...] entries as the source of truth. prefer relation + target for join repair instead of inventing a fresh on mapping; if on is still needed, rewrite only the invalid join slice by translating the confirmed relation into the exact concrete field mapping the join op expects, and never use store names where field paths are required. join and join_right emit a combined flat record by default, so reuse dotted store-qualified field paths unless a later project step reshapes the output. If the AST shape is ambiguous, call gettoolinfo('execute_script'). Use concrete predicate objects and concrete join mappings; do not guess missing values or emit boolean placeholders where a researched field plus user value is required.`
-	ListStoresInstruction    = "Research store structure before writing multi-store reads or repairs. Pass stores:[...] to scope the response to likely targets, and infer likely store names from the user's ask instead of leaving stores empty when obvious candidates are available. The tool can narrow close singular/plural matches internally, but you should still pass the most likely store names you can infer. The result returns grounded schema=... and optional relations=[...] lines. Read schema literally to choose the field name, then align that field name with the value or operator from the user's criteria instead of emitting placeholders. Read relations literally: in users_orders(key->users.key), users_orders is the target store, key is the target-store join field, and users.key is the current-store field path. Reuse those grounded relations as the source of truth for join targets, join fields, dotted field paths, and predicate field names rather than guessing them."
+	ExecuteScriptInstruction = "Execute a full ordered JSON AST under script for multi-step store operations. Each step should be an object such as {op, args?, input_var?, result_var?}. " +
+		"Focus on orchestration semantics: begin a transaction, read or mutate stores, then commit or rollback. begin_tx defines the durability boundary for the workflow, so use it when related mutations must persist or roll back together. " +
+		"For larger mutation runs, batch deliberately under explicit commits, with a practical default of about 50 to 250 CRUD operations per transaction unless business atomicity requires a different boundary. Chain multi-step reads with result_var/input_var. " +
+		"Use list_stores to research stores before multi-store joins or whenever schema is uncertain. Prefer scoped calls such as stores:[\"users\",\"users_orders\",\"orders\"] so research stays compact on large databases. list_stores returns a JSON object with stores:[{name,schema,description,relations,empty}]. " +
+		"Read each store.schema object literally for exact field names and data types, then align the expression field name and literal value with that exact schema instead of emitting placeholders: if schema confirms first_name:string and the ask says first_name John, emit {\"first_name\":{\"$eq\":\"John\"}}; if schema confirms orders.total_amount:number and the ask says total amount > 500, emit {\"orders.total_amount\":{\"$gt\":500}}. " +
+		"Read each store.relations entry literally: source_fields are the current-store field paths, target_store is the joined store, and target_fields are the target-store join fields. Treat those grounded relations as the source of truth. " +
+		"Worked example: for the prompt Find orders for users with first_name 'John' with total amount > 500, think in this order: infer likely stores [\"users\",\"users_orders\",\"orders\"]; call list_stores; read users.schema.first_name:string and orders.schema.total_amount:number; align expression names to those exact fields; align literal values to those exact types; then compose joins from the returned relations. If list_stores returns users.relations with target_store users_orders and target_fields [user_id], and users_orders.relations with target_store orders and target_fields [key], the next AST can be {\"script\":[{\"op\":\"begin_tx\",\"args\":{\"mode\":\"read\"},\"result_var\":\"tx\"},{\"op\":\"open_store\",\"args\":{\"transaction\":\"tx\",\"name\":\"users\"},\"result_var\":\"users_store\"},{\"op\":\"open_store\",\"args\":{\"transaction\":\"tx\",\"name\":\"users_orders\"},\"result_var\":\"users_orders_store\"},{\"op\":\"open_store\",\"args\":{\"transaction\":\"tx\",\"name\":\"orders\"},\"result_var\":\"orders_store\"},{\"op\":\"select\",\"args\":{\"store\":\"users_store\",\"condition\":{\"first_name\":{\"$eq\":\"John\"}}},\"result_var\":\"matched_users\"},{\"op\":\"join\",\"input_var\":\"matched_users\",\"args\":{\"target\":\"users_orders_store\",\"relation\":\"users_orders\"},\"result_var\":\"user_order_links\"},{\"op\":\"join\",\"input_var\":\"user_order_links\",\"args\":{\"target\":\"orders_store\",\"relation\":\"orders\"},\"result_var\":\"joined_orders\"},{\"op\":\"filter\",\"input_var\":\"joined_orders\",\"args\":{\"condition\":{\"orders.total_amount\":{\"$gt\":500}}},\"result_var\":\"filtered_orders\"},{\"op\":\"return\",\"input_var\":\"filtered_orders\"}]}. Do not emit booleans such as {\"first_name\":true} or {\"orders\":true}. " +
+		"Prefer relation + target for join repair instead of inventing a fresh on mapping; if on is still needed, rewrite only the invalid join slice by translating the confirmed relation into the exact concrete field mapping the join op expects, and never use store names where field paths are required. join and join_right emit a combined flat record by default, so reuse dotted store-qualified field paths unless a later project step intentionally reshapes the output. If the AST shape is ambiguous, call gettoolinfo('execute_script') and continue with concrete predicate objects, concrete join mappings, and boolean placeholders removed."
+	ListStoresInstruction = "Research store structure before writing multi-store reads or repairs. Pass stores:[...] to scope the response to likely targets, and infer likely store names from the user's ask instead of leaving stores empty when obvious candidates are available. " +
+		"The tool can narrow close singular/plural matches internally, but you should still pass the most likely store names you can infer. The result is a JSON object with stores:[{name,schema,description,relations,empty}]. " +
+		"Read each store.schema object literally to choose the field name, and match the expression name and literal value to that field's exact data type instead of emitting placeholders. Read each store.relations entry literally: source_fields are the current-store field paths, target_store is the joined store, and target_fields are the target-store join fields. Reuse those grounded relations as the source of truth for join targets, join fields, dotted field paths, and predicate field names rather than guessing them. " +
+		"Worked example: Find orders for users with first_name 'John' with total amount > 500. Infer [\"users\",\"users_orders\",\"orders\"], read users.schema.first_name:string and orders.schema.total_amount:number, align expression names to first_name and orders.total_amount, align literal values to string John and number 500, then compose the join AST from the returned relation fields. The resulting execute_script AST should contain grounded expressions such as {\"first_name\":{\"$eq\":\"John\"}} and {\"orders.total_amount\":{\"$gt\":500}}, not booleans like {\"first_name\":true}."
 )
 
 const emptyObjectArgsSchema = `{"type":"object","properties":{}}`
 
 const listStoresArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"stores":{"type":"array","description":"Optional likely store names to research. Infer likely targets from the user's ask and pass them here, for example [\"users\",\"users_orders\",\"orders\"], to keep research compact instead of listing the whole database. Close singular/plural forms are narrowed internally, but explicit likely names are preferred.","items":{"type":"string"}}}}`
+
+type listStoresPayload struct {
+	Database string             `json:"database,omitempty"`
+	Stores   []listStorePayload `json:"stores"`
+}
+
+type listStorePayload struct {
+	Name        string            `json:"name"`
+	Schema      map[string]string `json:"schema,omitempty"`
+	Description string            `json:"description,omitempty"`
+	Relations   []sop.Relation    `json:"relations,omitempty"`
+	Empty       bool              `json:"empty,omitempty"`
+}
 
 const (
 	SelectInstruction                   = "Read or mutate one store directly when you do not need a multi-step AST. Provide the store name plus optional key/value criteria, fields, limit, and direction. For mutations set action=delete or action=update and include grounded update_values instead of placeholder objects. This tool still executes inside a transaction: it reuses an explicit transaction when one is active, otherwise it opens and auto-commits its own local transaction. Prefer execute_script when you need multi-step transaction orchestration."
@@ -218,17 +241,13 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 	}
 	if tx == nil {
 		// If no transaction in payload, try to start one on the DB
-		if db != nil {
-			var err error
-			tx, err = db.BeginTransaction(ctx, sop.ForReading)
-			if err != nil {
-				return "", fmt.Errorf("failed to begin transaction: %w", err)
-			}
-			// Auto-commit if we started it locally
-			autoCommit = true
-		} else {
-			return "", fmt.Errorf("no active transaction and no database to start one")
+		var err error
+		tx, err = db.BeginTransaction(ctx, sop.ForReading)
+		if err != nil {
+			return "", fmt.Errorf("failed to begin transaction: %w", err)
 		}
+		// Auto-commit if we started it locally
+		autoCommit = true
 	}
 	stores, err := tx.GetPhasedTransaction().GetStores(ctx)
 	if err != nil {
@@ -240,7 +259,7 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 	sort.Strings(stores)
 	resolvedStores := resolveListStoresScope(stores, requestedStores, p.CurrentUserQuery)
 
-	// Enrich with brief schema info
+	payload := listStoresPayload{Database: dbName}
 	var descriptions []string
 
 	// Resolve DatabaseOptions for inspection
@@ -260,6 +279,7 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 				continue
 			}
 		}
+		storePayload := listStorePayload{Name: sName}
 		desc := sName
 		if hasOpts {
 			// Peek for schema to guide the LLM
@@ -268,6 +288,8 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 			s, err := jsondb.OpenStore(ctx, dbOpts, sName, tx)
 			if err == nil {
 				info := s.GetStoreInfo()
+				storePayload.Description = info.Description
+				storePayload.Relations = append([]sop.Relation(nil), info.Relations...)
 				var extras string
 				if info.Description != "" {
 					extras += fmt.Sprintf(" description=\"%s\"", info.Description)
@@ -282,12 +304,15 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 					v, _ := s.GetCurrentValue(ctx)
 					flat := flattenItem(k, v)
 					schema := inferSchema(flat)
+					storePayload.Schema = schema
 					desc = fmt.Sprintf("%s schema=%s%s", sName, formatSchema(schema), extras)
 				} else {
+					storePayload.Empty = true
 					desc = fmt.Sprintf("%s (empty store)%s", sName, extras)
 				}
 			}
 		}
+		payload.Stores = append(payload.Stores, storePayload)
 		descriptions = append(descriptions, desc)
 	}
 	if len(requestedStores) > 0 && len(descriptions) == 0 {
@@ -299,7 +324,11 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 			return "", fmt.Errorf("failed to commit transaction: %w", err)
 		}
 	}
-	result := fmt.Sprintf("Stores:\n%s", strings.Join(descriptions, "\n"))
+	resultBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal list_stores payload: %w", err)
+	}
+	result := string(resultBytes)
 	if nativeToolHintsEnabled(ctx) {
 		return wrapToolResultWithListStoresHint(result, descriptions), nil
 	}
@@ -503,7 +532,7 @@ func wrapNativeTerminalToolResult(ctx context.Context, result string, status str
 
 func wrapNativeToolResultEnvelope(result string, hint *ai.ToolProgressHint) string {
 	envelope := ai.ToolResultEnvelope{
-		ToolResult:   json.RawMessage(strconv.Quote(result)),
+		ToolResult:   normalizeToolResultPayload(result),
 		ProgressHint: hint,
 	}
 	bytes, err := json.Marshal(envelope)
@@ -511,6 +540,17 @@ func wrapNativeToolResultEnvelope(result string, hint *ai.ToolProgressHint) stri
 		return result
 	}
 	return string(bytes)
+}
+
+func normalizeToolResultPayload(result string) json.RawMessage {
+	trimmed := strings.TrimSpace(result)
+	if trimmed == "" {
+		return json.RawMessage(strconv.Quote(result))
+	}
+	if json.Valid([]byte(trimmed)) {
+		return json.RawMessage(trimmed)
+	}
+	return json.RawMessage(strconv.Quote(result))
 }
 
 func (a *CopilotAgent) toolSwitchDatabase(ctx context.Context, args map[string]any) (string, error) {

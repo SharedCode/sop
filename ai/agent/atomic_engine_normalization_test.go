@@ -303,3 +303,22 @@ func TestSanitizeScript_InjectsImplicitTransactionWiring(t *testing.T) {
 		t.Fatalf("expected open_store result_var to normalize to store name, got %q", got)
 	}
 }
+
+func TestSanitizeScript_PreservesExplicitCommitBeforeReturn(t *testing.T) {
+	script := []ScriptInstruction{
+		{Op: "begin_tx", Args: map[string]any{"mode": "read"}, ResultVar: "tx"},
+		{Op: "open_store", Args: map[string]any{"name": "users", "transaction": "tx"}, ResultVar: "users_store"},
+		{Op: "scan", Args: map[string]any{"store": "users_store"}, ResultVar: "users_cursor"},
+		{Op: "filter", InputVar: "users_cursor", Args: map[string]any{"condition": map[string]any{"first_name": map[string]any{"$eq": "John"}}}, ResultVar: "filtered_orders"},
+		{Op: "commit_tx", Args: map[string]any{"transaction": "tx"}},
+		{Op: "return", InputVar: "filtered_orders"},
+	}
+
+	sanitized := sanitizeScript(script)
+	if got := sanitized[4].Op; got != "commit_tx" {
+		t.Fatalf("expected explicit commit to remain before return, got %q", got)
+	}
+	if got := sanitized[5].Op; got != "return" {
+		t.Fatalf("expected return to remain terminal op, got %q", got)
+	}
+}

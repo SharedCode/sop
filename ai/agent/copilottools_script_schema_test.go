@@ -12,20 +12,29 @@ func TestBuildExecuteScriptArgsSchema_IncludesResearchAndOrchestrationGuidance(t
 	checks := []string{
 		`multi-step store orchestration`,
 		`call list_stores first`,
-		`schema=... and optional relations=[...]`,
-		`read schema=... for exact field names`,
+		`JSON object with stores:[{name,schema,description,relations,empty}]`,
+		`Read each store.schema object for exact field names`,
 		`align those researched field names with the user's criteria values`,
-		`Read relations=[...] literally`,
-		`users_orders(key->users.key)`,
-		`target-store join field`,
-		`current-store field path`,
-		`returned relations=[...] entries as the source of truth`,
+		`Read each store.relations entry literally`,
+		`source_fields are the current-store field paths`,
+		`target_store is the joined store`,
+		`target_fields are the target-store join fields`,
+		`Worked example:`,
+		`users_orders`,
+		`users.schema.first_name:string`,
+		`align expression names to first_name and orders.total_amount`,
+		`align literal values to string John and number 500`,
+		`Example AST:`,
+		`begin_tx`,
+		`matched_users`,
+		`filtered_orders`,
 		`emit a combined flat record by default`,
 		`call gettoolinfo('execute_script')`,
 		`filter expects {condition: object}`,
 		`{\"first_name\":{\"$eq\":\"John\"}}`,
 		`{\"orders.total_amount\":{\"$gt\":500}}`,
-		`do not emit booleans such as {\"first_name\":true}`,
+		`match the literal type to the schema type`,
+		`Do not emit booleans such as {\"first_name\":true}`,
 		`join and join_right must reuse researched relation mappings instead of inventing field pairs.`,
 		`Relation-target store variable for relation-driven joins`,
 		`Concrete left-to-right join mapping.`,
@@ -89,7 +98,7 @@ func TestBuildExecuteScriptArgsSchema_DeclaresJoinSpecificArgs(t *testing.T) {
 }
 
 func TestExecuteScriptInstruction_MentionsResearchAndConcreteShapes(t *testing.T) {
-	checks := []string{"full ordered JSON AST", "{op, args?, input_var?, result_var?}", "begin a transaction", "result_var/input_var", "list_stores", "schema=...", "relations=[...]", "align those researched field names with the user's criteria values", "join-field semantics", "prefer relation + target for join repair", "rewrite only the invalid join slice", "combined flat record by default", "gettoolinfo('execute_script')", "concrete predicate objects", "concrete join mappings", "boolean placeholders"}
+	checks := []string{"full ordered JSON AST", "{op, args?, input_var?, result_var?}", "begin a transaction", "result_var/input_var", "list_stores", "JSON object with stores:[{name,schema,description,relations,empty}]", "align the expression field name and literal value with that exact schema", "source_fields are the current-store field paths", "target_store is the joined store", "target_fields are the target-store join fields", "Worked example: for the prompt Find orders for users with first_name 'John' with total amount > 500", "stores:[\"users\",\"users_orders\",\"orders\"]", "align expression names to those exact fields", "align literal values to those exact types", "the next AST can be {\"script\":[{\"op\":\"begin_tx\"", "\"condition\":{\"first_name\":{\"$eq\":\"John\"}}", "\"condition\":{\"orders.total_amount\":{\"$gt\":500}}", "Prefer relation + target for join repair", "rewrite only the invalid join slice", "combined flat record by default", "gettoolinfo('execute_script')", "concrete predicate objects", "concrete join mappings", "boolean placeholders"}
 	for _, check := range checks {
 		if !strings.Contains(ExecuteScriptInstruction, check) {
 			t.Fatalf("expected ExecuteScriptInstruction to contain %q\nInstruction: %s", check, ExecuteScriptInstruction)
@@ -101,13 +110,13 @@ func TestExecuteScriptInstruction_MentionsResearchAndConcreteShapes(t *testing.T
 }
 
 func TestStoresAndSpacesInstructions_AreRichEnoughForToolContext(t *testing.T) {
-	storesChecks := []string{"stores:[...]", "schema=...", "relations=[...]", "user's criteria", "infer likely store names", "singular/plural"}
+	storesChecks := []string{"stores:[...]", "stores:[{name,schema,description,relations,empty}]", "expression name and literal value", "exact data type", "infer likely store names", "singular/plural", "Worked example: Find orders for users with first_name 'John' with total amount > 500.", "align expression names to first_name and orders.total_amount", "align literal values to string John and number 500", "{\"first_name\":{\"$eq\":\"John\"}}", "{\"orders.total_amount\":{\"$gt\":500}}"}
 	for _, check := range storesChecks {
 		if !strings.Contains(ListStoresInstruction, check) {
 			t.Fatalf("expected ListStoresInstruction to contain %q\nInstruction: %s", check, ListStoresInstruction)
 		}
 	}
-	for _, check := range []string{"users_orders(key->users.key)", "target store", "current-store field path"} {
+	for _, check := range []string{"source_fields are the current-store field paths", "target_store is the joined store", "target_fields are the target-store join fields", "compose the join AST from the returned relation fields"} {
 		if !strings.Contains(ListStoresInstruction, check) {
 			t.Fatalf("expected ListStoresInstruction to explain concrete relations consumption with %q\nInstruction: %s", check, ListStoresInstruction)
 		}

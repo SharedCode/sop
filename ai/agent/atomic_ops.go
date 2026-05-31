@@ -409,33 +409,6 @@ func sanitizeScript(script []ScriptInstruction) []ScriptInstruction {
 			}
 		}
 
-		if instr.Op == "commit_tx" {
-
-			hasCursorProducer := false
-			for j := 0; j < i; j++ {
-				prev := script[j]
-				if prev.Op == "scan" || prev.Op == "join" || prev.Op == "filter" {
-					hasCursorProducer = true
-					break
-				}
-			}
-
-			if hasCursorProducer {
-
-				cmdToDefer := make(map[string]any)
-				if instr.Args != nil {
-					for k, v := range instr.Args {
-						cmdToDefer[k] = v
-					}
-				}
-				cmdToDefer["op"] = "commit_tx"
-
-				instr.Op = "defer"
-				instr.Args = map[string]any{
-					"command": cmdToDefer,
-				}
-			}
-		}
 	}
 	if !hasExplicitOutput && scriptEndsWithTerminalControl(script) {
 		for i := len(script) - 1; i >= 0; i-- {

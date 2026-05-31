@@ -53,6 +53,8 @@ const (
 	maxProjectedPlaybookEntries   = 4
 )
 
+const ctxKeyDeferImplicitSessionTxClose = "_defer_implicit_session_tx_close"
+
 const (
 	askOutcomeMRUCategoryHeader          = "ASK_OUTCOME_HEADER"
 	askOutcomeMRUCategoryDatabase        = "ASK_OUTCOME_DATABASE"
@@ -2902,6 +2904,40 @@ func (a *CopilotAgent) logThought(ctx context.Context, query string, toolsExecut
 
 // Execute executes the requested tool against the session payload.
 func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	resolvePayloadTx := func(payload *ai.SessionPayload, targetDB string) sop.Transaction {
+		if payload == nil {
+			return nil
+		}
+		if targetDB != "" && payload.Transactions != nil {
+			if tAny, ok := payload.Transactions[targetDB]; ok {
+				if tx, ok := tAny.(sop.Transaction); ok {
+					return tx
+				}
+			}
+		}
+		if payload.Transaction != nil {
+			if tx, ok := payload.Transaction.(sop.Transaction); ok {
+				return tx
+			}
+		}
+		return nil
+	}
+
+	clearPayloadTx := func(payload *ai.SessionPayload, targetDB string, tx sop.Transaction) {
+		if payload == nil || tx == nil {
+			return
+		}
+		if targetDB != "" && payload.Transactions != nil {
+			if current, ok := payload.Transactions[targetDB].(sop.Transaction); ok && current == tx {
+				delete(payload.Transactions, targetDB)
+			}
+		}
+		if current, ok := payload.Transaction.(sop.Transaction); ok && current == tx {
+			payload.Transaction = nil
+		}
+		payload.Variables = nil
+	}
+
 	// Determine if we should deobfuscate
 	dbName, _ := args["database"].(string)
 	if dbName == "" {
@@ -2997,6 +3033,8 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 		newPayload.Transaction = nil
 		ctx = context.WithValue(ctx, SessionPayloadKey, &newPayload)
 	}
+	p = ai.GetSessionPayload(ctx)
+	preExistingTx := resolvePayloadTx(p, dbName)
 
 	if !dbFound && toolName != "list_databases" && toolName != "list_scripts" && toolName != "get_script_details" {
 		// Debugging
@@ -3013,7 +3051,23 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 	// Execute specific tool
 	if toolDef, ok := a.registry.Get(toolName); ok {
 		log.Info("LLM Tool Call", "tool", toolName)
-		return toolDef.Handler(ctx, args)
+		res, err := toolDef.Handler(ctx, args)
+		if deferClose, _ := ctx.Value(ctxKeyDeferImplicitSessionTxClose).(bool); !deferClose {
+			if pAfter := ai.GetSessionPayload(ctx); preExistingTx == nil && pAfter != nil && !pAfter.ExplicitTransaction {
+				if tx := resolvePayloadTx(pAfter, dbName); tx != nil {
+					if err != nil {
+						tx.Rollback(ctx)
+					} else if tx.HasBegun() {
+						if commitErr := tx.Commit(ctx); commitErr != nil {
+							clearPayloadTx(pAfter, dbName, tx)
+							return "", fmt.Errorf("tool execution succeeded but transaction commit failed: %w", commitErr)
+						}
+					}
+					clearPayloadTx(pAfter, dbName, tx)
+				}
+			}
+		}
+		return res, err
 	}
 
 	// Dump registry keys if tool not found (Debug)
@@ -3049,11 +3103,30 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 func (a *CopilotAgent) runScript(ctx context.Context, name string, script ai.Script, args map[string]any) (string, error) {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Running script '%s'...\n", name))
+	ctx = context.WithValue(ctx, ctxKeyDeferImplicitSessionTxClose, true)
 
 	// Scope for template resolution
 	scope := make(map[string]any)
 	for k, v := range args {
 		scope[k] = v
+	}
+
+	initialTransactions := make(map[string]sop.Transaction)
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		if p.Transactions != nil {
+			for dbName, tAny := range p.Transactions {
+				if existingTx, ok := tAny.(sop.Transaction); ok {
+					initialTransactions[dbName] = existingTx
+				}
+			}
+		}
+		if p.Transaction != nil {
+			if existingTx, ok := p.Transaction.(sop.Transaction); ok && p.CurrentDB != "" {
+				if _, exists := initialTransactions[p.CurrentDB]; !exists {
+					initialTransactions[p.CurrentDB] = existingTx
+				}
+			}
+		}
 	}
 
 	// Transaction Handling
@@ -3064,6 +3137,58 @@ func (a *CopilotAgent) runScript(ctx context.Context, name string, script ai.Scr
 	// Default to "manual" (let steps handle it or caller) unless specified
 	// The Script struct has TransactionMode field.
 	// Values: "none" (default), "single" (global tx), "per_step" (not implemented here, steps do it naturally if no global tx)
+	if script.TransactionMode != "single" {
+		if p := ai.GetSessionPayload(ctx); p != nil {
+			dbName := script.Database
+			if dbName == "" {
+				dbName = p.CurrentDB
+			}
+			if dbName != "" {
+				var existing sop.Transaction
+				if p.Transactions != nil {
+					if tAny, ok := p.Transactions[dbName]; ok {
+						existing, _ = tAny.(sop.Transaction)
+					}
+				}
+				if existing == nil && p.Transaction != nil && (dbName == p.CurrentDB || dbName == "") {
+					existing, _ = p.Transaction.(sop.Transaction)
+				}
+				if existing == nil {
+					db, err := a.resolveDatabase(dbName)
+					if err != nil {
+						return "", fmt.Errorf("failed to resolve database '%s' for implicit script transaction: %w", dbName, err)
+					}
+					tx, err = db.BeginTransaction(ctx, sop.ForWriting)
+					if err != nil {
+						return "", fmt.Errorf("failed to begin implicit script transaction: %w", err)
+					}
+					if p.Transactions == nil {
+						p.Transactions = make(map[string]any)
+					}
+					p.Transactions[dbName] = tx
+					p.Transaction = tx
+					rollbackFunc = func() {
+						tx.Rollback(ctx)
+						delete(p.Transactions, dbName)
+						if current, ok := p.Transaction.(sop.Transaction); ok && current == tx {
+							p.Transaction = nil
+						}
+						p.Variables = nil
+					}
+					commitFunc = func() error {
+						err := tx.Commit(ctx)
+						delete(p.Transactions, dbName)
+						if current, ok := p.Transaction.(sop.Transaction); ok && current == tx {
+							p.Transaction = nil
+						}
+						p.Variables = nil
+						return err
+					}
+					sb.WriteString(fmt.Sprintf("Implicit Session Transaction Started (%s)\n", dbName))
+				}
+			}
+		}
+	}
 
 	if script.TransactionMode == "single" {
 		// Identify Target DB
@@ -3146,7 +3271,7 @@ func (a *CopilotAgent) runScript(ctx context.Context, name string, script ai.Scr
 
 			res, err := a.Execute(stepCtx, step.Command, resolvedArgs)
 			if err != nil {
-				if !step.ContinueOnError {
+				if !step.ContinueOnError || shouldShortCircuitScriptOnError(step.Command, resolvedArgs, err) {
 					return "", fmt.Errorf("step %d (%s) failed: %w", i+1, step.Command, err)
 				}
 				sb.WriteString(fmt.Sprintf("Step %d failed: %v\n", i+1, err))
@@ -3164,6 +3289,25 @@ func (a *CopilotAgent) runScript(ctx context.Context, name string, script ai.Scr
 		}
 		// Clear rollbackFunc so defer doesn't rollback
 		rollbackFunc = nil
+	} else if p := ai.GetSessionPayload(ctx); p != nil && !p.ExplicitTransaction && p.Transactions != nil {
+		for dbName, tAny := range p.Transactions {
+			tx, ok := tAny.(sop.Transaction)
+			if !ok || tx == nil {
+				continue
+			}
+			if existingTx, exists := initialTransactions[dbName]; exists && existingTx == tx {
+				continue
+			}
+			if tx.HasBegun() {
+				if err := tx.Commit(ctx); err != nil {
+					return "", fmt.Errorf("failed to commit implicit script transaction for '%s': %w", dbName, err)
+				}
+			}
+			delete(p.Transactions, dbName)
+			if current, ok := p.Transaction.(sop.Transaction); ok && current == tx {
+				p.Transaction = nil
+			}
+		}
 	}
 
 	return sb.String(), nil
@@ -3207,7 +3351,7 @@ func (a *CopilotAgent) runScriptRaw(ctx context.Context, script ai.Script, args 
 
 			res, err := a.Execute(stepCtx, step.Command, resolvedArgs)
 			if err != nil {
-				if !step.ContinueOnError {
+				if !step.ContinueOnError || shouldShortCircuitScriptOnError(step.Command, resolvedArgs, err) {
 					return "", fmt.Errorf("step %d (%s) failed: %w", i+1, step.Command, err)
 				}
 			}

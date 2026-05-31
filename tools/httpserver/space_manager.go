@@ -17,6 +17,138 @@ import (
 	"github.com/sharedcode/sop/ai/memory"
 )
 
+func runIngestImportSpace(ctx context.Context, request IngestSpaceRequest, emb ai.Embeddings, llm ai.Generator, onProgress func(progress int, total int, msg string), beforeCommit func()) error {
+	if onProgress != nil {
+		onProgress(10, 100, "Initializing database connection...")
+	}
+
+	opts, err := getDBOptions(ctx, request.DatabaseName)
+	if err != nil {
+		return fmt.Errorf("failed to get DB config: %w", err)
+	}
+
+	db := database.NewDatabase(opts)
+	trans, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer trans.Rollback(ctx)
+
+	kb, err := db.OpenKnowledgeBase(ctx, request.SpaceName, trans, llm, emb, false)
+	if err != nil {
+		return fmt.Errorf("failed to open KnowledgeBase '%s': %w", request.SpaceName, err)
+	}
+
+	reader, closer, err := ingestImportReader(ctx, request)
+	if err != nil {
+		return err
+	}
+	if closer != nil {
+		defer closer.Close()
+	}
+
+	if reader != nil {
+		if onProgress != nil {
+			onProgress(30, 100, "Reading Space data stream...")
+		}
+
+		enrichCb := func(it *memory.ExportItem[map[string]any]) {
+			var textStr, descStr string
+			if txt, ok := it.Data["text"].(string); ok {
+				textStr = txt
+			} else if txt, ok := it.Data["title"].(string); ok {
+				textStr = txt
+			}
+
+			if desc, ok := it.Data["description"].(string); ok {
+				descStr = desc
+			} else if cnt, ok := it.Data["content"].(string); ok {
+				descStr = cnt
+			}
+
+			it.Summaries = extractSummaries(SpaceIngestChunk{
+				Summaries:   it.Summaries,
+				Text:        textStr,
+				Description: descStr,
+				Data:        it.Data,
+			})
+		}
+
+		if err := kb.ImportJSON(ctx, reader, "expert", enrichCb); err != nil {
+			return fmt.Errorf("failed to ImportJSON: %w", err)
+		}
+	}
+
+	if emb != nil {
+		cfg, cfgErr := kb.GetConfig(ctx)
+		if cfgErr == nil && cfg != nil {
+			needsUpdate := false
+
+			if cfg.EmbedderDimension != emb.Dim() {
+				cfg.EmbedderDimension = emb.Dim()
+				needsUpdate = true
+			}
+			if cfg.Embedder != emb.Name() {
+				cfg.Embedder = emb.Name()
+				needsUpdate = true
+			}
+			if needsUpdate {
+				kb.SetConfig(ctx, cfg)
+			}
+		}
+	}
+
+	if onProgress != nil {
+		onProgress(90, 100, "Committing changes...")
+	}
+	if beforeCommit != nil {
+		beforeCommit()
+	}
+	if err := trans.Commit(ctx); err != nil {
+		return fmt.Errorf("failed to commit ingest import: %w", err)
+	}
+
+	if request.SpaceName == "SOP" && emb != nil {
+		if onProgress != nil {
+			onProgress(95, 100, "Calculating Embeddings (Auto Vectorize)...")
+		}
+		if err := db.Vectorize(ctx, kb.Name(), llm, emb, 100); err != nil {
+			return fmt.Errorf("import successful, but vectorization failed: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func ingestImportReader(ctx context.Context, request IngestSpaceRequest) (io.Reader, io.Closer, error) {
+	if request.PreloadFilePath != "" {
+		f, err := os.Open(request.PreloadFilePath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to open preload file: %w", err)
+		}
+		return f, f, nil
+	}
+	if request.URL != "" {
+		reqHTTP, err := http.NewRequestWithContext(ctx, http.MethodGet, request.URL, nil)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create import request: %w", err)
+		}
+		resp, err := http.DefaultClient.Do(reqHTTP)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to fetch import URL: %w", err)
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			resp.Body.Close()
+			return nil, nil, fmt.Errorf("failed to fetch import URL: %s", resp.Status)
+		}
+		return resp.Body, resp.Body, nil
+	}
+	if len(request.CustomData) > 0 {
+		return bytes.NewReader(request.CustomData), nil, nil
+	}
+	return nil, nil, nil
+}
+
 func handlePreloadSpace(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -529,116 +661,12 @@ func handleIngestImportSpace(w http.ResponseWriter, r *http.Request) {
 		}()
 
 		ctx := context.Background()
-		UpdateTask(taskId, "in_progress", 10, 100, "Initializing database connection...", "")
-		opts, err := getDBOptions(ctx, request.DatabaseName)
+		err := runIngestImportSpace(ctx, request, emb, llm, func(progress int, total int, msg string) {
+			UpdateTask(taskId, "in_progress", progress, total, msg, "")
+		}, nil)
 		if err != nil {
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to get DB config: %v", err))
+			UpdateTask(taskId, "error", 0, 0, "", err.Error())
 			return
-		}
-
-		db := database.NewDatabase(opts)
-		trans, err := db.BeginTransaction(ctx, sop.ForWriting)
-		if err != nil {
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to begin transaction: %v", err))
-			return
-		}
-
-		kb, err := db.OpenKnowledgeBase(ctx, request.SpaceName, trans, llm, emb, false)
-		if err != nil {
-			trans.Rollback(ctx)
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to open KnowledgeBase '%s': %v", request.SpaceName, err))
-			return
-		}
-
-		var reader io.Reader
-		var closer io.Closer
-
-		if request.PreloadFilePath != "" {
-			f, err := os.Open(request.PreloadFilePath)
-			if err == nil {
-				reader = f
-				closer = f
-				defer closer.Close()
-			}
-		} else if request.URL != "" {
-			reqHTTP, err := http.NewRequestWithContext(ctx, http.MethodGet, request.URL, nil)
-			if err == nil {
-				resp, err := http.DefaultClient.Do(reqHTTP)
-				if err == nil {
-					reader = resp.Body
-					closer = resp.Body
-					defer closer.Close()
-				}
-			}
-		} else if len(request.CustomData) > 0 {
-			reader = bytes.NewReader(request.CustomData)
-		}
-
-		if reader != nil {
-			UpdateTask(taskId, "in_progress", 30, 100, "Reading Space data stream...", "")
-
-			enrichCb := func(it *memory.ExportItem[map[string]any]) {
-				var textStr, descStr string
-				if txt, ok := it.Data["text"].(string); ok {
-					textStr = txt
-				} else if txt, ok := it.Data["title"].(string); ok {
-					textStr = txt
-				} // In compiler, text is exported in Summaries, but other systems might put it in Data
-
-				if desc, ok := it.Data["description"].(string); ok {
-					descStr = desc
-				} else if cnt, ok := it.Data["content"].(string); ok {
-					descStr = cnt
-				}
-
-				it.Summaries = extractSummaries(SpaceIngestChunk{
-					Summaries:   it.Summaries,
-					Text:        textStr,
-					Description: descStr,
-					Data:        it.Data,
-				})
-			}
-
-			err = kb.ImportJSON(ctx, reader, "expert", enrichCb)
-			if err != nil {
-				trans.Rollback(ctx)
-				UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to ImportJSON: %v", err))
-				return
-			}
-		}
-
-		if dbEmbedder != nil {
-			cfg, cfgErr := kb.GetConfig(ctx)
-			if cfgErr == nil && cfg != nil {
-				needsUpdate := false
-
-				if cfg.EmbedderDimension != dbEmbedder.Dim() {
-					cfg.EmbedderDimension = dbEmbedder.Dim()
-					needsUpdate = true
-				}
-				if cfg.Embedder != dbEmbedder.Name() {
-					cfg.Embedder = dbEmbedder.Name()
-					needsUpdate = true
-				}
-				if needsUpdate {
-					kb.SetConfig(ctx, cfg)
-				}
-			}
-		}
-
-		UpdateTask(taskId, "in_progress", 90, 100, "Committing changes...", "")
-		if err := trans.Commit(ctx); err != nil {
-			UpdateTask(taskId, "error", 0, 0, "", fmt.Sprintf("Failed to commit ingest import: %v", err))
-			return
-		}
-
-		// Vectorize if "SOP" KB ingest (preloading).
-		if request.SpaceName == "SOP" && emb != nil {
-			UpdateTask(taskId, "in_progress", 95, 100, "Calculating Embeddings (Auto Vectorize)...", "")
-			if err := db.Vectorize(ctx, kb.Name(), llm, emb, 100); err != nil {
-				UpdateTask(taskId, "error", 100, 100, "", fmt.Sprintf("Import successful, but vectorization failed: %v", err))
-				return
-			}
 		}
 
 		UpdateTask(taskId, "completed", 100, 100, fmt.Sprintf("Successfully imported and ingested %s", request.SpaceName), "")

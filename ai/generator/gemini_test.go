@@ -40,6 +40,17 @@ func TestDescribeGeminiEmptyResponse_IncludesFinishReason(t *testing.T) {
 	}
 }
 
+func TestGeminiReActLoop_DefaultsToFourIterations(t *testing.T) {
+	g := &gemini{model: "gemini-3.5-flash"}
+	loop, ok := g.ReActLoop().(geminiOwnedReActLoop)
+	if !ok {
+		t.Fatalf("expected gemini owned loop, got %#v", g.ReActLoop())
+	}
+	if loop.maxIterations != 4 {
+		t.Fatalf("expected default Gemini owned loop budget to be 4, got %d", loop.maxIterations)
+	}
+}
+
 func TestBuildGeminiRequest_IncludesGenerationConfigAndTools(t *testing.T) {
 	req := buildGeminiRequest("find users", ai.GenOptions{
 		SystemPrompt: "system",
@@ -82,6 +93,19 @@ func TestBuildGeminiRequest_IncludesGenerationConfigAndTools(t *testing.T) {
 	}
 }
 
+func TestBuildGeminiRequest_IncludesZeroTemperatureWhenForced(t *testing.T) {
+	req := buildGeminiRequest("find users", ai.GenOptions{
+		Temperature:      0.0,
+		ForceTemperature: true,
+	})
+	if req.GenerationConfig == nil {
+		t.Fatalf("expected generation config when zero temperature is forced")
+	}
+	if req.GenerationConfig.Temperature != 0.0 {
+		t.Fatalf("expected explicit zero temperature, got %#v", req.GenerationConfig)
+	}
+}
+
 func TestBuildGeminiRequest_OmitsToolConfigWithoutTools(t *testing.T) {
 	req := buildGeminiRequest("find users", ai.GenOptions{SystemPrompt: "system"})
 
@@ -113,26 +137,112 @@ func TestBuildGeminiRequest_IncludesToolCallContinuation(t *testing.T) {
 	if len(req.Contents) != 3 {
 		t.Fatalf("expected prompt plus function call/response continuation, got %#v", req.Contents)
 	}
-	if req.Contents[0].Role != "model" || req.Contents[0].Parts[0].FunctionCall == nil {
-		t.Fatalf("expected first content to carry the model functionCall continuation, got %#v", req.Contents[0])
+	if req.Contents[0].Role != "user" || req.Contents[0].Parts[0].Text != "continue after tool" {
+		t.Fatalf("expected first content to carry the resumed prompt, got %#v", req.Contents[0])
 	}
-	if req.Contents[0].Parts[0].FunctionCall.ID != "call_abc123" {
-		t.Fatalf("expected functionCall id to round-trip, got %#v", req.Contents[0].Parts[0].FunctionCall)
+	if req.Contents[1].Role != "model" || req.Contents[1].Parts[0].FunctionCall == nil {
+		t.Fatalf("expected second content to carry the model functionCall continuation, got %#v", req.Contents[1])
 	}
-	if req.Contents[0].Parts[0].ThoughtSignature != "signature_abc123" {
-		t.Fatalf("expected thought signature to round-trip, got %#v", req.Contents[0].Parts[0])
+	if req.Contents[1].Parts[0].FunctionCall.ID != "call_abc123" {
+		t.Fatalf("expected functionCall id to round-trip, got %#v", req.Contents[1].Parts[0].FunctionCall)
 	}
-	if req.Contents[1].Role != "user" || req.Contents[1].Parts[0].FunctionResponse == nil {
-		t.Fatalf("expected second content to carry the user functionResponse continuation, got %#v", req.Contents[1])
+	if req.Contents[1].Parts[0].ThoughtSignature != "signature_abc123" {
+		t.Fatalf("expected thought signature to round-trip, got %#v", req.Contents[1].Parts[0])
 	}
-	if req.Contents[1].Parts[0].FunctionResponse.ID != "call_abc123" {
-		t.Fatalf("expected functionResponse id to match functionCall id, got %#v", req.Contents[1].Parts[0].FunctionResponse)
+	if req.Contents[2].Role != "user" || req.Contents[2].Parts[0].FunctionResponse == nil {
+		t.Fatalf("expected third content to carry the user functionResponse continuation, got %#v", req.Contents[2])
 	}
-	if req.Contents[1].Parts[0].FunctionResponse.Name != "list_stores" {
-		t.Fatalf("expected functionResponse name to match tool name, got %#v", req.Contents[1].Parts[0].FunctionResponse)
+	if req.Contents[2].Parts[0].FunctionResponse.ID != "call_abc123" {
+		t.Fatalf("expected functionResponse id to match functionCall id, got %#v", req.Contents[2].Parts[0].FunctionResponse)
 	}
-	if req.Contents[2].Role != "user" || req.Contents[2].Parts[0].Text != "continue after tool" {
-		t.Fatalf("expected final content to carry the resumed prompt, got %#v", req.Contents[2])
+	if req.Contents[2].Parts[0].FunctionResponse.Name != "list_stores" {
+		t.Fatalf("expected functionResponse name to match tool name, got %#v", req.Contents[2].Parts[0].FunctionResponse)
+	}
+}
+
+func TestBuildGeminiRequest_MultipleContinuationsAlternateAfterPrompt(t *testing.T) {
+	req := buildGeminiRequest("continue after tools", ai.GenOptions{
+		ToolCallContinuations: []ai.ToolCallContinuation{
+			{
+				ToolCall: ai.ToolCall{Name: "list_stores", NativeID: "call_1"},
+				Response: map[string]any{"stores": []any{"users"}},
+			},
+			{
+				ToolCall: ai.ToolCall{Name: "execute_script", NativeID: "call_2"},
+				Response: map[string]any{"rows": []any{map[string]any{"first_name": "John"}}},
+			},
+		},
+	})
+
+	if len(req.Contents) != 5 {
+		t.Fatalf("expected prompt plus two function call/response pairs, got %#v", req.Contents)
+	}
+	if req.Contents[0].Role != "user" || req.Contents[0].Parts[0].Text != "continue after tools" {
+		t.Fatalf("expected prompt to lead continuation request, got %#v", req.Contents[0])
+	}
+	if req.Contents[1].Role != "model" || req.Contents[1].Parts[0].FunctionCall == nil || req.Contents[1].Parts[0].FunctionCall.Name != "list_stores" {
+		t.Fatalf("expected first continuation functionCall after prompt, got %#v", req.Contents[1])
+	}
+	if req.Contents[2].Role != "user" || req.Contents[2].Parts[0].FunctionResponse == nil || req.Contents[2].Parts[0].FunctionResponse.Name != "list_stores" {
+		t.Fatalf("expected first continuation functionResponse after functionCall, got %#v", req.Contents[2])
+	}
+	if req.Contents[3].Role != "model" || req.Contents[3].Parts[0].FunctionCall == nil || req.Contents[3].Parts[0].FunctionCall.Name != "execute_script" {
+		t.Fatalf("expected second continuation functionCall after first response, got %#v", req.Contents[3])
+	}
+	if req.Contents[4].Role != "user" || req.Contents[4].Parts[0].FunctionResponse == nil || req.Contents[4].Parts[0].FunctionResponse.Name != "execute_script" {
+		t.Fatalf("expected second continuation functionResponse after second functionCall, got %#v", req.Contents[4])
+	}
+}
+
+func TestCoerceGeminiToolContinuationResponse_WrapsPlainTextInObject(t *testing.T) {
+	resp := coerceGeminiToolContinuationResponse("Stores:\norders schema=id,total_amount\nusers schema=id,first_name")
+	wrapped, ok := resp.(map[string]any)
+	if !ok {
+		t.Fatalf("expected wrapped object response, got %#v", resp)
+	}
+	if wrapped["result"] != "Stores:\norders schema=id,total_amount\nusers schema=id,first_name" {
+		t.Fatalf("expected plain text to be wrapped under result, got %#v", wrapped)
+	}
+}
+
+func TestCoerceGeminiToolContinuationResponse_WrapsArrayEnvelopeInObject(t *testing.T) {
+	resp := coerceGeminiToolContinuationResponse(`{"tool_result":[{"first_name":"John"}]}`)
+	wrapped, ok := resp.(map[string]any)
+	if !ok {
+		t.Fatalf("expected wrapped object response, got %#v", resp)
+	}
+	rows, ok := wrapped["result"].([]any)
+	if !ok || len(rows) != 1 {
+		t.Fatalf("expected array tool result to be wrapped under result, got %#v", wrapped)
+	}
+}
+
+func TestCoerceGeminiToolContinuationResponse_PreservesObjectEnvelope(t *testing.T) {
+	resp := coerceGeminiToolContinuationResponse(`{"tool_result":{"rows":[{"first_name":"John"}]}}`)
+	wrapped, ok := resp.(map[string]any)
+	if !ok {
+		t.Fatalf("expected object response, got %#v", resp)
+	}
+	rows, ok := wrapped["rows"].([]any)
+	if !ok || len(rows) != 1 {
+		t.Fatalf("expected object tool result to remain top-level object, got %#v", wrapped)
+	}
+}
+
+func TestBuildGeminiRepairDirective_IncludesConcreteValidationGuidance(t *testing.T) {
+	directive := buildGeminiRepairDirective(ai.ReActToolResult{
+		Name:   "execute_script",
+		Result: "execute_script validation error [invalid_filter_placeholder]: invalid type for filter condition field \"get_current_value\": got null placeholder; expected an operator/value predicate such as {\"$eq\": value} for current query \"Find orders for users with first_name 'John' with total amount > 500\" Example fix: {\"op\":\"filter\",\"args\":{\"condition\":{\"get_current_value\":{\"$eq\":\"<value>\"}}}}\nexecute_script validation error [invalid_filter_query_mismatch]: filter condition field \"total_amount\" does not preserve the user-requested predicate from the current query \"Find orders for users with first_name 'John' with total amount > 500\"; expected map[$gt:500], got map[get_current_value:<nil> op:map[$eq:>] value:500] Example fix: {\"op\":\"filter\",\"args\":{\"condition\":{\"total_amount\":{\"$gt\":500}}}}",
+	})
+
+	if !strings.Contains(directive, "Validation guidance (invalid_filter_placeholder)") {
+		t.Fatalf("expected placeholder validation guidance, got %q", directive)
+	}
+	if !strings.Contains(directive, "Validation guidance (invalid_filter_query_mismatch)") {
+		t.Fatalf("expected query mismatch validation guidance, got %q", directive)
+	}
+	if !strings.Contains(directive, `{"op":"filter","args":{"condition":{"total_amount":{"$gt":500}}}}`) {
+		t.Fatalf("expected concrete example fix to be preserved, got %q", directive)
 	}
 }
 
@@ -234,6 +344,15 @@ func TestGeminiReActTurnStrategy_UsesReducedClarificationPromptOnFinalTurn(t *te
 	if !strings.Contains(turn.Prompt, "do not call more tools") {
 		t.Fatalf("expected reduced clarification prompt on final turn, got %q", turn.Prompt)
 	}
+	if !strings.Contains(turn.Prompt, "do not ask for permission") {
+		t.Fatalf("expected repair-aware final turn prompt, got %q", turn.Prompt)
+	}
+	if !strings.Contains(turn.Prompt, "Return the corrected tool call you would make next as a compact executable payload") {
+		t.Fatalf("expected final turn to request a corrected executable payload, got %q", turn.Prompt)
+	}
+	if strings.Contains(turn.Prompt, "Briefly state the corrected next action") {
+		t.Fatalf("expected final turn to stop asking for next-action prose, got %q", turn.Prompt)
+	}
 	response, ok := turn.Options.ToolCallContinuations[0].Response.(map[string]any)
 	if !ok {
 		t.Fatalf("expected structured continuation response envelope, got %#v", turn.Options.ToolCallContinuations[0].Response)
@@ -242,11 +361,11 @@ func TestGeminiReActTurnStrategy_UsesReducedClarificationPromptOnFinalTurn(t *te
 	if !ok {
 		t.Fatalf("expected react_state in continuation response envelope, got %#v", response)
 	}
-	if reactState["task_status"] != "clarification_required" {
-		t.Fatalf("expected clarification task status in carried state, got %#v", reactState)
+	if reactState["task_status"] != "repair_budget_exhausted" {
+		t.Fatalf("expected repair-budget task status in carried state, got %#v", reactState)
 	}
-	if reactState["phase"] != string(ai.ReActLoopPhaseClarification) {
-		t.Fatalf("expected clarification phase in carried state, got %#v", reactState)
+	if reactState["phase"] != string(ai.ReActLoopPhaseRepair) {
+		t.Fatalf("expected repair phase in carried state, got %#v", reactState)
 	}
 	if reactState["has_more_tool_work"] != false {
 		t.Fatalf("expected final turn to disable more tool work, got %#v", reactState)
@@ -255,8 +374,8 @@ func TestGeminiReActTurnStrategy_UsesReducedClarificationPromptOnFinalTurn(t *te
 	if !ok {
 		t.Fatalf("expected allowed_next_actions in carried state, got %#v", reactState)
 	}
-	if len(actions) != 2 || actions[0] != string(ai.ReActNextActionAskClarification) || actions[1] != string(ai.ReActNextActionAnswerUser) {
-		t.Fatalf("expected clarification actions in carried state, got %#v", actions)
+	if len(actions) != 2 || actions[0] != string(ai.ReActNextActionAnswerUser) || actions[1] != string(ai.ReActNextActionAskClarification) {
+		t.Fatalf("expected repair-budget actions in carried state, got %#v", actions)
 	}
 	if reactState["iteration"] != 4 {
 		t.Fatalf("expected iteration in carried state, got %#v", reactState)
@@ -689,6 +808,89 @@ func TestGeminiOwnedReActLoop_UnwrapsProgressHintsIntoLoopState(t *testing.T) {
 	}
 	if hint.Status != "progressing" || len(hint.SuggestedNextTools) != 1 || hint.SuggestedNextTools[0] != "execute_script" {
 		t.Fatalf("unexpected streamed progress hint: %#v", hint)
+	}
+}
+
+type geminiOwnedLoopRepairDirectiveGenerator struct{ calls int }
+
+func (m *geminiOwnedLoopRepairDirectiveGenerator) Name() string {
+	return "gemini_owned_loop_repair_directive_test"
+}
+
+func (m *geminiOwnedLoopRepairDirectiveGenerator) EstimateCost(inTokens, outTokens int) float64 {
+	return 0
+}
+
+func (m *geminiOwnedLoopRepairDirectiveGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	_ = ctx
+	_ = prompt
+	m.calls++
+	switch m.calls {
+	case 1:
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{
+			Name: "execute_script",
+			Args: map[string]any{"script": []any{map[string]any{"op": "filter", "args": map[string]any{"condition": map[string]any{"first_name": true, "orders.total_amount": true}}}}},
+		}}}, nil
+	case 2:
+		if len(opts.ToolCallContinuations) != 1 {
+			return ai.GenOutput{Text: fmt.Sprintf("expected one continuation, got %d", len(opts.ToolCallContinuations))}, nil
+		}
+		response, ok := opts.ToolCallContinuations[0].Response.(map[string]any)
+		if !ok {
+			return ai.GenOutput{Text: fmt.Sprintf("expected structured continuation response, got %#v", opts.ToolCallContinuations[0].Response)}, nil
+		}
+		reactState, ok := response["react_state"].(map[string]any)
+		if !ok {
+			return ai.GenOutput{Text: fmt.Sprintf("expected react_state in continuation response, got %#v", response)}, nil
+		}
+		directive, _ := reactState["repair_directive"].(string)
+		if !strings.Contains(directive, "call the same tool again with corrected arguments") {
+			return ai.GenOutput{Text: fmt.Sprintf("expected repair directive, got %#v", reactState)}, nil
+		}
+		if reactState["task_status"] != "repair_required" {
+			return ai.GenOutput{Text: fmt.Sprintf("expected repair_required task status, got %#v", reactState)}, nil
+		}
+		actions, ok := reactState["allowed_next_actions"].([]string)
+		if !ok || len(actions) != 2 || actions[0] != string(ai.ReActNextActionRetrySameTool) || actions[1] != string(ai.ReActNextActionAskClarification) {
+			return ai.GenOutput{Text: fmt.Sprintf("unexpected repair actions: %#v", reactState)}, nil
+		}
+		return ai.GenOutput{Text: "Need corrected execute_script args."}, nil
+	default:
+		return ai.GenOutput{Text: "unexpected extra call"}, nil
+	}
+}
+
+type geminiOwnedLoopRepairDirectiveExecutor struct{}
+
+func (e *geminiOwnedLoopRepairDirectiveExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	_ = ctx
+	_ = toolName
+	_ = args
+	return "execute_script validation error [invalid_filter_placeholder]: invalid type for filter condition field \"first_name\": got boolean placeholder true; expected an operator/value predicate Example fix: {\"op\":\"filter\",\"args\":{\"condition\":{\"first_name\":{\"$eq\":\"<value>\"}}}}", nil
+}
+
+func (e *geminiOwnedLoopRepairDirectiveExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	_ = ctx
+	return []ai.ToolDefinition{{Name: "execute_script"}}, nil
+}
+
+func TestGeminiOwnedReActLoop_CarriesRepairDirectiveAfterValidationFailure(t *testing.T) {
+	gen := &geminiOwnedLoopRepairDirectiveGenerator{}
+	loop := geminiOwnedReActLoop{
+		generator:     gen,
+		maxIterations: 2,
+	}
+	resp, err := loop.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "Find orders for users with first_name 'John' with total amount > 500",
+		Executor:     &geminiOwnedLoopRepairDirectiveExecutor{},
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if resp.FinalText != "Need corrected execute_script args." {
+		t.Fatalf("unexpected final text: %q", resp.FinalText)
 	}
 }
 

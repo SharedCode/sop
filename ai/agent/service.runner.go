@@ -1190,7 +1190,7 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map
 					}()
 
 					if err := s.runStep(asyncCtx, st, scope, scopeMu, sb, asyncDB); err != nil {
-						if st.ContinueOnError {
+						if st.ContinueOnError && !shouldShortCircuitScriptOnError(st.Command, st.Args, err) {
 							// Log error but don't stop the group
 							log.Error("Async step failed (continuing)", "step_type", st.Type, "error", err)
 							return nil
@@ -1205,7 +1205,7 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map
 
 		// Sync step
 		if err := s.runStep(stepCtx, step, scope, scopeMu, sb, stepDB); err != nil {
-			if step.ContinueOnError {
+			if step.ContinueOnError && !shouldShortCircuitScriptOnError(step.Command, step.Args, err) {
 				// Log error and continue
 				log.Error("Step failed (continuing)", "step_type", step.Type, "error", err)
 				continue

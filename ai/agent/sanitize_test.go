@@ -55,22 +55,14 @@ func TestSanitizeScript(t *testing.T) {
 			},
 		},
 		{
-			name: "CommitTx - Rewrite to Defer if Cursor Produced",
+			name: "CommitTx - Preserve Explicit Commit if Cursor Produced",
 			input: []ScriptInstruction{
 				{Op: "scan", Args: map[string]interface{}{"store": "users"}},
 				{Op: "commit_tx", Args: map[string]interface{}{"transaction": "tx"}},
 			},
 			expected: []ScriptInstruction{
 				{Op: "scan", Args: map[string]interface{}{"store": "users"}, ResultVar: "output"},
-				{
-					Op: "defer",
-					Args: map[string]interface{}{
-						"command": map[string]interface{}{
-							"op":          "commit_tx",
-							"transaction": "tx",
-						},
-					},
-				},
+				{Op: "commit_tx", Args: map[string]interface{}{"transaction": "tx"}},
 			},
 		},
 		{
@@ -322,10 +314,8 @@ func TestSanitizeScript_NormalizesLiveJohnQueryShapes(t *testing.T) {
 	assert.Equal(t, map[string]any{"first_name": map[string]any{"$eq": "John"}}, sanitized[3].Args["condition"])
 	assert.Equal(t, map[string]any{"users_orders.value": "key"}, sanitized[5].Args["on"])
 	assert.Equal(t, map[string]any{"orders.total_amount": map[string]any{"$gt": 500.0}}, sanitized[6].Args["condition"])
-	assert.Equal(t, "defer", sanitized[7].Op)
-	deferredCommand := sanitized[7].Args["command"].(map[string]any)
-	assert.Equal(t, "commit_tx", deferredCommand["op"])
-	assert.Equal(t, "tx", deferredCommand["transaction"])
+	assert.Equal(t, "commit_tx", sanitized[7].Op)
+	assert.Equal(t, "tx", sanitized[7].Args["transaction"])
 }
 
 func TestSanitizeScript_NormalizesLiveJohnQueryBooleanAliasPlaceholders(t *testing.T) {
@@ -356,7 +346,7 @@ func TestSanitizeScript_NormalizesLiveJohnQueryBooleanAliasPlaceholders(t *testi
 	assert.Equal(t, map[string]any{"first_name": map[string]any{"$eq": "John"}}, sanitized[3].Args["condition"])
 	assert.Equal(t, map[string]any{"users_orders.value": "key"}, sanitized[5].Args["on"])
 	assert.Equal(t, map[string]any{"orders.total_amount": map[string]any{"$gt": 500.0}}, sanitized[6].Args["condition"])
-	assert.Equal(t, "defer", sanitized[7].Op)
+	assert.Equal(t, "commit_tx", sanitized[7].Op)
 }
 
 func TestToolExecuteScript_RewritesRecordedArgsToNormalizedScript(t *testing.T) {
@@ -396,8 +386,36 @@ func TestToolExecuteScript_RewritesRecordedArgsToNormalizedScript(t *testing.T) 
 	assert.Equal(t, map[string]any{"orders.total_amount": map[string]any{"$gt": 500.0}}, orderCondition)
 
 	commit := script[6].(map[string]any)
-	assert.Equal(t, "defer", commit["op"])
-	deferred := commit["args"].(map[string]any)["command"].(map[string]any)
-	assert.Equal(t, "commit_tx", deferred["op"])
-	assert.Equal(t, "tx", deferred["transaction"])
+	assert.Equal(t, "commit_tx", commit["op"])
+	assert.Equal(t, "tx", commit["args"].(map[string]any)["transaction"])
+}
+
+func TestToolExecuteScript_UsesClarificationTargetQueryForAliasPredicateGrounding(t *testing.T) {
+	agent := NewCopilotAgent(Config{StubMode: true}, nil, nil)
+	ctx := context.WithValue(context.Background(), "session_payload", &ai.SessionPayload{
+		CurrentUserQuery: "Use this script then plugin your 500 condition.",
+		ClarificationState: &ai.ClarificationState{
+			TargetQuery: "Find orders for users with first_name 'John' with total amount > 500",
+			Status:      "resolved",
+		},
+	})
+	args := map[string]any{
+		"script": []any{
+			map[string]any{"op": "begin_tx", "args": map[string]any{"mode": "read"}},
+			map[string]any{"op": "open_store", "args": map[string]any{"name": "users"}, "result_var": "users_store"},
+			map[string]any{"op": "scan", "args": map[string]any{"store": "users_store"}, "result_var": "users_cursor"},
+			map[string]any{"op": "filter", "input_var": "users_cursor", "args": map[string]any{"condition": map[string]any{"first_name": "John"}}, "result_var": "filtered_users"},
+			map[string]any{"op": "join", "input_var": "filtered_users", "args": map[string]any{"store": "users_orders", "on": map[string]any{"key": "key"}}, "result_var": "joined_uo"},
+			map[string]any{"op": "join", "input_var": "joined_uo", "args": map[string]any{"store": "orders", "on": map[string]any{"value": "key"}}, "result_var": "joined_orders"},
+			map[string]any{"op": "filter", "input_var": "joined_orders", "args": map[string]any{"condition": map[string]any{"orders": true}}, "result_var": "filtered_orders"},
+		},
+	}
+
+	_, err := agent.toolExecuteScript(ctx, args)
+	assert.NoError(t, err)
+
+	script := args["script"].([]any)
+	filterOrders := script[6].(map[string]any)
+	orderCondition := filterOrders["args"].(map[string]any)["condition"].(map[string]any)
+	assert.Equal(t, map[string]any{"orders.total_amount": map[string]any{"$gt": 500.0}}, orderCondition)
 }

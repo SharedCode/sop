@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/agent/parser"
 	"github.com/sharedcode/sop/ai/obfuscation"
 )
 
@@ -73,10 +74,38 @@ type progressSink func(string)
 
 // Run executes the orchestration loop relying on native tool calls.
 func (e *NativeReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) (ai.ReasoningResponse, error) {
+	if resp, handled, err := handleDirectSlashReasoningRequest(ctx, req); handled {
+		return resp, err
+	}
 	if loop := resolveOwnedReActLoop(req); loop != nil {
 		return loop.Run(ctx, req)
 	}
 	return e.runDefaultLoop(ctx, req)
+}
+
+func handleDirectSlashReasoningRequest(ctx context.Context, req ai.ReasoningRequest) (ai.ReasoningResponse, bool, error) {
+	trimmed := strings.TrimSpace(req.UserQuery)
+	if trimmed == "" || !strings.HasPrefix(trimmed, "/") || req.Executor == nil {
+		return ai.ReasoningResponse{}, false, nil
+	}
+
+	toolName, args, err := parser.ParseSlashCommand(trimmed[1:])
+	if err != nil || strings.TrimSpace(toolName) == "" {
+		return ai.ReasoningResponse{}, false, err
+	}
+
+	result, execErr := req.Executor.Execute(ctx, toolName, args)
+	if execErr != nil {
+		if strings.Contains(execErr.Error(), "unknown tool") {
+			return ai.ReasoningResponse{}, false, nil
+		}
+		return ai.ReasoningResponse{}, true, execErr
+	}
+
+	return ai.ReasoningResponse{
+		FinalText: result,
+		ToolCalls: []ai.ToolCall{{Name: toolName, Args: args}},
+	}, true, nil
 }
 
 func resolveOwnedReActLoop(req ai.ReasoningRequest) ai.ReActLoop {

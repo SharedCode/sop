@@ -243,12 +243,13 @@ type Generator interface {
 
 // GenOptions configures the generation process.
 type GenOptions struct {
-	SystemPrompt string
-	MaxTokens    int
-	Temperature  float32
-	TopP         float32
-	Stop         []string
-	Tools        []ToolDefinition // NEW: Pass the schemas via Native API
+	SystemPrompt     string
+	MaxTokens        int
+	Temperature      float32
+	ForceTemperature bool
+	TopP             float32
+	Stop             []string
+	Tools            []ToolDefinition // NEW: Pass the schemas via Native API
 	// ToolCallContinuations carries provider-neutral tool-call/result turns that a
 	// generator can translate into its provider-specific continuation format.
 	ToolCallContinuations []ToolCallContinuation

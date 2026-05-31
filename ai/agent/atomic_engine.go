@@ -150,10 +150,7 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 		return "", fmt.Errorf("script must be a JSON string or array")
 	}
 
-	currentQuery := ""
-	if p := ai.GetSessionPayload(ctx); p != nil {
-		currentQuery = strings.TrimSpace(p.CurrentUserQuery)
-	}
+	currentQuery := currentQueryForScriptGrounding(ai.GetSessionPayload(ctx))
 
 	for _, step := range rawSteps {
 		normalizeScriptStepForCompatibilityWithQuery(step, currentQuery)
@@ -325,9 +322,7 @@ func selectExecuteScriptReturn(engine *ScriptEngine, scriptCtx *ScriptContext, s
 
 func validateExecuteScriptPlaceholders(ctx context.Context, script []ScriptInstruction) error {
 	var currentQuery string
-	if p := ai.GetSessionPayload(ctx); p != nil {
-		currentQuery = strings.TrimSpace(p.CurrentUserQuery)
-	}
+	currentQuery = currentQueryForScriptGrounding(ai.GetSessionPayload(ctx))
 	resultOrigins := make(map[string]string, len(script))
 	validationErrors := make([]*executeScriptValidationError, 0)
 
@@ -828,7 +823,7 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 		})
 	}
 
-	return func(ctx context.Context, e *ScriptEngine) error {
+	return func(ctx context.Context, e *ScriptEngine) (runErr error) {
 
 		defer func() {
 			if attachDeferredCleanupCursor(ctx, e) {
@@ -843,6 +838,9 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 				log.Debug("Executing deferred operation", "index", i)
 				if err := task(ctx, e); err != nil {
 					log.Error("Deferred execution failed", "error", err)
+					if runErr == nil {
+						runErr = fmt.Errorf("deferred operation failed: %w", err)
+					}
 				}
 			}
 		}()
@@ -1597,6 +1595,37 @@ func normalizeScriptStepForCompatibilityWithQuery(step map[string]any, currentQu
 	}
 }
 
+func currentQueryForScriptGrounding(payload *ai.SessionPayload) string {
+	if payload == nil {
+		return ""
+	}
+
+	candidates := make([]string, 0, 4)
+	appendUnique := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		for _, existing := range candidates {
+			if existing == value {
+				return
+			}
+		}
+		candidates = append(candidates, value)
+	}
+
+	if payload.ClarificationState != nil {
+		appendUnique(payload.ClarificationState.TargetQuery)
+		appendUnique(payload.ClarificationState.EffectiveResumeAsk)
+	}
+	if payload.RetryRewriteState != nil {
+		appendUnique(payload.RetryRewriteState.ResolvedQuery)
+	}
+	appendUnique(payload.CurrentUserQuery)
+
+	return strings.Join(candidates, "\n")
+}
+
 func normalizeCompatibilitySortStep(step map[string]any, argsObj map[string]any) {
 	if step == nil || argsObj == nil {
 		return
@@ -2156,8 +2185,15 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 		}
 	}
 
-	if _, ok := e.Context.Variables["output"]; !ok && e.LastResult != nil && !isInternalScriptHandle(e.LastResult) {
-		e.Context.Variables["output"] = e.LastResult
+	if _, ok := e.Context.Variables["output"]; !ok {
+		if e.Context.LastUpdatedVar != "" {
+			if materialized, ok := e.Context.Variables[e.Context.LastUpdatedVar]; ok && !isInternalScriptHandle(materialized) {
+				e.Context.Variables["output"] = materialized
+			}
+		}
+		if _, ok := e.Context.Variables["output"]; !ok && e.LastResult != nil && !isInternalScriptHandle(e.LastResult) {
+			e.Context.Variables["output"] = e.LastResult
+		}
 	}
 
 	return tx.Commit(ctx)

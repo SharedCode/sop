@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -256,6 +257,10 @@ func extractListStoresFacts(resultText string) []string {
 		return nil
 	}
 
+	if facts := extractStructuredListStoresFacts(trimmed); len(facts) > 0 {
+		return facts
+	}
+
 	lines := strings.Split(trimmed, "\n")
 	facts := make([]string, 0, len(lines)*2)
 	for _, line := range lines {
@@ -282,6 +287,83 @@ func extractListStoresFacts(resultText string) []string {
 		facts = append(facts, fmt.Sprintf("list_stores returned: %s", line))
 	}
 	return facts
+}
+
+type listStoresFactPayload struct {
+	Stores []listStoreFactEntry `json:"stores"`
+}
+
+type listStoreFactEntry struct {
+	Name      string                  `json:"name"`
+	Schema    map[string]string       `json:"schema"`
+	Relations []listStoreFactRelation `json:"relations"`
+}
+
+type listStoreFactRelation struct {
+	SourceFields []string `json:"source_fields"`
+	TargetStore  string   `json:"target_store"`
+	TargetFields []string `json:"target_fields"`
+}
+
+func extractStructuredListStoresFacts(trimmed string) []string {
+	rawPayload := []byte(trimmed)
+	var envelope ToolResultEnvelope
+	if json.Unmarshal(rawPayload, &envelope) == nil && len(envelope.ToolResult) > 0 {
+		rawPayload = envelope.ToolResult
+	}
+
+	var payload listStoresFactPayload
+	if err := json.Unmarshal(rawPayload, &payload); err != nil || len(payload.Stores) == 0 {
+		return nil
+	}
+
+	facts := make([]string, 0, len(payload.Stores)*2)
+	for _, store := range payload.Stores {
+		name := strings.TrimSpace(store.Name)
+		if name == "" {
+			continue
+		}
+		if len(store.Schema) > 0 {
+			facts = append(facts, fmt.Sprintf("list_stores confirmed %s schema=%s", name, formatListStoresFactSchema(store.Schema)))
+		}
+		if len(store.Relations) > 0 {
+			facts = append(facts, fmt.Sprintf("list_stores confirmed %s relations=%s", name, formatListStoresFactRelations(store.Relations)))
+		}
+		if len(store.Schema) == 0 && len(store.Relations) == 0 {
+			facts = append(facts, fmt.Sprintf("list_stores returned: %s", name))
+		}
+	}
+	return facts
+}
+
+func formatListStoresFactSchema(schema map[string]string) string {
+	keys := make([]string, 0, len(schema))
+	for key := range schema {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, fmt.Sprintf("%s: %s", key, schema[key]))
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
+}
+
+func formatListStoresFactRelations(relations []listStoreFactRelation) string {
+	parts := make([]string, 0, len(relations))
+	for _, relation := range relations {
+		if strings.TrimSpace(relation.TargetStore) == "" {
+			continue
+		}
+		source := strings.Join(relation.SourceFields, ",")
+		target := strings.Join(relation.TargetFields, ",")
+		parts = append(parts, fmt.Sprintf("%s(%s->%s)", relation.TargetStore, target, source))
+	}
+	if len(parts) == 0 {
+		return "[]"
+	}
+	sort.Strings(parts)
+	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 func isRecoverableRepairResult(result ReActToolResult, toolName string, strategy string) bool {

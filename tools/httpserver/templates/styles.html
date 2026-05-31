@@ -115,7 +115,6 @@
         th, td { text-align: left; padding: 6px 12px; border: 1px solid var(--border-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         th { position: relative; background-color: var(--table-header-bg); text-transform: capitalize; }
         th.th-key { color: var(--key-color); font-weight: bold; }
-        th.th-val { }
         .col-resizer { position: absolute; right: 0; top: 0; bottom: 0; width: 4px; background-color: transparent; border-right: 1px solid var(--border-color); cursor: col-resize; user-select: none; transition: background-color 0.2s; }
         .col-resizer:hover { background-color: var(--success-bg); }
         tr:nth-child(even) { background-color: var(--table-row-even); }
@@ -151,22 +150,24 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 20px;
+            padding: 15px;
             box-sizing: border-box;
         }
         .wizard-container {
             width: 600px;
             max-width: 100%;
+            max-height: calc(100vh - 15px);
             background: var(--sidebar-bg);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 30px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            overflow-y: auto;
         }
         .wizard-step { display: none; }
         .wizard-step.active { display: block; }
         .wizard-header { margin-bottom: 20px; text-align: center; }
-        .wizard-footer { margin-top: 30px; display: flex; justify-content: space-between; gap: 3px; }
+        .wizard-footer { margin-top: 18px; display: flex; justify-content: space-between; gap: 3px; }
         .wizard-footer button { padding: 9px 17px; }
         .wizard-progress { display: flex; gap: 5px; justify-content: center; margin-bottom: 20px; }
         .progress-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border-color); }

@@ -26,7 +26,8 @@ func TestToolJoin_OrderBy(t *testing.T) {
 	agent := NewCopilotAgent(cfg, dbs, sysDB)
 
 	ctx := context.Background()
-	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
+	payload := &ai.SessionPayload{CurrentDB: "system"}
+	ctx = context.WithValue(ctx, "session_payload", payload)
 	agent.Open(ctx)
 
 	// Create Stores and Data
@@ -47,6 +48,13 @@ func TestToolJoin_OrderBy(t *testing.T) {
 	right.Add(ctx, "3", map[string]any{"id": "3", "val": "R3"})
 
 	t2.Commit(ctx)
+
+	readTx, err := sysDB.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction read failed: %v", err)
+	}
+	defer readTx.Rollback(ctx)
+	payload.Transaction = readTx
 
 	// Helper to extract key
 	getKey := func(item map[string]any) string {

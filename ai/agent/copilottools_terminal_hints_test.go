@@ -44,7 +44,14 @@ func TestToolFetch_ReturnsTerminalEnvelopeForMissingKeyInNativeLoop(t *testing.T
 		t.Fatalf("Commit failed: %v", err)
 	}
 
-	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: dbName})
+	readPayload := &ai.SessionPayload{CurrentDB: dbName}
+	readTx, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction read failed: %v", err)
+	}
+	defer readTx.Rollback(ctx)
+	readPayload.Transaction = readTx
+	ctx = context.WithValue(ctx, "session_payload", readPayload)
 	ctx = context.WithValue(ctx, ai.CtxKeyNativeToolHints, true)
 
 	res, err := agent.toolFetch(ctx, map[string]any{"store": "users", "key": "missing"})
@@ -82,7 +89,14 @@ func TestToolUpdate_ReturnsTerminalEnvelopeForMissingItemInNativeLoop(t *testing
 		t.Fatalf("Commit failed: %v", err)
 	}
 
-	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: dbName})
+	writePayload := &ai.SessionPayload{CurrentDB: dbName}
+	writeTx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction write failed: %v", err)
+	}
+	defer writeTx.Rollback(ctx)
+	writePayload.Transaction = writeTx
+	ctx = context.WithValue(ctx, "session_payload", writePayload)
 	ctx = context.WithValue(ctx, ai.CtxKeyNativeToolHints, true)
 
 	res, err := agent.toolUpdate(ctx, map[string]any{
@@ -124,7 +138,14 @@ func TestToolDelete_ReturnsTerminalEnvelopeForMissingItemInNativeLoop(t *testing
 		t.Fatalf("Commit failed: %v", err)
 	}
 
-	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: dbName})
+	writePayload := &ai.SessionPayload{CurrentDB: dbName}
+	writeTx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction write failed: %v", err)
+	}
+	defer writeTx.Rollback(ctx)
+	writePayload.Transaction = writeTx
+	ctx = context.WithValue(ctx, "session_payload", writePayload)
 	ctx = context.WithValue(ctx, ai.CtxKeyNativeToolHints, true)
 
 	res, err := agent.toolDelete(ctx, map[string]any{"store": "users", "key": "missing"})

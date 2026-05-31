@@ -188,6 +188,37 @@ func TestDeferCommitWithImplicitVariableReturn(t *testing.T) {
 	assert.True(t, mockTx.Committed, "transaction should commit after implicit cursor close")
 }
 
+func TestDeferredCommitErrorPropagatesWithoutCursor(t *testing.T) {
+	ctx := context.Background()
+
+	mockTx := new(MockTxWithStateDefer)
+	mockTx.On("Commit", mock.Anything).Return(fmt.Errorf("redis unavailable"))
+
+	engine := NewScriptEngine(NewScriptContext(), func(name string) (Database, error) {
+		return nil, fmt.Errorf("db not supported in this test")
+	})
+	engine.Context.Transactions["tx1"] = mockTx
+
+	script := []ScriptInstruction{
+		{
+			Op: "defer",
+			Args: map[string]any{
+				"op":          "commit_tx",
+				"transaction": "tx1",
+			},
+		},
+	}
+
+	compiled, err := CompileScript(script)
+	assert.NoError(t, err)
+
+	err = compiled(ctx, engine)
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "deferred operation failed")
+	assert.ErrorContains(t, err, "redis unavailable")
+	assert.True(t, mockTx.Committed, "deferred commit should still have been attempted")
+}
+
 // DummyCursor for testing
 type DummyCursor struct {
 	Items []any

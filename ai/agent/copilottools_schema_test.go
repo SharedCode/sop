@@ -14,6 +14,18 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
+type listStoresTestPayload struct {
+	Database string                `json:"database"`
+	Stores   []listStoresTestStore `json:"stores"`
+}
+
+type listStoresTestStore struct {
+	Name      string            `json:"name"`
+	Schema    map[string]string `json:"schema"`
+	Relations []sop.Relation    `json:"relations"`
+	Empty     bool              `json:"empty"`
+}
+
 func TestToolListStores_SchemaEnrichment(t *testing.T) {
 	// 1. Setup Temp Dir
 	tmpDir, err := os.MkdirTemp("", "sop_schema_test")
@@ -95,19 +107,28 @@ func TestToolListStores_SchemaEnrichment(t *testing.T) {
 		t.Fatalf("toolListStores failed: %v", err)
 	}
 
-	// 5. Verify Output
-	t.Logf("ListStores Result:\n%s", res)
-
-	if !strings.Contains(res, "users") {
-		t.Error("Result should contain store name 'users'")
+	var resultPayload listStoresTestPayload
+	if err := json.Unmarshal([]byte(res), &resultPayload); err != nil {
+		t.Fatalf("expected JSON list_stores payload, got %q: %v", res, err)
 	}
-	// Verification of Schema Enrichment
-	// Expected schema: first_name:string, age:number
-	if !strings.Contains(res, "first_name") {
-		t.Error("Result should contain schema field 'first_name'")
+	if resultPayload.Database != dbName {
+		t.Fatalf("expected database %q, got %q", dbName, resultPayload.Database)
 	}
-	if !strings.Contains(res, "age") {
-		t.Error("Result should contain schema field 'age'")
+	if len(resultPayload.Stores) != 2 {
+		t.Fatalf("expected 2 stores in payload, got %+v", resultPayload.Stores)
+	}
+	users := resultPayload.Stores[1]
+	if users.Name != "users" {
+		users = resultPayload.Stores[0]
+	}
+	if users.Name != "users" {
+		t.Fatalf("expected payload to contain users store, got %+v", resultPayload.Stores)
+	}
+	if users.Schema["first_name"] != "string" {
+		t.Fatalf("expected first_name:string in schema, got %+v", users.Schema)
+	}
+	if users.Schema["age"] != "number" {
+		t.Fatalf("expected age:number in schema, got %+v", users.Schema)
 	}
 }
 
@@ -160,14 +181,15 @@ func TestToolListStores_FiltersRequestedStores(t *testing.T) {
 		t.Fatalf("toolListStores failed: %v", err)
 	}
 
-	if !strings.Contains(res, "orders") {
-		t.Fatalf("expected filtered result to contain orders, got %s", res)
+	var payload listStoresTestPayload
+	if err := json.Unmarshal([]byte(res), &payload); err != nil {
+		t.Fatalf("expected JSON list_stores payload, got %q: %v", res, err)
 	}
-	if strings.Contains(res, "users") {
-		t.Fatalf("expected filtered result to exclude users, got %s", res)
+	if len(payload.Stores) != 1 || payload.Stores[0].Name != "orders" {
+		t.Fatalf("expected only orders store, got %+v", payload.Stores)
 	}
-	if !strings.Contains(res, "total_amount") {
-		t.Fatalf("expected filtered result to contain orders schema, got %s", res)
+	if payload.Stores[0].Schema["total_amount"] != "number" {
+		t.Fatalf("expected grounded orders schema, got %+v", payload.Stores[0].Schema)
 	}
 }
 
@@ -220,11 +242,12 @@ func TestToolListStores_FuzzyMatchesRequestedStores(t *testing.T) {
 		t.Fatalf("toolListStores failed: %v", err)
 	}
 
-	if !strings.Contains(res, "orders") {
-		t.Fatalf("expected fuzzy matched result to contain orders, got %s", res)
+	var payload listStoresTestPayload
+	if err := json.Unmarshal([]byte(res), &payload); err != nil {
+		t.Fatalf("expected JSON list_stores payload, got %q: %v", res, err)
 	}
-	if strings.Contains(res, "users_orders") {
-		t.Fatalf("expected fuzzy matched result to prefer exact singular/plural match over join table, got %s", res)
+	if len(payload.Stores) != 1 || payload.Stores[0].Name != "orders" {
+		t.Fatalf("expected fuzzy match to resolve to orders only, got %+v", payload.Stores)
 	}
 }
 
@@ -275,11 +298,19 @@ func TestToolListStores_InfersLikelyStoresFromUserQuery(t *testing.T) {
 		t.Fatalf("toolListStores failed: %v", err)
 	}
 
-	if !strings.Contains(res, "users") || !strings.Contains(res, "orders") || !strings.Contains(res, "users_orders") {
-		t.Fatalf("expected query-derived narrowing to keep likely related stores, got %s", res)
+	var payload listStoresTestPayload
+	if err := json.Unmarshal([]byte(res), &payload); err != nil {
+		t.Fatalf("expected JSON list_stores payload, got %q: %v", res, err)
 	}
-	if strings.Contains(res, "payments") {
-		t.Fatalf("expected query-derived narrowing to exclude unrelated stores, got %s", res)
+	seen := make(map[string]bool, len(payload.Stores))
+	for _, store := range payload.Stores {
+		seen[store.Name] = true
+	}
+	if !seen["users"] || !seen["orders"] || !seen["users_orders"] {
+		t.Fatalf("expected query-derived narrowing to keep likely related stores, got %+v", payload.Stores)
+	}
+	if seen["payments"] {
+		t.Fatalf("expected query-derived narrowing to exclude unrelated stores, got %+v", payload.Stores)
 	}
 }
 
@@ -334,8 +365,15 @@ func TestToolListStores_ReturnsProgressEnvelopeForNativeHints(t *testing.T) {
 	if len(envelope.ProgressHint.SuggestedNextTools) != 1 || envelope.ProgressHint.SuggestedNextTools[0] != "execute_script" {
 		t.Fatalf("expected execute_script as suggested next tool, got %+v", envelope.ProgressHint)
 	}
-	if !strings.Contains(string(envelope.ToolResult), "Stores:") || !strings.Contains(string(envelope.ToolResult), "users") {
-		t.Fatalf("expected tool result payload to preserve list_stores output, got %s", string(envelope.ToolResult))
+	var payload listStoresTestPayload
+	if err := json.Unmarshal(envelope.ToolResult, &payload); err != nil {
+		t.Fatalf("expected structured tool_result payload, got %s: %v", string(envelope.ToolResult), err)
+	}
+	if len(payload.Stores) != 1 || payload.Stores[0].Name != "users" {
+		t.Fatalf("expected tool result payload to contain users store, got %+v", payload.Stores)
+	}
+	if payload.Stores[0].Schema["first_name"] != "string" {
+		t.Fatalf("expected users schema in tool_result payload, got %+v", payload.Stores[0].Schema)
 	}
 	if len(envelope.ProgressHint.Clues) == 0 || !strings.Contains(envelope.ProgressHint.Clues[0], "users") {
 		t.Fatalf("expected grounded clue in progress hint, got %+v", envelope.ProgressHint)

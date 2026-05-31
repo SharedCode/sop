@@ -148,6 +148,26 @@ func (m *ownedReActLoopMockGenerator) ReActLoop() ai.ReActLoop {
 	return ownedReActLoopMock{}
 }
 
+type directSlashExecutor struct {
+	calledTool string
+	calledArgs map[string]any
+}
+
+func (e *directSlashExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	_ = ctx
+	e.calledTool = tool
+	e.calledArgs = args
+	if tool == "list_databases" {
+		return "[\"dev_db\"]", nil
+	}
+	return "", fmt.Errorf("unknown tool: %s", tool)
+}
+
+func (e *directSlashExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	_ = ctx
+	return []ai.ToolDefinition{{Name: "list_databases"}}, nil
+}
+
 type bypassReActPromptMockGenerator struct {
 	calls int
 }
@@ -428,6 +448,56 @@ func TestNativeReActEngine_DelegatesToOwnedReActLoopWhenProvided(t *testing.T) {
 	}
 	if resp.FinalText != "Final answer: provider owned loop used" {
 		t.Fatalf("expected provider-owned loop response, got %q", resp.FinalText)
+	}
+}
+
+func TestNativeReActEngine_HandlesDirectSlashCommandBeforeDefaultLoop(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &loopMockGenerator{}
+	executor := &directSlashExecutor{}
+
+	resp, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "/list_databases",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if gen.calls != 0 {
+		t.Fatalf("expected slash command to bypass generator, got %d calls", gen.calls)
+	}
+	if executor.calledTool != "list_databases" {
+		t.Fatalf("expected slash command tool execution, got %q", executor.calledTool)
+	}
+	if resp.FinalText != "[\"dev_db\"]" {
+		t.Fatalf("expected direct tool result, got %q", resp.FinalText)
+	}
+	if len(resp.ToolCalls) != 1 || resp.ToolCalls[0].Name != "list_databases" {
+		t.Fatalf("expected direct tool call to be recorded, got %#v", resp.ToolCalls)
+	}
+}
+
+func TestNativeReActEngine_HandlesDirectSlashCommandBeforeOwnedLoop(t *testing.T) {
+	engine := &NativeReActEngine{}
+	gen := &ownedReActLoopMockGenerator{}
+	executor := &directSlashExecutor{}
+
+	resp, err := engine.Run(context.Background(), ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		UserQuery:    "/list_databases",
+		Executor:     executor,
+		Generator:    gen,
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if executor.calledTool != "list_databases" {
+		t.Fatalf("expected slash command tool execution before owned loop, got %q", executor.calledTool)
+	}
+	if resp.FinalText != "[\"dev_db\"]" {
+		t.Fatalf("expected direct tool result, got %q", resp.FinalText)
 	}
 }
 
