@@ -218,7 +218,9 @@
             <label style="display: block; margin-bottom: 4px; font-weight: bold;">API Key (Auth Token)</label>
             <input type="password" id="chat-settings-overlay-api-key" placeholder="Enter API Key securely" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
         </div>
+        <div id="chat-settings-test-status" style="display: none; margin-bottom: 10px; font-size: 12px;"></div>
         <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px;">
+            <button onclick="testChatSettingsConnection()" style="padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--pre-bg); color: var(--text-color); cursor: pointer;">Test Connection</button>
             <button onclick="toggleChatSettings()" style="padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--pre-bg); color: var(--text-color); cursor: pointer;">Cancel</button>
             <button onclick="saveChatSettings()" style="padding: 4px 10px; border-radius: 3px; border: none; background: var(--accent-color); color: white; cursor: pointer;">Save & Close</button>
         </div>

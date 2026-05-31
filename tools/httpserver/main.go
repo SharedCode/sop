@@ -119,6 +119,15 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+func hasAnyEnv(keys ...string) bool {
+	for _, key := range keys {
+		if os.Getenv(key) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func readSetupWizardAIConfigFromEnv() setupWizardAIConfig {
 	type providerEnv struct {
 		provider string
@@ -130,19 +139,19 @@ func readSetupWizardAIConfigFromEnv() setupWizardAIConfig {
 	providers := []providerEnv{
 		{
 			provider: "gemini",
-			apiKey:   firstNonEmpty(os.Getenv("GEMINI_API_KEY"), os.Getenv("LLM_API_KEY")),
+			apiKey:   firstNonEmpty(os.Getenv("GEMINI_API_KEY"), os.Getenv("LLM_API_KEY"), os.Getenv("SOP_LLM_API_KEY")),
 			model:    os.Getenv("GEMINI_MODEL"),
 			baseURL:  firstNonEmpty(os.Getenv("GEMINI_API_BASE_URL"), os.Getenv("GOOGLE_API_BASE_URL")),
 		},
 		{
 			provider: "openai",
-			apiKey:   firstNonEmpty(os.Getenv("OPENAI_API_KEY"), os.Getenv("LLM_API_KEY")),
+			apiKey:   firstNonEmpty(os.Getenv("OPENAI_API_KEY"), os.Getenv("LLM_API_KEY"), os.Getenv("SOP_LLM_API_KEY")),
 			model:    os.Getenv("OPENAI_MODEL"),
 			baseURL:  os.Getenv("OPENAI_API_BASE_URL"),
 		},
 		{
 			provider: "anthropic",
-			apiKey:   firstNonEmpty(os.Getenv("ANTHROPIC_API_KEY"), os.Getenv("LLM_API_KEY")),
+			apiKey:   firstNonEmpty(os.Getenv("ANTHROPIC_API_KEY"), os.Getenv("LLM_API_KEY"), os.Getenv("SOP_LLM_API_KEY")),
 			model:    os.Getenv("ANTHROPIC_MODEL"),
 			baseURL:  os.Getenv("ANTHROPIC_API_BASE_URL"),
 		},
@@ -183,6 +192,7 @@ func setupWizardAIConfigJSON() template.JS {
 var content embed.FS
 
 var config Config
+var modelCatalog = defaultModelCatalog()
 var loadedAgents = make(map[string]ai.Agent[map[string]any])
 var activeSessions = NewSessionManager(100)
 
@@ -311,17 +321,23 @@ func main() {
 	}
 
 	if _, err := os.Stat(targetConfigPath); err == nil {
-		if err := loadConfig(targetConfigPath); err != nil {
+		err := loadConfig(targetConfigPath)
+		if err != nil {
 			log.Error(fmt.Sprintf("Failed to load config file: %v", err))
 		} else {
 			if config.ConfigFile == "" {
 				config.ConfigFile = targetConfigPath
+			}
+			if _, err := loadModelCatalog(targetConfigPath); err != nil {
+				log.Error(fmt.Sprintf("Failed to load model catalog: %v", err))
 			}
 			log.Info(fmt.Sprintf("Loaded configuration from: %s", targetConfigPath))
 			if len(config.Databases) == 0 && config.SystemDB == nil {
 				log.Warn(fmt.Sprintf("Loaded configuration file '%s' but found 0 databases defined.", targetConfigPath))
 			}
 		}
+	} else if _, err := loadModelCatalog(""); err != nil {
+		log.Error(fmt.Sprintf("Failed to load model catalog: %v", err))
 	}
 
 	// Override RootPassword from environment variable if set (Security best practice)
@@ -351,7 +367,6 @@ func main() {
 			},
 		}
 	}
-
 	// Resolve Database Paths to absolute
 	for i := range config.Databases {
 		if abs, err := filepath.Abs(config.Databases[i].Path); err == nil {
@@ -433,6 +448,7 @@ func main() {
 	http.HandleFunc("/api/store/item/delete", handleDeleteItem)
 	http.HandleFunc("/api/admin/validate", handleValidateAdminToken)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
+	http.HandleFunc("/api/ai/test-connection", handleTestLLMConnection)
 	http.HandleFunc("/api/ai/summarize", handleAISummarize)
 	http.HandleFunc("/api/tool/execute", handleToolExecute)
 	http.HandleFunc("/api/ai/session/close", handleCloseSession)
@@ -741,8 +757,9 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]any{
-		"Version": sop.Version,
-		"Mode":    config.Mode,
+		"Version":      sop.Version,
+		"Mode":         config.Mode,
+		"ModelCatalog": modelCatalog,
 		// AllowInvalidMapKey is a flag to bypass the validation that requires Map Key types
 		// to have an Index Specification or CEL Expression. This is useful for testing.
 		"AllowInvalidMapKey": os.Getenv("SOP_ALLOW_INVALID_MAP_KEY") == "true",
@@ -751,7 +768,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 			if config.BrainProvider != "" {
 				return config.BrainProvider
 			}
-			if os.Getenv("GEMINI_API_KEY") != "" {
+			if hasAnyEnv("GEMINI_API_KEY", "LLM_API_KEY", "SOP_LLM_API_KEY") {
 				return "gemini"
 			} else if os.Getenv("OPENAI_API_KEY") != "" {
 				return "openai"
@@ -769,7 +786,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		"MaxHashMod":              fs.MaximumModValue,
 		"Env": map[string]bool{
 			"SOP_ROOT_PASSWORD": os.Getenv("SOP_ROOT_PASSWORD") != "",
-			"LLM_API_KEY":       os.Getenv("LLM_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("ANTHROPIC_API_KEY") != "",
+			"LLM_API_KEY":       hasAnyEnv("LLM_API_KEY", "SOP_LLM_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY"),
 			"EMBEDDING_API_KEY": os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("VOYAGE_API_KEY") != "" || os.Getenv("EMBEDDING_API_KEY") != "",
 		},
 	}
@@ -1148,6 +1165,9 @@ func saveConfigFile() {
 	encoder.SetIndent("", "    ")
 	encoder.Encode(config)
 	os.Rename(config.ConfigFile+".tmp", config.ConfigFile)
+	if err := ensureModelCatalogFile(config.ConfigFile); err != nil {
+		log.Error(fmt.Sprintf("Failed to save model catalog: %v", err))
+	}
 }
 
 func handleUpdateDatabase(w http.ResponseWriter, r *http.Request) {

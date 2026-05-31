@@ -759,9 +759,11 @@
     function handleInlineChatProviderChange() {
         const providerValue = document.getElementById('chat-settings-provider')?.value || '';
         const parts = splitProviderValue(providerValue);
+        const source = getSelectedProviderOptionSource('chat-settings-provider');
         const nextConfig = mergeStoredAIConfig({
             brain_provider: parts.provider,
-            brain_model: parts.model
+            brain_model: parts.model,
+            brain_source: source
         });
         syncChatControlsFromAIConfig(nextConfig);
         syncSetupWizardControlsFromAIConfig(nextConfig);
@@ -771,6 +773,7 @@
         const providerValue = document.getElementById('chat-settings-provider')?.value || '';
         const authInput = document.getElementById('chat-settings-inline-auth');
         const parts = splitProviderValue(providerValue);
+        const source = getSelectedProviderOptionSource('chat-settings-provider');
         if (!authInput) return;
 
         const value = authInput.value.trim();
@@ -778,10 +781,12 @@
         const nextConfig = mergeStoredAIConfig(isLocal ? {
             brain_provider: parts.provider,
             brain_model: parts.model,
+            brain_source: source,
             brain_url: value
         } : {
             brain_provider: parts.provider,
             brain_model: parts.model,
+            brain_source: source,
             brain_api_key: value
         });
         syncChatControlsFromAIConfig(nextConfig);
@@ -803,12 +808,14 @@
     function saveChatSettings() {
         const providerValue = document.getElementById('chat-settings-provider-overlay')?.value || '';
         const parts = splitProviderValue(providerValue);
+        const source = getSelectedProviderOptionSource('chat-settings-provider-overlay');
         const apiKey = document.getElementById('chat-settings-overlay-api-key')?.value.trim() || '';
         const url = document.getElementById('chat-settings-url')?.value.trim() || '';
 
         const nextConfig = mergeStoredAIConfig({
             brain_provider: parts.provider,
             brain_model: parts.model,
+            brain_source: source,
             brain_api_key: apiKey,
             brain_url: url
         });
@@ -832,6 +839,59 @@
             if (urlContainer) urlContainer.style.display = showURL ? 'block' : 'none';
             if (apiKeyContainer) apiKeyContainer.style.display = isLocalProvider ? 'none' : 'block';
         }
+    }
+
+    function setConnectionTestStatus(elementId, message, isSuccess) {
+        const status = document.getElementById(elementId);
+        if (!status) return;
+        status.style.display = 'block';
+        status.style.color = isSuccess ? 'var(--success-color)' : 'var(--danger-color)';
+        status.textContent = message;
+    }
+
+    async function runLLMConnectionTest(payload, statusElementId) {
+        setConnectionTestStatus(statusElementId, 'Testing connection...', true);
+        try {
+            const result = await apiCall('/api/ai/test-connection', 'POST', payload, {});
+            const message = result.response ? `Connected successfully: ${result.response}` : 'Connected successfully.';
+            setConnectionTestStatus(statusElementId, message, true);
+            showAlert(message, null, 'LLM Connection OK', 'var(--success-color)');
+        } catch (error) {
+            const message = `Connection failed: ${error.message}`;
+            setConnectionTestStatus(statusElementId, message, false);
+        }
+    }
+
+    function testChatSettingsConnection() {
+        const providerValue = document.getElementById('chat-settings-provider-overlay')?.value || '';
+        const parts = splitProviderValue(providerValue);
+        if (!parts.provider) {
+            showAlert('Please choose an LLM provider first.');
+            return;
+        }
+        const payload = {
+            provider: parts.provider,
+            model: parts.model,
+            api_key: document.getElementById('chat-settings-overlay-api-key')?.value.trim() || '',
+            url: document.getElementById('chat-settings-url')?.value.trim() || ''
+        };
+        runLLMConnectionTest(payload, 'chat-settings-test-status');
+    }
+
+    function testSetupBrainConnection() {
+        const providerValue = document.getElementById('setup-brain-provider')?.value || '';
+        const parts = splitProviderValue(providerValue);
+        if (!parts.provider) {
+            showAlert('Please choose an LLM provider first.');
+            return;
+        }
+        const payload = {
+            provider: parts.provider,
+            model: parts.model,
+            api_key: document.getElementById('setup-brain-api-key')?.value.trim() || '',
+            url: document.getElementById('setup-brain-url')?.value.trim() || ''
+        };
+        runLLMConnectionTest(payload, 'setup-brain-test-status');
     }
 
 </script>

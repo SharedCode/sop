@@ -1,0 +1,211 @@
+{
+    "llm": [
+        {
+            "label": "Google",
+            "options": [
+                {
+                    "value": "gemini:gemini-3.5-flash",
+                    "label": "Gemini 3.5 Flash"
+                },
+                {
+                    "value": "gemini:gemini-3.1-pro-preview",
+                    "label": "Gemini 3.1 Pro Preview"
+                },
+                {
+                    "value": "gemini:gemini-2.5-pro",
+                    "label": "Gemini 2.5 Pro"
+                },
+                {
+                    "value": "gemini:gemini-3.1-flash-lite",
+                    "label": "Gemini 3.1 Flash Lite"
+                },
+                {
+                    "value": "gemini:gemma-4-it",
+                    "label": "Gemma 4 Instruct"
+                },
+                {
+                    "value": "gemini:gemma-4",
+                    "label": "Gemma 4"
+                },
+                {
+                    "value": "gemini:gemini-1.5-pro",
+                    "label": "Gemini 1.5 Pro"
+                },
+                {
+                    "value": "gemini:gemini-1.5-flash",
+                    "label": "Gemini 1.5 Flash"
+                }
+            ]
+        },
+        {
+            "label": "Anthropic",
+            "options": [
+                {
+                    "value": "anthropic:claude-4.7-opus",
+                    "label": "Claude Opus 4.7"
+                },
+                {
+                    "value": "anthropic:claude-4.7-sonnet",
+                    "label": "Claude Sonnet 4.7"
+                },
+                {
+                    "value": "anthropic:claude-4.7-haiku",
+                    "label": "Claude 4.7 Haiku"
+                },
+                {
+                    "value": "anthropic:claude-4.6-sonnet",
+                    "label": "Claude Sonnet 4.6"
+                },
+                {
+                    "value": "anthropic:claude-4.6-haiku",
+                    "label": "Claude 4.6 Haiku"
+                },
+                {
+                    "value": "anthropic:claude-code-sonnet-4.6",
+                    "label": "Claude Code Sonnet 4.6"
+                },
+                {
+                    "value": "anthropic:claude-code-opus-4.6",
+                    "label": "Claude Code Opus 4.6"
+                },
+                {
+                    "value": "anthropic:claude-3.5-sonnet",
+                    "label": "Claude 3.5 Sonnet"
+                },
+                {
+                    "value": "anthropic:claude-3.5-haiku",
+                    "label": "Claude 3.5 Haiku"
+                }
+            ]
+        },
+        {
+            "label": "OpenAI",
+            "options": [
+                {
+                    "value": "openai:gpt-5.5",
+                    "label": "GPT-5.5"
+                },
+                {
+                    "value": "openai:gpt-5.4",
+                    "label": "GPT-5.4"
+                },
+                {
+                    "value": "openai:o3-mini",
+                    "label": "o3-mini"
+                },
+                {
+                    "value": "openai:gpt-4.2",
+                    "label": "GPT-4.2"
+                },
+                {
+                    "value": "openai:gpt-4.2-mini",
+                    "label": "GPT-4.2 Mini"
+                },
+                {
+                    "value": "openai:gpt-4o",
+                    "label": "GPT-4o"
+                },
+                {
+                    "value": "openai:gpt-4o-mini",
+                    "label": "GPT-4o Mini"
+                },
+                {
+                    "value": "openai:o1-preview",
+                    "label": "o1-preview"
+                }
+            ]
+        },
+        {
+            "label": "Local",
+            "options": [
+                {
+                    "value": "ollama",
+                    "label": "Ollama (Local Default)"
+                },
+                {
+                    "value": "ollama:gemma-4",
+                    "label": "Ollama (Gemma 4)"
+                }
+            ]
+        }
+    ],
+    "embedder": [
+        {
+            "label": "Google",
+            "options": [
+                {
+                    "value": "gemini:gemini-embedding-2",
+                    "label": "Gemini (gemini-embedding-2)"
+                },
+                {
+                    "value": "gemini:gemini-embedding-001",
+                    "label": "Gemini (gemini-embedding-001)"
+                }
+            ]
+        },
+        {
+            "label": "OpenAI",
+            "options": [
+                {
+                    "value": "openai:text-embedding-4-large",
+                    "label": "OpenAI (text-embedding-4-large)"
+                },
+                {
+                    "value": "openai:text-embedding-3-large",
+                    "label": "OpenAI (text-embedding-3-large)"
+                },
+                {
+                    "value": "openai:text-embedding-3-small",
+                    "label": "OpenAI (text-embedding-3-small)"
+                },
+                {
+                    "value": "openai:text-embedding-ada-002",
+                    "label": "OpenAI (text-embedding-ada-002)"
+                }
+            ]
+        },
+        {
+            "label": "Voyage",
+            "options": [
+                {
+                    "value": "voyage:voyage-3-large",
+                    "label": "Voyage 3 Large"
+                },
+                {
+                    "value": "voyage:voyage-3",
+                    "label": "Voyage 3"
+                }
+            ]
+        },
+        {
+            "label": "Cohere",
+            "options": [
+                {
+                    "value": "cohere:embed-english-v3.0",
+                    "label": "Cohere English v3.0"
+                },
+                {
+                    "value": "cohere:embed-multilingual-v3.0",
+                    "label": "Cohere Multilingual v3.0"
+                }
+            ]
+        },
+        {
+            "label": "Local",
+            "options": [
+                {
+                    "value": "ollama:nomic-embed-text",
+                    "label": "Ollama (nomic-embed-text)"
+                },
+                {
+                    "value": "ollama:mxbai-embed-large",
+                    "label": "Ollama (mxbai-embed-large)"
+                },
+                {
+                    "value": "ollama:all-minilm",
+                    "label": "Ollama (all-minilm)"
+                }
+            ]
+        }
+    ]
+}

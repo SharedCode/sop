@@ -42,7 +42,7 @@ type SaveConfigRequest struct {
 
 	// LLM Brain Options
 	BrainProvider string `json:"brain_provider"` // "gemini", "openai", "ollama"
-	BrainModel    string `json:"brain_model"`    // "gemini-3.1-pro-preview", "gpt-4", "llama3"
+	BrainModel    string `json:"brain_model"`    // "gemini-3.1-pro-preview", "gpt-5.4", "claude-4.6-sonnet", "llama3"
 	BrainURL      string `json:"brain_url"`      // e.g. "http://localhost:11434"
 	BrainAPIKey   string `json:"brain_api_key"`  // For cloud providers
 

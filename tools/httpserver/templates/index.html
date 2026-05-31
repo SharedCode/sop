@@ -1041,6 +1041,10 @@
                         <input type="text" id="setup-brain-url" placeholder="http://localhost:11434" style="width: 100%; padding: 4px;">
                     </div>
                 </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button type="button" onclick="testSetupBrainConnection()" style="padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--pre-bg); color: var(--text-color); cursor: pointer;">Test LLM Connection</button>
+                    <div id="setup-brain-test-status" style="display: none; font-size: 12px;"></div>
+                </div>
             </div>
 
             <!-- Embedder Settings -->

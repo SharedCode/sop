@@ -58,4 +58,30 @@ func TestReadSetupWizardAIConfigFromEnv(t *testing.T) {
 			t.Fatalf("expected gemini model, got %q", cfg.BrainModel)
 		}
 	})
+
+	t.Run("gemini falls back to documented sop llm api key", func(t *testing.T) {
+		t.Setenv("OPENAI_API_KEY", "")
+		t.Setenv("OPENAI_API_BASE_URL", "")
+		t.Setenv("OPENAI_MODEL", "")
+		t.Setenv("ANTHROPIC_API_KEY", "")
+		t.Setenv("ANTHROPIC_API_BASE_URL", "")
+		t.Setenv("ANTHROPIC_MODEL", "")
+		t.Setenv("GEMINI_API_KEY", "")
+		t.Setenv("GEMINI_API_BASE_URL", "")
+		t.Setenv("GEMINI_MODEL", "gemini-3.5-flash")
+		t.Setenv("LLM_API_KEY", "")
+		t.Setenv("SOP_LLM_API_KEY", "documented-key")
+
+		cfg := readSetupWizardAIConfigFromEnv()
+
+		if cfg.BrainProvider != "gemini" {
+			t.Fatalf("expected gemini provider, got %q", cfg.BrainProvider)
+		}
+		if cfg.BrainAPIKey != "documented-key" {
+			t.Fatalf("expected sop llm api key fallback, got %q", cfg.BrainAPIKey)
+		}
+		if cfg.BrainModel != "gemini-3.5-flash" {
+			t.Fatalf("expected gemini model, got %q", cfg.BrainModel)
+		}
+	})
 }

@@ -21,20 +21,56 @@
         }
     }
 
-    function ensureSetupProviderOption(selectId, provider, model) {
+    function getSelectedProviderOptionSource(selectId) {
+        const select = document.getElementById(selectId);
+        if (!select || select.selectedIndex < 0) return 'catalog';
+        const option = select.options[select.selectedIndex];
+        return option?.dataset?.injected === 'env' ? 'env' : 'catalog';
+    }
+
+    function selectProviderOption(select, value, source) {
+        if (!select) return;
+
+        const preferEnv = source === 'env';
+        const options = Array.from(select.options);
+        const matchingOption = options.find(option => {
+            if (option.value !== value) return false;
+            const isEnv = option.dataset.injected === 'env';
+            return preferEnv ? isEnv : !isEnv;
+        }) || options.find(option => option.value === value);
+
+        if (matchingOption) {
+            select.value = matchingOption.value;
+            matchingOption.selected = true;
+        }
+    }
+
+    function ensureSetupProviderOption(selectId, provider, model, source = 'catalog') {
         const select = document.getElementById(selectId);
         if (!select || !provider) return;
 
         const value = model ? `${provider}:${model}` : provider;
-        const existing = Array.from(select.options).find(option => option.value === value);
-        if (!existing) {
+        const options = Array.from(select.options);
+        const existingCatalog = options.find(option => option.value === value && option.dataset.injected !== 'env');
+        let existingEnv = options.find(option => option.value === value && option.dataset.injected === 'env');
+
+        if (!existingCatalog && source !== 'env') {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = model ? `${setupProviderLabel(provider)} (${model})` : `${setupProviderLabel(provider)}`;
+            select.appendChild(option);
+        }
+
+        if (!existingEnv) {
             const option = document.createElement('option');
             option.value = value;
             option.textContent = model ? `${setupProviderLabel(provider)} (${model}) [Env]` : `${setupProviderLabel(provider)} [Env]`;
             option.dataset.injected = 'env';
             select.appendChild(option);
+            existingEnv = option;
         }
-        select.value = value;
+
+        selectProviderOption(select, value, source);
     }
 
     function syncChatControlsFromAIConfig(aiConfig) {
@@ -43,8 +79,10 @@
             return;
         }
 
-        ensureSetupProviderOption('chat-settings-provider', cfg.brain_provider, cfg.brain_model);
-        ensureSetupProviderOption('chat-settings-provider-overlay', cfg.brain_provider, cfg.brain_model);
+        const source = cfg.brain_source || 'catalog';
+
+        ensureSetupProviderOption('chat-settings-provider', cfg.brain_provider, cfg.brain_model, source);
+        ensureSetupProviderOption('chat-settings-provider-overlay', cfg.brain_provider, cfg.brain_model, source);
 
         const inlineProvider = document.getElementById('chat-settings-provider');
         const inlineAuth = document.getElementById('chat-settings-inline-auth');
@@ -53,7 +91,7 @@
         const isLocal = cfg.brain_provider === 'ollama' || cfg.brain_provider === 'local';
 
         if (inlineProvider) {
-            inlineProvider.value = buildProviderValue(cfg.brain_provider, cfg.brain_model);
+            selectProviderOption(inlineProvider, buildProviderValue(cfg.brain_provider, cfg.brain_model), source);
         }
         if (inlineAuth) {
             inlineAuth.value = isLocal ? (cfg.brain_url || '') : (cfg.brain_api_key || '');
@@ -65,6 +103,9 @@
         if (overlayAPIKey) {
             overlayAPIKey.value = cfg.brain_api_key || '';
         }
+        if (document.getElementById('chat-settings-provider-overlay')) {
+            selectProviderOption(document.getElementById('chat-settings-provider-overlay'), buildProviderValue(cfg.brain_provider, cfg.brain_model), source);
+        }
 
         toggleChatSettingsFields();
     }
@@ -75,8 +116,8 @@
             return;
         }
 
-        ensureSetupProviderOption('setup-brain-provider', cfg.brain_provider, cfg.brain_model);
-        ensureSetupProviderOption('setup-embedder-provider', cfg.embedder_provider, cfg.embedder_model);
+        ensureSetupProviderOption('setup-brain-provider', cfg.brain_provider, cfg.brain_model, cfg.brain_source || 'catalog');
+        ensureSetupProviderOption('setup-embedder-provider', cfg.embedder_provider, cfg.embedder_model, cfg.embedder_source || 'catalog');
 
         const brainAPIKeyInput = document.getElementById('setup-brain-api-key');
         const brainURLInput = document.getElementById('setup-brain-url');
@@ -107,10 +148,12 @@
         return {
             brain_provider: storedConfig.brain_provider || envConfig.brain_provider || '',
             brain_model: storedConfig.brain_model || envConfig.brain_model || '',
+            brain_source: storedConfig.brain_source || (envConfig.brain_provider ? 'env' : 'catalog'),
             brain_url: storedConfig.brain_url || envConfig.brain_url || '',
             brain_api_key: storedConfig.brain_api_key || envConfig.brain_api_key || '',
             embedder_provider: storedConfig.embedder_provider || envConfig.embedder_provider || '',
             embedder_model: storedConfig.embedder_model || envConfig.embedder_model || '',
+            embedder_source: storedConfig.embedder_source || (envConfig.embedder_provider ? 'env' : 'catalog'),
             embedder_url: storedConfig.embedder_url || envConfig.embedder_url || '',
             embedder_api_key: storedConfig.embedder_api_key || envConfig.embedder_api_key || ''
         };

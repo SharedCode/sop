@@ -70,6 +70,7 @@ echo "Starting SOP Release Build v$VERSION"
 echo "Cleaning up..."
 rm -rf $OUTPUT_DIR
 mkdir -p $OUTPUT_DIR
+cp model_catalog.json "$OUTPUT_DIR/" 2>/dev/null || true
 
 # Step 1: Build Core Binaries & Shared Libraries
 echo "Building Core Bindings and Binaries..."
@@ -239,6 +240,7 @@ create_bundle() {
 
     # 5. READMEs & Scripts
     cp README.md "$BUNDLE_DIR/"
+    cp model_catalog.json "$BUNDLE_DIR/" 2>/dev/null || true
     mkdir -p "$BUNDLE_DIR/docs"
     cp docs/installation/DATA_MANAGER_SETUP.md "$BUNDLE_DIR/docs/" 2>/dev/null || true
     cp docs/installation/LANGUAGE_BINDINGS.md "$BUNDLE_DIR/docs/" 2>/dev/null || true
