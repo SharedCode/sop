@@ -8,6 +8,12 @@ import (
 	"sync"
 )
 
+const routeToMultiKBArgsSchema = `{"type":"object","properties":{"kb_names":{"type":"array","description":"Knowledge base names to search in parallel.","items":{"type":"string"}},"optimized_query":{"type":"string","description":"Query to run across the target knowledge bases."}},"required":["kb_names","optimized_query"]}`
+
+const handoffToAvatarArgsSchema = `{"type":"object","properties":{"avatar_kb_name":{"type":"string","description":"Avatar knowledge base name that should receive the delegated task."},"task_context":{"type":"object","description":"Structured task payload to hand off to the avatar."}},"required":["avatar_kb_name","task_context"]}`
+
+const concludeTopicArgsSchema = `{"type":"object","properties":{"summary":{"type":"string","description":"Compact summary of the resolved topic or thread."},"topic_label":{"type":"string","description":"Short label for the topic being concluded."}},"required":["summary","topic_label"]}`
+
 func (a *CopilotAgent) toolRouteToMultiKB(ctx context.Context, args map[string]any) (string, error) {
 	kbNamesRaw, ok := args["kb_names"]
 	if !ok {
@@ -98,8 +104,8 @@ func (a *CopilotAgent) toolHandoffToAvatar(ctx context.Context, args map[string]
 }
 
 func (a *CopilotAgent) registerRoutingTools(ctx context.Context) {
-	a.registry.RegisterWithUI("route_to_multi_kb", "Routes a query to multiple specific knowledge bases.", "Executes query across given KBs", "(kb_names: Array<string>, optimized_query: string)", a.toolRouteToMultiKB)
-	a.registry.RegisterWithUI("handoff_to_avatar", "Yields control to an Avatar-specific Knowledge Base to execute a task.", "Handoff to an Avatar", "(avatar_kb_name: string, task_context: object)", a.toolHandoffToAvatar)
+	a.registry.RegisterWithUI("route_to_multi_kb", "Routes a query to multiple specific knowledge bases.", "Executes query across given KBs", routeToMultiKBArgsSchema, a.toolRouteToMultiKB)
+	a.registry.RegisterWithUI("handoff_to_avatar", "Yields control to an Avatar-specific Knowledge Base to execute a task.", "Handoff to an Avatar", handoffToAvatarArgsSchema, a.toolHandoffToAvatar)
 
-	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", "(summary: string, topic_label: string)", a.toolConcludeTopic)
+	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", concludeTopicArgsSchema, a.toolConcludeTopic)
 }

@@ -69,6 +69,24 @@ func (s *store[T]) SetLLM(l LLM[T]) {
 	s.llm = l
 }
 
+func extractSearchText(data any) string {
+	if m, ok := data.(map[string]any); ok {
+		var parts []string
+		for _, field := range []string{"text", "description", "content", "page_content", "_raw_content"} {
+			if text, ok := m[field].(string); ok && strings.TrimSpace(text) != "" {
+				parts = append(parts, text)
+			}
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, " ")
+		}
+	}
+	if st, ok := data.(interface{ SearchText() string }); ok {
+		return st.SearchText()
+	}
+	return fmt.Sprintf("%v", data)
+}
+
 func (s *store[T]) Upsert(ctx context.Context, item Item[T], vec []float32) error {
 	id := item.ID
 	if id == sop.NilUUID {
@@ -192,15 +210,7 @@ func (s *store[T]) Upsert(ctx context.Context, item Item[T], vec []float32) erro
 
 	// 4. Update TextIndex if present
 	if s.textIndex != nil {
-
-		strData := ""
-		if m, ok := any(item.Data).(map[string]any); ok {
-			strData = fmt.Sprintf("%v %v", m["text"], m["description"])
-		} else if st, ok := any(item.Data).(interface{ SearchText() string }); ok {
-			strData = st.SearchText()
-		} else {
-			strData = fmt.Sprintf("%v", item.Data)
-		}
+		strData := extractSearchText(item.Data)
 		err = s.textIndex.Add(ctx, fmt.Sprintf("%v,%v", bestCategory.String(), id.String()), strData)
 		if err != nil {
 			return err
@@ -298,15 +308,7 @@ func (s *store[T]) UpsertByCategoryID(ctx context.Context, catID sop.UUID, catCe
 
 	// Update global text index
 	if s.textIndex != nil {
-
-		strData := ""
-		if m, ok := any(item.Data).(map[string]any); ok {
-			strData = fmt.Sprintf("%v %v", m["text"], m["description"])
-		} else if st, ok := any(item.Data).(interface{ SearchText() string }); ok {
-			strData = st.SearchText()
-		} else {
-			strData = fmt.Sprintf("%v", item.Data)
-		}
+		strData := extractSearchText(item.Data)
 		log.Debug("s.textIndex.Add call")
 		s.textIndex.Add(ctx, fmt.Sprintf("%v,%v", catID.String(), id.String()), strData) // Assumes item.ID actually contained textual representation.
 	}
@@ -671,13 +673,15 @@ func (s *store[T]) QueryTextBatch(ctx context.Context, texts []string, opts *Sea
 }
 
 // QueryText performs a BM25 or keyword text search on the stored text representation of the thoughts.
+// When a use-case already has a reliable category taxonomy, CategoryPath-based retrieval can be
+// a cheaper SearchByPath-style alternative to enabling and maintaining the optional text index.
 
 func (s *store[T]) QueryText(ctx context.Context, text string, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
 	if opts == nil {
 		opts = &SearchOptions[T]{Limit: 10}
 	}
 	if s.textIndex == nil {
-		return nil, fmt.Errorf("text search is not enabled on this store")
+		return nil, nil
 	}
 
 	var targetCategoryID sop.UUID

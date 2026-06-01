@@ -37,10 +37,10 @@ The **SOP Data Manager** includes an embedded AI Copilot powered by LLMs (like G
 You can provide the API Key via an environment variable or the configuration file. For a detailed guide on using the conversational interface, case sensitivity rules, and query examples, please refer to the [AI Copilot User Guide](ai/AI_COPILOT_USAGE.md).
 
 **Option 1: Environment Variable (Recommended)**
-Set the `SOP_LLM_API_KEY` variable in your shell or `.env` file before launching the application.
+Set the provider-specific API key in your shell or `.env` file before launching the application.
 
 ```bash
-export SOP_LLM_API_KEY="your-api-key-here"
+export GEMINI_API_KEY="your-api-key-here"
 ```
 
 **Option 2: Config File**
@@ -184,6 +184,7 @@ The Data Manager includes an integrated AI Copilot that supports **Natural Langu
     *   **Natural Language Steps**: Invokes the LLM only when reasoning is required (e.g., "Analyze sentiment").
 *   **Bare-Metal Performance**: Scripts are compiled into efficient engine instructions (Go code), avoiding the overhead of runtime parsing for repeated tasks.
 *   **Documentation**: See the [Execute Script Tool](ai/EXECUTE_SCRIPT_TOOL.md) for technical details on how scripts are parsed and executed by the AI Copilot.
+*   **Store Orchestration Modes**: See [Store Orchestration Modes](ai/STORE_ORCHESTRATION_MODES.md) for the provider-neutral direction that keeps both `execute_script` and piped lego-block tool assembly as first-class control surfaces.
 
 To launch the Data Manager:
 ```bash

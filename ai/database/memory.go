@@ -149,10 +149,10 @@ func (db *Database) OpenKnowledgeBase(
 	cfg, _ := kb.GetConfig(ctx)
 
 	useTextSearch := false
-	if len(enableTextSearch) > 0 {
+	if cfg != nil {
+		useTextSearch = cfg.TextSearchEnabled
+	} else if len(enableTextSearch) > 0 {
 		useTextSearch = enableTextSearch[0]
-	} else if cfg != nil && cfg.TextSearchEnabled {
-		useTextSearch = true
 	}
 
 	if useTextSearch {

@@ -51,8 +51,19 @@ In a large-scale enterprise environment, the SOP Data Manager shines as a statel
 ## Usage
 
 ### Prerequisites
-- Go 1.20+ installed.
-- An existing SOP database (folder containing SOP data).
+- Go 1.24.3+ installed.
+- Run from the root of the `sop` repository so `go run ./tools/httpserver` resolves the module correctly.
+- Either:
+  - an existing SOP database folder for single-database mode, or
+  - a `config.json` file for multi-database mode.
+- Building code paths that include the AI package requires a working `clang`/C toolchain:
+  - macOS: install Xcode Command Line Tools or Xcode.
+  - Linux: install `clang` from your distro package manager.
+  - Windows: install LLVM/Clang, or use an environment that provides it such as MSYS2/MinGW or Visual Studio Build Tools with LLVM support.
+- Redis is required only when running with `"mode": "clustered"`.
+- An LLM API key is required only if you plan to use AI Copilot features.
+
+No separate frontend build step is required; the UI assets are embedded into the Go binary.
 
 ### Environment Variables
 
@@ -139,11 +150,14 @@ Create a JSON configuration file (e.g., `config.json`) to define your environmen
 ```json
 {
   "port": 8080,
+  "pageSize": 40,
   "root_password": "optional_admin_password",
+  "enable_rest_auth": false,
+  "production_mode": false,
   "databases": [
     {
       "name": "Local Development",
-      "path": "/tmp/sop_data",
+      "path": "./data/dev_db",
       "mode": "standalone"
     },
     {
@@ -152,9 +166,16 @@ Create a JSON configuration file (e.g., `config.json`) to define your environmen
       "mode": "clustered",
       "redis": "redis-prod:6379"
     }
-  ]
+  ],
+  "system_db": {
+    "name": "system",
+    "path": "./data/sop_system",
+    "mode": "standalone"
+  }
 }
 ```
+
+> **Note**: This example shows the structure of `system_db`, but for a fresh setup it is usually better to let the Data Manager Setup Wizard create and initialize it.
 
 **Security Note:** For production environments, it is recommended to set the root password using the `SOP_ROOT_PASSWORD` environment variable instead of storing it in the config file. The environment variable takes precedence over the config file setting.
 

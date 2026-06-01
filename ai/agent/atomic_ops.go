@@ -409,33 +409,6 @@ func sanitizeScript(script []ScriptInstruction) []ScriptInstruction {
 			}
 		}
 
-		if instr.Op == "commit_tx" {
-
-			hasCursorProducer := false
-			for j := 0; j < i; j++ {
-				prev := script[j]
-				if prev.Op == "scan" || prev.Op == "join" || prev.Op == "filter" {
-					hasCursorProducer = true
-					break
-				}
-			}
-
-			if hasCursorProducer {
-
-				cmdToDefer := make(map[string]any)
-				if instr.Args != nil {
-					for k, v := range instr.Args {
-						cmdToDefer[k] = v
-					}
-				}
-				cmdToDefer["op"] = "commit_tx"
-
-				instr.Op = "defer"
-				instr.Args = map[string]any{
-					"command": cmdToDefer,
-				}
-			}
-		}
 	}
 	if !hasExplicitOutput && scriptEndsWithTerminalControl(script) {
 		for i := len(script) - 1; i >= 0; i-- {
@@ -448,7 +421,50 @@ func sanitizeScript(script []ScriptInstruction) []ScriptInstruction {
 			break
 		}
 	}
+	script = hoistCommitBeforeReturn(script)
 	return script
+}
+
+// hoistCommitBeforeReturn moves any commit_tx or rollback_tx steps that follow a
+// return step to immediately precede it. A return placed before a commit causes
+// the engine to short-circuit (HasReturned=true breaks the step loop) and skips
+// the transaction control step entirely, leaving the transaction uncommitted.
+func hoistCommitBeforeReturn(script []ScriptInstruction) []ScriptInstruction {
+	// Find the index of the first return op.
+	returnIdx := -1
+	for i, instr := range script {
+		if strings.EqualFold(strings.TrimSpace(instr.Op), "return") {
+			returnIdx = i
+			break
+		}
+	}
+	if returnIdx < 0 {
+		return script
+	}
+
+	// Collect tx-control steps that appear after the return.
+	var txSteps []ScriptInstruction
+	var rest []ScriptInstruction
+	for i := returnIdx + 1; i < len(script); i++ {
+		op := strings.ToLower(strings.TrimSpace(script[i].Op))
+		if op == "commit_tx" || op == "rollback_tx" {
+			txSteps = append(txSteps, script[i])
+		} else {
+			rest = append(rest, script[i])
+		}
+	}
+
+	if len(txSteps) == 0 {
+		return script
+	}
+
+	// Rebuild: prefix + txSteps + return + any remaining non-tx trailing steps.
+	out := make([]ScriptInstruction, 0, len(script))
+	out = append(out, script[:returnIdx]...)
+	out = append(out, txSteps...)
+	out = append(out, script[returnIdx])
+	out = append(out, rest...)
+	return out
 }
 
 func normalizeScriptCompatibilityShapes(script []ScriptInstruction) []ScriptInstruction {
@@ -461,7 +477,10 @@ func normalizeScriptCompatibilityShapes(script []ScriptInstruction) []ScriptInst
 		instr.Args = cloneAnyMap(instr.Args)
 
 		normalizeLegacyFilterArgs(&instr)
+		normalizeLegacySortArgs(&instr)
 		normalizeReturnVariableReference(&instr)
+		normalizeImplicitBeginTxResultVar(&instr, len(normalized))
+		normalizeImplicitTransactionReference(&instr, currentTxVar)
 
 		if strings.EqualFold(instr.Op, "begin_tx") && strings.TrimSpace(instr.ResultVar) != "" {
 			currentTxVar = strings.TrimSpace(instr.ResultVar)
@@ -502,6 +521,34 @@ func normalizeScriptCompatibilityShapes(script []ScriptInstruction) []ScriptInst
 	}
 
 	return normalized
+}
+
+func normalizeImplicitBeginTxResultVar(instr *ScriptInstruction, stepIndex int) {
+	if instr == nil || !strings.EqualFold(instr.Op, "begin_tx") {
+		return
+	}
+	if strings.TrimSpace(instr.ResultVar) != "" {
+		return
+	}
+	if stepIndex == 0 {
+		instr.ResultVar = "tx"
+		return
+	}
+	instr.ResultVar = fmt.Sprintf("tx_%d", stepIndex+1)
+}
+
+func normalizeImplicitTransactionReference(instr *ScriptInstruction, currentTxVar string) {
+	if instr == nil || strings.TrimSpace(currentTxVar) == "" || instr.Args == nil {
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(instr.Op)) {
+	case "open_store", "commit_tx", "rollback_tx":
+		if txName, _ := instr.Args["transaction"].(string); strings.TrimSpace(txName) == "" {
+			instr.Args["transaction"] = currentTxVar
+		} else {
+			instr.Args["transaction"] = strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(txName), "@"), "$")
+		}
+	}
 }
 
 func normalizeImplicitOpenStoreResultVar(instr *ScriptInstruction) {
@@ -551,6 +598,35 @@ func captureImplicitPipelineInput(script []ScriptInstruction, stepIndex int) str
 	compatVar := fmt.Sprintf("__compat_input_%d", stepIndex)
 	last.ResultVar = compatVar
 	return compatVar
+}
+
+// normalizeLegacySortArgs converts the compact sort form {field, direction} to the
+// canonical {fields: ["<field> <dir>"]} form expected by stageSort.
+func normalizeLegacySortArgs(instr *ScriptInstruction) {
+	if instr == nil || !strings.EqualFold(instr.Op, "sort") {
+		return
+	}
+	if instr.Args == nil {
+		return
+	}
+	if _, hasFields := instr.Args["fields"]; hasFields {
+		return
+	}
+	field, _ := instr.Args["field"].(string)
+	field = strings.TrimSpace(field)
+	if field == "" {
+		return
+	}
+	dir, _ := instr.Args["direction"].(string)
+	dir = strings.TrimSpace(strings.ToLower(dir))
+	if dir == "descending" {
+		dir = "desc"
+	} else if dir == "ascending" || dir == "" {
+		dir = "asc"
+	}
+	instr.Args["fields"] = []any{field + " " + dir}
+	delete(instr.Args, "field")
+	delete(instr.Args, "direction")
 }
 
 func normalizeLegacyFilterArgs(instr *ScriptInstruction) {

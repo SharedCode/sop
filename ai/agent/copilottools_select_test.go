@@ -92,6 +92,12 @@ func TestToolSelect_WithFilter(t *testing.T) {
 	sessionPayload := &ai.SessionPayload{
 		CurrentDB: "testdb",
 	}
+	readTx, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction read failed: %v", err)
+	}
+	defer readTx.Rollback(ctx)
+	sessionPayload.Transaction = readTx
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
 	// 3. Test Cases
@@ -129,8 +135,6 @@ func TestToolSelect_WithFilter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			sessionPayload.Transaction = nil
-
 			args := map[string]any{
 				"store":     storeName,
 				"key_match": tt.filter,
@@ -244,6 +248,12 @@ func TestToolSelect_WithAlias(t *testing.T) {
 	sessionPayload := &ai.SessionPayload{
 		CurrentDB: "testdb",
 	}
+	readTx, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction read failed: %v", err)
+	}
+	defer readTx.Rollback(ctx)
+	sessionPayload.Transaction = readTx
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
 	// 3. Execute Select with Alias
@@ -344,6 +354,12 @@ func TestToolSelect_OutputFormat(t *testing.T) {
 	payload := &ai.SessionPayload{
 		CurrentDB: "test",
 	}
+	readTx, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction read failed: %v", err)
+	}
+	defer readTx.Rollback(ctx)
+	payload.Transaction = readTx
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
 	// Test 1: Select All
@@ -393,7 +409,8 @@ func TestToolSelect_OrderBy(t *testing.T) {
 	agent := NewCopilotAgent(cfg, dbs, sysDB)
 
 	ctx := context.Background()
-	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "system"})
+	payload := &ai.SessionPayload{CurrentDB: "system"}
+	ctx = context.WithValue(ctx, "session_payload", payload)
 	agent.Open(ctx)
 
 	// Create Store and Data using sopdb directly
@@ -408,6 +425,13 @@ func TestToolSelect_OrderBy(t *testing.T) {
 	s.Add(ctx, "2", map[string]any{"name": "two"})
 	s.Add(ctx, "3", map[string]any{"name": "three"})
 	t2.Commit(ctx)
+
+	readTx, err := sysDB.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction read failed: %v", err)
+	}
+	defer readTx.Rollback(ctx)
+	payload.Transaction = readTx
 
 	// Helper to extract name from key map
 	getKeyName := func(item map[string]any) string {
@@ -564,6 +588,12 @@ func TestToolSelect_OrderedOutput(t *testing.T) {
 	sessionPayload := &ai.SessionPayload{
 		CurrentDB: "testdb",
 	}
+	readTx, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction read failed: %v", err)
+	}
+	defer readTx.Rollback(ctx)
+	sessionPayload.Transaction = readTx
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
 	// 3. Test
@@ -759,6 +789,12 @@ func TestToolSelect_LegacyOrderedOutput(t *testing.T) {
 	sessionPayload := &ai.SessionPayload{
 		CurrentDB: "testdb",
 	}
+	readTx, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction read failed: %v", err)
+	}
+	defer readTx.Rollback(ctx)
+	sessionPayload.Transaction = readTx
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
 	// 3. Test
@@ -841,6 +877,12 @@ func TestReproSelect_NestedFilter(t *testing.T) {
 	sessionPayload := &ai.SessionPayload{
 		CurrentDB: "testdb",
 	}
+	readTx, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction read failed: %v", err)
+	}
+	defer readTx.Rollback(ctx)
+	sessionPayload.Transaction = readTx
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
 	// 3. Run Select with nested filter

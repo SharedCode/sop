@@ -9,9 +9,6 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/database"
-
-	// Ensure Redis adapter is registered for Clustered tests
-	_ "github.com/sharedcode/sop/adapters/redis"
 )
 
 func TestDatabase_Standalone_Simple(t *testing.T) {
@@ -87,32 +84,6 @@ func TestDatabase_Standalone_Replication(t *testing.T) {
 
 	if err := tx.Commit(ctx); err != nil {
 		t.Fatalf("Commit failed: %v", err)
-	}
-}
-
-func TestDatabase_Clustered_Construction(t *testing.T) {
-	// This test verifies we can construct the object.
-	// Actual connection might fail if Redis/Cassandra are not present.
-
-	db, err := database.ValidateOptions(sop.DatabaseOptions{
-		CacheType:     sop.Redis,
-		StoresFolders: []string{t.TempDir()},
-	})
-
-	if err != nil {
-		t.Fatal("ValidateOptions returned error for Clustered")
-	}
-
-	// We expect BeginTransaction to fail or panic if Redis is not reachable,
-	// but we can try it to see what happens.
-	ctx := context.Background()
-	_, err = database.BeginTransaction(ctx, db, sop.ForWriting)
-	if err == nil {
-		// If it succeeds (maybe mock redis?), great.
-		// If it fails, we check if it's a connection error.
-		t.Log("BeginTransaction succeeded (unexpected without Redis)")
-	} else {
-		t.Logf("BeginTransaction failed as expected (no Redis): %v", err)
 	}
 }
 

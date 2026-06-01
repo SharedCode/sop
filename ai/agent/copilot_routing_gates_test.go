@@ -80,6 +80,9 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 		if taskCtx.RoutingGate != RoutingGateFocused {
 			t.Errorf("Gate 1 should mark focused routing gate, got %q", taskCtx.RoutingGate)
 		}
+		if toolsCtx := ag.getSystemToolsContext(ctx); toolsCtx != "" {
+			t.Errorf("Gate 1 should not inject system tools during classification, got %q", toolsCtx)
+		}
 
 		// Verify MRU Session context got updated
 		rs, ok := payload.Variables["RoutingState"].(*TaskContextClassification)
@@ -90,6 +93,10 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 
 	t.Run("Gate 2: MRU Context Inheritance", func(t *testing.T) {
 		gen := &RouterTestGen{}
+		ag.service.session.MRU = []MRUItem{
+			{Category: askOutcomeMRUCategoryQuery, Context: "- Last user ask: Find John orders", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+			{Category: askOutcomeMRUCategoryToolPattern, Context: "- Tool pattern: list_stores -> execute_script", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
+		}
 		// Seed payload with existing context
 		payload := &ai.SessionPayload{Variables: make(map[string]any)}
 		payload.Variables["RoutingState"] = &TaskContextClassification{
@@ -112,6 +119,15 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 		}
 		if taskCtx.RoutingGate != RoutingGateContinuity {
 			t.Errorf("Gate 2 should mark continuity routing gate, got %q", taskCtx.RoutingGate)
+		}
+		if !strings.Contains(gen.CapturedPrompt, "CONTINUITY DIGEST:") {
+			t.Fatalf("expected Gate 2 prompt to include continuity digest, got: %s", gen.CapturedPrompt)
+		}
+		if !strings.Contains(gen.CapturedPrompt, "Find John orders") || !strings.Contains(gen.CapturedPrompt, "list_stores -") || !strings.Contains(gen.CapturedPrompt, "execute_script") {
+			t.Fatalf("expected Gate 2 prompt to include MRU-derived digest signals, got: %s", gen.CapturedPrompt)
+		}
+		if toolsCtx := ag.getSystemToolsContext(ctx); toolsCtx != "" {
+			t.Fatalf("expected Gate 2 continuity classification to avoid system tool injection, got %q", toolsCtx)
 		}
 	})
 
@@ -171,6 +187,30 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 		}
 		if taskCtx.RoutingGate != RoutingGateDiscovery {
 			t.Errorf("Gate 3 should mark discovery routing gate, got %q", taskCtx.RoutingGate)
+		}
+		if toolsCtx := ag.getSystemToolsContext(ctx); toolsCtx != "" {
+			t.Errorf("Gate 3 should not inject system tools during classification, got %q", toolsCtx)
+		}
+	})
+
+	t.Run("Gate 2: Rehydrates Routing State From STM", func(t *testing.T) {
+		gen := &RouterTestGen{}
+		payload := &ai.SessionPayload{Variables: make(map[string]any)}
+		ctx = context.WithValue(ctx, "session_payload", payload)
+		ag.service.session.Memory = NewShortTermMemory()
+		ag.service.session.Memory.SetRoutingState(&TaskContextClassification{
+			Entity:      "Omni",
+			Domain:      StoresDomain,
+			DBArtifacts: []string{"users"},
+			Layers:      []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}},
+		})
+
+		taskCtx := ag.evaluateRoutingGates(ctx, "show users again", gen)
+		if taskCtx == nil || taskCtx.RoutingGate != RoutingGateContinuity {
+			t.Fatalf("expected continuity routing gate after STM rehydration, got %+v", taskCtx)
+		}
+		if rs, ok := payload.Variables["RoutingState"].(*TaskContextClassification); !ok || rs == nil || rs.Domain != "TestInherited" {
+			t.Fatalf("expected routing state to be restored and updated through Gate 2, got %v", payload.Variables["RoutingState"])
 		}
 	})
 }

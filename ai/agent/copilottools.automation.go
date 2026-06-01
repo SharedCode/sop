@@ -6,14 +6,18 @@ import (
 	"fmt"
 )
 
+const executeLocalCommandArgsSchema = `{"type":"object","properties":{"command":{"type":"string","description":"Shell command to execute on the user's local machine after approval."},"reasoning":{"type":"string","description":"Short explanation shown to the user for why this local command is needed."}},"required":["command"]}`
+
+const sendEmailArgsSchema = `{"type":"object","properties":{"to":{"type":"string","description":"Recipient email address."},"subject":{"type":"string","description":"Email subject line."},"body":{"type":"string","description":"Email body content."}},"required":["to"]}`
+
 // toolExecuteLocalCommand equips the LLM to orchestrate shell commands on the user's local machine.
 // Instead of running the command on the server, it returns an action payload that the UI interprets
 // to communicate with the local SOP Desktop Companion daemon.
 
 func (a *CopilotAgent) registerAutomationTools(ctx context.Context) {
-	a.registry.Register("execute_local_command", "Executes a shell command on the user's local machine via the SOP Desktop Daemon. Use this for building code, git operations, local file inspection, or running local scripts. This will prompt the user for approval in the UI.", "(command: string, reasoning: string)", a.toolExecuteLocalCommand)
+	a.registry.Register("execute_local_command", "Executes a shell command on the user's local machine via the SOP Desktop Daemon. Use this for building code, git operations, local file inspection, or running local scripts. This will prompt the user for approval in the UI.", executeLocalCommandArgsSchema, a.toolExecuteLocalCommand)
 
-	a.registry.Register("send_email", "Sends an email.", "(to: string, subject: string, body: string)", a.toolSendEmail)
+	a.registry.Register("send_email", "Sends an email.", sendEmailArgsSchema, a.toolSendEmail)
 }
 func (a *CopilotAgent) toolExecuteLocalCommand(ctx context.Context, args map[string]any) (string, error) {
 	commandRaw, ok := args["command"]

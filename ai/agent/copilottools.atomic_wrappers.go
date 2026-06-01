@@ -9,6 +9,76 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
+const (
+	beginTxArgsSchema       = `{"type":"object","description":"Begin an explicit transaction for chained native store tool calls.","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"mode":{"type":"string","enum":["read","write"],"description":"Transaction mode for the native pipeline."},"result_var":{"type":"string","description":"Optional variable name to store the transaction handle. Defaults to tx."}},"required":["mode"]}`
+	commitTxArgsSchema      = `{"type":"object","description":"Commit the explicit native transaction. The current pipeline result is preserved for follow-up serialization.","properties":{"transaction":{"type":"string","description":"Optional transaction handle variable name. Defaults to the active explicit transaction."}}}`
+	rollbackTxArgsSchema    = `{"type":"object","description":"Rollback the explicit native transaction. The current pipeline result is preserved for follow-up serialization.","properties":{"transaction":{"type":"string","description":"Optional transaction handle variable name. Defaults to the active explicit transaction."}}}`
+	openStoreArgsSchema     = `{"type":"object","description":"Open a store inside the explicit native transaction and save the handle for later scan or join_right steps.","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"transaction":{"type":"string","description":"Optional transaction handle variable name. Defaults to the active explicit transaction."},"name":{"type":"string","description":"Concrete store name to open."},"result_var":{"type":"string","description":"Optional variable name to store the store handle. Defaults to the store name."}},"required":["name"]}`
+	scanAtomicArgsSchema    = `{"type":"object","description":"Scan a store handle or grounded store name and emit a stream/list for the next native pipeline step.","properties":{"store":{"type":"string","description":"Store handle from open_store or a grounded store name."},"stream":{"type":"boolean","description":"When true, keep the result in stream form for later filter, join_right, or project steps."},"direction":{"type":"string","enum":["asc","desc","ascending","descending"],"description":"Optional scan direction when supported."},"result_var":{"type":"string","description":"Optional variable name to store the scan result."}},"required":["store"]}`
+	filterAtomicArgsSchema  = `{"type":"object","description":"Filter the current implicit pipeline result using a grounded condition object.","properties":{"condition":{"type":"object","description":"Concrete predicate object. After joins, keep dotted store-qualified field names such as orders.total_amount."},"result_var":{"type":"string","description":"Optional variable name to store the filtered result."}},"required":["condition"]}`
+	projectAtomicArgsSchema = `{"type":"object","description":"Project fields from the current implicit pipeline result.","properties":{"fields":{"type":"array","description":"Fields to keep. After joins, use dotted store-qualified field paths unless you intentionally want aliases.","items":{"type":"string"}},"result_var":{"type":"string","description":"Optional variable name to store the projected result."}},"required":["fields"]}`
+	joinRightArgsSchema     = `{"type":"object","description":"Join the current implicit pipeline result to a target store using a grounded on mapping.","properties":{"store":{"type":"string","description":"Store handle from open_store or a grounded target store name."},"on":{"type":"object","description":"Concrete mapping from current-result fields to target-store fields."},"stream":{"type":"boolean","description":"When true, keep the joined result in stream form for later pipeline steps."},"result_var":{"type":"string","description":"Optional variable name to store the joined result."}},"required":["store","on"]}`
+	limitAtomicArgsSchema   = `{"type":"object","description":"Keep only the first N records from the current implicit pipeline result.","properties":{"limit":{"type":"integer","description":"Maximum number of records to keep."},"result_var":{"type":"string","description":"Optional variable name to store the limited result."}},"required":["limit"]}`
+	sortAtomicArgsSchema    = `{"type":"object","description":"Sort the current implicit pipeline result.","properties":{"field":{"type":"string","description":"Field to sort by. After joins, use dotted store-qualified field names when needed."},"direction":{"type":"string","enum":["asc","desc","ascending","descending"],"description":"Sort direction."},"result_var":{"type":"string","description":"Optional variable name to store the sorted result."}},"required":["field"]}`
+)
+
+var atomicToolSpecs = map[string]struct {
+	short       string
+	instruction string
+	schema      string
+}{
+	"begin_tx": {
+		short:       "Begins an explicit native pipeline transaction.",
+		instruction: "Begin an explicit native transaction for chained store tool calls. Prefer this direct pipeline path for clear multi-step reads instead of packing the same sequence into execute_script. Save the handle with result_var, usually tx, and reuse it from later open_store calls.",
+		schema:      beginTxArgsSchema,
+	},
+	"commit_tx": {
+		short:       "Commits the explicit native pipeline transaction.",
+		instruction: "Commit the active explicit native transaction after the chained store calls are complete. This closes the durability boundary without discarding the current pipeline result.",
+		schema:      commitTxArgsSchema,
+	},
+	"rollback_tx": {
+		short:       "Rolls back the explicit native pipeline transaction.",
+		instruction: "Rollback the active explicit native transaction when the chained store calls should not persist. This closes the durability boundary without discarding the current pipeline result.",
+		schema:      rollbackTxArgsSchema,
+	},
+	"open_store": {
+		short:       "Opens a store handle for native pipeline steps.",
+		instruction: "Open a concrete store inside the explicit transaction and save the handle with result_var. Later scan or join_right calls can reference that handle by name.",
+		schema:      openStoreArgsSchema,
+	},
+	"scan": {
+		short:       "Scans a store into the native pipeline.",
+		instruction: "Scan a store handle or grounded store name and emit a stream/list for the next native pipeline step. Prefer stream=true when a later filter, join_right, or project step will consume the result.",
+		schema:      scanAtomicArgsSchema,
+	},
+	"filter": {
+		short:       "Filters the current native pipeline result.",
+		instruction: "Filter the current implicit pipeline result using a grounded condition object. After joins, keep dotted store-qualified field names such as orders.total_amount.",
+		schema:      filterAtomicArgsSchema,
+	},
+	"sort": {
+		short:       "Sorts the current native pipeline result.",
+		instruction: "Sort the current implicit pipeline result by one grounded field. After joins, use dotted store-qualified field names when needed.",
+		schema:      sortAtomicArgsSchema,
+	},
+	"project": {
+		short:       "Projects fields from the current native pipeline result.",
+		instruction: "Project fields from the current implicit pipeline result. After joins, keep dotted store-qualified field paths unless you intentionally rename them.",
+		schema:      projectAtomicArgsSchema,
+	},
+	"limit": {
+		short:       "Limits the current native pipeline result.",
+		instruction: "Keep only the first N records from the current implicit pipeline result.",
+		schema:      limitAtomicArgsSchema,
+	},
+	"join_right": {
+		short:       "Joins the current native pipeline result to another store.",
+		instruction: "Join the current implicit pipeline result to a target store using a grounded on mapping. Prefer join_right for chained native multi-store reads once list_stores has confirmed the relation fields.",
+		schema:      joinRightArgsSchema,
+	},
+}
+
 // toolAtomicOpWrapper creates a tool function that executes a single atomic operation
 // using the shared session ScriptEngine.
 func (a *CopilotAgent) toolAtomicOpWrapper(op string) func(context.Context, map[string]any) (string, error) {
@@ -47,6 +117,9 @@ func (a *CopilotAgent) toolAtomicOpWrapper(op string) func(context.Context, map[
 		result, err := opFunc(ctx, engine, args, input)
 		if err != nil {
 			return "", fmt.Errorf("operation '%s' failed: %v", op, err)
+		}
+		if result == nil && preserveLastResultOnNil(op) {
+			result = input
 		}
 
 		// Update LastResult in agent state
@@ -104,19 +177,7 @@ func (a *CopilotAgent) toolAtomicOpWrapper(op string) func(context.Context, map[
 
 // Helper to register all atomic tools
 func (a *CopilotAgent) registerAtomicTools() {
-	ops := []string{
-		"open_db", "begin_tx", "commit_tx", "rollback_tx",
-		"open_store", "scan", "filter", "sort", "project", "limit",
-		"join_right", "assign", "return", // Removed colliding ops: "join", "add", "update", "delete" to preserve Legacy Tool precedence
-		"inspect", "if", "loop", "call_function",
-		"list_new", "list_append", "map_merge",
-		"first", "last", "next", "previous", "find",
-		"get_current_key", "get_current_value",
-	}
-
-	for _, op := range ops {
-		// Use a closure to capture 'op'
-		opName := op
-		a.registry.Register(opName, fmt.Sprintf("Atomic operation: %s", opName), "(args: object)", a.toolAtomicOpWrapper(opName))
+	for opName, spec := range atomicToolSpecs {
+		a.registry.RegisterWithUI(opName, spec.short, spec.instruction, spec.schema, a.toolAtomicOpWrapper(opName))
 	}
 }

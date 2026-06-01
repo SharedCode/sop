@@ -36,8 +36,46 @@ const (
 	MRUSourceUnknown     = ""
 	MRUSourcePersona     = "persona"
 	MRUSourceSystemTools = "system_tools"
+	MRUSourceAskOutcome  = "ask_outcome"
+	MRUSourceAskProgress = "ask_progress"
 	MRUSourcePlaybook    = "playbook"
 )
+
+const (
+	MRUScopeSession = "session"
+	MRUScopeAsk     = "ask"
+)
+
+const (
+	maxProjectedPersonaEntries    = 2
+	maxProjectedSystemToolEntries = 1
+	maxProjectedAskOutcomeEntries = 10
+	maxProjectedPlaybookEntries   = 4
+)
+
+const ctxKeyDeferImplicitSessionTxClose = "_defer_implicit_session_tx_close"
+
+const (
+	askOutcomeMRUCategoryHeader          = "ASK_OUTCOME_HEADER"
+	askOutcomeMRUCategoryDatabase        = "ASK_OUTCOME_DATABASE"
+	askOutcomeMRUCategoryDomain          = "ASK_OUTCOME_DOMAIN"
+	askOutcomeMRUCategoryQuery           = "ASK_OUTCOME_QUERY"
+	askOutcomeMRUCategoryResult          = "ASK_OUTCOME_RESULT"
+	askOutcomeMRUCategoryStoreSchema     = "ASK_OUTCOME_STORE_SCHEMA"
+	askOutcomeMRUCategoryRelations       = "ASK_OUTCOME_STORE_RELATIONS"
+	askOutcomeMRUCategoryJoinSelection   = "ASK_OUTCOME_JOIN_SELECTION"
+	askOutcomeMRUCategoryFilterSelection = "ASK_OUTCOME_FILTER_SELECTION"
+	askOutcomeMRUCategoryConfirmed       = "ASK_OUTCOME_CONFIRMED"
+	askOutcomeMRUCategoryToolPattern     = "ASK_OUTCOME_TOOL_PATTERN"
+	askOutcomeMRUCategoryGuidance        = "ASK_OUTCOME_GUIDANCE"
+	askProgressMRUCategoryHeader         = "ASK_PROGRESS_HEADER"
+	askProgressMRUCategoryResult         = "ASK_PROGRESS_RESULT"
+	askProgressMRUCategoryToolPattern    = "ASK_PROGRESS_TOOL_PATTERN"
+	askProgressMRUCategoryConfirmed      = "ASK_PROGRESS_CONFIRMED"
+	askProgressMRUCategoryGuidance       = "ASK_PROGRESS_GUIDANCE"
+)
+
+const personaSourceMRUCategoryPrefix = "PERSONA_SOURCE_"
 
 // MRUItem represents a single category currently in working memory
 type MRUItem struct {
@@ -45,6 +83,187 @@ type MRUItem struct {
 	LastAccessed int64
 	Context      string
 	Source       string
+	Scope        string
+}
+
+func cloneTaskContextClassification(taskCtx *TaskContextClassification) *TaskContextClassification {
+	if taskCtx == nil {
+		return nil
+	}
+	cloned := *taskCtx
+	if taskCtx.DBArtifacts != nil {
+		cloned.DBArtifacts = append([]string(nil), taskCtx.DBArtifacts...)
+	}
+	if taskCtx.StoresArtifacts != nil {
+		cloned.StoresArtifacts = append([]string(nil), taskCtx.StoresArtifacts...)
+	}
+	if taskCtx.SpacesArtifacts != nil {
+		cloned.SpacesArtifacts = append([]string(nil), taskCtx.SpacesArtifacts...)
+	}
+	if taskCtx.Layers != nil {
+		cloned.Layers = append([]LayerInfo(nil), taskCtx.Layers...)
+	}
+	return &cloned
+}
+
+func shouldPreserveMRUOnTopicSwitch(item MRUItem) bool {
+	return item.Source == MRUSourcePersona || strings.HasPrefix(item.Category, "PERSONA_")
+}
+
+func isRehydratableMRUItem(item MRUItem) bool {
+	if normalizeMRUScope(item.Scope) != MRUScopeSession {
+		return false
+	}
+	switch item.Source {
+	case MRUSourcePersona, MRUSourceSystemTools, MRUSourceAskOutcome, MRUSourcePlaybook:
+		return true
+	default:
+		return strings.HasPrefix(item.Category, "PERSONA_")
+	}
+}
+
+func projectedMRUSourcePriority(source string) int {
+	switch source {
+	case MRUSourcePersona:
+		return 0
+	case MRUSourceSystemTools:
+		return 1
+	case MRUSourceAskOutcome:
+		return 2
+	case MRUSourcePlaybook:
+		return 3
+	default:
+		return 4
+	}
+}
+
+func projectedMRUSourceLimit(source string) int {
+	switch source {
+	case MRUSourcePersona:
+		return maxProjectedPersonaEntries
+	case MRUSourceSystemTools:
+		return maxProjectedSystemToolEntries
+	case MRUSourceAskOutcome:
+		return maxProjectedAskOutcomeEntries
+	case MRUSourcePlaybook:
+		return maxProjectedPlaybookEntries
+	default:
+		return 0
+	}
+}
+
+func projectMRUItemsFromSTM(snapshot []MRUItem, activeKB string) []MRUItem {
+	if len(snapshot) == 0 && strings.TrimSpace(activeKB) == "" {
+		return nil
+	}
+
+	candidates := make([]MRUItem, 0, len(snapshot)+4)
+	for _, item := range snapshot {
+		if !isRehydratableMRUItem(item) {
+			continue
+		}
+		candidates = append(candidates, item)
+	}
+
+	for _, kb := range strings.Split(activeKB, ",") {
+		kb = strings.TrimSpace(kb)
+		if kb == "" {
+			continue
+		}
+		candidates = append(candidates, MRUItem{
+			Category: playbookMRUCategory(kb),
+			Source:   MRUSourcePlaybook,
+			Scope:    MRUScopeSession,
+		})
+	}
+
+	sort.SliceStable(candidates, func(i, j int) bool {
+		leftPriority := projectedMRUSourcePriority(candidates[i].Source)
+		rightPriority := projectedMRUSourcePriority(candidates[j].Source)
+		if leftPriority != rightPriority {
+			return leftPriority < rightPriority
+		}
+		if candidates[i].LastAccessed != candidates[j].LastAccessed {
+			return candidates[i].LastAccessed > candidates[j].LastAccessed
+		}
+		return candidates[i].Category < candidates[j].Category
+	})
+
+	seenCategories := make(map[string]bool, len(candidates))
+	perSourceCounts := make(map[string]int, 3)
+	projected := make([]MRUItem, 0, len(candidates))
+	for _, item := range candidates {
+		if seenCategories[item.Category] {
+			continue
+		}
+		limit := projectedMRUSourceLimit(item.Source)
+		if limit == 0 || perSourceCounts[item.Source] >= limit {
+			continue
+		}
+		seenCategories[item.Category] = true
+		perSourceCounts[item.Source]++
+		projected = append(projected, item)
+	}
+
+	return projected
+}
+
+func summarizeProjectedMRU(items []MRUItem) string {
+	if len(items) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		label := item.Category
+		if item.Source != "" {
+			label = item.Source + ":" + item.Category
+		}
+		parts = append(parts, label)
+	}
+	return strings.Join(parts, ",")
+}
+
+func summarizePromptComponentsPresent(report PromptBudgetReport) string {
+	present := make([]string, 0, len(report.ComponentStats))
+	for _, stat := range report.ComponentStats {
+		if stat.FinalChars > 0 {
+			present = append(present, string(stat.Component))
+		}
+	}
+	return strings.Join(present, ",")
+}
+
+func (a *CopilotAgent) rehydrateMRUFromMemory(ctx context.Context) {
+	if a.service == nil || a.service.session == nil || a.service.session.Memory == nil {
+		return
+	}
+
+	session := a.service.session
+	stm := session.Memory
+
+	if payload := ai.GetSessionPayload(ctx); payload != nil {
+		if payload.Variables == nil {
+			payload.Variables = make(map[string]any)
+		}
+		if _, ok := payload.Variables["RoutingState"].(*TaskContextClassification); !ok {
+			if restored := stm.GetRoutingState(); restored != nil {
+				payload.Variables["RoutingState"] = restored
+			}
+		}
+	}
+
+	activeKB := ""
+	if thread := stm.GetCurrentThread(); thread != nil && len(thread.Exchanges) > 0 {
+		activeKB = thread.Exchanges[len(thread.Exchanges)-1].ActiveKB
+	}
+
+	projected := projectMRUItemsFromSTM(stm.GetMRUSnapshot(), activeKB)
+	for _, item := range projected {
+		a.markMRUCategoryWithSource(item.Category, item.Context, item.Source)
+	}
+	if summary := summarizeProjectedMRU(projected); summary != "" {
+		log.Info("STM MRU Projection", "projected_items", summary)
+	}
 }
 
 // CopilotAgent is a specialized agent for database administration tasks.
@@ -104,6 +323,10 @@ func (a *CopilotAgent) MarkMRUCategory(category string, context string) {
 }
 
 func (a *CopilotAgent) markMRUCategoryWithSource(category string, context string, source string) {
+	a.markMRUCategory(category, context, source, MRUScopeSession)
+}
+
+func (a *CopilotAgent) markMRUCategory(category string, context string, source string, scope string) {
 	if a.service == nil || a.service.session == nil {
 		return
 	}
@@ -112,6 +335,7 @@ func (a *CopilotAgent) markMRUCategoryWithSource(category string, context string
 	defer sess.MRUMu.Unlock()
 
 	ts := time.Now().UnixMilli()
+	scope = normalizeMRUScope(scope)
 
 	// Update if exists
 	for i, item := range sess.MRU {
@@ -123,6 +347,7 @@ func (a *CopilotAgent) markMRUCategoryWithSource(category string, context string
 			if source != "" {
 				sess.MRU[i].Source = source
 			}
+			sess.MRU[i].Scope = scope
 			return
 		}
 	}
@@ -133,6 +358,7 @@ func (a *CopilotAgent) markMRUCategoryWithSource(category string, context string
 		LastAccessed: ts,
 		Context:      context,
 		Source:       source,
+		Scope:        scope,
 	})
 	// Sort by newest and shrink if > MaxMRUSize
 	if len(sess.MRU) > MaxMRUSize {
@@ -140,6 +366,17 @@ func (a *CopilotAgent) markMRUCategoryWithSource(category string, context string
 			return sess.MRU[i].LastAccessed > sess.MRU[j].LastAccessed
 		})
 		sess.MRU = sess.MRU[:MaxMRUSize]
+	}
+}
+
+func normalizeMRUScope(scope string) string {
+	switch strings.TrimSpace(scope) {
+	case "", MRUScopeSession:
+		return MRUScopeSession
+	case MRUScopeAsk:
+		return MRUScopeAsk
+	default:
+		return MRUScopeSession
 	}
 }
 
@@ -160,6 +397,25 @@ func (a *CopilotAgent) clearMRUCategory(category string) {
 	sess.MRU = filtered
 }
 
+func (a *CopilotAgent) clearMRUBySourceAndScope(source string, scope string) {
+	if a.service == nil || a.service.session == nil {
+		return
+	}
+	sess := a.service.session
+	sess.MRUMu.Lock()
+	defer sess.MRUMu.Unlock()
+
+	scope = normalizeMRUScope(scope)
+	filtered := sess.MRU[:0]
+	for _, item := range sess.MRU {
+		if item.Source == source && normalizeMRUScope(item.Scope) == scope {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	sess.MRU = filtered
+}
+
 func (a *CopilotAgent) clearMRUForTopicSwitch() {
 	if a.service == nil || a.service.session == nil {
 		return
@@ -170,11 +426,14 @@ func (a *CopilotAgent) clearMRUForTopicSwitch() {
 
 	filtered := sess.MRU[:0]
 	for _, item := range sess.MRU {
-		if item.Source == MRUSourcePersona || strings.HasPrefix(item.Category, "PERSONA_") {
+		if shouldPreserveMRUOnTopicSwitch(item) {
 			filtered = append(filtered, item)
 		}
 	}
 	sess.MRU = filtered
+	if sess.Memory != nil {
+		sess.Memory.ResetProjectionForTopicSwitch()
+	}
 }
 
 func playbookMRUCategory(domain string) string {
@@ -243,6 +502,8 @@ func NewCopilotAgent(cfg Config, databases map[string]sop.DatabaseOptions, syste
 
 	var gen ai.Generator
 	var err error
+	geminiKey := strings.TrimSpace(os.Getenv(EnvGeminiAPIKey))
+	openAIKey := strings.TrimSpace(os.Getenv(EnvOpenAIAPIKey))
 
 	// 1. Try Config First
 	if cfg.Generator.Type != "" {
@@ -255,35 +516,6 @@ func NewCopilotAgent(cfg Config, databases map[string]sop.DatabaseOptions, syste
 	// 2. Fallback to Environment Variables if Config failed or was empty
 	if gen == nil {
 		provider := os.Getenv(EnvAIProvider)
-		geminiKey := strings.TrimSpace(os.Getenv(EnvGeminiAPIKey))
-		openAIKey := strings.TrimSpace(os.Getenv(EnvOpenAIAPIKey))
-		llmKey := strings.TrimSpace(os.Getenv(EnvLLMAPIKey))
-
-		// Support unified LLM_API_KEY
-		if llmKey != "" {
-			// Auto-Correction: If user chose Gemini but provided an OpenAI key (sk-...), switch to ChatGPT
-			if provider == ProviderGemini && strings.HasPrefix(llmKey, "sk-") {
-				log.Warn("Configuration mismatch: Provider is 'gemini' but LLM_API_KEY is an OpenAI key (sk-...). Switching to 'chatgpt'.")
-				provider = ProviderChatGPT
-			}
-
-			// If provider is explicitly set, use LLM_API_KEY for that provider
-			if provider == ProviderChatGPT && openAIKey == "" {
-				openAIKey = llmKey
-			} else if provider == ProviderGemini && geminiKey == "" {
-				geminiKey = llmKey
-			} else if provider == "" {
-				// Ambiguous case: Guess provider based on key format or default
-				if strings.HasPrefix(llmKey, "sk-") {
-					provider = ProviderChatGPT
-					openAIKey = llmKey
-				} else {
-					// Fallback to Gemini (Google API keys usually start with AIza...)
-					provider = ProviderGemini
-					geminiKey = llmKey
-				}
-			}
-		}
 		if provider == "" {
 			if openAIKey != "" {
 				provider = ProviderChatGPT
@@ -331,16 +563,14 @@ func NewCopilotAgent(cfg Config, databases map[string]sop.DatabaseOptions, syste
 	}
 
 	agent := &CopilotAgent{
-		Config:    cfg,
-		brain:     gen,
-		registry:  NewRegistry(),
-		databases: databases,
-		systemDB:  systemDB,
-		Memory:    memory.NewMemoryUnit(ai.AgentIDOmni),
-		// API Keys are less relevant now that we use the Generator interface mostly,
-		// but we keep them empty or fill them if we really need them for direct calls later.
-		// geminiKey:       geminiKey,
-		// openAIKey:       openAIKey,
+		Config:          cfg,
+		brain:           gen,
+		registry:        NewRegistry(),
+		databases:       databases,
+		systemDB:        systemDB,
+		Memory:          memory.NewMemoryUnit(ai.AgentIDOmni),
+		geminiKey:       geminiKey,
+		openAIKey:       openAIKey,
 		compiledScripts: make(map[string]CachedScript),
 	}
 	// Tools are registered dynamically in Open() or Ask() to ensure context propagation
@@ -446,10 +676,11 @@ func (a *CopilotAgent) Search(ctx context.Context, query string, limit int) ([]a
 //     If the intent indicates a specialized Avatar (e.g., a "Legal Auditor" persona), it delegates
 //     execution entirely to that sub-agent.
 //
-//  4. Context Classification (Domain Injection):
-//     For generic queries (intent == "OMNI"), it performs a lightweight classification to identify
-//     the semantic domain (e.g., "Spaces" or "Stores"). Based on this domain, it forcefully injects
-//     relevant tool documentations (from the system KB) into the semantic memory buffer.
+//  4. Context Classification:
+//     For generic queries (intent == "OMNI"), it performs a lightweight three-gate classification to
+//     identify the semantic domain (e.g., "Spaces" or "Stores"), likely artifacts, and CRUD layer.
+//     This stage is classification-only: it updates routing state, but does not assemble prompt slices
+//     or mutate System_Tools context.
 //
 //  5. Episode Metadata Tracking (MRU Cache):
 //     Analyzes the user's prior chat exchange inside the short-term episodic memory. If the user
@@ -457,9 +688,9 @@ func (a *CopilotAgent) Search(ctx context.Context, query string, limit int) ([]a
 //     semantic boundaries so the LLM retains coherent situational context across turns.
 //
 //  6. System Prompt Construction:
-//     Assembles the massive multi-part context prompt (using SystemPromptBuilder) linking the
-//     Core Persona, Active Playbooks/KBs, injected Tool Descriptions, semantic memory boundaries,
-//     and chronological conversation history.
+//     Assembles the multi-part context prompt (using SystemPromptBuilder) linking the Core Persona,
+//     Active Playbooks/KBs, stable System Tools context, targeted focused execution/tool guidance
+//     derived from the current classification, semantic memory boundaries, and conversation history.
 //
 //  7. Reasoning Engine Delegation:
 //     Packages the assembled context and delegates execution to the ReAct engine. The engine loops
@@ -470,19 +701,83 @@ func (a *CopilotAgent) Search(ctx context.Context, query string, limit int) ([]a
 //     Records the completed dialogue and active track-state into the short-term memory transcript,
 //     clears the volatile MRU buffer, and returns the final text response to the client.
 func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+	ctx = a.applyAskOptions(ctx, opts...)
+	a.clearAskProgressMRU()
+
+	gen := a.resolveGenerator(ctx)
+	if gen == nil {
+		return "⚠️ **AI Copilot Disabled**: No valid API Key found.\n\nPlease go to **Environment Settings** (HDD icon in bottom left) -> **LLM API Key** to configure your Google Gemini or OpenAI key.", nil
+	}
+
+	sessionID := a.logAskStart(ctx, query, gen)
+
+	if handled, res, err := a.handlePendingUserConfirmation(ctx, query); handled {
+		return res, err
+	}
+
+	if handled, res, err := a.handleDirectToolInvocation(ctx, query, gen); handled {
+		return res, err
+	}
+
+	rawQuery := query
+	if rewrittenQuery, rewritten := a.tryMetaTalkBasedRouting(ctx, query); rewritten {
+		log.Info("Copilot Ask MetaTalkBasedRouting Rewrite", "original_query", query, "effective_query", rewrittenQuery)
+		query = rewrittenQuery
+	}
+
+	// 3. Intent Classification (Router)
+	intent := a.classifyIntent(ctx, query, gen)
+
+	// Fast-path routing: If Avatar, execute Avatar Sub-Agent
+	if intent != ai.IntentOmni {
+		log.Info("Ask: Request classified for Avatar", "avatar", intent)
+		return a.executeAvatarSubAgent(ctx, intent, query)
+	}
+	log.Info("Ask: Request classified for OMNI")
+
+	// 4. Three-Gate Context Classification
+	taskContext := a.evaluateRoutingGates(ctx, query, gen)
+	if taskContext == nil {
+		taskContext = &TaskContextClassification{Domain: "General"}
+	}
+	log.Info("Copilot Ask Routing",
+		"routing_gate", taskContext.RoutingGate,
+		"task_context", summarizeTaskContextForLog(*taskContext),
+	)
+
+	// 5. Episode Metadata Tracking (MRU Cache)
+	a.trackEpisodeMetadata(ctx, intent)
+
+	// 6. System Prompt Construction
+	fullPrompt := a.buildSystemPrompt(ctx, query, *taskContext)
+
+	// 7. Reasoning Engine Delegation
+	finalText, toolCalls, outcomeFacts, outcomeRecipes, carryoverState, err := a.delegateToReasoningEngine(ctx, query, gen, fullPrompt)
+	if err != nil {
+		return "", err
+	}
+	log.Info("Copilot Ask Complete",
+		"session_id", sessionID,
+		"response_chars", len(finalText),
+	)
+
+	// 8. Epilogue & Cleanup
+	a.epilogueAndCleanup(ctx, rawQuery, intent, finalText, toolCalls, outcomeFacts, outcomeRecipes, carryoverState)
+
+	return finalText, nil
+}
+
+func (a *CopilotAgent) applyAskOptions(ctx context.Context, opts ...ai.Option) context.Context {
 	if len(opts) > 0 {
 		cfg := ai.NewAskConfig(opts...)
 		if format, ok := cfg.Values["default_format"].(string); ok && strings.TrimSpace(format) != "" {
 			ctx = context.WithValue(ctx, ai.CtxKeyDefaultFormat, strings.TrimSpace(format))
 		}
 	}
+	return ctx
+}
 
-	// 1. Generator Resolution
-	gen := a.resolveGenerator(ctx)
-	if gen == nil {
-		return "⚠️ **AI Copilot Disabled**: No valid API Key found.\n\nPlease go to **Environment Settings** (HDD icon in bottom left) -> **LLM API Key** to configure your Google Gemini or OpenAI key.", nil
-	}
-
+func (a *CopilotAgent) logAskStart(ctx context.Context, query string, gen ai.Generator) string {
 	var sessionID string
 	var currentDB string
 	var activeDomain string
@@ -497,70 +792,251 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 			currentThreadID = fmt.Sprintf("%v", thread.ID)
 		}
 	}
-	log.Info("Copilot Ask Start",
-		"generator", gen.Name(),
-		"default_format", getRequestedOutputFormat(ctx),
-		"session_id", sessionID,
-		"current_db", currentDB,
-		"active_domain", activeDomain,
-		"thread_id", currentThreadID,
-		"query_chars", len(query),
-	)
-
-	if handled, res, err := a.handlePendingUserConfirmation(ctx, query); handled {
-		return res, err
-	}
-
-	// 2. Direct Invocation Handling
-	if handled, res, err := a.handleDirectInvocation(ctx, query, gen); handled {
-		return res, err
-	}
-
-	// 3. Intent Classification (Router)
-	intent := a.classifyIntent(ctx, query, gen)
-
-	// Fast-path routing: If Avatar, execute Avatar Sub-Agent
-	if intent != ai.IntentOmni {
-		log.Info("Ask: Request classified for Avatar", "avatar", intent)
-		return a.executeAvatarSubAgent(ctx, intent, query)
-	}
-	log.Info("Ask: Request classified for OMNI")
-
-	// 4. Three-Gate Context Classification (Domain & Tool Injection)
-	taskContext := a.evaluateRoutingGates(ctx, query, gen)
-	if taskContext == nil {
-		taskContext = &TaskContextClassification{Domain: "General"}
-	}
-	log.Info("Copilot Ask Routing",
-		"routing_gate", taskContext.RoutingGate,
-		"task_context", summarizeTaskContextForLog(*taskContext),
-	)
-
-	// 5. Episode Metadata Tracking (MRU Cache)
-	a.trackEpisodeMetadata(ctx, intent)
-
-	a.registerTools(ctx)
-
-	// 6. System Prompt Construction
-	fullPrompt := a.buildSystemPrompt(ctx, query, *taskContext)
-
-	// 7. Reasoning Engine Delegation
-	finalText, err := a.delegateToReasoningEngine(ctx, query, gen, fullPrompt)
-	if err != nil {
-		return "", err
-	}
-	log.Info("Copilot Ask Complete",
-		"session_id", sessionID,
-		"response_chars", len(finalText),
-	)
-
-	// 8. Epilogue & Cleanup
-	a.epilogueAndCleanup(ctx, query, intent, finalText)
-
-	return finalText, nil
+	log.Info("Copilot Ask Start", "generator", gen.Name(), "default_format", getRequestedOutputFormat(ctx), "session_id", sessionID,
+		"current_db", currentDB, "active_domain", activeDomain, "thread_id", currentThreadID, "query_chars", len(query))
+	return sessionID
 }
 
-func (a *CopilotAgent) handleDirectInvocation(ctx context.Context, query string, gen ai.Generator) (bool, string, error) {
+func (a *CopilotAgent) tryMetaTalkBasedRouting(ctx context.Context, query string) (string, bool) {
+	if rewrittenQuery, rewritten := a.rewriteRetryMetaAsk(ctx, query); rewritten {
+		return rewrittenQuery, true
+	}
+	if rewrittenQuery, rewritten := a.rewriteConversationalMetaAsk(ctx, query); rewritten {
+		return rewrittenQuery, true
+	}
+	return "", false
+}
+
+func (a *CopilotAgent) rewriteRetryMetaAsk(ctx context.Context, query string) (string, bool) {
+	if !isRetryMetaAsk(query) {
+		return query, false
+	}
+
+	a.rehydrateMRUFromMemory(ctx)
+	resolved, ok := a.latestAskOutcomeQuery()
+	if !ok || strings.TrimSpace(resolved) == "" {
+		return query, false
+	}
+
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		p.RetryRewriteState = &ai.RetryRewriteState{
+			OriginalQuery: query,
+			ResolvedQuery: resolved,
+			Status:        "resolved",
+		}
+		p.CurrentUserQuery = resolved
+	}
+
+	return resolved, true
+}
+
+func (a *CopilotAgent) rewriteConversationalMetaAsk(ctx context.Context, query string) (string, bool) {
+	if !isLikelyMetaConversationFollowUp(query) {
+		return query, false
+	}
+
+	a.rehydrateMRUFromMemory(ctx)
+	question, targetQuery, ok := a.pendingOrAnchoredClarification(ctx)
+	if !ok {
+		return query, false
+	}
+
+	effective := fmt.Sprintf("Target ask: %s\nAssistant clarification question: %s\nUser clarification: %s\nAnswer the clarification using the target ask context, then continue the target ask if the clarification resolves it.", targetQuery, question, strings.TrimSpace(query))
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		if p.ClarificationState == nil {
+			p.ClarificationState = &ai.ClarificationState{}
+		}
+		p.ClarificationState.TargetQuery = targetQuery
+		p.ClarificationState.AssistantQuestion = question
+		if strings.TrimSpace(p.ClarificationState.OriginalUserQuery) == "" {
+			p.ClarificationState.OriginalUserQuery = targetQuery
+		}
+		p.ClarificationState.UserClarification = strings.TrimSpace(query)
+		p.ClarificationState.EffectiveResumeAsk = effective
+		p.ClarificationState.Status = "resolved"
+		p.CurrentUserQuery = effective
+	}
+
+	return effective, true
+}
+
+func (a *CopilotAgent) pendingOrAnchoredClarification(ctx context.Context) (string, string, bool) {
+	if p := ai.GetSessionPayload(ctx); p != nil && p.ClarificationState != nil {
+		state := p.ClarificationState
+		if strings.EqualFold(strings.TrimSpace(state.Status), "pending") && strings.TrimSpace(state.AssistantQuestion) != "" && strings.TrimSpace(state.TargetQuery) != "" {
+			return strings.TrimSpace(state.AssistantQuestion), strings.TrimSpace(state.TargetQuery), true
+		}
+	}
+	return a.latestMetaConversationAnchor(ctx)
+}
+
+func (a *CopilotAgent) latestMetaConversationAnchor(ctx context.Context) (string, string, bool) {
+	if a.service == nil || a.service.session == nil || a.service.session.Memory == nil {
+		return "", "", false
+	}
+	thread := a.service.session.Memory.GetCurrentThread()
+	if thread == nil || len(thread.Exchanges) == 0 {
+		return "", "", false
+	}
+	last := thread.Exchanges[len(thread.Exchanges)-1]
+	if last.Role != RoleAssistant || !isLikelyMetaQuestion(last.Content) {
+		return "", "", false
+	}
+	targetQuery, ok := a.latestAskOutcomeQuery()
+	if !ok || strings.TrimSpace(targetQuery) == "" {
+		for i := len(thread.Exchanges) - 2; i >= 0; i-- {
+			if thread.Exchanges[i].Role == RoleUser && strings.TrimSpace(thread.Exchanges[i].Content) != "" {
+				targetQuery = strings.TrimSpace(thread.Exchanges[i].Content)
+				ok = true
+				break
+			}
+		}
+	}
+	if !ok || strings.TrimSpace(targetQuery) == "" {
+		return "", "", false
+	}
+	return strings.TrimSpace(last.Content), strings.TrimSpace(targetQuery), true
+}
+
+func (a *CopilotAgent) latestAskOutcomeQuery() (string, bool) {
+	item, ok := a.findMRUItem(askOutcomeMRUCategoryQuery, MRUSourceAskOutcome, true)
+	if !ok || normalizeMRUScope(item.Scope) != MRUScopeSession {
+		return "", false
+	}
+	query := trimMRUPrefix(item.Context)
+	query = strings.TrimSpace(strings.TrimPrefix(query, "Last user ask:"))
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return "", false
+	}
+	return query, true
+}
+
+func isRetryMetaAsk(query string) bool {
+	normalized := normalizeRetryMetaAskPhrase(query)
+	if normalized == "" {
+		return false
+	}
+	known := map[string]struct{}{
+		"retry same ask":              {},
+		"retry the same ask":          {},
+		"can we retry same ask":       {},
+		"can we retry the same ask":   {},
+		"could we retry same ask":     {},
+		"could we retry the same ask": {},
+		"repeat same ask":             {},
+		"repeat the same ask":         {},
+		"can we repeat same ask":      {},
+		"can we repeat the same ask":  {},
+		"rerun same ask":              {},
+		"rerun the same ask":          {},
+		"run same ask again":          {},
+		"run the same ask again":      {},
+	}
+	if _, ok := known[normalized]; ok {
+		return true
+	}
+
+	hasSameAsk := strings.Contains(normalized, "same ask") || strings.Contains(normalized, "previous ask")
+	if !hasSameAsk {
+		return false
+	}
+	for _, marker := range []string{"retry", "repeat", "rerun", "run again", "try again"} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeRetryMetaAskPhrase(query string) string {
+	line := strings.TrimSpace(lastNonEmptyQueryLine(query))
+	line = strings.TrimSpace(strings.Trim(line, ".!?"))
+	line = strings.ToLower(line)
+	return strings.Join(strings.Fields(line), " ")
+}
+
+func isLikelyMetaConversationFollowUp(query string) bool {
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" || strings.HasPrefix(trimmed, "/") {
+		return false
+	}
+	if strings.HasSuffix(trimmed, "?") {
+		return true
+	}
+	if len(trimmed) > 280 {
+		return false
+	}
+	lower := strings.ToLower(trimmed)
+	for _, prefix := range []string{"yes", "no", "use ", "prefer ", "it is ", "it's ", "flatten", "nested", "only ", "just ", "the ", "this ", "that ", "those ", "these ", "keep ", "make it ", "return ", "show ", "remove ", "add ", "continue ", "proceed ", "go with ", "let's use ", "lets use ", "i want ", "we want "} {
+		if strings.HasPrefix(lower, prefix) {
+			return true
+		}
+	}
+	for _, marker := range []string{"flat", "flattened", "nested", "dotted", "same ask", "hardcoded queries", "on demand", "that shape", "those fields", "that option", "the first option", "the second option"} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func isLikelyMetaQuestion(text string) bool {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" || !strings.Contains(trimmed, "?") {
+		return false
+	}
+	normalized := normalizeMetaQuestionText(trimmed)
+	for _, marker := range []string{
+		"do you mean",
+		"are you asking",
+		"should i",
+		"should we",
+		"should i continue",
+		"should i proceed",
+		"should we continue",
+		"would you like",
+		"do you want",
+		"do you want me to",
+		"which",
+		"which output shape",
+		"which fields",
+		"what kind",
+		"what should",
+		"what format",
+		"can you clarify",
+		"can you confirm",
+		"is your goal",
+		"is the goal",
+		"before i proceed",
+		"before i continue",
+		"to answer this correctly",
+		"to continue correctly",
+		"so i can continue",
+		"how would you like",
+		"how should",
+		"is it",
+		"nested",
+		"flattened",
+		"flat",
+		"projection",
+		"join outputs",
+	} {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeMetaQuestionText(text string) string {
+	text = strings.ToLower(strings.TrimSpace(text))
+	replacer := strings.NewReplacer("\n", " ", "\t", " ", ",", " ", ":", " ", ";", " ", "(", " ", ")", " ", "`", " ")
+	text = replacer.Replace(text)
+	return strings.Join(strings.Fields(text), " ")
+}
+
+func (a *CopilotAgent) handleDirectToolInvocation(ctx context.Context, query string, gen ai.Generator) (bool, string, error) {
 	if strings.HasPrefix(strings.TrimSpace(query), "/") {
 		// Register tools for local command parsing
 		a.registerTools(ctx)
@@ -737,134 +1213,71 @@ func lastNonEmptyQueryLine(query string) string {
 }
 
 func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, gen ai.Generator) *TaskContextClassification {
-	isTest := false
-	if gen != nil {
-		if strings.Contains(fmt.Sprintf("%T", gen), "mock") || strings.Contains(fmt.Sprintf("%T", gen), "Mock") || strings.Contains(fmt.Sprintf("%T", gen), "Smart") {
-			isTest = true
-		}
-	}
-
-	parts := strings.Split(query, ":")
-
-	// Gate 1: Telescoping Prefix Verification
-	if len(parts) > 1 && (strings.EqualFold(parts[0], "omni") || strings.EqualFold(parts[0], "medical") || strings.EqualFold(parts[0], "support")) {
-		log.Info("Gate 1 Activated: Prefix match", "prefix", parts[0])
-
-		var taskCtx *TaskContextClassification
-		parsedEntity := parts[0]
-		parsedDomain := ""
-		parsedArtifact := ""
-		if len(parts) >= 2 {
-			parsedDomain = strings.TrimSpace(parts[1])
-		}
-		if len(parts) >= 3 {
-			parsedArtifact = strings.TrimSpace(parts[2])
-		}
-
-		if !isTest && gen != nil {
-			taskCtx, _ = a.ClassifyFocusedTaskContext(ctx, query, parsedEntity, parsedDomain, parsedArtifact, gen)
-		}
-
-		taskCtx = enrichFocusedTaskContext(taskCtx, parsedEntity, parsedDomain, parsedArtifact)
-		annotateTaskContextIntent(taskCtx, query)
-		taskCtx.RoutingGate = RoutingGateFocused
-
-		a.injectToolsForDomain(ctx, taskCtx)
-		if p := ai.GetSessionPayload(ctx); p != nil {
-			if p.Variables == nil {
-				p.Variables = make(map[string]any)
-			}
-			p.Variables["RoutingState"] = taskCtx
-		}
+	a.rehydrateMRUFromMemory(ctx)
+	isTest := isRoutingTestGenerator(gen)
+	anchor := parseRoutingAnchor(query)
+	if taskCtx := a.tryPrefixBasedRouting(ctx, query, gen, isTest, anchor); taskCtx != nil {
 		return taskCtx
 	}
-
-	// Gate 2: MRU Context Inheritance (Context Momentum)
-	if p := ai.GetSessionPayload(ctx); p != nil && p.Variables != nil {
-		if rs, ok := p.Variables["RoutingState"].(*TaskContextClassification); ok && rs != nil {
-			if !isTest && gen != nil {
-				updatedRS, isSwitch, err := a.ClassifyContinuityTaskContext(ctx, query, rs, gen)
-				if err == nil && isSwitch {
-					log.Info("Gate 2 Detected Topic Switch. Falling through to Gate 3.")
-					delete(p.Variables, "RoutingState")
-					a.clearMRUForTopicSwitch()
-
-					// Clear the episodic memory thread to avoid context poisoning
-					if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
-						newThreadID := sop.NewUUID()
-						thread := &ConversationThread{
-							ID:         newThreadID,
-							RootPrompt: query,
-							Label:      "Topic Switch",
-							Category:   "General",
-							Exchanges:  make([]Interaction, 0),
-							Status:     "active",
-						}
-						a.service.session.Memory.AddThread(thread)
-						a.service.session.Memory.CurrentThreadID = newThreadID
-					}
-
-					// Fall through to Gate 3
-				} else if err == nil && updatedRS != nil {
-					log.Info("Gate 2 Activated: Inheriting MRU Context with Updates", "domain", updatedRS.Domain)
-					annotateTaskContextIntent(updatedRS, query)
-					updatedRS.RoutingGate = RoutingGateContinuity
-					a.injectToolsForDomain(ctx, updatedRS)
-					p.Variables["RoutingState"] = updatedRS
-					return updatedRS
-				}
-			} else {
-				// Test fallback
-				log.Info("Gate 2 Activated: Inheriting MRU Context (Test Mode)", "domain", rs.Domain)
-				annotateTaskContextIntent(rs, query)
-				rs.RoutingGate = RoutingGateContinuity
-				a.injectToolsForDomain(ctx, rs)
-				return rs
-			}
-		}
+	if taskCtx := a.tryAskContinuationBasedRouting(ctx, query, gen, isTest, anchor); taskCtx != nil {
+		return taskCtx
 	}
-
-	// Gate 3: Cold Start & Context Outline Classification
-	if len(parts) == 1 {
-		log.Info("Gate 3 Activated: Cold Start Classification")
-	}
-
-	if gen != nil && !isTest {
-		if taskCtx, err := a.ClassifyTaskContext(ctx, query, gen); err == nil && taskCtx != nil {
-			log.Info("Gate 3 Classification Success", "domain", taskCtx.Domain)
-			annotateTaskContextIntent(taskCtx, query)
-			taskCtx.RoutingGate = RoutingGateDiscovery
-			a.injectToolsForDomain(ctx, taskCtx)
-			if p := ai.GetSessionPayload(ctx); p != nil {
-				if p.Variables == nil {
-					p.Variables = make(map[string]any)
-				}
-				p.Variables["RoutingState"] = taskCtx
-			}
-			return taskCtx
-		} else {
-			log.Warn("Gate 3 classification failed or returned nil", "error", err)
-		}
-	}
-
-	return nil
+	return a.tryColdStartBasedRouting(ctx, query, gen, isTest)
 }
 
-func (a *CopilotAgent) injectToolsForDomain(ctx context.Context, taskCtx *TaskContextClassification) {
-	if taskCtx == nil {
-		return
+func (a *CopilotAgent) renderToolDefinitionContext(title string, toolNames []string) string {
+	if a == nil || a.registry == nil || strings.TrimSpace(title) == "" {
+		return ""
 	}
+	var lines []string
+	for _, name := range toolNames {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		toolDef, ok := a.registry.Get(name)
+		if !ok {
+			continue
+		}
+		description := strings.Join(strings.Fields(strings.TrimSpace(toolDef.Description)), " ")
+		if description == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("- %s: %s", toolDef.Name, description))
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return title + "\n" + strings.Join(lines, "\n")
+}
 
-	if focused := a.buildFocusedToolContext(taskCtx); focused != "" {
-		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\n"+focused, MRUSourceSystemTools)
-		return
-	}
+func (a *CopilotAgent) buildStoresToolDescriptionContext() string {
+	return strings.Join([]string{
+		"Structured Context: Stores Tools",
+		"You are a Stores Database Expert Agent. Translate requests into executable store operations.",
+		"CRITICAL RULES:",
+		"1. Never guess store names, field names, or join mappings. Use list_stores first whenever schema, relations, or field paths are uncertain.",
+		"2. Think through the read/join/filter plan before writing the operation.",
+		"3. SOP store queries are not SQL. When the user asks for a query or filter, produce SOP-native JSON tool/script operations, not SQL syntax.",
+		"4. When you generate a multi-step store plan using steps such as begin_tx, open_store, scan, filter, sort, project, return, commit_tx, or rollback_tx, place those steps inside execute_script.script and call execute_script to submit the plan to the executor. CRITICAL ORDERING: commit_tx (or rollback_tx) MUST always appear BEFORE return. A return placed before commit_tx causes the engine to exit immediately, skipping the transaction commit and leaving the transaction open.",
+		"5. If execution fails, analyze the error, rewrite the operation, and retry once. If it still fails, ask the user a short clarification question.",
+	}, "\n")
+}
 
-	if strings.EqualFold(taskCtx.Domain, "Stores") {
-		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\nStructured Context: Stores Tools\n"+toolsStoresManual, MRUSourceSystemTools)
-	} else if strings.EqualFold(taskCtx.Domain, "Spaces") {
-		a.markMRUCategoryWithSource(SYSTEM_TOOLS, "\nStructured Context: Spaces Tools\n"+toolsSpacesManual, MRUSourceSystemTools)
-	}
+func (a *CopilotAgent) buildSpacesToolDescriptionContext() string {
+	return strings.Join([]string{
+		"Structured Context: Spaces Tools",
+		"- Space mutations are business-critical because they change persisted knowledge. The tool that performs the write also defines the durability boundary for that change.",
+		"- When a Space tool manages its own transaction path, treat that tool call as the commit boundary for the requested knowledge mutation.",
+		"- mint_to_space: Persist generated or discovered content in a Space. Use the exact kb_name requested by the user; this tool manages its own write transaction.",
+		"- delete_space: Remove an entire Space only when the user explicitly wants full deletion; it manages its own deletion path.",
+		"- enrich_space: Run the enrichment pipeline only when the user explicitly wants derived knowledge refreshed.",
+		"- update_space_config: Change Space routing, persona, or tool settings with a grounded config object.",
+		"- read_space_config: Inspect current Space configuration before changing it or when the user asks how it behaves.",
+		"- vectorize_space: Refresh embeddings for the whole Space only when the user explicitly asks for vectorization or semantic refresh.",
+		"- vectorize_space_categories: Refresh embeddings for specific categories when the request is narrower than full-space vectorization.",
+		"- vectorize_space_items: Refresh embeddings for specific items when the user wants the tightest possible vectorization scope.",
+	}, "\n")
 }
 
 func (a *CopilotAgent) trackEpisodeMetadata(ctx context.Context, intent string) {
@@ -902,7 +1315,7 @@ func (a *CopilotAgent) trackEpisodeMetadata(ctx context.Context, intent string) 
 	}
 }
 
-func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query string, gen ai.Generator, fullPrompt string) (string, error) {
+func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query string, gen ai.Generator, fullPrompt string) (string, []ai.ToolCall, []string, []ai.LearnedRecipe, *ai.CarryoverState, error) {
 	currentDB := ""
 	if p := ai.GetSessionPayload(ctx); p != nil {
 		currentDB = p.CurrentDB
@@ -919,15 +1332,45 @@ func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query stri
 	}
 
 	req := ai.ReasoningRequest{
-		SystemPrompt: fullPrompt, // For baseline, this contains the full aggregated state
-		UserQuery:    query,
-		Executor:     a, // CopilotAgent implements Executor
-		Generator:    gen,
+		SystemPrompt:  fullPrompt, // For baseline, this contains the full aggregated state
+		UserQuery:     query,
+		Executor:      a, // CopilotAgent implements Executor
+		Generator:     gen,
+		HydrationSink: a.buildProviderLoopMRUSink(),
+	}
+
+	// Wire up the HTTP event streamer so provider-owned ReAct loops (e.g. ChatGPT
+	// Responses API) can emit tool_result / assistant_message events directly to the UI.
+	if streamer, ok := ctx.Value(ai.CtxKeyEventStreamer).(func(string, any)); ok && streamer != nil {
+		req.Streamer = streamer
+	}
+
+	// Forward the persisted carryover state so provider-owned loops can use server-side
+	// continuation (e.g. GPT's previous_response_id). Without this, CarryoverState is nil
+	// on every ask and live cross-ask carryover never takes effect on this path.
+	if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+		if storedState := a.service.session.Memory.GetCarryoverState(); storedState != nil {
+			req.CarryoverMode = storedState.Mode
+			req.CarryoverState = storedState
+		}
+	}
+
+	// For Stores asks, inject an execution directive into ContextText so it appears in
+	// the model's input turn (not just in the instructions JSON blob). Provider-owned
+	// loops (e.g. GPT Responses API) pass ContextText as part of the user message, which
+	// is harder for the model to override than background system instructions.
+	// ForceToolCall additionally sets tool_choice=required at the API level so the model
+	// cannot emit a conversational text response instead of a function call.
+	if routingState := activeRoutingState(ctx); routingState != nil {
+		if directive := buildStoresExecutionDirective(routingState); directive != "" {
+			req.ContextText = directive
+			req.ForceToolCall = true
+		}
 	}
 
 	resp, err := engine.Run(ctx, req)
 	if err != nil {
-		return "", err
+		return "", nil, nil, nil, nil, err
 	}
 
 	finalText := resp.FinalText
@@ -935,10 +1378,37 @@ func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query stri
 		finalText = obfuscation.GlobalObfuscator.DeobfuscateText(finalText)
 	}
 
-	return finalText, nil
+	return finalText, resp.ToolCalls, resp.OutcomeFacts, resp.OutcomeRecipes, resp.CarryoverState, nil
 }
 
-func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, intent string, finalText string) {
+// buildStoresExecutionDirective returns a short execution directive for Stores asks.
+// It is injected into ReasoningRequest.ContextText so provider-owned loops surface it
+// in the model's input turn rather than only in the background instructions.
+func buildStoresExecutionDirective(rs *TaskContextClassification) string {
+	if rs == nil || !strings.EqualFold(rs.Domain, StoresDomain) {
+		return ""
+	}
+	if len(collectCRUDFlags(rs.Layers)) == 0 {
+		return ""
+	}
+	return "Execution task: call execute_script as a function_call with the full transaction plan. Do not display the script or plan as assistant text."
+}
+
+func (a *CopilotAgent) buildProviderLoopMRUSink() ai.MemoryHydrationSink {
+	if a == nil || a.service == nil || a.service.session == nil {
+		return nil
+	}
+	a.clearAskProgressMRU()
+	return func(update ai.MemoryHydrationUpdate) {
+		a.persistAskProgressMRU(update)
+	}
+}
+
+func (a *CopilotAgent) clearAskProgressMRU() {
+	a.clearMRUBySourceAndScope(MRUSourceAskProgress, MRUScopeAsk)
+}
+
+func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, intent string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string, outcomeRecipes []ai.LearnedRecipe, carryoverState *ai.CarryoverState) {
 	if a.service != nil && a.service.session != nil {
 		if a.service.session.Memory == nil {
 			a.service.session.Memory = NewShortTermMemory()
@@ -985,11 +1455,24 @@ func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, int
 		})
 
 	}
+	a.persistAskOutcomeMRU(ctx, query, finalText, toolCalls, outcomeFacts)
+	a.clearAskProgressMRU()
+	a.updateClarificationState(ctx, query, finalText, toolCalls)
+	a.clearRetryRewriteState(ctx)
 
-	// 7. Log Episode for SleepCycle (Episodic Memory)
+	// 7. Persist compact session projection back into STM.
+	mruSnapshot := a.getMRUSnapshot()
+	if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+		thread := a.service.session.Memory.GetCurrentThread()
+		a.service.session.Memory.SetMRUSnapshot(mruSnapshot)
+		existingRecipes := a.service.session.Memory.GetRecipeSnapshot()
+		learnedRecipes := recipeItemsFromLearned(outcomeRecipes)
+		a.service.session.Memory.SetRecipeSnapshot(mergeRecipeSnapshots(existingRecipes, learnedRecipes))
+		persistCarryoverState(a.service.session.Memory, buildCarryoverState(ctx, a.service.session, a.brain, thread, query, finalText, toolCalls, outcomeFacts, outcomeRecipes, carryoverState))
+	}
+
+	// 8. Log Episode for SleepCycle (Episodic Memory)
 	if a.service != nil && a.service.EnableShortTermMemory {
-		mruSnapshot := a.getMRUSnapshot()
-
 		thoughtPayload := map[string]any{
 			"query":          query,
 			"response":       finalText,
@@ -997,6 +1480,425 @@ func (a *CopilotAgent) epilogueAndCleanup(ctx context.Context, query string, int
 		}
 
 		go a.Memory.LogEpisodeToSTM(context.Background(), "user_interaction", thoughtPayload, "Interacted with user", nil)
+	}
+}
+
+func (a *CopilotAgent) clearRetryRewriteState(ctx context.Context) {
+	if p := ai.GetSessionPayload(ctx); p != nil && p.RetryRewriteState != nil {
+		p.RetryRewriteState = nil
+	}
+}
+
+func (a *CopilotAgent) updateClarificationState(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall) {
+	p := ai.GetSessionPayload(ctx)
+	if p == nil {
+		return
+	}
+	if strings.TrimSpace(finalText) == "" {
+		return
+	}
+	if len(toolCalls) == 0 && isLikelyMetaQuestion(finalText) {
+		targetQuery := strings.TrimSpace(askOutcomeQueryForPersistence(ctx, query))
+		if targetQuery == "" {
+			targetQuery = strings.TrimSpace(query)
+		}
+		p.ClarificationState = &ai.ClarificationState{
+			TargetQuery:       targetQuery,
+			AssistantQuestion: strings.TrimSpace(finalText),
+			OriginalUserQuery: strings.TrimSpace(query),
+			Status:            "pending",
+		}
+		return
+	}
+	if p.ClarificationState != nil {
+		p.ClarificationState = nil
+	}
+}
+
+func summarizeAskOutcomeMRU(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) string {
+	return renderAskOutcomeMRUItems(buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts))
+}
+
+func buildAskOutcomeMRUItems(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) []MRUItem {
+	query = askOutcomeQueryForPersistence(ctx, query)
+	query = compactMRUText(query, 180)
+	finalText = sanitizeAssistantContinuityText(finalText)
+	finalText = compactMRUText(finalText, 260)
+	if query == "" && finalText == "" {
+		return nil
+	}
+
+	items := []MRUItem{{Category: askOutcomeMRUCategoryHeader, Context: "Recent Ask Outcome:", Source: MRUSourceAskOutcome, Scope: MRUScopeSession}}
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		if currentDB := strings.TrimSpace(p.CurrentDB); currentDB != "" {
+			items = append(items, MRUItem{Category: askOutcomeMRUCategoryDatabase, Context: fmt.Sprintf("- Database: %s", currentDB), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+		}
+		if activeDomain := strings.TrimSpace(p.ActiveDomain); activeDomain != "" {
+			items = append(items, MRUItem{Category: askOutcomeMRUCategoryDomain, Context: fmt.Sprintf("- Domain: %s", activeDomain), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+		}
+	}
+	if query != "" {
+		items = append(items, MRUItem{Category: askOutcomeMRUCategoryQuery, Context: fmt.Sprintf("- Last user ask: %s", query), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+	}
+	if finalText != "" {
+		items = append(items, MRUItem{Category: askOutcomeMRUCategoryResult, Context: fmt.Sprintf("- Last outcome: %s", finalText), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+	}
+	items = append(items, buildAskOutcomeFactMRUItems(outcomeFacts)...)
+	if toolPattern := summarizeAskOutcomeToolPattern(toolCalls); toolPattern != "" {
+		items = append(items, MRUItem{Category: askOutcomeMRUCategoryToolPattern, Context: fmt.Sprintf("- Tool pattern: %s", toolPattern), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+	}
+	items = append(items, MRUItem{Category: askOutcomeMRUCategoryGuidance, Context: "- Reuse confirmed facts and successful patterns from this outcome before broadening scope.", Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+	return items
+}
+
+func buildAskProgressMRUItems(finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) []MRUItem {
+	finalText = compactMRUText(finalText, 220)
+	facts := compactOutcomeFacts(outcomeFacts)
+	if finalText == "" && len(facts) == 0 && len(toolCalls) == 0 {
+		return nil
+	}
+	items := []MRUItem{{Category: askProgressMRUCategoryHeader, Context: "In-Flight Ask Progress:", Source: MRUSourceAskProgress, Scope: MRUScopeAsk}}
+	if finalText != "" {
+		items = append(items, MRUItem{Category: askProgressMRUCategoryResult, Context: fmt.Sprintf("- Latest progress: %s", finalText), Source: MRUSourceAskProgress, Scope: MRUScopeAsk})
+	}
+	for index, fact := range facts {
+		items = append(items, MRUItem{Category: fmt.Sprintf("%s_%02d", askProgressMRUCategoryConfirmed, index+1), Context: fmt.Sprintf("- Confirmed so far: %s", fact), Source: MRUSourceAskProgress, Scope: MRUScopeAsk})
+	}
+	if toolPattern := summarizeAskOutcomeToolPattern(toolCalls); toolPattern != "" {
+		items = append(items, MRUItem{Category: askProgressMRUCategoryToolPattern, Context: fmt.Sprintf("- Tool pattern so far: %s", toolPattern), Source: MRUSourceAskProgress, Scope: MRUScopeAsk})
+	}
+	items = append(items, MRUItem{Category: askProgressMRUCategoryGuidance, Context: "- Treat these as provisional in-loop signals until the ask completes.", Source: MRUSourceAskProgress, Scope: MRUScopeAsk})
+	return items
+}
+
+func (a *CopilotAgent) persistAskProgressMRU(update ai.MemoryHydrationUpdate) {
+	a.clearMRUBySourceAndScope(MRUSourceAskProgress, MRUScopeAsk)
+	for _, item := range buildAskProgressMRUItems(update.FinalText, update.ToolCalls, update.OutcomeFacts) {
+		a.markMRUCategory(item.Category, item.Context, item.Source, item.Scope)
+	}
+}
+
+func askOutcomeQueryForPersistence(ctx context.Context, fallback string) string {
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		if p.ClarificationState != nil && strings.TrimSpace(p.ClarificationState.TargetQuery) != "" {
+			return strings.TrimSpace(p.ClarificationState.TargetQuery)
+		}
+		if p.RetryRewriteState != nil && strings.TrimSpace(p.RetryRewriteState.ResolvedQuery) != "" {
+			return strings.TrimSpace(p.RetryRewriteState.ResolvedQuery)
+		}
+	}
+	return fallback
+}
+
+func buildAskOutcomeFactMRUItems(outcomeFacts []string) []MRUItem {
+	facts := compactOutcomeFacts(outcomeFacts)
+	if len(facts) == 0 {
+		return nil
+	}
+
+	items := make([]MRUItem, 0, len(facts))
+	genericIndex := 1
+	for _, fact := range facts {
+		category := ""
+		if joinSelectionKey, ok := classifyExecuteScriptJoinFactKey(fact); ok {
+			category = fmt.Sprintf("%s_%s", askOutcomeMRUCategoryJoinSelection, normalizeMRUFactKey(joinSelectionKey))
+		} else if filterSelectionKey, ok := classifyExecuteScriptFilterFactKey(fact); ok {
+			category = fmt.Sprintf("%s_%s", askOutcomeMRUCategoryFilterSelection, normalizeMRUFactKey(filterSelectionKey))
+		} else if details, ok := classifyConfirmedStoreFact(fact); ok && details.FactType == confirmedStoreFactTypeSchema {
+			category = fmt.Sprintf("%s_%s", askOutcomeMRUCategoryStoreSchema, normalizeMRUFactKey(details.StoreName))
+		} else if details, ok := classifyConfirmedStoreFact(fact); ok && details.FactType == confirmedStoreFactTypeRelations {
+			category = fmt.Sprintf("%s_%s", askOutcomeMRUCategoryRelations, normalizeMRUFactKey(details.CategoryKey()))
+		} else {
+			category = fmt.Sprintf("%s_%02d", askOutcomeMRUCategoryConfirmed, genericIndex)
+			genericIndex++
+		}
+		items = append(items, MRUItem{Category: category, Context: fmt.Sprintf("- Confirmed: %s", fact), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+	}
+	return items
+}
+
+const (
+	confirmedStoreFactTypeSchema    = "schema"
+	confirmedStoreFactTypeRelations = "relations"
+)
+
+type confirmedStoreFactDetails struct {
+	StoreName      string
+	FactType       string
+	FactValue      string
+	RelationTarget string
+}
+
+func (d confirmedStoreFactDetails) CategoryKey() string {
+	if d.FactType != confirmedStoreFactTypeRelations || strings.TrimSpace(d.RelationTarget) == "" {
+		return d.StoreName
+	}
+	return d.StoreName + "__" + d.RelationTarget + "__" + trimRelationFactValue(d.FactValue)
+}
+
+func classifyConfirmedStoreFact(fact string) (confirmedStoreFactDetails, bool) {
+	fact = strings.TrimSpace(fact)
+	if !strings.HasPrefix(fact, "list_stores confirmed ") {
+		return confirmedStoreFactDetails{}, false
+	}
+	remainder := strings.TrimPrefix(fact, "list_stores confirmed ")
+	if storeName, factValue, ok := classifyConfirmedStoreFactByMarker(remainder, "schema="); ok {
+		return confirmedStoreFactDetails{StoreName: storeName, FactType: confirmedStoreFactTypeSchema, FactValue: factValue}, true
+	}
+	if storeName, factValue, ok := classifyConfirmedStoreFactByMarker(remainder, "relations="); ok {
+		return confirmedStoreFactDetails{StoreName: storeName, FactType: confirmedStoreFactTypeRelations, FactValue: factValue, RelationTarget: extractPrimaryRelationTarget(factValue)}, true
+	}
+	return confirmedStoreFactDetails{}, false
+}
+
+func classifyExecuteScriptJoinFactKey(fact string) (string, bool) {
+	fact = strings.TrimSpace(fact)
+	if !strings.HasPrefix(fact, "execute_script confirmed ") {
+		return "", false
+	}
+	remainder := strings.TrimPrefix(fact, "execute_script confirmed ")
+	storeIdx := strings.Index(remainder, " store=")
+	onIdx := strings.Index(remainder, " on=")
+	if storeIdx <= 0 || onIdx <= storeIdx {
+		return "", false
+	}
+	op := strings.TrimSpace(remainder[:storeIdx])
+	store := strings.TrimSpace(remainder[storeIdx+len(" store=") : onIdx])
+	on := strings.TrimSpace(remainder[onIdx+len(" on="):])
+	if op == "" || store == "" || on == "" {
+		return "", false
+	}
+	return op + "__" + store + "__" + on, true
+}
+
+func classifyExecuteScriptFilterFactKey(fact string) (string, bool) {
+	fact = strings.TrimSpace(fact)
+	if !strings.HasPrefix(fact, "execute_script confirmed filter ") {
+		return "", false
+	}
+	remainder := strings.TrimPrefix(fact, "execute_script confirmed filter ")
+	fieldIdx := strings.Index(remainder, "field=")
+	opIdx := strings.Index(remainder, " op=")
+	if fieldIdx != 0 || opIdx <= len("field=") {
+		return "", false
+	}
+	field := strings.TrimSpace(remainder[len("field="):opIdx])
+	op := strings.TrimSpace(remainder[opIdx+len(" op="):])
+	if field == "" || op == "" {
+		return "", false
+	}
+	return field + "__" + op, true
+}
+
+func classifyConfirmedStoreFactByMarker(remainder string, marker string) (string, string, bool) {
+	idx := strings.Index(remainder, " "+marker)
+	if idx <= 0 {
+		return "", "", false
+	}
+	storeName := strings.TrimSpace(remainder[:idx])
+	if storeName == "" {
+		return "", "", false
+	}
+	factValue := strings.TrimSpace(remainder[idx+1+len(marker):])
+	if factValue == "" {
+		return "", "", false
+	}
+	return storeName, factValue, true
+}
+
+func extractPrimaryRelationTarget(factValue string) string {
+	factValue = trimRelationFactValue(factValue)
+	if factValue == "" {
+		return ""
+	}
+	entry := factValue
+	if idx := strings.Index(entry, ","); idx >= 0 {
+		entry = entry[:idx]
+	}
+	entry = strings.TrimSpace(entry)
+	if idx := strings.Index(entry, "("); idx > 0 {
+		return strings.TrimSpace(entry[:idx])
+	}
+	return entry
+}
+
+func trimRelationFactValue(factValue string) string {
+	return strings.TrimSpace(strings.TrimPrefix(strings.TrimSuffix(strings.TrimSpace(factValue), "]"), "["))
+}
+
+func normalizeMRUFactKey(key string) string {
+	key = strings.TrimSpace(strings.ToUpper(key))
+	if key == "" {
+		return "UNKNOWN"
+	}
+	var b strings.Builder
+	b.Grow(len(key))
+	for _, r := range key {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			continue
+		}
+		b.WriteByte('_')
+	}
+	normalized := strings.Trim(b.String(), "_")
+	if normalized == "" {
+		return "UNKNOWN"
+	}
+	return normalized
+}
+
+func compactOutcomeFacts(facts []string) []string {
+	if len(facts) == 0 {
+		return nil
+	}
+	compacted := make([]string, 0, len(facts))
+	seen := make(map[string]bool, len(facts))
+	for _, fact := range facts {
+		fact = compactMRUText(fact, 180)
+		if fact == "" || seen[fact] {
+			continue
+		}
+		seen[fact] = true
+		compacted = append(compacted, fact)
+	}
+	return compacted
+}
+
+func renderAskOutcomeMRUItems(items []MRUItem) string {
+	if len(items) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		if strings.TrimSpace(item.Context) == "" {
+			continue
+		}
+		parts = append(parts, item.Context)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func summarizeAskOutcomeToolPattern(toolCalls []ai.ToolCall) string {
+	if len(toolCalls) == 0 {
+		return ""
+	}
+	pattern := make([]string, 0, len(toolCalls))
+	for _, toolCall := range toolCalls {
+		name := strings.TrimSpace(toolCall.Name)
+		if name == "" {
+			continue
+		}
+		pattern = append(pattern, name)
+	}
+	if len(pattern) == 0 {
+		return ""
+	}
+	return strings.Join(pattern, " -> ")
+}
+
+func compactMRUText(text string, maxLen int) string {
+	text = strings.Join(strings.Fields(strings.TrimSpace(text)), " ")
+	if maxLen <= 0 || len(text) <= maxLen {
+		return text
+	}
+	return text[:maxLen-3] + "..."
+}
+
+func sanitizeAssistantContinuityText(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return ""
+	}
+	markers := []string{"```json", "```", "<function_call", "Function_call", "{\"script\"", "{ \"script\"", "\n{\n \"script\"", "\n{\n\t\"script\""}
+	cut := -1
+	for _, marker := range markers {
+		idx := strings.Index(trimmed, marker)
+		if idx >= 0 && (cut == -1 || idx < cut) {
+			cut = idx
+		}
+	}
+	if cut >= 0 {
+		prefix := strings.TrimSpace(trimmed[:cut])
+		if prefix == "" {
+			return "[tool call/script content stripped]"
+		}
+		return prefix + " [tool call/script content stripped]"
+	}
+	return trimmed
+}
+
+func (a *CopilotAgent) getAskOutcomeContext() string {
+	if a.service == nil || a.service.session == nil {
+		return ""
+	}
+	orderedCategories := []string{
+		askOutcomeMRUCategoryHeader,
+		askOutcomeMRUCategoryDatabase,
+		askOutcomeMRUCategoryDomain,
+		askOutcomeMRUCategoryQuery,
+		askOutcomeMRUCategoryResult,
+	}
+	items := make([]MRUItem, 0, len(orderedCategories))
+	for _, category := range orderedCategories {
+		if item, ok := a.findMRUItem(category, MRUSourceAskOutcome, true); ok && normalizeMRUScope(item.Scope) == MRUScopeSession {
+			items = append(items, item)
+		}
+	}
+	items = append(items, a.collectAskOutcomeItemsByPrefix(askOutcomeMRUCategoryStoreSchema+"_")...)
+	items = append(items, a.collectAskOutcomeItemsByPrefix(askOutcomeMRUCategoryRelations+"_")...)
+	items = append(items, a.collectAskOutcomeItemsByPrefix(askOutcomeMRUCategoryJoinSelection+"_")...)
+	items = append(items, a.collectAskOutcomeItemsByPrefix(askOutcomeMRUCategoryFilterSelection+"_")...)
+	items = append(items, a.collectAskOutcomeItemsByPrefix(askOutcomeMRUCategoryConfirmed+"_")...)
+	if item, ok := a.findMRUItem(askOutcomeMRUCategoryToolPattern, MRUSourceAskOutcome, true); ok && normalizeMRUScope(item.Scope) == MRUScopeSession {
+		items = append(items, item)
+	}
+	if item, ok := a.findMRUItem(askOutcomeMRUCategoryGuidance, MRUSourceAskOutcome, true); ok && normalizeMRUScope(item.Scope) == MRUScopeSession {
+		items = append(items, item)
+	}
+	return renderAskOutcomeMRUItems(items)
+}
+
+func (a *CopilotAgent) getMemoryContinuationContext(taskClassification TaskContextClassification) string {
+	if taskClassification.RoutingGate != RoutingGateContinuity {
+		return ""
+	}
+	if a == nil || a.service == nil || a.service.session == nil || a.service.session.Memory == nil {
+		return ""
+	}
+	state := a.service.session.Memory.GetCarryoverState()
+	return memoryContinuationSummary(state, ai.CarryoverResetUnsupportedProvider)
+}
+
+func (a *CopilotAgent) collectAskOutcomeItemsByPrefix(prefix string) []MRUItem {
+	if prefix == "" {
+		return nil
+	}
+	snapshot := a.getMRUSnapshot()
+	items := make([]MRUItem, 0, len(snapshot))
+	for _, item := range snapshot {
+		if item.Source != MRUSourceAskOutcome || normalizeMRUScope(item.Scope) != MRUScopeSession {
+			continue
+		}
+		if strings.HasPrefix(item.Category, prefix) {
+			items = append(items, item)
+		}
+	}
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].Category != items[j].Category {
+			return items[i].Category < items[j].Category
+		}
+		return items[i].LastAccessed < items[j].LastAccessed
+	})
+	if len(items) > maxProjectedAskOutcomeEntries {
+		items = items[:maxProjectedAskOutcomeEntries]
+	}
+	return items
+}
+
+func (a *CopilotAgent) persistAskOutcomeMRU(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) {
+	a.clearMRUBySourceAndScope(MRUSourceAskOutcome, MRUScopeSession)
+	for _, item := range buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts) {
+		a.markMRUCategory(item.Category, item.Context, item.Source, item.Scope)
 	}
 }
 
@@ -1009,6 +1911,14 @@ func (a *CopilotAgent) resolveGenerator(ctx context.Context) ai.Generator {
 	providerOverride, ok := ctx.Value(ai.CtxKeyProvider).(string)
 	if !ok || providerOverride == "" {
 		return gen
+	}
+	var modelOverride string
+	if provider, model, ok := strings.Cut(providerOverride, ":"); ok {
+		providerOverride = provider
+		modelOverride = model
+	}
+	if providerOverride == "openai" {
+		providerOverride = ProviderChatGPT
 	}
 
 	var err error
@@ -1024,7 +1934,10 @@ func (a *CopilotAgent) resolveGenerator(ctx context.Context) ai.Generator {
 			key = a.geminiKey
 		}
 		if key != "" {
-			model := os.Getenv(EnvGeminiModel)
+			model := modelOverride
+			if model == "" {
+				model = os.Getenv(EnvGeminiModel)
+			}
 			if model == "" {
 				model = DefaultModelGemini
 			}
@@ -1039,20 +1952,25 @@ func (a *CopilotAgent) resolveGenerator(ctx context.Context) ai.Generator {
 			key = a.openAIKey
 		}
 		if key != "" {
-			model := customBaseURL
+			model := modelOverride
 			if model == "" {
 				model = os.Getenv(EnvOpenAIModel)
 			}
 			if model == "" {
 				model = DefaultModelOpenAI
 			}
-			tempGen, err = generator.New(ProviderChatGPT, map[string]any{
+			options := map[string]any{
 				"api_key": key,
 				"model":   model,
-			})
+				"api_url": customBaseURL,
+			}
+			tempGen, err = generator.New(ProviderChatGPT, options)
 		}
 	case ProviderOllama:
-		model := os.Getenv(EnvOllamaModel)
+		model := modelOverride
+		if model == "" {
+			model = os.Getenv(EnvOllamaModel)
+		}
 		if model == "" {
 			model = DefaultModelOllama
 		}
@@ -1072,7 +1990,7 @@ func (a *CopilotAgent) resolveGenerator(ctx context.Context) ai.Generator {
 	if err == nil && tempGen != nil {
 		gen = tempGen
 	} else {
-		log.Warn("Failed to switch provider", "provider", providerOverride, "error", err)
+		log.Warn("Failed to resolve to valid provider", "provider", providerOverride, "error", err)
 	}
 
 	return gen
@@ -1118,73 +2036,38 @@ func (a *CopilotAgent) handleSlashCommand(ctx context.Context, query string, gen
 }
 
 func (a *CopilotAgent) resolvePersona(ctx context.Context) string {
+	persona, _ := a.resolvePersonaWithMetadata(ctx)
+	return persona
+}
+
+func personaSourceCacheKey(agentID string) string {
+	return personaSourceMRUCategoryPrefix + agentID
+}
+
+func (a *CopilotAgent) resolvePersonaWithMetadata(ctx context.Context) (string, bool) {
 	agentID := ai.AgentIDOmni
-	if a.Memory != nil && a.Memory.AgentID != "" {
-		agentID = a.Memory.AgentID
-	}
 	cacheKey := "PERSONA_" + agentID
+	sourceKey := personaSourceCacheKey(agentID)
 
 	// 1. Try MRU Cache
 	if cachedVal, ok := a.getMRUCategoryBySource(cacheKey, MRUSourcePersona, true); ok && cachedVal != "" {
-		return cachedVal
+		personaSource, _ := a.getMRUCategoryBySource(sourceKey, MRUSourcePersona, true)
+		return cachedVal, strings.EqualFold(strings.TrimSpace(personaSource), "kb")
 	}
 
-	p := ai.GetSessionPayload(ctx)
-
 	persona := ""
-	if agentID != ai.AgentIDOmni {
-		if p == nil {
-			log.Error("Routed to an Avatar but there is no selected KB")
-		} else {
-			// If Avatar, use its exact KB as the Persona config source
-			var matchingRef *ai.ArtifactReference
-			for _, ref := range p.SelectedKBs {
-				if ref.Name == agentID && ref.Type == ai.ArtifactTypeSpace {
-					matchingRef = &ref
-					break
+	personaFromKB := false
+	// buildSystemPrompt is the Omni supervisor path. Avatar persona loading stays in avatar.go.
+	if a.systemDB != nil {
+		tempDB := database.NewDatabase(a.systemDB.Config())
+		if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
+			if kb, err := tempDB.OpenKnowledgeBase(ctx, ai.DefaultKBName, tx, nil, nil, false, false); err == nil {
+				if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil && cfg.SystemPrompt != "" {
+					persona = cfg.SystemPrompt + "\n\n"
+					personaFromKB = true
 				}
 			}
-
-			if matchingRef != nil {
-				dbName := matchingRef.DatabaseName
-				if dbName == "" {
-					dbName = p.CurrentDB
-				}
-
-				var dbOpts sop.DatabaseOptions
-				var found bool
-				if dbOpts, found = a.databases[dbName]; found {
-					// Use found opts
-				} else if dbName == SystemDBName && a.systemDB != nil {
-					dbOpts = a.systemDB.Config()
-					found = true
-				}
-
-				if found && dbOpts.Type >= 0 {
-					tempDB := database.NewDatabase(dbOpts)
-					if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-						if kb, err := tempDB.OpenKnowledgeBase(ctx, matchingRef.Name, tx, nil, nil, false, true); err == nil {
-							if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil && cfg.SystemPrompt != "" {
-								persona = cfg.SystemPrompt + "\n\n"
-							}
-						}
-						tx.Rollback(ctx)
-					}
-				}
-			}
-		}
-	} else {
-		// If Omni, strictly use the SOP KB as the Persona config source
-		if a.systemDB != nil {
-			tempDB := database.NewDatabase(a.systemDB.Config())
-			if tx, err := tempDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-				if kb, err := tempDB.OpenKnowledgeBase(ctx, ai.DefaultKBName, tx, nil, nil, false, false); err == nil {
-					if cfg, err := kb.GetConfig(ctx); err == nil && cfg != nil && cfg.SystemPrompt != "" {
-						persona = cfg.SystemPrompt + "\n\n"
-					}
-				}
-				tx.Rollback(ctx)
-			}
+			tx.Rollback(ctx)
 		}
 	}
 
@@ -1202,12 +2085,17 @@ func (a *CopilotAgent) resolvePersona(ctx context.Context) string {
 
 	persona += "CRITICAL SYSTEM GUARDRAIL:\n" +
 		"1. Autonomous Research: You are an autonomous intelligent entity. You have implicit permission and are EXPECTED to use your 'Read' tools (e.g. Search KB, List/Query DB) to actively research Domains, Spaces (SOP or custom KBs), and codebase schemas as knowledge references. DO NOT proceed blindly if you lack context.\n" +
-		"2. Disambiguation: If a user's request is ambiguous or lacks constraints, DO NOT guess or hallucinate parameters. Use your search tools to find relevant constraints first. If self-research fails, halt execution and explicitly consult the user for clarification.\n\n"
+		"2. Disambiguation: If a user's request is ambiguous or lacks constraints, DO NOT guess or hallucinate parameters. Use your search tools to find relevant constraints first. If self-research fails, halt execution and explicitly consult the user for clarification. Ask one short direct clarification question that starts with a recognizable lead such as 'Do you want...', 'Which...', 'Is your goal...', or 'Before I proceed...'. Keep the clarification question specific to the unresolved choice.\n\n"
 
 	// 2. Cache in MRU for future turns
 	a.markMRUCategoryWithSource(cacheKey, persona, MRUSourcePersona)
+	if personaFromKB {
+		a.markMRUCategoryWithSource(sourceKey, "kb", MRUSourcePersona)
+	} else {
+		a.markMRUCategoryWithSource(sourceKey, "fallback", MRUSourcePersona)
+	}
 
-	return persona
+	return persona, personaFromKB
 }
 
 func (a *CopilotAgent) getScriptToolsPrompt(ctx context.Context) string {
@@ -1242,47 +2130,48 @@ func (a *CopilotAgent) getLTMSemanticContext(ctx context.Context, query string) 
 	toolsDef := ""
 	if a.systemDB != nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil && a.Memory.AgentID != "" {
 		if tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-			kbName := fmt.Sprintf("ltm_%s", a.Memory.AgentID)
+			a.Memory.BindSession(ctx)
+			kbName := a.Memory.LongTermMemoryName()
 			kb, err := a.systemDB.OpenKnowledgeBase(ctx, kbName, tx, nil, nil, false, true)
 			if err == nil {
-				vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query})
-				if err == nil && len(vecs) > 0 {
-					closestCat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
-					catFilter := ""
-					if err == nil && closestCat != nil {
-						catFilter = closestCat.Name
+				hits, err := memory.DigestKnowledgeBase(ctx, kb, a.service.Domain().Embedder(), memory.KBDigestRequest{
+					Queries:            []string{query},
+					PerQueryLimit:      5,
+					MaxResults:         5,
+					MinScore:           0.6,
+					UseClosestCategory: true,
+				})
+				if err == nil && len(hits) > 0 {
+					knowledgeStr := ""
+					for _, hit := range hits {
+						knowledgeStr += fmt.Sprintf("- (Score: %.2f) %s\n", hit.Score, hit.Text)
 					}
-					hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: 5, CategoryPath: catFilter})
-					if err == nil && len(hits) > 0 {
-						hasKnowledge := false
-						knowledgeStr := ""
-						for _, hit := range hits {
-							if hit.Score < 0.6 {
-								continue
-							}
-							valStr := ""
-							if str, ok := hit.Payload["_raw_content"].(string); ok {
-								valStr = str
-							} else if str, ok := hit.Payload["content"].(string); ok {
-								valStr = str
-							} else {
-								valStr = fmt.Sprintf("%v", hit.Payload)
-							}
-							if valStr != "" {
-								hasKnowledge = true
-								knowledgeStr += fmt.Sprintf("- (Score: %.2f) %s\n", hit.Score, valStr)
-							}
-						}
-						if hasKnowledge {
-							toolsDef += "\nContext Section (Learned Knowledge):\n" + knowledgeStr
-						}
-					}
+					toolsDef += "\nContext Section (Learned Knowledge):\n" + knowledgeStr
 				}
 			}
 			tx.Rollback(ctx)
 		}
 	}
 	return toolsDef
+}
+
+func buildKnowledgeMiningQueries(domain string, query string) []string {
+	queries := []string{query}
+	domain = strings.TrimSpace(domain)
+	if domain == "" {
+		return queries
+	}
+
+	queries = append(queries, domain+" "+query)
+	if strings.EqualFold(domain, "sop") {
+		queries = append(queries,
+			"SOP architecture "+query,
+			"SOP SDLC "+query,
+			"SOP onboarding "+query,
+			"SOP tech stack "+query,
+		)
+	}
+	return queries
 }
 
 func (a *CopilotAgent) getPlaybooksContext(ctx context.Context, query string, targetDomains []string) string {
@@ -1339,31 +2228,19 @@ func (a *CopilotAgent) getPlaybooksContext(ctx context.Context, query string, ta
 			if tx, err := domainDB.BeginTransaction(ctx, sop.ForReading); err == nil {
 				kb, err := domainDB.OpenKnowledgeBase(ctx, domain, tx, nil, nil, false)
 				if err == nil && a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
-					vecs, err := a.service.Domain().Embedder().EmbedTexts(ctx, []string{query})
-					if err == nil && len(vecs) > 0 {
-						closestCat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
-						catFilter := ""
-						if err == nil && closestCat != nil {
-							catFilter = closestCat.Name
-						}
-						hits, err := kb.SearchSemantics(ctx, vecs[0], &memory.SearchOptions[map[string]any]{Limit: 5, CategoryPath: catFilter})
-						accumStr := ""
-						if err == nil && len(hits) > 0 {
-							for _, hit := range hits {
-								if hit.Score < 0.6 {
-									continue
-								}
-								hasGoodHits = true
-								valStr := ""
-								if str, ok := hit.Payload["_raw_content"].(string); ok {
-									valStr = str
-								} else if str, ok := hit.Payload["content"].(string); ok {
-									valStr = str
-								} else {
-									valStr = fmt.Sprintf("%v", hit.Payload)
-								}
-								accumStr += fmt.Sprintf("- Context (Score: %.2f): %s\n", hit.Score, valStr)
-							}
+					hits, err := memory.DigestKnowledgeBase(ctx, kb, a.service.Domain().Embedder(), memory.KBDigestRequest{
+						Queries:            buildKnowledgeMiningQueries(domain, query),
+						PerQueryLimit:      5,
+						MaxResults:         5,
+						MinScore:           0.6,
+						UseClosestCategory: true,
+						KeywordFallback:    strings.EqualFold(domain, "sop"),
+					})
+					accumStr := ""
+					if err == nil && len(hits) > 0 {
+						for _, hit := range hits {
+							hasGoodHits = true
+							accumStr += fmt.Sprintf("- Context (Score: %.2f): %s\n", hit.Score, hit.Text)
 						}
 
 						if hasGoodHits {
@@ -1442,17 +2319,26 @@ func (a *CopilotAgent) getSchemaInjectionContext(ctx context.Context) string {
 // buildSystemPrompt, on top of generated System Prompt(below), we rely on native Tool Calling via ListTools,
 // which specifies each tool's basic info & supported JSON schema.
 func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, taskClassification TaskContextClassification) string {
+	a.rehydrateMRUFromMemory(ctx)
+
 	builder := NewSystemPromptBuilder()
+	leanStoresAssembly := shouldUseLeanStoresAssembly(taskClassification)
+	persona, _ := a.resolvePersonaWithMetadata(ctx)
+	semanticMemory := a.getLTMSemanticContext(ctx, query)
+	if leanStoresAssembly {
+		persona = trimPromptComponentContent(ComponentPersona, persona, 900)
+		semanticMemory = ""
+	}
 
 	// 1. Resolve Avatar / Custom KB Persona or Fallback
-	builder.With(ComponentPersona, a.resolvePersona(ctx))
+	builder.With(ComponentPersona, persona)
 
 	// 2. LTM Semantic Resolution (Self-Correction / Working Memory)
-	builder.With(ComponentSemanticMemory, a.getLTMSemanticContext(ctx, query))
+	builder.With(ComponentSemanticMemory, semanticMemory)
 
 	// 3. Always inject System Tools loaded into LTM
 	systemTools := a.getSystemToolsContext(ctx)
-	if focusedTools := a.buildFocusedToolContext(&taskClassification); focusedTools != "" && !strings.Contains(systemTools, focusedTools) {
+	if focusedTools := compactFocusedToolContextAgainstBaseline(systemTools, a.buildFocusedToolContext(&taskClassification)); focusedTools != "" {
 		if systemTools != "" {
 			systemTools += "\n\n"
 		}
@@ -1461,12 +2347,35 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 	builder.With(ComponentSystemTools, systemTools)
 
 	// 4. Active Custom KBs / Playbooks Lookups
-	domains := []string{"sop"}
+	// In the future, OMNI will be able to lookup multiple KBs, BUT OMNI will always assume persona from SOP.
+	var domains []string
 	if p := ai.GetSessionPayload(ctx); p != nil && p.ActiveDomain != "" {
-		domains = append(domains, strings.Split(p.ActiveDomain, ",")...)
+		domains = strings.Split(p.ActiveDomain, ",")
+	} else {
+		domains = []string{"sop"}
 	}
-	builder.With(ComponentPlaybooks, a.getPlaybooksContext(ctx, query, domains))
-	builder.With(ComponentFocusedContext, a.getFocusedExecutionContext(ctx, taskClassification))
+	playbooksContext := ""
+	if !leanStoresAssembly {
+		playbooksContext = a.getPlaybooksContext(ctx, query, domains)
+	}
+	builder.With(ComponentPlaybooks, playbooksContext)
+	builder.With(ComponentRecipes, a.getRecipeContext(taskClassification))
+	focusedExecutionContext := a.getFocusedExecutionContext(ctx, taskClassification)
+	if memoryContinuation := a.getMemoryContinuationContext(taskClassification); memoryContinuation != "" {
+		if focusedExecutionContext != "" {
+			focusedExecutionContext = memoryContinuation + "\n\n" + focusedExecutionContext
+		} else {
+			focusedExecutionContext = memoryContinuation
+		}
+	}
+	if askOutcome := a.getAskOutcomeContext(); askOutcome != "" {
+		if focusedExecutionContext != "" {
+			focusedExecutionContext = askOutcome + "\n\n" + focusedExecutionContext
+		} else {
+			focusedExecutionContext = askOutcome
+		}
+	}
+	builder.With(ComponentFocusedContext, focusedExecutionContext)
 
 	// 5. Generic schema fallback only when no specific store targets were classified.
 	if taskClassification.Domain == StoresDomain && len(taskClassification.DBArtifacts) == 0 {
@@ -1485,11 +2394,25 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 		"routing_gate", taskClassification.RoutingGate,
 		"original_chars", budgetReport.OriginalTotalChars,
 		"final_chars", budgetReport.FinalTotalChars,
+		"components_present", summarizePromptComponentsPresent(budgetReport),
 		"trimmed_components", summarizePromptBudgetTrim(budgetReport),
 	)
 	log.Info("LLM Context (OMNI)", "SystemPrompt", fullPrompt)
 
 	return fullPrompt
+}
+
+func shouldUseLeanStoresAssembly(taskClassification TaskContextClassification) bool {
+	if !strings.EqualFold(taskClassification.Domain, StoresDomain) {
+		return false
+	}
+	if taskClassification.RoutingGate == RoutingGateContinuity {
+		return false
+	}
+	if isCrossDomain(taskClassification.Layers) || taskClassification.ScriptAuthoring {
+		return false
+	}
+	return len(taskClassification.DBArtifacts) > 0 || len(taskClassification.StoresArtifacts) > 0
 }
 
 func (a *CopilotAgent) promptBudgetProfile(taskClassification TaskContextClassification) PromptBudgetProfile {
@@ -1499,6 +2422,7 @@ func (a *CopilotAgent) promptBudgetProfile(taskClassification TaskContextClassif
 			ComponentPersona:        2800,
 			ComponentSemanticMemory: 1400,
 			ComponentSystemTools:    2600,
+			ComponentRecipes:        3200,
 			ComponentPlaybooks:      1600,
 			ComponentFocusedContext: 2600,
 			ComponentSchema:         1800,
@@ -1511,6 +2435,7 @@ func (a *CopilotAgent) promptBudgetProfile(taskClassification TaskContextClassif
 			ComponentPlaybooks,
 			ComponentSemanticMemory,
 			ComponentSystemTools,
+			ComponentRecipes,
 			ComponentPersona,
 			ComponentFocusedContext,
 			ComponentUserQuery,
@@ -1551,6 +2476,29 @@ func (a *CopilotAgent) promptBudgetProfile(taskClassification TaskContextClassif
 
 	if taskClassification.RoutingGate == RoutingGateContinuity {
 		profile.ComponentCharBudgets[ComponentHistory] = 2600
+	}
+
+	if shouldUseLeanStoresAssembly(taskClassification) {
+		profile.TotalChars = 11200
+		profile.ComponentCharBudgets[ComponentPersona] = 900
+		profile.ComponentCharBudgets[ComponentSemanticMemory] = 0
+		profile.ComponentCharBudgets[ComponentSystemTools] = 1800
+		profile.ComponentCharBudgets[ComponentRecipes] = 2200
+		profile.ComponentCharBudgets[ComponentPlaybooks] = 0
+		profile.ComponentCharBudgets[ComponentFocusedContext] = 4200
+		profile.ComponentCharBudgets[ComponentHistory] = 900
+		profile.ComponentCharBudgets[ComponentUserQuery] = 1400
+		profile.TrimPriorityLowToHigh = []PromptComponent{
+			ComponentPlaybooks,
+			ComponentSemanticMemory,
+			ComponentHistory,
+			ComponentSchema,
+			ComponentPersona,
+			ComponentSystemTools,
+			ComponentRecipes,
+			ComponentFocusedContext,
+			ComponentUserQuery,
+		}
 	}
 
 	return profile
@@ -1604,7 +2552,7 @@ func (a *CopilotAgent) getSessionMemoryContext() string {
 					}
 					sb.WriteString(fmt.Sprintf("User: %s\n", userText))
 				} else if ex.Role == RoleAssistant {
-					astText := ex.Content
+					astText := sanitizeAssistantContinuityText(ex.Content)
 					for {
 						start := strings.Index(astText, "```json")
 						if start == -1 {
@@ -1651,7 +2599,11 @@ func (b *BaselineReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) 
 		}
 
 		text := strings.TrimSpace(resp.Text)
-		isToolCall := false
+		type localToolCall struct {
+			Tool string         `json:"tool"`
+			Args map[string]any `json:"args"`
+		}
+		var toolCalls []localToolCall
 		var cleanText string
 		if start := strings.Index(text, "```"); start != -1 {
 			cleanText = text[start:]
@@ -1663,43 +2615,11 @@ func (b *BaselineReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) 
 			if end := strings.LastIndex(cleanText, "```"); end != -1 {
 				cleanText = cleanText[:end]
 			}
-			isToolCall = true
 		} else {
+			cleanText = text
 			idxOb := strings.Index(text, "{")
 			idxAr := strings.Index(text, "[")
 			if idxOb != -1 && (idxAr == -1 || idxOb < idxAr) {
-				cleanText = text[idxOb:]
-				isToolCall = true
-			} else if idxAr != -1 {
-				cleanText = text[idxAr:]
-				isToolCall = true
-			}
-		}
-
-		if isToolCall && (strings.Contains(cleanText, "\"tool\"") || strings.Contains(cleanText, "\"op\"")) {
-			cleanText = strings.TrimSpace(cleanText)
-			type localToolCall struct {
-				Tool string         `json:"tool"`
-				Args map[string]any `json:"args"`
-			}
-			var toolCalls []localToolCall
-
-			if err := json.Unmarshal([]byte(cleanText), &toolCalls); err == nil {
-				validToolCalls := true
-				if len(toolCalls) > 0 {
-					for _, tc := range toolCalls {
-						if tc.Tool == "" {
-							validToolCalls = false
-							break
-						}
-					}
-				}
-				if !validToolCalls || len(toolCalls) == 0 {
-					toolCalls = nil
-				}
-			}
-
-			if len(toolCalls) == 0 {
 				var scriptSteps []any
 				if err := json.Unmarshal([]byte(cleanText), &scriptSteps); err == nil && len(scriptSteps) > 0 {
 					isScript := true
@@ -1793,139 +2713,58 @@ func (b *BaselineReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) 
 // ListTools returns the list of available tools.
 func (a *CopilotAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
 	var tools []ai.ToolDefinition
-
-	var routingState *TaskContextClassification
-	if p := ai.GetSessionPayload(ctx); p != nil && p.Variables != nil {
-		if rs, ok := p.Variables["RoutingState"].(*TaskContextClassification); ok {
-			routingState = rs
-		}
-	}
-
-	allowedSpacesTools := make(map[string]bool)
-	allowedStoresTools := make(map[string]bool)
-
-	if routingState != nil {
-		crudParams := collectCRUDFlags(routingState.Layers)
-		cross := isCrossDomain(routingState.Layers)
-
-		// Foundational scripts/tools that should always be present
-		allowedStoresTools["execute_script"] = true
-
-		if cross || strings.EqualFold(routingState.Domain, SpacesDomain) {
-			if crudParams["R"] {
-				allowedSpacesTools["read_space_config"] = true
-				allowedSpacesTools["search_space"] = true
-			}
-			if crudParams["C"] || crudParams["U"] {
-				allowedSpacesTools["mint_to_space"] = true
-				allowedSpacesTools["enrich_space"] = true
-				allowedSpacesTools["update_space_config"] = true
-				allowedSpacesTools["vectorize_space"] = true
-				allowedSpacesTools["vectorize_space_categories"] = true
-				allowedSpacesTools["vectorize_space_items"] = true
-			}
-			if crudParams["D"] {
-				allowedSpacesTools["delete_space"] = true
-			}
-		}
-
-		if cross || strings.EqualFold(routingState.Domain, StoresDomain) {
-			if crudParams["R"] {
-				allowedStoresTools["select"] = true
-				allowedStoresTools["join"] = true
-				allowedStoresTools["explain_join"] = true
-				allowedStoresTools["scan"] = true
-			}
-			if crudParams["C"] {
-				allowedStoresTools["add"] = true
-			}
-			if crudParams["U"] {
-				allowedStoresTools["update"] = true
-			}
-			if crudParams["D"] {
-				allowedStoresTools["delete"] = true
-			}
-			allowedStoresTools["manage_transaction"] = true
-		}
-	}
-
-	isSpaceTool := func(name string) bool {
-		switch name {
-		case "mint_to_space", "delete_space", "enrich_space", "update_space_config", "read_space_config", "vectorize_space", "vectorize_space_categories", "vectorize_space_items", "search_space":
-			return true
-		}
-		return false
-	}
-
-	isStoreTool := func(name string) bool {
-		switch name {
-		case "select", "join", "explain_join", "add", "update", "delete", "manage_transaction", "scan":
-			return true
-		}
-		return false
-	}
-
-	// Append compiled go tools
-	if a.registry != nil {
-		for _, t := range a.registry.List() {
-			if t.Hidden {
-				continue // Skip hidden for the LLM natively as well
-			}
-
-			// Apply RoutingState Filter if available
-			if routingState != nil {
-				name := t.Name
-				if isSpaceTool(name) && !allowedSpacesTools[name] {
-					continue
-				}
-				if isStoreTool(name) && !allowedStoresTools[name] {
-					continue
-				}
-			}
-
-			tools = append(tools, ai.ToolDefinition{
-				Name:        t.Name,
-				Description: t.Description,
-				Schema:      t.ArgsSchema,
-			})
-		}
-	}
-
-	// Query systemDB for stored user scripts
-	if a.systemDB != nil {
-		tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
-		if err == nil {
-			defer tx.Rollback(ctx)
-			store, err := a.systemDB.OpenModelStore(ctx, "scripts", tx)
-			if err == nil {
-				// Iterate via Store.List
-				// For simplicity, scripts might not have explicit schema strings yet,
-				// but we build a minimal one if properties are available.
-				var defaultArgsSchema = `{"type": "object", "properties": {"database": {"type": "string", "description": "Target database constraint (optional)"}}}`
-
-				// Attempt to load all scripts under ai.DefaultScriptCategory
-				var keys []string
-				keys, _ = store.List(ctx, ai.DefaultScriptCategory)
-				for _, scriptName := range keys {
-					var script ai.Script
-					if err := store.Load(ctx, ai.DefaultScriptCategory, scriptName, &script); err == nil {
-						desc := script.Description
-						if desc == "" {
-							desc = "Executes the script '" + scriptName + "'"
-						}
-
-						tools = append(tools, ai.ToolDefinition{
-							Name:        scriptName,
-							Description: "Execute pre-saved user script. " + desc,
-							Schema:      defaultArgsSchema,
-						})
-					}
-				}
-			}
-		}
-	}
+	routingState := activeRoutingState(ctx)
+	exposure := buildNativeToolExposure(routingState)
+	tools = append(tools, a.listRegisteredTools(exposure)...)
+	tools = append(tools, a.listStoredScriptTools(ctx)...)
 
 	return tools, nil
+}
+
+func allowedNativeDomainTools(routingState *TaskContextClassification) (map[string]bool, map[string]bool) {
+	allowedSpacesTools := make(map[string]bool)
+	allowedStoresTools := make(map[string]bool)
+	if routingState == nil {
+		return allowedSpacesTools, allowedStoresTools
+	}
+
+	crudParams := collectCRUDFlags(routingState.Layers)
+	cross := isCrossDomain(routingState.Layers)
+	allow := func(target map[string]bool, names ...string) {
+		for _, name := range names {
+			target[name] = true
+		}
+	}
+
+	if cross || strings.EqualFold(routingState.Domain, SpacesDomain) {
+		if crudParams["R"] {
+			allow(allowedSpacesTools, "read_space_config", "search_space")
+		}
+		if crudParams["C"] || crudParams["U"] {
+			allow(allowedSpacesTools, "mint_to_space", "enrich_space", "update_space_config", "vectorize_space", "vectorize_space_categories", "vectorize_space_items")
+		}
+		if crudParams["D"] {
+			allow(allowedSpacesTools, "delete_space")
+		}
+	}
+
+	if cross || strings.EqualFold(routingState.Domain, StoresDomain) {
+		allow(allowedStoresTools, "execute_script", "list_stores", "manage_transaction", "begin_tx", "commit_tx", "rollback_tx")
+		if crudParams["R"] {
+			allow(allowedStoresTools, "select", "join", "join_right", "explain_join", "open_store", "scan", "filter", "sort", "project", "limit")
+		}
+		if crudParams["C"] {
+			allow(allowedStoresTools, "add")
+		}
+		if crudParams["U"] {
+			allow(allowedStoresTools, "update")
+		}
+		if crudParams["D"] {
+			allow(allowedStoresTools, "delete")
+		}
+	}
+
+	return allowedSpacesTools, allowedStoresTools
 }
 
 // InitializePhysicalMemory creates strictly isolated B-Tree (STM) and Vector (LTM) structures for this Agent ID
@@ -2058,13 +2897,11 @@ func (a *CopilotAgent) logThought(ctx context.Context, query string, toolsExecut
 		return
 	}
 
-	payloadInfo := ai.GetSessionPayload(ctx)
-	userID := "default"
-	kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, userID)
-	if payloadInfo != nil && payloadInfo.UserID != "" {
-		userID = payloadInfo.UserID
-		kbName = payloadInfo.GetMemoryKBName()
+	if a.Memory == nil {
+		return
 	}
+	a.Memory.BindSession(ctx)
+	kbName := a.Memory.LongTermMemoryName()
 
 	var embedder ai.Embeddings
 	if a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
@@ -2121,6 +2958,40 @@ func (a *CopilotAgent) logThought(ctx context.Context, query string, toolsExecut
 
 // Execute executes the requested tool against the session payload.
 func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	resolvePayloadTx := func(payload *ai.SessionPayload, targetDB string) sop.Transaction {
+		if payload == nil {
+			return nil
+		}
+		if targetDB != "" && payload.Transactions != nil {
+			if tAny, ok := payload.Transactions[targetDB]; ok {
+				if tx, ok := tAny.(sop.Transaction); ok {
+					return tx
+				}
+			}
+		}
+		if payload.Transaction != nil {
+			if tx, ok := payload.Transaction.(sop.Transaction); ok {
+				return tx
+			}
+		}
+		return nil
+	}
+
+	clearPayloadTx := func(payload *ai.SessionPayload, targetDB string, tx sop.Transaction) {
+		if payload == nil || tx == nil {
+			return
+		}
+		if targetDB != "" && payload.Transactions != nil {
+			if current, ok := payload.Transactions[targetDB].(sop.Transaction); ok && current == tx {
+				delete(payload.Transactions, targetDB)
+			}
+		}
+		if current, ok := payload.Transaction.(sop.Transaction); ok && current == tx {
+			payload.Transaction = nil
+		}
+		payload.Variables = nil
+	}
+
 	// Determine if we should deobfuscate
 	dbName, _ := args["database"].(string)
 	if dbName == "" {
@@ -2216,6 +3087,8 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 		newPayload.Transaction = nil
 		ctx = context.WithValue(ctx, SessionPayloadKey, &newPayload)
 	}
+	p = ai.GetSessionPayload(ctx)
+	preExistingTx := resolvePayloadTx(p, dbName)
 
 	if !dbFound && toolName != "list_databases" && toolName != "list_scripts" && toolName != "get_script_details" {
 		// Debugging
@@ -2232,7 +3105,23 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 	// Execute specific tool
 	if toolDef, ok := a.registry.Get(toolName); ok {
 		log.Info("LLM Tool Call", "tool", toolName)
-		return toolDef.Handler(ctx, args)
+		res, err := toolDef.Handler(ctx, args)
+		if deferClose, _ := ctx.Value(ctxKeyDeferImplicitSessionTxClose).(bool); !deferClose {
+			if pAfter := ai.GetSessionPayload(ctx); preExistingTx == nil && pAfter != nil && !pAfter.ExplicitTransaction {
+				if tx := resolvePayloadTx(pAfter, dbName); tx != nil {
+					if err != nil {
+						tx.Rollback(ctx)
+					} else if tx.HasBegun() {
+						if commitErr := tx.Commit(ctx); commitErr != nil {
+							clearPayloadTx(pAfter, dbName, tx)
+							return "", fmt.Errorf("tool execution succeeded but transaction commit failed: %w", commitErr)
+						}
+					}
+					clearPayloadTx(pAfter, dbName, tx)
+				}
+			}
+		}
+		return res, err
 	}
 
 	// Dump registry keys if tool not found (Debug)
@@ -2268,11 +3157,30 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 func (a *CopilotAgent) runScript(ctx context.Context, name string, script ai.Script, args map[string]any) (string, error) {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Running script '%s'...\n", name))
+	ctx = context.WithValue(ctx, ctxKeyDeferImplicitSessionTxClose, true)
 
 	// Scope for template resolution
 	scope := make(map[string]any)
 	for k, v := range args {
 		scope[k] = v
+	}
+
+	initialTransactions := make(map[string]sop.Transaction)
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		if p.Transactions != nil {
+			for dbName, tAny := range p.Transactions {
+				if existingTx, ok := tAny.(sop.Transaction); ok {
+					initialTransactions[dbName] = existingTx
+				}
+			}
+		}
+		if p.Transaction != nil {
+			if existingTx, ok := p.Transaction.(sop.Transaction); ok && p.CurrentDB != "" {
+				if _, exists := initialTransactions[p.CurrentDB]; !exists {
+					initialTransactions[p.CurrentDB] = existingTx
+				}
+			}
+		}
 	}
 
 	// Transaction Handling
@@ -2283,6 +3191,58 @@ func (a *CopilotAgent) runScript(ctx context.Context, name string, script ai.Scr
 	// Default to "manual" (let steps handle it or caller) unless specified
 	// The Script struct has TransactionMode field.
 	// Values: "none" (default), "single" (global tx), "per_step" (not implemented here, steps do it naturally if no global tx)
+	if script.TransactionMode != "single" {
+		if p := ai.GetSessionPayload(ctx); p != nil {
+			dbName := script.Database
+			if dbName == "" {
+				dbName = p.CurrentDB
+			}
+			if dbName != "" {
+				var existing sop.Transaction
+				if p.Transactions != nil {
+					if tAny, ok := p.Transactions[dbName]; ok {
+						existing, _ = tAny.(sop.Transaction)
+					}
+				}
+				if existing == nil && p.Transaction != nil && (dbName == p.CurrentDB || dbName == "") {
+					existing, _ = p.Transaction.(sop.Transaction)
+				}
+				if existing == nil {
+					db, err := a.resolveDatabase(dbName)
+					if err != nil {
+						return "", fmt.Errorf("failed to resolve database '%s' for implicit script transaction: %w", dbName, err)
+					}
+					tx, err = db.BeginTransaction(ctx, sop.ForWriting)
+					if err != nil {
+						return "", fmt.Errorf("failed to begin implicit script transaction: %w", err)
+					}
+					if p.Transactions == nil {
+						p.Transactions = make(map[string]any)
+					}
+					p.Transactions[dbName] = tx
+					p.Transaction = tx
+					rollbackFunc = func() {
+						tx.Rollback(ctx)
+						delete(p.Transactions, dbName)
+						if current, ok := p.Transaction.(sop.Transaction); ok && current == tx {
+							p.Transaction = nil
+						}
+						p.Variables = nil
+					}
+					commitFunc = func() error {
+						err := tx.Commit(ctx)
+						delete(p.Transactions, dbName)
+						if current, ok := p.Transaction.(sop.Transaction); ok && current == tx {
+							p.Transaction = nil
+						}
+						p.Variables = nil
+						return err
+					}
+					sb.WriteString(fmt.Sprintf("Implicit Session Transaction Started (%s)\n", dbName))
+				}
+			}
+		}
+	}
 
 	if script.TransactionMode == "single" {
 		// Identify Target DB
@@ -2365,7 +3325,7 @@ func (a *CopilotAgent) runScript(ctx context.Context, name string, script ai.Scr
 
 			res, err := a.Execute(stepCtx, step.Command, resolvedArgs)
 			if err != nil {
-				if !step.ContinueOnError {
+				if !step.ContinueOnError || shouldShortCircuitScriptOnError(step.Command, resolvedArgs, err) {
 					return "", fmt.Errorf("step %d (%s) failed: %w", i+1, step.Command, err)
 				}
 				sb.WriteString(fmt.Sprintf("Step %d failed: %v\n", i+1, err))
@@ -2383,6 +3343,25 @@ func (a *CopilotAgent) runScript(ctx context.Context, name string, script ai.Scr
 		}
 		// Clear rollbackFunc so defer doesn't rollback
 		rollbackFunc = nil
+	} else if p := ai.GetSessionPayload(ctx); p != nil && !p.ExplicitTransaction && p.Transactions != nil {
+		for dbName, tAny := range p.Transactions {
+			tx, ok := tAny.(sop.Transaction)
+			if !ok || tx == nil {
+				continue
+			}
+			if existingTx, exists := initialTransactions[dbName]; exists && existingTx == tx {
+				continue
+			}
+			if tx.HasBegun() {
+				if err := tx.Commit(ctx); err != nil {
+					return "", fmt.Errorf("failed to commit implicit script transaction for '%s': %w", dbName, err)
+				}
+			}
+			delete(p.Transactions, dbName)
+			if current, ok := p.Transaction.(sop.Transaction); ok && current == tx {
+				p.Transaction = nil
+			}
+		}
 	}
 
 	return sb.String(), nil
@@ -2426,7 +3405,7 @@ func (a *CopilotAgent) runScriptRaw(ctx context.Context, script ai.Script, args 
 
 			res, err := a.Execute(stepCtx, step.Command, resolvedArgs)
 			if err != nil {
-				if !step.ContinueOnError {
+				if !step.ContinueOnError || shouldShortCircuitScriptOnError(step.Command, resolvedArgs, err) {
 					return "", fmt.Errorf("step %d (%s) failed: %w", i+1, step.Command, err)
 				}
 			}

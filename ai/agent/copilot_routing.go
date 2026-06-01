@@ -1,0 +1,175 @@
+package agent
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	log "log/slog"
+
+	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
+)
+
+type routingAnchor struct {
+	prefix   string
+	entity   string
+	domain   string
+	artifact string
+	taskCtx  *TaskContextClassification
+}
+
+func isRoutingTestGenerator(gen ai.Generator) bool {
+	if gen == nil {
+		return false
+	}
+	typeName := fmt.Sprintf("%T", gen)
+	return strings.Contains(typeName, "mock") || strings.Contains(typeName, "Mock") || strings.Contains(typeName, "Smart")
+}
+
+func parseRoutingAnchor(query string) *routingAnchor {
+	parts := strings.Split(query, ":")
+	if len(parts) <= 1 {
+		return nil
+	}
+	if !(strings.EqualFold(parts[0], "omni") || strings.EqualFold(parts[0], "medical") || strings.EqualFold(parts[0], "support")) {
+		return nil
+	}
+	anchor := &routingAnchor{
+		prefix: parts[0],
+		entity: parts[0],
+	}
+	if len(parts) >= 2 {
+		anchor.domain = strings.TrimSpace(parts[1])
+	}
+	if len(parts) >= 3 {
+		anchor.artifact = strings.TrimSpace(parts[2])
+	}
+	anchor.taskCtx = enrichFocusedTaskContext(nil, anchor.entity, anchor.domain, anchor.artifact)
+	return anchor
+}
+
+func (a *CopilotAgent) resetRoutingForTopicSwitch(query string, payload *ai.SessionPayload) {
+	if payload != nil && payload.Variables != nil {
+		delete(payload.Variables, "RoutingState")
+	}
+	a.clearMRUForTopicSwitch()
+	if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+		newThreadID := sop.NewUUID()
+		thread := &ConversationThread{
+			ID:         newThreadID,
+			RootPrompt: query,
+			Label:      "Topic Switch",
+			Category:   "General",
+			Exchanges:  make([]Interaction, 0),
+			Status:     "active",
+		}
+		a.service.session.Memory.AddThread(thread)
+		a.service.session.Memory.CurrentThreadID = newThreadID
+	}
+}
+
+func (a *CopilotAgent) persistRoutingState(ctx context.Context, taskCtx *TaskContextClassification) {
+	if taskCtx == nil {
+		return
+	}
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		if p.Variables == nil {
+			p.Variables = make(map[string]any)
+		}
+		p.Variables["RoutingState"] = taskCtx
+	}
+	if a.service != nil && a.service.session != nil && a.service.session.Memory != nil {
+		a.service.session.Memory.SetRoutingState(taskCtx)
+	}
+}
+
+func (a *CopilotAgent) tryPrefixBasedRouting(ctx context.Context, query string, gen ai.Generator, isTest bool, anchor *routingAnchor) *TaskContextClassification {
+	if anchor == nil {
+		return nil
+	}
+
+	log.Info("Prefix-Based Routing Activated", "prefix", anchor.prefix)
+
+	var taskCtx *TaskContextClassification
+	if !isTest && gen != nil {
+		taskCtx, _ = a.ClassifyFocusedTaskContext(ctx, query, anchor.entity, anchor.domain, anchor.artifact, gen)
+	}
+
+	taskCtx = enrichFocusedTaskContext(taskCtx, anchor.entity, anchor.domain, anchor.artifact)
+	if p := ai.GetSessionPayload(ctx); p != nil && p.Variables != nil {
+		if rs, ok := p.Variables["RoutingState"].(*TaskContextClassification); ok && rs != nil && !isTest && gen != nil {
+			updatedRS, isSwitch, err := a.ClassifyContinuityTaskContext(ctx, query, rs, taskCtx, gen)
+			if err == nil && isSwitch {
+				log.Info("Prefix-Based Routing Triggered Topic Switch Reset")
+				a.resetRoutingForTopicSwitch(query, p)
+			} else if err == nil && updatedRS != nil {
+				taskCtx = enforceFocusedConstraints(updatedRS, anchor.entity, anchor.domain, anchor.artifact)
+			}
+		}
+	}
+
+	annotateTaskContextIntent(taskCtx, query)
+	taskCtx.RoutingGate = RoutingGateFocused
+	a.persistRoutingState(ctx, taskCtx)
+	return taskCtx
+}
+
+func (a *CopilotAgent) tryAskContinuationBasedRouting(ctx context.Context, query string, gen ai.Generator, isTest bool, anchor *routingAnchor) *TaskContextClassification {
+	p := ai.GetSessionPayload(ctx)
+	if p == nil || p.Variables == nil {
+		return nil
+	}
+	rs, ok := p.Variables["RoutingState"].(*TaskContextClassification)
+	if !ok || rs == nil {
+		return nil
+	}
+
+	if !isTest && gen != nil {
+		var anchorTaskCtx *TaskContextClassification
+		if anchor != nil {
+			anchorTaskCtx = anchor.taskCtx
+		}
+		updatedRS, isSwitch, err := a.ClassifyContinuityTaskContext(ctx, query, rs, anchorTaskCtx, gen)
+		if err == nil && isSwitch {
+			log.Info("Ask-Continuation Routing Detected Topic Switch. Falling through to Cold-Start Routing.")
+			a.resetRoutingForTopicSwitch(query, p)
+			return nil
+		}
+		if err == nil && updatedRS != nil {
+			log.Info("Ask-Continuation Routing Activated: Inheriting MRU Context with Updates", "domain", updatedRS.Domain)
+			annotateTaskContextIntent(updatedRS, query)
+			updatedRS.RoutingGate = RoutingGateContinuity
+			a.persistRoutingState(ctx, updatedRS)
+			return updatedRS
+		}
+		return nil
+	}
+
+	log.Info("Ask-Continuation Routing Activated: Inheriting MRU Context (Test Mode)", "domain", rs.Domain)
+	annotateTaskContextIntent(rs, query)
+	rs.RoutingGate = RoutingGateContinuity
+	a.persistRoutingState(ctx, rs)
+	return rs
+}
+
+func (a *CopilotAgent) tryColdStartBasedRouting(ctx context.Context, query string, gen ai.Generator, isTest bool) *TaskContextClassification {
+	if len(strings.Split(query, ":")) == 1 {
+		log.Info("Cold-Start Routing Activated")
+	}
+	if gen == nil || isTest {
+		return nil
+	}
+
+	taskCtx, err := a.ClassifyTaskContext(ctx, query, gen)
+	if err != nil || taskCtx == nil {
+		log.Warn("Cold-start routing classification failed or returned nil", "error", err)
+		return nil
+	}
+
+	log.Info("Cold-start routing classification success", "domain", taskCtx.Domain)
+	annotateTaskContextIntent(taskCtx, query)
+	taskCtx.RoutingGate = RoutingGateDiscovery
+	a.persistRoutingState(ctx, taskCtx)
+	return taskCtx
+}

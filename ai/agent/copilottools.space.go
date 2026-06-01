@@ -12,15 +12,31 @@ import (
 	"github.com/sharedcode/sop/ai/memory"
 )
 
+const mintToSpaceArgsSchema = `{"type":"object","properties":{"kb_name":{"type":"string","description":"Exact target knowledge base name. Use the user-requested Space name even when the Space does not exist yet."},"content":{"type":"string","description":"Durable generated or discovered content to persist. Generate the content first, then store it with mint_to_space."},"category":{"type":"string","description":"Optional category label grouping related entries inside the target Space."}},"required":["kb_name","content"]}`
+
+const deleteSpaceArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"kb_name":{"type":"string","description":"Exact knowledge base name to delete. Use this only for full Space deletion, not normal content changes."}},"required":["kb_name"]}`
+
+const enrichSpaceArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"kb_name":{"type":"string","description":"Target knowledge base name whose derived knowledge should be refreshed or enriched."}},"required":["kb_name"]}`
+
+const updateSpaceConfigArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"kb_name":{"type":"string","description":"Exact target knowledge base name whose behavior should change."},"config":{"type":"object","description":"Grounded knowledge base configuration object to persist after inspecting the current config when needed."}},"required":["kb_name","config"]}`
+
+const readSpaceConfigArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"kb_name":{"type":"string","description":"Exact target knowledge base name whose routing rules, system prompts, persona settings, or enabled tool access should be inspected."}},"required":["kb_name"]}`
+
+const vectorizeSpaceArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"kb_name":{"type":"string","description":"Exact target knowledge base name to vectorize. Use only when the user explicitly asks for embeddings, reindexing, vectorization, or semantic refresh of the whole Space."},"batch_size":{"type":"integer","description":"Optional vectorization batch size for full-Space reconciliation."}},"required":["kb_name"]}`
+
+const vectorizeSpaceCategoriesArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"kb_name":{"type":"string","description":"Exact target knowledge base name whose selected categories should be vectorized. Prefer this over full-Space vectorization when the request is narrower."},"batch_size":{"type":"integer","description":"Optional vectorization batch size for the selected categories."},"category_ids":{"type":"array","description":"Category UUIDs to vectorize for a topic-wide refresh within the target Space.","items":{"type":"string"}}},"required":["kb_name"]}`
+
+const vectorizeSpaceItemsArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"kb_name":{"type":"string","description":"Exact target knowledge base name whose specific items should be vectorized. Prefer this over category-wide or full-Space vectorization when only a few changed items need refresh."},"batch_size":{"type":"integer","description":"Optional vectorization batch size for the selected items."},"category_id":{"type":"string","description":"Optional category UUID scoping the items to vectorize."},"item_ids":{"type":"array","description":"Item UUIDs to vectorize for a tightly scoped semantic refresh.","items":{"type":"string"}}},"required":["kb_name"]}`
+
 func (a *CopilotAgent) registerSpaceTools(ctx context.Context) {
-	a.registry.RegisterWithUI("mint_to_space", "Mints a declarative fact, observation, or solution directly into a designated UI Knowledge Base (Space) to scale learning to other users.", "Directly stores information as a permanent KnowledgeChunk.", "(kb_name: string, content: string, category?: string)", a.toolMintToSpace)
-	a.registry.RegisterWithUI("delete_space", "Deletes an entire Space (Knowledge Base).", "Removes a space and all of its contents.", "(kb_name: string)", a.toolDeleteSpace)
-	a.registry.RegisterWithUI("enrich_space", "Forces the background process or directly executes knowledge base enrichment on a given item or entire KB.", "Executes knowledge base sleep cycle compilation.", "(kb_name: string)", a.toolEnrichSpace)
-	a.registry.RegisterWithUI("update_space_config", "Updates the configuration of a specified Space (Knowledge Base). Needs JSON config map.", "Sets the routing rules, system prompts, and tool access for a specific Space.", "(kb_name: string, config: object)", a.toolUpdateSpaceConfig)
-	a.registry.RegisterWithUI("read_space_config", "Retrieves the current configuration rules of a specified Space (Knowledge Base).", "Returns the routing rules, system prompts, and tool access applied to the space.", "(kb_name: string)", a.toolReadSpaceConfig)
-	a.registry.RegisterWithUI("vectorize_space", "Triggers vectorization for the entire Space (Knowledge Base) to compute semantic embeddings.", "Generates AI embeddings for all unvectorized items in the space.", "(kb_name: string)", a.toolVectorizeSpace)
-	a.registry.RegisterWithUI("vectorize_space_categories", "Triggers vectorization for specific Categories within the Space.", "Generates AI embeddings for items scoped to specific categories.", "(kb_name: string, categories: []string)", a.toolVectorizeCategories)
-	a.registry.RegisterWithUI("vectorize_space_items", "Triggers vectorization for specific Items within a Category.", "Generates AI embeddings for specific items.", "(kb_name: string, category: string, item_names: []string)", a.toolVectorizeItems)
+	a.registry.RegisterWithUI("mint_to_space", "Stores generated or durable knowledge in a target Space using the exact requested kb_name.", MintToSpaceInstruction, mintToSpaceArgsSchema, a.toolMintToSpace)
+	a.registry.RegisterWithUI("delete_space", "Deletes an entire Space only after explicit user intent.", DeleteSpaceInstruction, deleteSpaceArgsSchema, a.toolDeleteSpace)
+	a.registry.RegisterWithUI("enrich_space", "Reruns Space enrichment when derived knowledge needs an explicit refresh.", EnrichSpaceInstruction, enrichSpaceArgsSchema, a.toolEnrichSpace)
+	a.registry.RegisterWithUI("update_space_config", "Changes routing or behavior settings for a Space after grounded config inspection.", UpdateSpaceConfigInstruction, updateSpaceConfigArgsSchema, a.toolUpdateSpaceConfig)
+	a.registry.RegisterWithUI("read_space_config", "Reads the current config for a Space before behavior changes.", ReadSpaceConfigInstruction, readSpaceConfigArgsSchema, a.toolReadSpaceConfig)
+	a.registry.RegisterWithUI("vectorize_space", "Refreshes embeddings for an entire Space only on explicit vectorization requests.", VectorizeSpaceInstruction, vectorizeSpaceArgsSchema, a.toolVectorizeSpace)
+	a.registry.RegisterWithUI("vectorize_space_categories", "Refreshes embeddings for selected Space categories on explicit request.", VectorizeSpaceCategoriesInstruction, vectorizeSpaceCategoriesArgsSchema, a.toolVectorizeCategories)
+	a.registry.RegisterWithUI("vectorize_space_items", "Refreshes embeddings for specific Space items on explicit request.", VectorizeSpaceItemsInstruction, vectorizeSpaceItemsArgsSchema, a.toolVectorizeItems)
 }
 
 func emitSpaceMutationEvent(ctx context.Context, action string, databaseName string, kbName string) {

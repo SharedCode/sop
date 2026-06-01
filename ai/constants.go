@@ -3,7 +3,7 @@ package ai
 const (
 	// Default Models
 	DefaultModelOpenAI = "gpt-5.2"
-	DefaultModelGemini = "gemini-3.1-pro-preview"
+	DefaultModelGemini = "gemini-3.5-flash"
 	DefaultModelOllama = "llama3"
 
 	// Default Application Configurations
@@ -15,6 +15,5 @@ const (
 	IntentOmni       = "OMNI"
 
 	// Knowledge Base Constants
-	DefaultKBName  = "SOP"
-	MemoryKBPrefix = "memory_"
+	DefaultKBName = "SOP"
 )

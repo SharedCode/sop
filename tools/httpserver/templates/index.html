@@ -870,10 +870,7 @@
                 </div>
             </div>
 
-            <div class="form-group" style="margin-top: 15px; margin-bottom: 0px;" id="setup-template-container">
-            </div>
-
-            <div class="form-group" style="margin-top: 15px; margin-bottom: 0px;">
+            <div class="form-group" style="margin-top: 10px; margin-bottom: 0px;">
                 <div style="display: flex; flex-direction: column; gap: 8px;">
                     <label style="cursor: pointer; user-select: none;">
                         <input type="checkbox" id="setup-populate-demo"> 
@@ -981,7 +978,7 @@
             <p style="font-size: 14px;">We are ready to initialize your environment.</p>
 
            <div style="background: var(--pre-bg); padding: 10px; border-radius: 4px; font-size: 0.85em; margin-bottom: 15px; border: 1px solid var(--border-color);">
-                <strong>Environment Check:</strong>
+                <strong>Shell Environment Check:</strong>
                 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px 20px; margin: 10px 0;">
                     <!-- Row 1 -->
@@ -994,16 +991,6 @@
                         {{end}}
                     </div>
                     <div>
-                        <code>LLM_API_KEY</code>: 
-                        {{if .Env.LLM_API_KEY}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
-                        {{else}}
-                            <span style="color: var(--text-muted);">Not Set</span>
-                        {{end}}
-                    </div>
-                    
-                    <!-- Row 2 -->
-                    <div>
                         <code>GEMINI_API_KEY</code>: 
                         {{if .Env.GEMINI_API_KEY}}
                             <span style="color: var(--success-color); font-weight: bold;">Detected</span>
@@ -1014,6 +1001,70 @@
                     <div>
                         <code>OPENAI_API_KEY</code>: 
                         {{if .Env.OPENAI_API_KEY}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
+                        {{else}}
+                            <span style="color: var(--text-muted);">Not Set</span>
+                        {{end}}
+                    </div>
+
+                    <!-- Row 2 -->
+                    <div>
+                        <code>OPENAI_API_BASE_URL</code>: 
+                        {{if .Env.OPENAI_API_BASE_URL}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
+                        {{else}}
+                            <span style="color: var(--text-muted);">Not Set</span>
+                        {{end}}
+                    </div>
+                    <div>
+                        <code>OPENAI_MODEL</code>: 
+                        {{if .Env.OPENAI_MODEL}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
+                        {{else}}
+                            <span style="color: var(--text-muted);">Not Set</span>
+                        {{end}}
+                    </div>
+
+                    <!-- Row 3 -->
+                    <div>
+                        <code>ANTHROPIC_API_KEY</code>: 
+                        {{if .Env.ANTHROPIC_API_KEY}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
+                        {{else}}
+                            <span style="color: var(--text-muted);">Not Set</span>
+                        {{end}}
+                    </div>
+                    <div>
+                        <code>ANTHROPIC_API_BASE_URL</code>: 
+                        {{if .Env.ANTHROPIC_API_BASE_URL}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
+                        {{else}}
+                            <span style="color: var(--text-muted);">Not Set</span>
+                        {{end}}
+                    </div>
+
+                    <!-- Row 4 -->
+                    <div>
+                        <code>ANTHROPIC_MODEL</code>: 
+                        {{if .Env.ANTHROPIC_MODEL}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
+                        {{else}}
+                            <span style="color: var(--text-muted);">Not Set</span>
+                        {{end}}
+                    </div>
+                    <div>
+                        <code>GEMINI_API_BASE_URL</code>: 
+                        {{if .Env.GEMINI_API_BASE_URL}}
+                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
+                        {{else}}
+                            <span style="color: var(--text-muted);">Not Set</span>
+                        {{end}}
+                    </div>
+
+                    <!-- Row 5 -->
+                    <div>
+                        <code>GEMINI_MODEL</code>: 
+                        {{if .Env.GEMINI_MODEL}}
                             <span style="color: var(--success-color); font-weight: bold;">Detected</span>
                         {{else}}
                             <span style="color: var(--text-muted);">Not Set</span>
@@ -1031,18 +1082,22 @@
                 <div style="display: flex; align-items: stretch; gap: 10px; margin-bottom: 10px;">
                     <div style="flex: 1;">
                         <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">LLM / Brain</label>
-                        <select id="setup-brain-provider" style="width: 100%; padding: 4px;" onchange="toggleProviderAuth()">
+                        <select id="setup-brain-provider" style="width: 100%; padding: 4px;" onchange="handleSetupBrainProviderChange()">
                             {{template "llmOptions" .}}
                         </select>
                     </div>
                     <div style="flex: 1;" id="setup-brain-api-container">
                         <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">API Key</label>
-                        <input type="password" id="setup-brain-api-key" {{if .Env.LLM_API_KEY}}placeholder="(Loaded from Environment)" title="An API Key was automatically detected in your System Environment Variables."{{else}}placeholder="Enter API Key"{{end}} style="width: 100%; padding: 4px;">
+                        <input type="password" id="setup-brain-api-key" {{if .Env.BRAIN_API_KEY}}placeholder="(Loaded from Environment)" title="A provider-specific API key was automatically detected in your System Environment Variables."{{else}}placeholder="Enter API Key"{{end}} style="width: 100%; padding: 4px;">
                     </div>
                     <div style="flex: 1; display: none;" id="setup-brain-url-container">
                         <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">Base URL</label>
                         <input type="text" id="setup-brain-url" placeholder="http://localhost:11434" style="width: 100%; padding: 4px;">
                     </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button type="button" onclick="testSetupBrainConnection()" style="padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--pre-bg); color: var(--text-color); cursor: pointer;">Test LLM Connection</button>
+                    <div id="setup-brain-test-status" style="display: none; font-size: 12px;"></div>
                 </div>
             </div>
 
@@ -1051,7 +1106,7 @@
                 <div style="display: flex; align-items: stretch; gap: 10px; margin-bottom: 10px;">
                     <div style="flex: 1;">
                         <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">Embedder (Vector Generator)</label>
-                        <select id="setup-embedder-provider" style="width: 100%; padding: 4px;" onchange="toggleProviderAuth()">
+                        <select id="setup-embedder-provider" style="width: 100%; padding: 4px;" onchange="handleSetupEmbedderProviderChange()">
                             {{template "embedderOptions" .}}
                         </select>
                     </div>
@@ -1063,6 +1118,10 @@
                         <label style="font-weight: bold; font-size: 12px; display: block; margin-bottom: 2px;">Base URL</label>
                         <input type="text" id="setup-embedder-url" placeholder="http://localhost:11434" style="width: 100%; padding: 4px;">
                     </div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <button type="button" onclick="testSetupEmbedderConnection()" style="padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--pre-bg); color: var(--text-color); cursor: pointer;">Test Embedder Connection</button>
+                    <div id="setup-embedder-test-status" style="display: none; font-size: 12px;"></div>
                 </div>
             </div>
             <div style="margin-bottom: 15px;">

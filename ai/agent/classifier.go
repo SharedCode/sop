@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/sharedcode/sop/ai"
@@ -24,6 +25,19 @@ type TaskContextClassification struct {
 	Layers          []LayerInfo `json:"layers"`
 	ScriptAuthoring bool        `json:"-"`
 	RoutingGate     string      `json:"-"`
+}
+
+type continuityDigest struct {
+	Summary            string   `json:"summary,omitempty"`
+	CurrentGoal        string   `json:"current_goal,omitempty"`
+	ConfirmedFacts     []string `json:"confirmed_facts,omitempty"`
+	OpenQuestions      []string `json:"open_questions,omitempty"`
+	RecentPatterns     []string `json:"recent_patterns,omitempty"`
+	SuggestedNextMoves []string `json:"suggested_next_moves,omitempty"`
+	ActiveDomains      []string `json:"active_domains,omitempty"`
+	ActiveArtifacts    []string `json:"active_artifacts,omitempty"`
+	ExplicitAnchor     string   `json:"explicit_anchor,omitempty"`
+	CurrentQuerySignal string   `json:"current_query_signal,omitempty"`
 }
 
 var validCRUDFlags = map[string]bool{
@@ -138,9 +152,11 @@ func (a *CopilotAgent) ClassifyFocusedTaskContext(ctx context.Context, query, en
 
 // ClassifyContinuityTaskContext is Gate 2: The "Continuity/Switch" Classifier.
 // Used to check if the user is maintaining MRU context or switching topics.
-func (a *CopilotAgent) ClassifyContinuityTaskContext(ctx context.Context, query string, mru *TaskContextClassification, gen ai.Generator) (*TaskContextClassification, bool, error) {
-	mruJSON, _ := json.Marshal(mru)
-	prompt := fmt.Sprintf(promptClassifyContinuity, string(mruJSON), query)
+func (a *CopilotAgent) ClassifyContinuityTaskContext(ctx context.Context, query string, mru *TaskContextClassification, anchor *TaskContextClassification, gen ai.Generator) (*TaskContextClassification, bool, error) {
+	digestJSON, _ := json.MarshalIndent(a.buildContinuityDigest(query, mru, anchor), "", "  ")
+	routingJSON, _ := json.MarshalIndent(mru, "", "  ")
+	anchorJSON, _ := json.MarshalIndent(anchor, "", "  ")
+	prompt := fmt.Sprintf(promptClassifyContinuity, string(digestJSON), string(routingJSON), string(anchorJSON), query)
 
 	opts := ai.GenOptions{
 		SystemPrompt: prompt,
@@ -210,6 +226,117 @@ func (a *CopilotAgent) ClassifyContinuityTaskContext(ctx context.Context, query 
 	return &updatedMRU, false, nil
 }
 
+func (a *CopilotAgent) buildContinuityDigest(query string, routing *TaskContextClassification, anchor *TaskContextClassification) continuityDigest {
+	digest := continuityDigest{
+		CurrentQuerySignal: compactMRUText(query, 180),
+	}
+
+	if routing != nil {
+		if domain := strings.TrimSpace(routing.Domain); domain != "" {
+			digest.ActiveDomains = append(digest.ActiveDomains, domain)
+		}
+		digest.ActiveArtifacts = append(digest.ActiveArtifacts, routing.DBArtifacts...)
+		digest.ActiveArtifacts = append(digest.ActiveArtifacts, routing.StoresArtifacts...)
+		digest.ActiveArtifacts = append(digest.ActiveArtifacts, routing.SpacesArtifacts...)
+	}
+	if anchor != nil {
+		if domain := strings.TrimSpace(anchor.Domain); domain != "" {
+			digest.ActiveDomains = append(digest.ActiveDomains, domain)
+		}
+		digest.ActiveArtifacts = append(digest.ActiveArtifacts, anchor.DBArtifacts...)
+		digest.ActiveArtifacts = append(digest.ActiveArtifacts, anchor.StoresArtifacts...)
+		digest.ActiveArtifacts = append(digest.ActiveArtifacts, anchor.SpacesArtifacts...)
+		digest.ExplicitAnchor = compactMRUText(summarizeTaskContextForLog(*anchor), 220)
+	}
+
+	for _, item := range a.getMRUSnapshot() {
+		if normalizeMRUScope(item.Scope) != MRUScopeSession {
+			continue
+		}
+		contextText := compactMRUText(item.Context, 220)
+		if contextText == "" {
+			continue
+		}
+
+		switch {
+		case item.Source == MRUSourceAskOutcome && item.Category == askOutcomeMRUCategoryQuery:
+			if digest.CurrentGoal == "" {
+				digest.CurrentGoal = trimMRUPrefix(contextText)
+			}
+		case item.Source == MRUSourceAskOutcome && item.Category == askOutcomeMRUCategoryResult:
+			if digest.Summary == "" {
+				digest.Summary = trimMRUPrefix(contextText)
+			}
+		case item.Source == MRUSourceAskOutcome && strings.HasPrefix(item.Category, askOutcomeMRUCategoryToolPattern):
+			digest.RecentPatterns = appendUniqueCompact(digest.RecentPatterns, trimMRUPrefix(contextText), 180)
+		case item.Source == MRUSourceAskOutcome && item.Category == askOutcomeMRUCategoryGuidance:
+			digest.SuggestedNextMoves = appendUniqueCompact(digest.SuggestedNextMoves, trimMRUPrefix(contextText), 180)
+		case item.Source == MRUSourceAskOutcome && (strings.HasPrefix(item.Category, askOutcomeMRUCategoryStoreSchema+"_") || strings.HasPrefix(item.Category, askOutcomeMRUCategoryRelations+"_") || strings.HasPrefix(item.Category, askOutcomeMRUCategoryJoinSelection+"_") || strings.HasPrefix(item.Category, askOutcomeMRUCategoryFilterSelection+"_") || strings.HasPrefix(item.Category, askOutcomeMRUCategoryConfirmed+"_")):
+			digest.ConfirmedFacts = appendUniqueCompact(digest.ConfirmedFacts, trimMRUPrefix(contextText), 180)
+		case item.Source == MRUSourceAskOutcome:
+			// Keep other ask-outcome lines out of the digest to avoid replaying boilerplate.
+		case item.Source == MRUSourcePlaybook:
+			digest.SuggestedNextMoves = appendUniqueCompact(digest.SuggestedNextMoves, contextText, 180)
+		case item.Source == MRUSourcePersona:
+			if digest.Summary == "" {
+				digest.Summary = contextText
+			}
+		default:
+			digest.OpenQuestions = appendUniqueCompact(digest.OpenQuestions, contextText, 180)
+		}
+	}
+
+	if digest.CurrentGoal == "" {
+		digest.CurrentGoal = digest.CurrentQuerySignal
+	}
+	if digest.Summary == "" && digest.CurrentGoal != "" {
+		digest.Summary = digest.CurrentGoal
+	}
+	digest.ActiveDomains = uniqueSortedStrings(digest.ActiveDomains)
+	digest.ActiveArtifacts = uniqueSortedStrings(digest.ActiveArtifacts)
+	return digest
+}
+
+func appendUniqueCompact(items []string, value string, maxLen int) []string {
+	value = compactMRUText(trimMRUPrefix(value), maxLen)
+	if value == "" {
+		return items
+	}
+	for _, existing := range items {
+		if existing == value {
+			return items
+		}
+	}
+	return append(items, value)
+}
+
+func uniqueSortedStrings(values []string) []string {
+	seen := make(map[string]bool, len(values))
+	unique := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" || seen[trimmed] {
+			continue
+		}
+		seen[trimmed] = true
+		unique = append(unique, trimmed)
+	}
+	sort.Strings(unique)
+	return unique
+}
+
+func trimMRUPrefix(value string) string {
+	value = strings.TrimSpace(value)
+	value = strings.TrimPrefix(value, "- ")
+	value = strings.TrimSpace(value)
+	for _, prefix := range []string{"Last user ask:", "Last outcome:", "Tool pattern:", "Confirmed:", "Database:", "Domain:"} {
+		if strings.HasPrefix(value, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(value, prefix))
+		}
+	}
+	return value
+}
+
 // Helper to parse standard classification responses
 func parseClassificationResponse(raw string) (*TaskContextClassification, error) {
 	raw = strings.TrimSpace(raw)
@@ -220,9 +347,20 @@ func parseClassificationResponse(raw string) (*TaskContextClassification, error)
 		raw = strings.TrimPrefix(raw, "```")
 		raw = strings.TrimSuffix(raw, "```")
 	}
+	raw = strings.TrimSpace(raw)
+
+	jsonPayload := raw
+	if !strings.HasPrefix(jsonPayload, "{") {
+		if braceIdx := strings.Index(jsonPayload, "{"); braceIdx >= 0 {
+			candidate, err := extractBalancedJSONObject(jsonPayload[braceIdx:])
+			if err == nil {
+				jsonPayload = candidate
+			}
+		}
+	}
 
 	var result TaskContextClassification
-	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+	if err := json.Unmarshal([]byte(jsonPayload), &result); err != nil {
 		return nil, fmt.Errorf("failed to parse classification JSON: %w (raw: %s)", err, raw)
 	}
 	normalizeTaskContext(&result)

@@ -8,6 +8,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/ai/vector"
 	core "github.com/sharedcode/sop/database"
 )
@@ -153,6 +154,48 @@ func TestAIDatabase_RemoveKnowledgeBase_ReturnsNotFoundWhenMissing(t *testing.T)
 	err := db.RemoveKnowledgeBase(ctx, "missing_space")
 	if err == nil {
 		t.Fatal("expected missing knowledge base delete to fail")
+	}
+}
+
+func TestAIDatabase_OpenKnowledgeBase_RespectsPersistedTextSearchSetting(t *testing.T) {
+	storagePath := t.TempDir()
+
+	db := database.NewDatabase(core.DatabaseOptions{
+		StoresFolders: []string{storagePath},
+	})
+
+	ctx := context.Background()
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	kb, err := db.OpenKnowledgeBase(ctx, "kb_text_optional", tx, nil, nil, false, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase failed: %v", err)
+	}
+	if err := kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{TextSearchEnabled: false}); err != nil {
+		t.Fatalf("SetConfig failed: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	tx2, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction reopen failed: %v", err)
+	}
+	if _, err := db.OpenKnowledgeBase(ctx, "kb_text_optional", tx2, nil, nil, false, true); err != nil {
+		t.Fatalf("OpenKnowledgeBase reopen failed: %v", err)
+	}
+	stores, err := tx2.GetStores(ctx)
+	_ = tx2.Rollback(ctx)
+	if err != nil {
+		t.Fatalf("GetStores failed: %v", err)
+	}
+	for _, store := range stores {
+		if store == "kb_text_optional/text" {
+			t.Fatalf("expected persisted KB text-search setting to prevent creating text index store, found %q", store)
+		}
 	}
 }
 

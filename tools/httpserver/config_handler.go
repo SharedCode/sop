@@ -92,6 +92,7 @@ func handleCreateEnvironment(w http.ResponseWriter, r *http.Request) {
 		Databases:  []DatabaseConfig{},
 		ConfigFile: filename,
 	}
+	modelCatalog = defaultModelCatalog()
 
 	// Reload agents (will be empty)
 	if err := initAgents(context.Background()); err != nil {
@@ -153,6 +154,10 @@ func handleSwitchEnvironment(w http.ResponseWriter, r *http.Request) {
 
 	// Force update ConfigFile tracker
 	config.ConfigFile = req.Filename
+	if _, err := loadModelCatalog(req.Filename); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to load model catalog: %v", err), http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "Switched to " + req.Filename})

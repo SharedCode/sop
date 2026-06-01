@@ -13,7 +13,6 @@ const (
 	EnvAIProvider   = "AI_PROVIDER"
 	EnvGeminiAPIKey = "GEMINI_API_KEY"
 	EnvOpenAIAPIKey = "OPENAI_API_KEY"
-	EnvLLMAPIKey    = "LLM_API_KEY"
 	EnvOpenAIModel  = "OPENAI_MODEL"
 	EnvGeminiModel  = "GEMINI_MODEL"
 	EnvOllamaModel  = "OLLAMA_MODEL"

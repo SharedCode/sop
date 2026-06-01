@@ -67,20 +67,7 @@
     async function apiCall(endpoint, method = 'GET', body = null, overrideHeaders = null) {
         try {
             const h = { 'Content-Type': 'application/json' };
-            const lStr = localStorage.getItem('sop_ai_config');
-            if (lStr) {
-                try {
-                    const c = JSON.parse(lStr);
-                    if(c.brain_provider) h['X-LLM-Provider'] = c.brain_provider;
-                    if(c.brain_api_key) h['X-LLM-API-Key'] = c.brain_api_key;
-                    if(c.brain_url) h['X-LLM-URL'] = c.brain_url;
-                    if(c.brain_model) h['X-LLM-Model'] = c.brain_model;
-                    if(c.embedder_provider) h['X-Embedder-Provider'] = c.embedder_provider;
-                    if(c.embedder_api_key) h['X-Embedder-API-Key'] = c.embedder_api_key;
-                    if(c.embedder_url) h['X-Embedder-URL'] = c.embedder_url;
-                    if(c.embedder_model) h['X-Embedder-Model'] = c.embedder_model;
-                } catch(e){}
-            }
+            applyAIConfigHeaders(h, getStoredAIConfig());
 
             if (overrideHeaders) {
                 for (const [k, v] of Object.entries(overrideHeaders)) {
@@ -110,6 +97,54 @@
             showAlert("Action failed: " + error.message);
             throw error;
         }
+    }
+
+    function getStoredAIConfig() {
+        const raw = localStorage.getItem('sop_ai_config');
+        if (!raw) return {};
+        try {
+            return JSON.parse(raw) || {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function setStoredAIConfig(aiConfig) {
+        localStorage.setItem('sop_ai_config', JSON.stringify(aiConfig || {}));
+    }
+
+    function mergeStoredAIConfig(partialConfig) {
+        const nextConfig = Object.assign({}, getStoredAIConfig(), partialConfig || {});
+        setStoredAIConfig(nextConfig);
+        return nextConfig;
+    }
+
+    function splitProviderValue(value) {
+        const raw = (value || '').trim();
+        if (!raw) return { provider: '', model: '' };
+        const sep = raw.indexOf(':');
+        if (sep === -1) return { provider: raw, model: '' };
+        return {
+            provider: raw.slice(0, sep),
+            model: raw.slice(sep + 1)
+        };
+    }
+
+    function buildProviderValue(provider, model) {
+        return model ? `${provider}:${model}` : (provider || '');
+    }
+
+    function applyAIConfigHeaders(headers, aiConfig) {
+        const cfg = aiConfig || {};
+        if (cfg.brain_provider) headers['X-LLM-Provider'] = cfg.brain_provider;
+        if (cfg.brain_api_key) headers['X-LLM-API-Key'] = cfg.brain_api_key;
+        if (cfg.brain_url) headers['X-LLM-URL'] = cfg.brain_url;
+        if (cfg.brain_model) headers['X-LLM-Model'] = cfg.brain_model;
+        if (cfg.embedder_provider) headers['X-Embedder-Provider'] = cfg.embedder_provider;
+        if (cfg.embedder_api_key) headers['X-Embedder-API-Key'] = cfg.embedder_api_key;
+        if (cfg.embedder_url) headers['X-Embedder-URL'] = cfg.embedder_url;
+        if (cfg.embedder_model) headers['X-Embedder-Model'] = cfg.embedder_model;
+        return headers;
     }
 
     function openUIModal(modalId) {

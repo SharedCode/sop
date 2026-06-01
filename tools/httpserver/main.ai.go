@@ -126,7 +126,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sendEvent := setupStream(w)
+	sendEvent, hasStreamedContent := setupStream(w)
 
 	blueprint, err := resolveContextAndAgent(r.Context(), req, sendEvent)
 	if err != nil {
@@ -159,6 +159,14 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		"full_message_chars", len(fullMessage),
 	)
 
+	// Inject X-LLM-* header values so resolveGenerator can use them
+	if apiKey := r.Header.Get("X-LLM-API-Key"); apiKey != "" {
+		ctx = context.WithValue(ctx, ai.CtxKeyAPIKey, apiKey)
+	}
+	if baseURL := r.Header.Get("X-LLM-URL"); baseURL != "" {
+		ctx = context.WithValue(ctx, ai.CtxKeyBaseURL, baseURL)
+	}
+
 	// Inject streaming writer bypass
 	ctx = context.WithValue(ctx, ai.CtxKeyWriter, &DirectFlushingWriter{w: w})
 
@@ -180,7 +188,12 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		"response_chars", len(response),
 	)
 
-	interpretOutput(response, sendEvent)
+	// When the event stream already sent assistant content, calling interpretOutput
+	// would duplicate the final answer. Only run it for the path where no content
+	// has been flushed yet.
+	if !hasStreamedContent() {
+		interpretOutput(response, sendEvent)
+	}
 }
 
 type aiChatRequest struct {
@@ -225,8 +238,16 @@ func initializeRequest(w http.ResponseWriter, r *http.Request) (*aiChatRequest, 
 	return &req, nil
 }
 
-func setupStream(w http.ResponseWriter) func(string, any) {
-	return func(eventType string, payload any) {
+// setupStream initialises the NDJSON event writer for an AI chat response.
+// It returns:
+//   - sendEvent: the function to call for each event
+//   - hasStreamedContent: returns true once any assistant text was sent via the
+//     event stream (delta or non-streaming). Used by handleAIChat to decide
+//     whether interpretOutput should re-emit the same text.
+func setupStream(w http.ResponseWriter) (func(string, any), func() bool) {
+	var contentStreamed bool
+
+	writeEvent := func(eventType string, payload any) {
 		if eventType == "records" || eventType == "record" || eventType == "preview" {
 			b, _ := json.Marshal(payload)
 			log.Debug("UI: Sending Payload (WIRE)", "type", eventType, "json_preview", string(b))
@@ -249,6 +270,60 @@ func setupStream(w http.ResponseWriter) func(string, any) {
 			f.Flush()
 		}
 	}
+
+	sendEvent := func(eventType string, payload any) {
+		switch eventType {
+		case ai.ReasoningEventAssistantMessage:
+			if message, ok := payload.(map[string]any); ok {
+				if streaming, _ := message["streaming"].(bool); streaming {
+					return
+				}
+				if source, _ := message["source"].(string); strings.EqualFold(strings.TrimSpace(source), "reasoning_summary") {
+					return
+				}
+				if phase, _ := message["phase"].(string); strings.EqualFold(strings.TrimSpace(phase), "commentary") {
+					return
+				}
+				if text, ok := message["text"].(string); ok && strings.TrimSpace(text) != "" {
+					contentStreamed = true
+					writeEvent("content", text)
+					return
+				}
+			}
+		case ai.ReasoningEventToolCall:
+			if toolCall, ok := payload.(map[string]any); ok {
+				if tool, _ := toolCall["tool"].(string); strings.EqualFold(strings.TrimSpace(tool), "execute_script") {
+					return
+				}
+			}
+		case ai.ReasoningEventToolResult:
+			if result, ok := payload.(map[string]any); ok {
+				if tool, _ := result["tool"].(string); tool == "execute_script" {
+					if text, ok := result["result"].(string); ok && strings.TrimSpace(text) != "" {
+						trimmed := strings.TrimSpace(text)
+						var rawRecords []json.RawMessage
+						if json.Unmarshal([]byte(trimmed), &rawRecords) == nil && len(rawRecords) > 0 {
+							for _, rec := range rawRecords {
+								writeEvent("record", rec)
+							}
+							return
+						}
+						var singleRecord map[string]any
+						if json.Unmarshal([]byte(trimmed), &singleRecord) == nil && len(singleRecord) > 0 {
+							writeEvent("record", singleRecord)
+							return
+						}
+						writeEvent("content", text)
+						return
+					}
+				}
+			}
+		}
+
+		writeEvent(eventType, payload)
+	}
+
+	return sendEvent, func() bool { return contentStreamed }
 }
 
 func resolveContextAndAgent(ctx context.Context, req *aiChatRequest, sendEvent func(string, any)) (ai.Agent[map[string]any], error) {
@@ -392,7 +467,7 @@ func constructPayload(ctx context.Context, req *aiChatRequest, sendEvent func(st
 func executeAgentLifecycle(ctx context.Context, agentSvc ai.Agent[map[string]any], req *aiChatRequest, sendEvent func(string, any)) error {
 	if sysOpts, err := getSystemDBOptions(ctx); err == nil {
 		sysDB := aidb.NewDatabase(sysOpts)
-		kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, req.UserID)
+		kbName := memory.BuildLTMStoreName(ai.AgentIDOmni, req.UserID)
 		trans, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 		if trans != nil {
 			dbEmbedder := GetConfiguredEmbedder(nil)
@@ -853,14 +928,20 @@ func injectGlobalConfig(cfg *agent.Config, globalCfg *Config) {
 		return
 	}
 
+	brainProvider, brainModel := normalizeProviderAndModel(globalCfg.BrainProvider, globalCfg.BrainModel)
+	embedderProvider, embedderModel := normalizeProviderAndModel(globalCfg.EmbedderProvider, globalCfg.EmbedderModel)
+	if brainProvider == "openai" {
+		brainProvider = "chatgpt"
+	}
+
 	// 1. Brain Config
-	if globalCfg.BrainProvider != "" {
-		cfg.Generator.Type = globalCfg.BrainProvider
+	if brainProvider != "" {
+		cfg.Generator.Type = brainProvider
 		if cfg.Generator.Options == nil {
 			cfg.Generator.Options = make(map[string]any)
 		}
-		if globalCfg.BrainModel != "" {
-			cfg.Generator.Options["model"] = globalCfg.BrainModel
+		if brainModel != "" {
+			cfg.Generator.Options["model"] = brainModel
 		}
 		if globalCfg.BrainURL != "" {
 			cfg.Generator.Options["base_url"] = globalCfg.BrainURL
@@ -878,13 +959,13 @@ func injectGlobalConfig(cfg *agent.Config, globalCfg *Config) {
 	}
 
 	// 2. Embedder Config
-	if globalCfg.EmbedderProvider != "" {
-		cfg.Embedder.Type = globalCfg.EmbedderProvider
+	if embedderProvider != "" {
+		cfg.Embedder.Type = embedderProvider
 		if cfg.Embedder.Options == nil {
 			cfg.Embedder.Options = make(map[string]any)
 		}
-		if globalCfg.EmbedderModel != "" {
-			cfg.Embedder.Options["model"] = globalCfg.EmbedderModel
+		if embedderModel != "" {
+			cfg.Embedder.Options["model"] = embedderModel
 		}
 		if globalCfg.EmbedderURL != "" {
 			cfg.Embedder.Options["base_url"] = globalCfg.EmbedderURL
@@ -974,7 +1055,7 @@ func handleAIFeedback(w http.ResponseWriter, r *http.Request) {
 	// Ensure rollback if not committed
 	defer trans.Rollback(ctx)
 
-	kbName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, req.UserID)
+	kbName := memory.BuildLTMStoreName(ai.AgentIDOmni, req.UserID)
 	if req.UserID == "" {
 		kbName = "llm_feedback"
 	}

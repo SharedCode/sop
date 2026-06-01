@@ -139,6 +139,86 @@ func TestDeferCommitWithLazyReturn(t *testing.T) {
 	assert.True(t, mockTx.Committed, "Transaction SHOULD be committed after cursor close")
 }
 
+func TestDeferCommitWithImplicitVariableReturn(t *testing.T) {
+	ctx := context.Background()
+
+	mockTx := new(MockTxWithStateDefer)
+	mockTx.On("Commit", mock.Anything).Return(nil)
+
+	engine := NewScriptEngine(NewScriptContext(), func(name string) (Database, error) {
+		return nil, fmt.Errorf("db not supported in this test")
+	})
+	engine.Context.Transactions["tx1"] = mockTx
+
+	lazyCursor := &DummyCursor{Items: []any{"A", "B"}}
+	engine.Context.Variables["my_cursor"] = lazyCursor
+
+	script := []ScriptInstruction{
+		{
+			Op:        "assign",
+			Args:      map[string]any{"value": "{{my_cursor}}"},
+			ResultVar: "filtered_rows",
+		},
+		{
+			Op: "defer",
+			Args: map[string]any{
+				"op":          "commit_tx",
+				"transaction": "tx1",
+			},
+		},
+	}
+
+	compiled, err := CompileScript(script)
+	assert.NoError(t, err)
+
+	err = compiled(ctx, engine)
+	assert.NoError(t, err)
+
+	wrapped, ok := engine.Context.Variables["filtered_rows"].(*DeferredCleanupCursor)
+	assert.True(t, ok, "implicit result variable should receive deferred cleanup wrapper")
+	assert.False(t, mockTx.Committed, "transaction should not commit before implicit cursor is drained")
+
+	_, _, _ = wrapped.Next(ctx)
+	_, _, _ = wrapped.Next(ctx)
+	_, ok, _ = wrapped.Next(ctx)
+	assert.False(t, ok)
+
+	err = wrapped.Close()
+	assert.NoError(t, err)
+	assert.True(t, mockTx.Committed, "transaction should commit after implicit cursor close")
+}
+
+func TestDeferredCommitErrorPropagatesWithoutCursor(t *testing.T) {
+	ctx := context.Background()
+
+	mockTx := new(MockTxWithStateDefer)
+	mockTx.On("Commit", mock.Anything).Return(fmt.Errorf("redis unavailable"))
+
+	engine := NewScriptEngine(NewScriptContext(), func(name string) (Database, error) {
+		return nil, fmt.Errorf("db not supported in this test")
+	})
+	engine.Context.Transactions["tx1"] = mockTx
+
+	script := []ScriptInstruction{
+		{
+			Op: "defer",
+			Args: map[string]any{
+				"op":          "commit_tx",
+				"transaction": "tx1",
+			},
+		},
+	}
+
+	compiled, err := CompileScript(script)
+	assert.NoError(t, err)
+
+	err = compiled(ctx, engine)
+	assert.Error(t, err)
+	assert.ErrorContains(t, err, "deferred operation failed")
+	assert.ErrorContains(t, err, "redis unavailable")
+	assert.True(t, mockTx.Committed, "deferred commit should still have been attempted")
+}
+
 // DummyCursor for testing
 type DummyCursor struct {
 	Items []any

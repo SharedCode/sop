@@ -22,9 +22,6 @@ func init() {
 		apiKey, _ := cfg["api_key"].(string)
 		if apiKey == "" {
 			apiKey = os.Getenv("ANTHROPIC_API_KEY")
-			if apiKey == "" {
-				apiKey = os.Getenv("LLM_API_KEY")
-			}
 		}
 		model, _ := cfg["model"].(string)
 		if model == "" {
@@ -38,6 +35,15 @@ func init() {
 }
 
 func (g *anthropic) Name() string { return "anthropic" }
+
+func (g *anthropic) CarryoverCapability() ai.CarryoverCapability {
+	return ai.CarryoverCapability{
+		Provider:        g.Name(),
+		Model:           g.model,
+		SupportsCompact: true,
+		SupportsLive:    false,
+	}
+}
 
 type anthropicMessage struct {
 	Role    string `json:"role"`
@@ -79,7 +85,7 @@ func (g *anthropic) Generate(ctx context.Context, prompt string, opts ai.GenOpti
 
 	maxTokens := opts.MaxTokens
 	if maxTokens <= 0 {
-		maxTokens = 4096 // Anthropic requires max_tokens
+		maxTokens = 10000 // Anthropic requires max_tokens; default to the repo-wide high ceiling.
 	}
 
 	reqBody := anthropicRequest{

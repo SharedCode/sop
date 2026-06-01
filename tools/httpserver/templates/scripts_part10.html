@@ -1,11 +1,443 @@
 {{define "scripts_part10"}}
 <script>
+    const setupWizardAIConfigDefaults = {{.SetupWizardAIConfigJSON}};
+
     function toggleEnterpriseBrain() {
         // Legacy function, kept for safety if referenced elsewhere, but effectively superseded by toggleManualEnterpriseBrain
     }
 
+    function setupProviderLabel(provider) {
+        switch ((provider || '').toLowerCase()) {
+            case 'openai':
+                return 'OpenAI';
+            case 'anthropic':
+                return 'Anthropic';
+            case 'gemini':
+                return 'Gemini';
+            case 'ollama':
+                return 'Ollama';
+            default:
+                return provider || 'Provider';
+        }
+    }
+
+    function describeProviderSelection(provider, model, fallbackLabel) {
+        if (!provider) {
+            return fallbackLabel;
+        }
+
+        const providerLabel = setupProviderLabel(provider);
+        if (!model) {
+            return providerLabel;
+        }
+
+        return `${providerLabel} (${model})`;
+    }
+
+    function capitalizeSummaryLabel(value) {
+        if (!value) {
+            return value;
+        }
+        return value.charAt(0).toUpperCase() + value.slice(1);
+    }
+
+    function describeAISummarySelection(aiConfig) {
+        const cfg = aiConfig || {};
+        const llm = capitalizeSummaryLabel(cfg.brain_model || cfg.brain_provider || 'Auto');
+        const embedder = capitalizeSummaryLabel(cfg.embedder_model || cfg.embedder_provider || 'Default');
+        const embedderNeedsSuffix = !/(embed|embedding)/i.test(embedder);
+        return `${llm} * ${embedder}${embedderNeedsSuffix ? ' emb' : ''}`;
+    }
+
+    function getSelectedProviderOptionSource(selectId) {
+        const select = document.getElementById(selectId);
+        if (!select || select.selectedIndex < 0) return 'catalog';
+        const option = select.options[select.selectedIndex];
+        return option?.dataset?.injected === 'env' ? 'env' : 'catalog';
+    }
+
+    function isLocalProviderValue(value) {
+        return (value || '').startsWith('ollama') || (value || '').startsWith('local');
+    }
+
+    function selectProviderOption(select, value, source) {
+        if (!select) return;
+
+        const preferEnv = source === 'env';
+        const options = Array.from(select.options);
+        const matchingOption = options.find(option => {
+            if (option.value !== value) return false;
+            const isEnv = option.dataset.injected === 'env';
+            return preferEnv ? isEnv : !isEnv;
+        }) || options.find(option => option.value === value);
+
+        if (matchingOption) {
+            options.forEach(option => {
+                option.selected = option === matchingOption;
+            });
+        }
+    }
+
+    function ensureEnvironmentOptgroup(select) {
+        if (!select) return null;
+
+        let envGroup = Array.from(select.children).find(child => {
+            return child.tagName === 'OPTGROUP' && child.dataset.injectedGroup === 'env';
+        });
+        if (envGroup) {
+            return envGroup;
+        }
+
+        envGroup = document.createElement('optgroup');
+        envGroup.label = 'Environment';
+        envGroup.dataset.injectedGroup = 'env';
+
+        const insertBeforeNode = Array.from(select.children).find((child, index) => {
+            return index > 0;
+        }) || null;
+
+        if (insertBeforeNode) {
+            select.insertBefore(envGroup, insertBeforeNode);
+        } else {
+            select.appendChild(envGroup);
+        }
+
+        return envGroup;
+    }
+
+    function ensureSetupProviderOption(selectId, provider, model, source = 'catalog', shouldSelect = true) {
+        const select = document.getElementById(selectId);
+        if (!select || !provider) return;
+
+        const value = model ? `${provider}:${model}` : provider;
+        const options = Array.from(select.options);
+        const existingCatalog = options.find(option => option.value === value && option.dataset.injected !== 'env');
+        let existingEnv = options.find(option => option.value === value && option.dataset.injected === 'env');
+
+        if (!existingCatalog && source !== 'env') {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = model ? `${setupProviderLabel(provider)} (${model})` : `${setupProviderLabel(provider)}`;
+            select.appendChild(option);
+        }
+
+        if (!existingEnv) {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = model ? `${setupProviderLabel(provider)} (${model}) (Env)` : `${setupProviderLabel(provider)} (Env)`;
+            option.dataset.injected = 'env';
+
+            const envGroup = ensureEnvironmentOptgroup(select);
+            envGroup.appendChild(option);
+            existingEnv = option;
+        }
+
+        if (shouldSelect) {
+            selectProviderOption(select, value, source);
+        }
+    }
+
+    function getEnvProviderOptions() {
+        const cfg = setupWizardAIConfigDefaults || {};
+        if (Array.isArray(cfg.env_providers) && cfg.env_providers.length) {
+            return cfg.env_providers;
+        }
+        if (cfg.brain_provider) {
+            return [{
+                provider: cfg.brain_provider,
+                model: cfg.brain_model,
+                url: cfg.brain_url,
+                api_key: cfg.brain_api_key
+            }];
+        }
+        return [];
+    }
+
+    function findEnvProviderOption(provider, model) {
+        const exactMatch = getEnvProviderOptions().find(option => {
+            if (!option || option.provider !== provider) {
+                return false;
+            }
+            return (option.model || '') === (model || '');
+        });
+        if (exactMatch) {
+            return exactMatch;
+        }
+
+        const providerMatches = getEnvProviderOptions().filter(option => {
+            return option && option.provider === provider;
+        });
+        if (providerMatches.length === 1) {
+            return providerMatches[0];
+        }
+        return providerMatches.find(option => !option.model) || null;
+    }
+
+    function getCatalogProviderSelection(selectId, provider) {
+        const select = document.getElementById(selectId);
+        if (!select || !provider) return null;
+
+        const matchingOption = Array.from(select.options).find(option => {
+            if (option.dataset.injected === 'env') {
+                return false;
+            }
+            const parts = splitProviderValue(option.value || '');
+            return parts.provider === provider;
+        });
+        if (!matchingOption) {
+            return null;
+        }
+
+        const parts = splitProviderValue(matchingOption.value || '');
+        if (!parts.provider) {
+            return null;
+        }
+
+        return parts;
+    }
+
+    function selectedProviderUsesURL(selectId) {
+        const select = document.getElementById(selectId);
+        if (!select) return false;
+
+        const value = select.value || '';
+        if (!value) {
+            return false;
+        }
+        if (isLocalProviderValue(value)) {
+            return true;
+        }
+        if (getSelectedProviderOptionSource(selectId) !== 'env') {
+            return false;
+        }
+
+        const parts = splitProviderValue(value);
+        const envOption = findEnvProviderOption(parts.provider, parts.model);
+        return !!(envOption && envOption.url);
+    }
+
+    function shouldOverwriteWithEnvValue(currentValue, fieldName) {
+        if (!currentValue) {
+            return true;
+        }
+
+        return getEnvProviderOptions().some(option => {
+            return (option?.[fieldName] || '') === currentValue;
+        });
+    }
+
+    function applyEnvSelectionDefaults(selectId, apiKeyInputId, urlInputId) {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+
+        const source = getSelectedProviderOptionSource(selectId);
+        if (source !== 'env') return;
+
+        const parts = splitProviderValue(select.value || '');
+        const envOption = findEnvProviderOption(parts.provider, parts.model);
+        if (!envOption) return;
+
+        const apiKeyInput = document.getElementById(apiKeyInputId);
+        const urlInput = document.getElementById(urlInputId);
+
+        if (apiKeyInput && shouldOverwriteWithEnvValue(apiKeyInput.value.trim(), 'api_key')) {
+            apiKeyInput.value = envOption.api_key || '';
+        }
+        if (urlInput && shouldOverwriteWithEnvValue(urlInput.value.trim(), 'url')) {
+            urlInput.value = envOption.url || '';
+        }
+    }
+
+    function handleSetupBrainProviderChange() {
+        applyEnvSelectionDefaults('setup-brain-provider', 'setup-brain-api-key', 'setup-brain-url');
+        toggleProviderAuth();
+    }
+
+    function handleChatSettingsProviderChange() {
+        applyEnvSelectionDefaults('chat-settings-provider-overlay', 'chat-settings-overlay-api-key', 'chat-settings-url');
+        toggleChatSettingsFields();
+        if (typeof persistChatSettingsDraft === 'function') {
+            const nextConfig = persistChatSettingsDraft();
+            syncSetupWizardControlsFromAIConfig(nextConfig);
+        }
+    }
+
+    function handleSetupEmbedderProviderChange() {
+        applyEnvSelectionDefaults('setup-embedder-provider', 'setup-embedder-api-key', 'setup-embedder-url');
+        toggleProviderAuth();
+    }
+
+    function handleChatSettingsEmbedderProviderChange() {
+        applyEnvSelectionDefaults('chat-settings-embedder-overlay', 'chat-settings-embedder-api-key', 'chat-settings-embedder-url');
+        toggleChatSettingsFields();
+        if (typeof persistChatSettingsDraft === 'function') {
+            const nextConfig = persistChatSettingsDraft();
+            syncSetupWizardControlsFromAIConfig(nextConfig);
+        }
+    }
+
+    function injectEnvBackedAIOptions(envConfig) {
+        const cfg = envConfig || {};
+        const providers = Array.isArray(cfg.env_providers) && cfg.env_providers.length
+            ? cfg.env_providers
+            : (cfg.brain_provider ? [{ provider: cfg.brain_provider, model: cfg.brain_model, url: cfg.brain_url, api_key: cfg.brain_api_key }] : []);
+
+        providers.forEach(option => {
+            if (!option || !option.provider) {
+                return;
+            }
+
+            ensureSetupProviderOption('setup-brain-provider', option.provider, option.model, 'env', false);
+            ensureSetupProviderOption('chat-settings-provider-overlay', option.provider, option.model, 'env', false);
+
+            const embedderSelection = getCatalogProviderSelection('setup-embedder-provider', option.provider);
+            if (embedderSelection) {
+                ensureSetupProviderOption('setup-embedder-provider', embedderSelection.provider, embedderSelection.model, 'env', false);
+                ensureSetupProviderOption('chat-settings-embedder-overlay', embedderSelection.provider, embedderSelection.model, 'env', false);
+            }
+        });
+
+        if (cfg.brain_provider) {
+            ensureSetupProviderOption('setup-brain-provider', cfg.brain_provider, cfg.brain_model, 'env');
+            ensureSetupProviderOption('chat-settings-provider-overlay', cfg.brain_provider, cfg.brain_model, 'env');
+        }
+
+        if (cfg.embedder_provider) {
+            ensureSetupProviderOption('setup-embedder-provider', cfg.embedder_provider, cfg.embedder_model, 'env');
+            ensureSetupProviderOption('chat-settings-embedder-overlay', cfg.embedder_provider, cfg.embedder_model, 'env');
+        }
+    }
+
+    function syncChatControlsFromAIConfig(aiConfig) {
+        const cfg = aiConfig || {};
+        const summaryCombined = document.getElementById('chat-ai-summary-combined');
+
+        if (summaryCombined) {
+            summaryCombined.textContent = describeAISummarySelection(cfg);
+        }
+
+        if (!cfg.brain_provider) {
+            if (!cfg.embedder_provider) {
+                return;
+            }
+        }
+
+        const source = cfg.brain_source || 'catalog';
+        const embedderSource = cfg.embedder_source || 'catalog';
+
+        ensureSetupProviderOption('chat-settings-provider-overlay', cfg.brain_provider, cfg.brain_model, source);
+        ensureSetupProviderOption('chat-settings-embedder-overlay', cfg.embedder_provider, cfg.embedder_model, embedderSource);
+
+        const overlayURL = document.getElementById('chat-settings-url');
+        const overlayAPIKey = document.getElementById('chat-settings-overlay-api-key');
+        const overlayEmbedder = document.getElementById('chat-settings-embedder-overlay');
+        const overlayEmbedderURL = document.getElementById('chat-settings-embedder-url');
+        const overlayEmbedderAPIKey = document.getElementById('chat-settings-embedder-api-key');
+        if (overlayURL) {
+            overlayURL.value = cfg.brain_url || '';
+        }
+        if (overlayAPIKey) {
+            overlayAPIKey.value = cfg.brain_api_key || '';
+        }
+        if (document.getElementById('chat-settings-provider-overlay')) {
+            selectProviderOption(document.getElementById('chat-settings-provider-overlay'), buildProviderValue(cfg.brain_provider, cfg.brain_model), source);
+        }
+        if (overlayEmbedder) {
+            selectProviderOption(overlayEmbedder, buildProviderValue(cfg.embedder_provider, cfg.embedder_model), embedderSource);
+        }
+        if (overlayEmbedderURL) {
+            overlayEmbedderURL.value = cfg.embedder_url || '';
+        }
+        if (overlayEmbedderAPIKey) {
+            overlayEmbedderAPIKey.value = cfg.embedder_api_key || '';
+        }
+
+        toggleChatSettingsFields();
+    }
+
+    function syncSetupWizardControlsFromAIConfig(aiConfig) {
+        const cfg = aiConfig || {};
+        if (!cfg.brain_provider && !cfg.embedder_provider) {
+            return;
+        }
+
+        ensureSetupProviderOption('setup-brain-provider', cfg.brain_provider, cfg.brain_model, cfg.brain_source || 'catalog');
+        ensureSetupProviderOption('setup-embedder-provider', cfg.embedder_provider, cfg.embedder_model, cfg.embedder_source || 'catalog');
+
+        const brainAPIKeyInput = document.getElementById('setup-brain-api-key');
+        const brainURLInput = document.getElementById('setup-brain-url');
+        const embedderAPIKeyInput = document.getElementById('setup-embedder-api-key');
+        const embedderURLInput = document.getElementById('setup-embedder-url');
+
+        if (brainAPIKeyInput) {
+            brainAPIKeyInput.value = cfg.brain_api_key || '';
+        }
+        if (brainURLInput) {
+            brainURLInput.value = cfg.brain_url || '';
+        }
+        if (embedderAPIKeyInput) {
+            embedderAPIKeyInput.value = cfg.embedder_api_key || '';
+        }
+        if (embedderURLInput) {
+            embedderURLInput.value = cfg.embedder_url || '';
+        }
+
+        toggleProviderAuth();
+    }
+
+    function initializeChatAIConfig() {
+        syncChatControlsFromAIConfig(getStoredAIConfig());
+    }
+
+    function getStoredAIConfigValue(storedConfig, key, fallbackValue) {
+        if (Object.prototype.hasOwnProperty.call(storedConfig || {}, key)) {
+            return storedConfig[key] || '';
+        }
+        return fallbackValue;
+    }
+
+    function mergeSetupAIConfig(storedConfig, envConfig) {
+        const brainSource = storedConfig.brain_source || (envConfig.brain_provider ? 'env' : 'catalog');
+        const embedderSource = storedConfig.embedder_source || (envConfig.embedder_provider ? 'env' : 'catalog');
+
+        return {
+            brain_provider: storedConfig.brain_provider || envConfig.brain_provider || '',
+            brain_model: storedConfig.brain_model || envConfig.brain_model || '',
+            brain_source: brainSource,
+            brain_url: getStoredAIConfigValue(storedConfig, 'brain_url', brainSource === 'env' ? (envConfig.brain_url || '') : ''),
+            brain_api_key: getStoredAIConfigValue(storedConfig, 'brain_api_key', brainSource === 'env' ? (envConfig.brain_api_key || '') : ''),
+            embedder_provider: storedConfig.embedder_provider || envConfig.embedder_provider || '',
+            embedder_model: storedConfig.embedder_model || envConfig.embedder_model || '',
+            embedder_source: embedderSource,
+            embedder_url: getStoredAIConfigValue(storedConfig, 'embedder_url', embedderSource === 'env' ? (envConfig.embedder_url || '') : ''),
+            embedder_api_key: getStoredAIConfigValue(storedConfig, 'embedder_api_key', embedderSource === 'env' ? (envConfig.embedder_api_key || '') : '')
+        };
+    }
+
+    function initializeSetupWizardAIConfig() {
+        const envConfig = setupWizardAIConfigDefaults || {};
+        const hasEnvDefaults = Object.values(envConfig).some(value => !!value);
+
+        injectEnvBackedAIOptions(envConfig);
+
+        let storedConfig = {};
+        storedConfig = getStoredAIConfig();
+
+        const mergedConfig = mergeSetupAIConfig(storedConfig, envConfig);
+        const hasMergedConfig = Object.values(mergedConfig).some(value => !!value);
+        if (!hasEnvDefaults && !hasMergedConfig) {
+            return;
+        }
+
+        setStoredAIConfig(mergedConfig);
+        syncSetupWizardControlsFromAIConfig(mergedConfig);
+        initializeChatAIConfig();
+    }
+
     // Auto-update DB Path based on Name
     document.addEventListener('DOMContentLoaded', () => {
+        initializeSetupWizardAIConfig();
+        initializeChatAIConfig();
 
         const setupDbNameInput = document.getElementById('setup-db-name');
         const setupDbPathInput = document.getElementById('setup-db-path');
@@ -399,13 +831,17 @@
 
         // 2. Determine System DB Settings (Simple vs Advanced)
         const port = parseInt(document.getElementById('setup-port').value);
-        const bProvider = document.getElementById('setup-brain-provider') ? document.getElementById('setup-brain-provider').value : "";
-        const bModel = document.getElementById('setup-brain-model') ? document.getElementById('setup-brain-model').value.trim() : "";
+        const bProviderValue = document.getElementById('setup-brain-provider') ? document.getElementById('setup-brain-provider').value : "";
+        const bParts = splitProviderValue(bProviderValue);
+        const bProvider = bParts.provider;
+        const bModel = bParts.model || (document.getElementById('setup-brain-model') ? document.getElementById('setup-brain-model').value.trim() : "");
         const bUrl = document.getElementById('setup-brain-url') ? document.getElementById('setup-brain-url').value.trim() : "";
         const bApiKey = document.getElementById('setup-brain-api-key') ? document.getElementById('setup-brain-api-key').value.trim() : "";
 
-        const eProvider = document.getElementById('setup-embedder-provider') ? document.getElementById('setup-embedder-provider').value : "";
-        const eModel = document.getElementById('setup-embedder-model') ? document.getElementById('setup-embedder-model').value.trim() : "";
+        const eProviderValue = document.getElementById('setup-embedder-provider') ? document.getElementById('setup-embedder-provider').value : "";
+        const eParts = splitProviderValue(eProviderValue);
+        const eProvider = eParts.provider;
+        const eModel = eParts.model || (document.getElementById('setup-embedder-model') ? document.getElementById('setup-embedder-model').value.trim() : "");
         const eUrl = document.getElementById('setup-embedder-url') ? document.getElementById('setup-embedder-url').value.trim() : "";
         const eApiKey = document.getElementById('setup-embedder-api-key') ? document.getElementById('setup-embedder-api-key').value.trim() : "";
         const sysAdvToggle = document.getElementById('setup-sys-advanced-toggle');

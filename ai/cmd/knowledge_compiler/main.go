@@ -240,6 +240,25 @@ func getCat(catPath string) *memory.Category {
 	return c
 }
 
+func buildExportItems(chunks []KnowledgeChunk) []memory.ExportItem[map[string]any] {
+	exportItems := make([]memory.ExportItem[map[string]any], 0, len(chunks))
+	for _, chunk := range chunks {
+		cat := getCat(chunk.Category)
+		exportItems = append(exportItems, memory.ExportItem[map[string]any]{
+			CategoryPath: cat.ID.String(),
+			DocID:        chunk.DocumentID.String(),
+			Data: map[string]any{
+				"category":      cat.Name,
+				"category_path": cat.Path,
+				"description":   chunk.Description,
+				"original_id":   chunk.ID,
+			},
+			Summaries: []string{chunk.Text},
+		})
+	}
+	return exportItems
+}
+
 func parseUnlinkedFiles(repoRoot string) {
 	filepath.WalkDir(repoRoot, func(file string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -451,19 +470,7 @@ func main() {
 		}
 	}
 
-	var exportItems []memory.ExportItem[map[string]any]
-	for _, chunk := range allChunks {
-		cat := getCat(chunk.Category)
-		exportItems = append(exportItems, memory.ExportItem[map[string]any]{
-			CategoryPath: cat.ID.String(),
-			DocID:        chunk.DocumentID.String(),
-			Data: map[string]any{
-				"description": chunk.Description,
-				"original_id": chunk.ID,
-			},
-			Summaries: []string{chunk.Text},
-		})
-	}
+	exportItems := buildExportItems(allChunks)
 
 	var categories []*memory.Category
 	for _, c := range catGraphMap {
@@ -498,4 +505,3 @@ func main() {
 
 	fmt.Printf("Success! Compiled %d knowledge items and %d categories into %s\n", len(exportItems), len(categories), outputPath)
 }
-

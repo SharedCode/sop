@@ -77,3 +77,62 @@ func TestSystemTools_OmniAndAvatar_Injections(t *testing.T) {
 		t.Fatalf("Avatar Prompt failed to include System Tools from MRU/getSystemToolsContext")
 	}
 }
+
+func TestInjectToolsForDomain_StoresUsesCompactProtocolSlice(t *testing.T) {
+	ctx := context.Background()
+	sysDBOptions := sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}}
+	sysDB := database.NewDatabase(sysDBOptions)
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}}}
+
+	ag.injectToolsForDomain(ctx, &TaskContextClassification{Domain: StoresDomain})
+	tools := ag.getSystemToolsContext(ctx)
+
+	if !strings.Contains(tools, "Structured Context: Stores Tools") {
+		t.Fatalf("expected Stores tools context to be injected, got: %s", tools)
+	}
+	if strings.Contains(tools, "<h2> Example</h2>") || strings.Contains(tools, "Execution Flow Engine Guardrails") {
+		t.Fatalf("expected injected Stores tools context to omit the large example block, got: %s", tools)
+	}
+	if !strings.Contains(tools, "Never guess store names") || !strings.Contains(tools, "Think through the read/join/filter plan") {
+		t.Fatalf("expected injected Stores tools context to retain the simplified protocol guidance, got: %s", tools)
+	}
+	if !strings.Contains(tools, "SOP store queries are not SQL") || !strings.Contains(tools, "produce SOP-native JSON tool/script operations") {
+		t.Fatalf("expected injected Stores tools context to explicitly reject SQL output, got: %s", tools)
+	}
+	if !strings.Contains(tools, "place those steps inside execute_script.script") || !strings.Contains(tools, "call execute_script to submit the plan to the executor") {
+		t.Fatalf("expected injected Stores tools context to place generated steps inside execute_script, got: %s", tools)
+	}
+	if !strings.Contains(tools, "retry once") || !strings.Contains(tools, "short clarification question") {
+		t.Fatalf("expected injected Stores tools context to include retry and clarification guidance, got: %s", tools)
+	}
+}
+
+func TestInjectToolsForDomain_SpacesUsesDescriptionContext(t *testing.T) {
+	ctx := context.Background()
+	sysDBOptions := sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}}
+	sysDB := database.NewDatabase(sysDBOptions)
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}}}
+
+	ag.injectToolsForDomain(ctx, &TaskContextClassification{Domain: SpacesDomain})
+	tools := ag.getSystemToolsContext(ctx)
+
+	if !strings.Contains(tools, "Structured Context: Spaces Tools") {
+		t.Fatalf("expected Spaces tools context to be injected, got: %s", tools)
+	}
+	if !strings.Contains(tools, "- mint_to_space:") || !strings.Contains(tools, "- update_space_config:") {
+		t.Fatalf("expected injected Spaces tools context to be generated from tool descriptions, got: %s", tools)
+	}
+	if !strings.Contains(tools, "manages its own write transaction") || !strings.Contains(tools, "explicitly asks for vectorization or semantic refresh") {
+		t.Fatalf("expected injected Spaces tools context to retain behavioral guidance from tool descriptions, got: %s", tools)
+	}
+	if !strings.Contains(tools, "business-critical") || !strings.Contains(tools, "defines the durability boundary") {
+		t.Fatalf("expected injected Spaces tools context to explain why transaction boundaries matter for persisted knowledge changes, got: %s", tools)
+	}
+	if strings.Contains(tools, "# Spaces Manual") || strings.Contains(tools, "<h2> Core Conventions</h2>") {
+		t.Fatalf("expected injected Spaces tools context to avoid the old manual blob, got: %s", tools)
+	}
+}

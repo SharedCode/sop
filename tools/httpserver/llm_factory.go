@@ -2,11 +2,92 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/generator"
 )
+
+type llmSettings struct {
+	Provider string
+	APIKey   string
+	URL      string
+	Model    string
+}
+
+func resolveLLMSettings(r *http.Request) llmSettings {
+	settings := llmSettings{
+		Provider: config.BrainProvider,
+		APIKey:   config.BrainAPIKey,
+		URL:      config.BrainURL,
+		Model:    config.BrainModel,
+	}
+
+	if r != nil {
+		if h := r.Header.Get("X-LLM-Provider"); h != "" {
+			settings.Provider = h
+		}
+		if h := r.Header.Get("X-LLM-API-Key"); h != "" {
+			settings.APIKey = h
+		}
+		if h := r.Header.Get("X-LLM-URL"); h != "" {
+			settings.URL = h
+		}
+		if h := r.Header.Get("X-LLM-Model"); h != "" {
+			settings.Model = h
+		}
+	}
+
+	if settings.Provider == "" {
+		settings.Provider = "gemini"
+	}
+
+	return settings
+}
+
+func newConfiguredLLM(settings llmSettings) (ai.Generator, error) {
+	provider := settings.Provider
+	options := make(map[string]any)
+
+	switch provider {
+	case "gemini":
+		options["api_key"] = settings.APIKey
+		if settings.APIKey == "" {
+			options["api_key"] = config.LLMApiKey
+		}
+		options["model"] = settings.Model
+		if settings.URL != "" {
+			options["api_url"] = settings.URL
+		}
+	case "ollama":
+		options["base_url"] = settings.URL
+		if settings.URL == "" {
+			options["base_url"] = config.BrainURL
+		}
+		options["model"] = settings.Model
+	case "chatgpt", "openai":
+		provider = "chatgpt"
+		options["api_key"] = settings.APIKey
+		if settings.APIKey == "" {
+			options["api_key"] = config.LLMApiKey
+		}
+		options["model"] = settings.Model
+		if settings.URL != "" {
+			options["api_url"] = settings.URL
+		}
+	case "anthropic":
+		options["api_key"] = settings.APIKey
+		if settings.APIKey == "" {
+			options["api_key"] = config.LLMApiKey
+		}
+		options["model"] = settings.Model
+	default:
+		return nil, fmt.Errorf("unsupported provider %q", provider)
+	}
+
+	return generator.New(provider, options)
+}
 
 // GetConfiguredLLM returns an AI Generator based on the server configuration.
 func GetConfiguredLLM(r *http.Request) ai.Generator {
@@ -15,61 +96,7 @@ func GetConfiguredLLM(r *http.Request) ai.Generator {
 		return mockGen
 	}
 
-	provider := config.BrainProvider
-	apiKey := config.BrainAPIKey
-	url := config.BrainURL
-	model := config.BrainModel
-
-	if r != nil {
-		if h := r.Header.Get("X-LLM-Provider"); h != "" {
-			provider = h
-		}
-		if h := r.Header.Get("X-LLM-API-Key"); h != "" {
-			apiKey = h
-		}
-		if h := r.Header.Get("X-LLM-URL"); h != "" {
-			url = h
-		}
-		if h := r.Header.Get("X-LLM-Model"); h != "" {
-			model = h
-		}
-	}
-
-	if provider == "" {
-		provider = "gemini"
-	}
-
-	options := make(map[string]any)
-	switch provider {
-	case "gemini":
-		options["apiKey"] = apiKey
-		if options["apiKey"] == "" {
-			options["apiKey"] = config.LLMApiKey
-		}
-		options["model"] = model
-	case "ollama":
-		options["baseURL"] = url
-		if options["baseURL"] == "" {
-			options["baseURL"] = config.BrainURL
-		}
-		options["model"] = model
-	case "chatgpt", "openai":
-		provider = "chatgpt"
-		options["api_key"] = apiKey
-		if options["api_key"] == "" {
-			options["api_key"] = config.LLMApiKey
-		}
-		options["model"] = model
-	case "anthropic":
-		provider = "anthropic"
-		options["api_key"] = apiKey
-		if options["api_key"] == "" {
-			options["api_key"] = config.LLMApiKey
-		}
-		options["model"] = model
-	}
-
-	gen, err := generator.New(provider, options)
+	gen, err := newConfiguredLLM(resolveLLMSettings(r))
 	if err != nil {
 		mockGen, _ := generator.New("perceptron", nil)
 		return mockGen
