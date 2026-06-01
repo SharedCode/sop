@@ -44,6 +44,208 @@ We purposely designed a **Retrieval-Augmented Generation (RAG)** pipeline to add
 3.  **Policy Enforcement**: By decoupling the reasoning (LLM) from the execution (Local Tools), we can enforce strict policies on what the agent can and cannot do, removing the risks associated with giving an AI direct access to corporate data.
 4.  **ReAct Loop**: The LLM reasons about which tool to use, but the Go backend intercepts these calls, validates them, and executes them safely using ACID transactions.
 
+### Progressive ReAct Loop
+
+The ReAct loop in SOP is progressive by design, not a blind repeat-until-success loop.
+
+*   **Clarification First When Needed**: Before routing and execution, Gate 0 can now keep the interaction in a clarification-first mode. If the assistant asks a focused clarification question, the next user reply is rewritten back onto the original target ask and the normal execution path resumes.
+*   **Macro Then Micro**: Routing gates prepare the Ask frame first. The inner native ReAct loop then executes inside that frame without re-running the gates on every retry.
+*   **Ask-Anchored Working State**: After each inner tool step, the engine or provider-owned loop compacts the current grounded state into an Ask-local MRU summary. The next LLM call sees current focus, preserved valid work, confirmed facts, missing pieces, and suggested next tools.
+*   **Structured Tool Guidance**: Tools can return both a user-visible payload and an internal `progress_hint`. That hint can say what improved, what is still missing, and which tool should come next.
+*   **Concrete Retry Visibility**: The retry prompt now includes the actual generated tool arguments together with failure details and the most recent successful context, so the model can refine the next step from the improving script rather than regenerate the whole plan.
+*   **Bounded Repair, Not Infinite Retry**: The loop starts with a small retry budget and only extends it when new grounded facts, a proven recovery pattern, or positive progress hints show real convergence.
+*   **Recipe Learning Inside the Loop**: When a repair pattern succeeds, the engine learns an implicit recipe from that success. That recipe is not just stored for later asks; it also counts as live progress in the current Ask.
+*   **Hard Stop Semantics**: Tools can explicitly signal terminal outcomes such as blocked, anti-success, or hard error. In those cases, the loop stops immediately instead of wasting retries.
+
+In practical terms, this means a user can supplement or redirect a failed or incomplete Ask on the next turn without restating the whole task. Gate 0 carries the target ask forward, and the resumed Ask can continue into grounded research or tool execution once the model emits a native tool call.
+
+In practical terms, this means SOP's ReAct loop can see the returned agent context, the script it already tried, the exact failure, the grounded facts it has accumulated, and the missing pieces that still need research. That is what allows the LLM to preserve what is already correct and refine only the next delta.
+
+### Two First-Class Store Control Surfaces
+
+As query reliability work has progressed, one design direction has become explicit: SOP must treat both of its store-control surfaces as first-class rather than assuming one universal tool shape fits every provider and model.
+
+*   **Rich-plan surface: `execute_script`**. This remains the high-bandwidth option when the model can fluently emit one coherent multi-step workflow. It is still the best user experience for strong models because it compresses a complete plan into one tool call.
+*   **Block-assembly surface: piped native lego blocks**. This is the lower-level control surface built from the same atomic operations that the engine already uses internally. Typical steps include `begin_tx`, `open_store`, `scan`, `filter`, `join_right`, `project`, `limit`, `commit_tx`, and `rollback_tx`.
+
+These are not two different engines. `execute_script` is an orchestration envelope over the same underlying execution substrate. The lego blocks are the execution substrate made directly visible to the model.
+
+This policy currently applies to **Stores workflows**. Spaces remain a separate domain centered on knowledge ingestion, enrichment, semantic retrieval, and user-managed memory operations through domain-native tools rather than store-style join/filter orchestration.
+
+Why this matters:
+
+*   Some models are fluent at emitting a complete script AST in one shot.
+*   Some models are much more reliable when they can assemble the same workflow one grounded step at a time.
+*   SOP therefore needs both surfaces well-oiled so the product stays reliable across providers and model quality levels.
+
+Shared policy direction:
+
+1.  Try `execute_script` first when the request looks like one coherent workflow.
+2.  If the failure is recoverable through missing user facts or grounding, enter clarification/meta-talk, gather the missing detail, and retry `execute_script` with a richer grounded plan.
+3.  If the workflow remains structurally unstable, the system should be able to continue in lego-block mode, where the model assembles smaller piped steps over the same transaction/result context.
+
+For Spaces, the design direction is different: keep the domain-specific Space verbs first-class and evolve Stores-to-Spaces interoperability as a separate cross-domain orchestration seam rather than forcing Spaces into the same lego-block story prematurely.
+
+This escalation policy is intentionally provider-neutral. Gemini, ChatGPT, Anthropic, and the generic engine path may transport turns differently, but the orchestration rule should stay the same.
+
+### Current Provider Reality
+
+The Ask/ReAct system now has an explicit provider-owned loop seam. The generic engine still exists, but providers that can genuinely carry their own volatile thread state can now own the inner loop directly instead of being forced through one shared retry controller.
+
+*   **Gemini**: Now owns a native provider loop in `ai/generator/gemini.go`. The engine delegates to `ReActLoop()` when Gemini is selected. Gemini receives tool schemas, returns parsed native tool calls, accumulates full tool-call continuations across turns, and continues from provider-native function call/function response state instead of replaying a synthetic retry frame on each pass.
+*   **Shared Ask Outcome Summaries**: MRU-facing `OutcomeFacts` and `OutcomeRecipes` now come from the shared helper in `ai/outcome_summary.go`. That keeps MRU continuity behavior aligned between the default engine path and provider-owned Gemini runs.
+*   **OpenAI ChatGPT**: Now owns the default native provider loop in `ai/generator/chatgpt.go`. The engine delegates through the OpenAI Responses API, preserves `previous_response_id` when available, replays assistant/reasoning/tool items when provider response IDs are missing, executes native `function_call` items locally, and can stream assistant/tool/reasoning events through the shared request streamer. The old scaffold flag is now only an explicit opt-out if someone needs to force the generic path while debugging.
+*   **Anthropic**: Also still currently follows the generic path in this codebase. It does not yet own a provider-native loop here.
+
+Provider-neutral rule:
+
+*   provider code should handle transport, continuation shape, and response parsing
+*   shared Ask/ReAct policy should decide when to stay on `execute_script`, when to ask for clarification, and when to shift into lego-block assembly mode
+*   no provider should require a different user-facing recovery model for the same Stores workflow
+
+The operational consequence is that Gemini is no longer the old hybrid described in earlier drafts. Gemini is now the reference implementation of the thin-wrapper model in SOP:
+
+*   the provider owns the live conversational/tool thread
+*   the application owns tool execution, event wiring, and hard guardrails
+*   the final clarification turn is an enforced hard stop with no tool schemas exposed
+
+This design is now documented, and the next tracked implementation phase is:
+
+Current stabilization order for release:
+
+1.  **Queries**: Stabilize store research, joins, filters, script AST generation, tool repair, and provider-owned query execution loops first.
+2.  **Spaces**: After Queries are reliable, stabilize Space lifecycle operations, enrichment, vectorization, and config mutations.
+3.  **KB Searches**: Once Queries and Spaces are stable, harden Knowledge Base search grounding, retrieval ranking, and search-to-action handoff.
+4.  **Memory Injection**: Only after those surfaces are stable should SOP make memory injection a dominant runtime layer for cross-Ask continuity.
+
+That does not mean carryover or provider-owned continuity are out of scope for the current release iteration. Queries still depend on them materially, so they are being actively exercised, traced, and hardened now as part of query stabilization. The deferral is narrower: SOP is postponing memory injection as a dominant cross-Ask runtime layer until Queries, Spaces, and KB Searches are stable enough to sit on top of it.
+
+In other words:
+
+*   **Provider Loop and Carryover (Current Iteration)**: Provider-owned loops, bounded carryover, hydration, repair continuity, and cross-turn tool-call state are part of the active stabilization surface because query reliability depends on them.
+*   **Memory Injection as Primary Runtime Layer (Deferred)**: Broader MRU/STM/LTM injection as the main cross-Ask reasoning substrate remains intentionally sequenced after Queries, Spaces, and KB Searches.
+
+The next deeper memory-focused phase is still planned, but it is not the current release blocker:
+
+*   **Budgeted Carryover Across Asks**: Bounded Gemini carryover between adjacent Asks remains a tracked implementation phase. The model should be allowed to reuse its live thread only while the topic, KB, provider, and token budget remain valid. Once that thread grows expensive or stale, SOP should cut over to compact MRU, `OutcomeFacts`, learned recipes, and focused retrieval instead of replaying the whole raw thread.
+
+When SOP returns to memory injection hardening, that work should be treated as a reliability project rather than prompt tuning. The release gates for that phase are:
+
+1.  **Continuity Gate**: MRU -> STM -> LTM handoff remains correct across normal asks, follow-ups, clarification turns, and provider-owned retries.
+2.  **Grounding Gate**: Schema facts, relations, prior tool outcomes, and learned repair recipes survive between asks and are reused without reintroducing stale or contradictory facts.
+3.  **Repair Gate**: Failed tool calls preserve enough ask-local truth for the next loop to repair the broken slice instead of restarting the whole task.
+4.  **Observability Gate**: Hydration, carryover, and memory-projection paths are inspectable in logs and tests so provider drift can be debugged from evidence instead of guesswork.
+
+That means SOP will deliberately treat provider carryover as a short-horizon cache rather than the primary memory layer:
+
+*   live Gemini continuity when it is cheap and still on-topic
+*   compact SOP memory when continuity is still useful but the provider thread is getting expensive
+*   full SOP rebuild when the topic or trust boundary changed
+
+```mermaid
+flowchart LR
+    User[User Ask] --> Engine[Native ReAct Engine]
+    Engine --> Decision{Generator exposes ReActLoop?}
+    Decision -- No --> DefaultLoop[Default shared loop\nengine-owned retry and repair]
+    Decision -- Yes --> GeminiLoop[Gemini-owned loop\nprovider-native continuation]
+    GeminiLoop --> Tools[Local tools via executor]
+    Tools --> GeminiLoop
+    GeminiLoop --> User
+    DefaultLoop --> Tools
+    Tools --> DefaultLoop
+    DefaultLoop --> User
+```
+
+Tracked carryover decision model:
+
+```mermaid
+flowchart TD
+    A[Next user Ask] --> B[Continuity classification]
+    B --> C{Same lane and within budget?}
+    C -- Yes --> D[Reuse live Gemini thread]
+    C -- No, but related --> E[Use compact SOP continuity]
+    C -- No --> F[Fresh Ask rebuilt from SOP memory]
+    D --> G[Minimal prompt delta]
+    E --> H[Compact MRU facts and recipes]
+    F --> I[Full focused Ask frame]
+```
+
+Gemini-native turn model:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Engine as Native ReAct Engine
+    participant Gemini as Gemini ReAct Loop
+    participant Tools as Local Tools
+
+    User->>Engine: Ask
+    Engine->>Gemini: delegate via ReActLoop()
+    Gemini->>Gemini: prepare turn with carried continuations
+    Gemini->>Tools: execute all native tool calls from turn
+    Tools-->>Gemini: tool results / tool errors
+    Gemini->>Gemini: append ToolCallContinuations
+    Gemini->>Gemini: continue from provider thread state
+    Gemini-->>User: final answer or clarification
+```
+
+### Two-Layer MRU Model
+
+SOP now uses two distinct MRU layers that share the same live session buffer but serve different purposes:
+
+*   **Inner Ask-Progress MRU**: A provisional, ask-scoped partition used only while a provider-owned loop is still running. Provider loops can emit bounded grounded updates through the shared `MemoryHydrationSink` contract in `ai/interfaces.go`. These updates are limited to grounded progress such as confirmed facts, recent tool pattern, final text so far, and carryover metadata. They are intentionally tagged as ask-scoped and are cleared at the start of each Ask and again during epilogue.
+*   **Session / Carryover MRU**: The canonical between-Ask memory layer. At epilogue, SOP persists the final ask outcome into session-scoped MRU, snapshots that macro MRU into STM, merges learned recipes, and updates carryover metadata. When native provider carryover is unavailable or cut off, this session/STM-backed layer is what reconstructs continuity for the next Ask.
+
+Hydration contract limits:
+
+*   Provider-owned loops should normalize provisional updates through `ai.BuildMemoryHydrationUpdateFromParts` in `ai/memory_hydration.go`.
+*   `ai.BuildMemoryHydrationUpdate` remains available as a thin adapter from a full `ReasoningResponse`, but new provider-owned loops should prefer the narrower `FromParts` helper.
+*   The helper currently retains only the most recent 6 tool calls and 6 grounded facts.
+*   Provisional final text and carryover summaries are trimmed to 600 characters.
+*   Individual grounded facts are trimmed to 240 characters.
+*   Carryover metadata is cloned and bounded as well, including recent tool names and outcome facts.
+
+Operational rule:
+
+*   provisional in-loop MRU may help the running Ask
+*   final ask outcome always wins and becomes the only MRU layer promoted into STM carryover
+
+### GPT / OpenAI Parity Model
+
+The OpenAI/ChatGPT owned loop now follows the same two-layer state model already established for Gemini:
+
+*   **Stateful inside the Ask loop**: provider-owned response/thread state remains local to the running Ask. It may emit bounded provisional hydration through `ai.BuildMemoryHydrationUpdateFromParts`, but it does not become canonical memory.
+*   **Carryover between Asks**: provider-side continuation handles now flow through `CarryoverState` and may reuse OpenAI `previous_response_id` continuity when the thread is still valid. If that handle is unavailable, SOP falls back to replaying compact assistant/reasoning/tool history rather than treating vendor state as durable memory.
+*   **Canonical continuity stays local**: if provider carryover expires, resets, or becomes too expensive, SOP reconstructs continuity from session MRU, STM snapshots, recipes, and LTM/playbooks rather than depending on vendor state.
+
+Current completion status for this GPT phase:
+
+*   the owned loop is now on by default for ChatGPT in this codebase
+*   Gemini, ChatGPT, and the generic native engine now share one backend event contract in `ai/stream_events.go`
+*   focused GPT generator tests and the full `cd /Volumes/BigDrive/sop/ai && go test ./...` suite were green at the end of this phase
+*   the remaining GPT follow-up is not architecture work; it is a live-key smoke test against the real OpenAI API if operational verification is desired later
+
+Design rule:
+
+*   treat provider server-side state as a short-horizon runtime optimization
+*   keep epilogue as the only promotion point into canonical between-Ask memory
+*   keep streamed provider events observational only; they inform UI/runtime progress but do not replace final epilogue promotion
+
+### Dynamic Tool Registration Boundary
+
+The correct architectural seam is between:
+
+1.  **Stage 1: Focused retrieval / schema grounding**
+2.  **Stage 2: Inner Ask/ReAct execution**
+
+Today SOP already narrows the prompt heavily through routing, focused context, and recipes. However, the tool contract itself is still broader than ideal. The next refinement is to let focused retrieval not only narrow prompt text, but also narrow the tool registration payload handed to the provider so the LLM reasons inside a smaller, grounded schema sandbox before the loop starts.
+
+This matters because dynamic tool registration:
+
+*   keeps token pressure lower than replaying broad schema text in every retry frame
+*   reduces guessed tables, fields, and join mappings
+*   gives runtime validation a smaller and more accurate contract to enforce
+
 ## Why This Matters
 This architecture allows us to create a **fully controllable, customizable AI** necessary for enterprise databases.
 *   **Agentic Interfaces**: We build a robust set of tools and give an AI agent the agency to use them, but within a secure sandbox.
@@ -181,6 +383,15 @@ When `AllowAutoEnrichment` is actively enabled for a KB, the background memory w
 3. **Mathematical Clustering (`MaxMathCategoryDistance`)**: Before defaulting to expensive LLM logic to classify facts, SOP utilizes blazing-fast local Cosine Distance mathematics to determine if the new vector perfectly aligns with an existing `CenterVector` taxonomic boundary.
 4. **Fallback Formative Cataloging (`GenerateCategories`)**: If facts are "orphaned" by mathematical distance, they are batched to the LLM taxonomy organizer. The LLM evaluates the batch, incorporating the `PersonaContext`, and actively assigns (or generates) formal category labels.
 5. **Schema Stabilization**: Center Vectors and `VectorHash` boundaries are recalculating, organically solidifying the Space matrix for future querying.
+
+#### 3. Future Direction: Knowledge Base Absorption into LTM
+Beyond implicit enrichment, SOP's long-term direction is to allow a Knowledge Base to be absorbed into Long-Term Memory as distilled expertise.
+* **Current Default:** Right now, the practical model is still Avatar + KB + STM + LTM. The mounted KB is the active grounding surface for the LLM, and the product needs to keep stabilizing how that helps before we reduce dependence on live KB attachment.
+* **Goal:** Let the AI accumulate multiple durable skills from curated Spaces, effectively creating a reusable internal depot of expertise.
+* **Method:** Absorption should summarize and refine a Space into durable thoughts, rules, and skill fragments rather than naively copying the entire Space into prompt-time working memory.
+* **Benefit:** The AI can become multi-talented over time while still respecting routing, prompt budgets, and isolation boundaries.
+* **Constraint:** Absorbed knowledge must retain lineage to the source Knowledge Base so it can be refreshed, governed, or removed later if the source changes.
+* **Operating-Model Shift:** If absorption matures, the system can evolve from an Avatar that is primarily defined by one mounted KB into an Avatar that carries its own STM/LTM plus previously absorbed expertise, then later absorbs additional KBs as new skills.
 
 ### Episodic Working Memory (Context Carry-over)
 

@@ -18,9 +18,6 @@ func (a *CopilotAgent) StartSleepCycle(ctx context.Context, hourlyInterval int, 
 		nowFn = time.Now
 	}
 
-	stmStoreName := "stm_" + a.Memory.AgentID
-	ltmStoreName := "ltm_" + a.Memory.AgentID
-
 	// Wrap the actual consolidating logic to avoid duplication
 	runSleepCycle := func() {
 		if a.systemDB == nil {
@@ -31,11 +28,24 @@ func (a *CopilotAgent) StartSleepCycle(ctx context.Context, hourlyInterval int, 
 		if err != nil {
 			return
 		}
-
-		stm, err := a.systemDB.OpenBtree(ctx, stmStoreName, tx)
-		if err != nil {
+		if a.Memory == nil {
 			tx.Rollback(ctx)
 			return
+		}
+		a.Memory.BindSession(ctx)
+		if _, err := a.Memory.OpenShortTermMemory(ctx, a.systemDB, tx); err != nil {
+			tx.Rollback(ctx)
+			return
+		}
+		stmStore := a.Memory.STMStore()
+		stm := stmStore.Primary()
+
+		if removed, err := stmStore.PruneExpired(ctx, time.Now()); err != nil {
+			log.Warn("CopilotAgent: Failed pruning stale STM episodes before sleep cycle", "agent_id", a.Memory.AgentID, "error", err)
+			tx.Rollback(ctx)
+			return
+		} else if removed > 0 {
+			log.Debug("CopilotAgent: Pruned stale STM episodes before sleep cycle", "agent_id", a.Memory.AgentID, "count", removed)
 		}
 
 		var embedder ai.Embeddings
@@ -43,7 +53,7 @@ func (a *CopilotAgent) StartSleepCycle(ctx context.Context, hourlyInterval int, 
 			embedder = a.service.Domain().Embedder()
 		}
 
-		ltm, err := a.systemDB.OpenKnowledgeBase(ctx, ltmStoreName, tx, a.brain, embedder, false)
+		ltm, err := a.systemDB.OpenKnowledgeBase(ctx, a.Memory.LongTermMemoryName(), tx, a.brain, embedder, false)
 		if err != nil {
 			tx.Rollback(ctx)
 			return
@@ -89,14 +99,19 @@ func (a *CopilotAgent) StartSleepCycle(ctx context.Context, hourlyInterval int, 
 			log.Warn("CopilotAgent: LTM TriggerSleepCycle encountered error", "agent_id", a.Memory.AgentID, "error", err)
 		}
 
-		for _, id := range itemIDs {
-			_, err = stm.Remove(ctx, id)
+		for i, id := range itemIDs {
+			var payload map[string]any
+			if i < len(thoughts) {
+				payload = thoughts[i].Data
+			}
+			err = stmStore.RemoveEpisode(ctx, id, payload)
 			if err != nil {
 				log.Warn("CopilotAgent: Failed to remove scrubbed item from STM", "id", id, "error", err)
 			}
 		}
 
 		tx.Commit(ctx)
+		a.Memory.CloseShortTermMemory()
 		log.Debug("CopilotAgent: Sleep Cycle completed successfully.", "agent_id", a.Memory.AgentID)
 	}
 
@@ -116,7 +131,8 @@ func (a *CopilotAgent) StartSleepCycle(ctx context.Context, hourlyInterval int, 
 						// Perform a safe check: are there items in STM unvectorized?
 						tx, err := a.systemDB.BeginTransaction(ctx, sop.ForReading)
 						if err == nil {
-							stm, stmErr := a.systemDB.OpenBtree(ctx, stmStoreName, tx)
+							a.Memory.BindSession(ctx)
+							stm, stmErr := a.systemDB.OpenBtree(ctx, a.Memory.ShortTermMemoryName(), tx)
 							if stmErr == nil {
 								// Root anchor check
 								count := stm.Count()

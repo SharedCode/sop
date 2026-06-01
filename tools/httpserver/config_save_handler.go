@@ -42,7 +42,7 @@ type SaveConfigRequest struct {
 
 	// LLM Brain Options
 	BrainProvider string `json:"brain_provider"` // "gemini", "openai", "ollama"
-	BrainModel    string `json:"brain_model"`    // "gemini-3.1-pro-preview", "gpt-4", "llama3"
+	BrainModel    string `json:"brain_model"`    // "gemini-3.1-pro-preview", "gpt-5.4", "claude-4.6-sonnet", "llama3"
 	BrainURL      string `json:"brain_url"`      // e.g. "http://localhost:11434"
 	BrainAPIKey   string `json:"brain_api_key"`  // For cloud providers
 
@@ -62,6 +62,22 @@ type SaveConfigRequest struct {
 	Databases      []UserDBRequest     `json:"databases"`
 }
 
+func normalizeProviderAndModel(provider, model string) (string, string) {
+	provider = strings.TrimSpace(provider)
+	model = strings.TrimSpace(model)
+	if provider == "" {
+		return "", model
+	}
+	parts := strings.SplitN(provider, ":", 2)
+	if len(parts) != 2 {
+		return provider, model
+	}
+	if model == "" {
+		model = strings.TrimSpace(parts[1])
+	}
+	return strings.TrimSpace(parts[0]), model
+}
+
 // handleSaveConfig writes the provided configuration to the specified file path.
 // Broken down into modular steps for readability/maintainability.
 func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
@@ -77,6 +93,8 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
+	req.BrainProvider, req.BrainModel = normalizeProviderAndModel(req.BrainProvider, req.BrainModel)
+	req.EmbedderProvider, req.EmbedderModel = normalizeProviderAndModel(req.EmbedderProvider, req.EmbedderModel)
 
 	// 2. Validate Safety (Paths, Conflicts, Permissions)
 	if err := validatePathConflictsAndPermissions(req); err != nil {

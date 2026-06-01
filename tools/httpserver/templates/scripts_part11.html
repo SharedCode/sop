@@ -716,63 +716,217 @@
         const bProv = document.getElementById('setup-brain-provider')?.value || '';
         const bApiC = document.getElementById('setup-brain-api-container');
         const bUrlC = document.getElementById('setup-brain-url-container');
+        const bUrlInput = document.getElementById('setup-brain-url');
+        const isBrainLocal = isLocalProviderValue(bProv);
+        const showBrainURL = selectedProviderUsesURL('setup-brain-provider');
         
-        if (bProv.startsWith('ollama') || bProv.startsWith('local')) {
-            if (bApiC) bApiC.style.display = 'none';
-            if (bUrlC) bUrlC.style.display = 'block';
-        } else {
-            if (bApiC) bApiC.style.display = 'block';
-            if (bUrlC) bUrlC.style.display = 'none';
-        }
+        if (bApiC) bApiC.style.display = isBrainLocal ? 'none' : 'block';
+        if (bUrlC) bUrlC.style.display = showBrainURL ? 'block' : 'none';
+        if (!showBrainURL && bUrlInput) bUrlInput.value = '';
 
         const eProv = document.getElementById('setup-embedder-provider')?.value || '';
         const eApiC = document.getElementById('setup-embedder-api-container');
         const eUrlC = document.getElementById('setup-embedder-url-container');
+        const eUrlInput = document.getElementById('setup-embedder-url');
+        const isEmbedderLocal = isLocalProviderValue(eProv);
+        const showEmbedderURL = selectedProviderUsesURL('setup-embedder-provider');
         
         if (eProv === '') {
             // Same as Brain
             if (eApiC) eApiC.style.display = 'none';
             if (eUrlC) eUrlC.style.display = 'none';
-        } else if (eProv.startsWith('ollama') || eProv.startsWith('local')) {
-            if (eApiC) eApiC.style.display = 'none';
-            if (eUrlC) eUrlC.style.display = 'block';
+            if (eUrlInput) eUrlInput.value = '';
         } else {
-            if (eApiC) eApiC.style.display = 'block';
-            if (eUrlC) eUrlC.style.display = 'none';
+            if (eApiC) eApiC.style.display = isEmbedderLocal ? 'none' : 'block';
+            if (eUrlC) eUrlC.style.display = showEmbedderURL ? 'block' : 'none';
+            if (!showEmbedderURL && eUrlInput) eUrlInput.value = '';
         }
     }
 
-    function toggleInlineAuthFields(selectId, inputId) {
-        const provider = document.getElementById(selectId)?.value || '';
-        const input = document.getElementById(inputId);
-        if (!input) return;
-        
-        if (provider.startsWith('ollama') || provider.startsWith('local')) {
-            input.type = 'text';
-            input.placeholder = 'http://localhost:11434';
-            input.title = 'Base URL (Optional)';
-        } else {
-            input.type = 'password';
-            input.placeholder = 'API Key';
-            input.title = 'API Key';
+    function toggleChatSettings() {
+        const overlay = document.getElementById('chat-settings');
+        if (!overlay) return;
+        const isOpen = overlay.style.display !== 'none';
+        if (isOpen) {
+            overlay.style.display = 'none';
+            return;
         }
+        syncChatControlsFromAIConfig(getStoredAIConfig());
+        overlay.style.display = 'block';
+    }
+
+    function collectChatSettingsConfig() {
+        const providerValue = document.getElementById('chat-settings-provider-overlay')?.value || '';
+        const parts = splitProviderValue(providerValue);
+        const source = getSelectedProviderOptionSource('chat-settings-provider-overlay');
+        const apiKey = document.getElementById('chat-settings-overlay-api-key')?.value.trim() || '';
+        const url = document.getElementById('chat-settings-url')?.value.trim() || '';
+        const persistURL = providerValue && selectedProviderUsesURL('chat-settings-provider-overlay') ? url : '';
+        const persistAPIKey = parts.provider && !isLocalProviderValue(providerValue) ? apiKey : '';
+        const embedderValue = document.getElementById('chat-settings-embedder-overlay')?.value || '';
+        const embedderParts = splitProviderValue(embedderValue);
+        const embedderSource = getSelectedProviderOptionSource('chat-settings-embedder-overlay');
+        const embedderAPIKey = document.getElementById('chat-settings-embedder-api-key')?.value.trim() || '';
+        const embedderURL = document.getElementById('chat-settings-embedder-url')?.value.trim() || '';
+        const persistEmbedderURL = embedderValue && selectedProviderUsesURL('chat-settings-embedder-overlay') ? embedderURL : '';
+        const persistEmbedderAPIKey = embedderParts.provider && !isLocalProviderValue(embedderValue) ? embedderAPIKey : '';
+
+        return {
+            brain_provider: parts.provider,
+            brain_model: parts.model,
+            brain_source: source,
+            brain_api_key: persistAPIKey,
+            brain_url: persistURL,
+            embedder_provider: embedderParts.provider,
+            embedder_model: embedderParts.model,
+            embedder_source: embedderSource,
+            embedder_api_key: persistEmbedderAPIKey,
+            embedder_url: persistEmbedderURL
+        };
+    }
+
+    function persistChatSettingsDraft() {
+        return mergeStoredAIConfig(collectChatSettingsConfig());
+    }
+
+    function saveChatSettings() {
+        const nextConfig = persistChatSettingsDraft();
+        syncChatControlsFromAIConfig(nextConfig);
+        syncSetupWizardControlsFromAIConfig(nextConfig);
+        toggleChatSettings();
     }
 
     function toggleChatSettingsFields() {
         const provider = document.getElementById('chat-settings-provider-overlay')?.value || '';
         const urlContainer = document.getElementById('chat-settings-url-container');
         const apiKeyContainer = document.getElementById('chat-settings-apikey-container');
+        const urlInput = document.getElementById('chat-settings-url');
+        const isLocalProvider = isLocalProviderValue(provider);
+        const showURL = selectedProviderUsesURL('chat-settings-provider-overlay');
+        const embedderProvider = document.getElementById('chat-settings-embedder-overlay')?.value || '';
+        const embedderURLContainer = document.getElementById('chat-settings-embedder-url-container');
+        const embedderAPIKeyContainer = document.getElementById('chat-settings-embedder-apikey-container');
+        const embedderURLInput = document.getElementById('chat-settings-embedder-url');
+        const isLocalEmbedder = isLocalProviderValue(embedderProvider);
+        const showEmbedderURL = selectedProviderUsesURL('chat-settings-embedder-overlay');
         
-        if (provider.startsWith('ollama') || provider.startsWith('local')) {
-            if (urlContainer) urlContainer.style.display = 'block';
-            if (apiKeyContainer) apiKeyContainer.style.display = 'none';
-        } else if (provider === '') {
+        if (provider === '') {
             if (urlContainer) urlContainer.style.display = 'none';
             if (apiKeyContainer) apiKeyContainer.style.display = 'none';
+            if (urlInput) urlInput.value = '';
         } else {
-            if (urlContainer) urlContainer.style.display = 'none';
-            if (apiKeyContainer) apiKeyContainer.style.display = 'block';
+            if (urlContainer) urlContainer.style.display = showURL ? 'block' : 'none';
+            if (apiKeyContainer) apiKeyContainer.style.display = isLocalProvider ? 'none' : 'block';
+            if (!showURL && urlInput) urlInput.value = '';
         }
+
+        if (embedderProvider === '') {
+            if (embedderURLContainer) embedderURLContainer.style.display = 'none';
+            if (embedderAPIKeyContainer) embedderAPIKeyContainer.style.display = 'none';
+            if (embedderURLInput) embedderURLInput.value = '';
+        } else {
+            if (embedderURLContainer) embedderURLContainer.style.display = showEmbedderURL ? 'block' : 'none';
+            if (embedderAPIKeyContainer) embedderAPIKeyContainer.style.display = isLocalEmbedder ? 'none' : 'block';
+            if (!showEmbedderURL && embedderURLInput) embedderURLInput.value = '';
+        }
+    }
+
+    function setConnectionTestStatus(elementId, message, isSuccess) {
+        const status = document.getElementById(elementId);
+        if (!status) return;
+        status.style.display = 'block';
+        status.style.color = isSuccess ? 'var(--success-color)' : 'var(--danger-color)';
+        status.textContent = message;
+    }
+
+    async function runLLMConnectionTest(payload, statusElementId) {
+        setConnectionTestStatus(statusElementId, 'Testing connection...', true);
+        try {
+            const result = await apiCall('/api/ai/test-connection', 'POST', payload, {});
+            const message = result.response ? `Connected successfully: ${result.response}` : 'Connected successfully.';
+            setConnectionTestStatus(statusElementId, message, true);
+            showAlert(message, null, 'LLM Connection OK', 'var(--success-color)');
+        } catch (error) {
+            const message = `Connection failed: ${error.message}`;
+            setConnectionTestStatus(statusElementId, message, false);
+        }
+    }
+
+    async function runEmbedderConnectionTest(payload, statusElementId) {
+        setConnectionTestStatus(statusElementId, 'Testing embedder connection...', true);
+        try {
+            const result = await apiCall('/api/ai/test-embedder-connection', 'POST', payload, {});
+            const message = result.dimension ? `Connected successfully. Vector dimension: ${result.dimension}` : 'Connected successfully.';
+            setConnectionTestStatus(statusElementId, message, true);
+            showAlert(message, null, 'Embedder Connection OK', 'var(--success-color)');
+        } catch (error) {
+            const message = `Connection failed: ${error.message}`;
+            setConnectionTestStatus(statusElementId, message, false);
+        }
+    }
+
+    function testChatSettingsConnection() {
+        const providerValue = document.getElementById('chat-settings-provider-overlay')?.value || '';
+        const parts = splitProviderValue(providerValue);
+        if (!parts.provider) {
+            showAlert('Please choose an LLM provider first.');
+            return;
+        }
+        const payload = {
+            provider: parts.provider,
+            model: parts.model,
+            api_key: document.getElementById('chat-settings-overlay-api-key')?.value.trim() || '',
+            url: document.getElementById('chat-settings-url')?.value.trim() || ''
+        };
+        runLLMConnectionTest(payload, 'chat-settings-test-status');
+    }
+
+    function testChatSettingsEmbedderConnection() {
+        const providerValue = document.getElementById('chat-settings-embedder-overlay')?.value || '';
+        const parts = splitProviderValue(providerValue);
+        if (!parts.provider) {
+            showAlert('Please choose an embedder provider first.');
+            return;
+        }
+        const payload = {
+            provider: parts.provider,
+            model: parts.model,
+            api_key: document.getElementById('chat-settings-embedder-api-key')?.value.trim() || '',
+            url: document.getElementById('chat-settings-embedder-url')?.value.trim() || ''
+        };
+        runEmbedderConnectionTest(payload, 'chat-settings-embedder-test-status');
+    }
+
+    function testSetupBrainConnection() {
+        const providerValue = document.getElementById('setup-brain-provider')?.value || '';
+        const parts = splitProviderValue(providerValue);
+        if (!parts.provider) {
+            showAlert('Please choose an LLM provider first.');
+            return;
+        }
+        const payload = {
+            provider: parts.provider,
+            model: parts.model,
+            api_key: document.getElementById('setup-brain-api-key')?.value.trim() || '',
+            url: document.getElementById('setup-brain-url')?.value.trim() || ''
+        };
+        runLLMConnectionTest(payload, 'setup-brain-test-status');
+    }
+
+    function testSetupEmbedderConnection() {
+        const providerValue = document.getElementById('setup-embedder-provider')?.value || '';
+        const parts = splitProviderValue(providerValue);
+        if (!parts.provider) {
+            showAlert('Please choose an embedder provider first.');
+            return;
+        }
+        const payload = {
+            provider: parts.provider,
+            model: parts.model,
+            api_key: document.getElementById('setup-embedder-api-key')?.value.trim() || '',
+            url: document.getElementById('setup-embedder-url')?.value.trim() || ''
+        };
+        runEmbedderConnectionTest(payload, 'setup-embedder-test-status');
     }
 
 </script>

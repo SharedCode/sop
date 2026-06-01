@@ -451,6 +451,8 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 		resolvedArgs[k] = s.resolveDeep(v, scope, scopeMu)
 	}
 
+	commandName, commandArgs := normalizeScriptCommandInvocation(step.Command, resolvedArgs)
+
 	// Capture step for /last-tool support
 	if s.session != nil {
 		s.session.mu.Lock()
@@ -479,7 +481,7 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 
 	if executor != nil {
 		// Skip empty commands
-		if step.Command == "" {
+		if commandName == "" {
 			return nil
 		}
 
@@ -488,16 +490,16 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 		preAnnouncedStep := false
 		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
 			stepIndex, _ := ctx.Value("step_index").(int)
-			log.Debug("runStepCommand: StartStreamingStep", "index", stepIndex, "command", step.Command, "name", step.Name)
+			log.Debug("runStepCommand: StartStreamingStep", "index", stepIndex, "command", commandName, "name", step.Name)
 
 			// Use Name if provided, otherwise Command
-			displayName := step.Command
+			displayName := commandName
 			if step.Name != "" {
 				displayName = step.Name
 			}
 
 			isVerbose, _ := ctx.Value("verbose").(bool)
-			if step.Command == "execute_script" && isVerbose {
+			if commandName == "execute_script" && isVerbose {
 				streamer.Write(StepExecutionResult{
 					Type:      "step_start",
 					Command:   displayName,
@@ -511,7 +513,7 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 			}
 		}
 
-		resp, err := executor.Execute(ctx, step.Command, resolvedArgs)
+		resp, err := executor.Execute(ctx, commandName, commandArgs)
 
 		// Check if tool streamed the result
 		if stepStreamer != nil && stepStreamer.used {
@@ -671,6 +673,47 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 		return fmt.Errorf("no tool executor available")
 	}
 	return nil
+}
+
+func normalizeScriptCommandInvocation(command string, args map[string]any) (string, map[string]any) {
+	command = strings.TrimSpace(command)
+	if !strings.EqualFold(command, "call_function") {
+		return command, args
+	}
+	if len(args) == 0 {
+		return command, args
+	}
+
+	target := ""
+	for _, key := range []string{"function", "tool", "name", "command"} {
+		if value, ok := args[key].(string); ok && strings.TrimSpace(value) != "" {
+			target = strings.TrimSpace(value)
+			break
+		}
+	}
+	if target == "" || strings.EqualFold(target, "call_function") {
+		return command, args
+	}
+
+	for _, nestedKey := range []string{"args", "arguments", "params", "input"} {
+		if nested, ok := args[nestedKey].(map[string]any); ok {
+			cloned := make(map[string]any, len(nested))
+			for k, v := range nested {
+				cloned[k] = v
+			}
+			return target, cloned
+		}
+	}
+
+	normalized := make(map[string]any)
+	for k, v := range args {
+		switch strings.ToLower(strings.TrimSpace(k)) {
+		case "type", "command", "function", "tool", "name", "result_var":
+			continue
+		}
+		normalized[k] = v
+	}
+	return target, normalized
 }
 
 func (s *Service) runStepSet(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder) error {
@@ -1190,7 +1233,7 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map
 					}()
 
 					if err := s.runStep(asyncCtx, st, scope, scopeMu, sb, asyncDB); err != nil {
-						if st.ContinueOnError {
+						if st.ContinueOnError && !shouldShortCircuitScriptOnError(st.Command, st.Args, err) {
 							// Log error but don't stop the group
 							log.Error("Async step failed (continuing)", "step_type", st.Type, "error", err)
 							return nil
@@ -1205,7 +1248,7 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map
 
 		// Sync step
 		if err := s.runStep(stepCtx, step, scope, scopeMu, sb, stepDB); err != nil {
-			if step.ContinueOnError {
+			if step.ContinueOnError && !shouldShortCircuitScriptOnError(step.Command, step.Args, err) {
 				// Log error and continue
 				log.Error("Step failed (continuing)", "step_type", step.Type, "error", err)
 				continue

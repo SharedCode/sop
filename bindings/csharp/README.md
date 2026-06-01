@@ -43,7 +43,7 @@ SOP includes a powerful **SOP Data Manager** that provides **full CRUD** capabil
 
 *   **Web UI**: A modern, responsive interface for browsing B-Trees, managing stores, and visualizing data.
 *   **AI Copilot**: Integrated directly into the UI, the AI Copilot can help you write queries, explain data structures, and even generate code snippets.
-    > **Note**: To use the Copilot, you must set the `SOP_LLM_API_KEY` environment variable (e.g., for Gemini) before starting the server.
+    > **Note**: To use the Copilot, set a provider-specific environment variable such as `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` before starting the server.
 *   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
 
 To launch the SOP Data Manager, download the all-in-one single-file installer from [SOP Releases](https://github.com/SharedCode/sop/releases). Alternatively, you can use the Go toolchain:

@@ -72,7 +72,11 @@ func (e *autoTxExecutor) Execute(ctx context.Context, name string, args map[stri
 		if err != nil {
 			e.s.session.Transaction.Rollback(ctx)
 		} else {
-			e.s.session.Transaction.Commit(ctx)
+			if commitErr := e.s.session.Transaction.Commit(ctx); commitErr != nil {
+				e.s.session.Transaction = nil
+				e.s.session.Variables = nil
+				return "", fmt.Errorf("tool execution succeeded but session transaction commit failed: %w", commitErr)
+			}
 		}
 		e.s.session.Transaction = nil
 		e.s.session.Variables = nil

@@ -3,6 +3,7 @@ package sop
 import (
 	"context"
 	"errors"
+	"net"
 	"os"
 	"strings"
 	"syscall"
@@ -32,6 +33,20 @@ func TestShouldRetry_NonRetryableSyscallErrno(t *testing.T) {
 	for i, e := range cases {
 		if ShouldRetry(e) {
 			t.Fatalf("case %d expected non-retryable: %v", i, e)
+		}
+	}
+}
+
+func TestShouldRetry_NonRetryableNetworkErrors(t *testing.T) {
+	cases := []error{
+		&net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED},
+		&net.OpError{Op: "dial", Net: "tcp", Err: syscall.ENETUNREACH},
+		&net.DNSError{Err: "no such host", Name: "redis.local"},
+		errors.New("dial tcp 127.0.0.1:6379: connect: connection refused"),
+	}
+	for i, e := range cases {
+		if ShouldRetry(e) {
+			t.Fatalf("case %d expected non-retryable network error: %v", i, e)
 		}
 	}
 }

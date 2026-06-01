@@ -99,19 +99,17 @@ func TestMultiDBScriptExecution(t *testing.T) {
 	// 4. Execute Script via ExecuteTool (simulating LLM call)
 	// We need to simulate a session where a transaction is active on "db1" (default)
 
-	// Case A: No active transaction in payload (Auto-commit mode)
-	// Each step should start its own transaction on the correct DB.
+	// Case A: No active transaction in payload.
+	// The script now promotes missing transactions into session scope and commits them at script completion.
 	t.Run("AutoCommit", func(t *testing.T) {
 		payload := &ai.SessionPayload{
 			CurrentDB: "db1",
 		}
 		ctxWithPayload := context.WithValue(ctx, "session_payload", payload)
 
-		// We call ExecuteTool directly for the script
-		// But wait, ExecuteTool for a script calls runScript, which calls ExecuteTool for steps.
 		res, err := daAgent.Execute(ctxWithPayload, "multidb_script", map[string]any{})
 		if err != nil {
-			t.Fatalf("Script execution failed: %v", err)
+			t.Fatalf("Expected success, but got error: %v", err)
 		}
 		t.Logf("Result: %s", res)
 	})
@@ -128,12 +126,37 @@ func TestMultiDBScriptExecution(t *testing.T) {
 		}
 		ctxWithPayload := context.WithValue(ctx, "session_payload", payload)
 
-		// This should succeed now that we handle cross-db transactions
 		res, err := daAgent.Execute(ctxWithPayload, "multidb_script", map[string]any{})
 		if err != nil {
-			t.Errorf("Expected success, but got error: %v", err)
-		} else {
-			t.Logf("Result: %s", res)
+			t.Fatalf("Expected success, but got error: %v", err)
 		}
+		t.Logf("Result: %s", res)
+	})
+
+	// Case C: Active transactions on both DB1 and DB2
+	t.Run("ActiveTransaction_DB1_DB2", func(t *testing.T) {
+		db1 := database.NewDatabase(dbOpts1)
+		tx1, _ := db1.BeginTransaction(ctx, sop.ForReading)
+		defer tx1.Rollback(ctx)
+
+		db2 := database.NewDatabase(dbOpts2)
+		tx2, _ := db2.BeginTransaction(ctx, sop.ForReading)
+		defer tx2.Rollback(ctx)
+
+		payload := &ai.SessionPayload{
+			CurrentDB:   "db1",
+			Transaction: tx1,
+			Transactions: map[string]any{
+				"db1": tx1,
+				"db2": tx2,
+			},
+		}
+		ctxWithPayload := context.WithValue(ctx, "session_payload", payload)
+
+		res, err := daAgent.Execute(ctxWithPayload, "multidb_script", map[string]any{})
+		if err != nil {
+			t.Fatalf("Expected success with explicit transactions, but got error: %v", err)
+		}
+		t.Logf("Result: %s", res)
 	})
 }

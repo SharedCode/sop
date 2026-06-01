@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	log "log/slog"
+	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -148,8 +150,11 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 		return "", fmt.Errorf("script must be a JSON string or array")
 	}
 
+	currentQuery := currentQueryForScriptGrounding(ai.GetSessionPayload(ctx))
+	normalizationState := a.newScriptCompatibilityNormalizerState(ctx, rawSteps)
+
 	for _, step := range rawSteps {
-		normalizeScriptStepForCompatibility(step)
+		normalizeScriptStepForCompatibilityWithQueryAndState(step, currentQuery, normalizationState)
 
 		if _, hasOp := step["op"]; !hasOp {
 			if cmd, ok := step["command"].(string); ok && cmd != "" {
@@ -170,6 +175,10 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 			}
 		}
 
+		if normalizationState != nil {
+			normalizationState.observeStep(step)
+		}
+
 	}
 
 	bytes, _ := json.Marshal(rawSteps)
@@ -177,7 +186,20 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 		return "", fmt.Errorf("failed to re-parse normalized script: %v", err)
 	}
 
+	if err := validateExecuteScriptPlaceholders(ctx, script); err != nil {
+		return "", err
+	}
+
 	script = sanitizeScript(script)
+	writeNormalizedScriptArgs(args, script)
+	if scriptJSON, err := json.MarshalIndent(script, "", "  "); err == nil {
+		log.Info("toolExecuteScript: Running sanitized script",
+			"steps", len(script),
+			"script", string(scriptJSON),
+		)
+	} else {
+		log.Warn("toolExecuteScript: Failed to marshal sanitized script for logging", "error", err)
+	}
 
 	if a.Config.StubMode {
 
@@ -228,63 +250,481 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 	}
 
 	log.Debug("toolExecuteScript: Checking for return value candidates...")
+	choice := selectExecuteScriptReturn(engine, scriptCtx, script)
+	log.Debug("toolExecuteScript: Selected return value",
+		"source", choice.Source,
+		"detail", choice.Detail,
+		"type", fmt.Sprintf("%T", choice.Value),
+		"last_updated_var", scriptCtx.LastUpdatedVar,
+	)
+	if choice.SuccessMessage != "" {
+		return choice.SuccessMessage, nil
+	}
+	return serializeResult(ctx, choice.Value)
+}
 
+func writeNormalizedScriptArgs(args map[string]any, script []ScriptInstruction) {
+	if args == nil {
+		return
+	}
+	bytes, err := json.Marshal(script)
+	if err != nil {
+		return
+	}
+	var normalized []any
+	if err := json.Unmarshal(bytes, &normalized); err != nil {
+		return
+	}
+	args["script"] = normalized
+}
+
+type executeScriptReturnChoice struct {
+	Source         string
+	Detail         string
+	Value          any
+	SuccessMessage string
+}
+
+func selectExecuteScriptReturn(engine *ScriptEngine, scriptCtx *ScriptContext, script []ScriptInstruction) executeScriptReturnChoice {
 	if val, ok := scriptCtx.Variables["output"]; ok && val != nil {
-		log.Debug("toolExecuteScript: Returning 'output' variable")
-		return serializeResult(ctx, val)
+		return executeScriptReturnChoice{Source: "output", Value: val}
 	}
 
 	if val, ok := scriptCtx.Variables["final_result"]; ok && val != nil {
-		log.Debug("toolExecuteScript: Returning 'final_result' variable")
-		return serializeResult(ctx, val)
+		return executeScriptReturnChoice{Source: "final_result", Value: val}
 	}
 
 	if val, ok := scriptCtx.Variables["result"]; ok && val != nil {
-		log.Debug("toolExecuteScript: Returning 'result' variable")
-		return serializeResult(ctx, val)
+		return executeScriptReturnChoice{Source: "result", Value: val}
 	}
 
 	if len(script) > 0 {
 		lastInstr := script[len(script)-1]
 
 		if lastInstr.Op == "return" {
-
-			log.Debug("toolExecuteScript: Returning 'return' op result")
 			if engine.ReturnValue != nil {
-				return serializeResult(ctx, engine.ReturnValue)
+				return executeScriptReturnChoice{Source: "return_value", Value: engine.ReturnValue}
 			}
 			if engine.LastResult == nil {
-				return "Script executed successfully.", nil
+				return executeScriptReturnChoice{Source: "success_message", Detail: "explicit_return_nil", SuccessMessage: "Script executed successfully."}
 			}
-			return serializeResult(ctx, engine.LastResult)
+			return executeScriptReturnChoice{Source: "return_last_result", Value: engine.LastResult}
 		}
 
 		if lastInstr.ResultVar != "" {
 			if val, ok := scriptCtx.Variables[lastInstr.ResultVar]; ok && val != nil {
-				log.Debug("toolExecuteScript: Returning last instruction result variable", "var", lastInstr.ResultVar)
-				return serializeResult(ctx, val)
+				return executeScriptReturnChoice{Source: "last_instruction_result_var", Detail: lastInstr.ResultVar, Value: val}
 			}
 		}
 	}
 
 	if scriptCtx.LastUpdatedVar != "" {
 		if val, ok := scriptCtx.Variables[scriptCtx.LastUpdatedVar]; ok && val != nil {
-			if isInternalScriptHandle(val) {
-				log.Debug("toolExecuteScript: Skipping internal last updated variable", "var", scriptCtx.LastUpdatedVar, "type", fmt.Sprintf("%T", val))
-			} else {
-				log.Debug("toolExecuteScript: Returning last updated variable", "var", scriptCtx.LastUpdatedVar)
-				return serializeResult(ctx, val)
+			if !isInternalScriptHandle(val) {
+				return executeScriptReturnChoice{Source: "last_updated_var", Detail: scriptCtx.LastUpdatedVar, Value: val}
 			}
 		}
 	}
 
 	if engine.LastResult != nil {
-		log.Debug("toolExecuteScript: Returning implicit LastResult")
-		return serializeResult(ctx, engine.LastResult)
+		return executeScriptReturnChoice{Source: "last_result", Value: engine.LastResult}
 	}
 
-	log.Debug("toolExecuteScript: No result found, returning success message")
-	return "Script executed successfully.", nil
+	return executeScriptReturnChoice{Source: "success_message", Detail: "no_result", SuccessMessage: "Script executed successfully."}
+}
+
+func validateExecuteScriptPlaceholders(ctx context.Context, script []ScriptInstruction) error {
+	var currentQuery string
+	currentQuery = currentQueryForScriptGrounding(ai.GetSessionPayload(ctx))
+	resultOrigins := make(map[string]string, len(script))
+	validationErrors := make([]*executeScriptValidationError, 0)
+
+	for _, instr := range script {
+		if err := validateExecuteScriptInputShape(instr, resultOrigins); err != nil {
+			validationErrors = append(validationErrors, err)
+		}
+		if (instr.Op == "join" || instr.Op == "join_right") && instr.Args != nil {
+			if onMap, ok := instr.Args["on"].(map[string]any); ok {
+				for leftField, rightField := range onMap {
+					if isInvalidPlaceholderFieldName(leftField) {
+						validationErrors = append(validationErrors, newExecuteScriptValidationError(
+							"invalid_join_on_field_placeholder",
+							fmt.Sprintf("invalid join.on field %q: expected a real left-hand field path such as %q", leftField, "users.key"),
+							fmt.Sprintf(`{"op":"%s","args":{"relation":"users_orders","target":"orders_store"}}`, instr.Op),
+						))
+						continue
+					}
+
+					if placeholder, ok := rightField.(bool); ok {
+						validationErrors = append(validationErrors, newExecuteScriptValidationError(
+							"invalid_join_on_placeholder",
+							fmt.Sprintf("invalid type for join.on[%q]: got boolean placeholder %t; expected a field path string such as %q", leftField, placeholder, "key"),
+							fmt.Sprintf(`{"op":"%s","args":{"relation":"users_orders","target":"orders_store"}}`, instr.Op),
+						))
+						continue
+					}
+					if rightField == nil {
+						validationErrors = append(validationErrors, newExecuteScriptValidationError(
+							"invalid_join_on_placeholder",
+							fmt.Sprintf("invalid type for join.on[%q]: got null placeholder; expected a field path string such as %q", leftField, "key"),
+							fmt.Sprintf(`{"op":"%s","args":{"relation":"users_orders","target":"orders_store"}}`, instr.Op),
+						))
+						continue
+					}
+					if rightFieldStr, ok := rightField.(string); ok && isInvalidPlaceholderFieldName(rightFieldStr) {
+						validationErrors = append(validationErrors, newExecuteScriptValidationError(
+							"invalid_join_on_placeholder",
+							fmt.Sprintf("invalid join.on[%q] field path %q: expected a real right-hand field path such as %q", leftField, rightFieldStr, "key"),
+							fmt.Sprintf(`{"op":"%s","args":{"relation":"users_orders","target":"orders_store"}}`, instr.Op),
+						))
+					}
+				}
+			}
+		}
+
+		if instr.Op == "filter" && instr.Args != nil {
+			if condition, ok := instr.Args["condition"].(map[string]any); ok {
+				validationErrors = append(validationErrors, validateFilterConditionPlaceholders(condition, currentQuery)...)
+			}
+		}
+
+		if instr.ResultVar != "" {
+			resultOrigins[instr.ResultVar] = instr.Op
+		}
+	}
+
+	return collapseExecuteScriptValidationErrors(validationErrors)
+}
+
+func validateExecuteScriptInputShape(instr ScriptInstruction, resultOrigins map[string]string) *executeScriptValidationError {
+	if instr.Op != "filter" || strings.TrimSpace(instr.InputVar) == "" {
+		return nil
+	}
+	originOp := strings.TrimSpace(resultOrigins[instr.InputVar])
+	if originOp != "open_store" {
+		return nil
+	}
+	storeName := "<store_var>"
+	if instr.Args != nil {
+		if named, ok := instr.Args["store"].(string); ok && strings.TrimSpace(named) != "" {
+			storeName = strings.TrimSpace(named)
+		}
+	}
+	return newExecuteScriptValidationError(
+		"invalid_filter_input_shape",
+		fmt.Sprintf("filter input_var %q resolves to an open_store handle; expected a scanned cursor or list before filtering", instr.InputVar),
+		fmt.Sprintf(`{"op":"scan","args":{"store":%q},"result_var":"%s_cursor"}`, storeName, instr.InputVar),
+	)
+}
+
+func validateFilterConditionPlaceholders(condition map[string]any, currentQuery string) []*executeScriptValidationError {
+	validationErrors := make([]*executeScriptValidationError, 0)
+	for field, raw := range condition {
+		if strings.HasPrefix(field, "$") {
+			switch nested := raw.(type) {
+			case []any:
+				for _, item := range nested {
+					if nestedMap, ok := item.(map[string]any); ok {
+						validationErrors = append(validationErrors, validateFilterConditionPlaceholders(nestedMap, currentQuery)...)
+					}
+				}
+			case map[string]any:
+				validationErrors = append(validationErrors, validateFilterConditionPlaceholders(nested, currentQuery)...)
+			}
+			continue
+		}
+
+		if isInvalidPlaceholderFieldName(field) {
+			queryHint := ""
+			if currentQuery != "" {
+				queryHint = fmt.Sprintf(" for current query %q", currentQuery)
+			}
+			validationErrors = append(validationErrors, newExecuteScriptValidationError(
+				"invalid_filter_field_placeholder",
+				fmt.Sprintf("invalid filter condition field %q: expected a real field path such as %q%s", field, "first_name", queryHint),
+				fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":{"$eq":"<value>"}}}}`, "first_name"),
+			))
+			continue
+		}
+
+		if raw == nil {
+			queryHint := ""
+			if currentQuery != "" {
+				queryHint = fmt.Sprintf(" for current query %q", currentQuery)
+			}
+			validationErrors = append(validationErrors, newExecuteScriptValidationError(
+				"invalid_filter_placeholder",
+				fmt.Sprintf("invalid type for filter condition field %q: got null placeholder; expected an operator/value predicate such as {\"$eq\": value}%s", field, queryHint),
+				fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":{"$eq":"<value>"}}}}`, field),
+			))
+			continue
+		}
+
+		if placeholder, ok := raw.(bool); ok {
+			if isLikelyBooleanFieldName(field) {
+				continue
+			}
+			queryHint := ""
+			if currentQuery != "" {
+				queryHint = fmt.Sprintf(" for current query %q", currentQuery)
+			}
+			validationErrors = append(validationErrors, newExecuteScriptValidationError(
+				"invalid_filter_placeholder",
+				fmt.Sprintf("invalid type for filter condition field %q: got boolean placeholder %t; expected an operator/value predicate such as {\"$eq\": value}%s", field, placeholder, queryHint),
+				fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":{"$eq":"<value>"}}}}`, field),
+			))
+			continue
+		}
+
+		// CEL remains supported when condition itself is a string expression.
+		// This only rejects malformed map-based AST placeholders like {"field":"$eq"}.
+		if placeholder, ok := raw.(string); ok {
+			trimmed := strings.TrimSpace(strings.Trim(placeholder, "\"'"))
+			if strings.HasPrefix(trimmed, "$") && !strings.Contains(trimmed, ":") {
+				queryHint := ""
+				if currentQuery != "" {
+					queryHint = fmt.Sprintf(" for current query %q", currentQuery)
+				}
+				validationErrors = append(validationErrors, newExecuteScriptValidationError(
+					"invalid_filter_operator_placeholder",
+					fmt.Sprintf("invalid filter condition field %q: got operator placeholder %q without a comparison value; expected a predicate object such as {\"%s\": value}%s", field, trimmed, trimmed, queryHint),
+					fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":{"%s":"<value>"}}}}`, field, trimmed),
+				))
+				continue
+			}
+		}
+
+		if nested, ok := raw.(map[string]any); ok {
+			validationErrors = append(validationErrors, validateFilterConditionPlaceholders(nested, currentQuery)...)
+			validationErrors = append(validationErrors, validateFilterConditionGrounding(field, nested, currentQuery)...)
+			continue
+		}
+
+		validationErrors = append(validationErrors, validateScalarFilterConditionGrounding(field, raw, currentQuery)...)
+	}
+
+	return validationErrors
+}
+
+type executeScriptValidationError struct {
+	Category string
+	Message  string
+	Example  string
+}
+
+type executeScriptValidationErrors struct {
+	Errors []*executeScriptValidationError
+}
+
+func (e *executeScriptValidationErrors) Error() string {
+	if e == nil || len(e.Errors) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(e.Errors))
+	for _, item := range e.Errors {
+		if item == nil {
+			continue
+		}
+		parts = append(parts, item.Error())
+	}
+	return strings.Join(parts, "\n")
+}
+
+func (e *executeScriptValidationErrors) Unwrap() []error {
+	if e == nil {
+		return nil
+	}
+	errs := make([]error, 0, len(e.Errors))
+	for _, item := range e.Errors {
+		if item != nil {
+			errs = append(errs, item)
+		}
+	}
+	return errs
+}
+
+func (e *executeScriptValidationError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Example == "" {
+		return fmt.Sprintf("execute_script validation error [%s]: %s", e.Category, e.Message)
+	}
+	return fmt.Sprintf("execute_script validation error [%s]: %s Example fix: %s", e.Category, e.Message, e.Example)
+}
+
+func newExecuteScriptValidationError(category, message, example string) *executeScriptValidationError {
+	return &executeScriptValidationError{
+		Category: category,
+		Message:  message,
+		Example:  example,
+	}
+}
+
+func collapseExecuteScriptValidationErrors(validationErrors []*executeScriptValidationError) error {
+	filtered := make([]*executeScriptValidationError, 0, len(validationErrors))
+	seen := make(map[string]struct{}, len(validationErrors))
+	for _, item := range validationErrors {
+		if item == nil {
+			continue
+		}
+		key := item.Category + "\n" + item.Message + "\n" + item.Example
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		filtered = append(filtered, item)
+	}
+	switch len(filtered) {
+	case 0:
+		return nil
+	case 1:
+		return filtered[0]
+	default:
+		return &executeScriptValidationErrors{Errors: filtered}
+	}
+}
+
+func validateFilterConditionGrounding(field string, raw map[string]any, currentQuery string) []*executeScriptValidationError {
+	expected, ok := inferPredicateFromCurrentQuery(field, currentQuery)
+	if !ok || filterPredicateMatchesExpected(raw, expected) {
+		return nil
+	}
+	if len(raw) == 0 {
+		return []*executeScriptValidationError{newExecuteScriptValidationError(
+			"invalid_filter_query_mismatch",
+			fmt.Sprintf("filter condition field %q does not preserve the user-requested predicate from the current query %q; expected %v", field, currentQuery, expected),
+			fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":%s}}}`, field, mustJSON(expected)),
+		)}
+	}
+	for op, value := range expected {
+		actual, ok := raw[op]
+		if ok && valuesEquivalentForFilterGrounding(actual, value) {
+			return nil
+		}
+	}
+	return []*executeScriptValidationError{newExecuteScriptValidationError(
+		"invalid_filter_query_mismatch",
+		fmt.Sprintf("filter condition field %q does not preserve the user-requested predicate from the current query %q; expected %v, got %v", field, currentQuery, expected, raw),
+		fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":%s}}}`, field, mustJSON(expected)),
+	)}
+}
+
+func validateScalarFilterConditionGrounding(field string, raw any, currentQuery string) []*executeScriptValidationError {
+	expected, ok := inferPredicateFromCurrentQuery(field, currentQuery)
+	if !ok {
+		return nil
+	}
+	if eq, hasEq := expected["$eq"]; hasEq && valuesEquivalentForFilterGrounding(eq, raw) {
+		return nil
+	}
+	return []*executeScriptValidationError{newExecuteScriptValidationError(
+		"invalid_filter_query_mismatch",
+		fmt.Sprintf("filter condition field %q uses scalar value %v but the current query %q implies predicate %v", field, raw, currentQuery, expected),
+		fmt.Sprintf(`{"op":"filter","args":{"condition":{"%s":%s}}}`, field, mustJSON(expected)),
+	)}
+}
+
+func mustJSON(value any) string {
+	bytes, err := json.Marshal(value)
+	if err != nil {
+		return "{}"
+	}
+	return string(bytes)
+}
+
+func filterPredicateMatchesExpected(raw map[string]any, expected map[string]any) bool {
+	if len(raw) != len(expected) {
+		return false
+	}
+	for op, expectedValue := range expected {
+		actualValue, ok := raw[op]
+		if !ok || !valuesEquivalentForFilterGrounding(actualValue, expectedValue) {
+			return false
+		}
+	}
+	return true
+}
+
+func valuesEquivalentForFilterGrounding(actual, expected any) bool {
+	if reflect.DeepEqual(actual, expected) {
+		return true
+	}
+	actualString, actualIsString := actual.(string)
+	expectedString, expectedIsString := expected.(string)
+	if actualIsString && expectedIsString {
+		return strings.EqualFold(strings.TrimSpace(actualString), strings.TrimSpace(expectedString))
+	}
+	actualNumber, actualIsNumber := coerceFilterGroundingNumber(actual)
+	expectedNumber, expectedIsNumber := coerceFilterGroundingNumber(expected)
+	if actualIsNumber && expectedIsNumber {
+		return actualNumber == expectedNumber
+	}
+	return false
+}
+
+func coerceFilterGroundingNumber(value any) (float64, bool) {
+	switch number := value.(type) {
+	case int:
+		return float64(number), true
+	case int8:
+		return float64(number), true
+	case int16:
+		return float64(number), true
+	case int32:
+		return float64(number), true
+	case int64:
+		return float64(number), true
+	case uint:
+		return float64(number), true
+	case uint8:
+		return float64(number), true
+	case uint16:
+		return float64(number), true
+	case uint32:
+		return float64(number), true
+	case uint64:
+		return float64(number), true
+	case float32:
+		return float64(number), true
+	case float64:
+		return number, true
+	default:
+		return 0, false
+	}
+}
+
+func isLikelyBooleanFieldName(field string) bool {
+	field = strings.ToLower(strings.TrimSpace(field))
+	field = strings.TrimPrefix(field, "!")
+	if idx := strings.LastIndex(field, "."); idx >= 0 {
+		field = field[idx+1:]
+	}
+
+	if strings.HasPrefix(field, "is_") || strings.HasPrefix(field, "has_") || strings.HasPrefix(field, "can_") || strings.HasPrefix(field, "should_") {
+		return true
+	}
+
+	switch field {
+	case "active", "enabled", "disabled", "deleted", "archived", "visible", "public", "private", "verified", "locked", "done", "complete", "completed":
+		return true
+	default:
+		return false
+	}
+}
+
+func isInvalidPlaceholderFieldName(field string) bool {
+	field = strings.ToLower(strings.TrimSpace(strings.Trim(field, "\"'")))
+	if field == "" {
+		return true
+	}
+
+	switch field {
+	case "null", "nil", "<nil>", "undefined", "none":
+		return true
+	default:
+		return false
+	}
 }
 
 // CompiledScript is a function that executes the compiled script against an engine.
@@ -396,38 +836,10 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 		})
 	}
 
-	return func(ctx context.Context, e *ScriptEngine) error {
+	return func(ctx context.Context, e *ScriptEngine) (runErr error) {
 
 		defer func() {
-			// Check if we are returning a Cursor that needs to own the deferred cleanup
-			var cursor ScriptCursor
-
-			if sc, ok := e.ReturnValue.(ScriptCursor); ok {
-				cursor = sc
-			} else if sc, ok := e.LastResult.(ScriptCursor); ok {
-
-				cursor = sc
-			}
-
-			if cursor != nil && len(e.Deferred) > 0 {
-				log.Debug("Transferring deferred cleanup to returned cursor")
-
-				wrapper := &DeferredCleanupCursor{
-					source:  cursor,
-					cleanup: e.Deferred,
-					ctx:     ctx,
-					engine:  e,
-				}
-
-				if e.ReturnValue != nil {
-					e.ReturnValue = wrapper
-				}
-
-				if e.LastResult == cursor {
-					e.LastResult = wrapper
-				}
-
-				e.Deferred = nil
+			if attachDeferredCleanupCursor(ctx, e) {
 				return
 			}
 
@@ -439,6 +851,9 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 				log.Debug("Executing deferred operation", "index", i)
 				if err := task(ctx, e); err != nil {
 					log.Error("Deferred execution failed", "error", err)
+					if runErr == nil {
+						runErr = fmt.Errorf("deferred operation failed: %w", err)
+					}
 				}
 			}
 		}()
@@ -524,6 +939,65 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 		}
 		return nil
 	}, nil
+}
+
+func attachDeferredCleanupCursor(ctx context.Context, e *ScriptEngine) bool {
+	if len(e.Deferred) == 0 {
+		return false
+	}
+
+	var cursor ScriptCursor
+	if sc, ok := e.ReturnValue.(ScriptCursor); ok {
+		cursor = sc
+	} else if sc, ok := e.LastResult.(ScriptCursor); ok {
+		cursor = sc
+	} else if sc, ok := e.Context.Variables["output"].(ScriptCursor); ok {
+		cursor = sc
+	} else if sc, ok := e.Context.Variables["final_result"].(ScriptCursor); ok {
+		cursor = sc
+	} else if sc, ok := e.Context.Variables["result"].(ScriptCursor); ok {
+		cursor = sc
+	} else if e.Context.LastUpdatedVar != "" {
+		if sc, ok := e.Context.Variables[e.Context.LastUpdatedVar].(ScriptCursor); ok {
+			cursor = sc
+		}
+	}
+
+	if cursor == nil {
+		return false
+	}
+
+	log.Debug("Transferring deferred cleanup to returned cursor")
+	wrapper := &DeferredCleanupCursor{
+		source:  cursor,
+		cleanup: e.Deferred,
+		ctx:     ctx,
+		engine:  e,
+	}
+
+	if current, ok := e.ReturnValue.(ScriptCursor); ok && current == cursor {
+		e.ReturnValue = wrapper
+	}
+	if current, ok := e.LastResult.(ScriptCursor); ok && current == cursor {
+		e.LastResult = wrapper
+	}
+	if current, ok := e.Context.Variables["output"].(ScriptCursor); ok && current == cursor {
+		e.Context.Variables["output"] = wrapper
+	}
+	if current, ok := e.Context.Variables["final_result"].(ScriptCursor); ok && current == cursor {
+		e.Context.Variables["final_result"] = wrapper
+	}
+	if current, ok := e.Context.Variables["result"].(ScriptCursor); ok && current == cursor {
+		e.Context.Variables["result"] = wrapper
+	}
+	if e.Context.LastUpdatedVar != "" {
+		if current, ok := e.Context.Variables[e.Context.LastUpdatedVar].(ScriptCursor); ok && current == cursor {
+			e.Context.Variables[e.Context.LastUpdatedVar] = wrapper
+		}
+	}
+
+	e.Deferred = nil
+	return true
 }
 
 func (e *ScriptEngine) resolveTemplate(tmpl string) any {
@@ -1103,20 +1577,81 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 }
 
 func normalizeScriptStepForCompatibility(step map[string]any) {
+	normalizeScriptStepForCompatibilityWithQueryAndState(step, "", nil)
+}
+
+func normalizeScriptStepForCompatibilityWithQuery(step map[string]any, currentQuery string) {
+	normalizeScriptStepForCompatibilityWithQueryAndState(step, currentQuery, nil)
+}
+
+func normalizeScriptStepForCompatibilityWithQueryAndState(step map[string]any, currentQuery string, state *scriptCompatibilityNormalizerState) {
 	op, _ := step["op"].(string)
 	if op == "" {
 		if cmd, ok := step["command"].(string); ok {
 			op = cmd
 		}
 	}
-	if !strings.EqualFold(op, "sort") {
-		return
-	}
 
 	argsObj, hasArgs := step["args"].(map[string]any)
 	if !hasArgs {
 		argsObj = make(map[string]any)
 		step["args"] = argsObj
+	}
+
+	switch {
+	case strings.EqualFold(op, "sort"):
+		normalizeCompatibilitySortStep(step, argsObj)
+	case strings.EqualFold(op, "filter"), strings.EqualFold(op, "select"):
+		if condition, ok := argsObj["condition"].(map[string]any); ok {
+			var aliases []string
+			var storeFields map[string]map[string]struct{}
+			if state != nil {
+				aliases = state.aliasesForStep(step)
+				storeFields = state.storeFields
+			}
+			argsObj["condition"] = normalizeCompatibilityConditionMapWithQueryAndAliases(condition, currentQuery, aliases, storeFields)
+		}
+	case strings.EqualFold(op, "join"), strings.EqualFold(op, "join_right"):
+		if onMap, ok := argsObj["on"].(map[string]any); ok {
+			argsObj["on"] = normalizeCompatibilityJoinOn(onMap)
+		}
+	}
+}
+
+func currentQueryForScriptGrounding(payload *ai.SessionPayload) string {
+	if payload == nil {
+		return ""
+	}
+
+	candidates := make([]string, 0, 4)
+	appendUnique := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		for _, existing := range candidates {
+			if existing == value {
+				return
+			}
+		}
+		candidates = append(candidates, value)
+	}
+
+	if payload.ClarificationState != nil {
+		appendUnique(payload.ClarificationState.TargetQuery)
+		appendUnique(payload.ClarificationState.EffectiveResumeAsk)
+	}
+	if payload.RetryRewriteState != nil {
+		appendUnique(payload.RetryRewriteState.ResolvedQuery)
+	}
+	appendUnique(payload.CurrentUserQuery)
+
+	return strings.Join(candidates, "\n")
+}
+
+func normalizeCompatibilitySortStep(step map[string]any, argsObj map[string]any) {
+	if step == nil || argsObj == nil {
+		return
 	}
 
 	if inputVar, _ := step["input_var"].(string); inputVar == "" {
@@ -1142,6 +1677,14 @@ func normalizeScriptStepForCompatibility(step map[string]any) {
 	if !desc {
 		desc, _ = argsObj["descending"].(bool)
 	}
+	if !desc {
+		if direction, _ := argsObj["direction"].(string); strings.TrimSpace(direction) != "" {
+			switch strings.ToLower(strings.TrimSpace(direction)) {
+			case "desc", "descending":
+				desc = true
+			}
+		}
+	}
 	if desc {
 		field += " desc"
 	}
@@ -1150,6 +1693,751 @@ func normalizeScriptStepForCompatibility(step map[string]any) {
 	delete(argsObj, "field")
 	delete(argsObj, "desc")
 	delete(argsObj, "descending")
+	delete(argsObj, "direction")
+}
+
+func normalizeCompatibilityConditionMap(condition map[string]any) map[string]any {
+	return normalizeCompatibilityConditionMapWithQueryAndAliases(condition, "", nil, nil)
+}
+
+func normalizeCompatibilityConditionMapWithQuery(condition map[string]any, currentQuery string) map[string]any {
+	return normalizeCompatibilityConditionMapWithQueryAndAliases(condition, currentQuery, nil, nil)
+}
+
+func normalizeCompatibilityConditionMapWithQueryAndAliases(condition map[string]any, currentQuery string, aliases []string, storeFields map[string]map[string]struct{}) map[string]any {
+	normalized := make(map[string]any, len(condition))
+	for field, raw := range condition {
+		field = qualifyCompatibilityConditionField(normalizeCompatibilityFieldPathWithAliases(field, aliases), aliases, storeFields)
+		if strings.HasPrefix(strings.TrimSpace(field), "$") {
+			addNormalizedCompatibilityConditionEntry(normalized, field, raw, aliases)
+			continue
+		}
+
+		if nested, ok := raw.(map[string]any); ok {
+			if newField, newValue, handled := normalizeMalformedCompatibilityPredicate(field, nested, currentQuery, aliases, storeFields); handled {
+				if newField != "" {
+					addNormalizedCompatibilityConditionEntry(normalized, newField, newValue, aliases)
+				}
+				continue
+			}
+			addNormalizedCompatibilityConditionEntry(normalized, field, normalizeCompatibilityConditionMapWithQueryAndAliases(nested, currentQuery, aliases, storeFields), aliases)
+			continue
+		}
+
+		if raw == nil && shouldDropCompatibilityPlaceholderField(field, aliases, storeFields) {
+			continue
+		}
+
+		if placeholder, ok := raw.(bool); ok && placeholder && !isLikelyBooleanFieldName(field) {
+			if inferred, changed := inferPredicateFromCurrentQuery(field, currentQuery); changed {
+				addNormalizedCompatibilityConditionEntry(normalized, field, inferred, aliases)
+				continue
+			}
+			if inferredField, inferredValue, changed := inferAliasPredicateFromCurrentQuery(field, currentQuery); changed {
+				addNormalizedCompatibilityConditionEntry(normalized, inferredField, inferredValue, aliases)
+				continue
+			}
+		}
+
+		if rawStr, ok := raw.(string); ok {
+			newField, newValue, changed := normalizeCompatibilityConditionEntry(field, rawStr)
+			if changed {
+				addNormalizedCompatibilityConditionEntry(normalized, newField, newValue, aliases)
+				continue
+			}
+
+			if inferredField, inferredValue, changed := normalizeCompatibilityAliasConditionEntry(field, rawStr, currentQuery); changed {
+				addNormalizedCompatibilityConditionEntry(normalized, inferredField, inferredValue, aliases)
+				continue
+			}
+
+			if !isAliasPlaceholderField(field) {
+				addNormalizedCompatibilityConditionEntry(normalized, field, map[string]any{"$eq": parseCompatibilityLiteral(rawStr)}, aliases)
+				continue
+			}
+		}
+
+		addNormalizedCompatibilityConditionEntry(normalized, field, raw, aliases)
+	}
+	return normalized
+}
+
+func addNormalizedCompatibilityConditionEntry(normalized map[string]any, field string, value any, aliases []string) {
+	if normalized == nil || strings.TrimSpace(field) == "" {
+		return
+	}
+	if len(aliases) == 1 {
+		alias := strings.TrimSpace(aliases[0])
+		if strings.Contains(field, ".") {
+			parts := strings.SplitN(field, ".", 2)
+			if strings.EqualFold(strings.TrimSpace(parts[0]), alias) {
+				leaf := strings.TrimSpace(parts[1])
+				if _, exists := normalized[leaf]; exists {
+					return
+				}
+			}
+		} else {
+			delete(normalized, alias+"."+field)
+		}
+	}
+	normalized[field] = value
+}
+
+func normalizeMalformedCompatibilityPredicate(field string, raw map[string]any, currentQuery string, aliases []string, storeFields map[string]map[string]struct{}) (string, any, bool) {
+	if len(raw) == 0 {
+		if inferred, ok := inferPredicateFromCurrentQuery(field, currentQuery); ok {
+			return field, inferred, true
+		}
+		return "", nil, true
+	}
+	if containsPredicateOperator(raw) {
+		return field, nil, false
+	}
+	if inferred, ok := inferPredicateFromCurrentQuery(field, currentQuery); ok {
+		return field, inferred, true
+	}
+	if value, ok := extractCompatibilityPredicateValue(raw); ok {
+		return field, map[string]any{"$eq": value}, true
+	}
+	if shouldDropCompatibilityPlaceholderField(field, aliases, storeFields) {
+		return "", nil, true
+	}
+	return field, nil, false
+}
+
+func containsPredicateOperator(raw map[string]any) bool {
+	for key := range raw {
+		if strings.HasPrefix(strings.TrimSpace(key), "$") {
+			return true
+		}
+	}
+	return false
+}
+
+func extractCompatibilityPredicateValue(raw map[string]any) (any, bool) {
+	if value, ok := raw["value"]; ok && value != nil {
+		return value, true
+	}
+	for _, value := range raw {
+		if value == nil {
+			continue
+		}
+		if nested, ok := value.(map[string]any); ok {
+			if nestedValue, ok := extractCompatibilityPredicateValue(nested); ok {
+				return nestedValue, true
+			}
+			continue
+		}
+		switch typed := value.(type) {
+		case string:
+			if strings.TrimSpace(typed) != "" {
+				return typed, true
+			}
+		default:
+			return typed, true
+		}
+	}
+	return nil, false
+}
+
+func shouldDropCompatibilityPlaceholderField(field string, aliases []string, storeFields map[string]map[string]struct{}) bool {
+	field = normalizeCompatibilityFieldPath(field)
+	if field == "" || strings.HasPrefix(field, "$") {
+		return true
+	}
+	if isRecognizedCompatibilityField(field, aliases, storeFields) {
+		return false
+	}
+	lower := strings.ToLower(field)
+	if strings.Contains(lower, "_match") || strings.Contains(lower, "_value") || strings.HasSuffix(lower, "_store") {
+		return true
+	}
+	return len(aliases) > 0 || len(storeFields) > 0
+}
+
+func isRecognizedCompatibilityField(field string, aliases []string, storeFields map[string]map[string]struct{}) bool {
+	if field == "" {
+		return false
+	}
+	if strings.Contains(field, ".") {
+		parts := strings.SplitN(field, ".", 2)
+		fields := storeFields[strings.ToLower(strings.TrimSpace(parts[0]))]
+		if len(fields) == 0 {
+			return false
+		}
+		_, ok := fields[strings.ToLower(strings.TrimSpace(parts[1]))]
+		return ok
+	}
+	for _, alias := range aliases {
+		fields := storeFields[strings.ToLower(strings.TrimSpace(alias))]
+		if len(fields) == 0 {
+			continue
+		}
+		if _, ok := fields[strings.ToLower(field)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeCompatibilityFieldPathWithAliases(field string, aliases []string) string {
+	field = normalizeCompatibilityFieldPath(field)
+	if field == "" || strings.Contains(field, ".") {
+		return field
+	}
+	lower := strings.ToLower(field)
+	for _, alias := range aliases {
+		alias = strings.TrimSpace(alias)
+		if alias == "" {
+			continue
+		}
+		prefix := strings.ToLower(alias) + "_"
+		if strings.HasPrefix(lower, prefix) && len(field) > len(prefix) {
+			return alias + "." + field[len(prefix):]
+		}
+	}
+	return field
+}
+
+func qualifyCompatibilityConditionField(field string, aliases []string, storeFields map[string]map[string]struct{}) string {
+	field = normalizeCompatibilityFieldPath(field)
+	if field == "" || strings.HasPrefix(field, "$") || strings.Contains(field, ".") {
+		return field
+	}
+	if len(aliases) <= 1 || len(storeFields) == 0 {
+		return field
+	}
+	for _, alias := range aliases {
+		fields := storeFields[strings.ToLower(strings.TrimSpace(alias))]
+		if len(fields) == 0 {
+			continue
+		}
+		if _, ok := fields[strings.ToLower(field)]; ok {
+			return alias + "." + field
+		}
+	}
+	return field
+}
+
+type scriptCompatibilityNormalizerState struct {
+	storeVars     map[string]string
+	resultAliases map[string][]string
+	storeFields   map[string]map[string]struct{}
+}
+
+func (a *CopilotAgent) newScriptCompatibilityNormalizerState(ctx context.Context, rawSteps []map[string]any) *scriptCompatibilityNormalizerState {
+	return &scriptCompatibilityNormalizerState{
+		storeVars:     make(map[string]string),
+		resultAliases: make(map[string][]string),
+		storeFields:   a.inferScriptStoreFieldSets(ctx, rawSteps),
+	}
+}
+
+func (s *scriptCompatibilityNormalizerState) aliasesForStep(step map[string]any) []string {
+	if s == nil || step == nil {
+		return nil
+	}
+	inputVar, _ := step["input_var"].(string)
+	if aliases := s.resultAliases[strings.TrimSpace(inputVar)]; len(aliases) > 0 {
+		return append([]string(nil), aliases...)
+	}
+	argsObj, _ := step["args"].(map[string]any)
+	if argsObj == nil {
+		return nil
+	}
+	if storeRef, _ := argsObj["store"].(string); strings.TrimSpace(storeRef) != "" {
+		return s.resolveAliasesForStoreRef(storeRef)
+	}
+	return nil
+}
+
+func (s *scriptCompatibilityNormalizerState) observeStep(step map[string]any) {
+	if s == nil || step == nil {
+		return
+	}
+	op, _ := step["op"].(string)
+	resultVar, _ := step["result_var"].(string)
+	resultVar = strings.TrimSpace(resultVar)
+	argsObj, _ := step["args"].(map[string]any)
+	if argsObj == nil {
+		argsObj = map[string]any{}
+	}
+	inputVar, _ := step["input_var"].(string)
+	inputVar = strings.TrimSpace(inputVar)
+
+	switch strings.ToLower(strings.TrimSpace(op)) {
+	case "open_store":
+		storeName, _ := argsObj["name"].(string)
+		storeName = strings.TrimSpace(storeName)
+		if resultVar != "" && storeName != "" {
+			s.storeVars[resultVar] = storeName
+			s.resultAliases[resultVar] = []string{storeName}
+		}
+	case "scan", "select":
+		if resultVar != "" {
+			if storeRef, _ := argsObj["store"].(string); strings.TrimSpace(storeRef) != "" {
+				s.resultAliases[resultVar] = s.resolveAliasesForStoreRef(storeRef)
+			}
+		}
+	case "join", "join_right":
+		if resultVar != "" {
+			aliases := s.resultAliases[inputVar]
+			aliases = append(append([]string(nil), aliases...), s.targetAliases(argsObj)...)
+			s.resultAliases[resultVar] = dedupeStringSlice(aliases)
+		}
+	case "filter", "sort", "project", "limit", "first", "last", "next", "previous", "find":
+		if resultVar != "" && inputVar != "" {
+			s.resultAliases[resultVar] = append([]string(nil), s.resultAliases[inputVar]...)
+		}
+	}
+}
+
+func (s *scriptCompatibilityNormalizerState) targetAliases(argsObj map[string]any) []string {
+	for _, key := range []string{"target", "store", "with", "relation"} {
+		if ref, _ := argsObj[key].(string); strings.TrimSpace(ref) != "" {
+			if aliases := s.resolveAliasesForStoreRef(ref); len(aliases) > 0 {
+				return aliases
+			}
+		}
+	}
+	return nil
+}
+
+func (s *scriptCompatibilityNormalizerState) resolveAliasesForStoreRef(ref string) []string {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return nil
+	}
+	if storeName := strings.TrimSpace(s.storeVars[ref]); storeName != "" {
+		return []string{storeName}
+	}
+	if aliases := s.resultAliases[ref]; len(aliases) > 0 {
+		return append([]string(nil), aliases...)
+	}
+	return []string{ref}
+}
+
+func (a *CopilotAgent) inferScriptStoreFieldSets(ctx context.Context, rawSteps []map[string]any) map[string]map[string]struct{} {
+	storeNames := make(map[string]struct{})
+	for _, step := range rawSteps {
+		op, _ := step["op"].(string)
+		if !strings.EqualFold(strings.TrimSpace(op), "open_store") {
+			continue
+		}
+		argsObj, _ := step["args"].(map[string]any)
+		storeName, _ := argsObj["name"].(string)
+		storeName = strings.TrimSpace(storeName)
+		if storeName != "" {
+			storeNames[storeName] = struct{}{}
+		}
+	}
+	if len(storeNames) == 0 {
+		return nil
+	}
+
+	dbName := ""
+	if payload := ai.GetSessionPayload(ctx); payload != nil {
+		dbName = strings.TrimSpace(payload.CurrentDB)
+	}
+	for _, step := range rawSteps {
+		op, _ := step["op"].(string)
+		argsObj, _ := step["args"].(map[string]any)
+		switch {
+		case strings.EqualFold(strings.TrimSpace(op), "open_db"):
+			if name, _ := argsObj["name"].(string); strings.TrimSpace(name) != "" {
+				dbName = strings.TrimSpace(name)
+			}
+		case strings.EqualFold(strings.TrimSpace(op), "begin_tx"):
+			if name, _ := argsObj["database"].(string); strings.TrimSpace(name) != "" {
+				dbName = strings.TrimSpace(name)
+			}
+		}
+	}
+	if dbName == "" {
+		return nil
+	}
+
+	db, err := a.resolveDatabase(dbName)
+	if err != nil || db == nil {
+		return nil
+	}
+	tx, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		return nil
+	}
+	defer tx.Rollback(ctx)
+
+	storeFields := make(map[string]map[string]struct{}, len(storeNames))
+	for storeName := range storeNames {
+		store, err := jsondb.OpenStore(ctx, db.Config(), storeName, tx)
+		if err != nil || store == nil {
+			continue
+		}
+		if ok, _ := store.First(ctx); !ok {
+			continue
+		}
+		flat := flattenItem(store.GetCurrentKey(), mustCurrentValue(ctx, store))
+		schema := inferSchema(flat)
+		if len(schema) == 0 {
+			continue
+		}
+		fieldSet := make(map[string]struct{}, len(schema))
+		for field := range schema {
+			fieldSet[strings.ToLower(strings.TrimSpace(field))] = struct{}{}
+		}
+		storeFields[strings.ToLower(storeName)] = fieldSet
+	}
+	if len(storeFields) == 0 {
+		return nil
+	}
+	return storeFields
+}
+
+func mustCurrentValue(ctx context.Context, store jsondb.StoreAccessor) any {
+	value, _ := store.GetCurrentValue(ctx)
+	return value
+}
+
+func dedupeStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, trimmed)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func normalizeCompatibilityAliasConditionEntry(fieldHint string, raw string, currentQuery string) (string, any, bool) {
+	raw = strings.TrimSpace(strings.Trim(raw, "\"'"))
+	fieldHint = strings.TrimSpace(strings.Trim(fieldHint, "\"'"))
+	if raw == "" || fieldHint == "" || !isAliasPlaceholderField(fieldHint) {
+		return fieldHint, raw, false
+	}
+
+	combinedField := normalizeCompatibilityFieldPath(fieldHint + "." + raw)
+	if predicate, ok := inferPredicateFromCurrentQuery(combinedField, currentQuery); ok {
+		return combinedField, predicate, true
+	}
+
+	return combinedField, map[string]any{"$eq": parseCompatibilityLiteral(raw)}, true
+}
+
+func inferAliasPredicateFromCurrentQuery(fieldHint string, currentQuery string) (string, map[string]any, bool) {
+	fieldHint = strings.TrimSpace(strings.Trim(fieldHint, "\"'"))
+	if fieldHint == "" || !isAliasPlaceholderField(fieldHint) {
+		return fieldHint, nil, false
+	}
+
+	if inferredField, predicate, ok := inferAliasPredicateFromQueryPattern(fieldHint, currentQuery); ok {
+		return inferredField, predicate, true
+	}
+
+	return fieldHint, nil, false
+}
+
+func inferAliasPredicateFromQueryPattern(alias string, currentQuery string) (string, map[string]any, bool) {
+	query := strings.TrimSpace(currentQuery)
+	if query == "" {
+		return alias, nil, false
+	}
+
+	patterns := []struct {
+		re *regexp.Regexp
+		op string
+	}{
+		{re: regexp.MustCompile(`(?i)([a-zA-Z][a-zA-Z0-9_]*(?:[\s_]+[a-zA-Z0-9_]+){0,2})\s*(>=|<=|>|<|=|==)\s*(-?\d+(?:\.\d+)?)`), op: ""},
+		{re: regexp.MustCompile(`(?i)([a-zA-Z][a-zA-Z0-9_]*(?:[\s_]+[a-zA-Z0-9_]+){0,2})\s*(?:is\s+)?greater\s+than\s+(-?\d+(?:\.\d+)?)`), op: "$gt"},
+		{re: regexp.MustCompile(`(?i)([a-zA-Z][a-zA-Z0-9_]*(?:[\s_]+[a-zA-Z0-9_]+){0,2})\s*(?:is\s+)?less\s+than\s+(-?\d+(?:\.\d+)?)`), op: "$lt"},
+		{re: regexp.MustCompile(`(?i)([a-zA-Z][a-zA-Z0-9_]*(?:[\s_]+[a-zA-Z0-9_]+){0,2})\s*(?:is|=|==|equals?)?\s*['"]([^'"]+)['"]`), op: "$eq"},
+	}
+
+	for _, pattern := range patterns {
+		matches := pattern.re.FindAllStringSubmatch(query, -1)
+		for _, match := range matches {
+			if len(match) < 3 {
+				continue
+			}
+			leaf := normalizeAliasLeafCandidate(match[1])
+			if leaf == "" {
+				continue
+			}
+			field := alias + "." + leaf
+			op := pattern.op
+			valueIndex := 2
+			if op == "" {
+				op = comparisonOperatorToAST(match[2])
+				valueIndex = 3
+			}
+			value := parseCompatibilityLiteral(match[valueIndex])
+			return field, map[string]any{op: value}, true
+		}
+	}
+
+	return alias, nil, false
+}
+
+func normalizeAliasLeafCandidate(raw string) string {
+	raw = strings.ToLower(strings.TrimSpace(strings.Trim(raw, "\"'")))
+	if raw == "" {
+		return ""
+	}
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
+		switch r {
+		case ' ', '_', '.':
+			return true
+		default:
+			return false
+		}
+	})
+	if len(parts) == 0 {
+		return ""
+	}
+	stopWords := map[string]struct{}{
+		"a": {}, "an": {}, "and": {}, "by": {}, "find": {}, "for": {}, "from": {}, "in": {},
+		"is": {}, "of": {}, "on": {}, "or": {}, "the": {}, "to": {}, "where": {}, "with": {},
+	}
+	filtered := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if _, isStopWord := stopWords[part]; isStopWord {
+			continue
+		}
+		filtered = append(filtered, part)
+	}
+	if len(filtered) > 0 {
+		parts = filtered
+	}
+	if len(parts) > 3 {
+		parts = parts[len(parts)-3:]
+	}
+	return strings.Join(parts, "_")
+}
+
+func normalizeCompatibilityConditionEntry(fieldHint string, raw string) (string, any, bool) {
+	raw = strings.TrimSpace(strings.Trim(raw, "\"'"))
+	fieldHint = strings.TrimSpace(strings.Trim(fieldHint, "\"'"))
+	if raw == "" || fieldHint == "" {
+		return fieldHint, raw, false
+	}
+
+	if strings.HasPrefix(raw, "$") {
+		parts := strings.SplitN(raw, ":", 2)
+		if len(parts) == 2 {
+			op := strings.TrimSpace(parts[0])
+			value := parseCompatibilityLiteral(parts[1])
+			if op != "" {
+				return fieldHint, map[string]any{op: value}, true
+			}
+		}
+	}
+
+	re := regexp.MustCompile(`^([a-zA-Z0-9_.]+)\s*(==|=|!=|>=|<=|>|<)\s*(.+)$`)
+	if parts := re.FindStringSubmatch(raw); len(parts) == 4 {
+		field := strings.TrimSpace(parts[1])
+		op := strings.TrimSpace(parts[2])
+		value := parseCompatibilityLiteral(parts[3])
+		if field != "" {
+			if !strings.Contains(field, ".") && isAliasPlaceholderField(fieldHint) {
+				field = fieldHint + "." + field
+			}
+			return field, map[string]any{comparisonOperatorToAST(op): value}, true
+		}
+	}
+
+	return fieldHint, raw, false
+}
+
+func normalizeCompatibilityJoinOn(onMap map[string]any) map[string]any {
+	normalized := make(map[string]any, len(onMap))
+	for left, raw := range onMap {
+		left = normalizeCompatibilityFieldPath(left)
+		if rawStr, ok := raw.(string); ok {
+			rawStr = strings.TrimSpace(strings.Trim(rawStr, "\"'"))
+			if strings.Contains(rawStr, "=") {
+				parts := strings.SplitN(rawStr, "=", 2)
+				lhs := strings.TrimSpace(parts[0])
+				rhs := strings.TrimSpace(parts[1])
+				if lhs != "" && rhs != "" {
+					if !strings.Contains(lhs, ".") && isAliasPlaceholderField(left) {
+						lhs = left + "." + lhs
+					}
+					normalized[lhs] = rhs
+					continue
+				}
+			}
+			if isAliasPlaceholderField(left) && rawStr != "" && !strings.Contains(rawStr, ".") {
+				normalized[left+"."+rawStr] = "key"
+				continue
+			}
+		}
+		normalized[left] = raw
+	}
+	return normalized
+}
+
+func normalizeCompatibilityFieldPath(field string) string {
+	field = strings.TrimSpace(strings.Trim(field, "\"'"))
+	return field
+}
+
+func comparisonOperatorToAST(op string) string {
+	switch strings.TrimSpace(op) {
+	case "=", "==":
+		return "$eq"
+	case "!=":
+		return "$ne"
+	case ">":
+		return "$gt"
+	case ">=":
+		return "$gte"
+	case "<":
+		return "$lt"
+	case "<=":
+		return "$lte"
+	default:
+		return "$eq"
+	}
+}
+
+func parseCompatibilityLiteral(raw string) any {
+	raw = strings.TrimSpace(strings.Trim(raw, "\"'"))
+	if raw == "" {
+		return ""
+	}
+	if b, err := strconv.ParseBool(raw); err == nil {
+		return b
+	}
+	if i, err := strconv.Atoi(raw); err == nil {
+		return i
+	}
+	if f, err := strconv.ParseFloat(raw, 64); err == nil {
+		return f
+	}
+	return raw
+}
+
+func inferPredicateFromCurrentQuery(field string, currentQuery string) (map[string]any, bool) {
+	query := strings.TrimSpace(currentQuery)
+	if query == "" {
+		return nil, false
+	}
+
+	field = normalizeCompatibilityFieldPath(field)
+	leaf := field
+	if idx := strings.LastIndex(leaf, "."); idx >= 0 {
+		leaf = leaf[idx+1:]
+	}
+	leaf = strings.TrimSpace(leaf)
+	if leaf == "" {
+		return nil, false
+	}
+
+	fieldPattern := queryFieldPattern(field)
+	leafPattern := queryFieldPattern(leaf)
+	patterns := []string{fieldPattern}
+	if leafPattern != fieldPattern {
+		patterns = append(patterns, leafPattern)
+	}
+
+	for _, pattern := range patterns {
+		if predicate, ok := inferNumericPredicateFromQueryPattern(query, pattern); ok {
+			return predicate, true
+		}
+		if predicate, ok := inferQuotedStringPredicateFromQueryPattern(query, pattern); ok {
+			return predicate, true
+		}
+	}
+
+	return nil, false
+}
+
+func queryFieldPattern(field string) string {
+	parts := strings.FieldsFunc(strings.ToLower(strings.TrimSpace(field)), func(r rune) bool {
+		switch r {
+		case '.', '_', ' ':
+			return true
+		default:
+			return false
+		}
+	})
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, `[\s_\.]+`)
+}
+
+func inferQuotedStringPredicateFromQueryPattern(query string, fieldPattern string) (map[string]any, bool) {
+	if fieldPattern == "" {
+		return nil, false
+	}
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?i)` + fieldPattern + `\s*(?:is|=|==|equals?)?\s*['"]([^'"]+)['"]`),
+	}
+	for _, pattern := range patterns {
+		if matches := pattern.FindStringSubmatch(query); len(matches) == 2 {
+			value := strings.TrimSpace(matches[1])
+			if value != "" {
+				return map[string]any{"$eq": value}, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func inferNumericPredicateFromQueryPattern(query string, fieldPattern string) (map[string]any, bool) {
+	if fieldPattern == "" {
+		return nil, false
+	}
+	patterns := []struct {
+		re *regexp.Regexp
+		op string
+	}{
+		{re: regexp.MustCompile(`(?i)` + fieldPattern + `\s*(>=|<=|>|<|=|==)\s*(-?\d+(?:\.\d+)?)`), op: ""},
+		{re: regexp.MustCompile(`(?i)` + fieldPattern + `\s*(?:is\s+)?greater\s+than\s+(-?\d+(?:\.\d+)?)`), op: "$gt"},
+		{re: regexp.MustCompile(`(?i)` + fieldPattern + `\s*(?:is\s+)?less\s+than\s+(-?\d+(?:\.\d+)?)`), op: "$lt"},
+	}
+	for _, pattern := range patterns {
+		matches := pattern.re.FindStringSubmatch(query)
+		if len(matches) == 0 {
+			continue
+		}
+		op := pattern.op
+		valueIndex := 1
+		if op == "" {
+			op = comparisonOperatorToAST(matches[1])
+			valueIndex = 2
+		}
+		value := parseCompatibilityLiteral(matches[valueIndex])
+		return map[string]any{op: value}, true
+	}
+	return nil, false
+}
+
+func isAliasPlaceholderField(field string) bool {
+	field = strings.ToLower(strings.TrimSpace(field))
+	if field == "" || strings.Contains(field, ".") {
+		return false
+	}
+	switch field {
+	case "users", "orders", "users_orders", "products", "customers", "items", "payments", "invoices", "details":
+		return true
+	default:
+		return strings.HasPrefix(field, "store_") || strings.HasPrefix(field, "s_")
+	}
 }
 
 func preserveLastResultOnNil(op string) bool {
@@ -1239,6 +2527,26 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 		return fmt.Errorf("transaction '%s' not found", txName)
 	}
 
+	if err := e.materializeCommitOutput(ctx); err != nil {
+		return err
+	}
+
+	if _, ok := e.Context.Variables["output"]; !ok {
+		if e.Context.LastUpdatedVar != "" {
+			if materialized, ok := e.Context.Variables[e.Context.LastUpdatedVar]; ok && !isInternalScriptHandle(materialized) {
+				e.Context.Variables["output"] = materialized
+			}
+		}
+		if _, ok := e.Context.Variables["output"]; !ok && e.LastResult != nil && !isInternalScriptHandle(e.LastResult) {
+			e.Context.Variables["output"] = e.LastResult
+		}
+	}
+
+	return tx.Commit(ctx)
+}
+
+func (e *ScriptEngine) materializeCommitOutput(ctx context.Context) error {
+
 	drain := func(name string, cursor ScriptCursor) error {
 		results := make([]any, 0)
 
@@ -1282,32 +2590,60 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 		return nil
 	}
 
-	if e.Context.LastUpdatedVar != "" {
-		if val, ok := e.Context.Variables[e.Context.LastUpdatedVar]; ok {
-			if cursor, ok := val.(ScriptCursor); ok {
-				if err := drain(e.Context.LastUpdatedVar, cursor); err != nil {
-					return err
-				}
+	materializeVar := func(name string) (bool, error) {
+		if name == "" {
+			return false, nil
+		}
+		val, ok := e.Context.Variables[name]
+		if !ok {
+			return false, nil
+		}
+		cursor, ok := val.(ScriptCursor)
+		if !ok {
+			return false, nil
+		}
+		if err := drain(name, cursor); err != nil {
+			return true, err
+		}
+		return true, nil
+	}
+
+	materializeDirect := func(current any, set func(any)) (bool, error) {
+		cursor, ok := current.(ScriptCursor)
+		if !ok {
+			return false, nil
+		}
+
+		results := make([]any, 0)
+		for {
+			itemObj, ok, err := cursor.Next(ctx)
+			if err != nil {
+				return true, fmt.Errorf("failed to materialize return cursor before commit: %v", err)
 			}
-		}
-	}
-
-	for name, val := range e.Context.Variables {
-		if name == e.Context.LastUpdatedVar {
-			continue
-		}
-		if cursor, ok := val.(ScriptCursor); ok {
-			if err := drain(name, cursor); err != nil {
-				return err
+			if !ok {
+				break
 			}
+			results = append(results, itemObj)
+		}
+		cursor.Close()
+		set(results)
+		return true, nil
+	}
+
+	for _, name := range []string{"output", "final_result", "result", e.Context.LastUpdatedVar} {
+		if handled, err := materializeVar(name); handled || err != nil {
+			return err
 		}
 	}
 
-	if _, ok := e.Context.Variables["output"]; !ok && e.LastResult != nil && !isInternalScriptHandle(e.LastResult) {
-		e.Context.Variables["output"] = e.LastResult
+	if handled, err := materializeDirect(e.ReturnValue, func(v any) { e.ReturnValue = v }); handled || err != nil {
+		return err
+	}
+	if handled, err := materializeDirect(e.LastResult, func(v any) { e.LastResult = v }); handled || err != nil {
+		return err
 	}
 
-	return tx.Commit(ctx)
+	return nil
 }
 
 func (e *ScriptEngine) RollbackTx(ctx context.Context, args map[string]any) error {
@@ -2014,6 +3350,25 @@ func (e *ScriptEngine) Join(ctx context.Context, input any, args map[string]any)
 	}
 
 	rightStore, isRightStore := e.getStore(rightVar)
+	if !isRightStore && rightVar != "" {
+		if rightInput, ok := e.Context.Variables[rightVar]; ok {
+			if store, ok := rightInput.(jsondb.StoreAccessor); ok && store != nil {
+				rightStore = store
+				isRightStore = true
+			}
+		}
+	}
+	if !isRightStore && rightVar != "" {
+		openedStore, openErr := e.OpenStore(ctx, map[string]any{"name": rightVar})
+		if openErr == nil && openedStore != nil {
+			rightStore = openedStore
+			isRightStore = true
+			if e.Context.Stores == nil {
+				e.Context.Stores = make(map[string]jsondb.StoreAccessor)
+			}
+			e.Context.Stores[rightVar] = openedStore
+		}
+	}
 
 	rightAlias, _ := args["right_alias"].(string)
 	if rightAlias == "" {
@@ -2462,7 +3817,19 @@ func (e *ScriptEngine) stageFilter(input []any, args map[string]any) ([]any, err
 func (e *ScriptEngine) stageSort(input []any, args map[string]any) ([]any, error) {
 	fieldsRaw, ok := args["fields"].([]any)
 	if !ok {
-		return input, nil
+		// Fallback: compact form {field, direction} emitted by some LLM responses.
+		if f, _ := args["field"].(string); strings.TrimSpace(f) != "" {
+			dir, _ := args["direction"].(string)
+			dir = strings.ToLower(strings.TrimSpace(dir))
+			if dir == "descending" {
+				dir = "desc"
+			} else if dir != "desc" {
+				dir = "asc"
+			}
+			fieldsRaw = []any{strings.TrimSpace(f) + " " + dir}
+		} else {
+			return input, nil
+		}
 	}
 	var fields []string
 	for _, f := range fieldsRaw {
@@ -2730,13 +4097,11 @@ func (e *ScriptEngine) CallFunction(ctx context.Context, args map[string]any) (a
 
 	savedVars := make(map[string]any)
 	params := normalizeCallFunctionParams(args)
-	if params != nil {
-		for k, v := range params {
-			if oldVal, exists := e.Context.Variables[k]; exists {
-				savedVars[k] = oldVal
-			}
-			e.Context.Variables[k] = v
+	for k, v := range params {
+		if oldVal, exists := e.Context.Variables[k]; exists {
+			savedVars[k] = oldVal
 		}
+		e.Context.Variables[k] = v
 	}
 
 	// Call Handler

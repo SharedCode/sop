@@ -375,7 +375,11 @@ func (a *CopilotAgent) toolUpdate(ctx context.Context, args map[string]any) (str
 		if localTx {
 			tx.Rollback(ctx)
 		}
-		return fmt.Sprintf("Item with key '%v' not found in store '%s'", key, storeName), nil
+		return wrapNativeTerminalToolResult(ctx,
+			fmt.Sprintf("Item with key '%v' not found in store '%s'", key, storeName),
+			"terminal_error",
+			"Stop retrying this exact update until the key or target store changes.",
+		), nil
 	}
 
 	if localTx {
@@ -512,7 +516,11 @@ func (a *CopilotAgent) toolDelete(ctx context.Context, args map[string]any) (str
 		if localTx {
 			tx.Rollback(ctx)
 		}
-		return fmt.Sprintf("Item '%v' not found in store '%s'", key, storeName), nil
+		return wrapNativeTerminalToolResult(ctx,
+			fmt.Sprintf("Item '%v' not found in store '%s'", key, storeName),
+			"terminal_error",
+			"Stop retrying this exact delete until the key or target store changes.",
+		), nil
 	}
 
 	if localTx {
@@ -626,7 +634,7 @@ func (a *CopilotAgent) toolManageTransaction(ctx context.Context, args map[strin
 				if commitErr != nil {
 					return "", fmt.Errorf("commit failed: %v. AND failed to auto-start new one: %v", commitErr, beginErr)
 				}
-				return "Transaction committed, but failed to auto-start new one: " + beginErr.Error(), nil
+				return "", fmt.Errorf("transaction committed, but failed to auto-start new one: %w", beginErr)
 			}
 
 			if p.Transactions == nil {
@@ -682,7 +690,7 @@ func (a *CopilotAgent) toolManageTransaction(ctx context.Context, args map[strin
 		if db != nil {
 			newTx, err := db.BeginTransaction(ctx, sop.ForWriting)
 			if err != nil {
-				return "Transaction rolled back, but failed to auto-start new one: " + err.Error(), nil
+				return "", fmt.Errorf("transaction rolled back, but failed to auto-start new one: %w", err)
 			}
 			if p.Transactions == nil {
 				p.Transactions = make(map[string]any)
@@ -759,7 +767,7 @@ func (a *CopilotAgent) toolMintToSpace(ctx context.Context, args map[string]any)
 	category, _ := args["category"].(string)
 
 	var targetDB *database.Database
-	if strings.HasPrefix(kbName, ai.MemoryKBPrefix) {
+	if strings.HasPrefix(kbName, "ltm_") {
 		if a.systemDB == nil {
 			return "", fmt.Errorf("systemDB is not initialized")
 		}

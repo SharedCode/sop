@@ -99,10 +99,122 @@ type Config struct {
 	RedisURL     string `json:"-"`
 }
 
+type setupWizardAIConfig struct {
+	BrainProvider    string                      `json:"brain_provider,omitempty"`
+	BrainModel       string                      `json:"brain_model,omitempty"`
+	BrainURL         string                      `json:"brain_url,omitempty"`
+	BrainAPIKey      string                      `json:"brain_api_key,omitempty"`
+	EmbedderProvider string                      `json:"embedder_provider,omitempty"`
+	EmbedderModel    string                      `json:"embedder_model,omitempty"`
+	EmbedderURL      string                      `json:"embedder_url,omitempty"`
+	EmbedderAPIKey   string                      `json:"embedder_api_key,omitempty"`
+	EnvProviders     []setupWizardProviderOption `json:"env_providers,omitempty"`
+}
+
+type setupWizardProviderOption struct {
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
+	URL      string `json:"url,omitempty"`
+	APIKey   string `json:"api_key,omitempty"`
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func hasAnyEnv(keys ...string) bool {
+	for _, key := range keys {
+		if os.Getenv(key) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func readSetupWizardAIConfigFromEnv() setupWizardAIConfig {
+	type providerEnv struct {
+		provider string
+		apiKey   string
+		model    string
+		baseURL  string
+	}
+
+	providers := []providerEnv{
+		{
+			provider: "gemini",
+			apiKey:   os.Getenv("GEMINI_API_KEY"),
+			model:    os.Getenv("GEMINI_MODEL"),
+			baseURL:  firstNonEmpty(os.Getenv("GEMINI_API_BASE_URL"), os.Getenv("GOOGLE_API_BASE_URL")),
+		},
+		{
+			provider: "openai",
+			apiKey:   os.Getenv("OPENAI_API_KEY"),
+			model:    os.Getenv("OPENAI_MODEL"),
+			baseURL:  os.Getenv("OPENAI_API_BASE_URL"),
+		},
+		{
+			provider: "anthropic",
+			apiKey:   os.Getenv("ANTHROPIC_API_KEY"),
+			model:    os.Getenv("ANTHROPIC_MODEL"),
+			baseURL:  os.Getenv("ANTHROPIC_API_BASE_URL"),
+		},
+	}
+
+	options := make([]setupWizardProviderOption, 0, len(providers))
+
+	for _, provider := range providers {
+		if provider.apiKey == "" && provider.model == "" && provider.baseURL == "" {
+			continue
+		}
+
+		options = append(options, setupWizardProviderOption{
+			Provider: provider.provider,
+			Model:    provider.model,
+			URL:      provider.baseURL,
+			APIKey:   provider.apiKey,
+		})
+	}
+
+	if len(options) > 0 {
+		defaultProvider := options[0]
+
+		return setupWizardAIConfig{
+			BrainProvider: defaultProvider.Provider,
+			BrainModel:    defaultProvider.Model,
+			BrainURL:      defaultProvider.URL,
+			BrainAPIKey:   defaultProvider.APIKey,
+			EnvProviders:  options,
+		}
+	}
+
+	if host := firstNonEmpty(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_BASE_URL")); host != "" {
+		return setupWizardAIConfig{
+			BrainProvider: "ollama",
+			BrainURL:      host,
+		}
+	}
+
+	return setupWizardAIConfig{}
+}
+
+func setupWizardAIConfigJSON() template.JS {
+	b, err := json.Marshal(readSetupWizardAIConfigFromEnv())
+	if err != nil {
+		return template.JS("{}")
+	}
+	return template.JS(b)
+}
+
 //go:embed templates/*
 var content embed.FS
 
 var config Config
+var modelCatalog = defaultModelCatalog()
 var loadedAgents = make(map[string]ai.Agent[map[string]any])
 var activeSessions = NewSessionManager(100)
 
@@ -231,17 +343,23 @@ func main() {
 	}
 
 	if _, err := os.Stat(targetConfigPath); err == nil {
-		if err := loadConfig(targetConfigPath); err != nil {
+		err := loadConfig(targetConfigPath)
+		if err != nil {
 			log.Error(fmt.Sprintf("Failed to load config file: %v", err))
 		} else {
 			if config.ConfigFile == "" {
 				config.ConfigFile = targetConfigPath
+			}
+			if _, err := loadModelCatalog(targetConfigPath); err != nil {
+				log.Error(fmt.Sprintf("Failed to load model catalog: %v", err))
 			}
 			log.Info(fmt.Sprintf("Loaded configuration from: %s", targetConfigPath))
 			if len(config.Databases) == 0 && config.SystemDB == nil {
 				log.Warn(fmt.Sprintf("Loaded configuration file '%s' but found 0 databases defined.", targetConfigPath))
 			}
 		}
+	} else if _, err := loadModelCatalog(""); err != nil {
+		log.Error(fmt.Sprintf("Failed to load model catalog: %v", err))
 	}
 
 	// Override RootPassword from environment variable if set (Security best practice)
@@ -271,7 +389,6 @@ func main() {
 			},
 		}
 	}
-
 	// Resolve Database Paths to absolute
 	for i := range config.Databases {
 		if abs, err := filepath.Abs(config.Databases[i].Path); err == nil {
@@ -353,6 +470,8 @@ func main() {
 	http.HandleFunc("/api/store/item/delete", handleDeleteItem)
 	http.HandleFunc("/api/admin/validate", handleValidateAdminToken)
 	http.HandleFunc("/api/ai/chat", handleAIChat)
+	http.HandleFunc("/api/ai/test-connection", handleTestLLMConnection)
+	http.HandleFunc("/api/ai/test-embedder-connection", handleTestEmbedderConnection)
 	http.HandleFunc("/api/ai/summarize", handleAISummarize)
 	http.HandleFunc("/api/tool/execute", handleToolExecute)
 	http.HandleFunc("/api/ai/session/close", handleCloseSession)
@@ -661,8 +780,9 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := map[string]any{
-		"Version": sop.Version,
-		"Mode":    config.Mode,
+		"Version":      sop.Version,
+		"Mode":         config.Mode,
+		"ModelCatalog": modelCatalog,
 		// AllowInvalidMapKey is a flag to bypass the validation that requires Map Key types
 		// to have an Index Specification or CEL Expression. This is useful for testing.
 		"AllowInvalidMapKey": os.Getenv("SOP_ALLOW_INVALID_MAP_KEY") == "true",
@@ -682,14 +802,24 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 			}
 			return "gemini"
 		}(), "IsEnterprise": isEnterprise,
-		"SystemDBName": SystemDBName,
-		"ConfigFile":   config.ConfigFile,
-		"MinHashMod":   fs.MinimumModValue,
-		"MaxHashMod":   fs.MaximumModValue,
+		"SystemDBName":            SystemDBName,
+		"ConfigFile":              config.ConfigFile,
+		"SetupWizardAIConfigJSON": setupWizardAIConfigJSON(),
+		"MinHashMod":              fs.MinimumModValue,
+		"MaxHashMod":              fs.MaximumModValue,
 		"Env": map[string]bool{
-			"SOP_ROOT_PASSWORD": os.Getenv("SOP_ROOT_PASSWORD") != "",
-			"LLM_API_KEY":       os.Getenv("LLM_API_KEY") != "" || os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("ANTHROPIC_API_KEY") != "",
-			"EMBEDDING_API_KEY": os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("VOYAGE_API_KEY") != "" || os.Getenv("EMBEDDING_API_KEY") != "",
+			"SOP_ROOT_PASSWORD":      os.Getenv("SOP_ROOT_PASSWORD") != "",
+			"BRAIN_API_KEY":          os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("ANTHROPIC_API_KEY") != "",
+			"OPENAI_API_KEY":         os.Getenv("OPENAI_API_KEY") != "",
+			"OPENAI_API_BASE_URL":    os.Getenv("OPENAI_API_BASE_URL") != "",
+			"OPENAI_MODEL":           os.Getenv("OPENAI_MODEL") != "",
+			"ANTHROPIC_API_KEY":      os.Getenv("ANTHROPIC_API_KEY") != "",
+			"ANTHROPIC_API_BASE_URL": os.Getenv("ANTHROPIC_API_BASE_URL") != "",
+			"ANTHROPIC_MODEL":        os.Getenv("ANTHROPIC_MODEL") != "",
+			"GEMINI_API_KEY":         os.Getenv("GEMINI_API_KEY") != "",
+			"GEMINI_API_BASE_URL":    os.Getenv("GEMINI_API_BASE_URL") != "" || os.Getenv("GOOGLE_API_BASE_URL") != "",
+			"GEMINI_MODEL":           os.Getenv("GEMINI_MODEL") != "",
+			"EMBEDDING_API_KEY":      os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("VOYAGE_API_KEY") != "" || os.Getenv("EMBEDDING_API_KEY") != "",
 		},
 	}
 	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
@@ -1067,6 +1197,9 @@ func saveConfigFile() {
 	encoder.SetIndent("", "    ")
 	encoder.Encode(config)
 	os.Rename(config.ConfigFile+".tmp", config.ConfigFile)
+	if err := ensureModelCatalogFile(config.ConfigFile); err != nil {
+		log.Error(fmt.Sprintf("Failed to save model catalog: %v", err))
+	}
 }
 
 func handleUpdateDatabase(w http.ResponseWriter, r *http.Request) {

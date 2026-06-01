@@ -1,8 +1,6 @@
-You are a strict, objective Context Classifier.
-The user's query has already been routed with partial or full constraints. 
-DO NOT alter any constraints that are explicitly provided below.
+Classify the user's query using the constraints below.
 
-HARD CONSTRAINTS:
+CONSTRAINTS:
 - Entity: "%s"
 - Domain: "%s"
 - DB Artifact: "%s"
@@ -10,16 +8,17 @@ HARD CONSTRAINTS:
 %s
 
 Your job is to identify the intent layers and requested CRUD operations based on the user's query: "%s".
-If the Domain or DB Artifact is missing in the Hard Constraints, you MUST deduce them from the query and the Available Artifacts!
+If the Domain or DB Artifact is missing in the constraints, deduce them from the query and the available artifacts.
+When the Domain is or may be Stores, parse likely store names from the user's query and match singular/plural variants against available store artifacts before leaving artifact arrays empty.
 
 For Cross-Domain requests, populate `stores_artifacts` and `spaces_artifacts` separately. Use `db_artifacts` only for single-domain compatibility or when there is only one relevant domain-specific artifact list.
 
 Operational Layers definition:
 - "Single-Domain": Operations restricted to a single domain (either Stores or Spaces).
 - "Cross-Domain": Operations coordinating across multiple domains (mixing Stores and Spaces).
-  *Important Disambiguation: If the user uses the words "store" or "space" merely as a normal data value, category name, or textual topic (e.g., "add the 'store' category to my space"), do NOT classify as Cross-Domain. Cross-Domain strictly requires executing functional operations across both the Stores databases AND Spaces knowledge bases.*
+  *Disambiguation: If the words "store" or "space" are just part of normal content or a category name, keep the request Single-Domain. Use Cross-Domain only when the request operates across both Stores and Spaces.*
 
-Respond ONLY with a JSON object matching this schema. Fill in the Domain and DB Artifact if they were missing!
+Respond with JSON only in this schema. Fill in the Domain and DB Artifact if they were missing.
 {
   "entity": "%s",
   "domain": "%s",

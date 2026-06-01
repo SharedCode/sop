@@ -19,7 +19,6 @@ import (
 func (a *CopilotAgent) resolveTransaction(ctx context.Context, db *database.Database, dbName string, mode sop.TransactionMode) (sop.Transaction, bool, error) {
 	p := ai.GetSessionPayload(ctx)
 	var tx sop.Transaction
-	var localTx bool
 
 	if p != nil {
 		// 1. Check Transactions map (Multi-DB support)
@@ -43,21 +42,34 @@ func (a *CopilotAgent) resolveTransaction(ctx context.Context, db *database.Data
 	}
 
 	if tx == nil {
-		if db != nil {
-			var err error
-			fmt.Println("DEBUG: resolveTransaction starting NEW local transaction")
-			tx, err = db.BeginTransaction(ctx, mode)
-			if err != nil {
-				return nil, false, fmt.Errorf("failed to begin transaction: %w", err)
+		if p == nil {
+			if dbName != "" {
+				return nil, false, fmt.Errorf("no session payload available to create transaction for database '%s'", dbName)
 			}
-			if p == nil || !p.ExplicitTransaction {
-				localTx = true
+			return nil, false, fmt.Errorf("no session payload available to create transaction")
+		}
+		if db == nil {
+			if dbName != "" {
+				return nil, false, fmt.Errorf("no database available to create transaction for database '%s'", dbName)
 			}
-		} else {
-			return nil, false, fmt.Errorf("no active transaction and no database to start one")
+			return nil, false, fmt.Errorf("no database available to create transaction")
+		}
+
+		var err error
+		tx, err = db.BeginTransaction(ctx, mode)
+		if err != nil {
+			return nil, false, fmt.Errorf("failed to begin transaction: %w", err)
+		}
+
+		if p.Transactions == nil {
+			p.Transactions = make(map[string]any)
+		}
+		p.Transactions[dbName] = tx
+		if dbName == "" || dbName == p.CurrentDB {
+			p.Transaction = tx
 		}
 	}
-	return tx, localTx, nil
+	return tx, false, nil
 }
 
 func (a *CopilotAgent) openGenericStore(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (btree.BtreeInterface[any, any], btree.ComparerFunc[any], *jsondb.IndexSpecification, error) {

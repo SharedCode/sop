@@ -2,7 +2,8 @@ package ai
 
 import (
 	"context"
-	"fmt"
+	"encoding/json"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
@@ -41,6 +42,8 @@ const (
 	CtxKeyProgressSink ContextKey = "ai_progress_sink"
 	// CtxKeyEventStreamer is the context key for passing a structured event emitter callback.
 	CtxKeyEventStreamer ContextKey = "ai_event_streamer"
+	// CtxKeyNativeToolHints marks native Ask-loop tool execution that can consume structured progress hints.
+	CtxKeyNativeToolHints ContextKey = "ai_native_tool_hints"
 )
 
 // ArtifactType represents the type of a database artifact.
@@ -240,18 +243,37 @@ type Generator interface {
 
 // GenOptions configures the generation process.
 type GenOptions struct {
-	SystemPrompt string
-	MaxTokens    int
-	Temperature  float32
-	TopP         float32
-	Stop         []string
-	Tools        []ToolDefinition // NEW: Pass the schemas via Native API
+	SystemPrompt     string
+	MaxTokens        int
+	Temperature      float32
+	ForceTemperature bool
+	TopP             float32
+	Stop             []string
+	Tools            []ToolDefinition // NEW: Pass the schemas via Native API
+	// ToolCallContinuations carries provider-neutral tool-call/result turns that a
+	// generator can translate into its provider-specific continuation format.
+	ToolCallContinuations []ToolCallContinuation
+}
+
+// ToolCallContinuation preserves a completed tool-call turn so generators can
+// continue a provider-native function-calling exchange without flattening the
+// tool response back into plain prompt text.
+type ToolCallContinuation struct {
+	ToolCall ToolCall
+	Response any
 }
 
 // ToolCall represents a native tool call requested by the LLM.
 type ToolCall struct {
 	Name string
 	Args map[string]any
+	// NativeID carries the provider-native tool/function call identifier when one exists.
+	// It is intentionally transport-agnostic so engines can round-trip tool continuity
+	// across Gemini, OpenAI, Anthropic, or future providers without hard-coding one API shape.
+	NativeID string
+	// TransportMeta preserves provider-specific fields that may be needed to continue a
+	// native tool-calling session without flattening everything into prompt text.
+	TransportMeta map[string]any
 }
 
 // GenOutput represents the result of a generation.
@@ -262,24 +284,245 @@ type GenOutput struct {
 	ToolCalls  []ToolCall // NEW: Struct for natively parsed tool requests
 }
 
+type CarryoverMode string
+
+const (
+	CarryoverModeOff     CarryoverMode = "off"
+	CarryoverModeCompact CarryoverMode = "compact"
+	CarryoverModeLive    CarryoverMode = "live"
+)
+
+type CarryoverResetReason string
+
+const (
+	CarryoverResetNone                CarryoverResetReason = ""
+	CarryoverResetDisabled            CarryoverResetReason = "disabled"
+	CarryoverResetUnsupportedProvider CarryoverResetReason = "unsupported_provider"
+	CarryoverResetMissingState        CarryoverResetReason = "missing_state"
+	CarryoverResetLiveContinuation    CarryoverResetReason = "live_continuation"
+	CarryoverResetTopicSwitch         CarryoverResetReason = "topic_switch"
+	CarryoverResetProviderChanged     CarryoverResetReason = "provider_changed"
+	CarryoverResetModelChanged        CarryoverResetReason = "model_changed"
+	CarryoverResetKBChanged           CarryoverResetReason = "kb_changed"
+	CarryoverResetExpired             CarryoverResetReason = "expired"
+	CarryoverResetBudgetExceeded      CarryoverResetReason = "budget_exceeded"
+	CarryoverResetCompactContinuation CarryoverResetReason = "compact_continuation"
+)
+
+type CarryoverCapability struct {
+	Provider        string
+	Model           string
+	SupportsCompact bool
+	SupportsLive    bool
+}
+
+// CarryoverCapabilityProvider is an optional generator extension that lets a
+// provider declare whether it can participate in compact or live carryover
+// across adjacent asks.
+type CarryoverCapabilityProvider interface {
+	CarryoverCapability() CarryoverCapability
+}
+
+type CarryoverPolicy struct {
+	DefaultMode             CarryoverMode
+	LiveCarryoverMaxAsks    int
+	LiveCarryoverIdleTTL    time.Duration
+	LiveCarryoverSoftTokens int
+	LiveCarryoverHardTokens int
+	MaxRawToolCarryTokens   int
+}
+
+func DefaultCarryoverPolicy() CarryoverPolicy {
+	return CarryoverPolicy{
+		DefaultMode:             CarryoverModeCompact,
+		LiveCarryoverMaxAsks:    3,
+		LiveCarryoverIdleTTL:    15 * time.Minute,
+		LiveCarryoverSoftTokens: 8000,
+		LiveCarryoverHardTokens: 12000,
+		MaxRawToolCarryTokens:   2000,
+	}
+}
+
+type CarryoverState struct {
+	Mode                   CarryoverMode
+	Provider               string
+	Model                  string
+	ConversationHandle     string
+	TopicFingerprint       string
+	KBFingerprint          string
+	StartedAtUnixMilli     int64
+	LastUsedAtUnixMilli    int64
+	AskCount               int
+	EstimatedCarryTokens   int
+	EstimatedRawToolTokens int
+	LastOutcomeFacts       []string
+	LastRecipeIDs          []string
+	LastToolNames          []string
+	LastUserQuery          string
+	LastAssistantSummary   string
+	LastResetReason        CarryoverResetReason
+}
+
 // ReasoningEngine isolates the orchestration loop from the service configuration.
 type ReasoningEngine interface {
 	Run(ctx context.Context, req ReasoningRequest) (ReasoningResponse, error)
 }
 
+// ReActLoop owns a full multi-turn ReAct loop lifecycle rather than just a
+// single-turn prompt adaptation.
+type ReActLoop interface {
+	Run(ctx context.Context, req ReasoningRequest) (ReasoningResponse, error)
+}
+
 type ReasoningRequest struct {
-	SystemPrompt string
-	ContextText  string
-	HistoryText  string
-	UserQuery    string
-	Executor     ToolExecutor
-	Generator    Generator
-	Streamer     func(eventType string, data any) // Optional NDJSON callback
+	SystemPrompt   string
+	ContextText    string
+	HistoryText    string
+	UserQuery      string
+	Executor       ToolExecutor
+	Generator      Generator
+	CarryoverMode  CarryoverMode
+	CarryoverState *CarryoverState
+	HydrationSink  MemoryHydrationSink
+	Streamer       func(eventType string, data any) // Optional NDJSON callback
+	// ForceToolCall instructs provider-owned loops to set tool_choice=required so
+	// the model must emit a tool call rather than a conversational text response.
+	ForceToolCall bool
+}
+
+type MemoryHydrationUpdate struct {
+	FinalText      string
+	ToolCalls      []ToolCall
+	OutcomeFacts   []string
+	OutcomeRecipes []LearnedRecipe
+	CarryoverState *CarryoverState
+}
+
+type MemoryHydrationSink func(update MemoryHydrationUpdate)
+
+// ReActToolResult is the provider-neutral per-step state that the ReAct
+// engine can expose to provider-specific loop adapters.
+type ReActToolResult struct {
+	Name   string
+	Args   map[string]any
+	Result string
+	Hint   *ToolProgressHint
+}
+
+// ReActPendingRepair is a provider-neutral snapshot of a pending repair path.
+type ReActPendingRepair struct {
+	ToolName       string
+	Strategy       string
+	ResearchTool   string
+	ResearchReason string
+}
+
+type ReActLoopPhase string
+
+const (
+	ReActLoopPhaseActive            ReActLoopPhase = "active"
+	ReActLoopPhaseRepair            ReActLoopPhase = "repair"
+	ReActLoopPhaseClarification     ReActLoopPhase = "clarification"
+	ReActLoopPhaseMalformedToolCall ReActLoopPhase = "malformed_tool_call"
+)
+
+type ReActNextAction string
+
+const (
+	ReActNextActionCallTool         ReActNextAction = "call_tool"
+	ReActNextActionRetrySameTool    ReActNextAction = "retry_same_tool"
+	ReActNextActionAskClarification ReActNextAction = "ask_clarification"
+	ReActNextActionAnswerUser       ReActNextAction = "answer_user"
+)
+
+// ReActLoopState captures the current loop-owned state so provider-owned loops
+// can observe or eventually own the same transition surface.
+type ReActLoopState struct {
+	Iteration                int
+	AllowedIterations        int
+	MaxIterations            int
+	RemainingToolCalls       int
+	RepairAttempts           int
+	Phase                    ReActLoopPhase
+	AllowedNextActions       []ReActNextAction
+	PendingRepair            *ReActPendingRepair
+	PendingMalformedToolCall bool
+	ToolResults              []ReActToolResult
+	ToolCallContinuations    []ToolCallContinuation
+}
+
+// ReActTurn captures a single ReAct generation turn before it reaches a
+// provider-specific generator. Providers can adapt the prompt/options while the
+// engine retains ownership of retry policy and tool execution.
+type ReActTurn struct {
+	Iteration       int
+	UserQuery       string
+	Prompt          string
+	RepairDirective string
+	LoopState       ReActLoopState
+	Options         GenOptions
+	ToolResults     []ReActToolResult
+	FinalTurn       bool
+}
+
+// ReActTurnStrategy is the shared loop-facing contract for shaping a single
+// ReAct generation turn before it reaches the provider transport.
+type ReActTurnStrategy interface {
+	PrepareTurn(ctx context.Context, turn ReActTurn) ReActTurn
+}
+
+// ReActPromptBypassStrategy is an optional strategy hook that lets a provider
+// skip generic synthetic prompt construction when carried tool-call state is
+// sufficient to continue the interaction.
+type ReActPromptBypassStrategy interface {
+	ShouldBypassPrompt(turn ReActTurn) bool
+}
+
+// ReActTurnStrategyProvider lets generators return a provider-specific ReAct
+// loop implementation while the engine keeps ownership of retry and execution policy.
+type ReActTurnStrategyProvider interface {
+	ReActTurnStrategy() ReActTurnStrategy
+}
+
+// ReActLoopProvider lets generators return a provider-owned ReAct loop that can
+// take over retry, repair, continuation, and termination policy end-to-end.
+type ReActLoopProvider interface {
+	ReActLoop() ReActLoop
+}
+
+// DefaultReActTurnStrategy preserves the generic synthetic-prompt behavior.
+// It exists as an explicit implementation so providers can extend or replace it.
+type DefaultReActTurnStrategy struct{}
+
+func (DefaultReActTurnStrategy) PrepareTurn(ctx context.Context, turn ReActTurn) ReActTurn {
+	_ = ctx
+	return turn
+}
+
+// LearnedRecipe captures a reusable protocol distilled from successful reasoning behavior.
+// It is intentionally separate from grounded facts.
+type LearnedRecipe struct {
+	ID         string
+	Kind       string
+	Scope      string
+	Domain     string
+	Topic      string
+	Trigger    string
+	Protocol   []string
+	Invariants []string
+	Confidence float64
+	Source     string
 }
 
 type ReasoningResponse struct {
-	FinalText string
-	ToolCalls []ToolCall // For audit/logging
+	FinalText      string
+	ToolCalls      []ToolCall // For audit/logging
+	OutcomeFacts   []string   // Compact grounded facts safe to carry into outer MRU continuity
+	OutcomeRecipes []LearnedRecipe
+	// CarryoverState lets provider-owned loops return updated continuity metadata,
+	// such as a reusable live conversation handle, without exposing transport
+	// details to the service layer.
+	CarryoverState *CarryoverState
 }
 
 // PolicyEngine defines the interface for evaluating content against safety policies.
@@ -420,12 +663,33 @@ type SessionPayload struct {
 	Transactions map[string]any
 	// Variables holds session-scoped variables (e.g. cached store instances).
 	Variables map[string]any
+	// RetryRewriteState tracks an explicit retry-the-same-ask rewrite.
+	RetryRewriteState *RetryRewriteState
+	// ClarificationState tracks an explicit pending clarification round before execution resumes.
+	ClarificationState *ClarificationState
 	// ExplicitTransaction indicates if the transaction was explicitly started by the user.
 	ExplicitTransaction bool
 	// LastInteractionSteps tracks the number of steps added/executed in the last user interaction.
 	LastInteractionSteps int
 	// ConversationHistory stores the active memory/transcript for the session.
 	ConversationHistory string
+}
+
+// ClarificationState tracks a pending assistant clarification before the target ask resumes.
+type ClarificationState struct {
+	TargetQuery        string
+	AssistantQuestion  string
+	OriginalUserQuery  string
+	UserClarification  string
+	EffectiveResumeAsk string
+	Status             string
+}
+
+// RetryRewriteState tracks a retry-the-same-ask rewrite through Gate 0.
+type RetryRewriteState struct {
+	OriginalQuery string
+	ResolvedQuery string
+	Status        string
 }
 
 // Manages Payload's cleanup, e.g. Transaction Commit/Rollback.
@@ -458,19 +722,6 @@ func (sp *SessionPayload) Close(ctx context.Context) error {
 	return nil
 }
 
-// GetDatabase returns the effective current Database name.
-// GetMemoryKBName constructs the correct Long-Term Memory namespace.
-// It branches the user's vector store namespace if AvatarScope is present.
-func (s *SessionPayload) GetMemoryKBName() string {
-	if s.UserID == "" {
-		return ""
-	}
-	if s.AvatarScope != "" {
-		return fmt.Sprintf("%s%s_Avatar_%s", MemoryKBPrefix, s.UserID, s.AvatarScope)
-	}
-	return fmt.Sprintf("%s%s", MemoryKBPrefix, s.UserID)
-}
-
 func (s *SessionPayload) GetDatabase() string {
 	return s.CurrentDB
 }
@@ -499,6 +750,26 @@ type ToolExecutor interface {
 	Execute(ctx context.Context, toolName string, args map[string]any) (string, error)
 	// ListTools returns the list of available tools.
 	ListTools(ctx context.Context) ([]ToolDefinition, error)
+}
+
+// ToolProgressHint is an optional progress envelope that a tool can return to guide
+// the native Ask loop toward the next narrowing step without directly mutating scratchpad state.
+type ToolProgressHint struct {
+	Status             string   `json:"status,omitempty"`
+	CompletionDelta    float64  `json:"completion_delta,omitempty"`
+	Confidence         float64  `json:"confidence,omitempty"`
+	Missing            []string `json:"missing,omitempty"`
+	Tips               []string `json:"tips,omitempty"`
+	Clues              []string `json:"clues,omitempty"`
+	SuggestedNextTools []string `json:"suggested_next_tools,omitempty"`
+}
+
+// ToolResultEnvelope is an optional JSON result shape that tools can return.
+// If present, `tool_result` remains the user-visible payload while `progress_hint`
+// feeds the engine's internal progress and retry budgeting.
+type ToolResultEnvelope struct {
+	ToolResult   json.RawMessage   `json:"tool_result,omitempty"`
+	ProgressHint *ToolProgressHint `json:"progress_hint,omitempty"`
 }
 
 // ToolDefinition describes a tool available to the agent.

@@ -45,6 +45,7 @@ jobs:
             bindings/csharp/Sop/*.dylib
             bindings/csharp/Sop/*.h
             bindings/java/src/main/resources/darwin-*/*.dylib
+            release/model_catalog.json
             release/sop-httpserver-darwin-*
             release/sop-bundle-darwin-*.tar.gz
 
@@ -91,6 +92,7 @@ jobs:
             bindings/csharp/Sop/*.h
             bindings/java/src/main/resources/linux-*/*.so
             bindings/java/src/main/resources/win32-*/*.dll
+            release/model_catalog.json
             release/sop-httpserver-linux-*
             release/sop-httpserver-windows-*
             release/sop-bundle-linux-*.tar.gz

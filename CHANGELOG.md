@@ -10,6 +10,7 @@
     - **Structured Execution Results**: Enhanced the Script Execution Engine to emit structured events for every execution step (`step_start`, `record`, `outputs`). This ensures consistent real-time feedback for long-running scripts.
     - **Step Visibility**: The Chat interface and Script Runner now clearly demarcate each step (e.g., "**Step 1:** select"), providing better observability into the agent's reasoning process.
     - **Execution Indexing**: Implemented robust step indexing propagation to track progress across complex control flows and streamed results.
+    - **Grounded Join Repair**: Tightened `execute_script` join guidance so multi-store repair prefers researched `relation + target` paths over invented join mappings, and clarified recovery prompts now preserve validation category, suggested fix examples, and attempted mappings when escalation to clarification is required.
 - **UI Enhancements (Data Manager)**:
     - **CEL Editor**: Added a dedicated modal for editing `StoreInfo.CELexpression` with auto-generation capabilities based on Index Specifications.
     - **Bulk Delete**: Implemented a selection column in the data grid allowing users to select and delete multiple items at once.

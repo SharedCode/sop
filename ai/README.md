@@ -66,6 +66,43 @@ Interfaces for connecting to AI models:
 *   **Generators**: Connect to LLMs like OpenAI, Gemini, or local Ollama instances.
 *   **Embedders**: Convert text to vectors. Includes a "Simple" keyword-based embedder (for testing) and an "Agent Embedder" (for semantic understanding).
 
+#### Provider-Owned ReAct Loops
+
+The `Generator` layer is no longer just a transport adapter for every provider. SOP now exposes a loop-level seam so providers that truly preserve native tool/conversation state can own their inner ReAct loop instead of being forced through one shared retry controller.
+
+- `ReActLoopProvider` lets a generator return a provider-owned `ReActLoop`
+- `ReActTurnStrategyProvider` still supports turn-level shaping for shared paths
+- the default engine remains the fallback when a provider does not supply its own loop
+
+Gemini is the first full implementation of this design:
+
+- `ai/generator/gemini.go` now provides `ReActLoop()`
+- the Gemini loop accumulates ordered `ToolCallContinuation` state across turns
+- every native tool call emitted in a Gemini turn is executed and fed back into the same provider thread
+- the final cap-exhausted turn is a no-tool clarification turn, enforced structurally rather than only by prompt wording
+- MRU-facing `OutcomeFacts` and `OutcomeRecipes` are summarized by the shared helper in `ai/outcome_summary.go`, so Gemini and the default engine feed continuity through the same compaction logic
+
+Carryover support is now designed as the next tracked implementation phase:
+
+- Gemini continuity inside one Ask remains provider-owned.
+- Between adjacent Asks, SOP will add a bounded carryover policy with three modes: `off`, `compact`, and `live`.
+- `compact` is the intended default: reuse compact MRU, `OutcomeFacts`, learned recipes, and routing continuity without paying to replay an expensive raw provider thread.
+- `live` reuse should be allowed only for the same provider, model, topic, and KB when the carryover thread remains within budget.
+- When the live thread is too expensive or stale, SOP should reset to a fresh Ask rebuilt from provider-neutral memory rather than letting provider carryover become the durable source of truth.
+
+For the provider-neutral Stores execution direction that now treats both `execute_script` and piped lego-block assembly as first-class control surfaces, see [STORE_ORCHESTRATION_MODES.md](STORE_ORCHESTRATION_MODES.md).
+
+```mermaid
+flowchart LR
+    Ask[ReasoningRequest] --> Engine[NativeReActEngine]
+    Engine --> LoopCheck{ReActLoopProvider?}
+    LoopCheck -- No --> Default[Default shared loop]
+    LoopCheck -- Yes --> Provider[Provider-owned loop]
+    Provider --> Gemini[Gemini native continuation thread]
+    Gemini --> Exec[ToolExecutor]
+    Exec --> Gemini
+```
+
 ### 4. Model Store (`ai/database/model_store.go`)
 A unified interface for persisting AI models, from small "Skills" (Perceptrons) to large "Brains" (Neural Nets).
 *   **Backend**: Uses transactional B-Tree storage (`BTreeModelStore`) for reliability and consistency.

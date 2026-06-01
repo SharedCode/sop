@@ -91,7 +91,11 @@ func (a *CopilotAgent) toolFetch(ctx context.Context, args map[string]any) (stri
 			return "", fmt.Errorf("error searching for key: %w", err)
 		}
 		if !ok {
-			return fmt.Sprintf("Key not found: %v", keyArg), nil
+			return wrapNativeTerminalToolResult(ctx,
+				fmt.Sprintf("Key not found: %v", keyArg),
+				"terminal_error",
+				"Stop retrying this exact key lookup until the key, store, or database selection changes.",
+			), nil
 		}
 		k := store.GetCurrentKey()
 		v, _ := store.GetCurrentValue(ctx)

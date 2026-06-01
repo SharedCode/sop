@@ -837,10 +837,11 @@ func (s *Service) InitializeUserSession(ctx context.Context, userID string) erro
 	}
 	defer tx.Rollback(ctx)
 
-	ltmName := fmt.Sprintf("%s%s", ai.MemoryKBPrefix, userID)
-	if p := ai.GetSessionPayload(ctx); p != nil && p.GetMemoryKBName() != "" {
-		ltmName = p.GetMemoryKBName()
+	agentID := ai.AgentIDOmni
+	if p := ai.GetSessionPayload(ctx); p != nil && p.AgentID != "" {
+		agentID = p.AgentID
 	}
+	ltmName := memory.BuildLTMStoreName(agentID, userID)
 
 	// OpenKnowledgeBase safely ensures DDL (creates B-Trees if they don't exist)
 	// Because this is a ForWriting transaction, the NewBtree calls deep inside will succeed.
@@ -1066,7 +1067,11 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 
 	// 2_0. Inject User Preferences (Long-Term Memory Search via pre-prompt fetch)
 	if p := ai.GetSessionPayload(ctx); p != nil && p.UserID != "" && s.systemDB != nil {
-		kbName := p.GetMemoryKBName()
+		agentID := p.AgentID
+		if agentID == "" {
+			agentID = ai.AgentIDOmni
+		}
+		kbName := memory.BuildLTMStoreName(agentID, p.UserID)
 		if tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
 			if kb, err := s.systemDB.OpenKnowledgeBase(ctx, kbName, tx, s.generator, nil, false, true); err == nil {
 				// We search the user's Long-Term memory kb for implicitly learned preferences related to the query
@@ -1084,24 +1089,6 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 						}
 					}
 					systemPrompt = fmt.Sprintf("%s%s", systemPrompt, prefText.String())
-				}
-			}
-			tx.Rollback(ctx)
-		}
-	}
-
-	// 2c. Tool Usage Hint for Knowledge Retrieval
-	systemPrompt = fmt.Sprintf("%s\n\n[Tool Usage Note]\nYou can use the tool \"gettoolinfo\" with argument \"tool\" (e.g., \"gettoolinfo('execute_script')\") to get detailed usage instructions for any tool if you are unsure about its parameters or behavior.", systemPrompt)
-
-	// 2d. Inject execute_script tool details directly to help LLM formulate queries
-	if s.systemDB != nil {
-		if tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
-			if kb, err := s.systemDB.OpenKnowledgeBase(ctx, "sop", tx, s.generator, nil, false, true); err == nil {
-				hits, searchErr := kb.SearchKeywords(ctx, "execute_script Tool Operations", &memory.SearchOptions[map[string]any]{Limit: 1})
-				if searchErr == nil && len(hits) > 0 {
-					if content, ok := hits[0].Payload["Content"].(string); ok {
-						systemPrompt = fmt.Sprintf("%s\n\n[execute_script Tool Operations]\n%s", systemPrompt, content)
-					}
 				}
 			}
 			tx.Rollback(ctx)
@@ -1180,6 +1167,24 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		}
 	}
 
+	carryover := decideCarryover(ctx, s.session, gen, topicAssessment, historyText)
+	if strings.TrimSpace(carryover.Summary) != "" {
+		contextText = appendCarryoverToContext(contextText, carryover.Summary)
+	}
+	if carryover.Mode == ai.CarryoverModeCompact {
+		if carryover.SuppressHistory {
+			historyText = ""
+		}
+	}
+	log.Info("Carryover Decision",
+		"provider", providerName(gen),
+		"mode", carryover.Mode,
+		"reason", carryover.Reason,
+		"history_suppressed", carryover.SuppressHistory,
+		"estimated_carry_tokens", carryover.EstimatedCarryTokens,
+		"estimated_history_tokens", carryover.EstimatedHistoryTokens,
+	)
+
 	// 4. Delegate to the Reasoning Engine
 	executor, _ := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor)
 
@@ -1189,12 +1194,14 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 	}
 
 	req := ai.ReasoningRequest{
-		SystemPrompt: systemPrompt,
-		ContextText:  contextText,
-		HistoryText:  historyText,
-		UserQuery:    query,
-		Executor:     executor,
-		Generator:    gen,
+		SystemPrompt:   systemPrompt,
+		ContextText:    contextText,
+		HistoryText:    historyText,
+		UserQuery:      query,
+		Executor:       executor,
+		Generator:      gen,
+		CarryoverMode:  carryover.Mode,
+		CarryoverState: carryover.State,
 		// DB passing strategy: The ServiceToolExecutor currently runs Execution and does AutoTX inside Service.Ask.
 		// For proper isolation while maintaining auto-tx flow matching the legacy codebase,
 		// we pass the DB securely down via context inside ServiceToolExecutor or wrap it here.
@@ -1293,6 +1300,8 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		Content:   assistantContent,
 		Timestamp: time.Now().Unix(),
 	})
+
+	persistCarryoverState(s.session.Memory, buildCarryoverState(ctx, s.session, gen, currentThread, query, finalText, engineResp.ToolCalls, engineResp.OutcomeFacts, engineResp.OutcomeRecipes, engineResp.CarryoverState))
 
 	return finalText, nil
 }

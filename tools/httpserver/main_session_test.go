@@ -277,7 +277,7 @@ func TestHandleAIChat_StreamsStructuredToolEvents(t *testing.T) {
 		"event_tester": &eventStreamingMockAgent{},
 	}
 
-	reqBody := `{"message": "Create tasks", "database": "devdb", "agent": "event_tester"}`
+	reqBody := `{"message": "Create tasks", "database": "", "agent": "event_tester"}`
 	req := httptest.NewRequest("POST", "/ai/chat", bytes.NewBufferString(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 

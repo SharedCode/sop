@@ -163,14 +163,13 @@
 <!-- Floating Chat Widget -->
 <div id="chat-widget" class="chat-widget">
     <div class="chat-header">
-        <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="chat-header-controls">
             <span>AI</span>
-            
-            <!-- Quick LLM Engine Setup -->
-            <select id="chat-settings-provider" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="LLM Provider" onchange="toggleInlineAuthFields('chat-settings-provider', 'chat-settings-api-key')">
-                {{template "llmOptions" .}}
-            </select>
-            <input type="password" id="chat-settings-api-key" placeholder="API Key" style="width: 80px; padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color); font-size: 11px; margin-left: 4px;" title="API Key / Base URL">
+            <button type="button" id="chat-ai-summary-button" class="chat-ai-summary-button" onmousedown="event.stopPropagation()" onclick="event.stopPropagation(); toggleChatSettings()" title="View or edit LLM and embedder settings">
+                <span class="chat-ai-summary-values">
+                    <span id="chat-ai-summary-combined">Auto * Default emb</span>
+                </span>
+            </button>
 
             <select id="domain-select" style="padding: 2px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--accent-color); color: white; font-size: 11px; font-weight: normal; margin-left: 4px;" onclick="event.stopPropagation()" onchange="handleDomainChange(this)" title="Active Space">
                 <option value="" selected>None</option>
@@ -206,19 +205,38 @@
         <h4 style="margin-top: 0; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">LLM Engine Settings</h4>
         <div style="margin-bottom: 10px;">
             <label style="display: block; margin-bottom: 4px; font-weight: bold;">Provider / Model</label>
-            <select id="chat-settings-provider-overlay" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="toggleChatSettingsFields()">
+            <select id="chat-settings-provider-overlay" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="handleChatSettingsProviderChange()">
                 {{template "llmOptions" .}}
             </select>
         </div>
         <div id="chat-settings-url-container" style="margin-bottom: 10px; display: none;">
             <label style="display: block; margin-bottom: 4px; font-weight: bold;">Base URL</label>
-            <input type="text" id="chat-settings-url" placeholder="http://localhost:11434" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <input type="text" id="chat-settings-url" placeholder="http://localhost:11434" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="persistChatSettingsDraft()">
         </div>
         <div id="chat-settings-apikey-container" style="margin-bottom: 10px; display: none;">
             <label style="display: block; margin-bottom: 4px; font-weight: bold;">API Key (Auth Token)</label>
-            <input type="password" id="chat-settings-api-key" placeholder="Enter API Key securely" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <input type="password" id="chat-settings-overlay-api-key" placeholder="Enter API Key securely" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="persistChatSettingsDraft()">
         </div>
+        <div id="chat-settings-test-status" style="display: none; margin-bottom: 10px; font-size: 12px;"></div>
+        <h4 style="margin-top: 16px; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px;">Embedder Settings</h4>
+        <div style="margin-bottom: 10px;">
+            <label style="display: block; margin-bottom: 4px; font-weight: bold;">Provider / Model</label>
+            <select id="chat-settings-embedder-overlay" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="handleChatSettingsEmbedderProviderChange()">
+                {{template "embedderOptions" .}}
+            </select>
+        </div>
+        <div id="chat-settings-embedder-url-container" style="margin-bottom: 10px; display: none;">
+            <label style="display: block; margin-bottom: 4px; font-weight: bold;">Base URL</label>
+            <input type="text" id="chat-settings-embedder-url" placeholder="http://localhost:11434" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="persistChatSettingsDraft()">
+        </div>
+        <div id="chat-settings-embedder-apikey-container" style="margin-bottom: 10px; display: none;">
+            <label style="display: block; margin-bottom: 4px; font-weight: bold;">API Key (Auth Token)</label>
+            <input type="password" id="chat-settings-embedder-api-key" placeholder="Enter API Key securely" style="width: 100%; padding: 4px; border-radius: 3px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" onchange="persistChatSettingsDraft()">
+        </div>
+        <div id="chat-settings-embedder-test-status" style="display: none; margin-bottom: 10px; font-size: 12px;"></div>
         <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 15px;">
+            <button onclick="testChatSettingsEmbedderConnection()" style="padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--pre-bg); color: var(--text-color); cursor: pointer;">Test Embedder</button>
+            <button onclick="testChatSettingsConnection()" style="padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--pre-bg); color: var(--text-color); cursor: pointer;">Test Connection</button>
             <button onclick="toggleChatSettings()" style="padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--pre-bg); color: var(--text-color); cursor: pointer;">Cancel</button>
             <button onclick="saveChatSettings()" style="padding: 4px 10px; border-radius: 3px; border: none; background: var(--accent-color); color: white; cursor: pointer;">Save & Close</button>
         </div>
