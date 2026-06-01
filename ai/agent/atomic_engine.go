@@ -2519,7 +2519,7 @@ func (e *ScriptEngine) BeginTx(ctx context.Context, args map[string]any) (sop.Tr
 	return tx, err
 }
 
-func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error {
+func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) (err error) {
 	txName, _ := args["transaction"].(string)
 	txName = e.resolveVarName(txName)
 	tx, ok := e.Context.Transactions[txName]
@@ -2527,7 +2527,14 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 		return fmt.Errorf("transaction '%s' not found", txName)
 	}
 
-	if err := e.materializeCommitOutput(ctx); err != nil {
+	commitCtx := ctx
+	if maxDuration := tx.CommitMaxDuration(); maxDuration > 0 {
+		var cancel context.CancelFunc
+		commitCtx, cancel = context.WithTimeout(ctx, maxDuration)
+		defer cancel()
+	}
+
+	if err = e.materializeCommitOutput(commitCtx); err != nil {
 		return err
 	}
 
@@ -2542,7 +2549,7 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) error 
 		}
 	}
 
-	return tx.Commit(ctx)
+	return tx.Commit(commitCtx)
 }
 
 func (e *ScriptEngine) materializeCommitOutput(ctx context.Context) error {
