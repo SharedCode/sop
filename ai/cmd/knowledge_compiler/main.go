@@ -298,6 +298,7 @@ func parseUnlinkedFiles(repoRoot string) {
 			strings.Contains(upperName, "DEV_TO_POST") ||
 			strings.Contains(upperName, "AI_COPILOT") ||
 			strings.Contains(upperName, "SYSTEM_KNOWLEDGE") ||
+			strings.HasPrefix(upperName, "CLASSIFY_") ||
 			strings.Contains(upperName, "CURRENT_DESIGN_PLAN") {
 			return nil
 		}
