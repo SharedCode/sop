@@ -10,23 +10,36 @@ import (
 	"github.com/google/uuid"
 )
 
-// InferSchemaFromTypes uses reflection to directly inspect the types of key and value,
-// providing more accurate schema information than JSON marshaling.
-// This is the preferred method when generic type information is available.
-// Maintains Key/Value separation with "Key." and "Value." prefixes for SQL generation.
-func InferSchemaFromTypes(key any, value any) map[string]string {
-	schema := make(map[string]string)
+// SchemaInferenceResult contains flat schema with field lists for LLM understanding.
+type SchemaInferenceResult struct {
+	// Flat schema without prefixes for LLM correlation with Relations
+	Schema map[string]string
+	// Fields that belong to the Key
+	KeyFields []string
+	// Fields that belong to the Value
+	ValueFields []string
+}
 
-	// Infer key schema with "Key." prefix
+// InferSchemaFromTypes uses reflection to directly inspect the types of key and value.
+// Returns flat schema format without prefixes for better LLM understanding and correlation with Relations.
+func InferSchemaFromTypes(key any, value any) SchemaInferenceResult {
+	result := SchemaInferenceResult{
+		Schema:      make(map[string]string),
+		KeyFields:   []string{},
+		ValueFields: []string{},
+	}
+
+	// Infer key schema
 	if key != nil {
 		keyType := reflect.TypeOf(key)
-		keySchema := reflectTypeToSchemaWithPrefix(keyType, "Key")
+		keySchema := reflectTypeToSchemaFlat(keyType)
 		for k, v := range keySchema {
-			schema[k] = v
+			result.Schema[k] = v
+			result.KeyFields = append(result.KeyFields, k)
 		}
 	}
 
-	// Infer value schema with "Value." prefix
+	// Infer value schema
 	if value != nil {
 		// Handle pointer to value (common in B-tree Item)
 		val := reflect.ValueOf(value)
@@ -37,35 +50,43 @@ func InferSchemaFromTypes(key any, value any) map[string]string {
 			} else {
 				// Nil pointer - inspect the type it points to
 				valueType := reflect.TypeOf(value).Elem()
-				valueSchema := reflectTypeToSchemaWithPrefix(valueType, "Value")
+				valueSchema := reflectTypeToSchemaFlat(valueType)
 				for k, v := range valueSchema {
-					schema[k] = v
+					result.Schema[k] = v
+					result.ValueFields = append(result.ValueFields, k)
 				}
-				return schema
+				return result
 			}
 		}
 
 		// For map types with runtime values (like map[string]any), inspect the actual contents
 		if val.Kind() == reflect.Map {
-			valueSchema := reflectValueMapToSchemaWithPrefix(val, "Value")
+			valueSchema := reflectValueMapToSchemaFlat(val)
 			for k, v := range valueSchema {
-				schema[k] = v
+				result.Schema[k] = v
+				result.ValueFields = append(result.ValueFields, k)
 			}
 		} else {
 			// Use type-based inference for other types
 			valueType := reflect.TypeOf(value)
-			valueSchema := reflectTypeToSchemaWithPrefix(valueType, "Value")
+			valueSchema := reflectTypeToSchemaFlat(valueType)
 			for k, v := range valueSchema {
-				schema[k] = v
+				result.Schema[k] = v
+				result.ValueFields = append(result.ValueFields, k)
 			}
 		}
 	}
 
-	return schema
+	// Sort field lists for consistency
+	sort.Strings(result.KeyFields)
+	sort.Strings(result.ValueFields)
+
+	return result
 }
 
-// reflectTypeToSchemaWithPrefix converts a reflect.Type to a schema map with proper Key/Value prefixing.
-func reflectTypeToSchemaWithPrefix(t reflect.Type, prefix string) map[string]string {
+// reflectTypeToSchemaFlat converts a reflect.Type to a flat schema map without prefixes.
+// This is used for the new FlatSchema format that's easier for LLMs to correlate with Relations.
+func reflectTypeToSchemaFlat(t reflect.Type) map[string]string {
 	schema := make(map[string]string)
 
 	// Handle pointer types
@@ -77,15 +98,15 @@ func reflectTypeToSchemaWithPrefix(t reflect.Type, prefix string) map[string]str
 	case reflect.Struct:
 		// Special case for UUID
 		if t.PkgPath() == "github.com/sharedcode/sop" && t.Name() == "UUID" {
-			schema[prefix] = "uuid"
+			schema["key"] = "uuid"
 			return schema
 		}
 		if t.PkgPath() == "github.com/google/uuid" && t.Name() == "UUID" {
-			schema[prefix] = "uuid"
+			schema["key"] = "uuid"
 			return schema
 		}
 
-		// Inspect struct fields with prefix
+		// Inspect struct fields without prefix
 		for i := 0; i < t.NumField(); i++ {
 			field := t.Field(i)
 
@@ -103,28 +124,29 @@ func reflectTypeToSchemaWithPrefix(t reflect.Type, prefix string) map[string]str
 				}
 			}
 
-			// Use "Key.field" or "Value.field" format
-			prefixedName := fmt.Sprintf("%s.%s", prefix, strings.ToLower(fieldName))
-			schema[prefixedName] = reflectTypeToString(field.Type)
+			// Use lowercase field name directly (no prefix)
+			flatName := strings.ToLower(fieldName)
+			schema[flatName] = reflectTypeToString(field.Type)
 		}
 
 	case reflect.Map:
 		// For maps without runtime data, just mark as object
-		schema[prefix] = "object"
+		schema["key"] = "object"
 
 	case reflect.Slice, reflect.Array:
-		schema[prefix] = "list"
+		schema["key"] = "list"
 
 	default:
-		// Primitive types - use the prefix directly (e.g., "Key" or "Value")
-		schema[prefix] = reflectTypeToString(t)
+		// Primitive types - use "key" as the field name
+		schema["key"] = reflectTypeToString(t)
 	}
 
 	return schema
 }
 
-// reflectValueMapToSchemaWithPrefix inspects a map value at runtime with proper Key/Value prefixing.
-func reflectValueMapToSchemaWithPrefix(mapVal reflect.Value, prefix string) map[string]string {
+// reflectValueMapToSchemaFlat inspects a map value at runtime without prefixes.
+// This is used for the new FlatSchema format that's easier for LLMs to correlate with Relations.
+func reflectValueMapToSchemaFlat(mapVal reflect.Value) map[string]string {
 	schema := make(map[string]string)
 
 	if !mapVal.IsValid() || mapVal.IsNil() {
@@ -139,10 +161,9 @@ func reflectValueMapToSchemaWithPrefix(mapVal reflect.Value, prefix string) map[
 
 		// Only handle string keys
 		if key.Kind() == reflect.String {
+			// Use lowercase field name directly (no prefix)
 			fieldName := strings.ToLower(key.String())
-			// Use "Key.field" or "Value.field" format
-			prefixedName := fmt.Sprintf("%s.%s", prefix, fieldName)
-			schema[prefixedName] = inferSchemaTypeFromValue(val)
+			schema[fieldName] = inferSchemaTypeFromValue(val)
 		}
 	}
 

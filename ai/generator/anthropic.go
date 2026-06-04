@@ -35,7 +35,7 @@ func (g *anthropic) CarryoverCapability() ai.CarryoverCapability {
 		Provider:        g.Name(),
 		Model:           g.model,
 		SupportsCompact: true,
-		SupportsLive:    false,
+		SupportsLive:    true,
 	}
 }
 

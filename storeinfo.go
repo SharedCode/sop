@@ -55,10 +55,20 @@ type StoreInfo struct {
 	// Relations describes foreign key relationships to other stores.
 	Relations []Relation `json:"relations,omitempty"`
 
-	// Schema stores the inferred field types captured from the first item added.
+	// Schema stores field types without prefixes for LLM correlation with Relations.
+	// Format: {"key": "string", "first_name": "string", "age": "number"}
 	Schema map[string]string `json:"schema,omitempty"`
 
+	// KeyFields lists the field names that are part of the Key.
+	// Example: ["key"] for primitive keys, ["id", "timestamp"] for composite keys
+	KeyFields []string `json:"key_fields,omitempty"`
+
+	// ValueFields lists the field names that are part of the Value.
+	// Example: ["first_name", "age", "email"] for the value object
+	ValueFields []string `json:"value_fields,omitempty"`
+
 	// Version allows versioning of the store info payload for future upgrades.
+
 	Version string `json:"version,omitempty"`
 }
 

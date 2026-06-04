@@ -665,8 +665,80 @@ func (s *Service) evaluateInputPolicy(ctx context.Context, input string) error {
 	return nil
 }
 
+// extractCategoryPath detects and extracts explicit category paths from queries.
+// Supports patterns like:
+//   - "[Category/Subcategory] query text" - bracketed format
+//   - "path:Category/Subcategory query text" - prefixed format
+//   - "in Category/Subcategory: query text" - inline format
+//
+// Returns (categoryPath, cleanQuery) where cleanQuery has the path removed.
+func extractCategoryPath(query string) (string, string) {
+	query = strings.TrimSpace(query)
+
+	// Pattern 1: [Category/Path] at start
+	if strings.HasPrefix(query, "[") {
+		if endIdx := strings.Index(query, "]"); endIdx > 1 {
+			path := strings.TrimSpace(query[1:endIdx])
+			if strings.Contains(path, "/") || strings.Contains(path, ">") {
+				cleanQuery := strings.TrimSpace(query[endIdx+1:])
+				return normalizeCategoryPath(path), cleanQuery
+			}
+		}
+	}
+
+	// Pattern 2: path:Category/Path
+	if strings.HasPrefix(strings.ToLower(query), "path:") {
+		parts := strings.SplitN(query[5:], " ", 2)
+		if len(parts) > 0 {
+			path := strings.TrimSpace(parts[0])
+			if strings.Contains(path, "/") || strings.Contains(path, ">") {
+				cleanQuery := ""
+				if len(parts) > 1 {
+					cleanQuery = strings.TrimSpace(parts[1])
+				}
+				return normalizeCategoryPath(path), cleanQuery
+			}
+		}
+	}
+
+	// Pattern 3: in Category/Path:
+	if strings.HasPrefix(strings.ToLower(query), "in ") {
+		remaining := query[3:]
+		if colonIdx := strings.Index(remaining, ":"); colonIdx > 0 {
+			path := strings.TrimSpace(remaining[:colonIdx])
+			if strings.Contains(path, "/") || strings.Contains(path, ">") {
+				cleanQuery := strings.TrimSpace(remaining[colonIdx+1:])
+				return normalizeCategoryPath(path), cleanQuery
+			}
+		}
+	}
+
+	return "", query
+}
+
+// normalizeCategoryPath standardizes category path format.
+// Converts "Category > Subcategory" to "Category/Subcategory"
+func normalizeCategoryPath(path string) string {
+	path = strings.TrimSpace(path)
+	// Replace > separator with /
+	path = strings.ReplaceAll(path, " > ", "/")
+	path = strings.ReplaceAll(path, ">", "/")
+	// Clean up multiple slashes
+	for strings.Contains(path, "//") {
+		path = strings.ReplaceAll(path, "//", "/")
+	}
+	return path
+}
+
 // Search performs a semantic search in the domain's knowledge base.
 // It enforces policies and uses the domain's embedder.
+// This implements HYBRID SEARCH:
+//   - Semantic/Vector search (embedding similarity)
+//   - Text/BM25 search (keyword matching) when text index is configured
+//   - Results merged using Reciprocal Rank Fusion (RRF)
+//   - CategoryPath search (when explicit path detected in query)
+//
+// Used by retrieveKnowledge to automatically enrich LLM context in Ask flow.
 func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
 	// 1. Policy Check (Input)
 	if err := s.evaluateInputPolicy(ctx, query); err != nil {
@@ -684,7 +756,18 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 		// Return empty results instead of error, allowing the agent to proceed without context.
 		return nil, nil
 	}
-	vecs, err := emb.EmbedTexts(ctx, []string{query})
+
+	// 2a. Check for explicit CategoryPath in query (rare but supported)
+	categoryPath, cleanQuery := extractCategoryPath(query)
+	if categoryPath != "" {
+		log.Debug("CategoryPath detected in query", "path", categoryPath, "clean_query", cleanQuery)
+	}
+	queryToEmbed := cleanQuery
+	if queryToEmbed == "" {
+		queryToEmbed = query
+	}
+
+	vecs, err := emb.EmbedTexts(ctx, []string{queryToEmbed})
 	if err != nil {
 		return nil, fmt.Errorf("embedding failed: %w", err)
 	}
@@ -706,13 +789,26 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 	var textHits []search.TextSearchResult
 	var textErr error
 
-	// Vector Search
-	vectorHits, vecErr = idx.Query(ctx, vecs[0], limit, nil)
+	// Vector Search (Semantic similarity via embeddings)
+	// If CategoryPath specified, use filter to scope results to that category
+	var queryFilter func(map[string]any) bool
+	if categoryPath != "" {
+		// CategoryPath filter: match items in the specified category hierarchy
+		queryFilter = func(payload map[string]any) bool {
+			if cat, ok := payload["category"].(string); ok {
+				// Match exact path or sub-paths
+				return cat == categoryPath || strings.HasPrefix(cat, categoryPath+"/")
+			}
+			return false
+		}
+		log.Debug("Scoping search to CategoryPath", "path", categoryPath)
+	}
+	vectorHits, vecErr = idx.Query(ctx, vecs[0], limit, queryFilter)
 
-	// Text Search
+	// Text Search (BM25 keyword matching) - runs in parallel if text index exists
 	textIdx, err := s.domain.TextIndex(ctx, tx)
 	if err == nil && textIdx != nil {
-		textHits, textErr = textIdx.Search(ctx, query)
+		textHits, textErr = textIdx.Search(ctx, queryToEmbed)
 	}
 
 	if vecErr != nil {
@@ -735,6 +831,22 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 				activeContext[thread.Category] = true
 			}
 		}
+	}
+
+	// Process Vector Hits
+	// CategoryPath hits get a boost since they match explicit user intent
+	for rank, hit := range vectorHits {
+		boost := 1.0
+		if categoryPath != "" {
+			// Boost hits from the specified category path
+			if cat, ok := hit.Payload["category"].(string); ok {
+				if cat == categoryPath || strings.HasPrefix(cat, categoryPath+"/") {
+					boost = 1.5 // 50% boost for category path matches
+				}
+			}
+		}
+		scores[hit.ID] += boost / (k + float64(rank+1))
+		payloads[hit.ID] = hit.Payload
 	}
 
 	// Process Vector Hits
@@ -1347,6 +1459,8 @@ func (s *Service) performTopicRouting(ctx context.Context, query string) *topicR
 }
 
 // retrieveKnowledge performs vector/text search against the domain knowledge base.
+// This is the core implementation of the "Agent searches its KB" pattern.
+// Called automatically during Ask flow to enrich LLM context with domain expertise.
 func (s *Service) retrieveKnowledge(ctx context.Context, query string) ([]ai.Hit[map[string]any], error) {
 	return s.Search(ctx, query, 10)
 }
@@ -1771,10 +1885,24 @@ func (s *Service) ask(ctx context.Context, req AskRequest) (AskResponse, error) 
 	// Ensure tools are registered (session specific registration)
 	s.registerTools()
 
-	// 7. Run retrieval against the domain knowledge index
+	// 7. CRITICAL PATTERN: Agent looks up its domain-specific Knowledge Base (KB)
+	// This implements the universal pattern: "When user asks Agent X about Topic Y, Agent X searches its KB first"
+	// Examples:
+	//   - Omni (system agent) → searches SOP KB (database documentation)
+	//   - Avatar agents → search their domain-specific expertise KBs
+	//   - Custom agents → search their configured knowledge stores
+	// The Search performs BOTH:
+	//   a) Semantic/Vector search (embeddings-based similarity)
+	//   b) Text/BM25 search (keyword matching) if text index is enabled
+	// Results are merged using Reciprocal Rank Fusion and injected into LLM context
 	hits, err := s.retrieveKnowledge(ctx, query)
 	if err != nil {
 		return AskResponse{}, fmt.Errorf("retrieval failed: %w", err)
+	}
+	if len(hits) > 0 {
+		log.Info("KB retrieval enriched context", "domain", s.domain.ID(), "hits", len(hits), "top_score", hits[0].Score)
+	} else if s.domain != nil && s.domain.Embedder() != nil {
+		log.Debug("KB retrieval returned no results", "domain", s.domain.ID(), "query", query)
 	}
 
 	// 8. Build system/context/history prompt inputs

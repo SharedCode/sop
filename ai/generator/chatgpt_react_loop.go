@@ -300,11 +300,7 @@ func executeToolCalls(ctx context.Context, req ai.ReasoningRequest, iteration in
 			break
 		}
 		toolCall = normalizeChatGPTWrappedToolCall(toolCall)
-		// execute_script results are rendered directly from the tool_result payload, so
-		// skip the extra streamed tool_call noise for that tool.
-		if !(req.Streamer != nil && strings.EqualFold(toolCall.Name, "execute_script")) {
-			emitChatGPTOwnedLoopEvent(req, ai.ReasoningEventToolCall, ai.BuildToolCallEvent(toolCall.Name, cloneChatGPTToolArgs(toolCall.Args), iteration))
-		}
+		emitChatGPTOwnedLoopEvent(req, ai.ReasoningEventToolCall, ai.BuildToolCallEvent(toolCall.Name, cloneChatGPTToolArgs(toolCall.Args), iteration))
 		executed = append(executed, toolCall)
 		result, outputItem := executeSingleToolCall(ctx, req, iteration, toolCall)
 		results = append(results, result)

@@ -1525,7 +1525,7 @@ func (jp *JoinProcessor) executeStandardJoin() (string, error) {
 			}
 			checkedLeftKeyOpt = true
 			if leftJoinOnKeyOnly {
-				log.Info("Join: Optimization Enabled - Left Store Join fields are in Key. Deferring Value fetch.")
+				log.Debug("Join: Optimization Enabled - Left Store Join fields are in Key. Deferring Value fetch.")
 			}
 		}
 

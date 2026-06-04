@@ -21,18 +21,19 @@ const (
 	ExecuteScriptInstruction = "Execute a full ordered JSON AST under script for multi-step store operations. Each step should be an object such as {op, args?, input_var?, result_var?}. " +
 		"Focus on orchestration semantics: begin a transaction, read or mutate stores, then commit or rollback. begin_tx defines the durability boundary for the workflow, so use it when related mutations must persist or roll back together. " +
 		"For larger mutation runs, batch deliberately under explicit commits, with a practical default of about 50 to 250 CRUD operations per transaction unless business atomicity requires a different boundary. Chain multi-step reads with result_var/input_var. " +
-		"Use list_stores to research stores before multi-store joins or whenever schema is uncertain. Prefer scoped calls such as stores:[\"users\",\"users_orders\",\"orders\"] so research stays compact on large databases. list_stores returns a JSON object with stores:[{name,schema,description,relations,empty}]. " +
+		"Use list_stores to research stores before multi-store joins or whenever schema is uncertain. Prefer scoped calls such as stores:[\"users\",\"users_orders\",\"orders\"] so research stays compact on large databases. list_stores returns stores:[{name,schema,key_fields,value_fields,description,relations,empty}]. " +
 		"When you fill args.condition or any predicate object, write the condition expression the engine should execute and assign the concrete comparison value directly. " +
-		"In multi-store queries, and in any filter or select that runs after a join, predicate keys must use store-qualified dotted field paths such as \"users.first_name\" or \"orders.total_amount\" rather than bare field names. " +
-		"Read each store.schema object literally for exact field names and data types, then align the expression field name and literal value with that exact schema instead of emitting placeholders: if schema confirms first_name:string and the ask says first_name John, emit {\"first_name\":{\"$eq\":\"John\"}}; if schema confirms orders.total_amount:number and the ask says total amount > 500, emit {\"orders.total_amount\":{\"$gt\":500}}. " +
-		"Think of predicate objects as completed expressions with the operator and literal value already assigned. " +
-		"Read each store.relations entry literally: source_fields are the current-store field paths, target_store is the joined store, and target_fields are the target-store join fields. Treat those grounded relations as the source of truth. " +
-		"Worked example: for the prompt Find orders for users with first_name 'John' with total amount > 500, think in this order: infer likely stores [\"users\",\"users_orders\",\"orders\"]; call list_stores; read users.schema.first_name:string and orders.schema.total_amount:number; align expression names to those exact fields; align literal values to those exact types; then compose joins from the returned relations. If list_stores returns users.relations with target_store users_orders and target_fields [user_id], and users_orders.relations with target_store orders and target_fields [key], the next AST can be {\"script\":[{\"op\":\"begin_tx\",\"args\":{\"mode\":\"read\"},\"result_var\":\"tx\"},{\"op\":\"open_store\",\"args\":{\"transaction\":\"tx\",\"name\":\"users\"},\"result_var\":\"users_store\"},{\"op\":\"open_store\",\"args\":{\"transaction\":\"tx\",\"name\":\"users_orders\"},\"result_var\":\"users_orders_store\"},{\"op\":\"open_store\",\"args\":{\"transaction\":\"tx\",\"name\":\"orders\"},\"result_var\":\"orders_store\"},{\"op\":\"select\",\"args\":{\"store\":\"users_store\",\"condition\":{\"first_name\":{\"$eq\":\"John\"}}},\"result_var\":\"matched_users\"},{\"op\":\"join\",\"input_var\":\"matched_users\",\"args\":{\"target\":\"users_orders_store\",\"relation\":\"users_orders\"},\"result_var\":\"user_order_links\"},{\"op\":\"join\",\"input_var\":\"user_order_links\",\"args\":{\"target\":\"orders_store\",\"relation\":\"orders\"},\"result_var\":\"joined_orders\"},{\"op\":\"filter\",\"input_var\":\"joined_orders\",\"args\":{\"condition\":{\"orders.total_amount\":{\"$gt\":500}}},\"result_var\":\"filtered_orders\"},{\"op\":\"return\",\"input_var\":\"filtered_orders\"}]}. Do not emit booleans such as {\"first_name\":true} or {\"orders\":true}. " +
+		"Predicate format: for single-store operations (select, scan with filter), use bare field names like \"first_name\". After joins, use store-qualified paths like \"orders.total_amount\". " +
+		"Read store.schema for field names and types (e.g., {\"key\": \"string\", \"first_name\": \"string\", \"age\": \"number\"}). Match types exactly: string values in quotes, numbers as numbers. " +
+		"Relations map joins using schema field names. source_fields and target_fields reference fields from the schema. " +
+		"Example: Find orders for users with first_name 'John' where total_amount > 500. Call list_stores([\"users\",\"users_orders\",\"orders\"]). Read schemas: users has first_name field, orders has total_amount field. Build: {\"script\":[{\"op\":\"begin_tx\",\"args\":{\"mode\":\"read\"},\"result_var\":\"tx\"},{\"op\":\"open_store\",\"args\":{\"transaction\":\"tx\",\"name\":\"users\"},\"result_var\":\"users_store\"},{\"op\":\"select\",\"args\":{\"store\":\"users_store\",\"condition\":{\"first_name\":{\"$eq\":\"John\"}}},\"result_var\":\"matched_users\"},{\"op\":\"join\",\"input_var\":\"matched_users\",\"args\":{\"target\":\"users_orders_store\",\"relation\":\"users_orders\"},\"result_var\":\"user_order_links\"},{\"op\":\"join\",\"input_var\":\"user_order_links\",\"args\":{\"target\":\"orders_store\",\"relation\":\"orders\"},\"result_var\":\"joined_orders\"},{\"op\":\"filter\",\"input_var\":\"joined_orders\",\"args\":{\"condition\":{\"orders.total_amount\":{\"$gt\":500}}},\"result_var\":\"filtered_orders\"},{\"op\":\"return\",\"input_var\":\"filtered_orders\"}]}. Do not emit booleans like {\"first_name\":true}. " +
 		"Prefer relation + target for join repair instead of inventing a fresh on mapping; if on is still needed, rewrite only the invalid join slice by translating the confirmed relation into the exact concrete field mapping the join op expects, and never use store names where field paths are required. join and join_right emit a combined flat record by default, so reuse dotted store-qualified field paths unless a later project step intentionally reshapes the output. If the AST shape is ambiguous, call gettoolinfo('execute_script') and continue with concrete predicate objects, concrete join mappings, and boolean placeholders removed."
 	ListStoresInstruction = "Research store structure before writing multi-store reads or repairs. Pass stores:[...] to scope the response to likely targets, and infer likely store names from the user's ask instead of leaving stores empty when obvious candidates are available. " +
-		"The tool can narrow close singular/plural matches internally, but you should still pass the most likely store names you can infer. The result is a JSON object with stores:[{name,schema,description,relations,empty}]. " +
-		"Read each store.schema object literally to choose the field name, and match the expression name and literal value to that field's exact data type instead of emitting placeholders. Read each store.relations entry literally: source_fields are the current-store field paths, target_store is the joined store, and target_fields are the target-store join fields. Reuse those grounded relations as the source of truth for join targets, join fields, dotted field paths, and predicate field names rather than guessing them. " +
-		"Worked example: Find orders for users with first_name 'John' with total amount > 500. Infer [\"users\",\"users_orders\",\"orders\"], read users.schema.first_name:string and orders.schema.total_amount:number, align expression names to first_name and orders.total_amount, align literal values to string John and number 500, then compose the join AST from the returned relation fields. The resulting execute_script AST should contain grounded expressions such as {\"first_name\":{\"$eq\":\"John\"}} and {\"orders.total_amount\":{\"$gt\":500}}, not booleans like {\"first_name\":true}."
+		"The tool can narrow close singular/plural matches internally, but you should still pass the most likely store names you can infer. The result is a JSON object with stores:[{name,schema,key_fields,value_fields,description,relations,empty}]. " +
+		"Each store.schema maps field names to types (e.g., {\"key\": \"string\", \"first_name\": \"string\", \"age\": \"number\"}). " +
+		"When building predicates: for single-store operations, use bare field names like \"first_name\". After joins, use store-qualified names like \"orders.total_amount\". " +
+		"Relations map store-to-store joins using schema field names. source_fields and target_fields reference fields from the schema. " +
+		"Example: Find orders for users with first_name 'John' where total_amount > 500. Call list_stores with [\"users\", \"users_orders\", \"orders\"]. Read schemas: users has first_name, orders has total_amount. Build predicates: {\"first_name\": {\"$eq\": \"John\"}} for single-store filter, {\"orders.total_amount\": {\"$gt\": 500}} after joins."
 )
 
 const emptyObjectArgsSchema = `{"type":"object","properties":{}}`
@@ -46,7 +47,9 @@ type listStoresPayload struct {
 
 type listStorePayload struct {
 	Name        string            `json:"name"`
-	Schema      map[string]string `json:"schema,omitempty"`
+	Schema      map[string]string `json:"schema,omitempty"`       // Flat schema without prefixes
+	KeyFields   []string          `json:"key_fields,omitempty"`   // Field names in the Key
+	ValueFields []string          `json:"value_fields,omitempty"` // Field names in the Value
 	Description string            `json:"description,omitempty"`
 	Relations   []sop.Relation    `json:"relations,omitempty"`
 	Empty       bool              `json:"empty,omitempty"`
@@ -303,9 +306,11 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 					extras += fmt.Sprintf(" relations=%s", string(rels))
 				}
 
-				// Prefer stored schema from StoreInfo, fallback to runtime inference
+				// Prefer stored schema from StoreInfo
 				if len(info.Schema) > 0 {
 					storePayload.Schema = info.Schema
+					storePayload.KeyFields = info.KeyFields
+					storePayload.ValueFields = info.ValueFields
 					desc = fmt.Sprintf("%s schema=%s%s", sName, formatSchema(info.Schema), extras)
 				} else if ok, _ := s.First(ctx); ok {
 					k := s.GetCurrentKey()
