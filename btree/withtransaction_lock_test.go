@@ -78,7 +78,7 @@ func TestBtreeWithTransaction_RLockCurrentItem_Success(t *testing.T) {
 	}
 }
 
-// Test btreeWithTransaction rollback on GetCurrentValueNoLock error
+// Test btreeWithTransaction GetCurrentValueNoLock bypasses ItemActionTracker.
 func TestBtreeWithTransaction_GetCurrentValueNoLock_RollbackOnError(t *testing.T) {
 	b, _ := newTestBtree[string]()
 	ctx := context.Background()
@@ -94,14 +94,17 @@ func TestBtreeWithTransaction_GetCurrentValueNoLock_RollbackOnError(t *testing.T
 	// Force an error by setting ItemActionTracker to nil
 	b.storeInterface.ItemActionTracker = nil
 
-	_, err := bt.GetCurrentValueNoLock(ctx)
-	if err == nil {
-		t.Error("GetCurrentValueNoLock should fail with nil ItemActionTracker")
+	v, err := bt.GetCurrentValueNoLock(ctx)
+	if err != nil {
+		t.Fatalf("GetCurrentValueNoLock should bypass ItemActionTracker and succeed: %v", err)
+	}
+	if v != "value10" {
+		t.Errorf("expected 'value10', got: %v", v)
 	}
 
-	// Verify rollback was called
-	if !trans.rollbackCalled {
-		t.Error("Rollback should have been called on error")
+	// Verify rollback was not called.
+	if trans.rollbackCalled {
+		t.Error("Rollback should not have been called when GetCurrentValueNoLock succeeds")
 	}
 }
 
@@ -144,15 +147,16 @@ func TestBtreeWithTransaction_GetCurrentValueNoLock_RollbackFailure(t *testing.T
 	// Force an error by setting ItemActionTracker to nil
 	b.storeInterface.ItemActionTracker = nil
 
-	_, err := bt.GetCurrentValueNoLock(ctx)
-	if err == nil {
-		t.Error("should return error when ItemActionTracker is nil")
+	v, err := bt.GetCurrentValueNoLock(ctx)
+	if err != nil {
+		t.Fatalf("GetCurrentValueNoLock should bypass ItemActionTracker and succeed: %v", err)
+	}
+	if v != "value10" {
+		t.Errorf("expected 'value10', got: %v", v)
 	}
 
-	// Error message should mention rollback failure
-	errStr := err.Error()
-	if errStr == "" {
-		t.Error("error message should not be empty")
+	if trans.rollbackCalled {
+		t.Error("Rollback should not have been called when GetCurrentValueNoLock succeeds")
 	}
 }
 

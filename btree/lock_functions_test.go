@@ -195,7 +195,8 @@ func TestRLockCurrentItem_NilStoreInterface(t *testing.T) {
 	}
 }
 
-// Test GetCurrentValueNoLock with nil ItemActionTracker
+// Test GetCurrentValueNoLock with nil ItemActionTracker.
+// NoLock read should bypass ItemActionTracker.
 func TestGetCurrentValueNoLock_NilItemActionTracker(t *testing.T) {
 	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true, IsValueDataInNodeSegment: true})
 	fnr := &trackingNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}
@@ -213,9 +214,12 @@ func TestGetCurrentValueNoLock_NilItemActionTracker(t *testing.T) {
 	// Manually set ItemActionTracker to nil
 	b.storeInterface.ItemActionTracker = nil
 
-	_, err = b.GetCurrentValueNoLock(context.Background())
-	if err == nil || err.Error() != "ItemActionTracker is nil" {
-		t.Errorf("expected 'ItemActionTracker is nil' error, got: %v", err)
+	v, err := b.GetCurrentValueNoLock(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentValueNoLock should bypass ItemActionTracker, got: %v", err)
+	}
+	if v != "value10" {
+		t.Errorf("expected 'value10', got: %v", v)
 	}
 }
 
@@ -289,7 +293,8 @@ func (t *trackingNR[TK, TV]) Get(ctx context.Context, id sop.UUID) (*Node[TK, TV
 	return t.n[id], nil
 }
 
-// Test ItemActionTracker.Get error handling
+// Test ItemActionTracker.Get error handling.
+// NoLock read should bypass ItemActionTracker.Get errors.
 func TestGetCurrentValueNoLock_ItemActionTrackerError(t *testing.T) {
 	store := sop.NewStoreInfo(sop.StoreOptions{SlotLength: 4, IsUnique: true, IsValueDataInNodeSegment: true})
 	fnr := &trackingNR[int, string]{n: map[sop.UUID]*Node[int, string]{}}
@@ -305,10 +310,13 @@ func TestGetCurrentValueNoLock_ItemActionTrackerError(t *testing.T) {
 	b.Add(context.Background(), 10, "value10")
 	b.Find(context.Background(), 10, true)
 
-	// GetCurrentValueNoLock should return error from ItemActionTracker.Get
-	_, err = b.GetCurrentValueNoLock(context.Background())
-	if err == nil || err.Error() != "tracker error" {
-		t.Errorf("expected 'tracker error', got: %v", err)
+	// GetCurrentValueNoLock should bypass ItemActionTracker.Get and succeed.
+	v, err := b.GetCurrentValueNoLock(context.Background())
+	if err != nil {
+		t.Fatalf("GetCurrentValueNoLock should bypass tracker.Get errors, got: %v", err)
+	}
+	if v != "value10" {
+		t.Errorf("expected 'value10', got: %v", v)
 	}
 }
 
@@ -327,10 +335,10 @@ func TestRLockCurrentItem_ItemActionTrackerError(t *testing.T) {
 	b.Add(context.Background(), 10, "value10")
 	b.Find(context.Background(), 10, true)
 
-	// RLockCurrentItem doesn't call ItemActionTracker.Get(), so it should succeed even with errorIAT
+	// RLockCurrentItem now calls ItemActionTracker.Get(), so tracker errors are surfaced.
 	err = b.RLockCurrentItem(context.Background())
-	if err != nil {
-		t.Errorf("RLockCurrentItem should succeed (doesn't call ItemActionTracker.Get), got: %v", err)
+	if err == nil || err.Error() != "tracker error" {
+		t.Errorf("expected 'tracker error', got: %v", err)
 	}
 }
 

@@ -99,7 +99,7 @@ func TestBuildExecuteScriptArgsSchema_DeclaresJoinSpecificArgs(t *testing.T) {
 }
 
 func TestExecuteScriptInstruction_MentionsResearchAndConcreteShapes(t *testing.T) {
-	checks := []string{"full ordered JSON AST", "{op, args?, input_var?, result_var?}", "begin a transaction", "result_var/input_var", "list_stores", "JSON object with stores:[{name,schema,description,relations,empty}]", "write the condition expression the engine should execute", "align the expression field name and literal value with that exact schema", "completed expressions with the operator and literal value already assigned", "source_fields are the current-store field paths", "target_store is the joined store", "target_fields are the target-store join fields", "Worked example: for the prompt Find orders for users with first_name 'John' with total amount > 500", "stores:[\"users\",\"users_orders\",\"orders\"]", "align expression names to those exact fields", "align literal values to those exact types", "the next AST can be {\"script\":[{\"op\":\"begin_tx\"", "\"condition\":{\"first_name\":{\"$eq\":\"John\"}}", "\"condition\":{\"orders.total_amount\":{\"$gt\":500}}", "Prefer relation + target for join repair", "rewrite only the invalid join slice", "combined flat record by default", "gettoolinfo('execute_script')", "concrete predicate objects", "concrete join mappings", "boolean placeholders"}
+	checks := []string{"full ordered JSON AST", "{op, args?, input_var?, result_var?}", "begin a transaction", "result_var/input_var", "list_stores", "stores:[{name,schema,key_fields,value_fields,description,relations,empty}]", "write the condition expression the engine should execute", "Predicate format", "single-store operations", "bare field names", "After joins, use store-qualified paths", "Read store.schema for field names and types", "Match types exactly", "source_fields and target_fields reference fields from the schema", "Find orders for users with first_name 'John' where total_amount > 500", "stores:[\"users\",\"users_orders\",\"orders\"]", "\"condition\":{\"first_name\":{\"$eq\":\"John\"}}", "\"condition\":{\"orders.total_amount\":{\"$gt\":500}}", "Prefer relation + target for join repair", "rewrite only the invalid join slice", "combined flat record by default", "gettoolinfo('execute_script')", "concrete predicate objects", "concrete join mappings", "boolean placeholders"}
 	for _, check := range checks {
 		if !strings.Contains(ExecuteScriptInstruction, check) {
 			t.Fatalf("expected ExecuteScriptInstruction to contain %q\nInstruction: %s", check, ExecuteScriptInstruction)
@@ -111,13 +111,13 @@ func TestExecuteScriptInstruction_MentionsResearchAndConcreteShapes(t *testing.T
 }
 
 func TestStoresAndSpacesInstructions_AreRichEnoughForToolContext(t *testing.T) {
-	storesChecks := []string{"stores:[...]", "stores:[{name,schema,description,relations,empty}]", "expression name and literal value", "exact data type", "infer likely store names", "singular/plural", "Worked example: Find orders for users with first_name 'John' with total amount > 500.", "align expression names to first_name and orders.total_amount", "align literal values to string John and number 500", "{\"first_name\":{\"$eq\":\"John\"}}", "{\"orders.total_amount\":{\"$gt\":500}}"}
+	storesChecks := []string{"stores:[...]", "stores:[{name,schema,key_fields,value_fields,description,relations,empty}]", "infer likely store names", "singular/plural", "Each store.schema maps field names to types", "for single-store operations, use bare field names", "After joins, use store-qualified names", "Find orders for users with first_name 'John' where total_amount > 500", "{\"first_name\": {\"$eq\": \"John\"}}", "{\"orders.total_amount\": {\"$gt\": 500}}"}
 	for _, check := range storesChecks {
 		if !strings.Contains(ListStoresInstruction, check) {
 			t.Fatalf("expected ListStoresInstruction to contain %q\nInstruction: %s", check, ListStoresInstruction)
 		}
 	}
-	for _, check := range []string{"source_fields are the current-store field paths", "target_store is the joined store", "target_fields are the target-store join fields", "compose the join AST from the returned relation fields"} {
+	for _, check := range []string{"Relations map store-to-store joins using schema field names", "source_fields and target_fields reference fields from the schema"} {
 		if !strings.Contains(ListStoresInstruction, check) {
 			t.Fatalf("expected ListStoresInstruction to explain concrete relations consumption with %q\nInstruction: %s", check, ListStoresInstruction)
 		}

@@ -316,22 +316,16 @@ func (btree *Btree[TK, TV]) GetCurrentValueNoLock(ctx context.Context) (TV, erro
 	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
 		return zero, err
 	} else {
-		// Fetch value if needed, but do NOT mark read (no rlock hint).
-		vnf := item.ValueNeedsFetch
-		if btree.storeInterface == nil {
-			return zero, fmt.Errorf("storeInterface is nil")
-		}
-		if btree.storeInterface.ItemActionTracker == nil {
-			return zero, fmt.Errorf("ItemActionTracker is nil")
-		}
-		if err := btree.storeInterface.ItemActionTracker.Get(ctx, item); err != nil {
-			return zero, err
-		}
+		//vnf := item.ValueNeedsFetch
 
-		// Don't mark the node as fetched to avoid read lock hint on Commit, since this method is for scenarios where caller manages rlocks explicitly.
+		// Don't mark the node & item as fetched to avoid read lock hint on Commit,
+		// since this method is for scenarios where caller manages rlocks explicitly.
+		// btree.storeInterface.NodeRepository.Fetched(btree.currentItemRef.nodeID)
+		// btree.storeInterface.ItemActionTracker.Get(ctx, item)
 
-		if vnf && !item.ValueNeedsFetch && item.Value != nil {
+		if item.ValueNeedsFetch && item.Value != nil {
 			item.valueWasFetched = true
+			item.ValueNeedsFetch = false
 		}
 		if item.Value == nil {
 			return zero, nil
@@ -343,17 +337,30 @@ func (btree *Btree[TK, TV]) GetCurrentValueNoLock(ctx context.Context) (TV, erro
 // RLockCurrentItem registers the current item for read lock (version check) on Commit without returning the value.
 // This is useful when you need to lock an item for consistency checking but don't need to read its value.
 func (btree *Btree[TK, TV]) RLockCurrentItem(ctx context.Context) error {
-	if btree.currentItemRef.getNodeID() == sop.NilUUID {
-		return fmt.Errorf("no current item selected to lock")
+	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
+		if err == nil && item == nil {
+			err = fmt.Errorf("no current item selected to lock")
+		}
+		return err
+	} else {
+		// Register to local cache the "item get" for submit/resolution on Commit.
+		if btree.storeInterface == nil {
+			return fmt.Errorf("storeInterface is nil")
+		}
+		if btree.storeInterface.ItemActionTracker == nil {
+			return fmt.Errorf("ItemActionTracker is nil")
+		}
+		vnf := item.ValueNeedsFetch
+		// Mark item as fetched for version conflict detection.
+		if err := btree.storeInterface.ItemActionTracker.Get(ctx, item); err != nil {
+			return err
+		}
+		// Mark node as fetched for version conflict detection.
+		btree.storeInterface.NodeRepository.Fetched(btree.currentItemRef.nodeID)
+		if vnf && !item.ValueNeedsFetch && item.Value != nil {
+			item.valueWasFetched = true
+		}
 	}
-	if btree.storeInterface == nil {
-		return fmt.Errorf("storeInterface is nil")
-	}
-	if btree.storeInterface.ItemActionTracker == nil {
-		return fmt.Errorf("ItemActionTracker is nil")
-	}
-	// Mark node as fetched for version conflict detection
-	btree.storeInterface.NodeRepository.Fetched(btree.currentItemRef.nodeID)
 	return nil
 }
 
@@ -382,15 +389,19 @@ func (btree *Btree[TK, TV]) GetCurrentItemNoLock(ctx context.Context) (Item[TK, 
 	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
 		return zero, err
 	} else {
-		vnf := item.ValueNeedsFetch
-		if err := btree.storeInterface.ItemActionTracker.Get(ctx, item); err != nil {
-			return zero, err
-		}
+		//vnf := item.ValueNeedsFetch
 
-		// Don't mark the node as fetched to avoid read lock hint on Commit, caller manages rlocks explicitly.
+		// Don't mark the node & item as fetched to avoid read lock hint on Commit,
+		// since this method is for scenarios where caller manages rlocks explicitly.
+		// btree.storeInterface.NodeRepository.Fetched(btree.currentItemRef.nodeID)
+		// btree.storeInterface.ItemActionTracker.Get(ctx, item)
 
-		if vnf && !item.ValueNeedsFetch && item.Value != nil {
+		if item.ValueNeedsFetch && item.Value != nil {
 			item.valueWasFetched = true
+			item.ValueNeedsFetch = false
+		}
+		if item.Value == nil {
+			return zero, nil
 		}
 		return *item, nil
 	}
