@@ -148,6 +148,12 @@ func (btree *Btree[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, er
 	}
 	btree.promote(ctx)
 
+	// Capture schema on first item add.
+	if btree.StoreInfo.Count == 0 {
+		flat := sop.FlattenForSchema(item.Key, item.Value)
+		btree.StoreInfo.Schema = sop.InferSchema(flat)
+	}
+
 	// Increment store's item count.
 	btree.StoreInfo.Count++
 
@@ -378,7 +384,6 @@ func (btree *Btree[TK, TV]) GetCurrentItemNoLock(ctx context.Context) (Item[TK, 
 		return *item, nil
 	}
 }
-
 
 // AddIfNotExist inserts the item only when a duplicate key does not exist (temporarily enabling uniqueness).
 func (btree *Btree[TK, TV]) AddIfNotExist(ctx context.Context, key TK, value TV) (bool, error) {

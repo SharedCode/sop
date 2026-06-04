@@ -18,7 +18,7 @@ func inferSchema(item map[string]any) map[string]string {
 
 func inferType(v any) string {
 	if v == nil {
-		return "null"
+		return "object"
 	}
 	switch val := v.(type) {
 	case string:
@@ -28,7 +28,7 @@ func inferType(v any) string {
 		return "string"
 	case uuid.UUID:
 		return "uuid"
-	case int, int64, int32, float64, float32:
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
 		return "number"
 	case bool:
 		return "boolean"

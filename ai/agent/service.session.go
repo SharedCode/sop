@@ -226,7 +226,11 @@ Use these tools via slash(/) commands. Arguments can be positional (e.g. ` + "`/
 			if hasOpts {
 				s, err := jsondb.OpenStore(ctx, dbOpts, sName, tx)
 				if err == nil {
-					if ok, _ := s.First(ctx); ok {
+					info := s.GetStoreInfo()
+					// Prefer stored schema from StoreInfo, fallback to runtime inference
+					if len(info.Schema) > 0 {
+						desc = fmt.Sprintf("%s schema=%s", sName, formatSchema(info.Schema))
+					} else if ok, _ := s.First(ctx); ok {
 						k := s.GetCurrentKey()
 						v, _ := s.GetCurrentValue(ctx)
 						flat := flattenItem(k, v)

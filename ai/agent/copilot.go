@@ -2280,7 +2280,10 @@ func (a *CopilotAgent) getSchemaInjectionContext(ctx context.Context) string {
 						var schemaInfo string
 						if storeAccessor, err := jsondb.OpenStore(ctx, db.Config(), s, tx); err == nil {
 							info := storeAccessor.GetStoreInfo()
-							if ok, _ := storeAccessor.First(ctx); ok {
+							// Prefer stored schema from StoreInfo, fallback to runtime inference
+							if len(info.Schema) > 0 {
+								schemaInfo += fmt.Sprintf(" %s", formatSchema(info.Schema))
+							} else if ok, _ := storeAccessor.First(ctx); ok {
 								key := storeAccessor.GetCurrentKey()
 								if key != nil {
 									if val, err := storeAccessor.GetCurrentValue(ctx); err == nil {

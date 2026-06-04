@@ -55,6 +55,9 @@ type StoreInfo struct {
 	// Relations describes foreign key relationships to other stores.
 	Relations []Relation `json:"relations,omitempty"`
 
+	// Schema stores the inferred field types captured from the first item added.
+	Schema map[string]string `json:"schema,omitempty"`
+
 	// Version allows versioning of the store info payload for future upgrades.
 	Version string `json:"version,omitempty"`
 }

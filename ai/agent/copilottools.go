@@ -303,7 +303,11 @@ func (a *CopilotAgent) toolListStores(ctx context.Context, args map[string]any) 
 					extras += fmt.Sprintf(" relations=%s", string(rels))
 				}
 
-				if ok, _ := s.First(ctx); ok {
+				// Prefer stored schema from StoreInfo, fallback to runtime inference
+				if len(info.Schema) > 0 {
+					storePayload.Schema = info.Schema
+					desc = fmt.Sprintf("%s schema=%s%s", sName, formatSchema(info.Schema), extras)
+				} else if ok, _ := s.First(ctx); ok {
 					k := s.GetCurrentKey()
 					v, _ := s.GetCurrentValue(ctx)
 					flat := flattenItem(k, v)

@@ -224,14 +224,14 @@ func TestSessionPayloadPropagation(t *testing.T) {
 		t.Fatal("Agent is not a payloadMockAgent")
 	}
 
-	// Check if captured options have the SessionPayload
+	// Check if captured config has the SessionPayload
 	var payload *ai.SessionPayload
-	optConfig := ai.AskConfig{Values: make(map[string]any)}
-	for _, o := range pmAgent.capturedOpts {
-		o(&optConfig)
-	}
-	if p, ok := optConfig.Values["payload"].(*ai.SessionPayload); ok {
-		payload = p
+	if pmAgent.capturedCfg != nil {
+		if p, ok := pmAgent.capturedCfg.Get("payload"); ok {
+			if sp, ok := p.(*ai.SessionPayload); ok {
+				payload = sp
+			}
+		}
 	}
 
 	if payload == nil {

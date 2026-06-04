@@ -19,10 +19,6 @@ func newBTreeWithInducedErrors[TK btree.Ordered, TV any](t *testing.T) *b3WithIn
 	return &b3WithInducedErrors[TK, TV]{t: t}
 }
 
-func (b3 b3WithInducedErrors[TK, TV]) Lock(ctx context.Context, forWriting bool) error {
-	return nil
-}
-
 func (b3 b3WithInducedErrors[TK, TV]) Count() int64 {
 	return 0
 }
@@ -129,6 +125,31 @@ func (b3 b3WithInducedErrors[TK, TV]) GetCurrentItem(ctx context.Context) (btree
 		return btree.Item[TK, TV]{}, fmt.Errorf("foobar")
 	}
 	return btree.Item[TK, TV]{}, nil
+}
+
+func (b3 b3WithInducedErrors[TK, TV]) GetCurrentValueNoLock(ctx context.Context) (TV, error) {
+	b3.t.Helper()
+	var zero TV
+	if b3.induceErrorOnMethod == 9 {
+		return zero, fmt.Errorf("foobar")
+	}
+	return zero, nil
+}
+
+func (b3 b3WithInducedErrors[TK, TV]) GetCurrentItemNoLock(ctx context.Context) (btree.Item[TK, TV], error) {
+	b3.t.Helper()
+	if b3.induceErrorOnMethod == 10 {
+		return btree.Item[TK, TV]{}, fmt.Errorf("foobar")
+	}
+	return btree.Item[TK, TV]{}, nil
+}
+
+func (b3 b3WithInducedErrors[TK, TV]) RLockCurrentItem(ctx context.Context) error {
+	b3.t.Helper()
+	if b3.induceErrorOnMethod == 19 {
+		return fmt.Errorf("foobar")
+	}
+	return nil
 }
 
 func (b3 b3WithInducedErrors[TK, TV]) First(ctx context.Context) (bool, error) {
