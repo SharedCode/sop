@@ -52,6 +52,14 @@ func (c currentItemRef) getNodeID() sop.UUID {
 	return c.nodeID
 }
 
+// inferSchemaOfFirst captures schema from the first item added to the B-tree.
+// Uses reflection to infer types from the generic TK and TV parameters.
+func (btree *Btree[TK, TV]) inferSchemaOfFirst(item *Item[TK, TV]) {
+	if btree.StoreInfo.Count == 0 {
+		btree.StoreInfo.Schema = sop.InferSchemaFromTypes(item.Key, item.Value)
+	}
+}
+
 // distributeAction contains details to allow B-tree to balance item load across nodes.
 // "distribute" function will use these details in order to distribute an item of a node
 // to either the left side or right side nodes of the branch(relative to the sourceNode)
@@ -148,11 +156,8 @@ func (btree *Btree[TK, TV]) Add(ctx context.Context, key TK, value TV) (bool, er
 	}
 	btree.promote(ctx)
 
-	// Capture schema on first item add.
-	if btree.StoreInfo.Count == 0 {
-		flat := sop.FlattenForSchema(item.Key, item.Value)
-		btree.StoreInfo.Schema = sop.InferSchema(flat)
-	}
+	// Capture schema on first item add using reflection for accurate type information.
+	btree.inferSchemaOfFirst(item)
 
 	// Increment store's item count.
 	btree.StoreInfo.Count++
@@ -180,6 +185,9 @@ func (btree *Btree[TK, TV]) AddItem(ctx context.Context, item *Item[TK, TV]) (bo
 		return false, err
 	}
 	btree.promote(ctx)
+
+	// Capture schema on first item add using reflection for accurate type information.
+	btree.inferSchemaOfFirst(item)
 
 	// Increment store's item count.
 	btree.StoreInfo.Count++

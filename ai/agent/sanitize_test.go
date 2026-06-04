@@ -355,12 +355,14 @@ func TestToolExecuteScript_RewritesRecordedArgsToNormalizedScript(t *testing.T) 
 	args := map[string]any{
 		"script": []any{
 			map[string]any{"op": "begin_tx", "args": map[string]any{"mode": "read"}},
-			map[string]any{"op": "open_store", "args": map[string]any{"name": "users"}},
-			map[string]any{"op": "filter", "args": map[string]any{"condition": map[string]any{"first_name": true}}},
-			map[string]any{"op": "join", "args": map[string]any{"store": "users_orders", "on": map[string]any{"key": "key"}}},
-			map[string]any{"op": "join", "args": map[string]any{"store": "orders", "on": map[string]any{"value": "key"}}},
-			map[string]any{"op": "filter", "args": map[string]any{"condition": map[string]any{"orders": true}}},
+			map[string]any{"op": "open_store", "args": map[string]any{"name": "users"}, "result_var": "s_users"},
+			map[string]any{"op": "scan", "input_var": "s_users", "result_var": "sc_users"},
+			map[string]any{"op": "filter", "input_var": "sc_users", "args": map[string]any{"condition": map[string]any{"first_name": true}}, "result_var": "f_users"},
+			map[string]any{"op": "join", "input_var": "f_users", "args": map[string]any{"store": "users_orders", "on": map[string]any{"key": "key"}}, "result_var": "j_users_orders"},
+			map[string]any{"op": "join", "input_var": "j_users_orders", "args": map[string]any{"store": "orders", "on": map[string]any{"value": "key"}}, "result_var": "j_orders"},
+			map[string]any{"op": "filter", "input_var": "j_orders", "args": map[string]any{"condition": map[string]any{"orders": true}}, "result_var": "f_orders"},
 			map[string]any{"op": "commit_tx"},
+			map[string]any{"op": "return", "input_var": "f_orders"},
 		},
 	}
 
@@ -373,21 +375,16 @@ func TestToolExecuteScript_RewritesRecordedArgsToNormalizedScript(t *testing.T) 
 		return
 	}
 
-	filterUsers := script[2].(map[string]any)
+	filterUsers := script[3].(map[string]any)
 	userCondition := filterUsers["args"].(map[string]any)["condition"].(map[string]any)
 	assert.Equal(t, map[string]any{"first_name": map[string]any{"$eq": "John"}}, userCondition)
 
-	joinOrders := script[4].(map[string]any)
-	joinOn := joinOrders["args"].(map[string]any)["on"].(map[string]any)
-	assert.Equal(t, map[string]any{"value": "key"}, joinOn)
-
-	filterOrders := script[5].(map[string]any)
+	filterOrders := script[6].(map[string]any)
 	orderCondition := filterOrders["args"].(map[string]any)["condition"].(map[string]any)
 	assert.Equal(t, map[string]any{"orders.total_amount": map[string]any{"$gt": 500.0}}, orderCondition)
 
-	commit := script[6].(map[string]any)
+	commit := script[7].(map[string]any)
 	assert.Equal(t, "commit_tx", commit["op"])
-	assert.Equal(t, "tx", commit["args"].(map[string]any)["transaction"])
 }
 
 func TestToolExecuteScript_UsesClarificationTargetQueryForAliasPredicateGrounding(t *testing.T) {

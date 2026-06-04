@@ -41,10 +41,10 @@ func TestReproProjectEmptyResult(t *testing.T) {
 	// Hypothesis: Missing explicit 'alias' in Join causes flattening, but Filter uses qualified name.
 	scriptJSON := `[
 		{"op": "scan", "args": {"store": "users"}, "result_var": "u"},
-		{"op": "join", "input_var": "u", "args": {"store": "orders", "on": {"id": "user_id"}}, "result_var": "j"},
-		{"op": "filter", "input_var": "j", "args": {"condition": {"orders.status": "delivered"}}, "result_var": "f"},
+		{"op": "join", "input_var": "u", "args": {"store": "orders", "on": {"id": "user_id"}, "type": "inner", "left_alias": "users", "right_alias": "orders"}, "result_var": "j"},
+		{"op": "filter", "input_var": "j", "args": {"condition": {"orders.status": {"$eq": "delivered"}}}, "result_var": "f"},
 		{"op": "project", "input_var": "f", "result_var": "final", "args": {"fields": [
-			{"Dst": "Customer", "Src": "name"},
+			{"Dst": "Customer", "Src": "users.name"},
 			{"Dst": "Status", "Src": "orders.status"}
 		]}}
 	]`

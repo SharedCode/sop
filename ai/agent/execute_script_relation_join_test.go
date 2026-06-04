@@ -58,11 +58,12 @@ func TestExecuteScript_RelationTargetJoinCompatibility(t *testing.T) {
 		{"args": map[string]any{"database": "dev_db", "mode": "read"}, "op": "begin_tx", "result_var": "tx"},
 		{"args": map[string]any{"name": "users", "transaction": "tx"}, "op": "open_store", "result_var": "users_store"},
 		{"args": map[string]any{"name": "orders", "transaction": "tx"}, "op": "open_store", "result_var": "orders_store"},
-		{"args": map[string]any{"store": "users_store"}, "op": "scan"},
-		{"args": map[string]any{"field": "first_name", "op": "==", "value": "John"}, "op": "filter"},
-		{"args": map[string]any{"relation": "users_orders", "target": "orders_store"}, "op": "join"},
-		{"args": map[string]any{"field": "total_amount", "op": ">", "value": 500}, "op": "filter"},
+		{"args": map[string]any{"store": "users_store"}, "op": "scan", "result_var": "users_scan"},
+		{"input_var": "users_scan", "args": map[string]any{"condition": map[string]any{"first_name": map[string]any{"$eq": "John"}}}, "op": "filter", "result_var": "filtered_users"},
+		{"input_var": "filtered_users", "args": map[string]any{"relation": "users_orders", "target": "orders_store"}, "op": "join", "result_var": "joined_data"},
+		{"input_var": "joined_data", "args": map[string]any{"condition": map[string]any{"orders.total_amount": map[string]any{"$gt": 500}}}, "op": "filter", "result_var": "final_result"},
 		{"args": map[string]any{"transaction": "tx"}, "op": "commit_tx"},
+		{"input_var": "final_result", "op": "return"},
 	}
 
 	scriptBytes, err := json.Marshal(script)

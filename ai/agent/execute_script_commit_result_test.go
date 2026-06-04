@@ -55,8 +55,8 @@ func TestExecuteScript_CommitDoesNotClobberSortedResult(t *testing.T) {
 	scriptSteps := []map[string]any{
 		{"op": "begin_tx", "args": map[string]any{"database": "dev_db", "mode": "read"}, "result_var": "tx1"},
 		{"op": "open_store", "args": map[string]any{"name": "users", "transaction": "tx1"}, "result_var": "users_store"},
-		{"op": "scan", "args": map[string]any{"store": "users_store"}},
-		{"op": "sort", "args": map[string]any{"field": "age", "descending": true}},
+		{"op": "scan", "args": map[string]any{"store": "users_store"}, "result_var": "scan_result"},
+		{"op": "sort", "input_var": "scan_result", "args": map[string]any{"field": "age", "descending": true}, "result_var": "sorted_result"},
 		{"op": "commit_tx", "args": map[string]any{"transaction": "tx1"}},
 	}
 

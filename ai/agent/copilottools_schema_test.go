@@ -124,11 +124,15 @@ func TestToolListStores_SchemaEnrichment(t *testing.T) {
 	if users.Name != "users" {
 		t.Fatalf("expected payload to contain users store, got %+v", resultPayload.Stores)
 	}
-	if users.Schema["first_name"] != "string" {
-		t.Fatalf("expected first_name:string in schema, got %+v", users.Schema)
+	// Schema should now use Key/Value prefixes for SQL clarity
+	if users.Schema["Value.first_name"] != "string" {
+		t.Fatalf("expected Value.first_name:string in schema, got %+v", users.Schema)
 	}
-	if users.Schema["age"] != "number" {
-		t.Fatalf("expected age:number in schema, got %+v", users.Schema)
+	if users.Schema["Value.age"] != "number" {
+		t.Fatalf("expected Value.age:number in schema, got %+v", users.Schema)
+	}
+	if users.Schema["Key"] != "string" {
+		t.Fatalf("expected Key:string in schema, got %+v", users.Schema)
 	}
 }
 
@@ -188,8 +192,8 @@ func TestToolListStores_FiltersRequestedStores(t *testing.T) {
 	if len(payload.Stores) != 1 || payload.Stores[0].Name != "orders" {
 		t.Fatalf("expected only orders store, got %+v", payload.Stores)
 	}
-	if payload.Stores[0].Schema["total_amount"] != "number" {
-		t.Fatalf("expected grounded orders schema, got %+v", payload.Stores[0].Schema)
+	if payload.Stores[0].Schema["Value.total_amount"] != "number" {
+		t.Fatalf("expected grounded orders schema with Value prefix, got %+v", payload.Stores[0].Schema)
 	}
 }
 
@@ -372,10 +376,121 @@ func TestToolListStores_ReturnsProgressEnvelopeForNativeHints(t *testing.T) {
 	if len(payload.Stores) != 1 || payload.Stores[0].Name != "users" {
 		t.Fatalf("expected tool result payload to contain users store, got %+v", payload.Stores)
 	}
-	if payload.Stores[0].Schema["first_name"] != "string" {
-		t.Fatalf("expected users schema in tool_result payload, got %+v", payload.Stores[0].Schema)
+	if payload.Stores[0].Schema["Value.first_name"] != "string" {
+		t.Fatalf("expected users schema with Value prefix in tool_result payload, got %+v", payload.Stores[0].Schema)
 	}
 	if len(envelope.ProgressHint.Clues) == 0 || !strings.Contains(envelope.ProgressHint.Clues[0], "users") {
 		t.Fatalf("expected grounded clue in progress hint, got %+v", envelope.ProgressHint)
+	}
+}
+
+// UserKey is a composite struct key for testing Key.field_name schema format
+type UserKey struct {
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+}
+
+func compareUserKey(a, b UserKey) int {
+	if a.FirstName != b.FirstName {
+		if a.FirstName < b.FirstName {
+			return -1
+		}
+		return 1
+	}
+	if a.LastName < b.LastName {
+		return -1
+	}
+	if a.LastName > b.LastName {
+		return 1
+	}
+	return 0
+}
+
+func TestToolListStores_StructKeySchema(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "sop_struct_key_schema_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	dbName := "test_db_struct_key_schema"
+	opts := sop.DatabaseOptions{StoresFolders: []string{tmpDir}}
+	agent := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{dbName: opts}, nil)
+	ctx := context.Background()
+	agent.Open(ctx)
+
+	db := database.NewDatabase(opts)
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	// Create store with struct key using core_db.NewBtree directly
+	storeOpts := sop.StoreOptions{
+		Name:           "users_by_name",
+		IsUnique:       true,
+		IsPrimitiveKey: false,
+	}
+	store, err := core_db.NewBtree[UserKey, map[string]interface{}](ctx, opts, "users_by_name", tx, compareUserKey, storeOpts)
+	if err != nil {
+		tx.Rollback(ctx)
+		t.Fatalf("NewBtree failed: %v", err)
+	}
+
+	// Add item with struct key
+	key := UserKey{FirstName: "John", LastName: "Doe"}
+	value := map[string]interface{}{"age": 30, "email": "john.doe@example.com"}
+	if _, err := store.Add(ctx, key, value); err != nil {
+		tx.Rollback(ctx)
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	// Query schema via list_stores tool
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: dbName})
+	res, err := agent.toolListStores(ctx, map[string]any{"database": dbName})
+	if err != nil {
+		t.Fatalf("toolListStores failed: %v", err)
+	}
+
+	var payload listStoresTestPayload
+	if err := json.Unmarshal([]byte(res), &payload); err != nil {
+		t.Fatalf("expected JSON payload, got %q: %v", res, err)
+	}
+
+	if len(payload.Stores) != 1 {
+		t.Fatalf("expected 1 store, got %d: %+v", len(payload.Stores), payload.Stores)
+	}
+
+	store_info := payload.Stores[0]
+	if store_info.Name != "users_by_name" {
+		t.Fatalf("expected store name 'users_by_name', got %q", store_info.Name)
+	}
+
+	// Verify Key fields are prefixed with "Key."
+	if store_info.Schema["Key.first_name"] != "string" {
+		t.Fatalf("expected Key.first_name:string in schema, got %+v", store_info.Schema)
+	}
+	if store_info.Schema["Key.last_name"] != "string" {
+		t.Fatalf("expected Key.last_name:string in schema, got %+v", store_info.Schema)
+	}
+
+	// Verify Value fields are prefixed with "Value."
+	if store_info.Schema["Value.age"] != "number" {
+		t.Fatalf("expected Value.age:number in schema, got %+v", store_info.Schema)
+	}
+	if store_info.Schema["Value.email"] != "string" {
+		t.Fatalf("expected Value.email:string in schema, got %+v", store_info.Schema)
+	}
+
+	// Verify no unprefixed keys exist (old format should not appear)
+	if _, exists := store_info.Schema["first_name"]; exists {
+		t.Fatalf("found unprefixed 'first_name' in schema (should be 'Key.first_name'), got %+v", store_info.Schema)
+	}
+	if _, exists := store_info.Schema["age"]; exists {
+		t.Fatalf("found unprefixed 'age' in schema (should be 'Value.age'), got %+v", store_info.Schema)
 	}
 }

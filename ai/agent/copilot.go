@@ -652,20 +652,22 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap)
 		}
 	}
 
+	if handled, res, err := a.handlePendingUserConfirmation(ctx, query); handled {
+		return res, err
+	}
+
+	// Check for direct tool invocation (slash commands) BEFORE checking for API key
+	// This allows slash commands to work without an LLM provider configured
+	if handled, res, err := a.handleDirectToolInvocation(ctx, query, nil); handled {
+		return res, err
+	}
+
 	gen := a.resolveGeneratorWithOverride(ctx, providerDetails)
 	if gen == nil {
 		return "⚠️ **AI Copilot Disabled**: No valid API Key found.\n\nPlease go to **Environment Settings** (HDD icon in bottom left) -> **LLM API Key** to configure your Google Gemini or OpenAI key.", nil
 	}
 
 	sessionID := a.logAskStart(ctx, query, gen)
-
-	if handled, res, err := a.handlePendingUserConfirmation(ctx, query); handled {
-		return res, err
-	}
-
-	if handled, res, err := a.handleDirectToolInvocation(ctx, query, gen); handled {
-		return res, err
-	}
 
 	rawQuery := query
 	if rewrittenQuery, rewritten := a.tryMetaTalkBasedRouting(ctx, query); rewritten {
