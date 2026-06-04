@@ -57,7 +57,7 @@ func TestService_Ask_CapturesLastStep_OnToolExecution(t *testing.T) {
 	ctx := context.WithValue(context.Background(), ai.CtxKeyExecutor, executor)
 
 	// 4. Execute Ask
-	_, err := svc.Ask(ctx, "execute tool")
+	_, err := svc.Ask(ctx, "execute tool", nil)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestService_StepCommand_UsesLastStep(t *testing.T) {
 
 	// 2. Execute /step command via handleSessionCommand
 	ctx := context.Background()
-	resp, err := svc.Ask(ctx, "/step")
+	resp, err := svc.Ask(ctx, "/step", nil)
 	if err != nil {
 		t.Fatalf("Ask /step failed: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestService_Ask_CapturesLastStep_OnRawOutput(t *testing.T) {
 	ctx := context.WithValue(context.Background(), ai.CtxKeyExecutor, executor)
 
 	// 3. Execute Ask
-	_, err := svc.Ask(ctx, "execute raw tool")
+	_, err := svc.Ask(ctx, "execute raw tool", nil)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
@@ -162,7 +162,7 @@ type MockAgent struct {
 }
 
 func (m *MockAgent) ID() string { return m.IDStr }
-func (m *MockAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+func (m *MockAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
 	// Simulate tool execution and recording
 	// This relies on the recorder being in the context and implementing ScriptRecorder interface
 	if recorder, ok := ctx.Value(ai.CtxKeyScriptRecorder).(ai.ScriptRecorder); ok {
@@ -201,7 +201,7 @@ func TestService_Ask_WithPipeline_CapturesLastStep(t *testing.T) {
 
 	// 5. Execute Ask
 	ctx := context.Background()
-	svc.Ask(ctx, "run pipeline")
+	svc.Ask(ctx, "run pipeline", nil)
 
 	// 6. Verify LastStep
 	if svc.session.LastStep == nil {

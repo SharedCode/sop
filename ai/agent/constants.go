@@ -10,24 +10,23 @@ const (
 	DefaultHost = "http://localhost:11434"
 
 	// Environment Variables
-	EnvAIProvider   = "AI_PROVIDER"
-	EnvGeminiAPIKey = "GEMINI_API_KEY"
-	EnvOpenAIAPIKey = "OPENAI_API_KEY"
-	EnvOpenAIModel  = "OPENAI_MODEL"
-	EnvGeminiModel  = "GEMINI_MODEL"
-	EnvOllamaModel  = "OLLAMA_MODEL"
-	EnvOllamaHost   = "OLLAMA_HOST"
+	EnvOllamaHost = "OLLAMA_HOST"
+
+	// Note: API keys are no longer read from environment variables.
+	// All LLM configuration must be provided through the Config struct.
 
 	// Providers
-	ProviderGemini  = "gemini"
-	ProviderChatGPT = "chatgpt"
-	ProviderOllama  = "ollama"
-	ProviderLocal   = "local"
+	ProviderGemini    = "gemini"
+	ProviderChatGPT   = "chatgpt"
+	ProviderAnthropic = "anthropic"
+	ProviderOllama    = "ollama"
+	ProviderLocal     = "local"
 
 	// Default Models
-	DefaultModelOpenAI = ai.DefaultModelOpenAI
-	DefaultModelGemini = ai.DefaultModelGemini
-	DefaultModelOllama = ai.DefaultModelOllama
+	DefaultModelOpenAI    = ai.DefaultModelOpenAI
+	DefaultModelGemini    = ai.DefaultModelGemini
+	DefaultModelAnthropic = "claude-3-5-sonnet-20241022"
+	DefaultModelOllama    = ai.DefaultModelOllama
 
 	// Session Keys
 	SessionPayloadKey = "session_payload"

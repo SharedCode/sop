@@ -14,16 +14,18 @@ const updateArgsSchema = `{"type":"object","description":"Updates data in a stor
 
 const deleteArgsSchema = `{"type":"object","description":"Deletes data from a store by key. For mutations, prefer explicit transaction control so commit boundaries remain deliberate.","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"store":{"type":"string","description":"Target store name."},"key":{"type":"string","description":"Primitive key or JSON-encoded complex key string for the item to delete."}},"required":["store","key"]}`
 
+const joinArgsSchema = `{"type":"object","description":"Joins two stores on specified fields.","properties":{"left_store":{"type":"string","description":"Left store name."},"right_store":{"type":"string","description":"Right store name."},"left_join_fields":{"type":"array","description":"Fields from left store to join on.","items":{"type":"string"}},"right_join_fields":{"type":"array","description":"Fields from right store to join on.","items":{"type":"string"}},"join_type":{"type":"string","enum":["inner","left","right"],"description":"Type of join. Defaults to inner."},"fields":{"type":"array","description":"Fields to project in result.","items":{"type":"string"}},"limit":{"type":"number","description":"Maximum number of results. Defaults to 10."},"direction":{"type":"string","enum":["asc","desc"],"description":"Sort direction."},"action":{"type":"string","enum":["delete_left","update_left"],"description":"Optional mutation action."},"update_values":{"type":"object","description":"Values for update_left action."}},"required":["left_store","right_store","left_join_fields","right_join_fields"]}`
+
 const manageTransactionArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"action":{"type":"string","enum":["begin","commit","rollback"],"description":"Transaction action to execute."}},"required":["action"]}`
 
 func (a *CopilotAgent) registerStoresTools(ctx context.Context) {
 	a.registry.RegisterWithUI("select", "Selects data from a store using criteria. With action=delete or action=update, it mutates the selected records. Prefer explicit transaction control for multi-step or mutating flows.", SelectInstruction, selectArgsSchema, a.toolSelect)
 
-	a.registry.RegisterHidden("join", JoinInstruction, "(left_store: string, right_store: string, left_join_fields: Array<string>, right_join_fields: Array<string>, join_type?: \"inner\" | \"left\" | \"right\", fields?: Array<string>, limit?: number, direction?: \"asc\" | \"desc\", action?: \"delete_left\" | \"update_left\", update_values?: object)", a.toolJoin)
+	a.registry.RegisterHidden("join", JoinInstruction, joinArgsSchema, a.toolJoin)
 	a.registry.RegisterWithUI("explain_join", "Explains whether a join will use indexes or a full scan. Use explicit transaction control when the plan is part of a larger workflow.", ExplainJoinInstruction, explainJoinArgsSchema, a.toolExplainJoin)
 
 	a.registry.RegisterWithUI("add", "Adds data to a store. For mutations, prefer explicit transaction control so commit boundaries remain deliberate.", AddInstruction, addArgsSchema, a.toolAdd)
 	a.registry.RegisterWithUI("update", "Updates data in a store. For mutations, prefer explicit transaction control so commit boundaries remain deliberate.", UpdateInstruction, updateArgsSchema, a.toolUpdate)
 	a.registry.RegisterWithUI("delete", "Deletes data from a store by key. For mutations, prefer explicit transaction control so commit boundaries remain deliberate.", DeleteInstruction, deleteArgsSchema, a.toolDelete)
-	a.registry.RegisterWithUI("manage_transaction", "Begins, commits, or rolls back the active explicit transaction scope for native store tool calls.", ManageTransactionInstruction, manageTransactionArgsSchema, a.toolManageTransaction)
+	a.registry.RegisterHidden("manage_transaction", ManageTransactionInstruction, manageTransactionArgsSchema, a.toolManageTransaction)
 }

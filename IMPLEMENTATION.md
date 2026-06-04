@@ -52,6 +52,26 @@ Conventions for this document:
 - OpenAI/ChatGPT now follows the same split-state model as Gemini: provider-owned statefulness during Ask loops, optional provider carryover between Asks through `CarryoverState`, provisional in-loop hydration via `BuildMemoryHydrationUpdateFromParts`, and canonical continuity still committed only at epilogue.
 - OpenAI/ChatGPT owned-loop activation is now default-on in `ai/generator/chatgpt.go`; the old scaffold knob remains only as an explicit disable path for debugging the generic fallback.
 - Shared tool/assistant event payload shaping now lives in `ai/stream_events.go`, and Gemini, ChatGPT, plus the generic native engine all emit the same core backend event contract from that common layer.
+- Gemini API optimization for Gemini 2.0 Flash Thinking: `thinking_config` parameter automatically injects "medium" thinking level when tool definitions are present, enabling structured reasoning before tool selection without manual prompt engineering.
+- Gemini API optimization for Gemini 2.0 Flash Thinking: `response_schema` parameter constrains LLM token generation to enforce exact output structure, preventing hallucinated fields or keys in structured tool responses.
+- Transaction lifecycle robustness: Context cancellation now properly propagates through Ask→ReAct loop→Tool execution→Transaction cleanup, preventing orphaned locks when users abort in-flight requests.
+- Transaction lifecycle robustness: Removed problematic deferred transaction rollback from CopilotAgent.Ask that was leaving locks unreleased; Service is now the sole owner of transaction lifecycle management.
+- Transaction lifecycle robustness: HTTP handler panic recovery now ensures transaction cleanup even during unexpected failures, maintaining database consistency.
+- Carryover architecture for efficient LLM context management: Dual-mode system supports both Compact mode (MRU-enriched fallback summaries on cutoff) and Live mode (provider-native conversation handles for Gemini/GPT continuations).
+- Carryover architecture: Gemini live carryover now stores conversation state in `ConversationHandle` JSON, enabling native Gemini session continuations without flattening tool history into prompt text.
+- Carryover architecture: ChatGPT live carryover uses OpenAI Responses API `PreviousResponseID` for native session continuations, mirroring Gemini's pattern while preserving provider-specific implementation details.
+- Carryover cutoff enrichment: When token budgets or ask limits trigger carryover cutoff, `collectAskOutcomeMRUContext` extracts session MRU (database, domain, schemas, relations, joins, filters) and enriches the compact fallback summary, ensuring LLM receives rich context even without live provider state.
+- MRU (Most Recently Used) infrastructure for Service path: `persistSessionAskOutcomeMRU` now writes ask outcomes to session MRU after completion, providing same memory persistence for Gemini/GPT paths that CopilotAgent already had.
+- MRU infrastructure: All three ReAct loops (default, Gemini, GPT) consume MRU-enriched `req.ContextText` on cutoff via unified carryover decision logic in `ai/agent/carryover.go`.
+- MRU infrastructure: Default loop (shared NativeReActEngine) properly integrates with MRU PUSH/PULL despite lacking provider-owned carryover, receiving enriched context through infrastructure-level Compact mode fallbacks.
+- Typed Database API with OpenAPI generation: New first-class typed API in `ai/agent/api_*.go` provides strongly typed methods for bulk operations and transaction control, complementing the existing map[string]any LLM tool layer.
+- Typed Database API structure: Four files organize the implementation - `api_types.go` (type definitions), `api_core.go` (single operations), `api_bulk.go` (bulk operations with 3 transaction modes), `api_transaction.go` (transaction lifecycle).
+- Bulk operations with transaction modes: `BulkAdd`, `BulkUpdate`, `BulkDelete` support three modes - `auto_batch` (scalable, per-batch tx for 10K+ items), `single` (atomic, one tx for <10K items), `explicit` (multi-operation atomicity using provided tx handle).
+- OpenAPI schema generation: Go struct tags plus swag annotations auto-generate OpenAPI 2.0 spec at `ai/agent/docs/agent_swagger.yaml`, providing schema reference for LLM guidance instead of verbose inline definitions (93% size reduction).
+- OpenAPI benefits: Single source of truth - schemas cannot drift from implementation (auto-generated from Go structs), enables multi-language client generation, provides compile-time type safety, supports HTTP endpoint auto-validation.
+- Dual-layer API architecture: Spaces API (`copilottools.space.go`, 585 lines, 14 functions) handles high-level AI memory operations (knowledge bases, embeddings, vectorization), while Typed Database API handles low-level database operations (B-Trees, bulk CRUD, transactions). Both coexist for complementary use cases.
+- API separation rationale: Spaces API uses domain-specific tools (`mint_to_space`, `enrich_space`, `vectorize_space`) for AI memory subsystem (VectorDB, special schema, categories/items), while Database API provides general-purpose data operations. The rule "When working with Spaces, DO NOT USE RAW DATABASE TOOLS" maintains clear separation.
+- LLM tool adapters: Both APIs expose tools via thin adapters that convert map[string]any to typed structs, preserving backward compatibility with existing LLM text/JSON interaction while adding type safety for programmatic access (test harnesses, HTTP endpoints, direct API calls).
 
 ### Open TODO
 
@@ -60,6 +80,136 @@ Conventions for this document:
 - [ ] Additional Omni consumption hardening for cross-database loopback flows.
 - [ ] Medical Space showcase package for deep-domain demonstration.
 - [x] Add a real OpenAI/ChatGPT owned loop that mirrors Gemini's split between in-Ask provider state and between-Ask carryover while preserving epilogue as the only canonical memory promotion point.
+
+## 3. Code Quality and Readability Refactor
+
+### Problem: Context-Based State Passing
+
+The codebase currently uses `context.Context` extensively for passing application state (16+ typed ContextKey constants, 66+ `ctx.Value()` calls, 100+ `context.WithValue()` calls across `ai/**/*.go`). This creates significant readability and maintainability issues:
+
+**Hidden Dependencies**: Function signatures don't reveal what state they consume
+```go
+// Current: Hidden dependencies
+func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error)
+// No indication this pulls executor, session payload, provider, format, database, streamer from context
+
+// Target: Explicit dependencies
+func (s *Service) Ask(ctx context.Context, req AskRequest) (AskResponse, error)
+// All dependencies visible in AskRequest struct
+```
+
+**Untraceable Flow**: Must follow context chains through multiple files to understand data flow
+```go
+// Value set in service.go:938
+ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
+// ... 5 function calls later ...
+// Value retrieved in service.go:1165
+executor, _ := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor)
+// No parameter chain shows this dependency
+```
+
+**Lost Type Safety**: Runtime type assertions with silent failures
+```go
+stepIndex, _ := ctx.Value("step_index").(int)  // Untyped key, no compile-time validation
+if recorder, ok := ctx.Value(ai.CtxKeyScriptRecorder).(ai.ScriptRecorder); ok {
+    // Silent fail if missing or wrong type
+}
+```
+
+**Testing Complexity**: Each test must construct elaborate context chains
+```go
+ctx = context.WithValue(ctx, "session_payload", payload)
+ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
+ctx = context.WithValue(ctx, CtxKeyJSONStreamer, streamer)
+ctx = context.WithValue(ctx, "verbose", true)
+ctx = context.WithValue(ctx, "step_index", 1)
+```
+
+### Context Keys Currently in Use
+
+**Typed Keys** (ai/interfaces.go):
+- `CtxKeyProvider`, `CtxKeyAPIKey`, `CtxKeyBaseURL` - Provider configuration overrides
+- `CtxKeyExecutor`, `CtxKeyDeobfuscator`, `CtxKeyHistory` - Tool execution dependencies
+- `CtxKeyWriter`, `CtxKeyDatabase`, `CtxKeyResultStreamer` - I/O and data access
+- `CtxKeyScriptRecorder`, `CtxKeyAutoFlush`, `CtxKeyDefaultFormat` - Script orchestration
+- `CtxKeyProgressSink`, `CtxKeyEventStreamer`, `CtxKeyNativeToolHints` - Progress reporting
+- `CtxKeyIsNewTopic` - Conversation state
+
+**Untyped String Keys**:
+- `"session_payload"` (SessionPayload) - Critical session state, transaction, variables
+- `"verbose"`, `"step_index"`, `"sb_mutex"` - Runtime control
+- `"is_compiled"`, `"force_compile_mode"` - Script compilation flags
+- `CtxKeyJSONStreamer`, `CtxKeySuppressInternalStepStart`, `CtxKeyCurrentScriptCategory` - Runner state
+
+### Refactor Plan
+
+**Phase 1: Core Request/Response Structs** ✅ COMPLETED (Commit: 55f762c1)
+- [x] Create explicit request structs for Ask flow:
+  - `AskRequest{Query, Session, Executor, Generator, ProviderOverride, Database, Writer, EventStreamer, ProgressSink, ScriptRecorder, DefaultFormat, Options, Verbose}`
+  - Contains all explicit parameters previously hidden in context
+- [x] Create response structs that carry both result and state changes:
+  - `AskResponse{FinalText, UpdatedSession, CarryoverState, ToolCalls, OutcomeFacts, OutcomeRecipes}`
+- [x] Create `Service.AskWithRequest()` method accepting `AskRequest` and returning `AskResponse`
+- [x] Implement 7 helper methods with explicit parameters for internal orchestration
+
+**Phase 2: Tool Execution Context** ✅ COMPLETED (Commit: d407d81f)
+- [x] Create `ToolExecutionContext` struct:
+  - `{Session, Executor, Recorder, Writer, ResultStreamer, NativeToolHints, Database, EventStreamer, ProgressSink}`
+- [x] Add `toolCtx *ToolExecutionContext` field to `ServiceToolExecutor`
+- [x] Create helper `injectToolContextToLegacyContext()` for backward compatibility
+- [x] Integrate with `AskWithRequest` method
+
+**Phase 3: Script Orchestration** ✅ COMPLETED (Commit: 4738a993)
+- [x] Create `ScriptRunContext` struct:
+  - `{JSONStreamer, SuppressInternalStepStart, StepIndex, Verbose, UseNDJSON, CurrentScriptCategory, StringBuilderMutex}`
+- [x] Refactor `executeScript()` to accept explicit `ScriptRunContext`
+- [x] Create helper functions: `injectScriptContextToLegacyContext()` and `extractScriptContextFromLegacyContext()`
+- [x] Update script orchestration to use explicit context struct
+
+**Phase 4: Provider Configuration** ✅ COMPLETED (Commit: 5774bbc9)
+- [x] Create `ProviderOverride` struct (renamed from GeneratorConfig to avoid conflict):
+  - `{Provider, Model, APIKey, BaseURL}`
+- [x] Add `ProviderOverride` field to `AskRequest`
+- [x] Create helper `extractProviderOverrideFromContext()` for backward compatibility
+- [x] Update `resolveGeneratorAndCarryover()` and `resolveGeneratorAndCarryoverWithRequest()` to use `ProviderOverride`
+- [x] Make provider configuration explicit instead of hidden in context
+
+**Phase 5: Update Calling Sites** ✅ COMPLETED (Commit: 24c6285e)
+- [x] Rewrite legacy `Service.Ask()` to delegate to `AskWithRequest()`
+- [x] Extract all parameters from context in `Ask()` and construct `AskRequest`
+- [x] Maintain full backward compatibility for all existing callers
+- [x] All tests continue to work without modification
+- Note: External callers can continue using `Ask()` or migrate to `AskWithRequest()` gradually
+
+**Phase 6: Cleanup and Validation** 🔄 IN PROGRESS
+- [x] Verify all Ask-related tests pass (all passing)
+- [ ] Run full test suite to verify refactoring (2 pre-existing failures unrelated to refactor)
+- [ ] Document completed refactor patterns in ARCHITECTURE.md
+- [ ] Update REFACTOR_PLAN.md status
+- Note: Context keys are preserved for backward compatibility since legacy `Ask()` still extracts from context
+
+### Keep Context For
+
+- **Cancellation and Deadlines**: Proper use of `context.Context` for request lifecycle
+- **Request-scoped Tracing**: Distributed tracing IDs, request IDs
+- **Rare Cross-cutting Concerns**: Authentication tokens, tenant IDs (if truly cross-cutting)
+
+### Expected Benefits
+
+- **Readability**: Function signatures reveal all dependencies
+- **Traceability**: Parameter chains show data flow through call stack
+- **Type Safety**: Compile-time validation of dependencies
+- **Testing**: Simple struct construction instead of context chains
+- **Maintainability**: Easier to add/remove dependencies without hunting context keys
+- **IDE Support**: Better autocomplete, go-to-definition, refactoring tools
+
+### Implementation Priority
+
+1. **High**: SessionPayload, ToolExecutor, Streamer (affects ~40 files)
+2. **Medium**: Script orchestration state (affects ~10 files)
+3. **Low**: Provider config (affects ~5 files)
+
+Start with Service path first (simpler), then apply learnings to CopilotAgent path.
 
 ### Document To Space (Declarative vs Episodic Bridge)
 

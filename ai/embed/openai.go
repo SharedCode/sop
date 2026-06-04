@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 )
 
@@ -20,14 +19,8 @@ type OpenAIEmbedder struct {
 
 // NewOpenAI creates a new OpenAI-compatible embedder.
 func NewOpenAI(apiKey, model, baseURL string) *OpenAIEmbedder {
-	if apiKey == "" {
-		apiKey = os.Getenv("OPENAI_API_KEY")
-	}
 	if model == "" {
 		model = "text-embedding-3-small"
-	}
-	if strings.TrimSpace(baseURL) == "" {
-		baseURL = os.Getenv("OPENAI_API_BASE_URL")
 	}
 	return &OpenAIEmbedder{
 		apiKey:  apiKey,

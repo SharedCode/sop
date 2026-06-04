@@ -75,6 +75,31 @@ func TestMRUProjectionHelpers(t *testing.T) {
 	}
 }
 
+func TestResetTopicSwitchProjection_ClearsRoutingStateAndCarryover(t *testing.T) {
+	session := NewRunnerSession()
+	session.Memory.SetRoutingState(&TaskContextClassification{Domain: StoresDomain, DBArtifacts: []string{"main"}})
+	session.Memory.SetCarryoverState(&ai.CarryoverState{Provider: "chatgpt", ConversationHandle: "resp_prev_123"})
+	session.Memory.SetMRUSnapshot([]MRUItem{{Category: "PERSONA_omni", Context: "persona context", Source: MRUSourcePersona, Scope: MRUScopeSession}})
+
+	payload := &ai.SessionPayload{Variables: map[string]any{"RoutingState": &TaskContextClassification{Domain: StoresDomain}}}
+	ctx := context.WithValue(context.Background(), "session_payload", payload)
+
+	resetTopicSwitchProjection(ctx, session)
+
+	if _, ok := payload.Variables["RoutingState"]; ok {
+		t.Fatal("expected routing state payload to be cleared on topic switch")
+	}
+	if got := session.Memory.GetRoutingState(); got != nil {
+		t.Fatalf("expected routing state projection to be cleared, got %+v", got)
+	}
+	if got := session.Memory.GetCarryoverState(); got != nil {
+		t.Fatalf("expected carryover projection to be cleared, got %+v", got)
+	}
+	if got := session.Memory.GetMRUSnapshot(); len(got) == 0 {
+		t.Fatal("expected non-topic MRU to remain available after topic switch reset")
+	}
+}
+
 func TestRehydrateMRUFromMemory_RestoresRoutingAndProjectsActiveKB(t *testing.T) {
 	ag := NewCopilotAgent(Config{}, nil, nil)
 	ag.service = &Service{session: NewRunnerSession()}

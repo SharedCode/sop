@@ -68,8 +68,6 @@ No separate frontend build step is required; the UI assets are embedded into the
 ### Environment Variables
 
 - `SOP_ALLOW_INVALID_MAP_KEY`: Set to `true` to bypass the validation that requires Map Key types to have an Index Specification or CEL Expression. This is primarily for testing purposes.
-- `GEMINI_API_KEY`: **Required for AI Copilot**. The API key for Google Gemini Pro. You can obtain one from [Google AI Studio](https://aistudio.google.com/).
-- `OPENAI_API_KEY`: Optional. The API key for OpenAI (ChatGPT) if you prefer to use GPT models.
 - `SOP_ROOT_PASSWORD`: Optional. Sets the admin password for protected operations (like schema updates). Overrides the `root_password` in `config.json`.
 
 ## User Guide

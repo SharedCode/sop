@@ -1,4 +1,21 @@
 {
+    "_requirements": {
+        "_description": "All models in this catalog must support the following SOP AI integration features",
+        "_note_ollama": "Ollama local models do not support tool calling and are excluded from LLM options. Use Ollama for embeddings only (nomic-embed-text, mxbai-embed-large, all-minilm) or for simple text transformation tasks outside the agent architecture.",
+        "required": {
+            "tool_calling": "Must support function calling with tool definitions (JSON schemas) and return structured ToolCalls with function name and arguments. Used via GenOptions.Tools and GenOutput.ToolCalls.",
+            "system_prompts": "Must accept system-level instructions separate from user prompts. Used via GenOptions.SystemPrompt.",
+            "multi_turn_conversations": "Must support multi-turn conversations with tool call continuations, preserving tool_use/tool_result pairs across turns. Used via GenOptions.ToolCallContinuations (provider-neutral format)."
+        },
+        "optional": {
+            "thinking_controls": "Optional support for reasoning/thinking level controls (e.g., Gemini ThinkingLevel: low/medium/high). Used via GenOptions.ThinkingLevel.",
+            "structured_output_schemas": "Optional support for strict output structure enforcement via JSON schema (e.g., Gemini ResponseSchema). Used via GenOptions.ResponseSchema."
+        },
+        "carryover_modes": {
+            "compact": "Budget-based carryover with MRU enrichment when live carryover budget exceeded",
+            "live": "Provider-native continuation using ToolCallContinuations array (Gemini), PreviousResponseID (ChatGPT), or message history (Claude)"
+        }
+    },
     "llm": [
         {
             "label": "Google",
@@ -41,39 +58,43 @@
             "label": "Anthropic",
             "options": [
                 {
-                    "value": "anthropic:claude-4.7-opus",
+                    "value": "anthropic:claude-opus-4-8",
+                    "label": "Claude Opus 4.8"
+                },
+                {
+                    "value": "anthropic:claude-opus-4-7",
                     "label": "Claude Opus 4.7"
                 },
                 {
-                    "value": "anthropic:claude-4.7-sonnet",
-                    "label": "Claude Sonnet 4.7"
+                    "value": "anthropic:claude-opus-4-6",
+                    "label": "Claude Opus 4.6"
                 },
                 {
-                    "value": "anthropic:claude-4.7-haiku",
-                    "label": "Claude 4.7 Haiku"
-                },
-                {
-                    "value": "anthropic:claude-4.6-sonnet",
+                    "value": "anthropic:claude-sonnet-4-6",
                     "label": "Claude Sonnet 4.6"
                 },
                 {
-                    "value": "anthropic:claude-4.6-haiku",
-                    "label": "Claude 4.6 Haiku"
+                    "value": "anthropic:claude-sonnet-4-5",
+                    "label": "Claude Sonnet 4.5"
                 },
                 {
-                    "value": "anthropic:claude-code-sonnet-4.6",
-                    "label": "Claude Code Sonnet 4.6"
+                    "value": "anthropic:claude-haiku-4-5",
+                    "label": "Claude Haiku 4.5"
                 },
                 {
-                    "value": "anthropic:claude-code-opus-4.6",
-                    "label": "Claude Code Opus 4.6"
+                    "value": "anthropic:claude-opus-4-5",
+                    "label": "Claude Opus 4.5"
                 },
                 {
-                    "value": "anthropic:claude-3.5-sonnet",
-                    "label": "Claude 3.5 Sonnet"
+                    "value": "anthropic:claude-opus-4-1",
+                    "label": "Claude Opus 4.1"
                 },
                 {
-                    "value": "anthropic:claude-3.5-haiku",
+                    "value": "anthropic:claude-3-5-sonnet-20241022",
+                    "label": "Claude 3.5 Sonnet (Oct 2024)"
+                },
+                {
+                    "value": "anthropic:claude-3-5-haiku",
                     "label": "Claude 3.5 Haiku"
                 }
             ]
@@ -90,41 +111,28 @@
                     "label": "GPT-5.4"
                 },
                 {
-                    "value": "openai:o3-mini",
-                    "label": "o3-mini"
+                    "value": "openai:gpt-5.4-mini",
+                    "label": "GPT-5.4 Mini"
                 },
                 {
-                    "value": "openai:gpt-4.2",
-                    "label": "GPT-4.2"
+                    "value": "openai:gpt-5.2",
+                    "label": "GPT-5.2"
                 },
                 {
-                    "value": "openai:gpt-4.2-mini",
-                    "label": "GPT-4.2 Mini"
+                    "value": "openai:gpt-5.5-pro",
+                    "label": "GPT-5.5 Pro"
                 },
                 {
-                    "value": "openai:gpt-4o",
-                    "label": "GPT-4o"
+                    "value": "openai:gpt-5.4-pro",
+                    "label": "GPT-5.4 Pro"
                 },
                 {
-                    "value": "openai:gpt-4o-mini",
-                    "label": "GPT-4o Mini"
+                    "value": "openai:gpt-5.4-nano",
+                    "label": "GPT-5.4 Nano"
                 },
                 {
-                    "value": "openai:o1-preview",
-                    "label": "o1-preview"
-                }
-            ]
-        },
-        {
-            "label": "Local",
-            "options": [
-                {
-                    "value": "ollama",
-                    "label": "Ollama (Local Default)"
-                },
-                {
-                    "value": "ollama:gemma-4",
-                    "label": "Ollama (Gemma 4)"
+                    "value": "openai:gpt-5.2-pro",
+                    "label": "GPT-5.2 Pro"
                 }
             ]
         }

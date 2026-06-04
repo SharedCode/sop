@@ -181,7 +181,9 @@ func TestReproLoadFailedError_Legacy(t *testing.T) {
 
 	// Start drafting (formerly recording)
 	// Note: /create is handled by Service.Ask directly
-	resp, err := svc.Ask(ctx, "/create my_script", ai.WithSessionPayload(payload))
+	cfg := ai.NewConfigMap()
+	cfg.Set("payload", payload)
+	resp, err := svc.Ask(ctx, "/create my_script", cfg)
 	if err != nil {
 		t.Fatalf("Start drafting failed: %v", err)
 	}
@@ -202,7 +204,7 @@ func TestReproLoadFailedError_Legacy(t *testing.T) {
 	// ctx = context.WithValue(ctx, ai.CtxKeyExecutor, daAgent)
 
 	query := "select region, name, salary from employees where key like region='APAC', department='HR' limit 5"
-	resp, err = svc.Ask(ctx, query, ai.WithSessionPayload(payload))
+	resp, err = svc.Ask(ctx, query, cfg)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
@@ -346,7 +348,9 @@ func TestReproLoadFailedError_Native(t *testing.T) {
 
 	// Start drafting (formerly recording)
 	// Note: /create is handled by Service.Ask directly
-	resp, err := svc.Ask(ctx, "/create my_script", ai.WithSessionPayload(payload))
+	cfg := ai.NewConfigMap()
+	cfg.Set("payload", payload)
+	resp, err := svc.Ask(ctx, "/create my_script", cfg)
 	if err != nil {
 		t.Fatalf("Start drafting failed: %v", err)
 	}
@@ -367,7 +371,7 @@ func TestReproLoadFailedError_Native(t *testing.T) {
 	// ctx = context.WithValue(ctx, ai.CtxKeyExecutor, daAgent)
 
 	query := "select region, name, salary from employees where key like region='APAC', department='HR' limit 5"
-	resp, err = svc.Ask(ctx, query, ai.WithSessionPayload(payload))
+	resp, err = svc.Ask(ctx, query, cfg)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}

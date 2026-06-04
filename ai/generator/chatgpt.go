@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/sharedcode/sop/ai"
@@ -22,63 +21,22 @@ import (
 
 // chatgpt implements the Generator interface for OpenAI's ChatGPT models.
 type chatgpt struct {
-	apiKey       string
-	model        string
-	apiURL       string
-	ownedLoop    ai.ReActLoop
-	newOwnedLoop func(*chatgpt) ai.ReActLoop
-	supportsLive bool
+	apiKey    string
+	model     string
+	apiURL    string
+	ownedLoop ai.ReActLoop
 }
 
 func init() {
 	Register("chatgpt", func(cfg map[string]any) (ai.Generator, error) {
 		apiKey, _ := cfg["api_key"].(string)
-		if apiKey == "" {
-			apiKey = os.Getenv("OPENAI_API_KEY")
-		}
 		model, _ := cfg["model"].(string)
-		if model == "" {
-			model = os.Getenv("OPENAI_MODEL")
-		}
 		if model == "" {
 			model = "gpt-4o"
 		}
-		rawAPIURL, hasAPIURL := cfg["api_url"]
-		apiURL, _ := rawAPIURL.(string)
-		if !hasAPIURL {
-			apiURL = os.Getenv("OPENAI_API_BASE_URL")
-		}
-		gen := &chatgpt{apiKey: apiKey, model: model, apiURL: strings.TrimSpace(apiURL)}
-		if chatGPTOwnedLoopScaffoldEnabled(cfg) {
-			gen.newOwnedLoop = newChatGPTOwnedReActLoop
-			gen.supportsLive = true
-		}
-		return gen, nil
+		apiURL, _ := cfg["api_url"].(string)
+		return &chatgpt{apiKey: apiKey, model: model, apiURL: strings.TrimSpace(apiURL)}, nil
 	})
-}
-
-func chatGPTOwnedLoopScaffoldEnabled(cfg map[string]any) bool {
-	if enabled, ok := cfg["enable_owned_loop_scaffold"].(bool); ok {
-		return enabled
-	}
-	if raw, ok := cfg["enable_owned_loop_scaffold"].(string); ok {
-		return parseChatGPTBoolOverride(raw, true)
-	}
-	if raw := os.Getenv("OPENAI_ENABLE_OWNED_LOOP_SCAFFOLD"); strings.TrimSpace(raw) != "" {
-		return parseChatGPTBoolOverride(raw, true)
-	}
-	return true
-}
-
-func parseChatGPTBoolOverride(raw string, fallback bool) bool {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "1", "true", "yes", "on":
-		return true
-	case "0", "false", "no", "off":
-		return false
-	default:
-		return fallback
-	}
 }
 
 // ----------------------------------------------------------------------------
@@ -93,16 +51,13 @@ func (g *chatgpt) CarryoverCapability() ai.CarryoverCapability {
 		Provider:        g.Name(),
 		Model:           g.model,
 		SupportsCompact: true,
-		SupportsLive:    g.supportsLive,
+		SupportsLive:    true,
 	}
 }
 
 func (g *chatgpt) ReActLoop() ai.ReActLoop {
-	if g.ownedLoop != nil {
-		return g.ownedLoop
-	}
-	if g.newOwnedLoop != nil {
-		return g.newOwnedLoop(g)
+	if g.ownedLoop == nil {
+		g.ownedLoop = newChatGPTOwnedReActLoop(g)
 	}
 	return g.ownedLoop
 }
@@ -111,7 +66,7 @@ func (g *chatgpt) ReActLoop() ai.ReActLoop {
 // For multi-turn tool-using workflows, use the Responses API via the ReAct loop.
 func (g *chatgpt) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	if g.apiKey == "" {
-		return ai.GenOutput{}, fmt.Errorf("missing OpenAI API Key. Please set OPENAI_API_KEY environment variable")
+		return ai.GenOutput{}, fmt.Errorf("missing OpenAI API Key. Please provide api_key in generator configuration")
 	}
 	messages := make([]openAIMessage, 0, 2)
 	if systemPrompt := strings.TrimSpace(opts.SystemPrompt); systemPrompt != "" {
@@ -122,9 +77,24 @@ func (g *chatgpt) Generate(ctx context.Context, prompt string, opts ai.GenOption
 	reqBody := openAIRequest{
 		Model:       g.model,
 		Messages:    messages,
-		MaxTokens:   opts.MaxTokens,
 		Temperature: opts.Temperature,
 	}
+
+	// GPT-5+ and o-series models use max_completion_tokens instead of max_tokens
+	modelLower := strings.ToLower(strings.TrimSpace(g.model))
+	usesCompletionTokens := strings.HasPrefix(modelLower, "gpt-5") ||
+		strings.HasPrefix(modelLower, "o1") ||
+		strings.HasPrefix(modelLower, "o3") ||
+		strings.Contains(modelLower, "gpt-5")
+
+	if opts.MaxTokens > 0 {
+		if usesCompletionTokens {
+			reqBody.MaxCompletionTokens = opts.MaxTokens
+		} else {
+			reqBody.MaxTokens = opts.MaxTokens
+		}
+	}
+
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return ai.GenOutput{}, fmt.Errorf("failed to marshal request: %w", err)

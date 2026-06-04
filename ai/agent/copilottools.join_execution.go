@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	log "log/slog"
 	"sort"
 	"strings"
 
@@ -254,6 +255,11 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 		return nil, false, err
 	}
 
+	// Set default max consecutive rows without match if not configured
+	if jc.maxRowsWithoutMatch == 0 {
+		jc.maxRowsWithoutMatch = MaxConsecutiveRowsWithoutMatch
+	}
+
 	// STRATEGY: Fallback (Memory Hash Join)
 	if jc.plan.Strategy == StrategyInMemory {
 		if !jc.useFallback {
@@ -271,6 +277,13 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 			count := 0
 
 			for scanIter && count < limit {
+				// Check context cancellation
+				select {
+				case <-ctx.Done():
+					return nil, false, fmt.Errorf("context cancelled during join materialization: %w", ctx.Err())
+				default:
+				}
+
 				k := jc.right.GetCurrentKey()
 				v, err := jc.right.GetCurrentValue(ctx)
 				if err != nil {
@@ -349,6 +362,13 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 
 				// 4. Stream the rest
 				for scanIter {
+					// Check context cancellation
+					select {
+					case <-ctx.Done():
+						return nil, false, fmt.Errorf("context cancelled during temp store spill: %w", ctx.Err())
+					default:
+					}
+
 					// Get Current
 					k := jc.right.GetCurrentKey()
 					v, _ := jc.right.GetCurrentValue(ctx)
@@ -375,6 +395,13 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 		}
 
 		for {
+			// Check context cancellation
+			select {
+			case <-ctx.Done():
+				return nil, false, fmt.Errorf("context cancelled during fallback join: %w", ctx.Err())
+			default:
+			}
+
 			if jc.currentL == nil {
 				var ok bool
 				var err error
@@ -432,6 +459,14 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 
 	// STRATEGY: Index Seek
 	for {
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return nil, false, fmt.Errorf("context cancelled during index seek join: %w", ctx.Err())
+		default:
+		}
+
+		// If we're not currently scanning, get the next left row
 		if jc.currentL == nil {
 			var ok bool
 			var err error
@@ -443,6 +478,7 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 				return nil, false, nil
 			}
 			jc.matched = false
+			jc.scanning = false // Reset scanning flag for new left row
 
 			// Seek
 			var seekKey any
@@ -497,7 +533,11 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 			}
 
 			if !found && !jc.plan.IsComposite {
-				// No match for this key
+				// No match for this key (primitive key case)
+				log.Debug("JoinRightCursor: IndexSeek found no match",
+					"seek_key", seekKey,
+					"join_type", jc.joinType,
+					"strategy", "primitive")
 				if jc.joinType == "left" {
 					// Emit (LHS, nil)
 					res := jc.currentL
@@ -508,137 +548,191 @@ func (jc *JoinRightCursor) NextOptimized(ctx context.Context) (any, bool, error)
 				jc.currentL = nil // Consumed (Inner Join: discard LHS)
 				continue
 			}
+
+			// For composite keys or when found=true, we fall through to scan
+			// This handles cases where index seek positions us, then we scan for matches
+			if !found && jc.plan.IsComposite {
+				log.Debug("JoinRightCursor: IndexSeek returned false for composite key, will attempt scan",
+					"seek_key", seekKey,
+					"composite_fields", jc.plan.PrefixFields)
+			}
+
+			// Mark that we're now scanning the right store
+			jc.scanning = true
 		}
 
-		// Scan
-		for {
-			k := jc.right.GetCurrentKey()
-			if k == nil {
-				break
-			}
-			v, err := jc.right.GetCurrentValue(ctx)
-			if err != nil {
-				return nil, false, fmt.Errorf("join scan error (Value): %w", err)
-			}
+		// Continue scanning right store for current left row
+		if jc.scanning {
+			for {
+				// Check context cancellation
+				select {
+				case <-ctx.Done():
+					return nil, false, fmt.Errorf("context cancelled during join scan: %w", ctx.Err())
+				default:
+				}
 
-			// Stop Check (B-Tree Order Awareness)
-			stop := false
-			if jc.plan.IsComposite {
-				if kMap, ok := k.(map[string]any); ok {
-					for _, pField := range jc.plan.PrefixFields {
-						var targetVal any
-						for lField, rFieldRaw := range jc.on {
-							if fmt.Sprintf("%v", rFieldRaw) == pField {
-								targetVal = getField(jc.currentL, lField)
-								break
-							}
-						}
-						// Use Compare helper if available, or string fallback logic
-						// We use the same comparison logic as B-Tree for consistency
-						sCurr := fmt.Sprintf("%v", kMap[pField])
-						sTarget := fmt.Sprintf("%v", targetVal)
+				k := jc.right.GetCurrentKey()
+				if k == nil {
+					break
+				}
+				v, err := jc.right.GetCurrentValue(ctx)
+				if err != nil {
+					return nil, false, fmt.Errorf("join scan error (Value): %w", err)
+				}
 
-						if jc.plan.Ascending {
-							if sCurr > sTarget {
-								stop = true
-								break
-							} else if sCurr < sTarget {
-								stop = false
+				// Stop Check (B-Tree Order Awareness)
+				stop := false
+				if jc.plan.IsComposite {
+					if kMap, ok := k.(map[string]any); ok {
+						for _, pField := range jc.plan.PrefixFields {
+							var targetVal any
+							for lField, rFieldRaw := range jc.on {
+								if fmt.Sprintf("%v", rFieldRaw) == pField {
+									targetVal = getField(jc.currentL, lField)
+									break
+								}
 							}
-						} else {
-							// Descending: Stop if Current < Target (Passed it)
-							// e.g. Target=EU. Scan=US, EU, CN.
-							// Start US. US > EU. Continue.
-							// Next EU. Match.
-							// Next CN. CN < EU. Stop.
-							// Wait. "US" > "EU".
-							// If order is US, EU, CN.
-							// Scan US. "US" > "EU". Continue.
-							// Scan EU. "EU" == "EU". Match.
-							// Scan CN. "CN" < "EU". Stop.
-							if sCurr < sTarget {
-								stop = true
-								break
-							} else if sCurr > sTarget {
-								stop = false
+							// Use Compare helper if available, or string fallback logic
+							// We use the same comparison logic as B-Tree for consistency
+							sCurr := fmt.Sprintf("%v", kMap[pField])
+							sTarget := fmt.Sprintf("%v", targetVal)
+
+							if jc.plan.Ascending {
+								if sCurr > sTarget {
+									stop = true
+									break
+								} else if sCurr < sTarget {
+									stop = false
+								}
+							} else {
+								// Descending: Stop if Current < Target (Passed it)
+								// e.g. Target=EU. Scan=US, EU, CN.
+								// Start US. US > EU. Continue.
+								// Next EU. Match.
+								// Next CN. CN < EU. Stop.
+								// Wait. "US" > "EU".
+								// If order is US, EU, CN.
+								// Scan US. "US" > "EU". Continue.
+								// Scan EU. "EU" == "EU". Match.
+								// Scan CN. "CN" < "EU". Stop.
+								if sCurr < sTarget {
+									stop = true
+									break
+								} else if sCurr > sTarget {
+									stop = false
+								}
 							}
+							// If equal, check next field
 						}
-						// If equal, check next field
+					}
+				} else {
+					// Primitive Key Comparison
+					// Updated to use CompareLoose which handles mixed numeric types (int/float).
+					var targetVal any
+					for lField, rFieldRaw := range jc.on {
+						if fmt.Sprintf("%v", rFieldRaw) == "key" {
+							targetVal = getField(jc.currentL, lField)
+							break
+						}
+					}
+
+					// Check "Current > Target" to see if we passed the match range.
+					// (Assuming Ascending Order for Primitives)
+					if CompareLoose(k, targetVal) > 0 {
+						stop = true
 					}
 				}
-			} else {
-				// Primitive Key Comparison
-				// Updated to use CompareLoose which handles mixed numeric types (int/float).
-				var targetVal any
+
+				if stop {
+					break
+				}
+
+				jc.totalRowsScanned++
+				jc.rowsSinceLastMatch++
+
+				// Safety: Check if we've scanned too many consecutive rows without matches
+				if jc.rowsSinceLastMatch > jc.maxRowsWithoutMatch {
+					return nil, false, fmt.Errorf("join scanned %d consecutive rows with no matches (total %d rows) - possible cartesian product or incorrect join condition", jc.rowsSinceLastMatch, jc.totalRowsScanned)
+				}
+
+				// Log progress every 10k consecutive non-matches
+				if jc.rowsSinceLastMatch%10000 == 0 {
+					log.Info("JoinRightCursor: Scanning large dataset without matches",
+						"consecutive_non_matches", jc.rowsSinceLastMatch,
+						"total_scanned", jc.totalRowsScanned,
+						"join_type", jc.joinType)
+				}
+
+				// Match Check (Filter)
+				match := true
 				for lField, rFieldRaw := range jc.on {
-					if fmt.Sprintf("%v", rFieldRaw) == "key" {
-						targetVal = getField(jc.currentL, lField)
+					rField := fmt.Sprintf("%v", rFieldRaw)
+					lVal := getField(jc.currentL, lField)
+					var rVal any
+					if rField == "key" {
+						rVal = k
+					} else {
+						if vMap, ok := v.(map[string]any); ok {
+							if val, found := vMap[rField]; found {
+								rVal = val
+							}
+						}
+						// If not found in Value, check the Key (Composite Key support)
+						if rVal == nil {
+							if kMap, ok := k.(map[string]any); ok {
+								if val, found := kMap[rField]; found {
+									rVal = val
+								}
+							}
+						}
+					}
+					if fmt.Sprintf("%v", lVal) != fmt.Sprintf("%v", rVal) {
+						match = false
 						break
 					}
 				}
 
-				// Check "Current > Target" to see if we passed the match range.
-				// (Assuming Ascending Order for Primitives)
-				if CompareLoose(k, targetVal) > 0 {
-					stop = true
+				if match {
+					// Reset counter on match - join is working, allow unlimited streaming
+					jc.rowsSinceLastMatch = 0
+					jc.matched = true
+					merged := jc.mergeResult(jc.currentL, v, k)
+					jc.right.Next(ctx)
+					return merged, true, nil
 				}
-			}
 
-			if stop {
-				break
-			}
-
-			// Match Check (Filter)
-			match := true
-			for lField, rFieldRaw := range jc.on {
-				rField := fmt.Sprintf("%v", rFieldRaw)
-				lVal := getField(jc.currentL, lField)
-				var rVal any
-				if rField == "key" {
-					rVal = k
-				} else {
-					if vMap, ok := v.(map[string]any); ok {
-						if val, found := vMap[rField]; found {
-							rVal = val
-						}
-					}
-					// If not found in Value, check the Key (Composite Key support)
-					if rVal == nil {
-						if kMap, ok := k.(map[string]any); ok {
-							if val, found := kMap[rField]; found {
-								rVal = val
-							}
-						}
-					}
+				ok, err := jc.right.Next(ctx)
+				if err != nil {
+					return nil, false, fmt.Errorf("join scan error (Next): %w", err)
 				}
-				if fmt.Sprintf("%v", lVal) != fmt.Sprintf("%v", rVal) {
-					match = false
+				if !ok {
 					break
 				}
 			}
 
-			if match {
-				jc.matched = true
-				merged := jc.mergeResult(jc.currentL, v, k)
-				jc.right.Next(ctx)
-				return merged, true, nil
+			// Scan completed for this left row
+			jc.scanning = false // Reset scanning flag
+
+			if !jc.matched {
+				// No matches found during scan
+				if jc.rowsSinceLastMatch > 1000 {
+					// Scanned many rows without match - possibly malformed join condition
+					log.Warn("JoinRightCursor: Scan completed with no matches after many attempts",
+						"rows_scanned_for_this_left_row", jc.rowsSinceLastMatch,
+						"join_type", jc.joinType,
+						"join_condition", jc.on)
+				}
 			}
 
-			ok, err := jc.right.Next(ctx)
-			if err != nil {
-				return nil, false, fmt.Errorf("join scan error (Next): %w", err)
+			if !jc.matched && jc.joinType == "left" {
+				// Reset counter when emitting left join unmatched row
+				jc.rowsSinceLastMatch = 0
+				res := jc.currentL
+				jc.currentL = nil
+				return res, true, nil
 			}
-			if !ok {
-				break
-			}
-		}
-
-		if !jc.matched && jc.joinType == "left" {
-			res := jc.currentL
 			jc.currentL = nil
-			return res, true, nil
 		}
-		jc.currentL = nil
 	}
 }
 
@@ -724,7 +818,6 @@ func (jc *JoinRightCursor) mergeResult(l any, rAny any, rKey any) any {
 			}
 		}
 	}
-
 	return &OrderedMap{m: newMap, keys: newKeys, isImplicit: true}
 }
 

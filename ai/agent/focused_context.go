@@ -118,10 +118,20 @@ func (a *CopilotAgent) buildStoresFocusedExecutionContext(ctx context.Context, t
 			}
 			quotedStores = append(quotedStores, fmt.Sprintf("%q", artifact))
 		}
+
+		storesHint := ""
+		if len(quotedStores) > 0 {
+			storesHint = fmt.Sprintf("stores:[%s]", strings.Join(quotedStores, ","))
+		}
+
 		if schemaPreGrounded {
-			sb.WriteString("Schema is pre-grounded above. Proceed directly to execute_script without a research step.\n")
-		} else if len(quotedStores) > 0 {
-			sb.WriteString(fmt.Sprintf("Research Hint: If uncertain, call list_stores with stores:[%s] before execute_script.\n", strings.Join(quotedStores, ",")))
+			if storesHint != "" {
+				sb.WriteString(fmt.Sprintf("Schema pre-grounded. Proceed to execute_script. Verify with %s if needed.\n", storesHint))
+			} else {
+				sb.WriteString("Schema pre-grounded. Proceed to execute_script.\n")
+			}
+		} else if storesHint != "" {
+			sb.WriteString(fmt.Sprintf("Research Hint: Use %s with list_stores before execute_script if uncertain.\n", storesHint))
 		}
 	}
 
@@ -256,15 +266,15 @@ func (a *CopilotAgent) describeFocusedStores(ctx context.Context, db *database.D
 
 func buildStoresCRUDOperationsContext(flags map[string]bool) string {
 	sections := make([]string, 0, len(flags))
-	dbNote := "- open_db is optional; begin_tx already uses the active Current Database. If you emit open_db, use the active Current Database name from context."
+	dbNote := "- open_db optional; begin_tx uses active DB. If you emit open_db, use the active Current Database name from context."
 	if flags["R"] {
 		sections = append(sections,
-			"- R = Read. Prefer read-only transactions. Flow: begin_tx(mode=read) -> open_store -> scan/filter/project/sort/limit -> commit_tx or rollback_tx.",
-			"- Any Stores plan — including single-step sorts, scans, and filters — must be placed inside execute_script.script and submitted via execute_script. Do not display the plan as text.",
+			"- R = Read. Flow: begin_tx(mode=read) -> open_store -> scan/filter/project/sort/limit -> commit_tx.",
+			"- Stores plans go inside execute_script.script. Do not display as text.",
 			"- Use list_stores to research schema, relations, field types, and field mappings whenever there is uncertainty. Once grounded, call execute_script immediately.",
 			dbNote,
-			"- Keep filters and joins concrete. Reuse researched schema, relations, and other confirmed facts.",
-			"- If a filter or join shape is rejected, replace only the malformed slice.",
+			"- Keep filters/joins concrete. Reuse researched schema, relations, and field types. Match predicate values to field types.",
+			"- If filter/join rejected, replace only malformed slice.",
 		)
 	}
 	if flags["C"] {
@@ -286,7 +296,7 @@ func buildStoresCRUDOperationsContext(flags map[string]bool) string {
 		)
 	}
 	if len(sections) == 0 {
-		sections = append(sections, "- No CRUD flags were classified. Default to read-first inspection before emitting mutating steps.")
+		sections = append(sections, "- No CRUD flags. Default: read-first inspection before mutations.")
 	}
 	return strings.Join(sections, "\n")
 }
@@ -403,7 +413,8 @@ func buildCompactStoresToolContext(manual string) string {
 		"<h2> Core Conventions</h2>",
 		"- Use `result_var` and `input_var` to chain multi-step reads.",
 		"- Use concrete predicate objects such as `{\"first_name\":{\"$eq\":\"John\"}}`, not placeholder booleans or nulls.",
-		"- Take predicate field names from researched `schema=...` output and take predicate values/operators from the user's criteria; do not replace either side with placeholders.",
+		"- Take predicate field names from researched `schema=...` output and take predicate values/operators from the user's criteria; match value types to schema types (string for first_name:string, number for age:number, etc.).",
+		"- Never use boolean true/false or null as predicate values unless checking for actual boolean/null values in the data.",
 	}
 	if coreSection != "" && strings.Contains(coreSection, "begin_tx") {
 		// Keep only the minimal execution-shape reminder; orchestration details live in recipes and focused execution context.
@@ -411,7 +422,7 @@ func buildCompactStoresToolContext(manual string) string {
 	}
 	researchLines := []string{
 		"<h2> Research & Orchestration Rules</h2>",
-		"- Use `list_stores` to research schema and relations when field names, value types, predicate shapes, or join mappings are ambiguous.",
+		"- Use `list_stores` to research schema, relations, field types, and field mappings when field names, value types, predicate shapes, or join mappings are ambiguous.",
 		"- Scope research with `stores:[...]` when likely target stores are already known.",
 		"- `list_stores` returns grounded `schema=...` and optional `relations=[...]` per store; reuse those as the source of truth.",
 		"- Read relations literally: in `users_orders(key->users.key)`, `users_orders` is the target store, `key` is the target-store join field, and `users.key` is the current-store field path.",

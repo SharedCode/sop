@@ -31,7 +31,7 @@ func (g *chatgpt) createResponses(ctx context.Context, reqBody openAIResponsesRe
 		return openAIResponsesResponse{}, fmt.Errorf("chatgpt generator is nil")
 	}
 	if g.apiKey == "" {
-		return openAIResponsesResponse{}, fmt.Errorf("missing OpenAI API Key. Please set OPENAI_API_KEY environment variable")
+		return openAIResponsesResponse{}, fmt.Errorf("missing OpenAI API Key. Please provide api_key in generator configuration")
 	}
 	log.Info("ChatGPT Responses API call", "url", g.responsesURL(), "model", reqBody.Model, "tool_choice", reqBody.ToolChoice, "tools", len(reqBody.Tools))
 
@@ -75,7 +75,7 @@ func (g *chatgpt) createResponsesStream(ctx context.Context, reqBody openAIRespo
 		return openAIResponsesResponse{}, fmt.Errorf("chatgpt generator is nil")
 	}
 	if g.apiKey == "" {
-		return openAIResponsesResponse{}, fmt.Errorf("missing OpenAI API Key. Please set OPENAI_API_KEY environment variable")
+		return openAIResponsesResponse{}, fmt.Errorf("missing OpenAI API Key. Please provide api_key in generator configuration")
 	}
 	stream := true
 	reqBody.Stream = &stream

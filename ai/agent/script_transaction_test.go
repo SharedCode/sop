@@ -189,25 +189,25 @@ func TestScript_Transactions(t *testing.T) {
 	}
 
 	// Test 1: Implicit
-	if _, err := svc.Ask(ctx, "/run implicit_tx"); err != nil {
+	if _, err := svc.Ask(ctx, "/run implicit_tx", nil); err != nil {
 		t.Fatalf("Implicit script failed: %v", err)
 	}
 	checkKey("emp_implicit", true)
 
 	// Test 2: Explicit Commit
-	if _, err := svc.Ask(ctx, "/run explicit_commit"); err != nil {
+	if _, err := svc.Ask(ctx, "/run explicit_commit", nil); err != nil {
 		t.Fatalf("Explicit Commit script failed: %v", err)
 	}
 	checkKey("emp_explicit_commit", true)
 
 	// Test 3: Explicit Rollback
-	if _, err := svc.Ask(ctx, "/run explicit_rollback"); err != nil {
+	if _, err := svc.Ask(ctx, "/run explicit_rollback", nil); err != nil {
 		t.Fatalf("Explicit Rollback script failed: %v", err)
 	}
 	checkKey("emp_explicit_rollback", false)
 
 	// Test 4: Uncommitted (Safety Rollback)
-	if _, err := svc.Ask(ctx, "/run uncommitted"); err != nil {
+	if _, err := svc.Ask(ctx, "/run uncommitted", nil); err != nil {
 		t.Fatalf("Uncommitted script failed: %v", err)
 	}
 	checkKey("emp_uncommitted", false)

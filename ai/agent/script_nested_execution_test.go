@@ -61,7 +61,7 @@ func TestScript_Play_Nested_Execution(t *testing.T) {
 	// 6. Execute Parent Script
 	// /run greet_user user=Alice
 	cmd := "/run greet_user user=Alice"
-	resp, err := svc.Ask(ctx, cmd)
+	resp, err := svc.Ask(ctx, cmd, nil)
 	if err != nil {
 		t.Fatalf("Execution failed: %v", err)
 	}

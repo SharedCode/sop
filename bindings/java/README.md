@@ -14,8 +14,7 @@ SOP bindings for Java allow you to use the high-performance SOP storage engine d
 SOP includes a powerful **Data Management Suite** that provides **full CRUD** capabilities for your B-Tree stores. It goes beyond simple viewing, offering a complete GUI for inspecting, searching, and managing your data at scale.
 
 *   **Web UI**: A modern, responsive interface for browsing B-Trees, managing stores, and visualizing data.
-*   **AI Copilot**: Integrated directly into the UI, the AI Copilot can help you write queries, explain data structures, and even generate code snippets.
-    > **Note**: The AI Copilot requires a provider-specific API key such as `GEMINI_API_KEY`, `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` before running the server.
+*   **AI Copilot**: Integrated directly into the UI, the AI Copilot can help you write queries, explain data structures, and even generate code snippets. Configure your LLM provider through the Setup Wizard on first launch.
 *   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
 
 To launch the Data Manager, download the all-in-one single-file installer from [SOP Releases](https://github.com/SharedCode/sop/releases). Alternatively, you can use the Go toolchain:

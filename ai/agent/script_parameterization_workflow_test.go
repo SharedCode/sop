@@ -64,7 +64,7 @@ func TestScriptParameterizationWorkflow(t *testing.T) {
 	// Command: /script parameterize <script_name> <param_name> <value_to_replace>
 	cmd := "/parameterize find_sales_employees dept Sales"
 
-	response, err := svc.Ask(ctx, cmd)
+	response, err := svc.Ask(ctx, cmd, nil)
 	if err != nil {
 		t.Fatalf("Command failed: %v", err)
 	}

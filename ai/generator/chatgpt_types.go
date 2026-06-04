@@ -79,7 +79,12 @@ type openAIResponsesSummaryItem struct {
 }
 
 type openAIResponsesUsage struct {
-	TotalTokens int `json:"total_tokens,omitempty"`
+	PromptTokens        int `json:"prompt_tokens,omitempty"`
+	CompletionTokens    int `json:"completion_tokens,omitempty"`
+	TotalTokens         int `json:"total_tokens,omitempty"`
+	PromptTokensDetails *struct {
+		CachedTokens int `json:"cached_tokens,omitempty"` // Tokens read from cache (50% savings)
+	} `json:"prompt_tokens_details,omitempty"`
 }
 
 type openAIResponsesError struct {
@@ -119,10 +124,11 @@ type openAIMessage struct {
 }
 
 type openAIRequest struct {
-	Model       string          `json:"model"`
-	Messages    []openAIMessage `json:"messages"`
-	MaxTokens   int             `json:"max_tokens,omitempty"`
-	Temperature float32         `json:"temperature,omitempty"`
+	Model               string          `json:"model"`
+	Messages            []openAIMessage `json:"messages"`
+	MaxTokens           int             `json:"max_tokens,omitempty"`
+	MaxCompletionTokens int             `json:"max_completion_tokens,omitempty"`
+	Temperature         float32         `json:"temperature,omitempty"`
 }
 
 type openAIResponse struct {
@@ -130,7 +136,12 @@ type openAIResponse struct {
 		Message openAIMessage `json:"message"`
 	} `json:"choices"`
 	Usage struct {
-		TotalTokens int `json:"total_tokens"`
+		PromptTokens        int `json:"prompt_tokens"`
+		CompletionTokens    int `json:"completion_tokens"`
+		TotalTokens         int `json:"total_tokens"`
+		PromptTokensDetails *struct {
+			CachedTokens int `json:"cached_tokens,omitempty"` // Tokens read from cache (50% savings)
+		} `json:"prompt_tokens_details,omitempty"`
 	} `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`

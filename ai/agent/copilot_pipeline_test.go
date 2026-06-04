@@ -130,7 +130,7 @@ func TestCopilotAsk_RewritesRetryMetaAskBeforeRoutingAndEngine(t *testing.T) {
 	}}
 	ctx := context.WithValue(context.Background(), "session_payload", payload)
 
-	resp, err := ag.Ask(ctx, "Can we retry the same ask?")
+	resp, err := ag.Ask(ctx, "Can we retry the same ask?", nil)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestCopilotAsk_RewritesQualifiedRetryMetaAskBeforeRoutingAndEngine(t *testi
 	ctx := context.WithValue(context.Background(), "session_payload", payload)
 
 	query := "Since you failed, can you retry the same ask? perhaps I can supply missing info you need."
-	resp, err := ag.Ask(ctx, query)
+	resp, err := ag.Ask(ctx, query, nil)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
@@ -199,7 +199,7 @@ func TestAsk_ClearsAskProgressMRUBeforeEarlyReturn(t *testing.T) {
 		{Category: askOutcomeMRUCategoryHeader, Context: "Recent Ask Outcome:", Source: MRUSourceAskOutcome, Scope: MRUScopeSession},
 	}
 
-	resp, err := ag.Ask(context.Background(), "Hello")
+	resp, err := ag.Ask(context.Background(), "Hello", nil)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
@@ -438,7 +438,7 @@ func TestCopilotAsk_RewritesConversationalMetaAskBeforeRoutingAndEngine(t *testi
 	}}
 	ctx := context.WithValue(context.Background(), "session_payload", payload)
 
-	resp, err := ag.Ask(ctx, "Flat joined fields. Keep dotted names.")
+	resp, err := ag.Ask(ctx, "Flat joined fields. Keep dotted names.", nil)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}

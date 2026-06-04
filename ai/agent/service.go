@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	log "log/slog"
@@ -118,6 +120,303 @@ func (s *Service) SetFeature(feature string, enabled bool) {
 	}
 }
 
+// ServiceAskOptions contains explicit, typed parameters for Service.Ask().
+// This is the user-facing struct with IDE support, type safety, and clear documentation.
+// It gets converted from generic ConfigMap at the Agent interface boundary.
+//
+// Example usage:
+//
+//	// Working with the Agent interface (generic):
+//	cfg := ai.NewConfigMap()
+//	cfg.Set("database", myDB)
+//	cfg.Set("payload", sessionPayload)
+//	response, err := agent.Ask(ctx, query, cfg)
+//
+//	// Working with Service directly (explicit, typed):
+//	opts := &ServiceAskOptions{
+//	    Database: myDB,
+//	    Payload:  sessionPayload,
+//	    Verbose:  true,
+//	}
+//	// Convert to ConfigMap for Agent interface
+//	cfg := optsToConfigMap(opts)
+//	response, err := service.Ask(ctx, query, cfg)
+type ServiceAskOptions struct {
+	// Database to use for this query (overrides session default)
+	Database *database.Database
+
+	// Payload contains session state: current DB, selected KBs, transaction, variables, etc.
+	Payload *ai.SessionPayload
+
+	// Executor for running tool calls during ReAct loops (commands, queries, scripts)
+	Executor ai.ToolExecutor
+
+	// Writer for streaming output in real-time (optional)
+	Writer io.Writer
+
+	// Recorder captures script steps for playback or audit (optional)
+	Recorder ai.ScriptRecorder
+
+	// DefaultFormat for query results: "csv", "json", "table", etc.
+	DefaultFormat string
+
+	// EventStreamer receives structured events: tool calls, progress, errors (optional)
+	EventStreamer func(string, any)
+
+	// ProgressSink receives progress messages during long operations (optional)
+	ProgressSink func(string)
+
+	// Generator optionally overrides the default LLM provider
+	Generator ai.Generator
+
+	// ProviderDetails for runtime provider configuration (API key, base URL, model)
+	ProviderDetails *ProviderDetails
+
+	// Verbose enables detailed logging and diagnostic output
+	Verbose bool
+
+	// IsNewTopic indicates this query starts a new conversation topic
+	IsNewTopic bool
+
+	// ForcedDBName overrides database selection logic (internal use)
+	ForcedDBName string
+}
+
+// FromConfigMap converts generic ConfigMap to typed ServiceAskOptions.
+// This is the conversion layer between the Agent interface and implementation.
+func (s *Service) optsFromConfigMap(cfg *ai.ConfigMap) *ServiceAskOptions {
+	opts := &ServiceAskOptions{}
+
+	if cfg == nil {
+		return opts
+	}
+
+	// Extract each field with proper type assertions
+	if val, ok := cfg.Get("database"); ok {
+		if db, ok := val.(*database.Database); ok {
+			opts.Database = db
+		} else if dbName, ok := val.(string); ok && dbName != "" {
+			// Resolve database by name
+			if dbOpts, exists := s.databases[dbName]; exists {
+				opts.Database = database.NewDatabase(dbOpts)
+			}
+		}
+	}
+
+	if val, ok := cfg.Get("payload"); ok {
+		if p, ok := val.(*ai.SessionPayload); ok {
+			opts.Payload = p
+		}
+	}
+
+	if val, ok := cfg.Get("executor"); ok {
+		if exec, ok := val.(ai.ToolExecutor); ok {
+			opts.Executor = exec
+		}
+	}
+
+	if val, ok := cfg.Get("writer"); ok {
+		if w, ok := val.(io.Writer); ok {
+			opts.Writer = w
+		}
+	}
+
+	if val, ok := cfg.Get("recorder"); ok {
+		if rec, ok := val.(ai.ScriptRecorder); ok {
+			opts.Recorder = rec
+		}
+	}
+
+	if val, ok := cfg.Get("default_format"); ok {
+		if format, ok := val.(string); ok {
+			opts.DefaultFormat = format
+		}
+	}
+
+	if val, ok := cfg.Get("event_streamer"); ok {
+		if streamer, ok := val.(func(string, any)); ok {
+			opts.EventStreamer = streamer
+		}
+	}
+
+	if val, ok := cfg.Get("progress_sink"); ok {
+		if sink, ok := val.(func(string)); ok {
+			opts.ProgressSink = sink
+		}
+	}
+
+	if val, ok := cfg.Get("generator"); ok {
+		if gen, ok := val.(ai.Generator); ok {
+			opts.Generator = gen
+		}
+	}
+
+	if val, ok := cfg.Get("provider_details"); ok {
+		if po, ok := val.(*ProviderDetails); ok {
+			opts.ProviderDetails = po
+		}
+	}
+
+	if val, ok := cfg.Get("verbose"); ok {
+		if v, ok := val.(bool); ok {
+			opts.Verbose = v
+		}
+	}
+
+	if val, ok := cfg.Get("is_new_topic"); ok {
+		if v, ok := val.(bool); ok {
+			opts.IsNewTopic = v
+		}
+	}
+
+	if val, ok := cfg.Get("forced_db_name"); ok {
+		if name, ok := val.(string); ok {
+			opts.ForcedDBName = name
+		}
+	}
+
+	return opts
+}
+
+// AskRequest contains all dependencies for an Ask operation, making the data flow explicit.
+// This replaces the previous pattern of hiding dependencies in context.Context.
+type AskRequest struct {
+	// Query is the user's input question or command
+	Query string
+
+	// Session holds the current session state including transactions, variables, and database context
+	Session *ai.SessionPayload
+
+	// Executor is the tool executor for running tool calls during ReAct loops
+	Executor ai.ToolExecutor
+
+	// Generator optionally overrides the default LLM provider
+	Generator ai.Generator
+
+	// ProviderOverride optionally provides runtime provider configuration (provider, model, API key, base URL)
+	ProviderOverride *ProviderDetails
+
+	// Database optionally overrides the session's current database
+	Database *database.Database
+
+	// Writer is the output destination for streaming responses
+	Writer io.Writer
+
+	// EventStreamer receives structured events during reasoning (tool calls, progress, etc.)
+	EventStreamer func(eventType string, data any)
+
+	// ProgressSink receives progress messages during execution
+	ProgressSink func(message string)
+
+	// ScriptRecorder captures executed script steps for playback or audit
+	ScriptRecorder ai.ScriptRecorder
+
+	// DefaultFormat sets the default output format for tools (csv, json, etc.)
+	DefaultFormat string
+
+	// Options carries additional configuration from ConfigMap
+	Options *ai.ConfigMap
+
+	// Verbose enables detailed logging and progress reporting
+	Verbose bool
+}
+
+// AskResponse contains the result and any state changes from an Ask operation.
+type AskResponse struct {
+	// FinalText is the assistant's answer to the user
+	FinalText string
+
+	// UpdatedSession contains any session state changes (updated transactions, variables, etc.)
+	UpdatedSession *ai.SessionPayload
+
+	// CarryoverState holds provider-specific continuation state for next Ask
+	CarryoverState *ai.CarryoverState
+
+	// ToolCalls lists all tools executed during the Ask for audit/logging
+	ToolCalls []ai.ToolCall
+
+	// OutcomeFacts contains compact grounded facts safe to carry into MRU continuity
+	OutcomeFacts []string
+
+	// OutcomeRecipes contains learned patterns distilled from this Ask
+	OutcomeRecipes []ai.LearnedRecipe
+}
+
+// ToolExecutionContext carries all dependencies needed for tool execution.
+// This replaces the pattern of hiding tool dependencies in context.Context via multiple context keys.
+// Affects Phase 2 context keys: CtxKeyExecutor, CtxKeyScriptRecorder, CtxKeyWriter,
+// CtxKeyResultStreamer, CtxKeyNativeToolHints
+type ToolExecutionContext struct {
+	// Session holds the current session state for tools that need access to variables or state
+	Session *ai.SessionPayload
+
+	// Executor is the tool executor (may be nested/chained)
+	Executor ai.ToolExecutor
+
+	// Recorder captures script steps during execution for playback/audit
+	Recorder ai.ScriptRecorder
+
+	// Writer is the output destination for streaming tool results
+	Writer io.Writer
+
+	// ResultStreamer enables structured streaming output for tools (BeginArray, WriteItem, EndArray)
+	ResultStreamer ai.ResultStreamer
+
+	// NativeToolHints indicates this is native Ask-loop tool execution that can consume structured hints
+	NativeToolHints bool
+
+	// Database is the target database for script/tool execution
+	Database *database.Database
+
+	// EventStreamer receives structured events during tool execution
+	EventStreamer func(eventType string, data any)
+
+	// ProgressSink receives progress messages
+	ProgressSink func(message string)
+}
+
+// ScriptRunContext carries all dependencies needed for script execution orchestration.
+// This replaces the pattern of hiding script orchestration state in context.Context.
+// Affects Phase 3 context keys: CtxKeyJSONStreamer, CtxKeySuppressInternalStepStart,
+// "step_index", "verbose", CtxKeyUseNDJSON, CtxKeyCurrentScriptCategory
+type ScriptRunContext struct {
+	// JSONStreamer handles streaming JSON array elements for script execution output
+	JSONStreamer *JSONStreamer
+
+	// SuppressInternalStepStart suppresses step_start events in streamed output
+	SuppressInternalStepStart bool
+
+	// StepIndex tracks the current step number in script execution
+	StepIndex int
+
+	// Verbose enables detailed logging and progress reporting for script steps
+	Verbose bool
+
+	// UseNDJSON indicates whether to use newline-delimited JSON format instead of JSON array
+	UseNDJSON bool
+
+	// CurrentScriptCategory tracks the category of the currently executing script
+	CurrentScriptCategory string
+
+	// StringBuilderMutex protects concurrent writes to the script output string builder
+	StringBuilderMutex *sync.Mutex
+}
+
+// ProviderDetails carries runtime provider configuration for generator selection.
+type ProviderDetails struct {
+	// Provider specifies which LLM provider to use (e.g., "gemini", "chatgpt", "claude")
+	Provider string
+
+	// Model optionally specifies a specific model within the provider (e.g., "gemini-2.0-flash-thinking-exp")
+	Model string
+
+	// APIKey provides a transient API key override for the provider
+	APIKey string
+
+	// BaseURL provides a transient base URL override for the provider
+	BaseURL string
+}
+
 // TopicAssessment is the structure returned by the generic router.
 type TopicAssessment struct {
 	IsNewTopic    bool   `json:"is_new_topic"`
@@ -177,7 +476,8 @@ Format:
 	fullPrompt := "Answer in strict JSON.\n" + prompt
 
 	output, err := s.generator.Generate(ctx, fullPrompt, ai.GenOptions{
-		Temperature: 0.1, // Deterministic
+		Temperature:   0.1,   // Deterministic
+		ThinkingLevel: "low", // Strict JSON schema adherence for topic routing
 	})
 	if err != nil {
 		return nil, err
@@ -216,34 +516,29 @@ func (s *Service) Open(ctx context.Context) error {
 		return nil
 	}
 
-	// If we are recording, we do NOT use the session transaction.
-	// The user requirement is that during recording, each step is an isolated transaction (auto-commit).
-	// Explicit transaction commands (begin/commit) are recorded as steps but do not affect the recording session.
-	if s.session.Transaction != nil {
-		// If NOT recording, and we have an active session transaction (e.g. from a previous step in a stateful session), use it.
-		// BUT ONLY if it matches the requested database.
-		if s.session.CurrentDB == "" || s.session.CurrentDB == p.CurrentDB {
-			p.Transaction = s.session.Transaction
-			p.Variables = s.session.Variables
-			// Restore ExplicitTransaction flag if we are reusing a transaction
-			// We assume if s.session.Transaction is set, it was explicit (based on Close logic),
-			// but let's be safe. Actually, Close only saves it if it WAS explicit.
-			// So we can set it to true here.
-			p.ExplicitTransaction = true
-			return openRegistryAgents()
+	// If we have an active session transaction (e.g. from a previous step in a stateful session), use it.
+	// BUT ONLY if it matches the requested database.
+	if s.session.CurrentDB == "" || s.session.CurrentDB == p.CurrentDB {
+		p.Transaction = s.session.Transaction
+		p.Variables = s.session.Variables
+		return openRegistryAgents()
+	}
+	// If DB mismatch, we commit the previous transaction as we are switching context.
+	if s.session.CurrentDB != "" && s.session.CurrentDB != p.CurrentDB {
+		if p.ExplicitTransaction {
+			log.Warn("Switching databases with an explicit transaction is not recommended. Committing the previous transaction before switching.", "from_db", s.session.CurrentDB, "to_db", p.CurrentDB)
+			// Since we are switching, we clear the explicit transaction flag & onto implicit.
+			p.ExplicitTransaction = false
 		}
-		// If DB mismatch, we commit the previous transaction as we are switching context.
-		if s.session.CurrentDB != "" && s.session.CurrentDB != p.CurrentDB {
-			if s.session.Transaction != nil {
-				// Commit the old transaction to persist changes
-				if err := s.session.Transaction.Commit(ctx); err != nil {
-					return fmt.Errorf("failed to commit previous transaction on database '%s' before switching to '%s': %w", s.session.CurrentDB, p.CurrentDB, err)
-				}
+		if s.session.Transaction != nil {
+			// Commit the old transaction to persist changes
+			if err := s.session.Transaction.Commit(ctx); err != nil {
+				return fmt.Errorf("failed to commit previous transaction on database '%s' before switching to '%s': %w", s.session.CurrentDB, p.CurrentDB, err)
 			}
-			// Clear the session transaction as we've committed it
-			s.session.Transaction = nil
-			s.session.Variables = nil
 		}
+		// Clear the session transaction as we've committed it
+		s.session.Transaction = nil
+		s.session.Variables = nil
 	}
 
 	if p.CurrentDB == "" {
@@ -298,19 +593,36 @@ func (s *Service) Close(ctx context.Context) error {
 		return closeRegistryAgents()
 	}
 	if tx, ok := p.Transaction.(sop.Transaction); ok {
-		// If the transaction was explicitly started by the user, we persist it.
-		if p.ExplicitTransaction {
-			s.session.Transaction = tx
-			s.session.CurrentDB = p.CurrentDB
-			s.session.Variables = p.Variables
+		// Check if context was canceled - if so, rollback any uncommitted transaction
+		if ctx.Err() != nil {
+			log.Warn("Context canceled during Close - rolling back transaction", "error", ctx.Err())
+			if tx.HasBegun() {
+				// Use background context for rollback since original context is canceled
+				tx.Rollback(context.Background())
+			}
+			p.Transaction = nil
+			s.session.Transaction = nil
+			s.session.Variables = nil
 			return closeRegistryAgents()
 		}
-		// Otherwise, we commit it as it's an implicit transaction for this request/script.
+
+		// CRITICAL: ExplicitTransaction = true means language bindings manage the transaction.
+		// Do NOT auto-commit or auto-rollback explicit transactions. They may span multiple requests.
+		// Language bindings will call manage_transaction to commit/rollback explicitly.
+		if p.ExplicitTransaction {
+			log.Debug("Explicit transaction left open for external management", "db", p.CurrentDB)
+			// Do NOT clear p.Transaction - language bindings may reuse it across requests
+			return closeRegistryAgents()
+		}
+
+		// Auto-commit implicit (session-managed) transactions
 		if tx.HasBegun() {
 			if err := tx.Commit(ctx); err != nil {
+				p.Transaction = nil
 				return fmt.Errorf("failed to commit implicit transaction: %w", err)
 			}
 		}
+		p.Transaction = nil
 		// Clear session state
 		s.session.Transaction = nil
 		s.session.Variables = nil
@@ -469,7 +781,7 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 }
 
 // RunPipeline executes the configured chain of agents.
-func (s *Service) RunPipeline(ctx context.Context, input string) (string, error) {
+func (s *Service) RunPipeline(ctx context.Context, input string, cfg *ai.ConfigMap) (string, error) {
 	// Note: We do NOT call evaluateInputPolicy here anymore.
 	// Policies should be explicitly added as steps in the pipeline if desired.
 	// This allows for more flexible policy application (e.g. input, output, intermediate).
@@ -482,7 +794,7 @@ func (s *Service) RunPipeline(ctx context.Context, input string) (string, error)
 			return "", fmt.Errorf("pipeline agent '%s' not found in registry", step.Agent.ID)
 		}
 
-		output, err := agent.Ask(ctx, currentInput)
+		output, err := agent.Ask(ctx, currentInput, cfg)
 		if err != nil {
 			return "", fmt.Errorf("pipeline step '%s' failed: %w", step.Agent.ID, err)
 		}
@@ -644,8 +956,7 @@ func (s *Service) GetLastToolInstructions() string {
 	return string(b)
 }
 
-// Ask performs a RAG (Retrieval-Augmented Generation) request.
-// RecordStep implements the ScriptRecorder interface
+// RecordStep implements the ScriptRecorder interface.
 func (s *Service) RecordStep(ctx context.Context, step ai.ScriptStep) {
 	// Debug: Log what we are recording
 	if step.Type == "command" {
@@ -776,7 +1087,7 @@ func (a *AdHocAgent) Close(ctx context.Context) error { return nil }
 func (a *AdHocAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
 	return nil, nil
 }
-func (a *AdHocAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+func (a *AdHocAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
 	return "", nil
 }
 
@@ -869,163 +1180,144 @@ func (s *Service) InitializeUserSession(ctx context.Context, userID string) erro
 	return tx.Commit(ctx)
 }
 
-func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
-	// Ensure statelessness for non-playback sessions (Interactive & Drafting)
-	defer func() {
-		if s.GetSessionMode() != SessionModePlayback && s.session.Transaction != nil {
-			// Rollback if not committed (safety)
-			// If it was committed, it should have been cleared.
-			// If it's still here, it's a leak.
-			s.session.Transaction.Rollback(ctx)
-			s.session.Transaction = nil
-			s.session.Variables = nil
-		}
-	}()
+// topicRoutingResult holds the outcome of topic identification and routing.
+type topicRoutingResult struct {
+	assessment *TopicAssessment
+	isNewTopic bool
+}
 
-	// Clear buffer at start of Ask
+// promptInputs holds the constructed prompt components for the reasoning engine.
+type promptInputs struct {
+	systemPrompt string
+	contextText  string
+	historyText  string
+}
+
+// generatorConfig holds the resolved generator and carryover strategy.
+type generatorConfig struct {
+	generator ai.Generator
+	carryover carryoverDecision
+}
+
+// resetInteractionBuffer clears the tool call buffer unless this is a last-tool introspection request.
+func (s *Service) resetInteractionBuffer(query string) {
 	trimQ := strings.TrimSpace(query)
 	if trimQ != "last-tool" && trimQ != "/last-tool" && trimQ != "last_tool" && trimQ != "/last_tool" {
 		s.session.LastInteractionToolCalls = []ai.ScriptStep{}
 	}
+}
 
-	cfg := ai.NewAskConfig(opts...)
-	var db *database.Database
-	var forcedDBName string
-	if format, ok := cfg.Values["default_format"].(string); ok && strings.TrimSpace(format) != "" {
-		ctx = context.WithValue(ctx, ai.CtxKeyDefaultFormat, strings.TrimSpace(format))
-	}
+// // parseAskConfig extracts database and format from ConfigMap and updates context.
+// func (s *Service) parseAskConfig(ctx context.Context, cfg *ai.ConfigMap) (context.Context, *database.Database) {
+// 	if cfg == nil {
+// 		return ctx, nil
+// 	}
 
-	if val, ok := cfg.Values["database"]; ok {
-		if d, ok := val.(*database.Database); ok {
-			db = d
-		} else if dName, ok := val.(string); ok && dName != "" {
-			// If a string name is provided, use it to resolve DB and set as forcedDBName
-			forcedDBName = dName
-			if opts, ok := s.databases[dName]; ok {
-				db = database.NewDatabase(opts)
-			}
-		}
-	}
+// 	if val, ok := cfg.Get("default_format"); ok {
+// 		if format, ok := val.(string); ok && strings.TrimSpace(format) != "" {
+// 			ctx = context.WithValue(ctx, ai.CtxKeyDefaultFormat, strings.TrimSpace(format))
+// 		}
+// 	}
 
-	// Ensure we have a tool executor
-	// If the caller didn't provide one, we use the ServiceToolExecutor which delegates to registered agents.
-	if ctx.Value(ai.CtxKeyExecutor) == nil {
-		executor := &ServiceToolExecutor{s: s}
-		ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
-	}
+// 	var db *database.Database
+// 	if val, ok := cfg.Get("database"); ok {
+// 		if d, ok := val.(*database.Database); ok {
+// 			db = d
+// 		} else if dName, ok := val.(string); ok && dName != "" {
+// 			if dbOpts, ok := s.databases[dName]; ok {
+// 				db = database.NewDatabase(dbOpts)
+// 			}
+// 		}
+// 	}
 
-	// Inject SessionPayload into context if present
-	if val, ok := cfg.Values["payload"]; ok {
-		if p, ok := val.(*ai.SessionPayload); ok {
-			if strings.TrimSpace(p.CurrentUserQuery) == "" {
-				p.CurrentUserQuery = query
-			}
-			ctx = context.WithValue(ctx, "session_payload", p)
-			// Also set db from payload if not already set
-			if db == nil && p.CurrentDB != "" {
-				if opts, ok := s.databases[p.CurrentDB]; ok {
-					db = database.NewDatabase(opts)
-				}
-			}
-		}
-	} else if p := ai.GetSessionPayload(ctx); p != nil {
-		// Payload already exists in context, respect it.
-		// Ensure db is set if needed.
-		if db == nil && p.CurrentDB != "" {
-			if opts, ok := s.databases[p.CurrentDB]; ok {
-				db = database.NewDatabase(opts)
-			}
-		}
-	} else {
-		// If no payload provided, create a default one from session state
-		// Use forcedDBName if provided via Ask options, otherwise session state
+// 	return ctx, db
+// }
 
-		// 1. Prepare Context (History, DB schema, etc.)
-		targetDB := s.session.CurrentDB
-		if forcedDBName != "" {
-			targetDB = forcedDBName
-		}
+// // ensureToolExecutor attaches a default tool executor if none is present in context.
+// func (s *Service) ensureToolExecutor(ctx context.Context) context.Context {
+// 	if ctx.Value(ai.CtxKeyExecutor) == nil {
+// 		executor := &ServiceToolExecutor{s: s}
+// 		ctx = context.WithValue(ctx, ai.CtxKeyExecutor, executor)
+// 	}
+// 	return ctx
+// }
 
-		p := &ai.SessionPayload{
-			CurrentDB:        targetDB,
-			CurrentUserQuery: query,
-		}
-		if s.session.Transaction != nil {
-			p.Transaction = s.session.Transaction
-			p.Variables = s.session.Variables
-			p.ExplicitTransaction = true
-		}
-		// If Transactions map is needed, we might need to store it in session too?
-		// Currently RunnerSession doesn't seem to have Transactions map.
-		// But for single-DB transaction it works.
-		ctx = context.WithValue(ctx, "session_payload", p)
+// // resolveSessionPayload establishes or enriches the session payload in context.
+// func (s *Service) resolveSessionPayload(ctx context.Context, query string, cfg *ai.ConfigMap, db *database.Database) (context.Context, *database.Database) {
+// 	if val, ok := cfg.Get("payload"); ok {
+// 		if p, ok := val.(*ai.SessionPayload); ok {
+// 			if strings.TrimSpace(p.CurrentUserQuery) == "" {
+// 				p.CurrentUserQuery = query
+// 			}
+// 			ctx = context.WithValue(ctx, "session_payload", p)
+// 			if db == nil && p.CurrentDB != "" {
+// 				if dbOpts, ok := s.databases[p.CurrentDB]; ok {
+// 					db = database.NewDatabase(dbOpts)
+// 				}
+// 			}
+// 		}
+// 	} else if p := ai.GetSessionPayload(ctx); p != nil {
+// 		if db == nil && p.CurrentDB != "" {
+// 			if dbOpts, ok := s.databases[p.CurrentDB]; ok {
+// 				db = database.NewDatabase(dbOpts)
+// 			}
+// 		}
+// 	} else {
+// 		targetDB := s.session.CurrentDB
+// 		if forcedDBName, ok := cfg.Get("forced_db_name"); ok {
+// 			if dbName, ok := forcedDBName.(string); ok && dbName != "" {
+// 				targetDB = dbName
+// 			}
+// 		}
 
-		// Set db if available
-		if db == nil && p.CurrentDB != "" {
-			if opts, ok := s.databases[p.CurrentDB]; ok {
-				db = database.NewDatabase(opts)
-			}
-		}
-	}
+// 		p := &ai.SessionPayload{
+// 			CurrentDB:        targetDB,
+// 			CurrentUserQuery: query,
+// 		}
+// 		if s.session.Transaction != nil {
+// 			p.Transaction = s.session.Transaction
+// 			p.Variables = s.session.Variables
+// 			p.ExplicitTransaction = true
+// 		}
+// 		ctx = context.WithValue(ctx, "session_payload", p)
 
-	// Inject ScriptRecorder into context
-	ctx = context.WithValue(ctx, ai.CtxKeyScriptRecorder, s)
+// 		if db == nil && p.CurrentDB != "" {
+// 			if dbOpts, ok := s.databases[p.CurrentDB]; ok {
+// 				db = database.NewDatabase(dbOpts)
+// 			}
+// 		}
+// 	}
 
-	// Capture "ask" step for potential manual addition
-	// We do this BEFORE handling /create or /play so those commands themselves aren't captured as "ask" steps
-	// We explicitly exclude "last-tool" and any slash commands from being recorded as user intent.
-	if !strings.HasPrefix(query, "/") && query != "last-tool" {
-		s.RecordStep(ctx, ai.ScriptStep{
-			Type:   "ask",
-			Prompt: query,
-		})
-	}
+// 	return ctx, db
+// }
 
-	// Handle Session Commands (Scripts, Drafting, etc.)
-	if resp, handled, err := s.handleSessionCommand(ctx, query, db); handled {
-		return resp, err
-	}
+// // attachScriptRecorder injects the script recorder and captures the ask step if applicable.
+// func (s *Service) attachScriptRecorder(ctx context.Context, query string) context.Context {
+// 	ctx = context.WithValue(ctx, ai.CtxKeyScriptRecorder, s)
 
-	// If we are drafting, we do NOT want to execute the query against the LLM if it's a transaction command
-	// that was handled by the tool but skipped execution.
-	// However, the tool execution happens inside the LLM loop (or via direct tool call if we supported that).
-	// Since we are using an LLM, we must let it run.
-	// But wait, if the user says "begin transaction", the LLM will call the tool.
-	// The tool will see the recorder and return "recorded...".
-	// The LLM will then see that output and likely say "I have recorded the transaction start".
-	// This is fine.
+// 	if !strings.HasPrefix(query, "/") && query != "last-tool" {
+// 		s.RecordStep(ctx, ai.ScriptStep{
+// 			Type:   "ask",
+// 			Prompt: query,
+// 		})
+// 	}
 
-	// Obfuscate Input
-	// We ONLY obfuscate known resource names (Database, Store) that have been registered.
-	// We do NOT obfuscate the entire text blindly, but ObfuscateText only replaces known keys.
-	// If the user says "select from Python Complex DB", and "Python Complex DB" is registered,
-	// it becomes "select from DB_123". This is correct.
-	// The LLM sees "select from DB_123".
+// 	return ctx
+// }
 
-	// Obfuscate Query if enabled
+// applyObfuscation obfuscates known resource names in the query if enabled.
+func (s *Service) applyObfuscation(query string) string {
 	if s.EnableObfuscation {
-		query = obfuscation.GlobalObfuscator.ObfuscateText(query)
+		return obfuscation.GlobalObfuscator.ObfuscateText(query)
 	}
+	return query
+}
 
-	if handled, resp, err := s.handlePendingUserConfirmation(ctx, query); handled {
-		return resp, err
-	}
-
-	// 0. Pipeline Execution (if configured)
-	if len(s.pipeline) > 0 {
-		resp, err := s.RunPipeline(ctx, query)
-		return resp, err
-	}
-
-	// Ensure tools are registered (session specific registration)
-	s.registerTools()
-
-	// 0.5 Topic Identification / Routing (STM)
+// performTopicRouting identifies the conversation topic and manages thread continuity.
+func (s *Service) performTopicRouting(ctx context.Context, query string) *topicRoutingResult {
 	var topicAssessment *TopicAssessment
-	// Only run identification if we have history AND history injection is enabled.
-	// If injection is disabled, we must not send history summaries to the LLM (side-channel leak).
+
 	if s.EnableHistoryInjection && s.session.Memory != nil {
-		// Only run identification if we have history
 		assessment, err := s.identifyTopic(ctx, query)
 		if err != nil {
 			log.Warn("Topic identification failed, defaulting to new topic", "error", err)
@@ -1034,7 +1326,6 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 			topicAssessment = assessment
 		}
 
-		// Apply STM Logic: Promote existing thread if identified
 		if !topicAssessment.IsNewTopic && topicAssessment.TopicUUID != "" {
 			topicID, err := sop.ParseUUID(topicAssessment.TopicUUID)
 			if err == nil {
@@ -1042,30 +1333,35 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 			}
 		}
 	} else {
-		// Initialize memory if missing (defensive)
 		s.session.Memory = NewShortTermMemory()
 		topicAssessment = &TopicAssessment{IsNewTopic: true}
 	}
 
-	// 1. Search for context
-	// We must ensure that s.Search(term) does not return "User1, User2" from previous run.
-	// Since Search uses s.domain, and we inject a mock domain or real one:
-	// If the domain is just a vector store, it returns unrelated text.
-	// But if the "history" or "recent output" is being indexed...
-
-	hits, err := s.Search(ctx, query, 10)
-	if err != nil {
-		return "", fmt.Errorf("retrieval failed: %w", err)
+	result := &topicRoutingResult{assessment: topicAssessment}
+	if topicAssessment != nil && topicAssessment.IsNewTopic {
+		resetTopicSwitchProjection(ctx, s.session)
+		result.isNewTopic = true
 	}
 
-	// 2. Construct Prompt
-	contextText := s.formatContext(hits)
-	var systemPrompt string
+	return result
+}
+
+// retrieveKnowledge performs vector/text search against the domain knowledge base.
+func (s *Service) retrieveKnowledge(ctx context.Context, query string) ([]ai.Hit[map[string]any], error) {
+	return s.Search(ctx, query, 10)
+}
+
+// buildPromptInputs constructs system prompt, context, and history for the reasoning engine.
+func (s *Service) buildPromptInputs(ctx context.Context, query string, hits []ai.Hit[map[string]any]) *promptInputs {
+	result := &promptInputs{}
+
+	result.contextText = s.formatContext(hits)
+
 	if s.domain != nil {
-		systemPrompt, _ = s.domain.Prompt(ctx, "system")
+		result.systemPrompt, _ = s.domain.Prompt(ctx, "system")
 	}
 
-	// 2_0. Inject User Preferences (Long-Term Memory Search via pre-prompt fetch)
+	// Inject user preferences from long-term memory
 	if p := ai.GetSessionPayload(ctx); p != nil && p.UserID != "" && s.systemDB != nil {
 		agentID := p.AgentID
 		if agentID == "" {
@@ -1074,7 +1370,6 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		kbName := memory.BuildLTMStoreName(agentID, p.UserID)
 		if tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
 			if kb, err := s.systemDB.OpenKnowledgeBase(ctx, kbName, tx, s.generator, nil, false, true); err == nil {
-				// We search the user's Long-Term memory kb for implicitly learned preferences related to the query
 				if userHits, err := kb.SearchKeywords(ctx, query, &memory.SearchOptions[map[string]any]{Limit: 5}); err == nil && len(userHits) > 0 {
 					var prefText strings.Builder
 					prefText.WriteString("\n\n[User Preferences & Active Memory Ledger for this query]\n")
@@ -1088,32 +1383,22 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 							prefText.WriteString(fmt.Sprintf("- %s\n", string(b)))
 						}
 					}
-					systemPrompt = fmt.Sprintf("%s%s", systemPrompt, prefText.String())
+					result.systemPrompt = fmt.Sprintf("%s%s", result.systemPrompt, prefText.String())
 				}
 			}
 			tx.Rollback(ctx)
 		}
 	}
 
-	// Filter and inject heavy architectural protocols ONLY if the query or topic warrants it.
-	// This prevents LLM "memory tax" and bloat for casual conversational threads.
-	// (Omni protocol logic removed or delegated to KB)
-
-	// [Regression Fix]
-	// If EnableHistoryInjection is false, we should also ensure that formatContext
-	// didn't accidentally include history-like artifacts if they were in the "hits".
-	// But more importantly, check if we accidentally appended historyText anyway.
-	var historyText string
+	// Build history text if injection is enabled
 	if s.EnableHistoryInjection && s.session.Memory != nil && len(s.session.Memory.Order) > 0 {
 		var historyBuilder strings.Builder
-		// Iterate through threads in order
 		for _, threadID := range s.session.Memory.Order {
 			thread, ok := s.session.Memory.Threads[threadID]
 			if !ok {
 				continue
 			}
 
-			// Format Header
 			historyBuilder.WriteString(fmt.Sprintf("\n--- Conversation Thread: %s ---\n", thread.Label))
 			if thread.Category != "" {
 				historyBuilder.WriteString(fmt.Sprintf("Category: %s\n", thread.Category))
@@ -1122,7 +1407,6 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 				historyBuilder.WriteString(fmt.Sprintf("Context: %s\n", thread.ContextNotes))
 			}
 
-			// Format Body (Exchanges)
 			historyBuilder.WriteString(fmt.Sprintf("Root: %s\n", thread.RootPrompt))
 			for _, interaction := range thread.Exchanges {
 				roleName := "User"
@@ -1134,48 +1418,58 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 				historyBuilder.WriteString(fmt.Sprintf("%s: %s\n", roleName, interaction.Content))
 			}
 
-			// Format Conclusion
 			if thread.Conclusion != "" {
 				historyBuilder.WriteString(fmt.Sprintf("Conclusion: %s\n", thread.Conclusion))
 			}
 			historyBuilder.WriteString("--------------------------------\n")
 		}
 
-		historyText = historyBuilder.String()
-		if historyText != "" {
-			historyText = "\n\n[Existing Conversation Threads]\n" + historyText
+		result.historyText = historyBuilder.String()
+		if result.historyText != "" {
+			result.historyText = "\n\n[Existing Conversation Threads]\n" + result.historyText
 		}
 	}
 
-	// 3. Determine Generator
+	return result
+}
+
+// resolveGeneratorAndCarryover selects the generator and computes the carryover strategy.
+func (s *Service) resolveGeneratorAndCarryover(ctx context.Context, topicAssessment *TopicAssessment, historyText string) *generatorConfig {
 	gen := s.generator
 
-	// Check for override in context
-	if provider, ok := ctx.Value(ai.CtxKeyProvider).(string); ok && provider != "" {
-		// Only override if the requested provider is different from the current one
-		// (We assume s.generator.Name() matches the provider string, e.g. "gemini", "ollama")
+	// Extract provider override from context for backward compatibility
+	providerOverride := extractProviderOverrideFromContext(ctx)
+
+	if providerOverride != nil && providerOverride.Provider != "" {
+		provider := providerOverride.Provider
+		if provider == "openai" {
+			provider = "chatgpt" // Normalize openai to chatgpt
+		}
+
+		// Build config map for generator initialization
+		configMap := make(map[string]any)
+		if providerOverride.APIKey != "" {
+			configMap["api_key"] = providerOverride.APIKey
+		}
+		if providerOverride.BaseURL != "" {
+			configMap["base_url"] = providerOverride.BaseURL
+		}
+		if providerOverride.Model != "" {
+			configMap["model"] = providerOverride.Model
+		}
+
+		// Create generator with config
 		if gen == nil || gen.Name() != provider {
-			// Create a temporary generator instance
-			// We rely on the generator package to pick up API keys from Env Vars
-			overriddenGen, err := generator.New(provider, nil)
-			if err == nil {
+			if overriddenGen, err := generator.New(provider, configMap); err == nil {
 				gen = overriddenGen
 			} else {
-				// Log warning? For now, just fall back to default
 				log.Warn("Failed to initialize requested provider, falling back to default", "provider", provider, "error", err)
 			}
 		}
 	}
 
 	carryover := decideCarryover(ctx, s.session, gen, topicAssessment, historyText)
-	if strings.TrimSpace(carryover.Summary) != "" {
-		contextText = appendCarryoverToContext(contextText, carryover.Summary)
-	}
-	if carryover.Mode == ai.CarryoverModeCompact {
-		if carryover.SuppressHistory {
-			historyText = ""
-		}
-	}
+
 	log.Info("Carryover Decision",
 		"provider", providerName(gen),
 		"mode", carryover.Mode,
@@ -1185,50 +1479,52 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		"estimated_history_tokens", carryover.EstimatedHistoryTokens,
 	)
 
-	// 4. Delegate to the Reasoning Engine
-	executor, _ := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor)
-
-	// Create the explicit native engine for Phase 4
-	engine := &NativeReActEngine{
-		EnableObfuscation: s.EnableObfuscation,
+	return &generatorConfig{
+		generator: gen,
+		carryover: carryover,
 	}
+}
 
-	req := ai.ReasoningRequest{
-		SystemPrompt:   systemPrompt,
-		ContextText:    contextText,
-		HistoryText:    historyText,
-		UserQuery:      query,
-		Executor:       executor,
-		Generator:      gen,
-		CarryoverMode:  carryover.Mode,
-		CarryoverState: carryover.State,
-		// DB passing strategy: The ServiceToolExecutor currently runs Execution and does AutoTX inside Service.Ask.
-		// For proper isolation while maintaining auto-tx flow matching the legacy codebase,
-		// we pass the DB securely down via context inside ServiceToolExecutor or wrap it here.
-	}
-	if streamer, ok := ctx.Value(ai.CtxKeyEventStreamer).(func(string, any)); ok && streamer != nil {
-		req.Streamer = streamer
-	}
+// // executeReasoningEngine runs the ReAct loop with the configured inputs and executor.
+// func (s *Service) executeReasoningEngine(ctx context.Context, query string, prompts *promptInputs, genCfg *generatorConfig, db *database.Database) (ai.ReasoningResponse, error) {
+// 	executor, _ := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor)
 
-	// Because we want to retain the EXACT auto-transaction logic that was tightly coupled inside Service.Ask,
-	// we will wrap the executor just for this call so `engine` doesn't need to know about AutoTX.
+// 	engine := &NativeReActEngine{
+// 		EnableObfuscation: s.EnableObfuscation,
+// 	}
 
-	wrappedExecutor := &autoTxExecutor{
-		original: executor,
-		s:        s,
-		db:       db,
-	}
-	req.Executor = wrappedExecutor
+// 	contextText := prompts.contextText
+// 	historyText := prompts.historyText
 
-	engineResp, err := engine.Run(ctx, req)
-	if err != nil {
-		return "", err
-	}
+// 	if strings.TrimSpace(genCfg.carryover.Summary) != "" {
+// 		contextText = appendCarryoverToContext(contextText, genCfg.carryover.Summary)
+// 	}
+// 	if genCfg.carryover.Mode == ai.CarryoverModeCompact && genCfg.carryover.SuppressHistory {
+// 		historyText = ""
+// 	}
 
-	finalText := engineResp.FinalText
+// 	req := ai.ReasoningRequest{
+// 		SystemPrompt:   prompts.systemPrompt,
+// 		ContextText:    contextText,
+// 		HistoryText:    historyText,
+// 		UserQuery:      query,
+// 		Executor:       &autoTxExecutor{original: executor, s: s, db: db},
+// 		Generator:      genCfg.generator,
+// 		CarryoverMode:  genCfg.carryover.Mode,
+// 		CarryoverState: genCfg.carryover.State,
+// 	}
 
-	// Record Chat Output if recording (we check if a tool was executed)
+// 	if streamer, ok := ctx.Value(ai.CtxKeyEventStreamer).(func(string, any)); ok && streamer != nil {
+// 		req.Streamer = streamer
+// 	}
+
+// 	return engine.Run(ctx, req)
+// }
+
+// updateSessionMemory persists the interaction outcomes into conversation threads and carryover state.
+func (s *Service) updateSessionMemory(ctx context.Context, query string, finalText string, topicAssessment *TopicAssessment, engineResp ai.ReasoningResponse, gen ai.Generator) {
 	toolRecorded := len(engineResp.ToolCalls) > 0
+
 	if s.session.CurrentScript != nil && !toolRecorded {
 		s.session.LastStep = &ai.ScriptStep{
 			Type:   "ask",
@@ -1236,30 +1532,11 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		}
 		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, *s.session.LastStep)
 	}
-
-	// Update Session Memory (Structured)
-	// We rely on the TopicAssessment performed at the start of the request.
-	// Record Chat Output if recording
-	if s.session.CurrentScript != nil && !toolRecorded {
-		s.session.LastStep = &ai.ScriptStep{
-			Type:   "ask",
-			Prompt: query,
-		}
-		s.session.CurrentScript.Steps = append(s.session.CurrentScript.Steps, *s.session.LastStep)
-	}
-
-	// Update Session Memory (Structured)
-	// We rely on the TopicAssessment performed at the start of the request.
-
-	// If assessment said New Topic, we create one.
-	// If assessment said Existing Topic, PromoteThread was already called, so CurrentThreadID is set.
 
 	var currentThread *ConversationThread
 
-	// Defensive check: If IdentifyTopic selected a thread that doesn't exist (hallucination?), force new.
 	if !topicAssessment.IsNewTopic && topicAssessment.TopicUUID != "" {
 		currentThread = s.session.Memory.GetCurrentThread()
-		// If nil, it means the ID was invalid or not found, fall back to new.
 	}
 
 	if currentThread == nil {
@@ -1283,14 +1560,12 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		currentThread = newThread
 	}
 
-	// Add User Interaction
 	currentThread.Exchanges = append(currentThread.Exchanges, Interaction{
 		Role:      RoleUser,
 		Content:   query,
 		Timestamp: time.Now().Unix(),
 	})
 
-	// Add Assistant Interaction
 	assistantContent := finalText
 	if toolRecorded {
 		assistantContent = fmt.Sprintf("(Tool Execution) %s", finalText)
@@ -1301,9 +1576,245 @@ func (s *Service) Ask(ctx context.Context, query string, opts ...ai.Option) (str
 		Timestamp: time.Now().Unix(),
 	})
 
-	persistCarryoverState(s.session.Memory, buildCarryoverState(ctx, s.session, gen, currentThread, query, finalText, engineResp.ToolCalls, engineResp.OutcomeFacts, engineResp.OutcomeRecipes, engineResp.CarryoverState))
+	// MRU PUSH: Write ask outcome to session MRU (infrastructure-level, benefits all provider loops)
+	persistSessionAskOutcomeMRU(ctx, s.session, query, finalText, engineResp.ToolCalls, engineResp.OutcomeFacts)
 
-	return finalText, nil
+	persistCarryoverState(s.session.Memory, buildCarryoverState(ctx, s.session, gen, currentThread, query, finalText, engineResp.ToolCalls, engineResp.OutcomeFacts, engineResp.OutcomeRecipes, engineResp.CarryoverState))
+}
+
+// Ask is the public interface method that maintains backward compatibility with ai.Agent interface.
+// It extracts configuration from ConfigMap (not context!), constructs an AskRequest, and delegates to ask().
+//
+// Proper separation of concerns:
+// - context.Context: Only for cancellation, deadlines, request-scoped tracing
+// - cfg *ConfigMap: For all parameter passing (session, executor, writer, etc.)
+func (s *Service) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
+	// Convert generic ConfigMap to explicit typed struct
+	opts := s.optsFromConfigMap(cfg)
+
+	// Backwards compatibility: fall back to context if executor not in ConfigMap
+	if opts.Executor == nil {
+		if ctxExec, ok := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor); ok {
+			opts.Executor = ctxExec
+		}
+	}
+
+	// Initialize session if not provided
+	session := opts.Payload
+	if session == nil {
+		// Backwards compatibility: fall back to context-based session payload
+		if ctxPayload, ok := ctx.Value("session_payload").(*ai.SessionPayload); ok && ctxPayload != nil {
+			session = ctxPayload
+		} else {
+			session = &ai.SessionPayload{
+				CurrentDB:        s.session.CurrentDB,
+				CurrentUserQuery: query,
+			}
+			if s.session.Transaction != nil {
+				session.Transaction = s.session.Transaction
+				session.Variables = s.session.Variables
+				//session.ExplicitTransaction = true
+			}
+		}
+	} else if strings.TrimSpace(session.CurrentUserQuery) == "" {
+		session.CurrentUserQuery = query
+	}
+
+	// Build AskRequest from typed options
+	req := AskRequest{
+		Query:            query,
+		Session:          session,
+		Executor:         opts.Executor,
+		Generator:        opts.Generator,
+		ProviderOverride: opts.ProviderDetails,
+		Database:         opts.Database,
+		Writer:           opts.Writer,
+		EventStreamer:    opts.EventStreamer,
+		ProgressSink:     opts.ProgressSink,
+		ScriptRecorder:   opts.Recorder,
+		DefaultFormat:    opts.DefaultFormat,
+		Options:          cfg,
+		Verbose:          opts.Verbose,
+	}
+
+	// Delegate to explicit-parameter ask method
+	resp, err := s.ask(ctx, req)
+	if err != nil {
+		return "", err
+	}
+
+	return resp.FinalText, nil
+}
+
+// ask handles a user request using explicit parameters instead of context-based state passing.
+// This method provides better readability and type safety by making all dependencies explicit
+// in the AskRequest struct rather than hiding them in context.Context.
+//
+// Functional flow:
+// 1. Guard transaction/session state cleanup for non-playback sessions.
+// 2. Reset per-interaction tool call buffer (except last-tool introspection requests).
+// 3. Handle session commands early (drafting/playback/script commands).
+// 4. Apply optional obfuscation and pending user confirmation handling.
+// 5. Short-circuit to configured pipeline when present.
+// 6. Perform topic routing and short-term memory thread promotion/initialization.
+// 7. Run retrieval against the domain knowledge index.
+// 8. Build system/context/history prompt inputs, including user preference enrichment.
+// 9. Resolve generator override and compute carryover strategy.
+// 10. Execute the native ReAct loop with tool execution and auto-transaction wrapping.
+// 11. Persist response outcomes into script/session memory and carryover state.
+func (s *Service) ask(ctx context.Context, req AskRequest) (AskResponse, error) {
+	// Check for context cancellation early
+	select {
+	case <-ctx.Done():
+		return AskResponse{}, fmt.Errorf("request canceled before execution: %w", ctx.Err())
+	default:
+	}
+
+	// Initialize session if not provided
+	if req.Session == nil {
+		req.Session = &ai.SessionPayload{
+			CurrentDB:        s.session.CurrentDB,
+			CurrentUserQuery: req.Query,
+		}
+		if s.session.Transaction != nil {
+			req.Session.Transaction = s.session.Transaction
+			req.Session.Variables = s.session.Variables
+			//req.Session.ExplicitTransaction = true
+		}
+	} else {
+		if strings.TrimSpace(req.Session.CurrentUserQuery) == "" {
+			req.Session.CurrentUserQuery = req.Query
+		}
+	}
+
+	// Initialize executor if not provided
+	if req.Executor == nil {
+		// Build tool execution context with all dependencies explicit
+		toolCtx := &ToolExecutionContext{
+			Session:         req.Session,
+			Executor:        nil, // will be set to self after creation
+			Recorder:        req.ScriptRecorder,
+			Writer:          req.Writer,
+			ResultStreamer:  nil,  // not typically needed in Ask flow, tools extract from context if needed
+			NativeToolHints: true, // Ask flow uses native tool hints
+			Database:        req.Database,
+			EventStreamer:   req.EventStreamer,
+			ProgressSink:    req.ProgressSink,
+		}
+		executor := &ServiceToolExecutor{s: s, toolCtx: toolCtx}
+		toolCtx.Executor = executor // self-reference
+		req.Executor = executor
+	}
+
+	// Initialize script recorder if not provided
+	if req.ScriptRecorder == nil {
+		req.ScriptRecorder = s
+	}
+
+	// 1. Reset per-interaction tool call buffer
+	s.resetInteractionBuffer(req.Query)
+
+	// 2. Capture the top-level ask step
+	if !strings.HasPrefix(req.Query, "/") && req.Query != "last-tool" {
+		req.ScriptRecorder.RecordStep(ctx, ai.ScriptStep{
+			Type:   "ask",
+			Prompt: req.Query,
+		})
+	}
+
+	// 3. Handle session commands early (drafting/playback/script commands)
+	db := req.Database
+	if db == nil && req.Session.CurrentDB != "" {
+		if dbOpts, ok := s.databases[req.Session.CurrentDB]; ok {
+			db = database.NewDatabase(dbOpts)
+		}
+	}
+
+	if resp, handled, err := s.handleSessionCommandWithRequest(ctx, req.Query, db, req.Session); handled {
+		return AskResponse{FinalText: resp, UpdatedSession: req.Session}, err
+	}
+
+	// 4. Apply optional obfuscation and pending user confirmation handling
+	query := s.applyObfuscation(req.Query)
+
+	if handled, resp, err := s.handlePendingUserConfirmationWithRequest(ctx, query, req.Session); handled {
+		return AskResponse{FinalText: resp, UpdatedSession: req.Session}, err
+	}
+
+	// 5. Perform topic routing and short-term memory thread promotion/initialization
+	topicResult := s.performTopicRoutingWithRequest(ctx, query, req.Session)
+
+	// 6. Short-circuit to configured pipeline when present
+	if len(s.pipeline) > 0 {
+		// TODO: Refactor RunPipeline to accept explicit parameters
+		// For now, fall back to context-based approach for pipeline
+		ctx = context.WithValue(ctx, "session_payload", req.Session)
+		if req.Executor != nil {
+			ctx = context.WithValue(ctx, ai.CtxKeyExecutor, req.Executor)
+		}
+		if req.ScriptRecorder != nil {
+			ctx = context.WithValue(ctx, ai.CtxKeyScriptRecorder, req.ScriptRecorder)
+		}
+
+		pipelineCfg := req.Options
+		if pipelineCfg == nil {
+			pipelineCfg = ai.NewConfigMap()
+		}
+		if topicResult.isNewTopic {
+			pipelineCfg.Set("is_new_topic", true)
+		}
+
+		finalText, err := s.RunPipeline(ctx, query, pipelineCfg)
+		return AskResponse{FinalText: finalText, UpdatedSession: req.Session}, err
+	}
+
+	// Ensure tools are registered (session specific registration)
+	s.registerTools()
+
+	// 7. Run retrieval against the domain knowledge index
+	hits, err := s.retrieveKnowledge(ctx, query)
+	if err != nil {
+		return AskResponse{}, fmt.Errorf("retrieval failed: %w", err)
+	}
+
+	// 8. Build system/context/history prompt inputs
+	prompts := s.buildPromptInputsWithRequest(ctx, query, hits, req.Session)
+
+	// 9. Resolve generator override and compute carryover strategy
+	gen := req.Generator
+	if gen == nil {
+		gen = s.generator
+	}
+
+	// Use explicit ProviderOverride if provided, otherwise extract from context for backward compatibility
+	providerOverride := req.ProviderOverride
+	if providerOverride == nil {
+		providerOverride = extractProviderOverrideFromContext(ctx)
+	}
+
+	genCfg := s.resolveGeneratorAndCarryoverWithRequest(ctx, gen, providerOverride, topicResult.assessment, prompts.historyText)
+
+	// 10. Execute the native ReAct loop with tool execution
+	engineResp, err := s.executeReasoningEngineWithRequest(ctx, query, prompts, genCfg, db, req.Executor, req.EventStreamer)
+	if err != nil {
+		// Check if error is due to context cancellation
+		if ctx.Err() != nil {
+			return AskResponse{}, fmt.Errorf("request canceled during execution: %w", ctx.Err())
+		}
+		return AskResponse{}, err
+	}
+
+	// 11. Persist response outcomes into script/session memory
+	s.updateSessionMemoryWithRequest(ctx, query, engineResp.FinalText, topicResult.assessment, engineResp, genCfg.generator, req.Session)
+
+	return AskResponse{
+		FinalText:      engineResp.FinalText,
+		UpdatedSession: req.Session,
+		CarryoverState: engineResp.CarryoverState,
+		ToolCalls:      engineResp.ToolCalls,
+		OutcomeFacts:   engineResp.OutcomeFacts,
+		OutcomeRecipes: engineResp.OutcomeRecipes,
+	}, nil
 }
 
 func (s *Service) formatContext(hits []ai.Hit[map[string]any]) string {
@@ -1327,4 +1838,229 @@ func (s *Service) formatContext(hits []ai.Hit[map[string]any]) string {
 		sb.WriteString("\n")
 	}
 	return sb.String()
+}
+
+// ----------------------------------------------------------------------------
+// MRU Infrastructure Functions (Session-Level)
+// ----------------------------------------------------------------------------
+
+// clearSessionMRUBySourceAndScope removes MRU items matching source and scope.
+func clearSessionMRUBySourceAndScope(session *RunnerSession, source string, scope string) {
+	if session == nil {
+		return
+	}
+	session.MRUMu.Lock()
+	defer session.MRUMu.Unlock()
+
+	scope = normalizeMRUScope(scope)
+	filtered := session.MRU[:0]
+	for _, item := range session.MRU {
+		if item.Source == source && normalizeMRUScope(item.Scope) == scope {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	session.MRU = filtered
+}
+
+// markSessionMRUCategory writes or updates a single MRU item in the session.
+func markSessionMRUCategory(session *RunnerSession, category string, context string, source string, scope string) {
+	if session == nil {
+		return
+	}
+	session.MRUMu.Lock()
+	defer session.MRUMu.Unlock()
+
+	ts := time.Now().UnixMilli()
+	scope = normalizeMRUScope(scope)
+
+	// Update if exists
+	for i, item := range session.MRU {
+		if item.Category == category {
+			session.MRU[i].LastAccessed = ts
+			if context != "" {
+				session.MRU[i].Context = context
+			}
+			if source != "" {
+				session.MRU[i].Source = source
+			}
+			session.MRU[i].Scope = scope
+			return
+		}
+	}
+
+	// Add new
+	session.MRU = append(session.MRU, MRUItem{
+		Category:     category,
+		LastAccessed: ts,
+		Context:      context,
+		Source:       source,
+		Scope:        scope,
+	})
+	// Sort by newest and shrink if > MaxMRUSize
+	if len(session.MRU) > MaxMRUSize {
+		sort.Slice(session.MRU, func(i, j int) bool {
+			return session.MRU[i].LastAccessed > session.MRU[j].LastAccessed
+		})
+		session.MRU = session.MRU[:MaxMRUSize]
+	}
+}
+
+// persistSessionAskOutcomeMRU writes ask outcome to session MRU (PUSH model).
+// This is the infrastructure-level MRU PUSH that benefits all provider loops.
+func persistSessionAskOutcomeMRU(ctx context.Context, session *RunnerSession, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) {
+	if session == nil {
+		return
+	}
+	clearSessionMRUBySourceAndScope(session, MRUSourceAskOutcome, MRUScopeSession)
+	for _, item := range buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts) {
+		markSessionMRUCategory(session, item.Category, item.Context, item.Source, item.Scope)
+	}
+}
+
+// Helper methods for AskWithRequest - these use explicit parameters instead of context lookups
+
+// extractProviderOverrideFromContext extracts ProviderOverride from context for backward compatibility
+func extractProviderOverrideFromContext(ctx context.Context) *ProviderDetails {
+	config := &ProviderDetails{}
+
+	if provider, ok := ctx.Value(ai.CtxKeyProvider).(string); ok && provider != "" {
+		// Split provider:model if present
+		if providerPart, modelPart, ok := strings.Cut(provider, ":"); ok {
+			config.Provider = providerPart
+			config.Model = modelPart
+		} else {
+			config.Provider = provider
+		}
+	}
+
+	if apiKey, ok := ctx.Value(ai.CtxKeyAPIKey).(string); ok && apiKey != "" {
+		config.APIKey = apiKey
+	}
+
+	if baseURL, ok := ctx.Value(ai.CtxKeyBaseURL).(string); ok && baseURL != "" {
+		config.BaseURL = baseURL
+	}
+
+	// Return nil if config is empty
+	if config.Provider == "" && config.APIKey == "" && config.BaseURL == "" {
+		return nil
+	}
+
+	return config
+}
+
+// handleSessionCommandWithRequest is the explicit-parameter version of handleSessionCommand
+func (s *Service) handleSessionCommandWithRequest(ctx context.Context, query string, db *database.Database, session *ai.SessionPayload) (string, bool, error) {
+	// Temporarily inject session into context for legacy compatibility
+	ctx = context.WithValue(ctx, "session_payload", session)
+	return s.handleSessionCommand(ctx, query, db)
+}
+
+// handlePendingUserConfirmationWithRequest is the explicit-parameter version of handlePendingUserConfirmation
+func (s *Service) handlePendingUserConfirmationWithRequest(ctx context.Context, query string, session *ai.SessionPayload) (bool, string, error) {
+	ctx = context.WithValue(ctx, "session_payload", session)
+	return s.handlePendingUserConfirmation(ctx, query)
+}
+
+// performTopicRoutingWithRequest is the explicit-parameter version of performTopicRouting
+func (s *Service) performTopicRoutingWithRequest(ctx context.Context, query string, session *ai.SessionPayload) *topicRoutingResult {
+	ctx = context.WithValue(ctx, "session_payload", session)
+	return s.performTopicRouting(ctx, query)
+}
+
+// buildPromptInputsWithRequest is the explicit-parameter version of buildPromptInputs
+func (s *Service) buildPromptInputsWithRequest(ctx context.Context, query string, hits []ai.Hit[map[string]any], session *ai.SessionPayload) *promptInputs {
+	ctx = context.WithValue(ctx, "session_payload", session)
+	return s.buildPromptInputs(ctx, query, hits)
+}
+
+// resolveGeneratorAndCarryoverWithRequest is the explicit-parameter version that accepts ProviderOverride explicitly
+func (s *Service) resolveGeneratorAndCarryoverWithRequest(ctx context.Context, gen ai.Generator, providerOverride *ProviderDetails, topicAssessment *TopicAssessment, historyText string) *generatorConfig {
+	// Apply provider override if provided
+	if providerOverride != nil && providerOverride.Provider != "" {
+		provider := providerOverride.Provider
+		if provider == "openai" {
+			provider = "chatgpt" // Normalize openai to chatgpt
+		}
+
+		// Build config map for generator initialization
+		configMap := make(map[string]any)
+		if providerOverride.APIKey != "" {
+			configMap["api_key"] = providerOverride.APIKey
+		}
+		if providerOverride.BaseURL != "" {
+			configMap["base_url"] = providerOverride.BaseURL
+		}
+		if providerOverride.Model != "" {
+			configMap["model"] = providerOverride.Model
+		}
+
+		// Create generator with config
+		if overriddenGen, err := generator.New(provider, configMap); err == nil {
+			gen = overriddenGen
+		} else {
+			log.Warn("Failed to initialize requested provider, falling back to provided generator",
+				"provider", provider, "error", err)
+		}
+	}
+
+	// Use provided generator if still nil
+	if gen == nil {
+		gen = s.generator
+	}
+
+	carryover := decideCarryover(ctx, s.session, gen, topicAssessment, historyText)
+
+	log.Info("Carryover Decision",
+		"provider", providerName(gen),
+		"mode", carryover.Mode,
+		"reason", carryover.Reason,
+		"history_suppressed", carryover.SuppressHistory,
+		"estimated_carry_tokens", carryover.EstimatedCarryTokens,
+		"estimated_history_tokens", carryover.EstimatedHistoryTokens,
+	)
+
+	return &generatorConfig{
+		generator: gen,
+		carryover: carryover,
+	}
+}
+
+// executeReasoningEngineWithRequest is the explicit-parameter version with explicit executor and streamer
+func (s *Service) executeReasoningEngineWithRequest(ctx context.Context, query string, prompts *promptInputs, genCfg *generatorConfig, db *database.Database, executor ai.ToolExecutor, eventStreamer func(string, any)) (ai.ReasoningResponse, error) {
+	engine := &NativeReActEngine{
+		EnableObfuscation: s.EnableObfuscation,
+	}
+
+	contextText := prompts.contextText
+	historyText := prompts.historyText
+
+	if strings.TrimSpace(genCfg.carryover.Summary) != "" {
+		contextText = appendCarryoverToContext(contextText, genCfg.carryover.Summary)
+	}
+	if genCfg.carryover.Mode == ai.CarryoverModeCompact && genCfg.carryover.SuppressHistory {
+		historyText = ""
+	}
+
+	req := ai.ReasoningRequest{
+		SystemPrompt:   prompts.systemPrompt,
+		ContextText:    contextText,
+		HistoryText:    historyText,
+		UserQuery:      query,
+		Executor:       &autoTxExecutor{original: executor, s: s, db: db},
+		Generator:      genCfg.generator,
+		CarryoverMode:  genCfg.carryover.Mode,
+		CarryoverState: genCfg.carryover.State,
+		Streamer:       eventStreamer,
+	}
+
+	return engine.Run(ctx, req)
+}
+
+// updateSessionMemoryWithRequest is the explicit-parameter version with explicit session
+func (s *Service) updateSessionMemoryWithRequest(ctx context.Context, query string, finalText string, topicAssessment *TopicAssessment, engineResp ai.ReasoningResponse, gen ai.Generator, session *ai.SessionPayload) {
+	// Temporarily inject session into context for legacy compatibility
+	ctx = context.WithValue(ctx, "session_payload", session)
+	s.updateSessionMemory(ctx, query, finalText, topicAssessment, engineResp, gen)
 }

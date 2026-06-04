@@ -55,7 +55,7 @@ func TestService_ExecuteScript_StringDB(t *testing.T) {
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
 	// This should NOT panic
-	resp, err := svc.Ask(ctx, "/run test_script")
+	resp, err := svc.Ask(ctx, "/run test_script", nil)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}

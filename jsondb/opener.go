@@ -20,6 +20,8 @@ type StoreAccessor interface {
 	FindInDescendingOrder(ctx context.Context, key any) (bool, error)
 	GetCurrentKey() any
 	GetCurrentValue(ctx context.Context) (any, error)
+	GetCurrentValueNoLock(ctx context.Context) (any, error)
+	RLockCurrentItem(ctx context.Context) error
 	Add(ctx context.Context, key any, value any) (bool, error)
 	Update(ctx context.Context, key any, value any) (bool, error)
 	Remove(ctx context.Context, key any) (bool, error)
@@ -91,6 +93,12 @@ func (s *primitiveStore) GetCurrentKey() any {
 func (s *primitiveStore) GetCurrentValue(ctx context.Context) (any, error) {
 	return s.btree.GetCurrentValue(ctx)
 }
+func (s *primitiveStore) GetCurrentValueNoLock(ctx context.Context) (any, error) {
+	return s.btree.GetCurrentValueNoLock(ctx)
+}
+func (s *primitiveStore) RLockCurrentItem(ctx context.Context) error {
+	return s.btree.RLockCurrentItem(ctx)
+}
 func (s *primitiveStore) Add(ctx context.Context, key any, value any) (bool, error) {
 	k, ok := key.(string)
 	if !ok {
@@ -145,6 +153,12 @@ func (s *jsonStore) GetCurrentKey() any {
 }
 func (s *jsonStore) GetCurrentValue(ctx context.Context) (any, error) {
 	return s.btree.BtreeInterface.GetCurrentValue(ctx)
+}
+func (s *jsonStore) GetCurrentValueNoLock(ctx context.Context) (any, error) {
+	return s.btree.BtreeInterface.GetCurrentValueNoLock(ctx)
+}
+func (s *jsonStore) RLockCurrentItem(ctx context.Context) error {
+	return s.btree.BtreeInterface.RLockCurrentItem(ctx)
 }
 func (s *jsonStore) Add(ctx context.Context, key any, value any) (bool, error) {
 	k, ok := key.(map[string]any)

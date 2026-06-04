@@ -316,6 +316,43 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentValue(ctx context.Context) (TV
 	return v, nil
 }
 
+// GetCurrentValueNoLock returns the current item's value without giving hint for read lock on Commit.
+func (b3 *btreeWithTransaction[TK, TV]) GetCurrentValueNoLock(ctx context.Context) (TV, error) {
+	var zero TV
+	if !b3.transaction.HasBegun() {
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return zero, fmt.Errorf("%v, rollback failed: %w", errTransHasNotBegunMsg, err)
+		}
+		return zero, errTransHasNotBegunMsg
+	}
+	v, err := b3.BtreeInterface.GetCurrentValueNoLock(ctx)
+	if err != nil {
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return v, fmt.Errorf("btree get current value nolock failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return v, fmt.Errorf("btree get current value nolock failed: %w", err)
+	}
+	return v, nil
+}
+
+// RLockCurrentItem registers the current item for read lock; requires begun transaction.
+func (b3 *btreeWithTransaction[TK, TV]) RLockCurrentItem(ctx context.Context) error {
+	if !b3.transaction.HasBegun() {
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return fmt.Errorf("%v, rollback failed: %w", errTransHasNotBegunMsg, err)
+		}
+		return errTransHasNotBegunMsg
+	}
+	err := b3.BtreeInterface.RLockCurrentItem(ctx)
+	if err != nil {
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return fmt.Errorf("btree rlock current item failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return fmt.Errorf("btree rlock current item failed: %w", err)
+	}
+	return nil
+}
+
 // GetCurrentItem returns the current item; requires begun transaction.
 func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], error) {
 	var zero Item[TK, TV]
@@ -331,6 +368,25 @@ func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItem(ctx context.Context) (Ite
 			return r, fmt.Errorf("btree get current item failed: %w, rollback failed: %v", err, rbErr)
 		}
 		return r, fmt.Errorf("btree get current item failed: %w", err)
+	}
+	return r, nil
+}
+
+// GetCurrentItemNoLock returns the current item without read lock hint; requires begun transaction.
+func (b3 *btreeWithTransaction[TK, TV]) GetCurrentItemNoLock(ctx context.Context) (Item[TK, TV], error) {
+	var zero Item[TK, TV]
+	if !b3.transaction.HasBegun() {
+		if err := b3.transaction.Rollback(ctx, nil); err != nil {
+			return zero, fmt.Errorf("%v, rollback failed: %w", errTransHasNotBegunMsg, err)
+		}
+		return zero, errTransHasNotBegunMsg
+	}
+	r, err := b3.BtreeInterface.GetCurrentItemNoLock(ctx)
+	if err != nil {
+		if rbErr := b3.transaction.Rollback(ctx, err); rbErr != nil {
+			return r, fmt.Errorf("btree get current item nolock failed: %w, rollback failed: %v", err, rbErr)
+		}
+		return r, fmt.Errorf("btree get current item nolock failed: %w", err)
 	}
 	return r, nil
 }

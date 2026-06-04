@@ -77,30 +77,3 @@ The `pom.xml` relies on the shared libraries being present in `src/main/resource
 **Command:** `cargo build --release` (in `bindings/rust/`)
 **Output:** Static binary in `bindings/rust/target/release/`
 Reliant on `build.rs` finding the static `.a` archives generated in Step 1.
-
-## Local AI Gateway Env Vars
-
-For local VS Code development, SOP can be pointed at a small local relay that presents one familiar API surface while speaking multiple provider dialects behind the curtain.
-
-Example relay configuration:
-
-```bash
-export OPENAI_API_BASE_URL=<LOCAL_RELAY_URL>
-export OPENAI_API_KEY=anything
-export OPENAI_MODEL=gpt-5.4
-
-export ANTHROPIC_API_BASE_URL=<LOCAL_RELAY_URL>
-export ANTHROPIC_API_KEY=anything
-export ANTHROPIC_MODEL=claude-code-sonnet-4.6
-
-export GEMINI_API_BASE_URL=<LOCAL_RELAY_URL>
-export GEMINI_API_KEY=anything
-export GEMINI_MODEL=gemini-3.5-flash
-```
-
-Notes:
-- Replace `<LOCAL_RELAY_URL>` with your developer-local relay endpoint.
-- Use provider-specific env vars even if all providers currently point to the same local relay.
-- Placeholder values like `anything` are only appropriate for local compatible relays, not hosted vendor APIs.
-- Direct Gemini usage without a local relay can continue using `GEMINI_API_KEY` with the normal hosted endpoint behavior.
-- Treat this as a developer-local adapter pattern, not as a statement about any particular hosted provider integration path.

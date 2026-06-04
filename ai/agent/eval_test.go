@@ -45,7 +45,7 @@ func TestOmniAIConversationalMemoryHarness(t *testing.T) {
 
 	// Step 1: Initial knowledge injection
 	query1 := "My landlord's name is Essex and they are ignoring a black mold issue in my apartment."
-	resp1, err := copilot.Ask(ctx, query1)
+	resp1, err := copilot.Ask(ctx, query1, nil)
 	if err != nil {
 		t.Fatalf("Failed to ask Step 1: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestOmniAIConversationalMemoryHarness(t *testing.T) {
 
 	// Step 2: Follow-up question relying on memory
 	query2 := "What was the name of the company I am having a dispute with?"
-	resp2, err := copilot.Ask(ctx, query2)
+	resp2, err := copilot.Ask(ctx, query2, nil)
 	if err != nil {
 		t.Fatalf("Failed to ask Step 2: %v", err)
 	}

@@ -10,6 +10,11 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
+// MaxConsecutiveRowsWithoutMatch is the safety limit for consecutive rows scanned
+// without finding a match in filter or join operations. This prevents runaway scans
+// from malformed queries while still allowing unlimited streaming of matching data.
+const MaxConsecutiveRowsWithoutMatch = 100000
+
 // ScriptCursor represents a streaming iterator for script operations.
 type ScriptCursor interface {
 	Next(ctx context.Context) (any, bool, error)
@@ -131,8 +136,16 @@ func (sc *StoreCursor) Next(ctx context.Context) (any, bool, error) {
 	}
 
 	for ok {
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return nil, false, fmt.Errorf("context cancelled during cursor iteration: %w", ctx.Err())
+		default:
+		}
+
 		k := sc.store.GetCurrentKey()
-		v, err := sc.store.GetCurrentValue(ctx)
+		// Use GetCurrentValueNoLock to avoid tracking items during scan
+		v, err := sc.store.GetCurrentValueNoLock(ctx)
 		if err != nil {
 			return nil, false, err
 		}
@@ -161,6 +174,11 @@ func (sc *StoreCursor) Next(ctx context.Context) (any, bool, error) {
 				}
 				continue
 			}
+		}
+
+		// Only register read lock for items we're actually emitting
+		if err := sc.store.RLockCurrentItem(ctx); err != nil {
+			return nil, false, fmt.Errorf("failed to lock emitted item: %w", err)
 		}
 
 		if m, ok := item.(map[string]any); ok && sc.storeName != "" {
@@ -219,6 +237,14 @@ type JoinRightCursor struct {
 	fallbackIdx  int
 	closed       bool
 	bloomFilter  *BloomFilter // Optimization: Bloom Filter for Right Store Keys
+
+	// Safety limits
+	rowsSinceLastMatch  int
+	maxRowsWithoutMatch int // Safety: max consecutive rows without match before failing
+	totalRowsScanned    int // For progress logging only
+
+	// Index Seek State - tracks mid-scan continuation
+	scanning bool // true when we're mid-scan of right store for current left row
 }
 
 func (jc *JoinRightCursor) Next(ctx context.Context) (any, bool, error) {
@@ -253,17 +279,33 @@ func (jc *JoinRightCursor) Close() error {
 
 // FilterCursor filters a stream.
 type FilterCursor struct {
-	source ScriptCursor
-	filter any
-	engine *ScriptEngine
-	closed bool
+	source              ScriptCursor
+	filter              any
+	engine              *ScriptEngine
+	closed              bool
+	rowsSinceLastMatch  int
+	maxRowsWithoutMatch int // Safety: max consecutive rows without a match before failing
+	totalRowsScanned    int // For progress logging only
 }
 
 func (fc *FilterCursor) Next(ctx context.Context) (any, bool, error) {
 	if fc.closed {
 		return nil, false, nil
 	}
+
+	// Set default max consecutive rows without match if not configured
+	if fc.maxRowsWithoutMatch == 0 {
+		fc.maxRowsWithoutMatch = MaxConsecutiveRowsWithoutMatch
+	}
+
 	for {
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return nil, false, fmt.Errorf("context cancelled during filter iteration: %w", ctx.Err())
+		default:
+		}
+
 		item, ok, err := fc.source.Next(ctx)
 		if err != nil {
 			return nil, false, err
@@ -272,12 +314,30 @@ func (fc *FilterCursor) Next(ctx context.Context) (any, bool, error) {
 			return nil, false, nil
 		}
 
+		fc.totalRowsScanned++
+		fc.rowsSinceLastMatch++
+
+		// Safety: Check if we've scanned too many consecutive rows without any matches
+		if fc.rowsSinceLastMatch > fc.maxRowsWithoutMatch {
+			return nil, false, fmt.Errorf("filter scanned %d consecutive rows with no matches (total %d rows) - possible incorrect filter or cartesian product", fc.rowsSinceLastMatch, fc.totalRowsScanned)
+		}
+
+		// Log progress every 10k consecutive non-matches to help diagnose issues
+		if fc.rowsSinceLastMatch%10000 == 0 {
+			log.Info("FilterCursor: Scanning large dataset without matches",
+				"consecutive_non_matches", fc.rowsSinceLastMatch,
+				"total_scanned", fc.totalRowsScanned,
+				"filter", fc.filter)
+		}
+
 		match, err := fc.engine.evaluateCondition(item, fc.filter)
 		if err != nil {
-			return nil, false, err
+			return nil, false, fmt.Errorf("filter evaluation error after scanning %d rows: %w", fc.totalRowsScanned, err)
 		}
 		if match {
-			log.Debug("FilterCursor match", "item", item)
+			// Reset counter on match - filter is working, allow unlimited streaming
+			fc.rowsSinceLastMatch = 0
+			log.Debug("FilterCursor match", "item", item, "total_rows_scanned", fc.totalRowsScanned)
 			return item, true, nil
 		}
 		log.Debug("FilterCursor mismatch", "filter", fc.filter, "item", item)
@@ -406,6 +466,13 @@ type MultiCursor struct {
 
 func (mc *MultiCursor) Next(ctx context.Context) (any, bool, error) {
 	for mc.current < len(mc.cursors) {
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return nil, false, fmt.Errorf("context cancelled during multi-cursor iteration: %w", ctx.Err())
+		default:
+		}
+
 		item, ok, err := mc.cursors[mc.current].Next(ctx)
 		if err != nil {
 			return nil, false, err

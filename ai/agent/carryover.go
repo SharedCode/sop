@@ -210,7 +210,69 @@ func shouldUseMemoryContinuationFallback(reason ai.CarryoverResetReason) bool {
 	}
 }
 
-func decisionWithFallback(decision carryoverDecision, state *ai.CarryoverState) carryoverDecision {
+func collectAskOutcomeMRUContext(session *RunnerSession) string {
+	if session == nil {
+		return ""
+	}
+	session.MRUMu.RLock()
+	defer session.MRUMu.RUnlock()
+
+	orderedCategories := []string{
+		askOutcomeMRUCategoryHeader,
+		askOutcomeMRUCategoryDatabase,
+		askOutcomeMRUCategoryDomain,
+		askOutcomeMRUCategoryQuery,
+		askOutcomeMRUCategoryResult,
+	}
+
+	items := make([]MRUItem, 0, len(orderedCategories)+20)
+	for _, category := range orderedCategories {
+		for _, item := range session.MRU {
+			if item.Category == category && item.Source == MRUSourceAskOutcome && normalizeMRUScope(item.Scope) == MRUScopeSession {
+				items = append(items, item)
+				break
+			}
+		}
+	}
+
+	// Collect prefixed categories
+	prefixes := []string{
+		askOutcomeMRUCategoryStoreSchema + "_",
+		askOutcomeMRUCategoryRelations + "_",
+		askOutcomeMRUCategoryJoinSelection + "_",
+		askOutcomeMRUCategoryFilterSelection + "_",
+		askOutcomeMRUCategoryConfirmed + "_",
+	}
+	for _, prefix := range prefixes {
+		for _, item := range session.MRU {
+			if strings.HasPrefix(item.Category, prefix) && item.Source == MRUSourceAskOutcome && normalizeMRUScope(item.Scope) == MRUScopeSession {
+				items = append(items, item)
+			}
+		}
+	}
+
+	// Collect tool pattern and guidance
+	for _, item := range session.MRU {
+		if (item.Category == askOutcomeMRUCategoryToolPattern || item.Category == askOutcomeMRUCategoryGuidance) &&
+			item.Source == MRUSourceAskOutcome && normalizeMRUScope(item.Scope) == MRUScopeSession {
+			items = append(items, item)
+		}
+	}
+
+	if len(items) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		if text := strings.TrimSpace(item.Context); text != "" {
+			parts = append(parts, text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func decisionWithFallback(decision carryoverDecision, state *ai.CarryoverState, session *RunnerSession) carryoverDecision {
 	if state == nil {
 		return decision
 	}
@@ -219,6 +281,10 @@ func decisionWithFallback(decision carryoverDecision, state *ai.CarryoverState) 
 	decision.State = cloned
 	if shouldUseMemoryContinuationFallback(decision.Reason) {
 		decision.Summary = memoryContinuationSummary(cloned, decision.Reason)
+		// Enrich with inter-Ask session MRU context for better continuity
+		if mruContext := collectAskOutcomeMRUContext(session); mruContext != "" {
+			decision.Summary = decision.Summary + "\n\n[Session Context]\n" + mruContext
+		}
 		decision.EstimatedCarryTokens = estimateCarryoverTokens(decision.Summary)
 	}
 	return decision
@@ -241,7 +307,7 @@ func decideCarryover(ctx context.Context, session *RunnerSession, gen ai.Generat
 	capability, ok := carryoverCapability(gen)
 	if !ok || !capability.SupportsCompact {
 		decision.Reason = ai.CarryoverResetUnsupportedProvider
-		return decisionWithFallback(decision, session.Memory.GetCarryoverState())
+		return decisionWithFallback(decision, session.Memory.GetCarryoverState(), session)
 	}
 	provider := strings.TrimSpace(capability.Provider)
 	state := session.Memory.GetCarryoverState()
@@ -251,11 +317,11 @@ func decideCarryover(ctx context.Context, session *RunnerSession, gen ai.Generat
 	}
 	if !strings.EqualFold(strings.TrimSpace(state.Provider), provider) {
 		decision.Reason = ai.CarryoverResetProviderChanged
-		return decisionWithFallback(decision, state)
+		return decisionWithFallback(decision, state, session)
 	}
 	if strings.TrimSpace(capability.Model) != "" && strings.TrimSpace(state.Model) != "" && !strings.EqualFold(strings.TrimSpace(state.Model), strings.TrimSpace(capability.Model)) {
 		decision.Reason = ai.CarryoverResetModelChanged
-		return decisionWithFallback(decision, state)
+		return decisionWithFallback(decision, state, session)
 	}
 	if topicUUID := strings.TrimSpace(topicAssessment.TopicUUID); topicUUID != "" && strings.TrimSpace(state.TopicFingerprint) != "" && strings.TrimSpace(state.TopicFingerprint) != topicUUID {
 		decision.Reason = ai.CarryoverResetTopicSwitch
@@ -269,11 +335,11 @@ func decideCarryover(ctx context.Context, session *RunnerSession, gen ai.Generat
 	policy := ai.DefaultCarryoverPolicy()
 	if state.LastUsedAtUnixMilli > 0 && time.Since(time.UnixMilli(state.LastUsedAtUnixMilli)) > policy.LiveCarryoverIdleTTL {
 		decision.Reason = ai.CarryoverResetExpired
-		return decisionWithFallback(decision, state)
+		return decisionWithFallback(decision, state, session)
 	}
 	if state.AskCount >= policy.LiveCarryoverMaxAsks || state.EstimatedCarryTokens > policy.LiveCarryoverHardTokens || state.EstimatedRawToolTokens > policy.MaxRawToolCarryTokens {
 		decision.Reason = ai.CarryoverResetBudgetExceeded
-		return decisionWithFallback(decision, state)
+		return decisionWithFallback(decision, state, session)
 	}
 	if capability.SupportsLive && strings.TrimSpace(state.ConversationHandle) != "" {
 		decision.Mode = ai.CarryoverModeLive
@@ -380,6 +446,16 @@ func persistCarryoverState(stm *ShortTermMemory, state *ai.CarryoverState) {
 		return
 	}
 	stm.SetCarryoverState(state)
+}
+
+func resetTopicSwitchProjection(ctx context.Context, session *RunnerSession) {
+	if session == nil || session.Memory == nil {
+		return
+	}
+	if payload := ai.GetSessionPayload(ctx); payload != nil && payload.Variables != nil {
+		delete(payload.Variables, "RoutingState")
+	}
+	session.Memory.ResetProjectionForTopicSwitch()
 }
 
 func appendCarryoverToContext(contextText string, summary string) string {

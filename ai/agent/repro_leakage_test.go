@@ -183,7 +183,7 @@ func TestRepro_Leakage_StateCleaning_Legacy(t *testing.T) {
 	// Cmd 1: Sort Users
 	// Expecting "all_users" (2 users)
 	t.Logf("Running Cmd 1: Show me all users")
-	res1, err := svc.Ask(runCtx, "Show me all users")
+	res1, err := svc.Ask(runCtx, "Show me all users", nil)
 	if err != nil {
 		t.Fatalf("Cmd 1 failed: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestRepro_Leakage_StateCleaning_Legacy(t *testing.T) {
 	// Cmd 2: Find Orders
 	// Expecting "big_orders" (1 order > 500)
 	t.Logf("Running Cmd 2: Find orders for user")
-	res2, err := svc.Ask(runCtx, "Find orders for user")
+	res2, err := svc.Ask(runCtx, "Find orders for user", nil)
 	if err != nil {
 		t.Fatalf("Cmd 2 failed: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestRepro_Leakage_StateCleaning_Legacy(t *testing.T) {
 
 	// Cmd 3: List Products
 	t.Logf("Running Cmd 3: List products")
-	res3, err := svc.Ask(runCtx, "List products")
+	res3, err := svc.Ask(runCtx, "List products", nil)
 	t.Logf("Result 3: %s", res3)
 	if strings.Contains(res3, "Alice") {
 		t.Errorf("LEAKAGE DETECTED: Cmd 3 returned users!")
@@ -296,7 +296,7 @@ func TestRepro_Leakage_StateCleaning_Native(t *testing.T) {
 	// Cmd 1: Sort Users
 	// Expecting "all_users" (2 users)
 	t.Logf("Running Cmd 1: Show me all users")
-	res1, err := svc.Ask(runCtx, "Show me all users")
+	res1, err := svc.Ask(runCtx, "Show me all users", nil)
 	if err != nil {
 		t.Fatalf("Cmd 1 failed: %v", err)
 	}
@@ -308,7 +308,7 @@ func TestRepro_Leakage_StateCleaning_Native(t *testing.T) {
 	// Cmd 2: Find Orders
 	// Expecting "big_orders" (1 order > 500)
 	t.Logf("Running Cmd 2: Find orders for user")
-	res2, err := svc.Ask(runCtx, "Find orders for user")
+	res2, err := svc.Ask(runCtx, "Find orders for user", nil)
 	if err != nil {
 		t.Fatalf("Cmd 2 failed: %v", err)
 	}
@@ -326,7 +326,7 @@ func TestRepro_Leakage_StateCleaning_Native(t *testing.T) {
 
 	// Cmd 3: List Products
 	t.Logf("Running Cmd 3: List products")
-	res3, err := svc.Ask(runCtx, "List products")
+	res3, err := svc.Ask(runCtx, "List products", nil)
 	t.Logf("Result 3: %s", res3)
 	if strings.Contains(res3, "Alice") {
 		t.Errorf("LEAKAGE DETECTED: Cmd 3 returned users!")
@@ -387,7 +387,7 @@ func TestAliasProjection_JoinRight_Legacy(t *testing.T) {
 	payload := &ai.SessionPayload{CurrentDB: "dev_db"}
 	runCtx := context.WithValue(ctx, "session_payload", payload)
 
-	res, err := svc.Ask(runCtx, "Run alias test")
+	res, err := svc.Ask(runCtx, "Run alias test", nil)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
@@ -455,7 +455,7 @@ func TestAliasProjection_JoinRight_Native(t *testing.T) {
 	payload := &ai.SessionPayload{CurrentDB: "dev_db"}
 	runCtx := context.WithValue(ctx, "session_payload", payload)
 
-	res, err := svc.Ask(runCtx, "Run alias test")
+	res, err := svc.Ask(runCtx, "Run alias test", nil)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}

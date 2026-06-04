@@ -27,7 +27,7 @@ func (m *mockAgent) Close(ctx context.Context) error {
 func (m *mockAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
 	return nil, nil
 }
-func (m *mockAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+func (m *mockAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
 	return "Mock Response from " + m.id, nil
 }
 
@@ -154,8 +154,8 @@ func TestSessionIDConcurrency(t *testing.T) {
 
 // payloadMockAgent for testing SessionPayload extraction
 type payloadMockAgent struct {
-	id           string
-	capturedOpts []ai.Option
+	id          string
+	capturedCfg *ai.ConfigMap
 }
 
 func (m *payloadMockAgent) Open(ctx context.Context) error  { return nil }
@@ -163,8 +163,8 @@ func (m *payloadMockAgent) Close(ctx context.Context) error { return nil }
 func (m *payloadMockAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
 	return nil, nil
 }
-func (m *payloadMockAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
-	m.capturedOpts = opts
+func (m *payloadMockAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
+	m.capturedCfg = cfg
 	return "Payload Mock Response", nil
 }
 func (m *payloadMockAgent) Clone() ai.Agent[map[string]any] {
@@ -255,7 +255,7 @@ func (m *eventStreamingMockAgent) Close(ctx context.Context) error { return nil 
 func (m *eventStreamingMockAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
 	return nil, nil
 }
-func (m *eventStreamingMockAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+func (m *eventStreamingMockAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
 	if streamer, ok := ctx.Value(ai.CtxKeyEventStreamer).(func(string, any)); ok && streamer != nil {
 		streamer("tool_call", map[string]any{
 			"tool": "mint_to_space",

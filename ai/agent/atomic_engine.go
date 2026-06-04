@@ -191,6 +191,12 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 	}
 
 	script = sanitizeScript(script)
+
+	// Grammar validation: Check structural and logical issues AFTER sanitization
+	// This runs on the canonical form with all defaults filled in, reducing false positives
+	if err := validateScriptGrammar(script); err != nil {
+		return "", fmt.Errorf("script grammar validation failed: %w", err)
+	}
 	writeNormalizedScriptArgs(args, script)
 	if scriptJSON, err := json.MarshalIndent(script, "", "  "); err == nil {
 		log.Info("toolExecuteScript: Running sanitized script",
@@ -1567,6 +1573,13 @@ func (e *ScriptEngine) Dispatch(ctx context.Context, instr ScriptInstruction) er
 		}
 		if tx, ok := result.(sop.Transaction); ok {
 			e.Context.Transactions[instr.ResultVar] = tx
+			// DEBUG: Transaction now stored in TWO places (Variables + Transactions)
+			log.Info("ExecuteStep: Stored transaction in multiple bags",
+				"var_name", instr.ResultVar,
+				"tx_id", tx.GetID(),
+				"also_in_variables", true,
+				"also_in_transactions", true,
+				"also_in_txtodb", e.Context.TxToDB[tx] != nil)
 		}
 		if store, ok := result.(jsondb.StoreAccessor); ok {
 			e.Context.Stores[instr.ResultVar] = store
@@ -2467,6 +2480,24 @@ func (e *ScriptEngine) resolveVarName(name string) string {
 	return strings.TrimPrefix(name, "$")
 }
 
+// mapKeys returns the keys of a map[string]any for debugging
+func (e *ScriptEngine) mapKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// txMapKeys returns the keys of a map[string]sop.Transaction for debugging
+func (e *ScriptEngine) txMapKeys(m map[string]sop.Transaction) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 func normalizeOpenDBName(args map[string]any) string {
 	for _, key := range []string{"name", "database", "db", "db_name", "database_name", "current_db", "currentDatabase"} {
 		if value, ok := args[key].(string); ok && strings.TrimSpace(value) != "" {
@@ -2511,10 +2542,13 @@ func (e *ScriptEngine) BeginTx(ctx context.Context, args map[string]any) (sop.Tr
 
 	tx, err := db.BeginTransaction(ctx, mode)
 	if err == nil {
+		log.Info("BeginTx: Transaction started", "database", dbName, "mode", modeStr, "tx_id", tx.GetID())
 		if e.Context.TxToDB == nil {
 			e.Context.TxToDB = make(map[sop.Transaction]Database)
 		}
 		e.Context.TxToDB[tx] = db
+	} else {
+		log.Error("BeginTx: Failed to start transaction", "database", dbName, "mode", modeStr, "error", err)
 	}
 	return tx, err
 }
@@ -2522,6 +2556,20 @@ func (e *ScriptEngine) BeginTx(ctx context.Context, args map[string]any) (sop.Tr
 func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) (err error) {
 	txName, _ := args["transaction"].(string)
 	txName = e.resolveVarName(txName)
+
+	// DEBUG: Log all transaction "bags" to diagnose storage confusion
+	log.Info("CommitTx: Looking for transaction", "txName", txName)
+	log.Info("CommitTx: Context.Transactions keys", "keys", e.txMapKeys(e.Context.Transactions))
+	log.Info("CommitTx: Context.Variables keys", "keys", e.mapKeys(e.Context.Variables))
+	log.Info("CommitTx: Context.TxToDB count", "count", len(e.Context.TxToDB))
+
+	// Check if transaction is in Variables but not in Transactions
+	if varTx, inVars := e.Context.Variables[txName]; inVars {
+		if _, isTx := varTx.(sop.Transaction); isTx {
+			log.Info("CommitTx: Found transaction in Variables but checking Transactions", "in_transactions", e.Context.Transactions[txName] != nil)
+		}
+	}
+
 	tx, ok := e.Context.Transactions[txName]
 	if !ok {
 		return fmt.Errorf("transaction '%s' not found", txName)
@@ -2534,10 +2582,14 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) (err e
 		defer cancel()
 	}
 
-	if err = e.materializeCommitOutput(commitCtx); err != nil {
+	// Stream and drain all cursors BEFORE committing the transaction.
+	// This ensures cursors are fully read while transaction is still open,
+	// and data is streamed to client without loading everything into memory.
+	if err = e.streamAndDrainCursorsBeforeCommit(commitCtx); err != nil {
 		return err
 	}
 
+	// Set output variable if not already set
 	if _, ok := e.Context.Variables["output"]; !ok {
 		if e.Context.LastUpdatedVar != "" {
 			if materialized, ok := e.Context.Variables[e.Context.LastUpdatedVar]; ok && !isInternalScriptHandle(materialized) {
@@ -2549,55 +2601,129 @@ func (e *ScriptEngine) CommitTx(ctx context.Context, args map[string]any) (err e
 		}
 	}
 
-	return tx.Commit(commitCtx)
+	// Now commit the transaction (all cursors are already drained)
+	log.Info("CommitTx: Committing transaction", "transaction", txName, "tx_id", tx.GetID())
+	err = tx.Commit(commitCtx)
+	if err == nil {
+		log.Info("CommitTx: Transaction committed successfully", "transaction", txName, "tx_id", tx.GetID())
+	} else {
+		log.Error("CommitTx: Failed to commit transaction", "transaction", txName, "tx_id", tx.GetID(), "error", err)
+	}
+	return err
 }
 
-func (e *ScriptEngine) materializeCommitOutput(ctx context.Context) error {
+// streamAndDrainCursorsBeforeCommit finds all cursors in the context and streams them
+// to the client in a memory-efficient way before the transaction is committed.
+// This prevents cursors from becoming invalid after commit while avoiding loading
+// large result sets into memory.
+func (e *ScriptEngine) streamAndDrainCursorsBeforeCommit(ctx context.Context) error {
+	log.Info("streamAndDrainCursorsBeforeCommit: Starting", "last_updated_var", e.Context.LastUpdatedVar)
 
-	drain := func(name string, cursor ScriptCursor) error {
-		results := make([]any, 0)
+	// Get the JSON streamer if available
+	var streamer *JSONStreamer
+	if s, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+		streamer = s
+		// Disable per-item flushing during bulk streaming for performance.
+		// The streamer will flush at the end when Close() is called.
+		streamer.SetFlush(false)
+		log.Info("streamAndDrainCursorsBeforeCommit: Streamer available, flush disabled for bulk ops")
+	} else {
+		log.Info("streamAndDrainCursorsBeforeCommit: No streamer in context, will materialize to arrays")
+	}
 
-		// Helper to wrap fields if spec available
-		var specs map[string]*jsondb.IndexSpecification
-		if provider, ok := cursor.(SpecProvider); ok {
-			specs = provider.GetIndexSpecs()
+	// streamAndDrain streams a cursor's data to the client (if streamer present)
+	// or materializes to array (if no streamer), then drains it completely.
+	// Returns the materialized array (or nil if streamed) and row count.
+	streamAndDrain := func(name string, cursor ScriptCursor) ([]any, int, error) {
+		log.Info("streamAndDrainCursorsBeforeCommit: Starting cursor drain", "var_name", name, "has_streamer", streamer != nil)
+
+		// Set up streaming if streamer is available
+		var resultStreamer interface {
+			WriteItem(any)
+			Close()
+			SetMetadata(map[string]any)
 		}
 
+		log.Info("streamAndDrain: About to check streamer", "var_name", name, "streamer_nil", streamer == nil)
+
+		if streamer != nil {
+			streamer.SetSuppressStepStart(true)
+			resultStreamer = streamer.StartStreamingStep("commit_drain", name, "", 0)
+			log.Info("streamAndDrain: Created result streamer", "var_name", name)
+
+			// Get ordered fields for metadata if available
+			if provider, ok := cursor.(OrderedFieldsProvider); ok {
+				if orderedFields := provider.GetOrderedFields(); len(orderedFields) > 0 {
+					resultStreamer.SetMetadata(map[string]any{"columns": orderedFields})
+					log.Info("streamAndDrain: Set metadata columns", "var_name", name, "column_count", len(orderedFields))
+				}
+			}
+		} else {
+			log.Info("streamAndDrain: No streamer, will accumulate to array", "var_name", name)
+		}
+
+		// If no streamer, accumulate results for backward compatibility
+		var results []any
+		if streamer == nil {
+			results = make([]any, 0)
+			log.Info("streamAndDrain: Initialized results array", "var_name", name)
+		}
+
+		log.Info("streamAndDrain: Starting iteration loop", "var_name", name)
+
+		// Process each item: stream or accumulate
+		count := 0
 		for {
+			// Check context cancellation before each iteration
+			select {
+			case <-ctx.Done():
+				return results, count, fmt.Errorf("context cancelled while draining cursor '%s': %w", name, ctx.Err())
+			default:
+			}
+
+			log.Info("streamAndDrain: Calling cursor.Next", "var_name", name, "iteration", count)
 			itemObj, ok, err := cursor.Next(ctx)
+			log.Info("streamAndDrain: cursor.Next returned", "var_name", name, "iteration", count, "ok", ok, "err", err)
 			if err != nil {
-				return fmt.Errorf("failed to materialize cursor '%s' before commit: %v", name, err)
+				return results, count, fmt.Errorf("failed to drain cursor '%s' before commit: %v", name, err)
 			}
 			if !ok {
 				break
 			}
 
-			var itemMap map[string]any
-			if m, ok := itemObj.(map[string]any); ok {
-				itemMap = m
-			} else if om, ok := itemObj.(*OrderedMap); ok && om != nil {
-				itemMap = om.m
-			} else if om, ok := itemObj.(OrderedMap); ok {
-				itemMap = om.m
+			// Stream to client if streamer is available
+			if resultStreamer != nil {
+				resultStreamer.WriteItem(itemObj)
+			} else {
+				// Accumulate in array if no streamer
+				results = append(results, itemObj)
 			}
 
-			if itemMap != nil && len(specs) > 0 {
-				for fieldName, spec := range specs {
-					if val, ok := itemMap[fieldName]; ok {
-						if m, ok := val.(map[string]any); ok {
-							itemMap[fieldName] = OrderedKey{m: m, spec: spec}
-						}
-					}
-				}
+			count++
+
+			// Log progress every 10,000 rows to detect potential infinite loops
+			if count%10000 == 0 {
+				log.Info("streamAndDrainCursorsBeforeCommit: Progress update", "var_name", name, "rows_processed", count)
 			}
-			results = append(results, itemObj)
 		}
+
+		log.Info("streamAndDrainCursorsBeforeCommit: Cursor drained", "var_name", name, "row_count", count, "streamed", streamer != nil)
+
+		// Close the streamer
+		if resultStreamer != nil {
+			log.Info("streamAndDrain: Closing result streamer", "var_name", name, "row_count", count)
+			resultStreamer.Close()
+			log.Info("streamAndDrain: Result streamer closed", "var_name", name)
+		}
+
+		// Close the cursor
 		cursor.Close()
-		e.Context.Variables[name] = results
-		return nil
+
+		return results, count, nil
 	}
 
-	materializeVar := func(name string) (bool, error) {
+	// drainVariable checks if a variable is a cursor and drains it
+	drainVariable := func(name string) (bool, error) {
 		if name == "" {
 			return false, nil
 		}
@@ -2609,59 +2735,104 @@ func (e *ScriptEngine) materializeCommitOutput(ctx context.Context) error {
 		if !ok {
 			return false, nil
 		}
-		if err := drain(name, cursor); err != nil {
+
+		log.Info("streamAndDrainCursorsBeforeCommit: Found cursor in variable", "var_name", name)
+		results, count, err := streamAndDrain(name, cursor)
+		if err != nil {
 			return true, err
 		}
+
+		// If streamed (results is nil), replace with summary
+		// If not streamed (results is array), replace with array
+		if results == nil {
+			e.Context.Variables[name] = map[string]any{
+				"streamed": true,
+				"rows":     count,
+			}
+			log.Info("streamAndDrainCursorsBeforeCommit: Variable cursor streamed", "var_name", name, "rows", count)
+		} else {
+			e.Context.Variables[name] = results
+			log.Info("streamAndDrainCursorsBeforeCommit: Variable cursor materialized to array", "var_name", name, "rows", count)
+		}
+
 		return true, nil
 	}
 
-	materializeDirect := func(current any, set func(any)) (bool, error) {
+	// drainDirect checks if a direct value is a cursor and drains it
+	drainDirect := func(current any, set func(any), label string) (bool, error) {
 		cursor, ok := current.(ScriptCursor)
 		if !ok {
 			return false, nil
 		}
 
-		results := make([]any, 0)
-		for {
-			itemObj, ok, err := cursor.Next(ctx)
-			if err != nil {
-				return true, fmt.Errorf("failed to materialize return cursor before commit: %v", err)
-			}
-			if !ok {
-				break
-			}
-			results = append(results, itemObj)
+		log.Info("streamAndDrainCursorsBeforeCommit: Found cursor in direct value", "label", label)
+		results, count, err := streamAndDrain(label, cursor)
+		if err != nil {
+			return true, err
 		}
-		cursor.Close()
-		set(results)
+
+		// If streamed (results is nil), replace with summary
+		// If not streamed (results is array), replace with array
+		if results == nil {
+			set(map[string]any{
+				"streamed": true,
+				"rows":     count,
+			})
+			log.Info("streamAndDrainCursorsBeforeCommit: Direct cursor streamed", "label", label, "rows", count)
+		} else {
+			set(results)
+			log.Info("streamAndDrainCursorsBeforeCommit: Direct cursor materialized to array", "label", label, "rows", count)
+		}
+
 		return true, nil
 	}
 
+	// Try to drain cursors in priority order
 	for _, name := range []string{"output", "final_result", "result", e.Context.LastUpdatedVar} {
-		if handled, err := materializeVar(name); handled || err != nil {
+		log.Info("streamAndDrainCursorsBeforeCommit: Checking variable", "var_name", name)
+		if handled, err := drainVariable(name); handled || err != nil {
 			return err
 		}
 	}
 
-	if handled, err := materializeDirect(e.ReturnValue, func(v any) { e.ReturnValue = v }); handled || err != nil {
-		return err
-	}
-	if handled, err := materializeDirect(e.LastResult, func(v any) { e.LastResult = v }); handled || err != nil {
+	// Check ReturnValue
+	log.Info("streamAndDrainCursorsBeforeCommit: Checking ReturnValue")
+	if handled, err := drainDirect(e.ReturnValue, func(v any) { e.ReturnValue = v }, "return_value"); handled || err != nil {
 		return err
 	}
 
+	// Check LastResult
+	log.Info("streamAndDrainCursorsBeforeCommit: Checking LastResult")
+	if handled, err := drainDirect(e.LastResult, func(v any) { e.LastResult = v }, "last_result"); handled || err != nil {
+		return err
+	}
+
+	log.Info("streamAndDrainCursorsBeforeCommit: Completed successfully")
 	return nil
 }
 
 func (e *ScriptEngine) RollbackTx(ctx context.Context, args map[string]any) error {
 	txName, _ := args["transaction"].(string)
 	txName = e.resolveVarName(txName)
+
+	// DEBUG: Log all transaction "bags" to diagnose storage confusion
+	log.Info("RollbackTx: Looking for transaction", "txName", txName)
+	log.Info("RollbackTx: Context.Transactions keys", "keys", e.txMapKeys(e.Context.Transactions))
+	log.Info("RollbackTx: Context.Variables keys", "keys", e.mapKeys(e.Context.Variables))
+
 	tx, ok := e.Context.Transactions[txName]
 	if !ok {
 		return fmt.Errorf("transaction '%s' not found", txName)
 	}
 
-	return tx.Rollback(ctx)
+	log.Info("RollbackTx: Rolling back transaction", "transaction", txName, "tx_id", tx.GetID())
+	err := tx.Rollback(ctx)
+	if err == nil {
+		log.Info("RollbackTx: Transaction rolled back successfully", "transaction", txName, "tx_id", tx.GetID())
+	} else {
+		log.Error("RollbackTx: Failed to rollback transaction", "transaction", txName, "tx_id", tx.GetID(), "error", err)
+	}
+	return err
 }
 
 func (e *ScriptEngine) OpenStore(ctx context.Context, args map[string]any) (jsondb.StoreAccessor, error) {
@@ -2787,7 +2958,22 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any, input any)
 	isDesc := dirLower == "desc" || dirLower == "descending"
 	startKey := args["start_key"]
 	prefix := args["prefix"]
+
+	// Accept both "condition" (used by LLM) and "filter" (legacy parameter name)
 	filter := args["filter"]
+	if condition := args["condition"]; condition != nil {
+		filter = condition
+	}
+
+	// Validate filter condition before execution
+	if filter != nil {
+		log.Info("Scan: Validating filter condition", "condition", filter)
+		if err := e.validateScanFilterCondition(filter); err != nil {
+			log.Error("Scan: Validation failed", "error", err, "condition", filter)
+			return nil, fmt.Errorf("scan filter validation failed: %w", err)
+		}
+		log.Info("Scan: Validation passed", "condition", filter)
+	}
 
 	stream, _ := args["stream"].(bool)
 
@@ -2867,7 +3053,8 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any, input any)
 	count := 0
 	for okIter && count < int(limit) {
 		k := store.GetCurrentKey()
-		v, _ := store.GetCurrentValue(ctx)
+		// Use GetCurrentValueNoLock to avoid tracking items during scan
+		v, _ := store.GetCurrentValueNoLock(ctx)
 
 		if prefix != nil {
 			if kStr, isStr := k.(string); isStr {
@@ -2898,6 +3085,11 @@ func (e *ScriptEngine) Scan(ctx context.Context, args map[string]any, input any)
 				}
 				continue
 			}
+		}
+
+		// Only register read lock for items we're actually emitting
+		if err := store.RLockCurrentItem(ctx); err != nil {
+			return nil, fmt.Errorf("failed to lock emitted item: %w", err)
 		}
 
 		if storeName != "" {
@@ -3091,6 +3283,14 @@ func (e *ScriptEngine) Filter(ctx context.Context, input any, args map[string]an
 	}
 
 	if cursor, ok := input.(ScriptCursor); ok {
+		// Early validation: Check if filter condition references valid fields
+		log.Info("Filter: Validating filter condition", "condition", conditionRaw)
+		if err := e.validateFilterCondition(ctx, cursor, conditionRaw); err != nil {
+			log.Error("Filter: Validation failed", "error", err, "condition", conditionRaw)
+			return nil, fmt.Errorf("filter validation failed: %w", err)
+		}
+		log.Info("Filter: Validation passed", "condition", conditionRaw)
+
 		return &FilterCursor{
 			source: cursor,
 			filter: conditionRaw,
@@ -3110,6 +3310,227 @@ func (e *ScriptEngine) Filter(ctx context.Context, input any, args map[string]an
 		return nil, fmt.Errorf("input must be a list of items or a cursor")
 	}
 	return e.stageFilter(list, args)
+}
+
+// validateFilterCondition checks if filter condition is valid before execution
+func (e *ScriptEngine) validateFilterCondition(ctx context.Context, cursor ScriptCursor, condition any) error {
+	// Check for empty string condition
+	if strCond, ok := condition.(string); ok {
+		if strings.TrimSpace(strCond) == "" {
+			return fmt.Errorf("filter condition cannot be empty string")
+		}
+		// Valid CEL string expression
+		return nil
+	}
+
+	// Check for map-based conditions
+	condMap, ok := condition.(map[string]any)
+	if !ok {
+		return fmt.Errorf("filter condition must be a map or CEL string, got %T", condition)
+	}
+
+	// Check for empty map condition
+	if len(condMap) == 0 {
+		return fmt.Errorf("filter condition cannot be empty map")
+	}
+
+	// Check each filter field for common mistakes
+	for field, value := range condMap {
+		if strings.TrimSpace(field) == "" {
+			return fmt.Errorf("filter field name cannot be empty")
+		}
+
+		// Check if value is a scalar (string, number, bool) instead of operator map
+		// This catches mistakes like {"total_amount": "500"} instead of {"total_amount": {"$gt": 500}}
+		switch v := value.(type) {
+		case string:
+			// Check if it's an operator that was accidentally used as a scalar
+			if strings.HasPrefix(v, "$") {
+				return fmt.Errorf("filter field '%s' has operator '%s' as scalar value. Use {\"field\": {\"%s\": value}} format", field, v, v)
+			}
+			// Check if value looks like a field name (likely a mistake)
+			if isLikelyFieldName(v) {
+				return fmt.Errorf("filter condition suspicious: '%s' = '%s'. Did you mean to use an operator like {\"$gt\": ...} or {\"$eq\": ...}?", field, v)
+			}
+			// Scalar string values are treated as equality checks, but warn if suspicious
+
+		case float64, int, int64, bool:
+			// Scalar values without operators - could be equality check or mistake
+			if boolVal, isBool := value.(bool); isBool {
+				// Boolean true/false as filter value is almost always a mistake
+				// The LLM probably meant to check if field exists or has a specific value
+				return fmt.Errorf("filter field '%s' has boolean value %t. Did you mean to use an operator like {'$gt': value}, {'$eq': value}, or {'$exists': true}?", field, boolVal)
+			}
+			// Numeric scalar values could be intentional equality checks, allow them
+
+		case map[string]any:
+			// Good: operator map like {"$gt": 500}
+			// Validate it has at least one operator
+			hasOperator := false
+			validOperators := map[string]bool{
+				"$eq": true, "$ne": true, "$gt": true, "$gte": true,
+				"$lt": true, "$lte": true, "$in": true, "$nin": true,
+				"$exists": true, "$regex": true, "$contains": true,
+			}
+			for k := range v {
+				if validOperators[k] || strings.HasPrefix(k, "$") {
+					hasOperator = true
+					break
+				}
+			}
+			if !hasOperator {
+				mapKeys := make([]string, 0, len(v))
+				for k := range v {
+					mapKeys = append(mapKeys, k)
+				}
+				// Special case: detect nested field references like {"orders": {"total_amount": true}}
+				// This is a common LLM mistake - trying to reference nested fields
+				if len(v) == 1 {
+					for k, nestedVal := range v {
+						if _, isBool := nestedVal.(bool); isBool {
+							return fmt.Errorf("filter field '%s' has nested structure {'%s': %v} which looks like incorrect syntax. Use dot notation: '%s.%s' or use proper operator: {'%s': {'$gt': value}}", field, k, nestedVal, field, k, k)
+						}
+					}
+				}
+				return fmt.Errorf("filter field '%s' has map value but no operators. Got keys: %v. Expected operators like $gt, $lt, $eq, etc.", field, mapKeys)
+			}
+
+			// Validate operator values - boolean true/false as comparison values are almost always mistakes
+			for opKey, opValue := range v {
+				if boolVal, isBool := opValue.(bool); isBool {
+					// Special exception: $exists operator can legitimately use boolean
+					if opKey == "$exists" {
+						continue
+					}
+					return fmt.Errorf("filter field '%s' has operator '%s' with boolean value %t. Boolean values in comparisons are usually mistakes. Did you mean to check a numeric/string field or use {'$exists': true/false}?", field, opKey, boolVal)
+				}
+			}
+
+		case nil:
+			return fmt.Errorf("filter field '%s' has nil value. Use {\"$eq\": null} or {\"$exists\": false} for null checks", field)
+
+		default:
+			// Arrays or other types might be valid for $in operations
+			// Allow them through
+		}
+	}
+
+	return nil
+}
+
+// validateScanFilterCondition validates filter conditions for scan/select operations
+func (e *ScriptEngine) validateScanFilterCondition(condition any) error {
+	// Check for empty string condition
+	if strCond, ok := condition.(string); ok {
+		if strings.TrimSpace(strCond) == "" {
+			return fmt.Errorf("filter condition cannot be empty string")
+		}
+		// Valid CEL string expression
+		return nil
+	}
+
+	// Check for map-based conditions
+	condMap, ok := condition.(map[string]any)
+	if !ok {
+		return fmt.Errorf("filter condition must be a map or CEL string, got %T", condition)
+	}
+
+	// Check for empty map condition
+	if len(condMap) == 0 {
+		return fmt.Errorf("filter condition cannot be empty map")
+	}
+
+	// Check each filter field for common mistakes
+	for field, value := range condMap {
+		if strings.TrimSpace(field) == "" {
+			return fmt.Errorf("filter field name cannot be empty")
+		}
+
+		// Check if value is a scalar (string, number, bool) instead of operator map
+		switch v := value.(type) {
+		case string:
+			// Check if it's an operator that was accidentally used as a scalar
+			if strings.HasPrefix(v, "$") {
+				return fmt.Errorf("filter field '%s' has operator '%s' as scalar value. Use {\"field\": {\"%s\": value}} format", field, v, v)
+			}
+			// Check if value looks like a field name (likely a mistake)
+			if isLikelyFieldName(v) {
+				return fmt.Errorf("filter condition suspicious: '%s' = '%s'. Did you mean to use an operator like {\"$gt\": ...} or {\"$eq\": ...}?", field, v)
+			}
+
+		case float64, int, int64, bool:
+			// Scalar values without operators - could be equality check or mistake
+			if boolVal, isBool := value.(bool); isBool {
+				// Boolean true/false as filter value is almost always a mistake
+				return fmt.Errorf("filter field '%s' has boolean value %t. Did you mean to use an operator like {'$gt': value}, {'$eq': value}, or {'$exists': true}?", field, boolVal)
+			}
+
+		case map[string]any:
+			// Operator map like {"$gt": 500}
+			// Validate it has at least one operator
+			hasOperator := false
+			validOperators := map[string]bool{
+				"$eq": true, "$ne": true, "$gt": true, "$gte": true,
+				"$lt": true, "$lte": true, "$in": true, "$nin": true,
+				"$exists": true, "$regex": true, "$contains": true,
+			}
+			for k := range v {
+				if validOperators[k] || strings.HasPrefix(k, "$") {
+					hasOperator = true
+					break
+				}
+			}
+			if !hasOperator {
+				mapKeys := make([]string, 0, len(v))
+				for k := range v {
+					mapKeys = append(mapKeys, k)
+				}
+				// Special case: detect nested field references like {"orders": {"total_amount": true}}
+				if len(v) == 1 {
+					for k, nestedVal := range v {
+						if _, isBool := nestedVal.(bool); isBool {
+							return fmt.Errorf("filter field '%s' has nested structure {'%s': %v} which looks like incorrect syntax. Use dot notation: '%s.%s' or use proper operator: {'%s': {'$gt': value}}", field, k, nestedVal, field, k, k)
+						}
+					}
+				}
+				return fmt.Errorf("filter field '%s' has map value but no operators. Got keys: %v. Expected operators like $gt, $lt, $eq, etc.", field, mapKeys)
+			}
+
+			// Validate operator values - boolean true/false as comparison values are almost always mistakes
+			for opKey, opValue := range v {
+				if boolVal, isBool := opValue.(bool); isBool {
+					// Special exception: $exists operator can legitimately use boolean
+					if opKey == "$exists" {
+						continue
+					}
+					return fmt.Errorf("filter field '%s' has operator '%s' with boolean value %t. Boolean values in comparisons are usually mistakes. Did you mean to check a numeric/string field or use {'$exists': true/false}?", field, opKey, boolVal)
+				}
+			}
+
+		case nil:
+			return fmt.Errorf("filter field '%s' has nil value. Use {\"$eq\": null} or {\"$exists\": false} for null checks", field)
+		}
+	}
+
+	return nil
+}
+
+// isLikelyFieldName checks if a string looks like a field name rather than a value
+func isLikelyFieldName(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	// Field names typically: lowercase, underscores, no spaces, alphanumeric
+	hasUnderscore := false
+	for _, r := range s {
+		if r == '_' {
+			hasUnderscore = true
+		} else if r == ' ' || r == '.' || r == ',' {
+			return false // Spaces/punctuation suggest it's a value, not a field
+		}
+	}
+	// If it has underscores and no spaces, likely a field name
+	return hasUnderscore || (len(s) > 2 && s == strings.ToLower(s))
 }
 
 func (e *ScriptEngine) Sort(ctx context.Context, input any, args map[string]any) (any, error) {

@@ -90,6 +90,7 @@ func newConfiguredLLM(settings llmSettings) (ai.Generator, error) {
 }
 
 // GetConfiguredLLM returns an AI Generator based on the server configuration.
+// It checks the HTTP request headers first, then falls back to server config defaults.
 func GetConfiguredLLM(r *http.Request) ai.Generator {
 	if !config.ProductionMode {
 		mockGen, _ := generator.New("perceptron", nil)

@@ -24,7 +24,7 @@ func TestCopilotAgent_Ask_SlashCommand(t *testing.T) {
 
 	// Case 1: Slash Command with simple args
 	// /list_databases
-	resp, err := agent.Ask(ctx, "/list_databases")
+	resp, err := agent.Ask(ctx, "/list_databases", nil)
 	if err != nil {
 		t.Fatalf("Ask with /list_databases failed: %v", err)
 	}

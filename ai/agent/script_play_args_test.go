@@ -77,7 +77,7 @@ func TestScript_Play_ArgumentParsing_Correct(t *testing.T) {
 			// We expect Ask to fail eventually because we didn't set up a Generator or Domain,
 			// but we want to check if it fails at the ARGUMENT PARSING stage.
 
-			out, err := svc.Ask(ctx, tt.cmd)
+			out, err := svc.Ask(ctx, tt.cmd, nil)
 
 			// If we expect an arg parsing error, it usually comes as a successful "response" string starting with "Error:"
 			// or sometimes as an error. The current implementation returns "Error: ..." as the string response for validation failures.

@@ -39,7 +39,7 @@ func (m *MemoryManager[T]) GenerateCategory(ctx context.Context, text string, pe
 	} else {
 		prompt = fmt.Sprintf("Categorize the following thought into exactly a 2-4 word concept:\n\n%s", text)
 	}
-	opts := ai.GenOptions{MaxTokens: 10, Temperature: 0.1}
+	opts := ai.GenOptions{MaxTokens: 10, Temperature: 0.1, ThinkingLevel: "low"}
 	out, err := m.llm.Generate(ctx, prompt, opts)
 	if err != nil {
 		return "", fmt.Errorf("llm classification failed: %w", err)
@@ -62,7 +62,7 @@ func (m *MemoryManager[T]) GenerateCategories(ctx context.Context, texts []strin
 		promptBuilder.WriteString(fmt.Sprintf("[%d] %s\n", i+1, t))
 	}
 
-	opts := ai.GenOptions{MaxTokens: 10 * len(texts), Temperature: 0.1}
+	opts := ai.GenOptions{MaxTokens: 10 * len(texts), Temperature: 0.1, ThinkingLevel: "low"}
 	out, err := m.llm.Generate(ctx, promptBuilder.String(), opts)
 	if err != nil {
 		return nil, fmt.Errorf("llm batch classification failed: %w", err)
@@ -169,7 +169,7 @@ func (m *MemoryManager[T]) GenerateSummariesBatch(ctx context.Context, payloads 
 		prompt.WriteString(fmt.Sprintf("[%d] %s\n", i, p))
 	}
 
-	opts := ai.GenOptions{MaxTokens: 2000, Temperature: 0.1}
+	opts := ai.GenOptions{MaxTokens: 2000, Temperature: 0.1, ThinkingLevel: "low"}
 	out, err := m.llm.Generate(ctx, prompt.String(), opts)
 	if err != nil {
 		return nil, err
@@ -215,7 +215,7 @@ func (m *MemoryManager[T]) GenerateSummaries(ctx context.Context, dataStr string
 		return []string{dataStr}, nil
 	}
 	prompt := "Break the following data down into distinct logical vectors or small standalone factual observations (sentences or short phrases). Return ONLY a pipe-separated ( | ) list of these phrases.\n\nData: " + dataStr
-	opts := ai.GenOptions{MaxTokens: 1000, Temperature: 0.1}
+	opts := ai.GenOptions{MaxTokens: 1000, Temperature: 0.1, ThinkingLevel: "low"}
 	out, err := m.llm.Generate(ctx, prompt, opts)
 	if err != nil {
 		return nil, err

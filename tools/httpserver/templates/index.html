@@ -980,91 +980,10 @@
            <div style="background: var(--pre-bg); padding: 10px; border-radius: 4px; font-size: 0.85em; margin-bottom: 15px; border: 1px solid var(--border-color);">
                 <strong>Shell Environment Check:</strong>
                 
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px 20px; margin: 10px 0;">
-                    <!-- Row 1 -->
+                <div style="display: grid; grid-template-columns: 1fr; gap: 5px; margin: 10px 0;">
                     <div>
                         <code>SOP_ROOT_PASSWORD</code>: 
                         {{if .Env.SOP_ROOT_PASSWORD}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
-                        {{else}}
-                            <span style="color: var(--text-muted);">Not Set</span>
-                        {{end}}
-                    </div>
-                    <div>
-                        <code>GEMINI_API_KEY</code>: 
-                        {{if .Env.GEMINI_API_KEY}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
-                        {{else}}
-                            <span style="color: var(--text-muted);">Not Set</span>
-                        {{end}}
-                    </div>
-                    <div>
-                        <code>OPENAI_API_KEY</code>: 
-                        {{if .Env.OPENAI_API_KEY}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
-                        {{else}}
-                            <span style="color: var(--text-muted);">Not Set</span>
-                        {{end}}
-                    </div>
-
-                    <!-- Row 2 -->
-                    <div>
-                        <code>OPENAI_API_BASE_URL</code>: 
-                        {{if .Env.OPENAI_API_BASE_URL}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
-                        {{else}}
-                            <span style="color: var(--text-muted);">Not Set</span>
-                        {{end}}
-                    </div>
-                    <div>
-                        <code>OPENAI_MODEL</code>: 
-                        {{if .Env.OPENAI_MODEL}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
-                        {{else}}
-                            <span style="color: var(--text-muted);">Not Set</span>
-                        {{end}}
-                    </div>
-
-                    <!-- Row 3 -->
-                    <div>
-                        <code>ANTHROPIC_API_KEY</code>: 
-                        {{if .Env.ANTHROPIC_API_KEY}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
-                        {{else}}
-                            <span style="color: var(--text-muted);">Not Set</span>
-                        {{end}}
-                    </div>
-                    <div>
-                        <code>ANTHROPIC_API_BASE_URL</code>: 
-                        {{if .Env.ANTHROPIC_API_BASE_URL}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
-                        {{else}}
-                            <span style="color: var(--text-muted);">Not Set</span>
-                        {{end}}
-                    </div>
-
-                    <!-- Row 4 -->
-                    <div>
-                        <code>ANTHROPIC_MODEL</code>: 
-                        {{if .Env.ANTHROPIC_MODEL}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
-                        {{else}}
-                            <span style="color: var(--text-muted);">Not Set</span>
-                        {{end}}
-                    </div>
-                    <div>
-                        <code>GEMINI_API_BASE_URL</code>: 
-                        {{if .Env.GEMINI_API_BASE_URL}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
-                        {{else}}
-                            <span style="color: var(--text-muted);">Not Set</span>
-                        {{end}}
-                    </div>
-
-                    <!-- Row 5 -->
-                    <div>
-                        <code>GEMINI_MODEL</code>: 
-                        {{if .Env.GEMINI_MODEL}}
                             <span style="color: var(--success-color); font-weight: bold;">Detected</span>
                         {{else}}
                             <span style="color: var(--text-muted);">Not Set</span>

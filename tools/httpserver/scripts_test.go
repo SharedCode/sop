@@ -33,7 +33,7 @@ func (a *MockAgent) Close(ctx context.Context) error { return nil }
 func (a *MockAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
 	return nil, nil
 }
-func (a *MockAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+func (a *MockAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
 	return "", nil
 }
 func (a *MockAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {

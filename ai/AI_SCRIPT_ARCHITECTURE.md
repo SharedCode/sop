@@ -97,3 +97,170 @@ The transformation is profound. Running a complex AI script now feels exactly li
 *   **Behavior:** Deterministic, machine-readable, and pipeable.
 
 We successfully bridged the gap between the flexibility of Generative AI and the rigidity required for data engineering. The SOP Agent is no longer just "chatting" about data; it is **streaming** it.
+
+---
+
+## API Architecture: Dual-Layer Design
+
+SOP provides two complementary APIs serving different domains:
+
+### 1. Spaces API (Domain: AI Memory)
+**Purpose**: High-level AI memory operations  
+**File**: `ai/agent/copilottools.space.go` (585 lines, 14 functions)  
+**Tools**:
+- Space management: `mint_to_space`, `delete_space`, `enrich_space`
+- Vectorization: `vectorize_space`, `vectorize_space_categories`, `vectorize_space_items`
+- Configuration: `update_space_config`, `read_space_config`
+- Category/Item CRUD: upsert, delete, list operations
+
+**Architecture**: 
+- Uses `map[string]any` with inline JSON schemas
+- Domain-specific for Knowledge Bases (VectorDB, embeddings, semantic search)
+- Operates on special schema (Categories/Items)
+
+**Key Rule**: When working with Spaces, **DO NOT USE RAW DATABASE TOOLS**. Spaces are AI memory, not raw B-Trees.
+
+### 2. Typed Database API (Domain: Data Operations)
+**Purpose**: Low-level database operations with bulk scalability  
+**Files**: `ai/agent/api_*.go` (4 files: types, core, bulk, transaction)  
+**Operations**:
+- Single ops: `Add`, `Update`, `Delete`, `Select`, `ExecuteScript`, `Join`
+- Bulk ops: `BulkAdd`, `BulkUpdate`, `BulkDelete` (with 3 transaction modes)
+- Transactions: `BeginTransaction`, `CommitTransaction`, `RollbackTransaction`
+
+**Architecture**:
+- Strongly typed Go structs with JSON tags
+- OpenAPI schema generation from types
+- Three transaction modes: `auto_batch` (scalable), `single` (atomic), `explicit` (multi-op)
+
+**Key Benefits**:
+- **Scalability**: Bulk operations handle 10K+ items efficiently
+- **Type Safety**: Compile-time validation
+- **Schema-Driven**: Single source of truth (Go structs → OpenAPI → LLM guidance)
+- **Testability**: Direct programmatic access for test harnesses
+
+### The Integration Pattern
+
+```
+┌─────────────────────────────────────────────────┐
+│           Business Logic Layer                  │
+│  ┌──────────────────┐  ┌──────────────────┐   │
+│  │ Spaces API       │  │ Database API     │   │
+│  │ (AI Memory)      │  │ (B-Trees)        │   │
+│  └────────┬─────────┘  └────────┬─────────┘   │
+└───────────┼────────────────────┼───────────────┘
+            │                    │
+    ┌───────┴────────┐   ┌──────┴──────┬──────────┐
+    │                │   │             │          │
+┌───▼────┐  ┌───────▼───▼──┐  ┌──────▼───┐  ┌───▼─────┐
+│ LLM    │  │  HTTP/OpenAPI │  │ Test     │  │ Scripts │
+│ Tools  │  │  Endpoints    │  │ Harness  │  │ Playback│
+└────────┘  └───────────────┘  └──────────┘  └─────────┘
+```
+
+**LLM Integration**: Both APIs expose tools via map[string]any adapters. LLMs use JSON, adapters convert to typed APIs internally.
+
+**OpenAPI Schemas**: The Database API generates OpenAPI specs from Go structs, providing concise schema references instead of verbose inline definitions (93% reduction in guidance size).
+
+**Use Case Separation**:
+- User says "Create a Notes space" → **Spaces API**
+- User says "Bulk insert 50,000 records" → **Database API**
+- User says "Enrich my knowledge base" → **Spaces API**
+- Script needs atomic multi-operation tx → **Database API** (explicit mode)
+
+See [ai/agent/README_API.md](agent/README_API.md) for Database API documentation.
+
+## LLM Provider Requirements
+
+The SOP AI Agent architecture requires specific capabilities from LLM providers to function correctly. These requirements stem from the ReAct (Reasoning + Acting) pattern and the need for reliable, structured tool execution.
+
+### Core Architecture Dependencies
+
+1. **Tool Calling (Function Calling)** - **BLOCKING REQUIREMENT**
+   - The agent architecture depends on native tool calling support
+   - LLM must accept tool definitions with JSON schemas
+   - LLM must return structured ToolCall objects (not text descriptions)
+   - Without this: Scripts cannot be generated, queries cannot be executed, agent is non-functional
+
+2. **System Prompts** - **REQUIRED**
+   - Must support system-level instructions independent of user messages
+   - Critical for role boundaries, safety constraints, and behavioral policies
+   - Used to inject: Database schema context, available tools, execution mode rules
+
+3. **Multi-Turn Tool Continuations** - **REQUIRED**
+   - Must preserve tool_use → tool_result pairs across conversation turns
+   - Enables the ReAct loop to iterate without losing context
+   - Without this: Agent cannot recover from errors, cannot execute multi-step workflows
+
+### Provider Implementation Matrix
+
+| Provider | Tool Calling | System Prompts | Multi-Turn | Native Loop | Implementation |
+|----------|--------------|----------------|------------|-------------|----------------|
+| **Gemini** | ✅ Native | ✅ | ✅ ToolCallContinuations | ✅ Provider-owned | `ai/generator/gemini.go` |
+| **ChatGPT** | ✅ Native | ✅ | ✅ Responses API threading | ✅ Provider-owned | `ai/generator/chatgpt_react_loop.go` |
+| **Claude** | ✅ Native | ✅ | ✅ Message history | ⚠️ Generic path | `ai/generator/anthropic.go` |
+| **Ollama** | ❌ Not supported | ✅ | ❌ No tool support | N/A | `ai/generator/ollama.go` (Embeddings only) |
+
+### Carryover Implementation Details
+
+The agent uses a **two-level carryover architecture** to maintain conversation state:
+
+#### Macro-Level: Inter-Ask Carryover (`ai/agent/carryover.go`)
+- Decides whether to continue conversation or reset
+- Budget limits: `AskCount`, `EstimatedCarryTokens`, `EstimatedRawToolTokens`
+- When budget exceeded: Falls back to **compact mode** with MRU enrichment
+- MRU context includes: Store schemas, relations, join/filter selections, confirmed facts, tool patterns
+
+#### Micro-Level: Intra-ReAct Loop (Provider-Specific)
+- **Gemini**: `ToolCallContinuations` array in `GenOptions`
+  - Preserves full function call/response state
+  - Native Gemini format: `functionCall`/`functionResponse` objects
+- **ChatGPT**: `PreviousResponseID` via OpenAI Responses API
+  - Provider-native thread continuation
+  - Opaque conversation handle preserved across turns
+- **Claude**: Message history with `tool_use`/`tool_result` content blocks
+  - Anthropic native format: Array of messages with alternating assistant/user roles
+  - Each tool call becomes `tool_use` block, result becomes `tool_result` block
+
+### Design Principle: Explicit Parameters
+
+**Critical**: All provider implementations follow the **explicit parameter design**:
+- Tool definitions passed via `GenOptions.Tools` (NOT extracted from Context)
+- Tool continuations passed via `GenOptions.ToolCallContinuations` (NOT from Context)
+- System prompts passed via `GenOptions.SystemPrompt` (NOT from Context)
+- Context only used for: Cancellation signals, tracing metadata
+
+This ensures:
+- Clear dependency boundaries
+- Testable without complex context mocking
+- Provider implementations remain stateless
+
+### Model Selection Criteria
+
+When adding models to `model_catalog.json`:
+
+**MUST HAVE:**
+- ✅ Tool calling with JSON schema support
+- ✅ System prompt support
+- ✅ Multi-turn conversation with tool result continuations
+
+**NICE TO HAVE:**
+- ⭐ Thinking/reasoning controls (Gemini-specific)
+- ⭐ Structured output schema enforcement (Gemini-specific)
+- ⭐ Provider-owned loop support (better error recovery)
+
+**EXCLUDE:**
+- ❌ Models without function calling support
+- ❌ Chat-only models (no tool execution)
+- ❌ Preview/experimental models not production-ready
+- ❌ Models with unreliable schema parsing
+
+### Testing Contract
+
+All providers must pass the contract tests in `ai/generator/provider_event_contract_test.go`:
+- Parse tool calls from responses correctly
+- Emit `ReasoningEventToolCall` events with proper structure
+- Include `tool`, `args`, and `iteration` in event payloads
+- Handle tool result feedback and continue reasoning loop
+
+See provider implementations for reference patterns.

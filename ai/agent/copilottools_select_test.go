@@ -654,6 +654,16 @@ func TestToolSelect_OrderedOutput(t *testing.T) {
 		t.Fatalf("Commit 2 failed: %v", err)
 	}
 
+	// Close old read transaction and start a new one to see Bob
+	readTx.Rollback(ctx)
+	readTx, err = db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction read 2 failed: %v", err)
+	}
+	defer readTx.Rollback(ctx)
+	sessionPayload.Transaction = readTx
+	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
+
 	// Select again
 	result, err = agent.toolSelect(ctx, args)
 	if err != nil {

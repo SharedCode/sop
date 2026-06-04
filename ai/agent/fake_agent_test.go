@@ -19,9 +19,11 @@ import (
 
 func TestFakeAgentGeneration(t *testing.T) {
 	// 1. Setup LLM
+	// Note: For production code, API keys come from Config only.
+	// For tests, we still check environment variables for convenience.
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		t.Skip("GEMINI_API_KEY not set")
+		t.Skip("GEMINI_API_KEY not set. For production code, configure via Config struct, not environment variables.")
 	}
 
 	// Try known valid models.
@@ -107,7 +109,7 @@ func TestFakeAgentGeneration(t *testing.T) {
 
 	// 4. Invoke Agent
 	fmt.Println("Sending request to Agent...")
-	response, err := adminAgent.Ask(ctx, userQuery)
+	response, err := adminAgent.Ask(ctx, userQuery, nil)
 	if err != nil {
 		t.Fatalf("Agent Ask failed: %v", err)
 	}

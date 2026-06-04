@@ -239,8 +239,10 @@ func (ss *StepStreamer) WriteItem(item any) {
 		}
 		b, _ := json.Marshal(res)
 		fmt.Fprintln(ss.parent.w, string(b))
-		if f, ok := ss.parent.w.(Flusher); ok {
-			f.Flush()
+		if ss.parent.shouldFlush {
+			if f, ok := ss.parent.w.(Flusher); ok {
+				f.Flush()
+			}
 		}
 		return
 	}
@@ -252,6 +254,11 @@ func (ss *StepStreamer) WriteItem(item any) {
 
 	b, _ := json.Marshal(item)
 	ss.parent.w.Write(b)
+	if ss.parent.shouldFlush {
+		if f, ok := ss.parent.w.(Flusher); ok {
+			f.Flush()
+		}
+	}
 }
 
 func (ss *StepStreamer) EndArray() {
@@ -278,6 +285,7 @@ func (ss *StepStreamer) EndArray() {
 
 func (ss *StepStreamer) Close() {
 	if ss.closed {
+		log.Debug("StepStreamer.Close: Already closed, skipping")
 		return
 	}
 	ss.parent.mu.Lock()
@@ -285,6 +293,12 @@ func (ss *StepStreamer) Close() {
 
 	if ss.parent.isNDJSON {
 		ss.closed = true
+		log.Debug("StepStreamer.Close: NDJSON mode, flushing")
+		// Flush any buffered data before closing
+		if f, ok := ss.parent.w.(Flusher); ok {
+			f.Flush()
+			log.Debug("StepStreamer.Close: NDJSON flushed")
+		}
 		return
 	}
 
@@ -292,42 +306,49 @@ func (ss *StepStreamer) Close() {
 	// Therefore, we shouldn't write the footer '}' either, effectively skipping the step output.
 	if !ss.used {
 		ss.closed = true
+		log.Debug("StepStreamer.Close: JSON array mode but not used, skipping")
 		return
 	}
 
 	fmt.Fprint(ss.parent.w, "}")
 	ss.closed = true
+	log.Debug("StepStreamer.Close: JSON array mode, flushing after closing bracket")
+	// Flush any buffered data before closing
+	if f, ok := ss.parent.w.(Flusher); ok {
+		f.Flush()
+		log.Debug("StepStreamer.Close: JSON array flushed")
+	}
 }
 
-func (s *Service) runStep(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+func (s *Service) runStep(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database, cfg *ai.ConfigMap) error {
 	switch step.Type {
 	case "ask":
-		return s.runStepAsk(ctx, step, scope, scopeMu, sb, db)
+		return s.runStepAsk(ctx, step, scope, scopeMu, sb, db, cfg)
 	case "command":
 		return s.runStepCommand(ctx, step, scope, scopeMu, sb)
 	case "set", "assignment":
 		return s.runStepSet(ctx, step, scope, scopeMu, sb)
 	case "if", "condition":
-		return s.runStepIf(ctx, step, scope, scopeMu, sb, db)
+		return s.runStepIf(ctx, step, scope, scopeMu, sb, db, cfg)
 	case "loop":
-		return s.runStepLoop(ctx, step, scope, scopeMu, sb, db)
+		return s.runStepLoop(ctx, step, scope, scopeMu, sb, db, cfg)
 	// case "fetch":
 	// 	return s.runStepFetch(ctx, step, scope, scopeMu, sb, db)
 	case "say", "print":
 		return s.runStepSay(ctx, step, scope, scopeMu, sb)
 	case "call_script", "script":
-		return s.runStepScript(ctx, step, scope, scopeMu, sb, db)
+		return s.runStepScript(ctx, step, scope, scopeMu, sb, db, cfg)
 	case "block":
-		return s.runStepBlock(ctx, step, scope, scopeMu, sb, db)
+		return s.runStepBlock(ctx, step, scope, scopeMu, sb, db, cfg)
 	}
 	return nil
 }
 
-func (s *Service) runStepBlock(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
-	return s.runSteps(ctx, step.Steps, scope, scopeMu, sb, db)
+func (s *Service) runStepBlock(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database, cfg *ai.ConfigMap) error {
+	return s.runSteps(ctx, step.Steps, scope, scopeMu, sb, db, cfg)
 }
 
-func (s *Service) runStepAsk(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+func (s *Service) runStepAsk(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database, cfg *ai.ConfigMap) error {
 	w, _ := ctx.Value(ai.CtxKeyWriter).(io.Writer)
 
 	prompt := step.Prompt
@@ -342,11 +363,6 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.ScriptStep, scope map[
 		}
 	}
 
-	var opts []ai.Option
-	if db != nil {
-		opts = append(opts, ai.WithDatabase(db))
-	}
-
 	// SOP Design Principle: Explicit Control
 	// An 'ask' step in a script is an imperative instruction to query the LLM.
 	// It is never skipped unless explicitly overridden by an external "replay" context
@@ -354,7 +370,16 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.ScriptStep, scope map[
 	// This ensures the script engine remains "dumb and obedient," allowing complex
 	// agentic workflows (Setup -> Ask -> Act) to function reliably.
 
-	resp, err := s.Ask(ctx, prompt, opts...)
+	// Use provided ConfigMap, or create empty if nil
+	if cfg == nil {
+		cfg = ai.NewConfigMap()
+	}
+	if db != nil {
+		cfg.Set("database", db)
+	}
+
+	// Call Ask with config (not context-based parameters!)
+	resp, err := s.Ask(ctx, prompt, cfg)
 	if err != nil {
 		msg := fmt.Sprintf("Error: %v\n", err)
 		sb.WriteString(msg)
@@ -369,7 +394,7 @@ func (s *Service) runStepAsk(ctx context.Context, step ai.ScriptStep, scope map[
 			Args map[string]any `json:"args"`
 		}
 		if json.Unmarshal([]byte(resp), &toolCall) == nil && toolCall.Tool != "" {
-			// It's a tool call! Execute it.
+			// It's a tool call! Execute it if we have an executor.
 			if executor, ok := ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor); ok && executor != nil {
 				toolResp, err := executor.Execute(ctx, toolCall.Tool, toolCall.Args)
 				if err != nil {
@@ -730,7 +755,7 @@ func (s *Service) runStepSet(ctx context.Context, step ai.ScriptStep, scope map[
 	return nil
 }
 
-func (s *Service) runStepIf(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+func (s *Service) runStepIf(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database, cfg *ai.ConfigMap) error {
 	w, _ := ctx.Value(ai.CtxKeyWriter).(io.Writer)
 
 	cond := step.Condition
@@ -748,10 +773,10 @@ func (s *Service) runStepIf(ctx context.Context, step ai.ScriptStep, scope map[s
 		if err := tmpl.Execute(&buf, scope); err == nil {
 			if buf.String() == "true" {
 				thenSteps := step.Then
-				return s.runSteps(ctx, thenSteps, scope, scopeMu, sb, db)
+				return s.runSteps(ctx, thenSteps, scope, scopeMu, sb, db, cfg)
 			} else {
 				if len(step.Else) > 0 {
-					return s.runSteps(ctx, step.Else, scope, scopeMu, sb, db)
+					return s.runSteps(ctx, step.Else, scope, scopeMu, sb, db, cfg)
 				}
 			}
 		} else {
@@ -767,7 +792,7 @@ func (s *Service) runStepIf(ctx context.Context, step ai.ScriptStep, scope map[s
 	return nil
 }
 
-func (s *Service) runStepLoop(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+func (s *Service) runStepLoop(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database, cfg *ai.ConfigMap) error {
 	listExpr := step.List
 	iterator := step.Iterator
 	body := step.Steps
@@ -807,7 +832,7 @@ func (s *Service) runStepLoop(ctx context.Context, step ai.ScriptStep, scope map
 				if scopeMu != nil {
 					scopeMu.Unlock()
 				}
-				if err := s.runSteps(ctx, body, scope, scopeMu, sb, db); err != nil {
+				if err := s.runSteps(ctx, body, scope, scopeMu, sb, db, cfg); err != nil {
 					return err
 				}
 			}
@@ -820,7 +845,7 @@ func (s *Service) runStepLoop(ctx context.Context, step ai.ScriptStep, scope map
 				if scopeMu != nil {
 					scopeMu.Unlock()
 				}
-				if err := s.runSteps(ctx, body, scope, scopeMu, sb, db); err != nil {
+				if err := s.runSteps(ctx, body, scope, scopeMu, sb, db, cfg); err != nil {
 					return err
 				}
 			}
@@ -850,7 +875,7 @@ func (s *Service) runStepSay(ctx context.Context, step ai.ScriptStep, scope map[
 	return nil
 }
 
-func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database, cfg *ai.ConfigMap) error {
 	name := step.ScriptName
 	if name == "" {
 		return fmt.Errorf("script name required")
@@ -971,7 +996,7 @@ func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope m
 	// Update context with the category where the script was found/resolved
 	ctx = context.WithValue(ctx, CtxKeyCurrentScriptCategory, targetCategory)
 
-	return s.executeScript(ctx, &script, nestedScope, &nestedMu, sb, db)
+	return s.executeScript(ctx, &script, nestedScope, &nestedMu, sb, db, cfg)
 }
 
 // ToolProvider interface for agents that can execute tools
@@ -979,9 +1004,11 @@ type ToolProvider interface {
 	Execute(ctx context.Context, toolName string, args map[string]any) (string, error)
 }
 
-// ServiceToolExecutor delegates tool execution to registered agents
+// ServiceToolExecutor delegates tool execution to registered agents.
+// It carries explicit ToolExecutionContext to make dependencies visible.
 type ServiceToolExecutor struct {
-	s *Service
+	s       *Service
+	toolCtx *ToolExecutionContext
 }
 
 type chainedToolExecutor struct {
@@ -1031,6 +1058,38 @@ func isToolUnavailableError(err error) bool {
 func (e *ServiceToolExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
 	log.Info("Executing Tool call", "tool", toolName, "args", args)
 
+	// Get or build tool execution context
+	toolCtx := e.toolCtx
+	if toolCtx == nil {
+		// Backward compatibility: extract from context
+		toolCtx = &ToolExecutionContext{
+			Executor:        ctx.Value(ai.CtxKeyExecutor).(ai.ToolExecutor),
+			Recorder:        nil, // will be extracted per-use
+			Writer:          nil, // will be extracted per-use
+			ResultStreamer:  nil, // will be extracted per-use
+			NativeToolHints: ctx.Value(ai.CtxKeyNativeToolHints) == true,
+			Database:        nil, // will be extracted per-use
+		}
+		if recorder, ok := ctx.Value(ai.CtxKeyScriptRecorder).(ai.ScriptRecorder); ok {
+			toolCtx.Recorder = recorder
+		}
+		if writer, ok := ctx.Value(ai.CtxKeyWriter).(io.Writer); ok {
+			toolCtx.Writer = writer
+		}
+		if streamer, ok := ctx.Value(ai.CtxKeyResultStreamer).(ai.ResultStreamer); ok {
+			toolCtx.ResultStreamer = streamer
+		}
+		if db, ok := ctx.Value(ai.CtxKeyDatabase).(*database.Database); ok {
+			toolCtx.Database = db
+		}
+		if session, ok := ctx.Value("session_payload").(*ai.SessionPayload); ok {
+			toolCtx.Session = session
+		}
+	}
+
+	// Inject tool context into context for tools that haven't been refactored yet
+	ctx = e.injectToolContextToLegacyContext(ctx, toolCtx)
+
 	// Handle "gettoolinfo" explicitly as it's a meta-tool served by Service from LLM Knowledge
 	if toolName == "gettoolinfo" {
 		targetTool, _ := args["tool"].(string)
@@ -1063,13 +1122,125 @@ func (e *ServiceToolExecutor) Execute(ctx context.Context, toolName string, args
 	return "", fmt.Errorf("tool '%s' not found in any registered agent", toolName)
 }
 
+// injectToolContextToLegacyContext puts ToolExecutionContext fields back into context
+// for backward compatibility with tools that haven't been refactored yet.
+// This is a transitional helper that will be removed once all tools are migrated.
+func (e *ServiceToolExecutor) injectToolContextToLegacyContext(ctx context.Context, toolCtx *ToolExecutionContext) context.Context {
+	if toolCtx == nil {
+		return ctx
+	}
+
+	if toolCtx.Executor != nil {
+		ctx = context.WithValue(ctx, ai.CtxKeyExecutor, toolCtx.Executor)
+	}
+	if toolCtx.Recorder != nil {
+		ctx = context.WithValue(ctx, ai.CtxKeyScriptRecorder, toolCtx.Recorder)
+	}
+	if toolCtx.Writer != nil {
+		ctx = context.WithValue(ctx, ai.CtxKeyWriter, toolCtx.Writer)
+	}
+	if toolCtx.ResultStreamer != nil {
+		ctx = context.WithValue(ctx, ai.CtxKeyResultStreamer, toolCtx.ResultStreamer)
+	}
+	if toolCtx.NativeToolHints {
+		ctx = context.WithValue(ctx, ai.CtxKeyNativeToolHints, true)
+	}
+	if toolCtx.Database != nil {
+		ctx = context.WithValue(ctx, ai.CtxKeyDatabase, toolCtx.Database)
+	}
+	if toolCtx.Session != nil {
+		ctx = context.WithValue(ctx, "session_payload", toolCtx.Session)
+	}
+	if toolCtx.EventStreamer != nil {
+		ctx = context.WithValue(ctx, ai.CtxKeyEventStreamer, toolCtx.EventStreamer)
+	}
+	if toolCtx.ProgressSink != nil {
+		ctx = context.WithValue(ctx, ai.CtxKeyProgressSink, toolCtx.ProgressSink)
+	}
+
+	return ctx
+}
+
 func (e *ServiceToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
 	return nil, nil
 }
 
-func (s *Service) executeScript(ctx context.Context, script *ai.Script, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
-	var sbMu sync.Mutex
-	ctx = context.WithValue(ctx, "sb_mutex", &sbMu)
+// injectScriptContextToLegacyContext puts ScriptRunContext fields back into context
+// for backward compatibility with code that hasn't been refactored yet.
+// This is a transitional helper that will be removed once all script execution is migrated.
+func injectScriptContextToLegacyContext(ctx context.Context, scriptCtx *ScriptRunContext) context.Context {
+	if scriptCtx == nil {
+		return ctx
+	}
+
+	if scriptCtx.JSONStreamer != nil {
+		ctx = context.WithValue(ctx, CtxKeyJSONStreamer, scriptCtx.JSONStreamer)
+	}
+	if scriptCtx.SuppressInternalStepStart {
+		ctx = context.WithValue(ctx, CtxKeySuppressInternalStepStart, true)
+	}
+	if scriptCtx.StepIndex > 0 {
+		ctx = context.WithValue(ctx, "step_index", scriptCtx.StepIndex)
+	}
+	if scriptCtx.Verbose {
+		ctx = context.WithValue(ctx, "verbose", true)
+	}
+	if scriptCtx.UseNDJSON {
+		ctx = context.WithValue(ctx, CtxKeyUseNDJSON, true)
+	}
+	if scriptCtx.CurrentScriptCategory != "" {
+		ctx = context.WithValue(ctx, CtxKeyCurrentScriptCategory, scriptCtx.CurrentScriptCategory)
+	}
+	if scriptCtx.StringBuilderMutex != nil {
+		ctx = context.WithValue(ctx, "sb_mutex", scriptCtx.StringBuilderMutex)
+	}
+
+	return ctx
+}
+
+// extractScriptContextFromLegacyContext extracts ScriptRunContext from context for backward compatibility
+func extractScriptContextFromLegacyContext(ctx context.Context) *ScriptRunContext {
+	scriptCtx := &ScriptRunContext{}
+
+	if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+		scriptCtx.JSONStreamer = streamer
+	}
+	if suppress, ok := ctx.Value(CtxKeySuppressInternalStepStart).(bool); ok {
+		scriptCtx.SuppressInternalStepStart = suppress
+	}
+	if stepIndex, ok := ctx.Value("step_index").(int); ok {
+		scriptCtx.StepIndex = stepIndex
+	}
+	if verbose, ok := ctx.Value("verbose").(bool); ok {
+		scriptCtx.Verbose = verbose
+	}
+	if useNDJSON, ok := ctx.Value(CtxKeyUseNDJSON).(bool); ok {
+		scriptCtx.UseNDJSON = useNDJSON
+	}
+	if category, ok := ctx.Value(CtxKeyCurrentScriptCategory).(string); ok {
+		scriptCtx.CurrentScriptCategory = category
+	}
+	if sbMu, ok := ctx.Value("sb_mutex").(*sync.Mutex); ok {
+		scriptCtx.StringBuilderMutex = sbMu
+	}
+
+	return scriptCtx
+}
+
+func (s *Service) executeScript(ctx context.Context, script *ai.Script, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database, cfg *ai.ConfigMap) error {
+	// Build ScriptRunContext from existing context values (for backward compatibility)
+	// or create new defaults
+	scriptCtx := extractScriptContextFromLegacyContext(ctx)
+
+	// Initialize StringBuilderMutex if not present
+	if scriptCtx.StringBuilderMutex == nil {
+		var sbMu sync.Mutex
+		scriptCtx.StringBuilderMutex = &sbMu
+	}
+
+	// Inject ScriptRunContext back into context for legacy code
+	ctx = injectScriptContextToLegacyContext(ctx, scriptCtx)
+
 	// ScriptRecorder must be preserved in context so that tools executed by the script
 	// are recorded in the session state (Session.LastStep / Session.LastInteractionToolCalls).
 	// This ensures commands like /last-tool work correctly after script execution.
@@ -1103,11 +1274,11 @@ func (s *Service) executeScript(ctx context.Context, script *ai.Script, scope ma
 	s.session.Playback = true
 	// defer func() { s.session.Playback = wasPlayback }()
 
-	return s.runSteps(ctx, script.Steps, scope, scopeMu, sb, db)
+	return s.runSteps(ctx, script.Steps, scope, scopeMu, sb, db, cfg)
 }
 
 // runSteps runs a sequence of script steps with support for control flow and variables.
-func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database) error {
+func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map[string]any, scopeMu *sync.RWMutex, sb *strings.Builder, db *database.Database, cfg *ai.ConfigMap) error {
 	// Create cancellable context for this script execution scope to support stopping on error
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -1232,7 +1403,7 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map
 						}
 					}()
 
-					if err := s.runStep(asyncCtx, st, scope, scopeMu, sb, asyncDB); err != nil {
+					if err := s.runStep(asyncCtx, st, scope, scopeMu, sb, asyncDB, cfg); err != nil {
 						if st.ContinueOnError && !shouldShortCircuitScriptOnError(st.Command, st.Args, err) {
 							// Log error but don't stop the group
 							log.Error("Async step failed (continuing)", "step_type", st.Type, "error", err)
@@ -1247,7 +1418,7 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map
 		}
 
 		// Sync step
-		if err := s.runStep(stepCtx, step, scope, scopeMu, sb, stepDB); err != nil {
+		if err := s.runStep(stepCtx, step, scope, scopeMu, sb, stepDB, cfg); err != nil {
 			if step.ContinueOnError && !shouldShortCircuitScriptOnError(step.Command, step.Args, err) {
 				// Log error and continue
 				log.Error("Step failed (continuing)", "step_type", step.Type, "error", err)
@@ -1260,7 +1431,7 @@ func (s *Service) runSteps(ctx context.Context, steps []ai.ScriptStep, scope map
 		}
 		// Synchronize state back from stepCtx cloned payload if mutated
 		if stepPayload := ai.GetSessionPayload(stepCtx); stepPayload != nil && p != nil && stepPayload != p {
-			p.ExplicitTransaction = stepPayload.ExplicitTransaction
+			//p.ExplicitTransaction = stepPayload.ExplicitTransaction
 			p.Transaction = stepPayload.Transaction
 			p.CurrentDB = stepPayload.CurrentDB
 		}

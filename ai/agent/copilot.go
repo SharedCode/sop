@@ -284,10 +284,6 @@ type CopilotAgent struct {
 	compiledScripts   map[string]CachedScript
 	compiledScriptsMu sync.RWMutex
 
-	// API Keys for dynamic switching
-	geminiKey string
-	openAIKey string
-
 	// StoreOpener allows mocking the store creation (e.g. for testing)
 	StoreOpener func(ctx context.Context, dbOpts sop.DatabaseOptions, storeName string, tx sop.Transaction) (jsondb.StoreAccessor, error)
 }
@@ -306,8 +302,6 @@ func (a *CopilotAgent) Clone() ai.Agent[map[string]any] {
 		lastToolCall:    nil,
 		service:         nil, // Caller should populate this
 		compiledScripts: make(map[string]CachedScript),
-		geminiKey:       a.geminiKey,
-		openAIKey:       a.openAIKey,
 		StoreOpener:     a.StoreOpener,
 	}
 }
@@ -495,66 +489,14 @@ func (a *CopilotAgent) getMRUSnapshot() []MRUItem {
 
 // NewCopilotAgent creates a new instance of CopilotAgent.
 func NewCopilotAgent(cfg Config, databases map[string]sop.DatabaseOptions, systemDB *database.Database) *CopilotAgent {
-	// Initialize the "Brain" (Generator)
-	// Priority:
-	// 1. Configuration passed (from UI/JSON)
-	// 2. Environment Variables (Legacy/Docker override)
-
+	// Initialize the "Brain" (Generator) from configuration
 	var gen ai.Generator
 	var err error
-	geminiKey := strings.TrimSpace(os.Getenv(EnvGeminiAPIKey))
-	openAIKey := strings.TrimSpace(os.Getenv(EnvOpenAIAPIKey))
 
-	// 1. Try Config First
 	if cfg.Generator.Type != "" {
 		gen, err = generator.New(cfg.Generator.Type, cfg.Generator.Options)
 		if err != nil {
 			log.Error(fmt.Sprintf("Failed to initialize generator from config (Type: %s): %v", cfg.Generator.Type, err))
-		}
-	}
-
-	// 2. Fallback to Environment Variables if Config failed or was empty
-	if gen == nil {
-		provider := os.Getenv(EnvAIProvider)
-		if provider == "" {
-			if openAIKey != "" {
-				provider = ProviderChatGPT
-			} else if geminiKey != "" {
-				provider = ProviderGemini
-			}
-		}
-
-		if provider == ProviderChatGPT && openAIKey != "" {
-			model := os.Getenv(EnvOpenAIModel)
-			if model == "" {
-				model = DefaultModelOpenAI
-			}
-			gen, err = generator.New(ProviderChatGPT, map[string]any{
-				"api_key": openAIKey,
-				"model":   model, // "model" is the correct key for OpenAI generator options
-			})
-		} else if (provider == ProviderGemini || provider == ProviderLocal || provider == "") && geminiKey != "" {
-			model := os.Getenv(EnvGeminiModel)
-			if model == "" {
-				model = DefaultModelGemini
-			}
-			gen, err = generator.New(ProviderGemini, map[string]any{
-				"api_key": geminiKey,
-				"model":   model,
-			})
-		} else if provider == ProviderOllama {
-			model := os.Getenv(EnvOllamaModel)
-			if model == "" {
-				model = DefaultModelOllama
-			}
-			host := os.Getenv(EnvOllamaHost)
-			if host == "" {
-				host = DefaultHost
-			}
-			gen, err = generator.New(ProviderOllama, map[string]any{
-				"base_url": host,
-				"model":    model,
-			})
 		}
 	}
 
@@ -569,8 +511,6 @@ func NewCopilotAgent(cfg Config, databases map[string]sop.DatabaseOptions, syste
 		databases:       databases,
 		systemDB:        systemDB,
 		Memory:          memory.NewMemoryUnit(ai.AgentIDOmni),
-		geminiKey:       geminiKey,
-		openAIKey:       openAIKey,
 		compiledScripts: make(map[string]CachedScript),
 	}
 	// Tools are registered dynamically in Open() or Ask() to ensure context propagation
@@ -647,10 +587,8 @@ func (a *CopilotAgent) Open(ctx context.Context) error {
 
 // Close cleans up the agent's resources.
 func (a *CopilotAgent) Close(ctx context.Context) error {
-	p := ai.GetSessionPayload(ctx)
-	if p != nil {
-		p.Close(ctx)
-	}
+	// Transaction lifecycle is managed by Service.Close(), not here.
+	// CopilotAgent has no agent-specific cleanup needed.
 	return nil
 }
 
@@ -700,11 +638,21 @@ func (a *CopilotAgent) Search(ctx context.Context, query string, limit int) ([]a
 //  8. Epilogue & Cleanup:
 //     Records the completed dialogue and active track-state into the short-term memory transcript,
 //     clears the volatile MRU buffer, and returns the final text response to the client.
-func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
-	ctx = a.applyAskOptions(ctx, opts...)
+func (a *CopilotAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
+	ctx = a.applyAskConfig(ctx, cfg)
 	a.clearAskProgressMRU()
 
-	gen := a.resolveGenerator(ctx)
+	// Extract ProviderDetails from ConfigMap
+	var providerDetails *ProviderDetails
+	if cfg != nil {
+		if po, ok := cfg.Get("provider_details"); ok {
+			if override, ok := po.(*ProviderDetails); ok {
+				providerDetails = override
+			}
+		}
+	}
+
+	gen := a.resolveGeneratorWithOverride(ctx, providerDetails)
 	if gen == nil {
 		return "⚠️ **AI Copilot Disabled**: No valid API Key found.\n\nPlease go to **Environment Settings** (HDD icon in bottom left) -> **LLM API Key** to configure your Google Gemini or OpenAI key.", nil
 	}
@@ -736,6 +684,9 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 	log.Info("Ask: Request classified for OMNI")
 
 	// 4. Three-Gate Context Classification
+
+	// TODO: process unpacking IsNewTopic from Options, and use that as added signal for routing in Gate 2 (MRU).
+
 	taskContext := a.evaluateRoutingGates(ctx, query, gen)
 	if taskContext == nil {
 		taskContext = &TaskContextClassification{Domain: "General"}
@@ -767,11 +718,12 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, opts ...ai.Option)
 	return finalText, nil
 }
 
-func (a *CopilotAgent) applyAskOptions(ctx context.Context, opts ...ai.Option) context.Context {
-	if len(opts) > 0 {
-		cfg := ai.NewAskConfig(opts...)
-		if format, ok := cfg.Values["default_format"].(string); ok && strings.TrimSpace(format) != "" {
-			ctx = context.WithValue(ctx, ai.CtxKeyDefaultFormat, strings.TrimSpace(format))
+func (a *CopilotAgent) applyAskConfig(ctx context.Context, cfg *ai.ConfigMap) context.Context {
+	if cfg != nil {
+		if val, ok := cfg.Get("default_format"); ok {
+			if format, ok := val.(string); ok && strings.TrimSpace(format) != "" {
+				ctx = context.WithValue(ctx, ai.CtxKeyDefaultFormat, strings.TrimSpace(format))
+			}
 		}
 	}
 	return ctx
@@ -1259,7 +1211,7 @@ func (a *CopilotAgent) buildStoresToolDescriptionContext() string {
 		"1. Never guess store names, field names, or join mappings. Use list_stores first whenever schema, relations, or field paths are uncertain.",
 		"2. Think through the read/join/filter plan before writing the operation.",
 		"3. SOP store queries are not SQL. When the user asks for a query or filter, produce SOP-native JSON tool/script operations, not SQL syntax.",
-		"4. When you generate a multi-step store plan using steps such as begin_tx, open_store, scan, filter, sort, project, return, commit_tx, or rollback_tx, place those steps inside execute_script.script and call execute_script to submit the plan to the executor. CRITICAL ORDERING: commit_tx (or rollback_tx) MUST always appear BEFORE return. A return placed before commit_tx causes the engine to exit immediately, skipping the transaction commit and leaving the transaction open.",
+		"4. When you generate a multi-step store plan using steps such as begin_tx, open_store, scan, filter, sort, project, commit_tx, rollback_tx or return, place those steps inside execute_script.script and call execute_script to submit the plan to the executor. The last step's result is returned automatically or use return to explicitly specify the return value.",
 		"5. If execution fails, analyze the error, rewrite the operation, and retry once. If it still fails, ask the user a short clarification question.",
 	}, "\n")
 }
@@ -1906,19 +1858,79 @@ func (a *CopilotAgent) persistAskOutcomeMRU(ctx context.Context, query string, f
 // HELPER METHODS
 // ----------------------------------------------------------------------------
 
+func (a *CopilotAgent) resolveGeneratorWithOverride(ctx context.Context, providerOverride *ProviderDetails) ai.Generator {
+	// Use explicit ProviderDetails parameter first
+	if providerOverride != nil && providerOverride.Provider != "" {
+		provider := providerOverride.Provider
+		if provider == "openai" {
+			provider = ProviderChatGPT
+		}
+
+		var err error
+		var tempGen ai.Generator
+
+		switch provider {
+		case ProviderGemini:
+			if providerOverride.APIKey != "" {
+				model := providerOverride.Model
+				if model == "" {
+					model = DefaultModelGemini
+				}
+				tempGen, err = generator.New(ProviderGemini, map[string]any{
+					"api_key": providerOverride.APIKey,
+					"model":   model,
+				})
+			}
+		case ProviderChatGPT:
+			if providerOverride.APIKey != "" {
+				model := providerOverride.Model
+				if model == "" {
+					model = DefaultModelOpenAI
+				}
+				options := map[string]any{
+					"api_key": providerOverride.APIKey,
+					"model":   model,
+				}
+				if providerOverride.BaseURL != "" {
+					options["api_url"] = providerOverride.BaseURL
+				}
+				tempGen, err = generator.New(ProviderChatGPT, options)
+			}
+		case ProviderAnthropic:
+			if providerOverride.APIKey != "" {
+				model := providerOverride.Model
+				if model == "" {
+					model = DefaultModelAnthropic
+				}
+				tempGen, err = generator.New(ProviderAnthropic, map[string]any{
+					"api_key": providerOverride.APIKey,
+					"model":   model,
+				})
+			}
+		}
+
+		if err == nil && tempGen != nil {
+			return tempGen
+		}
+	}
+
+	// Fall back to context for backward compatibility
+	return a.resolveGenerator(ctx)
+}
+
 func (a *CopilotAgent) resolveGenerator(ctx context.Context) ai.Generator {
 	gen := a.brain
-	providerOverride, ok := ctx.Value(ai.CtxKeyProvider).(string)
-	if !ok || providerOverride == "" {
+	providerOverrideStr, ok := ctx.Value(ai.CtxKeyProvider).(string)
+	if !ok || providerOverrideStr == "" {
 		return gen
 	}
 	var modelOverride string
-	if provider, model, ok := strings.Cut(providerOverride, ":"); ok {
-		providerOverride = provider
+	if provider, model, ok := strings.Cut(providerOverrideStr, ":"); ok {
+		providerOverrideStr = provider
 		modelOverride = model
 	}
-	if providerOverride == "openai" {
-		providerOverride = ProviderChatGPT
+	if providerOverrideStr == "openai" {
+		providerOverrideStr = ProviderChatGPT
 	}
 
 	var err error
@@ -1927,40 +1939,26 @@ func (a *CopilotAgent) resolveGenerator(ctx context.Context) ai.Generator {
 	customAPIKey, _ := ctx.Value(ai.CtxKeyAPIKey).(string)
 	customBaseURL, _ := ctx.Value(ai.CtxKeyBaseURL).(string)
 
-	switch providerOverride {
+	switch providerOverrideStr {
 	case ProviderGemini:
-		key := customAPIKey
-		if key == "" {
-			key = a.geminiKey
-		}
-		if key != "" {
+		if customAPIKey != "" {
 			model := modelOverride
-			if model == "" {
-				model = os.Getenv(EnvGeminiModel)
-			}
 			if model == "" {
 				model = DefaultModelGemini
 			}
 			tempGen, err = generator.New(ProviderGemini, map[string]any{
-				"api_key": key,
+				"api_key": customAPIKey,
 				"model":   model,
 			})
 		}
 	case ProviderChatGPT:
-		key := customAPIKey
-		if key == "" {
-			key = a.openAIKey
-		}
-		if key != "" {
+		if customAPIKey != "" {
 			model := modelOverride
-			if model == "" {
-				model = os.Getenv(EnvOpenAIModel)
-			}
 			if model == "" {
 				model = DefaultModelOpenAI
 			}
 			options := map[string]any{
-				"api_key": key,
+				"api_key": customAPIKey,
 				"model":   model,
 				"api_url": customBaseURL,
 			}
@@ -1968,9 +1966,6 @@ func (a *CopilotAgent) resolveGenerator(ctx context.Context) ai.Generator {
 		}
 	case ProviderOllama:
 		model := modelOverride
-		if model == "" {
-			model = os.Getenv(EnvOllamaModel)
-		}
 		if model == "" {
 			model = DefaultModelOllama
 		}
@@ -1990,7 +1985,7 @@ func (a *CopilotAgent) resolveGenerator(ctx context.Context) ai.Generator {
 	if err == nil && tempGen != nil {
 		gen = tempGen
 	} else {
-		log.Warn("Failed to resolve to valid provider", "provider", providerOverride, "error", err)
+		log.Warn("Failed to resolve to valid provider", "provider", providerOverrideStr, "error", err)
 	}
 
 	return gen
@@ -3072,7 +3067,11 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 			dbFound = true
 		}
 	} else {
-		if p.CurrentDB != "" {
+		// No explicit database arg, use CurrentDB from session
+		dbName = p.CurrentDB
+		if dbName == SystemDBName && a.systemDB != nil {
+			dbFound = true
+		} else if _, ok := a.databases[dbName]; ok {
 			dbFound = true
 		}
 	}
@@ -3090,7 +3089,7 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 	p = ai.GetSessionPayload(ctx)
 	preExistingTx := resolvePayloadTx(p, dbName)
 
-	if !dbFound && toolName != "list_databases" && toolName != "list_scripts" && toolName != "get_script_details" {
+	if !dbFound && toolName != "list_databases" && toolName != "list_scripts" && toolName != "get_script_details" && toolName != "list_tools" && toolName != "handoff_to_avatar" {
 		// Debugging
 		var keys []string
 		if a.systemDB != nil {
@@ -3154,213 +3153,329 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 	return "", fmt.Errorf("unknown tool: %s", toolName)
 }
 
+// scriptTransaction encapsulates transaction management for scripts
+type scriptTransaction struct {
+	tx           sop.Transaction
+	commitFunc   func() error
+	rollbackFunc func()
+	dbName       string
+}
+
+// setupScriptScope initializes the scope with provided arguments
+func setupScriptScope(args map[string]any) map[string]any {
+	scope := make(map[string]any)
+	for k, v := range args {
+		scope[k] = v
+	}
+	return scope
+}
+
+// trackInitialTransactions captures the initial state of transactions
+func trackInitialTransactions(ctx context.Context) map[string]sop.Transaction {
+	initialTransactions := make(map[string]sop.Transaction)
+	p := ai.GetSessionPayload(ctx)
+	if p == nil {
+		return initialTransactions
+	}
+
+	if p.Transactions != nil {
+		for dbName, tAny := range p.Transactions {
+			if existingTx, ok := tAny.(sop.Transaction); ok {
+				initialTransactions[dbName] = existingTx
+			}
+		}
+	}
+
+	if p.Transaction != nil {
+		if existingTx, ok := p.Transaction.(sop.Transaction); ok && p.CurrentDB != "" {
+			if _, exists := initialTransactions[p.CurrentDB]; !exists {
+				initialTransactions[p.CurrentDB] = existingTx
+			}
+		}
+	}
+
+	return initialTransactions
+}
+
+// setupImplicitTransaction creates an implicit transaction for non-single mode scripts
+func (a *CopilotAgent) setupImplicitTransaction(ctx context.Context, script ai.Script) (*scriptTransaction, error) {
+	if script.TransactionMode == "single" {
+		return nil, nil
+	}
+
+	p := ai.GetSessionPayload(ctx)
+	if p == nil {
+		return nil, nil
+	}
+
+	dbName := script.Database
+	if dbName == "" {
+		dbName = p.CurrentDB
+	}
+	if dbName == "" {
+		return nil, nil
+	}
+
+	// Check if transaction already exists
+	var existing sop.Transaction
+	if p.Transactions != nil {
+		if tAny, ok := p.Transactions[dbName]; ok {
+			existing, _ = tAny.(sop.Transaction)
+		}
+	}
+	if existing == nil && p.Transaction != nil && (dbName == p.CurrentDB || dbName == "") {
+		existing, _ = p.Transaction.(sop.Transaction)
+	}
+
+	if existing != nil {
+		return nil, nil
+	}
+
+	// Create new transaction
+	db, err := a.resolveDatabase(dbName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve database '%s' for implicit script transaction: %w", dbName, err)
+	}
+
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin implicit script transaction: %w", err)
+	}
+
+	log.Info("setupImplicitTransaction: Created implicit transaction", "database", dbName, "tx_id", tx.GetID())
+
+	if p.Transactions == nil {
+		p.Transactions = make(map[string]any)
+	}
+	p.Transactions[dbName] = tx
+	p.Transaction = tx
+
+	return &scriptTransaction{
+		tx:     tx,
+		dbName: dbName,
+		rollbackFunc: func() {
+			log.Info("scriptTransaction: Rolling back implicit transaction", "database", dbName, "tx_id", tx.GetID())
+			tx.Rollback(ctx)
+			delete(p.Transactions, dbName)
+			if current, ok := p.Transaction.(sop.Transaction); ok && current == tx {
+				p.Transaction = nil
+			}
+			p.Variables = nil
+		},
+		commitFunc: func() error {
+			log.Info("scriptTransaction: Committing implicit transaction", "database", dbName, "tx_id", tx.GetID())
+			err := tx.Commit(ctx)
+			delete(p.Transactions, dbName)
+			if current, ok := p.Transaction.(sop.Transaction); ok && current == tx {
+				p.Transaction = nil
+			}
+			p.Variables = nil
+			return err
+		},
+	}, nil
+}
+
+// setupSingleTransaction creates a single global transaction for the script
+func (a *CopilotAgent) setupSingleTransaction(ctx context.Context, script ai.Script) (context.Context, *scriptTransaction, error) {
+	dbName := script.Database
+	if dbName == "" {
+		if p := ai.GetSessionPayload(ctx); p != nil {
+			dbName = p.CurrentDB
+		}
+	}
+	if dbName == "" {
+		dbName = SystemDBName
+	}
+
+	db, err := a.resolveDatabase(dbName)
+	if err != nil {
+		return ctx, nil, fmt.Errorf("failed to resolve database '%s' for global transaction: %w", dbName, err)
+	}
+
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return ctx, nil, fmt.Errorf("failed to begin global transaction: %w", err)
+	}
+
+	log.Info("setupSingleTransaction: Created global transaction", "database", dbName, "tx_id", tx.GetID())
+
+	// Inject into context
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		newPayload := *p
+		if newPayload.Transactions == nil {
+			newPayload.Transactions = make(map[string]any)
+		}
+		newPayload.Transactions[dbName] = tx
+		newPayload.Transaction = tx
+		ctx = context.WithValue(ctx, SessionPayloadKey, &newPayload)
+	}
+
+	return ctx, &scriptTransaction{
+		tx:     tx,
+		dbName: dbName,
+		rollbackFunc: func() {
+			log.Info("scriptTransaction: Rolling back global transaction", "database", dbName, "tx_id", tx.GetID())
+			tx.Rollback(ctx)
+		},
+		commitFunc: func() error {
+			log.Info("scriptTransaction: Committing global transaction", "database", dbName, "tx_id", tx.GetID())
+			err := tx.Commit(ctx)
+			if err == nil {
+				log.Info("scriptTransaction: Successfully committed global transaction", "database", dbName, "tx_id", tx.GetID())
+			}
+			return err
+		},
+	}, nil
+}
+
+// resolveStepArgs resolves template arguments for a step
+func resolveStepArgs(step ai.ScriptStep, scope map[string]any) map[string]any {
+	resolvedArgs := make(map[string]any)
+	for k, v := range step.Args {
+		if strVal, ok := v.(string); ok {
+			resolvedArgs[k] = resolveTemplate(strVal, scope)
+		} else {
+			resolvedArgs[k] = v
+		}
+	}
+	return resolvedArgs
+}
+
+// createStepContext creates a context with database override if needed
+func createStepContext(ctx context.Context, step ai.ScriptStep) context.Context {
+	if step.Database == "" {
+		return ctx
+	}
+
+	p := ai.GetSessionPayload(ctx)
+	if p == nil {
+		return ctx
+	}
+
+	newPayload := *p
+	newPayload.CurrentDB = step.Database
+	if p.CurrentDB != step.Database {
+		newPayload.Transaction = nil
+	}
+	return context.WithValue(ctx, SessionPayloadKey, &newPayload)
+}
+
+// executeScriptSteps executes all script steps and returns the output
+func (a *CopilotAgent) executeScriptSteps(ctx context.Context, script ai.Script, scope map[string]any) (string, error) {
+	var sb strings.Builder
+
+	for i, step := range script.Steps {
+		if step.Type != "command" {
+			sb.WriteString(fmt.Sprintf("Skipping step %d (type '%s' not supported in tool execution)\n", i+1, step.Type))
+			continue
+		}
+
+		resolvedArgs := resolveStepArgs(step, scope)
+		stepCtx := createStepContext(ctx, step)
+
+		res, err := a.Execute(stepCtx, step.Command, resolvedArgs)
+		if err != nil {
+			if !step.ContinueOnError || shouldShortCircuitScriptOnError(step.Command, resolvedArgs, err) {
+				return "", fmt.Errorf("step %d (%s) failed: %w", i+1, step.Command, err)
+			}
+			sb.WriteString(fmt.Sprintf("Step %d failed: %v\n", i+1, err))
+		} else {
+			sb.WriteString(fmt.Sprintf("%s\n\n", res))
+		}
+	}
+
+	return sb.String(), nil
+}
+
+// commitImplicitTransactions commits any implicit transactions created during script execution
+func commitImplicitTransactions(ctx context.Context, initialTransactions map[string]sop.Transaction) error {
+	p := ai.GetSessionPayload(ctx)
+	if p == nil || p.ExplicitTransaction || p.Transactions == nil {
+		return nil
+	}
+
+	for dbName, tAny := range p.Transactions {
+		tx, ok := tAny.(sop.Transaction)
+		if !ok || tx == nil {
+			continue
+		}
+
+		// Skip if this transaction existed before the script
+		if existingTx, exists := initialTransactions[dbName]; exists && existingTx == tx {
+			continue
+		}
+
+		if tx.HasBegun() {
+			log.Info("commitImplicitTransactions: Committing implicit transaction", "database", dbName, "tx_id", tx.GetID())
+			if err := tx.Commit(ctx); err != nil {
+				return fmt.Errorf("failed to commit implicit script transaction for '%s': %w", dbName, err)
+			}
+			log.Info("commitImplicitTransactions: Successfully committed", "database", dbName, "tx_id", tx.GetID())
+		}
+
+		delete(p.Transactions, dbName)
+		if current, ok := p.Transaction.(sop.Transaction); ok && current == tx {
+			p.Transaction = nil
+		}
+	}
+
+	return nil
+}
+
 func (a *CopilotAgent) runScript(ctx context.Context, name string, script ai.Script, args map[string]any) (string, error) {
 	var sb strings.Builder
 	sb.WriteString(fmt.Sprintf("Running script '%s'...\n", name))
 	ctx = context.WithValue(ctx, ctxKeyDeferImplicitSessionTxClose, true)
 
-	// Scope for template resolution
-	scope := make(map[string]any)
-	for k, v := range args {
-		scope[k] = v
-	}
+	// Initialize scope and track initial transactions
+	scope := setupScriptScope(args)
+	initialTransactions := trackInitialTransactions(ctx)
 
-	initialTransactions := make(map[string]sop.Transaction)
-	if p := ai.GetSessionPayload(ctx); p != nil {
-		if p.Transactions != nil {
-			for dbName, tAny := range p.Transactions {
-				if existingTx, ok := tAny.(sop.Transaction); ok {
-					initialTransactions[dbName] = existingTx
-				}
-			}
-		}
-		if p.Transaction != nil {
-			if existingTx, ok := p.Transaction.(sop.Transaction); ok && p.CurrentDB != "" {
-				if _, exists := initialTransactions[p.CurrentDB]; !exists {
-					initialTransactions[p.CurrentDB] = existingTx
-				}
-			}
-		}
-	}
+	// Setup transaction based on script mode
+	var scriptTx *scriptTransaction
+	var err error
 
-	// Transaction Handling
-	var tx sop.Transaction
-	var commitFunc func() error
-	var rollbackFunc func()
-
-	// Default to "manual" (let steps handle it or caller) unless specified
-	// The Script struct has TransactionMode field.
-	// Values: "none" (default), "single" (global tx), "per_step" (not implemented here, steps do it naturally if no global tx)
-	if script.TransactionMode != "single" {
-		if p := ai.GetSessionPayload(ctx); p != nil {
-			dbName := script.Database
-			if dbName == "" {
-				dbName = p.CurrentDB
-			}
-			if dbName != "" {
-				var existing sop.Transaction
-				if p.Transactions != nil {
-					if tAny, ok := p.Transactions[dbName]; ok {
-						existing, _ = tAny.(sop.Transaction)
-					}
-				}
-				if existing == nil && p.Transaction != nil && (dbName == p.CurrentDB || dbName == "") {
-					existing, _ = p.Transaction.(sop.Transaction)
-				}
-				if existing == nil {
-					db, err := a.resolveDatabase(dbName)
-					if err != nil {
-						return "", fmt.Errorf("failed to resolve database '%s' for implicit script transaction: %w", dbName, err)
-					}
-					tx, err = db.BeginTransaction(ctx, sop.ForWriting)
-					if err != nil {
-						return "", fmt.Errorf("failed to begin implicit script transaction: %w", err)
-					}
-					if p.Transactions == nil {
-						p.Transactions = make(map[string]any)
-					}
-					p.Transactions[dbName] = tx
-					p.Transaction = tx
-					rollbackFunc = func() {
-						tx.Rollback(ctx)
-						delete(p.Transactions, dbName)
-						if current, ok := p.Transaction.(sop.Transaction); ok && current == tx {
-							p.Transaction = nil
-						}
-						p.Variables = nil
-					}
-					commitFunc = func() error {
-						err := tx.Commit(ctx)
-						delete(p.Transactions, dbName)
-						if current, ok := p.Transaction.(sop.Transaction); ok && current == tx {
-							p.Transaction = nil
-						}
-						p.Variables = nil
-						return err
-					}
-					sb.WriteString(fmt.Sprintf("Implicit Session Transaction Started (%s)\n", dbName))
-				}
-			}
-		}
-	}
-
+	// TODO: Finalize transaction strategy for scripts. For now, implicit handling is what is in. Plus, LLM manages it explicitly.
+	// Implicit only creates trans if missing to guard against LLM not managing transactions correctly.
 	if script.TransactionMode == "single" {
-		// Identify Target DB
-		// Need a database to start transaction on.
-		dbName := script.Database
-		if dbName == "" {
-			if p := ai.GetSessionPayload(ctx); p != nil {
-				dbName = p.CurrentDB
-			}
-		}
-		if dbName == "" {
-			dbName = SystemDBName // fallback
-		}
-
-		db, err := a.resolveDatabase(dbName)
+		ctx, scriptTx, err = a.setupSingleTransaction(ctx, script)
 		if err != nil {
-			return "", fmt.Errorf("failed to resolve database '%s' for global transaction: %w", dbName, err)
+			return "", err
 		}
-
-		tx, err = db.BeginTransaction(ctx, sop.ForWriting) // Assert Write for global scripts usually
+		sb.WriteString(fmt.Sprintf("Global Transaction Started (%s)\n", scriptTx.dbName))
+	} else {
+		scriptTx, err = a.setupImplicitTransaction(ctx, script)
 		if err != nil {
-			return "", fmt.Errorf("failed to begin global transaction: %w", err)
+			return "", err
 		}
-
-		sb.WriteString(fmt.Sprintf("Global Transaction Started (%s)\n", dbName))
-
-		rollbackFunc = func() {
-			tx.Rollback(ctx)
-		}
-		commitFunc = func() error {
-			return tx.Commit(ctx)
-		}
-
-		// Inject into Context
-		if p := ai.GetSessionPayload(ctx); p != nil {
-			// Clone payload
-			newPayload := *p
-			if newPayload.Transactions == nil {
-				newPayload.Transactions = make(map[string]any)
-			}
-			newPayload.Transactions[dbName] = tx
-			newPayload.Transaction = tx           // Legacy field for tools that don't support multi-db yet
-			newPayload.ExplicitTransaction = true // Prevent tools from auto-committing
-			ctx = context.WithValue(ctx, SessionPayloadKey, &newPayload)
+		if scriptTx != nil {
+			sb.WriteString(fmt.Sprintf("Implicit Session Transaction Started (%s)\n", scriptTx.dbName))
 		}
 	}
 
+	// Ensure rollback on failure
 	defer func() {
-		if rollbackFunc != nil {
-			rollbackFunc() // No-op if committed
+		if scriptTx != nil && scriptTx.rollbackFunc != nil {
+			scriptTx.rollbackFunc()
 		}
 	}()
 
-	for i, step := range script.Steps {
-		if step.Type == "command" {
-			// Resolve args
-			resolvedArgs := make(map[string]any)
-			for k, v := range step.Args {
-				if strVal, ok := v.(string); ok {
-					resolvedArgs[k] = resolveTemplate(strVal, scope)
-				} else {
-					resolvedArgs[k] = v
-				}
-			}
-
-			// Handle Database Override
-			stepCtx := ctx
-			if step.Database != "" {
-				if p := ai.GetSessionPayload(ctx); p != nil {
-					// Clone payload to update CurrentDB for this step only
-					newPayload := *p
-					newPayload.CurrentDB = step.Database
-					// Clear transaction if switching DB, as the existing transaction is bound to the old DB
-					if p.CurrentDB != step.Database {
-						newPayload.Transaction = nil
-					}
-					stepCtx = context.WithValue(ctx, SessionPayloadKey, &newPayload)
-				}
-			}
-
-			res, err := a.Execute(stepCtx, step.Command, resolvedArgs)
-			if err != nil {
-				if !step.ContinueOnError || shouldShortCircuitScriptOnError(step.Command, resolvedArgs, err) {
-					return "", fmt.Errorf("step %d (%s) failed: %w", i+1, step.Command, err)
-				}
-				sb.WriteString(fmt.Sprintf("Step %d failed: %v\n", i+1, err))
-			} else {
-				sb.WriteString(fmt.Sprintf("%s\n\n", res))
-			}
-		} else {
-			sb.WriteString(fmt.Sprintf("Skipping step %d (type '%s' not supported in tool execution)\n", i+1, step.Type))
-		}
+	// Execute all script steps
+	stepsOutput, err := a.executeScriptSteps(ctx, script, scope)
+	if err != nil {
+		return "", err
 	}
+	sb.WriteString(stepsOutput)
 
-	if commitFunc != nil {
-		if err := commitFunc(); err != nil {
+	// Commit transactions
+	if scriptTx != nil && scriptTx.commitFunc != nil {
+		if err := scriptTx.commitFunc(); err != nil {
 			return "", fmt.Errorf("failed to commit global transaction: %w", err)
 		}
-		// Clear rollbackFunc so defer doesn't rollback
-		rollbackFunc = nil
-	} else if p := ai.GetSessionPayload(ctx); p != nil && !p.ExplicitTransaction && p.Transactions != nil {
-		for dbName, tAny := range p.Transactions {
-			tx, ok := tAny.(sop.Transaction)
-			if !ok || tx == nil {
-				continue
-			}
-			if existingTx, exists := initialTransactions[dbName]; exists && existingTx == tx {
-				continue
-			}
-			if tx.HasBegun() {
-				if err := tx.Commit(ctx); err != nil {
-					return "", fmt.Errorf("failed to commit implicit script transaction for '%s': %w", dbName, err)
-				}
-			}
-			delete(p.Transactions, dbName)
-			if current, ok := p.Transaction.(sop.Transaction); ok && current == tx {
-				p.Transaction = nil
-			}
+		scriptTx.rollbackFunc = nil // Prevent defer from rolling back
+	} else {
+		if err := commitImplicitTransactions(ctx, initialTransactions); err != nil {
+			return "", err
 		}
 	}
 

@@ -149,7 +149,8 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	sendEvent("session_id", req.SessionID)
 
-	ctx, payload, askOpts, fullMessage := constructPayload(r.Context(), req, sendEvent)
+	llmSettings := resolveLLMSettings(r)
+	ctx, payload, cfg, fullMessage := constructPayload(r.Context(), req, llmSettings, sendEvent)
 	log.Info("HTTP AI Chat Payload",
 		"session_id", req.SessionID,
 		"current_db", payload.CurrentDB,
@@ -159,28 +160,37 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 		"full_message_chars", len(fullMessage),
 	)
 
-	// Inject X-LLM-* header values so resolveGenerator can use them
-	if apiKey := r.Header.Get("X-LLM-API-Key"); apiKey != "" {
-		ctx = context.WithValue(ctx, ai.CtxKeyAPIKey, apiKey)
-	}
-	if baseURL := r.Header.Get("X-LLM-URL"); baseURL != "" {
-		ctx = context.WithValue(ctx, ai.CtxKeyBaseURL, baseURL)
-	}
-
 	// Inject streaming writer bypass
 	ctx = context.WithValue(ctx, ai.CtxKeyWriter, &DirectFlushingWriter{w: w})
 
-	if err := executeAgentLifecycle(ctx, agentSvc, req, sendEvent); err != nil {
+	if err := executeAgentLifecycle(ctx, r, agentSvc, req, sendEvent); err != nil {
 		return
 	}
+
+	// Ensure Close is ALWAYS called, even on panic or context cancellation
 	defer func() {
+		if r := recover(); r != nil {
+			log.Error("Panic during agent execution", "panic", r, "session_id", req.SessionID)
+			// Use background context since original may be canceled
+			if err := agentSvc.Close(context.Background()); err != nil {
+				log.Error(fmt.Sprintf("Agent '%s' failed to close after panic: %v", req.Agent, err))
+			}
+			sendEvent("error", fmt.Sprintf("Internal error: %v", r))
+			panic(r) // Re-throw after cleanup
+		}
+		// Normal close - use original context to allow proper commit/rollback decisions
 		if err := agentSvc.Close(ctx); err != nil {
 			log.Error(fmt.Sprintf("Agent '%s' failed to close session: %v", req.Agent, err))
 		}
 	}()
 
-	response, err := executeRAG(ctx, agentSvc, req, fullMessage, askOpts, sendEvent)
+	response, err := executeRAG(ctx, agentSvc, req, fullMessage, cfg, sendEvent)
 	if err != nil {
+		// Check if error is due to context cancellation
+		if ctx.Err() != nil {
+			log.Warn("Request canceled by client", "session_id", req.SessionID, "error", ctx.Err())
+			sendEvent("error", "Request canceled")
+		}
 		return
 	}
 	log.Info("HTTP AI Chat Response",
@@ -296,6 +306,26 @@ func setupStream(w http.ResponseWriter) (func(string, any), func() bool) {
 					return
 				}
 			}
+		case ai.ReasoningEventToolError:
+			// Stream tool errors immediately so user can see validation failures in real-time
+			if errorEvent, ok := payload.(map[string]any); ok {
+				if errorMsg, _ := errorEvent["error"].(string); strings.TrimSpace(errorMsg) != "" {
+					contentStreamed = true
+					// Format error for display
+					tool, _ := errorEvent["tool"].(string)
+					iteration, _ := errorEvent["iteration"].(int)
+					var msg string
+					if iteration > 0 {
+						msg = fmt.Sprintf("⚠️ Error (iteration %d, tool: %s): %s\n", iteration, tool, errorMsg)
+					} else {
+						msg = fmt.Sprintf("⚠️ Error (tool: %s): %s\n", tool, errorMsg)
+					}
+					writeEvent("content", msg)
+					// Also send the raw error event for UI to handle if needed
+					writeEvent("tool_error", errorEvent)
+					return
+				}
+			}
 		case ai.ReasoningEventToolResult:
 			if result, ok := payload.(map[string]any); ok {
 				if tool, _ := result["tool"].(string); tool == "execute_script" {
@@ -364,7 +394,7 @@ func lockSession(req *aiChatRequest, blueprint ai.Agent[map[string]any]) (ai.Age
 	return agentSvc, sessionMu
 }
 
-func constructPayload(ctx context.Context, req *aiChatRequest, sendEvent func(string, any)) (context.Context, *ai.SessionPayload, []ai.Option, string) {
+func constructPayload(ctx context.Context, req *aiChatRequest, llmSettings llmSettings, sendEvent func(string, any)) (context.Context, *ai.SessionPayload, *ai.ConfigMap, string) {
 	if req.Provider != "" {
 		ctx = context.WithValue(ctx, ai.CtxKeyProvider, req.Provider)
 	}
@@ -379,15 +409,27 @@ func constructPayload(ctx context.Context, req *aiChatRequest, sendEvent func(st
 	ctx = context.WithValue(ctx, ai.CtxKeyEventStreamer, sendEvent)
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &DefaultToolExecutor{Agents: loadedAgents})
 
-	var askOpts []ai.Option
+	cfg := ai.NewConfigMap()
+
+	// Add LLM settings as ProviderDetails struct for the agent
+	if llmSettings.Provider != "" || llmSettings.APIKey != "" {
+		providerDetails := &agent.ProviderDetails{
+			Provider: llmSettings.Provider,
+			Model:    llmSettings.Model,
+			APIKey:   llmSettings.APIKey,
+			BaseURL:  llmSettings.URL,
+		}
+		cfg.Set("provider_details", providerDetails)
+	}
+
 	if req.Database != "" {
-		askOpts = append(askOpts, ai.WithDatabase(req.Database))
+		cfg.Set("database", req.Database)
 	}
 	format := req.Format
 	if format == "" {
 		format = "csv"
 	}
-	askOpts = append(askOpts, ai.WithDefaultFormat(format))
+	cfg.Set("default_format", format)
 
 	databases := make(map[string]any)
 	for _, dbCfg := range config.Databases {
@@ -444,7 +486,7 @@ func constructPayload(ctx context.Context, req *aiChatRequest, sendEvent func(st
 		SessionID:        req.SessionID,
 		AvatarScope:      avatarScope,
 	}
-	askOpts = append(askOpts, ai.WithSessionPayload(payload))
+	cfg.Set("payload", payload)
 
 	if req.Database != "" {
 		obfuscation.GlobalObfuscator.RegisterResource(req.Database, "DB")
@@ -461,17 +503,17 @@ func constructPayload(ctx context.Context, req *aiChatRequest, sendEvent func(st
 
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
-	return ctx, payload, askOpts, fullMessage
+	return ctx, payload, cfg, fullMessage
 }
 
-func executeAgentLifecycle(ctx context.Context, agentSvc ai.Agent[map[string]any], req *aiChatRequest, sendEvent func(string, any)) error {
+func executeAgentLifecycle(ctx context.Context, r *http.Request, agentSvc ai.Agent[map[string]any], req *aiChatRequest, sendEvent func(string, any)) error {
 	if sysOpts, err := getSystemDBOptions(ctx); err == nil {
 		sysDB := aidb.NewDatabase(sysOpts)
 		kbName := memory.BuildLTMStoreName(ai.AgentIDOmni, req.UserID)
 		trans, _ := sysDB.BeginTransaction(ctx, sop.ForWriting)
 		if trans != nil {
 			dbEmbedder := GetConfiguredEmbedder(nil)
-			dbLLM := GetConfiguredLLM(nil)
+			dbLLM := GetConfiguredLLM(r)
 			sysDB.OpenKnowledgeBase(ctx, kbName, trans, dbLLM, dbEmbedder, false, true)
 			trans.Commit(ctx)
 			go seedMetaCognitionAsync(req.UserID, kbName, sysOpts)
@@ -487,8 +529,8 @@ func executeAgentLifecycle(ctx context.Context, agentSvc ai.Agent[map[string]any
 	return nil
 }
 
-func executeRAG(ctx context.Context, agentSvc ai.Agent[map[string]any], req *aiChatRequest, fullMessage string, askOpts []ai.Option, sendEvent func(string, any)) (string, error) {
-	response, err := agentSvc.Ask(ctx, fullMessage, askOpts...)
+func executeRAG(ctx context.Context, agentSvc ai.Agent[map[string]any], req *aiChatRequest, fullMessage string, cfg *ai.ConfigMap, sendEvent func(string, any)) (string, error) {
+	response, err := agentSvc.Ask(ctx, fullMessage, cfg)
 	if err != nil {
 		msg := fmt.Sprintf("Agent '%s' failed: %v", req.Agent, err)
 		log.Error("Response: Agent Ask Failed", "error", msg)
@@ -1210,7 +1252,8 @@ func handleToolExecute(w http.ResponseWriter, r *http.Request) {
 		}
 		defer agentSvc.Close(ctx)
 
-		response, err := agentSvc.Ask(ctx, prompt)
+		cfg := ai.NewConfigMap()
+		response, err := agentSvc.Ask(ctx, prompt, cfg)
 		if err != nil {
 			log.Error("Failed to ask agent", "error", err)
 			http.Error(w, "Failed to generate text", http.StatusInternalServerError)

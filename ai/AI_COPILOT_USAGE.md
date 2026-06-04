@@ -98,11 +98,155 @@ You can modify data directly.
 
 ---
 
+## 2.1 Bulk Operations & Typed Database API
+
+> **Note**: This section covers the **Database Operations API** for B-Trees and bulk CRUD. For AI memory operations (Spaces/Knowledge Bases), see [Section 3: Spaces and Knowledge Bases](#3-spaces-and-knowledge-bases).
+
+For high-performance bulk database operations (10K+ items), SOP provides a strongly typed API with automatic transaction batching.
+
+### Why Bulk Operations?
+
+Single-item CRUD operations commit immediately in interactive mode. For large datasets:
+- **100 items**: Individual operations work fine
+- **10,000+ items**: Use bulk operations with automatic batching
+- **Transaction control**: Choose between scalability and atomicity
+
+### Bulk Operations Available
+
+#### bulk_add
+Insert multiple items efficiently with automatic transaction batching.
+
+**Natural Language:**
+- "Bulk insert 50,000 user records with auto-batching"
+- "Add these 10,000 items to the users store using single transaction mode"
+
+**Typed API (Go):**
+```go
+result, err := agent.BulkAdd(ctx, agent.BulkAddArgs{
+    Store: "users",
+    Items: items,  // []BulkItem with key/value pairs
+    TransactionMode: agent.TransactionModeAutoBatch,  // or Single, Explicit
+    BatchSize: 250,  // Items per batch
+})
+
+// Result includes metrics
+fmt.Printf("Processed: %d, Failed: %d, Duration: %s\n", 
+    result.Processed, result.Failed, result.Duration)
+fmt.Printf("Items/sec: %.0f, Batches: %d\n",
+    result.Metrics.ItemsPerSecond, result.Metrics.BatchesExecuted)
+```
+
+#### bulk_update / bulk_delete
+Similar to bulk_add but for updates and deletes.
+
+### Transaction Modes
+
+| Mode | Use Case | Items | Behavior | Atomicity |
+|------|----------|-------|----------|-----------|
+| **auto_batch** | Large bulk ops | 10K+ | Tx per batch, auto-commit | Per-batch |
+| **single** | Atomic bulk | <10K | ONE tx, single commit | All-or-nothing |
+| **explicit** | Multi-op atomic | Any | Use provided tx, caller commits | Cross-operation |
+
+**auto_batch (Default - Scalability)**
+```
+Batch 1: Begin → Add 250 items → Commit
+Batch 2: Begin → Add 250 items → Commit
+...
+Batch 40: Begin → Add 250 items → Commit
+```
+- ✅ Scales to millions of items
+- ✅ Memory efficient (streaming)
+- ⚠️ Partial success possible (batch-level atomicity)
+
+**single (Atomicity)**
+```
+Begin → Add ALL 5,000 items → Commit
+```
+- ✅ All-or-nothing guarantee
+- ✅ Perfect for financial operations
+- ⚠️ Limited to ~10K items (memory)
+
+**explicit (Multi-Operation Atomicity)**
+```
+tx = Begin Transaction
+Bulk Add 1,000 users with tx
+Bulk Update 500 profiles with tx
+Bulk Delete 200 old records with tx
+Commit Transaction
+```
+- ✅ Atomic across multiple operations
+- ✅ Full control over transaction lifecycle
+- ⚠️ Caller must manage commit/rollback
+
+### OpenAPI & Schema-Driven Accuracy
+
+The typed API generates OpenAPI schemas that serve as the **single source of truth** for LLM guidance.
+
+**Traditional Approach (Verbose, Error-Prone):**
+```go
+// 150+ lines of inline schema definitions
+registry.Register("bulk_add", "description", map[string]any{
+    "type": "object",
+    "properties": map[string]any{
+        "store": map[string]any{"type": "string", ...},
+        "items": map[string]any{"type": "array", ...},
+        // ... 100+ more lines
+    },
+}, toolBulkAdd)
+```
+❌ Schema drifts from implementation  
+❌ Verbose, hard to maintain  
+❌ No compile-time validation  
+
+**OpenAPI Approach (Concise, Always Accurate):**
+```markdown
+# LLM Guidance (10 lines vs 150+)
+Tools: bulk_add, bulk_update, bulk_delete
+Schemas: ai/agent/docs/schemas/*.json
+
+bulk_add - Insert multiple items
+  Required: store, items
+  Recommended: transaction_mode="auto_batch", batch_size=250
+```
+✅ **93% reduction** in guidance size  
+✅ **Single source** - Schemas generated from Go structs  
+✅ **Always accurate** - Can't drift (auto-generated)  
+✅ **Type-safe** - Compile-time validation  
+
+**Benefits:**
+- **LLM Accuracy**: Reference concise schemas instead of verbose inline definitions
+- **Multi-Language**: Generate clients for Python, TypeScript, Rust, Java, C#
+- **Test Harnesses**: Use strongly typed API directly in tests
+- **HTTP Endpoints**: Auto-validated requests against OpenAPI spec
+- **Documentation**: Swagger UI with interactive testing
+
+See [ai/agent/README_API.md](../agent/README_API.md) for complete API documentation.
+
+---
+
 ## 3. Spaces and Knowledge Bases
+
+> **Architecture Note**: Spaces have their own **domain-specific API** separate from the database operations API covered in Section 2.1. These are complementary systems serving different purposes.
 
 The AI acts as an **Omni Persona**—managing both underlying B-Trees as a Database Engineer and recognizing "Spaces" or "Knowledge Bases" explicitly.
 
-A "Space" or "Knowledge Base" (often represented as a single word like "Notes" or "Contacts") is a new AI memory subsystem comprised of a VectorDB, Text Search, and a special schema (Thoughts: Category/Items) along with its memory management. When a user asks to generate, translate, upload, or import data into a target Space, the AI **DOES NOT USE ANY RAW DATABASE TOOLS** (e.g., `open_store`, `list_stores`, `execute_script`). Treating Spaces like raw B-Trees will result in schema validation errors. 
+A "Space" or "Knowledge Base" (often represented as a single word like "Notes" or "Contacts") is an AI memory subsystem comprised of a VectorDB, Text Search, and a special schema (Thoughts: Category/Items) along with its memory management. When a user asks to generate, translate, upload, or import data into a target Space, the AI **DOES NOT USE ANY RAW DATABASE TOOLS** (e.g., `add`, `bulk_add`, `execute_script`). Treating Spaces like raw B-Trees will result in schema validation errors.
+
+### Spaces API vs Database API
+
+**Use Spaces API for:**
+- ✅ Knowledge bases, notes, contacts
+- ✅ Semantic search and embeddings
+- ✅ AI memory with categories/items
+- ✅ Tools: `mint_to_space`, `enrich_space`, `vectorize_space`
+
+**Use Database API (Section 2.1) for:**
+- ✅ Raw B-Tree operations
+- ✅ Bulk CRUD (10K+ items)
+- ✅ Transaction control
+- ✅ Tools: `bulk_add`, `bulk_update`, `bulk_delete`, `select`, `execute_script`
+
+The Spaces API is **high-level** (AI-oriented), while the Database API is **low-level** (storage-oriented). 
 
 Instead, the AI should use its Space APIs such as `upsert_space_items` natively to manage the categories and items, ensuring correct memory ingestion sequences.
 

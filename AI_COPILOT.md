@@ -189,6 +189,90 @@ sequenceDiagram
     Gemini-->>User: final answer or clarification
 ```
 
+### LLM Provider Requirements
+
+SOP AI integration requires specific capabilities from LLM providers to support the ReAct agent architecture, tool calling, and multi-turn conversations.
+
+#### Supported Providers
+
+**Current Integration Status:**
+
+| Provider | Status | Implementation | Native Loop | Carryover Method |
+|----------|--------|----------------|-------------|------------------|
+| **Google Gemini** | ✅ Production | `ai/generator/gemini.go` | Provider-owned | ToolCallContinuations array |
+| **OpenAI ChatGPT** | ✅ Production | `ai/generator/chatgpt_react_loop.go` | Provider-owned | Responses API threading (PreviousResponseID) |
+| **Anthropic Claude** | ✅ Production | `ai/generator/anthropic.go` | Generic path | Message history with tool_use/tool_result blocks |
+| **Ollama (Local)** | ❌ Not Supported | `ai/generator/ollama.go` | N/A | No tool calling support - **Embeddings only** |
+
+#### Required Capabilities
+
+All production LLM models in the catalog **must support** the following features:
+
+1. **Tool Calling (Function Calling)** - **CRITICAL**
+   - Must accept tool definitions with JSON schemas in requests
+   - Must return structured `ToolCall` objects with function name and arguments
+   - Used via: `GenOptions.Tools` → `GenOutput.ToolCalls`
+   - Without this: Agent cannot execute database operations, queries, or scripts
+
+2. **System Prompts** - **REQUIRED**
+   - Must accept system-level instructions separate from user prompts
+   - Used via: `GenOptions.SystemPrompt`
+   - Purpose: Enforces role boundaries, task context, and behavioral constraints
+
+3. **Multi-Turn Conversations with Tool Continuations** - **REQUIRED**
+   - Must support conversation history with tool_use/tool_result pairs
+   - Must preserve context across multiple reasoning-action cycles
+   - Used via: `GenOptions.ToolCallContinuations` (provider-neutral format)
+   - Without this: No carryover between ReAct loop iterations
+
+#### Optional But Valuable
+
+4. **Thinking/Reasoning Controls** (Gemini-specific)
+   - Optional support for internal reasoning intensity control
+   - Levels: `low` (strict structured outputs), `medium`, `high` (creative tasks)
+   - Used via: `GenOptions.ThinkingLevel`
+
+5. **Structured Output Schemas** (Gemini-specific)
+   - Optional support for strict JSON schema enforcement
+   - Constrains token generation to prevent hallucinated fields
+   - Used via: `GenOptions.ResponseSchema`
+
+#### Carryover Architecture
+
+SOP uses a **two-level carryover system** for conversation continuity:
+
+**Macro-Level (Inter-Ask Carryover):**
+- Budget-based with limits: `AskCount`, `EstimatedCarryTokens`, `EstimatedRawToolTokens`
+- Falls back to **compact mode** when budget exceeded
+- Enriched with **MRU context** (store schemas, relations, confirmed facts, tool patterns)
+- Managed by: `ai/agent/carryover.go`
+
+**Micro-Level (Intra-ReAct Loop):**
+- **Gemini**: Uses `ToolCallContinuations` array with full function call/response state
+- **ChatGPT**: Uses `PreviousResponseID` via OpenAI Responses API threading
+- **Claude**: Uses message history with `tool_use`/`tool_result` content blocks
+- Provider-specific but abstracted through `ToolCallContinuation` interface
+
+#### Model Selection Guidelines
+
+When choosing models for the catalog (`model_catalog.json`):
+
+- ✅ **Include**: Models with verified tool calling support and active API availability
+- ✅ **Test**: Validate each model handles complex multi-step workflows reliably
+- ❌ **Exclude**: Models without function calling support
+- ❌ **Exclude**: Preview/experimental models not production-ready
+- ⚠️ **Caution**: Future models should be verified against API documentation before adding
+
+**Current Production Models:**
+- **Gemini**: 3.5 Flash, 3.1 Pro Preview, 2.5 Pro, 1.5 Pro/Flash/Flash-8B, Gemma 4/4-IT
+- **Claude**: 4.7 Opus/Sonnet/Haiku, 4.6 Sonnet/Haiku, Code Sonnet/Opus 4.6, 3.5 Sonnet/Haiku
+- **GPT**: 4o, 4o-mini, 4-turbo, 3.5-turbo (and 5.x/o3-mini if available as of June 2026)
+
+**Not Supported for LLM (Embeddings Only):**
+- **Ollama**: Local models lack native tool calling support required for the ReAct agent architecture. Use Ollama for embeddings (nomic-embed-text, mxbai-embed-large, all-minilm) or for simple text-to-text transformation tasks that don't require database operations.
+
+See `model_catalog.json` for the complete list with capability annotations.
+
 ### Two-Layer MRU Model
 
 SOP now uses two distinct MRU layers that share the same live session buffer but serve different purposes:

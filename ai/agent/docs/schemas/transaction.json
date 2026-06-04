@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "TransactionArgs": {
+      "title": "TransactionArgs",
+      "description": "Arguments for beginning a transaction",
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "database": {
+          "type": "string",
+          "description": "Database name (optional)",
+          "example": "dev_db"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["read", "write"],
+          "description": "Transaction mode",
+          "default": "read"
+        }
+      }
+    },
+    "TransactionHandle": {
+      "title": "TransactionHandle",
+      "description": "Handle to an active transaction",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique transaction ID",
+          "example": "550e8400-e29b-41d4-a716-446655440000"
+        },
+        "database": {
+          "type": "string",
+          "description": "Database name"
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["read", "write"]
+        },
+        "started": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When transaction began"
+        }
+      }
+    }
+  }
+}

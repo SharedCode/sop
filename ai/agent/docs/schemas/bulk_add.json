@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BulkAddArgs",
+  "description": "Bulk insert multiple items with automatic transaction batching",
+  "type": "object",
+  "required": ["store", "items"],
+  "properties": {
+    "database": {
+      "type": "string",
+      "description": "Database name (optional, uses current session db)",
+      "example": "dev_db"
+    },
+    "store": {
+      "type": "string",
+      "description": "Store/table name",
+      "example": "users"
+    },
+    "items": {
+      "type": "array",
+      "description": "Items to insert",
+      "items": {
+        "$ref": "#/definitions/BulkItem"
+      }
+    },
+    "transaction_id": {
+      "type": "string",
+      "description": "Existing transaction ID (explicit mode only)"
+    },
+    "transaction_mode": {
+      "$ref": "#/definitions/TransactionMode"
+    },
+    "batch_size": {
+      "type": "integer",
+      "description": "Items per batch (default: 100, recommended: 250 for 10K+ items)",
+      "default": 100,
+      "example": 250
+    }
+  },
+  "definitions": {
+    "BulkItem": {
+      "type": "object",
+      "required": ["key", "value"],
+      "properties": {
+        "key": {
+          "description": "Item key (any type)",
+          "example": "user_123"
+        },
+        "value": {
+          "type": "object",
+          "description": "Item value (JSON object)",
+          "additionalProperties": true
+        }
+      }
+    },
+    "TransactionMode": {
+      "type": "string",
+      "enum": ["auto_batch", "single", "explicit"],
+      "description": "Transaction handling mode",
+      "default": "auto_batch",
+      "x-enum-descriptions": {
+        "auto_batch": "Creates transactions per batch, auto-commits. Use for 10K+ items (scalable)",
+        "single": "ONE transaction for ALL items, single commit. Use for <10K items (atomic)",
+        "explicit": "Uses provided transaction, NO auto-commits. Use for multi-operation atomicity"
+      }
+    }
+  }
+}
