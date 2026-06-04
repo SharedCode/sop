@@ -1,6 +1,14 @@
 # Changelog
 
 ## SOP V2 build 53 (Upcoming)
+- **Schema Format Enhancement**: Introduced flat schema format for better LLM understanding and correlation with Store Relations.
+    - **New Fields**: Added `FlatSchema`, `KeyFields`, and `ValueFields` to `StoreInfo` for improved schema representation.
+    - **Flat Schema**: Uses flat format without prefixes (e.g., `{"key": "string", "first_name": "string", "age": "number"}`) that directly correlates with relation field names.
+    - **Field Lists**: `KeyFields` and `ValueFields` arrays explicitly identify which fields belong to the Key vs Value, enabling LLMs to correctly prefix fields when generating SQL-like predicates.
+    - **LLM Compatibility**: The flat format follows JSON Schema standards and eliminates cognitive load for LLMs when mapping relation field names to schema fields.
+    - **Backward Compatibility**: The legacy prefixed `Schema` field (e.g., `{"Key": "string", "Value.first_name": "string"}`) is maintained for existing tools and will be deprecated in a future major version.
+    - **Automatic Inference**: Schema inference automatically populates both formats during B-Tree item insertion.
+    - **Updated Instructions**: AI Copilot prompts now reference the flat schema format and guide LLMs to use `key_fields` and `value_fields` for proper field prefix determination.
 - **Refactor**: Refactored `IndexSpecification` and `StoreInfo` to separate sorting logic from index definitions.
     - **CEL Expression**: The `CELexpression` field in `StoreInfo` is now the primary source for custom sorting logic.
     - **IndexSpecification**: Now strictly defines the fields used for indexing and optimization.

@@ -56,7 +56,10 @@ func (c currentItemRef) getNodeID() sop.UUID {
 // Uses reflection to infer types from the generic TK and TV parameters.
 func (btree *Btree[TK, TV]) inferSchemaOfFirst(item *Item[TK, TV]) {
 	if btree.StoreInfo.Count == 0 {
-		btree.StoreInfo.Schema = sop.InferSchemaFromTypes(item.Key, item.Value)
+		result := sop.InferSchemaFromTypes(item.Key, item.Value)
+		btree.StoreInfo.Schema = result.Schema
+		btree.StoreInfo.KeyFields = result.KeyFields
+		btree.StoreInfo.ValueFields = result.ValueFields
 	}
 }
 

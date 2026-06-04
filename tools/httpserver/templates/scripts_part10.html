@@ -124,7 +124,7 @@
         if (!existingEnv) {
             const option = document.createElement('option');
             option.value = value;
-            option.textContent = model ? `${setupProviderLabel(provider)} (${model}) (Env)` : `${setupProviderLabel(provider)} (Env)`;
+            option.textContent = model ? `${setupProviderLabel(provider)} (${model})` : `${setupProviderLabel(provider)}`;
             option.dataset.injected = 'env';
 
             const envGroup = ensureEnvironmentOptgroup(select);

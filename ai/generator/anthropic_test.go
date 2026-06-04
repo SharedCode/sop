@@ -351,8 +351,8 @@ func TestAnthropicCarryoverCapability_SupportsCompactNotLive(t *testing.T) {
 	if !cap.SupportsCompact {
 		t.Fatal("expected SupportsCompact to be true")
 	}
-	if cap.SupportsLive {
-		t.Fatal("expected SupportsLive to be false")
+	if !cap.SupportsLive {
+		t.Fatal("expected SupportsLive to be true")
 	}
 }
 

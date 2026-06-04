@@ -1056,7 +1056,7 @@ func isToolUnavailableError(err error) bool {
 }
 
 func (e *ServiceToolExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
-	log.Info("Executing Tool call", "tool", toolName, "args", args)
+	log.Debug("Executing Tool call", "tool", toolName, "args", args)
 
 	// Get or build tool execution context
 	toolCtx := e.toolCtx

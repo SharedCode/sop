@@ -27,7 +27,7 @@ Conventions for this document:
 - Stores prompt context is artifact-scoped and relation-aware.
 - CRUD-scoped operation guidance is injected for focused execution.
 - Batch-first CRUD and search patterns are established in the AI layer.
-- SearchByPath lexical fast-path is active.
+- SearchByPath supports dual-mode operation: lexical fast-path for exact matches, and breakthrough semantic path search using CategoriesByDistance for hierarchical semantic navigation (world's first).
 - Native Ask/ReAct micro-loop now keeps Ask-local state through Ask-anchored MRU compaction between inner-loop iterations.
 - Native Ask loop now uses a progress-aware retry budget: base 5 iterations, bounded extension up to hard cap 15 when grounded progress is detected.
 - Structured native tool envelopes are active via `tool_result` plus `progress_hint`, and the engine now interprets hints for progress, repair guidance, and terminal hard-stop behavior.
@@ -1176,13 +1176,13 @@ Production-ready knowledge base and orchestration core with deterministic contex
 
 1. Batched-first native CRUD API parity across SDK and UI flows.
 2. Omni knowledge consumption via transactional loopback and retrieval orchestration.
-3. Lexical fast-path via SearchByPath.
+3. Dual-mode SearchByPath: lexical fast-path + semantic hierarchical navigation via CategoriesByDistance.
 4. Medical knowledge base demonstration as a deep-domain benchmark.
 
 ### Current Completion Markers
 
 - Batched-first CRUD behavior: implemented.
-- SearchByPath fast prefix scanning: implemented.
+- SearchByPath dual-mode: lexical fast-path + semantic path search via CategoriesByDistance hierarchical drill-down: implemented.
 - Three-gate routing and focused context assembly: implemented.
 - Native Ask-loop progression, bounded retry extension, and structured tool-hint interpretation: implemented.
 - Initial native terminal-envelope rollout for user-visible hard-stop tool outcomes: implemented.

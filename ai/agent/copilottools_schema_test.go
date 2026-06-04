@@ -20,10 +20,12 @@ type listStoresTestPayload struct {
 }
 
 type listStoresTestStore struct {
-	Name      string            `json:"name"`
-	Schema    map[string]string `json:"schema"`
-	Relations []sop.Relation    `json:"relations"`
-	Empty     bool              `json:"empty"`
+	Name        string            `json:"name"`
+	Schema      map[string]string `json:"schema"`       // Flat schema without prefixes
+	KeyFields   []string          `json:"key_fields"`   // Fields in Key
+	ValueFields []string          `json:"value_fields"` // Fields in Value
+	Relations   []sop.Relation    `json:"relations"`
+	Empty       bool              `json:"empty"`
 }
 
 func TestToolListStores_SchemaEnrichment(t *testing.T) {
@@ -124,15 +126,36 @@ func TestToolListStores_SchemaEnrichment(t *testing.T) {
 	if users.Name != "users" {
 		t.Fatalf("expected payload to contain users store, got %+v", resultPayload.Stores)
 	}
-	// Schema should now use Key/Value prefixes for SQL clarity
-	if users.Schema["Value.first_name"] != "string" {
-		t.Fatalf("expected Value.first_name:string in schema, got %+v", users.Schema)
+	// Schema should have flat format without prefixes
+	if users.Schema["first_name"] != "string" {
+		t.Fatalf("expected first_name:string in schema, got %+v", users.Schema)
 	}
-	if users.Schema["Value.age"] != "number" {
-		t.Fatalf("expected Value.age:number in schema, got %+v", users.Schema)
+	if users.Schema["age"] != "number" {
+		t.Fatalf("expected age:number in schema, got %+v", users.Schema)
 	}
-	if users.Schema["Key"] != "string" {
-		t.Fatalf("expected Key:string in schema, got %+v", users.Schema)
+	if users.Schema["key"] != "string" {
+		t.Fatalf("expected key:string in schema, got %+v", users.Schema)
+	}
+	// Check KeyFields and ValueFields
+	if len(users.KeyFields) != 1 || users.KeyFields[0] != "key" {
+		t.Fatalf("expected key_fields:[\"key\"], got %+v", users.KeyFields)
+	}
+	if len(users.ValueFields) != 2 {
+		t.Fatalf("expected 2 value_fields, got %+v", users.ValueFields)
+	}
+	// ValueFields should contain both first_name and age (order may vary)
+	hasFirstName := false
+	hasAge := false
+	for _, field := range users.ValueFields {
+		if field == "first_name" {
+			hasFirstName = true
+		}
+		if field == "age" {
+			hasAge = true
+		}
+	}
+	if !hasFirstName || !hasAge {
+		t.Fatalf("expected value_fields to contain first_name and age, got %+v", users.ValueFields)
 	}
 }
 
@@ -192,8 +215,12 @@ func TestToolListStores_FiltersRequestedStores(t *testing.T) {
 	if len(payload.Stores) != 1 || payload.Stores[0].Name != "orders" {
 		t.Fatalf("expected only orders store, got %+v", payload.Stores)
 	}
-	if payload.Stores[0].Schema["Value.total_amount"] != "number" {
-		t.Fatalf("expected grounded orders schema with Value prefix, got %+v", payload.Stores[0].Schema)
+	// Check flat schema format
+	if payload.Stores[0].Schema["total_amount"] != "number" {
+		t.Fatalf("expected total_amount:number in schema, got %+v", payload.Stores[0].Schema)
+	}
+	if len(payload.Stores[0].ValueFields) == 0 {
+		t.Fatalf("expected value_fields to be populated, got %+v", payload.Stores[0].ValueFields)
 	}
 }
 
@@ -376,8 +403,8 @@ func TestToolListStores_ReturnsProgressEnvelopeForNativeHints(t *testing.T) {
 	if len(payload.Stores) != 1 || payload.Stores[0].Name != "users" {
 		t.Fatalf("expected tool result payload to contain users store, got %+v", payload.Stores)
 	}
-	if payload.Stores[0].Schema["Value.first_name"] != "string" {
-		t.Fatalf("expected users schema with Value prefix in tool_result payload, got %+v", payload.Stores[0].Schema)
+	if payload.Stores[0].Schema["first_name"] != "string" {
+		t.Fatalf("expected users schema without prefix in tool_result payload, got %+v", payload.Stores[0].Schema)
 	}
 	if len(envelope.ProgressHint.Clues) == 0 || !strings.Contains(envelope.ProgressHint.Clues[0], "users") {
 		t.Fatalf("expected grounded clue in progress hint, got %+v", envelope.ProgressHint)
@@ -470,27 +497,53 @@ func TestToolListStores_StructKeySchema(t *testing.T) {
 		t.Fatalf("expected store name 'users_by_name', got %q", store_info.Name)
 	}
 
-	// Verify Key fields are prefixed with "Key."
-	if store_info.Schema["Key.first_name"] != "string" {
-		t.Fatalf("expected Key.first_name:string in schema, got %+v", store_info.Schema)
+	// Verify flat schema (no prefixes)
+	if store_info.Schema["first_name"] != "string" {
+		t.Fatalf("expected first_name:string in schema, got %+v", store_info.Schema)
 	}
-	if store_info.Schema["Key.last_name"] != "string" {
-		t.Fatalf("expected Key.last_name:string in schema, got %+v", store_info.Schema)
+	if store_info.Schema["last_name"] != "string" {
+		t.Fatalf("expected last_name:string in schema, got %+v", store_info.Schema)
 	}
-
-	// Verify Value fields are prefixed with "Value."
-	if store_info.Schema["Value.age"] != "number" {
-		t.Fatalf("expected Value.age:number in schema, got %+v", store_info.Schema)
+	if store_info.Schema["age"] != "number" {
+		t.Fatalf("expected age:number in schema, got %+v", store_info.Schema)
 	}
-	if store_info.Schema["Value.email"] != "string" {
-		t.Fatalf("expected Value.email:string in schema, got %+v", store_info.Schema)
+	if store_info.Schema["email"] != "string" {
+		t.Fatalf("expected email:string in schema, got %+v", store_info.Schema)
 	}
 
-	// Verify no unprefixed keys exist (old format should not appear)
-	if _, exists := store_info.Schema["first_name"]; exists {
-		t.Fatalf("found unprefixed 'first_name' in schema (should be 'Key.first_name'), got %+v", store_info.Schema)
+	// Verify KeyFields contains first_name and last_name
+	if len(store_info.KeyFields) != 2 {
+		t.Fatalf("expected 2 key_fields, got %+v", store_info.KeyFields)
 	}
-	if _, exists := store_info.Schema["age"]; exists {
-		t.Fatalf("found unprefixed 'age' in schema (should be 'Value.age'), got %+v", store_info.Schema)
+	hasFirstName := false
+	hasLastName := false
+	for _, field := range store_info.KeyFields {
+		if field == "first_name" {
+			hasFirstName = true
+		}
+		if field == "last_name" {
+			hasLastName = true
+		}
+	}
+	if !hasFirstName || !hasLastName {
+		t.Fatalf("expected key_fields to contain first_name and last_name, got %+v", store_info.KeyFields)
+	}
+
+	// Verify ValueFields contains age and email
+	if len(store_info.ValueFields) != 2 {
+		t.Fatalf("expected 2 value_fields, got %+v", store_info.ValueFields)
+	}
+	hasAge := false
+	hasEmail := false
+	for _, field := range store_info.ValueFields {
+		if field == "age" {
+			hasAge = true
+		}
+		if field == "email" {
+			hasEmail = true
+		}
+	}
+	if !hasAge || !hasEmail {
+		t.Fatalf("expected value_fields to contain age and email, got %+v", store_info.ValueFields)
 	}
 }
