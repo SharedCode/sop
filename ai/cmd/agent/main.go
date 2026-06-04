@@ -210,7 +210,7 @@ func main() {
 	fmt.Println(cfg.Description)
 	fmt.Println("Type 'exit' to quit.")
 
-	if err := agent.RunLoop(context.Background(), svc, os.Stdin, os.Stdout, cfg.UserPrompt, cfg.AssistantName); err != nil {
+	if err := agent.RunLoop(context.Background(), svc, os.Stdin, os.Stdout, cfg.UserPrompt, cfg.AssistantName, ai.NewConfigMap()); err != nil {
 		fmt.Printf("Error during session: %v\n", err)
 	}
 }

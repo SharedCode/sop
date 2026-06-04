@@ -94,7 +94,8 @@ func (a *CopilotAgent) listRegisteredTools(exposure nativeToolExposure) []ai.Too
 	}
 	tools := make([]ai.ToolDefinition, 0)
 	for _, tool := range a.registry.List() {
-		if tool.Hidden {
+		// Skip hidden tools only when routing is restricted AND tool is not explicitly allowed
+		if tool.Hidden && exposure.restrict && !exposure.allowed[tool.Name] {
 			continue
 		}
 		if !shouldExposeNativeTool(tool.Name, exposure) {

@@ -100,8 +100,9 @@ func (a *CopilotAgent) ClassifyTaskContext(ctx context.Context, query string, ge
 	prompt := fmt.Sprintf(promptClassifyDiscovery, strings.Join(storesList, ", "), strings.Join(spacesList, ", "))
 
 	opts := ai.GenOptions{
-		SystemPrompt: prompt,
-		Temperature:  0.0,
+		SystemPrompt:  prompt,
+		Temperature:   0.0,
+		ThinkingLevel: "low", // Strict JSON schema adherence for classification
 	}
 
 	resp, err := gen.Generate(ctx, query, opts)
@@ -133,8 +134,9 @@ func (a *CopilotAgent) ClassifyFocusedTaskContext(ctx context.Context, query, en
 	prompt := fmt.Sprintf(promptClassifyFocused, entity, domain, artifact, availableContext, query, entity, domain, artifact, storesArtifact, spacesArtifact)
 
 	opts := ai.GenOptions{
-		SystemPrompt: prompt,
-		Temperature:  0.0,
+		SystemPrompt:  prompt,
+		Temperature:   0.0,
+		ThinkingLevel: "low", // Strict JSON schema adherence for focused classification
 	}
 
 	resp, err := gen.Generate(ctx, query, opts)
@@ -159,8 +161,9 @@ func (a *CopilotAgent) ClassifyContinuityTaskContext(ctx context.Context, query 
 	prompt := fmt.Sprintf(promptClassifyContinuity, string(digestJSON), string(routingJSON), string(anchorJSON), query)
 
 	opts := ai.GenOptions{
-		SystemPrompt: prompt,
-		Temperature:  0.0,
+		SystemPrompt:  prompt,
+		Temperature:   0.0,
+		ThinkingLevel: "low", // Strict JSON schema adherence for continuity classification
 	}
 
 	resp, err := gen.Generate(ctx, query, opts)

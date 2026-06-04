@@ -34,21 +34,18 @@ The **SOP Data Manager** includes an embedded AI Copilot powered by LLMs (like G
 
 ### Setting the API Key
 
-You can provide the API Key via an environment variable or the configuration file. For a detailed guide on using the conversational interface, case sensitivity rules, and query examples, please refer to the [AI Copilot User Guide](ai/AI_COPILOT_USAGE.md).
+You can provide the API Key via the Setup Wizard (on first launch) or the configuration file. For a detailed guide on using the conversational interface, case sensitivity rules, and query examples, please refer to the [AI Copilot User Guide](ai/AI_COPILOT_USAGE.md).
 
-**Option 1: Environment Variable (Recommended)**
-Set the provider-specific API key in your shell or `.env` file before launching the application.
-
-```bash
-export GEMINI_API_KEY="your-api-key-here"
-```
-
-**Option 2: Config File**
-Add the `llm_api_key` field to your `config.json` file.
+**Config File**
+Add the generator configuration to your `config.json` file.
 
 ```json
 {
-  "llm_api_key": "your-api-key-here",
+  "generator": {
+    "provider": "gemini",
+    "api_key": "your-api-key-here",
+    "model": "gemini-2.0-flash-exp"
+  },
   "port": 8080
 }
 ```

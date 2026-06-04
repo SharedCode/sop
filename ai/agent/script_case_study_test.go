@@ -116,7 +116,7 @@ func TestCaseStudy_TwoPathsToAutomation(t *testing.T) {
 		// 1.d. Execute
 		// /run onboard_employee user_id="u1" user_email="u1@example.com"
 		runCmd := "/run onboard_employee user_id=mjordan user_email=mjordan@bulls.com"
-		resp, err := svc.Ask(ctx, runCmd)
+		resp, err := svc.Ask(ctx, runCmd, nil)
 		if err != nil {
 			t.Fatalf("Execution failed: %v", err)
 		}
@@ -164,7 +164,7 @@ func TestCaseStudy_TwoPathsToAutomation(t *testing.T) {
 		// 2.b. Verify Concrete Script Works (The Prototype Phase)
 		// Running it without args should work for "jdoe"
 		runConcrete := "/run onboard_workflow_prototype"
-		if _, err := svc.Ask(ctx, runConcrete); err != nil {
+		if _, err := svc.Ask(ctx, runConcrete, nil); err != nil {
 			t.Fatalf("Concrete prototype execution failed: %v", err)
 		}
 		verifyUserExists(t, ctx, sysDB, "jdoe", "staff")
@@ -178,13 +178,13 @@ func TestCaseStudy_TwoPathsToAutomation(t *testing.T) {
 		// We intentionally pass the SHORT string first ("jdoe") to verify the system
 		// correctly prioritizes the LONG string ("jdoe@example.com") despite the argument order.
 		cmd := "/script parameterize onboard_workflow_prototype user_id jdoe user_email jdoe@example.com"
-		if _, err := svc.Ask(ctx, cmd); err != nil {
+		if _, err := svc.Ask(ctx, cmd, nil); err != nil {
 			t.Fatalf("Batch parameterization failed: %v", err)
 		}
 		// 2.d. Verify Result (The Abstract Phase)
 		// Now we run the SAME script with NEW values (scottie pippen)
 		runAbstract := "/run onboard_workflow_prototype user_id=spippen user_email=spippen@bulls.com"
-		if _, err := svc.Ask(ctx, runAbstract); err != nil {
+		if _, err := svc.Ask(ctx, runAbstract, nil); err != nil {
 			t.Fatalf("Abstract execution failed: %v", err)
 		}
 

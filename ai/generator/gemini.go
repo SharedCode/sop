@@ -8,7 +8,6 @@ import (
 	"io"
 	log "log/slog"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/sharedcode/sop/ai"
@@ -24,23 +23,14 @@ type gemini struct {
 func init() {
 	Register("gemini", func(cfg map[string]any) (ai.Generator, error) {
 		apiKey, _ := cfg["api_key"].(string)
-		if apiKey == "" {
-			apiKey = os.Getenv("GEMINI_API_KEY")
-		}
 		if strings.HasPrefix(apiKey, "sk-") {
 			return nil, fmt.Errorf("detected OpenAI API key (starts with 'sk-') but generator type is 'gemini'. Please check your configuration")
 		}
 		model, _ := cfg["model"].(string)
 		if model == "" {
-			model = os.Getenv("GEMINI_MODEL")
-		}
-		if model == "" {
 			model = ai.DefaultModelGemini
 		}
 		apiURL, _ := cfg["api_url"].(string)
-		if strings.TrimSpace(apiURL) == "" {
-			apiURL = os.Getenv("GEMINI_API_URL")
-		}
 		return &gemini{apiKey: apiKey, model: model, apiURL: strings.TrimSpace(apiURL)}, nil
 	})
 }
@@ -53,7 +43,7 @@ func (g *gemini) CarryoverCapability() ai.CarryoverCapability {
 		Provider:        g.Name(),
 		Model:           strings.TrimSpace(g.model),
 		SupportsCompact: true,
-		SupportsLive:    false,
+		SupportsLive:    true,
 	}
 }
 
@@ -120,6 +110,19 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 	}
 
 	continuations := make([]ai.ToolCallContinuation, 0)
+
+	// Restore continuations from previous Ask carryover state
+	if req.CarryoverState != nil && req.CarryoverState.Mode == ai.CarryoverModeLive && req.CarryoverState.ConversationHandle != "" {
+		if err := json.Unmarshal([]byte(req.CarryoverState.ConversationHandle), &continuations); err == nil {
+			log.Info("Gemini restored continuations from carryover",
+				"count", len(continuations),
+				"estimated_tokens", req.CarryoverState.EstimatedRawToolTokens,
+			)
+		} else {
+			log.Warn("Gemini failed to restore continuations from carryover", "error", err)
+		}
+	}
+
 	toolResults := make([]ai.ReActToolResult, 0)
 	executedToolCalls := make([]ai.ToolCall, 0)
 
@@ -203,6 +206,25 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 				emitGeminiOwnedLoopHydration(req, resp)
 				return resp, nil
 			}
+		}
+
+		// Check for repeated validation errors and bail out early
+		if shouldShortCircuitOnRepeatedValidationErrors(toolResults, iteration) {
+			errorMsg := "I encountered repeated validation errors in the script. Please check the filter conditions and ensure they use proper operators like $eq, $gt, etc. instead of boolean placeholders."
+			log.Warn("Gemini owned loop short-circuited on repeated validation errors",
+				"iteration", iteration,
+				"tool_results_count", len(toolResults),
+			)
+			// Emit error event so UI displays it immediately
+			emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolError, map[string]any{
+				"tool":      "execute_script",
+				"error":     errorMsg,
+				"iteration": iteration,
+				"reason":    "repeated_validation_errors",
+			})
+			resp := geminiOwnedLoopResponse(errorMsg, executedToolCalls, toolResults, continuations)
+			emitGeminiOwnedLoopHydration(req, resp)
+			return resp, nil
 		}
 	}
 
@@ -344,6 +366,51 @@ func geminiValidationErrorParts(line string) (string, string, string) {
 	return category, remainder, example
 }
 
+func summarizeGeminiContinuationToolOutput(toolName string, response any) any {
+	trimmedTool := strings.TrimSpace(toolName)
+	if !strings.EqualFold(trimmedTool, "execute_script") {
+		return response
+	}
+
+	// Convert response to string for analysis
+	var resultText string
+	switch v := response.(type) {
+	case string:
+		resultText = v
+	case map[string]any:
+		if result, ok := v["result"].(string); ok {
+			resultText = result
+		} else {
+			bytes, _ := json.Marshal(v)
+			resultText = string(bytes)
+		}
+	default:
+		bytes, _ := json.Marshal(response)
+		resultText = string(bytes)
+	}
+
+	trimmedResult := strings.TrimSpace(resultText)
+	if trimmedResult == "" {
+		return map[string]any{"result": "execute_script completed with no textual payload. Results, if any, were already streamed to the client."}
+	}
+
+	var rows []json.RawMessage
+	if err := json.Unmarshal([]byte(trimmedResult), &rows); err == nil {
+		return map[string]any{"result": fmt.Sprintf("execute_script completed successfully and returned %d row(s). The full row payload was already streamed to the client. Do not restate the rows; provide at most a brief summary.", len(rows))}
+	}
+
+	var record map[string]any
+	if err := json.Unmarshal([]byte(trimmedResult), &record); err == nil {
+		return map[string]any{"result": "execute_script completed successfully and returned one structured record. The full payload was already streamed to the client. Do not restate the record; provide at most a brief summary."}
+	}
+
+	if len(trimmedResult) > 1000 {
+		return map[string]any{"result": fmt.Sprintf("execute_script completed successfully and returned a large textual payload (%d chars). The full payload was already streamed to the client. Do not restate it; provide at most a brief summary.", len(trimmedResult))}
+	}
+
+	return response
+}
+
 func geminiOwnedLoopCarryoverState(continuations []ai.ToolCallContinuation) *ai.CarryoverState {
 	if len(continuations) == 0 {
 		return nil
@@ -353,7 +420,8 @@ func geminiOwnedLoopCarryoverState(continuations []ai.ToolCallContinuation) *ai.
 		return &ai.CarryoverState{Mode: ai.CarryoverModeCompact}
 	}
 	return &ai.CarryoverState{
-		Mode:                   ai.CarryoverModeCompact,
+		Mode:                   ai.CarryoverModeLive,
+		ConversationHandle:     string(raw),
 		EstimatedRawToolTokens: (len(raw) + 3) / 4,
 	}
 }
@@ -504,6 +572,36 @@ func shouldShortCircuitGeminiOwnedLoopOnToolHint(hint *ai.ToolProgressHint) bool
 	default:
 		return false
 	}
+}
+
+func shouldShortCircuitOnRepeatedValidationErrors(toolResults []ai.ReActToolResult, currentIteration int) bool {
+	// Need at least 2 consecutive failures to short-circuit
+	if len(toolResults) < 2 || currentIteration < 2 {
+		return false
+	}
+
+	// Check the last 2-3 tool results for validation errors
+	checkCount := 3
+	if len(toolResults) < checkCount {
+		checkCount = len(toolResults)
+	}
+
+	consecutiveValidationErrors := 0
+	for i := len(toolResults) - 1; i >= len(toolResults)-checkCount && i >= 0; i-- {
+		result := toolResults[i]
+		// Check if the result contains validation error keywords
+		if strings.Contains(result.Result, "validation error") &&
+			(strings.Contains(result.Result, "invalid_filter_placeholder") ||
+				strings.Contains(result.Result, "invalid_filter_operator_placeholder") ||
+				strings.Contains(result.Result, "invalid_filter_field_placeholder")) {
+			consecutiveValidationErrors++
+		} else {
+			break // Stop if we hit a non-validation-error
+		}
+	}
+
+	// Short-circuit after 2 consecutive validation errors
+	return consecutiveValidationErrors >= 2
 }
 
 func cloneGeminiReActToolResults(results []ai.ReActToolResult) []ai.ReActToolResult {
@@ -694,9 +792,15 @@ type geminiFunctionCallingConfig struct {
 }
 
 type geminiGenerationConfig struct {
-	Temperature     float32 `json:"temperature,omitempty"`
-	TopP            float32 `json:"topP,omitempty"`
-	MaxOutputTokens int     `json:"maxOutputTokens,omitempty"`
+	Temperature     float32               `json:"temperature,omitempty"`
+	TopP            float32               `json:"topP,omitempty"`
+	MaxOutputTokens int                   `json:"maxOutputTokens,omitempty"`
+	ThinkingConfig  *geminiThinkingConfig `json:"thinkingConfig,omitempty"`
+	ResponseSchema  map[string]any        `json:"responseSchema,omitempty"`
+}
+
+type geminiThinkingConfig struct {
+	ThinkingLevel string `json:"thinkingLevel,omitempty"`
 }
 
 type geminiContent struct {
@@ -819,6 +923,7 @@ func buildGeminiRequest(prompt string, opts ai.GenOptions) geminiRequest {
 			continue
 		}
 
+		summarizedResponse := summarizeGeminiContinuationToolOutput(continuation.ToolCall.Name, continuation.Response)
 		reqBody.Contents = append(reqBody.Contents,
 			geminiContent{
 				Role: "model",
@@ -832,7 +937,7 @@ func buildGeminiRequest(prompt string, opts ai.GenOptions) geminiRequest {
 				Role: "user",
 				Parts: []geminiPart{{FunctionResponse: &geminiFunctionResponse{
 					Name:     continuation.ToolCall.Name,
-					Response: continuation.Response,
+					Response: summarizedResponse,
 					ID:       strings.TrimSpace(continuation.ToolCall.NativeID),
 				}}},
 			},
@@ -867,12 +972,33 @@ func buildGeminiRequest(prompt string, opts ai.GenOptions) geminiRequest {
 		}
 	}
 
-	if opts.ForceTemperature || opts.Temperature > 0 || opts.TopP > 0 || opts.MaxTokens > 0 {
-		reqBody.GenerationConfig = &geminiGenerationConfig{
+	if opts.ForceTemperature || opts.Temperature > 0 || opts.TopP > 0 || opts.MaxTokens > 0 || opts.ThinkingLevel != "" || opts.ResponseSchema != nil || len(opts.Tools) > 0 {
+		generatorConfig := &geminiGenerationConfig{
 			Temperature:     opts.Temperature,
 			TopP:            opts.TopP,
 			MaxOutputTokens: opts.MaxTokens,
 		}
+
+		// Configure thinking level - auto-detect or use explicit setting
+		// Only enable for models that support it (Gemini 3.x+, Gemma 4+)
+		thinkingLevel := strings.ToLower(strings.TrimSpace(opts.ThinkingLevel))
+		if thinkingLevel == "" && len(opts.Tools) > 0 {
+			// Auto-detect: Use medium thinking level for tool-based structured tasks
+			// This prevents over-analysis and creative syntax variations in tool schemas
+			thinkingLevel = "medium"
+		}
+		if thinkingLevel != "" {
+			generatorConfig.ThinkingConfig = &geminiThinkingConfig{
+				ThinkingLevel: thinkingLevel,
+			}
+		}
+
+		// Hard-constrain output structure if response schema is provided
+		if opts.ResponseSchema != nil {
+			generatorConfig.ResponseSchema = sanitizeGeminiSchema(opts.ResponseSchema)
+		}
+
+		reqBody.GenerationConfig = generatorConfig
 	}
 
 	return reqBody
@@ -1035,7 +1161,7 @@ func (g *gemini) Generate(ctx context.Context, prompt string, opts ai.GenOptions
 			"prompt_preview", geminiPreview(prompt, 240),
 		)
 		return ai.GenOutput{
-			Text: fmt.Sprintf("[Gemini Stub] Missing API Key. Please set GEMINI_API_KEY environment variable. Would send: %q", prompt),
+			Text: fmt.Sprintf("[Gemini Stub] Missing API Key. Please provide api_key in generator configuration. Would send: %q", prompt),
 		}, nil
 	}
 

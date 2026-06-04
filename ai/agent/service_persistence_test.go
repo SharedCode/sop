@@ -22,7 +22,7 @@ func TestScriptDrafting_Persistence(t *testing.T) {
 	if err := svc.Open(ctx); err != nil {
 		t.Fatalf("Open 1 failed: %v", err)
 	}
-	resp, err := svc.Ask(ctx, "/create myscript")
+	resp, err := svc.Ask(ctx, "/create myscript", nil)
 	if err != nil {
 		t.Fatalf("Ask 1 failed: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestScriptDrafting_Persistence(t *testing.T) {
 	}
 	// We simulate a command/ask execution.
 	// This should be auto-recorded into the active draft.
-	resp, err = svc.Ask(ctx, "Do something")
+	resp, err = svc.Ask(ctx, "Do something", nil)
 	if err != nil {
 		t.Fatalf("Ask 2 failed: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestScriptDrafting_Persistence(t *testing.T) {
 	if err := svc.Open(ctx); err != nil {
 		t.Fatalf("Open 3 failed: %v", err)
 	}
-	resp, err = svc.Ask(ctx, "/step explicit-instruction")
+	resp, err = svc.Ask(ctx, "/step explicit-instruction", nil)
 	if err != nil {
 		t.Fatalf("Ask 3 failed: %v", err)
 	}

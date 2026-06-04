@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
 )
 
@@ -19,9 +18,6 @@ type GeminiEmbedder struct {
 
 // NewGemini creates a new Google Gemini embedder.
 func NewGemini(apiKey, model string) *GeminiEmbedder {
-	if apiKey == "" {
-		apiKey = os.Getenv("GEMINI_API_KEY")
-	}
 	if model == "" {
 		model = "gemini-embedding-001" // Typically 768 dimensions
 	}

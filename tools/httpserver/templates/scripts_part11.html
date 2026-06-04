@@ -790,6 +790,24 @@
     }
 
     function saveChatSettings() {
+        // Validate LLM provider and API key
+        const providerValue = document.getElementById('chat-settings-provider-overlay')?.value || '';
+        const apiKey = document.getElementById('chat-settings-overlay-api-key')?.value.trim() || '';
+        
+        if (providerValue && !isLocalProviderValue(providerValue) && !apiKey) {
+            showAlert('API Key is required for the selected LLM provider');
+            return;
+        }
+        
+        // Validate Embedder provider and API key
+        const embedderValue = document.getElementById('chat-settings-embedder-overlay')?.value || '';
+        const embedderApiKey = document.getElementById('chat-settings-embedder-api-key')?.value.trim() || '';
+        
+        if (embedderValue && !isLocalProviderValue(embedderValue) && !embedderApiKey) {
+            showAlert('API Key is required for the selected Embedder provider');
+            return;
+        }
+        
         const nextConfig = persistChatSettingsDraft();
         syncChatControlsFromAIConfig(nextConfig);
         syncSetupWizardControlsFromAIConfig(nextConfig);
@@ -843,9 +861,33 @@
         setConnectionTestStatus(statusElementId, 'Testing connection...', true);
         try {
             const result = await apiCall('/api/ai/test-connection', 'POST', payload, {});
-            const message = result.response ? `Connected successfully: ${result.response}` : 'Connected successfully.';
-            setConnectionTestStatus(statusElementId, message, true);
-            showAlert(message, null, 'LLM Connection OK', 'var(--success-color)');
+            const baseMessage = result.response ? `Connected successfully: ${result.response}` : 'Connected successfully.';
+            setConnectionTestStatus(statusElementId, baseMessage, true);
+            
+            // Build detailed feature compatibility message
+            let detailedMessage = '✓ Basic text generation\n✓ Tool calling';
+            
+            if (result.features) {
+                // Add thinking config support status for Gemini models
+                if (payload.provider && payload.provider.toLowerCase() === 'gemini') {
+                    if (result.features.supports_thinking_config) {
+                        detailedMessage += '\n✓ Thinking config (advanced reasoning)';
+                    } else {
+                        detailedMessage += '\n✗ Thinking config (not supported by this model)';
+                    }
+                }
+                
+                // Add warnings if any
+                const warnings = result.features.warnings || [];
+                if (warnings.length > 0) {
+                    detailedMessage += '\n\n' + warnings.join('\n');
+                }
+            }
+            
+            // Show alert with appropriate color
+            const hasWarnings = result.features && result.features.warnings && result.features.warnings.length > 0;
+            const alertColor = hasWarnings ? 'var(--warning-color)' : 'var(--success-color)';
+            showAlert(detailedMessage, null, 'LLM Connection Test', alertColor);
         } catch (error) {
             const message = `Connection failed: ${error.message}`;
             setConnectionTestStatus(statusElementId, message, false);

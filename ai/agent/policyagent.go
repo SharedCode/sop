@@ -27,7 +27,7 @@ func NewPolicyAgent(id string, policy ai.PolicyEngine, classifier ai.Classifier)
 // Ask evaluates the input against the policy.
 // If the policy passes, it returns the input (or a transformed version).
 // If the policy fails, it returns an error.
-func (p *PolicyAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+func (p *PolicyAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
 	if p.classifier == nil || p.policy == nil {
 		return query, nil
 	}

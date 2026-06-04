@@ -575,7 +575,7 @@ func (a *CopilotAgent) toolManageTransaction(ctx context.Context, args map[strin
 		// Legacy check
 		if p.Transaction != nil && (dbName == "" || dbName == p.CurrentDB) {
 			p.ExplicitTransaction = true
-			return "Transaction already active (promoted to explicit)", nil
+			return "Transaction already active", nil
 		}
 
 		if db == nil {
@@ -627,29 +627,29 @@ func (a *CopilotAgent) toolManageTransaction(ctx context.Context, args map[strin
 		p.ExplicitTransaction = false
 		p.Variables = nil // Clear cache
 
-		// Auto-restart logic (preserve existing behavior)
-		if db != nil {
-			newTx, beginErr := db.BeginTransaction(ctx, sop.ForWriting)
-			if beginErr != nil {
-				if commitErr != nil {
-					return "", fmt.Errorf("commit failed: %v. AND failed to auto-start new one: %v", commitErr, beginErr)
-				}
-				return "", fmt.Errorf("transaction committed, but failed to auto-start new one: %w", beginErr)
-			}
+		// // Auto-restart logic (preserve existing behavior)
+		// if db != nil {
+		// 	newTx, beginErr := db.BeginTransaction(ctx, sop.ForWriting)
+		// 	if beginErr != nil {
+		// 		if commitErr != nil {
+		// 			return "", fmt.Errorf("commit failed: %v. AND failed to auto-start new one: %v", commitErr, beginErr)
+		// 		}
+		// 		return "", fmt.Errorf("transaction committed, but failed to auto-start new one: %w", beginErr)
+		// 	}
 
-			if p.Transactions == nil {
-				p.Transactions = make(map[string]any)
-			}
-			p.Transactions[dbName] = newTx
-			if dbName == p.CurrentDB {
-				p.Transaction = newTx
-			}
+		// 	if p.Transactions == nil {
+		// 		p.Transactions = make(map[string]any)
+		// 	}
+		// 	p.Transactions[dbName] = newTx
+		// 	if dbName == p.CurrentDB {
+		// 		p.Transaction = newTx
+		// 	}
 
-			if commitErr != nil {
-				return fmt.Sprintf("New transaction started, but previous commit failed: %v", commitErr), commitErr
-			}
-			return "Transaction committed (and new one started)", nil
-		}
+		// 	if commitErr != nil {
+		// 		return fmt.Sprintf("New transaction started, but previous commit failed: %v", commitErr), commitErr
+		// 	}
+		// 	return "Transaction committed (and new one started)", nil
+		// }
 
 		if commitErr != nil {
 			return "", fmt.Errorf("commit failed: %w", commitErr)
@@ -686,21 +686,21 @@ func (a *CopilotAgent) toolManageTransaction(ctx context.Context, args map[strin
 		p.ExplicitTransaction = false
 		p.Variables = nil
 
-		// Auto-restart logic
-		if db != nil {
-			newTx, err := db.BeginTransaction(ctx, sop.ForWriting)
-			if err != nil {
-				return "", fmt.Errorf("transaction rolled back, but failed to auto-start new one: %w", err)
-			}
-			if p.Transactions == nil {
-				p.Transactions = make(map[string]any)
-			}
-			p.Transactions[dbName] = newTx
-			if dbName == p.CurrentDB {
-				p.Transaction = newTx
-			}
-			return "Transaction rolled back (and new one started)", nil
-		}
+		// // Auto-restart logic
+		// if db != nil {
+		// 	newTx, err := db.BeginTransaction(ctx, sop.ForWriting)
+		// 	if err != nil {
+		// 		return "", fmt.Errorf("transaction rolled back, but failed to auto-start new one: %w", err)
+		// 	}
+		// 	if p.Transactions == nil {
+		// 		p.Transactions = make(map[string]any)
+		// 	}
+		// 	p.Transactions[dbName] = newTx
+		// 	if dbName == p.CurrentDB {
+		// 		p.Transaction = newTx
+		// 	}
+		// 	return "Transaction rolled back (and new one started)", nil
+		// }
 
 		return "Transaction rolled back", nil
 

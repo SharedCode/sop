@@ -292,6 +292,54 @@ func (btree *Btree[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	}
 }
 
+// GetCurrentValueNoLock returns the current item's value without registering a read lock hint.
+// This is useful when the caller manages locking explicitly (e.g., SQL layer with explicit lock management).
+func (btree *Btree[TK, TV]) GetCurrentValueNoLock(ctx context.Context) (TV, error) {
+	var zero TV
+	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
+		return zero, err
+	} else {
+		// Fetch value if needed, but do NOT mark read (no rlock hint).
+		vnf := item.ValueNeedsFetch
+		if btree.storeInterface == nil {
+			return zero, fmt.Errorf("storeInterface is nil")
+		}
+		if btree.storeInterface.ItemActionTracker == nil {
+			return zero, fmt.Errorf("ItemActionTracker is nil")
+		}
+		if err := btree.storeInterface.ItemActionTracker.Get(ctx, item); err != nil {
+			return zero, err
+		}
+
+		// Don't mark the node as fetched to avoid read lock hint on Commit, since this method is for scenarios where caller manages rlocks explicitly.
+
+		if vnf && !item.ValueNeedsFetch && item.Value != nil {
+			item.valueWasFetched = true
+		}
+		if item.Value == nil {
+			return zero, nil
+		}
+		return *item.Value, nil
+	}
+}
+
+// RLockCurrentItem registers the current item for read lock (version check) on Commit without returning the value.
+// This is useful when you need to lock an item for consistency checking but don't need to read its value.
+func (btree *Btree[TK, TV]) RLockCurrentItem(ctx context.Context) error {
+	if btree.currentItemRef.getNodeID() == sop.NilUUID {
+		return fmt.Errorf("no current item selected to lock")
+	}
+	if btree.storeInterface == nil {
+		return fmt.Errorf("storeInterface is nil")
+	}
+	if btree.storeInterface.ItemActionTracker == nil {
+		return fmt.Errorf("ItemActionTracker is nil")
+	}
+	// Mark node as fetched for version conflict detection
+	btree.storeInterface.NodeRepository.Fetched(btree.currentItemRef.nodeID)
+	return nil
+}
+
 // GetCurrentItem returns the current item including key and value, fetching value if necessary.
 func (btree *Btree[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], error) {
 	var zero Item[TK, TV]
@@ -309,6 +357,28 @@ func (btree *Btree[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], e
 		return *item, nil
 	}
 }
+
+// GetCurrentItemNoLock returns the current item without read lock hint.
+// Use this when managing locks explicitly (e.g., in SQL layer).
+func (btree *Btree[TK, TV]) GetCurrentItemNoLock(ctx context.Context) (Item[TK, TV], error) {
+	var zero Item[TK, TV]
+	if item, err := btree.getCurrentItem(ctx); err != nil || item == nil {
+		return zero, err
+	} else {
+		vnf := item.ValueNeedsFetch
+		if err := btree.storeInterface.ItemActionTracker.Get(ctx, item); err != nil {
+			return zero, err
+		}
+
+		// Don't mark the node as fetched to avoid read lock hint on Commit, caller manages rlocks explicitly.
+
+		if vnf && !item.ValueNeedsFetch && item.Value != nil {
+			item.valueWasFetched = true
+		}
+		return *item, nil
+	}
+}
+
 
 // AddIfNotExist inserts the item only when a duplicate key does not exist (temporarily enabling uniqueness).
 func (btree *Btree[TK, TV]) AddIfNotExist(ctx context.Context, key TK, value TV) (bool, error) {

@@ -30,12 +30,16 @@ type kbItem struct {
 // setupIntegHarness bootstraps a Service hooked up to real/in-memory B-Trees.
 // It conditionally loads the provided JSON files into designated Knowledge Bases.
 func setupIntegHarness(t *testing.T, ctx context.Context, kbsToLoad map[string]string) *Service {
+	// Note: For production code, API keys come from Config only.
+	// For tests, we still check environment variables for convenience.
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		t.Skip("Skipping integration test: GEMINI_API_KEY is not set.")
+		t.Skip("Skipping integration test: GEMINI_API_KEY is not set. For production code, configure via Config struct, not environment variables.")
 	}
 
-	gen, err := generator.New("gemini", map[string]any{})
+	gen, err := generator.New("gemini", map[string]any{
+		"api_key": apiKey,
+	})
 	if err != nil {
 		t.Fatalf("Failed to initialize Gemini: %v", err)
 	}
@@ -181,13 +185,12 @@ func TestHarness_ReAct_MedicalKBSimulation(t *testing.T) {
 	}
 	svc := setupIntegHarness(t, ctx, kbs)
 
-	options := []ai.Option{
-		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "medical_kb", Type: ai.ArtifactTypeSpace}}}),
-	}
+	options := ai.NewConfigMap()
+	options.Set("payload", &ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "medical_kb", Type: ai.ArtifactTypeSpace}}})
 
 	// Query requiring it to fetch from the loaded medical KB
 	t.Log("Querying medical condition...")
-	res, err := svc.Ask(ctx, "I have continuous sneezing and shivering. Based on the medical KB, what condition might I have?", options...)
+	res, err := svc.Ask(ctx, "I have continuous sneezing and shivering. Based on the medical KB, what condition might I have?", options)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
@@ -208,12 +211,11 @@ func TestHarness_ReAct_MultiKBSimulation(t *testing.T) {
 	}
 	svc := setupIntegHarness(t, ctx, kbs)
 
-	options := []ai.Option{
-		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "medical_kb", Type: ai.ArtifactTypeSpace}, {Name: "sop_kb", Type: ai.ArtifactTypeSpace}, {Name: "empty_kb1", Type: ai.ArtifactTypeSpace}, {Name: "empty_kb2", Type: ai.ArtifactTypeSpace}}}),
-	}
+	options := ai.NewConfigMap()
+	options.Set("payload", &ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "medical_kb", Type: ai.ArtifactTypeSpace}, {Name: "sop_kb", Type: ai.ArtifactTypeSpace}, {Name: "empty_kb1", Type: ai.ArtifactTypeSpace}, {Name: "empty_kb2", Type: ai.ArtifactTypeSpace}}})
 
 	t.Log("Asking complex multi-KB query...")
-	res, err := svc.Ask(ctx, "First read from the medical KB: Tell me what condition has dischromic patches. Then, read from the sop_kb: explain what the No-LLM Direct Command Interface is. Conclude by storing both answers in your ActiveMemory.", options...)
+	res, err := svc.Ask(ctx, "First read from the medical KB: Tell me what condition has dischromic patches. Then, read from the sop_kb: explain what the No-LLM Direct Command Interface is. Conclude by storing both answers in your ActiveMemory.", options)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
@@ -257,9 +259,8 @@ func TestHarness_ReAct_LongConversation_50Turns(t *testing.T) {
 		t.Fatalf("STM init failed: %v", err)
 	}
 
-	options := []ai.Option{
-		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "medical_kb", Type: ai.ArtifactTypeSpace}, {Name: "sop_kb", Type: ai.ArtifactTypeSpace}}}),
-	}
+	options := ai.NewConfigMap()
+	options.Set("payload", &ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "medical_kb", Type: ai.ArtifactTypeSpace}, {Name: "sop_kb", Type: ai.ArtifactTypeSpace}}})
 
 	questions := []string{
 		"How do I use slash commands in the SOP No-LLM mode?",
@@ -277,7 +278,7 @@ func TestHarness_ReAct_LongConversation_50Turns(t *testing.T) {
 			q = "Please store a summary of our entire conversation so far into ActiveMemory."
 		}
 
-		res, err := svc.Ask(ctx, fmt.Sprintf("[Turn %d] %s", i+1, q), options...)
+		res, err := svc.Ask(ctx, fmt.Sprintf("[Turn %d] %s", i+1, q), options)
 		if err != nil {
 			t.Fatalf("Ask failed on turn %d: %v", i+1, err)
 		}
@@ -313,16 +314,15 @@ func TestHarness_ReAct_MultiSleepCycles(t *testing.T) {
 		t.Fatalf("STM init failed: %v", err)
 	}
 
-	options := []ai.Option{
-		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "sop_kb", Type: ai.ArtifactTypeSpace}}}),
-	}
+	options := ai.NewConfigMap()
+	options.Set("payload", &ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "sop_kb", Type: ai.ArtifactTypeSpace}}})
 
 	// Manually initiate constant background sleep cycle
 	svc.StartShortTermMemorySleepCycle(ctx, 2*time.Second)
 
 	// Cycle 1: Inject fact
 	t.Log("--- Cycle 1: Initial Injection ---")
-	_, err := svc.Ask(ctx, "My favorite color is Blue. Please remember this in ActiveMemory. You MUST use the 'conclude_topic' tool to ensure it is recorded. Output the tool call wrapped exactly in a ```json block.", options...)
+	_, err := svc.Ask(ctx, "My favorite color is Blue. Please remember this in ActiveMemory. You MUST use the 'conclude_topic' tool to ensure it is recorded. Output the tool call wrapped exactly in a ```json block.", options)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestHarness_ReAct_MultiSleepCycles(t *testing.T) {
 
 	// Cycle 2: Verify and Mutate
 	t.Log("--- Cycle 2: Mutation ---")
-	res, err := svc.Ask(ctx, "What was my favorite color? Also, I've changed my mind, my favorite color is now Green. Please store this update in your ActiveMemory. You MUST use the 'conclude_topic' tool to record it. Output the tool call wrapped exactly in a ```json block.", options...)
+	res, err := svc.Ask(ctx, "What was my favorite color? Also, I've changed my mind, my favorite color is now Green. Please store this update in your ActiveMemory. You MUST use the 'conclude_topic' tool to record it. Output the tool call wrapped exactly in a ```json block.", options)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
@@ -343,7 +343,7 @@ func TestHarness_ReAct_MultiSleepCycles(t *testing.T) {
 
 	// Cycle 3: Verify the mutated state
 	t.Log("--- Cycle 3: Verification ---")
-	resFinal, err := svc.Ask(ctx, "What is my favorite color currently? Respond extremely concisely.", options...)
+	resFinal, err := svc.Ask(ctx, "What is my favorite color currently? Respond extremely concisely.", options)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
@@ -381,12 +381,11 @@ func TestHarness_ReAct_OmniSearch(t *testing.T) {
 	svc := setupIntegHarness(t, ctx, kbs)
 	svc.EnableShortTermMemory = false // Avoid write conflicts
 
-	options := []ai.Option{
-		ai.WithSessionPayload(&ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "omni_kb", Type: ai.ArtifactTypeSpace}}}),
-	}
+	options := ai.NewConfigMap()
+	options.Set("payload", &ai.SessionPayload{SelectedKBs: []ai.ArtifactReference{{Name: "omni_kb", Type: ai.ArtifactTypeSpace}}})
 
 	t.Log("Asking question about apple iPhones...")
-	res, err := svc.Ask(ctx, "what details do you know about apple iPhones? You MUST use the 'search_custom_kbs' tool to search for knowledge. Output the tool call wrapped exactly in a ```json block.", options...)
+	res, err := svc.Ask(ctx, "what details do you know about apple iPhones? You MUST use the 'search_custom_kbs' tool to search for knowledge. Output the tool call wrapped exactly in a ```json block.", options)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}

@@ -42,6 +42,16 @@ func (l chatGPTOwnedReActLoop) modelName() string {
 	return l.generator.model
 }
 
+// chatGPTReasoningEffort returns the appropriate reasoning effort level for the model.
+// GPT-x.x-pro models only support 'medium', 'high', and 'xhigh' (not 'low').
+func chatGPTReasoningEffort(model string) string {
+	modelLower := strings.ToLower(strings.TrimSpace(model))
+	if strings.Contains(modelLower, "-pro") {
+		return "medium"
+	}
+	return "low"
+}
+
 // ----------------------------------------------------------------------------
 // Main loop
 // ----------------------------------------------------------------------------
@@ -162,7 +172,7 @@ func buildChatGPTResponsesRequest(req ai.ReasoningRequest, model string, tools [
 		}},
 		Tools:             responsesTools,
 		Include:           []string{"reasoning.encrypted_content"},
-		Reasoning:         &openAIResponsesReasoning{Effort: "low"},
+		Reasoning:         &openAIResponsesReasoning{Effort: chatGPTReasoningEffort(model)},
 		ParallelToolCalls: &parallelToolCalls,
 		Store:             &store,
 	}
@@ -212,7 +222,7 @@ func buildContinuationRequest(model string, req ai.ReasoningRequest, prev openAI
 		Tools:              prev.Tools,
 		PreviousResponseID: response.ID,
 		Include:            []string{"reasoning.encrypted_content"},
-		Reasoning:          &openAIResponsesReasoning{Effort: "low"},
+		Reasoning:          &openAIResponsesReasoning{Effort: chatGPTReasoningEffort(model)},
 		ParallelToolCalls:  prev.ParallelToolCalls,
 		Store:              prev.Store,
 		MaxOutputTokens:    prev.MaxOutputTokens,

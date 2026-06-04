@@ -30,12 +30,7 @@ func (chatGPTOwnedLoopHydrationStub) Run(ctx context.Context, req ai.ReasoningRe
 		{Name: "tool_7", Args: map[string]any{"step": 7}},
 		{Name: "tool_8", Args: map[string]any{"step": 8}},
 	}, []string{"confirmed users store"}, nil, "thread_123")
-	emitChatGPTOwnedLoopHydration(req, ai.MemoryHydrationUpdate{
-		FinalText:      resp.FinalText,
-		ToolCalls:      resp.ToolCalls,
-		OutcomeFacts:   resp.OutcomeFacts,
-		CarryoverState: resp.CarryoverState,
-	})
+	emitChatGPTOwnedLoopHydration(req, resp)
 	resp.ToolCalls[7].Name = "mutated_tool"
 	resp.CarryoverState.LastToolNames[0] = "mutated_tool"
 	resp.CarryoverState.LastOutcomeFacts[0] = "mutated fact"
@@ -119,32 +114,24 @@ func TestChatGPTOwnedLoopResponse_UsesConversationHandleInCarryoverState(t *test
 }
 
 func TestChatGPTReActLoop_DefaultsToOwnedLoop(t *testing.T) {
-	gen := &chatgpt{model: "gpt-4o", newOwnedLoop: newChatGPTOwnedReActLoop, supportsLive: true}
+	gen := &chatgpt{model: "gpt-4o", apiKey: "test-key"}
 	if _, ok := gen.ReActLoop().(chatGPTOwnedReActLoop); !ok {
 		t.Fatalf("expected owned loop by default, got %#v", gen.ReActLoop())
 	}
 }
 
-func TestChatGPTReActLoop_UsesFactoryScaffoldWhenProvided(t *testing.T) {
-	gen := &chatgpt{
-		model: "gpt-4o",
-		newOwnedLoop: func(g *chatgpt) ai.ReActLoop {
-			if g.model != "gpt-4o" {
-				t.Fatalf("expected factory to receive generator state, got model %q", g.model)
-			}
-			return newChatGPTOwnedReActLoop(g)
-		},
-	}
+func TestChatGPTReActLoop_RetainsGeneratorPointer(t *testing.T) {
+	gen := &chatgpt{model: "gpt-4o", apiKey: "test-key"}
 	loop := gen.ReActLoop()
 	if loop == nil {
-		t.Fatal("expected owned loop from scaffold factory")
+		t.Fatal("expected owned loop")
 	}
 	ownedLoop, ok := loop.(chatGPTOwnedReActLoop)
 	if !ok {
-		t.Fatalf("expected scaffold factory loop type, got %#v", loop)
+		t.Fatalf("expected owned loop type, got %#v", loop)
 	}
 	if ownedLoop.generator != gen {
-		t.Fatalf("expected scaffold loop to retain generator pointer, got %#v", ownedLoop.generator)
+		t.Fatalf("expected loop to retain generator pointer, got %#v", ownedLoop.generator)
 	}
 }
 
@@ -165,44 +152,7 @@ func TestChatGPTFactory_EnablesOwnedLoopByDefault(t *testing.T) {
 	}
 }
 
-func TestChatGPTFactory_DisablesOwnedLoopScaffoldFromConfig(t *testing.T) {
-	created, err := New("chatgpt", map[string]any{
-		"api_key":                    "test-key",
-		"model":                      "gpt-4o",
-		"enable_owned_loop_scaffold": false,
-	})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	gen, ok := created.(*chatgpt)
-	if !ok {
-		t.Fatalf("expected chatgpt generator, got %#v", created)
-	}
-	if loop := gen.ReActLoop(); loop != nil {
-		t.Fatalf("expected explicit config disable to turn off owned loop, got %#v", loop)
-	}
-	if capability := gen.CarryoverCapability(); capability.SupportsLive {
-		t.Fatalf("expected explicit config disable to turn off live carryover, got %+v", capability)
-	}
-}
-
-func TestChatGPTFactory_DisablesOwnedLoopScaffoldFromEnv(t *testing.T) {
-	t.Setenv("OPENAI_ENABLE_OWNED_LOOP_SCAFFOLD", "false")
-	created, err := New("chatgpt", map[string]any{"api_key": "test-key", "model": "gpt-4o"})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-	gen, ok := created.(*chatgpt)
-	if !ok {
-		t.Fatalf("expected chatgpt generator, got %#v", created)
-	}
-	if loop := gen.ReActLoop(); loop != nil {
-		t.Fatalf("expected env disable to turn off owned loop, got %#v", loop)
-	}
-	if capability := gen.CarryoverCapability(); capability.SupportsLive {
-		t.Fatalf("expected env disable to turn off live carryover, got %+v", capability)
-	}
-}
+// Owned loop toggle removed - ChatGPT always uses optimized Responses API loop.
 
 func TestChatGPTFactory_UsesConfiguredAPIURL(t *testing.T) {
 	created, err := New("chatgpt", map[string]any{
@@ -273,14 +223,9 @@ func TestChatGPTGenerate_UsesConfiguredAPIURL(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(openAIResponse{
 			Choices: []struct {
-				Message struct {
-					Content string `json:"content"`
-				} `json:"message"`
-				FinishReason string `json:"finish_reason"`
+				Message openAIMessage `json:"message"`
 			}{
-				{Message: struct {
-					Content string `json:"content"`
-				}{Content: "OK"}, FinishReason: "stop"},
+				{Message: openAIMessage{Content: "OK"}},
 			},
 		})
 	}))
@@ -809,7 +754,7 @@ func TestParseChatGPTResponsesStream_SuppressesRawDeltaBridgeEventsAndReturnsCom
 		payload   map[string]any
 	}
 	var events []streamedEvent
-	response, err := parseChatGPTResponsesStream(stream, func(eventType string, data any) {
+	response, err := parseChatGPTResponsesStream(context.Background(), stream, func(eventType string, data any) {
 		payload, ok := data.(map[string]any)
 		if !ok {
 			t.Fatalf("expected streamed payload map, got %#v", data)
@@ -861,8 +806,8 @@ func TestChatGPTOwnedLoopCarryoverState_UsesHandleAndRawToolEstimate(t *testing.
 	if state == nil {
 		t.Fatal("expected carryover state")
 	}
-	if state.Mode != ai.CarryoverModeCompact {
-		t.Fatalf("expected compact carryover mode, got %+v", state)
+	if state.Mode != ai.CarryoverModeLive {
+		t.Fatalf("expected live carryover mode when handle is provided, got %+v", state)
 	}
 	if state.ConversationHandle != "thread_123" {
 		t.Fatalf("expected conversation handle to round-trip, got %+v", state)
@@ -876,4 +821,66 @@ func TestChatGPTOwnedLoopCarryoverState_ReturnsNilWithoutHandleOrTools(t *testin
 	if state := chatGPTOwnedLoopCarryoverState("", nil); state != nil {
 		t.Fatalf("expected nil carryover state when no provider runtime state exists, got %+v", state)
 	}
+}
+
+// Test helper functions
+
+func chatGPTOwnedLoopResponse(
+	model string,
+	finalText string,
+	toolCalls []ai.ToolCall,
+	outcomeFacts []string,
+	outcomeRecipes []ai.LearnedRecipe,
+	conversationHandle string,
+) ai.ReasoningResponse {
+	resp := ai.ReasoningResponse{
+		FinalText:      finalText,
+		ToolCalls:      toolCalls,
+		OutcomeFacts:   outcomeFacts,
+		OutcomeRecipes: outcomeRecipes,
+	}
+
+	if carryState := chatGPTOwnedLoopCarryoverState(conversationHandle, toolCalls); carryState != nil {
+		carryState.Provider = "chatgpt"
+		carryState.Model = model
+		carryState.LastAssistantSummary = strings.TrimSpace(finalText)
+		carryState.LastOutcomeFacts = append([]string(nil), outcomeFacts...)
+		carryState.LastToolNames = toolCallNames(toolCalls)
+		carryState.LastRecipeIDs = recipeIDs(outcomeRecipes)
+		resp.CarryoverState = carryState
+	}
+
+	return resp
+}
+
+func chatGPTOwnedLoopCarryoverState(
+	conversationHandle string,
+	toolCalls []ai.ToolCall,
+) *ai.CarryoverState {
+	if len(toolCalls) == 0 && conversationHandle == "" {
+		return nil
+	}
+
+	mode := ai.CarryoverModeCompact
+	if conversationHandle != "" {
+		mode = ai.CarryoverModeLive
+	}
+
+	state := &ai.CarryoverState{Mode: mode}
+	if conversationHandle != "" {
+		state.ConversationHandle = conversationHandle
+	}
+
+	if len(toolCalls) == 0 {
+		return state
+	}
+
+	// Estimate tokens based on JSON-serialized tool calls
+	raw, err := json.Marshal(toolCalls)
+	if err != nil {
+		return state
+	}
+	state.EstimatedRawToolTokens = (len(raw) + 3) / 4
+
+	return state
 }

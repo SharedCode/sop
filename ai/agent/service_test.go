@@ -227,7 +227,7 @@ func TestService_Ask_Obfuscation(t *testing.T) {
 
 			ctx := context.WithValue(context.Background(), ai.CtxKeyExecutor, executor)
 
-			result, err := svc.Ask(ctx, "query")
+			result, err := svc.Ask(ctx, "query", nil)
 			if err != nil {
 				t.Fatalf("Ask failed: %v", err)
 			}
@@ -286,7 +286,7 @@ func TestService_Ask_NoObfuscation(t *testing.T) {
 	ctx := context.Background()
 
 	// Execute
-	result, err := svc.Ask(ctx, "query")
+	result, err := svc.Ask(ctx, "query", nil)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}

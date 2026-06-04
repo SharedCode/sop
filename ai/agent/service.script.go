@@ -125,9 +125,7 @@ func (s *Service) PlayScript(ctx context.Context, name string, category string, 
 		}
 		// Safety: If the script left a transaction open (Explicitly), rollback it now.
 		if s.session.Transaction != nil {
-			if tx, ok := s.session.Transaction.(sop.Transaction); ok {
-				_ = tx.Rollback(scriptCtx)
-			}
+			_ = s.session.Transaction.Rollback(scriptCtx)
 			s.session.Transaction = nil
 			s.session.Variables = nil
 			fmt.Fprint(w, "\nWarning: Uncommitted transaction was automatically rolled back for safety.")
@@ -151,7 +149,10 @@ func (s *Service) PlayScript(ctx context.Context, name string, category string, 
 	// We will just capture the text output in a builder, but the structured output goes to streamer.
 	var sb strings.Builder
 
-	if err := s.executeScript(scriptCtx, &script, args, &scopeMu, &sb, db); err != nil {
+	// Create empty ConfigMap for script execution (scripts don't use Ask options)
+	cfg := ai.NewConfigMap()
+
+	if err := s.executeScript(scriptCtx, &script, args, &scopeMu, &sb, db, cfg); err != nil {
 		errMsg := fmt.Sprintf("Error executing script: %v", err)
 
 		// Also add to streamer
@@ -915,7 +916,8 @@ IMPORTANT:
 
 	// 3. Call LLM
 	genOut, err := s.generator.Generate(ctx, prompt, ai.GenOptions{
-		Temperature: 0.2, // Low temperature for precision
+		Temperature:   0.2,   // Low temperature for precision
+		ThinkingLevel: "low", // Strict JSON schema adherence for script refinement
 	})
 	if err != nil {
 		return fmt.Sprintf("Error generating refinement: %v", err), nil

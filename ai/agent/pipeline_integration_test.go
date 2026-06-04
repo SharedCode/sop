@@ -19,9 +19,11 @@ import (
 
 func TestServiceIntegration_LastTool(t *testing.T) {
 	// 1. Setup LLM
+	// Note: For production code, API keys come from Config only.
+	// For tests, we still check environment variables for convenience.
 	apiKey := os.Getenv("GEMINI_API_KEY")
 	if apiKey == "" {
-		t.Skip("GEMINI_API_KEY not set")
+		t.Skip("GEMINI_API_KEY not set. For production code, configure via Config struct, not environment variables.")
 	}
 
 	// Use a known working model
@@ -110,7 +112,7 @@ func TestServiceIntegration_LastTool(t *testing.T) {
 	query := "Join users and orders on user_id"
 
 	fmt.Printf("Sending query: %s\n", query)
-	resp, err := svc.Ask(ctx, query)
+	resp, err := svc.Ask(ctx, query, nil)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}

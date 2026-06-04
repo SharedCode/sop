@@ -100,6 +100,13 @@ func (c *RightOuterJoinStoreCursor) Next(ctx context.Context) (any, bool, error)
 
 		if len(c.leftList) == 0 && c.leftCursor != nil {
 			for {
+				// Check context cancellation
+				select {
+				case <-ctx.Done():
+					return nil, false, fmt.Errorf("context cancelled during right outer join indexing: %w", ctx.Err())
+				default:
+				}
+
 				item, ok, err := c.leftCursor.Next(ctx)
 				if err != nil {
 					return nil, false, err
@@ -147,6 +154,13 @@ func (c *RightOuterJoinStoreCursor) Next(ctx context.Context) (any, bool, error)
 
 	// Loop until we return an item or finish
 	for {
+		// Check context cancellation
+		select {
+		case <-ctx.Done():
+			return nil, false, fmt.Errorf("context cancelled during right outer join iteration: %w", ctx.Err())
+		default:
+		}
+
 		// 1. If we have pending matches for the current Right item, emit them
 		if c.matchIdx < len(c.matches) {
 			lItem := c.matches[c.matchIdx]
@@ -211,6 +225,13 @@ func (c *RightOuterJoinStoreCursor) Next(ctx context.Context) (any, bool, error)
 			ok, err := c.tempStore.FindOne(c.ctx, lookupKey, true)
 			if err == nil && ok {
 				for {
+					// Check context cancellation
+					select {
+					case <-ctx.Done():
+						return nil, false, fmt.Errorf("context cancelled during spilled store scan: %w", ctx.Err())
+					default:
+					}
+
 					k := c.tempStore.GetCurrentKey()
 
 					// Check if key still matches

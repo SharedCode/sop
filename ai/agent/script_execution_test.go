@@ -192,7 +192,7 @@ func TestScriptExecution_SelectTwice(t *testing.T) {
 	// Let's use /create for realism
 
 	// Start recording
-	svc.Ask(ctx, "/create demo_loop")
+	svc.Ask(ctx, "/create demo_loop", nil)
 
 	// Record steps
 	svc.RecordStep(ctx, ai.ScriptStep{
@@ -200,31 +200,31 @@ func TestScriptExecution_SelectTwice(t *testing.T) {
 		Command: "manage_transaction",
 		Args:    map[string]any{"action": "begin"},
 	})
-	svc.Ask(ctx, "/step")
+	svc.Ask(ctx, "/step", nil)
 
 	svc.RecordStep(ctx, ai.ScriptStep{
 		Type:    "command",
 		Command: "select",
 		Args:    map[string]any{"database": filepath.Base(tmpDir), "store": "employees", "limit": 2},
 	})
-	svc.Ask(ctx, "/step")
+	svc.Ask(ctx, "/step", nil)
 
 	svc.RecordStep(ctx, ai.ScriptStep{
 		Type:    "command",
 		Command: "select",
 		Args:    map[string]any{"database": filepath.Base(tmpDir), "store": "employees", "limit": 3},
 	})
-	svc.Ask(ctx, "/step")
+	svc.Ask(ctx, "/step", nil)
 
 	svc.RecordStep(ctx, ai.ScriptStep{
 		Type:    "command",
 		Command: "manage_transaction",
 		Args:    map[string]any{"action": "commit"},
 	})
-	svc.Ask(ctx, "/step")
+	svc.Ask(ctx, "/step", nil)
 
 	// Stop recording (saves script)
-	resp, err := svc.Ask(ctx, "/save")
+	resp, err := svc.Ask(ctx, "/save", nil)
 	if err != nil {
 		t.Fatalf("Failed to stop recording: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestScriptExecution_SelectTwice(t *testing.T) {
 	mockGen.Index = 0
 
 	// Execute /run
-	respPlay, err := svc.Ask(ctx, "/run demo_loop")
+	respPlay, err := svc.Ask(ctx, "/run demo_loop", nil)
 	if err != nil {
 		t.Fatalf("Play failed: %v", err)
 	}
@@ -273,7 +273,7 @@ func TestScriptExecution_NoPipeline(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	err := svc.runSteps(ctx, script.Steps, make(map[string]any), nil, &sb, nil)
+	err := svc.runSteps(ctx, script.Steps, make(map[string]any), nil, &sb, nil, nil)
 	if err != nil {
 		t.Fatalf("Execution failed: %v", err)
 	}
@@ -303,7 +303,7 @@ func TestScriptExecution_CommandStep(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	err := svc.runSteps(ctx, script.Steps, make(map[string]any), nil, &sb, nil)
+	err := svc.runSteps(ctx, script.Steps, make(map[string]any), nil, &sb, nil, nil)
 	if err != nil {
 		t.Fatalf("Execution failed: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestScriptShow(t *testing.T) {
 	tx.Commit(ctx)
 
 	// Test /show
-	resp, err := svc.Ask(ctx, "/show test_script")
+	resp, err := svc.Ask(ctx, "/show test_script", nil)
 	if err != nil {
 		t.Fatalf("Show failed: %v", err)
 	}
@@ -384,13 +384,13 @@ func TestScriptSaveAs(t *testing.T) {
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &MockToolExecutor{})
 
 	// 1. Run a command (not recording)
-	_, err := svc.Ask(ctx, "find users")
+	_, err := svc.Ask(ctx, "find users", nil)
 	if err != nil {
 		t.Fatalf("Ask failed: %v", err)
 	}
 
 	// 2. Save as script
-	resp, err := svc.Ask(ctx, "/save_as my_saved_script")
+	resp, err := svc.Ask(ctx, "/save_as my_saved_script", nil)
 	if err != nil {
 		t.Fatalf("Save As failed: %v", err)
 	}
@@ -507,11 +507,11 @@ func TestScriptRecording_SelectTwice_Legacy(t *testing.T) {
 	defer svc.Close(ctx)
 
 	// Start recording
-	svc.Ask(ctx, "/create demo_loop_rec")
+	svc.Ask(ctx, "/create demo_loop_rec", nil)
 
 	// Step 1
 	t.Log("Executing Step 1 (Recording)...")
-	resp1, err := svc.Ask(ctx, "select from employees limit 2")
+	resp1, err := svc.Ask(ctx, "select from employees limit 2", nil)
 	if err != nil {
 		t.Fatalf("Step 1 failed: %v", err)
 	}
@@ -521,7 +521,7 @@ func TestScriptRecording_SelectTwice_Legacy(t *testing.T) {
 	// Step 2
 	t.Log("Executing Step 2 (Recording)...")
 
-	resp2, err := svc.Ask(ctx, "select from employees limit 3")
+	resp2, err := svc.Ask(ctx, "select from employees limit 3", nil)
 	if err != nil {
 		t.Fatalf("Step 2 failed: %v", err)
 	}
@@ -532,7 +532,7 @@ func TestScriptRecording_SelectTwice_Legacy(t *testing.T) {
 	}
 
 	// Stop recording
-	svc.Ask(ctx, "/save")
+	svc.Ask(ctx, "/save", nil)
 }
 
 func TestScriptRecording_SelectTwice_Native(t *testing.T) {
@@ -622,11 +622,11 @@ func TestScriptRecording_SelectTwice_Native(t *testing.T) {
 	defer svc.Close(ctx)
 
 	// Start recording
-	svc.Ask(ctx, "/create demo_loop_rec")
+	svc.Ask(ctx, "/create demo_loop_rec", nil)
 
 	// Step 1
 	t.Log("Executing Step 1 (Recording)...")
-	resp1, err := svc.Ask(ctx, "select from employees limit 2")
+	resp1, err := svc.Ask(ctx, "select from employees limit 2", nil)
 	if err != nil {
 		t.Fatalf("Step 1 failed: %v", err)
 	}
@@ -637,7 +637,7 @@ func TestScriptRecording_SelectTwice_Native(t *testing.T) {
 	t.Log("Executing Step 2 (Recording)...")
 	// We need to reset the mock generator index because we are calling Ask again
 
-	resp2, err := svc.Ask(ctx, "select from employees limit 3")
+	resp2, err := svc.Ask(ctx, "select from employees limit 3", nil)
 	if err != nil {
 		t.Fatalf("Step 2 failed: %v", err)
 	}
@@ -648,7 +648,7 @@ func TestScriptRecording_SelectTwice_Native(t *testing.T) {
 	}
 
 	// Stop recording
-	svc.Ask(ctx, "/save")
+	svc.Ask(ctx, "/save", nil)
 }
 
 func TestScriptRecording_OverwriteProtection(t *testing.T) {
@@ -674,7 +674,7 @@ func TestScriptRecording_OverwriteProtection(t *testing.T) {
 	ctx := context.Background()
 
 	// 3. Record a script "test_script"
-	resp, err := svc.Ask(ctx, "/create test_script")
+	resp, err := svc.Ask(ctx, "/create test_script", nil)
 	if err != nil {
 		t.Fatalf("Failed to start recording: %v", err)
 	}
@@ -683,7 +683,7 @@ func TestScriptRecording_OverwriteProtection(t *testing.T) {
 	}
 
 	// Stop recording (saves it)
-	resp, err = svc.Ask(ctx, "/save")
+	resp, err = svc.Ask(ctx, "/save", nil)
 	if err != nil {
 		t.Fatalf("Failed to stop recording: %v", err)
 	}
@@ -692,7 +692,7 @@ func TestScriptRecording_OverwriteProtection(t *testing.T) {
 	}
 
 	// 4. Try to record "test_script" again (should warn)
-	resp, err = svc.Ask(ctx, "/create test_script")
+	resp, err = svc.Ask(ctx, "/create test_script", nil)
 	if err != nil {
 		t.Fatalf("Failed to ask: %v", err)
 	}
@@ -717,16 +717,16 @@ func TestScriptManagement(t *testing.T) {
 	ctx := context.Background()
 
 	// 2. Create a script "my_script" with 3 steps
-	svc.Ask(ctx, "/create my_script")
+	svc.Ask(ctx, "/create my_script", nil)
 	svc.session.CurrentScript.Steps = []ai.ScriptStep{
 		{Type: "ask", Prompt: "Step 1"},
 		{Type: "ask", Prompt: "Step 2"},
 		{Type: "ask", Prompt: "Step 3"},
 	}
-	svc.Ask(ctx, "/save")
+	svc.Ask(ctx, "/save", nil)
 
 	// 3. Test /list
-	resp, err := svc.Ask(ctx, "/list")
+	resp, err := svc.Ask(ctx, "/list", nil)
 	if err != nil {
 		t.Fatalf("Failed to list scripts: %v", err)
 	}
@@ -735,7 +735,7 @@ func TestScriptManagement(t *testing.T) {
 	}
 
 	// 4. Test /show
-	resp, err = svc.Ask(ctx, "/show my_script")
+	resp, err = svc.Ask(ctx, "/show my_script", nil)
 	if err != nil {
 		t.Fatalf("Failed to show script: %v", err)
 	}
@@ -744,7 +744,7 @@ func TestScriptManagement(t *testing.T) {
 	}
 
 	// 5. Test /show --json
-	resp, err = svc.Ask(ctx, "/show my_script --json")
+	resp, err = svc.Ask(ctx, "/show my_script --json", nil)
 	if err != nil {
 		t.Fatalf("Failed to show script json: %v", err)
 	}
@@ -753,7 +753,7 @@ func TestScriptManagement(t *testing.T) {
 	}
 
 	// 6. Test /delete
-	resp, err = svc.Ask(ctx, "/delete my_script")
+	resp, err = svc.Ask(ctx, "/delete my_script", nil)
 	if err != nil {
 		t.Fatalf("Failed to delete script: %v", err)
 	}
@@ -762,7 +762,7 @@ func TestScriptManagement(t *testing.T) {
 	}
 
 	// Verify deletion
-	resp, err = svc.Ask(ctx, "/list")
+	resp, err = svc.Ask(ctx, "/list", nil)
 	if strings.Contains(resp, "my_script") {
 		t.Errorf("Script should be deleted, but found in list: %s", resp)
 	}
@@ -787,22 +787,22 @@ func TestScriptNestedAndUpdates(t *testing.T) {
 	ctx := context.Background()
 
 	// 2. Create sub-script
-	svc.Ask(ctx, "/create sub_script")
+	svc.Ask(ctx, "/create sub_script", nil)
 	svc.session.CurrentScript.Steps = []ai.ScriptStep{
 		{Type: "say", Message: "Sub Step 1"},
 	}
-	svc.Ask(ctx, "/save")
+	svc.Ask(ctx, "/save", nil)
 
 	// 3. Create main-script with nested script step
-	svc.Ask(ctx, "/create main_script")
+	svc.Ask(ctx, "/create main_script", nil)
 	svc.session.CurrentScript.Steps = []ai.ScriptStep{
 		{Type: "ask", Prompt: "Main Step 1"},
 		{Type: "call_script", ScriptName: "sub_script"},
 	}
-	svc.Ask(ctx, "/save")
+	svc.Ask(ctx, "/save", nil)
 
 	// 4. Verify /show displays nested script correctly
-	resp, err := svc.Ask(ctx, "/show main_script")
+	resp, err := svc.Ask(ctx, "/show main_script", nil)
 	if err != nil {
 		t.Fatalf("Failed to show script: %v", err)
 	}
@@ -893,7 +893,7 @@ func TestScriptAsyncExecution(t *testing.T) {
 	var scopeMu sync.RWMutex
 
 	start := time.Now()
-	err := svc.runSteps(ctx, script.Steps, scope, &scopeMu, &sb, sysDB)
+	err := svc.runSteps(ctx, script.Steps, scope, &scopeMu, &sb, sysDB, nil)
 	duration := time.Since(start)
 
 	if err != nil {
@@ -935,7 +935,7 @@ func (a *FallbackExecuteScriptAgent) Close(ctx context.Context) error { return n
 func (a *FallbackExecuteScriptAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
 	return nil, nil
 }
-func (a *FallbackExecuteScriptAgent) Ask(ctx context.Context, query string, opts ...ai.Option) (string, error) {
+func (a *FallbackExecuteScriptAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
 	return "", nil
 }
 func (a *FallbackExecuteScriptAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
@@ -1018,7 +1018,7 @@ func TestScriptAsyncErrorPropagation(t *testing.T) {
 	}
 
 	var sb strings.Builder
-	err := svc.runSteps(ctx, script.Steps, make(map[string]any), nil, &sb, sysDB)
+	err := svc.runSteps(ctx, script.Steps, make(map[string]any), nil, &sb, sysDB, nil)
 
 	if err == nil {
 		t.Fatal("Expected error, got nil")
@@ -1072,7 +1072,7 @@ func TestRunScript_ExecuteScriptFallsBackToServiceExecutor(t *testing.T) {
 	svc := NewService(&MockDomain{}, sysDB, nil, nil, nil, registry, false)
 
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &UnavailableMockToolExecutor{})
-	resp, err := svc.Ask(ctx, "/run expensive_orders")
+	resp, err := svc.Ask(ctx, "/run expensive_orders", nil)
 	if err != nil {
 		t.Fatalf("/run failed: %v", err)
 	}

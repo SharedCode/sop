@@ -50,7 +50,7 @@ func TestRunSteps_ManageTransactionErrorShortCircuitsDespiteContinueOnError(t *t
 	}
 
 	var sb strings.Builder
-	err := svc.runSteps(ctx, steps, make(map[string]any), nil, &sb, nil)
+	err := svc.runSteps(ctx, steps, make(map[string]any), nil, &sb, nil, nil)
 	if err == nil {
 		t.Fatal("expected transaction begin failure to abort script")
 	}
@@ -85,7 +85,7 @@ func TestRunSteps_TransactionalToolErrorShortCircuitsDespiteContinueOnError(t *t
 	}
 
 	var sb strings.Builder
-	err := svc.runSteps(ctx, steps, make(map[string]any), nil, &sb, nil)
+	err := svc.runSteps(ctx, steps, make(map[string]any), nil, &sb, nil, nil)
 	if err == nil {
 		t.Fatal("expected transactional tool failure to abort script")
 	}

@@ -1,0 +1,40 @@
+{
+    "schemes": [
+        "http",
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "AI-powered database operations with strongly typed API and bulk operations\n\n## Key Features\n- **Bulk Operations**: Process 10K+ items with automatic batching\n- **Transaction Control**: Three modes (auto_batch, single, explicit)\n- **Type Safety**: Strongly typed request/response structures\n- **LLM Integration**: Compatible with function calling and text tools",
+        "title": "SOP Agent API",
+        "contact": {
+            "name": "SOP Team",
+            "url": "https://github.com/sharedcode/sop"
+        },
+        "license": {
+            "name": "MIT",
+            "url": "https://opensource.org/licenses/MIT"
+        },
+        "version": "2.0"
+    },
+    "basePath": "/api/v1",
+    "paths": {},
+    "tags": [
+        {
+            "description": "High-performance bulk insert/update/delete with automatic transaction batching",
+            "name": "Bulk Operations"
+        },
+        {
+            "description": "Transaction lifecycle management (begin, commit, rollback)",
+            "name": "Transactions"
+        },
+        {
+            "description": "Individual item operations (add, update, delete, select)",
+            "name": "Single Operations"
+        },
+        {
+            "description": "Script execution and join operations",
+            "name": "Advanced"
+        }
+    ]
+}

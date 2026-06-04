@@ -54,7 +54,7 @@ func (ae *AgentEmbedder[T]) EmbedTexts(ctx context.Context, texts []string) ([][
 		// Note: In a real high-throughput system, we'd want a batch API for the agent.
 		prompt := fmt.Sprintf("%s\n\nInput: %s", ae.instruction, text)
 
-		concept, err := ae.agent.Ask(ctx, prompt)
+		concept, err := ae.agent.Ask(ctx, prompt, nil)
 		if err != nil {
 			// Fallback to original text if agent fails
 			enhancedTexts[i] = text

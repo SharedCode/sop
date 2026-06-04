@@ -101,7 +101,7 @@ func TestContextHistoryControl(t *testing.T) {
 
 	// 2. Run Step 1: "Show Users"
 	t.Log("--- Executing Step 1: Show Users ---")
-	resp1, err := svc.Ask(ctx, "Show users")
+	resp1, err := svc.Ask(ctx, "Show users", nil)
 	if err != nil {
 		t.Fatalf("Step 1 failed: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestContextHistoryControl(t *testing.T) {
 
 	// 3. Run Step 2: "Find orders"
 	t.Log("--- Executing Step 2: Find orders ---")
-	resp2, err := svc.Ask(ctx, "Find orders")
+	resp2, err := svc.Ask(ctx, "Find orders", nil)
 	if err != nil {
 		t.Fatalf("Step 2 failed: %v", err)
 	}

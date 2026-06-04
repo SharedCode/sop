@@ -100,22 +100,14 @@ type Config struct {
 }
 
 type setupWizardAIConfig struct {
-	BrainProvider    string                      `json:"brain_provider,omitempty"`
-	BrainModel       string                      `json:"brain_model,omitempty"`
-	BrainURL         string                      `json:"brain_url,omitempty"`
-	BrainAPIKey      string                      `json:"brain_api_key,omitempty"`
-	EmbedderProvider string                      `json:"embedder_provider,omitempty"`
-	EmbedderModel    string                      `json:"embedder_model,omitempty"`
-	EmbedderURL      string                      `json:"embedder_url,omitempty"`
-	EmbedderAPIKey   string                      `json:"embedder_api_key,omitempty"`
-	EnvProviders     []setupWizardProviderOption `json:"env_providers,omitempty"`
-}
-
-type setupWizardProviderOption struct {
-	Provider string `json:"provider,omitempty"`
-	Model    string `json:"model,omitempty"`
-	URL      string `json:"url,omitempty"`
-	APIKey   string `json:"api_key,omitempty"`
+	BrainProvider    string `json:"brain_provider,omitempty"`
+	BrainModel       string `json:"brain_model,omitempty"`
+	BrainURL         string `json:"brain_url,omitempty"`
+	BrainAPIKey      string `json:"brain_api_key,omitempty"`
+	EmbedderProvider string `json:"embedder_provider,omitempty"`
+	EmbedderModel    string `json:"embedder_model,omitempty"`
+	EmbedderURL      string `json:"embedder_url,omitempty"`
+	EmbedderAPIKey   string `json:"embedder_api_key,omitempty"`
 }
 
 func firstNonEmpty(values ...string) string {
@@ -127,70 +119,8 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func hasAnyEnv(keys ...string) bool {
-	for _, key := range keys {
-		if os.Getenv(key) != "" {
-			return true
-		}
-	}
-	return false
-}
-
 func readSetupWizardAIConfigFromEnv() setupWizardAIConfig {
-	type providerEnv struct {
-		provider string
-		apiKey   string
-		model    string
-		baseURL  string
-	}
-
-	providers := []providerEnv{
-		{
-			provider: "gemini",
-			apiKey:   os.Getenv("GEMINI_API_KEY"),
-			model:    os.Getenv("GEMINI_MODEL"),
-			baseURL:  firstNonEmpty(os.Getenv("GEMINI_API_BASE_URL"), os.Getenv("GOOGLE_API_BASE_URL")),
-		},
-		{
-			provider: "openai",
-			apiKey:   os.Getenv("OPENAI_API_KEY"),
-			model:    os.Getenv("OPENAI_MODEL"),
-			baseURL:  os.Getenv("OPENAI_API_BASE_URL"),
-		},
-		{
-			provider: "anthropic",
-			apiKey:   os.Getenv("ANTHROPIC_API_KEY"),
-			model:    os.Getenv("ANTHROPIC_MODEL"),
-			baseURL:  os.Getenv("ANTHROPIC_API_BASE_URL"),
-		},
-	}
-
-	options := make([]setupWizardProviderOption, 0, len(providers))
-
-	for _, provider := range providers {
-		if provider.apiKey == "" && provider.model == "" && provider.baseURL == "" {
-			continue
-		}
-
-		options = append(options, setupWizardProviderOption{
-			Provider: provider.provider,
-			Model:    provider.model,
-			URL:      provider.baseURL,
-			APIKey:   provider.apiKey,
-		})
-	}
-
-	if len(options) > 0 {
-		defaultProvider := options[0]
-
-		return setupWizardAIConfig{
-			BrainProvider: defaultProvider.Provider,
-			BrainModel:    defaultProvider.Model,
-			BrainURL:      defaultProvider.URL,
-			BrainAPIKey:   defaultProvider.APIKey,
-			EnvProviders:  options,
-		}
-	}
+	// API keys are no longer read from environment variables
 
 	if host := firstNonEmpty(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_BASE_URL")); host != "" {
 		return setupWizardAIConfig{
@@ -791,13 +721,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 			if config.BrainProvider != "" {
 				return config.BrainProvider
 			}
-			if os.Getenv("GEMINI_API_KEY") != "" {
-				return "gemini"
-			} else if os.Getenv("OPENAI_API_KEY") != "" {
-				return "openai"
-			} else if os.Getenv("ANTHROPIC_API_KEY") != "" {
-				return "anthropic"
-			} else if os.Getenv("OLLAMA_HOST") != "" {
+			if os.Getenv("OLLAMA_HOST") != "" {
 				return "ollama"
 			}
 			return "gemini"
@@ -808,18 +732,7 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		"MinHashMod":              fs.MinimumModValue,
 		"MaxHashMod":              fs.MaximumModValue,
 		"Env": map[string]bool{
-			"SOP_ROOT_PASSWORD":      os.Getenv("SOP_ROOT_PASSWORD") != "",
-			"BRAIN_API_KEY":          os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("ANTHROPIC_API_KEY") != "",
-			"OPENAI_API_KEY":         os.Getenv("OPENAI_API_KEY") != "",
-			"OPENAI_API_BASE_URL":    os.Getenv("OPENAI_API_BASE_URL") != "",
-			"OPENAI_MODEL":           os.Getenv("OPENAI_MODEL") != "",
-			"ANTHROPIC_API_KEY":      os.Getenv("ANTHROPIC_API_KEY") != "",
-			"ANTHROPIC_API_BASE_URL": os.Getenv("ANTHROPIC_API_BASE_URL") != "",
-			"ANTHROPIC_MODEL":        os.Getenv("ANTHROPIC_MODEL") != "",
-			"GEMINI_API_KEY":         os.Getenv("GEMINI_API_KEY") != "",
-			"GEMINI_API_BASE_URL":    os.Getenv("GEMINI_API_BASE_URL") != "" || os.Getenv("GOOGLE_API_BASE_URL") != "",
-			"GEMINI_MODEL":           os.Getenv("GEMINI_MODEL") != "",
-			"EMBEDDING_API_KEY":      os.Getenv("OPENAI_API_KEY") != "" || os.Getenv("GEMINI_API_KEY") != "" || os.Getenv("VOYAGE_API_KEY") != "" || os.Getenv("EMBEDDING_API_KEY") != "",
+			"SOP_ROOT_PASSWORD": os.Getenv("SOP_ROOT_PASSWORD") != "",
 		},
 	}
 	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {

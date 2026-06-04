@@ -107,11 +107,13 @@ func (a *CopilotAgent) toolCreateSpace(ctx context.Context, args map[string]any)
 }
 
 func (a *CopilotAgent) toolDeleteSpace(ctx context.Context, args map[string]any) (string, error) {
-	db, err := a.getDBForSpaceContext(ctx, args)
-	if err != nil {
-		return "", err
-	}
+	// Extract parameters from args and Context
 	p := ai.GetSessionPayload(ctx)
+	databaseName, _ := args["database"].(string)
+	if databaseName == "" && p != nil {
+		databaseName = p.CurrentDB
+	}
+
 	kbName, _ := args["kb_name"].(string)
 	if kbName == "" {
 		if fallback, ok := args["name"].(string); ok && fallback != "" {
@@ -126,86 +128,57 @@ func (a *CopilotAgent) toolDeleteSpace(ctx context.Context, args map[string]any)
 			}
 		}
 	}
-	if kbName == "" {
-		return "", fmt.Errorf("kb_name required")
-	}
 
-	err = db.RemoveKnowledgeBase(ctx, kbName)
+	// Delegate to typed API with explicit parameters
+	result, err := a.DeleteSpace(ctx, DeleteSpaceArgs{
+		Database: databaseName,
+		KBName:   kbName,
+	})
 	if err != nil {
 		return "", err
 	}
-	databaseName := ""
-	if p != nil {
-		databaseName = p.CurrentDB
-	}
-	emitSpaceMutationEvent(ctx, "delete", databaseName, kbName)
-	return fmt.Sprintf("Space/KnowledgeBase '%s' deleted successfully.\n[[REFRESH_SPACES]]", kbName), nil
+	return result + "\n[[REFRESH_SPACES]]", nil
 }
 
 func (a *CopilotAgent) toolUpdateSpaceConfig(ctx context.Context, args map[string]any) (string, error) {
-	db, err := a.getDBForSpaceContext(ctx, args)
-	if err != nil {
-		return "", err
+	// Extract parameters from args and Context
+	p := ai.GetSessionPayload(ctx)
+	databaseName, _ := args["database"].(string)
+	if databaseName == "" && p != nil {
+		databaseName = p.CurrentDB
 	}
+
 	kbName, _ := args["kb_name"].(string)
-	if kbName == "" {
-		return "", fmt.Errorf("kb_name required")
-	}
-
-	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
-	if err != nil {
-		return "", err
-	}
-	defer tx.Rollback(ctx)
-
-	var embedder ai.Embeddings
-	if a.service != nil && a.service.Domain() != nil {
-		embedder = a.service.Domain().Embedder()
-	}
-	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, false)
-	if err != nil {
-		return "", err
-	}
-
 	configMap, _ := args["config"].(map[string]any)
+
+	// Convert config map to struct
 	configBytes, _ := json.Marshal(configMap)
 	var config memory.KnowledgeBaseConfig
 	json.Unmarshal(configBytes, &config)
 
-	err = kb.SetConfig(ctx, &config)
-	if err != nil {
-		return "", err
-	}
-	tx.Commit(ctx)
-	return fmt.Sprintf("Config updated for '%s'", kbName), nil
+	// Delegate to typed API with explicit parameters
+	return a.UpdateSpaceConfig(ctx, UpdateSpaceConfigArgs{
+		Database: databaseName,
+		KBName:   kbName,
+		Config:   config,
+	})
 }
 
 func (a *CopilotAgent) toolReadSpaceConfig(ctx context.Context, args map[string]any) (string, error) {
-	db, err := a.getDBForSpaceContext(ctx, args)
-	if err != nil {
-		return "", err
+	// Extract parameters from args and Context
+	p := ai.GetSessionPayload(ctx)
+	databaseName, _ := args["database"].(string)
+	if databaseName == "" && p != nil {
+		databaseName = p.CurrentDB
 	}
+
 	kbName, _ := args["kb_name"].(string)
-	if kbName == "" {
-		return "", fmt.Errorf("kb_name required")
-	}
 
-	tx, err := db.BeginTransaction(ctx, sop.ForReading)
-	if err != nil {
-		return "", err
-	}
-	defer tx.Rollback(ctx)
-
-	var embedder ai.Embeddings
-	if a.service != nil && a.service.Domain() != nil {
-		embedder = a.service.Domain().Embedder()
-	}
-	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, false)
-	if err != nil {
-		return "", err
-	}
-
-	cfg, err := kb.GetConfig(ctx)
+	// Delegate to typed API with explicit parameters
+	cfg, err := a.ReadSpaceConfig(ctx, ReadSpaceConfigArgs{
+		Database: databaseName,
+		KBName:   kbName,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -214,33 +187,35 @@ func (a *CopilotAgent) toolReadSpaceConfig(ctx context.Context, args map[string]
 }
 
 func (a *CopilotAgent) toolVectorizeSpace(ctx context.Context, args map[string]any) (string, error) {
-	db, err := a.getDBForSpaceContext(ctx, args)
-	if err != nil {
-		return "", err
+	// Extract parameters from args and Context
+	p := ai.GetSessionPayload(ctx)
+	databaseName, _ := args["database"].(string)
+	if databaseName == "" && p != nil {
+		databaseName = p.CurrentDB
 	}
+
 	kbName, _ := args["kb_name"].(string)
 	batchSize := 100
 	if val, ok := args["batch_size"].(float64); ok && val > 0 {
 		batchSize = int(val)
 	}
 
-	var embedder ai.Embeddings
-	if a.service != nil && a.service.Domain() != nil {
-		embedder = a.service.Domain().Embedder()
-	}
-
-	err = db.Vectorize(ctx, kbName, a.brain, embedder, batchSize)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("Space '%s' vectorized.", kbName), nil
+	// Delegate to typed API with explicit parameters
+	return a.VectorizeSpace(ctx, VectorizeSpaceArgs{
+		Database:  databaseName,
+		KBName:    kbName,
+		BatchSize: batchSize,
+	})
 }
 
 func (a *CopilotAgent) toolVectorizeCategories(ctx context.Context, args map[string]any) (string, error) {
-	db, err := a.getDBForSpaceContext(ctx, args)
-	if err != nil {
-		return "", err
+	// Extract parameters from args and Context
+	p := ai.GetSessionPayload(ctx)
+	databaseName, _ := args["database"].(string)
+	if databaseName == "" && p != nil {
+		databaseName = p.CurrentDB
 	}
+
 	kbName, _ := args["kb_name"].(string)
 	batchSize := 100
 	if val, ok := args["batch_size"].(float64); ok && val > 0 {
@@ -258,32 +233,42 @@ func (a *CopilotAgent) toolVectorizeCategories(ctx context.Context, args map[str
 		}
 	}
 
-	var embedder ai.Embeddings
-	if a.service != nil && a.service.Domain() != nil {
-		embedder = a.service.Domain().Embedder()
-	}
-
-	err = db.VectorizeCategories(ctx, kbName, a.brain, embedder, batchSize, ids)
+	// Delegate to typed API with explicit parameters
+	result, err := a.BulkVectorizeCategories(ctx, BulkVectorizeCategoriesArgs{
+		Database:    databaseName,
+		KBName:      kbName,
+		BatchSize:   batchSize,
+		CategoryIDs: ids,
+	})
 	if err != nil {
 		return "", err
 	}
-	return "Categories vectorized.", nil
+	if result.Success {
+		return "Categories vectorized.", nil
+	}
+	return fmt.Sprintf("Categories vectorized with errors: %d processed, %d failed", result.Processed, result.Failed), nil
 }
 
 func (a *CopilotAgent) toolVectorizeItems(ctx context.Context, args map[string]any) (string, error) {
-	db, err := a.getDBForSpaceContext(ctx, args)
-	if err != nil {
-		return "", err
+	// Extract parameters from args and Context
+	p := ai.GetSessionPayload(ctx)
+	databaseName, _ := args["database"].(string)
+	if databaseName == "" && p != nil {
+		databaseName = p.CurrentDB
 	}
+
 	kbName, _ := args["kb_name"].(string)
 	batchSize := 100
 	if val, ok := args["batch_size"].(float64); ok {
 		batchSize = int(val)
 	}
 
-	var catID sop.UUID
-	if val, ok := args["category_id"].(string); ok {
-		catID, _ = sop.ParseUUID(val)
+	var catID *sop.UUID
+	if val, ok := args["category_id"].(string); ok && val != "" {
+		u, e := sop.ParseUUID(val)
+		if e == nil {
+			catID = &u
+		}
 	}
 
 	idsRaw, _ := args["item_ids"].([]any)
@@ -297,74 +282,62 @@ func (a *CopilotAgent) toolVectorizeItems(ctx context.Context, args map[string]a
 		}
 	}
 
-	var embedder ai.Embeddings
-	if a.service != nil && a.service.Domain() != nil {
-		embedder = a.service.Domain().Embedder()
-	}
-
-	err = db.VectorizeItems(ctx, kbName, a.brain, embedder, batchSize, catID, itemIDs)
+	// Delegate to typed API with explicit parameters
+	result, err := a.BulkVectorizeItems(ctx, BulkVectorizeItemsArgs{
+		Database:   databaseName,
+		KBName:     kbName,
+		BatchSize:  batchSize,
+		CategoryID: catID,
+		ItemIDs:    itemIDs,
+	})
 	if err != nil {
 		return "", err
 	}
-	return "Items vectorized.", nil
+	if result.Success {
+		return "Items vectorized.", nil
+	}
+	return fmt.Sprintf("Items vectorized with errors: %d processed, %d failed", result.Processed, result.Failed), nil
 }
 
 func (a *CopilotAgent) toolUpsertCategories(ctx context.Context, args map[string]any) (string, error) {
-	db, err := a.getDBForSpaceContext(ctx, args)
-	if err != nil {
-		return "", err
+	// Extract parameters from args and Context
+	p := ai.GetSessionPayload(ctx)
+	databaseName, _ := args["database"].(string)
+	if databaseName == "" && p != nil {
+		databaseName = p.CurrentDB
 	}
+
 	kbName, _ := args["kb_name"].(string)
-
-	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
-	if err != nil {
-		return "", err
-	}
-	defer tx.Rollback(ctx)
-
-	var embedder ai.Embeddings
-	if a.service != nil && a.service.Domain() != nil {
-		embedder = a.service.Domain().Embedder()
-	}
-	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, false)
-	if err != nil {
-		return "", err
-	}
 
 	paramsRaw, _ := args["parameters"].([]any)
 	b, _ := json.Marshal(paramsRaw)
 	var params []memory.UpsertCategoryParam
 	json.Unmarshal(b, &params)
 
-	err = kb.UpsertCategories(ctx, params)
+	// Delegate to typed API with explicit parameters
+	result, err := a.BulkUpsertCategories(ctx, BulkUpsertCategoriesArgs{
+		Database:   databaseName,
+		KBName:     kbName,
+		Parameters: params,
+	})
 	if err != nil {
 		return "", err
 	}
-	tx.Commit(ctx)
-	return "Categories upserted.", nil
+	if result.Success {
+		return "Categories upserted.", nil
+	}
+	return fmt.Sprintf("Categories upserted with errors: %d processed, %d failed", result.Processed, result.Failed), nil
 }
 
 func (a *CopilotAgent) toolDeleteCategories(ctx context.Context, args map[string]any) (string, error) {
-	db, err := a.getDBForSpaceContext(ctx, args)
-	if err != nil {
-		return "", err
+	// Extract parameters from args and Context
+	p := ai.GetSessionPayload(ctx)
+	databaseName, _ := args["database"].(string)
+	if databaseName == "" && p != nil {
+		databaseName = p.CurrentDB
 	}
+
 	kbName, _ := args["kb_name"].(string)
-
-	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
-	if err != nil {
-		return "", err
-	}
-	defer tx.Rollback(ctx)
-
-	var embedder ai.Embeddings
-	if a.service != nil && a.service.Domain() != nil {
-		embedder = a.service.Domain().Embedder()
-	}
-	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, false)
-	if err != nil {
-		return "", err
-	}
 
 	idsRaw, _ := args["category_ids"].([]any)
 	var ids []sop.UUID
@@ -375,90 +348,85 @@ func (a *CopilotAgent) toolDeleteCategories(ctx context.Context, args map[string
 		}
 	}
 
-	err = kb.DeleteCategories(ctx, ids)
+	// Delegate to typed API with explicit parameters
+	result, err := a.BulkDeleteCategories(ctx, BulkDeleteCategoriesArgs{
+		Database:    databaseName,
+		KBName:      kbName,
+		CategoryIDs: ids,
+	})
 	if err != nil {
 		return "", err
 	}
-	tx.Commit(ctx)
-	return "Categories deleted.", nil
+	if result.Success {
+		return "Categories deleted.", nil
+	}
+	return fmt.Sprintf("Categories deleted with errors: %d processed, %d failed", result.Processed, result.Failed), nil
 }
 
 func (a *CopilotAgent) toolListCategories(ctx context.Context, args map[string]any) (string, error) {
-	db, err := a.getDBForSpaceContext(ctx, args)
-	if err != nil {
-		return "", err
+	// Extract parameters from args and Context
+	p := ai.GetSessionPayload(ctx)
+	databaseName, _ := args["database"].(string)
+	if databaseName == "" && p != nil {
+		databaseName = p.CurrentDB
 	}
+
 	kbName, _ := args["kb_name"].(string)
 
-	tx, err := db.BeginTransaction(ctx, sop.ForReading)
-	if err != nil {
-		return "", err
-	}
-	defer tx.Rollback(ctx)
-
-	var embedder ai.Embeddings
-	if a.service != nil && a.service.Domain() != nil {
-		embedder = a.service.Domain().Embedder()
-	}
-	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, false)
-	if err != nil {
-		return "", err
-	}
-
-	var p memory.ListCategoriesParam
-	p.Limit = 100
+	limit := 100
 	if val, ok := args["limit"].(float64); ok && val > 0 {
-		p.Limit = int(val)
+		limit = int(val)
 	}
+	offset := 0
 	if val, ok := args["offset"].(float64); ok && val > 0 {
-		p.Offset = int(val)
+		offset = int(val)
 	}
-	if val, ok := args["parent_path"].(string); ok {
-		p.ParentPath = val
-	}
+	parentPath, _ := args["parent_path"].(string)
 
-	cats, total, err := kb.ListCategories(ctx, p)
+	// Delegate to typed API with explicit parameters
+	result, err := a.ListCategories(ctx, ListCategoriesArgs{
+		Database:   databaseName,
+		KBName:     kbName,
+		Limit:      limit,
+		Offset:     offset,
+		ParentPath: parentPath,
+	})
 	if err != nil {
 		return "", err
 	}
-	res := map[string]any{"categories": cats, "total": total}
+	res := map[string]any{"categories": result.Categories, "total": result.Total}
 	b, _ := json.Marshal(res)
 	return string(b), nil
 }
 
 func (a *CopilotAgent) toolUpsertItems(ctx context.Context, args map[string]any) (string, error) {
-	db, err := a.getDBForSpaceContext(ctx, args)
-	if err != nil {
-		return "", err
+	// Extract parameters from args and Context
+	p := ai.GetSessionPayload(ctx)
+	databaseName, _ := args["database"].(string)
+	if databaseName == "" && p != nil {
+		databaseName = p.CurrentDB
 	}
+
 	kbName, _ := args["kb_name"].(string)
-
-	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
-	if err != nil {
-		return "", err
-	}
-	defer tx.Rollback(ctx)
-
-	var embedder ai.Embeddings
-	if a.service != nil && a.service.Domain() != nil {
-		embedder = a.service.Domain().Embedder()
-	}
-	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, false)
-	if err != nil {
-		return "", err
-	}
 
 	paramsRaw, _ := args["parameters"].([]any)
 	b, _ := json.Marshal(paramsRaw)
 	var params []memory.UpsertItemParam[map[string]any]
 	json.Unmarshal(b, &params)
 
-	err = kb.UpsertItems(ctx, params)
+	// Delegate to typed API with explicit parameters
+	result, err := a.BulkUpsertItems(ctx, BulkUpsertItemsArgs{
+		Database:   databaseName,
+		KBName:     kbName,
+		Parameters: params,
+	})
 	if err != nil {
 		return "", err
 	}
-	tx.Commit(ctx)
-	return "Items upserted.", nil
+	if result.Success {
+		return "Items upserted.", nil
+	}
+	return fmt.Sprintf("Items upserted with errors: %d processed, %d failed", result.Processed, result.Failed), nil
 }
 
 func (a *CopilotAgent) toolDeleteItems(ctx context.Context, args map[string]any) (string, error) {

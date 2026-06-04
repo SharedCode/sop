@@ -48,7 +48,7 @@ func TestScriptParameterization_Nested(t *testing.T) {
 
 	// 4. Parameterize "Sales" -> "target_dept"
 	cmd := "/parameterize audit_department target_dept Sales"
-	resp, err := svc.Ask(ctx, cmd)
+	resp, err := svc.Ask(ctx, cmd, nil)
 	if err != nil {
 		t.Fatalf("Command failed: %v", err)
 	}

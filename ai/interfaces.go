@@ -44,6 +44,9 @@ const (
 	CtxKeyEventStreamer ContextKey = "ai_event_streamer"
 	// CtxKeyNativeToolHints marks native Ask-loop tool execution that can consume structured progress hints.
 	CtxKeyNativeToolHints ContextKey = "ai_native_tool_hints"
+	// CtxKeyIsNewTopic carries the is-new-topic signal from the orchestrating Service down to pipeline agents.
+	// When true it indicates the current request starts a fresh conversation thread rather than continuing one.
+	CtxKeyIsNewTopic ContextKey = "ai_is_new_topic"
 )
 
 // ArtifactType represents the type of a database artifact.
@@ -253,6 +256,12 @@ type GenOptions struct {
 	// ToolCallContinuations carries provider-neutral tool-call/result turns that a
 	// generator can translate into its provider-specific continuation format.
 	ToolCallContinuations []ToolCallContinuation
+	// ThinkingLevel controls internal reasoning intensity for Gemini 3.1 Pro (low/medium/high).
+	// Use "low" for strict structured outputs, "high" for creative tasks.
+	ThinkingLevel string
+	// ResponseSchema enforces strict output structure by physically constraining token generation.
+	// Pass a JSON schema to prevent hallucinated fields/keys.
+	ResponseSchema map[string]any
 }
 
 // ToolCallContinuation preserves a completed tool-call turn so generators can
@@ -335,7 +344,7 @@ type CarryoverPolicy struct {
 func DefaultCarryoverPolicy() CarryoverPolicy {
 	return CarryoverPolicy{
 		DefaultMode:             CarryoverModeCompact,
-		LiveCarryoverMaxAsks:    3,
+		LiveCarryoverMaxAsks:    4,
 		LiveCarryoverIdleTTL:    15 * time.Minute,
 		LiveCarryoverSoftTokens: 8000,
 		LiveCarryoverHardTokens: 12000,
@@ -580,44 +589,51 @@ type Domain[T any] interface {
 	DataPath() string
 }
 
-// AskConfig holds configuration options for the Ask method.
-type AskConfig struct {
-	Values map[string]any
+// ConfigMap holds configuration parameters for Agent.Ask calls.
+// This is the "goo" type used at the Agent interface boundary for pipeline flexibility.
+// Individual agent implementations should define their own typed structs and convert from ConfigMap.
+type ConfigMap struct {
+	values map[string]any
 }
 
-// Option defines a function that configures AskConfig.
-type Option func(*AskConfig)
-
-// NewAskConfig creates a new AskConfig with the applied options.
-func NewAskConfig(opts ...Option) *AskConfig {
-	cfg := &AskConfig{Values: make(map[string]any)}
-	for _, opt := range opts {
-		opt(cfg)
-	}
-	return cfg
+// NewConfigMap creates a new empty ConfigMap.
+func NewConfigMap() *ConfigMap {
+	return &ConfigMap{values: make(map[string]any)}
 }
 
-// WithDatabase adds a database instance to the configuration.
-// The db parameter should be of type *database.Database.
-func WithDatabase(db any) Option {
-	return func(c *AskConfig) {
-		c.Values["database"] = db
+func (c *ConfigMap) Get(key string) (any, bool) {
+	if c == nil || c.values == nil {
+		return nil, false
 	}
+	value, exists := c.values[key]
+	return value, exists
 }
 
-// WithDefaultFormat sets the default output format (e.g., "csv", "json") for tools.
-func WithDefaultFormat(format string) Option {
-	return func(c *AskConfig) {
-		c.Values["default_format"] = format
+func (c *ConfigMap) Set(key string, value any) {
+	if c == nil {
+		return
 	}
+	if c.values == nil {
+		c.values = make(map[string]any)
+	}
+	c.values[key] = value
 }
 
-// WithDatabaseResolver adds a database resolver to the configuration.
-// Deprecated: Use WithSessionPayload instead.
-func WithDatabaseResolver(resolver any) Option {
-	return func(c *AskConfig) {
-		// No-op or legacy support if needed, but we are removing the interface.
+// ToMap returns the underlying map for marshaling/conversion.
+func (c *ConfigMap) ToMap() map[string]any {
+	if c == nil || c.values == nil {
+		return make(map[string]any)
 	}
+	return c.values
+}
+
+// IsNewTopicFromContext returns the is-new-topic flag stamped into the context by applyAskOptions.
+// Returns false if the flag was not set (treat as topic continuation).
+func IsNewTopicFromContext(ctx context.Context) bool {
+	if v, ok := ctx.Value(CtxKeyIsNewTopic).(bool); ok {
+		return v
+	}
+	return false
 }
 
 // Agent defines the interface for an AI agent service.
@@ -627,7 +643,7 @@ type Agent[T any] interface {
 	Close(ctx context.Context) error
 
 	Search(ctx context.Context, query string, limit int) ([]Hit[T], error)
-	Ask(ctx context.Context, query string, opts ...Option) (string, error)
+	Ask(ctx context.Context, query string, cfg *ConfigMap) (string, error)
 }
 
 // SessionPayload represents the context and state for an agent session.
@@ -663,12 +679,27 @@ type SessionPayload struct {
 	Transactions map[string]any
 	// Variables holds session-scoped variables (e.g. cached store instances).
 	Variables map[string]any
+	// ExplicitTransaction marks when language bindings (Python, Rust, Java, .NET) are managing
+	// their own transaction lifecycle via manage_transaction API.
+	//
+	// When ExplicitTransaction = true:
+	//   - Transaction is managed EXTERNALLY by language binding code
+	//   - SessionPayload.Close() will NOT auto-commit or auto-rollback
+	//   - Language bindings must explicitly call commit/rollback via manage_transaction
+	//   - This allows transactions to span multiple API calls (e.g., HTTP requests)
+	//
+	// When ExplicitTransaction = false (default):
+	//   - Transaction is managed INTERNALLY by the agent session
+	//   - SessionPayload.Close() will auto-commit the transaction
+	//   - Transaction lifecycle is scoped to a single Ask/Execute call
+	//
+	// WARNING: ExplicitTransaction = true is prone to transaction leaks if language bindings
+	// don't properly commit/rollback. Only use when you need multi-request transaction scope.
+	ExplicitTransaction bool
 	// RetryRewriteState tracks an explicit retry-the-same-ask rewrite.
 	RetryRewriteState *RetryRewriteState
 	// ClarificationState tracks an explicit pending clarification round before execution resumes.
 	ClarificationState *ClarificationState
-	// ExplicitTransaction indicates if the transaction was explicitly started by the user.
-	ExplicitTransaction bool
 	// LastInteractionSteps tracks the number of steps added/executed in the last user interaction.
 	LastInteractionSteps int
 	// ConversationHistory stores the active memory/transcript for the session.
@@ -711,9 +742,17 @@ func (sp *SessionPayload) Close(ctx context.Context) error {
 	}
 
 	if sp.ExplicitTransaction {
-		// Explicit transactions span multiple requests. We must NOT rollback here.
+		// CRITICAL: Explicit transactions are managed externally by language bindings
+		// via the manage_transaction API. They must NOT be auto-committed or auto-rolled back
+		// by SessionPayload.Close() because:
+		//   1. The transaction may span multiple API calls (multi-request scope)
+		//   2. Language binding code is responsible for commit/rollback
+		//   3. Auto-managing would break the external transaction lifecycle
+		// See TestTransactionLifecycle_ExplicitTransaction for validation.
 		return nil
 	}
+
+	// Auto-commit implicit (session-managed) transactions
 	if tx, ok := sp.Transaction.(sop.Transaction); ok {
 		if tx.HasBegun() {
 			return tx.Commit(ctx)
@@ -724,13 +763,6 @@ func (sp *SessionPayload) Close(ctx context.Context) error {
 
 func (s *SessionPayload) GetDatabase() string {
 	return s.CurrentDB
-}
-
-// WithSessionPayload adds a session payload to the configuration.
-func WithSessionPayload(payload *SessionPayload) Option {
-	return func(c *AskConfig) {
-		c.Values["payload"] = payload
-	}
 }
 
 // GetSessionPayload retrieves the session payload from the context.

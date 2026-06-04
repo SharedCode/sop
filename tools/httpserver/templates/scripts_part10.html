@@ -43,8 +43,8 @@
 
     function describeAISummarySelection(aiConfig) {
         const cfg = aiConfig || {};
-        const llm = capitalizeSummaryLabel(cfg.brain_model || cfg.brain_provider || 'Auto');
-        const embedder = capitalizeSummaryLabel(cfg.embedder_model || cfg.embedder_provider || 'Default');
+        const llm = capitalizeSummaryLabel(cfg.brain_model || cfg.brain_provider || 'GPT-5.4');
+        const embedder = capitalizeSummaryLabel(cfg.embedder_model || cfg.embedder_provider || 'text-embedding-3-small');
         const embedderNeedsSuffix = !/(embed|embedding)/i.test(embedder);
         return `${llm} * ${embedder}${embedderNeedsSuffix ? ' emb' : ''}`;
     }
@@ -89,7 +89,7 @@
         }
 
         envGroup = document.createElement('optgroup');
-        envGroup.label = 'Environment';
+        envGroup.label = 'Local Storage';
         envGroup.dataset.injectedGroup = 'env';
 
         const insertBeforeNode = Array.from(select.children).find((child, index) => {
@@ -676,6 +676,15 @@
             currentWizardStep++;
             updateWizardStep();
         } else {
+            // Step 3: Validate AI Configuration before finishing
+            const bProviderValue = document.getElementById('setup-brain-provider') ? document.getElementById('setup-brain-provider').value : "";
+            const bApiKey = document.getElementById('setup-brain-api-key') ? document.getElementById('setup-brain-api-key').value.trim() : "";
+            
+            // Check if provider is selected and requires API key (not local/ollama)
+            if (bProviderValue && !isLocalProviderValue(bProviderValue) && !bApiKey) {
+                return showAlert("API Key is required for the selected LLM provider");
+            }
+            
             finishSetup();
         }
     }

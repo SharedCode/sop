@@ -189,11 +189,31 @@ func (b3 *Cursor[TK, TV]) GetCurrentValue(ctx context.Context) (TV, error) {
 	return b3.Btree.GetCurrentValue(ctx)
 }
 
+// GetCurrentValueNoLock returns the current value without read lock hint.
+func (b3 *Cursor[TK, TV]) GetCurrentValueNoLock(ctx context.Context) (TV, error) {
+	b3.Btree.currentItem = b3.currentItem
+	b3.Btree.currentItemRef = b3.currentItemRef
+	return b3.Btree.GetCurrentValueNoLock(ctx)
+}
+
+// RLockCurrentItem registers the current item for read lock.
+func (b3 *Cursor[TK, TV]) RLockCurrentItem(ctx context.Context) error {
+	b3.Btree.currentItem = b3.currentItem
+	b3.Btree.currentItemRef = b3.currentItemRef
+	return b3.Btree.RLockCurrentItem(ctx)
+}
+
 // GetCurrentItem returns the current item; requires begun transaction.
 func (b3 *Cursor[TK, TV]) GetCurrentItem(ctx context.Context) (Item[TK, TV], error) {
 	b3.Btree.currentItem = b3.currentItem
 	b3.Btree.currentItemRef = b3.currentItemRef
 	return b3.Btree.GetCurrentItem(ctx)
+}
+
+func (b3 *Cursor[TK, TV]) GetCurrentItemNoLock(ctx context.Context) (Item[TK, TV], error) {
+	b3.Btree.currentItem = b3.currentItem
+	b3.Btree.currentItemRef = b3.currentItemRef
+	return b3.Btree.GetCurrentItemNoLock(ctx)
 }
 
 // Next advances the cursor forward; requires begun transaction.

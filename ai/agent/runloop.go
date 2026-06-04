@@ -14,7 +14,7 @@ import (
 // It reads user input from r, processes it using the agent's Ask method,
 // and writes the response to w.
 // The loop continues until the user enters "exit" or the input stream ends.
-func RunLoop(ctx context.Context, agent ai.Agent[map[string]any], r io.Reader, w io.Writer, prompt string, assistantName string) error {
+func RunLoop(ctx context.Context, agent ai.Agent[map[string]any], r io.Reader, w io.Writer, prompt string, assistantName string, cfg *ai.ConfigMap) error {
 	scanner := bufio.NewScanner(r)
 
 	if prompt == "" {
@@ -55,7 +55,7 @@ func RunLoop(ctx context.Context, agent ai.Agent[map[string]any], r io.Reader, w
 			fmt.Fprintf(w, "\n[Progress] %s\n", msg)
 		})
 
-		answer, err := agent.Ask(loopCtx, input)
+		answer, err := agent.Ask(loopCtx, input, cfg)
 		if err != nil {
 			fmt.Fprintf(w, "Error: %v\n", err)
 		} else {

@@ -57,10 +57,20 @@ type BtreeInterface[TK Ordered, TV any] interface {
 	// GetCurrentKey returns the current item's key (and Item ID). If the B-tree allows duplicates,
 	// having the Item ID available allows finding that item conveniently (see FindWithID).
 	GetCurrentKey() Item[TK, TV]
-	// GetCurrentValue returns the current item's value.
+	// GetCurrentValue returns the current item's value with read lock hint for transaction commit.
 	GetCurrentValue(ctx context.Context) (TV, error)
+	// GetCurrentValueNoLock returns the current item's value without read lock hint.
+	// Use this when managing locks explicitly (e.g., in SQL layer).
+	GetCurrentValueNoLock(ctx context.Context) (TV, error)
 	// GetCurrentItem returns the current item.
 	GetCurrentItem(ctx context.Context) (Item[TK, TV], error)
+	// GetCurrentItemNoLock returns the current item without read lock hint.
+	// Use this when managing locks explicitly (e.g., in SQL layer).
+	GetCurrentItemNoLock(ctx context.Context) (Item[TK, TV], error)
+
+	// RLockCurrentItem registers the current item for read lock (version check) on Commit.
+	// Use this when you need to lock an item without fetching its value.
+	RLockCurrentItem(ctx context.Context) error
 
 	// First positions the cursor to the first item as per key ordering.
 	// Use GetCurrentKey/GetCurrentValue to retrieve the current item.

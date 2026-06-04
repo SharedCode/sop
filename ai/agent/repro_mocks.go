@@ -116,6 +116,19 @@ func (m *MockStore) GetCurrentValue(ctx context.Context) (any, error) {
 	return m.Items[m.currentIndex].Value, nil
 }
 
+func (m *MockStore) GetCurrentValueNoLock(ctx context.Context) (any, error) {
+	// Mock doesn't track locks, so this is same as GetCurrentValue
+	return m.GetCurrentValue(ctx)
+}
+
+func (m *MockStore) RLockCurrentItem(ctx context.Context) error {
+	// Mock doesn't track locks, so this is a no-op
+	if !m.started || m.currentIndex < 0 || m.currentIndex >= len(m.Items) {
+		return fmt.Errorf("no current item to lock")
+	}
+	return nil
+}
+
 func (m *MockStore) Add(ctx context.Context, key any, value any) (bool, error) {
 	m.Items = append(m.Items, MockItem{Key: key, Value: value})
 	return true, nil

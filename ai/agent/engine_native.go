@@ -151,16 +151,27 @@ func (e *NativeReActEngine) runDefaultLoop(ctx context.Context, req ai.Reasoning
 	var pendingContinuation *ai.ToolCallContinuation
 	strategy := resolveReActTurnStrategy(req)
 	for iteration := 0; iteration < budgetState.maxIterations && iteration < budgetState.allowedIterations; iteration++ {
+		// Check for context cancellation at the start of each iteration
+		select {
+		case <-ctx.Done():
+			log.Warn("Native ReAct Engine: Request canceled by client", "iteration", iteration+1, "error", ctx.Err())
+			return ai.ReasoningResponse{}, fmt.Errorf("request canceled during iteration %d: %w", iteration+1, ctx.Err())
+		default:
+		}
+
 		emitVerboseProgress(ctx, "Reasoning iteration %d of %d.", iteration+1, budgetState.allowedIterations)
 		temperature := nativeReActToolCallTemperature
+		thinkingLevel := "low" // Default: strict schema adherence for tool calls
 		if pendingRepair != nil || pendingMalformedCall != nil {
 			temperature = nativeReActRepairTemperature
+			thinkingLevel = "medium" // More reasoning for repair strategies
 		}
 		genOpts := ai.GenOptions{
-			SystemPrompt: req.SystemPrompt,
-			MaxTokens:    e.MaxTokens,
-			Temperature:  temperature,
-			Tools:        tools,
+			SystemPrompt:  req.SystemPrompt,
+			MaxTokens:     e.MaxTokens,
+			Temperature:   temperature,
+			ThinkingLevel: thinkingLevel,
+			Tools:         tools,
 			ToolCallContinuations: func() []ai.ToolCallContinuation {
 				if pendingContinuation == nil {
 					return nil
@@ -377,9 +388,10 @@ func (e *NativeReActEngine) runDefaultLoop(ctx context.Context, req ai.Reasoning
 
 	log.Warn("Native ReAct Engine Reached Tool Iteration Limit", "limit", budgetState.allowedIterations, "hard_cap", budgetState.maxIterations)
 	finalOpts := ai.GenOptions{
-		SystemPrompt: req.SystemPrompt,
-		MaxTokens:    e.MaxTokens,
-		Temperature:  0.7,
+		SystemPrompt:  req.SystemPrompt,
+		MaxTokens:     e.MaxTokens,
+		Temperature:   0.7,
+		ThinkingLevel: "high", // Higher reasoning for final synthesis and explanation
 		ToolCallContinuations: func() []ai.ToolCallContinuation {
 			if pendingContinuation == nil {
 				return nil
@@ -590,6 +602,9 @@ func isRecoverableToolExecutionError(err error) bool {
 		"invalid type",
 		"must be",
 		"expected",
+		"validation failed",
+		"grammar validation",
+		"unnecessary nested joins",
 	}
 	for _, hint := range recoverableHints {
 		if strings.Contains(message, hint) {
