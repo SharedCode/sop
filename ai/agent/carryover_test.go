@@ -24,6 +24,10 @@ func (carryoverTestGenerator) Generate(ctx context.Context, prompt string, opts 
 }
 func (carryoverTestGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (carryoverTestGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func TestDecideCarryover_UsesCompactModeForGeminiContinuation(t *testing.T) {
 	session := NewRunnerSession()
 	threadID := sop.NewUUID()
@@ -170,6 +174,11 @@ type capabilityOnlyGenerator struct {
 
 func (g capabilityOnlyGenerator) Name() string                                 { return g.provider }
 func (g capabilityOnlyGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (g capabilityOnlyGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func (g capabilityOnlyGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	_ = ctx
 	_ = prompt
@@ -188,6 +197,7 @@ func TestBuildCarryoverState_MergesProviderRuntimeState(t *testing.T) {
 	gen := capabilityOnlyGenerator{provider: "chatgpt", model: "gpt-test", supportsCompact: true, supportsLive: true}
 	providerState := &ai.CarryoverState{
 		Mode:                   ai.CarryoverModeLive,
+		ConversationID:         "conv_123",
 		ConversationHandle:     "thread-handle-123",
 		EstimatedRawToolTokens: 144,
 	}
@@ -198,6 +208,9 @@ func TestBuildCarryoverState_MergesProviderRuntimeState(t *testing.T) {
 	}
 	if state.Mode != ai.CarryoverModeLive {
 		t.Fatalf("expected live mode to survive merge, got %+v", state)
+	}
+	if state.ConversationID != "conv_123" {
+		t.Fatalf("expected provider conversation ID, got %+v", state)
 	}
 	if state.ConversationHandle != "thread-handle-123" {
 		t.Fatalf("expected provider conversation handle, got %+v", state)

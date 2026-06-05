@@ -65,3 +65,7 @@ func (p *perceptron) Generate(ctx context.Context, prompt string, opts ai.GenOpt
 func (p *perceptron) EstimateCost(inTokens, outTokens int) float64 {
 	return 0.0 // Local compute is "free" (monetarily)
 }
+
+func (p *perceptron) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}

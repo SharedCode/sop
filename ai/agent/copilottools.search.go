@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	log "log/slog"
 	"strings"
 
 	"github.com/sharedcode/sop"
@@ -13,10 +14,28 @@ import (
 )
 
 // searchKnowledgeBase searches a specified knowledge base in the given DB.
+func stripRoutingPrefix(query, kbName string) string {
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return trimmed
+	}
+
+	canonicalName := strings.ToLower(ai.CanonicalKBName(kbName))
+	prefix := canonicalName + ":"
+	if canonicalName == "" || !strings.HasPrefix(strings.ToLower(trimmed), prefix) {
+		return trimmed
+	}
+
+	return strings.TrimSpace(trimmed[len(canonicalName)+1:])
+}
+
 func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Database, kbName string, query string, catPath string, category string, textSearchEnabled bool, limit int) (string, error) {
 	if db == nil {
 		return "", fmt.Errorf("database is null")
 	}
+	kbName = ai.CanonicalKBName(kbName)
+	query = stripRoutingPrefix(query, kbName)
+	log.Info("searchKnowledgeBase start", "kb_name", kbName, "query", query, "category", category, "category_path", catPath, "text_search_enabled", textSearchEnabled, "limit", limit)
 
 	tx, err := db.BeginTransaction(ctx, sop.ForReading)
 	if err != nil {
@@ -32,7 +51,7 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 	// We pass documentMode=false. TextSearch configuration is now inferred natively within the DB.
 	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, false)
 	if err != nil {
-		// KB might not exist, silently return empty or error
+		log.Error("searchKnowledgeBase open failed", "kb_name", kbName, "error", err)
 		return "", fmt.Errorf("failed to open kb %s: %w", kbName, err)
 	}
 

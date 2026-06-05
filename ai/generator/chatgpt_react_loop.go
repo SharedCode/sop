@@ -99,7 +99,7 @@ func (l chatGPTOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest)
 
 		// No tool calls — final answer reached.
 		if req.Executor == nil || len(toolCalls) == 0 {
-			resp := buildFinalResponse(l.modelName(), openAIResponseFinalText(response), executedToolCalls, toolResults, response.ID)
+			resp := buildFinalResponse(l.modelName(), openAIResponseFinalText(response), executedToolCalls, toolResults, response.ID, conversationIDFromResponse(response))
 			emitChatGPTOwnedLoopHydration(req, resp)
 			return resp, nil
 		}
@@ -112,7 +112,7 @@ func (l chatGPTOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest)
 		executedToolCalls = append(executedToolCalls, newExecuted...)
 		toolResults = append(toolResults, newResults...)
 
-		partial := buildFinalResponse(l.modelName(), "", executedToolCalls, toolResults, response.ID)
+		partial := buildFinalResponse(l.modelName(), "", executedToolCalls, toolResults, response.ID, conversationIDFromResponse(response))
 		emitChatGPTOwnedLoopHydration(req, partial)
 
 		request = buildContinuationRequest(l.modelName(), req, request, response, toolOutputItems)
@@ -186,7 +186,11 @@ func buildChatGPTResponsesRequest(req ai.ReasoningRequest, model string, tools [
 		request.Stream = &stream
 	}
 	if state := req.CarryoverState; state != nil {
-		request.PreviousResponseID = strings.TrimSpace(state.ConversationHandle)
+		if conversationID := strings.TrimSpace(state.ConversationID); conversationID != "" {
+			request.Conversation = conversationID
+		} else if handle := strings.TrimSpace(state.ConversationHandle); handle != "" {
+			request.PreviousResponseID = handle
+		}
 	}
 	if req.ForceToolCall && len(responsesTools) > 0 {
 		request.ToolChoice = buildToolChoiceForceCall(responsesTools)
@@ -409,14 +413,14 @@ func summarizeChatGPTContinuationToolOutput(toolName, resultText string) string 
 // Response assembly
 // ----------------------------------------------------------------------------
 
-func buildFinalResponse(model string, finalText string, toolCalls []ai.ToolCall, toolResults []ai.ReActToolResult, conversationHandle string) ai.ReasoningResponse {
+func buildFinalResponse(model string, finalText string, toolCalls []ai.ToolCall, toolResults []ai.ReActToolResult, responseID string, conversationID string) ai.ReasoningResponse {
 	resp := ai.ReasoningResponse{
 		FinalText:      finalText,
 		ToolCalls:      toolCalls,
 		OutcomeFacts:   append([]string(nil), ai.SummarizeOutcomeFacts(toolResults)...),
 		OutcomeRecipes: append([]ai.LearnedRecipe(nil), ai.SummarizeOutcomeRecipes(toolResults)...),
 	}
-	if carryState := buildCarryoverState(conversationHandle, toolCalls); carryState != nil {
+	if carryState := buildCarryoverState(responseID, conversationID, toolCalls); carryState != nil {
 		carryState.Provider = "chatgpt"
 		carryState.Model = model
 		carryState.LastAssistantSummary = strings.TrimSpace(finalText)
@@ -428,18 +432,22 @@ func buildFinalResponse(model string, finalText string, toolCalls []ai.ToolCall,
 	return resp
 }
 
-func buildCarryoverState(conversationHandle string, toolCalls []ai.ToolCall) *ai.CarryoverState {
-	handle := conversationHandle
-	if len(toolCalls) == 0 && handle == "" {
+func buildCarryoverState(responseID string, conversationID string, toolCalls []ai.ToolCall) *ai.CarryoverState {
+	handle := strings.TrimSpace(responseID)
+	serverHandle := strings.TrimSpace(conversationID)
+	if len(toolCalls) == 0 && handle == "" && serverHandle == "" {
 		return nil
 	}
 	mode := ai.CarryoverModeCompact
-	if handle != "" {
+	if handle != "" || serverHandle != "" {
 		mode = ai.CarryoverModeLive
 	}
 	state := &ai.CarryoverState{Mode: mode}
 	if handle != "" {
 		state.ConversationHandle = handle
+	}
+	if serverHandle != "" {
+		state.ConversationID = serverHandle
 	}
 	if len(toolCalls) == 0 {
 		return state
@@ -450,6 +458,13 @@ func buildCarryoverState(conversationHandle string, toolCalls []ai.ToolCall) *ai
 	}
 	state.EstimatedRawToolTokens = (len(raw) + 3) / 4
 	return state
+}
+
+func conversationIDFromResponse(response openAIResponsesResponse) string {
+	if response.Conversation == nil {
+		return ""
+	}
+	return strings.TrimSpace(response.Conversation.ID)
 }
 
 func toolCallNames(toolCalls []ai.ToolCall) []string {
@@ -489,9 +504,10 @@ func recipeIDs(recipes []ai.LearnedRecipe) []string {
 // ----------------------------------------------------------------------------
 
 func emitChatGPTOwnedLoopEvent(req ai.ReasoningRequest, eventType string, data any) {
-	if req.Streamer != nil {
-		req.Streamer(eventType, data)
+	if req.Streamer == nil || !req.Verbose {
+		return
 	}
+	req.Streamer(eventType, data)
 }
 
 func emitChatGPTOwnedLoopAssistantMessages(req ai.ReasoningRequest, response openAIResponsesResponse) {

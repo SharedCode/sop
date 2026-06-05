@@ -41,18 +41,42 @@ type categoryCandidate struct {
 }
 
 // FindClosestCategory finds the nearest single category to the target vector using Euclidean distance.
-func FindClosestCategory(vec []float32, categories []*Category) (*Category, float32) {
+func FindClosestCategoryFromPtrs(vec []float32, categories []*Category) (*Category, float32) {
 	if len(categories) == 0 {
 		return nil, 0
 	}
 	var closest *Category
 	minDist := float32(math.MaxFloat32)
 
-	for _, c := range categories {
-		d := EuclideanDistance(vec, c.CenterVector)
-		if d < minDist {
-			minDist = d
-			closest = c
+	for _, cat := range categories {
+		if len(cat.CenterVector) == 0 {
+			continue
+		}
+		dist := EuclideanDistance(vec, cat.CenterVector)
+		if dist < minDist {
+			minDist = dist
+			closest = cat
+		}
+	}
+	return closest, minDist
+}
+
+func FindClosestCategory(vec []float32, categories []Category) (*Category, float32) {
+	if len(categories) == 0 {
+		return nil, 0
+	}
+	var closest *Category
+	minDist := float32(math.MaxFloat32)
+
+	for i := range categories {
+		cat := &categories[i]
+		if len(cat.CenterVector) == 0 {
+			continue
+		}
+		dist := EuclideanDistance(vec, cat.CenterVector)
+		if dist < minDist {
+			minDist = dist
+			closest = cat
 		}
 	}
 	return closest, minDist

@@ -8,6 +8,35 @@ import (
 	"github.com/sharedcode/sop/ai"
 )
 
+func TestOwnedLoops_DontEmitToolEventsUnlessVerbose(t *testing.T) {
+	t.Run("gemini", func(t *testing.T) {
+		gen := &geminiOwnedLoopStreamingGenerator{}
+		exec := &geminiOwnedLoopStreamingExecutor{}
+		loop := geminiOwnedReActLoop{
+			generator:     gen,
+			maxIterations: 2,
+		}
+
+		var events []providerStreamedEvent
+		_, err := loop.Run(context.Background(), ai.ReasoningRequest{
+			SystemPrompt: "You are a test assistant.",
+			UserQuery:    "Show me users",
+			Executor:     exec,
+			Generator:    gen,
+			Streamer: func(eventType string, data any) {
+				payload, _ := data.(map[string]any)
+				events = append(events, providerStreamedEvent{eventType: eventType, payload: payload})
+			},
+		})
+		if err != nil {
+			t.Fatalf("Run failed: %v", err)
+		}
+		if len(events) != 0 {
+			t.Fatalf("expected no verbose tool events when Verbose is false, got %#v", events)
+		}
+	})
+}
+
 func TestOwnedLoops_EmitCompatibleCoreToolEventsAcrossProviders(t *testing.T) {
 	t.Run("gemini", func(t *testing.T) {
 		gen := &geminiOwnedLoopStreamingGenerator{}
@@ -23,6 +52,7 @@ func TestOwnedLoops_EmitCompatibleCoreToolEventsAcrossProviders(t *testing.T) {
 				UserQuery:    "Show me users",
 				Executor:     exec,
 				Generator:    gen,
+				Verbose:      true,
 				Streamer:     streamer,
 			})
 			if err != nil {
@@ -74,6 +104,7 @@ func TestOwnedLoops_EmitCompatibleCoreToolEventsAcrossProviders(t *testing.T) {
 			resp, err := loop.Run(context.Background(), ai.ReasoningRequest{
 				SystemPrompt: "Use tools when needed.",
 				UserQuery:    "Find John",
+				Verbose:      true,
 				Executor: chatGPTToolExecutorStub{
 					tools: []ai.ToolDefinition{{
 						Name:        "lookup_user",

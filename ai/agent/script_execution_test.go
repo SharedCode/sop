@@ -69,6 +69,10 @@ func (m *MockScriptedGenerator) Generate(ctx context.Context, prompt string, opt
 }
 func (m *MockScriptedGenerator) EstimateCost(in, out int) float64 { return 0 }
 
+func (m *MockScriptedGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 // MockToolExecutor for testing
 type MockToolExecutor struct{}
 

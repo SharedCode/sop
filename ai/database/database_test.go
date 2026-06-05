@@ -157,6 +157,40 @@ func TestAIDatabase_RemoveKnowledgeBase_ReturnsNotFoundWhenMissing(t *testing.T)
 	}
 }
 
+func TestAIDatabase_OpenKnowledgeBase_ReopensLegacyStoreConfiguration(t *testing.T) {
+	storagePath := t.TempDir()
+
+	db := database.NewDatabase(core.DatabaseOptions{
+		StoresFolders: []string{storagePath},
+	})
+
+	ctx := context.Background()
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	legacyStore := sop.ConfigureStore("kb_legacy/categories", true, 2, "legacy categories store", sop.BigData, "")
+	if _, err := core.NewBtree[sop.UUID, *memory.Category](ctx, db.Config(), legacyStore.Name, tx, nil, legacyStore); err != nil {
+		t.Fatalf("pre-creating legacy categories store failed: %v", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	reopenTx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction reopen failed: %v", err)
+	}
+	if _, err := db.OpenKnowledgeBase(ctx, "kb_legacy", reopenTx, nil, nil, false); err != nil {
+		t.Fatalf("expected OpenKnowledgeBase to reopen a legacy store without failing, got: %v", err)
+	}
+	if err := reopenTx.Rollback(ctx); err != nil {
+		t.Fatalf("Rollback failed: %v", err)
+	}
+}
+
 func TestAIDatabase_OpenKnowledgeBase_RespectsPersistedTextSearchSetting(t *testing.T) {
 	storagePath := t.TempDir()
 

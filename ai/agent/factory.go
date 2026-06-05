@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	log "log/slog"
 	"path/filepath"
 
 	"github.com/sharedcode/sop"
@@ -29,6 +30,23 @@ func HashString(s string) string {
 	h := fnv.New64a()
 	io.WriteString(h, s)
 	return fmt.Sprintf("%x", h.Sum64())
+}
+
+func prewarmGeneratorCache(ctx context.Context, gen ai.Generator, systemPrompt string, tools []ai.ToolDefinition) {
+	if gen == nil {
+		return
+	}
+
+	if systemPrompt == "" && len(tools) == 0 {
+		return
+	}
+
+	if err := gen.PrewarmCache(ctx, ai.GenOptions{
+		SystemPrompt: systemPrompt,
+		Tools:        tools,
+	}); err != nil {
+		log.Warn("generator cache prewarm failed", "generator", gen.Name(), "error", err)
+	}
 }
 
 // SetupInfrastructure initializes the Embedder and Vector Index based on the configuration.
@@ -288,5 +306,7 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (ai.Agent
 	}
 
 	svc := NewService(dom, deps.SystemDB, deps.Databases, gen, cfg.Pipeline, fullRegistry, serviceObfuscation)
+	prewarmGeneratorCache(ctx, gen, cfg.SystemPrompt, nil)
+
 	return svc, nil
 }

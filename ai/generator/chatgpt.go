@@ -137,6 +137,10 @@ func (g *chatgpt) EstimateCost(inTokens, outTokens int) float64 {
 	return float64(inTokens)*0.000005 + float64(outTokens)*0.000015
 }
 
+func (g *chatgpt) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 // ----------------------------------------------------------------------------
 // URL helpers
 // ----------------------------------------------------------------------------

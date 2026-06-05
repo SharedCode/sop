@@ -156,6 +156,49 @@ func TestBatchItemsAndSearch(t *testing.T) {
 	}
 }
 
+func TestKnowledgeBase_SearchByPath_PrefixMatchesSummaries(t *testing.T) {
+	ctx := context.Background()
+	cats := inmemory.NewBtree[sop.UUID, *Category](true)
+	vecs := inmemory.NewBtree[VectorKey, Vector](true)
+	items := inmemory.NewBtree[ItemKey, Item[string]](true)
+	pathTree := inmemory.NewBtree[string, sop.UUID](false)
+	distTree := inmemory.NewBtree[DistanceKey, byte](false)
+	docsTree := inmemory.NewBtree[sop.UUID, Document](false)
+
+	s := NewStore[string]("semantic_kb", nil, cats.Btree, pathTree.Btree, distTree.Btree, vecs.Btree, items.Btree, docsTree.Btree).(*store[string])
+	embedder := &MockPlaybookEmbedder{Rules: []PlaybookRule{
+		{Keywords: []string{"root"}, Vector: []float32{1, 0, 0}},
+		{Keywords: []string{"engineering"}, Vector: []float32{0, 1, 0}},
+		{Keywords: []string{"architecture"}, Vector: []float32{0, 0, 1}},
+	}}
+	kb := &KnowledgeBase[string]{
+		Store:   s,
+		Manager: NewMemoryManager[string](s, &MockLLM{}, embedder),
+	}
+
+	rootID := sop.NewUUID()
+	engID := sop.NewUUID()
+	archID := sop.NewUUID()
+	itemID := sop.NewUUID()
+
+	cats.Btree.Add(ctx, rootID, &Category{ID: rootID, Name: "Root", Path: "Root", CenterVector: []float32{1, 0, 0}})
+	cats.Btree.Add(ctx, engID, &Category{ID: engID, Name: "Engineering", Path: "Root/Engineering", CenterVector: []float32{0, 1, 0}, ParentIDs: []CategoryParent{{ParentID: rootID}}})
+	cats.Btree.Add(ctx, archID, &Category{ID: archID, Name: "Architecture", Path: "Root/Engineering/Architecture", CenterVector: []float32{0, 0, 1}, ParentIDs: []CategoryParent{{ParentID: engID}}})
+	pathTree.Btree.Add(ctx, "Root/Engineering/Architecture", archID)
+	items.Btree.Add(ctx, ItemKey{CategoryID: archID, ItemID: itemID}, Item[string]{ID: itemID, CategoryID: archID, Summaries: []string{"Architecture guidance for new B-tree"}})
+
+	res, err := kb.SearchByPath(ctx, []PathSearchParam{{CategoryPath: "Root/Engineering/Architecture", SearchText: "Architecture"}})
+	if err != nil {
+		t.Fatalf("SearchByPath failed: %v", err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("expected 1 prefix-match result, got %d", len(res))
+	}
+	if !strings.Contains(strings.Join(res[0].Summaries, " "), "Architecture") {
+		t.Fatalf("expected prefix search to surface the Architecture item, got %+v", res[0].Summaries)
+	}
+}
+
 func TestKnowledgeBaseEdgeCases(t *testing.T) {
 	ctx := context.Background()
 	s := prepareTestStore()

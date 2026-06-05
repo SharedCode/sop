@@ -51,7 +51,11 @@ func (m *omniMockGenerator) Generate(ctx context.Context, prompt string, opts ai
 }
 
 func (m *omniMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
-func (m *omniMockGenerator) Name() string                                 { return "mock" }
+
+func (m *omniMockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+func (m *omniMockGenerator) Name() string { return "mock" }
 
 func TestOmni_HandoffToAvatar(t *testing.T) {
 	ctx := context.Background()
@@ -168,7 +172,11 @@ func (m *restrictedMockGenerator) Generate(ctx context.Context, prompt string, o
 }
 
 func (m *restrictedMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
-func (m *restrictedMockGenerator) Name() string                                 { return "mock" }
+
+func (m *restrictedMockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+func (m *restrictedMockGenerator) Name() string { return "mock" }
 
 func TestOmni_RestrictedAvatarTools(t *testing.T) {
 	ctx := context.Background()
@@ -185,7 +193,7 @@ func TestOmni_RestrictedAvatarTools(t *testing.T) {
 	kb, _ := sysDB.OpenKnowledgeBase(ctx, "restricted_kb", tx, nil, nil, false)
 	kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{
 		SystemPrompt: "You are the restricted avatar.",
-		AllowedTools: []string{"route_to_multi_kb"},
+		AllowedTools: []string{"search_space"},
 	})
 	_ = tx.Commit(ctx)
 

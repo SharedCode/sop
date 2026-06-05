@@ -240,8 +240,21 @@ type Generator interface {
 	Name() string
 	// Generate produces text based on the provided prompt and options.
 	Generate(ctx context.Context, prompt string, opts GenOptions) (GenOutput, error)
+	// PrewarmCache sends a request to the provider to cache the provided
+	// options (e.g., SystemPrompt, Tools) without generating a response.
+	// This is used for just-in-time, predictive caching.
+	PrewarmCache(ctx context.Context, opts GenOptions) error
 	// EstimateCost calculates the estimated cost of the generation.
 	EstimateCost(inTokens, outTokens int) float64
+}
+
+type AI struct {
+	// Provider is the default AI provider to use.
+	Provider string `json:"Provider,omitempty"`
+	// CacheTTL is the cache duration for AI providers that support it (e.g., "5m", "1h").
+	CacheTTL string `json:"CacheTTL,omitempty"`
+	// EndPoint is the AI provider's endpoint.
+	EndPoint string `json:"Endpoint,omitempty"`
 }
 
 // GenOptions configures the generation process.
@@ -357,6 +370,7 @@ type CarryoverState struct {
 	Provider               string
 	Model                  string
 	ConversationHandle     string
+	ConversationID         string
 	TopicFingerprint       string
 	KBFingerprint          string
 	StartedAtUnixMilli     int64
@@ -394,6 +408,8 @@ type ReasoningRequest struct {
 	CarryoverState *CarryoverState
 	HydrationSink  MemoryHydrationSink
 	Streamer       func(eventType string, data any) // Optional NDJSON callback
+	// Verbose enables structured progress/tool-result streaming during the reasoning loop.
+	Verbose bool
 	// ForceToolCall instructs provider-owned loops to set tool_choice=required so
 	// the model must emit a tool call rather than a conversational text response.
 	ForceToolCall bool
@@ -704,6 +720,8 @@ type SessionPayload struct {
 	LastInteractionSteps int
 	// ConversationHistory stores the active memory/transcript for the session.
 	ConversationHistory string
+	// Verbose enables detailed progress and intermediate tool-result streaming for this session.
+	Verbose bool
 }
 
 // ClarificationState tracks a pending assistant clarification before the target ask resumes.
@@ -878,6 +896,8 @@ type ScriptStep struct {
 	// OutputVariable is where the LLM's response will be stored.
 	// If empty, the response is just printed.
 	OutputVariable string `json:"output_variable,omitempty"`
+	// InputVariable is the variable to use as input for this step.
+	InputVariable string `json:"input_variable,omitempty"`
 
 	// --- Fields for "set" (Variable Assignment) ---
 	// Variable is the name of the variable to set.

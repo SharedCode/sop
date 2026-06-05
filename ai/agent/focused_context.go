@@ -222,6 +222,11 @@ func (a *CopilotAgent) describeFocusedStores(ctx context.Context, db *database.D
 			resolved = exact
 		}
 
+		if _, knownDB := a.databases[resolved]; knownDB {
+			sb.WriteString(fmt.Sprintf("- %s (database switch; use open_db(\"%s\") before opening stores)\n", artifact, resolved))
+			continue
+		}
+
 		storeAccessor, err := jsondb.OpenStore(ctx, db.Config(), resolved, tx)
 		if err != nil {
 			sb.WriteString(fmt.Sprintf("- %s (not found in active database)\n", artifact))
@@ -273,8 +278,9 @@ func buildStoresCRUDOperationsContext(flags map[string]bool) string {
 	if flags["R"] {
 		sections = append(sections,
 			"- R = Read. Flow: begin_tx(mode=read) -> open_store -> scan/filter/project/sort/limit -> commit_tx.",
+			"- Set the target database explicitly.",
 			"- Stores plans go inside execute_script.script. Do not display as text.",
-			"- Use list_stores to research schema, relations, field types, and field mappings whenever there is uncertainty. Once grounded, call execute_script immediately.",
+			"- Use list_stores to research schema/relations when uncertain, then call execute_script.",
 			dbNote,
 			"- Keep filters/joins concrete. Reuse researched schema, relations, and field types. Match predicate values to field types.",
 			"- If filter/join rejected, replace only malformed slice.",
@@ -283,18 +289,21 @@ func buildStoresCRUDOperationsContext(flags map[string]bool) string {
 	if flags["C"] {
 		sections = append(sections,
 			"- C = Create. Use write transactions. If key shape, field names, or value shape are uncertain, research them with list_stores first. For multi-step creates, generate a concrete write script and run it with execute_script.",
+			"- Set the target database explicitly.",
 			dbNote,
 		)
 	}
 	if flags["U"] {
 		sections = append(sections,
 			"- U = Update. Use write transactions and narrow the target records before update. If field names, predicates, or value shape are uncertain, research them with list_stores first. For multi-step updates, generate a concrete write script and run it with execute_script.",
+			"- Set the target database explicitly.",
 			dbNote,
 		)
 	}
 	if flags["D"] {
 		sections = append(sections,
 			"- D = Delete. Use write transactions and narrow the target records before delete. If key fields, filters, or relation mapping are uncertain, research them with list_stores first. For multi-step deletes, generate a concrete write script and run it with execute_script.",
+			"- Set the target database explicitly.",
 			dbNote,
 		)
 	}
@@ -346,6 +355,7 @@ func buildSpacesCRUDOperationsContext(flags map[string]bool) string {
 func buildScriptAuthoringContext(domain string, flags map[string]bool) string {
 	sections := []string{
 		"- Use create_script for new reusable scripts; use save_script only to replace an existing full definition.",
+		"- Set the target database explicitly when you create or save scripts so the saved script carries its runtime database context.",
 		"- Put reusable steps under the `script` field. Legacy alias `steps` is accepted but not preferred.",
 		"- For reusable data workflows, prefer a command step that calls execute_script with the inner AST in args.script.",
 		"- In stored execute_script AST, preserve real predicates and exact dotted field paths. Do not flatten them into placeholders or underscore names.",

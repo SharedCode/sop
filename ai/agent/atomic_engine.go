@@ -190,11 +190,11 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 		return "", err
 	}
 
-	script = sanitizeScript(script)
+	script = SanitizeScript(script)
 
-	// Grammar validation: Check structural and logical issues AFTER sanitization
-	// This runs on the canonical form with all defaults filled in, reducing false positives
-	if err := validateScriptGrammar(script); err != nil {
+	// Grammar validation: Check structural and logical issues AFTER sanitization.
+	// Reuse the same execution-path validation helpers as create_script.
+	if err := ValidateScriptGrammar(script); err != nil {
 		return "", fmt.Errorf("script grammar validation failed: %w", err)
 	}
 	writeNormalizedScriptArgs(args, script)

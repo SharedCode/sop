@@ -58,6 +58,10 @@ func (m *MockGenerator) EstimateCost(inTokens, outTokens int) float64 {
 	return 0
 }
 
+func (m *MockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 // MockEmbedder implements ai.Embeddings for testing.
 type MockEmbedder struct{}
 

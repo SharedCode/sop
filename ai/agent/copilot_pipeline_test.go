@@ -26,6 +26,10 @@ func (m *pipelineFakeGen) Generate(ctx context.Context, prompt string, opts ai.G
 func (m *pipelineFakeGen) Name() string                                 { return "fake_pipeline" }
 func (m *pipelineFakeGen) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
 
+func (m *pipelineFakeGen) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 type retryMetaAskMockGen struct {
 	CapturedPrompt string
 }
@@ -37,6 +41,10 @@ func (m *retryMetaAskMockGen) Generate(ctx context.Context, prompt string, opts 
 
 func (m *retryMetaAskMockGen) Name() string                                 { return "retry_meta_ask_mock" }
 func (m *retryMetaAskMockGen) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
+
+func (m *retryMetaAskMockGen) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 
 func TestRewriteRetryMetaAsk_UsesLatestAskOutcomeQuery(t *testing.T) {
 	ag := NewCopilotAgent(Config{}, nil, nil)
@@ -459,7 +467,7 @@ func TestCopilotAsk_RewritesConversationalMetaAskBeforeRoutingAndEngine(t *testi
 func TestBuildAskOutcomeMRUItems_UsesAskOutcomeOverride(t *testing.T) {
 	payload := &ai.SessionPayload{Variables: make(map[string]any), ClarificationState: &ai.ClarificationState{TargetQuery: "Find John orders", Status: "resolved"}}
 	ctx := context.WithValue(context.Background(), "session_payload", payload)
-	items := buildAskOutcomeMRUItems(ctx, "Flat joined fields. Keep dotted names.", "Found orders", nil, nil)
+	items := buildAskOutcomeMRUItems(ctx, "Flat joined fields. Keep dotted names.", "Found orders", nil, nil, nil)
 	found := false
 	for _, item := range items {
 		if item.Category == askOutcomeMRUCategoryQuery {
@@ -474,7 +482,7 @@ func TestBuildAskOutcomeMRUItems_UsesAskOutcomeOverride(t *testing.T) {
 func TestBuildAskOutcomeMRUItems_UsesRetryRewriteState(t *testing.T) {
 	payload := &ai.SessionPayload{Variables: make(map[string]any), RetryRewriteState: &ai.RetryRewriteState{OriginalQuery: "Can we retry the same ask?", ResolvedQuery: "Find John orders", Status: "resolved"}}
 	ctx := context.WithValue(context.Background(), "session_payload", payload)
-	items := buildAskOutcomeMRUItems(ctx, "Can we retry the same ask?", "Found orders", nil, nil)
+	items := buildAskOutcomeMRUItems(ctx, "Can we retry the same ask?", "Found orders", nil, nil, nil)
 	found := false
 	for _, item := range items {
 		if item.Category == askOutcomeMRUCategoryQuery {
@@ -1082,6 +1090,27 @@ func TestBuildSystemPrompt_AddsMemoryContinuationFallbackForContinuityRouting(t 
 	}
 }
 
+func TestBuildAskOutcomeMRUItems_IncludesCarryoverPayload(t *testing.T) {
+	items := buildAskOutcomeMRUItems(context.Background(), "Find users", "Found users", nil, nil, &ai.CarryoverState{
+		Provider:           "chatgpt",
+		ConversationID:     "conv_123",
+		ConversationHandle: "resp_456",
+	})
+	if len(items) == 0 {
+		t.Fatal("expected carryover MRU items to be produced")
+	}
+	found := false
+	for _, item := range items {
+		if strings.Contains(item.Context, "conv_123") || strings.Contains(item.Context, "resp_456") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected carryover payload to appear in MRU items, got %+v", items)
+	}
+}
+
 func TestBuildAskOutcomeMRUItems_TypesConfirmedStoreFacts(t *testing.T) {
 	items := buildAskOutcomeMRUItems(context.Background(), "Find users", "Found users", []ai.ToolCall{{Name: "list_stores"}}, []string{
 		"list_stores confirmed users schema=key:string, first_name:string",
@@ -1089,7 +1118,7 @@ func TestBuildAskOutcomeMRUItems_TypesConfirmedStoreFacts(t *testing.T) {
 		"execute_script confirmed join store=users_orders on=users.key->key",
 		"execute_script confirmed filter field=first_name op=$eq",
 		"execute_script returned: [{\"first_name\":\"John\"}]",
-	})
+	}, nil)
 
 	seenCategories := map[string]bool{}
 	for _, item := range items {
@@ -1202,7 +1231,7 @@ func TestEpilogueAndCleanup_FinalAskOutcomeWinsOverAskProgress(t *testing.T) {
 }
 
 func TestBuildAskOutcomeMRUItems_StripsToolCallAndScriptDumpFromOutcome(t *testing.T) {
-	items := buildAskOutcomeMRUItems(context.Background(), "Find users", "Planning result {\"script\":[{\"op\":\"begin_tx\"}]} <function_call name=\"execute_script\">...</function_call>", nil, nil)
+	items := buildAskOutcomeMRUItems(context.Background(), "Find users", "Planning result {\"script\":[{\"op\":\"begin_tx\"}]} <function_call name=\"execute_script\">...</function_call>", nil, nil, nil)
 	found := false
 	for _, item := range items {
 		if item.Category != askOutcomeMRUCategoryResult {

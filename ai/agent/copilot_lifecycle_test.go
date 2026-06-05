@@ -32,6 +32,10 @@ func (m *mockGenerator) Generate(ctx context.Context, prompt string, opts ai.Gen
 func (m *mockGenerator) Name() string                                 { return "mock" }
 func (m *mockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
 
+func (m *mockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 type mockDomain struct {
 	emb ai.Embeddings
 }

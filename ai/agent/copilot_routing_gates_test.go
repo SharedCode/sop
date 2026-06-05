@@ -33,6 +33,10 @@ func (m *RouterTestGen) Generate(ctx context.Context, prompt string, opts ai.Gen
 func (m *RouterTestGen) Name() string                                 { return "RouterTestGen" }
 func (m *RouterTestGen) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
 
+func (m *RouterTestGen) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func TestThreeGates_RoutingArchitecture(t *testing.T) {
 	ctx := context.Background()
 	sysDBOptions := sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}}

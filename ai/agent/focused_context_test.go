@@ -82,8 +82,8 @@ func TestBuildSystemPrompt_IncludesFocusedStoreContext(t *testing.T) {
 	if !strings.Contains(prompt, "R = Read") || !strings.Contains(prompt, "begin_tx(mode=read)") {
 		t.Fatalf("expected read-only store operations in prompt: %s", prompt)
 	}
-	if !strings.Contains(prompt, "use the active Current Database name from context") {
-		t.Fatalf("expected focused prompt to teach open_db database selection from active context: %s", prompt)
+	if !strings.Contains(prompt, "Set the target database explicitly") {
+		t.Fatalf("expected focused prompt to teach explicit database selection for scripts: %s", prompt)
 	}
 	if strings.Contains(prompt, "Available Stores:") {
 		t.Fatalf("expected no generic all-store schema dump when a target artifact is classified: %s", prompt)
@@ -173,6 +173,28 @@ func TestBuildSystemPrompt_StoresFocusedContext_StaysWithinBudgetGuardrail(t *te
 		if element.Component == ComponentSystemTools && strings.Contains(element.Content, "[truncated]") {
 			t.Fatalf("expected stores system tools context to fit without truncation after prompt reductions, got: %s", element.Content)
 		}
+	}
+}
+
+func TestBuildSystemPrompt_DoesNotTreatAvailableDatabaseNamesAsStoreTargets(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+	devOpts := sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}}
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{"dev_db": devOpts}, sysDB)
+	ag.service = &Service{session: &RunnerSession{MRU: []MRUItem{}}}
+
+	payload := &ai.SessionPayload{CurrentDB: SystemDBName, Variables: make(map[string]any)}
+	ctx = context.WithValue(ctx, "session_payload", payload)
+
+	prompt := ag.buildSystemPrompt(ctx, "Use dev_db before reading stores", TaskContextClassification{
+		Domain:      StoresDomain,
+		DBArtifacts: []string{"dev_db"},
+		Layers:      []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}},
+	})
+
+	if strings.Contains(prompt, "- dev_db (not found in active database)") {
+		t.Fatalf("expected database-name artifacts to be treated as database switches, not store targets, got prompt: %s", prompt)
 	}
 }
 

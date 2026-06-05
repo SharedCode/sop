@@ -25,6 +25,8 @@ func (m *MockGenerator) Generate(ctx context.Context, prompt string, options ai.
 
 func (m *MockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (m *MockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error { return nil }
+
 // MockAgent implements ai.Agent and ToolProvider
 type MockAgent struct{}
 

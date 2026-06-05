@@ -78,6 +78,7 @@ func (a *CopilotAgent) registerSystemTools(ctx context.Context) {
 	a.registry.Register("list_databases", "Lists all available databases.", emptyObjectArgsSchema, a.toolListDatabases)
 	a.registry.Register("list_stores", ListStoresInstruction, listStoresArgsSchema, a.toolListStores)
 	a.registry.Register("list_tools", "Lists all available tools and their usage instructions.", emptyObjectArgsSchema, a.toolListTools)
+	a.registry.Register("set_verbose", "Toggle session verbosity for follow-up tool results and progress streaming.", `{"type":"object","properties":{"verbose":{"type":"boolean","description":"Set verbosity on or off. If omitted, the current setting is toggled."}}}`, a.toolSetVerbose)
 }
 
 // registerTools registers all available tools for the CopilotAgent.
@@ -173,6 +174,32 @@ func (a *CopilotAgent) toolListTools(ctx context.Context, args map[string]any) (
 	}
 
 	return sb.String(), nil
+}
+
+func (a *CopilotAgent) toolSetVerbose(ctx context.Context, args map[string]any) (string, error) {
+	p := ai.GetSessionPayload(ctx)
+	current := a.Config.Verbose
+	if p != nil {
+		current = p.Verbose || current
+	}
+
+	newState := !current
+	if v, ok := args["verbose"].(bool); ok {
+		newState = v
+	} else if v, ok := args["enabled"].(bool); ok {
+		newState = v
+	}
+
+	if p != nil {
+		p.Verbose = newState
+	}
+	a.SetVerbose(newState)
+
+	status := "OFF"
+	if newState {
+		status = "ON"
+	}
+	return fmt.Sprintf("Session verbosity set to %s.", status), nil
 }
 
 func (a *CopilotAgent) toolListDatabases(ctx context.Context, args map[string]any) (string, error) {

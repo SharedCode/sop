@@ -266,6 +266,32 @@ func TestChatGPTOwnedReActLoop_DefaultRunReturnsExplicitScaffoldError(t *testing
 	}
 }
 
+func TestBuildChatGPTResponsesRequest_UsesConversationIDWhenPresent(t *testing.T) {
+	request, err := buildChatGPTResponsesRequest(ai.ReasoningRequest{
+		SystemPrompt: "You are a test assistant.",
+		ContextText:  "Focused context",
+		HistoryText:  "Prior exchange",
+		UserQuery:    "Find John",
+		CarryoverState: &ai.CarryoverState{
+			ConversationHandle: "resp_prev_123",
+			ConversationID:     "conv_123",
+		},
+	}, "gpt-5.4", []ai.ToolDefinition{{
+		Name:        "list_stores",
+		Description: "Lists stores",
+		Schema:      `{"type":"object","properties":{"store_names":{"type":"array"}},"required":["store_names"],"additionalProperties":false}`,
+	}})
+	if err != nil {
+		t.Fatalf("buildChatGPTResponsesRequest() error = %v", err)
+	}
+	if request.Conversation != "conv_123" {
+		t.Fatalf("expected server-managed conversation id, got %#v", request.Conversation)
+	}
+	if request.PreviousResponseID != "" {
+		t.Fatalf("expected previous_response_id to stay empty when using conversation carryover, got %#v", request.PreviousResponseID)
+	}
+}
+
 func TestBuildChatGPTResponsesRequest_UsesPreviousResponseIDAndMapsTools(t *testing.T) {
 	request, err := buildChatGPTResponsesRequest(ai.ReasoningRequest{
 		SystemPrompt:   "You are a test assistant.",
@@ -479,6 +505,7 @@ func TestChatGPTOwnedReActLoop_RunUsesStreamingTransportWhenStreamerPresent(t *t
 	events := make([]string, 0, 1)
 	resp, err := loop.Run(context.Background(), ai.ReasoningRequest{
 		UserQuery: "Find John",
+		Verbose:   true,
 		Streamer: func(eventType string, data any) {
 			_ = data
 			events = append(events, eventType)
@@ -704,6 +731,7 @@ func TestChatGPTOwnedReActLoop_RunEmitsAssistantMessagePhases(t *testing.T) {
 	}
 	resp, err := loop.Run(context.Background(), ai.ReasoningRequest{
 		UserQuery: "Find John",
+		Verbose:   true,
 		Streamer: func(eventType string, data any) {
 			if eventType != "assistant_message" {
 				return

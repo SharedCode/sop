@@ -213,6 +213,9 @@ func TestAnthropicBuildMessages_WithToolCallContinuations(t *testing.T) {
 	if userToolContent[0].ToolUseID != "toolu_123" {
 		t.Fatalf("expected tool_result with ToolUseID toolu_123, got %+v", userToolContent[0])
 	}
+	if userToolContent[0].CacheControl == nil || userToolContent[0].CacheControl.Type != "ephemeral" {
+		t.Fatalf("expected final tool_result block to carry a cache breakpoint, got %+v", userToolContent[0])
+	}
 
 	// Third: user with prompt
 	if messages[2].Role != "user" {
@@ -224,6 +227,33 @@ func TestAnthropicBuildMessages_WithToolCallContinuations(t *testing.T) {
 	}
 	if promptContent != "Show me the user details" {
 		t.Fatalf("expected prompt 'Show me the user details', got %s", promptContent)
+	}
+}
+
+func TestAnthropicBuildMessages_UsesEmptyInputObjectForToolUseBlocks(t *testing.T) {
+	gen := &anthropic{apiKey: "test-key", model: "claude-3-5-sonnet-20241022"}
+
+	messages := gen.buildMessages("continue", ai.GenOptions{
+		ToolCallContinuations: []ai.ToolCallContinuation{{
+			ToolCall: ai.ToolCall{Name: "noop", NativeID: "toolu_empty"},
+			Response: map[string]any{"ok": true},
+		}},
+	})
+
+	if len(messages) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(messages))
+	}
+
+	assistantBlocks, ok := messages[0].Content.([]anthropicContentBlock)
+	if !ok || len(assistantBlocks) != 1 {
+		t.Fatalf("expected one assistant tool_use block, got %#v", messages[0].Content)
+	}
+
+	if assistantBlocks[0].Input == nil {
+		t.Fatal("expected tool_use input to be present as an object, got nil")
+	}
+	if len(assistantBlocks[0].Input) != 0 {
+		t.Fatalf("expected empty tool_use input object, got %#v", assistantBlocks[0].Input)
 	}
 }
 
@@ -298,6 +328,31 @@ func TestAnthropicGenerate_ParsesToolCallsFromResponse(t *testing.T) {
 	}
 }
 
+func TestAnthropicThinkingConfig_NormalizesOpusLowToMedium(t *testing.T) {
+	gen := &anthropic{model: "claude-opus-4-20250514"}
+	cfg := gen.thinkingConfig("low")
+	if cfg == nil {
+		t.Fatal("expected thinking config for opus model")
+	}
+	if cfg.Type != "enabled" {
+		t.Fatalf("expected thinking type enabled, got %q", cfg.Type)
+	}
+	if cfg.BudgetTokens != 1024 {
+		t.Fatalf("expected medium budget of 1024, got %d", cfg.BudgetTokens)
+	}
+}
+
+func TestAnthropicThinkingConfig_LeavesNonOpusThinkingLevelUntouched(t *testing.T) {
+	gen := &anthropic{model: "claude-sonnet-4-20250514"}
+	cfg := gen.thinkingConfig("low")
+	if cfg == nil {
+		t.Fatal("expected thinking config for sonnet model")
+	}
+	if cfg.BudgetTokens != 512 {
+		t.Fatalf("expected low budget of 512, got %d", cfg.BudgetTokens)
+	}
+}
+
 func TestAnthropicFactory_UsesCorrectDefaultModel(t *testing.T) {
 	gen, err := New("anthropic", map[string]any{"api_key": "test-key"})
 	if err != nil {
@@ -331,10 +386,110 @@ func TestAnthropicFactory_UsesProvidedModel(t *testing.T) {
 	}
 }
 
+func TestAnthropicFactory_UsesConfiguredCacheTTL(t *testing.T) {
+	gen, err := New("anthropic", map[string]any{
+		"api_key":   "test-key",
+		"cache_ttl": "42m",
+		"CacheTTL":  "1h",
+	})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	anthropicGen, ok := gen.(*anthropic)
+	if !ok {
+		t.Fatalf("expected *anthropic, got %T", gen)
+	}
+	if anthropicGen.cacheTTL != "42m" {
+		t.Fatalf("expected configured cache TTL to be used, got %q", anthropicGen.cacheTTL)
+	}
+}
+
 func TestAnthropicName_ReturnsAnthropicIdentifier(t *testing.T) {
 	gen := &anthropic{apiKey: "test-key", model: "claude-3-5-sonnet-20241022"}
 	if gen.Name() != "anthropic" {
 		t.Fatalf("expected name 'anthropic', got %s", gen.Name())
+	}
+}
+
+func TestAnthropicOwnedLoopPrompt_IncludesOriginalAskFromCarryoverState(t *testing.T) {
+	prompt := anthropicOwnedLoopPrompt(ai.ReasoningRequest{
+		UserQuery: "continue the script",
+		CarryoverState: &ai.CarryoverState{
+			LastUserQuery:        "create a script to list users",
+			LastAssistantSummary: "Created the initial script plan.",
+		},
+	})
+
+	if !contains(prompt, "create a script to list users") {
+		t.Fatalf("expected prompt to include the original ask from carryover state, got %q", prompt)
+	}
+	if !contains(prompt, "Created the initial script plan.") {
+		t.Fatalf("expected prompt to include the prior answer summary from carryover state, got %q", prompt)
+	}
+}
+
+func contains(value, needle string) bool {
+	return len(needle) == 0 || (len(value) >= len(needle) && (value == needle || containsAt(value, needle)))
+}
+
+func containsAt(value, needle string) bool {
+	for i := 0; i+len(needle) <= len(value); i++ {
+		if value[i:i+len(needle)] == needle {
+			return true
+		}
+	}
+	return false
+}
+
+func TestAnthropicOwnedLoopCarryoverState_UsesRicherLivePayload(t *testing.T) {
+	continuations := []ai.ToolCallContinuation{{
+		ToolCall: ai.ToolCall{Name: "execute_script", Args: map[string]any{"script": []any{"SELECT 1"}}},
+		Response: map[string]any{"result": "ok"},
+	}}
+
+	state := anthropicOwnedLoopCarryoverState(continuations)
+	if state == nil {
+		t.Fatal("expected carryover state")
+	}
+	if state.Mode != ai.CarryoverModeLive {
+		t.Fatalf("expected live carryover mode, got %+v", state)
+	}
+	if state.ConversationHandle == "" {
+		t.Fatalf("expected fallback continuation payload in ConversationHandle, got %+v", state)
+	}
+	if state.ConversationID != "" {
+		t.Fatalf("expected no synthetic ConversationID for Anthropic fallback payload, got %+v", state)
+	}
+	if state.EstimatedRawToolTokens <= 0 {
+		t.Fatalf("expected raw tool token estimate, got %+v", state)
+	}
+}
+
+func TestAnthropicRestoreContinuations_PrefersConversationIDAndFallsBackToHandle(t *testing.T) {
+	continuationJSON := `[{"ToolCall":{"Name":"execute_script","Args":{"script":["SELECT 1"]}},"Response":{"result":"ok"}}]`
+
+	prefersID, err := restoreAnthropicContinuations(&ai.CarryoverState{
+		Mode:               ai.CarryoverModeLive,
+		ConversationID:     continuationJSON,
+		ConversationHandle: `{"broken":true}`,
+	})
+	if err != nil {
+		t.Fatalf("expected ConversationID restore to succeed, got error: %v", err)
+	}
+	if len(prefersID) != 1 || prefersID[0].ToolCall.Name != "execute_script" {
+		t.Fatalf("expected ConversationID payload to restore tool continuation, got %+v", prefersID)
+	}
+
+	fallsBackToHandle, err := restoreAnthropicContinuations(&ai.CarryoverState{
+		Mode:               ai.CarryoverModeLive,
+		ConversationHandle: continuationJSON,
+	})
+	if err != nil {
+		t.Fatalf("expected ConversationHandle fallback restore to succeed, got error: %v", err)
+	}
+	if len(fallsBackToHandle) != 1 || fallsBackToHandle[0].ToolCall.Name != "execute_script" {
+		t.Fatalf("expected ConversationHandle fallback to restore tool continuation, got %+v", fallsBackToHandle)
 	}
 }
 

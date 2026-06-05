@@ -229,6 +229,22 @@ func TestCoerceGeminiToolContinuationResponse_PreservesObjectEnvelope(t *testing
 	}
 }
 
+func TestGeminiOwnedLoopResponse_PopulatesCarryoverMetadata(t *testing.T) {
+	resp := geminiOwnedLoopResponse("Done after tool", []ai.ToolCall{{Name: "execute_script"}}, []ai.ReActToolResult{{Name: "execute_script", Result: "rows=1"}}, []ai.ToolCallContinuation{{ToolCall: ai.ToolCall{Name: "execute_script"}, Response: map[string]any{"ok": true}}}, "gemini", "gemini-2.5-flash")
+	if resp.CarryoverState == nil {
+		t.Fatal("expected Gemini carryover state to be populated")
+	}
+	if resp.CarryoverState.Provider != "gemini" || resp.CarryoverState.Model != "gemini-2.5-flash" {
+		t.Fatalf("expected provider/model metadata, got %+v", resp.CarryoverState)
+	}
+	if resp.CarryoverState.LastAssistantSummary != "Done after tool" {
+		t.Fatalf("expected final text summary to be copied into carryover state, got %+v", resp.CarryoverState)
+	}
+	if len(resp.CarryoverState.LastToolNames) != 1 || resp.CarryoverState.LastToolNames[0] != "execute_script" {
+		t.Fatalf("expected tool names to be captured, got %+v", resp.CarryoverState.LastToolNames)
+	}
+}
+
 func TestBuildGeminiRepairDirective_IncludesConcreteValidationGuidance(t *testing.T) {
 	directive := buildGeminiRepairDirective(ai.ReActToolResult{
 		Name:   "execute_script",
@@ -388,8 +404,15 @@ func TestGeminiReActTurnStrategy_UsesReducedClarificationPromptOnFinalTurn(t *te
 	}
 }
 
+type prewarmNoop struct{}
+
+func (p *prewarmNoop) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 type geminiOwnedLoopTestGenerator struct {
 	calls int
+	prewarmNoop
 }
 
 func (m *geminiOwnedLoopTestGenerator) Name() string { return "gemini_owned_loop_test" }
@@ -493,6 +516,7 @@ func TestGeminiOwnedReActLoop_AccumulatesToolCallContinuationsAcrossTurns(t *tes
 
 type geminiOwnedLoopMultiToolGenerator struct {
 	calls int
+	prewarmNoop
 }
 
 func (m *geminiOwnedLoopMultiToolGenerator) Name() string { return "gemini_owned_loop_multi_tool_test" }
@@ -552,6 +576,7 @@ func TestGeminiOwnedReActLoop_ExecutesAllToolCallsInATurn(t *testing.T) {
 
 type geminiOwnedLoopFinalTurnGuardrailGenerator struct {
 	calls int
+	prewarmNoop
 }
 
 func (m *geminiOwnedLoopFinalTurnGuardrailGenerator) Name() string {
@@ -612,6 +637,7 @@ func TestGeminiOwnedReActLoop_DisablesToolsOnFinalTurn(t *testing.T) {
 
 type geminiOwnedLoopStreamingGenerator struct {
 	calls int
+	prewarmNoop
 }
 
 func (m *geminiOwnedLoopStreamingGenerator) Name() string { return "gemini_owned_loop_streaming_test" }
@@ -670,6 +696,7 @@ func TestGeminiOwnedReActLoop_StreamsStructuredToolEventsAndExecutionContext(t *
 		UserQuery:    "Show me users",
 		Executor:     exec,
 		Generator:    gen,
+		Verbose:      true,
 		Streamer: func(eventType string, data any) {
 			payload, _ := data.(map[string]any)
 			events = append(events, streamedEvent{eventType: eventType, payload: payload})
@@ -703,6 +730,7 @@ func TestGeminiOwnedReActLoop_StreamsStructuredToolEventsAndExecutionContext(t *
 
 type geminiOwnedLoopProgressGenerator struct {
 	calls int
+	prewarmNoop
 }
 
 func (m *geminiOwnedLoopProgressGenerator) Name() string { return "gemini_owned_loop_progress_test" }
@@ -791,6 +819,7 @@ func TestGeminiOwnedReActLoop_UnwrapsProgressHintsIntoLoopState(t *testing.T) {
 		UserQuery:    "Find John",
 		Executor:     &geminiOwnedLoopProgressExecutor{},
 		Generator:    gen,
+		Verbose:      true,
 		Streamer: func(eventType string, data any) {
 			payload, _ := data.(map[string]any)
 			events = append(events, streamedEvent{eventType: eventType, payload: payload})
@@ -817,7 +846,10 @@ func TestGeminiOwnedReActLoop_UnwrapsProgressHintsIntoLoopState(t *testing.T) {
 	}
 }
 
-type geminiOwnedLoopRepairDirectiveGenerator struct{ calls int }
+type geminiOwnedLoopRepairDirectiveGenerator struct {
+	calls int
+	prewarmNoop
+}
 
 func (m *geminiOwnedLoopRepairDirectiveGenerator) Name() string {
 	return "gemini_owned_loop_repair_directive_test"
@@ -900,7 +932,10 @@ func TestGeminiOwnedReActLoop_CarriesRepairDirectiveAfterValidationFailure(t *te
 	}
 }
 
-type geminiOwnedLoopTerminalHintGenerator struct{ calls int }
+type geminiOwnedLoopTerminalHintGenerator struct {
+	calls int
+	prewarmNoop
+}
 
 func (m *geminiOwnedLoopTerminalHintGenerator) Name() string {
 	return "gemini_owned_loop_terminal_hint_test"
@@ -974,7 +1009,10 @@ func TestGeminiOwnedReActLoop_ShortCircuitsOnTerminalHint(t *testing.T) {
 	}
 }
 
-type geminiOwnedLoopOutcomeGenerator struct{ calls int }
+type geminiOwnedLoopOutcomeGenerator struct {
+	calls int
+	prewarmNoop
+}
 
 func (m *geminiOwnedLoopOutcomeGenerator) Name() string { return "gemini_owned_loop_outcome_test" }
 

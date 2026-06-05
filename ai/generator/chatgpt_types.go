@@ -11,6 +11,7 @@ type openAIResponsesRequest struct {
 	Tools              []openAIResponsesTool      `json:"tools,omitempty"`
 	ToolChoice         any                        `json:"tool_choice,omitempty"`
 	PreviousResponseID string                     `json:"previous_response_id,omitempty"`
+	Conversation       string                     `json:"conversation,omitempty"`
 	Include            []string                   `json:"include,omitempty"`
 	Reasoning          *openAIResponsesReasoning  `json:"reasoning,omitempty"`
 	ParallelToolCalls  *bool                      `json:"parallel_tool_calls,omitempty"`
@@ -45,13 +46,18 @@ type openAIResponsesReasoning struct {
 	Effort string `json:"effort,omitempty"`
 }
 
+type openAIResponsesConversation struct {
+	ID string `json:"id,omitempty"`
+}
+
 type openAIResponsesResponse struct {
-	ID         string                      `json:"id"`
-	Status     string                      `json:"status,omitempty"`
-	Output     []openAIResponsesOutputItem `json:"output,omitempty"`
-	OutputText string                      `json:"output_text,omitempty"`
-	Usage      *openAIResponsesUsage       `json:"usage,omitempty"`
-	Error      *openAIResponsesError       `json:"error,omitempty"`
+	ID           string                       `json:"id"`
+	Status       string                       `json:"status,omitempty"`
+	Conversation *openAIResponsesConversation `json:"conversation,omitempty"`
+	Output       []openAIResponsesOutputItem  `json:"output,omitempty"`
+	OutputText   string                       `json:"output_text,omitempty"`
+	Usage        *openAIResponsesUsage        `json:"usage,omitempty"`
+	Error        *openAIResponsesError        `json:"error,omitempty"`
 }
 
 type openAIResponsesOutputItem struct {

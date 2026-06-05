@@ -1691,7 +1691,7 @@ func (s *Service) updateSessionMemory(ctx context.Context, query string, finalTe
 	})
 
 	// MRU PUSH: Write ask outcome to session MRU (infrastructure-level, benefits all provider loops)
-	persistSessionAskOutcomeMRU(ctx, s.session, query, finalText, engineResp.ToolCalls, engineResp.OutcomeFacts)
+	persistSessionAskOutcomeMRU(ctx, s.session, query, finalText, engineResp.ToolCalls, engineResp.OutcomeFacts, engineResp.CarryoverState)
 
 	persistCarryoverState(s.session.Memory, buildCarryoverState(ctx, s.session, gen, currentThread, query, finalText, engineResp.ToolCalls, engineResp.OutcomeFacts, engineResp.OutcomeRecipes, engineResp.CarryoverState))
 }
@@ -1789,6 +1789,7 @@ func (s *Service) ask(ctx context.Context, req AskRequest) (AskResponse, error) 
 		req.Session = &ai.SessionPayload{
 			CurrentDB:        s.session.CurrentDB,
 			CurrentUserQuery: req.Query,
+			Verbose:          req.Verbose,
 		}
 		if s.session.Transaction != nil {
 			req.Session.Transaction = s.session.Transaction
@@ -1799,7 +1800,9 @@ func (s *Service) ask(ctx context.Context, req AskRequest) (AskResponse, error) 
 		if strings.TrimSpace(req.Session.CurrentUserQuery) == "" {
 			req.Session.CurrentUserQuery = req.Query
 		}
+		req.Session.Verbose = req.Session.Verbose || req.Verbose
 	}
+	req.Verbose = req.Verbose || req.Session.Verbose
 
 	// Initialize executor if not provided
 	if req.Executor == nil {
@@ -1923,7 +1926,7 @@ func (s *Service) ask(ctx context.Context, req AskRequest) (AskResponse, error) 
 	genCfg := s.resolveGeneratorAndCarryoverWithRequest(ctx, gen, providerOverride, topicResult.assessment, prompts.historyText)
 
 	// 10. Execute the native ReAct loop with tool execution
-	engineResp, err := s.executeReasoningEngineWithRequest(ctx, query, prompts, genCfg, db, req.Executor, req.EventStreamer)
+	engineResp, err := s.executeReasoningEngineWithRequest(ctx, query, prompts, genCfg, db, req.Executor, req.EventStreamer, req.Verbose)
 	if err != nil {
 		// Check if error is due to context cancellation
 		if ctx.Err() != nil {
@@ -2036,12 +2039,12 @@ func markSessionMRUCategory(session *RunnerSession, category string, context str
 
 // persistSessionAskOutcomeMRU writes ask outcome to session MRU (PUSH model).
 // This is the infrastructure-level MRU PUSH that benefits all provider loops.
-func persistSessionAskOutcomeMRU(ctx context.Context, session *RunnerSession, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) {
+func persistSessionAskOutcomeMRU(ctx context.Context, session *RunnerSession, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string, carryoverState *ai.CarryoverState) {
 	if session == nil {
 		return
 	}
 	clearSessionMRUBySourceAndScope(session, MRUSourceAskOutcome, MRUScopeSession)
-	for _, item := range buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts) {
+	for _, item := range buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts, carryoverState) {
 		markSessionMRUCategory(session, item.Category, item.Context, item.Source, item.Scope)
 	}
 }
@@ -2156,7 +2159,7 @@ func (s *Service) resolveGeneratorAndCarryoverWithRequest(ctx context.Context, g
 }
 
 // executeReasoningEngineWithRequest is the explicit-parameter version with explicit executor and streamer
-func (s *Service) executeReasoningEngineWithRequest(ctx context.Context, query string, prompts *promptInputs, genCfg *generatorConfig, db *database.Database, executor ai.ToolExecutor, eventStreamer func(string, any)) (ai.ReasoningResponse, error) {
+func (s *Service) executeReasoningEngineWithRequest(ctx context.Context, query string, prompts *promptInputs, genCfg *generatorConfig, db *database.Database, executor ai.ToolExecutor, eventStreamer func(string, any), verbose bool) (ai.ReasoningResponse, error) {
 	engine := &NativeReActEngine{
 		EnableObfuscation: s.EnableObfuscation,
 	}
@@ -2181,6 +2184,7 @@ func (s *Service) executeReasoningEngineWithRequest(ctx context.Context, query s
 		CarryoverMode:  genCfg.carryover.Mode,
 		CarryoverState: genCfg.carryover.State,
 		Streamer:       eventStreamer,
+		Verbose:        verbose,
 	}
 
 	return engine.Run(ctx, req)

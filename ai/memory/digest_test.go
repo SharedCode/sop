@@ -14,7 +14,13 @@ type mapDigestLLM struct{}
 
 func (m *mapDigestLLM) Name() string { return "map-digest-llm" }
 
-func (m *mapDigestLLM) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+func (m *mapDigestLLM) EstimateCost(inTokens, outTokens int) float64 {
+	return 0.0
+}
+
+func (m *mapDigestLLM) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 
 func (m *mapDigestLLM) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	if strings.Contains(strings.ToLower(prompt), "sdlc") {

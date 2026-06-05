@@ -18,6 +18,10 @@ func (m *loopMockGenerator) Name() string { return "loop_mock" }
 
 func (m *loopMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (m *loopMockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func (m *loopMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
 	if m.calls == 1 {
@@ -56,6 +60,10 @@ func (m *toolTemperatureMockGenerator) Name() string { return "tool_temperature_
 
 func (m *toolTemperatureMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (m *toolTemperatureMockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func (m *toolTemperatureMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.temperatures = append(m.temperatures, opts.Temperature)
 	m.calls++
@@ -77,6 +85,10 @@ type reActTurnStrategyMockGenerator struct {
 func (m *reActTurnStrategyMockGenerator) Name() string { return "react_turn_strategy_mock" }
 
 func (m *reActTurnStrategyMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *reActTurnStrategyMockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 
 type reActTurnStrategyMock struct{}
 
@@ -137,6 +149,10 @@ func (m *ownedReActLoopMockGenerator) Name() string { return "owned_react_loop_m
 
 func (m *ownedReActLoopMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (m *ownedReActLoopMockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func (m *ownedReActLoopMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	_ = ctx
 	_ = prompt
@@ -175,6 +191,10 @@ type bypassReActPromptMockGenerator struct {
 func (m *bypassReActPromptMockGenerator) Name() string { return "bypass_react_prompt_mock" }
 
 func (m *bypassReActPromptMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *bypassReActPromptMockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 
 type bypassReActPromptMock struct{}
 
@@ -221,6 +241,10 @@ func (m *recoverableTempMockGenerator) Name() string { return "recoverable_temp_
 
 func (m *recoverableTempMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (m *recoverableTempMockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func (m *recoverableTempMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.temperatures = append(m.temperatures, opts.Temperature)
 	m.calls++
@@ -241,6 +265,10 @@ func (m *malformedFunctionCallRecoveryGenerator) Name() string { return "malform
 
 func (m *malformedFunctionCallRecoveryGenerator) EstimateCost(inTokens, outTokens int) float64 {
 	return 0
+}
+
+func (m *malformedFunctionCallRecoveryGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
 }
 
 func (m *malformedFunctionCallRecoveryGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
@@ -293,6 +321,10 @@ func (m *textualToolCallRecoveryGenerator) Name() string { return "textual_tool_
 
 func (m *textualToolCallRecoveryGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (m *textualToolCallRecoveryGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func (m *textualToolCallRecoveryGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
 	if m.calls == 1 {
@@ -314,6 +346,10 @@ func (m *truncatedTextualToolCallRecoveryGenerator) Name() string {
 
 func (m *truncatedTextualToolCallRecoveryGenerator) EstimateCost(inTokens, outTokens int) float64 {
 	return 0
+}
+
+func (m *truncatedTextualToolCallRecoveryGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
 }
 
 func (m *truncatedTextualToolCallRecoveryGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
@@ -608,6 +644,10 @@ func (m *csvLoopMockGenerator) Name() string { return "csv_loop_mock" }
 
 func (m *csvLoopMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (m *csvLoopMockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func (m *csvLoopMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
 	if m.calls == 1 {
@@ -636,6 +676,10 @@ type csvMetaToolMockGenerator struct {
 func (m *csvMetaToolMockGenerator) Name() string { return "csv_meta_tool_mock" }
 
 func (m *csvMetaToolMockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *csvMetaToolMockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 
 func (m *csvMetaToolMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
@@ -800,6 +844,32 @@ func TestNativeReActEngine_RespectsVerboseFalse(t *testing.T) {
 	}
 }
 
+func TestEmitReasoningEvent_RespectsVerboseFlag(t *testing.T) {
+	var events int
+	emitReasoningEvent(ai.ReasoningRequest{
+		Streamer: func(eventType string, data any) {
+			events++
+		},
+		Verbose: false,
+	}, ai.ReasoningEventToolResult, map[string]any{"tool": "execute_script"})
+
+	if events != 0 {
+		t.Fatalf("expected tool result events to be suppressed when verbose=false, got %d", events)
+	}
+
+	events = 0
+	emitReasoningEvent(ai.ReasoningRequest{
+		Streamer: func(eventType string, data any) {
+			events++
+		},
+		Verbose: true,
+	}, ai.ReasoningEventToolResult, map[string]any{"tool": "execute_script"})
+
+	if events != 1 {
+		t.Fatalf("expected tool result events to stream when verbose=true, got %d", events)
+	}
+}
+
 func TestNativeReActEngine_StreamsStructuredToolEvents(t *testing.T) {
 	engine := &NativeReActEngine{}
 	gen := &loopMockGenerator{}
@@ -815,6 +885,7 @@ func TestNativeReActEngine_StreamsStructuredToolEvents(t *testing.T) {
 		UserQuery:    "Show me users",
 		Executor:     &loopMockExecutor{},
 		Generator:    gen,
+		Verbose:      true,
 		Streamer: func(eventType string, data any) {
 			payload, _ := data.(map[string]any)
 			events = append(events, streamedEvent{eventType: eventType, payload: payload})
@@ -850,6 +921,10 @@ type recoverableArgErrorGenerator struct {
 func (m *recoverableArgErrorGenerator) Name() string { return "recoverable_arg_error_mock" }
 
 func (m *recoverableArgErrorGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *recoverableArgErrorGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 
 func (m *recoverableArgErrorGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
@@ -940,6 +1015,10 @@ type delayedRepairGenerator struct {
 func (m *delayedRepairGenerator) Name() string { return "delayed_repair_mock" }
 
 func (m *delayedRepairGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *delayedRepairGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 
 func (m *delayedRepairGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
@@ -1144,6 +1223,10 @@ func (m *executeScriptRepairGenerator) Name() string { return "execute_script_re
 
 func (m *executeScriptRepairGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (m *executeScriptRepairGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func (m *executeScriptRepairGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
 	switch m.calls {
@@ -1259,6 +1342,10 @@ func (m *executeScriptJoinRepairGenerator) Name() string { return "execute_scrip
 
 func (m *executeScriptJoinRepairGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (m *executeScriptJoinRepairGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func (m *executeScriptJoinRepairGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
 	switch m.calls {
@@ -1367,6 +1454,10 @@ func (m *discoveryClarificationGenerator) Name() string { return "discovery_clar
 
 func (m *discoveryClarificationGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (m *discoveryClarificationGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func (m *discoveryClarificationGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
 	switch m.calls {
@@ -1464,6 +1555,10 @@ func (m *routedSameToolClarificationGenerator) Name() string {
 
 func (m *routedSameToolClarificationGenerator) EstimateCost(inTokens, outTokens int) float64 {
 	return 0
+}
+
+func (m *routedSameToolClarificationGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
 }
 
 func (m *routedSameToolClarificationGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
@@ -1667,6 +1762,10 @@ func (m *progressionHistoryJoinRepairGenerator) Name() string {
 
 func (m *progressionHistoryJoinRepairGenerator) EstimateCost(inTokens, outTokens int) float64 {
 	return 0
+}
+
+func (m *progressionHistoryJoinRepairGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
 }
 
 func (m *progressionHistoryJoinRepairGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
@@ -2620,6 +2719,10 @@ type progressBudgetGenerator struct{ calls int }
 
 func (m *progressBudgetGenerator) Name() string                                 { return "progress_budget_mock" }
 func (m *progressBudgetGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *progressBudgetGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 func (m *progressBudgetGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
 	if strings.Contains(prompt, "We have hit the retry cap.") {
@@ -2682,6 +2785,10 @@ type stalledBudgetGenerator struct{ calls int }
 
 func (m *stalledBudgetGenerator) Name() string                                 { return "stalled_budget_mock" }
 func (m *stalledBudgetGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *stalledBudgetGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 func (m *stalledBudgetGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
 	if strings.Contains(prompt, "We have hit the retry cap.") {
@@ -2733,6 +2840,10 @@ type cappedBudgetGenerator struct{ calls int }
 
 func (m *cappedBudgetGenerator) Name() string                                 { return "capped_budget_mock" }
 func (m *cappedBudgetGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *cappedBudgetGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 func (m *cappedBudgetGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
 	if strings.Contains(prompt, "We have hit the retry cap.") {
@@ -2759,6 +2870,10 @@ type antiSuccessGenerator struct{ calls int }
 
 func (m *antiSuccessGenerator) Name() string                                 { return "anti_success_mock" }
 func (m *antiSuccessGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *antiSuccessGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 func (m *antiSuccessGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
 	if m.calls == 1 {
