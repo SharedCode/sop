@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	log "log/slog"
 	"net/http"
 	"time"
 
@@ -68,7 +69,7 @@ func handleUpdateSpaceItem(w http.ResponseWriter, r *http.Request) {
 	defer trans.Rollback(ctx)
 
 	db := aidb.NewDatabase(dbOpts)
-	dbEmbedder := GetConfiguredEmbedder(r)
+	dbEmbedder := GetConfiguredEmbedderForSpace(r, storeName, "")
 	dbLLM := GetConfiguredLLM(r)
 
 	kb, err := db.OpenKnowledgeBase(ctx, storeName, trans, dbLLM, dbEmbedder, false)
@@ -87,37 +88,29 @@ func handleUpdateSpaceItem(w http.ResponseWriter, r *http.Request) {
 	var foundKey memory.ItemKey
 	var found bool
 
-	if req.CategoryID != "" {
-		parsedCatID, catErr := sop.ParseUUID(req.CategoryID)
-		if catErr == nil {
-			foundKey = memory.ItemKey{CategoryID: parsedCatID, ItemID: itemID}
-			if ok, _ := itemsTree.Find(ctx, foundKey, false); ok {
-				found = true
-			}
-		}
+	if req.CategoryID == "" {
+		http.Error(w, "Missing CategoryID", http.StatusBadRequest)
+		return
 	}
 
-	// Fallback to sequential scan if CategoryID is missing or not found
-	if !found {
-		itemsTree.First(ctx)
-		for {
-			k := itemsTree.GetCurrentKey()
-			if k.Key.ItemID == itemID {
-				foundKey = k.Key
-				found = true
-				break
-			}
-			if ok, _ := itemsTree.Next(ctx); !ok {
-				break
-			}
-		}
+	parsedCatID, catErr := sop.ParseUUID(req.CategoryID)
+	if catErr != nil {
+		log.Error("Error encountered while parsing Category ID", "err", catErr)
+		http.Error(w, "Invalid CategoryID", http.StatusBadRequest)
+		return
+	}
+
+	foundKey = memory.ItemKey{CategoryID: parsedCatID, ItemID: itemID}
+	if found, err = itemsTree.Find(ctx, foundKey, false); err != nil {
+		log.Error("Error encountered while reading Item", "err", err)
+		http.Error(w, "Error encountered while reading Item", http.StatusInternalServerError)
+		return
 	}
 
 	if !found {
 		http.Error(w, "Item not found", http.StatusNotFound)
 		return
 	}
-	itemsTree.Find(ctx, foundKey, false)
 	existingItem, _ := itemsTree.GetCurrentValue(ctx)
 
 	// Merge data (twist for UI integration)

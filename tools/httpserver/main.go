@@ -140,6 +140,14 @@ func setupWizardAIConfigJSON() template.JS {
 	return template.JS(b)
 }
 
+func modelCatalogJSON() template.JS {
+	b, err := json.Marshal(modelCatalog)
+	if err != nil {
+		return template.JS("{}")
+	}
+	return template.JS(b)
+}
+
 //go:embed templates/*
 var content embed.FS
 
@@ -298,6 +306,10 @@ func main() {
 	}
 	if os.Getenv("SOP_ENABLE_REST_AUTH") == "true" {
 		config.EnableRestAuth = true
+	}
+
+	if !wasProductionFlagPassed {
+		config.ProductionMode = true
 	}
 
 	// If no databases loaded (e.g. no config file or empty), use CLI flags as default
@@ -724,11 +736,12 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 			if os.Getenv("OLLAMA_HOST") != "" {
 				return "ollama"
 			}
-			return "gemini"
+			return "openai"
 		}(), "IsEnterprise": isEnterprise,
 		"SystemDBName":            SystemDBName,
 		"ConfigFile":              config.ConfigFile,
 		"SetupWizardAIConfigJSON": setupWizardAIConfigJSON(),
+		"ModelCatalogJSON":        modelCatalogJSON(),
 		"MinHashMod":              fs.MinimumModValue,
 		"MaxHashMod":              fs.MaximumModValue,
 		"Env": map[string]bool{

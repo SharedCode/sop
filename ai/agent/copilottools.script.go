@@ -15,9 +15,9 @@ import (
 
 const listScriptsArgsSchema = `{"type":"object","properties":{"category":{"type":"string","description":"Optional script category to list. Defaults to the standard script category."}}}`
 
-const createScriptArgsSchema = `{"type":"object","properties":{"name":{"type":"string","description":"Name of the script to create."},"description":{"type":"string","description":"Optional human-readable description of the script."},"script":{"type":"array","description":"Preferred array of reusable script steps.","items":{"type":"object"}},"steps":{"type":"array","description":"Legacy alias of script.","items":{"type":"object"}}},"required":["name"]}`
+const createScriptArgsSchema = `{"type":"object","properties":{"name":{"type":"string","description":"Name of the script to create."},"description":{"type":"string","description":"Optional human-readable description of the script."},"database":{"type":"string","description":"Set the target database for this script so the saved script carries an explicit runtime database context."},"script":{"type":"array","description":"Preferred array of reusable script steps.","items":{"type":"object"}},"steps":{"type":"array","description":"Legacy alias of script.","items":{"type":"object"}}},"required":["name"]}`
 
-const saveScriptArgsSchema = `{"type":"object","properties":{"name":{"type":"string","description":"Name of the script to save or replace."},"description":{"type":"string","description":"Optional human-readable description of the script."},"script":{"type":"array","description":"Preferred array of reusable script steps.","items":{"type":"object"}},"steps":{"type":"array","description":"Legacy alias of script.","items":{"type":"object"}}},"required":["name"]}`
+const saveScriptArgsSchema = `{"type":"object","properties":{"name":{"type":"string","description":"Name of the script to save or replace."},"description":{"type":"string","description":"Optional human-readable description of the script."},"database":{"type":"string","description":"Set the target database for this script so the saved script carries an explicit runtime database context."},"script":{"type":"array","description":"Preferred array of reusable script steps.","items":{"type":"object"}},"steps":{"type":"array","description":"Legacy alias of script.","items":{"type":"object"}}},"required":["name"]}`
 
 const getScriptDetailsArgsSchema = `{"type":"object","properties":{"name":{"type":"string","description":"Name of the script to inspect."},"category":{"type":"string","description":"Optional script category. Defaults to the standard script category."}},"required":["name"]}`
 
@@ -163,11 +163,20 @@ func (a *CopilotAgent) toolCreateScript(ctx context.Context, args map[string]any
 	if p := ai.GetSessionPayload(ctx); p != nil {
 		currentDB = p.CurrentDB
 	}
-
 	script := ai.Script{
 		Description: description,
 		Database:    currentDB,
 		Steps:       steps,
+	}
+
+	// Validate the script steps.
+	if err := ai.ValidateScript(steps); err != nil {
+		return "", fmt.Errorf("script validation failed: %w", err)
+	}
+
+	// Also perform grammar validation using the same execution-path helpers.
+	if err := ValidateScriptSteps(steps); err != nil {
+		return "", fmt.Errorf("script grammar validation failed: %w", err)
 	}
 
 	// Persist the new script
@@ -255,7 +264,6 @@ func (a *CopilotAgent) toolSaveScript(ctx context.Context, args map[string]any) 
 	if p := ai.GetSessionPayload(ctx); p != nil {
 		currentDB = p.CurrentDB
 	}
-
 	script := ai.Script{
 		Description: description,
 		Database:    currentDB,

@@ -107,6 +107,9 @@ func mergeCarryoverRuntimeState(state *ai.CarryoverState, previous *ai.Carryover
 	if carryoverModeSupported(capability, providerState.Mode) && providerState.Mode != "" {
 		state.Mode = providerState.Mode
 	}
+	if conversationID := strings.TrimSpace(providerState.ConversationID); conversationID != "" {
+		state.ConversationID = conversationID
+	}
 	if handle := strings.TrimSpace(providerState.ConversationHandle); handle != "" {
 		state.ConversationHandle = handle
 	}

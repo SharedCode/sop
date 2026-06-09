@@ -1,11 +1,14 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 )
 
@@ -101,5 +104,52 @@ func TestShouldShortCircuitScriptOnError_DetectsAtomicTransactionFailures(t *tes
 	err := errors.New("step failed: operation 'commit_tx' failed: redis unavailable")
 	if !shouldShortCircuitScriptOnError("execute_script", nil, err) {
 		t.Fatal("expected atomic transaction failure to force short-circuit")
+	}
+}
+
+type failingDatabase struct {
+	err error
+}
+
+func (d *failingDatabase) BeginTransaction(context.Context, sop.TransactionMode, ...time.Duration) (sop.Transaction, error) {
+	return nil, d.err
+}
+
+func (d *failingDatabase) Config() sop.DatabaseOptions {
+	return sop.DatabaseOptions{}
+}
+
+func TestCompileScript_WritesErrorEventOnTransactionFailureEvenWhenVerboseIsOff(t *testing.T) {
+	var buf bytes.Buffer
+	streamer := NewJSONStreamer(&buf)
+	streamer.SetSuppressStepStart(true)
+	ctx := context.WithValue(context.Background(), CtxKeyJSONStreamer, streamer)
+
+	engine := NewScriptEngine(NewScriptContext(), func(name string) (Database, error) {
+		return &failingDatabase{err: errors.New("redis unavailable")}, nil
+	})
+
+	compiled, err := engine.Compile([]ScriptInstruction{{
+		Op:   "begin_tx",
+		Args: map[string]any{"database": "system", "mode": "write"},
+	}})
+	if err != nil {
+		t.Fatalf("Compile failed: %v", err)
+	}
+
+	err = compiled(ctx, engine)
+	if err == nil {
+		t.Fatal("expected transaction failure")
+	}
+	if !strings.Contains(err.Error(), "redis unavailable") {
+		t.Fatalf("expected transaction failure details, got: %v", err)
+	}
+
+	output := buf.String()
+	if !strings.Contains(output, `"type": "error"`) && !strings.Contains(output, `"type":"error"`) {
+		t.Fatalf("expected error event in streamer output, got: %s", output)
+	}
+	if !strings.Contains(output, "redis unavailable") {
+		t.Fatalf("expected streamer error payload to mention the failure cause, got: %s", output)
 	}
 }

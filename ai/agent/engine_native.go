@@ -294,8 +294,10 @@ func (e *NativeReActEngine) runDefaultLoop(ctx context.Context, req ai.Reasoning
 			log.Warn("Native ReAct Engine Deferred Non-Repair Tool Call", "expected_tool", pendingRepair.ToolName, "received_tool", toolCall.Name)
 			continue
 		}
+		// The model produced a native tool call such as "search_space".
+		// This is the dispatch point: the engine hands that name + args to the executor.
 		emitVerboseProgress(ctx, "Calling tool `%s`.", toolCall.Name)
-		log.Info("Native ReAct Engine Tool Call",
+		log.Info("Native React Engine Tool Call",
 			"iteration", iteration+1,
 			"tool", toolCall.Name,
 			"arg_keys", summarizeToolArgKeys(toolCall.Args),
@@ -307,6 +309,8 @@ func (e *NativeReActEngine) runDefaultLoop(ctx context.Context, req ai.Reasoning
 
 		execCtx := context.WithValue(ctx, ai.CtxKeyNativeToolHints, true)
 		priorRepair := pendingRepair
+		// req.Executor is the registered runtime (CopilotAgent). Execute() resolves
+		// the tool name from the registry and runs the matching handler.
 		rawResult, err := req.Executor.Execute(execCtx, toolCall.Name, toolCall.Args)
 		if err != nil {
 			emitReasoningEvent(req, ai.ReasoningEventToolError, ai.BuildToolErrorEvent(toolCall.Name, cloneToolEventMap(toolCall.Args), err, iteration+1))
@@ -556,9 +560,10 @@ func (s *askLoopBudgetState) extendIfProgressing(delta askLoopProgressDelta) boo
 }
 
 func emitReasoningEvent(req ai.ReasoningRequest, eventType string, data any) {
-	if req.Streamer != nil {
-		req.Streamer(eventType, data)
+	if req.Streamer == nil {
+		return
 	}
+	req.Streamer(eventType, data)
 }
 
 func cloneToolEventMap(src map[string]any) map[string]any {
@@ -632,15 +637,28 @@ func emitVerboseProgress(ctx context.Context, format string, args ...any) {
 	msg := fmt.Sprintf(format, args...)
 	if sink, ok := ctx.Value(ai.CtxKeyProgressSink).(func(string)); ok && sink != nil {
 		sink(msg)
-		return
 	}
 }
 
-func isVerboseEnabled(ctx context.Context) bool {
-	if v, ok := ctx.Value("verbose").(bool); ok {
-		return v
+func runnerSessionFromContext(ctx context.Context) *RunnerSession {
+	if ctx == nil {
+		return nil
 	}
-	return true
+	if rs, ok := ctx.Value(RunnerSessionKey).(*RunnerSession); ok && rs != nil {
+		return rs
+	}
+	return nil
+}
+
+func effectiveVerbose(ctx context.Context) bool {
+	if rs := runnerSessionFromContext(ctx); rs != nil {
+		return rs.IsVerbose()
+	}
+	return false
+}
+
+func isVerboseEnabled(ctx context.Context) bool {
+	return effectiveVerbose(ctx)
 }
 
 const (

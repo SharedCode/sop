@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	log "log/slog"
+	"math"
 	"strings"
 
 	"github.com/sharedcode/sop"
@@ -130,7 +131,7 @@ func (s *store[T]) Upsert(ctx context.Context, item Item[T], vec []float32) erro
 		for {
 			c, err := s.categories.GetCurrentValue(ctx)
 			if err == nil && c != nil {
-				dist := EuclideanDistance(vec, c.CenterVector)
+				dist := Distance(vec, c.CenterVector, true)
 				if bestDist == -1 || dist < bestDist {
 					bestDist = dist
 					bestCategory = c.ID
@@ -276,7 +277,7 @@ func (s *store[T]) UpsertByCategoryID(ctx context.Context, catID sop.UUID, catCe
 	for _, vec := range vecs {
 		dist := float32(0)
 		if len(catCenterVector) > 0 {
-			dist = EuclideanDistance(vec, catCenterVector)
+			dist = Distance(vec, catCenterVector, true)
 		}
 		vk := VectorKey{CategoryID: catID, VectorID: sop.NewUUID(), DistanceToCategory: dist}
 
@@ -385,6 +386,8 @@ func (s *store[T]) QueryBatch(ctx context.Context, vectors [][]float32, opts *Se
 	return results, nil
 }
 
+// Find Closest Category implements a beam search through the category tree, starting from the root and
+// exploring closest categories at each level until it finds the best overall match for the query vector.
 func (s *store[T]) FindClosestCategory(ctx context.Context, qVec []float32) (*Category, float32, error) {
 	type candidate struct {
 		ParentID sop.UUID
@@ -401,7 +404,7 @@ func (s *store[T]) FindClosestCategory(ctx context.Context, qVec []float32) (*Ca
 		var nextQueue []candidate
 
 		for _, cand := range queue {
-			qDist := EuclideanDistance(cand.Anchor, qVec)
+			qDist := Distance(cand.Anchor, qVec, true)
 			_, err := s.categoriesByDistance.Find(ctx, DistanceKey{ParentID: cand.ParentID, Distance: qDist, ID: sop.NilUUID}, false)
 			if err != nil {
 				continue
@@ -436,7 +439,7 @@ func (s *store[T]) FindClosestCategory(ctx context.Context, qVec []float32) (*Ca
 					if f && err == nil {
 						cat, _ := s.categories.GetCurrentValue(ctx)
 						if cat != nil && len(cat.CenterVector) > 0 {
-							mDist := EuclideanDistance(qVec, cat.CenterVector)
+							mDist := Distance(qVec, cat.CenterVector, true)
 							nextQueue = append(nextQueue, candidate{ParentID: cat.ID, Anchor: cat.CenterVector, Dist: mDist})
 							if bestGlobalDist < 0 || mDist < bestGlobalDist {
 								bestGlobalDist = mDist
@@ -472,9 +475,157 @@ func (s *store[T]) FindClosestCategory(ctx context.Context, qVec []float32) (*Ca
 	return bestGlobalCat, bestGlobalDist, nil
 }
 
-func (s *store[T]) resolveTargetCategory(ctx context.Context, qVec []float32) *Category {
-	cat, _, _ := s.FindClosestCategory(ctx, qVec)
-	return cat
+func (s *store[T]) resolveTargetCategory(ctx context.Context, qVec []float32) (*Category, error) {
+	cat, _, err := s.FindClosestCategory(ctx, qVec)
+	return cat, err
+}
+
+// SemanticCategoryByPath resolves a hierarchical category path expressed as pre-embedded
+// vectors into the closest matching Category at each level, using the CategoriesByDistance
+// B-Tree for O(log N) lookup per level.
+//
+// Algorithm (per design doc Section 12):
+//
+//	Level 0: anchor = DomainReference, ParentID = NilUUID
+//	Level i: anchor = prev.CenterVector,  ParentID = prev.ID
+//
+// At each level:
+//  1. dist = EuclideanDistance(anchor, queryVec)
+//  2. Find(DistanceKey{ParentID, dist, NilUUID}) positions the cursor at the nearest entry.
+//  3. Scan a small neighbourhood on both sides, validate by EuclideanDistance(queryVec, cat.CenterVector).
+//  4. The category with the smallest validated distance is the best match for this level.
+func (s *store[T]) SemanticCategoryByPath(ctx context.Context, pathVectors [][]float32) ([]*Category, error) {
+	log.Info("SemanticCategoryByPath start", "path_vectors", len(pathVectors), "domain_reference_len", len(s.domainReference))
+	if len(pathVectors) == 0 {
+		return nil, nil
+	}
+	if len(s.domainReference) == 0 {
+		return nil, fmt.Errorf("domain reference vector is not set. Ensure this KB had been vectorized.")
+	}
+
+	results, _, err := s.semanticCategoryByPartRecursive(ctx, sop.NilUUID, s.domainReference, pathVectors, 0)
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
+}
+
+func (s *store[T]) semanticCategoryByPartRecursive(ctx context.Context, parentID sop.UUID, anchor []float32, pathVectors [][]float32, level int) ([]*Category, int, error) {
+	if level >= len(pathVectors) {
+		return nil, level, nil
+	}
+
+	candidates, err := s.semanticCategoryByPart(ctx, parentID, anchor, pathVectors[level])
+	if err != nil {
+		return nil, level, err
+	}
+	if level == len(pathVectors)-1 {
+		return candidates, level, nil
+	}
+	var result []*Category
+	for _, candidate := range candidates {
+		if candidate == nil || candidate.ID.IsNil() {
+			continue
+		}
+		subCandidates, l, err := s.semanticCategoryByPartRecursive(ctx, candidate.ID, candidate.CenterVector, pathVectors, level+1)
+		if err != nil {
+			return nil, l, err
+		}
+		if len(subCandidates) == 0 || l < len(pathVectors)-1 {
+			continue
+		}
+		result = append(result, subCandidates...)
+	}
+
+	return result, level, nil
+}
+
+func (s *store[T]) semanticCategoryByPart(ctx context.Context, parentID sop.UUID, anchor []float32, partVector []float32) ([]*Category, error) {
+	if len(partVector) == 0 {
+		return nil, nil
+	}
+	if len(anchor) == 0 {
+		return nil, fmt.Errorf("domain reference vector is not set. Ensure this KB had been vectorized.")
+	}
+
+	var result []*Category
+	dist := Distance(anchor, partVector, true)
+
+	// Position cursor at the nearest distance entry for this parent.
+	if _, err := s.categoriesByDistance.Find(ctx, DistanceKey{ParentID: parentID, Distance: dist, ID: sop.NilUUID}, false); err != nil {
+		return nil, err
+	}
+
+	// Scan a neighbourhood of up to 5 entries before and after the cursor position.
+	// We peek backwards first then scan forward, collecting candidates.
+	const scanWindow = 5
+	backSteps := 0
+	for i := 0; i < scanWindow; i++ {
+		ok, err := s.categoriesByDistance.Previous(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !ok || s.categoriesByDistance.GetCurrentKey().Key.ParentID.Compare(parentID) != 0 {
+			if ok {
+				s.categoriesByDistance.Next(ctx)
+			} else {
+				s.categoriesByDistance.First(ctx)
+			}
+			break
+		}
+		backSteps++
+	}
+
+	bestDist := float32(-1)
+	maxForward := backSteps + 1 + scanWindow
+	for i := 0; i < maxForward; i++ {
+		currKey := s.categoriesByDistance.GetCurrentKey()
+		if currKey.Key.ParentID.Compare(parentID) != 0 {
+			break
+		}
+		if !currKey.Key.ID.IsNil() {
+			currDist := compare(dist, currKey.Key.Distance, bestDist)
+			if i == 0 || currDist <= 0 {
+				found, err := s.categories.Find(ctx, currKey.Key.ID, false)
+				if err != nil {
+					return nil, err
+				}
+				if found {
+					cat, err := s.categories.GetCurrentValue(ctx)
+					if err != nil {
+						return nil, err
+					}
+					if cat != nil {
+						if currDist < 0 {
+							bestDist = currKey.Key.Distance
+							result = []*Category{cat}
+						} else {
+							result = append(result, cat)
+						}
+					}
+				}
+			}
+		}
+		if ok, err := s.categoriesByDistance.Next(ctx); !ok || err != nil {
+			if err != nil {
+				return nil, err
+			}
+			break
+		}
+	}
+	return result, nil
+}
+
+func compare(vecDistance float32, A float32, B float32) int {
+	x := math.Abs(float64(vecDistance) - float64(A))
+	y := math.Abs(float64(vecDistance) - float64(B))
+	if x > y {
+		return 1
+	}
+	if x < y {
+		return -1
+	}
+	return 0
 }
 
 func (s *store[T]) Query(ctx context.Context, vec []float32, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
@@ -483,12 +634,16 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, opts *SearchOptions
 	}
 	var targetCategory *Category
 
-	if len(opts.CategoryDistanceVector) > 0 {
-		qVec := opts.CategoryDistanceVector
+	if len(opts.CategoryVector) > 0 {
+		qVec := opts.CategoryVector
 		if len(qVec) == 0 {
 			qVec = vec
 		}
-		targetCategory = s.resolveTargetCategory(ctx, qVec)
+		var err error
+		targetCategory, err = s.resolveTargetCategory(ctx, qVec)
+		if err != nil {
+			return nil, err
+		}
 		if targetCategory == nil {
 			return nil, nil // Error or not found
 		}
@@ -533,7 +688,11 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, opts *SearchOptions
 				break
 			}
 		}
-		targetCategory, _ = FindClosestCategory(vec, categories)
+		var catPointers []*Category
+		for i := range categories {
+			catPointers = append(catPointers, categories[i])
+		}
+		targetCategory, _ = FindClosestCategoryFromPtrs(vec, catPointers)
 	}
 
 	if targetCategory == nil {
@@ -608,7 +767,7 @@ func (s *store[T]) Query(ctx context.Context, vec []float32, opts *SearchOptions
 					hits = append(hits, ai.Hit[T]{
 						ID:      item.ID.String(),
 						DocID:   item.DocID,
-						Score:   EuclideanDistance(vec, v.Data),
+						Score:   Distance(vec, v.Data, true),
 						Payload: item.Data,
 					})
 				}
@@ -686,8 +845,11 @@ func (s *store[T]) QueryText(ctx context.Context, text string, opts *SearchOptio
 
 	var targetCategoryID sop.UUID
 
-	if len(opts.CategoryDistanceVector) > 0 {
-		targetCat := s.resolveTargetCategory(ctx, opts.CategoryDistanceVector)
+	if len(opts.CategoryVector) > 0 {
+		targetCat, err := s.resolveTargetCategory(ctx, opts.CategoryVector)
+		if err != nil {
+			return nil, err
+		}
 		if targetCat != nil {
 			targetCategoryID = targetCat.ID
 		}
@@ -740,7 +902,7 @@ func (s *store[T]) QueryText(ctx context.Context, text string, opts *SearchOptio
 		itemKeySearch := ItemKey{CategoryID: catID, ItemID: id}
 		foundItem, err := s.items.Find(ctx, itemKeySearch, false)
 		var payload T
-		var docID string
+		var docID DocIDs
 		if foundItem && err == nil {
 			item, err := s.items.GetCurrentValue(ctx)
 			if err == nil {

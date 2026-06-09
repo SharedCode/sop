@@ -93,3 +93,8 @@ func (g *ollama) Generate(ctx context.Context, prompt string, opts ai.GenOptions
 func (g *ollama) EstimateCost(inTokens, outTokens int) float64 {
 	return 0 // Free!
 }
+
+func (g *ollama) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	// Ollama does not support cache pre-warming.
+	return nil
+}

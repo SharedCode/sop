@@ -56,7 +56,7 @@ func handleVectorizeSpace(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	dbEmbedder := GetConfiguredEmbedder(r)
+	dbEmbedder := GetConfiguredEmbedderForSpace(r, reqData.SpaceName, "")
 	dbLLM := GetConfiguredLLM(r)
 
 	task := RegisterTask("VectorizeSpace", 100)

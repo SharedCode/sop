@@ -6,8 +6,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"time"
+)
+
+const (
+	openAIEmbedderClientTimeout         = 45 * time.Second
+	openAIEmbedderDialTimeout           = 10 * time.Second
+	openAIEmbedderKeepAliveTimeout      = 30 * time.Second
+	openAIEmbedderTLSHandshakeTimeout   = 15 * time.Second
+	openAIEmbedderResponseHeaderTimeout = 30 * time.Second
 )
 
 // OpenAIEmbedder uses the OpenAI embeddings API or a compatible relay.
@@ -92,7 +102,17 @@ func (e *OpenAIEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]fl
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+e.apiKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{
+		Timeout: openAIEmbedderClientTimeout,
+		Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           (&net.Dialer{Timeout: openAIEmbedderDialTimeout, KeepAlive: openAIEmbedderKeepAliveTimeout}).DialContext,
+			TLSHandshakeTimeout:   openAIEmbedderTLSHandshakeTimeout,
+			ResponseHeaderTimeout: openAIEmbedderResponseHeaderTimeout,
+		},
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("openai embeddings api request failed: %w", err)
 	}

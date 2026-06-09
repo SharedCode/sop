@@ -131,6 +131,22 @@ func TestStoresAndSpacesInstructions_AreRichEnoughForToolContext(t *testing.T) {
 	}
 }
 
+func TestScriptCreationSchemasRequireExplicitDatabase(t *testing.T) {
+	checks := map[string]string{
+		"create_script": createScriptArgsSchema,
+		"save_script":   saveScriptArgsSchema,
+	}
+
+	for name, schema := range checks {
+		if !strings.Contains(schema, `"database"`) {
+			t.Fatalf("expected %s schema to declare a database field, got: %s", name, schema)
+		}
+		if !strings.Contains(schema, "target database") && !strings.Contains(schema, "database to run") {
+			t.Fatalf("expected %s schema to explain the database purpose, got: %s", name, schema)
+		}
+	}
+}
+
 func TestStoreInstructions_MentionTransactionBehavior(t *testing.T) {
 	checks := map[string]string{
 		"SelectInstruction":      SelectInstruction,

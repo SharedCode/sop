@@ -486,6 +486,13 @@
                 </div>
                 <textarea id="edit-kb-sysprompt" class="form-input" style="width: 100%; height: 65px; box-sizing: border-box; resize: vertical; margin-bottom: 0px;" placeholder="Describe how the AI should think, search, and synthesize data from this Space. (e.g., 'You are a strict Legal Auditor. Cite references...') Click ✨ Enhance with AI to automatically expand your draft!"></textarea>
             </div>
+
+            <div style="margin-top: 15px;">
+                <label class="form-label" style="display:block; margin-bottom:5px; color: var(--text-color); font-size: 0.9em;">Domain Reference:</label>
+                <textarea id="edit-kb-domain-reference" class="form-input" readonly
+                          style="width: 100%; height: 60px; background: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); padding: 8px; border-radius: 4px; box-sizing: border-box; resize: vertical; font-family: monospace; font-size: 12px; opacity: 0.85;"
+                          placeholder="No domain reference available"></textarea>
+            </div>
         </div>
         <div class="modal-footer">
             <button onclick="closeEditKBModal()" class="btn-secondary">Cancel</button>

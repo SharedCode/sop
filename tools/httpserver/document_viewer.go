@@ -9,12 +9,23 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 )
 
+func isExternalDocID(docID string) bool {
+	trimmed := strings.TrimSpace(docID)
+	return strings.HasPrefix(trimmed, "http://") || strings.HasPrefix(trimmed, "https://") || strings.HasPrefix(trimmed, "file://") || strings.HasPrefix(trimmed, "mailto:")
+}
+
 func handleViewer(w http.ResponseWriter, r *http.Request) {
 	docID := r.URL.Query().Get("docID")
 	if docID == "" {
 		http.Error(w, "docID is required", http.StatusBadRequest)
 		return
 	}
+
+	if isExternalDocID(docID) {
+		http.Redirect(w, r, docID, http.StatusFound)
+		return
+	}
+
 	dbName := r.URL.Query().Get("db")
 	spaceName := r.URL.Query().Get("space")
 

@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"math"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -27,6 +28,21 @@ func TestCosineSimilarity(t *testing.T) {
 	// zeros
 	if CosineSimilarity([]float32{0, 0, 0}, v1) != 0 {
 		t.Errorf("expected 0")
+	}
+}
+
+func TestNormalizeVectorReturnsUnitNorm(t *testing.T) {
+	got := NormalizeVector([]float32{3, 4})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 values, got %d", len(got))
+	}
+
+	norm := 0.0
+	for _, val := range got {
+		norm += float64(val * val)
+	}
+	if math.Abs(norm-1) > 1e-6 {
+		t.Fatalf("expected unit norm, got %v", norm)
 	}
 }
 

@@ -178,6 +178,31 @@
 
     function handleChatKeydown(e) {
         const input = document.getElementById('chat-input');
+        if (!input) return;
+
+        // --- LINE SELECTION (Shift + Cmd/Ctrl + Arrows) ---
+        // Mirrors common editor shortcuts for selecting text by line.
+        if ((e.metaKey || e.ctrlKey) && e.shiftKey) {
+            const val = input.value;
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            const anchor = Math.min(start, end);
+            const focus = Math.max(start, end);
+
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                const lineStart = val.lastIndexOf('\n', focus - 1) + 1;
+                input.setSelectionRange(Math.min(lineStart, focus), Math.max(lineStart, focus));
+                return;
+            }
+            if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                let lineEnd = val.indexOf('\n', focus);
+                if (lineEnd === -1) lineEnd = val.length;
+                input.setSelectionRange(Math.min(focus, lineEnd), Math.max(focus, lineEnd));
+                return;
+            }
+        }
 
         // --- CUSTOM NAVIGATION (Cmd/Ctrl + Arrows) ---
         // Supports macOS (Meta/Command) and Windows/Linux (Control)

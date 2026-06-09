@@ -28,7 +28,7 @@ func buildChunkData(cid string, chunk SpaceIngestChunk, documentMode bool) map[s
 		if _, exists := chunk.Data["original_id"]; !exists && cid != "" {
 			chunk.Data["original_id"] = cid
 		}
-		if chunk.DocID != "" {
+		if len(chunk.DocID) > 0 {
 			chunk.Data["doc_id"] = chunk.DocID
 		}
 		return chunk.Data
@@ -64,7 +64,7 @@ func buildChunkData(cid string, chunk SpaceIngestChunk, documentMode bool) map[s
 		"original_id": cid,
 	}
 
-	if chunk.DocID != "" {
+	if len(chunk.DocID) > 0 {
 		res["doc_id"] = chunk.DocID
 	}
 

@@ -17,7 +17,6 @@ type ExecuteScriptRequest struct {
 	Category string         `json:"category"`
 	Args     map[string]any `json:"args"`
 	Agent    string         `json:"agent"` // Optional: specify which agent to use
-	Verbose  *bool          `json:"verbose"`
 }
 
 // handleExecuteScript handles the POST /api/scripts/execute endpoint.
@@ -79,11 +78,9 @@ func handleExecuteScript(w http.ResponseWriter, r *http.Request) {
 		AvatarScope: "",       // System scripts do not run in Avatar Mode
 	}
 	ctx = context.WithValue(ctx, "session_payload", payload)
-	verbose := true
-	if req.Verbose != nil {
-		verbose = *req.Verbose
+	if rs := agentSvc.RunnerSession(); rs != nil {
+		ctx = context.WithValue(ctx, agent.RunnerSessionKey, rs)
 	}
-	ctx = context.WithValue(ctx, "verbose", verbose)
 
 	// Inject ScriptRecorder into context so executed steps are recorded in session state
 	// This enables /last-tool to work after running a script.

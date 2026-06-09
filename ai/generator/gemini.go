@@ -177,7 +177,7 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 			"text_preview", geminiPreview(output.Text, 320),
 		)
 		if req.Executor == nil || len(output.ToolCalls) == 0 {
-			resp := geminiOwnedLoopResponse(output.Text, executedToolCalls, toolResults, continuations)
+			resp := geminiOwnedLoopResponse(output.Text, executedToolCalls, toolResults, continuations, l.generator.Name(), geminiGeneratorModel(l.generator))
 			log.Debug("Gemini owned loop completed without more tool calls",
 				"iteration", iteration,
 				"executed_tool_calls", len(executedToolCalls),
@@ -194,9 +194,9 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 			toolResult, continuation := executeGeminiOwnedLoopToolCall(ctx, req, iteration, toolCall)
 			toolResults = append(toolResults, toolResult)
 			continuations = append(continuations, continuation)
-			emitGeminiOwnedLoopHydration(req, geminiOwnedLoopResponse("", executedToolCalls, toolResults, continuations))
+			emitGeminiOwnedLoopHydration(req, geminiOwnedLoopResponse("", executedToolCalls, toolResults, continuations, l.generator.Name(), geminiGeneratorModel(l.generator)))
 			if shouldShortCircuitGeminiOwnedLoopOnToolHint(toolResult.Hint) {
-				resp := geminiOwnedLoopResponse(toolResult.Result, executedToolCalls, toolResults, continuations)
+				resp := geminiOwnedLoopResponse(toolResult.Result, executedToolCalls, toolResults, continuations, l.generator.Name(), geminiGeneratorModel(l.generator))
 				log.Warn("Gemini owned loop short-circuited on terminal tool hint",
 					"iteration", iteration,
 					"tool", toolCall.Name,
@@ -222,7 +222,7 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 				"iteration": iteration,
 				"reason":    "repeated_validation_errors",
 			})
-			resp := geminiOwnedLoopResponse(errorMsg, executedToolCalls, toolResults, continuations)
+			resp := geminiOwnedLoopResponse(errorMsg, executedToolCalls, toolResults, continuations, l.generator.Name(), geminiGeneratorModel(l.generator))
 			emitGeminiOwnedLoopHydration(req, resp)
 			return resp, nil
 		}
@@ -262,7 +262,7 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 		)
 		return ai.ReasoningResponse{}, fmt.Errorf("final generation failed: %w", err)
 	}
-	resp := geminiOwnedLoopResponse(output.Text, executedToolCalls, toolResults, continuations)
+	resp := geminiOwnedLoopResponse(output.Text, executedToolCalls, toolResults, continuations, l.generator.Name(), geminiGeneratorModel(l.generator))
 	log.Debug("Gemini owned loop finished on final turn",
 		"executed_tool_calls", len(executedToolCalls),
 		"outcome_facts", len(resp.OutcomeFacts),
@@ -272,14 +272,14 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 	return resp, nil
 }
 
-func geminiOwnedLoopResponse(finalText string, toolCalls []ai.ToolCall, toolResults []ai.ReActToolResult, continuations []ai.ToolCallContinuation) ai.ReasoningResponse {
+func geminiOwnedLoopResponse(finalText string, toolCalls []ai.ToolCall, toolResults []ai.ReActToolResult, continuations []ai.ToolCallContinuation, provider, model string) ai.ReasoningResponse {
 	resp := ai.ReasoningResponse{
 		FinalText:      finalText,
 		ToolCalls:      toolCalls,
 		OutcomeFacts:   ai.SummarizeOutcomeFacts(toolResults),
 		OutcomeRecipes: ai.SummarizeOutcomeRecipes(toolResults),
 	}
-	if carryState := geminiOwnedLoopCarryoverState(continuations); carryState != nil {
+	if carryState := geminiOwnedLoopCarryoverState(continuations, provider, model, finalText, toolCalls, toolResults); carryState != nil {
 		resp.CarryoverState = carryState
 	}
 	return resp
@@ -411,19 +411,43 @@ func summarizeGeminiContinuationToolOutput(toolName string, response any) any {
 	return response
 }
 
-func geminiOwnedLoopCarryoverState(continuations []ai.ToolCallContinuation) *ai.CarryoverState {
-	if len(continuations) == 0 {
+func geminiOwnedLoopCarryoverState(continuations []ai.ToolCallContinuation, provider, model, finalText string, toolCalls []ai.ToolCall, toolResults []ai.ReActToolResult) *ai.CarryoverState {
+	if len(continuations) == 0 && len(toolCalls) == 0 && strings.TrimSpace(finalText) == "" {
 		return nil
 	}
+
+	state := &ai.CarryoverState{
+		Mode: ai.CarryoverModeCompact,
+	}
+	if strings.TrimSpace(provider) != "" {
+		state.Provider = strings.TrimSpace(provider)
+	}
+	if strings.TrimSpace(model) != "" {
+		state.Model = strings.TrimSpace(model)
+	}
+	if summary := strings.TrimSpace(finalText); summary != "" {
+		state.LastAssistantSummary = summary
+	}
+	if len(toolCalls) > 0 {
+		state.LastToolNames = toolCallNames(toolCalls)
+	}
+	if len(toolResults) > 0 {
+		state.LastOutcomeFacts = append([]string(nil), ai.SummarizeOutcomeFacts(toolResults)...)
+		state.LastRecipeIDs = recipeIDs(ai.SummarizeOutcomeRecipes(toolResults))
+	}
+
+	if len(continuations) == 0 {
+		return state
+	}
+
 	raw, err := json.Marshal(continuations)
 	if err != nil {
-		return &ai.CarryoverState{Mode: ai.CarryoverModeCompact}
+		return state
 	}
-	return &ai.CarryoverState{
-		Mode:                   ai.CarryoverModeLive,
-		ConversationHandle:     string(raw),
-		EstimatedRawToolTokens: (len(raw) + 3) / 4,
-	}
+	state.Mode = ai.CarryoverModeLive
+	state.ConversationHandle = string(raw)
+	state.EstimatedRawToolTokens = (len(raw) + 3) / 4
+	return state
 }
 
 func emitGeminiOwnedLoopHydration(req ai.ReasoningRequest, resp ai.ReasoningResponse) {
@@ -652,8 +676,10 @@ func executeGeminiOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequest
 			"error", execErr,
 			"raw_result_preview", geminiPreview(rawResult, 320),
 		)
-		emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolError, ai.BuildToolErrorEvent(toolCall.Name, cloneGeminiToolArgs(toolCall.Args), execErr, iteration))
 		resultText = execErr.Error()
+
+		emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneGeminiToolArgs(toolCall.Args), resultText, cloneGeminiToolProgressHint(hint), iteration))
+		emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolError, ai.BuildToolErrorEvent(toolCall.Name, cloneGeminiToolArgs(toolCall.Args), execErr, iteration))
 		continuationResponse = map[string]any{
 			"tool_error": map[string]any{
 				"message": execErr.Error(),
@@ -681,9 +707,10 @@ func executeGeminiOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequest
 }
 
 func emitGeminiOwnedLoopEvent(req ai.ReasoningRequest, eventType string, data any) {
-	if req.Streamer != nil {
-		req.Streamer(eventType, data)
+	if req.Streamer == nil {
+		return
 	}
+	req.Streamer(eventType, data)
 }
 
 func unwrapGeminiToolResultEnvelope(rawResult string) (string, *ai.ToolProgressHint) {
@@ -788,7 +815,8 @@ type geminiToolConfig struct {
 }
 
 type geminiFunctionCallingConfig struct {
-	Mode string `json:"mode,omitempty"`
+	Mode                 string   `json:"mode,omitempty"`
+	AllowedFunctionNames []string `json:"allowedFunctionNames,omitempty"`
 }
 
 type geminiGenerationConfig struct {
@@ -968,7 +996,10 @@ func buildGeminiRequest(prompt string, opts ai.GenOptions) geminiRequest {
 		}
 		reqBody.Tools = []geminiTool{{FunctionDeclarations: funcs}}
 		reqBody.ToolConfig = &geminiToolConfig{
-			FunctionCallingConfig: &geminiFunctionCallingConfig{Mode: "VALIDATED"},
+			FunctionCallingConfig: &geminiFunctionCallingConfig{
+				Mode:                 "ANY",
+				AllowedFunctionNames: geminiAllowedFunctionNames(opts.Tools),
+			},
 		}
 	}
 
@@ -1002,6 +1033,27 @@ func buildGeminiRequest(prompt string, opts ai.GenOptions) geminiRequest {
 	}
 
 	return reqBody
+}
+
+func geminiAllowedFunctionNames(tools []ai.ToolDefinition) []string {
+	if len(tools) == 0 {
+		return nil
+	}
+
+	names := make([]string, 0, len(tools))
+	seen := make(map[string]struct{}, len(tools))
+	for _, tool := range tools {
+		name := strings.TrimSpace(tool.Name)
+		if name == "" {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+	return names
 }
 
 func geminiThoughtSignature(toolCall ai.ToolCall) string {
@@ -1315,4 +1367,9 @@ func geminiPreview(text string, maxLen int) string {
 func (g *gemini) EstimateCost(inTokens, outTokens int) float64 {
 	// Placeholder pricing
 	return float64(inTokens)*0.0001 + float64(outTokens)*0.0002
+}
+
+func (g *gemini) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	// Gemini does not support cache pre-warming.
+	return nil
 }

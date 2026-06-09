@@ -13,10 +13,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/sharedcode/sop/ai"
+)
+
+const (
+	chatGPTClientTimeout         = 45 * time.Second
+	chatGPTDialTimeout           = 10 * time.Second
+	chatGPTKeepAliveTimeout      = 30 * time.Second
+	chatGPTTLSHandshakeTimeout   = 15 * time.Second
+	chatGPTResponseHeaderTimeout = 30 * time.Second
 )
 
 // chatgpt implements the Generator interface for OpenAI's ChatGPT models.
@@ -106,7 +116,17 @@ func (g *chatgpt) Generate(ctx context.Context, prompt string, opts ai.GenOption
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+g.apiKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	client := &http.Client{
+		Timeout: chatGPTClientTimeout,
+		Transport: &http.Transport{
+			Proxy:                 http.ProxyFromEnvironment,
+			DialContext:           (&net.Dialer{Timeout: chatGPTDialTimeout, KeepAlive: chatGPTKeepAliveTimeout}).DialContext,
+			TLSHandshakeTimeout:   chatGPTTLSHandshakeTimeout,
+			ResponseHeaderTimeout: chatGPTResponseHeaderTimeout,
+		},
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return ai.GenOutput{}, fmt.Errorf("openai api request failed: %w", err)
 	}
@@ -135,6 +155,10 @@ func (g *chatgpt) Generate(ctx context.Context, prompt string, opts ai.GenOption
 // EstimateCost returns a rough cost estimate based on token counts (GPT-4o pricing).
 func (g *chatgpt) EstimateCost(inTokens, outTokens int) float64 {
 	return float64(inTokens)*0.000005 + float64(outTokens)*0.000015
+}
+
+func (g *chatgpt) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
 }
 
 // ----------------------------------------------------------------------------

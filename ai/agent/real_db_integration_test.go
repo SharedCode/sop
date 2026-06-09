@@ -38,7 +38,7 @@ func TestRealDBIntegration_JoinFlow(t *testing.T) {
 		Variables: make(map[string]any),
 		CurrentDB: "dev_db",
 	})
-	ctx = context.WithValue(ctx, "verbose", true)
+	ctx = context.WithValue(ctx, RunnerSessionKey, &RunnerSession{Verbose: true})
 
 	// Script
 	scriptRaw := `[

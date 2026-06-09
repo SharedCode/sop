@@ -1,6 +1,7 @@
 {{define "scripts_part10"}}
 <script>
     const setupWizardAIConfigDefaults = {{.SetupWizardAIConfigJSON}};
+    const setupWizardModelCatalog = {{.ModelCatalogJSON}};
 
     function toggleEnterpriseBrain() {
         // Legacy function, kept for safety if referenced elsewhere, but effectively superseded by toggleManualEnterpriseBrain
@@ -57,7 +58,26 @@
     }
 
     function isLocalProviderValue(value) {
-        return (value || '').startsWith('ollama') || (value || '').startsWith('local');
+        const raw = (value || '').trim();
+        const parts = splitProviderValue(raw);
+        const normalizedValue = `${parts.provider || ''}:${parts.model || ''}`.toLowerCase();
+        const localGroup = Array.isArray(setupWizardModelCatalog?.embedder)
+            ? setupWizardModelCatalog.embedder.find(group => (group.label || '').toLowerCase() === 'local')
+            : null;
+        const isCatalogLocal = !!localGroup?.options?.some(option => {
+            return (option.value || '').toLowerCase() === normalizedValue || (option.value || '').toLowerCase() === (parts.provider || '').toLowerCase();
+        });
+
+        return raw.toLowerCase().startsWith('ollama') || raw.toLowerCase().startsWith('local') || raw.toLowerCase().startsWith('kelindar') || isCatalogLocal;
+    }
+
+    function isKelindarLocalEmbedderValue(value) {
+        const parts = splitProviderValue(value || '');
+        const normalizedValue = `${parts.provider || ''}:${parts.model || ''}`.toLowerCase();
+        const localGroup = Array.isArray(setupWizardModelCatalog?.embedder)
+            ? setupWizardModelCatalog.embedder.find(group => (group.label || '').toLowerCase() === 'local')
+            : null;
+        return !!localGroup?.options?.some(option => (option.value || '').toLowerCase() === normalizedValue);
     }
 
     function selectProviderOption(select, value, source) {
@@ -112,7 +132,6 @@
         const value = model ? `${provider}:${model}` : provider;
         const options = Array.from(select.options);
         const existingCatalog = options.find(option => option.value === value && option.dataset.injected !== 'env');
-        let existingEnv = options.find(option => option.value === value && option.dataset.injected === 'env');
 
         if (!existingCatalog && source !== 'env') {
             const option = document.createElement('option');
@@ -121,15 +140,11 @@
             select.appendChild(option);
         }
 
-        if (!existingEnv) {
-            const option = document.createElement('option');
-            option.value = value;
-            option.textContent = model ? `${setupProviderLabel(provider)} (${model})` : `${setupProviderLabel(provider)}`;
-            option.dataset.injected = 'env';
-
-            const envGroup = ensureEnvironmentOptgroup(select);
-            envGroup.appendChild(option);
-            existingEnv = option;
+        if (source === 'env') {
+            if (shouldSelect) {
+                selectProviderOption(select, value, source);
+            }
+            return;
         }
 
         if (shouldSelect) {
@@ -204,6 +219,9 @@
         if (!value) {
             return false;
         }
+        if (isKelindarLocalEmbedderValue(value)) {
+            return false;
+        }
         if (isLocalProviderValue(value)) {
             return true;
         }
@@ -262,9 +280,23 @@
         }
     }
 
+    function updateSetupLocalEmbedderNotice() {
+        const select = document.getElementById('setup-embedder-provider');
+        const note = document.getElementById('setup-local-embedder-note');
+        if (!select || !note) return;
+
+        const selectedValue = select.value || '';
+        const isLocal = isLocalProviderValue(selectedValue) || isKelindarLocalEmbedderValue(selectedValue);
+        note.style.display = isLocal ? 'none' : 'block';
+        note.textContent = isLocal
+            ? 'Local kelindar model download will start during Finalize and cache under ~/.cache/sop/models.'
+            : 'Non-local embedders will incur API call charges when vectorizing prompts and Space entries.';
+    }
+
     function handleSetupEmbedderProviderChange() {
         applyEnvSelectionDefaults('setup-embedder-provider', 'setup-embedder-api-key', 'setup-embedder-url');
         toggleProviderAuth();
+        updateSetupLocalEmbedderNotice();
     }
 
     function handleChatSettingsEmbedderProviderChange() {
@@ -383,6 +415,7 @@
         }
 
         toggleProviderAuth();
+        updateSetupLocalEmbedderNotice();
     }
 
     function initializeChatAIConfig() {
@@ -396,18 +429,29 @@
         return fallbackValue;
     }
 
+    function getPreferredAIConfigDefaults() {
+        const envConfig = setupWizardAIConfigDefaults || {};
+        return {
+            brain_provider: envConfig.brain_provider || 'openai',
+            brain_model: envConfig.brain_model || 'gpt-5.4',
+            embedder_provider: envConfig.embedder_provider || 'local',
+            embedder_model: envConfig.embedder_model || 'kelindar'
+        };
+    }
+
     function mergeSetupAIConfig(storedConfig, envConfig) {
+        const defaults = getPreferredAIConfigDefaults();
         const brainSource = storedConfig.brain_source || (envConfig.brain_provider ? 'env' : 'catalog');
         const embedderSource = storedConfig.embedder_source || (envConfig.embedder_provider ? 'env' : 'catalog');
 
         return {
-            brain_provider: storedConfig.brain_provider || envConfig.brain_provider || '',
-            brain_model: storedConfig.brain_model || envConfig.brain_model || '',
+            brain_provider: storedConfig.brain_provider || envConfig.brain_provider || defaults.brain_provider,
+            brain_model: storedConfig.brain_model || envConfig.brain_model || defaults.brain_model,
             brain_source: brainSource,
             brain_url: getStoredAIConfigValue(storedConfig, 'brain_url', brainSource === 'env' ? (envConfig.brain_url || '') : ''),
             brain_api_key: getStoredAIConfigValue(storedConfig, 'brain_api_key', brainSource === 'env' ? (envConfig.brain_api_key || '') : ''),
-            embedder_provider: storedConfig.embedder_provider || envConfig.embedder_provider || '',
-            embedder_model: storedConfig.embedder_model || envConfig.embedder_model || '',
+            embedder_provider: storedConfig.embedder_provider || envConfig.embedder_provider || defaults.embedder_provider,
+            embedder_model: storedConfig.embedder_model || envConfig.embedder_model || defaults.embedder_model,
             embedder_source: embedderSource,
             embedder_url: getStoredAIConfigValue(storedConfig, 'embedder_url', embedderSource === 'env' ? (envConfig.embedder_url || '') : ''),
             embedder_api_key: getStoredAIConfigValue(storedConfig, 'embedder_api_key', embedderSource === 'env' ? (envConfig.embedder_api_key || '') : '')

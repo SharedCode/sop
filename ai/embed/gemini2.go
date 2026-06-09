@@ -7,21 +7,41 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
 // GeminiEmbedder connects to the Google Generative Language API to generate semantic embeddings.
 type GeminiEmbedder struct {
-	apiKey string
-	model  string
+	apiKey               string
+	model                string
+	outputDimensionality int
 }
 
 // NewGemini creates a new Google Gemini embedder.
 func NewGemini(apiKey, model string) *GeminiEmbedder {
-	if model == "" {
-		model = "gemini-embedding-001" // Typically 768 dimensions
+	model = sanitizeModelName(model)
+	outputDimensionality := 0
+	if strings.Contains(strings.ToLower(model), "embedding-2") || strings.Contains(strings.ToLower(model), "embedding-001") {
+		outputDimensionality = 768
 	}
-	return &GeminiEmbedder{apiKey: apiKey, model: model}
+	return &GeminiEmbedder{apiKey: apiKey, model: model, outputDimensionality: outputDimensionality}
+}
+
+func sanitizeModelName(model string) string {
+	model = strings.TrimSpace(model)
+	lower := strings.ToLower(model)
+	if strings.HasPrefix(lower, "models/") {
+		model = lower[len("models/"):]
+	}
+	if model == "" {
+		return "gemini-embedding-2"
+	}
+	return strings.ToLower(model)
+}
+
+func normalizedModelName(model string) string {
+	return "models/" + sanitizeModelName(model)
 }
 
 func (e *GeminiEmbedder) Name() string { return "gemini-" + e.model }
@@ -36,8 +56,10 @@ type geminiContent struct {
 }
 
 type geminiContentRequest struct {
-	Model   string        `json:"model"`
-	Content geminiContent `json:"content"`
+	Model                string        `json:"model"`
+	Content              geminiContent `json:"content"`
+	TaskType             string        `json:"taskType,omitempty"`
+	OutputDimensionality int           `json:"outputDimensionality,omitempty"`
 }
 
 type geminiBatchEmbedRequest struct {
@@ -58,7 +80,7 @@ func (e *GeminiEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]fl
 		return nil, fmt.Errorf("gemini api key is missing")
 	}
 
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:batchEmbedContents?key=%s", e.model, e.apiKey)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/%s:batchEmbedContents?key=%s", normalizedModelName(e.model), e.apiKey)
 
 	out := make([][]float32, 0, len(texts))
 	chunkSize := 100 // Gemini has a limit of 100 requests per batch
@@ -76,10 +98,10 @@ func (e *GeminiEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]fl
 				text = " "
 			}
 			reqs[j] = geminiContentRequest{
-				Model: fmt.Sprintf("models/%s", e.model),
-				Content: geminiContent{
-					Parts: []geminiPart{{Text: text}},
-				},
+				Model:                normalizedModelName(e.model),
+				Content:              geminiContent{Parts: []geminiPart{{Text: text}}},
+				TaskType:             "RETRIEVAL_DOCUMENT",
+				OutputDimensionality: e.outputDimensionality,
 			}
 		}
 

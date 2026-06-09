@@ -22,6 +22,26 @@ SOP functions as a compiler for this new language:
 
 This shifts the role of the AI from a passive "assistant" to an active **development platform**, where the "code" is natural language and the "binary" is the JSON-based Script definition.
 
+## Recommended Authoring Workflow
+
+The most reliable way to build automations in SOP is to treat script authoring as an incremental engineering workflow rather than one large generation step.
+
+1.  **Define the atomic function**: Start with one narrow script that solves a single business rule, such as computing churn risk for one customer.
+2.  **Dry-run and inspect**: Execute that script with representative inputs, inspect the trace, and correct the rule before composing anything larger.
+3.  **Compose the controller**: Build the higher-level workflow as a loop or orchestrator that calls the verified atomic script instead of duplicating its logic inline.
+4.  **Promote to scheduled automation**: Once the trace is correct and repeatable, save the workflow as a reusable batch job or callable script.
+
+This pattern preserves determinism. The atomic script becomes a stable unit, the controller stays simple, and later business-rule changes happen in one place.
+
+### Worked Example: Function Then Controller
+
+One effective pattern is to first author a script that evaluates a single record, then compose a second script that streams over the full dataset and calls that atomic script for each item.
+
+*   **Atomic Step**: A script like `check_churn_risk` can fetch one customer's orders, evaluate the risk rule, and return structured output.
+*   **Verification Step**: Run the atomic script with a known sample input and inspect the execution trace before using it elsewhere.
+*   **Controller Step**: A second script can scan all customers, call `check_churn_risk`, and branch on the result for logging, coupon generation, or downstream actions.
+*   **Operational Result**: The logic stays composable, reviewable, and schedulable without forcing the model to regenerate the whole workflow on every run.
+
 ## The Hardship: Growing Pains
 
 ### 1. The "Chatty" Trap

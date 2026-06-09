@@ -1042,6 +1042,9 @@
                     <button type="button" onclick="testSetupEmbedderConnection()" style="padding: 4px 10px; border-radius: 3px; border: 1px solid var(--border-color); background: var(--pre-bg); color: var(--text-color); cursor: pointer;">Test Embedder Connection</button>
                     <div id="setup-embedder-test-status" style="display: none; font-size: 12px;"></div>
                 </div>
+                <div id="setup-local-embedder-note" style="display: none; margin-top: 8px; padding: 8px 10px; border-radius: 4px; background: rgba(255, 184, 77, 0.12); border: 1px solid rgba(255, 184, 77, 0.35); color: var(--text-color); font-size: 12px; line-height: 1.4;">
+                    Non-local embedders will incur API call charges when vectorizing prompts and Space entries.
+                </div>
             </div>
             <div style="margin-bottom: 15px;">
                 <small style="color: var(--text-muted);">Get Keys: <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color: var(--active-bg);">Google Gemini</a> | <a href="https://platform.openai.com/api-keys" target="_blank" style="color: var(--active-bg);">OpenAI</a></small>

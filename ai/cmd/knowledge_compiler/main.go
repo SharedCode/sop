@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/yuin/goldmark"
@@ -99,6 +101,9 @@ func getHeadingText(n *ast.Heading, source []byte) string {
 
 var parsedFiles = make(map[string]*Section)
 var baseURL string
+var description string
+var inputFile string
+var singleFileMode bool
 
 func parseMarkdownToTree(filePath string, defaultTitle string) *Section {
 	absPath, err := filepath.Abs(filePath)
@@ -154,8 +159,8 @@ func parseMarkdownToTree(filePath string, defaultTitle string) *Section {
 				stack = stack[:len(stack)-1]
 			}
 
-			if level >= 4 {
-				// Flatten any heading deeper than L3 directly into the L3 body
+			if level >= 4 && !singleFileMode {
+				// In repo-wide sweeps, keep legacy behavior and fold deep headings into the parent body.
 				prefix := strings.Repeat("#", level)
 				textStr := prefix + " " + title
 				stack[len(stack)-1].Paragraphs = append(stack[len(stack)-1].Paragraphs, textStr)
@@ -186,6 +191,14 @@ func parseMarkdownToTree(filePath string, defaultTitle string) *Section {
 	return root
 }
 
+func resetCompilerState() {
+	parsedFiles = make(map[string]*Section)
+	allChunks = nil
+	allDocuments = nil
+	catGraphMap = make(map[string]*memory.Category)
+	catDescriptions = make(map[string]string)
+}
+
 func findRepoRoot() string {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -207,6 +220,8 @@ func findRepoRoot() string {
 	return "."
 }
 
+const categorySlashPlaceholder = "\u0000SLASH\u0000"
+
 var allChunks []KnowledgeChunk
 var allDocuments []*memory.Document
 var catGraphMap = make(map[string]*memory.Category)
@@ -215,21 +230,47 @@ var catDescriptions = make(map[string]string)
 type KnowledgeChunk struct {
 	ID          string   `json:"id"`
 	Category    string   `json:"category"`
-	Text        string   `json:"text"`
+	CategoryKey string   `json:"-"`
+	Title       string   `json:"title"`
+	Summaries   []string `json:"summaries"`
 	Description string   `json:"description"`
+	Sources     []string `json:"sources"`
 	DocumentID  sop.UUID `json:"document_id"`
+	Explicit    bool     `json:"explicit"`
+}
+
+type explicitItemBlock struct {
+	Title     string
+	Summaries []string
+	Body      string
+	Sources   []string
+}
+
+func escapeCategoryPart(value string) string {
+	return strings.ReplaceAll(value, " / ", categorySlashPlaceholder)
+}
+
+func unescapeCategoryPart(value string) string {
+	return strings.ReplaceAll(value, categorySlashPlaceholder, " / ")
 }
 
 func getCat(catPath string) *memory.Category {
 	if c, ok := catGraphMap[catPath]; ok {
 		return c
 	}
+
 	parts := strings.Split(catPath, " / ")
+	displayParts := make([]string, len(parts))
+	for i, part := range parts {
+		displayParts[i] = unescapeCategoryPart(part)
+	}
+
 	id := sop.UUID(uuid.New())
+	displayPath := strings.Join(displayParts, " / ")
 	c := &memory.Category{
 		ID:   id,
-		Name: removePrefix(parts[len(parts)-1], prefix),
-		Path: catPath,
+		Name: removePrefix(displayParts[len(displayParts)-1], prefix),
+		Path: displayPath,
 	}
 	if len(parts) > 1 {
 		parentPath := strings.Join(parts[:len(parts)-1], " / ")
@@ -243,20 +284,254 @@ func getCat(catPath string) *memory.Category {
 func buildExportItems(chunks []KnowledgeChunk) []memory.ExportItem[map[string]any] {
 	exportItems := make([]memory.ExportItem[map[string]any], 0, len(chunks))
 	for _, chunk := range chunks {
-		cat := getCat(chunk.Category)
+		catKey := chunk.CategoryKey
+		if catKey == "" {
+			parts := strings.Split(chunk.Category, " / ")
+			encodedParts := make([]string, len(parts))
+			for i, part := range parts {
+				encodedParts[i] = escapeCategoryPart(part)
+			}
+			catKey = strings.Join(encodedParts, " / ")
+		}
+		cat := getCat(catKey)
+		summaries := chunk.Summaries
+		sources := normalizeSourceURLs(chunk.Sources)
+		if len(summaries) == 0 && chunk.Title != "" {
+			summaries = []string{chunk.Title}
+		}
 		exportItems = append(exportItems, memory.ExportItem[map[string]any]{
 			CategoryPath: cat.ID.String(),
-			DocID:        chunk.DocumentID.String(),
+			DocID:        memory.DocIDs(sources),
 			Data: map[string]any{
+				"title":         chunk.Title,
+				"text":          chunk.Title,
 				"category":      cat.Name,
 				"category_path": cat.Path,
 				"description":   chunk.Description,
+				"sources":       sources,
 				"original_id":   chunk.ID,
 			},
-			Summaries: []string{chunk.Text},
+			Summaries: summaries,
 		})
 	}
 	return exportItems
+}
+
+func normalizeStructuredLine(line string) string {
+	trimmed := strings.TrimSpace(line)
+	trimmed = strings.TrimPrefix(trimmed, "- ")
+	return strings.TrimSpace(trimmed)
+}
+
+func splitSources(value string) []string {
+	parts := strings.Split(value, ",")
+	seen := make(map[string]bool)
+	var out []string
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" || seen[part] {
+			continue
+		}
+		seen[part] = true
+		out = append(out, part)
+	}
+	return out
+}
+
+func normalizeSourceURL(source string) string {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		return source
+	}
+	if strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") || strings.HasPrefix(source, "file://") {
+		return source
+	}
+	if baseURL == "" {
+		return source
+	}
+
+	cleaned := filepath.ToSlash(source)
+	cleaned = strings.TrimPrefix(cleaned, "./")
+	cleaned = strings.TrimPrefix(cleaned, "/")
+	if cleaned == "." {
+		return strings.TrimSuffix(baseURL, "/")
+	}
+
+	resolved, err := url.JoinPath(baseURL, cleaned)
+	if err != nil {
+		return strings.TrimSuffix(baseURL, "/") + "/" + cleaned
+	}
+	return resolved
+}
+
+func normalizeSourceURLs(sources []string) []string {
+	if len(sources) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(sources))
+	seen := make(map[string]bool)
+	for _, source := range sources {
+		resolved := normalizeSourceURL(source)
+		if resolved == "" || seen[resolved] {
+			continue
+		}
+		seen[resolved] = true
+		out = append(out, resolved)
+	}
+	return out
+}
+
+func normalizeExplicitParagraphs(paragraphs []string) []string {
+	markers := []string{"Summary:", "Body:", "Sources:", "Source:"}
+	normalized := make([]string, 0, len(paragraphs))
+
+	for _, paragraph := range paragraphs {
+		var b strings.Builder
+		for i := 0; i < len(paragraph); {
+			matched := ""
+			for _, marker := range markers {
+				if strings.HasPrefix(paragraph[i:], marker) {
+					matched = marker
+					break
+				}
+			}
+			if matched != "" {
+				if b.Len() > 0 && b.String()[b.Len()-1] != '\n' {
+					b.WriteByte('\n')
+				}
+				b.WriteString(matched)
+				i += len(matched)
+				continue
+			}
+			b.WriteByte(paragraph[i])
+			i++
+		}
+		normalized = append(normalized, b.String())
+	}
+
+	return normalized
+}
+
+func parseExplicitItemBlocks(paragraphs []string) ([]explicitItemBlock, []string) {
+	lines := strings.Split(strings.Join(normalizeExplicitParagraphs(paragraphs), "\n"), "\n")
+	var blocks []explicitItemBlock
+	var current *explicitItemBlock
+	var bodyLines []string
+	inBody := false
+	var leftover []string
+
+	finishCurrent := func() {
+		if current == nil {
+			return
+		}
+		current.Body = strings.TrimSpace(strings.Join(bodyLines, "\n"))
+		if current.Title != "" && len(current.Summaries) > 0 && current.Body != "" {
+			blocks = append(blocks, *current)
+		} else {
+			if current.Title != "" {
+				leftover = append(leftover, "Item: "+current.Title)
+			}
+			for _, s := range current.Summaries {
+				leftover = append(leftover, "Summary: "+s)
+			}
+			if current.Body != "" {
+				leftover = append(leftover, "Body:")
+				leftover = append(leftover, current.Body)
+			}
+			if len(current.Sources) > 0 {
+				leftover = append(leftover, "Sources: "+strings.Join(current.Sources, ", "))
+			}
+		}
+		current = nil
+		bodyLines = nil
+		inBody = false
+	}
+
+	for _, rawLine := range lines {
+		normalized := normalizeStructuredLine(rawLine)
+		if current == nil {
+			if strings.HasPrefix(normalized, "Item:") {
+				current = &explicitItemBlock{Title: strings.TrimSpace(strings.TrimPrefix(normalized, "Item:"))}
+				continue
+			}
+			if strings.TrimSpace(rawLine) != "" {
+				leftover = append(leftover, rawLine)
+			}
+			continue
+		}
+
+		if strings.HasPrefix(normalized, "Item:") {
+			finishCurrent()
+			current = &explicitItemBlock{Title: strings.TrimSpace(strings.TrimPrefix(normalized, "Item:"))}
+			continue
+		}
+
+		if strings.HasPrefix(normalized, "Summary:") {
+			inBody = false
+			summary := strings.TrimSpace(strings.TrimPrefix(normalized, "Summary:"))
+			if summary != "" && len(current.Summaries) < 5 {
+				current.Summaries = append(current.Summaries, summary)
+			}
+			continue
+		}
+
+		if strings.HasPrefix(normalized, "Body:") {
+			inBody = true
+			bodyText := strings.TrimSpace(strings.TrimPrefix(normalized, "Body:"))
+			if bodyText != "" {
+				bodyLines = append(bodyLines, bodyText)
+			}
+			continue
+		}
+
+		if strings.HasPrefix(normalized, "Sources:") {
+			inBody = false
+			current.Sources = append(current.Sources, splitSources(strings.TrimSpace(strings.TrimPrefix(normalized, "Sources:")))...)
+			continue
+		}
+
+		if strings.HasPrefix(normalized, "Source:") {
+			inBody = false
+			current.Sources = append(current.Sources, splitSources(strings.TrimSpace(strings.TrimPrefix(normalized, "Source:")))...)
+			continue
+		}
+
+		if inBody {
+			bodyLines = append(bodyLines, rawLine)
+		} else if strings.TrimSpace(rawLine) != "" {
+			leftover = append(leftover, rawLine)
+		}
+	}
+
+	finishCurrent()
+
+	for i := range blocks {
+		blocks[i].Body = cleanText(blocks[i].Body)
+		if len(blocks[i].Sources) > 1 {
+			sort.Strings(blocks[i].Sources)
+		}
+	}
+
+	var cleanedLeftover []string
+	for _, line := range leftover {
+		if strings.TrimSpace(line) != "" {
+			cleanedLeftover = append(cleanedLeftover, line)
+		}
+	}
+
+	return blocks, cleanedLeftover
+}
+
+func extractCategoryDescription(paragraphs []string, fallback string) string {
+	if len(paragraphs) == 0 {
+		return cleanText(fallback)
+	}
+
+	desc := strings.TrimSpace(paragraphs[0])
+	if desc == "" {
+		desc = fallback
+	}
+	return cleanText(desc)
 }
 
 func parseUnlinkedFiles(repoRoot string) {
@@ -299,6 +574,7 @@ func parseUnlinkedFiles(repoRoot string) {
 			strings.Contains(upperName, "AI_COPILOT") ||
 			strings.Contains(upperName, "SYSTEM_KNOWLEDGE") ||
 			strings.HasPrefix(upperName, "CLASSIFY_") ||
+			strings.Contains(upperName, "KB_CURATION_MANIFEST") ||
 			strings.Contains(upperName, "CURRENT_DESIGN_PLAN") {
 			return nil
 		}
@@ -369,6 +645,72 @@ func parseUnlinkedFiles(repoRoot string) {
 	})
 }
 
+func parseOneMarkdownFile(repoRoot string, file string) {
+	absPath, err := filepath.Abs(file)
+	if err != nil {
+		return
+	}
+
+	filename := strings.ToUpper(filepath.Base(absPath))
+	if strings.Contains(filename, "CODE_OF_CONDUCT") ||
+		strings.Contains(filename, "LICENSE") ||
+		strings.Contains(filename, "CHANGELOG") ||
+		strings.Contains(filename, "POST") ||
+		strings.Contains(filename, "ANNOUNCEMENT") ||
+		strings.Contains(filename, "RELEASE") ||
+		strings.Contains(filename, "PROPOSAL") ||
+		strings.Contains(filename, "CONTRIBUTING") ||
+		strings.Contains(filename, "LINKEDIN") ||
+		strings.Contains(filename, "DEV_TO_POST") ||
+		strings.Contains(filename, "AI_COPILOT") ||
+		strings.Contains(filename, "SYSTEM_KNOWLEDGE") ||
+		strings.HasPrefix(filename, "CLASSIFY_") ||
+		strings.Contains(filename, "KB_CURATION_MANIFEST") ||
+		strings.Contains(filename, "CURRENT_DESIGN_PLAN") {
+		fmt.Printf("Skipping ineligible markdown file: %s\n", absPath)
+		return
+	}
+
+	title := strings.TrimSuffix(filepath.Base(absPath), filepath.Ext(absPath))
+	singleFileMode = true
+	tree := parseMarkdownToTree(absPath, title)
+	if tree == nil {
+		return
+	}
+
+	relPath, _ := filepath.Rel(repoRoot, absPath)
+	docID := sop.NewUUID()
+
+	urlVal := "file://" + relPath
+	if baseURL != "" {
+		if strings.HasSuffix(baseURL, "/") {
+			urlVal = baseURL + relPath
+		} else {
+			urlVal = baseURL + "/" + relPath
+		}
+	}
+
+	doc := &memory.Document{
+		ID:          docID,
+		Title:       title,
+		URL:         urlVal,
+		ContentType: "text/markdown",
+		Content:     "",
+	}
+	allDocuments = append(allDocuments, doc)
+
+	if len(tree.Children) > 0 {
+		for _, rootSection := range tree.Children {
+			if len(rootSection.Children) == 0 && len(rootSection.Paragraphs) == 0 {
+				continue
+			}
+			processFlattenedTreeIntoChunks(rootSection, []string{rootSection.Title}, docID)
+		}
+	} else {
+		processFlattenedTreeIntoChunks(tree, []string{tree.Title}, docID)
+	}
+}
+
 func processFlattenedTreeIntoChunks(node *Section, currentPathContext []string, docID sop.UUID) {
 	var normalizedPaths []string
 	for _, p := range currentPathContext {
@@ -382,11 +724,15 @@ func processFlattenedTreeIntoChunks(node *Section, currentPathContext []string, 
 		catPath = normalizeCategoryName(node.Title)
 	}
 
-	desc := node.Title
-	if len(node.Paragraphs) > 0 {
-		desc = node.Paragraphs[0]
+	encodedPaths := make([]string, 0, len(normalizedPaths))
+	for _, p := range normalizedPaths {
+		encodedPaths = append(encodedPaths, escapeCategoryPart(p))
 	}
-	cleanedDesc := cleanText(desc)
+	catKey := strings.Join(encodedPaths, " / ")
+
+	explicitBlocks, remainingParagraphs := parseExplicitItemBlocks(node.Paragraphs)
+
+	cleanedDesc := extractCategoryDescription(remainingParagraphs, node.Title)
 	if len(cleanedDesc) > 500 {
 		runes := []rune(cleanedDesc)
 		if len(runes) > 500 {
@@ -395,20 +741,40 @@ func processFlattenedTreeIntoChunks(node *Section, currentPathContext []string, 
 	}
 	catDescriptions[catPath] = cleanedDesc
 
-	body := strings.TrimSpace(strings.Join(node.Paragraphs, "\n"))
+	for _, block := range explicitBlocks {
+		idPrefix := strings.ReplaceAll(block.Title, " ", "_")
+		allChunks = append(allChunks, KnowledgeChunk{
+			ID:          fmt.Sprintf("%s_item_%d", idPrefix, len(allChunks)),
+			Category:    catPath,
+			CategoryKey: catKey,
+			Title:       removePrefix(cleanText(block.Title), prefix),
+			Summaries:   block.Summaries,
+			Description: block.Body,
+			Sources:     block.Sources,
+			DocumentID:  docID,
+			Explicit:    true,
+		})
+	}
+
+	body := strings.TrimSpace(strings.Join(remainingParagraphs, "\n"))
 
 	if strings.Contains(node.Title, "Execute Script Tool") {
 		fmt.Printf("Execute Script Tool -> bodyLen: %d, children: %d\n", len(body), len(node.Children))
 	}
-	// Create an Item if we have substantial content AND (length > 500 OR it's a leaf node)
-	if len(body) >= 10 && (len(body) > 500 || len(node.Children) == 0) {
+	// In curated input-file mode, the paragraph under a category heading is treated as
+	// description metadata rather than a synthetic section item. Keep the legacy
+	// synthetic-item behavior only for repo-wide sweeps.
+	if !singleFileMode && len(body) >= 10 && (len(body) > 500 || len(node.Children) == 0) {
 		idPrefix := strings.ReplaceAll(node.Title, " ", "_")
 		allChunks = append(allChunks, KnowledgeChunk{
 			ID:          fmt.Sprintf("%s_section_%d", idPrefix, len(allChunks)),
 			Category:    catPath,
-			Text:        removePrefix(cleanText(node.Title), prefix),
+			CategoryKey: catKey,
+			Title:       removePrefix(cleanText(node.Title), prefix),
+			Summaries:   []string{removePrefix(cleanText(node.Title), prefix)},
 			Description: cleanText(body),
 			DocumentID:  docID,
+			Explicit:    false,
 		})
 	}
 
@@ -421,51 +787,75 @@ func processFlattenedTreeIntoChunks(node *Section, currentPathContext []string, 
 
 var prefix string
 
+func buildKnowledgeBaseConfig(desc, systemPrompt string, documentMode bool) *memory.KnowledgeBaseConfig {
+	return &memory.KnowledgeBaseConfig{
+		IsPersona:    true,
+		Description:  strings.TrimSpace(desc),
+		SystemPrompt: strings.TrimSpace(systemPrompt),
+		DocumentMode: documentMode,
+	}
+}
+
 func main() {
 	flag.StringVar(&baseURL, "base-url", "", "Base URL for documents")
+	flag.StringVar(&description, "desc", "", "Optional description to persist on the generated KB config")
 	flag.StringVar(&prefix, "prefix", "", "Prefix to remove from category names")
+	flag.StringVar(&inputFile, "input", "", "Optional single markdown file to compile instead of sweeping the repo")
 	flag.Parse()
 
+	singleFileMode = inputFile != ""
+	resetCompilerState()
 	repoRoot := findRepoRoot()
 
-	fmt.Println("Sweeping unlinked Markdown files...")
-	parseUnlinkedFiles(repoRoot)
+	curatedMode := inputFile != ""
+	if curatedMode {
+		fmt.Printf("Compiling single markdown file: %s\n", inputFile)
+		parseOneMarkdownFile(repoRoot, inputFile)
+	} else {
+		fmt.Println("Sweeping unlinked Markdown files...")
+		parseUnlinkedFiles(repoRoot)
+	}
 
-	fmt.Println("Rolling up single-item sub-categories...")
-	changed := true
-	for changed {
-		changed = false
-		itemsPerCat := make(map[string][]int)
-		for i, chunk := range allChunks {
-			itemsPerCat[chunk.Category] = append(itemsPerCat[chunk.Category], i)
-		}
+	if !curatedMode {
+		fmt.Println("Rolling up single-item sub-categories...")
+		changed := true
+		for changed {
+			changed = false
+			itemsPerCat := make(map[string][]int)
+			for i, chunk := range allChunks {
+				itemsPerCat[chunk.Category] = append(itemsPerCat[chunk.Category], i)
+			}
 
-		for catPath, indices := range itemsPerCat {
-			if len(indices) == 1 && strings.Contains(catPath, " / ") {
-				hasChildren := false
-				for otherCat := range itemsPerCat {
-					if strings.HasPrefix(otherCat, catPath+" / ") {
-						hasChildren = true
-						break
-					}
-				}
-
-				if !hasChildren {
-					parts := strings.Split(catPath, " / ")
-					parentPath := strings.Join(parts[:len(parts)-1], " / ")
-
-					idx := indices[0]
-
-					// Ensure the original ## header name is not lost when flattening
-					headerName := parts[len(parts)-1]
-					if !strings.HasPrefix(allChunks[idx].Text, headerName) {
-						if allChunks[idx].Text != headerName {
-							allChunks[idx].Text = headerName + " - " + allChunks[idx].Text
+			for catPath, indices := range itemsPerCat {
+				if len(indices) == 1 && strings.Contains(catPath, " / ") {
+					hasChildren := false
+					for otherCat := range itemsPerCat {
+						if strings.HasPrefix(otherCat, catPath+" / ") {
+							hasChildren = true
+							break
 						}
 					}
 
-					allChunks[idx].Category = parentPath
-					changed = true
+					if !hasChildren {
+						parts := strings.Split(catPath, " / ")
+						parentPath := strings.Join(parts[:len(parts)-1], " / ")
+
+						idx := indices[0]
+						if allChunks[idx].Explicit {
+							continue
+						}
+
+						// Ensure the original ## header name is not lost when flattening
+						headerName := parts[len(parts)-1]
+						if len(allChunks[idx].Summaries) > 0 && !strings.HasPrefix(allChunks[idx].Summaries[0], headerName) {
+							if allChunks[idx].Summaries[0] != headerName {
+								allChunks[idx].Summaries[0] = headerName + " - " + allChunks[idx].Summaries[0]
+							}
+						}
+
+						allChunks[idx].Category = parentPath
+						changed = true
+					}
 				}
 			}
 		}
@@ -490,11 +880,7 @@ func main() {
 	}
 
 	outObj := memory.ExportData[map[string]any]{
-		Config: &memory.KnowledgeBaseConfig{
-			IsPersona:    true,
-			SystemPrompt: systemPrompt,
-			DocumentMode: baseURL != "",
-		},
+		Config:     buildKnowledgeBaseConfig(description, systemPrompt, baseURL != ""),
 		Categories: categories,
 		Documents:  allDocuments,
 		Items:      exportItems,

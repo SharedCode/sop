@@ -3,7 +3,11 @@
 > **⚠️ LEGACY / PREDECESSOR COMPONENT ⚠️**
 > This document describes the bare-metal physical setup of the predecessor Vector DB in SOP (Inverted File Index using B-Trees).
 > 
-> **Recommendation:** The **Active Memory & Dynamic Vector Store** is the recommended vector architecture moving forward. It is fully supported by the UI's KnowledgeBase Studio. For the recommended high-level AI cognitive architecture (STM/LTM, Episodic memory, and dynamic vector stores), please see `ai/memory/ACTIVE_MEMORY_DESIGN.md`.
+> **Maintenance status:** This document is retained for backward reference and compatibility context. It is not the maintained design surface for current product changes.
+>
+> **Support status:** The predecessor vector store remains fully supported for backward compatibility, and its content can be imported into the newer Memory Spaces model.
+>
+> **Recommendation:** The **Active Memory & Dynamic Vector Store** is the maintained vector architecture going forward. It is supported by the UI's KnowledgeBase Studio and is the correct place for current embedding, routing, and AI-memory algorithm changes. For the maintained cognitive architecture (STM/LTM, episodic memory, dynamic vector stores, and the forward import path into Spaces), see `ai/memory/ACTIVE_MEMORY_DESIGN.md` and `ai/DYNAMIC_VECTOR_STORE_DESIGN.md`.
 
 ## 1. Core Problem: Indexing High-Dimensional Vectors
 We explored why standard B-Tree indexing fails for raw vectors:

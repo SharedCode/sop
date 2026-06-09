@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	log "log/slog"
 	"path/filepath"
 
 	"github.com/sharedcode/sop"
@@ -31,6 +32,23 @@ func HashString(s string) string {
 	return fmt.Sprintf("%x", h.Sum64())
 }
 
+func prewarmGeneratorCache(ctx context.Context, gen ai.Generator, systemPrompt string, tools []ai.ToolDefinition) {
+	if gen == nil {
+		return
+	}
+
+	if systemPrompt == "" && len(tools) == 0 {
+		return
+	}
+
+	if err := gen.PrewarmCache(ctx, ai.GenOptions{
+		SystemPrompt: systemPrompt,
+		Tools:        tools,
+	}); err != nil {
+		log.Warn("generator cache prewarm failed", "generator", gen.Name(), "error", err)
+	}
+}
+
 // SetupInfrastructure initializes the Embedder and Vector Index based on the configuration.
 func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai.Embeddings, *database.Database, string, vector.Config, error) {
 	// 1. Initialize Embedder
@@ -54,6 +72,28 @@ func SetupInfrastructure(ctx context.Context, cfg Config, deps Dependencies) (ai
 		apiKey, _ := cfg.Embedder.Options["api_key"].(string)
 		model, _ := cfg.Embedder.Options["model"].(string)
 		emb = embed.NewGemini(apiKey, model)
+	case "local":
+		modelPath, _ := cfg.Embedder.Options["model_path"].(string)
+		if modelPath == "" {
+			modelPath, _ = cfg.Embedder.Options["model"].(string)
+		}
+		providerName, _ := cfg.Embedder.Options["provider"].(string)
+		gpuLayers := 0
+		switch v := cfg.Embedder.Options["gpu_layers"].(type) {
+		case float64:
+			gpuLayers = int(v)
+		case int:
+			gpuLayers = v
+		case int32:
+			gpuLayers = int(v)
+		case int64:
+			gpuLayers = int(v)
+		}
+		var err error
+		emb, err = embed.NewLocalWithProvider(providerName, modelPath, gpuLayers)
+		if err != nil {
+			return nil, nil, "", vector.Config{}, err
+		}
 	default:
 		// Default: Simple Embedder with domain-specific synonyms
 		// We use a higher dimensionality (1024) to reduce collisions in the simple hash embedder
@@ -288,5 +328,7 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (ai.Agent
 	}
 
 	svc := NewService(dom, deps.SystemDB, deps.Databases, gen, cfg.Pipeline, fullRegistry, serviceObfuscation)
+	prewarmGeneratorCache(ctx, gen, cfg.SystemPrompt, nil)
+
 	return svc, nil
 }

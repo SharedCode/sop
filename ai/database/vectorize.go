@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"encoding/json"
+	"strings"
 
 	"github.com/sharedcode/sop/ai/memory"
 
@@ -16,6 +17,43 @@ import (
 
 // TODO: refactor Vectorize & VectorizeCategories so they can share common Category/Batched Items'
 // vectorizer private function.
+
+const maxDomainAnchorLength = 256
+
+func chooseDomainAnchor(kb *memory.KnowledgeBase[map[string]any], cfg *memory.KnowledgeBaseConfig) string {
+	if name := strings.TrimSpace(kb.Store.Name()); name != "" && len([]rune(name)) <= maxDomainAnchorLength {
+		return name
+	}
+	if desc := strings.TrimSpace(cfg.Description); desc != "" && len([]rune(desc)) <= maxDomainAnchorLength {
+		return desc
+	}
+	return strings.TrimSpace(cfg.SystemPrompt)
+}
+
+func ensureDomainReference(ctx context.Context, kb *memory.KnowledgeBase[map[string]any], cfg *memory.KnowledgeBaseConfig, embedder ai.Embeddings) error {
+	if kb == nil || cfg == nil {
+		return nil
+	}
+
+	if len(cfg.DomainReference) == 0 {
+		anchor := chooseDomainAnchor(kb, cfg)
+		if anchor == "" {
+			return nil
+		}
+
+		vecs, err := embed.QueryTexts(ctx, embedder, []string{anchor})
+		if err != nil {
+			return err
+		}
+		if len(vecs) == 0 || len(vecs[0]) == 0 {
+			return nil
+		}
+		cfg.DomainReference = vecs[0]
+	}
+
+	kb.Store.SetDomainReference(cfg.DomainReference)
+	return kb.SetConfig(ctx, cfg)
+}
 
 // Vectorize processes the store's KnowledgeBase in batches, managing its own transactions and cursor state.
 func (db *Database) Vectorize(
@@ -51,10 +89,10 @@ func (db *Database) Vectorize(
 		cfg = &memory.KnowledgeBaseConfig{
 			EmbedderDimension: embedderDim,
 		}
-		if err := kb.SetConfig(ctx, cfg); err != nil {
-			tx.Rollback(ctx)
-			return err
-		}
+	}
+	if err := ensureDomainReference(ctx, kb, cfg, embedder); err != nil {
+		tx.Rollback(ctx)
+		return err
 	}
 
 	catBtree, err := kb.Store.Categories(ctx)
@@ -114,7 +152,7 @@ func (db *Database) Vectorize(
 			break
 		}
 
-		log.Info("Processing category", "catID", catID, "catName", cat.Name)
+		log.Debug("Processing category", "catID", catID, "catName", cat.Name)
 
 		if len(cat.CenterVector) > 0 {
 			oldCategoryVectors[cat.ID] = cat.CenterVector
@@ -124,15 +162,15 @@ func (db *Database) Vectorize(
 
 		catCenterVector := cat.CenterVector
 
-		// Vectorize the category itself if outdated
-		embedText := cat.Description
+		// Vectorize the category itself using its own name as the semantic anchor.
+		embedText := strings.TrimSpace(cat.Name)
 		if embedText == "" {
-			embedText = cat.Name
+			embedText = strings.TrimSpace(cat.Description)
 		}
 		expectedCatHash := memory.ComputeVectorHash(embedderDim, embedText)
 		if cat.VectorHash != expectedCatHash || len(cat.CenterVector) == 0 {
-			log.Info("Vectorizing category", "catID", catID)
-			catVecs, err := embedder.EmbedTexts(ctx, []string{embedText})
+			log.Debug("Vectorizing category", "catID", catID)
+			catVecs, err := embed.CategoryTexts(ctx, embedder, []string{embedText})
 			if err != nil {
 				tx.Rollback(ctx)
 				return err
@@ -243,8 +281,8 @@ func (db *Database) Vectorize(
 			// If batch is full, flush and commit
 			if len(batchTasks) >= batchSize {
 				if len(batchSummaries) > 0 {
-					log.Info("Vectorize embedding items batch", "kb_name", kbName, "count", len(batchSummaries))
-					allVecs, err := embedder.EmbedTexts(ctx, batchSummaries)
+					log.Debug("Vectorize embedding items batch", "kb_name", kbName, "count", len(batchSummaries))
+					allVecs, err := embed.DocumentTexts(ctx, embedder, batchSummaries)
 					if err != nil {
 						tx.Rollback(ctx)
 						return err
@@ -322,7 +360,7 @@ func (db *Database) Vectorize(
 				}
 				// Restore item cursor
 				fok, err := itemsBtree.Find(ctx, memory.ItemKey{CategoryID: catID, ItemID: lastItemInCat}, false)
-				log.Info("Restored item cursor", "fok", fok, "err", err, "lastItemInCat", lastItemInCat)
+				log.Debug("Restored item cursor", "fok", fok, "err", err, "lastItemInCat", lastItemInCat)
 				if err != nil {
 					tx.Rollback(ctx)
 					return err
@@ -330,7 +368,7 @@ func (db *Database) Vectorize(
 			}
 
 			iok, err = itemsBtree.Next(ctx)
-			log.Info("After item cursor restore, Next", "iok", iok, "err", err)
+			log.Debug("After item cursor restore, Next", "iok", iok, "err", err)
 		}
 		log.Debug("After items loop", "catID", catID, "totalItemCount", totalItemCount)
 
@@ -347,8 +385,8 @@ func (db *Database) Vectorize(
 	// Flush any remaining batch
 	if len(batchTasks) > 0 {
 		if len(batchSummaries) > 0 {
-			log.Info("Vectorize embedding items batch (final)", "kb_name", kbName, "count", len(batchSummaries))
-			allVecs, err := embedder.EmbedTexts(ctx, batchSummaries)
+			log.Debug("Vectorize embedding items batch (final)", "kb_name", kbName, "count", len(batchSummaries))
+			allVecs, err := embed.DocumentTexts(ctx, embedder, batchSummaries)
 			if err != nil {
 				tx.Rollback(ctx)
 				return err
@@ -370,7 +408,7 @@ func (db *Database) Vectorize(
 	}
 
 	cfg.LastVectorized = time.Now().Unix()
-	log.Info("Saving LastVectorized timestamp", "LastVectorized", cfg.LastVectorized)
+	log.Debug("Saving LastVectorized timestamp", "LastVectorized", cfg.LastVectorized)
 	kb.SetConfig(ctx, cfg)
 	return tx.Commit(ctx)
 }
@@ -410,10 +448,10 @@ func (db *Database) VectorizeCategories(
 		cfg = &memory.KnowledgeBaseConfig{
 			EmbedderDimension: embedderDim,
 		}
-		if err := kb.SetConfig(ctx, cfg); err != nil {
-			tx.Rollback(ctx)
-			return err
-		}
+	}
+	if err := ensureDomainReference(ctx, kb, cfg, embedder); err != nil {
+		tx.Rollback(ctx)
+		return err
 	}
 
 	catBtree, err := kb.Store.Categories(ctx)
@@ -455,7 +493,7 @@ func (db *Database) VectorizeCategories(
 			break
 		}
 
-		log.Info("Processing category", "catID", catID, "catName", cat.Name)
+		log.Debug("Processing category", "catID", catID, "catName", cat.Name)
 
 		if len(cat.CenterVector) > 0 {
 			oldCategoryVectors[cat.ID] = cat.CenterVector
@@ -465,15 +503,15 @@ func (db *Database) VectorizeCategories(
 
 		catCenterVector := cat.CenterVector
 
-		// Vectorize the category itself if outdated
-		embedText := cat.Description
+		// Vectorize the category itself using its own name as the semantic anchor.
+		embedText := strings.TrimSpace(cat.Name)
 		if embedText == "" {
-			embedText = cat.Name
+			embedText = strings.TrimSpace(cat.Description)
 		}
 		expectedCatHash := memory.ComputeVectorHash(embedderDim, embedText)
 		if cat.VectorHash != expectedCatHash || len(cat.CenterVector) == 0 {
-			log.Info("Vectorizing category", "catID", catID)
-			catVecs, err := embedder.EmbedTexts(ctx, []string{embedText})
+			log.Debug("Vectorizing category", "catID", catID)
+			catVecs, err := embed.CategoryTexts(ctx, embedder, []string{embedText})
 			if err != nil {
 				tx.Rollback(ctx)
 				return err
@@ -584,8 +622,8 @@ func (db *Database) VectorizeCategories(
 			// If batch is full, flush and commit
 			if len(batchTasks) >= batchSize {
 				if len(batchSummaries) > 0 {
-					log.Info("Vectorize embedding items batch", "kb_name", kbName, "count", len(batchSummaries))
-					allVecs, err := embedder.EmbedTexts(ctx, batchSummaries)
+					log.Debug("Vectorize embedding items batch", "kb_name", kbName, "count", len(batchSummaries))
+					allVecs, err := embed.DocumentTexts(ctx, embedder, batchSummaries)
 					if err != nil {
 						tx.Rollback(ctx)
 						return err
@@ -653,7 +691,7 @@ func (db *Database) VectorizeCategories(
 				}
 				// Restore item cursor
 				fok, err := itemsBtree.Find(ctx, memory.ItemKey{CategoryID: catID, ItemID: lastItemInCat}, false)
-				log.Info("Restored item cursor", "fok", fok, "err", err, "lastItemInCat", lastItemInCat)
+				log.Debug("Restored item cursor", "fok", fok, "err", err, "lastItemInCat", lastItemInCat)
 				if err != nil {
 					tx.Rollback(ctx)
 					return err
@@ -661,7 +699,7 @@ func (db *Database) VectorizeCategories(
 			}
 
 			iok, err = itemsBtree.Next(ctx)
-			log.Info("After item cursor restore, Next", "iok", iok, "err", err)
+			log.Debug("After item cursor restore, Next", "iok", iok, "err", err)
 		}
 		log.Debug("After items loop", "catID", catID, "totalItemCount", totalItemCount)
 
@@ -676,8 +714,8 @@ func (db *Database) VectorizeCategories(
 	// Flush any remaining batch
 	if len(batchTasks) > 0 {
 		if len(batchSummaries) > 0 {
-			log.Info("Vectorize embedding items batch (final)", "kb_name", kbName, "count", len(batchSummaries))
-			allVecs, err := embedder.EmbedTexts(ctx, batchSummaries)
+			log.Debug("Vectorize embedding items batch (final)", "kb_name", kbName, "count", len(batchSummaries))
+			allVecs, err := embed.DocumentTexts(ctx, embedder, batchSummaries)
 			if err != nil {
 				tx.Rollback(ctx)
 				return err

@@ -16,11 +16,11 @@ The `StoreOptions` struct is the primary way to configure a B-Tree store.
 
 ### Active Persistence Optimization
 
-SOP features a unique optimization for handling large data (e.g., media files, GBs/TBs of data) called **Active Persistence**.
+SOP supports an optimization for handling large data (e.g., media files or other large payloads) called **Active Persistence**.
 
 *   **Configuration**: Set `IsValueDataInNodeSegment = false` and `IsValueDataActivelyPersisted = true`.
 *   **Mechanism**: When an item is added to the B-Tree, the value (blob) is persisted to a separate file **immediately** during the `Add` call, rather than waiting for the transaction commit.
-*   **Benefit**: The final `Commit` operation becomes significantly faster because the heavy lifting of writing large data blobs is already complete. This is ideal for streaming scenarios where data chunks are saved incrementally.
+*   **Benefit**: The final `Commit` operation becomes faster because the large data blobs have already been written. This is useful for streaming scenarios where data chunks are saved incrementally.
 
 | `IsValueDataGloballyCached` | `bool` | Caches the Value in Redis. | `true` for read-heavy workloads. `false` for write-heavy or very large data. |
 | `LeafLoadBalancing` | `bool` | Checks siblings for space before splitting a node. | `false` (default). Set to `true` to save space at the cost of insert latency. |

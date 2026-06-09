@@ -22,6 +22,10 @@ func (m *gate1MockGen) Generate(ctx context.Context, prompt string, opts ai.GenO
 func (m *gate1MockGen) Name() string                                 { return "gate1_mock" }
 func (m *gate1MockGen) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
 
+func (m *gate1MockGen) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func TestGate1_PartialPrefixHandling(t *testing.T) {
 	ctx := context.Background()
 	sysDBOptions := sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	log "log/slog"
+	"regexp"
 	"strings"
 
 	"github.com/sharedcode/sop"
@@ -12,11 +14,104 @@ import (
 	"github.com/sharedcode/sop/ai/memory"
 )
 
-// searchKnowledgeBase searches a specified knowledge base in the given DB.
+// Only strip routing tokens that the system recognizes at the start of the query.
+var routingTokenPattern = regexp.MustCompile(`(?i)^(?:omni|sop)(?:\s*[:/]\s*|\s*->\s*)`)
+
+// stripRoutingPrefix removes only system-recognized routing prefixes.
+// It strips the active KB name prefix when present and then strips
+// leading OMNI/SOP routing tokens, but leaves unknown prefixes untouched.
+func stripRoutingPrefix(query, kbName string) string {
+	trimmed := strings.TrimSpace(query)
+	trimmed = strings.Trim(trimmed, "\"'`")
+	if trimmed == "" {
+		return trimmed
+	}
+
+	startsWithOMNI := routingTokenPattern.MatchString(trimmed) && strings.EqualFold(strings.FieldsFunc(trimmed, func(r rune) bool { return r == ':' || r == '/' || r == '-' || r == '>' })[0], "omni")
+
+	if startsWithOMNI {
+		trimmed = strings.TrimSpace(routingTokenPattern.ReplaceAllString(trimmed, ""))
+		trimmed = strings.TrimSpace(routingTokenPattern.ReplaceAllString(trimmed, ""))
+	} else if routingTokenPattern.MatchString(trimmed) {
+		trimmed = strings.TrimSpace(routingTokenPattern.ReplaceAllString(trimmed, ""))
+	}
+
+	canonicalName := strings.ToLower(ai.CanonicalKBName(kbName))
+	for _, prefix := range []string{"sop:" + canonicalName + ":", canonicalName + ":", "sop:"} {
+		if strings.HasPrefix(strings.ToLower(trimmed), strings.ToLower(prefix)) {
+			trimmed = strings.TrimSpace(trimmed[len(prefix):])
+			break
+		}
+	}
+
+	return strings.TrimSpace(trimmed)
+}
+
+func looksLikeCategoryPath(query string) bool {
+	trimmed := strings.TrimSpace(query)
+	trimmed = strings.Trim(trimmed, "\"'`")
+	if trimmed == "" {
+		return false
+	}
+
+	if strings.ContainsAny(trimmed, "/\\") {
+		parts := strings.FieldsFunc(trimmed, func(r rune) bool {
+			return r == '/' || r == '\\'
+		})
+		return len(parts) >= 2
+	}
+	return false
+}
+
+func extractCategoryPathQuery(query string) string {
+	trimmed := strings.TrimSpace(query)
+	trimmed = strings.Trim(trimmed, "\"'`")
+	trimmed = stripRoutingPrefix(trimmed, "")
+
+	path, _ := splitCategoryPathInstruction(trimmed)
+	if path != "" {
+		return path
+	}
+
+	if strings.Contains(trimmed, "/") || strings.Contains(trimmed, "\\") {
+		return trimmed
+	}
+
+	return ""
+}
+
+func splitCategoryPathInstruction(query string) (string, string) {
+	trimmed := strings.TrimSpace(query)
+	trimmed = strings.Trim(trimmed, "\"'`")
+	if trimmed == "" {
+		return "", ""
+	}
+
+	re := regexp.MustCompile(`(?i)^(?P<path>.+?)(?:\s*:\s*llm\b\s*(?P<instruction>.*))?$`)
+	matches := re.FindStringSubmatch(trimmed)
+	if len(matches) != 3 {
+		return "", ""
+	}
+
+	path := strings.TrimSpace(matches[1])
+	instruction := strings.TrimSpace(matches[2])
+	if path == "" || !looksLikeCategoryPath(path) {
+		return "", ""
+	}
+
+	return path, instruction
+}
+
 func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Database, kbName string, query string, catPath string, category string, textSearchEnabled bool, limit int) (string, error) {
 	if db == nil {
 		return "", fmt.Errorf("database is null")
 	}
+	kbName = ai.CanonicalKBName(kbName)
+	query = stripRoutingPrefix(query, kbName)
+	pathQuery := extractCategoryPathQuery(query)
+	_, llmInstruction := splitCategoryPathInstruction(query)
+	pathPrompt := looksLikeCategoryPath(query)
+	log.Info("searchKnowledgeBase start", "kb_name", kbName, "query", query, "category_path_query", pathQuery, "llm_instruction", llmInstruction, "path_prompt", pathPrompt, "category", category, "category_path", catPath, "text_search_enabled", textSearchEnabled, "limit", limit)
 
 	tx, err := db.BeginTransaction(ctx, sop.ForReading)
 	if err != nil {
@@ -32,11 +127,47 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 	// We pass documentMode=false. TextSearch configuration is now inferred natively within the DB.
 	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, false)
 	if err != nil {
-		// KB might not exist, silently return empty or error
+		log.Error("searchKnowledgeBase open failed", "kb_name", kbName, "error", err)
 		return "", fmt.Errorf("failed to open kb %s: %w", kbName, err)
 	}
 
 	var results []string
+
+	if pathQuery != "" {
+		searchText := ""
+		if !pathPrompt {
+			searchText = query
+		}
+		pathHits, err := kb.SearchByPath(ctx, []memory.PathSearchParam{{CategoryPath: pathQuery, SearchText: searchText}})
+		if err == nil && len(pathHits) > 0 {
+			results = append(results, "--- Category Path Matches ---")
+			for _, h := range pathHits {
+				if len(results) >= limit+1 {
+					break
+				}
+				text := ""
+				categoryVal := ""
+				if descVal, ok := h.Data["description"].(string); ok {
+					text = descVal
+				} else if textVal, ok := h.Data["text"].(string); ok {
+					text = textVal
+				}
+				if text == "" {
+					b, _ := json.Marshal(h.Data)
+					text = string(b)
+				}
+				if catVal, ok := h.Data["category"].(string); ok {
+					categoryVal = catVal
+				}
+				docID := h.DocID.First()
+				link := ""
+				if docID != "" {
+					link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", docID)
+				}
+				results = append(results, fmt.Sprintf("CategoryPath: %s\nText: %s%s", categoryVal, text, link))
+			}
+		}
+	}
 
 	if catPath != "" {
 		pathHits, err := kb.SearchByPath(ctx, []memory.PathSearchParam{{CategoryPath: catPath, SearchText: query}})
@@ -70,9 +201,10 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 					continue
 				}
 
+				docID := h.DocID.First()
 				link := ""
-				if h.DocID != "" {
-					link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", h.DocID)
+				if docID != "" {
+					link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", docID)
 				}
 
 				results = append(results, fmt.Sprintf("CategoryPath: %s\nText: %s%s", categoryVal, text, link))
@@ -101,9 +233,10 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 						categoryVal = catVal
 					}
 
+					docID := memory.DocIDs(h.DocID).First()
 					link := ""
-					if h.DocID != "" {
-						link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", h.DocID)
+					if docID != "" {
+						link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", docID)
 					}
 
 					results = append(results, fmt.Sprintf("Score: %.2f | CategoryPath: %s\nText: %s%s", h.Score, categoryVal, text, link))
@@ -130,9 +263,10 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 					categoryVal = catVal
 				}
 
+				docID := memory.DocIDs(h.DocID).First()
 				link := ""
-				if h.DocID != "" {
-					link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", h.DocID)
+				if docID != "" {
+					link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", docID)
 				}
 
 				results = append(results, fmt.Sprintf("Score: %.2f | CategoryPath: %s\nText: %s%s", h.Score, categoryVal, text, link))
@@ -160,9 +294,10 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 						categoryVal = catVal
 					}
 
+					docID := memory.DocIDs(h.DocID).First()
 					link := ""
-					if h.DocID != "" {
-						link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", h.DocID)
+					if docID != "" {
+						link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", docID)
 					}
 
 					results = append(results, fmt.Sprintf("Score: %.2f | CategoryPath: %s\nText: %s%s", h.Score, categoryVal, text, link))

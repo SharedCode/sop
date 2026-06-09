@@ -1,8 +1,8 @@
-# Building a "Local Expert" AI: Embedding an Intelligent Copilot into SOP Data Manager
+# AI Copilot Architecture in SOP Data Manager
 
-I'm excited to share a major update to the **SOP Data Manager**, the GUI tool for our Scalable Objects Persistence (SOP) engine. We've moved beyond simple CRUD operations and integrated a fully context-aware **AI Copilot** directly into the workflow.
+The **SOP Data Manager** includes a context-aware **AI Copilot** integrated with the database workflow.
 
-This isn't just a chatbot overlay; it's a **ReAct (Reasoning + Acting) Agent** deeply integrated with the database backend, designed to act as a "Local Expert" for your data.
+The Copilot is implemented as a **ReAct (Reasoning + Acting) Agent** that uses local tools and runtime validation rather than a chat-only interface.
 
 > **Important**: The AI Copilot requires an LLM API Key (e.g., Gemini, OpenAI) to function. You must provide your own key in the "Environment Configuration" settings. If no key is supplied, the AI Copilot features will be disabled.
 
@@ -14,13 +14,13 @@ We have introduced a **Direct Command Interface** that works entirely offline:
 *   **Zero Dependencies**: This mode requires NO internet connection and NO API Key.
 *   **Full Power**: You get access to the exact same backend tools (`select`, `run_script`, `manage_knowledge`) that the Agent uses, but driven manually by you.
 
-This confirms our philosophy: **The AI is a helper, but the robust machinery underneath is yours to command.**
+This keeps the same execution surface available with or without an external LLM.
 
 ## The Problem: Context Switching
 Managing complex NoSQL data often involves jumping between a GUI to view items and a terminal to run queries or scripts. You might see a record, wonder "how many other records have this specific field value?", and have to switch context to write a script to find out.
 
 ## The Solution: A Floating, Context-Aware Copilot
-We've refactored the UI to introduce a persistent, **floating AI widget**.
+The UI includes a persistent, **floating AI widget**.
 *   **Always Available**: It floats above your data grid, draggable and resizable, so you never lose sight of the data you're analyzing.
 *   **Tool-Equipped**: The AI isn't hallucinating answers. It has access to real backend tools:
     *   `list_stores()`: To understand your database topology.
@@ -37,6 +37,15 @@ Instead of forcing data into rigid columns, Agentic Data is auto-managed by the 
 - **Configurable Personas**: Each Playbook is imbued with "AI-ness". When creating a Playbook, users define a **System Prompt** and an **Embedder**, dictating exactly *how* the AI should manage and draw persona from that specific data pool.
 - **UI Reflection**: In the SOP Data Manager, Agentic Data isn't displayed in a dense tabular grid like standard crud stores. It is rendered as a responsive Card UI, subtly reminding the user that this entity is an "AI Maintained" context module.
 
+### Persona Routing and Isolation
+
+The Copilot runtime separates system-level routing from domain-level persona execution.
+
+*   **System Supervisor**: The top-level agent classifies intent, enforces policy, and decides whether the Ask should stay in the general SOP lane or be routed to a specific Knowledge Base.
+*   **Domain Persona**: When an Ask is routed to a Space or Playbook, the active prompt, embedder, and tool permissions come from that Space rather than a shared global persona.
+*   **Scoped Memory**: Short-term and long-term memory facts are tagged to the active domain so retrieval stays within the correct boundary.
+*   **Isolation by Construction**: This prevents one domain from leaking facts or rules into another while preserving common safety rails at the system layer.
+
 ## Under the Hood: A Secure RAG Pipeline
 We purposely designed a **Retrieval-Augmented Generation (RAG)** pipeline to address the critical security needs of database management.
 1.  **Local Power, Global Intelligence**: The backend is built in **Go**, keeping the execution logic and data access strictly local.
@@ -44,9 +53,27 @@ We purposely designed a **Retrieval-Augmented Generation (RAG)** pipeline to add
 3.  **Policy Enforcement**: By decoupling the reasoning (LLM) from the execution (Local Tools), we can enforce strict policies on what the agent can and cannot do, removing the risks associated with giving an AI direct access to corporate data.
 4.  **ReAct Loop**: The LLM reasons about which tool to use, but the Go backend intercepts these calls, validates them, and executes them safely using ACID transactions.
 
+### Self-Correction and Grounding Model
+
+SOP treats operational guidance as managed data instead of static prompt text.
+
+*   **Two Knowledge Tiers**: The runtime combines curated SOP knowledge from markdown-authored docs with ask-local and long-lived memory facts collected from previous execution.
+*   **Selective Retrieval**: The system injects only the rules, schema details, and prior corrections that are relevant to the current Ask rather than replaying a full instruction encyclopedia.
+*   **Schema Grounding**: Live store samples and relation metadata can be inspected before generation so fields and joins come from observed structure instead of model guesswork.
+*   **Persistent Corrections**: When a repair pattern or validated operational fact proves useful, it can be retained for later Asks rather than being lost with the current chat session.
+
 ### Progressive ReAct Loop
 
 The ReAct loop in SOP is progressive by design, not a blind repeat-until-success loop.
+
+#### Deep KB path routing and explicit LLM suffixes
+
+Two retrieval patterns are now recognized as first-class routing cases:
+
+*   **Deep slash-path KB prompts** such as `sop:/a/b/c` or `a/b/c/d` are treated as focused KB retrieval requests. The system tries direct category-path lookup first, which is faster and more deterministic than falling back to a generic discovery loop.
+*   **Explicit post-retrieval synthesis markers** use the form `:LLM <instruction>`, for example `a/b/c:LLM extract Apple company from the matches`. This suffix is reserved for cases where the user wants the model to summarize, filter, or synthesize after the KB results are already retrieved.
+
+In other words, pure path-style lookup stays grounded in KB retrieval, while `:LLM ...` is the opt-in switch for higher-level reasoning over the matched items.
 
 *   **Clarification First When Needed**: Before routing and execution, Gate 0 can now keep the interaction in a clarification-first mode. If the assistant asks a focused clarification question, the next user reply is rewritten back onto the original target ask and the normal execution path resumes.
 *   **Macro Then Micro**: Routing gates prepare the Ask frame first. The inner native ReAct loop then executes inside that frame without re-running the gates on every retry.
@@ -102,6 +129,20 @@ Provider-neutral rule:
 *   provider code should handle transport, continuation shape, and response parsing
 *   shared Ask/ReAct policy should decide when to stay on `execute_script`, when to ask for clarification, and when to shift into lego-block assembly mode
 *   no provider should require a different user-facing recovery model for the same Stores workflow
+
+### Tool-call result modes and streaming contract
+
+The current continuation contract now supports two tool-result modes:
+
+*   **Research mode**: when the next turn is explicitly research-oriented, the continuation payload may include a small sample of returned rows/records (or the raw error text when the tool failed) so the model can inspect structure, schema, or failure shape before continuing.
+*   **Default mode**: for ordinary tool calls, the continuation payload should remain compact: a brief success summary on success, or the error text on failure.
+
+The stream contract is also explicit:
+
+*   **Intermediate tool results**: only flow to the `Streamer` when `Verbose` is enabled.
+*   **Final tool result**: always flows to the `Streamer`, even when `Verbose` is false.
+
+This keeps researcher-facing analysis useful without inflating ordinary tool continuations with large raw payloads, while ensuring the final visible outcome is always observable in the UI.
 
 The operational consequence is that Gemini is no longer the old hybrid described in earlier drafts. Gemini is now the reference implementation of the thin-wrapper model in SOP:
 
@@ -270,6 +311,7 @@ When choosing models for the catalog (`model_catalog.json`):
 
 **Not Supported for LLM (Embeddings Only):**
 - **Ollama**: Local models lack native tool calling support required for the ReAct agent architecture. Use Ollama for embeddings (nomic-embed-text, mxbai-embed-large, all-minilm) or for simple text-to-text transformation tasks that don't require database operations.
+- **Kelindar BGE small Q8**: Use `kelindar:bge-small-en-v1.5-q8_0` for lightweight, short-text embedding scenarios such as titles, labels, brief queries, and compact retrieval passages.
 
 See `model_catalog.json` for the complete list with capability annotations.
 

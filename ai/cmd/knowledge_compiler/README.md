@@ -1,16 +1,68 @@
 # Knowledge Compiler
 
-The Knowledge Compiler is a powerful utility designed to generate a highly structured Knowledge Base JSON file (`sop_base_knowledge.json`) directly from a repository's Markdown files. 
+The Knowledge Compiler generates a structured Knowledge Base JSON file (`sop_base_knowledge.json`) from Markdown sources.
 
-We highly recommend end-users utilize this compiler to automatically generate Knowledge Base JSON files from their own repository's Markdown files! It allows you to build customized, semantically-aware spaces for your specific projects.
+The preferred workflow is to author one curated Markdown source that follows the KB curation manifest and let the compiler translate that file into canonical `ExportData / ExportItem` JSON compatible with `ImportJSON`.
 
 ## How it Works
 
-The compiler uses an AST-based Markdown crawler to naturally build a Directed Acyclic Graph (DAG) for categories based on the structure of your documentation:
+The compiler supports two modes conceptually:
 
-1. **Hierarchy via Links (The DAG)**: The crawler starts at the repository's root `README.md`. If a section like `## Architecture` links to `[Frontend UI](ui.md)`, the base category for the linked file naturally becomes `Architecture / Frontend UI`. Headers inside the linked file extend this taxonomy (e.g., `Architecture / Frontend UI / State Management`).
-2. **Multiple Links**: If a file is linked from multiple locations throughout your documentation, its contents are not duplicated. Instead, the root category for that document receives multiple parent relationships, forming a clean Directed Acyclic Graph.
-3. **Unlinked Markdown Files**: After the crawler completes the tree from root reads, it sweeps the repository for any unvisited `.md` files. It dynamically extracts their primary header (`H1`) or filename to act as their Level 1 Category, ensuring no knowledge is missed while keeping the taxonomy clean.
+1. **Curated mode (preferred)**
+	* A curated Markdown file defines the semantic category hierarchy explicitly.
+	* Explicit item blocks define the actual retrievable knowledge payload.
+	* The compiler packages those items into canonical `ExportData / ExportItem` JSON.
+
+2. **Legacy fallback mode**
+	* If Markdown does not contain explicit item blocks, the compiler can still fall back to heading-and-body extraction from existing documentation.
+	* This preserves backward compatibility with older repo-shaped knowledge sources.
+
+## Curated Markdown contract
+
+The preferred curated source uses:
+
+* `#`, `##`, and optional `###` for the bounded semantic category hierarchy
+* explicit item blocks for knowledge entries
+
+Example:
+
+```markdown
+# AI & Knowledge Systems
+## Embedders
+
+- Item: Gemini embedding contract
+  Summary: Gemini embedder supports gemini-embedding-2 via batchEmbedContents.
+  Summary: Requests use taskType RETRIEVAL_DOCUMENT.
+  Summary: Requests set outputDimensionality to 768.
+  Body:
+  The Gemini embedder uses the Google Generative Language batch endpoint and emits retrieval-oriented 768-dimensional embeddings.
+  Sources: ai/embed/gemini2.go, ai/embed/gemini2_test.go
+```
+
+Compiler mapping:
+
+* heading path -> `ExportItem.CategoryPath`
+* repeated `Summary:` lines -> `ExportItem.Summaries`
+* `Item:` / `Body:` / `Sources:` -> `ExportItem.Data`
+
+Recommended payload fields inside `ExportItem.Data`:
+
+* `title`
+* `text`
+* `description`
+* `sources`
+
+The `Summary:` lines are the vector-indexing payload. The `Body:` block is the full explanatory payload returned to the user after retrieval.
+
+## Output model
+
+The compiler emits canonical Knowledge Base import/export JSON compatible with:
+
+* `memory.ExportData`
+* `memory.ExportItem`
+* `KnowledgeBase.ImportJSON(...)`
+
+This keeps the compiler aligned with the existing import, preload, and vectorization flows instead of introducing a separate ad hoc schema.
 
 ## Usage
 
@@ -18,5 +70,13 @@ Simply run the compiler from the root of your repository:
 ```bash
 go run ./ai/cmd/knowledge_compiler/main.go
 ```
+
+To compile only one curated Markdown file instead of sweeping the whole repo:
+
+```bash
+go run ./ai/cmd/knowledge_compiler/main.go -input ai/SOP_CURATED_KB.md
+```
+
+For curation rules and the bounded semantic taxonomy, see [ai/KB_CURATION_MANIFEST.md](../../KB_CURATION_MANIFEST.md).
 
 *Note: This specific README file is internally ignored by the compiler to prevent self-referential clutter in the generated Knowledge Base.*

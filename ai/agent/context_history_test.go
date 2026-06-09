@@ -31,6 +31,10 @@ func (m *MockContaminationGenerator) Generate(ctx context.Context, prompt string
 func (m *MockContaminationGenerator) Name() string                                 { return "mock" }
 func (m *MockContaminationGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
 
+func (m *MockContaminationGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 // MockContaminationExecutor implements ai.ToolExecutor
 type MockContaminationExecutor struct {
 	Results []string

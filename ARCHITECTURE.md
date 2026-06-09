@@ -33,8 +33,8 @@ sop/
 
 These packages are intended for direct use by consumers of the library:
 
-*   **`github.com/sharedcode/sop/infs`**: The **primary and recommended** backend. It uses the local filesystem for both metadata (via a high-performance hashmap) and data. Redis is used strictly for **caching and coordination** (locking), not for data persistence.
-    *   *Usage*: Ideal for both **distributed clusters** and single-node deployments. It outperforms the hybrid backend in stress tests.
+*   **`github.com/sharedcode/sop/infs`**: The primary and recommended backend. It uses the local filesystem for both metadata (via a high-performance hashmap) and data. Redis is used strictly for **caching and coordination** (locking), not for data persistence.
+    *   *Usage*: Suitable for both **distributed clusters** and single-node deployments. In the referenced stress tests, it outperformed the hybrid backend.
 
 *   **`github.com/sharedcode/sop/incfs`**: The "Hybrid" backend. It combines:
     *   **Cassandra**: For metadata and registry storage.
@@ -46,7 +46,7 @@ These packages are intended for direct use by consumers of the library:
 
 *   **`github.com/sharedcode/sop/internal/inredck`**:
     *   **Role**: This package contains the core implementation logic for the Redis/Cassandra interaction, specifically the "Cassandra Blob" pattern.
-    *   **Why Internal?**: The pattern of storing B-Tree nodes as blobs in Cassandra is a powerful but complex implementation detail. Exposing this directly would risk users creating dependencies on internal storage formats or misusing the low-level blob management APIs. By keeping it internal, we enforce the use of the safe, transactional APIs provided by `incfs` and `streamingdata`.
+    *   **Why Internal?**: The pattern of storing B-Tree nodes as blobs in Cassandra is a complex implementation detail. Exposing this directly would risk users creating dependencies on internal storage formats or misusing the low-level blob management APIs. By keeping it internal, SOP routes usage through the transactional APIs provided by `incfs` and `streamingdata`.
 
 ## Design Principles
 
@@ -118,7 +118,7 @@ Designed for **distributed, high-scale environments** as well as single-node dep
     *   Users can manage **many stores** (B-Trees) within each database folder.
     *   You can have **many database folders**, allowing you to create a vast set of databases, each dedicated to a specific taxonomy or domain.
 *   **Registry (Filesystem)**: Stores metadata and the registry in a specialized, memory-mapped hashmap file on disk.
-    *   *Why*: **Superior Performance**. The proprietary registry hashmap on disk, combined with Redis coordination, has been proven to scale better than the Hybrid Cassandra model. In stress tests simulating heavy workloads across machines on commodity hardware, `infs` performed **25% faster** than `incfs`.
+    *   *Why*: The filesystem registry, combined with Redis coordination, has scaled better than the hybrid Cassandra model in this codebase's stress tests. In the referenced tests, `infs` performed about **25% faster** than `incfs`.
     *   *Partitioning*: The registry is split into "Segment Files" (default 1MB) to manage concurrency and file sizes. See [Configuration Guide](CONFIGURATION.md#registry-partitioning--tuning) for tuning details.
 *   **Blob Store (Filesystem)**: Stores nodes/values as blobs.
 *   **Locking & Caching**:
@@ -135,7 +135,7 @@ An alternative backend for distributed environments that **"Powers up"** your ex
     *   Users can manage **many stores** (B-Trees) within each Keyspace.
     *   You can have **many Keyspaces**, allowing you to create a vast set of databases, each dedicated to a specific taxonomy or domain.
 *   **Registry (Cassandra)**: Stores metadata, B-Tree root information, and the "Virtual ID" registry.
-    *   *Why*: **"Power up"** for Cassandra. This backend layers SOP's **ACID transactions** and **B-Tree indexing** (ordered data, range queries) on top of Cassandra, giving you the best of both worlds: Cassandra's robust replication for metadata and SOP's transactional consistency.
+    *   *Why*: This backend layers SOP's **ACID transactions** and **B-Tree indexing** (ordered data, range queries) on top of Cassandra, combining Cassandra replication for metadata with SOP's transactional model.
 *   **Blob Store (Filesystem)**: Stores the actual B-Tree nodes and data values as serialized blobs.
     *   *Why*: Direct filesystem I/O is extremely fast and cost-effective for bulk data.
 *   **Locking & Caching (Redis)**: Handles distributed locking and caches frequently accessed nodes.
@@ -242,23 +242,23 @@ SOP is designed to run in two distinct modes, catering to different scale requir
 
 ## AI & Cognitive Memory Architecture
 
-SOP introduces a novel architecture for AI Agents, distinguishing itself from standard "RAG" or "Chatbot" implementations by adopting a **Tri-State Cognitive Memory Architecture**. This leverages the B-Tree as the central nervous system, providing session continuity, experiential learning, and Knowledge Base compilation.
+SOP uses a multi-layer memory architecture for AI agents. This design uses B-Trees and vector stores to support session continuity, learned behavior, and Knowledge Base compilation.
 
 ### 1. Working Memory (MRU) - Session-Scoped
 *   **Mechanism**: A fast, in-memory array (`[]MRUItem`) attached to the `Session` state.
 *   **Workflow**: Ensures context is contiguous for the User regardless of which agent is currently active. The Omni Architect orchestrates passing a copied snapshot of the Session MRU into the Avatar as a "whiteboard", returning and appending the result to the global MRU under thread-safe locks.
-*   **Context Continuity (Dynamic Semantic Injection)**: Rather than falling back to placeholder text ("dummy" logs) during multi-turn exchanges, the engine dynamically pipes actual semantic RAG chunks (`kb.SearchSemantics`) straight into `MarkMRUCategory()`. If a user's follow-up query is semantically bare, the system seamlessly pulls the `Carried-Over Playbook Context` directly from the prior exchange in the MRU. This reliably eradicates conversational amnesia across the episodic ReAct loop.
+*   **Context Continuity (Dynamic Semantic Injection)**: Rather than falling back to placeholder text ("dummy" logs) during multi-turn exchanges, the engine pipes semantic RAG chunks (`kb.SearchSemantics`) into `MarkMRUCategory()`. If a follow-up query is semantically sparse, the system can pull carried-over playbook context from the prior exchange in the MRU.
 
 ### 2. Episodic Memory (STM) - Avatar-Scoped
 *   **Mechanism**: A completely physically isolated B-Tree per agent (`stm_<agent_id>`), detaching from global channels.
 *   **Workflow**: The Avatar operates a private, localized batch-write loop connected to its own channel. During its internal execution loop, it logs execution snapshots to its channel. A background worker periodically flushes its local channel to the `stm_<agent_id>` tree natively. This guarantees O(1) decommissioning and pure isolation.
 
 ### 3. Declarative Long-Term Memory (LTM) & Sleep Cycle
-*   **Mechanism**: The Avatar has private Vector DBs (`ltm_<agent_id>`) for its own semantic procedural learnings swept during its private **Sleep Cycle**. By balancing "Minted" UI Knowledge Bases (Declarative) against Auto-Enriched Conversational Memory (Episodic LTM), SOP bridges unstructured interactions into structured vectors through a rigorous summarization, clustering, and fallback-LLM cataloging pipeline.
-*   **Direction**: LTM is intended to evolve from a passive vector store into a managed cognitive asset. User interaction should drive what gets captured, Sleep Cycle should refine and re-categorize thoughts, and the resulting LTM should continuously influence future LLM behavior. LTM itself will eventually require MRU/LRU-like lifecycle policies so cold or superseded thoughts can be archived, compacted, or purged while high-value thoughts remain behaviorally active.
+*   **Mechanism**: The Avatar has private Vector DBs (`ltm_<agent_id>`) for semantic and procedural learnings captured during its private **Sleep Cycle**. By combining UI-managed Knowledge Bases (Declarative) with auto-enriched conversational memory (Episodic LTM), SOP converts unstructured interactions into structured vectors through summarization, clustering, and cataloging steps.
+*   **Direction**: LTM is expected to evolve from a passive vector store into a managed memory layer. User interaction drives what gets captured, Sleep Cycle refines and re-categorizes thoughts, and the resulting LTM can influence later LLM behavior. Over time, LTM will also need MRU/LRU-style lifecycle policies so cold or superseded thoughts can be archived, compacted, or purged while high-value thoughts remain active.
 *   **Current Default**: The present runtime composition is Avatar + KB + STM + LTM. The KB is still the primary grounding surface, and we need to stabilize exactly how that mounted KB benefits the LLM before making absorption a dominant operating mode.
-*   **Knowledge Absorption**: Curated Knowledge Bases should eventually be absorbable into LTM as distilled skills/expertise, giving the AI a durable internal depot of reusable competencies rather than forcing every capability to remain tied to an actively mounted Space.
-*   **Long-Term Shift**: This enables a future transition from an "Avatar of a KB" to an Avatar simply carrying STM/LTM plus absorbed expertise, with additional KBs assimilated over time as new competencies.
+*   **Knowledge Absorption**: Curated Knowledge Bases may later be absorbed into LTM as distilled skills or expertise, reducing the need to keep every capability tied to an actively mounted Space.
+*   **Long-Term Shift**: This would support a transition from an "Avatar of a KB" to an Avatar carrying STM/LTM plus absorbed expertise, with additional KBs assimilated over time as new competencies.
 
 ### 4. Hybrid Scripting Engine (Explicit Execution)
 The SOP Scripting Engine (`ai/agent`) follows a unique **"Explicit Execution"** design pattern.

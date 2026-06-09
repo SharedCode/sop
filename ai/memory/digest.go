@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/embed"
 )
 
 type KBDigestRequest struct {
@@ -19,7 +20,7 @@ type KBDigestRequest struct {
 }
 
 type KBDigestHit struct {
-	DocID      string
+	DocID      []string
 	Score      float32
 	Category   string
 	Text       string
@@ -54,7 +55,7 @@ func DigestKnowledgeBase(ctx context.Context, kb *KnowledgeBase[map[string]any],
 	for _, query := range queries {
 		categoryFilter := ""
 		if embedder != nil {
-			vecs, err := embedder.EmbedTexts(ctx, []string{query})
+			vecs, err := embed.QueryTexts(ctx, embedder, []string{query})
 			if err == nil && len(vecs) > 0 {
 				if req.UseClosestCategory {
 					closestCat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
@@ -165,7 +166,7 @@ func mergeDigestHit(merged map[string]KBDigestHit, hit KBDigestHit) {
 	if text == "" {
 		return
 	}
-	key := hit.DocID
+	key := strings.Join(hit.DocID, "|")
 	if key == "" {
 		key = hit.Category + "|" + text
 	}

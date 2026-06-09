@@ -133,21 +133,16 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 		return "", fmt.Errorf("script argument is required")
 	}
 
-	// Parse Script first to ensure it's valid and normalized
+	// Parse Script first to ensure it's valid and normalized.
+	// Some provider-owned loops (notably Anthropic tool execution) can emit
+	// either a JSON stringified script array or a single object-shaped step,
+	// so normalize both forms before compilation.
 	var rawSteps []map[string]any
 	var script []ScriptInstruction
 
-	if pStr, ok := scriptRaw.(string); ok {
-		if err := json.Unmarshal([]byte(pStr), &rawSteps); err != nil {
-			return "", fmt.Errorf("failed to parse script JSON: %v", err)
-		}
-	} else if pSlice, ok := scriptRaw.([]any); ok {
-		bytes, _ := json.Marshal(pSlice)
-		if err := json.Unmarshal(bytes, &rawSteps); err != nil {
-			return "", fmt.Errorf("failed to parse script array: %v", err)
-		}
-	} else {
-		return "", fmt.Errorf("script must be a JSON string or array")
+	rawSteps, err := normalizeScriptSteps(scriptRaw)
+	if err != nil {
+		return "", err
 	}
 
 	currentQuery := currentQueryForScriptGrounding(ai.GetSessionPayload(ctx))
@@ -190,11 +185,11 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 		return "", err
 	}
 
-	script = sanitizeScript(script)
+	script = SanitizeScript(script)
 
-	// Grammar validation: Check structural and logical issues AFTER sanitization
-	// This runs on the canonical form with all defaults filled in, reducing false positives
-	if err := validateScriptGrammar(script); err != nil {
+	// Grammar validation: Check structural and logical issues AFTER sanitization.
+	// Reuse the same execution-path validation helpers as create_script.
+	if err := ValidateScriptGrammar(script); err != nil {
 		return "", fmt.Errorf("script grammar validation failed: %w", err)
 	}
 	writeNormalizedScriptArgs(args, script)
@@ -267,6 +262,85 @@ func (a *CopilotAgent) toolExecuteScript(ctx context.Context, args map[string]an
 		return choice.SuccessMessage, nil
 	}
 	return serializeResult(ctx, choice.Value)
+}
+
+func normalizeScriptSteps(raw any) ([]map[string]any, error) {
+	switch typed := raw.(type) {
+	case string:
+		var decoded any
+		if err := json.Unmarshal([]byte(typed), &decoded); err != nil {
+			return nil, fmt.Errorf("failed to parse script JSON: %v", err)
+		}
+		return normalizeScriptSteps(decoded)
+
+	case []any:
+		flat := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			if nested, ok := unwrapScriptEnvelope(item); ok {
+				recursed, err := normalizeScriptSteps(nested)
+				if err != nil {
+					return nil, err
+				}
+				flat = append(flat, recursed...)
+				continue
+			}
+
+			bytes, err := json.Marshal(item)
+			if err != nil {
+				return nil, fmt.Errorf("failed to encode script item: %v", err)
+			}
+			var step map[string]any
+			if err := json.Unmarshal(bytes, &step); err != nil {
+				return nil, fmt.Errorf("failed to parse script item: %v", err)
+			}
+			flat = append(flat, step)
+		}
+		return flat, nil
+
+	case []map[string]any:
+		return typed, nil
+
+	case map[string]any:
+		if nested, ok := unwrapScriptEnvelope(typed); ok {
+			return normalizeScriptSteps(nested)
+		}
+		return []map[string]any{typed}, nil
+
+	default:
+		return nil, fmt.Errorf("script must be a JSON string, array, or single object")
+	}
+}
+
+func unwrapScriptEnvelope(raw any) (any, bool) {
+	step, ok := raw.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+
+	if _, hasOp := step["op"]; hasOp {
+		return nil, false
+	}
+	if _, hasCmd := step["command"]; hasCmd {
+		return nil, false
+	}
+
+	if args, ok := step["args"].(map[string]any); ok {
+		if nested, hasSteps := args["steps"]; hasSteps {
+			return nested, true
+		}
+		if nested, hasScript := args["script"]; hasScript {
+			return nested, true
+		}
+	}
+
+	if nested, hasSteps := step["steps"]; hasSteps {
+		return nested, true
+	}
+	if nested, hasScript := step["script"]; hasScript {
+		return nested, true
+	}
+
+	return nil, false
 }
 
 func writeNormalizedScriptArgs(args map[string]any, script []ScriptInstruction) {
@@ -886,7 +960,7 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 			}
 
 			if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
-				isVerbose, _ := ctx.Value("verbose").(bool)
+				isVerbose := effectiveVerbose(ctx)
 				suppressInternalStepStart, _ := ctx.Value(CtxKeySuppressInternalStepStart).(bool)
 
 				isSystemOp := false
@@ -913,7 +987,19 @@ func CompileScript(script []ScriptInstruction) (CompiledScript, error) {
 			}
 
 			if err := step.Func(ctx, e); err != nil {
-				log.Debug("ExecuteStep failed", "step", i+1, "err", err)
+				log.Error("ExecuteStep failed", "step", i+1, "op", step.Op, "error", err)
+				if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok && streamer != nil {
+					displayName := step.Op
+					if step.Name != "" {
+						displayName = step.Name
+					}
+					streamer.Write(StepExecutionResult{
+						Type:      "error",
+						Command:   displayName,
+						StepIndex: i + 1,
+						Error:     err.Error(),
+					})
+				}
 				if stepStreamer != nil {
 					stepStreamer.Close()
 				}

@@ -18,10 +18,10 @@ type llmSettings struct {
 
 func resolveLLMSettings(r *http.Request) llmSettings {
 	settings := llmSettings{
-		Provider: config.BrainProvider,
+		Provider: firstNonEmpty(config.BrainProvider, "openai"),
 		APIKey:   config.BrainAPIKey,
 		URL:      config.BrainURL,
-		Model:    config.BrainModel,
+		Model:    firstNonEmpty(config.BrainModel, "gpt-5.4"),
 	}
 
 	if r != nil {
@@ -37,10 +37,6 @@ func resolveLLMSettings(r *http.Request) llmSettings {
 		if h := r.Header.Get("X-LLM-Model"); h != "" {
 			settings.Model = h
 		}
-	}
-
-	if settings.Provider == "" {
-		settings.Provider = "gemini"
 	}
 
 	return settings

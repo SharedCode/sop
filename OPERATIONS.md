@@ -1,4 +1,4 @@
-# Operational Guide (DevOps)
+# Operations Guide
 
 This guide covers the operational aspects of running SOP in production, including failover handling, connection management, and backup strategies.
 
@@ -56,7 +56,7 @@ Backing up a hybrid system requires coordination.
 2.  **Snapshot Blob Store (Filesystem)**:
     *   Use filesystem snapshots (e.g., ZFS, LVM, or cloud volume snapshots) to capture the data directory.
 3.  **Consistency**:
-    *   Ideally, pause writes during the snapshot window to ensure the Registry and Blob Store are perfectly aligned.
+    *   If possible, pause writes during the snapshot window to ensure the Registry and Blob Store are aligned.
     *   If zero-downtime is required, snapshot Cassandra *first*, then the Filesystem. SOP's Copy-On-Write nature means old blobs (referenced by the older Cassandra snapshot) will still exist on disk, ensuring a consistent point-in-time restore.
 
 ### Restore Procedure
@@ -69,13 +69,13 @@ Backing up a hybrid system requires coordination.
 
 ## Data Management Suite (SOP Web UI)
 
-SOP includes a powerful HTTP Server and Web UI that functions as a full database management suite. It allows you to:
+SOP includes an HTTP Server and Web UI that functions as a database management suite. It allows you to:
 *   **Perform Full CRUD**: Create, Read, Update, and Delete records in any B-Tree.
 *   **Manage Any Database**: Works with any SOP store, regardless of the language or data type used.
 *   **Leverage Rich Indexing**: Utilize `IndexSpecification` to define and search on compound indexes with multiple fields and custom sort orders, giving you RDBMS-like power.
 *   **Debug & Inspect**: Visually verify data integrity and structure.
 
-> **Note on Architecture**: This tool is **not** a central database server. In SOP's masterless architecture, this UI is simply another client node. You can run it locally on your laptop to manage a remote production cluster, or deploy it as a sidecar. It connects directly to the storage layer, respecting all ACID guarantees without introducing a central bottleneck. Each user managing data via this app participates in **"swarm" computing**, where changes are efficiently merged or rejected (if conflicting) with full ACID guarantees.
+> **Note on Architecture**: This tool is **not** a central database server. In SOP's masterless architecture, this UI is another client node. You can run it locally to manage a remote production cluster, or deploy it as a sidecar. It connects directly to the storage layer and respects the same ACID guarantees as other SOP clients.
 
 ### Running the Management Suite
 

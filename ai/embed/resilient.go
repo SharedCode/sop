@@ -24,18 +24,50 @@ func (r *ResilientEmbedder) Name() string { return fmt.Sprintf("resilient-%s", r
 func (r *ResilientEmbedder) Dim() int     { return r.base.Dim() }
 
 func (r *ResilientEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]float32, error) {
+	return r.retryCall(ctx, func(rctx context.Context) ([][]float32, error) {
+		return r.base.EmbedTexts(rctx, texts)
+	})
+}
+
+func (r *ResilientEmbedder) EmbedCategoryTexts(ctx context.Context, texts []string) ([][]float32, error) {
+	if modeAware, ok := r.base.(ai.EmbeddingModeSupport); ok {
+		return r.retryCall(ctx, func(rctx context.Context) ([][]float32, error) {
+			return modeAware.EmbedCategoryTexts(rctx, texts)
+		})
+	}
+	return r.EmbedTexts(ctx, texts)
+}
+
+func (r *ResilientEmbedder) EmbedDocumentTexts(ctx context.Context, texts []string) ([][]float32, error) {
+	if modeAware, ok := r.base.(ai.EmbeddingModeSupport); ok {
+		return r.retryCall(ctx, func(rctx context.Context) ([][]float32, error) {
+			return modeAware.EmbedDocumentTexts(rctx, texts)
+		})
+	}
+	return r.EmbedTexts(ctx, texts)
+}
+
+func (r *ResilientEmbedder) EmbedQueryTexts(ctx context.Context, texts []string) ([][]float32, error) {
+	if modeAware, ok := r.base.(ai.EmbeddingModeSupport); ok {
+		return r.retryCall(ctx, func(rctx context.Context) ([][]float32, error) {
+			return modeAware.EmbedQueryTexts(rctx, texts)
+		})
+	}
+	return r.EmbedTexts(ctx, texts)
+}
+
+func (r *ResilientEmbedder) retryCall(ctx context.Context, call func(context.Context) ([][]float32, error)) ([][]float32, error) {
 	var result [][]float32
 	err := sop.Retry(ctx, func(rctx context.Context) error {
-		res, rerr := r.base.EmbedTexts(rctx, texts)
+		res, rerr := call(rctx)
 		if rerr != nil {
 			if sop.ShouldRetry(rerr) {
 				return retry.RetryableError(rerr)
 			}
-			return rerr // permanent
+			return rerr
 		}
 		result = res
 		return nil
 	}, nil)
-
 	return result, err
 }

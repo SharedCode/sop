@@ -23,7 +23,7 @@ func TestDeferSilentOutput(t *testing.T) {
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, CtxKeyJSONStreamer, js)
-	ctx = context.WithValue(ctx, "verbose", true)
+	ctx = context.WithValue(ctx, RunnerSessionKey, &RunnerSession{Verbose: true})
 
 	// 2. Setup Engine
 	engine := NewScriptEngine(NewScriptContext(), func(name string) (Database, error) {

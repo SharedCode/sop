@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	log "log/slog"
 	"net/http"
@@ -149,8 +150,13 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	sendEvent("session_id", req.SessionID)
 
+	var rs *agent.RunnerSession
+	if svc, ok := agentSvc.(*agent.Service); ok && svc != nil {
+		rs = svc.RunnerSession()
+	}
+
 	llmSettings := resolveLLMSettings(r)
-	ctx, payload, cfg, fullMessage := constructPayload(r.Context(), req, llmSettings, sendEvent)
+	ctx, payload, cfg, fullMessage := constructPayload(r.Context(), req, llmSettings, sendEvent, rs)
 	log.Info("HTTP AI Chat Payload",
 		"session_id", req.SessionID,
 		"current_db", payload.CurrentDB,
@@ -213,7 +219,6 @@ type aiChatRequest struct {
 	Agent       string                 `json:"agent"`
 	Provider    string                 `json:"provider"`
 	Format      string                 `json:"format"`
-	Verbose     *bool                  `json:"verbose"`
 	SessionID   string                 `json:"session_id"`
 	UserID      string                 `json:"user_id"`
 	ClientID    string                 `json:"client_id"`
@@ -246,6 +251,25 @@ func initializeRequest(w http.ResponseWriter, r *http.Request) (*aiChatRequest, 
 	req.Database = strings.TrimSpace(req.Database)
 	req.StoreName = strings.TrimSpace(req.StoreName)
 	return &req, nil
+}
+
+func isStructuredToolResult(tool string) bool {
+	switch strings.ToLower(strings.TrimSpace(tool)) {
+	case "execute_script":
+		return true
+	default:
+		return false
+	}
+}
+
+func renderVisibleText(s string) string {
+	if strings.Contains(s, `\u`) {
+		var decoded string
+		if err := json.Unmarshal([]byte("\""+strings.ReplaceAll(s, `"`, `\"`)+"\""), &decoded); err == nil {
+			s = decoded
+		}
+	}
+	return html.UnescapeString(s)
 }
 
 // setupStream initialises the NDJSON event writer for an AI chat response.
@@ -302,7 +326,7 @@ func setupStream(w http.ResponseWriter) (func(string, any), func() bool) {
 			}
 		case ai.ReasoningEventToolCall:
 			if toolCall, ok := payload.(map[string]any); ok {
-				if tool, _ := toolCall["tool"].(string); strings.EqualFold(strings.TrimSpace(tool), "execute_script") {
+				if tool, _ := toolCall["tool"].(string); isStructuredToolResult(tool) {
 					return
 				}
 			}
@@ -328,9 +352,10 @@ func setupStream(w http.ResponseWriter) (func(string, any), func() bool) {
 			}
 		case ai.ReasoningEventToolResult:
 			if result, ok := payload.(map[string]any); ok {
-				if tool, _ := result["tool"].(string); tool == "execute_script" {
-					if text, ok := result["result"].(string); ok && strings.TrimSpace(text) != "" {
-						trimmed := strings.TrimSpace(text)
+				tool, _ := result["tool"].(string)
+				if text, ok := result["result"].(string); ok && strings.TrimSpace(text) != "" {
+					trimmed := strings.TrimSpace(text)
+					if isStructuredToolResult(tool) {
 						var rawRecords []json.RawMessage
 						if json.Unmarshal([]byte(trimmed), &rawRecords) == nil && len(rawRecords) > 0 {
 							for _, rec := range rawRecords {
@@ -343,9 +368,11 @@ func setupStream(w http.ResponseWriter) (func(string, any), func() bool) {
 							writeEvent("record", singleRecord)
 							return
 						}
-						writeEvent("content", text)
-						return
 					}
+
+					contentStreamed = true
+					formatted := fmt.Sprintf("🛠️ Result from %s:\n%s", tool, renderVisibleText(trimmed))
+					writeEvent("content", formatted)
 				}
 			}
 		}
@@ -394,15 +421,11 @@ func lockSession(req *aiChatRequest, blueprint ai.Agent[map[string]any]) (ai.Age
 	return agentSvc, sessionMu
 }
 
-func constructPayload(ctx context.Context, req *aiChatRequest, llmSettings llmSettings, sendEvent func(string, any)) (context.Context, *ai.SessionPayload, *ai.ConfigMap, string) {
+func constructPayload(ctx context.Context, req *aiChatRequest, llmSettings llmSettings, sendEvent func(string, any), rs *agent.RunnerSession) (context.Context, *ai.SessionPayload, *ai.ConfigMap, string) {
 	if req.Provider != "" {
 		ctx = context.WithValue(ctx, ai.CtxKeyProvider, req.Provider)
 	}
-	verbose := true
-	if req.Verbose != nil {
-		verbose = *req.Verbose
-	}
-	ctx = context.WithValue(ctx, "verbose", verbose)
+	ctx = context.WithValue(ctx, agent.RunnerSessionKey, rs)
 	ctx = context.WithValue(ctx, ai.CtxKeyProgressSink, func(msg string) {
 		sendEvent("content", msg+"\n")
 	})
@@ -1049,6 +1072,38 @@ func injectGlobalConfig(cfg *agent.Config, globalCfg *Config) {
 }
 
 func (e *DefaultToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	if e == nil {
+		return nil, nil
+	}
+
+	if agentSvc, ok := e.Agents["copilot"]; ok {
+		if te, ok := agentSvc.(interface {
+			ListTools(context.Context) ([]ai.ToolDefinition, error)
+		}); ok {
+			tools, err := te.ListTools(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if len(tools) > 0 {
+				return tools, nil
+			}
+		}
+	}
+
+	for _, agentSvc := range e.Agents {
+		if te, ok := agentSvc.(interface {
+			ListTools(context.Context) ([]ai.ToolDefinition, error)
+		}); ok {
+			tools, err := te.ListTools(ctx)
+			if err != nil {
+				return nil, err
+			}
+			if len(tools) > 0 {
+				return tools, nil
+			}
+		}
+	}
+
 	return nil, nil
 }
 

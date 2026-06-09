@@ -72,7 +72,22 @@ func NewService(domain ai.Domain[map[string]any], systemDB *database.Database, d
 	}
 }
 
+// ListTools exposes the registered tool definitions for the service-backed runtime path.
+func (s *Service) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	if s == nil {
+		return nil, nil
+	}
+	return (&ServiceToolExecutor{s: s}).ListTools(ctx)
+}
+
 // Clone creates a new isolated instance of the agent sharing read-only components.
+func (s *Service) RunnerSession() *RunnerSession {
+	if s == nil {
+		return nil
+	}
+	return s.session
+}
+
 func (s *Service) Clone() ai.Agent[map[string]any] {
 	clonedRegistry := make(map[string]ai.Agent[map[string]any])
 	for k, v := range s.registry {
@@ -172,9 +187,6 @@ type ServiceAskOptions struct {
 	// ProviderDetails for runtime provider configuration (API key, base URL, model)
 	ProviderDetails *ProviderDetails
 
-	// Verbose enables detailed logging and diagnostic output
-	Verbose bool
-
 	// IsNewTopic indicates this query starts a new conversation topic
 	IsNewTopic bool
 
@@ -257,12 +269,6 @@ func (s *Service) optsFromConfigMap(cfg *ai.ConfigMap) *ServiceAskOptions {
 		}
 	}
 
-	if val, ok := cfg.Get("verbose"); ok {
-		if v, ok := val.(bool); ok {
-			opts.Verbose = v
-		}
-	}
-
 	if val, ok := cfg.Get("is_new_topic"); ok {
 		if v, ok := val.(bool); ok {
 			opts.IsNewTopic = v
@@ -316,9 +322,6 @@ type AskRequest struct {
 
 	// Options carries additional configuration from ConfigMap
 	Options *ai.ConfigMap
-
-	// Verbose enables detailed logging and progress reporting
-	Verbose bool
 }
 
 // AskResponse contains the result and any state changes from an Ask operation.
@@ -426,9 +429,49 @@ type TopicAssessment struct {
 }
 
 // identifyTopic determines if the query belongs to an existing conversation graph or starts a new one.
+func (s *Service) resolveTopicRoutingGenerator(ctx context.Context) ai.Generator {
+	gen := s.generator
+
+	providerOverride := extractProviderOverrideFromContext(ctx)
+	if providerOverride != nil && providerOverride.Provider != "" {
+		provider := providerOverride.Provider
+		if provider == "openai" {
+			provider = "chatgpt"
+		}
+
+		configMap := make(map[string]any)
+		if providerOverride.APIKey != "" {
+			configMap["api_key"] = providerOverride.APIKey
+		}
+		if providerOverride.BaseURL != "" {
+			configMap["base_url"] = providerOverride.BaseURL
+		}
+		if providerOverride.Model != "" {
+			configMap["model"] = providerOverride.Model
+		}
+
+		if gen == nil || gen.Name() != provider {
+			if overriddenGen, err := generator.New(provider, configMap); err == nil {
+				gen = overriddenGen
+			} else {
+				log.Warn("Failed to initialize topic-routing provider, falling back to default generator",
+					"provider", provider, "error", err)
+			}
+		}
+	}
+
+	return gen
+}
+
 func (s *Service) identifyTopic(ctx context.Context, query string) (*TopicAssessment, error) {
-	if s.session.Memory == nil || len(s.session.Memory.Threads) == 0 {
+	if s == nil || s.session == nil || s.session.Memory == nil || len(s.session.Memory.Threads) == 0 {
 		return &TopicAssessment{IsNewTopic: true, Reasoning: "No history exists."}, nil
+	}
+
+	gen := s.resolveTopicRoutingGenerator(ctx)
+	if gen == nil {
+		log.Warn("Topic routing generator unavailable; defaulting to a new topic", "query", query)
+		return &TopicAssessment{IsNewTopic: true, Reasoning: "No generator available for topic routing"}, nil
 	}
 
 	// Prepare list of recent topics
@@ -475,7 +518,7 @@ Format:
 	// Combine instructions into the prompt since GenOptions doesn't support SystemPrompt
 	fullPrompt := "Answer in strict JSON.\n" + prompt
 
-	output, err := s.generator.Generate(ctx, fullPrompt, ai.GenOptions{
+	output, err := gen.Generate(ctx, fullPrompt, ai.GenOptions{
 		Temperature:   0.1,   // Deterministic
 		ThinkingLevel: "low", // Strict JSON schema adherence for topic routing
 	})
@@ -857,12 +900,13 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 
 	// Process Text Hits
 	for rank, hit := range textHits {
-		scores[hit.DocID] += 1.0 / (k + float64(rank+1))
+		docID := hit.DocID
+		scores[docID] += 1.0 / (k + float64(rank+1))
 		// If payload missing, we need to fetch it
-		if _, ok := payloads[hit.DocID]; !ok {
-			item, err := idx.Get(ctx, hit.DocID)
+		if _, ok := payloads[docID]; !ok {
+			item, err := idx.Get(ctx, docID)
 			if err == nil && item != nil {
-				payloads[hit.DocID] = item.Payload
+				payloads[docID] = item.Payload
 			}
 		}
 	}
@@ -1427,6 +1471,13 @@ func (s *Service) applyObfuscation(query string) string {
 
 // performTopicRouting identifies the conversation topic and manages thread continuity.
 func (s *Service) performTopicRouting(ctx context.Context, query string) *topicRoutingResult {
+	if s == nil {
+		return &topicRoutingResult{assessment: &TopicAssessment{IsNewTopic: true}, isNewTopic: true}
+	}
+	if s.session == nil {
+		s.session = NewRunnerSession()
+	}
+
 	var topicAssessment *TopicAssessment
 
 	if s.EnableHistoryInjection && s.session.Memory != nil {
@@ -1691,7 +1742,7 @@ func (s *Service) updateSessionMemory(ctx context.Context, query string, finalTe
 	})
 
 	// MRU PUSH: Write ask outcome to session MRU (infrastructure-level, benefits all provider loops)
-	persistSessionAskOutcomeMRU(ctx, s.session, query, finalText, engineResp.ToolCalls, engineResp.OutcomeFacts)
+	persistSessionAskOutcomeMRU(ctx, s.session, query, finalText, engineResp.ToolCalls, engineResp.OutcomeFacts, engineResp.CarryoverState)
 
 	persistCarryoverState(s.session.Memory, buildCarryoverState(ctx, s.session, gen, currentThread, query, finalText, engineResp.ToolCalls, engineResp.OutcomeFacts, engineResp.OutcomeRecipes, engineResp.CarryoverState))
 }
@@ -1734,6 +1785,10 @@ func (s *Service) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (str
 		session.CurrentUserQuery = query
 	}
 
+	if session != nil {
+		s.hydrateSessionPreferences(ctx, session)
+	}
+
 	// Build AskRequest from typed options
 	req := AskRequest{
 		Query:            query,
@@ -1748,7 +1803,6 @@ func (s *Service) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (str
 		ScriptRecorder:   opts.Recorder,
 		DefaultFormat:    opts.DefaultFormat,
 		Options:          cfg,
-		Verbose:          opts.Verbose,
 	}
 
 	// Delegate to explicit-parameter ask method
@@ -1756,8 +1810,49 @@ func (s *Service) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (str
 	if err != nil {
 		return "", err
 	}
+	// TODO: Remove this bridge once verbose and similar preferences are hydrated from
+	// LTM -> MRU -> SessionPayload at ask entry. SessionPayload is a runtime carrier,
+	// not durable storage.
+	s.syncSessionFromPayload(resp.UpdatedSession)
 
 	return resp.FinalText, nil
+}
+
+func (s *Service) hydrateSessionPreferences(ctx context.Context, session *ai.SessionPayload) {
+	if s == nil || session == nil || s.systemDB == nil {
+		return
+	}
+
+	pref, ok, err := loadPreference(ctx, s.systemDB, session, memory.PreferenceKeyVerbose)
+	if err != nil {
+		log.Warn("Failed to hydrate verbose preference", "error", err)
+		return
+	}
+	if !ok {
+		return
+	}
+	if value, found := pref.Bool(); found {
+		s.session.SetVerbose(value)
+	}
+}
+
+func (s *Service) syncSessionFromPayload(payload *ai.SessionPayload) {
+	if s == nil || s.session == nil || payload == nil {
+		return
+	}
+
+	// TODO: Replace this cross-ask mirroring with memory-backed preference hydration.
+	// This helper exists only to bridge ephemeral SessionPayload state until the
+	// LTM -> MRU -> SessionPayload preference flow is fully implemented.
+	if payload.CurrentDB != "" {
+		s.session.CurrentDB = payload.CurrentDB
+	}
+	if payload.Transaction == nil {
+		s.session.Transaction = nil
+	} else if tx, ok := payload.Transaction.(sop.Transaction); ok {
+		s.session.Transaction = tx
+	}
+	s.session.Variables = payload.Variables
 }
 
 // ask handles a user request using explicit parameters instead of context-based state passing.
@@ -1795,10 +1890,8 @@ func (s *Service) ask(ctx context.Context, req AskRequest) (AskResponse, error) 
 			req.Session.Variables = s.session.Variables
 			//req.Session.ExplicitTransaction = true
 		}
-	} else {
-		if strings.TrimSpace(req.Session.CurrentUserQuery) == "" {
-			req.Session.CurrentUserQuery = req.Query
-		}
+	} else if strings.TrimSpace(req.Session.CurrentUserQuery) == "" {
+		req.Session.CurrentUserQuery = req.Query
 	}
 
 	// Initialize executor if not provided
@@ -1854,6 +1947,8 @@ func (s *Service) ask(ctx context.Context, req AskRequest) (AskResponse, error) 
 	if handled, resp, err := s.handlePendingUserConfirmationWithRequest(ctx, query, req.Session); handled {
 		return AskResponse{FinalText: resp, UpdatedSession: req.Session}, err
 	}
+	ctx = context.WithValue(ctx, "session_payload", req.Session)
+	ctx = context.WithValue(ctx, RunnerSessionKey, s.session)
 
 	// 5. Perform topic routing and short-term memory thread promotion/initialization
 	topicResult := s.performTopicRoutingWithRequest(ctx, query, req.Session)
@@ -1923,7 +2018,7 @@ func (s *Service) ask(ctx context.Context, req AskRequest) (AskResponse, error) 
 	genCfg := s.resolveGeneratorAndCarryoverWithRequest(ctx, gen, providerOverride, topicResult.assessment, prompts.historyText)
 
 	// 10. Execute the native ReAct loop with tool execution
-	engineResp, err := s.executeReasoningEngineWithRequest(ctx, query, prompts, genCfg, db, req.Executor, req.EventStreamer)
+	engineResp, err := s.executeReasoningEngineWithRequest(ctx, query, prompts, genCfg, db, req.Executor, req.EventStreamer, s.session.IsVerbose())
 	if err != nil {
 		// Check if error is due to context cancellation
 		if ctx.Err() != nil {
@@ -2036,12 +2131,12 @@ func markSessionMRUCategory(session *RunnerSession, category string, context str
 
 // persistSessionAskOutcomeMRU writes ask outcome to session MRU (PUSH model).
 // This is the infrastructure-level MRU PUSH that benefits all provider loops.
-func persistSessionAskOutcomeMRU(ctx context.Context, session *RunnerSession, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) {
+func persistSessionAskOutcomeMRU(ctx context.Context, session *RunnerSession, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string, carryoverState *ai.CarryoverState) {
 	if session == nil {
 		return
 	}
 	clearSessionMRUBySourceAndScope(session, MRUSourceAskOutcome, MRUScopeSession)
-	for _, item := range buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts) {
+	for _, item := range buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts, carryoverState) {
 		markSessionMRUCategory(session, item.Category, item.Context, item.Source, item.Scope)
 	}
 }
@@ -2156,7 +2251,7 @@ func (s *Service) resolveGeneratorAndCarryoverWithRequest(ctx context.Context, g
 }
 
 // executeReasoningEngineWithRequest is the explicit-parameter version with explicit executor and streamer
-func (s *Service) executeReasoningEngineWithRequest(ctx context.Context, query string, prompts *promptInputs, genCfg *generatorConfig, db *database.Database, executor ai.ToolExecutor, eventStreamer func(string, any)) (ai.ReasoningResponse, error) {
+func (s *Service) executeReasoningEngineWithRequest(ctx context.Context, query string, prompts *promptInputs, genCfg *generatorConfig, db *database.Database, executor ai.ToolExecutor, eventStreamer func(string, any), verbose bool) (ai.ReasoningResponse, error) {
 	engine := &NativeReActEngine{
 		EnableObfuscation: s.EnableObfuscation,
 	}
@@ -2181,6 +2276,7 @@ func (s *Service) executeReasoningEngineWithRequest(ctx context.Context, query s
 		CarryoverMode:  genCfg.carryover.Mode,
 		CarryoverState: genCfg.carryover.State,
 		Streamer:       eventStreamer,
+		Verbose:        verbose,
 	}
 
 	return engine.Run(ctx, req)

@@ -14,6 +14,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/jsondb"
 )
 
@@ -78,6 +79,7 @@ func (a *CopilotAgent) registerSystemTools(ctx context.Context) {
 	a.registry.Register("list_databases", "Lists all available databases.", emptyObjectArgsSchema, a.toolListDatabases)
 	a.registry.Register("list_stores", ListStoresInstruction, listStoresArgsSchema, a.toolListStores)
 	a.registry.Register("list_tools", "Lists all available tools and their usage instructions.", emptyObjectArgsSchema, a.toolListTools)
+	a.registry.Register("set_verbose", "Toggle session verbosity for follow-up tool results and progress streaming.", `{"type":"object","properties":{"verbose":{"type":"boolean","description":"Set verbosity on or off. If omitted, the current setting is toggled."}}}`, a.toolSetVerbose)
 }
 
 // registerTools registers all available tools for the CopilotAgent.
@@ -173,6 +175,36 @@ func (a *CopilotAgent) toolListTools(ctx context.Context, args map[string]any) (
 	}
 
 	return sb.String(), nil
+}
+
+func (a *CopilotAgent) toolSetVerbose(ctx context.Context, args map[string]any) (string, error) {
+	rs := runnerSessionFromContext(ctx)
+	if rs == nil {
+		return "", fmt.Errorf("no runner session found")
+	}
+	current := rs.Verbose
+
+	newState := !current
+	if v, ok := args["verbose"].(bool); ok {
+		newState = v
+	} else if v, ok := args["enabled"].(bool); ok {
+		newState = v
+	}
+
+	rs.SetVerbose(newState)
+	systemDB := a.systemDB
+	if systemDB == nil && a.service != nil {
+		systemDB = a.service.systemDB
+	}
+	if err := persistPreference(ctx, systemDB, ai.GetSessionPayload(ctx), memory.NewBoolPreference(memory.PreferenceKeyVerbose, newState)); err != nil {
+		log.Warn("Failed to persist verbose preference", "error", err)
+	}
+
+	status := "OFF"
+	if newState {
+		status = "ON"
+	}
+	return fmt.Sprintf("Session verbosity set to %s.", status), nil
 }
 
 func (a *CopilotAgent) toolListDatabases(ctx context.Context, args map[string]any) (string, error) {

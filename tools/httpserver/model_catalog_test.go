@@ -25,6 +25,9 @@ func TestLoadModelCatalogSeedsDefaultFile(t *testing.T) {
 	if len(modelCatalog.Embedder) == 0 {
 		t.Fatal("expected default embedder catalog entries")
 	}
+	if got := modelCatalog.Embedder[len(modelCatalog.Embedder)-1].Options[len(modelCatalog.Embedder[len(modelCatalog.Embedder)-1].Options)-1].Value; got != "kelindar:nomic-embed-text-v1.5-q8_0" {
+		t.Fatalf("expected default embedder catalog to include the registry-backed local kelindar option, got %q", got)
+	}
 	if modelCatalog.LLM[0].Options[0].Value != "gemini:gemini-3.1-pro-preview" {
 		t.Fatalf("unexpected first default llm option: %q", modelCatalog.LLM[0].Options[0].Value)
 	}

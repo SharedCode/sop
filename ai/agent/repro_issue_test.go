@@ -22,6 +22,11 @@ type reproMockGenerator struct {
 
 func (m *reproMockGenerator) Name() string                     { return "mock" }
 func (m *reproMockGenerator) EstimateCost(in, out int) float64 { return 0 }
+
+func (m *reproMockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func (m *reproMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	if m.isNative {
 		if strings.Contains(prompt, "Tool results:") || strings.Contains(prompt, "tool response") {

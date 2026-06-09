@@ -8,6 +8,65 @@ import (
 	"github.com/sharedcode/sop/ai"
 )
 
+func TestOwnedLoops_EmitToolEventsWhenStreamerIsPresent(t *testing.T) {
+	t.Run("gemini", func(t *testing.T) {
+		gen := &geminiOwnedLoopStreamingGenerator{}
+		exec := &geminiOwnedLoopStreamingExecutor{}
+		loop := geminiOwnedReActLoop{
+			generator:     gen,
+			maxIterations: 2,
+		}
+
+		var events []providerStreamedEvent
+		_, err := loop.Run(context.Background(), ai.ReasoningRequest{
+			SystemPrompt: "You are a test assistant.",
+			UserQuery:    "Show me users",
+			Executor:     exec,
+			Generator:    gen,
+			Streamer: func(eventType string, data any) {
+				payload, _ := data.(map[string]any)
+				events = append(events, providerStreamedEvent{eventType: eventType, payload: payload})
+			},
+		})
+		if err != nil {
+			t.Fatalf("Run failed: %v", err)
+		}
+		if len(events) == 0 {
+			t.Fatalf("expected streamed tool events when a streamer is present, got none")
+		}
+	})
+}
+
+func TestOwnedLoops_EmitToolResultEvenWhenToolExecutionFails(t *testing.T) {
+	t.Run("gemini", func(t *testing.T) {
+		gen := &geminiOwnedLoopStreamingGenerator{}
+		exec := &failingGeminiExecutor{err: fmt.Errorf("boom")}
+		loop := geminiOwnedReActLoop{generator: gen, maxIterations: 1}
+
+		events := captureReasoningEvents(t, func(streamer func(string, any)) error {
+			_, err := loop.Run(context.Background(), ai.ReasoningRequest{
+				SystemPrompt: "You are a test assistant.",
+				UserQuery:    "Show me users",
+				Executor:     exec,
+				Generator:    gen,
+				Verbose:      true,
+				Streamer:     streamer,
+			})
+			return err
+		})
+
+		if len(events) < 3 {
+			t.Fatalf("expected tool_call + tool_result + tool_error events, got %#v", events)
+		}
+		if events[1].eventType != ai.ReasoningEventToolResult {
+			t.Fatalf("expected tool_result event after tool_call, got %#v", events[1])
+		}
+		if got := events[1].payload["result"]; got != "boom" {
+			t.Fatalf("expected tool_result to carry the failure message, got %#v", got)
+		}
+	})
+}
+
 func TestOwnedLoops_EmitCompatibleCoreToolEventsAcrossProviders(t *testing.T) {
 	t.Run("gemini", func(t *testing.T) {
 		gen := &geminiOwnedLoopStreamingGenerator{}
@@ -23,6 +82,7 @@ func TestOwnedLoops_EmitCompatibleCoreToolEventsAcrossProviders(t *testing.T) {
 				UserQuery:    "Show me users",
 				Executor:     exec,
 				Generator:    gen,
+				Verbose:      true,
 				Streamer:     streamer,
 			})
 			if err != nil {
@@ -74,6 +134,7 @@ func TestOwnedLoops_EmitCompatibleCoreToolEventsAcrossProviders(t *testing.T) {
 			resp, err := loop.Run(context.Background(), ai.ReasoningRequest{
 				SystemPrompt: "Use tools when needed.",
 				UserQuery:    "Find John",
+				Verbose:      true,
 				Executor: chatGPTToolExecutorStub{
 					tools: []ai.ToolDefinition{{
 						Name:        "lookup_user",
@@ -95,6 +156,22 @@ func TestOwnedLoops_EmitCompatibleCoreToolEventsAcrossProviders(t *testing.T) {
 
 		assertCoreToolEventContract(t, "chatgpt", events, "lookup_user", map[string]any{"name": "John"}, "John is in the users store.")
 	})
+}
+
+type failingGeminiExecutor struct {
+	err error
+}
+
+func (e *failingGeminiExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	_ = ctx
+	_ = toolName
+	_ = args
+	return "", e.err
+}
+
+func (e *failingGeminiExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	_ = ctx
+	return []ai.ToolDefinition{{Name: "list_stores"}}, nil
 }
 
 type providerStreamedEvent struct {
