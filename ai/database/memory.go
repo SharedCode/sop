@@ -44,8 +44,23 @@ func distanceKeyComparer(a, b memory.DistanceKey) int {
 	return a.ID.Compare(b.ID)
 }
 
+func openOrCreateBtree[TK btree.Ordered, TV any](ctx context.Context, db *Database, name string, t sop.Transaction, comparer btree.ComparerFunc[TK], options sop.StoreOptions) (btree.BtreeInterface[TK, TV], error) {
+	if trans, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
+		sr := trans.GetStoreRepository()
+		if sr != nil {
+			infos, err := sr.Get(ctx, name)
+			if err == nil && len(infos) > 0 && !infos[0].IsEmpty() {
+				return core.OpenBtree[TK, TV](ctx, db.config, name, t, comparer)
+			}
+		}
+	}
+	return core.NewBtree[TK, TV](ctx, db.config, name, t, comparer, options)
+}
+
 // KnowledgeBaseExists checks if the underlying physical tables for a knowledge base have been created.
 func (db *Database) KnowledgeBaseExists(ctx context.Context, name string) (bool, error) {
+	name = ai.CanonicalKBName(name)
+
 	tx, err := db.BeginTransaction(ctx, sop.ForReading)
 	if err != nil {
 		return false, err
@@ -78,6 +93,7 @@ func (db *Database) OpenKnowledgeBase(
 	documentMode bool,
 	enableTextSearch ...bool,
 ) (*memory.KnowledgeBase[map[string]any], error) {
+	name = ai.CanonicalKBName(name)
 
 	// Resurrect DocumentMode if the items store was physically provisioned in a prior lifecycle
 	if trans, ok := t.GetPhasedTransaction().(*common.Transaction); ok {
@@ -92,21 +108,21 @@ func (db *Database) OpenKnowledgeBase(
 
 	// 1. Open Categories Store
 	catsStore := sop.ConfigureStore(fmt.Sprintf("%s/categories", name), true, btree.DefaultSlotLength, "dynamic categories store", sop.SmallData, "")
-	catsTree, err := core.NewBtree[sop.UUID, *memory.Category](ctx, db.config, catsStore.Name, t, nil, catsStore)
+	catsTree, err := openOrCreateBtree[sop.UUID, *memory.Category](ctx, db, catsStore.Name, t, nil, catsStore)
 	if err != nil {
 		return nil, err
 	}
 
 	// 1.1 Open CategoriesByPath Store
 	catsByPathStore := sop.ConfigureStore(fmt.Sprintf("%s/categoriesByPath", name), true, btree.DefaultSlotLength, "dynamic categoriesByPath store", sop.SmallData, "")
-	catsByPathTree, err := core.NewBtree[string, sop.UUID](ctx, db.config, catsByPathStore.Name, t, nil, catsByPathStore)
+	catsByPathTree, err := openOrCreateBtree[string, sop.UUID](ctx, db, catsByPathStore.Name, t, nil, catsByPathStore)
 	if err != nil {
 		return nil, err
 	}
 
 	// 2. Open Vectors Store
 	vecsStore := sop.ConfigureStore(fmt.Sprintf("%s/vectors", name), true, 10000, "dynamic vectors store", sop.SmallData, "")
-	vecsTree, err := core.NewBtree[memory.VectorKey, memory.Vector](ctx, db.config, vecsStore.Name, t, vectorKeyComparer, vecsStore)
+	vecsTree, err := openOrCreateBtree[memory.VectorKey, memory.Vector](ctx, db, vecsStore.Name, t, vectorKeyComparer, vecsStore)
 	if err != nil {
 		return nil, err
 	}
@@ -117,21 +133,21 @@ func (db *Database) OpenKnowledgeBase(
 		itemsSize = sop.SmallData
 	}
 	itemsStore := sop.ConfigureStore(fmt.Sprintf("%s/items", name), true, btree.DefaultSlotLength, "dynamic items store", itemsSize, "")
-	itemsTree, err := core.NewBtree[memory.ItemKey, memory.Item[map[string]any]](ctx, db.config, itemsStore.Name, t, itemKeyComparer, itemsStore)
+	itemsTree, err := openOrCreateBtree[memory.ItemKey, memory.Item[map[string]any]](ctx, db, itemsStore.Name, t, itemKeyComparer, itemsStore)
 	if err != nil {
 		return nil, err
 	}
 
 	// 4. Open Categories By Distance Store
 	catsByDistStore := sop.ConfigureStore(fmt.Sprintf("%s/categoriesByDistance", name), true, btree.DefaultSlotLength, "dynamic categoriesByDistance store", sop.SmallData, "")
-	catsByDistTree, err := core.NewBtree[memory.DistanceKey, byte](ctx, db.config, catsByDistStore.Name, t, distanceKeyComparer, catsByDistStore)
+	catsByDistTree, err := openOrCreateBtree[memory.DistanceKey, byte](ctx, db, catsByDistStore.Name, t, distanceKeyComparer, catsByDistStore)
 	if err != nil {
 		return nil, err
 	}
 
 	// 5. Open Documents Store
 	docsStore := sop.ConfigureStore(fmt.Sprintf("%s/documents", name), true, btree.DefaultSlotLength, "dynamic canonical documents store", sop.BigData, "")
-	docsTree, err := core.NewBtree[sop.UUID, memory.Document](ctx, db.config, docsStore.Name, t, nil, docsStore)
+	docsTree, err := openOrCreateBtree[sop.UUID, memory.Document](ctx, db, docsStore.Name, t, nil, docsStore)
 	if err != nil {
 		return nil, err
 	}

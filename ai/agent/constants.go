@@ -30,4 +30,5 @@ const (
 
 	// Session Keys
 	SessionPayloadKey = "session_payload"
+	RunnerSessionKey  = "runner_session"
 )

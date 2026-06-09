@@ -237,9 +237,13 @@ If critical tool manuals are fragmented and left to probabilistic retrieval, a d
 
 Gate 1: Focused prefix routing.
 
-- Input shape: explicit namespace such as omni:stores:users.
-- Action: parse hard constraints and classify only the missing parts (mainly layers and CRUD intent).
-- Result: deterministic route with low token overhead.
+- Input shape: explicit namespace such as omni:stores:users, plus deep slash-path KB prompts such as `sop:/a/b/c` or `a/b/c/d`.
+- Action: parse hard constraints and classify only the missing parts (mainly layers and CRUD intent). Deep path-style KB prompts now short-circuit into focused KB retrieval rather than drifting into the generic discovery loop.
+- Result: deterministic route with low token overhead, and a clean path for direct category-path answers.
+
+Optional follow-on instruction format:
+
+- If the user adds an explicit `:LLM <instruction>` suffix, for example `a/b/c:LLM extract Apple company from the matches`, the ask remains grounded in KB retrieval but the model is invited to synthesize or narrow the returned candidates after the path lookup.
 
 Gate 2: MRU continuity or switch routing.
 
@@ -830,6 +834,8 @@ What the ChatGPT-owned loop now does:
 
 - delegates from `NativeReActEngine.Run(...)` through `ReActLoop()`
 - calls the OpenAI Responses API with native tool schemas and provider-owned loop control
+- follows the same continuation contract as Gemini and Anthropic: research turns may carry sample rows/records or the error, while default turns keep compact success summaries or the error text
+- keeps the final tool result always visible to the UI streamer, while `Verbose` controls whether intermediate tool results are streamed in the same turn
 - is active on the default ChatGPT path rather than hidden behind a default-off scaffold flag
 - executes local tool calls from native `function_call` items and feeds `function_call_output` back into the loop
 - reuses `previous_response_id` when available and falls back to replaying assistant messages, reasoning items, function calls, and function call outputs when it is not

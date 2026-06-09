@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	log "log/slog"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/sharedcode/sop"
@@ -17,6 +19,52 @@ import (
 	"github.com/sharedcode/sop/ai/database"
 	"github.com/sharedcode/sop/ai/memory"
 )
+
+func autoVectorizeBuiltinSpace(ctx context.Context, db *database.Database, spaceName, preloadPath string, emb ai.Embeddings, llm ai.Generator, onProgress func(progress int, total int, msg string)) error {
+	if !shouldForceLocalBuiltinEmbedder(spaceName, preloadPath) || emb == nil {
+		return nil
+	}
+
+	if onProgress != nil {
+		onProgress(95, 100, "Calculating Embeddings (Auto Vectorize)...")
+	}
+
+	if err := db.Vectorize(ctx, spaceName, llm, emb, 100); err != nil {
+		return fmt.Errorf("vectorization failed: %w", err)
+	}
+	return nil
+}
+
+type kbConfigSyncer interface {
+	GetConfig(context.Context) (*memory.KnowledgeBaseConfig, error)
+	SetConfig(context.Context, *memory.KnowledgeBaseConfig) error
+}
+
+func syncKnowledgeBaseEmbedderConfig(ctx context.Context, kb kbConfigSyncer, emb ai.Embeddings) error {
+	if kb == nil || emb == nil {
+		return nil
+	}
+
+	cfg, err := kb.GetConfig(ctx)
+	if err != nil || cfg == nil {
+		return nil
+	}
+
+	needsUpdate := false
+	if cfg.EmbedderDimension != emb.Dim() {
+		cfg.EmbedderDimension = emb.Dim()
+		needsUpdate = true
+	}
+	if cfg.Embedder != emb.Name() {
+		cfg.Embedder = emb.Name()
+		needsUpdate = true
+	}
+	if !needsUpdate {
+		return nil
+	}
+
+	return kb.SetConfig(ctx, cfg)
+}
 
 func runIngestImportSpace(ctx context.Context, request IngestSpaceRequest, emb ai.Embeddings, llm ai.Generator, onProgress func(progress int, total int, msg string), beforeCommit func()) error {
 	if onProgress != nil {
@@ -80,23 +128,8 @@ func runIngestImportSpace(ctx context.Context, request IngestSpaceRequest, emb a
 		}
 	}
 
-	if emb != nil {
-		cfg, cfgErr := kb.GetConfig(ctx)
-		if cfgErr == nil && cfg != nil {
-			needsUpdate := false
-
-			if cfg.EmbedderDimension != emb.Dim() {
-				cfg.EmbedderDimension = emb.Dim()
-				needsUpdate = true
-			}
-			if cfg.Embedder != emb.Name() {
-				cfg.Embedder = emb.Name()
-				needsUpdate = true
-			}
-			if needsUpdate {
-				kb.SetConfig(ctx, cfg)
-			}
-		}
+	if err := syncKnowledgeBaseEmbedderConfig(ctx, kb, emb); err != nil {
+		return fmt.Errorf("failed to update KnowledgeBase config: %w", err)
 	}
 
 	if onProgress != nil {
@@ -109,13 +142,8 @@ func runIngestImportSpace(ctx context.Context, request IngestSpaceRequest, emb a
 		return fmt.Errorf("failed to commit ingest import: %w", err)
 	}
 
-	if request.SpaceName == "SOP" && emb != nil {
-		if onProgress != nil {
-			onProgress(95, 100, "Calculating Embeddings (Auto Vectorize)...")
-		}
-		if err := db.Vectorize(ctx, kb.Name(), llm, emb, 100); err != nil {
-			return fmt.Errorf("import successful, but vectorization failed: %w", err)
-		}
+	if err := autoVectorizeBuiltinSpace(ctx, db, request.SpaceName, request.PreloadFilePath, emb, llm, onProgress); err != nil {
+		return fmt.Errorf("import successful, but %w", err)
 	}
 
 	return nil
@@ -301,27 +329,8 @@ func runIngestSpace(ctx context.Context, request IngestSpaceRequest, emb ai.Embe
 			return err
 		}
 
-		if emb != nil {
-			cfg, cfgErr := kb.GetConfig(ctx)
-			if cfgErr != nil {
-				return fmt.Errorf("failed to read KnowledgeBase config: %w", cfgErr)
-			}
-			if cfg != nil {
-				needsUpdate := false
-				if cfg.EmbedderDimension != emb.Dim() {
-					cfg.EmbedderDimension = emb.Dim()
-					needsUpdate = true
-				}
-				if cfg.Embedder != emb.Name() {
-					cfg.Embedder = emb.Name()
-					needsUpdate = true
-				}
-				if needsUpdate {
-					if err := kb.SetConfig(ctx, cfg); err != nil {
-						return fmt.Errorf("failed to update KnowledgeBase config: %w", err)
-					}
-				}
-			}
+		if err := syncKnowledgeBaseEmbedderConfig(ctx, kb, emb); err != nil {
+			return fmt.Errorf("failed to update KnowledgeBase config: %w", err)
 		}
 	}
 
@@ -335,7 +344,75 @@ func runIngestSpace(ctx context.Context, request IngestSpaceRequest, emb ai.Embe
 		return fmt.Errorf("failed to commit vector store initialization: %w", err)
 	}
 
+	if err := autoVectorizeBuiltinSpace(ctx, db, request.SpaceName, request.PreloadFilePath, emb, llm, onProgress); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func shouldUseImportPathForPreload(templateID, preloadPath string) bool {
+	trimmed := strings.TrimSpace(templateID)
+	return strings.EqualFold(trimmed, ai.DefaultKBName) || strings.EqualFold(trimmed, "SOP")
+}
+
+func builtinPreloadCandidates(templateID string) []string {
+	normalized := strings.ToLower(strings.TrimSpace(templateID))
+	normalized = strings.ReplaceAll(normalized, "_", " ")
+	normalized = strings.ReplaceAll(normalized, "-", " ")
+	normalized = strings.Join(strings.Fields(normalized), " ")
+
+	var candidates []string
+	if strings.Contains(normalized, "medical") {
+		candidates = append(candidates,
+			"medical.json",
+			"ai/medical.json",
+			"../medical.json",
+		)
+	}
+	if strings.Contains(normalized, "sop") {
+		candidates = append(candidates,
+			"sop_base_knowledge.json",
+			"ai/sop_base_knowledge.json",
+			"../ai/sop_base_knowledge.json",
+		)
+	}
+	return candidates
+}
+
+func buildImportSpaceRequest(ctx context.Context, filePath, databaseName, spaceName string) (*http.Request, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open preload file: %w", err)
+	}
+	defer file.Close()
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("database", databaseName); err != nil {
+		return nil, fmt.Errorf("failed to write database field: %w", err)
+	}
+	if err := writer.WriteField("name", spaceName); err != nil {
+		return nil, fmt.Errorf("failed to write name field: %w", err)
+	}
+
+	part, err := writer.CreateFormFile("file", filepath.Base(filePath))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create form file: %w", err)
+	}
+	if _, err := io.Copy(part, file); err != nil {
+		return nil, fmt.Errorf("failed to copy preload file contents: %w", err)
+	}
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("failed to close multipart writer: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "/api/spaces/import", &body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create import request: %w", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	return req, nil
 }
 
 func ingestImportReader(ctx context.Context, request IngestSpaceRequest) (io.Reader, io.Closer, error) {
@@ -391,9 +468,7 @@ func handlePreloadSpace(w http.ResponseWriter, r *http.Request) {
 		"../../" + req.TemplateID + ".json",
 		"ai/" + req.TemplateID + ".json",
 	}
-	if strings.EqualFold(req.TemplateID, ai.DefaultKBName) || req.TemplateID == "SOP" {
-		pathsToTry = append(pathsToTry, "sop_base_knowledge.json", "ai/sop_base_knowledge.json", "../ai/sop_base_knowledge.json")
-	}
+	pathsToTry = append(pathsToTry, builtinPreloadCandidates(req.TemplateID)...)
 
 	for _, p := range pathsToTry {
 		if _, err := os.Stat(p); err == nil {
@@ -435,21 +510,25 @@ func handlePreloadSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Remap to Ingest request
-	ingestReq := IngestSpaceRequest{
-		DatabaseName:    req.DatabaseName,
-		SpaceName:       req.TemplateID, // Use template ID as the Space name
-		PreloadFilePath: actualPath,
-	}
-
-	bodyBytes, _ := json.Marshal(ingestReq)
-	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-	if strings.EqualFold(req.TemplateID, ai.DefaultKBName) || strings.EqualFold(req.TemplateID, "SOP") {
-		// Forward directly to ingest import for SOP KB
-		handleIngestImportSpace(w, r)
+	if shouldUseImportPathForPreload(req.TemplateID, actualPath) {
+		importReq, err := buildImportSpaceRequest(r.Context(), actualPath, req.DatabaseName, req.TemplateID)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to build preload import request: %v", err), http.StatusInternalServerError)
+			return
+		}
+		handleImportSpace(w, importReq)
 	} else {
 		// Forward directly to ingest for other templates
+
+		// Remap to Ingest request
+		ingestReq := IngestSpaceRequest{
+			DatabaseName:    req.DatabaseName,
+			SpaceName:       req.TemplateID, // Use template ID as the Space name
+			PreloadFilePath: actualPath,
+		}
+
+		bodyBytes, _ := json.Marshal(ingestReq)
+		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 		handleIngestSpace(w, r)
 	}
 }
@@ -615,7 +694,7 @@ func handleIngestSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbEmbedder := GetConfiguredEmbedder(r)
+	dbEmbedder := GetConfiguredEmbedderForSpace(r, req.SpaceName, req.PreloadFilePath)
 	dbLLM := GetConfiguredLLM(r)
 
 	task := RegisterTask("SpaceIngest", 100)
@@ -671,8 +750,13 @@ func handleIngestImportSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbEmbedder := GetConfiguredEmbedder(r)
+	dbEmbedder := GetConfiguredEmbedderForSpace(r, req.SpaceName, req.PreloadFilePath)
 	dbLLM := GetConfiguredLLM(r)
+	embedderName := ""
+	if dbEmbedder != nil {
+		embedderName = dbEmbedder.Name()
+	}
+	log.Debug("ingest import embedder selection", "space", req.SpaceName, "preload_path", req.PreloadFilePath, "production_mode", config.ProductionMode, "embedder_name", embedderName, "embedder_nil", dbEmbedder == nil, "llm_nil", dbLLM == nil)
 
 	task := RegisterTask("SpaceIngestImport", 100)
 

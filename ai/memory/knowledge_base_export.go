@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/sharedcode/sop"
@@ -21,7 +22,7 @@ type ExportData[T any] struct {
 // ExportItem	dictates	what	fields	from	the	item	are	serialized.
 type ExportItem[T any] struct {
 	CategoryPath     string      `json:"category"`
-	DocID            string      `json:"doc_id,omitempty"`
+	DocID            DocIDs      `json:"doc_id,omitempty"`
 	Data             T           `json:"data"`
 	Summaries        []string    `json:"summaries,omitempty"`
 	SummariesVectors [][]float32 `json:"summaries_vectors,omitempty"`
@@ -166,10 +167,16 @@ func (kb *KnowledgeBase[T]) ImportJSON(ctx context.Context, reader io.Reader, pe
 
 		if key == "config" {
 			var configData KnowledgeBaseConfig
-			if err := decoder.Decode(&configData); err == nil {
-				_ = kb.SetConfig(ctx, &configData)
+			if err := decoder.Decode(&configData); err != nil {
+				return fmt.Errorf("decode kb config: %w", err)
 			}
-		} else if key == "categories" {
+			configData.Description = strings.TrimSpace(configData.Description)
+			if err := kb.SetConfig(ctx, &configData); err != nil {
+				return fmt.Errorf("persist kb config: %w", err)
+			}
+			continue
+		}
+		if key == "categories" {
 			//	Read	opening	'['
 			if _, err := decoder.Token(); err != nil { //	'['
 				return err

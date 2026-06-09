@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -12,6 +13,49 @@ import (
 	core_database "github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/jsondb"
 )
+
+func TestToolExecuteScript_AcceptsSingleInstructionObject(t *testing.T) {
+	agent := &CopilotAgent{Config: Config{StubMode: true}}
+
+	args := map[string]any{
+		"script": map[string]any{
+			"op":   "return",
+			"args": map[string]any{"value": "ok"},
+		},
+	}
+
+	result, err := agent.toolExecuteScript(context.Background(), args)
+	if err != nil {
+		t.Fatalf("toolExecuteScript should accept single object-shaped script input: %v", err)
+	}
+	if result == "" {
+		t.Fatal("expected a non-empty result from stubbed execution")
+	}
+}
+
+func TestToolExecuteScript_AcceptsNestedStepsWrapper(t *testing.T) {
+	agent := &CopilotAgent{}
+
+	args := map[string]any{
+		"script": []any{
+			map[string]any{
+				"args": map[string]any{
+					"steps": []any{
+						map[string]any{"op": "return", "args": map[string]any{"value": "ok"}},
+					},
+				},
+			},
+		},
+	}
+
+	result, err := agent.toolExecuteScript(context.Background(), args)
+	if err != nil {
+		t.Fatalf("toolExecuteScript should unwrap the nested steps wrapper: %v", err)
+	}
+	if !strings.Contains(result, "ok") {
+		t.Fatalf("expected the unwrapped return value, got %q", result)
+	}
+}
 
 func TestScriptExecution_JoinRegression(t *testing.T) {
 	// 1. Setup Temp DB

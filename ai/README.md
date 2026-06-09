@@ -1,35 +1,44 @@
 # SOP AI Kit
-The `sop/ai` package is the **SOP AI Kit** — a versatile **AI Platform** that transforms SOP from a storage engine into a complete **Computing Platform**.
+The `sop/ai` package is the **SOP AI Kit**. It extends SOP with AI-oriented storage, retrieval, scripting, and model-integration components.
 
-It enables you to build:
+It supports:
 *   **Domain-Specific AI Copilots**: Adapt the Scripting engine to any vertical (Finance, Healthcare, Media).
-*   **Embedded Applications**: Combine the database + scripting engine for powerful edge devices.
+*   **Embedded Applications**: Combine the database + scripting engine for edge and local deployments.
 *   **Personal AI Copilots**: Privacy-first, web-based assistants.
-*   **Enterprise AI Systems**: Acid-compliant RAG and autonomous agents.
+*   **Enterprise AI Systems**: ACID-compliant RAG and autonomous agents.
 
-It provides a complete toolkit for building local, privacy-first AI applications backed by the power of SOP's B-Tree storage engine.
+It provides components for building local AI applications on top of SOP's B-Tree storage engine.
+
+## Related Guides
+
+*   [AI Copilot & Agent Architecture](../AI_COPILOT.md)
+*   [AI Script Architecture](AI_SCRIPT_ARCHITECTURE.md)
+*   [SOP AI Copilot Usage](AI_COPILOT_USAGE.md)
+*   [Vector Store Design](vector/VECTOR_STORE_DESIGN.md)
+*   [Dynamic Vector Store Design](DYNAMIC_VECTOR_STORE_DESIGN.md)
 
 ## Core Components
 
 ### 1. New Memory Architecture (`ai/memory`) (Recommended)
-The core user-facing and Agent-driven storage engine. It is the **recommended** approach for new applications. It provides **Human-Readable Ontologies**, structured data for the UI and Copilot, rich visual analysis tools within the Data Manager, and is fully user-manageable and overridable.
+The core user-facing and agent-driven storage engine. It is the recommended approach for new applications. It provides human-readable ontologies, structured data for the UI and Copilot, visual analysis tools within the Data Manager, and user-manageable overrides.
 *   **Visual & Manageable**: Data Manager provides full UI integration to see how information is categorized. Users can manually inspect, manage, and override how the AI linked concepts, creating user-enrichable AI memories.
 *   **Knowledge Bases**: Groups information logically rather than physically. Implements the `OpenKnowledgeBase` pattern.
 *   **LLM Categorization**: Unlike legacy systems that use mathematics, this system uses LLMs to read data and determine its **Category** (e.g., "Billing", "HR").
 *   **Deterministic Pre-Filtering**: Caching and filtering by human-readable categories allows UI Copilots to skip 99% of the search space instantly before any math is done.
-*   **Always-Online (No Optimization Downtime)**: The new memory system intelligently shapes items into semantic categories natively. This completely eliminates the need for the blocking, expensive `Optimize()` phases that plague legacy K-Means vector architectures.
+*   **No Optimization Phase**: The memory system shapes items into semantic categories during normal operation, so it does not require a blocking `Optimize()` phase like the legacy K-Means vector path.
 *   **Granular Items**: The memory system inherently understands relationship mappings and structured JSON arrays for document retrieval.
-*   **Data as a Tradable Asset (Marketplace Ready)**: Because structuring this memory requires cognitive reasoning (LLM API calls), each Knowledge Base represents a literal "intellectual investment". Unlike flat, meaningless mathematical centroids, these highly-managed, "human-grade" semantic spaces (Spaces) can be managed via the UI, exported, and eventually minted, bought, or sold in a Data Marketplace by end-users.
+*   **Portable Knowledge Bases**: Because this memory structure is user-manageable, Knowledge Bases can be reviewed in the UI, exported, and reused across environments.
 
 ### 2. K-Means Vector Database (`ai/vector`) (Supported)
-A persistent, ACID-compliant vector store optimized for **pure mathematical throughput**. While the new memory architecture is recommended, the K-Means VectorDB is **fully supported** and retained for high-volume pipelines, backward compatibility, and cross-language FFI bindings. We will add support for the new memory architecture in cross-language FFI bindings soon.
-*   **Mathematical Centroids**: Zero-LLM ingestion. Vectors are grouped into clusters (Centroids) purely by cosine distance. This makes ingestion lightning fast and completely free (no API calls).
+A persistent, ACID-compliant vector store optimized for mathematical throughput. While the new memory architecture is recommended, the K-Means VectorDB remains supported for high-volume pipelines, backward compatibility, and cross-language FFI bindings.
+*   **Import Path to Spaces**: Legacy vector content can be imported into the newer Memory Spaces model. This allows older vector datasets to remain usable while the maintained product surface shifts toward Dynamic Vector Store and KnowledgeBase Studio workflows.
+*   **Mathematical Centroids**: Zero-LLM ingestion. Vectors are grouped into clusters (Centroids) by cosine distance. This avoids API calls during ingestion.
 *   **Blocking Optimizations (Weakness)**: Because centroids are purely mathematical, data drifts as vectors are added. It strictly requires periodic calls to the `Optimize()` function to recalculate the centers and shift data, during which writing may be blocked.
-*   **Storage**: Uses SOP B-Trees to store vectors and metadata. Wait-free, parallel queries point directly at mathematical clusters.
-*   **Usage**: Best for "Blind" data-dumping where 100M logs need to be searched without caring about folder structures, or when using language wrappers in Rust/Python/etc.
+*   **Storage**: Uses SOP B-Trees to store vectors and metadata. Parallel queries point directly at mathematical clusters.
+*   **Usage**: Suitable for high-volume ingestion pipelines and language-wrapper scenarios where mathematical clustering is preferred over category-oriented memory.
 *   **Modes**: Supports **Standalone** (In-Memory Cache) for local use and **Clustered** (Redis Cache) for distributed deployments.
 *   **Search**: Supports cosine similarity search with metadata filtering.
-*   **Partitioning**: Designed for massive scale via natural partitioning.
+*   **Partitioning**: Designed to scale through natural partitioning.
 *   **Optimization**: Built-in `Optimize()` method to rebalance clusters (Centroids) and ensure optimal search performance as data grows.
     *   **Scalability**: The optimization process is batched (commits every 200 items), allowing it to scale to millions of records without hitting transaction timeouts.
     *   **Operational Constraint**: To ensure data consistency and simplicity, the Vector Store enters a **Read-Only** mode during optimization. Any attempts to `Upsert` or `Delete` will return an error until `Optimize` completes.
@@ -58,8 +67,10 @@ See [ai/agent/README.md](ai/agent/README.md) for full documentation on Scripts, 
 
 ### 3. Memory Architecture (SOP Unique Design)
 The SOP Agent is equipped with a dual-memory system that leverages the Database Engine itself:
-*   **Short-Term Memory (Session Context)**: Uses `RunnerSession` / `ConversationThread` to track **Topics** and **Goals**. Unlike standard chat history (flat list), this structured approach allows the Agent to maintain distinct threads of thought and switch contexts without hallucinating via a rigorous "Executive Function".
-*   **Long-Term Memory (System Knowledge)**: Uses a persistent, transactional B-Tree (`llm_knowledge`). The Agent "learns" by performing ACID transactions against its own mind. This **B-Tree Powerhouse** approach ensures that knowledge is scalable, ordered, and corruption-free, unlike brittle JSON/Vector-only memory systems.
+*   **Short-Term Memory (Session Context)**: Uses `RunnerSession` / `ConversationThread` to track **Topics** and **Goals**. Unlike standard chat history (flat list), this structured approach allows the Agent to maintain distinct threads of thought and switch contexts with clearer state boundaries.
+*   **Long-Term Memory (System Knowledge)**: Uses a persistent, transactional B-Tree (`llm_knowledge`). The Agent records reusable knowledge through ACID-backed storage rather than relying only on transient prompt context.
+*   **Persona Isolation**: Knowledge Bases can carry distinct system prompts, embedders, and tool restrictions. Runtime memory is scoped to the active Knowledge Base so domain-specific personas do not bleed into unrelated asks.
+*   **System vs. Domain Roles**: The runtime can keep a system-level supervisor for routing and policy while delegating domain reasoning to the active Knowledge Base persona.
 
 ### 4. Generators & Embedders (`ai/generator`, `ai/embed`)
 Interfaces for connecting to AI models:
@@ -68,40 +79,11 @@ Interfaces for connecting to AI models:
 
 #### Provider-Owned ReAct Loops
 
-The `Generator` layer is no longer just a transport adapter for every provider. SOP now exposes a loop-level seam so providers that truly preserve native tool/conversation state can own their inner ReAct loop instead of being forced through one shared retry controller.
+The generator layer supports both shared and provider-owned ReAct loops.
 
-- `ReActLoopProvider` lets a generator return a provider-owned `ReActLoop`
-- `ReActTurnStrategyProvider` still supports turn-level shaping for shared paths
-- the default engine remains the fallback when a provider does not supply its own loop
-
-Gemini is the first full implementation of this design:
-
-- `ai/generator/gemini.go` now provides `ReActLoop()`
-- the Gemini loop accumulates ordered `ToolCallContinuation` state across turns
-- every native tool call emitted in a Gemini turn is executed and fed back into the same provider thread
-- the final cap-exhausted turn is a no-tool clarification turn, enforced structurally rather than only by prompt wording
-- MRU-facing `OutcomeFacts` and `OutcomeRecipes` are summarized by the shared helper in `ai/outcome_summary.go`, so Gemini and the default engine feed continuity through the same compaction logic
-
-Carryover support is now designed as the next tracked implementation phase:
-
-- Gemini continuity inside one Ask remains provider-owned.
-- Between adjacent Asks, SOP will add a bounded carryover policy with three modes: `off`, `compact`, and `live`.
-- `compact` is the intended default: reuse compact MRU, `OutcomeFacts`, learned recipes, and routing continuity without paying to replay an expensive raw provider thread.
-- `live` reuse should be allowed only for the same provider, model, topic, and KB when the carryover thread remains within budget.
-- When the live thread is too expensive or stale, SOP should reset to a fresh Ask rebuilt from provider-neutral memory rather than letting provider carryover become the durable source of truth.
-
-For the provider-neutral Stores execution direction that now treats both `execute_script` and piped lego-block assembly as first-class control surfaces, see [STORE_ORCHESTRATION_MODES.md](STORE_ORCHESTRATION_MODES.md).
-
-```mermaid
-flowchart LR
-    Ask[ReasoningRequest] --> Engine[NativeReActEngine]
-    Engine --> LoopCheck{ReActLoopProvider?}
-    LoopCheck -- No --> Default[Default shared loop]
-    LoopCheck -- Yes --> Provider[Provider-owned loop]
-    Provider --> Gemini[Gemini native continuation thread]
-    Gemini --> Exec[ToolExecutor]
-    Exec --> Gemini
-```
+- Providers that preserve native tool and conversation state can own the inner loop directly.
+- Providers without a native loop continue to use the shared engine path.
+- Carryover, repair continuity, and orchestration policy are documented in [AI Copilot & Agent Architecture](../AI_COPILOT.md) and [Store Orchestration Modes](STORE_ORCHESTRATION_MODES.md).
 
 ### 4. Model Store (`ai/database/model_store.go`)
 A unified interface for persisting AI models, from small "Skills" (Perceptrons) to large "Brains" (Neural Nets).
@@ -117,10 +99,10 @@ A transactional, embedded text search engine.
 *   **Usage**: Ideal for "Search this wiki" or "Filter by text" features alongside Vector Search.
 
 ### 6. Script System (`ai/SCRIPTS.md`)
-A unique **Hybrid Execution** engine that runs inside the Agent.
+A **Hybrid Execution** engine that runs inside the Agent.
 *   **Explicit Execution**: No magic, no guessing. The engine executes scripts line-by-line, exactly as defined.
 *   **Hybrid Workflows**: Seamlessly mixes **Deterministic Code** (`loop`, `fetch` tables) with **Non-Deterministic AI** (`ask` "Analyze this data").
-*   **Optimization**: Deterministic steps run at bare-metal Go speed; AI steps are invoked only when explicit reasoning is required.
+*   **Optimization**: Deterministic steps run in the local execution engine; AI steps are invoked only when explicit reasoning is required.
 *   [Read the full documentation](SCRIPTS.md).
 
 ### 7. AI Copilot (Interactive Mode)
@@ -137,14 +119,16 @@ The AI Copilot does not hardcode context rules. Instead, it relies on an embedde
 When the system initializes, the Setup Wizard compiles documents like this `README.md` and the user/tool guides (`AI_COPILOT_USAGE.md`), converting guidelines, relational schema strategies, and tool lists directly into **Active Memory** (Vectors). 
 This allows the AI to learn how your tables are linked, what tools it is allowed to use (`select`, `join`, `script`), and which CEL expressions map to your domain, directly from your documentation rather than rigid code blocks.
 
+KnowledgeBase Studio and the Space import/export surfaces are also the forward path for moving legacy vector content into the maintained Memory Spaces model.
+
 
 ## AI Tools
-*   [Execute Script Tool](EXECUTE_SCRIPT_TOOL.md)
+*   [AI Script Architecture](AI_SCRIPT_ARCHITECTURE.md)
 *   [Knowledge Base Studio](KNOWLEDGE_BASE_STUDIO.md)
-*   [Vector Store Design](VECTOR_STORE_DESIGN.md)
+*   [Vector Store Design](vector/VECTOR_STORE_DESIGN.md)
 *   [Dynamic Vector Store Design](DYNAMIC_VECTOR_STORE_DESIGN.md)
 *   [Swarm Design](SWARM_DESIGN.md)
-*   [SOP AI Architecture Article](SOP_AI_ARCHITECTURE_ARTICLE.md)
+*   [SOP AI Copilot Usage](AI_COPILOT_USAGE.md)
 
 ## Standards & Compatibility
 
@@ -157,11 +141,44 @@ The SOP AI Kit is designed to play nicely with the broader AI ecosystem while ad
     *   **Ollama**: Native support for local models (Llama 3, Mistral, Gemma).
     *   **Custom**: Implement the `ai.Generator` interface to connect any other provider.
 *   **Embedders**:
+    *   **Google Gemini embeddings**: Supports `gemini-embedding-2` through the Generative Language `batchEmbedContents` API. The runtime normalizes the model name to the `models/...` form and sends `taskType=RETRIEVAL_DOCUMENT` with `outputDimensionality=768`.
     *   **Ollama**: Use local models for embeddings.
+    *   **Local (kelindar / GGUF)**: Supports local GGUF embedders through the Kelindar integration, including `nomic-embed-text-v1.5-q8_0` and `bge-small-en-v1.5-q8_0`.
     *   **Agent-as-Embedder**: Use another SOP Agent to "embed" (translate) text, enabling recursive agent architectures.
 *   **Vector Store**:
     *   **LangChain**: The Python wrapper (`sop4py`) includes convenience methods for LangChain integration.
     *   **Generic**: The Go API uses generics (`VectorStore[T]`), allowing you to store strongly-typed structs or dynamic `map[string]any` payloads.
+
+#### Current embedder implementations
+
+The current runtime has three documented embedder paths for the main local and hosted setups:
+
+*   **Gemini `gemini-embedding-2`**: Hosted 768-dimensional embeddings via Google's batch endpoint. SOP sends retrieval-oriented payloads and explicitly requests `outputDimensionality=768`.
+*   **Kelindar / Nomic (`nomic-embed-text-v1.5-q8_0`)**: Local GGUF embedder with asymmetric prefixes for storage and query paths plus Matryoshka-style routing slices.
+*   **Kelindar / BGE Small (`bge-small-en-v1.5-q8_0`)**: Local GGUF embedder for lighter-weight 384-dimensional embeddings, especially useful for short labels, titles, and compact retrieval passages.
+
+#### Local kelindar / Nomic GGUF notes
+
+The default local embedding engine (`nomic-embed-text`) supports a native context window of **8,192 tokens** (approximately **6,000 English words**).
+
+*   **Automatic Handling:** If a text block inside your batch exceeds this size, the library will automatically truncate the text down to the maximum allowed limit before generating the vector.
+*   **Safety:** Your application will not crash, throw out-of-memory (OOM) exceptions, or panic when large documents are submitted.
+*   **Best Practice:** For large documents, chunk or split strings before passing them to the embedder to avoid losing context during truncation.
+
+For Kelindar models, SOP uses profile-driven behavior from embedder metadata:
+
+*   **Nomic Matryoshka routing**: Category and routing vectors are sliced to the routing dimension and normalized after slicing when the profile marks the model as Matryoshka-capable.
+*   **BGE-small**: The BGE small profile keeps 384-dimensional vectors and does not apply the Matryoshka routing normalization path.
+*   **Mode-specific prefixes**: Local routing, document-storage, and query vectors can use different prefixes so storage and retrieval follow the model contract rather than a single generic embedding call.
+
+#### Normalized vector distance path
+
+For normalized vectors, SOP uses a faster distance path in the memory/vector math layer.
+
+*   **One-time normalization**: Routing/category vectors from local Matryoshka models are normalized when they are sliced or indexed.
+*   **Fast distance**: `Distance(a, b, true)` dispatches to a dot-product-based Euclidean form for normalized vectors.
+*   **Formula**: For unit vectors, Euclidean distance is computed from the dot product as $\sqrt{2(1 - a \cdot b)}$.
+*   **Effect**: This avoids recomputing norms inside the hot search loop while preserving the same ranking behavior expected from Euclidean distance on normalized vectors.
 
 ### Deployment Standards
 *   **ACID Compliance**: Full Two-Phase Commit (2PC) support for distributed transactions.

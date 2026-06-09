@@ -21,6 +21,10 @@ type SmartMockGenerator struct {
 
 func (m *SmartMockGenerator) Name() string                     { return "mock" }
 func (m *SmartMockGenerator) EstimateCost(in, out int) float64 { return 0 }
+
+func (m *SmartMockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 func (m *SmartMockGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	var scriptBody string
 	// Instead of naive strings.Contains which can trigger on history context,

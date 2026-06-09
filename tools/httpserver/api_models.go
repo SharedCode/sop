@@ -19,7 +19,7 @@ type AddSpaceCategoryRequest struct {
 // It allows for flexible payload mapping via the Data field.
 type AddSpaceItemRequest struct {
 	ID         string         `json:"id,omitempty"`
-	DocID      string         `json:"doc_id,omitempty"`
+	DocID      memory.DocIDs  `json:"doc_id,omitempty"`
 	CategoryID string         `json:"category_id"`
 	Summaries  []string       `json:"summaries,omitempty"`
 	Positions  [][]float32    `json:"positions,omitempty"`
@@ -43,14 +43,15 @@ type UpdateSpaceItemRequest struct {
 // SpaceItemView defines the JSON model delivered to the UI for displaying Items.
 // It acts as a ViewModel rendering data originally stored generically inside Item[T].
 type SpaceItemView struct {
-	ID          string    `json:"id"`
-	DocID       string    `json:"doc_id,omitempty"`
-	Category    string    `json:"category"`
-	Text        string    `json:"text"`
-	Description string    `json:"description"`
-	Summaries   []string  `json:"summaries,omitempty"`
-	Vector      []float32 `json:"vector,omitempty"`
-	VectorSize  int       `json:"vector_size,omitempty"`
+	ID          string        `json:"id"`
+	DocID       memory.DocIDs `json:"doc_id,omitempty"`
+	CategoryID  string        `json:"category_id,omitempty"`
+	Category    string        `json:"category"`
+	Text        string        `json:"text"`
+	Description string        `json:"description"`
+	Summaries   []string      `json:"summaries,omitempty"`
+	Vector      []float32     `json:"vector,omitempty"`
+	VectorSize  int           `json:"vector_size,omitempty"`
 }
 
 // TemplateMetadata defines the structure for space template info.
@@ -80,7 +81,7 @@ type IngestSpaceRequest struct {
 // SpaceIngestChunk represents a discrete chunk of data/knowledge for ingestion.
 type SpaceIngestChunk struct {
 	ID               string         `json:"id"`
-	DocID            string         `json:"doc_id,omitempty"`
+	DocID            memory.DocIDs  `json:"doc_id,omitempty"`
 	Category         string         `json:"category"`
 	Text             string         `json:"text"`
 	Description      string         `json:"description"`

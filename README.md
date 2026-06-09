@@ -1,8 +1,8 @@
 # SOP Data & Compute Platform
 
-**SOP** is a comprehensive **Data & Compute Platform** designed for the modern enterprise and high-performance applications.
+**SOP** is a **Data & Compute Platform** for high-performance applications and distributed storage workflows.
 
-At its core, SOP is not just a traditional code library; it is a **Distributed Computing Framework** that powers **Swarm Computing**—the efficient, coordinated management of data and compute across clusters and embedded systems. SOP enables applications to effortlessly scale from a single device to a massive, distributed "swarm" of intelligent nodes.
+At its core, SOP combines an embedded storage engine, distributed coordination model, and AI/runtime tooling. It supports scaling from a single device to clustered deployments that share storage and coordination state.
 
 [![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions) [![CI](https://github.com/SharedCode/sop/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/sop/actions/workflows/go.yml) [![codecov](https://codecov.io/gh/SharedCode/sop/branch/master/graph/badge.svg)](https://app.codecov.io/github/SharedCode/sop) [![Go Reference](https://pkg.go.dev/badge/github.com/sharedcode/sop.svg)](https://pkg.go.dev/github.com/sharedcode/sop) [![Go Report Card](https://goreportcard.com/badge/github.com/sharedcode/sop)](https://goreportcard.com/report/github.com/sharedcode/sop)
 
@@ -64,36 +64,19 @@ Best for infrastructure administrators, DevOps, or "Data-First" users who want t
 
 ## Development Workflows: Code-First vs. Data-First
 
-The SOP Platform empowers you to choose the starting point that fits your style. Both approaches are **equally powerful** and allow you to manage your databases using the SOP library. It is simply a matter of preference where you begin.
+SOP supports both code-first and data-first workflows.
 
-### 1. Code-First Approach
-*Start in your IDE.*
-
-In this workflow, you use the **SOP Code Library** to define your data structures and logic programmatically.
-1.  **Define & Run**: You write code to define B-Tree stores, transaction logic, and data types (Go, Python, C#, etc.). When your app runs, SOP creates the necessary structures on disk.
-2.  **Manage Later**: You can then launch the **Data Manager** to inspect, query, and visualize the data your application has created. This is perfect for developers who prefer to stay in code and treat the database as an embedded component.
-
-### 2. Data-First Approach
-*Start in the Visual Tool.*
-
-In this workflow, you start with the **Data Manager** to define your schema and data beforehand.
-1.  **Visual Design**: Use the **Data Manager's Visual Tools** to create Databases, define Stores, and optionally populate initial datasets or manage content.
-2.  **Consume in Code**: Your application code simply "opens" these pre-existing stores. This allows you to define the schema and indices (data/schema first) before a single line of business logic is written.
-
-### The Complementary Cycle
-These workflows are not mutually exclusive—they represent a full lifecycle.
-*   **Start in App -> Continue in Manager**: Build your app, then use the Data Manager to inspect production data, debug issues, or analyze performance.
-*   **Start in Manager -> Consume in App**: Prototype a schema or populate a test dataset visually, then hand it off to developers to build the application logic.
-
-SOP ensures seamless interoperability regardless of where you begin.
+*   **Code-first**: Define stores and logic in application code, then inspect and manage them with the Data Manager.
+*   **Data-first**: Create stores and seed data in the Data Manager, then open those stores from application code.
+*   **Further Reading**: See [Workflows Guide](WORKFLOWS.md) for the detailed workflow patterns and deployment scenarios.
 
 ## SOP Data Manager & AI Suite
 
-SOP allows you to interact with your data using the **SOP Data Manager**—a web-based console that features a powerful **SQL-like** query engine and an **AI Copilot**.
+SOP allows you to interact with your data using the **SOP Data Manager**—a web-based console that includes a **SQL-like** query engine and an **AI Copilot**.
 
 ### Data Manager Capabilities
 *   **Visual Management**: Inspect B-Trees, manage Stores (Key-Value, Vector, Model), and explore the System DB.
-*   **Environment Manager**: Switch between environments (Dev, QA, Prod) instantly. Configurations (including the list of databases and connection details) are stored in portable **JSON files**.
+*   **Environment Manager**: Switch between environments using portable **JSON** configuration files.
 *   **Shared Intelligence**: Manage permissions and connections to share databases across the network, allowing different teams to collaborate on the same "System Knowledge" base.
 
 ### Designing for AI: Relations
@@ -111,77 +94,40 @@ This structure allows AI Agents to navigate data using simple "Chain of Thought"
     *   **CRUD**: Insert, Update, and Delete records via a query interface.
 
 ### Storage Distribution & Redundancy
-SOP separates the storage responsibilities into two distinct layers, each tunable via the configuration:
+SOP separates storage responsibilities into registry/system data and user-data files.
 
-1.  **Registry / System Data (Stores Folders)**:
-    *   **Configuration**: `StoresFolders` (List of paths).
-    *   **Mechanism**: Active/Passive Redundancy.
-    *   **Behavior**: You typically provide 2 paths (on different drives). SOP writes to the Active drive. If it fails, the system automatically fails over to the Passive drive to ensure the Registry & the database remains fully operational.
-
-2.  **User Data Files (Erasure Coding)**:
-    *   **Configuration**: `ErasureConfigs` (Map of Keys to EC settings).
-    *   **Mechanism**: Sharding & Parity (Striping).
-    *   **Behavior**: Large data files (User B-Trees, Blobs) are split into chunks (Shards) and distributed across multiple drives. This provides both **Parallel I/O (High IOPS)** and **Fault Tolerance** (e.g., surviving a drive failure via parity reconstruction).
-    *   **Key-Based Routing**: You can assign specific stores to specific storage tiers (e.g., "fast-ssd-pool" vs "archive-hdd-pool") using the configuration keys.
+*   **Registry and system data**: Configured through `StoresFolders` with active/passive redundancy.
+*   **User data files**: Configured through `ErasureConfigs` for striping, parity, and store-level routing.
+*   **Further Reading**: See [Configuration & Tuning Guide](CONFIGURATION.md) and [Operations Guide](OPERATIONS.md) for the full storage and failover configuration model.
 
 ### The System Database (SystemDB)
-All SOP environments come with a built-in **SystemDB**. Far from just a log repository, this is the "brain" of the platform that stores:
+All SOP environments come with a built-in **SystemDB**. It stores platform metadata and runtime artifacts such as:
 *   **Scripts**: Your automation workflows and compiled functions.
-*   **LLM Knowledge**: Standard B-Tree stores containing domain knowledge. Modeled like a "Model Store" (Category + Name keys), we use deterministic lookups to avoid the high false-positive rates found in Vector similarity search.
+*   **LLM Knowledge**: Domain knowledge and operational guidance used by the AI runtime.
 *   **(Future) RBAC**: Role-Based Access Control configurations for multi-user security.
 
 ### Spaces & Active Memory
-Instead of a single monolithic Vector Database, SOP utilizes **Spaces**—isolated, highly-focused semantic VectorDBs.
-*   **Targeted Context**: By partitioning data into domains (e.g., "Medical", "HR", "Sales"), queries remain highly relevant, bypassing the signal-to-noise degradation normally found in massive shared vector spaces.
-*   **Stateless Backend (BYOK)**: Connect to any Space safely using **Bring Your Own Key (BYOK)** architecture. The frontend injects credentials per-request via headers (`X-LLM-XX` and `X-Embedder-XX`), ensuring maximum security and a completely stateless backend.
-*   **Active Memory**: "The Butler" (our orchestrator) maintains bio-mimicked conceptual context retention via vector centroids, meaning conversations remember the *idea* of what you were talking about without requiring enormous token windows.
+SOP uses **Spaces** as isolated semantic working sets rather than one shared monolithic vector space.
+*   **Domain Scope**: Spaces let the runtime keep memory, retrieval, and enrichment focused on a specific domain.
+*   **Stateless Backend (BYOK)**: Credentials are supplied per request so the backend can remain stateless.
+*   **Further Reading**: See [AI Copilot & Agent Architecture](AI_COPILOT.md) and [SOP AI Kit](ai/README.md) for the detailed memory and Space model.
 
 ### Partitioned Vector Search
-SOP is uniquely positioned to serve as a high-performance Vector Database for AI/RAG applications. Recent findings demonstrate that SOP B-Trees can outperform specialized vector stores (like HNSW) for specific partitioned workloads by leveraging its efficient blob storage and range query capabilities.
+SOP supports partitioned vector search using B-Tree-backed storage layouts that keep related vectors adjacent and allow metadata-aware scans.
 
-**The Architecture:**
-1.  **Partitioning**: Vectors are grouped by a "Partition ID" (e.g., `DocumentID`, `UserID`, or a clustering centroid).
-2.  **Key Structure**: The B-Tree key is a composite of `{PartitionID, VectorID}`. This ensures that all vectors belonging to a partition are stored contiguously on disk.
-3.  **Blob Storage**: We configure the store with `IsValueDataInNodeSegment = false`.
-    *   **Why?**: This keeps the B-Tree index nodes (containing only keys) extremely compact and cache-friendly.
-    *   **Value**: The actual high-dimensional vector data (e.g., `[]float32`) is stored in the "Value" part, which SOP offloads to separate data segments (blobs).
-4.  **Streaming/Chunking**: For massive partitions, the value can be a "chunked blob" (using `StreamingDataStore`), allowing efficient retrieval of vector batches without loading the entire dataset into memory.
-
-**The Benefit**:
-When querying, you can perform a "Partition Scan":
-*   `b3.FindOne({PartitionID, MinVectorID})` jumps instantly to the start of the partition.
-*   `b3.Next()` iterates through the vectors in that partition with sequential I/O speed.
-    *   **Chunked Iteration**: For massive partitions, you can divide the vectors into chunks (e.g., 10MB blocks) and iterate through them efficiently. `b3.Next()` will seamlessly move from one chunk to the next, allowing you to process gigabytes of vector data without memory pressure.
-*   Since the index is compact, the traversal is lightning fast, and you only load the vector blobs you need.
-
-This approach eliminates the "random walk" overhead of graph-based indexes (like HNSW) when you can scope your search to a partition, making SOP an optimal storage engine for hybrid search (Metadata Filter + Vector Similarity).
+For the detailed storage layout, optimization model, and vector-search tradeoffs, see [SOP AI Kit](ai/README.md), [Vector Store Design](ai/vector/VECTOR_STORE_DESIGN.md), and [Dynamic Vector Store Design](ai/DYNAMIC_VECTOR_STORE_DESIGN.md).
 
 ### Rich Key Structures (Metadata Carrier)
-SOP allows you to use complex structs as B-Tree keys, enabling a powerful pattern where the Key itself acts as a persistent metadata carrier.
+SOP supports complex B-Tree keys that carry metadata such as status, version, category, or routing fields.
 
-*   **Concept**: Instead of just an ID, your Key can contain `Version`, `Status`, `Category`, or other metadata.
-*   **Benefit**: You can perform complex filtering and structural operations (e.g., "Find all active items in Category X") by scanning only the B-Tree nodes (Keys).
-*   **Efficiency**: This avoids the I/O cost of fetching the Value (which might be a large JSON blob or vector) until you actually need it.
-*   **ACID**: The Key and Value are updated atomically in the same transaction.
-
-This is heavily used in the **AI Vector Database** module, where the `ContentKey` stores `CentroidID`, `Distance`, and `Version` information, allowing the system to manage clustering and migrations purely via key traversal.
+This pattern is used across general-purpose stores and the AI/vector layers to support filtering and structural operations with minimal value reads. See [Architecture Guide](ARCHITECTURE.md), [SOP AI Kit](ai/README.md), and [Vector Store Design](ai/vector/VECTOR_STORE_DESIGN.md) for the detailed key layouts.
 
 ### AI Copilot & Scripts
 The Data Manager includes an integrated AI Copilot that supports **Natural Language Programming**.
-*   **Natural Language Queries**: Ask "Show me all active users" or "Join users with their last order", and the system acts on it.
-*   **Script Drafting**:
-    *   **Draft**: Type `/create my_script` to start a draft.
-    *   **Build**: Add steps naturally with `/step` or automatically from your last command.
-    *   **Save**: Commit your workflow with `/save`.
-*   **Execution**:
-    *   **Run**: Execute logic with `/run my_script`.
-    *   **Parameters**: Pass dynamic arguments like `/run user_audit id=123`.
-*   **Hybrid Engine**:
-    *   **Tool Steps**: Preserved as raw code (e.g., `Scan`, `Join`) for **zero-latency** execution.
-    *   **Natural Language Steps**: Invokes the LLM only when reasoning is required (e.g., "Analyze sentiment").
-*   **Bare-Metal Performance**: Scripts are compiled into efficient engine instructions (Go code), avoiding the overhead of runtime parsing for repeated tasks.
-*   **Documentation**: See the [Execute Script Tool](ai/EXECUTE_SCRIPT_TOOL.md) for technical details on how scripts are parsed and executed by the AI Copilot.
-*   **Store Orchestration Modes**: See [Store Orchestration Modes](ai/STORE_ORCHESTRATION_MODES.md) for the provider-neutral direction that keeps both `execute_script` and piped lego-block tool assembly as first-class control surfaces.
+*   **Natural Language Queries**: Ask for selections, joins, and CRUD operations in plain language.
+*   **Script Drafting and Execution**: Create, save, and run reusable workflows from the UI or command surface.
+*   **Hybrid Execution**: Deterministic tool steps and reasoning steps can be combined in the same workflow.
+*   **Documentation**: See [AI Copilot & Agent Architecture](AI_COPILOT.md), [AI Script Architecture](ai/AI_SCRIPT_ARCHITECTURE.md), and [Store Orchestration Modes](ai/STORE_ORCHESTRATION_MODES.md) for runtime internals and orchestration details.
 
 To launch the Data Manager:
 ```bash
@@ -189,24 +135,12 @@ To launch the Data Manager:
 sop-httpserver
 ```
 
-## Articles & Deep Dives
-*   **[Beyond RAG: The Self-Correcting Enterprise AI](SELF_CORRECTING_AI_ARTICLE.md)** - How SOP turns user corrections into permanent system intelligence.
-    *   **New**: Describes "Relational Intelligence" — how the AI reads the graph structure of your stores to perform perfect joins without hallucination.
-*   **[SOP vs Modern Database Architecture](SOP_MODERN_DB_ARTICLE.md)** - A deep dive into B-Tree cursors, Zero-Copy Streaming, and Native Joins.
-*   **[Programming with SOP](PROGRAMMING_WITH_SOP_ARTICLE.md)** - A conceptual guide to building applications on the SOP platform.
-*   **[Scalability & Limits](SCALABILITY.md)** - Understanding the theoretical and practical limits of the system.
-*   **[Swarm Computing](SWARM_COMPUTING.md)** - Learn how SOP enables distributed, coordinated computing without a central brain.
-*   **External Links & Presentations**:
-    *   [Google Slides Presentation](https://docs.google.com/presentation/d/17BWiLXcz1fPGVtCkAwvE9wR0cDq_dJPjxKgzMcWKkp4/edit#slide=id.p)
-    *   [SOP's Swarm Computing Proposition](https://www.linkedin.com/pulse/geminis-analysis-sops-swarm-computing-gerardo-recinto-cqzqc)
-    *   [Revolutionary Storage & Cache Strategy](https://www.linkedin.com/pulse/revolutionizing-b-tree-performance-universal-l1-cache-gerardo-recinto-87jjc)
-    *   [SOP as AI Vector Database](https://www.linkedin.com/pulse/sop-ai-database-engine-gerardo-recinto-tzlbc/?trackingId=yRXnbOEGSvS2knwVOAyxCA%3D%3D)
-    *   [Anatomy of a Video Blob](https://www.linkedin.com/pulse/sop-anatomy-video-blob-gerardo-recinto-4170c/?trackingId=mXG7oM1IRVyP4yIZtWWlmg%3D%3D)
-    *   [B-Tree, a Native of the Cluster](https://www.linkedin.com/pulse/b-tree-native-cluster-gerardo-recinto-chmjc/?trackingId=oZmC6tUHSiCBcYXUqwfGUQ%3D%3D)
-    *   [SOP in File System](https://www.linkedin.com/pulse/scaleable-object-persistencesop-file-system-gerardo-recinto-zplbc/?trackingId=jPp8ccwvQEydxt3pppa8eg%3D%3D)
-    *   [Hash Map on Disk](https://www.linkedin.com/posts/coolguru_hash-map-on-a-file-can-offer-up-to-13-activity-7313645523024891905-8yem?utm_source=share&utm_medium=member_desktop&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0)
-    *   [Master less cluster wide distributed locking (RSRR algorithm)](https://www.linkedin.com/posts/coolguru_new-master-less-cluster-wide-resource-locking-activity-7322020975674302465-lUjl?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0)
-    *   [RSRR as compared to DynamoDB's distributed locking](https://www.linkedin.com/posts/coolguru_i-just-found-out-thanks-to-my-eldest-that-activity-7325255314474250241-f07g?utm_source=social_share_send&utm_medium=member_desktop_web&rcm=ACoAAABC-LQBTk6hP9wAIOqQDfLJ3w2_hZ-nyh0)
+## Reference Guides
+*   **[AI Copilot & Agent Architecture](AI_COPILOT.md)** - Canonical reference for the Copilot runtime, grounding model, and provider execution loops.
+*   **[Architecture Guide](ARCHITECTURE.md)** - Core engine, storage flow, replication, and backend design.
+*   **[Scalability & Limits](SCALABILITY.md)** - Capacity math and architectural scaling model.
+*   **[Operations Guide](OPERATIONS.md)** - Failover, recovery, and operational practices.
+*   **[Workflows Guide](WORKFLOWS.md)** - Deployment and usage patterns from standalone to clustered environments.
 
 ## 🚀 Getting Started
 
@@ -307,7 +241,7 @@ Go developers often prefer storing native structs for maximum performance and ty
 
 ### Bridging the Gap: From Code-First to Managed (Safe & Zero-Downtime)
 
-SOP supports a powerful hybrid workflow. You can start with a **Code-First** approach (using custom Go structs and comparers) and later "upgrade" your store to be fully manageable by the Data Manager—**without migration or downtime**.
+SOP supports a hybrid workflow. You can start with a **Code-First** approach (using custom Go structs and comparers) and later make the store fully manageable by the Data Manager—**without migration or downtime**.
 
 *   **The Feature**: Use the Data Manager's **Edit Store** functionality to attach an `IndexSpecification` or `CEL expression` to an existing "Code-First" store.
 *   **The Safety Mechanism**: This operation is **100% safe** but protected.
@@ -332,7 +266,7 @@ See the [API Cookbook](COOKBOOK.md#interoperability-note-go-vs-other-languages) 
 
 ## SOP Data Manager
 
-SOP now includes a powerful **SOP Data Manager** that provides **full CRUD** capabilities for your B-Tree stores. It goes beyond simple viewing, offering a complete GUI for inspecting, searching, and managing your data at scale.
+SOP includes a **SOP Data Manager** that provides **full CRUD** capabilities for B-Tree stores. It supports inspection, search, and day-to-day data management through a web UI.
 
 *   **Web UI**: A modern, responsive interface for browsing B-Trees, managing stores, and visualizing data.
 *   **AI Copilot**: Integrated directly into the UI, the AI Copilot can help you write queries (including SQL-like Joins), explain data structures, and even generate code snippets.
@@ -396,10 +330,10 @@ See [ai/README.md](ai/README.md) for a deep dive into the AI capabilities.
 - [SOP for Java (sop4j)](bindings/java/README.md)
 - [SOP for C# (sop4cs)](bindings/csharp/README.md)
 - [SOP for Rust (sop4rs)](bindings/rust/README.md)
-- [SOP AI Kit](ai/README.md) - **New!** Includes Vector Store, RAG Agents, and **Scripts** (Record & Replay).
+- [SOP AI Kit](ai/README.md) - Includes Vector Store, RAG Agents, and **Scripts** (Record & Replay).
   - [AI Script Architecture](ai/AI_SCRIPT_ARCHITECTURE.md) - Deep dive into our scalable, functional AI runtime.
   - [Scripting Guide](ai/SCRIPTS.md) - Learn how to record and write scripts.
-- [SOP Data Manager](tools/httpserver/README.md) - **Updated!** A powerful SOP HTTP Server & Web UI that scales from a local embedded viewer to a clustered enterprise management console on Kubernetes.
+- [SOP Data Manager](tools/httpserver/README.md) - SOP HTTP Server & Web UI for local and clustered management workflows.
 - [Changelog](CHANGELOG.md)
 - [Community & support](#community--support)
 - [Contributing & license](#contributing--license)
@@ -565,11 +499,11 @@ Standard Key-Value stores treat keys as opaque strings. SOP treats them as **Fir
     *   **Consistency**: This metadata serves as the source of truth for ACID transactions.
 
 ### 4. Hybrid AI Compute & Scripting (Self-Correcting)
-SOP introduces a novel paradigm by embedding a **Scripting Engine directly into the AI Run-Loop**.
-*   **Compiled Instructions**: Unlike chat-only bots, SOP allows you to "record" complex AI reasoning into **deterministic scripts**. Once verified, these scripts run as compiled programs, eliminating future hallucinations for that task.
-*   **Self-Correction with Memory**: Agents possess controlled **Short-Term (Context)** and **Long-Term (Vector Store)** memory, enabling them to learn from mistakes and refine their own scripts over time ("Self-Correction").
-*   **Safety & Adoption**: By freezing successful stochastic reasoning into deterministic code, SOP removes the risk of "hallucinations" in production, enabling **Safe AI Adoption** across regulated industries like Healthcare and Finance.
-*   **Exponential Automation**: This unique combination of properties unlocks a **Tenfold Increase in Automatable Tasks**, allowing systems to handle complex, multi-step workflows that were previously considered too risky or complex for AI.
+SOP combines an AI-facing scripting engine with explicit execution controls.
+*   **Deterministic Workflows**: Multi-step reasoning can be captured as reusable scripts after validation.
+*   **Memory and Repair**: Runtime memory and repair patterns support iterative correction across asks.
+*   **Operational Safety**: Tool execution remains local and constrained by the application runtime.
+*   **Further Reading**: See [AI Copilot & Agent Architecture](AI_COPILOT.md) and [AI Script Architecture](ai/AI_SCRIPT_ARCHITECTURE.md) for the full runtime model.
 
 ### 5. Granular Durability & RAID
 Moving beyond simple replication, SOP brings hardware-level reliability concepts into software.
@@ -584,13 +518,7 @@ For operational best practices (failover, backups), see the [Operational Guide](
 
 For code examples, check out the [API Cookbook](COOKBOOK.md).
 
-See more details here that describe further, the different qualities & attributes/features of SOP, and why it is a good choice as a storage engine for your applications today: [Summary](GO_CORE_ENGINE.md)
-
-Before I go, I would like to say, SOP is a green field, totally new. What is being shipped in V2 is just the start of this new product. We are barely scratching the surface of what can be done that will help storage management at super scale. SOP is a super computing enabler. The way its architecture was laid out, independent features and together, they are meant to give us the best/most efficient performance & IO of a group of computers (cluster), network & their storage, that can possibly give us.
-
-## High level features/usability articles about SOP
-- [**New!** AI Copilot: A "Local Expert" for your Data](AI_COPILOT.md) - How we built a secure, RAG-based agent into the SOP Data Manager.
-- [SOP: The Modern Database Library](SOP_MODERN_DB_ARTICLE.md) - Why "Database-as-a-Library" is the future of cloud-native storage.
+See [Summary](GO_CORE_ENGINE.md) for additional implementation notes and storage-engine details.
 
 
 ## The Database Abstraction

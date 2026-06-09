@@ -255,7 +255,7 @@ func TestListTools_LowRiskExposedToolsUseJSONSchemas(t *testing.T) {
 		"vectorize_space_items":      false,
 		"execute_local_command":      false,
 		"send_email":                 false,
-		"route_to_multi_kb":          false,
+		"search_space":               false,
 		"handoff_to_avatar":          false,
 		"conclude_topic":             false,
 	}

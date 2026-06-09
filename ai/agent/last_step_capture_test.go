@@ -43,6 +43,10 @@ func (m *MockGeneratorWithRaw) Generate(ctx context.Context, prompt string, opts
 
 func (m *MockGeneratorWithRaw) EstimateCost(in, out int) float64 { return 0 }
 
+func (m *MockGeneratorWithRaw) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func TestService_Ask_CapturesLastStep_OnToolExecution(t *testing.T) {
 	// 1. Setup Mock Generator to return a tool call
 	toolCallJSON := `{"tool": "select", "args": {"database": "mydb", "query": "select * from users"}}`

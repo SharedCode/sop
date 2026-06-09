@@ -5,6 +5,12 @@ Semantic Anchors & Hybrid Search
 
 This document outlines the architectural breakthroughs and operational mechanics of the SOP Dynamic Vector Store. 
 
+## Legacy interoperability
+
+The Dynamic Vector Store is the maintained product direction for AI memory and KnowledgeBase Studio. The predecessor vector store remains supported for backward compatibility, and legacy vector content can be imported into the newer Memory Spaces model through the Space import workflows.
+
+That means the older vector path is not abandoned operationally, but new embedding, routing, and memory-algorithm work should be documented against the Dynamic Vector Store and Spaces surfaces rather than the predecessor IVF design.
+
 ## 1. The Problem with Traditional Vector Databases
 Traditional vector databases rely on algorithms like K-Means or rigid graph structures like HNSW. These systems suffer from fundamental flaws when operating at a massive, transactional scale:
 * **Blind Clustering:** They cluster vectors based purely on raw mathematical proximity, possessing zero contextual understanding of what the data actually *means*. 
@@ -50,6 +56,141 @@ For example, imagine our Database is anchored by the System Prompt: `"RBAC, B-Tr
 5. The B-Tree instantly retrieves the `"best friend"` Category (which sits exactly at `500`), **despite the fact that "best friend", "I love best friend", and "RBAC Databases" share absolutely zero semantic meaning.**
 
 The Anchor doesn't need to understand what it's looking at—it just needs to stubbornly stay still.
+
+## 4.6. Embedder Contract: Kelindar / nomic-embed-text-v1.5-q8_0
+
+The local Kelindar embedder uses the Nomic embedding family for both semantic anchoring and document/query retrieval. The contract must distinguish two modes explicitly.
+
+For lightweight, short-text embedding scenarios, the BGE small Q8 variant (`kelindar:bge-small-en-v1.5-q8_0`) is the preferred local option: it is smaller, faster to load, and works well for titles, labels, short queries, and compact retrieval passages where full long-document embeddings are not necessary.
+
+* **Storage mode**: embed raw text for persistence in the vector store using `search_document: `.
+* **Search mode**: embed the user query for retrieval using `search_query: `.
+* **Category/routing mode**: embed semantic category labels using `classification: ` and truncate to the routing dimension (256) for the B-Tree topology.
+
+The practical contract for this setup is:
+
+```json
+{
+  "model_name": "nomic-embed-text-v1.5-q8_0",
+  "max_context_tokens": 8192,
+  "supports_matryoshka": true,
+  "dimensions": {
+    "routing": 256,
+    "document": 768
+  },
+  "prefixes": {
+    "routing_search": "classification: ",
+    "doc_storage": "search_document: ",
+    "doc_search": "search_query: "
+  }
+}
+```
+
+| Vector role | Target dimension | Size prefix to use | Go array slice |
+| --- | ---: | --- | --- |
+| Domain Reference (DRCV) | 256 | `classification: ` | `vec[:256]` |
+| Category Centroids | 256 | `classification: ` | `vec[:256]` |
+| Implicit Category Search | 256 | `classification: ` | `vec[:256]` |
+| Stored SOP Documents | 768 (full) | `search_document: ` | `vec` |
+| Final User Text Query | 768 (full) | `search_query: ` | `vec` |
+
+This contract is intentionally data-driven: the model metadata above should be treated as the source of truth for routing dimensions, document dimensions, and prefix handling, so future embedders can plug into the same path without hard-coding assumptions.
+
+The current implementation also supports a second Kelindar profile for `bge-small-en-v1.5-q8_0`:
+
+```json
+{
+  "model_name": "bge-small-en-v1.5-q8_0",
+  "max_context_tokens": 512,
+  "supports_matryoshka": false,
+  "dimensions": {
+    "routing": 384,
+    "document": 384
+  },
+  "prefixes": {
+    "routing_search": "",
+    "doc_storage": "",
+    "doc_search": "Represent this sentence for searching relevant passages: "
+  }
+}
+```
+
+Operationally, BGE-small is the lighter local option for short labels, titles, and compact retrieval text, while Nomic remains the fuller local contract for asymmetric document/query flows and routing slices.
+
+### 4.6.2. Gemini embedder contract: `gemini-embedding-2`
+
+The hosted Gemini embedding path now targets `gemini-embedding-2` through the Generative Language `batchEmbedContents` API.
+
+The runtime contract for this path is:
+
+* **Model normalization**: model names are normalized to `models/gemini-embedding-2` before request dispatch.
+* **Task type**: requests set `taskType` to `RETRIEVAL_DOCUMENT`.
+* **Dimension request**: requests set `outputDimensionality` to `768`.
+* **Batching**: SOP sends requests in batches of up to 100 texts per API call.
+
+This keeps the Gemini path aligned with the rest of the vector stack: fixed dimensions, explicit retrieval semantics, and predictable payload shaping.
+
+### 4.6.3. Normalized vectors and faster distance calculation
+
+The current runtime assumes that routing/category vectors produced from Matryoshka-capable local models are normalized after slicing. This enables a faster distance calculation in the hot search loop.
+
+* **Normalization point**: local routing vectors are normalized once, at slice/index time.
+* **Distance primitive**: for normalized vectors, the runtime uses a dot-product-based Euclidean form instead of recomputing full Euclidean norms on every comparison.
+* **Formula**: for unit vectors, $d(a, b) = \sqrt{2(1 - a \cdot b)}$.
+* **Effect**: the search path keeps Euclidean semantics while replacing repeated norm work with a dot product and a final square root.
+
+This optimization is now the preferred path for normalized routing vectors in the dynamic store and memory math layer.
+
+### 4.6.1. Generic Go Driver Adapter (future-proof embedder layer)
+
+To make the vector stack portable across Nomic, MiniLM, and any future GGUF-compatible model, the runtime should expose a small adapter boundary instead of baking model logic into the B-Tree path.
+
+```go
+package embedder
+
+type EmbeddingProfile struct {
+    RoutingDim     int
+    DocumentDim    int
+    RoutingPrefix  string
+    DocStorePrefix string
+    DocQueryPrefix string
+}
+
+type ModelDriver interface {
+    // VectorizeSymmetric formats and cuts the array for the B-Tree topology.
+    VectorizeSymmetric(text string) ([]float32, error)
+    // VectorizeAsymmetric formats the payload for granular document matching.
+    VectorizeAsymmetric(text string, isQuery bool) ([]float32, error)
+}
+
+// UniversalDriver implements ModelDriver using the JSON profile configuration.
+type UniversalDriver struct {
+    rawModel *search.Vectorizer // Wrapped kelindar/search pointer
+    profile  EmbeddingProfile
+}
+
+func (d *UniversalDriver) VectorizeSymmetric(text string) ([]float32, error) {
+    formatted := d.profile.RoutingPrefix + text
+    vec, err := d.rawModel.Vectorize(formatted)
+    if err != nil {
+        return nil, err
+    }
+
+    // Slice if the model profile allows Matryoshka reduction.
+    if len(vec) > d.profile.RoutingDim {
+        return vec[:d.profile.RoutingDim], nil
+    }
+    return vec, nil
+}
+```
+
+This abstraction keeps the B-Tree, centroid, and category logic stable while the model-specific behavior is delegated to the profile-driven adapter. In practice, the same interface should implement three explicit paths:
+
+1. `VectorizeSymmetric(text)` → `classification: ` + Matryoshka truncation to 256 dims for category/routing vectors.
+2. `VectorizeAsymmetric(text, false)` → `search_document: ` + full 768-dim vector for stored content.
+3. `VectorizeAsymmetric(text, true)` → `search_query: ` + full 768-dim vector for query-time retrieval.
+
+That distinction is the missing signal in the current runtime path: storage and search must be treated as separate embedding modes, not one generic vectorization call.
 
 ## 5. Full Hybrid Integration (BM25)
 Dense vectors are incredible for conceptual matches, but poor for exact terms (UUIDs, names, error codes). The store operates as a fully complete **Hybrid System**, integrating sparse lexical BM25 search over the stored textual representations (`QueryText`). The AI agent can surgically retrieve data using exact keywords or broad conceptual similarities.

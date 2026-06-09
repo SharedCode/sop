@@ -62,19 +62,31 @@ func handleGetSpaceConfig(w http.ResponseWriter, r *http.Request) {
 		spaceDim = cfg.EmbedderDimension
 	}
 
+	pinnedEmbedder, pinnedReadOnly := pinnedInternalKBSettings(spaceName)
+	if pinnedEmbedder != "" {
+		pinnedInstance := GetConfiguredEmbedderForSpace(nil, spaceName, "")
+		if pinnedInstance != nil {
+			sysDim = pinnedInstance.Dim()
+			spaceDim = pinnedInstance.Dim()
+		}
+	}
+
 	response := struct {
 		memory.KnowledgeBaseConfig `json:",inline"`
 		IsReadOnly                 bool `json:"is_read_only"`
 		SystemEmbedderDimension    int  `json:"system_embedder_dimension"`
 		SpaceEmbedderDimension     int  `json:"space_embedder_dimension"`
 	}{
-		IsReadOnly:              !sop.CanPerformAction(ctx, spaceName, sop.ResourceAccess{}, sop.ActionWrite),
+		IsReadOnly:              pinnedReadOnly || !sop.CanPerformAction(ctx, spaceName, sop.ResourceAccess{}, sop.ActionWrite),
 		SystemEmbedderDimension: sysDim,
 		SpaceEmbedderDimension:  spaceDim,
 	}
 
 	if cfg != nil {
 		response.KnowledgeBaseConfig = *cfg
+		if pinnedEmbedder != "" {
+			response.Embedder = pinnedEmbedder
+		}
 	}
 
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")

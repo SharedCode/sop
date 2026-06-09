@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/sharedcode/sop/ai/memory"
@@ -11,6 +12,33 @@ import (
 )
 
 type mockEmbedder struct{}
+
+type promptAwareEmbedder struct{}
+
+func (m *promptAwareEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]float32, error) {
+	res := make([][]float32, len(texts))
+	for i, text := range texts {
+		switch text {
+		case "Finance knowledge base":
+			res[i] = []float32{9.0, 9.0, 9.0}
+		case "finance_kb":
+			res[i] = []float32{8.0, 8.0, 8.0}
+		case "You are the finance KB":
+			res[i] = []float32{9.0, 9.0, 9.0}
+		default:
+			res[i] = []float32{1.0, 2.0, 3.0}
+		}
+	}
+	return res, nil
+}
+
+func (m *promptAwareEmbedder) Dim() int {
+	return 3
+}
+
+func (m *promptAwareEmbedder) Name() string {
+	return "prompt-aware-embedder"
+}
 
 func (m *mockEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]float32, error) {
 	res := make([][]float32, len(texts))
@@ -26,6 +54,121 @@ func (m *mockEmbedder) Dim() int {
 
 func (m *mockEmbedder) Name() string {
 	return "mock-embedder"
+}
+
+func TestVectorize_PrefersKBNameForDomainReference(t *testing.T) {
+	ctx := context.Background()
+	dbDir := t.TempDir()
+	db := NewDatabase(sop.DatabaseOptions{StoresFolders: []string{dbDir}})
+
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	kb, err := db.OpenKnowledgeBase(ctx, "finance_kb", tx, nil, &promptAwareEmbedder{}, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase failed: %v", err)
+	}
+
+	cfg, err := kb.GetConfig(ctx)
+	if err != nil {
+		t.Fatalf("GetConfig failed: %v", err)
+	}
+	if cfg == nil {
+		cfg = &memory.KnowledgeBaseConfig{}
+	}
+	cfg.Description = "Finance knowledge base"
+	cfg.SystemPrompt = "You are the finance KB"
+	if err := kb.SetConfig(ctx, cfg); err != nil {
+		t.Fatalf("SetConfig failed: %v", err)
+	}
+
+	catID := sop.NewUUID()
+	cat := &memory.Category{ID: catID, Name: "Finance", Description: "Finance category"}
+	cats, _ := kb.Store.Categories(ctx)
+	cats.Add(ctx, catID, cat)
+	catsByPath, _ := kb.Store.CategoriesByPath(ctx)
+	catsByPath.Add(ctx, "Finance", catID)
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	if err := db.Vectorize(ctx, "finance_kb", nil, &promptAwareEmbedder{}, 1); err != nil {
+		t.Fatalf("Vectorize failed: %v", err)
+	}
+
+	tx2, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction(read) failed: %v", err)
+	}
+	defer tx2.Commit(ctx)
+
+	kb2, err := db.OpenKnowledgeBase(ctx, "finance_kb", tx2, nil, &promptAwareEmbedder{}, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase(read) failed: %v", err)
+	}
+	cfg2, err := kb2.GetConfig(ctx)
+	if err != nil {
+		t.Fatalf("GetConfig(read) failed: %v", err)
+	}
+	if len(cfg2.DomainReference) != 3 || cfg2.DomainReference[0] != 8 || cfg2.DomainReference[1] != 8 || cfg2.DomainReference[2] != 8 {
+		t.Fatalf("expected DomainReference to prefer the KB name over the description, got %v", cfg2.DomainReference)
+	}
+}
+
+func TestVectorize_FallsBackToKBNameWhenDescriptionIsTooLong(t *testing.T) {
+	ctx := context.Background()
+	dbDir := t.TempDir()
+	db := NewDatabase(sop.DatabaseOptions{StoresFolders: []string{dbDir}})
+
+	tx, err := db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	kb, err := db.OpenKnowledgeBase(ctx, "finance_kb", tx, nil, &promptAwareEmbedder{}, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase failed: %v", err)
+	}
+
+	cfg, err := kb.GetConfig(ctx)
+	if err != nil {
+		t.Fatalf("GetConfig failed: %v", err)
+	}
+	if cfg == nil {
+		cfg = &memory.KnowledgeBaseConfig{}
+	}
+	cfg.Description = strings.Repeat("This description is intentionally much longer than the threshold so the anchor logic must fall back to the KB name instead of the long description. ", 3)
+	if err := kb.SetConfig(ctx, cfg); err != nil {
+		t.Fatalf("SetConfig failed: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	if err := db.Vectorize(ctx, "finance_kb", nil, &promptAwareEmbedder{}, 1); err != nil {
+		t.Fatalf("Vectorize failed: %v", err)
+	}
+
+	tx2, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction(read) failed: %v", err)
+	}
+	defer tx2.Commit(ctx)
+
+	kb2, err := db.OpenKnowledgeBase(ctx, "finance_kb", tx2, nil, &promptAwareEmbedder{}, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase(read) failed: %v", err)
+	}
+	cfg2, err := kb2.GetConfig(ctx)
+	if err != nil {
+		t.Fatalf("GetConfig(read) failed: %v", err)
+	}
+	if len(cfg2.DomainReference) != 3 || cfg2.DomainReference[0] != 8 || cfg2.DomainReference[1] != 8 || cfg2.DomainReference[2] != 8 {
+		t.Fatalf("expected DomainReference to fall back to KB name, got %v", cfg2.DomainReference)
+	}
 }
 
 func TestStore_Vectorize_Batches(t *testing.T) {

@@ -1,0 +1,224 @@
+{
+    "_requirements": {
+        "_description": "All models in this catalog must support the following SOP AI integration features",
+        "_note_ollama": "Ollama local models do not support tool calling and are excluded from LLM options. Use Ollama for embeddings only (nomic-embed-text, mxbai-embed-large, all-minilm) or for simple text transformation tasks outside the agent architecture.",
+        "required": {
+            "tool_calling": "Must support function calling with tool definitions (JSON schemas) and return structured ToolCalls with function name and arguments. Used via GenOptions.Tools and GenOutput.ToolCalls.",
+            "system_prompts": "Must accept system-level instructions separate from user prompts. Used via GenOptions.SystemPrompt.",
+            "multi_turn_conversations": "Must support multi-turn conversations with tool call continuations, preserving tool_use/tool_result pairs across turns. Used via GenOptions.ToolCallContinuations (provider-neutral format)."
+        },
+        "optional": {
+            "thinking_controls": "Optional support for reasoning/thinking level controls (e.g., Gemini ThinkingLevel: low/medium/high). Used via GenOptions.ThinkingLevel.",
+            "structured_output_schemas": "Optional support for strict output structure enforcement via JSON schema (e.g., Gemini ResponseSchema). Used via GenOptions.ResponseSchema."
+        },
+        "carryover_modes": {
+            "compact": "Budget-based carryover with MRU enrichment when live carryover budget exceeded",
+            "live": "Provider-native continuation using ToolCallContinuations array (Gemini), PreviousResponseID (ChatGPT), or message history (Claude)"
+        }
+    },
+    "llm": [
+        {
+            "label": "Google",
+            "options": [
+                {
+                    "value": "gemini:gemini-3.5-flash",
+                    "label": "Gemini 3.5 Flash"
+                },
+                {
+                    "value": "gemini:gemini-3.1-pro-preview",
+                    "label": "Gemini 3.1 Pro Preview"
+                },
+                {
+                    "value": "gemini:gemini-2.5-pro",
+                    "label": "Gemini 2.5 Pro"
+                },
+                {
+                    "value": "gemini:gemini-3.1-flash-lite",
+                    "label": "Gemini 3.1 Flash Lite"
+                },
+                {
+                    "value": "gemini:gemma-4-it",
+                    "label": "Gemma 4 Instruct"
+                },
+                {
+                    "value": "gemini:gemma-4",
+                    "label": "Gemma 4"
+                },
+                {
+                    "value": "gemini:gemini-1.5-pro",
+                    "label": "Gemini 1.5 Pro"
+                },
+                {
+                    "value": "gemini:gemini-1.5-flash",
+                    "label": "Gemini 1.5 Flash"
+                }
+            ]
+        },
+        {
+            "label": "Anthropic",
+            "options": [
+                {
+                    "value": "anthropic:claude-opus-4-8",
+                    "label": "Claude Opus 4.8"
+                },
+                {
+                    "value": "anthropic:claude-opus-4-7",
+                    "label": "Claude Opus 4.7"
+                },
+                {
+                    "value": "anthropic:claude-opus-4-6",
+                    "label": "Claude Opus 4.6"
+                },
+                {
+                    "value": "anthropic:claude-sonnet-4-6",
+                    "label": "Claude Sonnet 4.6"
+                },
+                {
+                    "value": "anthropic:claude-sonnet-4-5",
+                    "label": "Claude Sonnet 4.5"
+                },
+                {
+                    "value": "anthropic:claude-haiku-4-5",
+                    "label": "Claude Haiku 4.5"
+                },
+                {
+                    "value": "anthropic:claude-opus-4-5",
+                    "label": "Claude Opus 4.5"
+                },
+                {
+                    "value": "anthropic:claude-opus-4-1",
+                    "label": "Claude Opus 4.1"
+                },
+                {
+                    "value": "anthropic:claude-3-5-sonnet-20241022",
+                    "label": "Claude 3.5 Sonnet (Oct 2024)"
+                },
+                {
+                    "value": "anthropic:claude-3-5-haiku",
+                    "label": "Claude 3.5 Haiku"
+                }
+            ]
+        },
+        {
+            "label": "OpenAI",
+            "options": [
+                {
+                    "value": "openai:gpt-5.5",
+                    "label": "GPT-5.5"
+                },
+                {
+                    "value": "openai:gpt-5.4",
+                    "label": "GPT-5.4"
+                },
+                {
+                    "value": "openai:gpt-5.4-mini",
+                    "label": "GPT-5.4 Mini"
+                },
+                {
+                    "value": "openai:gpt-5.2",
+                    "label": "GPT-5.2"
+                },
+                {
+                    "value": "openai:gpt-5.5-pro",
+                    "label": "GPT-5.5 Pro"
+                },
+                {
+                    "value": "openai:gpt-5.4-pro",
+                    "label": "GPT-5.4 Pro"
+                },
+                {
+                    "value": "openai:gpt-5.4-nano",
+                    "label": "GPT-5.4 Nano"
+                },
+                {
+                    "value": "openai:gpt-5.2-pro",
+                    "label": "GPT-5.2 Pro"
+                }
+            ]
+        }
+    ],
+    "embedder": [
+        {
+            "label": "Google",
+            "options": [
+                {
+                    "value": "gemini:gemini-embedding-2",
+                    "label": "Gemini (gemini-embedding-2)"
+                }
+            ]
+        },
+        {
+            "label": "OpenAI",
+            "options": [
+                {
+                    "value": "openai:text-embedding-4-large",
+                    "label": "OpenAI (text-embedding-4-large)"
+                },
+                {
+                    "value": "openai:text-embedding-3-large",
+                    "label": "OpenAI (text-embedding-3-large)"
+                },
+                {
+                    "value": "openai:text-embedding-3-small",
+                    "label": "OpenAI (text-embedding-3-small)"
+                },
+                {
+                    "value": "openai:text-embedding-ada-002",
+                    "label": "OpenAI (text-embedding-ada-002)"
+                }
+            ]
+        },
+        {
+            "label": "Voyage",
+            "options": [
+                {
+                    "value": "voyage:voyage-3-large",
+                    "label": "Voyage 3 Large"
+                },
+                {
+                    "value": "voyage:voyage-3",
+                    "label": "Voyage 3"
+                }
+            ]
+        },
+        {
+            "label": "Cohere",
+            "options": [
+                {
+                    "value": "cohere:embed-english-v3.0",
+                    "label": "Cohere English v3.0"
+                },
+                {
+                    "value": "cohere:embed-multilingual-v3.0",
+                    "label": "Cohere Multilingual v3.0"
+                }
+            ]
+        },
+        {
+            "label": "Local",
+            "options": [
+                {
+                    "value": "ollama:nomic-embed-text",
+                    "label": "Ollama (nomic-embed-text)"
+                },
+                {
+                    "value": "ollama:mxbai-embed-large",
+                    "label": "Ollama (mxbai-embed-large)"
+                },
+                {
+                    "value": "ollama:all-minilm",
+                    "label": "Ollama (all-minilm)"
+                },
+                {
+                    "value": "kelindar:nomic-embed-text-v1.5-q8_0",
+                    "label": "Kelindar (nomic-embed-text-v1.5-q8_0)"
+                },
+                {
+                    "value": "kelindar:bge-small-en-v1.5-q8_0",
+                    "label": "Kelindar (bge-small-en-v1.5-q8_0)"
+                }
+
+            ]
+        }
+    ]
+}

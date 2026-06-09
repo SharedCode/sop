@@ -48,9 +48,9 @@ func RunLoop(ctx context.Context, agent ai.Agent[map[string]any], r io.Reader, w
 			continue
 		}
 
-		// Inject writer into context for streaming output
+		// Inject writer into context for streaming output.
+		// This inherits the existing RunnerSession and other ctx values automatically.
 		loopCtx := context.WithValue(ctx, ai.CtxKeyWriter, w)
-		loopCtx = context.WithValue(loopCtx, "verbose", true)
 		loopCtx = context.WithValue(loopCtx, ai.CtxKeyProgressSink, func(msg string) {
 			fmt.Fprintf(w, "\n[Progress] %s\n", msg)
 		})

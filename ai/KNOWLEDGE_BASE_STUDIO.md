@@ -88,8 +88,10 @@ To ensure seamless integration with the broader AI ecosystem, SOP officially sup
 
 SOP expects an array of `documents`, where each document seamlessly maps to industry-standard fields:
 - `page_content` (LangChain-style) or `text` (common NLP-style) to define the embedded content.
-- `metadata` to hold key-value pairs (filters, sources, author info).
+- `metadata` to hold key-value pairs (filters, sources, author info, and SOP category hierarchy).
 - `id` (optional) to allow absolute referencing and UPSERT workflows.
+
+When exporting SOP items into this popular interchange shape, preserve the nested category context using metadata fields such as `sop_category_path`, `sop_category_id`, and `sop_parent_ids`.
 
 **Example `documents` JSON:**
 
@@ -98,17 +100,25 @@ SOP expects an array of `documents`, where each document seamlessly maps to indu
   "dataset_name": "engineering_runbooks",
   "documents": [
     {
-      "id": "doc-001",
+      "id": "item-001",
       "page_content": "To restart the primary database layer, initiate a graceful failover to the secondary node before executing the systemctl restart command.",
       "metadata": {
         "source": "wiki_ops",
         "author": "John Doe",
-        "tags": ["database", "restart", "failover"]
+        "tags": ["database", "restart", "failover"],
+        "sop_category_path": "Root / Engineering / Architecture",
+        "sop_category_id": "8d2d4a1f-1e5a-4c1c-bf01-6db74d8d9d2b",
+        "sop_parent_ids": [
+          "d1c0a53c-9e7b-4c7f-a114-b1d33856b844",
+          "7f8aef27-bf74-4a8d-b7d6-8cae07b9790a"
+        ]
       }
     }
   ]
 }
 ```
+
+This example shows how SOP’s nested categories can be carried in a standard document format: the human-readable hierarchy lives in `sop_category_path`, while the machine-readable identity chain lives in `sop_category_id` and `sop_parent_ids`.
 
 This ensures enterprise teams can directly bridge SOP's Vector Store into their existing LangChain loaders, maintaining clean boundaries for interchange, migrations, and backups.
 

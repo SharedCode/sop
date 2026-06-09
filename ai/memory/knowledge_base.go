@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	log "log/slog"
 
 	"strings"
 
@@ -48,29 +49,54 @@ func (kb *KnowledgeBase[T]) SearchKeywordsBatch(ctx context.Context, textQueries
 	return kb.Store.QueryTextBatch(ctx, textQueries, opts)
 }
 
+func searchOptionsSummary[T any](opts *SearchOptions[T]) []any {
+	if opts == nil {
+		return []any{"limit", 0, "category_path", "", "has_filter", false}
+	}
+	return []any{"limit", opts.Limit, "category_path", opts.CategoryPath, "has_filter", opts.Filter != nil}
+}
+
 // SearchSemantics executes a spatial search (vector matching against mathematical bounds).
 func (kb *KnowledgeBase[T]) SearchSemantics(ctx context.Context, queryVector []float32, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
+	log.Info("SearchSemantics invoked",
+		append([]any{"kb", kb.Name(), "query_vector_len", len(queryVector)}, searchOptionsSummary(opts)...)...)
 	config, err := kb.GetConfig(ctx)
 	if err == nil && config != nil && config.LastVectorized == 0 {
+		log.Warn("SearchSemantics blocked: KB not vectorized", "kb", kb.Name(), "last_vectorized", config.LastVectorized)
 		return nil, fmt.Errorf("Knowledge base is not vectorized")
 	}
-	return kb.Store.Query(ctx, queryVector, opts)
+	hits, err := kb.Store.Query(ctx, queryVector, opts)
+	if err != nil {
+		log.Error("SearchSemantics failed", "kb", kb.Name(), "error", err)
+	} else {
+		log.Info("SearchSemantics completed", "kb", kb.Name(), "hit_count", len(hits))
+	}
+	return hits, err
 }
 
 // SearchKeywords executes a traditional textual BM25 text-matched sparse search.
 func (kb *KnowledgeBase[T]) SearchKeywords(ctx context.Context, textQuery string, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
+	log.Info("SearchKeywords invoked",
+		append([]any{"kb", kb.Name(), "query", textQuery}, searchOptionsSummary(opts)...)...)
 	config, err := kb.GetConfig(ctx)
 	if err == nil && config != nil && config.LastVectorized == 0 {
+		log.Warn("SearchKeywords blocked: KB not vectorized", "kb", kb.Name(), "last_vectorized", config.LastVectorized)
 		return nil, fmt.Errorf("Knowledge base is not vectorized")
 	}
-	return kb.Store.QueryText(ctx, textQuery, opts)
+	hits, err := kb.Store.QueryText(ctx, textQuery, opts)
+	if err != nil {
+		log.Error("SearchKeywords failed", "kb", kb.Name(), "error", err)
+	} else {
+		log.Info("SearchKeywords completed", "kb", kb.Name(), "hit_count", len(hits))
+	}
+	return hits, err
 }
 
 // Thought represents the individual entity of data in a batch categorization execution.
 type Thought[T any] struct {
 	Summaries    []string
 	CategoryPath string
-	DocID        string
+	DocID        DocIDs
 	Data         T
 	Vectors      [][]float32
 	Positions    []VectorKey

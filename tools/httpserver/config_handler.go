@@ -88,9 +88,13 @@ func handleCreateEnvironment(w http.ResponseWriter, r *http.Request) {
 	// Initialize config in MEMORY ONLY.
 	// We do NOT write to disk yet to avoid creating empty "abandoned" files if the user cancels the wizard.
 	config = Config{
-		Port:       8080,
-		Databases:  []DatabaseConfig{},
-		ConfigFile: filename,
+		Port:             8080,
+		Databases:        []DatabaseConfig{},
+		ConfigFile:       filename,
+		BrainProvider:    "openai",
+		BrainModel:       "gpt-5.4",
+		EmbedderProvider: "local",
+		EmbedderModel:    "kelindar",
 	}
 	modelCatalog = defaultModelCatalog()
 
@@ -952,6 +956,24 @@ func isPathConflict(pathA, pathB string) (bool, string) {
 	return false, ""
 }
 
+func sanitizedConfigForDisk(cfg Config) Config {
+	sanitized := cfg
+
+	// Keep only non-sensitive preferences on disk. The selected AI provider/model/url/key
+	// values are already managed in browser local storage and must not be written to config.json.
+	sanitized.LLMApiKey = ""
+	sanitized.BrainProvider = ""
+	sanitized.BrainModel = ""
+	sanitized.BrainURL = ""
+	sanitized.BrainAPIKey = ""
+	sanitized.EmbedderProvider = ""
+	sanitized.EmbedderModel = ""
+	sanitized.EmbedderURL = ""
+	sanitized.EmbedderAPIKey = ""
+
+	return sanitized
+}
+
 // saveConfig writes the current configuration to the file specified in config.ConfigFile.
 func saveConfig() error {
 	if config.ConfigFile == "" {
@@ -979,7 +1001,7 @@ func saveConfig() error {
 
 	encoder := json.NewEncoder(f)
 	encoder.SetIndent("", "    ")
-	if err := encoder.Encode(config); err != nil {
+	if err := encoder.Encode(sanitizedConfigForDisk(config)); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 	return nil

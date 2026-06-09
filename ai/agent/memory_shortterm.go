@@ -17,10 +17,15 @@ type RunnerSession struct {
 	CurrentScript         *ai.Script
 	CurrentScriptName     string // Name of the script being drafted
 	CurrentScriptCategory string // Category for the script being drafted
-	Transaction           sop.Transaction
-	CurrentDB             string         // The database the transaction is bound to
-	Variables             map[string]any // Session-scoped variables (e.g. cached stores)
-	LastStep              *ai.ScriptStep
+	// TODO: Transaction has to be revisited, specially the interplay to SessionPayload.Transaction.
+	Transaction sop.Transaction
+	CurrentDB   string         // The database the transaction is bound to
+	Variables   map[string]any // Session-scoped variables (e.g. cached stores)
+	// Verbose is a temporary bridge for carried runtime state between asks when the caller does not
+	// provide a hydrated SessionPayload. The durable preference should move through LTM -> MRU ->
+	// SessionPayload instead of living here as a storage authority.
+	Verbose  bool
+	LastStep *ai.ScriptStep
 	// LastInteractionSteps tracks the number of steps added/executed in the last user interaction.
 	LastInteractionSteps int
 	// LastInteractionToolCalls buffers the tool calls from the last interaction for refactoring.
@@ -39,6 +44,31 @@ type RunnerSession struct {
 	// Memory holds the structured Short-Term Memory of the session.
 	// It replaces the flat History slice with threaded topics.
 	Memory *ShortTermMemory
+}
+
+func (rs *RunnerSession) IsVerbose() bool {
+	return rs != nil && rs.Verbose
+}
+
+func (rs *RunnerSession) SetVerbose(enabled bool) {
+	if rs == nil {
+		return
+	}
+	rs.Verbose = enabled
+}
+
+func (rs *RunnerSession) SetCurrentDB(db string) {
+	if rs == nil {
+		return
+	}
+	rs.CurrentDB = db
+}
+
+func (rs *RunnerSession) GetCurrentDB() string {
+	if rs == nil {
+		return ""
+	}
+	return rs.CurrentDB
 }
 
 type PendingUserConfirmation struct {

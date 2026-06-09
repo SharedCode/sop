@@ -14,7 +14,13 @@ type mapDigestLLM struct{}
 
 func (m *mapDigestLLM) Name() string { return "map-digest-llm" }
 
-func (m *mapDigestLLM) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+func (m *mapDigestLLM) EstimateCost(inTokens, outTokens int) float64 {
+	return 0.0
+}
+
+func (m *mapDigestLLM) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 
 func (m *mapDigestLLM) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	if strings.Contains(strings.ToLower(prompt), "sdlc") {
@@ -113,7 +119,7 @@ func TestMergeDigestHit_DeduplicatesByDocIDOrContent(t *testing.T) {
 	merged := map[string]KBDigestHit{}
 
 	mergeDigestHit(merged, KBDigestHit{
-		DocID:      "doc-1",
+		DocID:      DocIDs{"doc-1"},
 		Score:      0.6,
 		Category:   "Architecture",
 		Text:       "Architecture basics",
@@ -121,7 +127,7 @@ func TestMergeDigestHit_DeduplicatesByDocIDOrContent(t *testing.T) {
 		SearchType: "semantic",
 	})
 	mergeDigestHit(merged, KBDigestHit{
-		DocID:      "doc-1",
+		DocID:      DocIDs{"doc-1"},
 		Score:      0.9,
 		Category:   "Architecture",
 		Text:       "Architecture basics",

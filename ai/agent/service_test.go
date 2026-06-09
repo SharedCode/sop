@@ -58,6 +58,10 @@ func (m *MockGenerator) EstimateCost(inTokens, outTokens int) float64 {
 	return 0
 }
 
+func (m *MockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 // MockEmbedder implements ai.Embeddings for testing.
 type MockEmbedder struct{}
 
@@ -148,6 +152,25 @@ type MockExecutor struct {
 	LastArgs map[string]any
 }
 
+type listToolsTestAgent struct {
+	tools []ai.ToolDefinition
+}
+
+func (a *listToolsTestAgent) Open(ctx context.Context) error  { return nil }
+func (a *listToolsTestAgent) Close(ctx context.Context) error { return nil }
+func (a *listToolsTestAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
+	return nil, nil
+}
+func (a *listToolsTestAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
+	return "", nil
+}
+func (a *listToolsTestAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	return "", nil
+}
+func (a *listToolsTestAgent) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return a.tools, nil
+}
+
 func (e *MockExecutor) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
 	e.LastTool = toolName
 	e.LastArgs = args
@@ -156,6 +179,179 @@ func (e *MockExecutor) Execute(ctx context.Context, toolName string, args map[st
 
 func (e *MockExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
 	return nil, nil
+}
+
+func TestServiceToolExecutor_ListTools_ReflectsRegisteredAgents(t *testing.T) {
+	expected := []ai.ToolDefinition{{Name: "alpha", Description: "alpha tool", Schema: `{"type":"object"}`}}
+	svc := NewService(nil, nil, nil, nil, nil, map[string]ai.Agent[map[string]any]{
+		"test": &listToolsTestAgent{tools: expected},
+	}, false)
+
+	tools, err := (&ServiceToolExecutor{s: svc}).ListTools(context.Background())
+	if err != nil {
+		t.Fatalf("ListTools returned error: %v", err)
+	}
+	if len(tools) != 1 || tools[0].Name != expected[0].Name {
+		t.Fatalf("expected registered tool list to be returned, got %#v", tools)
+	}
+}
+
+func TestPerformTopicRouting_WithNilSession_DoesNotPanic(t *testing.T) {
+	svc := &Service{EnableHistoryInjection: true}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("performTopicRouting panicked with nil session: %v", r)
+		}
+	}()
+
+	result := svc.performTopicRouting(context.Background(), "hello there")
+	if result == nil {
+		t.Fatal("performTopicRouting returned nil result")
+	}
+	if !result.isNewTopic {
+		t.Fatal("expected topic routing to fall back to a new topic when session is unavailable")
+	}
+}
+
+func TestIdentifyTopic_NilGeneratorFallsBackWithoutPanic(t *testing.T) {
+	svc := &Service{session: NewRunnerSession()}
+	svc.session.Memory = NewShortTermMemory()
+	svc.session.Memory.AddThread(&ConversationThread{
+		ID:     sop.NewUUID(),
+		Label:  "Existing Topic",
+		Status: "open",
+		Exchanges: []Interaction{{
+			Role:    RoleUser,
+			Content: "previous question",
+		}},
+	})
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("identifyTopic panicked with nil generator: %v", r)
+		}
+	}()
+
+	assessment, err := svc.identifyTopic(context.Background(), "what about the other one?")
+	if err != nil {
+		t.Fatalf("identifyTopic returned error: %v", err)
+	}
+	if assessment == nil {
+		t.Fatal("identifyTopic returned nil assessment")
+	}
+	if !assessment.IsNewTopic {
+		t.Fatal("expected fallback classification to choose a new topic when no generator is available")
+	}
+}
+
+func TestServiceToolExecutor_DoesNotInjectLegacyVerboseFallback(t *testing.T) {
+	executor := &ServiceToolExecutor{}
+	ctx := executor.injectToolContextToLegacyContext(context.Background(), &ToolExecutionContext{
+		Session: &ai.SessionPayload{},
+	})
+
+	if v := ctx.Value("verbose"); v != nil {
+		t.Fatalf("expected no legacy verbose fallback to be injected, got %#v", v)
+	}
+}
+
+func TestIsVerboseEnabled_UsesRunnerSessionPointer(t *testing.T) {
+	ctx := context.WithValue(context.Background(), RunnerSessionKey, &RunnerSession{Verbose: true})
+
+	if !isVerboseEnabled(ctx) {
+		t.Fatal("expected verbose to resolve from the runner session pointer")
+	}
+}
+
+type verboseRuntimeGenerator struct {
+	calls int
+}
+
+func (m *verboseRuntimeGenerator) Name() string { return "verbose_runtime_mock" }
+
+func (m *verboseRuntimeGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *verboseRuntimeGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
+func (m *verboseRuntimeGenerator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
+	m.calls++
+	if m.calls == 1 {
+		return ai.GenOutput{ToolCalls: []ai.ToolCall{{Name: "echo_verbose", Args: map[string]any{}}}}, nil
+	}
+	return ai.GenOutput{Text: "Final answer: captured verbose state."}, nil
+}
+
+type verboseRuntimeExecutor struct {
+	seen []bool
+}
+
+func (e *verboseRuntimeExecutor) Execute(ctx context.Context, tool string, args map[string]any) (string, error) {
+	verbose := effectiveVerbose(ctx)
+	e.seen = append(e.seen, verbose)
+	if verbose {
+		return "verbose_on", nil
+	}
+	return "verbose_off", nil
+}
+
+func (e *verboseRuntimeExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
+	return []ai.ToolDefinition{{Name: "echo_verbose"}}, nil
+}
+
+func TestServiceAsk_SeedsNewSessionPayloadFromPersistedVerbose(t *testing.T) {
+	svc := NewService(&MockDomain{}, nil, nil, nil, nil, nil, false)
+	svc.session.Verbose = true
+	gen := &verboseRuntimeGenerator{}
+	exec := &verboseRuntimeExecutor{}
+
+	_, err := svc.ask(context.Background(), AskRequest{
+		Query:     "check verbose runtime",
+		Generator: gen,
+		Executor:  exec,
+	})
+	if err != nil {
+		t.Fatalf("ask failed: %v", err)
+	}
+	if !svc.session.IsVerbose() {
+		t.Fatalf("expected ask-created session to inherit persisted verbose, got %#v", svc.session)
+	}
+	if len(exec.seen) != 1 || !exec.seen[0] {
+		t.Fatalf("expected tool runtime to see persisted verbose=true, got %#v", exec.seen)
+	}
+}
+
+func TestServiceAsk_ReusesRunnerSessionVerboseForNextRequest(t *testing.T) {
+	svc := NewService(&MockDomain{}, nil, nil, nil, nil, nil, false)
+	svc.session.SetVerbose(true)
+	firstGen := &verboseRuntimeGenerator{}
+	firstExec := &verboseRuntimeExecutor{}
+	firstCfg := ai.NewConfigMap()
+	firstCfg.Set("payload", &ai.SessionPayload{})
+	firstCfg.Set("generator", firstGen)
+	firstCfg.Set("executor", firstExec)
+
+	if _, err := svc.Ask(context.Background(), "turn verbose on", firstCfg); err != nil {
+		t.Fatalf("first Ask failed: %v", err)
+	}
+	if !svc.session.IsVerbose() {
+		t.Fatal("expected service session to keep verbose=true for the next runtime step")
+	}
+
+	secondGen := &verboseRuntimeGenerator{}
+	secondExec := &verboseRuntimeExecutor{}
+	secondCfg := ai.NewConfigMap()
+	secondCfg.Set("generator", secondGen)
+	secondCfg.Set("executor", secondExec)
+
+	if _, err := svc.Ask(context.Background(), "reuse verbose runtime", secondCfg); err != nil {
+		t.Fatalf("second Ask failed: %v", err)
+	}
+	if len(secondExec.seen) != 1 || !secondExec.seen[0] {
+		t.Fatalf("expected follow-up Ask to reuse persisted verbose=true, got %#v", secondExec.seen)
+	}
 }
 
 func TestService_Ask_Obfuscation(t *testing.T) {

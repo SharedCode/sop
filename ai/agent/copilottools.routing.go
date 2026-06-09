@@ -4,82 +4,52 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	log "log/slog"
 	"strings"
-	"sync"
+
+	"github.com/sharedcode/sop/ai"
 )
 
-const routeToMultiKBArgsSchema = `{"type":"object","properties":{"kb_names":{"type":"array","description":"Knowledge base names to search in parallel.","items":{"type":"string"}},"optimized_query":{"type":"string","description":"Query to run across the target knowledge bases."}},"required":["kb_names","optimized_query"]}`
+const searchKBArgsSchema = `{"type":"object","properties":{"kb_name":{"type":"string","description":"Single knowledge base to search."},"query":{"type":"string","description":"Natural language query to run in the target knowledge base."},"limit":{"type":"integer","description":"Maximum number of hits to return. Defaults to 5."}},"required":["kb_name","query"]}`
 
 const handoffToAvatarArgsSchema = `{"type":"object","properties":{"avatar_kb_name":{"type":"string","description":"Avatar knowledge base name that should receive the delegated task."},"task_context":{"type":"object","description":"Structured task payload to hand off to the avatar."}},"required":["avatar_kb_name","task_context"]}`
 
 const concludeTopicArgsSchema = `{"type":"object","properties":{"summary":{"type":"string","description":"Compact summary of the resolved topic or thread."},"topic_label":{"type":"string","description":"Short label for the topic being concluded."}},"required":["summary","topic_label"]}`
 
-func (a *CopilotAgent) toolRouteToMultiKB(ctx context.Context, args map[string]any) (string, error) {
-	kbNamesRaw, ok := args["kb_names"]
+func (a *CopilotAgent) toolSearchKB(ctx context.Context, args map[string]any) (string, error) {
+	kbNameRaw, ok := args["kb_name"]
 	if !ok {
-		return "", fmt.Errorf("missing required argument 'kb_names'")
+		return "", fmt.Errorf("missing required argument 'kb_name'")
 	}
-	queryRaw, ok := args["optimized_query"]
+	queryRaw, ok := args["query"]
 	if !ok {
-		return "", fmt.Errorf("missing required argument 'optimized_query'")
-	}
-
-	kbNames, ok := kbNamesRaw.([]any)
-	if !ok {
-		return "", fmt.Errorf("'kb_names' must be a list of strings")
+		return "", fmt.Errorf("missing required argument 'query'")
 	}
 
+	kbName, ok := kbNameRaw.(string)
+	if !ok || strings.TrimSpace(kbName) == "" {
+		return "", fmt.Errorf("'kb_name' must be a non-empty string")
+	}
+	kbName = ai.CanonicalKBName(kbName)
 	query, ok := queryRaw.(string)
-	if !ok {
-		return "", fmt.Errorf("'optimized_query' must be a string")
+	if !ok || strings.TrimSpace(query) == "" {
+		return "", fmt.Errorf("'query' must be a non-empty string")
 	}
+	query = stripRoutingPrefix(query, kbName)
 
 	limit := 5
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var results []string
-	var errs []error
-
-	for _, nameAny := range kbNames {
-		nameStr, ok := nameAny.(string)
-		if !ok {
-			continue
-		}
-
-		wg.Add(1)
-		go func(kbName string) {
-			defer wg.Done()
-
-			db := a.resolveDBForKB(ctx, kbName)
-			if db == nil {
-				mu.Lock()
-				errs = append(errs, fmt.Errorf("could not resolve DB for KB '%s'", kbName))
-				mu.Unlock()
-				return
-			}
-
-			res, err := a.searchKnowledgeBase(ctx, db, kbName, query, "", "", true, limit)
-
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				errs = append(errs, fmt.Errorf("error searching KB '%s': %w", kbName, err))
-			} else {
-				results = append(results, fmt.Sprintf("=== Results from KB: %s ===\n%s", kbName, res))
-			}
-		}(nameStr)
+	if rawLimit, ok := args["limit"].(float64); ok && rawLimit > 0 {
+		limit = int(rawLimit)
 	}
 
-	wg.Wait()
+	log.Info("search_space tool invoked", "kb_name", kbName, "query", query, "limit", limit)
 
-	if len(results) == 0 {
-		if len(errs) > 0 {
-			return "", fmt.Errorf("all searches failed. First error: %w", errs[0])
-		}
-		return "No results found across specified KBs.", nil
+	db := a.resolveDBForKB(ctx, kbName)
+	if db == nil {
+		return "", fmt.Errorf("could not resolve DB for KB '%s'", kbName)
 	}
 
-	return strings.Join(results, "\n\n"), nil
+	return a.searchKnowledgeBase(ctx, db, kbName, query, "", "", true, limit)
 }
 
 func (a *CopilotAgent) toolHandoffToAvatar(ctx context.Context, args map[string]any) (string, error) {
@@ -104,7 +74,7 @@ func (a *CopilotAgent) toolHandoffToAvatar(ctx context.Context, args map[string]
 }
 
 func (a *CopilotAgent) registerRoutingTools(ctx context.Context) {
-	a.registry.RegisterWithUI("route_to_multi_kb", "Routes a query to multiple specific knowledge bases.", "Executes query across given KBs", routeToMultiKBArgsSchema, a.toolRouteToMultiKB)
+	a.registry.RegisterWithUI("search_space", "Searches one knowledge base.", "Use this when the user names one KB explicitly, such as 'SOP'.", searchKBArgsSchema, a.toolSearchKB)
 	a.registry.RegisterWithUI("handoff_to_avatar", "Yields control to an Avatar-specific Knowledge Base to execute a task.", "Handoff to an Avatar", handoffToAvatarArgsSchema, a.toolHandoffToAvatar)
 
 	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", concludeTopicArgsSchema, a.toolConcludeTopic)

@@ -523,8 +523,8 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 				displayName = step.Name
 			}
 
-			isVerbose, _ := ctx.Value("verbose").(bool)
-			if commandName == "execute_script" && isVerbose {
+			//&& isVerboseEnabled(ctx)
+			if commandName == "execute_script" {
 				streamer.Write(StepExecutionResult{
 					Type:      "step_start",
 					Command:   displayName,
@@ -601,7 +601,7 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 
 		// Stream result if streamer is present (and wasn't used by tool)
 		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
-			isVerbose, _ := ctx.Value("verbose").(bool)
+			isVerbose := isVerboseEnabled(ctx)
 
 			// Low-level commands that should NOT be announced as steps (system details)
 			isSystemStep := false
@@ -955,7 +955,7 @@ func (s *Service) runStepScript(ctx context.Context, step ai.ScriptStep, scope m
 	// We emit the PARENT step start (Script Step) here, then create a suppressive streamer for children.
 	if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
 		stepIndex, _ := ctx.Value("step_index").(int)
-		isVerbose, _ := ctx.Value("verbose").(bool)
+		isVerbose := isVerboseEnabled(ctx)
 
 		// 1. Emit Parent Step Start (The "Run Script" step)
 		// We use the script name as the command label
@@ -1162,7 +1162,22 @@ func (e *ServiceToolExecutor) injectToolContextToLegacyContext(ctx context.Conte
 }
 
 func (e *ServiceToolExecutor) ListTools(ctx context.Context) ([]ai.ToolDefinition, error) {
-	return nil, nil
+	if e == nil || e.s == nil {
+		return nil, nil
+	}
+
+	var tools []ai.ToolDefinition
+	for _, agent := range e.s.registry {
+		if executor, ok := agent.(ai.ToolExecutor); ok {
+			list, err := executor.ListTools(ctx)
+			if err != nil {
+				return nil, err
+			}
+			tools = append(tools, list...)
+		}
+	}
+
+	return tools, nil
 }
 
 // injectScriptContextToLegacyContext puts ScriptRunContext fields back into context
@@ -1181,9 +1196,6 @@ func injectScriptContextToLegacyContext(ctx context.Context, scriptCtx *ScriptRu
 	}
 	if scriptCtx.StepIndex > 0 {
 		ctx = context.WithValue(ctx, "step_index", scriptCtx.StepIndex)
-	}
-	if scriptCtx.Verbose {
-		ctx = context.WithValue(ctx, "verbose", true)
 	}
 	if scriptCtx.UseNDJSON {
 		ctx = context.WithValue(ctx, CtxKeyUseNDJSON, true)
@@ -1211,8 +1223,8 @@ func extractScriptContextFromLegacyContext(ctx context.Context) *ScriptRunContex
 	if stepIndex, ok := ctx.Value("step_index").(int); ok {
 		scriptCtx.StepIndex = stepIndex
 	}
-	if verbose, ok := ctx.Value("verbose").(bool); ok {
-		scriptCtx.Verbose = verbose
+	if verbose := effectiveVerbose(ctx); verbose {
+		scriptCtx.Verbose = true
 	}
 	if useNDJSON, ok := ctx.Value(CtxKeyUseNDJSON).(bool); ok {
 		scriptCtx.UseNDJSON = useNDJSON

@@ -17,6 +17,9 @@ func (m *MockPlaybookLLM) EstimateCost(x int, y int) float64 { return 0 }
 func (m *MockPlaybookLLM) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	return ai.GenOutput{}, nil
 }
+func (m *MockPlaybookLLM) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 
 func TestKnowledgeBase_API(t *testing.T) {
 	ctx := context.Background()
@@ -49,7 +52,7 @@ func TestKnowledgeBase_API(t *testing.T) {
 		t.Fatalf("IngestThought failed: %v", err)
 	}
 
-	hits, err := kb.SearchSemantics(ctx, []float32{1.0, 1.0, 1.0}, &SearchOptions[string]{Limit: 10})
+	hits, err := kb.SearchSemantics(ctx, []float32{1.0, 1.0, 1.0}, &SearchOptions[string]{Limit: 10, CategoryPath: "test_id"})
 	if err != nil {
 		t.Fatalf("SearchSemantics failed: %v", err)
 	}
@@ -129,6 +132,38 @@ func TestStaticKnowledgeBase(t *testing.T) {
 	}
 	if len(khitsEmpty) != 0 {
 		t.Errorf("Expected no hits for non-existent category, got %v", khitsEmpty)
+	}
+}
+
+func TestSearchOptionsSummary_SafelyExcludesFilterFunction(t *testing.T) {
+	opts := &SearchOptions[map[string]any]{
+		Limit:          7,
+		CategoryPath:   "docs",
+		CategoryVector: []float32{1, 2},
+		Filter:         func(map[string]any) bool { return true },
+	}
+
+	summary := searchOptionsSummary(opts)
+	if len(summary) != 6 {
+		t.Fatalf("expected 6 summary fields, got %d", len(summary))
+	}
+	if got := summary[0].(string); got != "limit" {
+		t.Fatalf("expected limit key, got %v", got)
+	}
+	if got := summary[1].(int); got != 7 {
+		t.Fatalf("expected limit value 7, got %v", got)
+	}
+	if got := summary[2].(string); got != "category_path" {
+		t.Fatalf("expected category_path key, got %v", got)
+	}
+	if got := summary[3].(string); got != "docs" {
+		t.Fatalf("expected docs category path, got %v", got)
+	}
+	if got := summary[4].(string); got != "has_filter" {
+		t.Fatalf("expected has_filter key, got %v", got)
+	}
+	if got := summary[5].(bool); !got {
+		t.Fatalf("expected has_filter to be true, got %v", got)
 	}
 }
 

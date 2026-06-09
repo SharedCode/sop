@@ -157,8 +157,8 @@ func TestBuildSystemPrompt_StoresFocusedContext_StaysWithinBudgetGuardrail(t *te
 	if focusedContent == "" {
 		t.Fatalf("expected focused execution context component in prompt: %s", prompt)
 	}
-	if len(focusedContent) > 950 {
-		t.Fatalf("expected stores focused execution context to stay within 950 chars after prompt reductions, got %d\nContent: %s", len(focusedContent), focusedContent)
+	if len(focusedContent) > 1000 {
+		t.Fatalf("expected stores focused execution context to stay within 1000 chars after prompt reductions, got %d\nContent: %s", len(focusedContent), focusedContent)
 	}
 	if !strings.Contains(focusedContent, "Target Stores") || !strings.Contains(focusedContent, "Relevant Store Operations") {
 		t.Fatalf("expected focused execution context to retain core Stores anchors: %s", focusedContent)

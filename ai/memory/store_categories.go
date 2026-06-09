@@ -42,6 +42,8 @@ func (s *store[T]) AddCategory(ctx context.Context, c *Category) (sop.UUID, erro
 		return sop.UUID{}, fmt.Errorf("category with ID %v already exists", c.ID)
 	}
 
+	// CategoriesByDistance is not maintained during AddCategory, Vectorize will populate it.
+
 	// Establish the primary hierarchy link if provided during creation
 	if len(c.ParentIDs) > 0 {
 		cp := c.ParentIDs[0]
@@ -70,6 +72,7 @@ func (s *store[T]) AddCategory(ctx context.Context, c *Category) (sop.UUID, erro
 
 // AddCategoryParent connects an existing category to an additional parent, supporting
 // the polyhierarchy DAG structure. This is often leveraged during LLM Sleep Cycles.
+
 func (s *store[T]) AddCategoryParent(ctx context.Context, categoryID sop.UUID, newParent CategoryParent) error {
 	if newParent.ParentID.IsNil() || categoryID.IsNil() {
 		return fmt.Errorf("category and parent IDs must be valid")

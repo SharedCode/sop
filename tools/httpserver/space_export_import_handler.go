@@ -68,7 +68,7 @@ func handleImportSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	file, _, err := r.FormFile("file")
+	file, fileHeader, err := r.FormFile("file")
 	if err != nil {
 		http.Error(w, "Failed to read uploaded file: "+err.Error(), http.StatusBadRequest)
 		return
@@ -102,8 +102,20 @@ func handleImportSpace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	emb := GetConfiguredEmbedderForSpace(r, spaceName, fileHeader.Filename)
+	if err := syncKnowledgeBaseEmbedderConfig(ctx, kb, emb); err != nil {
+		http.Error(w, "Failed to update KnowledgeBase config: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	if err := trans.Commit(ctx); err != nil {
 		http.Error(w, "Failed to commit transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	llm := GetConfiguredLLM(r)
+	if err := autoVectorizeBuiltinSpace(ctx, db, spaceName, fileHeader.Filename, emb, llm, nil); err != nil {
+		http.Error(w, "Failed to vectorize built-in space: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 

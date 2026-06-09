@@ -169,20 +169,41 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 		rawItems, count, _ := memoryDb.ListItems(ctx, memory.ListItemsParam{CategoryID: catIDFilter, Limit: limit, Offset: offset})
 		totalItemsCount = count
 
+		getGoodSample := func(vec []float32) float32 {
+			for _, v := range vec {
+				if v != 0 {
+					return v
+				}
+			}
+			return 0
+		}
+
 		for _, val := range rawItems {
 			if val.ID.IsNil() {
 				continue
 			}
 			t := SpaceItemView{
-				ID:        val.ID.String(),
-				Category:  val.CategoryID.String(),
-				Summaries: val.Summaries,
-				DocID:     val.DocID,
+				ID:         val.ID.String(),
+				CategoryID: val.CategoryID.String(),
+				Category:   val.CategoryID.String(),
+				Summaries:  val.Summaries,
+				DocID:      val.DocID,
 			}
 			if val.Data != nil {
 				payload := val.Data
-				if docID, found := payload["doc_id"]; found && t.DocID == "" {
-					t.DocID = fmt.Sprint(docID)
+				if docID, found := payload["doc_id"]; found && len(t.DocID) == 0 {
+					switch v := docID.(type) {
+					case []string:
+						t.DocID = memory.DocIDs(v)
+					case []any:
+						out := make([]string, 0, len(v))
+						for _, item := range v {
+							out = append(out, fmt.Sprint(item))
+						}
+						t.DocID = memory.DocIDs(out)
+					default:
+						t.DocID = memory.DocIDs{fmt.Sprint(v)}
+					}
 				}
 				if text, found := payload["text"]; found {
 					t.Text = fmt.Sprint(text)
@@ -201,7 +222,7 @@ func handleListSpaceItems(w http.ResponseWriter, r *http.Request) {
 					if found {
 						vVal, _ := vecTree.GetCurrentValue(ctx)
 						if len(vVal.Data) > 0 {
-							t.Vector = []float32{vVal.Data[0]}
+							t.Vector = []float32{getGoodSample(vVal.Data)}
 							t.VectorSize = len(vVal.Data)
 						}
 					}

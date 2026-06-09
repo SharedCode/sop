@@ -106,6 +106,10 @@ func (m *continuityIntentMockGen) Name() string { return "continuity_intent_mock
 
 func (m *continuityIntentMockGen) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (m *continuityIntentMockGen) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func TestClassifyContinuityTaskContext_RejectsInvalidIntent(t *testing.T) {
 	ag := &CopilotAgent{}
 	_, _, err := ag.ClassifyContinuityTaskContext(context.Background(), "same task", &TaskContextClassification{Entity: "Omni", Domain: StoresDomain}, nil, &continuityIntentMockGen{response: `{"intent":"maybe","layers":[]}`})

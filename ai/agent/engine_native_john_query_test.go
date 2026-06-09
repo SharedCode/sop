@@ -18,6 +18,10 @@ func (m *johnOrdersOver500Generator) Name() string { return "john_orders_over_50
 
 func (m *johnOrdersOver500Generator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
 
+func (m *johnOrdersOver500Generator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 func (m *johnOrdersOver500Generator) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	m.calls++
 	switch m.calls {
@@ -176,6 +180,7 @@ func TestNativeReActEngine_EndToEndFindJohnOrdersOver500(t *testing.T) {
 
 	query := "Find orders for users with first_name 'John' with total amount > 500"
 	runCtx := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "dev_db", CurrentUserQuery: query})
+	runCtx = context.WithValue(runCtx, RunnerSessionKey, &RunnerSession{Verbose: true})
 	engine := &NativeReActEngine{}
 	gen := &johnOrdersOver500Generator{}
 	var progress []string

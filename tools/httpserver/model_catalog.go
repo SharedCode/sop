@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 )
 
 type ModelCatalog struct {
@@ -21,7 +23,77 @@ type ModelCatalogOption struct {
 	Label string `json:"label"`
 }
 
+func defaultLocalEmbedderOptions() []ModelCatalogOption {
+	candidates := []string{
+		filepath.Join("ai", "models"),
+		filepath.Join("..", "ai", "models"),
+		filepath.Join("..", "..", "ai", "models"),
+	}
+
+	seen := map[string]struct{}{}
+	var options []ModelCatalogOption
+
+	for _, dir := range candidates {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" {
+				continue
+			}
+			path := filepath.Join(dir, entry.Name())
+			data, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+
+			var raw map[string]json.RawMessage
+			if err := json.Unmarshal(data, &raw); err != nil {
+				continue
+			}
+			for modelKey, rawEntry := range raw {
+				if _, ok := seen[modelKey]; ok {
+					continue
+				}
+				seen[modelKey] = struct{}{}
+
+				var entryInfo struct {
+					DisplayName string `json:"display_name"`
+				}
+				if err := json.Unmarshal(rawEntry, &entryInfo); err != nil {
+					continue
+				}
+				value := "kelindar:" + modelKey
+				label := "Kelindar / Gemini embedder"
+				if strings.Contains(modelKey, "gemini") {
+					value = "gemini:" + modelKey
+					label = "Google embedding model"
+				} else {
+					label = "Kelindar embedded library"
+				}
+				if entryInfo.DisplayName != "" {
+					label += " (" + entryInfo.DisplayName + ")"
+				} else {
+					label += " (" + modelKey + ")"
+				}
+
+				options = append(options, ModelCatalogOption{
+					Value: value,
+					Label: label,
+				})
+			}
+		}
+	}
+
+	sort.Slice(options, func(i, j int) bool {
+		return options[i].Label < options[j].Label
+	})
+	return options
+}
+
 func defaultModelCatalog() ModelCatalog {
+	localOptions := defaultLocalEmbedderOptions()
 	return ModelCatalog{
 		LLM: []ModelCatalogGroup{
 			{
@@ -52,22 +124,8 @@ func defaultModelCatalog() ModelCatalog {
 		},
 		Embedder: []ModelCatalogGroup{
 			{
-				Label: "Google",
-				Options: []ModelCatalogOption{
-					{Value: "gemini:gemini-embedding-2", Label: "Gemini (gemini-embedding-2)"},
-				},
-			},
-			{
-				Label: "OpenAI",
-				Options: []ModelCatalogOption{
-					{Value: "openai:text-embedding-3-small", Label: "OpenAI (text-embedding-3-small)"},
-				},
-			},
-			{
-				Label: "Local",
-				Options: []ModelCatalogOption{
-					{Value: "ollama:nomic-embed-text", Label: "Ollama (nomic-embed-text)"},
-				},
+				Label:   "Local",
+				Options: localOptions,
 			},
 		},
 	}

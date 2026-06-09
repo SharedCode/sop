@@ -34,6 +34,9 @@ type MockLLM struct{}
 
 func (m *MockLLM) Name() string                                 { return "MockLLM" }
 func (m *MockLLM) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
+func (m *MockLLM) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 func (m *MockLLM) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	// Let's pretend it always categorizes into "MockCategory"
 	return ai.GenOutput{Text: "MockCategory"}, nil
@@ -43,6 +46,9 @@ type FailingLLM struct{}
 
 func (m *FailingLLM) Name() string                                 { return "FailingLLM" }
 func (m *FailingLLM) EstimateCost(inTokens, outTokens int) float64 { return 0.0 }
+func (m *FailingLLM) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
 func (m *FailingLLM) Generate(ctx context.Context, prompt string, opts ai.GenOptions) (ai.GenOutput, error) {
 	return ai.GenOutput{}, fmt.Errorf("mock llm failure")
 }

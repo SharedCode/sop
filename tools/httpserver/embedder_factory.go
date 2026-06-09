@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	log "log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/embed"
@@ -17,10 +19,10 @@ type embedderSettings struct {
 
 func resolveEmbedderSettings(r *http.Request) embedderSettings {
 	settings := embedderSettings{
-		Provider: config.EmbedderProvider,
+		Provider: firstNonEmpty(config.EmbedderProvider, "local"),
 		APIKey:   config.EmbedderAPIKey,
 		URL:      config.EmbedderURL,
-		Model:    config.EmbedderModel,
+		Model:    firstNonEmpty(config.EmbedderModel, "kelindar"),
 	}
 
 	if r != nil {
@@ -38,15 +40,38 @@ func resolveEmbedderSettings(r *http.Request) embedderSettings {
 		}
 	}
 
-	if settings.Provider == "" {
-		if config.OllamaEmbedderURL != "" {
-			settings.Provider = "ollama"
-		} else {
-			settings.Provider = "gemini"
-		}
-	}
+	settings.Provider, settings.Model = normalizeProviderAndModel(settings.Provider, settings.Model)
 
 	return settings
+}
+
+func isInternalKnowledgeBase(spaceName, preloadPath string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(spaceName))
+	normalized = strings.ReplaceAll(normalized, "_", " ")
+	normalized = strings.ReplaceAll(normalized, "-", " ")
+	normalized = strings.Join(strings.Fields(normalized), " ")
+
+	lowerPath := strings.ToLower(strings.TrimSpace(preloadPath))
+
+	switch normalized {
+	case "sop", "sop kb", "sop knowledge base":
+		return strings.TrimSpace(preloadPath) == "" || strings.Contains(lowerPath, "sop_base_knowledge.json")
+	case "medical", "medical kb", "medical knowledge base":
+		return strings.TrimSpace(preloadPath) == "" || strings.Contains(lowerPath, "medical.json")
+	default:
+		return false
+	}
+}
+
+func shouldForceLocalBuiltinEmbedder(spaceName, preloadPath string) bool {
+	return isInternalKnowledgeBase(spaceName, preloadPath)
+}
+
+func pinnedInternalKBSettings(spaceName string) (string, bool) {
+	if !isInternalKnowledgeBase(spaceName, "") {
+		return "", false
+	}
+	return "kelindar:nomic-embed-text-v1.5-q8_0", true
 }
 
 func newConfiguredEmbedder(settings embedderSettings) (ai.Embeddings, error) {
@@ -84,6 +109,24 @@ func newConfiguredEmbedder(settings embedderSettings) (ai.Embeddings, error) {
 			model = "nomic-embed-text"
 		}
 		return embed.NewOllama(url, model), nil
+	case "local":
+		modelPath := strings.TrimSpace(settings.URL)
+		if modelPath == "" {
+			modelPath = strings.TrimSpace(settings.Model)
+		}
+		if modelPath == "" {
+			modelPath = "kelindar"
+		}
+		return embed.NewLocalWithProvider("kelindar", modelPath, 0)
+	case "kelindar":
+		modelPath := strings.TrimSpace(settings.Model)
+		if modelPath == "" {
+			modelPath = strings.TrimSpace(settings.URL)
+		}
+		if modelPath == "" {
+			modelPath = "kelindar"
+		}
+		return embed.NewLocalWithProvider("kelindar", modelPath, 0)
 	case "simple":
 		return embed.NewSimple("mock_embedder", 384, nil), nil
 	default:
@@ -91,15 +134,53 @@ func newConfiguredEmbedder(settings embedderSettings) (ai.Embeddings, error) {
 	}
 }
 
+// isInternalKnowledgeBase reports whether a space is one of the built-in
+// internal KBs that should always use the local Kelindar/Nomic embedder.
+
+// warmupBuiltinLocalEmbedder preloads the local Kelindar model for internal KBs.
+func warmupBuiltinLocalEmbedder(spaceName, preloadPath string) {
+	if !isInternalKnowledgeBase(spaceName, preloadPath) {
+		return
+	}
+
+	localEmbedder, err := embed.NewLocalWithProvider("kelindar", "kelindar", 0)
+	if err != nil {
+		return
+	}
+	_ = localEmbedder.Close()
+}
+
+func GetConfiguredEmbedderForSpace(r *http.Request, spaceName, preloadPath string) ai.Embeddings {
+	if isInternalKnowledgeBase(spaceName, preloadPath) {
+		warmupBuiltinLocalEmbedder(spaceName, preloadPath)
+		embedder, err := newConfiguredEmbedder(embedderSettings{Provider: "local", Model: "kelindar", URL: "kelindar"})
+		if err != nil {
+			log.Error("pinned internal kelindar embedder initialization failed", "space", spaceName, "err", err)
+			return nil
+		}
+		log.Debug("embedder selection using pinned internal local kelindar", "space", spaceName)
+		return embedder
+	}
+
+	log.Debug("embedder selection", "space", spaceName, "preload_path", preloadPath, "forced_local", false, "production_mode", config.ProductionMode)
+	return GetConfiguredEmbedder(r)
+}
+
 // GetConfiguredEmbedder returns an AI embedder based on the server configuration.
 func GetConfiguredEmbedder(r *http.Request) ai.Embeddings {
+	settings := resolveEmbedderSettings(r)
+	log.Debug("embedder selection details", "production_mode", config.ProductionMode, "provider", settings.Provider, "model", settings.Model, "url", settings.URL)
+
 	if !config.ProductionMode {
+		log.Warn("embedder selection using mock embedder", "reason", "production_mode=false", "provider", settings.Provider, "model", settings.Model)
 		return embed.NewSimple("mock_embedder", 384, nil)
 	}
 
-	embedder, err := newConfiguredEmbedder(resolveEmbedderSettings(r))
+	embedder, err := newConfiguredEmbedder(settings)
 	if err != nil {
+		log.Error("embedder selection failed, using mock embedder", "err", err, "provider", settings.Provider, "model", settings.Model)
 		return embed.NewSimple("mock_embedder", 384, nil)
 	}
+	log.Debug("embedder selection using configured real embedder", "provider", settings.Provider, "model", settings.Model)
 	return embedder
 }

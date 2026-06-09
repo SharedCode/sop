@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -24,6 +26,8 @@ func (m *MockGenerator) Generate(ctx context.Context, prompt string, options ai.
 }
 
 func (m *MockGenerator) EstimateCost(inTokens, outTokens int) float64 { return 0 }
+
+func (m *MockGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error { return nil }
 
 // MockAgent implements ai.Agent and ToolProvider
 type MockAgent struct{}
@@ -145,6 +149,25 @@ func TestHandleExecuteScript(t *testing.T) {
 	// We relax the check to allow for whitespace differences (e.g. "record": "Echo..." vs "record":"Echo...")
 	if !strings.Contains(body, "Echo: Hello World") {
 		t.Errorf("Expected output to contain 'Echo: Hello World', got: %s", body)
+	}
+}
+
+func TestSourceLinkPopupTemplateUsesEscapedAttributes(t *testing.T) {
+	templatePath := filepath.Join("templates", "scripts_part01.html")
+	content, err := os.ReadFile(templatePath)
+	if err != nil {
+		t.Fatalf("failed to read template: %v", err)
+	}
+
+	text := string(content)
+	if !strings.Contains(text, `data-doc-ids="${docIDsAttr}"`) {
+		t.Fatalf("expected escaped doc source attributes in template")
+	}
+	if !strings.Contains(text, `onclick="window.openDocSourcePopup(event, this, ${docIDsAttr}, ${textAttr}); return false;"`) {
+		t.Fatalf("expected popup handler to use escaped attribute payloads")
+	}
+	if strings.Contains(text, `onclick="window.openDocSourcePopup(event, this, ${JSON.stringify(docIDs)}, ${JSON.stringify(t.text || '')});`) {
+		t.Fatalf("template must not inject raw JSON into inline onclick attributes")
 	}
 }
 

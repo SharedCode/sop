@@ -69,6 +69,10 @@ func (m *MockScriptedGenerator) Generate(ctx context.Context, prompt string, opt
 }
 func (m *MockScriptedGenerator) EstimateCost(in, out int) float64 { return 0 }
 
+func (m *MockScriptedGenerator) PrewarmCache(ctx context.Context, opts ai.GenOptions) error {
+	return nil
+}
+
 // MockToolExecutor for testing
 type MockToolExecutor struct{}
 
@@ -1095,7 +1099,7 @@ func TestRunStepCommand_ExecuteScriptSuppressesInnerStepHeaders(t *testing.T) {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &StreamingExecuteScriptMock{})
 	ctx = context.WithValue(ctx, CtxKeyJSONStreamer, streamer)
-	ctx = context.WithValue(ctx, "verbose", true)
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{})
 	ctx = context.WithValue(ctx, "step_index", 1)
 
 	var sb strings.Builder
@@ -1174,7 +1178,7 @@ func TestPlayScript_SingleStepSuppressesTopLevelStepStart(t *testing.T) {
 
 	svc := NewService(&MockDomain{}, sysDB, nil, nil, nil, nil, false)
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &StreamingExecuteScriptMock{})
-	ctx = context.WithValue(ctx, "verbose", true)
+	ctx = context.WithValue(ctx, RunnerSessionKey, &RunnerSession{Verbose: true})
 	ctx = context.WithValue(ctx, CtxKeyUseNDJSON, true)
 
 	var buf bytes.Buffer

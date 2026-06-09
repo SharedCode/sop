@@ -67,6 +67,7 @@ const (
 	askOutcomeMRUCategoryFilterSelection = "ASK_OUTCOME_FILTER_SELECTION"
 	askOutcomeMRUCategoryConfirmed       = "ASK_OUTCOME_CONFIRMED"
 	askOutcomeMRUCategoryToolPattern     = "ASK_OUTCOME_TOOL_PATTERN"
+	askOutcomeMRUCategoryCarryover       = "ASK_OUTCOME_CARRYOVER"
 	askOutcomeMRUCategoryGuidance        = "ASK_OUTCOME_GUIDANCE"
 	askProgressMRUCategoryHeader         = "ASK_PROGRESS_HEADER"
 	askProgressMRUCategoryResult         = "ASK_PROGRESS_RESULT"
@@ -1170,12 +1171,14 @@ func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, g
 	a.rehydrateMRUFromMemory(ctx)
 	isTest := isRoutingTestGenerator(gen)
 	anchor := parseRoutingAnchor(query)
-	if taskCtx := a.tryPrefixBasedRouting(ctx, query, gen, isTest, anchor); taskCtx != nil {
-		return taskCtx
+
+	if taskClassification := a.tryPrefixBasedRouting(ctx, query, gen, isTest, anchor); taskClassification != nil {
+		return taskClassification
 	}
-	if taskCtx := a.tryAskContinuationBasedRouting(ctx, query, gen, isTest, anchor); taskCtx != nil {
-		return taskCtx
+	if taskClassification := a.tryAskContinuationBasedRouting(ctx, query, gen, isTest, anchor); taskClassification != nil {
+		return taskClassification
 	}
+
 	return a.tryColdStartBasedRouting(ctx, query, gen, isTest)
 }
 
@@ -1298,6 +1301,8 @@ func (a *CopilotAgent) delegateToReasoningEngine(ctx context.Context, query stri
 	if streamer, ok := ctx.Value(ai.CtxKeyEventStreamer).(func(string, any)); ok && streamer != nil {
 		req.Streamer = streamer
 	}
+
+	req.Verbose = effectiveVerbose(ctx)
 
 	// Forward the persisted carryover state so provider-owned loops can use server-side
 	// continuation (e.g. GPT's previous_response_id). Without this, CarryoverState is nil
@@ -1470,10 +1475,10 @@ func (a *CopilotAgent) updateClarificationState(ctx context.Context, query strin
 }
 
 func summarizeAskOutcomeMRU(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) string {
-	return renderAskOutcomeMRUItems(buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts))
+	return renderAskOutcomeMRUItems(buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts, nil))
 }
 
-func buildAskOutcomeMRUItems(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) []MRUItem {
+func buildAskOutcomeMRUItems(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string, carryoverState *ai.CarryoverState) []MRUItem {
 	query = askOutcomeQueryForPersistence(ctx, query)
 	query = compactMRUText(query, 180)
 	finalText = sanitizeAssistantContinuityText(finalText)
@@ -1498,6 +1503,18 @@ func buildAskOutcomeMRUItems(ctx context.Context, query string, finalText string
 		items = append(items, MRUItem{Category: askOutcomeMRUCategoryResult, Context: fmt.Sprintf("- Last outcome: %s", finalText), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
 	}
 	items = append(items, buildAskOutcomeFactMRUItems(outcomeFacts)...)
+	if carryoverState != nil {
+		payload := make([]string, 0, 2)
+		if conversationID := strings.TrimSpace(carryoverState.ConversationID); conversationID != "" {
+			payload = append(payload, fmt.Sprintf("conversation_id=%s", conversationID))
+		}
+		if conversationHandle := strings.TrimSpace(carryoverState.ConversationHandle); conversationHandle != "" {
+			payload = append(payload, fmt.Sprintf("response_id=%s", conversationHandle))
+		}
+		if len(payload) > 0 {
+			items = append(items, MRUItem{Category: askOutcomeMRUCategoryCarryover, Context: fmt.Sprintf("- Carryover payload: %s", strings.Join(payload, "; ")), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
+		}
+	}
 	if toolPattern := summarizeAskOutcomeToolPattern(toolCalls); toolPattern != "" {
 		items = append(items, MRUItem{Category: askOutcomeMRUCategoryToolPattern, Context: fmt.Sprintf("- Tool pattern: %s", toolPattern), Source: MRUSourceAskOutcome, Scope: MRUScopeSession})
 	}
@@ -1851,7 +1868,7 @@ func (a *CopilotAgent) collectAskOutcomeItemsByPrefix(prefix string) []MRUItem {
 
 func (a *CopilotAgent) persistAskOutcomeMRU(ctx context.Context, query string, finalText string, toolCalls []ai.ToolCall, outcomeFacts []string) {
 	a.clearMRUBySourceAndScope(MRUSourceAskOutcome, MRUScopeSession)
-	for _, item := range buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts) {
+	for _, item := range buildAskOutcomeMRUItems(ctx, query, finalText, toolCalls, outcomeFacts, nil) {
 		a.markMRUCategory(item.Category, item.Context, item.Source, item.Scope)
 	}
 }
@@ -1997,19 +2014,13 @@ func (a *CopilotAgent) handleSlashCommand(ctx context.Context, query string, gen
 	cmdLine := strings.TrimSpace(query)[1:]
 	toolName, args, err := parser.ParseSlashCommand(cmdLine)
 
-	if err == nil && (toolName == "verbose" || toolName == "v") {
-		newState := !a.Config.Verbose
-		if pos, ok := args["_positional"].([]string); ok && len(pos) > 0 {
-			val := strings.ToLower(pos[0])
-			if val == "on" || val == "true" || val == "1" {
-				newState = true
-			} else if val == "off" || val == "false" || val == "0" {
-				newState = false
-			}
+	if err == nil && (toolName == "get_verbose" || toolName == "verbose" || toolName == "v") {
+		rs := runnerSessionFromContext(ctx)
+		if rs == nil {
+			return true, "", fmt.Errorf("no runner session found")
 		}
-		a.SetVerbose(newState)
 		status := "OFF"
-		if newState {
+		if rs.IsVerbose() {
 			status = "ON"
 		}
 		return true, fmt.Sprintf("Verbose mode: **%s**", status), nil
@@ -2656,8 +2667,7 @@ func (b *BaselineReActEngine) Run(ctx context.Context, req ai.ReasoningRequest) 
 			}
 
 			if len(toolCalls) > 0 {
-				isCtxVerbose, _ := ctx.Value("verbose").(bool)
-				if b.Agent.Config.Verbose || isCtxVerbose {
+				if isVerboseEnabled(ctx) {
 					if w, ok := ctx.Value(ai.CtxKeyWriter).(io.Writer); ok {
 						var prettyJSON bytes.Buffer
 						if err := json.Indent(&prettyJSON, []byte(cleanText), "", "  "); err == nil {
@@ -3106,7 +3116,8 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 		return "", fmt.Errorf("database not found or not selected (Copilot). Requested: '%s', Available: %v", dbName, keys)
 	}
 
-	// Execute specific tool
+	// This is the registry dispatch point for native LLM tool calls.
+	// If the model asked for "search_space", the name resolves here to toolSearchKB.
 	if toolDef, ok := a.registry.Get(toolName); ok {
 		log.Info("LLM Tool Call", "tool", toolName)
 		res, err := toolDef.Handler(ctx, args)

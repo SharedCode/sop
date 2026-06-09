@@ -1,6 +1,11 @@
 package memory
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"strings"
+
 	"github.com/sharedcode/sop"
 )
 
@@ -8,6 +13,7 @@ type KnowledgeBaseConfig struct {
 	Type                string            `json:"type,omitempty"`
 	IsPersona           bool              `json:"is_persona,omitempty"`
 	IsExclusive         bool              `json:"is_exclusive,omitempty"`
+	Description         string            `json:"description,omitempty"`
 	SystemPrompt        string            `json:"system_prompt,omitempty"`
 	Embedder            string            `json:"embedder,omitempty"`
 	EmbedderDimension   int               `json:"embedder_dimension,omitempty"`
@@ -24,12 +30,56 @@ type KnowledgeBaseConfig struct {
 	TextSearchEnabled bool `json:"text_search_enabled,omitempty"` // Controls if keyword/BM25 search is indexed and available
 }
 
+// DocIDs stores one or more source document references for an item.
+// It accepts both a single string and a JSON array, which keeps older exports compatible.
+type DocIDs []string
+
+func (d DocIDs) First() string {
+	if len(d) == 0 {
+		return ""
+	}
+	return d[0]
+}
+
+func (d DocIDs) String() string {
+	return strings.Join(d, ",")
+}
+
+func (d DocIDs) MarshalJSON() ([]byte, error) {
+	if len(d) == 0 {
+		return []byte("[]"), nil
+	}
+	return json.Marshal([]string(d))
+}
+
+func (d *DocIDs) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || string(data) == "null" {
+		*d = nil
+		return nil
+	}
+
+	var single string
+	if err := json.Unmarshal(data, &single); err == nil {
+		*d = DocIDs{single}
+		return nil
+	}
+
+	var multi []string
+	if err := json.Unmarshal(data, &multi); err == nil {
+		*d = DocIDs(multi)
+		return nil
+	}
+
+	return fmt.Errorf("doc_id must be a string or an array of strings")
+}
+
 // Item represents the actual content (The "Thought" or Document).
 // Singular form as requested. It is fundamentally mapped to one or more Vector embeddings.
 type Item[T any] struct {
 	ID         sop.UUID    `json:"id"`
 	CategoryID sop.UUID    `json:"category_id"`
-	DocID      string      `json:"doc_id,omitempty"`      // UUID of uploaded documents OR string URI for external docs
+	DocID      DocIDs      `json:"doc_id,omitempty"`      // UUID of uploaded documents OR string URI for external docs
 	Summaries  []string    `json:"summaries,omitempty"`   // 1 or more distinct, clean sentences for vector indexing
 	Data       T           `json:"data"`                  // The application data or structured thought
 	Positions  []VectorKey `json:"positions,omitempty"`   // Direct links to its Vectors for O(1) cleanup during Category moves
@@ -43,19 +93,19 @@ func (item *Item[T]) IsConfig() bool {
 
 // IsInternalDocument returns true if the DocID is a valid SOP UUID, meaning the document is stored natively in the KB.
 func (item *Item[T]) IsInternalDocument() bool {
-	if item.DocID == "" {
+	if len(item.DocID) == 0 {
 		return false
 	}
-	_, err := sop.ParseUUID(item.DocID)
+	_, err := sop.ParseUUID(item.DocID.First())
 	return err == nil
 }
 
 // IsExternalDocument returns true if the DocID is populated but is not a valid SOP UUID (e.g. an HTTP/File URI).
 func (item *Item[T]) IsExternalDocument() bool {
-	if item.DocID == "" {
+	if len(item.DocID) == 0 {
 		return false
 	}
-	_, err := sop.ParseUUID(item.DocID)
+	_, err := sop.ParseUUID(item.DocID.First())
 	return err != nil
 }
 

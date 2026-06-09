@@ -2,9 +2,11 @@ package memory
 
 import (
 	"context"
+	log "log/slog"
 	"strings"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
 )
 
 // ============================================================================
@@ -304,6 +306,21 @@ func (kb *KnowledgeBase[T]) ListItems(ctx context.Context, param ListItemsParam)
 	return items, totalCount, nil
 }
 
+func convertToVectors(ctx context.Context, catPath string, embedder ai.Embeddings) ([][]float32, error) {
+	parts := strings.Split(catPath, "/")
+	if len(parts) == 0 {
+		parts = strings.Split(catPath, "\\")
+	}
+	if len(parts) == 0 {
+		return nil, nil
+	}
+	vecs, err := embedder.EmbedTexts(ctx, parts)
+	if err != nil {
+		return nil, err
+	}
+	return vecs, nil
+}
+
 // SearchByPath performs hierarchical category path search with dual-mode operation:
 //
 // MODE 1 - Lexical Fast-Path (O(1)):
@@ -326,6 +343,7 @@ func (kb *KnowledgeBase[T]) ListItems(ctx context.Context, param ListItemsParam)
 // This is the only vector database in the world with hierarchical semantic path search.
 // See ai/DYNAMIC_VECTOR_STORE_DESIGN.md Section 12 for full algorithm details.
 func (kb *KnowledgeBase[T]) SearchByPath(ctx context.Context, params []PathSearchParam) ([]Item[T], error) {
+	log.Info("SearchByPath start", "params_count", len(params), "params", params)
 	itemsTree, err := kb.Store.Items(ctx)
 	if err != nil {
 		return nil, err
@@ -338,17 +356,37 @@ func (kb *KnowledgeBase[T]) SearchByPath(ctx context.Context, params []PathSearc
 	var results []Item[T]
 
 	for _, param := range params {
+		log.Info("SearchByPath param", "category_path", param.CategoryPath, "search_text", param.SearchText)
 		found, err := catsByPathTree.Find(ctx, param.CategoryPath, false)
 		if err != nil {
 			return nil, err
 		}
-		if !found {
-			continue // Skip if category path is not found
-		}
-
-		catID, err := catsByPathTree.GetCurrentValue(ctx)
-		if err != nil {
-			return nil, err
+		catID := sop.NilUUID
+		if found {
+			catID, err = catsByPathTree.GetCurrentValue(ctx)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			log.Info("SearchByPath lexical miss, trying semantic fallback", "category_path", param.CategoryPath)
+			// Try search by Semantic Category Path.
+			vecs, err := convertToVectors(ctx, param.CategoryPath, kb.Manager.embedder)
+			if err != nil {
+				return nil, err
+			}
+			cats, err := kb.Store.SemanticCategoryByPath(ctx, vecs)
+			if err != nil {
+				return nil, err
+			}
+			if len(cats) > 0 {
+				log.Info("SearchByPath semantic fallback matched", "category_path", param.CategoryPath, "cat_id", cats[0].ID.String())
+				// Just pick one for MVP.
+				catID = cats[0].ID
+			} else {
+				log.Info("SearchByPath semantic fallback missed", "category_path", param.CategoryPath)
+				// Skip if category path is not found
+				continue
+			}
 		}
 
 		ok, _ := itemsTree.Find(ctx, ItemKey{CategoryID: catID, ItemID: sop.NilUUID}, true)

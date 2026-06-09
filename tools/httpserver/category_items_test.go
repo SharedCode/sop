@@ -8,6 +8,157 @@ import (
 	"testing"
 )
 
+func TestUpdateSpaceItemPersists(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbName := "testdb_update_item"
+	spaceName := "test_space_update"
+
+	config = Config{
+		RootPassword: "secret_password",
+		Databases: []DatabaseConfig{{
+			Name: dbName,
+			Path: tmpDir,
+			Mode: "standalone",
+		}},
+	}
+
+	sendJSON := func(method, url string, handler http.HandlerFunc, body interface{}) *httptest.ResponseRecorder {
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest(method, url, bytes.NewBuffer(b))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		handler(rr, req)
+		return rr
+	}
+
+	rr := sendJSON("POST", "/api/spaces/create", handleCreateSpace, CreateSpaceRequest{DatabaseName: dbName, SpaceName: spaceName})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Failed to create space: %v", rr.Body.String())
+	}
+
+	rr = sendJSON("POST", "/api/spaces/category/add?database="+dbName+"&name="+spaceName, handleAddSpaceCategory, AddSpaceCategoryRequest{Name: "Root"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Failed to add category: %v", rr.Body.String())
+	}
+	var catRes map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&catRes); err != nil {
+		t.Fatalf("Failed to decode category response: %v", err)
+	}
+	categoryID := catRes["id"].(string)
+
+	rr = sendJSON("POST", "/api/spaces/item/add?database="+dbName+"&name="+spaceName, handleAddSpaceItem, AddSpaceItemRequest{
+		CategoryID: categoryID,
+		Summaries:  []string{"Old summary"},
+		Data:       map[string]any{"text": "Old text", "description": "Old text"},
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Failed to add item: %v", rr.Body.String())
+	}
+	var addRes map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&addRes); err != nil {
+		t.Fatalf("Failed to decode add item response: %v", err)
+	}
+	itemID := addRes["id"].(string)
+
+	rr = sendJSON("POST", "/api/spaces/item/update?database="+dbName+"&name="+spaceName, handleUpdateSpaceItem, UpdateSpaceItemRequest{
+		ID:         itemID,
+		CategoryID: categoryID,
+		Summaries:  []string{"Updated summary"},
+		Data:       map[string]any{"chunk": "Updated text", "text": "Updated text", "description": "Updated text"},
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Update returned wrong status: got %v body %s", rr.Code, rr.Body.String())
+	}
+
+	req, _ := http.NewRequest("GET", "/api/spaces/items?database="+dbName+"&name="+spaceName, nil)
+	rrGet := httptest.NewRecorder()
+	handleListSpaceItems(rrGet, req)
+	if rrGet.Code != http.StatusOK {
+		t.Fatalf("List returned wrong status: got %v body %s", rrGet.Code, rrGet.Body.String())
+	}
+
+	var listRes map[string]any
+	if err := json.NewDecoder(rrGet.Body).Decode(&listRes); err != nil {
+		t.Fatalf("Failed to decode list response: %v", err)
+	}
+	items := listRes["data"].([]any)
+	if len(items) != 1 {
+		t.Fatalf("Expected 1 item after update, got %d", len(items))
+	}
+	item := items[0].(map[string]any)
+	if got := item["description"]; got != "Updated text" {
+		t.Fatalf("Expected updated description to persist, got %v", got)
+	}
+	if got := item["text"]; got != "Updated text" {
+		t.Fatalf("Expected updated text to persist, got %v", got)
+	}
+	if got := item["summaries"]; got == nil {
+		t.Fatalf("Expected updated summaries to persist")
+	}
+}
+
+func TestUpdateSpaceItemRequiresCategoryID(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbName := "testdb_update_no_cat"
+	spaceName := "test_space_update_no_cat"
+
+	config = Config{
+		RootPassword: "secret_password",
+		Databases: []DatabaseConfig{{
+			Name: dbName,
+			Path: tmpDir,
+			Mode: "standalone",
+		}},
+	}
+
+	sendJSON := func(method, url string, handler http.HandlerFunc, body interface{}) *httptest.ResponseRecorder {
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest(method, url, bytes.NewBuffer(b))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		handler(rr, req)
+		return rr
+	}
+
+	rr := sendJSON("POST", "/api/spaces/create", handleCreateSpace, CreateSpaceRequest{DatabaseName: dbName, SpaceName: spaceName})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Failed to create space: %v", rr.Body.String())
+	}
+
+	rr = sendJSON("POST", "/api/spaces/category/add?database="+dbName+"&name="+spaceName, handleAddSpaceCategory, AddSpaceCategoryRequest{Name: "Root"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Failed to add category: %v", rr.Body.String())
+	}
+	var catRes map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&catRes); err != nil {
+		t.Fatalf("Failed to decode category response: %v", err)
+	}
+	categoryID := catRes["id"].(string)
+
+	rr = sendJSON("POST", "/api/spaces/item/add?database="+dbName+"&name="+spaceName, handleAddSpaceItem, AddSpaceItemRequest{
+		CategoryID: categoryID,
+		Summaries:  []string{"Old summary"},
+		Data:       map[string]any{"text": "Old text", "description": "Old text"},
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Failed to add item: %v", rr.Body.String())
+	}
+	var addRes map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&addRes); err != nil {
+		t.Fatalf("Failed to decode add item response: %v", err)
+	}
+	itemID := addRes["id"].(string)
+
+	rr = sendJSON("POST", "/api/spaces/item/update?database="+dbName+"&name="+spaceName, handleUpdateSpaceItem, UpdateSpaceItemRequest{
+		ID:        itemID,
+		Summaries: []string{"Updated summary"},
+		Data:      map[string]any{"chunk": "Updated text", "text": "Updated text", "description": "Updated text"},
+	})
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("Expected missing CategoryID to fail with 400, got %v body %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestListSpaceCategoryAndItems(t *testing.T) {
 	// Setup temp dir for DB
 	tmpDir := t.TempDir()
@@ -170,6 +321,9 @@ func TestListSpaceCategoryAndItems(t *testing.T) {
 	itemsB := itemsResponseB["data"].([]interface{})
 	if len(itemsB) != 1 {
 		t.Logf("Expected 1 item in Root B, got %d", len(itemsB))
+	}
+	if item, ok := itemsB[0].(map[string]interface{}); !ok || item["category_id"] == nil || item["category_id"].(string) != rootBID {
+		t.Fatalf("Expected items response to include category_id=%s for UI update flow, got %#v", rootBID, itemsB[0])
 	}
 
 	// Items in Child A1

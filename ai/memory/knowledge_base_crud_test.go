@@ -23,6 +23,19 @@ func prepareTestStore() *store[string] {
 	return s
 }
 
+type semanticFallbackStore struct {
+	*store[string]
+	fallbackCats []*Category
+	called       bool
+	captured     [][]float32
+}
+
+func (s *semanticFallbackStore) SemanticCategoryByPath(ctx context.Context, pathVectors [][]float32) ([]*Category, error) {
+	s.called = true
+	s.captured = append([][]float32(nil), pathVectors...)
+	return s.fallbackCats, nil
+}
+
 func TestBatchCategories(t *testing.T) {
 	ctx := context.Background()
 	s := prepareTestStore()
@@ -156,10 +169,124 @@ func TestBatchItemsAndSearch(t *testing.T) {
 	}
 }
 
+func TestKnowledgeBase_SearchByPath_FallsBackToSemanticCategoryByPath(t *testing.T) {
+	ctx := context.Background()
+	base := prepareTestStore()
+	catID := sop.NewUUID()
+	itemID := sop.NewUUID()
+
+	fallback := &semanticFallbackStore{
+		store:        base,
+		fallbackCats: []*Category{{ID: catID, Name: "Semantic Fallback"}},
+	}
+	kb := &KnowledgeBase[string]{
+		Store:   fallback,
+		Manager: NewMemoryManager[string](fallback, &MockLLM{}, &MockPlaybookEmbedder{Rules: []PlaybookRule{{Keywords: []string{"missing"}, Vector: []float32{1, 0, 0}}}}),
+	}
+
+	if _, err := base.AddCategory(ctx, &Category{ID: catID, Name: "Semantic Fallback"}); err != nil {
+		t.Fatalf("AddCategory failed: %v", err)
+	}
+
+	itemsTree, err := base.Items(ctx)
+	if err != nil {
+		t.Fatalf("Items failed: %v", err)
+	}
+	if _, err := itemsTree.Add(ctx, ItemKey{CategoryID: catID, ItemID: itemID}, Item[string]{ID: itemID, CategoryID: catID, Summaries: []string{"Semantic fallback result"}}); err != nil {
+		t.Fatalf("Add item failed: %v", err)
+	}
+
+	res, err := kb.SearchByPath(ctx, []PathSearchParam{{CategoryPath: "Missing/Path", SearchText: "Semantic"}})
+	if err != nil {
+		t.Fatalf("SearchByPath failed: %v", err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("expected 1 semantic fallback result, got %d", len(res))
+	}
+	if !fallback.called {
+		t.Fatal("expected SemanticCategoryByPath to be invoked")
+	}
+	if len(fallback.captured) != 2 {
+		t.Fatalf("expected two embedded path parts, got %d", len(fallback.captured))
+	}
+	if !strings.HasPrefix(res[0].Summaries[0], "Semantic") {
+		t.Fatalf("expected semantic fallback item, got %q", res[0].Summaries[0])
+	}
+}
+
+func TestKnowledgeBase_SearchByPath_SkipsWhenSemanticFallbackFindsNothing(t *testing.T) {
+	ctx := context.Background()
+	base := prepareTestStore()
+
+	fallback := &semanticFallbackStore{store: base}
+	kb := &KnowledgeBase[string]{
+		Store:   fallback,
+		Manager: NewMemoryManager[string](fallback, &MockLLM{}, &MockPlaybookEmbedder{Rules: []PlaybookRule{{Keywords: []string{"missing"}, Vector: []float32{1, 0, 0}}}}),
+	}
+
+	res, err := kb.SearchByPath(ctx, []PathSearchParam{{CategoryPath: "Missing/Path", SearchText: "Semantic"}})
+	if err != nil {
+		t.Fatalf("SearchByPath failed: %v", err)
+	}
+	if len(res) != 0 {
+		t.Fatalf("expected no fallback results, got %d", len(res))
+	}
+	if !fallback.called {
+		t.Fatal("expected SemanticCategoryByPath to be invoked")
+	}
+}
+
+func TestKnowledgeBase_SearchByPath_PrefixMatchesSummaries(t *testing.T) {
+	ctx := context.Background()
+	cats := inmemory.NewBtree[sop.UUID, *Category](true)
+	vecs := inmemory.NewBtree[VectorKey, Vector](true)
+	items := inmemory.NewBtree[ItemKey, Item[string]](true)
+	pathTree := inmemory.NewBtree[string, sop.UUID](false)
+	distTree := inmemory.NewBtree[DistanceKey, byte](false)
+	docsTree := inmemory.NewBtree[sop.UUID, Document](false)
+
+	s := NewStore[string]("semantic_kb", nil, cats.Btree, pathTree.Btree, distTree.Btree, vecs.Btree, items.Btree, docsTree.Btree).(*store[string])
+	embedder := &MockPlaybookEmbedder{Rules: []PlaybookRule{
+		{Keywords: []string{"root"}, Vector: []float32{1, 0, 0}},
+		{Keywords: []string{"engineering"}, Vector: []float32{0, 1, 0}},
+		{Keywords: []string{"architecture"}, Vector: []float32{0, 0, 1}},
+	}}
+	kb := &KnowledgeBase[string]{
+		Store:   s,
+		Manager: NewMemoryManager[string](s, &MockLLM{}, embedder),
+	}
+
+	rootID := sop.NewUUID()
+	engID := sop.NewUUID()
+	archID := sop.NewUUID()
+	itemID := sop.NewUUID()
+
+	cats.Btree.Add(ctx, rootID, &Category{ID: rootID, Name: "Root", Path: "Root", CenterVector: []float32{1, 0, 0}})
+	cats.Btree.Add(ctx, engID, &Category{ID: engID, Name: "Engineering", Path: "Root/Engineering", CenterVector: []float32{0, 1, 0}, ParentIDs: []CategoryParent{{ParentID: rootID}}})
+	cats.Btree.Add(ctx, archID, &Category{ID: archID, Name: "Architecture", Path: "Root/Engineering/Architecture", CenterVector: []float32{0, 0, 1}, ParentIDs: []CategoryParent{{ParentID: engID}}})
+	pathTree.Btree.Add(ctx, "Root/Engineering/Architecture", archID)
+	items.Btree.Add(ctx, ItemKey{CategoryID: archID, ItemID: itemID}, Item[string]{ID: itemID, CategoryID: archID, Summaries: []string{"Architecture guidance for new B-tree"}})
+
+	res, err := kb.SearchByPath(ctx, []PathSearchParam{{CategoryPath: "Root/Engineering/Architecture", SearchText: "Architecture"}})
+	if err != nil {
+		t.Fatalf("SearchByPath failed: %v", err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("expected 1 prefix-match result, got %d", len(res))
+	}
+	if !strings.Contains(strings.Join(res[0].Summaries, " "), "Architecture") {
+		t.Fatalf("expected prefix search to surface the Architecture item, got %+v", res[0].Summaries)
+	}
+}
+
 func TestKnowledgeBaseEdgeCases(t *testing.T) {
 	ctx := context.Background()
 	s := prepareTestStore()
-	kb := &KnowledgeBase[string]{Store: s}
+	s.SetDomainReference([]float32{0.0, 0.0, 0.0})
+	kb := &KnowledgeBase[string]{
+		Store:   s,
+		Manager: NewMemoryManager[string](s, &MockLLM{}, &MockPlaybookEmbedder{}),
+	}
 
 	// Create 5 categories
 	upserts := make([]UpsertCategoryParam, 5)

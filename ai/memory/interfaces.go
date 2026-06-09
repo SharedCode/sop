@@ -36,6 +36,15 @@ type MemoryStore[T any] interface {
 	// FindClosestCategory explores the category tree using spatial distance to find the closest matching category.
 	FindClosestCategory(ctx context.Context, vector []float32) (*Category, float32, error)
 
+	// SemanticCategoryByPath resolves a category path expressed as pre-embedded vectors into the
+	// closest matching Categories at each level of the hierarchy.
+	//
+	// Given a path "a/b/c" whose parts have been embedded into vectors [va, vb, vc]:
+	//   - Level 0 (root): searches CategoriesByDistance with ParentID=NilUUID, anchor=DomainReference
+	//   - Level N:        searches CategoriesByDistance with ParentID=prev.ID, anchor=prev.CenterVector
+	// The function keeps all best-distance ties per level and returns the final best candidates.
+	SemanticCategoryByPath(ctx context.Context, pathVectors [][]float32) ([]*Category, error)
+
 	// Get retrieves a item by its logical ID.
 	Get(ctx context.Context, key ItemKey) (*Item[T], error)
 	// Delete removes an item by its logical ID.
@@ -116,7 +125,9 @@ type SearchOptions[T any] struct {
 	Limit int
 	// CategoryPath can serve as a cheaper SearchByPath-style alternative to TextSearch
 	// when the use-case has a stable, meaningful category taxonomy to route through.
-	CategoryPath           string
-	CategoryDistanceVector []float32
-	Filter                 func(T) bool
+	CategoryPath string
+	// CategoryVector can be used to search for items within a given category.
+	// The Category whose CenterVector is closest to this vector will be used as the search Category.
+	CategoryVector []float32
+	Filter         func(T) bool
 }

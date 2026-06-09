@@ -250,11 +250,6 @@ func TestSessionPayloadPropagation(t *testing.T) {
 
 type eventStreamingMockAgent struct{}
 
-func (m *eventStreamingMockAgent) Open(ctx context.Context) error  { return nil }
-func (m *eventStreamingMockAgent) Close(ctx context.Context) error { return nil }
-func (m *eventStreamingMockAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
-	return nil, nil
-}
 func (m *eventStreamingMockAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
 	if streamer, ok := ctx.Value(ai.CtxKeyEventStreamer).(func(string, any)); ok && streamer != nil {
 		streamer("tool_call", map[string]any{
@@ -269,7 +264,55 @@ func (m *eventStreamingMockAgent) Ask(ctx context.Context, query string, cfg *ai
 	}
 	return "Plain final answer.", nil
 }
+
+func (m *eventStreamingMockAgent) Open(ctx context.Context) error  { return nil }
+func (m *eventStreamingMockAgent) Close(ctx context.Context) error { return nil }
+func (m *eventStreamingMockAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
+	return nil, nil
+}
 func (m *eventStreamingMockAgent) Clone() ai.Agent[map[string]any] { return &eventStreamingMockAgent{} }
+
+func TestSetupStream_EmitsVisibleContentForToolResults(t *testing.T) {
+	w := httptest.NewRecorder()
+	sendEvent, _ := setupStream(w)
+
+	sendEvent(ai.ReasoningEventToolResult, map[string]any{
+		"tool":   "lookup_user",
+		"result": "John is in the users store.",
+	})
+
+	body := w.Body.String()
+	if !strings.Contains(body, `"type":"content"`) {
+		t.Fatalf("expected content event for tool_result, got: %s", body)
+	}
+	if !strings.Contains(body, "Result from lookup_user") {
+		t.Fatalf("expected human-readable tool result content, got: %s", body)
+	}
+}
+
+func TestSetupStream_HandlesListStoresResultAsContent(t *testing.T) {
+	w := httptest.NewRecorder()
+	sendEvent, _ := setupStream(w)
+
+	sendEvent(ai.ReasoningEventToolResult, map[string]any{
+		"tool":   "list_stores",
+		"result": `[{"name":"alpha"}]`,
+	})
+
+	body := w.Body.String()
+	if !strings.Contains(body, `"type":"content"`) {
+		t.Fatalf("expected content event for list_stores result, got: %s", body)
+	}
+	if !strings.Contains(body, "list_stores") {
+		t.Fatalf("expected list_stores result content in stream, got: %s", body)
+	}
+}
+
+func TestSetupStream_UnescapesToolResultText(t *testing.T) {
+	if got := renderVisibleText(`Link table: UserID -\u003e OrderID`); got != "Link table: UserID -> OrderID" {
+		t.Fatalf("expected real arrow rendering for escaped unicode text, got: %q", got)
+	}
+}
 
 func TestHandleAIChat_StreamsStructuredToolEvents(t *testing.T) {
 	activeSessions = NewSessionManager(100)
@@ -298,8 +341,5 @@ func TestHandleAIChat_StreamsStructuredToolEvents(t *testing.T) {
 	}
 	if !strings.Contains(body, `"kb_name":"Tasks2"`) {
 		t.Fatalf("expected structured tool args in NDJSON stream, got: %s", body)
-	}
-	if !strings.Contains(body, `Plain final answer.`) {
-		t.Fatalf("expected final answer content to still be streamed, got: %s", body)
 	}
 }

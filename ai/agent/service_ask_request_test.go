@@ -21,7 +21,6 @@ func TestAskWithRequest_BasicFlow(t *testing.T) {
 		Session: &ai.SessionPayload{
 			CurrentDB: "test_db",
 		},
-		Verbose: false,
 	}
 
 	// This demonstrates the explicit parameter pattern
@@ -44,7 +43,6 @@ func TestAskRequest_AllFieldsInitialized(t *testing.T) {
 		ScriptRecorder: nil, // Will use service default
 		DefaultFormat:  "json",
 		Options:        ai.NewConfigMap(),
-		Verbose:        true,
 	}
 
 	// Verify struct is properly initialized

@@ -144,57 +144,6 @@
                 {
                     "value": "gemini:gemini-embedding-2",
                     "label": "Gemini (gemini-embedding-2)"
-                },
-                {
-                    "value": "gemini:gemini-embedding-001",
-                    "label": "Gemini (gemini-embedding-001)"
-                }
-            ]
-        },
-        {
-            "label": "OpenAI",
-            "options": [
-                {
-                    "value": "openai:text-embedding-4-large",
-                    "label": "OpenAI (text-embedding-4-large)"
-                },
-                {
-                    "value": "openai:text-embedding-3-large",
-                    "label": "OpenAI (text-embedding-3-large)"
-                },
-                {
-                    "value": "openai:text-embedding-3-small",
-                    "label": "OpenAI (text-embedding-3-small)"
-                },
-                {
-                    "value": "openai:text-embedding-ada-002",
-                    "label": "OpenAI (text-embedding-ada-002)"
-                }
-            ]
-        },
-        {
-            "label": "Voyage",
-            "options": [
-                {
-                    "value": "voyage:voyage-3-large",
-                    "label": "Voyage 3 Large"
-                },
-                {
-                    "value": "voyage:voyage-3",
-                    "label": "Voyage 3"
-                }
-            ]
-        },
-        {
-            "label": "Cohere",
-            "options": [
-                {
-                    "value": "cohere:embed-english-v3.0",
-                    "label": "Cohere English v3.0"
-                },
-                {
-                    "value": "cohere:embed-multilingual-v3.0",
-                    "label": "Cohere Multilingual v3.0"
                 }
             ]
         },
@@ -202,16 +151,12 @@
             "label": "Local",
             "options": [
                 {
-                    "value": "ollama:nomic-embed-text",
-                    "label": "Ollama (nomic-embed-text)"
+                    "value": "kelindar:nomic-embed-text-v1.5-q8_0",
+                    "label": "Embedded library (Nomic Embed Text v1.5 (Q8))"
                 },
                 {
-                    "value": "ollama:mxbai-embed-large",
-                    "label": "Ollama (mxbai-embed-large)"
-                },
-                {
-                    "value": "ollama:all-minilm",
-                    "label": "Ollama (all-minilm)"
+                    "value": "kelindar:bge-small-en-v1.5-q8_0",
+                    "label": "Embedded library (BAAI General Embedding Small v1.5 (Q8))"
                 }
             ]
         }

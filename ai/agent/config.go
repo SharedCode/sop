@@ -77,10 +77,10 @@ type GeneratorConfig struct {
 }
 
 type EmbedderConfig struct {
-	Type        string         `json:"type"`              // "simple" (default), "agent", or "ollama"
+	Type        string         `json:"type"`              // "simple" (default), "agent", "ollama", "gemini", or "local"
 	AgentID     string         `json:"agent_id"`          // For "agent" type: ID of the agent to use
 	Instruction string         `json:"instruction"`       // For "agent" type: Instruction for the agent
-	Options     map[string]any `json:"options,omitempty"` // For "ollama" type: model, base_url
+	Options     map[string]any `json:"options,omitempty"` // For "local" type: model_path, provider, gpu_layers
 }
 
 type PolicyConfig struct {

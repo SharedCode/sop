@@ -130,7 +130,7 @@ func (db *Database) VectorizeItems(
 			continue
 		}
 
-		allVecs, err := embedder.EmbedTexts(ctx, batchSummaries)
+		allVecs, err := embed.DocumentTexts(ctx, embedder, batchSummaries)
 		if err != nil {
 			return err
 		}

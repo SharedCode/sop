@@ -913,8 +913,20 @@
             });
     }
 
+    function isPinnedInternalSpace(spaceName) {
+        const cleanName = typeof spaceName === 'string'
+            ? spaceName.replace(/\/data$/, '').replace(/_/g, ' ').replace(/-/g, ' ').toLowerCase().trim()
+            : '';
+        const normalized = cleanName.split(/\s+/).filter(Boolean).join(' ');
+        return normalized === 'sop' || normalized === 'sop kb' || normalized === 'sop knowledge base'
+            || normalized === 'medical' || normalized === 'medical kb' || normalized === 'medical knowledge base';
+    }
+
     function isSpaceReadOnly(spaceName, databaseName) {
         const cleanName = typeof spaceName === 'string' ? spaceName.replace(/\/data$/, '') : spaceName;
+        if (isPinnedInternalSpace(cleanName)) {
+            return true;
+        }
         if (cleanName && window.CONTEXT_RBAC && window.CONTEXT_RBAC["space_" + cleanName]) {
              return !window.CONTEXT_RBAC["space_" + cleanName].can_edit;
         }
@@ -955,6 +967,113 @@
               .replace(/\n/g, '&#10;')
               .replace(/\r/g, '&#13;');
 };
+
+    window.normalizeDocIDs = function(docID) {
+        if (Array.isArray(docID)) {
+            return docID.filter(Boolean);
+        }
+        return docID ? [docID] : [];
+    };
+
+    window.isExternalDocID = function(docID) {
+        return /^(https?:\/\/|file:\/\/|mailto:)/i.test(String(docID || '').trim());
+    };
+
+    window.buildDocViewerURL = function(docID, text) {
+        const value = String(docID || '').trim();
+        if (window.isExternalDocID(value)) {
+            return value;
+        }
+
+        const url = new URL('/viewer', window.location.origin);
+        const pageParams = new URLSearchParams(window.location.search || '');
+        const db = (typeof currentDatabase !== 'undefined' && currentDatabase) ? currentDatabase : (pageParams.get('db') || pageParams.get('database') || '');
+        const space = (typeof spaceName !== 'undefined' && spaceName) ? spaceName : (pageParams.get('space') || '');
+
+        url.searchParams.set('docID', value);
+        if (db) url.searchParams.set('db', db);
+        if (space) url.searchParams.set('space', space);
+        url.searchParams.set('text', text || '');
+        return url.toString();
+    };
+
+    window.closeDocSourcePopup = function() {
+        const popup = document.getElementById('doc-source-popup-menu');
+        if (popup) popup.remove();
+        document.removeEventListener('click', window._docSourcePopupOutsideHandler);
+        delete window._docSourcePopupOutsideHandler;
+    };
+
+    window.openDocSourcePopup = function(event, button, docIDs, text) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (!docIDs || docIDs.length === 0) return;
+        if (docIDs.length === 1) {
+            window.location.href = window.buildDocViewerURL(docIDs[0], text);
+            return;
+        }
+
+        window.closeDocSourcePopup();
+
+        const popup = document.createElement('div');
+        popup.id = 'doc-source-popup-menu';
+        popup.style.position = 'fixed';
+        popup.style.top = `${event.clientY + 8}px`;
+        popup.style.left = `${event.clientX + 8}px`;
+        popup.style.zIndex = '10000';
+        popup.style.minWidth = '320px';
+        popup.style.maxWidth = '420px';
+        popup.style.maxHeight = '320px';
+        popup.style.overflowY = 'auto';
+        popup.style.background = 'var(--bg-color)';
+        popup.style.border = '1px solid var(--border-color)';
+        popup.style.borderRadius = '8px';
+        popup.style.boxShadow = '0 10px 24px rgba(0,0,0,0.18)';
+        popup.style.padding = '8px';
+        popup.style.display = 'grid';
+        popup.style.gap = '6px';
+        popup.style.fontSize = '0.85em';
+        popup.style.lineHeight = '1.3';
+
+        docIDs.forEach(docID => {
+            const link = document.createElement('a');
+            link.href = window.buildDocViewerURL(docID, text);
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = docID;
+            link.style.display = 'block';
+            link.style.padding = '8px 10px';
+            link.style.borderRadius = '6px';
+            link.style.color = 'var(--text-color)';
+            link.style.textDecoration = 'none';
+            link.style.background = 'rgba(100,100,100,0.08)';
+            link.style.wordBreak = 'break-all';
+            link.style.fontSize = '0.85em';
+            link.style.lineHeight = '1.3';
+            link.addEventListener('click', () => window.closeDocSourcePopup());
+            popup.appendChild(link);
+        });
+
+        document.body.appendChild(popup);
+
+        requestAnimationFrame(() => {
+            const rect = popup.getBoundingClientRect();
+            const maxLeft = Math.max(8, window.innerWidth - rect.width - 8);
+            const maxTop = Math.max(8, window.innerHeight - rect.height - 8);
+            const nextLeft = Math.min(event.clientX + 8, maxLeft);
+            const nextTop = Math.min(event.clientY + 8, maxTop);
+            popup.style.left = `${Math.max(8, nextLeft)}px`;
+            popup.style.top = `${Math.max(8, nextTop)}px`;
+        });
+
+        window._docSourcePopupOutsideHandler = function(e) {
+            if (!popup.contains(e.target) && e.target !== button) {
+                window.closeDocSourcePopup();
+            }
+        };
+        document.addEventListener('click', window._docSourcePopupOutsideHandler);
+    };
 
     window.editDomainItemInline = function(link) {
         let itemId = link.getAttribute('data-id') || '';
@@ -1416,6 +1535,28 @@
         return !hasSchema;
     }
 
+    async function refreshCategoryCache(spaceName) {
+        try {
+            const res = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(spaceName)}&offset=0&limit=500&parent_id=`);
+            if (!res.ok) throw new Error('Failed to refresh categories');
+
+            const payload = await res.json();
+            const freshCategories = Array.isArray(payload) ? payload : (payload && Array.isArray(payload.data) ? payload.data : []);
+            window._currentKBCategories = freshCategories;
+
+            if (window._lastFetchItemsArgs && window._lastFetchItemsArgs.categoryId) {
+                const freshCat = freshCategories.find(c => c.id === window._lastFetchItemsArgs.categoryId);
+                if (freshCat) {
+                    window._lastFetchItemsArgs.catObj = freshCat;
+                }
+            }
+            return freshCategories;
+        } catch (err) {
+            console.error('Failed to refresh category cache', err);
+            return [];
+        }
+    }
+
     async function selectSpace(name, element, force = false, catOffset = 0, catLimit = 70) {
     currentStore = name + "/data";
     closeUIModal('toolbar');
@@ -1501,7 +1642,8 @@
         const currentDbObj = availableDatabases.find(db => db.name === currentDatabase);
         const isSystemDB = currentDbObj ? currentDbObj.is_system : false;
         const isReadOnlyKB = isSpaceReadOnly(name, currentDatabase);
-        
+        const isInternalKB = isPinnedInternalSpace(name);
+
         window._currentLimit = window._currentLimit || 50;
         
         let actionButtons = '';
@@ -1523,7 +1665,7 @@
                 <!-- Left Sidebar Treeview -->
                 <div id="category-tree-pane" style="width: 254px; min-width: 150px; max-width: 50%; padding-right: 8px; height: 100%; overflow-y: auto; display: flex; flex-direction: column;">
                     <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 5px; margin-bottom: 0px; flex-shrink: 0;">
-                        <h3 style="margin: 0; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center;">Categories <span onclick="event.stopPropagation(); window.vectorizeSpace('${name}')" title="Vectorize Entire Space" style="background: none; border: none; color: var(--key-color); font-size: 14px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; cursor: pointer; transition: transform 0.2s ease-in-out;" onmouseover="this.style.transform='scale(1.2)'" onmouseout="this.style.transform='scale(1)'">✨</span></h3>
+                        <h3 style="margin: 0; font-size: 1.1em; color: var(--text-color); display: flex; align-items: center;">Categories <span ${isInternalKB ? 'title="Vectorize is unavailable for internal KBs"' : 'onclick="event.stopPropagation(); window.vectorizeSpace(\'${name}\')" title="Vectorize Entire Space"'} style="background: none; border: none; color: var(--key-color); font-size: 14px; padding: 0; margin-left: 8px; display: inline-flex; align-items: center; ${isInternalKB ? 'cursor: default;' : 'cursor: pointer; transition: transform 0.2s ease-in-out;'}" ${isInternalKB ? '' : 'onmouseover="this.style.transform=\'scale(1.2)\'" onmouseout="this.style.transform=\'scale(1)\'"'}>✨</span></h3>
                         <span id="sidebar-view-all-items" title="View All Items" style="cursor: pointer; color: var(--link-color); display: flex; align-items: center; padding: 4px; border-radius: 4px;" onclick="window.fetchItemsForCategory('${name}', '', 'All Items', this)">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                                 <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zm8 0A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm-8 8A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm8 0A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3z"/>
@@ -1922,6 +2064,13 @@
                 let contentHtml = '';
                 
                 items.forEach(t => {
+                    const docIDs = window.normalizeDocIDs(t.doc_id || (t.data && t.data.doc_id));
+                    const primaryDocID = docIDs[0] || "";
+                    const currentPageParams = new URLSearchParams(window.location.search || '');
+                    const currentDB = (typeof currentDatabase !== 'undefined' && currentDatabase) ? currentDatabase : (currentPageParams.get('db') || currentPageParams.get('database') || '');
+                    const currentSpace = (typeof spaceName !== 'undefined' && spaceName) ? spaceName : (currentPageParams.get('space') || '');
+                    const docIDsAttr = JSON.stringify(docIDs).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+                    const textAttr = JSON.stringify(t.text || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
                     let fullDesc = t.description || t.text || "";
                     let isLongDesc = fullDesc.length > 150;
                     let shortDesc = isLongDesc ? fullDesc.substring(0, 150) + "..." : fullDesc;
@@ -1946,6 +2095,7 @@
                             displayCatName = catObj.name;
                         }
                     }
+                    const docLinkHref = primaryDocID ? window.buildDocViewerURL(primaryDocID, t.text || '') : "";
                     let descHtml = '';
                     if (isLongDesc) {
                         descHtml = `
@@ -1962,8 +2112,8 @@
                                         `<a class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="cursor:pointer; color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
                                          <a class="delete-item-btn" data-item-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-item-name="${window.escapeHTML(((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id || '')).substring(0, 100))}" onclick="window.deleteSpaceItem(this)" style="cursor:pointer; color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
                                     }
-                                    <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
-                                        ${t.doc_id ? `<a href="/viewer?docID=${window.escapeHTML(t.doc_id)}&db=${encodeURIComponent(currentDatabase)}&space=${encodeURIComponent(spaceName)}&text=${encodeURIComponent(t.text || '')}" target="_blank" style="color:var(--text-color); display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; padding: 4px; background: rgba(100,100,100,0.1); line-height: 1;" title="View Source Document"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg></a>` : ""}
+                                    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                                        ${primaryDocID ? `<a class="doc-source-link" href="${docLinkHref}" data-doc-ids="${docIDsAttr}" data-text="${textAttr}" onclick="window.openDocSourcePopup(event, this, ${docIDsAttr}, ${textAttr}); return false;" target="_blank" style="color:var(--text-color); display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; padding: 4px; background: rgba(100,100,100,0.1); line-height: 1;" title="View Source Document"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg></a>` : ''}
                                         ${vectorBox}
                                     </div>
                                 </div>
@@ -1983,8 +2133,8 @@
                                         `<a class="edit-item-btn" data-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-category-name="${window.escapeHTML(currCatName || '')}" data-summaries="${window.escapeHTML(t.summaries ? t.summaries.join('. ') : '')}" data-full-desc="${window.escapeHTML(fullDesc || '')}" onclick="editDomainItemInline(this)" style="cursor:pointer; color:var(--text-color); display: inline-flex; align-items: center;" title="Edit Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M12.146.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1 0 .708l-10 10a.5.5 0 0 1-.168.11l-5 2a.5.5 0 0 1-.65-.65l2-5a.5.5 0 0 1 .11-.168l10-10zM11.207 2.5 13.5 4.793 14.793 3.5 12.5 1.207 11.207 2.5zm1.586 3L10.5 3.207 4 9.707V10h.5a.5.5 0 0 1 .5.5v.5h.5a.5.5 0 0 1 .5.5v.5h.293l6.5-6.5zm-9.761 5.175-.106.106-1.528 3.821 3.821-1.528.106-.106A.5.5 0 0 1 5 12.5V12h-.5a.5.5 0 0 1-.5-.5V11h-.5a.5.5 0 0 1-.468-.325z"/></svg></a>
                                          <a class="delete-item-btn" data-item-id="${window.escapeHTML(t.id || '')}" data-category-id="${window.escapeHTML(t.category_id || t.category || '')}" data-item-name="${window.escapeHTML(((t.summaries && t.summaries.length > 0) ? t.summaries[0] : (t.text || t.description || t.topic || t.concept || t.name || t.id || '')).substring(0, 100))}" onclick="window.deleteSpaceItem(this)" style="cursor:pointer; color:var(--text-color); margin-left: 15px; display: inline-flex; align-items: center;" title="Delete Item"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg></a>`
                                     }
-                                    <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
-                                        ${t.doc_id ? `<a href="/viewer?docID=${window.escapeHTML(t.doc_id)}&db=${encodeURIComponent(currentDatabase)}&space=${encodeURIComponent(spaceName)}&text=${encodeURIComponent(t.text || '')}" target="_blank" style="color:var(--text-color); display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; padding: 4px; background: rgba(100,100,100,0.1); line-height: 1;" title="View Source Document"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg></a>` : ""}
+                                    <div style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                                        ${primaryDocID ? `<a class="doc-source-link" href="${docLinkHref}" data-doc-ids="${docIDsAttr}" data-text="${textAttr}" onclick="window.openDocSourcePopup(event, this, ${docIDsAttr}, ${textAttr}, ${categoryAttr}); return false;" target="_blank" style="color:var(--text-color); display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; padding: 4px; background: rgba(100,100,100,0.1); line-height: 1;" title="View Source Document"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/></svg></a>` : ''}
                                         ${vectorBox}
                                     </div>
                                 </div>
@@ -2862,8 +3012,9 @@ window.vectorizeSpace = async function(spaceName, skipDimensionCheck = false) {
                     let bodyPayload = { database: currentDatabase, space: cleanName };
                     const result = await apiCall(url, 'POST', bodyPayload, overrideHeaders);
                     if (result.task_id) {
-                        pollLongRunningTask(result.task_id, "Vectorizing Space", `Vectorizing Space: ${cleanName}`, "Vectorize").then(() => {
+                        pollLongRunningTask(result.task_id, "Vectorizing Space", `Vectorizing Space: ${cleanName}`, "Vectorize").then(async () => {
                             showAlert(`Space '${cleanName}' vectorization completed successfully!`);
+                            await refreshCategoryCache(cleanName);
                             if (window._lastFetchItemsArgs) {
                                 window.fetchItemsForCategory(
                                     window._lastFetchItemsArgs.spaceName, 
@@ -2964,9 +3115,10 @@ window.vectorizeSpace = async function(spaceName, skipDimensionCheck = false) {
                     "Vectorizing Space", 
                     `Vectorizing Space: ${cleanName}`, 
                     "Vectorize"
-                ).then(() => {
+                ).then(async () => {
                     showAlert(`Space '${cleanName}' vectorization completed successfully!`);
                     // Refresh current view (categories and items) to show updated vectors
+                    await refreshCategoryCache(cleanName);
                     if (window._lastFetchItemsArgs) {
                         window.fetchItemsForCategory(
                             window._lastFetchItemsArgs.spaceName, 
@@ -3006,9 +3158,8 @@ window.closeEditKBModal = function() {
 window.showEditKB = async function() {
     if (!currentStore) return;
     const baseName = currentStore.replace('/data', '');
-    const isReadOnly = isSpaceReadOnly(baseName, currentDatabase);
 
-    // Fetch config
+    // Fetch config first so the server-owned read-only flag can be honored.
     let config = null;
     try {
         const res = await fetch(`/api/spaces/config/get?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}&_=${Date.now()}`);
@@ -3018,6 +3169,8 @@ window.showEditKB = async function() {
     } catch (e) {
         console.error("Error fetching space config:", e);
     }
+
+    const isReadOnly = isSpaceReadOnly(baseName, currentDatabase) || !!(config && config.is_read_only);
 
     const modal = document.getElementById('edit-kb-modal');
     const titleSpan = document.getElementById('edit-kb-modal-title');
@@ -3047,7 +3200,15 @@ window.showEditKB = async function() {
         }
 
         if(document.getElementById('edit-kb-embedder')) {
-             document.getElementById('edit-kb-embedder').value = config.embedder || '';
+             const pinnedEmbedder = 'kelindar:nomic-embed-text-v1.5-q8_0';
+             const effectiveEmbedder = isPinnedInternalSpace(baseName) ? pinnedEmbedder : (config.embedder || '');
+             document.getElementById('edit-kb-embedder').value = effectiveEmbedder;
+        }
+        if(document.getElementById('edit-kb-domain-reference')) {
+             const domainRef = Array.isArray(config.domain_reference) && config.domain_reference.length > 0
+                 ? JSON.stringify(config.domain_reference)
+                 : '';
+             document.getElementById('edit-kb-domain-reference').value = domainRef;
         }
         if(document.getElementById('edit-kb-dimension')) {
              document.getElementById('edit-kb-dimension').value = config.space_embedder_dimension || config.system_embedder_dimension || '';
@@ -3057,11 +3218,12 @@ window.showEditKB = async function() {
         // Fallback clear
         if(document.getElementById('edit-kb-sysprompt')) document.getElementById('edit-kb-sysprompt').value = '';
         if(document.getElementById('edit-kb-is-persona')) document.getElementById('edit-kb-is-persona').checked = false;
+        if(document.getElementById('edit-kb-domain-reference')) document.getElementById('edit-kb-domain-reference').value = '';
         if(document.getElementById('edit-kb-sysprompt-container')) document.getElementById('edit-kb-sysprompt-container').style.display = 'none';
     }
 
     // Apply read-only locks
-    const allInputs = modal.querySelectorAll('input:not(#edit-kb-name), select, textarea');
+    const allInputs = modal.querySelectorAll('input:not(#edit-kb-name), select, textarea:not(#edit-kb-domain-reference)');
     allInputs.forEach(el => el.disabled = isReadOnly);
 
     const saveBtn = document.getElementById('edit-kb-save-btn');

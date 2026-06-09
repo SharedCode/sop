@@ -48,18 +48,14 @@ func (l anthropicOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningReques
 		)
 	}
 
-	continuations := make([]ai.ToolCallContinuation, 0)
-
-	// Restore continuations from previous Ask carryover state
-	if req.CarryoverState != nil && req.CarryoverState.Mode == ai.CarryoverModeLive && req.CarryoverState.ConversationHandle != "" {
-		if err := json.Unmarshal([]byte(req.CarryoverState.ConversationHandle), &continuations); err == nil {
-			log.Info("Anthropic restored continuations from carryover",
-				"count", len(continuations),
-				"estimated_tokens", req.CarryoverState.EstimatedRawToolTokens,
-			)
-		} else {
-			log.Warn("Anthropic failed to restore continuations from carryover", "error", err)
-		}
+	continuations, err := restoreAnthropicContinuations(req.CarryoverState)
+	if err != nil {
+		log.Warn("Anthropic failed to restore continuations from carryover", "error", err)
+	} else if len(continuations) > 0 {
+		log.Info("Anthropic restored continuations from carryover",
+			"count", len(continuations),
+			"estimated_tokens", req.CarryoverState.EstimatedRawToolTokens,
+		)
 	}
 
 	toolResults := make([]ai.ReActToolResult, 0)
@@ -200,6 +196,26 @@ func anthropicOwnedLoopResponse(finalText string, toolCalls []ai.ToolCall, toolR
 	return resp
 }
 
+func restoreAnthropicContinuations(state *ai.CarryoverState) ([]ai.ToolCallContinuation, error) {
+	if state == nil || state.Mode != ai.CarryoverModeLive {
+		return nil, nil
+	}
+
+	payload := strings.TrimSpace(state.ConversationID)
+	if payload == "" {
+		payload = strings.TrimSpace(state.ConversationHandle)
+	}
+	if payload == "" {
+		return nil, nil
+	}
+
+	continuations := make([]ai.ToolCallContinuation, 0)
+	if err := json.Unmarshal([]byte(payload), &continuations); err != nil {
+		return nil, err
+	}
+	return continuations, nil
+}
+
 func anthropicOwnedLoopCarryoverState(continuations []ai.ToolCallContinuation) *ai.CarryoverState {
 	if len(continuations) == 0 {
 		return nil
@@ -208,6 +224,11 @@ func anthropicOwnedLoopCarryoverState(continuations []ai.ToolCallContinuation) *
 	if err != nil {
 		return &ai.CarryoverState{Mode: ai.CarryoverModeCompact}
 	}
+
+	// Anthropic's documented continuity model is based on replaying the accumulated
+	// message/tool history and prompt caching prefixes. Keep the serialized fallback
+	// payload in ConversationHandle only; do not synthesize a ConversationID that
+	// implies a provider-native server thread that this implementation does not have.
 	return &ai.CarryoverState{
 		Mode:                   ai.CarryoverModeLive,
 		ConversationHandle:     string(raw),
@@ -216,7 +237,17 @@ func anthropicOwnedLoopCarryoverState(continuations []ai.ToolCallContinuation) *
 }
 
 func anthropicOwnedLoopPrompt(req ai.ReasoningRequest) string {
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, 6)
+
+	if state := req.CarryoverState; state != nil {
+		if previousAsk := strings.TrimSpace(state.LastUserQuery); previousAsk != "" {
+			parts = append(parts, "Continuing from the original ask:\n"+previousAsk)
+		}
+		if summary := strings.TrimSpace(state.LastAssistantSummary); summary != "" {
+			parts = append(parts, "Prior answer summary:\n"+summary)
+		}
+	}
+
 	if contextText := strings.TrimSpace(req.ContextText); contextText != "" {
 		parts = append(parts, "Context:\n"+contextText)
 	}
@@ -275,8 +306,9 @@ func executeAnthropicOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequ
 			"error", execErr,
 			"raw_result_preview", anthropicPreview(rawResult, 320),
 		)
-		emitAnthropicOwnedLoopEvent(req, ai.ReasoningEventToolError, ai.BuildToolErrorEvent(toolCall.Name, cloneAnthropicToolArgs(toolCall.Args), execErr, iteration))
 		resultText = execErr.Error()
+		emitAnthropicOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneAnthropicToolArgs(toolCall.Args), resultText, cloneAnthropicToolProgressHint(hint), iteration))
+		emitAnthropicOwnedLoopEvent(req, ai.ReasoningEventToolError, ai.BuildToolErrorEvent(toolCall.Name, cloneAnthropicToolArgs(toolCall.Args), execErr, iteration))
 		continuationResponse = map[string]any{
 			"tool_error": map[string]any{
 				"message": execErr.Error(),
@@ -380,9 +412,10 @@ func anthropicFunctionResponseObject(value any) map[string]any {
 }
 
 func emitAnthropicOwnedLoopEvent(req ai.ReasoningRequest, eventType string, data any) {
-	if req.Streamer != nil {
-		req.Streamer(eventType, data)
+	if req.Streamer == nil {
+		return
 	}
+	req.Streamer(eventType, data)
 }
 
 func emitAnthropicOwnedLoopHydration(req ai.ReasoningRequest, resp ai.ReasoningResponse) {
@@ -412,7 +445,7 @@ func shouldShortCircuitAnthropicOwnedLoopOnToolHint(hint *ai.ToolProgressHint) b
 
 func cloneAnthropicToolArgs(args map[string]any) map[string]any {
 	if len(args) == 0 {
-		return nil
+		return map[string]any{}
 	}
 	cloned := make(map[string]any, len(args))
 	for key, value := range args {
