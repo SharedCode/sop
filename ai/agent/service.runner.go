@@ -44,7 +44,8 @@ type Flusher interface {
 	Flush()
 }
 
-// JSONStreamer handles streaming JSON array elements
+// JSONStreamer handles streaming JSON array elements.
+// TODO: add a buffered batching wrapper in the future to reduce transport overhead for large result sets.
 type JSONStreamer struct {
 	w                 io.Writer
 	mu                *sync.Mutex
@@ -515,8 +516,6 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 		preAnnouncedStep := false
 		if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
 			stepIndex, _ := ctx.Value("step_index").(int)
-			log.Debug("runStepCommand: StartStreamingStep", "index", stepIndex, "command", commandName, "name", step.Name)
-
 			// Use Name if provided, otherwise Command
 			displayName := commandName
 			if step.Name != "" {
@@ -540,13 +539,13 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 
 		resp, err := executor.Execute(ctx, commandName, commandArgs)
 
-		// Check if tool streamed the result
+		// Check if tool streamed the result.
 		if stepStreamer != nil && stepStreamer.used {
 			stepStreamer.Close()
 			if err != nil {
 				return fmt.Errorf("command execution failed (streamed): %w", err)
 			}
-			// If streamed, we don't capture output to variable currently
+			// If streamed, we don't capture output to variable currently.
 			return nil
 		}
 
@@ -555,37 +554,42 @@ func (s *Service) runStepCommand(ctx context.Context, step ai.ScriptStep, scope 
 		}
 
 		if preAnnouncedStep {
-			if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
-				trimmed := strings.TrimSpace(resp)
-				stepIndex, _ := ctx.Value("step_index").(int)
-				if trimmed != "" {
-					if strings.HasPrefix(trimmed, "[") {
-						var list []json.RawMessage
-						if err := json.Unmarshal([]byte(trimmed), &list); err == nil {
-							for _, item := range list {
+			// execute_script already streams its own inner results. Re-emitting the
+			// outer returned string as a synthetic record is redundant and expensive,
+			// especially for large result sets, so suppress it for the wrapper path.
+			if commandName != "execute_script" {
+				if streamer, ok := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer); ok {
+					trimmed := strings.TrimSpace(resp)
+					stepIndex, _ := ctx.Value("step_index").(int)
+					if trimmed != "" {
+						if strings.HasPrefix(trimmed, "[") {
+							var list []json.RawMessage
+							if err := json.Unmarshal([]byte(trimmed), &list); err == nil {
+								for _, item := range list {
+									streamer.Write(StepExecutionResult{
+										Type:      "record",
+										Record:    item,
+										StepIndex: stepIndex,
+									})
+								}
+							} else {
 								streamer.Write(StepExecutionResult{
 									Type:      "record",
-									Record:    item,
+									Record:    resp,
 									StepIndex: stepIndex,
 								})
 							}
 						} else {
+							var resultAny any = resp
+							if strings.HasPrefix(trimmed, "{") {
+								resultAny = json.RawMessage(resp)
+							}
 							streamer.Write(StepExecutionResult{
 								Type:      "record",
-								Record:    resp,
+								Record:    resultAny,
 								StepIndex: stepIndex,
 							})
 						}
-					} else {
-						var resultAny any = resp
-						if strings.HasPrefix(trimmed, "{") {
-							resultAny = json.RawMessage(resp)
-						}
-						streamer.Write(StepExecutionResult{
-							Type:      "record",
-							Record:    resultAny,
-							StepIndex: stepIndex,
-						})
 					}
 				}
 			}
@@ -1069,6 +1073,8 @@ func (e *ServiceToolExecutor) Execute(ctx context.Context, toolName string, args
 			ResultStreamer:  nil, // will be extracted per-use
 			NativeToolHints: ctx.Value(ai.CtxKeyNativeToolHints) == true,
 			Database:        nil, // will be extracted per-use
+			EventStreamer:   nil,
+			ProgressSink:    nil,
 		}
 		if recorder, ok := ctx.Value(ai.CtxKeyScriptRecorder).(ai.ScriptRecorder); ok {
 			toolCtx.Recorder = recorder
@@ -1078,6 +1084,12 @@ func (e *ServiceToolExecutor) Execute(ctx context.Context, toolName string, args
 		}
 		if streamer, ok := ctx.Value(ai.CtxKeyResultStreamer).(ai.ResultStreamer); ok {
 			toolCtx.ResultStreamer = streamer
+		}
+		if streamer, ok := ctx.Value(ai.CtxKeyEventStreamer).(func(string, any)); ok {
+			toolCtx.EventStreamer = streamer
+		}
+		if sink, ok := ctx.Value(ai.CtxKeyProgressSink).(func(string)); ok {
+			toolCtx.ProgressSink = sink
 		}
 		if db, ok := ctx.Value(ai.CtxKeyDatabase).(*database.Database); ok {
 			toolCtx.Database = db

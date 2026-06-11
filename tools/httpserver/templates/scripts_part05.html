@@ -417,13 +417,7 @@
             }
 
             if (!Array.isArray(items) || items.length === 0) {
-                console.log("jsonToCSV: Input is not an array or empty");
                 return typeof input === 'string' ? input : JSON.stringify(input);
-            }
-
-            console.log("jsonToCSV: Parsed " + items.length + " items");
-            if (items.length > 0) {
-                console.log("First item structure:", JSON.stringify(items[0]));
             }
 
             // Check if items have the specific SOP 'key'/'value' structure
@@ -543,10 +537,8 @@
 
     function processMacroTrace(trace, format) {
         let output = "";
-        console.log("Processing Macro Trace. Steps:", trace.length);
         
         trace.forEach((step, index) => {
-            console.log(`Step ${index} type: ${step.type}`);
             if (step.type === 'command') {
                 // Optionally show the command being executed
                 // output += `> ${step.command}\n`;
@@ -605,6 +597,15 @@
         });
         
         return output.trim();
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
     }
 
     async function sendChatMessage() {
@@ -685,6 +686,7 @@
             const loadingEl = document.getElementById(loadingId);
             if (loadingEl) loadingEl.remove();
 
+
             if (!response.ok) {
                 const text = await response.text();
                 appendChatMessage('ai', 'HTTP Error: ' + response.status + ' - ' + text);
@@ -692,6 +694,12 @@
             }
 
             // Read the stream
+            if (!response.body) {
+                console.error('[AI stream] response body is null; stream will not start');
+                appendChatMessage('ai', 'Stream start failed: response body is unavailable.');
+                return;
+            }
+
             const reader = response.body.getReader();
             const decoder = new TextDecoder();
             
@@ -705,7 +713,9 @@
 
             while (true) {
                 const { done, value } = await reader.read();
-                if (done) break;
+                if (done) {
+                    break;
+                }
                 
                 const chunk = pendingChunk + decoder.decode(value, { stream: true });
                 // Split by newline to handle multiple objects in one chunk while preserving partial lines.
@@ -713,9 +723,25 @@
                 pendingChunk = lines.pop() || '';
                 
                 for (const line of lines) {
-                    if (!line.trim()) continue;
+                    const trimmed = line.trim();
+                    if (!trimmed) continue;
                     try {
-                        const event = JSON.parse(line);
+                        const event = (() => {
+                            try {
+                                return JSON.parse(trimmed);
+                            } catch (parseErr) {
+                                const start = Math.min(trimmed.indexOf('{'), trimmed.indexOf('['));
+                                if (start >= 0) {
+                                    const candidate = trimmed.slice(start);
+                                    try {
+                                        return JSON.parse(candidate);
+                                    } catch (candidateErr) {
+                                        throw parseErr;
+                                    }
+                                }
+                                throw parseErr;
+                            }
+                        })();
 
                         // Normalize payload/data from mixed backend formats
                         // StepExecutionResult uses 'record' or 'result' instead of 'payload'
@@ -724,11 +750,19 @@
                             else if (event.result !== undefined) event.payload = event.result;
                         }
 
+                        // Simple fallback: if the event is anything other than a plain text event,
+                        // still render its payload as visible text so the UI proves data is flowing.
+                        const rawPayloadForDisplay = typeof event.payload === 'string'
+                            ? event.payload
+                            : JSON.stringify(event.payload, null, 2);
+
                         // Map 'result' type to 'content' if it acts like text output
                         // This ensures command string outputs (like "Transaction committed") are shown
                         if (event.type === 'result') {
                             event.type = 'content';
                         }
+
+                        let handled = false;
                         
                         // Helper to flush pending records before showing text or other content
                         const flushRecords = () => {
@@ -745,10 +779,8 @@
                         };
 
                         if (event.type === 'content') {
-                             // Ignore empty content to prevent empty UI bubbles
-                             if (!event.payload || String(event.payload).length === 0) continue;
-
-                             flushRecords(); // Flush any data tables before showing new text analysis/headers
+                            handled = true;
+                            flushRecords(); // Flush any data tables before showing new text analysis/headers
 
                              if (!currentContentSpan) {
                                 // Start new content block
@@ -959,18 +991,26 @@
                             await yieldToBrowser();
                         } 
                         else if (event.type === 'record' || event.type === 'kv') {
+                            handled = true;
                             // Collect records
                             // If we encounter a schema change, we might want to flush?
                             // For simplicity, we just collect until text/content interrupts.
                             currentTableRecords.push(event.payload);
                             currentTableType = event.type;
                         }
+                        else if (event.type === 'result_stream') {
+                            handled = true;
+                            flushRecords();
+                            currentContentSpan = null;
+                        }
                         else if (event.type === 'tool_call') {
+                            handled = true;
                             flushRecords();
                             appendChatMessage('ai', '🛠️ Calling Tool: ' + event.payload.tool);
                             currentContentSpan = null;
                         }
                         else if (event.type === 'tool_result') {
+                            handled = true;
                             flushRecords();
 
                             const payload = event.payload || {};
@@ -1028,6 +1068,7 @@
                             currentContentSpan = null;
                         }
                         else if (event.type === 'space_mutation') {
+                            handled = true;
                             flushRecords();
 
                             const payload = event.payload || {};
@@ -1067,10 +1108,12 @@
                             currentContentSpan = null;
                         }
                         else if (event.type === 'tool_error') {
+                            handled = true;
                             flushRecords();
                             currentContentSpan = null;
                         }
                         else if (event.type === 'step_start') {
+                            handled = true;
                             flushRecords();
                             let label = event.payload || event.command;
                             const idx = event.step_index;
@@ -1085,26 +1128,67 @@
                             await yieldToBrowser();
                         }
                         else if (event.type === 'action_required') {
+                            handled = true;
                             flushRecords();
-                            const action = event.payload; // {action_type: '...', command: '...', reasoning: '...'}
-                            
-                            if (action.action_type === 'local_shell_execution') {
+                            const action = event.payload || {};
+
+                            if (String(action.action_type || '').trim() === 'local_shell_execution') {
                                 const msgDiv = document.createElement('div');
                                 msgDiv.className = 'chat-message ai';
-                                msgDiv.innerHTML = `
-                                    <div style="background: #1e1e1e; border: 1px solid #4ade80; border-radius: 8px; padding: 12px; margin-top: 8px;">
-                                        <div style="display: flex; align-items: center; margin-bottom: 8px;">
-                                            <span style="font-size: 1.2rem; margin-right: 8px;">💻</span>
-                                            <strong>Local Command Request</strong>
-                                        </div>
-                                        <p style="margin: 0 0 8px 0; font-size: 0.9rem; color: #a1a1aa;">${action.reasoning || 'The AI wants to run a command locally.'}</p>
-                                        <code style="display: block; background: #000; padding: 8px; border-radius: 4px; color: #4ade80; margin-bottom: 12px; font-family: monospace;">$ ${action.command}</code>
-                                        <div style="display: flex; gap: 8px;">
-                                            <button onclick="approveLocalCommand('${encodeURIComponent(action.command)}', this)" style="background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;">Approve & Run Locally</button>
-                                            <button onclick="rejectLocalCommand(this)" style="background: #3f3f46; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;">Deny</button>
-                                        </div>
-                                    </div>
-                                `;
+
+                                const card = document.createElement('div');
+                                card.style.cssText = 'background: #1e1e1e; border: 1px solid #4ade80; border-radius: 8px; padding: 12px; margin-top: 8px;';
+
+                                const header = document.createElement('div');
+                                header.style.cssText = 'display: flex; align-items: center; margin-bottom: 8px;';
+                                const icon = document.createElement('span');
+                                icon.textContent = '💻';
+                                icon.style.cssText = 'font-size: 1.2rem; margin-right: 8px;';
+                                const title = document.createElement('strong');
+                                title.textContent = 'Local Command Request';
+                                header.appendChild(icon);
+                                header.appendChild(title);
+
+                                const reasoning = document.createElement('p');
+                                reasoning.textContent = String(action.reasoning || 'The AI wants to run a command locally.');
+                                reasoning.style.cssText = 'margin: 0 0 8px 0; font-size: 0.9rem; color: #a1a1aa;';
+
+                                const code = document.createElement('code');
+                                code.textContent = '$ ' + String(action.command || '');
+                                code.style.cssText = 'display: block; background: #000; padding: 8px; border-radius: 4px; color: #4ade80; margin-bottom: 12px; font-family: monospace; white-space: pre-wrap; word-break: break-word;';
+
+                                const actions = document.createElement('div');
+                                actions.style.cssText = 'display: flex; gap: 8px;';
+
+                                const approveBtn = document.createElement('button');
+                                approveBtn.type = 'button';
+                                approveBtn.textContent = 'Approve & Run Locally';
+                                approveBtn.style.cssText = 'background: #10b981; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-weight: bold;';
+                                approveBtn.onclick = () => {
+                                    if (typeof window.approveLocalCommand === 'function') {
+                                        window.approveLocalCommand(encodeURIComponent(String(action.command || '')), approveBtn);
+                                    }
+                                };
+
+                                const denyBtn = document.createElement('button');
+                                denyBtn.type = 'button';
+                                denyBtn.textContent = 'Deny';
+                                denyBtn.style.cssText = 'background: #3f3f46; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer;';
+                                denyBtn.onclick = () => {
+                                    if (typeof window.rejectLocalCommand === 'function') {
+                                        window.rejectLocalCommand(denyBtn);
+                                    }
+                                };
+
+                                actions.appendChild(approveBtn);
+                                actions.appendChild(denyBtn);
+
+                                card.appendChild(header);
+                                card.appendChild(reasoning);
+                                card.appendChild(code);
+                                card.appendChild(actions);
+                                msgDiv.appendChild(card);
+
                                 document.getElementById('chat-history').appendChild(msgDiv);
                                 document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
                             }
@@ -1112,6 +1196,7 @@
                             currentContentSpan = null;
                         }
                         else if (event.type === 'switch_database') {
+                            handled = true;
                             flushRecords();
                             const newDbName = event.payload;
                             appendChatMessage('ai', `🔄 Switching active database context to '${newDbName}'...`);
@@ -1133,23 +1218,50 @@
                             currentContentSpan = null;
                         }
                         else if (event.type === 'session_id') {
+                            handled = true;
                             currentSessionID = event.payload;
                         }
                         else if (event.type === 'error') {
+                            handled = true;
                             flushRecords();
                             appendChatMessage('ai', 'Error: ' + event.payload);
                             currentContentSpan = null;
                             await yieldToBrowser();
                         }
+
+                        if (!handled) {
+                            flushRecords();
+                            appendChatMessage('ai', rawPayloadForDisplay || `Event: ${event.type}`);
+                            currentContentSpan = null;
+                        }
                     } catch (e) {
-                        console.error("Failed to parse stream line:", line, e);
+                        console.error('[AI stream] parse error', {
+                            line,
+                            error: e,
+                            pendingChunkLength: pendingChunk.length
+                        });
                     }
                 }
             }
 
             if (pendingChunk.trim()) {
                 try {
-                    const event = JSON.parse(pendingChunk);
+                    const trimmedPending = pendingChunk.trim();
+                    const event = (() => {
+                        try {
+                            return JSON.parse(trimmedPending);
+                        } catch (parseErr) {
+                            const start = Math.min(trimmedPending.indexOf('{'), trimmedPending.indexOf('['));
+                            if (start >= 0) {
+                                try {
+                                    return JSON.parse(trimmedPending.slice(start));
+                                } catch (candidateErr) {
+                                    throw parseErr;
+                                }
+                            }
+                            throw parseErr;
+                        }
+                    })();
                     if (event.payload === undefined) {
                         if (event.record !== undefined) event.payload = event.record;
                         else if (event.result !== undefined) event.payload = event.result;
@@ -1161,7 +1273,10 @@
                         appendChatMessage('ai', 'Error: ' + event.payload);
                     }
                 } catch (e) {
-                    console.error('Failed to parse final stream line:', pendingChunk, e);
+                    console.error('[AI stream] final parse error', {
+                        pendingChunk,
+                        error: e
+                    });
                 }
             }
             

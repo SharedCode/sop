@@ -93,9 +93,9 @@ func TestCopilotAgentExecute_UsesRunnerSessionVerboseForToolRuntime(t *testing.T
 	ctx := context.WithValue(context.Background(), RunnerSessionKey, rs)
 	ctx = context.WithValue(ctx, SessionPayloadKey, &ai.SessionPayload{CurrentDB: "system"})
 
-	ag.registry.Register("echo_verbose", "", `{"type":"object"}`, func(ctx context.Context, args map[string]any) (string, error) {
+	ag.registry.Register("echo_verbose", "", `{"type":"object"}`, wrapStringTool(func(ctx context.Context, args map[string]any) (string, error) {
 		return strconv.FormatBool(effectiveVerbose(ctx)), nil
-	})
+	}))
 
 	out, err := ag.Execute(ctx, "echo_verbose", map[string]any{"database": "system"})
 	if err != nil {

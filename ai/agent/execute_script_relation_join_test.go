@@ -72,9 +72,13 @@ func TestExecuteScript_RelationTargetJoinCompatibility(t *testing.T) {
 	}
 
 	ctxWithPayload := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
-	result, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
+	resultRaw, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
 	if err != nil {
 		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+	result, err := formatToolResult(ctxWithPayload, resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	if !strings.Contains(result, "John") {
@@ -142,9 +146,13 @@ func TestExecuteScript_JoinResolvesStoreByUnderlyingNameWhenResultVarDiffers(t *
 	}
 
 	ctxWithPayload := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
-	result, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
+	resultRaw, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
 	if err != nil {
 		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+	result, err := formatToolResult(ctxWithPayload, resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	if !strings.Contains(result, "John") {
@@ -214,9 +222,13 @@ func TestExecuteScript_OpenStoreWithoutResultVarCompatibility(t *testing.T) {
 	}
 
 	ctxWithPayload := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
-	result, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
+	resultRaw, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
 	if err != nil {
 		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+	result, err := formatToolResult(ctxWithPayload, resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	if !strings.Contains(result, "John") {
@@ -287,9 +299,13 @@ func TestExecuteScript_JoinAutoOpensRightStoresByUnderlyingName(t *testing.T) {
 	}
 
 	ctxWithPayload := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
-	result, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
+	resultRaw, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
 	if err != nil {
 		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+	result, err := formatToolResult(ctxWithPayload, resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	if !strings.Contains(result, "John") {
@@ -364,9 +380,13 @@ func TestExecuteScript_ExplicitCommitMaterializesJoinChainWithoutReturn(t *testi
 	}
 
 	ctxWithPayload := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
-	result, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
+	resultRaw, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
 	if err != nil {
 		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+	result, err := formatToolResult(ctxWithPayload, resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	if !strings.Contains(result, "John") {
@@ -440,9 +460,13 @@ func TestExecuteScript_ImplicitFilteredCursorSurvivesExplicitCommit(t *testing.T
 	}
 
 	ctxWithPayload := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
-	result, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
+	resultRaw, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
 	if err != nil {
 		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+	result, err := formatToolResult(ctxWithPayload, resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	if !strings.Contains(result, "John") {

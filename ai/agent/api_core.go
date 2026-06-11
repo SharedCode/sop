@@ -112,7 +112,11 @@ func (a *CopilotAgent) ExecuteScript(ctx context.Context, args ExecuteScriptArgs
 		"database": args.Database,
 		"script":   scriptAny,
 	}
-	return a.toolExecuteScript(ctx, argsMap)
+	res, err := a.toolExecuteScript(ctx, argsMap)
+	if err != nil {
+		return "", err
+	}
+	return formatToolResult(ctx, res)
 }
 
 // Join performs a join operation between two stores (first-class API)
@@ -143,7 +147,11 @@ func (a *CopilotAgent) Join(ctx context.Context, args JoinArgs) (string, error) 
 		"action":            args.Action,
 		"update_values":     args.UpdateValues,
 	}
-	return a.toolJoin(ctx, argsMap)
+	res, err := a.toolJoin(ctx, argsMap)
+	if err != nil {
+		return "", err
+	}
+	return formatToolResult(ctx, res)
 }
 
 // Helper to convert map to struct (for adapters)

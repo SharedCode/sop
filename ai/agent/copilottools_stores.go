@@ -19,13 +19,13 @@ const joinArgsSchema = `{"type":"object","description":"Joins two stores on spec
 const manageTransactionArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"action":{"type":"string","enum":["begin","commit","rollback"],"description":"Transaction action to execute."}},"required":["action"]}`
 
 func (a *CopilotAgent) registerStoresTools(ctx context.Context) {
-	a.registry.RegisterWithUI("select", "Selects data from a store using criteria. With action=delete or action=update, it mutates the selected records. Prefer explicit transaction control for multi-step or mutating flows.", SelectInstruction, selectArgsSchema, a.toolSelect)
+	a.registry.RegisterWithUI("select", "Selects data from a store using criteria. With action=delete or action=update, it mutates the selected records. Prefer explicit transaction control for multi-step or mutating flows.", SelectInstruction, selectArgsSchema, wrapStringTool(a.toolSelect))
 
 	a.registry.RegisterHidden("join", JoinInstruction, joinArgsSchema, a.toolJoin)
-	a.registry.RegisterWithUI("explain_join", "Explains whether a join will use indexes or a full scan. Use explicit transaction control when the plan is part of a larger workflow.", ExplainJoinInstruction, explainJoinArgsSchema, a.toolExplainJoin)
+	a.registry.RegisterWithUI("explain_join", "Explains whether a join will use indexes or a full scan. Use explicit transaction control when the plan is part of a larger workflow.", ExplainJoinInstruction, explainJoinArgsSchema, wrapStringTool(a.toolExplainJoin))
 
-	a.registry.RegisterWithUI("add", "Adds data to a store. For mutations, prefer explicit transaction control so commit boundaries remain deliberate.", AddInstruction, addArgsSchema, a.toolAdd)
-	a.registry.RegisterWithUI("update", "Updates data in a store. For mutations, prefer explicit transaction control so commit boundaries remain deliberate.", UpdateInstruction, updateArgsSchema, a.toolUpdate)
-	a.registry.RegisterWithUI("delete", "Deletes data from a store by key. For mutations, prefer explicit transaction control so commit boundaries remain deliberate.", DeleteInstruction, deleteArgsSchema, a.toolDelete)
-	a.registry.RegisterHidden("manage_transaction", ManageTransactionInstruction, manageTransactionArgsSchema, a.toolManageTransaction)
+	a.registry.RegisterWithUI("add", "Adds data to a store. For mutations, prefer explicit transaction control so commit boundaries remain deliberate.", AddInstruction, addArgsSchema, wrapStringTool(a.toolAdd))
+	a.registry.RegisterWithUI("update", "Updates data in a store. For mutations, prefer explicit transaction control so commit boundaries remain deliberate.", UpdateInstruction, updateArgsSchema, wrapStringTool(a.toolUpdate))
+	a.registry.RegisterWithUI("delete", "Deletes data from a store by key. For mutations, prefer explicit transaction control so commit boundaries remain deliberate.", DeleteInstruction, deleteArgsSchema, wrapStringTool(a.toolDelete))
+	a.registry.RegisterHidden("manage_transaction", ManageTransactionInstruction, manageTransactionArgsSchema, wrapStringTool(a.toolManageTransaction))
 }

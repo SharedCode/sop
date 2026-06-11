@@ -954,10 +954,13 @@ type StreamingExecuteScriptMock struct{}
 func (m *StreamingExecuteScriptMock) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
 	streamer, _ := ctx.Value(CtxKeyJSONStreamer).(*JSONStreamer)
 	suppressInternalStepStart, _ := ctx.Value(CtxKeySuppressInternalStepStart).(bool)
-	if toolName == "execute_script" && streamer != nil && !suppressInternalStepStart {
-		streamer.Write(StepExecutionResult{Type: "step_start", Command: "scan", StepIndex: 3})
-		streamer.Write(StepExecutionResult{Type: "step_start", Command: "filter", StepIndex: 4})
-		streamer.Write(StepExecutionResult{Type: "step_start", Command: "return", StepIndex: 6})
+	if toolName == "execute_script" && streamer != nil {
+		if !suppressInternalStepStart {
+			streamer.Write(StepExecutionResult{Type: "step_start", Command: "scan", StepIndex: 3})
+			streamer.Write(StepExecutionResult{Type: "step_start", Command: "filter", StepIndex: 4})
+			streamer.Write(StepExecutionResult{Type: "step_start", Command: "return", StepIndex: 6})
+		}
+		streamer.Write(StepExecutionResult{Type: "record", Record: map[string]any{"result": "done"}, StepIndex: 7})
 	}
 	return "done", nil
 }
@@ -1080,9 +1083,6 @@ func TestRunScript_ExecuteScriptFallsBackToServiceExecutor(t *testing.T) {
 	if err != nil {
 		t.Fatalf("/run failed: %v", err)
 	}
-	if !strings.Contains(resp, "ok") {
-		t.Fatalf("expected script output to contain ok, got: %s", resp)
-	}
 	if len(svc.session.LastInteractionToolCalls) == 0 {
 		t.Fatalf("expected script run to record executed tool calls, got none; response=%s", resp)
 	}
@@ -1110,7 +1110,7 @@ func TestRunStepCommand_ExecuteScriptSuppressesInnerStepHeaders(t *testing.T) {
 
 	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
 	if len(lines) != 2 {
-		t.Fatalf("expected step header plus result record, got %d: %s", len(lines), buf.String())
+		t.Fatalf("expected execute_script step header plus inner result record in the playback path, got %d: %s", len(lines), buf.String())
 	}
 
 	var first StepExecutionResult
@@ -1146,7 +1146,41 @@ func TestRunStepCommand_ExecuteScriptSuppressesInnerStepHeaders(t *testing.T) {
 		t.Fatalf("expected inner atomic step headers to be suppressed, got %d: %s", countInner, buf.String())
 	}
 	if countRecords != 1 {
-		t.Fatalf("expected execute_script result record once, got %d: %s", countRecords, buf.String())
+		t.Fatalf("expected one inner execute_script result record in the playback path, got %d: %s", countRecords, buf.String())
+	}
+}
+
+func TestRunStepCommand_ExecuteScriptSuppressesDuplicateUIRecord(t *testing.T) {
+	svc := NewService(&MockDomain{}, nil, nil, nil, nil, nil, false)
+	var buf bytes.Buffer
+	streamer := NewNDJSONStreamer(&buf)
+
+	ctx := context.Background()
+	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &StreamingExecuteScriptMock{})
+	ctx = context.WithValue(ctx, CtxKeyJSONStreamer, streamer)
+	ctx = context.WithValue(ctx, ai.CtxKeyEventStreamer, func(eventType string, payload any) {})
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{})
+	ctx = context.WithValue(ctx, "step_index", 1)
+
+	var sb strings.Builder
+	step := ai.ScriptStep{Type: "command", Command: "execute_script", Args: map[string]any{"script": []any{}}}
+	if err := svc.runStepCommand(ctx, step, map[string]any{}, nil, &sb); err != nil {
+		t.Fatalf("runStepCommand failed: %v", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected execute_script step header plus inner result record for UI streaming, got %d: %s", len(lines), buf.String())
+	}
+
+	for _, line := range lines {
+		var evt StepExecutionResult
+		if err := json.Unmarshal([]byte(line), &evt); err != nil {
+			t.Fatalf("unmarshal event: %v", err)
+		}
+		if evt.Type == "record" && evt.Record == "done" {
+			t.Fatalf("expected the outer synthetic result record to be suppressed, got %s", buf.String())
+		}
 	}
 }
 

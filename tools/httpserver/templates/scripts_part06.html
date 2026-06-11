@@ -1,15 +1,86 @@
 {{define "scripts_part06"}}
 <script>
+    function normalizeRenderRecords(records) {
+        if (records == null) return [];
+
+        if (typeof records === 'string') {
+            const trimmed = records.trim();
+            if (!trimmed) return [];
+            try {
+                const parsed = JSON.parse(trimmed);
+                return Array.isArray(parsed) ? parsed : [parsed];
+            } catch (e) {
+                return [records];
+            }
+        }
+
+        if (Array.isArray(records)) {
+            return records.flatMap(item => {
+                if (item && typeof item === 'object' && 'record' in item && !Array.isArray(item.record)) {
+                    return [item.record];
+                }
+                if (item && typeof item === 'object' && 'payload' in item && item.payload !== undefined) {
+                    return [item.payload];
+                }
+                return [item];
+            });
+        }
+
+        if (typeof records === 'object' && 'record' in records && records.record !== undefined) {
+            return [records.record];
+        }
+
+        if (typeof records === 'object' && 'payload' in records && records.payload !== undefined) {
+            return [records.payload];
+        }
+
+        return [records];
+    }
+
+    function normalizeRenderFormat(format, records, type) {
+        const normalized = String(format || '').toLowerCase().trim();
+        if (['table', 'json', 'csv'].includes(normalized)) {
+            return normalized;
+        }
+
+        const items = normalizeRenderRecords(records);
+        const hasStructuredRows = items.some(item => item && typeof item === 'object' && !Array.isArray(item));
+        const looksLikeScriptInstruction = items.some(item => item && typeof item === 'object' && (item.op || item.command) && item.args);
+
+        if (normalized === 'markdown' || normalized === 'text' || normalized === 'plain' || normalized === 'auto' || normalized === '') {
+            if (looksLikeScriptInstruction) return 'json';
+            if (hasStructuredRows) return 'table';
+            return 'json';
+        }
+
+        return type === 'kv' ? 'table' : 'json';
+    }
+
     function renderDataResults(records, format, type) {
+        const normalizedFormat = normalizeRenderFormat(format, records, type);
+        const normalizedRecords = normalizeRenderRecords(records);
+
+        console.info('[AI stream] renderDataResults', {
+            rawCount: records ? records.length : 0,
+            normalizedCount: normalizedRecords.length,
+            format,
+            normalizedFormat,
+            type,
+            preview: normalizedRecords.length > 0 ? JSON.stringify(normalizedRecords.slice(0, 2)).slice(0, 200) : '[]'
+        });
+
         // Auto-flatten records if they contain SOP internal fields (key, value, etc)
         // This makes the output much cleaner for Joins and raw Store scans.
+        let renderFormat = normalizedFormat;
+        let renderRecords = normalizedRecords;
+
         if (type === 'record') {
             // Heuristic to detect Script Instructions (which are technically records but should be viewed as JSON/Code)
-            if (records.length > 0 && records[0] && (records[0].op || records[0].command) && records[0].args) {
-                format = 'json';
+            if (renderRecords.length > 0 && renderRecords[0] && (renderRecords[0].op || renderRecords[0].command) && renderRecords[0].args) {
+                renderFormat = 'json';
             }
 
-            records = records.map(r => {
+            renderRecords = renderRecords.map(r => {
                 if (!r) return {}; // Safety for nulls
                 const flat = Object.assign({}, r);
                 ['key', 'value', 'right_key', 'right_value'].forEach(field => {
@@ -31,17 +102,17 @@
             });
         }
 
-        if (format === 'table') {
-            renderRecordTable(records, type);
-        } else if (format === 'json') {
+        if (renderFormat === 'table') {
+            renderRecordTable(renderRecords, type);
+        } else if (renderFormat === 'json') {
             const block = document.createElement('div');
             block.className = 'chat-message ai';
             const uuid = generateUUID();
             block.id = 'msg-' + uuid;
-            block.innerHTML = '<pre>' + JSON.stringify(records, null, 2) + '</pre>';
+            block.innerHTML = '<pre>' + JSON.stringify(renderRecords, null, 2) + '</pre>';
             document.getElementById('chat-history').appendChild(block);
             document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
-        } else if (format === 'csv') {
+        } else if (renderFormat === 'csv') {
             const block = document.createElement('div');
             block.className = 'chat-message ai';
             const uuid = generateUUID();
@@ -49,13 +120,13 @@
             
             // Convert Records to CSV
             const headerSet = new Set();
-            records.forEach(r => Object.keys(r).forEach(k => headerSet.add(k)));
+            renderRecords.forEach(r => Object.keys(r || {}).forEach(k => headerSet.add(k)));
             const headers = Array.from(headerSet);
             
             let csvHeader = headers.join(',');
             let csvBody = '';
 
-            records.forEach(r => {
+            renderRecords.forEach(r => {
                 const row = headers.map(h => {
                         let val = r[h];
                         if (val === undefined || val === null) return '';
@@ -74,7 +145,7 @@
             document.getElementById('chat-history').scrollTop = document.getElementById('chat-history').scrollHeight;
         } else {
                 // Default Fallback (Table)
-                renderRecordTable(records, type);
+                renderRecordTable(renderRecords, type);
         }
     }
 

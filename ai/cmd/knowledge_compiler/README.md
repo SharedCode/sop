@@ -66,7 +66,16 @@ This keeps the compiler aligned with the existing import, preload, and vectoriza
 
 ## Usage
 
-Simply run the compiler from the root of your repository:
+The simplest developer path is:
+
+```bash
+cd ai/cmd/knowledge_compiler
+./run.sh
+```
+
+This uses the curated source `../../SOP_CURATED_KB.md` and writes the generated KB to `ai/sop_base_knowledge.json` in the repo root.
+
+You can also run the compiler directly from the repo root:
 ```bash
 go run ./ai/cmd/knowledge_compiler/main.go
 ```
@@ -78,5 +87,18 @@ go run ./ai/cmd/knowledge_compiler/main.go -input ai/SOP_CURATED_KB.md
 ```
 
 For curation rules and the bounded semantic taxonomy, see [ai/KB_CURATION_MANIFEST.md](../../KB_CURATION_MANIFEST.md).
+
+### Developer trial flow
+
+1. Regenerate the KB JSON:
+   ```bash
+   cd ai/cmd/knowledge_compiler
+   ./run.sh
+   ```
+2. Start the Data Manager from the repo root:
+   ```bash
+   go run ./tools/httpserver
+   ```
+3. Use the SOP KB preload path in the UI. The HTTP server automatically looks for the generated file in the built-in candidate locations `sop_base_knowledge.json`, `ai/sop_base_knowledge.json`, and `../ai/sop_base_knowledge.json`.
 
 *Note: This specific README file is internally ignored by the compiler to prevent self-referential clutter in the generated Knowledge Base.*

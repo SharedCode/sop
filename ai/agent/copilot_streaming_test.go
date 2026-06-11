@@ -19,9 +19,9 @@ func TestCopilotAgent_DelegateToReasoningEngineStreamsToolEvents(t *testing.T) {
 		},
 	}
 
-	a.registry.Register("execute_script", "run a script", "{}", func(ctx context.Context, args map[string]any) (string, error) {
+	a.registry.Register("execute_script", "run a script", "{}", wrapStringTool(func(ctx context.Context, args map[string]any) (string, error) {
 		return `[{"name":"John Doe"}]`, nil
-	})
+	}))
 
 	var events []string
 	ctx := context.WithValue(context.Background(), ai.CtxKeyEventStreamer, func(eventType string, data any) {

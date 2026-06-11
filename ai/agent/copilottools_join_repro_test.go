@@ -78,9 +78,13 @@ func TestToolJoin_SuffixHandling(t *testing.T) {
 	}
 	ctx = context.WithValue(ctx, "session_payload", payload)
 
-	resp, err := adminAgent.toolJoin(ctx, args)
+	respRaw, err := adminAgent.toolJoin(ctx, args)
 	if err != nil {
 		t.Fatalf("toolJoin failed: %v", err)
+	}
+	resp, err := formatToolResult(ctx, respRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	t.Logf("Response: %s", resp)
@@ -205,9 +209,13 @@ func TestToolJoin_WithAlias(t *testing.T) {
 		},
 	}
 
-	resultJSON, err := agent.toolJoin(ctx, args)
+	resultRaw, err := agent.toolJoin(ctx, args)
 	if err != nil {
 		t.Fatalf("toolJoin failed: %v", err)
+	}
+	resultJSON, err := formatToolResult(ctx, resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	// 4. Verify Result
@@ -316,9 +324,13 @@ func TestToolJoin_StoreNamePrefix(t *testing.T) {
 		"join_type":         "inner",
 	}
 
-	result, err := agent.toolJoin(ctx, args)
+	resultRaw, err := agent.toolJoin(ctx, args)
 	if err != nil {
 		t.Fatalf("Join failed: %v", err)
+	}
+	result, err := formatToolResult(ctx, resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	// Parse Result

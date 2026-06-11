@@ -44,10 +44,26 @@ When regenerating or replacing the curated KB in the future, follow this sequenc
 2. Read and synthesize the source material into the bounded taxonomy defined in this manifest.
 3. Write or update the canonical curated file at `ai/SOP_CURATED_KB.md`.
 4. Ensure the curated file uses explicit item blocks with summaries, body, and provenance.
-5. Run the Knowledge Compiler against the curated file only.
+5. Run the Knowledge Compiler against the curated file only. From `ai/cmd/knowledge_compiler/`, use `./run.sh` (or `go run . -input ../../SOP_CURATED_KB.md ...`) so the compiler writes `ai/sop_base_knowledge.json` in the repo root.
 6. Inspect the generated `ai/sop_base_knowledge.json` for expected category paths and item payloads.
-7. If a temporary draft file was used, either delete it or leave it clearly marked as non-canonical.
+7. If you want to trial the KB in the UI, start `go run ./tools/httpserver` from the repo root. The built-in SOP preload path automatically detects `sop_base_knowledge.json`, `ai/sop_base_knowledge.json`, and `../ai/sop_base_knowledge.json` when the SOP KB is preloaded.
+8. If a temporary draft file was used, either delete it or leave it clearly marked as non-canonical.
+## Custom KB workflow for end users
 
+The same workflow can be used to author a custom Knowledge Base for a separate deployment or a private dataset:
+
+1. Copy or adapt this manifest to reflect the domain-specific taxonomy and source rules you want to enforce.
+2. Produce the curated Markdown source for your custom KB (for example, a private `SOP_CURATED_KB.md` file or a renamed variant in your own repo).
+3. Run the compiler to generate the importable JSON file:
+   ```bash
+   cd ai/cmd/knowledge_compiler
+   ./run.sh
+   ```
+   If you are using a custom curated input path, pass it to the compiler with the same `-input` option used in `run.sh`.
+4. Open the SOP Data Manager UI and use the Import JSON button in the Space/KB toolbar to load the generated file into your installation.
+5. Once imported, the custom KB can be queried and managed through the same HTTP Server and SOP Data Manager experience as the built-in SOP KB.
+
+This keeps the authoring and compilation steps identical to the built-in flow, while letting end users ship a domain-specific KB as a normal JSON artifact.
 ## Source selection
 
 Start from all Markdown files under the repo root (`..`), then exclude any file whose name matches the rules below.

@@ -2,6 +2,8 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -119,16 +121,30 @@ func TestSingleBlobScriptExecution(t *testing.T) {
 		"script": scriptJSON,
 	}
 
+	var streamed []any
+	ctx = context.WithValue(ctx, ai.CtxKeyEventStreamer, func(eventType string, payload any) {
+		if eventType == "record" {
+			streamed = append(streamed, payload)
+		}
+	})
+
 	result, err := agent.toolExecuteScript(ctx, args)
 
 	t.Logf("Execution Result: %s", result)
 
 	// 6. Assertions
 	assert.NoError(t, err)
+	assert.Empty(t, result, "explicit return should stay on the streaming path instead of materializing a JSON string")
+	assert.NotEmpty(t, streamed, "expected explicit return to emit streamed records")
 
-	// Check coverage of expected data
-	assert.Contains(t, result, "Employee 1")
-	assert.Contains(t, result, "HR")
+	for _, item := range streamed {
+		b, _ := json.Marshal(item)
+		itemJSON := string(b)
+		if itemJSON != "" && (strings.Contains(itemJSON, "Employee 1") || strings.Contains(itemJSON, "HR")) {
+			return
+		}
+	}
+	t.Fatal("expected streamed records to contain the projected data")
 
 	// Employee 2 is IT, so it should NOT match the join (department=HR from storeA)
 	// Wait, join_right keeps all from employees (Right side)?

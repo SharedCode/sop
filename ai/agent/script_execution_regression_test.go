@@ -24,9 +24,13 @@ func TestToolExecuteScript_AcceptsSingleInstructionObject(t *testing.T) {
 		},
 	}
 
-	result, err := agent.toolExecuteScript(context.Background(), args)
+	resultRaw, err := agent.toolExecuteScript(context.Background(), args)
 	if err != nil {
 		t.Fatalf("toolExecuteScript should accept single object-shaped script input: %v", err)
+	}
+	result, err := formatToolResult(context.Background(), resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 	if result == "" {
 		t.Fatal("expected a non-empty result from stubbed execution")
@@ -48,9 +52,13 @@ func TestToolExecuteScript_AcceptsNestedStepsWrapper(t *testing.T) {
 		},
 	}
 
-	result, err := agent.toolExecuteScript(context.Background(), args)
+	resultRaw, err := agent.toolExecuteScript(context.Background(), args)
 	if err != nil {
 		t.Fatalf("toolExecuteScript should unwrap the nested steps wrapper: %v", err)
+	}
+	result, err := formatToolResult(context.Background(), resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 	if !strings.Contains(result, "ok") {
 		t.Fatalf("expected the unwrapped return value, got %q", result)
@@ -143,9 +151,13 @@ func TestScriptExecution_JoinRegression(t *testing.T) {
 	// We mock the context payload to inject current DB
 	ctxWithPayload := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "dev_db"})
 
-	result, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": scriptJSON})
+	resultRaw, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": scriptJSON})
 	if err != nil {
 		t.Fatalf("Script execution failed: %v", err)
+	}
+	result, err := formatToolResult(ctxWithPayload, resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	t.Logf("Result: %s", result)

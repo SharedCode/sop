@@ -56,6 +56,17 @@ Most vendors force a choice:
 
 ### The KnowledgeBase Lifecycle
 
+#### Space Management Flow (Create → Manage → Vectorize → Search)
+
+This is the end-user and developer path for Spaces:
+
+1. **Create / Mint a Space**: Establish a dedicated KB for a department, product, or persona.
+2. **Manage Categories and Items**: Curate the taxonomy, add summaries, and refine the structure in SOP Data Manager / Knowledge Base Studio.
+3. **Vectorize When Ready**: Generate embeddings for the whole Space, specific categories, or individual items.
+4. **Search Through AI Copilot or Code**: Use the Copilot UI for trial-and-error retrieval, then call the same logic from your app using `ai` APIs such as `SearchKeywords(...)` and `SearchSemantics(...)`.
+
+This lifecycle is the bridge from human-managed authoring to app-managed runtime intelligence.
+
 SOP enables a **revolutionary workflow** that traditional vector DBs cannot support:
 
 #### Phase 1: Mint (Create Structure)

@@ -49,7 +49,7 @@ func TestRealDBIntegration_JoinFlow(t *testing.T) {
 		{"op": "open_store", "args": {"name": "users_orders", "transaction": "tx", "create": true}, "result_var": "users_orders"},
 		{"op": "open_store", "args": {"name": "orders", "transaction": "tx", "create": true}, "result_var": "orders"},
 
-		{"op": "scan", "args": {"store": "users", "filter": {"first_name": "John"}}, "result_var": "a"},
+		{"op": "scan", "args": {"store": "users", "filter": {"first_name": "John"}, "stream": true}, "result_var": "a"},
 
 		{"op": "join", "input_var": "a", "args": {"store": "users_orders", "alias": "b", "on": {"key": "key"}}, "result_var": "b_joined"},
 
@@ -60,15 +60,19 @@ func TestRealDBIntegration_JoinFlow(t *testing.T) {
 		{"op": "return", "args": {"value": "view"}}
 	]`
 
-	resStr, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptRaw})
+	resRaw, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptRaw})
 	if err != nil {
 		t.Fatalf("Execution failed: %v", err)
+	}
+	resStr, err := formatToolResult(ctx, resRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	fmt.Printf("Query Result:\n%s\n", resStr)
 
-	var results []any
+	var results []map[string]any
 	err = json.Unmarshal([]byte(resStr), &results)
 	assert.NoError(t, err)
-	t.Logf("Found %d records", len(results))
+	assert.NotEmpty(t, results, "expected explicit return to materialize the projected records")
 }

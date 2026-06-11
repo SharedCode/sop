@@ -103,9 +103,13 @@ func TestToolJoin_RightOuterJoin(t *testing.T) {
 	// If not, it fails.
 	// Let's rely on standard flow first.
 
-	resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
+	respRaw, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
 	if err != nil {
 		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+	resp, err := formatToolResult(ctx, respRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	t.Logf("Response: %s", resp)

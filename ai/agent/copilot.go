@@ -3136,7 +3136,14 @@ func (a *CopilotAgent) Execute(ctx context.Context, toolName string, args map[st
 				}
 			}
 		}
-		return res, err
+		if err != nil {
+			return "", err
+		}
+		text, fmtErr := formatToolResult(ctx, res)
+		if fmtErr != nil {
+			return "", fmtErr
+		}
+		return text, nil
 	}
 
 	// Dump registry keys if tool not found (Debug)

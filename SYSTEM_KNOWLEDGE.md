@@ -131,6 +131,15 @@ The protocol defines specific event types that drive the frontend state machine:
 | `content` | `payload` | General text output (markdown). | **CONTROL SIGNAL**: Flushes records. Appends text to the output stream. |
 | `log` | `message` | Debug/Info log. | Converted to `content` (prefixed with `> *Log:*`). |
 
+### 4.2.1. Connector model for the UI path
+The UI-facing path uses `CtxKeyEventStreamer` as the default connector. In that setup, result rows are emitted through the callback-backed `EventResultStreamer` adapter, which turns `WriteItem()` into `record` events and `EndArray()` into the matching completion signal for the NDJSON UI stream.
+
+This gives the RAG/Ask pipeline a single default bridge to the live HTTP/UI writer:
+- UI path: `CtxKeyEventStreamer` -> `EventResultStreamer` -> NDJSON `record` / `result_stream` events.
+- Non-UI or remote client path: explicit `CtxKeyResultStreamer` or legacy `JSONStreamer` can still be injected when another runtime wants structured row streaming instead of the UI callback.
+
+The resolver order is therefore: callback connector first, explicit result streamer second, legacy JSON streamer last.
+
 ### 4.3. The "Border Box" Issue (Troubleshooting)
 If the UI displays an empty "border box" or malformed table container at the end of a stream:
 *   **Cause**: This usually happens when the backend sends a final Control Signal (like `step_start` for a commit or cleanup step) which triggers a `flushRecords()`.

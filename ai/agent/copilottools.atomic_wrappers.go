@@ -81,8 +81,8 @@ var atomicToolSpecs = map[string]struct {
 
 // toolAtomicOpWrapper creates a tool function that executes a single atomic operation
 // using the shared session ScriptEngine.
-func (a *CopilotAgent) toolAtomicOpWrapper(op string) func(context.Context, map[string]any) (string, error) {
-	return func(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolAtomicOpWrapper(op string) func(context.Context, map[string]any) (any, error) {
+	return func(ctx context.Context, args map[string]any) (any, error) {
 		// Ensure session context exists (Scoped to Request via generic helper)
 		scriptCtx := getOrInitScriptContext(ctx)
 
@@ -171,7 +171,7 @@ func (a *CopilotAgent) toolAtomicOpWrapper(op string) func(context.Context, map[
 			}
 		}
 
-		return serializeResult(ctx, result)
+		return result, nil
 	}
 }
 

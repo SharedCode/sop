@@ -108,6 +108,62 @@ As soon as a step finishes, it is serialized and flushed.
 *   **Low Memory:** We process 100k records, stream the result, and forget it. No massive buffers.
 *   **Frontend Decoupling:** The backend sends a "Script Trace" (JSON array). The frontend decides how to render it—as a Chat bubble or a CSV table.
 
+### 4. Streaming vs. LLM Continuation Payloads
+
+The same streaming principle also governs tool-result continuation behavior.
+
+The raw UI stream and the LLM-facing continuation payload are not the same artifact.
+
+*   The UI may need every row.
+*   The LLM only needs a bounded representation of what happened.
+*   Both outputs should come from the same traversal, but they must not require the same in-memory form.
+
+In practice, the shared result path in `ai/agent/atomic_engine_part2.go` is the correct control point.
+
+*   As rows are drained from a cursor, the backend can stream them directly to the UI.
+*   During that same drain, a reducer can observe rows incrementally and build a compact summary for the next reasoning turn.
+*   The backend must not first build a full JSON array in memory and only then summarize it for the LLM.
+
+This boundary matters because post-serialization summarization does not protect the system from very large result sets. If a result contains millions of rows, full materialization fails before the summarizer can help.
+
+The intended invariant is simple:
+
+*   LLM-facing tool continuations must be produced from bounded incremental observation.
+*   Full result materialization is allowed only when a caller explicitly requires it and the path is known to be safe.
+
+### 5. Current Scope: Result Reducer Utility
+
+The current implementation is intentionally limited to a simple result reducer utility for capping the amount of data shared with the LLM.
+
+This utility is meant to:
+
+*   keep LLM-facing continuation payloads bounded
+*   avoid sending full raw result sets when only a preview is needed
+*   stay lightweight and localized to the shared result-drain path
+
+This keeps the feature focused on the immediate safety requirement without expanding into a broader consumer architecture.
+
+### 6. Scope Note for the Current Change
+
+The current change does not attempt to introduce the full reusable consumer model.
+
+The narrower goal is simply:
+
+*   a shared `ResultConsumer` interface that can observe normalized items during traversal
+*   a `UIResultConsumer` that forwards raw items to the existing UI streamer
+*   an `LLMResultConsumer` that keeps bounded reducer state for continuation payloads
+*   a `CompositeResultConsumer` that can drive both from one traversal
+
+The other missing piece is a structured result outcome rather than a string-only return path. That outcome should stay bounded and should later be usable by broader Ask analysis that combines:
+
+*   the initial Ask prompt
+*   intermediate tool calls and tool results
+*   MRU facts
+*   STM/LTM retrieval
+*   bounded tool-result facts and previews
+
+This phase intentionally stops short of wiring memory mutation or Ask orchestration into the result layer. The goal for now is only to keep the result-processing boundary open and complementary with those later analytical layers.
+
 ## The Result: A RESTful Experience
 
 The transformation is profound. Running a complex AI script now feels exactly like calling a standard REST API endpoint.
@@ -241,6 +297,18 @@ The agent uses a **two-level carryover architecture** to maintain conversation s
 - **Claude**: Message history with `tool_use`/`tool_result` content blocks
   - Anthropic native format: Array of messages with alternating assistant/user roles
   - Each tool call becomes `tool_use` block, result becomes `tool_result` block
+
+
+### Result-Flow Filtering (Backend Only)
+
+The planned change is intentionally limited to the result-to-LLM data path:
+
+- Add a backend filter/summarizer in the tool-result flow before the LLM sees the payload.
+- Apply a bounded excerpt or compact summary to all or to select tools, e.g. - `execute_script` or `scan`, outputs so research turns do not over-consume tokens.
+- Keep the full raw payload available for UI/streaming and for the backend execution path.
+- Do not change provider continuation state, carryover state, MRU, or the provider-native conversation thread.
+
+This is a result-flow optimization only. It does not introduce new provider modes, new carryover behavior, or new MRU wiring.
 
 ### Design Principle: Explicit Parameters
 

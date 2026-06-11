@@ -191,7 +191,7 @@ func (l geminiOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest) 
 		for _, toolCall := range output.ToolCalls {
 			emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolCall, ai.BuildToolCallEvent(toolCall.Name, cloneGeminiToolArgs(toolCall.Args), iteration))
 			executedToolCalls = append(executedToolCalls, toolCall)
-			toolResult, continuation := executeGeminiOwnedLoopToolCall(ctx, req, iteration, toolCall)
+			toolResult, continuation := executeGeminiOwnedLoopToolCall(ctx, req, iteration, l.maxIterations, toolCall)
 			toolResults = append(toolResults, toolResult)
 			continuations = append(continuations, continuation)
 			emitGeminiOwnedLoopHydration(req, geminiOwnedLoopResponse("", executedToolCalls, toolResults, continuations, l.generator.Name(), geminiGeneratorModel(l.generator)))
@@ -366,49 +366,11 @@ func geminiValidationErrorParts(line string) (string, string, string) {
 	return category, remainder, example
 }
 
-func summarizeGeminiContinuationToolOutput(toolName string, response any) any {
-	trimmedTool := strings.TrimSpace(toolName)
-	if !strings.EqualFold(trimmedTool, "execute_script") {
+func summarizeGeminiContinuationToolOutput(toolName string, response any, finalToolResult bool) any {
+	if !strings.EqualFold(strings.TrimSpace(toolName), "execute_script") {
 		return response
 	}
-
-	// Convert response to string for analysis
-	var resultText string
-	switch v := response.(type) {
-	case string:
-		resultText = v
-	case map[string]any:
-		if result, ok := v["result"].(string); ok {
-			resultText = result
-		} else {
-			bytes, _ := json.Marshal(v)
-			resultText = string(bytes)
-		}
-	default:
-		bytes, _ := json.Marshal(response)
-		resultText = string(bytes)
-	}
-
-	trimmedResult := strings.TrimSpace(resultText)
-	if trimmedResult == "" {
-		return map[string]any{"result": "execute_script completed with no textual payload. Results, if any, were already streamed to the client."}
-	}
-
-	var rows []json.RawMessage
-	if err := json.Unmarshal([]byte(trimmedResult), &rows); err == nil {
-		return map[string]any{"result": fmt.Sprintf("execute_script completed successfully and returned %d row(s). The full row payload was already streamed to the client. Do not restate the rows; provide at most a brief summary.", len(rows))}
-	}
-
-	var record map[string]any
-	if err := json.Unmarshal([]byte(trimmedResult), &record); err == nil {
-		return map[string]any{"result": "execute_script completed successfully and returned one structured record. The full payload was already streamed to the client. Do not restate the record; provide at most a brief summary."}
-	}
-
-	if len(trimmedResult) > 1000 {
-		return map[string]any{"result": fmt.Sprintf("execute_script completed successfully and returned a large textual payload (%d chars). The full payload was already streamed to the client. Do not restate it; provide at most a brief summary.", len(trimmedResult))}
-	}
-
-	return response
+	return map[string]any{"result": SummarizeToolResultForLLM(toolName, ExtractToolResultText(response), finalToolResult)}
 }
 
 func geminiOwnedLoopCarryoverState(continuations []ai.ToolCallContinuation, provider, model, finalText string, toolCalls []ai.ToolCall, toolResults []ai.ReActToolResult) *ai.CarryoverState {
@@ -655,7 +617,7 @@ func cloneGeminiToolArgs(args map[string]any) map[string]any {
 	return cloned
 }
 
-func executeGeminiOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequest, iteration int, toolCall ai.ToolCall) (ai.ReActToolResult, ai.ToolCallContinuation) {
+func executeGeminiOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequest, iteration, maxIterations int, toolCall ai.ToolCall) (ai.ReActToolResult, ai.ToolCallContinuation) {
 	log.Debug("Gemini owned loop executing tool",
 		"iteration", iteration,
 		"tool", toolCall.Name,
@@ -678,7 +640,9 @@ func executeGeminiOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequest
 		)
 		resultText = execErr.Error()
 
-		emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneGeminiToolArgs(toolCall.Args), resultText, cloneGeminiToolProgressHint(hint), iteration))
+		if shouldStreamGeminiToolResult(req, iteration >= maxIterations) {
+			emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneGeminiToolArgs(toolCall.Args), resultText, cloneGeminiToolProgressHint(hint), iteration))
+		}
 		emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolError, ai.BuildToolErrorEvent(toolCall.Name, cloneGeminiToolArgs(toolCall.Args), execErr, iteration))
 		continuationResponse = map[string]any{
 			"tool_error": map[string]any{
@@ -692,7 +656,9 @@ func executeGeminiOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequest
 			"hint_status", geminiHintStatus(hint),
 			"result_preview", geminiPreview(resultText, 320),
 		)
-		emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneGeminiToolArgs(toolCall.Args), resultText, cloneGeminiToolProgressHint(hint), iteration))
+		if shouldStreamGeminiToolResult(req, iteration >= maxIterations) {
+			emitGeminiOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneGeminiToolArgs(toolCall.Args), resultText, cloneGeminiToolProgressHint(hint), iteration))
+		}
 	}
 
 	return ai.ReActToolResult{
@@ -704,6 +670,13 @@ func executeGeminiOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequest
 			ToolCall: toolCall,
 			Response: continuationResponse,
 		}
+}
+
+func shouldStreamGeminiToolResult(req ai.ReasoningRequest, finalToolResult bool) bool {
+	if req.Streamer == nil {
+		return false
+	}
+	return req.Verbose || finalToolResult
 }
 
 func emitGeminiOwnedLoopEvent(req ai.ReasoningRequest, eventType string, data any) {
@@ -946,12 +919,12 @@ func buildGeminiRequest(prompt string, opts ai.GenOptions) geminiRequest {
 		)
 	}
 
-	for _, continuation := range opts.ToolCallContinuations {
+	for i, continuation := range opts.ToolCallContinuations {
 		if strings.TrimSpace(continuation.ToolCall.Name) == "" {
 			continue
 		}
 
-		summarizedResponse := summarizeGeminiContinuationToolOutput(continuation.ToolCall.Name, continuation.Response)
+		summarizedResponse := summarizeGeminiContinuationToolOutput(continuation.ToolCall.Name, continuation.Response, i == len(opts.ToolCallContinuations)-1)
 		reqBody.Contents = append(reqBody.Contents,
 			geminiContent{
 				Role: "model",
