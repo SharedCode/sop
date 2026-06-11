@@ -119,7 +119,7 @@ func (d *failingDatabase) Config() sop.DatabaseOptions {
 	return sop.DatabaseOptions{}
 }
 
-func TestCompileScript_WritesErrorEventOnTransactionFailureEvenWhenVerboseIsOff(t *testing.T) {
+func TestCompileScript_DoesNotWriteErrorEventOnTransactionFailureDuringInternalCompile(t *testing.T) {
 	var buf bytes.Buffer
 	streamer := NewJSONStreamer(&buf)
 	streamer.SetSuppressStepStart(true)
@@ -146,10 +146,7 @@ func TestCompileScript_WritesErrorEventOnTransactionFailureEvenWhenVerboseIsOff(
 	}
 
 	output := buf.String()
-	if !strings.Contains(output, `"type": "error"`) && !strings.Contains(output, `"type":"error"`) {
-		t.Fatalf("expected error event in streamer output, got: %s", output)
-	}
-	if !strings.Contains(output, "redis unavailable") {
-		t.Fatalf("expected streamer error payload to mention the failure cause, got: %s", output)
+	if output != "" {
+		t.Fatalf("expected compile-path execution to stay silent, got: %s", output)
 	}
 }

@@ -8,6 +8,8 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	core_database "github.com/sharedcode/sop/database"
+	"github.com/sharedcode/sop/jsondb"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -40,14 +42,35 @@ func TestRealDBIntegration_JoinFlow(t *testing.T) {
 	})
 	ctx = context.WithValue(ctx, RunnerSessionKey, &RunnerSession{Verbose: true})
 
+	tx, err := core_database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	assert.NoError(t, err)
+	defer tx.Rollback(ctx)
+
+	users, err := jsondb.CreateObjectStore(ctx, dbOpts, "users", tx)
+	assert.NoError(t, err)
+	_, err = users.Add(ctx, "u1", map[string]any{"first_name": "John", "key": "u1"})
+	assert.NoError(t, err)
+
+	orders, err := jsondb.CreateObjectStore(ctx, dbOpts, "orders", tx)
+	assert.NoError(t, err)
+	_, err = orders.Add(ctx, "o1", map[string]any{"key": "o1", "total_amount": 123})
+	assert.NoError(t, err)
+
+	usersOrders, err := jsondb.CreateObjectStore(ctx, dbOpts, "users_orders", tx)
+	assert.NoError(t, err)
+	_, err = usersOrders.Add(ctx, "u1", "o1")
+	assert.NoError(t, err)
+
+	assert.NoError(t, tx.Commit(ctx))
+
 	// Script
 	scriptRaw := `[
 		{"op": "open_db", "args": {"name": "dev_db"}},
 {"op": "begin_tx", "args": {"database": "dev_db", "mode": "write"}, "result_var": "tx"},
 
-		{"op": "open_store", "args": {"name": "users", "transaction": "tx", "create": true}, "result_var": "users"},
-		{"op": "open_store", "args": {"name": "users_orders", "transaction": "tx", "create": true}, "result_var": "users_orders"},
-		{"op": "open_store", "args": {"name": "orders", "transaction": "tx", "create": true}, "result_var": "orders"},
+		{"op": "open_store", "args": {"name": "users", "transaction": "tx"}, "result_var": "users"},
+		{"op": "open_store", "args": {"name": "users_orders", "transaction": "tx"}, "result_var": "users_orders"},
+		{"op": "open_store", "args": {"name": "orders", "transaction": "tx"}, "result_var": "orders"},
 
 		{"op": "scan", "args": {"store": "users", "filter": {"first_name": "John"}, "stream": true}, "result_var": "a"},
 

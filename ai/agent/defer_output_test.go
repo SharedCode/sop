@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// TestDeferSilentOutput verifies that a 'defer' step in a script does NOT produce
-// output in the JSON stream, avoiding the "Deferred" garbage string.
+// TestDeferSilentOutput verifies that internal script compilation/execution
+// stays silent. Streaming must happen only at the final public Execute boundary.
 func TestDeferSilentOutput(t *testing.T) {
 	// 1. Setup Streamer
 	buf := &bytes.Buffer{}
@@ -54,16 +54,9 @@ func TestDeferSilentOutput(t *testing.T) {
 	output := buf.String()
 	t.Logf("Stream Output:\n%s", output)
 
-	// Expectation:
-	// - "real_work" should be present (assign step)
-	// - "defer" op might have a "step_start" if verbose
-	// - BUT "result" for defer should NOT be present or should be empty/nil, NOT "Deferred"
-
+	assert.Empty(t, output, "CompileScript should not emit stream output during internal execution")
 	assert.NotContains(t, output, "\"Deferred\"", "Output should not contain 'Deferred' string")
 	assert.NotContains(t, output, "D,e,f,e,r", "Output should not contain char-split Deferred")
-
-	// Ensure we got the real work
-	assert.Contains(t, output, "real_work")
 }
 
 // TestScriptReturnNilIsHandled verifies that if a script returns nil (e.g. by ending with defer),
