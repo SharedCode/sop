@@ -156,7 +156,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	llmSettings := resolveLLMSettings(r)
-	ctx, payload, cfg, fullMessage := constructPayload(r.Context(), req, llmSettings, sendEvent, rs)
+	ctx, payload, cfg, fullMessage := constructPayload(r.Context(), w, req, llmSettings, sendEvent, rs)
 	log.Info("HTTP AI Chat Payload",
 		"session_id", req.SessionID,
 		"current_db", payload.CurrentDB,
@@ -272,6 +272,34 @@ func renderVisibleText(s string) string {
 	return html.UnescapeString(s)
 }
 
+func isReducerSamplePayload(s string) bool {
+	trimmed := strings.TrimSpace(s)
+	if trimmed == "" {
+		return false
+	}
+
+	var decoded any
+	if err := json.Unmarshal([]byte(trimmed), &decoded); err != nil {
+		return false
+	}
+
+	switch v := decoded.(type) {
+	case []any:
+		for _, item := range v {
+			if rec, ok := item.(map[string]any); ok {
+				if _, hasNotice := rec["_result_reducer_notice"]; hasNotice {
+					return true
+				}
+			}
+		}
+	case map[string]any:
+		_, hasNotice := v["_result_reducer_notice"]
+		return hasNotice
+	}
+
+	return false
+}
+
 // setupStream initialises the NDJSON event writer for an AI chat response.
 // It returns:
 //   - sendEvent: the function to call for each event
@@ -282,6 +310,11 @@ func setupStream(w http.ResponseWriter) (func(string, any), func() bool) {
 	var contentStreamed bool
 
 	writeEvent := func(eventType string, payload any) {
+		switch eventType {
+		case "record", "records", "preview", "result_stream":
+			contentStreamed = true
+		}
+
 		if eventType == "records" || eventType == "record" || eventType == "preview" {
 			b, _ := json.Marshal(payload)
 			log.Debug("UI: Sending Payload (WIRE)", "type", eventType, "json_preview", string(b))
@@ -292,6 +325,7 @@ func setupStream(w http.ResponseWriter) (func(string, any), func() bool) {
 
 		w.Header().Set("Content-Type", "application/x-ndjson")
 
+		log.Debug("UI: writing NDJSON event", "type", eventType, "payload_type", fmt.Sprintf("%T", payload), "payload_preview", fmt.Sprintf("%v", payload))
 		if err := json.NewEncoder(w).Encode(map[string]any{
 			"type":    eventType,
 			"payload": payload,
@@ -355,9 +389,13 @@ func setupStream(w http.ResponseWriter) (func(string, any), func() bool) {
 				tool, _ := result["tool"].(string)
 				if text, ok := result["result"].(string); ok && strings.TrimSpace(text) != "" {
 					trimmed := strings.TrimSpace(text)
+					if isReducerSamplePayload(trimmed) {
+						return
+					}
 					if isStructuredToolResult(tool) {
 						var rawRecords []json.RawMessage
 						if json.Unmarshal([]byte(trimmed), &rawRecords) == nil && len(rawRecords) > 0 {
+							contentStreamed = true
 							for _, rec := range rawRecords {
 								writeEvent("record", rec)
 							}
@@ -365,6 +403,7 @@ func setupStream(w http.ResponseWriter) (func(string, any), func() bool) {
 						}
 						var singleRecord map[string]any
 						if json.Unmarshal([]byte(trimmed), &singleRecord) == nil && len(singleRecord) > 0 {
+							contentStreamed = true
 							writeEvent("record", singleRecord)
 							return
 						}
@@ -377,6 +416,7 @@ func setupStream(w http.ResponseWriter) (func(string, any), func() bool) {
 			}
 		}
 
+		// Fallback event writer.
 		writeEvent(eventType, payload)
 	}
 
@@ -421,7 +461,7 @@ func lockSession(req *aiChatRequest, blueprint ai.Agent[map[string]any]) (ai.Age
 	return agentSvc, sessionMu
 }
 
-func constructPayload(ctx context.Context, req *aiChatRequest, llmSettings llmSettings, sendEvent func(string, any), rs *agent.RunnerSession) (context.Context, *ai.SessionPayload, *ai.ConfigMap, string) {
+func constructPayload(ctx context.Context, w http.ResponseWriter, req *aiChatRequest, llmSettings llmSettings, sendEvent func(string, any), rs *agent.RunnerSession) (context.Context, *ai.SessionPayload, *ai.ConfigMap, string) {
 	if req.Provider != "" {
 		ctx = context.WithValue(ctx, ai.CtxKeyProvider, req.Provider)
 	}
@@ -430,6 +470,8 @@ func constructPayload(ctx context.Context, req *aiChatRequest, llmSettings llmSe
 		sendEvent("content", msg+"\n")
 	})
 	ctx = context.WithValue(ctx, ai.CtxKeyEventStreamer, sendEvent)
+	ctx = context.WithValue(ctx, ai.CtxKeyResultStreamer, agent.NewEventResultStreamer(sendEvent))
+	ctx = context.WithValue(ctx, agent.CtxKeyJSONStreamer, agent.NewNDJSONStreamer(&DirectFlushingWriter{w: w}))
 	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &DefaultToolExecutor{Agents: loadedAgents})
 
 	cfg := ai.NewConfigMap()

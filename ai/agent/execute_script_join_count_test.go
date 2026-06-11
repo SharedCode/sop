@@ -243,39 +243,59 @@ func TestExecuteScript_JoinCountIsolation(t *testing.T) {
 	}
 
 	ctxWithPayload := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "test_db"})
-	result, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
+	resultRaw, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
 	if err != nil {
 		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+	result, err := formatToolResult(ctxWithPayload, resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	t.Logf("Script execution result (first 500 chars): %s", truncate(result, 500))
 
-	// Parse result to count records
-	var resultData []map[string]any
+	// Parse result to count records. The reducer may append a notice object for
+	// large outputs, so ignore that metadata when validating the sample rows.
+	var resultData []any
 	if err := json.Unmarshal([]byte(result), &resultData); err != nil {
 		t.Fatalf("unmarshal result: %v", err)
 	}
 
-	resultCount := len(resultData)
-	expectedCount := johnUsersWithHighOrders
+	realRows := 0
+	noticeCount := 0
+	for _, item := range resultData {
+		if m, ok := item.(map[string]any); ok {
+			if _, hasNotice := m["_result_reducer_notice"]; hasNotice {
+				noticeCount++
+				continue
+			}
+		}
+		realRows++
+	}
+
+	resultCount := realRows
+	expectedCount := min(johnUsersWithHighOrders, defaultResultReducerCutoff)
 
 	t.Logf("Result count: %d", resultCount)
 	t.Logf("Expected count: %d", expectedCount)
 
+	if noticeCount != 1 {
+		t.Logf("Result sample did not include reducer notice metadata (got %d notice objects)", noticeCount)
+	}
 	if resultCount != expectedCount {
-		t.Errorf("MISMATCH: Script returned %d records, expected %d", resultCount, expectedCount)
-		t.Errorf("Missing %d records - likely issue in join/materialization logic", expectedCount-resultCount)
-
-		// Show what we got
-		for i, record := range resultData {
-			t.Logf("  Record %d: first_name=%v, total_amount=%v", i+1, record["first_name"], record["total_amount"])
-		}
-	} else {
-		t.Logf("✓ Script execution returned correct count: %d records", resultCount)
+		t.Errorf("MISMATCH: Script returned %d sample rows, expected %d", resultCount, expectedCount)
+		t.Errorf("Missing %d rows from the reducer sample", expectedCount-resultCount)
 	}
 
-	// Verify all results are John with amount > 500
-	for i, record := range resultData {
+	// Verify all sample results are John with amount > 500
+	for i, item := range resultData {
+		record, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		if _, hasNotice := record["_result_reducer_notice"]; hasNotice {
+			continue
+		}
 		firstName, ok1 := record["first_name"].(string)
 		totalAmount, ok2 := record["total_amount"].(float64)
 
@@ -357,9 +377,10 @@ func TestExecuteScript_JoinCountDebug(t *testing.T) {
 	}
 
 	result1 := executeScriptHelper(t, agent, ctx, script1)
-	var stage1Data []map[string]any
+	var stage1Data []any
 	json.Unmarshal([]byte(result1), &stage1Data)
-	t.Logf("STAGE 1 (select): %d John users found", len(stage1Data))
+	realRows1, _ := countReadableRows(stage1Data)
+	t.Logf("STAGE 1 (select): %d John users found", realRows1)
 
 	// Stage 2: After first join (users -> users_orders)
 	script2 := []map[string]any{
@@ -373,11 +394,12 @@ func TestExecuteScript_JoinCountDebug(t *testing.T) {
 	}
 
 	result2 := executeScriptHelper(t, agent, ctx, script2)
-	var stage2Data []map[string]any
+	var stage2Data []any
 	json.Unmarshal([]byte(result2), &stage2Data)
-	t.Logf("STAGE 2 (after 1st join): %d records", len(stage2Data))
-	if len(stage2Data) < len(stage1Data) {
-		t.Errorf("❌ LOST %d records in first join!", len(stage1Data)-len(stage2Data))
+	realRows2, _ := countReadableRows(stage2Data)
+	t.Logf("STAGE 2 (after 1st join): %d records", realRows2)
+	if realRows2 < realRows1 {
+		t.Errorf("❌ LOST %d records in first join!", realRows1-realRows2)
 	}
 
 	// Stage 3: After second join (users_orders -> orders)
@@ -394,11 +416,12 @@ func TestExecuteScript_JoinCountDebug(t *testing.T) {
 	}
 
 	result3 := executeScriptHelper(t, agent, ctx, script3)
-	var stage3Data []map[string]any
+	var stage3Data []any
 	json.Unmarshal([]byte(result3), &stage3Data)
-	t.Logf("STAGE 3 (after 2nd join): %d records", len(stage3Data))
-	if len(stage3Data) < len(stage2Data) {
-		t.Errorf("❌ LOST %d records in second join!", len(stage2Data)-len(stage3Data))
+	realRows3, _ := countReadableRows(stage3Data)
+	t.Logf("STAGE 3 (after 2nd join): %d records", realRows3)
+	if realRows3 < realRows2 {
+		t.Errorf("❌ LOST %d records in second join!", realRows2-realRows3)
 	}
 
 	// Stage 4: After filter
@@ -416,21 +439,43 @@ func TestExecuteScript_JoinCountDebug(t *testing.T) {
 	}
 
 	result4 := executeScriptHelper(t, agent, ctx, script4)
-	var stage4Data []map[string]any
+	var stage4Data []any
 	json.Unmarshal([]byte(result4), &stage4Data)
-	t.Logf("STAGE 4 (after filter): %d records", len(stage4Data))
+	realRows4, noticeCount4 := countReadableRows(stage4Data)
+	t.Logf("STAGE 4 (after filter): %d records (notice=%d)", realRows4, noticeCount4)
 
-	if len(stage4Data) != 10 {
-		t.Errorf("FINAL RESULT: Expected 10 records, got %d", len(stage4Data))
+	if realRows4 != defaultResultReducerCutoff {
+		t.Errorf("FINAL RESULT: Expected %d sample rows, got %d", defaultResultReducerCutoff, realRows4)
 	}
+}
+
+func countReadableRows(v any) (realRows int, noticeCount int) {
+	items, ok := v.([]any)
+	if !ok {
+		return 0, 0
+	}
+	for _, item := range items {
+		if m, ok := item.(map[string]any); ok {
+			if _, hasNotice := m["_result_reducer_notice"]; hasNotice {
+				noticeCount++
+				continue
+			}
+		}
+		realRows++
+	}
+	return realRows, noticeCount
 }
 
 func executeScriptHelper(t *testing.T, agent *CopilotAgent, ctx context.Context, script []map[string]any) string {
 	scriptBytes, _ := json.Marshal(script)
 	ctxWithPayload := context.WithValue(ctx, "session_payload", &ai.SessionPayload{CurrentDB: "test_db"})
-	result, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
+	resultRaw, err := agent.toolExecuteScript(ctxWithPayload, map[string]any{"script": string(scriptBytes)})
 	if err != nil {
 		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+	result, err := formatToolResult(ctxWithPayload, resultRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 	return result
 }

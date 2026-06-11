@@ -15,9 +15,9 @@ const sendEmailArgsSchema = `{"type":"object","properties":{"to":{"type":"string
 // to communicate with the local SOP Desktop Companion daemon.
 
 func (a *CopilotAgent) registerAutomationTools(ctx context.Context) {
-	a.registry.Register("execute_local_command", "Executes a shell command on the user's local machine via the SOP Desktop Daemon. Use this for building code, git operations, local file inspection, or running local scripts. This will prompt the user for approval in the UI.", executeLocalCommandArgsSchema, a.toolExecuteLocalCommand)
+	a.registry.Register("execute_local_command", "Executes a shell command on the user's local machine via the SOP Desktop Daemon. Use this for building code, git operations, local file inspection, or running local scripts. This will prompt the user for approval in the UI.", executeLocalCommandArgsSchema, wrapStringTool(a.toolExecuteLocalCommand))
 
-	a.registry.Register("send_email", "Sends an email.", sendEmailArgsSchema, a.toolSendEmail)
+	a.registry.Register("send_email", "Sends an email.", sendEmailArgsSchema, wrapStringTool(a.toolSendEmail))
 }
 func (a *CopilotAgent) toolExecuteLocalCommand(ctx context.Context, args map[string]any) (string, error) {
 	commandRaw, ok := args["command"]

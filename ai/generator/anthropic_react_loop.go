@@ -115,7 +115,7 @@ func (l anthropicOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningReques
 		for _, toolCall := range output.ToolCalls {
 			emitAnthropicOwnedLoopEvent(req, ai.ReasoningEventToolCall, ai.BuildToolCallEvent(toolCall.Name, cloneAnthropicToolArgs(toolCall.Args), iteration))
 			executedToolCalls = append(executedToolCalls, toolCall)
-			toolResult, continuation := executeAnthropicOwnedLoopToolCall(ctx, req, iteration, toolCall)
+			toolResult, continuation := executeAnthropicOwnedLoopToolCall(ctx, req, iteration, l.maxIterations, toolCall)
 			toolResults = append(toolResults, toolResult)
 			continuations = append(continuations, continuation)
 			emitAnthropicOwnedLoopHydration(req, anthropicOwnedLoopResponse("", executedToolCalls, toolResults, continuations))
@@ -285,7 +285,7 @@ func buildAnthropicRepairDirective(last ai.ReActToolResult) string {
 	return directive
 }
 
-func executeAnthropicOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequest, iteration int, toolCall ai.ToolCall) (ai.ReActToolResult, ai.ToolCallContinuation) {
+func executeAnthropicOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequest, iteration, maxIterations int, toolCall ai.ToolCall) (ai.ReActToolResult, ai.ToolCallContinuation) {
 	log.Debug("Anthropic owned loop executing tool",
 		"iteration", iteration,
 		"tool", toolCall.Name,
@@ -307,7 +307,9 @@ func executeAnthropicOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequ
 			"raw_result_preview", anthropicPreview(rawResult, 320),
 		)
 		resultText = execErr.Error()
-		emitAnthropicOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneAnthropicToolArgs(toolCall.Args), resultText, cloneAnthropicToolProgressHint(hint), iteration))
+		if shouldStreamAnthropicToolResult(req, iteration >= maxIterations) {
+			emitAnthropicOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneAnthropicToolArgs(toolCall.Args), resultText, cloneAnthropicToolProgressHint(hint), iteration))
+		}
 		emitAnthropicOwnedLoopEvent(req, ai.ReasoningEventToolError, ai.BuildToolErrorEvent(toolCall.Name, cloneAnthropicToolArgs(toolCall.Args), execErr, iteration))
 		continuationResponse = map[string]any{
 			"tool_error": map[string]any{
@@ -321,7 +323,9 @@ func executeAnthropicOwnedLoopToolCall(ctx context.Context, req ai.ReasoningRequ
 			"hint_status", anthropicHintStatus(hint),
 			"result_preview", anthropicPreview(resultText, 320),
 		)
-		emitAnthropicOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneAnthropicToolArgs(toolCall.Args), resultText, cloneAnthropicToolProgressHint(hint), iteration))
+		if shouldStreamAnthropicToolResult(req, iteration >= maxIterations) {
+			emitAnthropicOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneAnthropicToolArgs(toolCall.Args), resultText, cloneAnthropicToolProgressHint(hint), iteration))
+		}
 	}
 
 	return ai.ReActToolResult{
@@ -409,6 +413,13 @@ func anthropicFunctionResponseObject(value any) map[string]any {
 	default:
 		return map[string]any{"result": typed}
 	}
+}
+
+func shouldStreamAnthropicToolResult(req ai.ReasoningRequest, finalToolResult bool) bool {
+	if req.Streamer == nil {
+		return false
+	}
+	return req.Verbose || finalToolResult
 }
 
 func emitAnthropicOwnedLoopEvent(req ai.ReasoningRequest, eventType string, data any) {

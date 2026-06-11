@@ -60,9 +60,13 @@ func TestToolJoin_ProjectionOrder_WithFieldsString(t *testing.T) {
 		"limit":  4,
 	}
 
-	res, err := adminAgent.toolJoin(ctx, args)
+	resRaw, err := adminAgent.toolJoin(ctx, args)
 	if err != nil {
 		t.Fatalf("toolJoin failed: %v", err)
+	}
+	res, err := formatToolResult(ctx, resRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	// Verify order in raw JSON output (map-based unmarshalling would lose ordering).
@@ -118,14 +122,24 @@ func TestToolJoin_ProjectionOrder_Complex_Wildcard(t *testing.T) {
 	}
 
 	// Helper
-	runScriptHelper := func(t *testing.T, script []map[string]any, name string, check func(string)) {
+	runScriptHelper := func(t *testing.T, script []map[string]any, name string, check func(string, []any)) {
 		scriptJSON, _ := json.Marshal(script)
-		res, err := agent.toolExecuteScript(ctx, map[string]any{"script": string(scriptJSON)})
+		var records []any
+		streamCtx := context.WithValue(ctx, ai.CtxKeyEventStreamer, func(eventType string, payload any) {
+			if eventType == "record" {
+				records = append(records, payload)
+			}
+		})
+		resRaw, err := agent.toolExecuteScript(streamCtx, map[string]any{"script": string(scriptJSON)})
 		if err != nil {
 			t.Fatalf("%s: Script failed: %v", name, err)
 		}
+		res, err := formatToolResult(streamCtx, resRaw)
+		if err != nil {
+			t.Fatalf("%s: formatToolResult failed: %v", name, err)
+		}
 		t.Logf("%s Result: %s", name, res)
-		check(res)
+		check(res, records)
 	}
 
 	// CASE 1: users.* first
@@ -153,7 +167,15 @@ func TestToolJoin_ProjectionOrder_Complex_Wildcard(t *testing.T) {
 		{"op": "return", "args": map[string]any{"value": "result"}},
 	}
 
-	runScriptHelper(t, script1, "CASE 1 (users.*, Amount)", func(res string) {
+	runScriptHelper(t, script1, "CASE 1 (users.*, Amount)", func(res string, records []any) {
+		if res != "" {
+			t.Logf("non-empty passthrough result: %s", res)
+		}
+		if len(records) == 0 {
+			t.Fatal("expected streamed records for explicit return")
+		}
+		payloadJSON, _ := json.Marshal(records[0])
+		res = string(payloadJSON)
 		// Expect 'name' (from users.*) BEFORE 'Amount'
 		// Note: 'Amount' (A) < 'name' (n) alphabetically.
 		// If sorted, Amount would be first.
@@ -166,6 +188,10 @@ func TestToolJoin_ProjectionOrder_Complex_Wildcard(t *testing.T) {
 		}
 		if idxName > idxAmount {
 			t.Errorf("CASE 1 FAIL: Expected 'users.*' (name) before 'Amount'. Got: %s", res)
+		}
+
+		if !strings.Contains(res, "\"name\"") || !strings.Contains(res, "\"Amount\"") {
+			t.Fatalf("CASE 1 FAIL: Expected projected fields to be present. Got: %s", res)
 		}
 	})
 
@@ -194,7 +220,12 @@ func TestToolJoin_ProjectionOrder_Complex_Wildcard(t *testing.T) {
 		{"op": "return", "args": map[string]any{"value": "result"}},
 	}
 
-	runScriptHelper(t, script2, "CASE 2 (Amount, users.*)", func(res string) {
+	runScriptHelper(t, script2, "CASE 2 (Amount, users.*)", func(res string, records []any) {
+		if len(records) == 0 {
+			t.Fatal("expected streamed records for explicit return")
+		}
+		payloadJSON, _ := json.Marshal(records[0])
+		res = string(payloadJSON)
 		// Expect 'Amount' BEFORE 'name'
 		idxName := strings.Index(res, "\"name\"")
 		idxAmount := strings.Index(res, "\"Amount\"")

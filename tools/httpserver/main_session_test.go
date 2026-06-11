@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/agent"
 )
 
 // mockAgent for testing cloning and session handling
@@ -272,6 +273,44 @@ func (m *eventStreamingMockAgent) Search(ctx context.Context, query string, limi
 }
 func (m *eventStreamingMockAgent) Clone() ai.Agent[map[string]any] { return &eventStreamingMockAgent{} }
 
+type streamerCaptureAgent struct {
+	capturedCtx context.Context
+}
+
+func (m *streamerCaptureAgent) Open(ctx context.Context) error  { return nil }
+func (m *streamerCaptureAgent) Close(ctx context.Context) error { return nil }
+func (m *streamerCaptureAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
+	return nil, nil
+}
+func (m *streamerCaptureAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
+	m.capturedCtx = ctx
+	return "ok", nil
+}
+func (m *streamerCaptureAgent) Clone() ai.Agent[map[string]any] {
+	return m
+}
+
+func TestHandleAIChat_InjectsJSONStreamerIntoExecutionContext(t *testing.T) {
+	activeSessions = NewSessionManager(100)
+	mock := &streamerCaptureAgent{}
+	loadedAgents = map[string]ai.Agent[map[string]any]{
+		"streamer_tester": mock,
+	}
+
+	req := httptest.NewRequest("POST", "/ai/chat", bytes.NewBufferString(`{"message":"ping","agent":"streamer_tester"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	handleAIChat(w, req)
+
+	if mock.capturedCtx == nil {
+		t.Fatal("expected Ask to receive a context")
+	}
+	if _, ok := mock.capturedCtx.Value(agent.CtxKeyJSONStreamer).(*agent.JSONStreamer); !ok {
+		t.Fatal("expected Ask context to contain a JSON streamer for record delivery")
+	}
+}
+
 func TestSetupStream_EmitsVisibleContentForToolResults(t *testing.T) {
 	w := httptest.NewRecorder()
 	sendEvent, _ := setupStream(w)
@@ -305,6 +344,49 @@ func TestSetupStream_HandlesListStoresResultAsContent(t *testing.T) {
 	}
 	if !strings.Contains(body, "list_stores") {
 		t.Fatalf("expected list_stores result content in stream, got: %s", body)
+	}
+}
+
+func TestSetupStream_SuppressesReducerNoticeContent(t *testing.T) {
+	w := httptest.NewRecorder()
+	sendEvent, _ := setupStream(w)
+
+	sendEvent(ai.ReasoningEventToolResult, map[string]any{
+		"tool":   "select",
+		"result": `[{"id":1,"_result_reducer_notice":"Results were 10 and were cutoff after first 4 rows. The UI already displayed these sample rows; do not repeat them in your answer."}]`,
+	})
+
+	body := w.Body.String()
+	if strings.Contains(body, `"type":"content"`) {
+		t.Fatalf("expected reducer-sample payload to suppress content rendering, got: %s", body)
+	}
+}
+
+func TestSetupStream_MarksStructuredToolResultsAsStreamedContent(t *testing.T) {
+	w := httptest.NewRecorder()
+	sendEvent, hasStreamedContent := setupStream(w)
+
+	sendEvent(ai.ReasoningEventToolResult, map[string]any{
+		"tool":   "execute_script",
+		"result": `[{"name":"alpha"}]`,
+	})
+
+	if !hasStreamedContent() {
+		t.Fatal("expected structured execute_script result to count as streamed UI output")
+	}
+	if strings.Contains(w.Body.String(), `"type":"record"`) {
+		t.Fatal("expected execute_script tool_result to avoid re-emitting duplicate record events, got: " + w.Body.String())
+	}
+}
+
+func TestSetupStream_MarksRecordEventsAsStreamedContent(t *testing.T) {
+	w := httptest.NewRecorder()
+	sendEvent, hasStreamedContent := setupStream(w)
+
+	sendEvent("record", map[string]any{"id": 1})
+
+	if !hasStreamedContent() {
+		t.Fatal("expected record events to count as streamed UI output")
 	}
 }
 

@@ -141,6 +141,19 @@ From the root of the `sop` repository:
 go run ./tools/httpserver -database /path/to/your/sop/data
 ```
 
+#### Developer trial with the built-in SOP KB
+
+If you want to exercise the SOP Knowledge Base preload flow from source:
+
+```bash
+cd ai/cmd/knowledge_compiler
+./run.sh
+cd ../..
+go run ./tools/httpserver
+```
+
+The generated file lives at `ai/sop_base_knowledge.json`. When the SOP KB preload path is used in the UI, the server automatically detects and loads the first matching file from `sop_base_knowledge.json`, `ai/sop_base_knowledge.json`, or `../ai/sop_base_knowledge.json`.
+
 #### Option 2: Multiple Databases (Recommended)
 
 Create a JSON configuration file (e.g., `config.json`) to define your environments:
@@ -187,6 +200,25 @@ Run the SOP HTTP Server with the config file:
 ```bash
 go run ./tools/httpserver -config config.json
 ```
+
+### Importing a custom Knowledge Base JSON
+
+You can use the same compile-and-import workflow to bring a custom KB into a local or deployed SOP Data Manager installation:
+
+1. Author or adapt the source Markdown and the KB curation manifest for your domain.
+2. Generate the importable JSON with the KB compiler:
+   ```bash
+   cd ai/cmd/knowledge_compiler
+   ./run.sh
+   ```
+   If you are using a different curated input file, update the compiler invocation accordingly.
+3. Start the Data Manager:
+   ```bash
+   go run ./tools/httpserver
+   ```
+4. In the UI, open the Space/KB view and click the Import JSON button to load the generated file.
+
+This lets end users package their own curated KB as a JSON file and load it into SOP Data Manager without changing the server code.
 
 ### Administrative Features
 

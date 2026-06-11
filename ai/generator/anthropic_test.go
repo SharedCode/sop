@@ -198,6 +198,43 @@ func TestAnthropicBuildMessages_SummarizesExecuteScriptToolResults(t *testing.T)
 	}
 }
 
+func TestAnthropicBuildMessages_UsesPreviewForNonFinalResults(t *testing.T) {
+	gen := &anthropic{apiKey: "test-key", model: "claude-3-5-sonnet-20241022"}
+
+	messages := gen.buildMessages("continue", ai.GenOptions{
+		ToolCallContinuations: []ai.ToolCallContinuation{
+			{
+				ToolCall: ai.ToolCall{Name: "execute_script", NativeID: "toolu_exec_1"},
+				Response: map[string]any{"result": `[{"id":1},{"id":2},{"id":3}]`},
+			},
+			{
+				ToolCall: ai.ToolCall{Name: "execute_script", NativeID: "toolu_exec_2"},
+				Response: map[string]any{"result": `[{"id":4},{"id":5}]`},
+			},
+		},
+	})
+
+	userToolContent, ok := messages[1].Content.([]anthropicContentBlock)
+	if !ok || len(userToolContent) != 1 {
+		t.Fatalf("expected a single tool_result block, got %#v", messages[1].Content)
+	}
+
+	contentText, ok := userToolContent[0].Content.(string)
+	if !ok || contentText == "" {
+		t.Fatalf("expected tool_result content to be a string, got %#v", userToolContent[0].Content)
+	}
+
+	var toolResult map[string]any
+	if err := json.Unmarshal([]byte(contentText), &toolResult); err != nil {
+		t.Fatalf("failed to unmarshal tool_result content: %v", err)
+	}
+
+	resultText, _ := toolResult["result"].(string)
+	if !strings.Contains(resultText, "Preview (first 3 rows)") || strings.Contains(resultText, "The full row payload was already streamed") {
+		t.Fatalf("expected capped preview payload, got %q", resultText)
+	}
+}
+
 func TestAnthropicBuildMessages_WithToolCallContinuations(t *testing.T) {
 	gen := &anthropic{apiKey: "test-key", model: "claude-3-5-sonnet-20241022"}
 

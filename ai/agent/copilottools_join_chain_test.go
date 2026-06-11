@@ -84,9 +84,13 @@ func TestToolJoin_Chained_InnerThenRight(t *testing.T) {
 	sessionPayload := &ai.SessionPayload{CurrentDB: "test_db"}
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
-	resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
+	respRaw, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
 	if err != nil {
 		t.Fatalf("Script failed: %v", err)
+	}
+	resp, err := formatToolResult(ctx, respRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	t.Logf("Response: %s", resp)
@@ -227,9 +231,13 @@ func TestToolJoin_Chained_InnerThenLeft(t *testing.T) {
 	sessionPayload := &ai.SessionPayload{CurrentDB: "test_db"}
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
-	resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
+	respRaw, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
 	if err != nil {
 		t.Fatalf("Script failed: %v", err)
+	}
+	resp, err := formatToolResult(ctx, respRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	t.Logf("Response: %s", resp)
@@ -338,9 +346,13 @@ func TestToolJoin_Full(t *testing.T) {
 	sessionPayload := &ai.SessionPayload{CurrentDB: "test_db"}
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
-	resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
+	respRaw, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
 	if err != nil {
 		t.Fatalf("Script failed: %v", err)
+	}
+	resp, err := formatToolResult(ctx, respRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	t.Logf("Response: %s", resp)

@@ -69,9 +69,13 @@ func TestProject_JoinedFields_PrefixIssue(t *testing.T) {
 	sessionPayload := &ai.SessionPayload{CurrentDB: "test_db"}
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
-	resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
+	respRaw, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
 	if err != nil {
 		t.Fatalf("Script failed: %v", err)
+	}
+	resp, err := formatToolResult(ctx, respRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	t.Logf("Response: %s", resp)
@@ -148,9 +152,13 @@ func TestProject_EmptyFields_Flattening(t *testing.T) {
 	sessionPayload := &ai.SessionPayload{CurrentDB: "test_db"}
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
-	resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
+	respRaw, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
 	if err != nil {
 		t.Fatalf("Script failed: %v", err)
+	}
+	resp, err := formatToolResult(ctx, respRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	t.Logf("Response: %s", resp)
@@ -208,9 +216,13 @@ func TestProject_Unprefixed_Match_Prefixed(t *testing.T) {
 
 	sessionPayload := &ai.SessionPayload{CurrentDB: "test_db"}
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
-	resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
+	respRaw, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
 	if err != nil {
 		t.Fatalf("Script failed: %v", err)
+	}
+	resp, err := formatToolResult(ctx, respRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	t.Logf("Response: %s", resp)
@@ -268,9 +280,13 @@ func TestProject_Mixed_Prefix_Scenarios(t *testing.T) {
 
 	sessionPayload := &ai.SessionPayload{CurrentDB: "test_db"}
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
-	resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
+	respRaw, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
 	if err != nil {
 		t.Fatalf("Script failed: %v", err)
+	}
+	resp, err := formatToolResult(ctx, respRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	var results []map[string]any
@@ -345,9 +361,13 @@ func TestProject_Alias_Explicit(t *testing.T) {
 	sessionPayload := &ai.SessionPayload{CurrentDB: "test_db"}
 	ctx = context.WithValue(ctx, "session_payload", sessionPayload)
 
-	resp, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
+	respRaw, err := agent.toolExecuteScript(ctx, map[string]any{"script": scriptJSON})
 	if err != nil {
 		t.Fatalf("Script failed: %v", err)
+	}
+	resp, err := formatToolResult(ctx, respRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	var allRes [][]map[string]any

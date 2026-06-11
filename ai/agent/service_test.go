@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -253,6 +254,36 @@ func TestServiceToolExecutor_DoesNotInjectLegacyVerboseFallback(t *testing.T) {
 
 	if v := ctx.Value("verbose"); v != nil {
 		t.Fatalf("expected no legacy verbose fallback to be injected, got %#v", v)
+	}
+}
+
+type eventAwareAgent struct{}
+
+func (a *eventAwareAgent) Open(ctx context.Context) error  { return nil }
+func (a *eventAwareAgent) Close(ctx context.Context) error { return nil }
+func (a *eventAwareAgent) Search(ctx context.Context, query string, limit int) ([]ai.Hit[map[string]any], error) {
+	return nil, nil
+}
+func (a *eventAwareAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap) (string, error) {
+	return "", nil
+}
+func (a *eventAwareAgent) Execute(ctx context.Context, toolName string, args map[string]any) (string, error) {
+	if _, ok := ctx.Value(ai.CtxKeyEventStreamer).(func(string, any)); !ok {
+		return "", fmt.Errorf("expected event streamer to be preserved in context")
+	}
+	return "ok", nil
+}
+
+func TestServiceToolExecutor_Execute_PreservesEventStreamer(t *testing.T) {
+
+	eventStreamer := func(eventType string, payload any) {}
+	ctx := context.WithValue(context.Background(), ai.CtxKeyEventStreamer, eventStreamer)
+	ctx = context.WithValue(ctx, ai.CtxKeyExecutor, &MockExecutor{})
+
+	svc := &Service{registry: map[string]ai.Agent[map[string]any]{"event_agent": &eventAwareAgent{}}}
+	_, err := (&ServiceToolExecutor{s: svc}).Execute(ctx, "demo", map[string]any{})
+	if err != nil {
+		t.Fatalf("Execute returned error: %v", err)
 	}
 }
 

@@ -8,7 +8,24 @@ import (
 )
 
 // ToolHandler is the function signature for a tool execution.
-type ToolHandler func(ctx context.Context, args map[string]any) (string, error)
+type ToolHandler func(ctx context.Context, args map[string]any) (any, error)
+
+func wrapStringTool(fn func(context.Context, map[string]any) (string, error)) ToolHandler {
+	return func(ctx context.Context, args map[string]any) (any, error) {
+		return fn(ctx, args)
+	}
+}
+
+func formatToolResult(ctx context.Context, res any) (string, error) {
+	switch v := res.(type) {
+	case string:
+		return v, nil
+	case nil:
+		return "", nil
+	default:
+		return serializeResult(ctx, v)
+	}
+}
 
 // ToolDefinition defines a tool's metadata and handler.
 type ToolDefinition struct {

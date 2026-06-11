@@ -76,10 +76,10 @@ const (
 
 // registerSystemTools registers the core system inspection tools.
 func (a *CopilotAgent) registerSystemTools(ctx context.Context) {
-	a.registry.Register("list_databases", "Lists all available databases.", emptyObjectArgsSchema, a.toolListDatabases)
-	a.registry.Register("list_stores", ListStoresInstruction, listStoresArgsSchema, a.toolListStores)
-	a.registry.Register("list_tools", "Lists all available tools and their usage instructions.", emptyObjectArgsSchema, a.toolListTools)
-	a.registry.Register("set_verbose", "Toggle session verbosity for follow-up tool results and progress streaming.", `{"type":"object","properties":{"verbose":{"type":"boolean","description":"Set verbosity on or off. If omitted, the current setting is toggled."}}}`, a.toolSetVerbose)
+	a.registry.Register("list_databases", "Lists all available databases.", emptyObjectArgsSchema, wrapStringTool(a.toolListDatabases))
+	a.registry.Register("list_stores", ListStoresInstruction, listStoresArgsSchema, wrapStringTool(a.toolListStores))
+	a.registry.Register("list_tools", "Lists all available tools and their usage instructions.", emptyObjectArgsSchema, wrapStringTool(a.toolListTools))
+	a.registry.Register("set_verbose", "Toggle session verbosity for follow-up tool results and progress streaming.", `{"type":"object","properties":{"verbose":{"type":"boolean","description":"Set verbosity on or off. If omitted, the current setting is toggled."}}}`, wrapStringTool(a.toolSetVerbose))
 }
 
 // registerTools registers all available tools for the CopilotAgent.

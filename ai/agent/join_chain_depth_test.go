@@ -3,12 +3,14 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
 	core_database "github.com/sharedcode/sop/database"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestToolJoin_Chained_ABCD(t *testing.T) {
@@ -152,6 +154,13 @@ func TestToolJoin_Chained_ABCD(t *testing.T) {
 		"script": scriptJSON,
 	}
 
+	var streamed []any
+	ctx = context.WithValue(ctx, ai.CtxKeyEventStreamer, func(eventType string, payload any) {
+		if eventType == "record" {
+			streamed = append(streamed, payload)
+		}
+	})
+
 	result, err := agent.toolExecuteScript(ctx, args)
 	if err != nil {
 		t.Fatalf("toolExecuteScript failed: %v", err)
@@ -163,20 +172,21 @@ func TestToolJoin_Chained_ABCD(t *testing.T) {
 	// The toolScript usually returns the result of the last operation if it's a query.
 
 	t.Logf("Result: %s", result)
+	assert.Empty(t, result, "final cursor result should stay on the streaming path")
 
-	// Check if result contains "D1"
-	if !contains(result, "D1") {
-		t.Errorf("Result expected to contain D1, got: %s", result)
+	if len(streamed) == 0 {
+		t.Fatal("expected streamed records for the final cursor result")
 	}
-	if !contains(result, "C1") {
-		t.Errorf("Result expected to contain C1, got: %s", result)
+
+	for _, item := range streamed {
+		b, _ := json.Marshal(item)
+		itemJSON := string(b)
+		if strings.Contains(itemJSON, "D1") && strings.Contains(itemJSON, "C1") && strings.Contains(itemJSON, "B1") && strings.Contains(itemJSON, "A1") {
+			return
+		}
 	}
-	if !contains(result, "B1") {
-		t.Errorf("Result expected to contain B1, got: %s", result)
-	}
-	if !contains(result, "A1") {
-		t.Errorf("Result expected to contain A1, got: %s", result)
-	}
+
+	t.Fatalf("expected streamed cursor rows to contain the chained join values, got: %+v", streamed)
 }
 
 func contains(s, substr string) bool {

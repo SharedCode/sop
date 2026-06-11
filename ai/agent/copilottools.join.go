@@ -17,7 +17,7 @@ import (
 	"github.com/sharedcode/sop/jsondb"
 )
 
-func (a *CopilotAgent) toolJoin(ctx context.Context, args map[string]any) (string, error) {
+func (a *CopilotAgent) toolJoin(ctx context.Context, args map[string]any) (any, error) {
 	// Stub Mode Check
 	if a.Config.StubMode {
 		// We need to import "encoding/json" first, but it's not imported in this file.
@@ -166,7 +166,7 @@ func (a *CopilotAgent) toolJoin(ctx context.Context, args map[string]any) (strin
 				engine.Context.Variables[resVar] = result
 			}
 
-			return serializeResult(ctx, result)
+			return result, nil
 		}
 
 		return "", fmt.Errorf("both left_store and right_store are required")

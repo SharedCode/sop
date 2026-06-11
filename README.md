@@ -239,6 +239,21 @@ Go developers often prefer storing native structs for maximum performance and ty
     *   **Pros**: **Full Data Manager Support**. The `IndexSpecification` acts as the contract, allowing the UI and AI Agents to manage your data.
     *   **Workflow**: You can use the **Data Manager** to create the B-Tree and define the `IndexSpecification`. Then, use the built-in **Code Generator** to generate the Go structs.
 
+### 3. Spaces / Knowledge Bases (Knowledge Base Studio)
+
+The same managed workflow extends to **Spaces**, which are SOP's Knowledge Base assets.
+
+*   **Author in the UI**: Use the SOP Data Manager (Knowledge Base Studio) to create, curate, and refine your Spaces / Knowledge Bases without writing application code.
+*   **Consume in your app**: Once authored, open the same Space from your Go application with the `sop/ai` package and use the rich `KnowledgeBase` API to manage, search, and digest those authored assets at runtime.
+*   **Best practice**: Treat the Data Manager as the authoring and governance layer, and the `ai` package as the runtime layer that retrieves, filters, and reasons over the curated Space content inside your product.
+
+Typical flow:
+1. Use the Data Manager to create or import a Space.
+2. Curate categories, summaries, and items in the UI.
+3. In your Go app, open the Space through `ai/database` / `ai/memory`, then use `SearchKeywords` or `SearchSemantics` to retrieve context for RAG, copilots, or domain tools.
+
+This is how developers can keep the human-friendly authoring experience in SOP Data Manager while still embedding the resulting Knowledge Base directly into their application logic.
+
 ### Bridging the Gap: From Code-First to Managed (Safe & Zero-Downtime)
 
 SOP supports a hybrid workflow. You can start with a **Code-First** approach (using custom Go structs and comparers) and later make the store fully manageable by the Data Manager—**without migration or downtime**.
@@ -426,8 +441,8 @@ For detailed architectural patterns, deployment lifecycles, and configuration ex
     *   **Scalability**: Infinite metadata scaling via Sharded Registry (FileSystem) or Cassandra tables.
     *   **Resilience**: Registry replication (Active/Passive or Quorum) and Erasure Coding for data blobs ensure zero data loss.
     *   **Operational Flexibility**: Choose the backend that fits your ops stack:
-        *   **FileSystem (`infs`)**: The most versatile option. Run on **Local Disk** for embedded/dev use, or mount a **Network Drive (NAS/S3)** for infinite cluster scalability. Requires only a shared mount and Redis.
-        *   **Cassandra (`incfs`)**: **"Power up"** your existing Cassandra cluster with SOP. Adds full **ACID Transactions**, **B-Tree Indexing** (ordered data, range queries), and efficient large item management to Cassandra's eventual consistency model.
+        *   **FileSystem (`infs`)**: The most versatile option. Run on **Local Disk** for embedded/dev use, or mount a **Network Drive (NAS/S3)** for infinite cluster scalability. Requires only a shared mount and Redis. It also offers stronger **all-or-nothing** guarantees than `incfs`, thanks to the Registry-on-File-System design.
+        *   **Cassandra (`incfs`)**: **"Power up"** your existing Cassandra cluster with SOP. Adds full **ACID Transactions**, **B-Tree Indexing** (ordered data, range queries), and efficient large item management to Cassandra's eventual consistency model. In practice, Cassandra can still exhibit rare dual-success races on batched commits, so the filesystem-backed Registry path is the safer choice when strict atomicity matters.
 
 ### 3. AI Vector Database
 *   **Scenario**: Storing and retrieving millions of vector embeddings for RAG (Retrieval-Augmented Generation) applications.

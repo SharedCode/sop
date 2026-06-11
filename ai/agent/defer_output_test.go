@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/jsondb"
 	"github.com/stretchr/testify/assert"
 )
@@ -188,4 +189,120 @@ func TestEmptyCursorReturnsEmptyList(t *testing.T) {
 		t.Fatal("Empty cursor serialized to 'null' instead of '[]'")
 	}
 	assert.Equal(t, "[]", res)
+}
+
+func TestResultReducerAppendAndWrite(t *testing.T) {
+	reducer := newResultReducer()
+	reducer.Append(map[string]any{"users.id": 7, "name": "alpha"})
+
+	written := reducer.Write()
+	assert.IsType(t, []any{}, written)
+	assert.Len(t, written, 1)
+}
+
+func TestResultReducerCutoffAddsNotice(t *testing.T) {
+	reducer := newResultReducer()
+	for i := 0; i < 10; i++ {
+		reducer.Append(map[string]any{"index": i})
+	}
+
+	written := reducer.Write()
+	items, ok := written.([]any)
+	assert.True(t, ok)
+	assert.Len(t, items, defaultResultReducerCutoff+1)
+	assert.Equal(t, fmt.Sprintf("Results were 10 and were cutoff after first %d rows. The UI already displayed these sample rows; do not repeat them in your answer.", defaultResultReducerCutoff), items[defaultResultReducerCutoff].(map[string]any)["_result_reducer_notice"])
+}
+
+func TestResultEmitterUsesReducerOnBufferedPath(t *testing.T) {
+	emitter := NewResultEmitter(context.Background())
+	emitter.Start()
+	for i := 0; i < 10; i++ {
+		emitter.Emit(map[string]any{"index": i})
+	}
+
+	out := emitter.Finalize()
+	var items []any
+	assert.NoError(t, json.Unmarshal([]byte(out), &items))
+	assert.Len(t, items, defaultResultReducerCutoff+1)
+
+	notice, ok := items[defaultResultReducerCutoff].(map[string]any)
+	assert.True(t, ok)
+	assert.Equal(t, fmt.Sprintf("Results were 10 and were cutoff after first %d rows. The UI already displayed these sample rows; do not repeat them in your answer.", defaultResultReducerCutoff), notice["_result_reducer_notice"])
+}
+
+type recordingStreamer struct {
+	items []any
+}
+
+func (r *recordingStreamer) BeginArray()                     {}
+func (r *recordingStreamer) SetMetadata(meta map[string]any) {}
+func (r *recordingStreamer) WriteItem(item any)              { r.items = append(r.items, item) }
+func (r *recordingStreamer) EndArray()                       {}
+
+func TestSerializeResultUsesResultStreamerForCursorRows(t *testing.T) {
+	streamer := &recordingStreamer{}
+	ctx := context.WithValue(context.Background(), ai.CtxKeyResultStreamer, streamer)
+
+	res, err := serializeResult(ctx, &MockCursor{Items: []any{map[string]any{"id": 1}, map[string]any{"id": 2}}})
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[{"id":1},{"id":2}]`, res)
+	assert.Len(t, streamer.items, 2)
+}
+
+func TestSerializeResultStreamsListResultsToResultStreamer(t *testing.T) {
+	streamer := &recordingStreamer{}
+	ctx := context.WithValue(context.Background(), ai.CtxKeyResultStreamer, streamer)
+
+	res, err := serializeResult(ctx, []any{map[string]any{"id": 1}, map[string]any{"id": 2}})
+	assert.NoError(t, err)
+	assert.JSONEq(t, `[{"id":1},{"id":2}]`, res)
+	assert.Len(t, streamer.items, 2)
+}
+
+func TestStreamReturnCursorResult_UsesLiveStreamer(t *testing.T) {
+	var eventTypes []string
+	var eventPayloads []any
+
+	ctx := context.WithValue(context.Background(), ai.CtxKeyEventStreamer, func(eventType string, payload any) {
+		eventTypes = append(eventTypes, eventType)
+		eventPayloads = append(eventPayloads, payload)
+	})
+
+	streamed, err := streamReturnCursorResult(ctx, &MockCursor{Items: []any{map[string]any{"id": 1}}})
+	assert.NoError(t, err)
+	assert.True(t, streamed)
+	assert.Contains(t, eventTypes, "result_stream")
+	assert.Contains(t, eventTypes, "record")
+	assert.NotEmpty(t, eventPayloads)
+}
+
+func TestResolveResultStreamerUsesEventStreamer(t *testing.T) {
+	var eventTypes []string
+	var eventPayloads []any
+
+	ctx := context.WithValue(context.Background(), ai.CtxKeyEventStreamer, func(eventType string, payload any) {
+		eventTypes = append(eventTypes, eventType)
+		eventPayloads = append(eventPayloads, payload)
+	})
+
+	streamer, closeable := resolveResultStreamer(ctx)
+	if assert.NotNil(t, streamer) {
+		streamer.BeginArray()
+		streamer.WriteItem(map[string]any{"id": 1})
+		streamer.EndArray()
+	}
+	if closeable != nil {
+		closeable.Close()
+	}
+
+	assert.Contains(t, eventTypes, "record")
+
+	for _, payload := range eventPayloads {
+		if item, ok := payload.(map[string]any); ok && item["id"] == 1 {
+			assert.Equal(t, map[string]any{"id": 1}, item)
+			return
+		}
+	}
+
+	t.Fatalf("expected record payload containing id=1, got %#v", eventPayloads)
 }

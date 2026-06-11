@@ -133,6 +133,11 @@ ctx = context.WithValue(ctx, "step_index", 1)
 - `CtxKeyWriter`, `CtxKeyDatabase`, `CtxKeyResultStreamer` - I/O and data access
 - `CtxKeyScriptRecorder`, `CtxKeyAutoFlush`, `CtxKeyDefaultFormat` - Script orchestration
 - `CtxKeyProgressSink`, `CtxKeyEventStreamer`, `CtxKeyNativeToolHints` - Progress reporting
+
+Important streaming contract:
+- `CtxKeyEventStreamer` is the default UI connector for the HTTP/NDJSON path. It is bridged through the callback-backed `EventResultStreamer` adapter so tool results can stream to the UI without requiring a separate writer.
+- `CtxKeyResultStreamer` remains the explicit structured-streaming hook for non-UI or remote clients that prefer an adapter/implementation of `ai.ResultStreamer`.
+- The legacy `JSONStreamer` fallback still exists for script playback and other internal consumers.
 - `CtxKeyIsNewTopic` - Conversation state
 
 **Untyped String Keys**:

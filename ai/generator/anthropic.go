@@ -259,53 +259,11 @@ func (g *anthropic) Generate(ctx context.Context, prompt string, opts ai.GenOpti
 
 // buildMessages constructs the messages array with tool call continuations
 // Parameters passed explicitly, NOT extracted from Context
-func summarizeAnthropicContinuationToolOutput(toolName string, response any) any {
-	trimmedTool := strings.TrimSpace(toolName)
-	if !strings.EqualFold(trimmedTool, "execute_script") {
+func summarizeAnthropicContinuationToolOutput(toolName string, response any, finalToolResult bool) any {
+	if !strings.EqualFold(strings.TrimSpace(toolName), "execute_script") {
 		return response
 	}
-
-	var resultText string
-	switch v := response.(type) {
-	case string:
-		resultText = v
-	case map[string]any:
-		if result, ok := v["result"].(string); ok {
-			resultText = result
-		} else if result, ok := v["tool_result"].(string); ok {
-			resultText = result
-		} else {
-			bytes, _ := json.Marshal(v)
-			resultText = string(bytes)
-		}
-	default:
-		bytes, _ := json.Marshal(response)
-		resultText = string(bytes)
-	}
-
-	trimmedResult := strings.TrimSpace(resultText)
-	if trimmedResult == "" {
-		return map[string]any{"result": "execute_script completed with no textual payload. Results, if any, were already streamed to the client."}
-	}
-	if strings.Contains(trimmedResult, "execute_script validation error [") || strings.Contains(trimmedResult, "Retry instruction:") {
-		return response
-	}
-
-	var rows []json.RawMessage
-	if err := json.Unmarshal([]byte(trimmedResult), &rows); err == nil {
-		return map[string]any{"result": fmt.Sprintf("execute_script completed successfully and returned %d row(s). The full row payload was already streamed to the client. Do not restate the rows; provide at most a brief summary.", len(rows))}
-	}
-
-	var record map[string]any
-	if err := json.Unmarshal([]byte(trimmedResult), &record); err == nil {
-		return map[string]any{"result": "execute_script completed successfully and returned one structured record. The full payload was already streamed to the client. Do not restate the record; provide at most a brief summary."}
-	}
-
-	if len(trimmedResult) > 1000 {
-		return map[string]any{"result": fmt.Sprintf("execute_script completed successfully and returned a large textual payload (%d chars). The full payload was already streamed to the client. Do not restate it; provide at most a brief summary.", len(trimmedResult))}
-	}
-
-	return response
+	return map[string]any{"result": SummarizeToolResultForLLM(toolName, ExtractToolResultText(response), finalToolResult)}
 }
 
 func (g *anthropic) buildMessages(prompt string, opts ai.GenOptions) []anthropicMessage {
@@ -329,7 +287,7 @@ func (g *anthropic) buildMessages(prompt string, opts ai.GenOptions) []anthropic
 			})
 
 			// User message with tool result
-			summarizedResponse := summarizeAnthropicContinuationToolOutput(cont.ToolCall.Name, cont.Response)
+			summarizedResponse := summarizeAnthropicContinuationToolOutput(cont.ToolCall.Name, cont.Response, i == len(opts.ToolCallContinuations)-1)
 			resultContent, _ := json.Marshal(summarizedResponse)
 			userContent := []anthropicContentBlock{
 				{

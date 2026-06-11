@@ -105,7 +105,7 @@ func (l chatGPTOwnedReActLoop) Run(ctx context.Context, req ai.ReasoningRequest)
 		}
 
 		// Execute tool calls and build continuation input for the next turn.
-		toolOutputItems, newExecuted, newResults := executeToolCalls(ctx, req, iteration, toolCalls)
+		toolOutputItems, newExecuted, newResults := executeToolCalls(ctx, req, iteration, maxIterations, toolCalls)
 		if err := ctx.Err(); err != nil {
 			return ai.ReasoningResponse{}, err
 		}
@@ -295,7 +295,7 @@ func buildChatGPTResponsesTools(tools []ai.ToolDefinition) ([]openAIResponsesToo
 //   - toolOutputItems: input items for the next Responses API request
 //   - executed: tool calls that were run
 //   - results: tool result records for carryover / outcome tracking
-func executeToolCalls(ctx context.Context, req ai.ReasoningRequest, iteration int, toolCalls []ai.ToolCall) ([]openAIResponsesInputItem, []ai.ToolCall, []ai.ReActToolResult) {
+func executeToolCalls(ctx context.Context, req ai.ReasoningRequest, iteration, maxIterations int, toolCalls []ai.ToolCall) ([]openAIResponsesInputItem, []ai.ToolCall, []ai.ReActToolResult) {
 	outputItems := make([]openAIResponsesInputItem, 0, len(toolCalls))
 	executed := make([]ai.ToolCall, 0, len(toolCalls))
 	results := make([]ai.ReActToolResult, 0, len(toolCalls))
@@ -307,7 +307,7 @@ func executeToolCalls(ctx context.Context, req ai.ReasoningRequest, iteration in
 		toolCall = normalizeChatGPTWrappedToolCall(toolCall)
 		emitChatGPTOwnedLoopEvent(req, ai.ReasoningEventToolCall, ai.BuildToolCallEvent(toolCall.Name, cloneChatGPTToolArgs(toolCall.Args), iteration))
 		executed = append(executed, toolCall)
-		result, outputItem := executeSingleToolCall(ctx, req, iteration, toolCall)
+		result, outputItem := executeSingleToolCall(ctx, req, iteration, toolCall, iteration >= maxIterations)
 		results = append(results, result)
 		outputItems = append(outputItems, outputItem)
 	}
@@ -355,7 +355,7 @@ func normalizeChatGPTWrappedToolCall(toolCall ai.ToolCall) ai.ToolCall {
 	}
 }
 
-func executeSingleToolCall(ctx context.Context, req ai.ReasoningRequest, iteration int, toolCall ai.ToolCall) (ai.ReActToolResult, openAIResponsesInputItem) {
+func executeSingleToolCall(ctx context.Context, req ai.ReasoningRequest, iteration int, toolCall ai.ToolCall, finalToolResult bool) (ai.ReActToolResult, openAIResponsesInputItem) {
 	execCtx := context.WithValue(ctx, ai.CtxKeyNativeToolHints, true)
 	if req.Streamer != nil {
 		execCtx = context.WithValue(execCtx, ai.CtxKeyEventStreamer, req.Streamer)
@@ -367,7 +367,9 @@ func executeSingleToolCall(ctx context.Context, req ai.ReasoningRequest, iterati
 	if execErr != nil {
 		resultText = execErr.Error()
 	}
-	emitChatGPTOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneChatGPTToolArgs(toolCall.Args), resultText, cloneChatGPTToolProgressHint(hint), iteration))
+	if shouldStreamChatGPTToolResult(req, finalToolResult) {
+		emitChatGPTOwnedLoopEvent(req, ai.ReasoningEventToolResult, ai.BuildToolResultEvent(toolCall.Name, cloneChatGPTToolArgs(toolCall.Args), resultText, cloneChatGPTToolProgressHint(hint), iteration))
+	}
 	if execErr != nil {
 		emitChatGPTOwnedLoopEvent(req, ai.ReasoningEventToolError, ai.BuildToolErrorEvent(toolCall.Name, cloneChatGPTToolArgs(toolCall.Args), execErr, iteration))
 	}
@@ -380,35 +382,12 @@ func executeSingleToolCall(ctx context.Context, req ai.ReasoningRequest, iterati
 		}, openAIResponsesInputItem{
 			Type:   "function_call_output",
 			CallID: strings.TrimSpace(toolCall.NativeID),
-			Output: summarizeChatGPTContinuationToolOutput(toolCall.Name, resultText),
+			Output: summarizeChatGPTContinuationToolOutput(toolCall.Name, resultText, finalToolResult),
 		}
 }
 
-func summarizeChatGPTContinuationToolOutput(toolName, resultText string) string {
-	trimmedTool := strings.TrimSpace(toolName)
-	trimmedResult := strings.TrimSpace(resultText)
-	if !strings.EqualFold(trimmedTool, "execute_script") {
-		return resultText
-	}
-	if trimmedResult == "" {
-		return "execute_script completed with no textual payload. Results, if any, were already streamed to the client."
-	}
-
-	var rows []json.RawMessage
-	if err := json.Unmarshal([]byte(trimmedResult), &rows); err == nil {
-		return fmt.Sprintf("execute_script completed successfully and returned %d row(s). The full row payload was already streamed to the client. Do not restate the rows; provide at most a brief summary.", len(rows))
-	}
-
-	var record map[string]any
-	if err := json.Unmarshal([]byte(trimmedResult), &record); err == nil {
-		return "execute_script completed successfully and returned one structured record. The full payload was already streamed to the client. Do not restate the record; provide at most a brief summary."
-	}
-
-	if len(trimmedResult) > 1000 {
-		return fmt.Sprintf("execute_script completed successfully and returned a large textual payload (%d chars). The full payload was already streamed to the client. Do not restate it; provide at most a brief summary.", len(trimmedResult))
-	}
-
-	return resultText
+func summarizeChatGPTContinuationToolOutput(toolName, resultText string, finalToolResult bool) string {
+	return SummarizeToolResultForLLM(toolName, resultText, finalToolResult)
 }
 
 // ----------------------------------------------------------------------------
@@ -504,6 +483,13 @@ func recipeIDs(recipes []ai.LearnedRecipe) []string {
 // ----------------------------------------------------------------------------
 // Event emission helpers
 // ----------------------------------------------------------------------------
+
+func shouldStreamChatGPTToolResult(req ai.ReasoningRequest, finalToolResult bool) bool {
+	if req.Streamer == nil {
+		return false
+	}
+	return req.Verbose || finalToolResult
+}
 
 func emitChatGPTOwnedLoopEvent(req ai.ReasoningRequest, eventType string, data any) {
 	if req.Streamer == nil {

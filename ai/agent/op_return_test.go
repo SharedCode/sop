@@ -66,9 +66,13 @@ func TestOpReturn_VariableResolution(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			scriptJSON, _ := json.Marshal(tt.script)
-			res, err := agent.toolExecuteScript(ctx, map[string]any{"script": string(scriptJSON)})
+			resRaw, err := agent.toolExecuteScript(ctx, map[string]any{"script": string(scriptJSON)})
 			if err != nil {
 				t.Fatalf("toolExecuteScript failed: %v", err)
+			}
+			res, err := formatToolResult(ctx, resRaw)
+			if err != nil {
+				t.Fatalf("formatToolResult failed: %v", err)
 			}
 
 			if tt.failIfFound != "" && strings.Contains(res, tt.failIfFound) && !strings.Contains(res, tt.expectValue) {
@@ -94,9 +98,13 @@ func TestOpReturn_LiteralValue(t *testing.T) {
 	}
 
 	scriptJSON, _ := json.Marshal(script)
-	res, err := agent.toolExecuteScript(ctx, map[string]any{"script": string(scriptJSON)})
+	resRaw, err := agent.toolExecuteScript(ctx, map[string]any{"script": string(scriptJSON)})
 	if err != nil {
 		t.Fatalf("toolExecuteScript failed: %v", err)
+	}
+	res, err := formatToolResult(ctx, resRaw)
+	if err != nil {
+		t.Fatalf("formatToolResult failed: %v", err)
 	}
 
 	if !strings.Contains(res, "just_a_string") {

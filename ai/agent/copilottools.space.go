@@ -29,14 +29,14 @@ const vectorizeSpaceCategoriesArgsSchema = `{"type":"object","properties":{"data
 const vectorizeSpaceItemsArgsSchema = `{"type":"object","properties":{"database":{"type":"string","description":"Optional database override. Defaults to the active session database."},"kb_name":{"type":"string","description":"Exact target knowledge base name whose specific items should be vectorized. Prefer this over category-wide or full-Space vectorization when only a few changed items need refresh."},"batch_size":{"type":"integer","description":"Optional vectorization batch size for the selected items."},"category_id":{"type":"string","description":"Optional category UUID scoping the items to vectorize."},"item_ids":{"type":"array","description":"Item UUIDs to vectorize for a tightly scoped semantic refresh.","items":{"type":"string"}}},"required":["kb_name"]}`
 
 func (a *CopilotAgent) registerSpaceTools(ctx context.Context) {
-	a.registry.RegisterWithUI("mint_to_space", "Stores generated or durable knowledge in a target Space using the exact requested kb_name.", MintToSpaceInstruction, mintToSpaceArgsSchema, a.toolMintToSpace)
-	a.registry.RegisterWithUI("delete_space", "Deletes an entire Space only after explicit user intent.", DeleteSpaceInstruction, deleteSpaceArgsSchema, a.toolDeleteSpace)
-	a.registry.RegisterWithUI("enrich_space", "Reruns Space enrichment when derived knowledge needs an explicit refresh.", EnrichSpaceInstruction, enrichSpaceArgsSchema, a.toolEnrichSpace)
-	a.registry.RegisterWithUI("update_space_config", "Changes routing or behavior settings for a Space after grounded config inspection.", UpdateSpaceConfigInstruction, updateSpaceConfigArgsSchema, a.toolUpdateSpaceConfig)
-	a.registry.RegisterWithUI("read_space_config", "Reads the current config for a Space before behavior changes.", ReadSpaceConfigInstruction, readSpaceConfigArgsSchema, a.toolReadSpaceConfig)
-	a.registry.RegisterWithUI("vectorize_space", "Refreshes embeddings for an entire Space only on explicit vectorization requests.", VectorizeSpaceInstruction, vectorizeSpaceArgsSchema, a.toolVectorizeSpace)
-	a.registry.RegisterWithUI("vectorize_space_categories", "Refreshes embeddings for selected Space categories on explicit request.", VectorizeSpaceCategoriesInstruction, vectorizeSpaceCategoriesArgsSchema, a.toolVectorizeCategories)
-	a.registry.RegisterWithUI("vectorize_space_items", "Refreshes embeddings for specific Space items on explicit request.", VectorizeSpaceItemsInstruction, vectorizeSpaceItemsArgsSchema, a.toolVectorizeItems)
+	a.registry.RegisterWithUI("mint_to_space", "Stores generated or durable knowledge in a target Space using the exact requested kb_name.", MintToSpaceInstruction, mintToSpaceArgsSchema, wrapStringTool(a.toolMintToSpace))
+	a.registry.RegisterWithUI("delete_space", "Deletes an entire Space only after explicit user intent.", DeleteSpaceInstruction, deleteSpaceArgsSchema, wrapStringTool(a.toolDeleteSpace))
+	a.registry.RegisterWithUI("enrich_space", "Reruns Space enrichment when derived knowledge needs an explicit refresh.", EnrichSpaceInstruction, enrichSpaceArgsSchema, wrapStringTool(a.toolEnrichSpace))
+	a.registry.RegisterWithUI("update_space_config", "Changes routing or behavior settings for a Space after grounded config inspection.", UpdateSpaceConfigInstruction, updateSpaceConfigArgsSchema, wrapStringTool(a.toolUpdateSpaceConfig))
+	a.registry.RegisterWithUI("read_space_config", "Reads the current config for a Space before behavior changes.", ReadSpaceConfigInstruction, readSpaceConfigArgsSchema, wrapStringTool(a.toolReadSpaceConfig))
+	a.registry.RegisterWithUI("vectorize_space", "Refreshes embeddings for an entire Space only on explicit vectorization requests.", VectorizeSpaceInstruction, vectorizeSpaceArgsSchema, wrapStringTool(a.toolVectorizeSpace))
+	a.registry.RegisterWithUI("vectorize_space_categories", "Refreshes embeddings for selected Space categories on explicit request.", VectorizeSpaceCategoriesInstruction, vectorizeSpaceCategoriesArgsSchema, wrapStringTool(a.toolVectorizeCategories))
+	a.registry.RegisterWithUI("vectorize_space_items", "Refreshes embeddings for specific Space items on explicit request.", VectorizeSpaceItemsInstruction, vectorizeSpaceItemsArgsSchema, wrapStringTool(a.toolVectorizeItems))
 }
 
 func emitSpaceMutationEvent(ctx context.Context, action string, databaseName string, kbName string) {

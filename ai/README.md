@@ -107,6 +107,17 @@ A **Hybrid Execution** engine that runs inside the Agent.
 
 ### 7. AI Copilot (Interactive Mode)
 A conversational interface for interacting with your data, building scripts, and managing AI Spaces.
+
+#### Space Management and Search in AI Copilot
+
+The AI Copilot is the interactive surface for the full Space lifecycle:
+
+1. **Create / Mint a Space**: Launch a new Knowledge Base, define its purpose, and seed its categories.
+2. **Manage Categories and Items**: Edit categories, add content, refine summaries, and organize the KB structure in the UI.
+3. **Vectorize When Ready**: Trigger full-space, category, or item vectorization once the curated content is ready.
+4. **Search the Space**: Ask the Copilot to search the active Space using semantic retrieval, text search, or combined retrieval paths.
+
+This is the same user flow that developers can later reproduce in code with the `ai` package.
 *   **Natural Language Queries**: "Select all users where role is admin".
 *   **CRUD Operations**: Add, update, and delete records using plain English.
 *   **AI Spaces Management**: Effortlessly generate, import, and manage "Spaces". A Space (or Knowledge Base) is a new AI memory subsystem combining VectorDB, Text Search, and a specialized schema (Thoughts: Category/Items).
@@ -211,6 +222,27 @@ For a deep dive into persisting AI models, configurations, and weights, see the 
 ## Usage as a Library
 
 You can use the `ai` package directly in your Go applications to build custom solutions.
+
+### Space Management in the App Runtime
+
+The runtime-side flow mirrors the UI workflow:
+
+1. **Open the authored Space** with `ai/database` / `ai/memory`.
+2. **Manage categories and items** through the `KnowledgeBase` abstraction.
+3. **Vectorize** the Space or selected categories/items when you are ready to enable semantic retrieval.
+4. **Search** using `SearchKeywords(...)` for BM25-style retrieval and `SearchSemantics(...)` for vector retrieval.
+
+This gives your application the same Space-aware reasoning path that the AI Copilot uses, while keeping the authoring experience in SOP Data Manager.
+
+### Authoring Spaces in SOP Data Manager, then consuming them in code
+
+A common pattern is to use the SOP Data Manager as the **authoring studio** for your Knowledge Bases (Spaces), then consume the curated data from your application with the `ai` library:
+
+1. Create or curate a Space in the SOP Data Manager / Knowledge Base Studio UI.
+2. Use the `ai/database` package to open that Space in your Go code with `OpenKnowledgeBase(...)`.
+3. Query it with the rich `KnowledgeBase` API, including `SearchKeywords(...)` and `SearchSemantics(...)`, to retrieve context for RAG or agent workflows.
+
+This keeps the human-facing management and authoring experience in the UI, while your application uses the SOP AI runtime to manage, digest, and search the authored Spaces in-process.
 
 ### Example: Building a Simple RAG App
 

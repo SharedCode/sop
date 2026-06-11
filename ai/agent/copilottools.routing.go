@@ -74,8 +74,8 @@ func (a *CopilotAgent) toolHandoffToAvatar(ctx context.Context, args map[string]
 }
 
 func (a *CopilotAgent) registerRoutingTools(ctx context.Context) {
-	a.registry.RegisterWithUI("search_space", "Searches one knowledge base.", "Use this when the user names one KB explicitly, such as 'SOP'.", searchKBArgsSchema, a.toolSearchKB)
-	a.registry.RegisterWithUI("handoff_to_avatar", "Yields control to an Avatar-specific Knowledge Base to execute a task.", "Handoff to an Avatar", handoffToAvatarArgsSchema, a.toolHandoffToAvatar)
+	a.registry.RegisterWithUI("search_space", "Searches one knowledge base.", "Use this when the user names one KB explicitly, such as 'SOP'.", searchKBArgsSchema, wrapStringTool(a.toolSearchKB))
+	a.registry.RegisterWithUI("handoff_to_avatar", "Yields control to an Avatar-specific Knowledge Base to execute a task.", "Handoff to an Avatar", handoffToAvatarArgsSchema, wrapStringTool(a.toolHandoffToAvatar))
 
-	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", concludeTopicArgsSchema, a.toolConcludeTopic)
+	a.registry.Register("conclude_topic", "Conclusion of the current conversation thread. Use this when the user is satisfied, a resolution is reached, or to summarize before moving to a new topic. This saves the summary to memory and cleans up the context.", concludeTopicArgsSchema, wrapStringTool(a.toolConcludeTopic))
 }

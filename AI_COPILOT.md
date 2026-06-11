@@ -132,10 +132,71 @@ Provider-neutral rule:
 
 ### Tool-call result modes and streaming contract
 
-The current continuation contract now supports two tool-result modes:
+The continuation payload is kept compact by the backend. When the next reasoning turn needs to inspect structure or failure shape, the backend may pass only a small bounded excerpt of the returned rows/records (or the raw error text when the tool failed); it does not send the full raw tool output.
 
-*   **Research mode**: when the next turn is explicitly research-oriented, the continuation payload may include a small sample of returned rows/records (or the raw error text when the tool failed) so the model can inspect structure, schema, or failure shape before continuing.
-*   **Default mode**: for ordinary tool calls, the continuation payload should remain compact: a brief success summary on success, or the error text on failure.
+The next design constraint is more specific than simple post-processing. The bounded LLM-facing payload must be produced at the shared result-drain boundary, not by summarizing a fully materialized JSON string after the fact.
+
+That boundary lives in `ai/agent/atomic_engine.go`, because it is the place where the backend can see each row exactly once while it is draining a cursor.
+
+The rule is explicit:
+
+*   **UI streaming** and **LLM continuation shaping** are two different outputs from the same traversal.
+*   The UI may stream every row.
+*   The LLM path must remain incremental and bounded.
+*   The backend must not require full result materialization just to produce a compact continuation payload.
+
+For very large result sets, the memory invariant is non-negotiable:
+
+*   If the caller needs an LLM-facing continuation payload, that payload must be derived from incremental observation.
+*   The shared result path must not allocate memory proportional to the full result unless a caller explicitly asks for full materialization.
+*   A 100-million-row cursor must be handled as streaming traversal plus bounded reducer state, not as a giant in-memory JSON array.
+
+This implies a reducer-style contract at the shared result boundary.
+
+*   The result path traverses rows once.
+*   The streamer writes raw UI-visible items.
+*   A reducer observes rows, scalars, or text incrementally and returns a bounded summary for the next LLM turn.
+*   Tool-specific wording can still be owned by shared summarization helpers such as `ai/generator/tool_result_summary.go`, but memory safety must exist before any full string payload would otherwise be built.
+
+For the current work, the scope is intentionally narrower:
+
+*   add a simple reducer utility that caps the amount of result data shared with the LLM
+*   keep the reduction logic local to the shared result-drain path
+*   avoid broader consumer/architecture refactors while this utility is being implemented
+
+### Current Gap
+
+The current implementation is intentionally scoped to a smaller utility feature: a bounded result reducer for LLM-facing output.
+
+What is already correct:
+
+*   the reduction boundary now lives at the shared result-drain path instead of after full JSON materialization
+*   UI streaming and LLM-facing shaping are treated as separate concerns
+*   native Ask-loop execution can receive a bounded continuation payload while direct/manual execution still preserves raw structured output
+
+What is still missing:
+
+*   the shared boundary is not yet expressed as a reusable `ResultConsumer` contract
+*   the current logic still uses a reducer-specific path instead of a composable consumer model such as `UIResultConsumer`, `LLMResultConsumer`, and `CompositeResultConsumer`
+*   tool behavior is still inferred ad hoc from tool name and context instead of being driven by an explicit `ToolResultPolicy`
+*   the shared result path still returns mostly string-shaped output rather than a structured `ToolResultOutcome` that later Ask analysis can consume
+
+That missing `ToolResultOutcome` seam matters because future Ask-quality work will need to combine more than just the last tool payload. The next analytical layer may want to consume:
+
+*   the initial Ask prompt
+*   each tool call and each tool result in between
+*   MRU-derived facts
+*   STM/LTM retrieval output
+*   reducer-produced facts, counts, previews, and policy hints
+
+The current phase should not directly wire MRU, STM/LTM, or provider carryover mutation into the result-processing layer. But the result-processing layer should expose a shape that those systems can consume later without another redesign.
+
+So the design target remains:
+
+*   one shared `processToolResult(...)` boundary
+*   one reusable `ResultConsumer` abstraction
+*   one explicit `ToolResultPolicy`
+*   one bounded `ToolResultOutcome` that is usable both for immediate continuation payloads and for future Ask-level analysis
 
 The stream contract is also explicit:
 
@@ -143,6 +204,8 @@ The stream contract is also explicit:
 *   **Final tool result**: always flows to the `Streamer`, even when `Verbose` is false.
 
 This keeps researcher-facing analysis useful without inflating ordinary tool continuations with large raw payloads, while ensuring the final visible outcome is always observable in the UI.
+
+This change is deliberately scoped. It does not alter provider-owned continuation state, carryover and MRU policy, or provider-native thread handling. It only moves the reduction boundary to the place where large-result safety and future reducer rules can be enforced correctly.
 
 The operational consequence is that Gemini is no longer the old hybrid described in earlier drafts. Gemini is now the reference implementation of the thin-wrapper model in SOP:
 

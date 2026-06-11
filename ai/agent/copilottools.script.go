@@ -883,17 +883,17 @@ func (a *CopilotAgent) toolScriptAddStepFromLast(ctx context.Context, args map[s
 }
 
 func (a *CopilotAgent) registerScriptTools(ctx context.Context) {
-	a.registry.Register("list_scripts", "Lists all available scripts.", listScriptsArgsSchema, a.toolListScripts)
-	a.registry.Register("create_script", "Creates a new named script. Use this when the script does not already exist. Provide the full script as `script` (preferred) or legacy alias `steps`.", createScriptArgsSchema, a.toolCreateScript)
-	a.registry.Register("save_script", "Saves or replaces a full script definition. Use this to overwrite/update an existing script. Provide the full script as `script` (preferred) or legacy alias `steps`.", saveScriptArgsSchema, a.toolSaveScript)
-	a.registry.Register("get_script_details", "Get details of a specific script.", getScriptDetailsArgsSchema, a.toolGetScriptDetails)
-	a.registry.Register("save_step", "Appends a new step to a script. Usage: save_step(script='MyScript', type='command', command='select', ...).", saveStepArgsSchema, a.toolScriptSaveStep)
-	a.registry.Register("insert_step", "Insert a step into a script.", insertStepArgsSchema, a.toolScriptInsertStep)
-	a.registry.Register("delete_step", "Delete a step from a script.", deleteStepArgsSchema, a.toolScriptDeleteStep)
-	a.registry.Register("update_step", "Update a step in a script.", updateStepArgsSchema, a.toolScriptUpdateStep)
-	a.registry.Register("reorder_steps", "Move a step in a script to a new position.", reorderStepsArgsSchema, a.toolScriptReorderSteps)
-	a.registry.Register("save_last_step", "Add the last executed tool call as a new step to a script. If 'index' is not provided, it appends to the end. If 'index' is provided, it inserts 'after' that index by default, unless 'position' is set to 'before'.", saveLastStepArgsSchema, a.toolScriptAddStepFromLast)
-	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new script or block.", refactorLastInteractionArgsSchema, a.toolRefactorScript)
+	a.registry.Register("list_scripts", "Lists all available scripts.", listScriptsArgsSchema, wrapStringTool(a.toolListScripts))
+	a.registry.Register("create_script", "Creates a new named script. Use this when the script does not already exist. Provide the full script as `script` (preferred) or legacy alias `steps`.", createScriptArgsSchema, wrapStringTool(a.toolCreateScript))
+	a.registry.Register("save_script", "Saves or replaces a full script definition. Use this to overwrite/update an existing script. Provide the full script as `script` (preferred) or legacy alias `steps`.", saveScriptArgsSchema, wrapStringTool(a.toolSaveScript))
+	a.registry.Register("get_script_details", "Get details of a specific script.", getScriptDetailsArgsSchema, wrapStringTool(a.toolGetScriptDetails))
+	a.registry.Register("save_step", "Appends a new step to a script. Usage: save_step(script='MyScript', type='command', command='select', ...).", saveStepArgsSchema, wrapStringTool(a.toolScriptSaveStep))
+	a.registry.Register("insert_step", "Insert a step into a script.", insertStepArgsSchema, wrapStringTool(a.toolScriptInsertStep))
+	a.registry.Register("delete_step", "Delete a step from a script.", deleteStepArgsSchema, wrapStringTool(a.toolScriptDeleteStep))
+	a.registry.Register("update_step", "Update a step in a script.", updateStepArgsSchema, wrapStringTool(a.toolScriptUpdateStep))
+	a.registry.Register("reorder_steps", "Move a step in a script to a new position.", reorderStepsArgsSchema, wrapStringTool(a.toolScriptReorderSteps))
+	a.registry.Register("save_last_step", "Add the last executed tool call as a new step to a script. If 'index' is not provided, it appends to the end. If 'index' is provided, it inserts 'after' that index by default, unless 'position' is set to 'before'.", saveLastStepArgsSchema, wrapStringTool(a.toolScriptAddStepFromLast))
+	a.registry.Register("refactor_last_interaction", "Refactor the last interaction's steps into a new script or block.", refactorLastInteractionArgsSchema, wrapStringTool(a.toolRefactorScript))
 
 	schema := buildExecuteScriptArgsSchema()
 	a.registry.RegisterWithUI("execute_script", "Executes a multi-step programmatic script for advanced queries.", ExecuteScriptInstruction, schema, a.toolExecuteScript)
