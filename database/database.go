@@ -304,7 +304,7 @@ func CursorOnOpenedBtree[TK btree.Ordered, TV any](ctx context.Context, config s
 	return common.CursorOnOpenedBtree[TK, TV](ctx, name, t)
 }
 
-// NewBtree creates a new general purpose B-Tree store.
+// NewBtree will open an existing one or create a new general purpose B-Tree store.
 func NewBtree[TK btree.Ordered, TV any](ctx context.Context, config sop.DatabaseOptions, name string, t sop.Transaction, comparer btree.ComparerFunc[TK], options ...sop.StoreOptions) (btree.BtreeInterface[TK, TV], error) {
 	var opts sop.StoreOptions
 	if len(options) > 0 {
@@ -316,15 +316,8 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, config sop.Database
 			opts.IsPrimitiveKey = btree.IsPrimitive[TK]()
 		}
 	} else {
-		opts = sop.StoreOptions{
-			Name:                     name,
-			SlotLength:               btree.DefaultSlotLength,
-			IsUnique:                 true,
-			IsValueDataInNodeSegment: true,
-			LeafLoadBalancing:        false,
-			Description:              "General purpose B-Tree created via Database",
-			IsPrimitiveKey:           btree.IsPrimitive[TK](),
-		}
+		opts = sop.ConfigureStore(name, true, btree.DefaultSlotLength, "General purpose B-Tree created via Database", sop.SmallData, "")
+		opts.IsPrimitiveKey = btree.IsPrimitive[TK]()
 	}
 
 	// If BlobStoreBaseFolderPath is not set, use the first store folder from the database configuration.

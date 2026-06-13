@@ -39,27 +39,35 @@ type UserDBRequest struct {
 type SaveConfigRequest struct {
 	RegistryPath string `json:"registry_path"`
 	Port         int    `json:"port"`
-
-	// LLM Brain Options
-	BrainProvider string `json:"brain_provider"` // "gemini", "openai", "ollama"
-	BrainModel    string `json:"brain_model"`    // "gemini-3.1-pro-preview", "gpt-5.4", "claude-4.6-sonnet", "llama3"
-	BrainURL      string `json:"brain_url"`      // e.g. "http://localhost:11434"
-	BrainAPIKey   string `json:"brain_api_key"`  // For cloud providers
-
-	// Embedder Options
-	EmbedderProvider string `json:"embedder_provider"` // "gemini", "openai", "ollama", "simple"
-	EmbedderModel    string `json:"embedder_model"`    // "nomic-embed-text", "text-embedding-3-small"
-	EmbedderURL      string `json:"embedder_url"`      // For ollama
-	EmbedderAPIKey   string `json:"embedder_api_key"`  // For cloud providers
-
-	// Legacy backwards compatibility (or we can just replace them entirely)
-	LLMApiKey           string `json:"llm_api_key"`
-	OllamaEmbedderURL   string `json:"ollama_embedder_url"`
-	OllamaEmbedderModel string `json:"ollama_embedder_model"`
+	RootPassword string `json:"root_password,omitempty"`
 
 	UseSharedBrain bool                `json:"use_shared_brain"`
 	SystemOptions  sop.DatabaseOptions `json:"system_options"`
 	Databases      []UserDBRequest     `json:"databases"`
+}
+
+func validateSetupWizardRootPassword(password string) error {
+	if strings.TrimSpace(password) == "" {
+		return fmt.Errorf("root password is required")
+	}
+	return nil
+}
+
+func ensureRootUserFromPassword(password string) error {
+	password = strings.TrimSpace(password)
+	if password == "" {
+		return nil
+	}
+
+	rootUsername := normalizeUsername("root")
+	for i := range config.Users {
+		if normalizeUsername(config.Users[i].Username) == rootUsername {
+			config.Users = append(config.Users[:i], config.Users[i+1:]...)
+			break
+		}
+	}
+
+	return config.SetUser("root", password, sop.RoleAdmin)
 }
 
 func normalizeProviderAndModel(provider, model string) (string, string) {
@@ -87,7 +95,7 @@ func normalizeProviderAndModel(provider, model string) (string, string) {
 // handleSaveConfig writes the provided configuration to the specified file path.
 // Broken down into modular steps for readability/maintainability.
 func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
-	log.Info("TRACE: handleSaveConfig called")
+	log.Debug("TRACE: handleSaveConfig called")
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -99,8 +107,10 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
-	req.BrainProvider, req.BrainModel = normalizeProviderAndModel(req.BrainProvider, req.BrainModel)
-	req.EmbedderProvider, req.EmbedderModel = normalizeProviderAndModel(req.EmbedderProvider, req.EmbedderModel)
+	if err := validateSetupWizardRootPassword(req.RootPassword); err != nil {
+		http.Error(w, fmt.Sprintf("Validation Failed: %v", err), http.StatusBadRequest)
+		return
+	}
 
 	// 2. Validate Safety (Paths, Conflicts, Permissions)
 	if err := validatePathConflictsAndPermissions(req); err != nil {
@@ -113,42 +123,11 @@ func handleSaveConfig(w http.ResponseWriter, r *http.Request) {
 	if req.Port > 0 {
 		config.Port = req.Port
 	}
-
-	// Legacy
-	if req.LLMApiKey != "" {
-		config.LLMApiKey = req.LLMApiKey
-	}
-	if req.OllamaEmbedderURL != "" {
-		config.OllamaEmbedderURL = req.OllamaEmbedderURL
-	}
-	if req.OllamaEmbedderModel != "" {
-		config.OllamaEmbedderModel = req.OllamaEmbedderModel
-	}
-
-	// New AI Config
-	if req.BrainProvider != "" {
-		config.BrainProvider = req.BrainProvider
-	}
-	if req.BrainModel != "" {
-		config.BrainModel = req.BrainModel
-	}
-	if req.BrainURL != "" {
-		config.BrainURL = req.BrainURL
-	}
-	if req.BrainAPIKey != "" {
-		config.BrainAPIKey = req.BrainAPIKey
-	}
-	if req.EmbedderProvider != "" {
-		config.EmbedderProvider = req.EmbedderProvider
-	}
-	if req.EmbedderModel != "" {
-		config.EmbedderModel = req.EmbedderModel
-	}
-	if req.EmbedderURL != "" {
-		config.EmbedderURL = req.EmbedderURL
-	}
-	if req.EmbedderAPIKey != "" {
-		config.EmbedderAPIKey = req.EmbedderAPIKey
+	if req.RootPassword != "" {
+		if err := ensureRootUserFromPassword(req.RootPassword); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to seed root user: %v", err), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// 4. Setup System DB (I/O)
@@ -333,7 +312,7 @@ func validatePathConflictsAndPermissions(req *SaveConfigRequest) error {
 	}
 
 	alreadyConfigured := collectAllConfiguredPaths(SystemDBName)
-	log.Info("TRACE: Starting Safety Validation (Wizard)")
+	log.Debug("TRACE: Starting Safety Validation (Wizard)")
 
 	if err := validatePathSafety(allPaths, alreadyConfigured); err != nil {
 		return fmt.Errorf("path safety checking failed: %v", err)
@@ -342,7 +321,7 @@ func validatePathConflictsAndPermissions(req *SaveConfigRequest) error {
 		return fmt.Errorf("write permissions check failed: %v", err)
 	}
 
-	log.Info("TRACE: Safety Validation Passed (Wizard)")
+	log.Debug("TRACE: Safety Validation Passed (Wizard)")
 	return nil
 }
 
@@ -421,7 +400,7 @@ func setupSystemDB(ctx context.Context, req *SaveConfigRequest) (*DatabaseConfig
 	}
 
 	if shouldSetup {
-		log.Info(fmt.Sprintf("TRACE: Executing database.Setup for SystemDB at '%s'", req.RegistryPath))
+		log.Debug(fmt.Sprintf("TRACE: Executing database.Setup for SystemDB at '%s'", req.RegistryPath))
 		if _, err := database.Setup(ctx, sysOpts); err != nil {
 			// Local cleanup if failed new setup
 			if !req.UseSharedBrain {

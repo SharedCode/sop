@@ -62,7 +62,7 @@ func handleCreateEnvironment(w http.ResponseWriter, r *http.Request) {
 	}
 	// Debug hex dump to find source of corruption
 	if req.Name != "" {
-		log.Info(fmt.Sprintf("DEBUG-NAME-HEX (CreateEnv): Name='%s', Hex=%x", req.Name, []byte(req.Name)))
+		log.Debug(fmt.Sprintf("DEBUG-NAME-HEX (CreateEnv): Name='%s', Hex=%x", req.Name, []byte(req.Name)))
 	}
 
 	// Sanitize Name
@@ -88,13 +88,9 @@ func handleCreateEnvironment(w http.ResponseWriter, r *http.Request) {
 	// Initialize config in MEMORY ONLY.
 	// We do NOT write to disk yet to avoid creating empty "abandoned" files if the user cancels the wizard.
 	config = Config{
-		Port:             8080,
-		Databases:        []DatabaseConfig{},
-		ConfigFile:       filename,
-		BrainProvider:    "openai",
-		BrainModel:       "gpt-5.4",
-		EmbedderProvider: "local",
-		EmbedderModel:    "kelindar",
+		Port:       8080,
+		Databases:  []DatabaseConfig{},
+		ConfigFile: filename,
 	}
 	modelCatalog = defaultModelCatalog()
 
@@ -240,48 +236,9 @@ func handleDeleteEnvironment(w http.ResponseWriter, r *http.Request) {
 
 // handleSaveConfig implementation moved to config_save_handler.go
 
-// handleUpdateLLMConfig updates the LLM API Key in the configuration.
-func handleUpdateLLMConfig(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		LLMApiKey string `json:"llm_api_key"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	if req.LLMApiKey == "" {
-		http.Error(w, "LLM API Key is required", http.StatusBadRequest)
-		return
-	}
-
-	config.LLMApiKey = req.LLMApiKey
-
-	// Save config
-	if err := saveConfig(); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to save config: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Reload agents to reflect configuration changes
-	if err := initAgents(context.Background()); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to initialize agents: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok", "message": "LLM API Key updated successfully"})
-}
-
 // handleInitDatabase initializes a database folder structure and writes configuration.
 func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
-	log.Info("TRACE: handleInitDatabase called")
+	log.Debug("TRACE: handleInitDatabase called")
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -318,7 +275,7 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 
 	// Debug hex dump to find source of corruption
 	if req.Path != "" {
-		log.Info(fmt.Sprintf("DEBUG-PATH-HEX (InitDatabase): Path='%s', Hex=%x", req.Path, []byte(req.Path)))
+		log.Debug(fmt.Sprintf("DEBUG-PATH-HEX (InitDatabase): Path='%s', Hex=%x", req.Path, []byte(req.Path)))
 	}
 
 	// Sanitize paths
@@ -362,7 +319,7 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 
 	// VALIDATION START
 	{
-		log.Info("TRACE: Starting Safety Validation")
+		log.Debug("TRACE: Starting Safety Validation")
 		newPaths := []string{}
 		// Deduplication logic for User DB (same as System DB fix)
 		seenPaths := make(map[string]struct{})
@@ -406,7 +363,7 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Write Permission Error: %v", err), http.StatusBadRequest)
 			return
 		}
-		log.Info("TRACE: Safety Validation Passed")
+		log.Debug("TRACE: Safety Validation Passed")
 	}
 	// VALIDATION END
 
@@ -550,10 +507,10 @@ func handleInitDatabase(w http.ResponseWriter, r *http.Request) {
 		if _, err := os.Stat(req.Path); err == nil {
 			log.Warn(fmt.Sprintf("TRACE: WARNING - Target path '%s' ALREADY EXISTS before Setup! (Possible race or external creation)", req.Path))
 		} else {
-			log.Info(fmt.Sprintf("TRACE: Target path '%s' does not exist. Safe to create.", req.Path))
+			log.Debug(fmt.Sprintf("TRACE: Target path '%s' does not exist. Safe to create.", req.Path))
 		}
 
-		log.Info(fmt.Sprintf("TRACE: Executing database.Setup for UserDB at '%s'", req.Path))
+		log.Debug(fmt.Sprintf("TRACE: Executing database.Setup for UserDB at '%s'", req.Path))
 		if _, err := database.Setup(ctx, options); err != nil {
 			// If the database is already setup (e.g. valid retry), legitimate warning but we can proceed
 			// This branch might not be reached given the checks above, but kept for robustness against race/parallel
@@ -959,17 +916,9 @@ func isPathConflict(pathA, pathB string) (bool, string) {
 func sanitizedConfigForDisk(cfg Config) Config {
 	sanitized := cfg
 
-	// Keep only non-sensitive preferences on disk. The selected AI provider/model/url/key
-	// values are already managed in browser local storage and must not be written to config.json.
-	sanitized.LLMApiKey = ""
-	sanitized.BrainProvider = ""
-	sanitized.BrainModel = ""
-	sanitized.BrainURL = ""
-	sanitized.BrainAPIKey = ""
-	sanitized.EmbedderProvider = ""
-	sanitized.EmbedderModel = ""
-	sanitized.EmbedderURL = ""
-	sanitized.EmbedderAPIKey = ""
+	// The legacy root-password field is no longer the runtime credential source.
+	// Persist only the seeded user records and clear any raw password fallback.
+	sanitized.RootPassword = ""
 
 	return sanitized
 }

@@ -393,20 +393,8 @@ func setupStream(w http.ResponseWriter) (func(string, any), func() bool) {
 						return
 					}
 					if isStructuredToolResult(tool) {
-						var rawRecords []json.RawMessage
-						if json.Unmarshal([]byte(trimmed), &rawRecords) == nil && len(rawRecords) > 0 {
-							contentStreamed = true
-							for _, rec := range rawRecords {
-								writeEvent("record", rec)
-							}
-							return
-						}
-						var singleRecord map[string]any
-						if json.Unmarshal([]byte(trimmed), &singleRecord) == nil && len(singleRecord) > 0 {
-							contentStreamed = true
-							writeEvent("record", singleRecord)
-							return
-						}
+						contentStreamed = true
+						return
 					}
 
 					contentStreamed = true
@@ -1035,72 +1023,8 @@ func injectGlobalConfig(cfg *agent.Config, globalCfg *Config) {
 		return
 	}
 
-	brainProvider, brainModel := normalizeProviderAndModel(globalCfg.BrainProvider, globalCfg.BrainModel)
-	embedderProvider, embedderModel := normalizeProviderAndModel(globalCfg.EmbedderProvider, globalCfg.EmbedderModel)
-	if brainProvider == "openai" {
-		brainProvider = "chatgpt"
-	}
-
-	// 1. Brain Config
-	if brainProvider != "" {
-		cfg.Generator.Type = brainProvider
-		if cfg.Generator.Options == nil {
-			cfg.Generator.Options = make(map[string]any)
-		}
-		if brainModel != "" {
-			cfg.Generator.Options["model"] = brainModel
-		}
-		if globalCfg.BrainURL != "" {
-			cfg.Generator.Options["base_url"] = globalCfg.BrainURL
-		}
-		if globalCfg.BrainAPIKey != "" {
-			cfg.Generator.Options["api_key"] = globalCfg.BrainAPIKey
-		}
-	} else if cfg.Generator.Type == "gemini" && globalCfg.LLMApiKey != "" {
-		if cfg.Generator.Options == nil {
-			cfg.Generator.Options = make(map[string]any)
-		}
-		// Only override if not set (or should we strictly override?)
-		// Let's force override for now as the global config is likely the user's intent
-		cfg.Generator.Options["api_key"] = globalCfg.LLMApiKey
-	}
-
-	// 2. Embedder Config
-	if embedderProvider != "" {
-		cfg.Embedder.Type = embedderProvider
-		if cfg.Embedder.Options == nil {
-			cfg.Embedder.Options = make(map[string]any)
-		}
-		if embedderModel != "" {
-			cfg.Embedder.Options["model"] = embedderModel
-		}
-		if globalCfg.EmbedderURL != "" {
-			cfg.Embedder.Options["base_url"] = globalCfg.EmbedderURL
-		}
-		if globalCfg.EmbedderAPIKey != "" {
-			cfg.Embedder.Options["api_key"] = globalCfg.EmbedderAPIKey
-		}
-	} else {
-		// Legacy Fallback
-		if cfg.Embedder.Type == "gemini" && globalCfg.LLMApiKey != "" {
-			if cfg.Embedder.Options == nil {
-				cfg.Embedder.Options = make(map[string]any)
-			}
-			cfg.Embedder.Options["api_key"] = globalCfg.LLMApiKey
-		} else if cfg.Embedder.Type == "ollama" {
-			if globalCfg.OllamaEmbedderURL != "" || globalCfg.OllamaEmbedderModel != "" {
-				if cfg.Embedder.Options == nil {
-					cfg.Embedder.Options = make(map[string]any)
-				}
-				if globalCfg.OllamaEmbedderURL != "" {
-					cfg.Embedder.Options["base_url"] = globalCfg.OllamaEmbedderURL
-				}
-				if globalCfg.OllamaEmbedderModel != "" {
-					cfg.Embedder.Options["model"] = globalCfg.OllamaEmbedderModel
-				}
-			}
-		}
-	}
+	// The global config no longer owns AI secret/provider fields. Keep runtime
+	// configuration in the agent config itself and only recurse into nested agents.
 	// Recursive injection
 	for i := range cfg.Agents {
 		// We need to take address of slice element to modify it

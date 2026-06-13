@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
@@ -215,10 +216,93 @@ func TestHandleExecuteScript_DefaultsVerboseTrue(t *testing.T) {
 	}
 }
 
+func TestWithAuth_RejectsExpiredSessionToken(t *testing.T) {
+	withIsolatedSessionStore(t)
+	config = Config{SystemDB: config.SystemDB}
+	defer func() { config = Config{} }()
+
+	ctx := context.Background()
+	store := NewSessionStore(time.Nanosecond)
+	access, _, err := store.CreateSession(ctx, "root", "admin")
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	st, tx, err := store.getStore(ctx)
+	if err != nil {
+		t.Fatalf("getStore() error = %v", err)
+	}
+	defer tx.Rollback(ctx)
+	if found, err := st.Find(ctx, access, false); err != nil || !found {
+		t.Fatalf("Find() = (%v, %v), want found session", err, found)
+	}
+	record, err := st.GetCurrentValue(ctx)
+	if err != nil {
+		t.Fatalf("GetCurrentValue() error = %v", err)
+	}
+	record.ExpiresAt = time.Now().UTC().Add(-time.Second)
+	if ok, err := st.UpdateCurrentValue(ctx, record); err != nil || !ok {
+		t.Fatalf("UpdateCurrentValue() = (%v, %v), want success", ok, err)
+	}
+
+	oldFacade := tokenFacade
+	tokenFacade = store
+	defer func() { tokenFacade = oldFacade }()
+
+	handler := withAuth(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("protected handler should not run for expired token")
+	})
+
+	req, _ := http.NewRequest(http.MethodGet, "/api/store/items", nil)
+	req.Header.Set("Authorization", "Bearer "+access)
+	w := httptest.NewRecorder()
+
+	handler(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for expired session token, got %d", w.Code)
+	}
+}
+
+func TestWithAuth_AllowsRequestWhenConfigFileIsMissing(t *testing.T) {
+	withIsolatedSessionStore(t)
+	config = Config{SystemDB: config.SystemDB}
+	defer func() { config = Config{} }()
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	tmpDir := t.TempDir()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+	defer os.Chdir(oldWd)
+
+	config.ConfigFile = filepath.Join(tmpDir, "config.json")
+
+	handler := withAuth(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req, _ := http.NewRequest(http.MethodGet, "/api/config/environments", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 when config.json is missing, got %d", w.Code)
+	}
+}
+
 func TestHandleExecuteScript_Auth(t *testing.T) {
+	withIsolatedSessionStore(t)
+	config = Config{SystemDB: config.SystemDB}
+	defer func() { config = Config{} }()
+
 	// Setup Config
-	config.EnableRestAuth = true
-	config.RootPassword = "secret_password"
+	if err := config.SetUser("root", "secret_password", "admin"); err != nil {
+		t.Fatalf("SetUser() error = %v", err)
+	}
 
 	// Handler with Auth
 	handler := withAuth(func(w http.ResponseWriter, r *http.Request) {
@@ -242,15 +326,18 @@ func TestHandleExecuteScript_Auth(t *testing.T) {
 		t.Errorf("Expected 401 for wrong token, got %d", w.Code)
 	}
 
-	// Case 3: Correct Token
+	// Case 3: Correct Session Token
+	accessToken, _, err := currentTokenFacade().CreateSession(context.Background(), "root", "admin")
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
 	req, _ = http.NewRequest("POST", "/api/scripts/execute", nil)
-	req.Header.Set("Authorization", "Bearer secret_password")
+	req.Header.Set("Authorization", "Bearer "+accessToken)
 	w = httptest.NewRecorder()
 	handler(w, req)
 	if w.Code != http.StatusOK {
-		t.Errorf("Expected 200 for correct token, got %d", w.Code)
+		t.Errorf("Expected 200 for valid session token, got %d", w.Code)
 	}
 
 	// Reset Config
-	config.EnableRestAuth = false
 }

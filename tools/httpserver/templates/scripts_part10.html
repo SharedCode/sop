@@ -720,6 +720,11 @@
             currentWizardStep++;
             updateWizardStep();
         } else {
+            const rootPassword = document.getElementById('setup-root-password')?.value || '';
+            if (!rootPassword.trim()) {
+                return showAlert("Root password is required to finish setup.");
+            }
+
             // Step 3: Validate AI Configuration before finishing
             const bProviderValue = document.getElementById('setup-brain-provider') ? document.getElementById('setup-brain-provider').value : "";
             const bApiKey = document.getElementById('setup-brain-api-key') ? document.getElementById('setup-brain-api-key').value.trim() : "";
@@ -1037,6 +1042,7 @@
         const finalPayload = {
             registry_path: regPath,
             port: port,
+            root_password: document.getElementById('setup-root-password')?.value || '',
             brain_provider: bProvider,
             brain_model: bModel,
             brain_url: bUrl,
@@ -1094,12 +1100,33 @@
         .then(async () => {
             if (window._setupProgressItl) clearInterval(window._setupProgressItl);
 
+            // 2. Auto-login immediately after setup so subsequent protected calls run
+            // within the newly created first-run session instead of redirecting to /login.
+            const rootPassword = (document.getElementById('setup-root-password')?.value || '').trim();
+            if (!rootPassword) {
+                throw new Error('Root password is required to complete setup.');
+            }
+            try {
+                const loginRes = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: 'root', password: rootPassword })
+                });
+                if (!loginRes.ok) {
+                    const text = await loginRes.text();
+                    throw new Error(text || 'auto-login failed');
+                }
+            } catch (e) {
+                throw new Error(`Auto-login after setup failed: ${e.message || e}`);
+            }
+
             let sopTaskId = null;
             let medTaskId = null;
 
-            // 1. Trigger SOP Space preload
+            // 3. Trigger SOP Space preload
             try {
-                const sopRes = await fetch('/api/spaces/preload', {
+                const sopRes = await authFetch('/api/spaces/preload', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
@@ -1120,10 +1147,10 @@
                 alert("Critical Error: Failed to trigger SOP preload. " + e.message);
             }
 
-            // 2. Trigger Medical Space preload if requested (Preload Examples checkbox)
+            // 4. Trigger Medical Space preload if requested (Preload Examples checkbox)
             if (populateDemo) {
                 try {
-                    const medRes = await fetch('/api/spaces/preload', {
+                    const medRes = await authFetch('/api/spaces/preload', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
@@ -1140,7 +1167,7 @@
                 }
             }
 
-            // 3. Poll Tasks via global system
+            // 5. Poll Tasks via global system
             try {
                 const msg = document.getElementById('setup-loading-message');
                 if (msg) msg.innerText = 'Preloading spaces...';
@@ -1167,7 +1194,8 @@
                 loadingModal.style.display = 'none';
             }
 
-            // 4. Reload/Redirect
+              // 6. Enter the app with the session established above unless a port
+              // change requires the user to restart the server first.
             resetSetupForm();
 
             const currentPort = window.location.port || (window.location.protocol === 'https:' ? '443' : '80');
@@ -1176,7 +1204,7 @@
                  const newUrl = `${window.location.protocol}//${hostname}:${port}`;
                  showAlert(`Setup Complete! IMPORTANT: You changed the port to ${port}. Please RESTART the server manually, then open: ${newUrl}`, null);
             } else {            
-                 window.location.reload();
+                  window.location.assign('/app');
             }
         })
         .catch(err => {

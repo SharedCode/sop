@@ -59,6 +59,7 @@ func TestPathRelaxation(t *testing.T) {
 	t.Run("SaveConfig", func(t *testing.T) {
 		payload := map[string]interface{}{
 			"registry_path":    tmpDir,
+			"root_password":    "secret123",
 			"use_shared_brain": true,
 			"type":             "clustered",
 		}

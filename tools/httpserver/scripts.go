@@ -5,8 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
+	"runtime"
 	"strings"
 
+	log "log/slog"
+
+	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent"
 )
@@ -106,39 +111,61 @@ func handleExecuteScript(w http.ResponseWriter, r *http.Request) {
 }
 
 // withAuth is a middleware that optionally enforces Bearer token authentication.
+func handlerName(next http.HandlerFunc) string {
+	if next == nil {
+		return "<nil>"
+	}
+	if fn := runtime.FuncForPC(reflect.ValueOf(next).Pointer()); fn != nil {
+		return fn.Name()
+	}
+	return "unknown-handler"
+}
+
 func withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// If Auth is disabled, skip checks
-		if !config.EnableRestAuth {
+		log.Debug("withAuth: handler invocation", "handler", handlerName(next), "method", r.Method, "path", r.URL.Path)
+		if !hasConfigFileOnDisk() {
+			log.Debug("withAuth: skipping bearer-token validation", "path", r.URL.Path, "method", r.Method, "reason", "config file not present on disk")
 			next(w, r)
 			return
 		}
 
-		// If Auth is enabled but no password is set, we fail closed (secure by default)
-		if config.RootPassword == "" {
-			http.Error(w, "Server configuration error: Auth enabled but no RootPassword set", http.StatusInternalServerError)
+		log.Debug("withAuth: enforcing bearer-token validation", "path", r.URL.Path, "method", r.Method)
+
+		token := authTokenFromRequest(r)
+		hasHeader := r.Header.Get("Authorization") != ""
+		cookie, errCookie := r.Cookie("sop_access_token")
+		hasCookie := errCookie == nil && strings.TrimSpace(cookie.Value) != ""
+		log.Debug("withAuth: checking bearer token", "path", r.URL.Path, "has_header", hasHeader, "has_cookie", hasCookie)
+		if token == "" {
+			log.Warn("withAuth: unauthenticated request denied", "path", r.URL.Path, "reason", "missing bearer token", "method", r.Method)
+			http.Error(w, "Unauthorized: Missing bearer token", http.StatusUnauthorized)
 			return
 		}
 
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "Unauthorized: Missing Authorization header", http.StatusUnauthorized)
-			return
-		}
-
-		// Check for "Bearer <token>"
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			http.Error(w, "Unauthorized: Invalid Authorization header format", http.StatusUnauthorized)
-			return
-		}
-
-		token := parts[1]
-		if token != config.RootPassword {
+		log.Debug("withAuth: executing token validation", "path", r.URL.Path, "token_prefix", tokenPrefix(token), "header_present", hasHeader)
+		ok, user, err := config.AuthenticateBearerToken(r.Context(), token)
+		if err != nil || !ok {
+			reason := "invalid or expired session token"
+			if err != nil {
+				reason = strings.ToLower(err.Error())
+			}
+			log.Warn("withAuth: unauthenticated request denied", "path", r.URL.Path, "reason", reason, "error", err, "ok", ok, "method", r.Method, "token_prefix", tokenPrefix(token))
 			http.Error(w, "Unauthorized: Invalid token", http.StatusUnauthorized)
 			return
 		}
+		log.Debug("withAuth: bearer token accepted", "path", r.URL.Path, "user", user.Username, "role", user.Role)
 
+		if ok, user, err := config.AuthenticateBearerToken(r.Context(), token); err == nil && ok {
+			auth := sop.AuthContext{
+				IsSystem: true,
+				Roles:    []string{user.Role},
+				UserID:   user.Username,
+			}
+			ctx := sop.ContextWithAuth(r.Context(), auth)
+			r = r.WithContext(ctx)
+		}
+		// Let the script execution logic handle final auth decisions.
 		next(w, r)
 	}
 }

@@ -179,10 +179,10 @@ func modelCatalogCandidatePaths(configPath string) []string {
 
 	if configPath != "" {
 		add(filepath.Join(filepath.Dir(configPath), modelCatalogFilename))
-	}
-
-	if exePath, err := os.Executable(); err == nil {
-		add(filepath.Join(filepath.Dir(exePath), modelCatalogFilename))
+		if exePath, err := os.Executable(); err == nil {
+			add(filepath.Join(filepath.Dir(exePath), modelCatalogFilename))
+		}
+		return paths
 	}
 
 	if cwd, err := os.Getwd(); err == nil {

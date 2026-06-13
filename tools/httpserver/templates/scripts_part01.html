@@ -31,7 +31,7 @@
             
             const interval = setInterval(async () => {
                 try {
-                    const statusRes = await fetch(`/api/tasks/status?task_id=${taskId}`);
+                    const statusRes = await authFetch(`/api/tasks/status?task_id=${taskId}`);
                     if (!statusRes.ok) throw new Error("Status check failed");
                     const statusData = await statusRes.json();
                     
@@ -64,6 +64,117 @@
         });
     }
 
+    function clearStoredSessionToken() {
+        localStorage.removeItem('sop_access_token');
+        localStorage.removeItem('sop_refresh_token');
+        localStorage.removeItem('sop_session_token');
+        localStorage.removeItem('access_token');
+        sessionStorage.removeItem('sop_access_token');
+        sessionStorage.removeItem('sop_refresh_token');
+        sessionStorage.removeItem('sop_session_token');
+        sessionStorage.removeItem('access_token');
+    }
+
+    function getStoredSessionToken() {
+        return localStorage.getItem('sop_access_token') ||
+               localStorage.getItem('sop_session_token') ||
+               localStorage.getItem('access_token') ||
+               sessionStorage.getItem('sop_access_token') ||
+               sessionStorage.getItem('sop_session_token') ||
+               sessionStorage.getItem('access_token') || '';
+    }
+
+    function getStoredRefreshToken() {
+        return localStorage.getItem('sop_refresh_token') ||
+               sessionStorage.getItem('sop_refresh_token') || '';
+    }
+
+    function clearCachedAppState() {
+        try {
+            currentStore = null;
+            currentStoreInfo = null;
+            currentItemKey = null;
+            currentItemValue = null;
+            currentItems = [];
+            window._currentKBCategories = [];
+            window._lastFetchItemsArgs = null;
+            localStorage.removeItem('sop_current_database');
+            localStorage.removeItem('sop_current_store');
+
+            const dataGrid = document.getElementById('data-grid');
+            if (dataGrid) dataGrid.innerHTML = '';
+            const storeList = document.getElementById('store-list');
+            if (storeList) storeList.innerHTML = '';
+            const kbList = document.getElementById('kb-list');
+            if (kbList) kbList.innerHTML = '';
+            const detailPanel = document.getElementById('detail-panel');
+            if (detailPanel) detailPanel.style.display = 'none';
+            const toolbar = document.getElementById('toolbar');
+            if (toolbar) toolbar.style.display = 'none';
+            const pagination = document.getElementById('pagination');
+            if (pagination) pagination.style.display = 'none';
+            const paginationTop = document.getElementById('pagination-top');
+            if (paginationTop) paginationTop.style.display = 'none';
+        } catch (err) {
+            console.warn('Failed to clear cached app state', err);
+        }
+    }
+
+    async function refreshSessionToken() {
+        const response = await fetch('/api/auth/refresh', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (!response.ok) {
+            throw new Error('Refresh failed');
+        }
+
+        const body = await response.json();
+        if (!body || !body.access_token) {
+            throw new Error('Refresh returned no access token');
+        }
+
+        return true;
+    }
+
+    async function authFetch(endpoint, options = {}) {
+        const headers = Object.assign({}, options.headers || {});
+        headers['Cache-Control'] = 'no-store';
+        headers.Pragma = 'no-cache';
+
+        const response = await fetch(endpoint, Object.assign({}, options, {
+            cache: 'no-store',
+            credentials: 'same-origin',
+            headers
+        }));
+        if (!response.ok && (response.status === 401 || response.status === 403)) {
+            if (response.status === 401 && !options._retry) {
+                try {
+                    const refreshed = await refreshSessionToken();
+                    if (refreshed) {
+                        const retryHeaders = Object.assign({}, options.headers || {});
+                        return await fetch(endpoint, Object.assign({}, options, {
+                            _retry: true,
+                            headers: Object.assign({}, options.headers || {})
+                        }));
+                    }
+                } catch (err) {
+                    console.warn('Token refresh failed, forcing login', err);
+                }
+            }
+
+            clearStoredSessionToken();
+            clearCachedAppState();
+            if (window.location.pathname !== '/login') {
+                window.location.assign('/login');
+            }
+            throw new Error(`Auth required (${response.status})`);
+        }
+        return response;
+    }
+
     async function apiCall(endpoint, method = 'GET', body = null, overrideHeaders = null) {
         try {
             const h = { 'Content-Type': 'application/json' };
@@ -77,13 +188,23 @@
 
             const options = {
                 method: method,
-                headers: h
+                headers: h,
+                cache: 'no-store',
+                credentials: 'same-origin'
             };
             if (body) {
                 options.body = JSON.stringify(body);
             }
-            const response = await fetch(endpoint, options);
+
+            const response = await authFetch(endpoint, options);
             if (!response.ok) {
+                if (response.status === 401 || response.status === 403) {
+                    clearStoredSessionToken();
+                    clearCachedAppState();
+                    if (window.location.pathname !== '/login') {
+                        window.location.assign('/login');
+                    }
+                }
                 const text = await response.text();
                 throw new Error(`API Error (${response.status}): ${text || response.statusText}`);
             }
@@ -695,8 +816,7 @@
         const normalizedSpaceToSelect = typeof spaceToSelect === 'string'
             ? spaceToSelect.replace(/\/data$/, '')
             : null;
-        const res = await fetch(`/api/spaces?database=${encodeURIComponent(databaseName)}&user_id=${encodeURIComponent(currentUserID)}&_=${Date.now()}`);
-        const bundle = await res.json();
+        const bundle = await apiCall(`/api/spaces?database=${encodeURIComponent(databaseName)}&user_id=${encodeURIComponent(currentUserID)}&_=${Date.now()}`);
         let kbs = bundle.data || [];
         const kbList = document.getElementById('kb-list');
         const domainSelect = document.getElementById('domain-select');
@@ -816,8 +936,7 @@
         document.getElementById('db-options-section').style.display = 'none';
         document.getElementById('db-options-content').innerHTML = 'Loading...';
         
-        fetch(`/api/stores?database=${encodeURIComponent(name)}&_=${Date.now()}`)
-            .then(res => res.json())
+        apiCall(`/api/stores?database=${encodeURIComponent(name)}&_=${Date.now()}`)
             .then(bundle => {
                 let stores = bundle.data || [];
                 if (bundle.rbac) { window.CONTEXT_RBAC["store"] = bundle.rbac; }
@@ -853,8 +972,7 @@
             });
 
         // Fetch DB Options
-        fetch(`/api/db/options?database=${encodeURIComponent(name)}`)
-            .then(res => res.json())
+        apiCall(`/api/db/options?database=${encodeURIComponent(name)}`)
             .then(opts => {
                 const section = document.getElementById('db-options-section');
                 const content = document.getElementById('db-options-content');
@@ -1209,7 +1327,7 @@
             summarizeBtn.innerText = "✨ Summarizing...";
             summarizeBtn.disabled = true;
             try {
-                const res = await fetch("/api/ai/summarize", {
+                const res = await authFetch("/api/ai/summarize", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ text: ta.value })
@@ -1293,7 +1411,7 @@
             if (summaries && summaries.length > 0) {
                  payload.summaries = summaries;
             }
-            const res = await fetch(`/api/spaces/item/update?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
+            const res = await authFetch(`/api/spaces/item/update?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify(payload)
@@ -1468,7 +1586,7 @@
             
             if (newName && (newName !== cat.name || newDesc !== cat.description)) {
                 try {
-                    const res = await fetch(`/api/spaces/category/add?name=${encodeURIComponent(spaceName)}`, {
+                    const res = await authFetch(`/api/spaces/category/add?name=${encodeURIComponent(spaceName)}`, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({id: cat.id, name: newName, description: newDesc})
@@ -1537,7 +1655,7 @@
 
     async function refreshCategoryCache(spaceName) {
         try {
-            const res = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(spaceName)}&offset=0&limit=500&parent_id=`);
+            const res = await authFetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(spaceName)}&offset=0&limit=500&parent_id=`);
             if (!res.ok) throw new Error('Failed to refresh categories');
 
             const payload = await res.json();
@@ -1588,7 +1706,7 @@
     grid.innerHTML = "<div style='padding: 15px;'>Fetching thoughts...</div>";
     
     try {
-        const resCat = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}&offset=${catOffset}&limit=${catLimit}&parent_id=root`);
+        const resCat = await authFetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}&offset=${catOffset}&limit=${catLimit}&parent_id=root`);
         if (!resCat.ok) throw new Error("Failed to fetch categories");
         const categoriesData = await resCat.json();
 
@@ -1799,7 +1917,7 @@
                         if (childrenContainer.children.length === 0) {
                             arrowSpan.innerHTML = '⌛ ';
                             try {
-                                const resCat = await fetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}&parent_id=${cat.id}&offset=0&limit=500`);
+                                const resCat = await authFetch(`/api/spaces/categories?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}&parent_id=${cat.id}&offset=0&limit=500`);
                                 if (resCat.ok) {
                                     const data = await resCat.json();
                                     let childrenData = Array.isArray(data) ? data : (data.data || []);
@@ -2020,7 +2138,7 @@
                 if (categoryId) url += `&category_id=${encodeURIComponent(categoryId)}`;
                 if (lastCatId && lastItemId) url += `&last_cat_id=${encodeURIComponent(lastCatId)}&last_item_id=${encodeURIComponent(lastItemId)}`;
                 
-                const res = await fetch(url);
+                const res = await authFetch(url);
                 if (!res.ok) throw new Error("Failed to fetch items");
                 
                 let resPayload = null;
@@ -2313,8 +2431,7 @@ async function selectStore(name, element, force = false) {
         // celBtn.title = `Edit '${name}' CEL expression`;
 
         // Fetch Store Info
-        fetch(`/api/store/info?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`)
-            .then(res => res.json())
+        apiCall(`/api/store/info?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(name)}`)
             .then(info => {
                 currentStoreInfo = info;
 
@@ -2668,7 +2785,7 @@ async function submitAddCategoryItem() {
     }
     
     try {
-        const res = await fetch(`/api/spaces/category/add?name=${encodeURIComponent(spaceName)}&database=${encodeURIComponent(currentDatabase)}`, {
+        const res = await authFetch(`/api/spaces/category/add?name=${encodeURIComponent(spaceName)}&database=${encodeURIComponent(currentDatabase)}`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({name: name, description: desc, parent_id: parentId})
@@ -2693,7 +2810,7 @@ async function submitAddCategoryItem() {
 
 window.deleteCategory = async function(catId, spaceName) {
     try {
-        const res = await fetch(`/api/spaces/category/delete?name=${encodeURIComponent(spaceName)}&database=${encodeURIComponent(currentDatabase)}`, {
+        const res = await authFetch(`/api/spaces/category/delete?name=${encodeURIComponent(spaceName)}&database=${encodeURIComponent(currentDatabase)}`, {
             method: 'DELETE',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({id: catId})
@@ -2768,7 +2885,7 @@ async function autoSummarizeAddSpaceItem() {
     btn.disabled = true;
     
     try {
-        const res = await fetch("/api/ai/summarize", {
+        const res = await authFetch("/api/ai/summarize", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ text: descInput.value })
@@ -2829,7 +2946,7 @@ async function saveSpaceItem() {
     };
     
     try {
-        const res = await fetch(`/api/spaces/item/add?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
+        const res = await authFetch(`/api/spaces/item/add?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
             method: 'POST',
             headers: {'Content-Type':'application/json'},
             body: JSON.stringify(reqBody)
@@ -2871,7 +2988,7 @@ async function saveSpaceItem() {
                 try {
                     const kbNameDisplay = window.currentStore ? window.currentStore.replace('/data', '') : (currentStore ? currentStore.replace('/data', '') : '');
                     const dbNameDisplay = window.currentDatabase || currentDatabase || '';
-                    const res = await fetch(`/api/spaces/item/delete?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
+                    const res = await authFetch(`/api/spaces/item/delete?name=${encodeURIComponent(kbNameDisplay)}&database=${encodeURIComponent(dbNameDisplay)}`, {
                         method: 'DELETE',
                         headers: {'Content-Type':'application/json'},
                         body: JSON.stringify(payload)
@@ -2993,7 +3110,7 @@ window.vectorizeSpace = async function(spaceName, skipDimensionCheck = false) {
 
     let overrideHeaders = null;
     try {
-        const res = await fetch(`/api/spaces/config/get?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(cleanName)}&_t=${new Date().getTime()}`);
+        const res = await authFetch(`/api/spaces/config/get?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(cleanName)}&_t=${new Date().getTime()}`);
         if (res.ok) {
             const config = await res.json();
             
@@ -3162,7 +3279,7 @@ window.showEditKB = async function() {
     // Fetch config first so the server-owned read-only flag can be honored.
     let config = null;
     try {
-        const res = await fetch(`/api/spaces/config/get?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}&_=${Date.now()}`);
+        const res = await authFetch(`/api/spaces/config/get?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}&_=${Date.now()}`);
         if (res.ok) {
             config = await res.json();
         }
@@ -3250,7 +3367,7 @@ window.showEditKB = async function() {
                 }
 
                 try {
-                    const r = await fetch(`/api/spaces/config?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`, {
+                    const r = await authFetch(`/api/spaces/config?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(payload)
@@ -3299,7 +3416,7 @@ async function importSpace(event) {
     formData.append('file', file);
 
     try {
-        const res = await fetch(`/api/spaces/import?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`, {
+        const res = await authFetch(`/api/spaces/import?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(baseName)}`, {
             method: 'POST',
             body: formData
         });

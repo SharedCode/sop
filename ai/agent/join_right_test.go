@@ -35,8 +35,8 @@ func TestJoinRightBehavior(t *testing.T) {
 	// Users: id, name
 	// Orders: id, user_id, item
 
-	userStoreOpts := sop.StoreOptions{Name: "users", SlotLength: 10, IsPrimitiveKey: true}
-	orderStoreOpts := sop.StoreOptions{Name: "orders", SlotLength: 10, IsPrimitiveKey: true}
+	userStoreOpts := sop.StoreOptions{Name: "users", SlotLength: 10}
+	orderStoreOpts := sop.StoreOptions{Name: "orders", SlotLength: 10}
 
 	sopdb.NewBtree[string, any](ctx, dbOpts, "users", tx, nil, userStoreOpts)
 	sopdb.NewBtree[string, any](ctx, dbOpts, "orders", tx, nil, orderStoreOpts)

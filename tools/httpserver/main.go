@@ -63,51 +63,24 @@ type DatabaseConfig struct {
 
 // Config holds the server configuration
 type Config struct {
-	Port           int              `json:"port"`
-	Databases      []DatabaseConfig `json:"databases"`
-	PageSize       int              `json:"pageSize"`
-	SystemDB       *DatabaseConfig  `json:"system_db,omitempty"`
-	RootPassword   string           `json:"root_password,omitempty"`
-	EnableRestAuth bool             `json:"enable_rest_auth,omitempty"`
-	ProductionMode bool             `json:"production_mode,omitempty"`
+	Port                   int              `json:"port"`
+	Databases              []DatabaseConfig `json:"databases"`
+	PageSize               int              `json:"pageSize"`
+	SystemDB               *DatabaseConfig  `json:"system_db,omitempty"`
+	RootPassword           string           `json:"root_password,omitempty"`
+	ProductionMode         bool             `json:"production_mode,omitempty"`
+	SessionTokenTTLMinutes int              `json:"session_token_ttl_minutes,omitempty"`
+	Users                  []UserRecord     `json:"users,omitempty"`
 
 	// ObfuscationMode defines the global obfuscation policy (disabled, per_database, all_databases).
 	// This overrides any setting in the agent's own configuration.
 	ObfuscationMode string `json:"obfuscation_mode,omitempty"`
-
-	// LLMApiKey is the default API key for AI Agents (e.g. Gemini).
-	LLMApiKey string `json:"llm_api_key,omitempty"`
-
-	// New Expanded Options
-	BrainProvider    string `json:"brain_provider,omitempty"`
-	BrainModel       string `json:"brain_model,omitempty"`
-	BrainURL         string `json:"brain_url,omitempty"`
-	BrainAPIKey      string `json:"brain_api_key,omitempty"`
-	EmbedderProvider string `json:"embedder_provider,omitempty"`
-	EmbedderModel    string `json:"embedder_model,omitempty"`
-	EmbedderURL      string `json:"embedder_url,omitempty"`
-	EmbedderAPIKey   string `json:"embedder_api_key,omitempty"`
-
-	// Ollama text embedder specific configuration (legacy fallback)
-	OllamaEmbedderURL   string `json:"ollama_embedder_url,omitempty"`
-	OllamaEmbedderModel string `json:"ollama_embedder_model,omitempty"`
 
 	// Legacy/CLI fields - Ignored in JSON to keep config clean
 	DatabasePath string `json:"-"`
 	Mode         string `json:"-"`
 	ConfigFile   string `json:"-"`
 	RedisURL     string `json:"-"`
-}
-
-type setupWizardAIConfig struct {
-	BrainProvider    string `json:"brain_provider,omitempty"`
-	BrainModel       string `json:"brain_model,omitempty"`
-	BrainURL         string `json:"brain_url,omitempty"`
-	BrainAPIKey      string `json:"brain_api_key,omitempty"`
-	EmbedderProvider string `json:"embedder_provider,omitempty"`
-	EmbedderModel    string `json:"embedder_model,omitempty"`
-	EmbedderURL      string `json:"embedder_url,omitempty"`
-	EmbedderAPIKey   string `json:"embedder_api_key,omitempty"`
 }
 
 func firstNonEmpty(values ...string) string {
@@ -119,25 +92,39 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-func readSetupWizardAIConfigFromEnv() setupWizardAIConfig {
-	// API keys are no longer read from environment variables
-
-	if host := firstNonEmpty(os.Getenv("OLLAMA_HOST"), os.Getenv("OLLAMA_BASE_URL")); host != "" {
-		return setupWizardAIConfig{
-			BrainProvider: "ollama",
-			BrainURL:      host,
-		}
+func candidateConfigPaths() []string {
+	if p := strings.TrimSpace(config.ConfigFile); p != "" {
+		return []string{p}
 	}
 
-	return setupWizardAIConfig{}
+	candidates := []string{}
+	if cwd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, filepath.Join(cwd, "config.json"))
+	} else {
+		candidates = append(candidates, "config.json")
+	}
+	return candidates
+}
+
+func findExistingConfigFile() string {
+	seen := map[string]struct{}{}
+	for _, candidate := range candidateConfigPaths() {
+		if candidate == "" {
+			continue
+		}
+		if _, ok := seen[candidate]; ok {
+			continue
+		}
+		seen[candidate] = struct{}{}
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func setupWizardAIConfigJSON() template.JS {
-	b, err := json.Marshal(readSetupWizardAIConfigFromEnv())
-	if err != nil {
-		return template.JS("{}")
-	}
-	return template.JS(b)
+	return template.JS("{}")
 }
 
 func modelCatalogJSON() template.JS {
@@ -227,7 +214,6 @@ func main() {
 	flag.StringVar(&config.ConfigFile, "config", "", "Path to configuration file (optional)")
 	flag.StringVar(&config.RedisURL, "redis", "localhost:6379", "Redis URL for clustered mode (e.g. localhost:6379)")
 	flag.IntVar(&config.PageSize, "pageSize", 40, "Number of items to display per page")
-	flag.BoolVar(&config.EnableRestAuth, "enable-rest-auth", false, "Enable Bearer token authentication for REST endpoints")
 	flag.BoolVar(&config.ProductionMode, "production", false, "Enable Production mode (use real Embedder and LLM)")
 	flag.Parse()
 
@@ -273,6 +259,9 @@ func main() {
 	// later on, which breaks the check for entering Setup Mode (len(Databases)==0 && ConfigFile=="").
 	var targetConfigPath = config.ConfigFile
 	if targetConfigPath == "" {
+		targetConfigPath = findExistingConfigFile()
+	}
+	if targetConfigPath == "" {
 		if cwd, err := os.Getwd(); err == nil {
 			targetConfigPath = filepath.Join(cwd, "config.json")
 		} else {
@@ -300,37 +289,12 @@ func main() {
 		log.Error(fmt.Sprintf("Failed to load model catalog: %v", err))
 	}
 
-	// Override RootPassword from environment variable if set (Security best practice)
-	if envPass := os.Getenv("SOP_ROOT_PASSWORD"); envPass != "" {
-		config.RootPassword = envPass
-	}
-	if os.Getenv("SOP_ENABLE_REST_AUTH") == "true" {
-		config.EnableRestAuth = true
-	}
-
 	if !wasProductionFlagPassed {
 		config.ProductionMode = true
 	}
 
-	// If no databases loaded (e.g. no config file or empty), use CLI flags as default
-	// BUT only if config file was NOT loaded. If config file was loaded but empty, that's a valid state (Setup Mode).
-	// Actually, if config file is missing, we are in Setup Mode.
-	// We only fallback to CLI flags if the user explicitly provided them?
-	// Or maybe we just start empty and let the UI handle it.
-	// Let's say: If config file is missing, we start with NO databases, which triggers Setup Mode in UI.
-	// UNLESS the user provided a specific database path via CLI that is NOT the default.
-	// The default is "/tmp/sop_data".
-	isDefaultPath := config.DatabasePath == "/tmp/sop_data"
-	if len(config.Databases) == 0 && config.ConfigFile == "" && !isDefaultPath {
-		config.Databases = []DatabaseConfig{
-			{
-				Name:     "Default",
-				Path:     config.DatabasePath,
-				Mode:     config.Mode,
-				RedisURL: config.RedisURL,
-			},
-		}
-	}
+	// First-run mode must remain empty when no config.json exists so the UI can
+	// enter environment creation mode and show the Setup Wizard instead of a login flow.
 	// Resolve Database Paths to absolute
 	for i := range config.Databases {
 		if abs, err := filepath.Abs(config.Databases[i].Path); err == nil {
@@ -394,61 +358,65 @@ func main() {
 		}
 	}
 
-	// Setup Routes
-	http.HandleFunc("/", handleIndex)
-	http.HandleFunc("/viewer", handleViewer)
-	http.HandleFunc("/api/databases", handleDatabases)
-	http.HandleFunc("/api/databases/update", handleUpdateDatabase)
-	http.HandleFunc("/api/stores", handleListStores)
-	http.HandleFunc("/api/spaces", handleListSpaces)
-	http.HandleFunc("/api/db/options", handleGetDBOptions)
-	http.HandleFunc("/api/store/info", handleGetStoreInfo)
-	http.HandleFunc("/api/store/update", handleUpdateStoreInfo)
-	http.HandleFunc("/api/store/items", handleListItems)
-	http.HandleFunc("/api/store/item/update", handleUpdateItem)
-	http.HandleFunc("/api/store/item/add", handleAddItem)
-	http.HandleFunc("/api/store/add", handleAddStore)
-	http.HandleFunc("/api/store/delete", handleDeleteStore)
-	http.HandleFunc("/api/store/item/delete", handleDeleteItem)
-	http.HandleFunc("/api/admin/validate", handleValidateAdminToken)
-	http.HandleFunc("/api/ai/chat", handleAIChat)
-	http.HandleFunc("/api/ai/test-connection", handleTestLLMConnection)
-	http.HandleFunc("/api/ai/test-embedder-connection", handleTestEmbedderConnection)
-	http.HandleFunc("/api/ai/summarize", handleAISummarize)
-	http.HandleFunc("/api/tool/execute", handleToolExecute)
-	http.HandleFunc("/api/ai/session/close", handleCloseSession)
-	http.HandleFunc("/api/ai/feedback", handleAIFeedback)
+	// Startup Routes
+	http.HandleFunc("/", handleRoot)
+	http.HandleFunc("/login", handleLoginPage)
+	http.HandleFunc("/app", requireAuth(handleIndex))
+	http.HandleFunc("/viewer", requireAuth(handleViewer))
+	http.HandleFunc("/api/databases", withAuth(handleDatabases))
+	http.HandleFunc("/api/databases/update", withAuth(handleUpdateDatabase))
+	http.HandleFunc("/api/stores", withAuth(handleListStores))
+	http.HandleFunc("/api/spaces", withAuth(handleListSpaces))
+	http.HandleFunc("/api/db/options", withAuth(handleGetDBOptions))
+	http.HandleFunc("/api/store/info", withAuth(handleGetStoreInfo))
+	http.HandleFunc("/api/store/update", withAuth(handleUpdateStoreInfo))
+	http.HandleFunc("/api/store/items", withAuth(handleListItems))
+	http.HandleFunc("/api/store/item/update", withAuth(handleUpdateItem))
+	http.HandleFunc("/api/store/item/add", withAuth(handleAddItem))
+	http.HandleFunc("/api/store/item/delete", withAuth(handleDeleteItem))
+	http.HandleFunc("/api/store/items/delete", withAuth(handleDeleteItems))
+	http.HandleFunc("/api/store/add", withAuth(handleAddStore))
+	http.HandleFunc("/api/store/delete", withAuth(handleDeleteStore))
+	http.HandleFunc("/api/admin/validate", withAuth(handleValidateAdminToken))
+	http.HandleFunc("/api/ai/chat", withAuth(handleAIChat))
+	http.HandleFunc("/api/ai/test-connection", withAuth(handleTestLLMConnection))
+	http.HandleFunc("/api/ai/test-embedder-connection", withAuth(handleTestEmbedderConnection))
+	http.HandleFunc("/api/ai/summarize", withAuth(handleAISummarize))
+	http.HandleFunc("/api/tool/execute", withAuth(handleToolExecute))
+	http.HandleFunc("/api/ai/session/close", withAuth(handleCloseSession))
+	http.HandleFunc("/api/ai/feedback", withAuth(handleAIFeedback))
 	http.HandleFunc("/api/scripts/execute", withAuth(handleExecuteScript))
 
 	// Knowledge Base Endpoints
-	http.HandleFunc("/api/spaces/categories", handleListSpaceCategories)
-	http.HandleFunc("/api/spaces/category/add", handleAddSpaceCategory)
-	http.HandleFunc("/api/spaces/category/delete", handleDeleteSpaceCategory)
-	http.HandleFunc("/api/spaces/items", handleListSpaceItems)
-	http.HandleFunc("/api/spaces/item/add", handleAddSpaceItem)
-	http.HandleFunc("/api/spaces/item/update", handleUpdateSpaceItem)
-	http.HandleFunc("/api/spaces/item/delete", handleDeleteSpaceItem)
-	http.HandleFunc("/api/spaces/create", handleCreateSpace)
-	http.HandleFunc("/api/spaces/preload", handlePreloadSpace)
-	http.HandleFunc("/api/spaces/ingest", handleIngestSpace)
-	http.HandleFunc("/api/spaces/ingest/import", handleIngestImportSpace)
-	http.HandleFunc("/api/spaces/vectorize", handleVectorizeSpace)
-	http.HandleFunc("/api/spaces/delete", handleDeleteSpace)
-	http.HandleFunc("/api/spaces/export", handleExportSpace)
-	http.HandleFunc("/api/spaces/import", handleImportSpace)
-	http.HandleFunc("/api/spaces/config/get", handleGetSpaceConfig)
-	http.HandleFunc("/api/spaces/config", handleSaveSpaceConfig)
-	http.HandleFunc("/api/tasks/status", handleGetTaskStatus)
+	http.HandleFunc("/api/spaces/categories", withAuth(handleListSpaceCategories))
+	http.HandleFunc("/api/spaces/category/add", withAuth(handleAddSpaceCategory))
+	http.HandleFunc("/api/spaces/category/delete", withAuth(handleDeleteSpaceCategory))
+	http.HandleFunc("/api/spaces/items", withAuth(handleListSpaceItems))
+	http.HandleFunc("/api/spaces/item/add", withAuth(handleAddSpaceItem))
+	http.HandleFunc("/api/spaces/item/update", withAuth(handleUpdateSpaceItem))
+	http.HandleFunc("/api/spaces/item/delete", withAuth(handleDeleteSpaceItem))
+	http.HandleFunc("/api/spaces/create", withAuth(handleCreateSpace))
+	http.HandleFunc("/api/spaces/preload", withAuth(handlePreloadSpace))
+	http.HandleFunc("/api/spaces/ingest", withAuth(handleIngestSpace))
+	http.HandleFunc("/api/spaces/ingest/import", withAuth(handleIngestImportSpace))
+	http.HandleFunc("/api/spaces/vectorize", withAuth(handleVectorizeSpace))
+	http.HandleFunc("/api/spaces/delete", withAuth(handleDeleteSpace))
+	http.HandleFunc("/api/spaces/export", withAuth(handleExportSpace))
+	http.HandleFunc("/api/spaces/import", withAuth(handleImportSpace))
+	http.HandleFunc("/api/spaces/config/get", withAuth(handleGetSpaceConfig))
+	http.HandleFunc("/api/spaces/config", withAuth(handleSaveSpaceConfig))
+	http.HandleFunc("/api/tasks/status", withAuth(handleGetTaskStatus))
 	// Configuration Endpoints
-	http.HandleFunc("/api/config/save", handleSaveConfig)
-	http.HandleFunc("/api/db/init", handleInitDatabase)
-	http.HandleFunc("/api/config/validate-path", handleValidatePath)
-	http.HandleFunc("/api/system/uninstall", handleUninstallSystem)
-	http.HandleFunc("/api/config/environments", handleListEnvironments)
-	http.HandleFunc("/api/config/environments/create", handleCreateEnvironment)
-	http.HandleFunc("/api/config/environments/switch", handleSwitchEnvironment)
-	http.HandleFunc("/api/config/environments/delete", handleDeleteEnvironment)
-	http.HandleFunc("/api/config/llm/update", handleUpdateLLMConfig)
+	http.HandleFunc("/api/config/save", withAuth(handleSaveConfig))
+	http.HandleFunc("/api/db/init", withAuth(handleInitDatabase))
+	http.HandleFunc("/api/config/validate-path", withAuth(handleValidatePath))
+	http.HandleFunc("/api/system/uninstall", withAuth(handleUninstallSystem))
+	http.HandleFunc("/api/config/environments", withAuth(handleListEnvironments))
+	http.HandleFunc("/api/config/environments/create", withAuth(handleCreateEnvironment))
+	http.HandleFunc("/api/config/environments/switch", withAuth(handleSwitchEnvironment))
+	http.HandleFunc("/api/config/environments/delete", withAuth(handleDeleteEnvironment))
+	http.HandleFunc("/api/auth/login", handleLogin)
+	http.HandleFunc("/api/auth/refresh", handleRefresh)
 
 	// Initialize Agents only if we have configured databases
 	// In Setup Mode (no databases), agents shouldn't initialize as the target environment isn't set yet.
@@ -485,16 +453,14 @@ func main() {
 		}()
 	}
 
-	// Dev bypass: If SOP_ROOT_PASSWORD is set in env, or if running via 'go run', auto-assign Admin role
-	// TODO: Once login screen/session auth is implemented, ensure authenticated session overlays take precedence over this dev bypass.
+	// Dev bypass: when running via 'go run', auto-assign admin role for localhost requests.
 	var handler http.Handler = http.DefaultServeMux
-	hasRootPassword := os.Getenv("SOP_ROOT_PASSWORD") != ""
 	isGoRun := strings.Contains(os.Args[0], "go-build")
 
-	if hasRootPassword || isGoRun {
+	if isGoRun {
 		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			isLocalhost := strings.HasPrefix(r.RemoteAddr, "127.0.0.1:") || strings.HasPrefix(r.RemoteAddr, "[::1]:")
-			if hasRootPassword || (isGoRun && isLocalhost) {
+			if isGoRun && isLocalhost {
 				auth := sop.AuthContext{
 					IsSystem: true,
 					Roles:    []string{sop.RoleAdmin},
@@ -530,6 +496,25 @@ func openBrowser(url string) {
 	}
 }
 
+func migrateLegacyRootPassword() {
+	if strings.TrimSpace(config.RootPassword) == "" {
+		return
+	}
+
+	for _, user := range config.Users {
+		if normalizeUsername(user.Username) == "root" {
+			config.RootPassword = ""
+			return
+		}
+	}
+
+	if err := config.SetUser("root", config.RootPassword, sop.RoleAdmin); err != nil {
+		log.Warn("failed to migrate legacy root password into users", "error", err)
+		return
+	}
+	config.RootPassword = ""
+}
+
 func loadConfig(path string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -544,6 +529,8 @@ func loadConfig(path string) error {
 	if err := json.NewDecoder(f).Decode(&config); err != nil {
 		return err
 	}
+
+	migrateLegacyRootPassword()
 
 	// Default System DB logic
 	// We ONLY populate SystemDB if it is explicitly defined in the config.
@@ -689,6 +676,34 @@ func getDBOptions(ctx context.Context, dbName string) (sop.DatabaseOptions, erro
 	return sop.DatabaseOptions{}, fmt.Errorf("database '%s' not found", dbName)
 }
 
+func hasConfigFileOnDisk() bool {
+	return findExistingConfigFile() != ""
+}
+
+func handleRoot(w http.ResponseWriter, r *http.Request) {
+	if hasConfigFileOnDisk() {
+		handleLoginPage(w, r)
+		return
+	}
+	http.Redirect(w, r, "/app", http.StatusFound)
+}
+
+func handleLoginPage(w http.ResponseWriter, r *http.Request) {
+	tmpl, err := template.ParseFS(content, "templates/login.html")
+	if err != nil {
+		http.Error(w, "Could not load login template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	data := map[string]any{
+		"Version": sop.Version,
+	}
+	if err := tmpl.ExecuteTemplate(w, "login.html", data); err != nil {
+		log.Error("Failed to execute login template", "error", err)
+		http.Error(w, "Login template execution failed", http.StatusInternalServerError)
+	}
+}
+
 func handleIndex(w http.ResponseWriter, r *http.Request) {
 	tmpl, err := template.ParseFS(content, "templates/*.html")
 	if err != nil {
@@ -727,26 +742,16 @@ func handleIndex(w http.ResponseWriter, r *http.Request) {
 		"ModelCatalog": modelCatalog,
 		// AllowInvalidMapKey is a flag to bypass the validation that requires Map Key types
 		// to have an Index Specification or CEL Expression. This is useful for testing.
-		"AllowInvalidMapKey": os.Getenv("SOP_ALLOW_INVALID_MAP_KEY") == "true",
-		"HasDemo":            hasDemo,
-		"LLMProvider": func() string {
-			if config.BrainProvider != "" {
-				return config.BrainProvider
-			}
-			if os.Getenv("OLLAMA_HOST") != "" {
-				return "ollama"
-			}
-			return "openai"
-		}(), "IsEnterprise": isEnterprise,
+		"AllowInvalidMapKey":      os.Getenv("SOP_ALLOW_INVALID_MAP_KEY") == "true",
+		"HasDemo":                 hasDemo,
+		"LLMProvider":             "openai",
+		"IsEnterprise":            isEnterprise,
 		"SystemDBName":            SystemDBName,
 		"ConfigFile":              config.ConfigFile,
 		"SetupWizardAIConfigJSON": setupWizardAIConfigJSON(),
 		"ModelCatalogJSON":        modelCatalogJSON(),
 		"MinHashMod":              fs.MinimumModValue,
 		"MaxHashMod":              fs.MaximumModValue,
-		"Env": map[string]bool{
-			"SOP_ROOT_PASSWORD": os.Getenv("SOP_ROOT_PASSWORD") != "",
-		},
 	}
 	if err := tmpl.ExecuteTemplate(w, "index.html", data); err != nil {
 		log.Error("Failed to execute template", "error", err)
@@ -1509,6 +1514,8 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 		SeedKey       any            `json:"seedKey"`
 		SeedValue     any            `json:"seedValue"`
 		AdminToken    string         `json:"adminToken"`
+		AdminUsername string         `json:"adminUsername"`
+		AdminPassword string         `json:"adminPassword"`
 		SlotLength    int            `json:"slotLength"`
 		IsUnique      bool           `json:"isUnique"`
 		DataSize      int            `json:"dataSize"` // 0=Small, 1=Medium, 2=Big
@@ -1522,6 +1529,14 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 		log.Error("Failed to decode JSON", "error", err)
 		http.Error(w, fmt.Sprintf("Invalid JSON body: %v", err), http.StatusBadRequest)
 		return
+	}
+
+	if authToken := extractBearerToken(r.Header.Get("Authorization")); authToken != "" && req.AdminToken == "" {
+		req.AdminToken = authToken
+	}
+	if username, password := config.authFromAuthorization(r.Header.Get("Authorization")); username != "" || password != "" {
+		req.AdminUsername = username
+		req.AdminPassword = password
 	}
 
 	// Hardening: Prevent modifying stores in System DB
@@ -1707,7 +1722,7 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
-		isAdmin := config.RootPassword != "" && req.AdminToken == config.RootPassword
+		isAdmin := config.IsAdminOverride(ctx, req.AdminUsername, req.AdminPassword, req.AdminToken) || isAdminRoleInContext(r.Context())
 
 		if isModifyingExistingSpec {
 			if !isAdmin {
@@ -2414,6 +2429,24 @@ func handleUpdateItem(w http.ResponseWriter, r *http.Request) {
 				if v, err := strconv.ParseUint(s, 10, 64); err == nil {
 					finalKey = uint64(v)
 				}
+			case float32:
+				if v, err := strconv.ParseFloat(s, 32); err == nil {
+					finalKey = float32(v)
+				}
+			case float64:
+				if v, err := strconv.ParseFloat(s, 64); err == nil {
+					finalKey = v
+				}
+			case string:
+				finalKey = s
+			case sop.UUID:
+				if v, err := sop.ParseUUID(s); err == nil {
+					finalKey = v
+				}
+			case uuid.UUID:
+				if v, err := uuid.Parse(s); err == nil {
+					finalKey = v
+				}
 			}
 		}
 		// Handle String to UUID
@@ -2847,6 +2880,217 @@ func handleDeleteItem(w http.ResponseWriter, r *http.Request) {
 	handleWriteOperation(w, r, "delete")
 }
 
+func handleDeleteItems(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Database  string `json:"database"`
+		StoreName string `json:"store"`
+		Keys      []any  `json:"keys"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
+		return
+	}
+
+	if req.StoreName == "" {
+		http.Error(w, "Store name is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.Keys) == 0 {
+		http.Error(w, "At least one key is required", http.StatusBadRequest)
+		return
+	}
+
+	ctx := r.Context()
+	dbOpts, err := getDBOptions(ctx, req.Database)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForWriting)
+	if err != nil {
+		http.Error(w, "Failed to begin transaction: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer trans.Rollback(ctx)
+
+	var isPrimitiveKey bool
+	var indexSpec *jsondb.IndexSpecification
+	if t2, ok := trans.GetPhasedTransaction().(*common.Transaction); ok {
+		stores, err := t2.StoreRepository.Get(ctx, req.StoreName)
+		if err == nil && len(stores) > 0 {
+			isPrimitiveKey = stores[0].IsPrimitiveKey
+			if !isPrimitiveKey && stores[0].MapKeyIndexSpecification != "" {
+				var is jsondb.IndexSpecification
+				if err := encoding.DefaultMarshaler.Unmarshal([]byte(stores[0].MapKeyIndexSpecification), &is); err == nil {
+					indexSpec = &is
+				}
+			}
+		}
+	}
+
+	var comparer btree.ComparerFunc[any]
+	if !isPrimitiveKey {
+		if indexSpec != nil {
+			comparer = func(a, b any) int {
+				return indexSpec.Comparer(a.(map[string]any), b.(map[string]any))
+			}
+		} else {
+			comparer = func(a, b any) int {
+				mapA, okA := a.(map[string]any)
+				mapB, okB := b.(map[string]any)
+				if !okA || !okB {
+					return btree.Compare(a, b)
+				}
+
+				keys := make([]string, 0, len(mapA)+len(mapB))
+				seen := make(map[string]struct{})
+				for k := range mapA {
+					if _, exists := seen[k]; !exists {
+						keys = append(keys, k)
+						seen[k] = struct{}{}
+					}
+				}
+				for k := range mapB {
+					if _, exists := seen[k]; !exists {
+						keys = append(keys, k)
+						seen[k] = struct{}{}
+					}
+				}
+				sort.Strings(keys)
+
+				for _, k := range keys {
+					valA, existsA := mapA[k]
+					valB, existsB := mapB[k]
+					if !existsA && !existsB {
+						continue
+					}
+					if !existsA {
+						return -1
+					}
+					if !existsB {
+						return 1
+					}
+					res := btree.Compare(valA, valB)
+					if res != 0 {
+						return res
+					}
+				}
+				return 0
+			}
+		}
+	}
+
+	store, err := database.OpenBtree[any, any](ctx, dbOpts, req.StoreName, trans, comparer)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to open store '%s': %v", req.StoreName, err), http.StatusInternalServerError)
+		return
+	}
+
+	var sampleKey any
+	if isPrimitiveKey {
+		if ok, _ := store.First(ctx); ok {
+			sampleKey = store.GetCurrentKey().Key
+		}
+	}
+
+	resolvedKeys := make([]any, 0, len(req.Keys))
+	preservedCount := 0
+	preserveOne := int(store.Count()) <= len(req.Keys)
+	for _, rawKey := range req.Keys {
+		finalKey := rawKey
+		if sampleKey != nil {
+			if f, ok := rawKey.(float64); ok {
+				switch sampleKey.(type) {
+				case int:
+					finalKey = int(f)
+				case int8:
+					finalKey = int8(f)
+				case int16:
+					finalKey = int16(f)
+				case int32:
+					finalKey = int32(f)
+				case int64:
+					finalKey = int64(f)
+				case uint:
+					finalKey = uint(f)
+				case uint8:
+					finalKey = uint8(f)
+				case uint16:
+					finalKey = uint16(f)
+				case uint32:
+					finalKey = uint32(f)
+				case uint64:
+					finalKey = uint64(f)
+				case float32:
+					finalKey = float32(f)
+				}
+			}
+			if s, ok := rawKey.(string); ok {
+				switch sampleKey.(type) {
+				case sop.UUID:
+					if id, err := sop.ParseUUID(s); err == nil {
+						finalKey = id
+					}
+				case uuid.UUID:
+					if id, err := uuid.Parse(s); err == nil {
+						finalKey = id
+					}
+				}
+			}
+		}
+
+		if sampleKey != nil {
+			sT := fmt.Sprintf("%T", sampleKey)
+			fT := fmt.Sprintf("%T", finalKey)
+			if sT != fT {
+				http.Error(w, fmt.Sprintf("Key type mismatch: expected %s, got %s", sT, fT), http.StatusBadRequest)
+				return
+			}
+		}
+
+		if preserveOne && preservedCount == 0 {
+			preservedCount++
+			continue
+		}
+		resolvedKeys = append(resolvedKeys, finalKey)
+	}
+
+	if store.Count()-int64(len(resolvedKeys)) < 1 {
+		http.Error(w, "At least one row must remain in the store for transaction merging.", http.StatusBadRequest)
+		return
+	}
+
+	deletedCount := 0
+	for _, key := range resolvedKeys {
+		removed, err := store.Remove(ctx, key)
+		if err != nil {
+			http.Error(w, "Failed to delete key: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if !removed {
+			http.Error(w, "One or more keys were not found", http.StatusNotFound)
+			return
+		}
+		deletedCount++
+	}
+
+	if err := trans.Commit(ctx); err != nil {
+		http.Error(w, "Commit failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]any{"status": "ok", "deleted": deletedCount, "preserved": preservedCount})
+}
+
 func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -2913,7 +3157,7 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 				return indexSpec.Comparer(a.(map[string]any), b.(map[string]any))
 			}
 		} else {
-			// Default Map Comparer (Dynamic) for generic maps
+			// Default Map Comparer (Dynamic) for generic maps (e.g. ModelStore)
 			comparer = func(a, b any) int {
 				mapA, okA := a.(map[string]any)
 				mapB, okB := b.(map[string]any)
@@ -3039,7 +3283,7 @@ func handleWriteOperation(w http.ResponseWriter, r *http.Request, op string) {
 		}
 	case "delete":
 		if store.Count() <= 1 {
-			opErr = fmt.Errorf("cannot delete the last item; store must contain at least one item")
+			opErr = fmt.Errorf("one row must remain in the store for SOP multi-transaction merging; deletion was not performed")
 		} else {
 			var removed bool
 			removed, opErr = store.Remove(ctx, finalKey)
@@ -3069,21 +3313,26 @@ func handleValidateAdminToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+
 	var req struct {
-		AdminToken string `json:"adminToken"`
+		AdminToken    string `json:"adminToken"`
+		AdminUsername string `json:"adminUsername"`
+		AdminPassword string `json:"adminPassword"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
 
-	if config.RootPassword == "" {
-		// If no root password set, we can't validate (fail closed)
-		w.WriteHeader(http.StatusUnauthorized)
-		return
+	if authToken := extractBearerToken(r.Header.Get("Authorization")); authToken != "" && req.AdminToken == "" {
+		req.AdminToken = authToken
+	}
+	if username, password := config.authFromAuthorization(r.Header.Get("Authorization")); username != "" || password != "" {
+		req.AdminUsername = username
+		req.AdminPassword = password
 	}
 
-	if req.AdminToken != config.RootPassword {
+	if !config.IsAdminOverride(r.Context(), req.AdminUsername, req.AdminPassword, req.AdminToken) && !isAdminRoleInContext(r.Context()) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}

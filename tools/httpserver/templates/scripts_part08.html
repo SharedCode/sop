@@ -112,20 +112,11 @@
             isCacheTTL: isCacheTTL,
             seedKey: seedKey,
             seedValue: seedValue,
-            relations: relations,
-            adminToken: window.currentAdminToken || ""
+            relations: relations
         };
 
         apiCall('/api/store/update', 'POST', payload)
         .catch(err => {
-            if (err.message.includes("Cannot update") && err.message.includes("structure") && !window.currentAdminToken) {
-                const token = prompt("Structural changes detected. Please enter Admin Token to override:");
-                if (token) {
-                    window.currentAdminToken = token;
-                    payload.adminToken = token;
-                    return apiCall('/api/store/update', 'POST', payload);
-                }
-            }
             throw err;
         })
         .then(data => {
@@ -147,7 +138,7 @@
 
     function showAddStore() {
         // currentStoreInfo = null; // Do not clear this, as it breaks Edit Store if we cancel Add
-        window.currentAdminToken = null;
+        window.currentAdminCredentials = null;
         
         // Fetch stores for potential relationships
         fetchRelationStores();
@@ -264,7 +255,7 @@
 
     function closeAddStoreModal() {
         closeUIModal('add-store-modal');
-        window.currentAdminToken = null;
+        window.currentAdminCredentials = null;
         const unlockBtn = document.getElementById('btn-unlock-admin');
         if (unlockBtn) unlockBtn.style.display = 'none';
     }

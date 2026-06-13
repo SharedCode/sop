@@ -2,11 +2,69 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/sharedcode/sop"
 )
+
+func TestValidateAdminToken_UsesAdminRoleContext(t *testing.T) {
+	config = Config{}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/validate", strings.NewReader(`{}`))
+	req = req.WithContext(sop.ContextWithAuth(req.Context(), sop.AuthContext{Roles: []string{sop.RoleAdmin}}))
+	w := httptest.NewRecorder()
+
+	handleValidateAdminToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for admin role context, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestValidateAdminToken_RejectsLegacyCredentialAuthorizationHeader(t *testing.T) {
+	config = Config{}
+	if err := config.SetUser("root", "secret_password", sop.RoleAdmin); err != nil {
+		t.Fatalf("SetUser() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/validate", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "Bearer root:secret_password")
+	w := httptest.NewRecorder()
+
+	handleValidateAdminToken(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for legacy credential Authorization header, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestValidateAdminToken_UsesBearerSessionToken(t *testing.T) {
+	withIsolatedSessionStore(t)
+	config = Config{SystemDB: config.SystemDB}
+	if err := config.SetUser("root", "secret_password", sop.RoleAdmin); err != nil {
+		t.Fatalf("SetUser() error = %v", err)
+	}
+
+	token, err := currentTokenFacade().CreateToken(context.Background(), "root", sop.RoleAdmin)
+	if err != nil {
+		t.Fatalf("CreateToken() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/validate", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	handleValidateAdminToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 from bearer session token, got %d: %s", w.Code, w.Body.String())
+	}
+}
 
 func TestAdminFeatures(t *testing.T) {
 	// Setup temp dir for DB
@@ -15,7 +73,6 @@ func TestAdminFeatures(t *testing.T) {
 
 	// Setup global config
 	config = Config{
-		RootPassword: "secret_password",
 		Databases: []DatabaseConfig{
 			{
 				Name: dbName,
@@ -23,6 +80,9 @@ func TestAdminFeatures(t *testing.T) {
 				Mode: "standalone",
 			},
 		},
+	}
+	if err := config.SetUser("root", "secret_password", sop.RoleAdmin); err != nil {
+		t.Fatalf("SetUser() error = %v", err)
 	}
 
 	// --- Test 1: Admin Override Security ---
@@ -75,8 +135,9 @@ func TestAdminFeatures(t *testing.T) {
 			t.Errorf("Expected 400 for unauthorized update, got %d", w.Code)
 		}
 
-		// 4. Update IndexSpec with wrong token -> Fail
-		updateReq["adminToken"] = "wrong"
+		// 4. Update IndexSpec with wrong credentials -> Fail
+		updateReq["adminUsername"] = "root"
+		updateReq["adminPassword"] = "wrong"
 		body, _ = json.Marshal(updateReq)
 		req = httptest.NewRequest("POST", "/api/store/update", bytes.NewBuffer(body))
 		w = httptest.NewRecorder()
@@ -85,8 +146,9 @@ func TestAdminFeatures(t *testing.T) {
 			t.Errorf("Expected 400 for wrong token, got %d", w.Code)
 		}
 
-		// 5. Update IndexSpec with correct token -> Success
-		updateReq["adminToken"] = "secret_password"
+		// 5. Update IndexSpec with correct credentials -> Success
+		updateReq["adminUsername"] = "root"
+		updateReq["adminPassword"] = "secret_password"
 		body, _ = json.Marshal(updateReq)
 		req = httptest.NewRequest("POST", "/api/store/update", bytes.NewBuffer(body))
 		w = httptest.NewRecorder()
@@ -134,7 +196,8 @@ func TestAdminFeatures(t *testing.T) {
 			"storeName":     "store_no_schema",
 			"indexSpec":     newIndexSpec,
 			"celExpression": newCel,
-			"adminToken":    "secret_password",
+			"adminUsername": "root",
+			"adminPassword": "secret_password",
 		}
 		body, _ = json.Marshal(updateReq)
 		req = httptest.NewRequest("POST", "/api/store/update", bytes.NewBuffer(body))

@@ -15,17 +15,8 @@ func TestSaveConfig_OmitsSensitiveAISelectionFields(t *testing.T) {
 	tmpDir := t.TempDir()
 	configFile := filepath.Join(tmpDir, "config.json")
 	config = Config{
-		ConfigFile:       configFile,
-		Port:             8080,
-		LLMApiKey:        "legacy-secret",
-		BrainProvider:    "chatgpt",
-		BrainModel:       "gpt-5.4",
-		BrainURL:         "https://example.test/brain",
-		BrainAPIKey:      "brain-secret",
-		EmbedderProvider: "gemini",
-		EmbedderModel:    "gemini-embedding-2",
-		EmbedderURL:      "https://example.test/embedder",
-		EmbedderAPIKey:   "embedder-secret",
+		ConfigFile: configFile,
+		Port:       8080,
 	}
 
 	if err := saveConfig(); err != nil {

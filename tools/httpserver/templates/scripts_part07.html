@@ -673,13 +673,8 @@
     function unlockAdminFields() {
         try {
             console.log("unlockAdminFields called");
-            const token = prompt("Enter Admin Token to unlock structural fields:");
-            if (!token) return;
-            
-            // Validate Token
-            apiCall('/api/admin/validate', 'POST', { adminToken: token })
-            .then(data => {
-                window.currentAdminToken = token;
+            apiCall('/api/admin/validate', 'POST')
+            .then(() => {
                 proceedUnlock();
             })
             .catch(err => {

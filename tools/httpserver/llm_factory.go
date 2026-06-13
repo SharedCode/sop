@@ -18,10 +18,8 @@ type llmSettings struct {
 
 func resolveLLMSettings(r *http.Request) llmSettings {
 	settings := llmSettings{
-		Provider: firstNonEmpty(config.BrainProvider, "openai"),
-		APIKey:   config.BrainAPIKey,
-		URL:      config.BrainURL,
-		Model:    firstNonEmpty(config.BrainModel, "gpt-5.4"),
+		Provider: "openai",
+		Model:    "gpt-5.4",
 	}
 
 	if r != nil {
@@ -48,34 +46,30 @@ func newConfiguredLLM(settings llmSettings) (ai.Generator, error) {
 
 	switch provider {
 	case "gemini":
-		options["api_key"] = settings.APIKey
-		if settings.APIKey == "" {
-			options["api_key"] = config.LLMApiKey
+		if settings.APIKey != "" {
+			options["api_key"] = settings.APIKey
 		}
 		options["model"] = settings.Model
 		if settings.URL != "" {
 			options["api_url"] = settings.URL
 		}
 	case "ollama":
-		options["base_url"] = settings.URL
-		if settings.URL == "" {
-			options["base_url"] = config.BrainURL
+		if settings.URL != "" {
+			options["base_url"] = settings.URL
 		}
 		options["model"] = settings.Model
 	case "chatgpt", "openai":
 		provider = "chatgpt"
-		options["api_key"] = settings.APIKey
-		if settings.APIKey == "" {
-			options["api_key"] = config.LLMApiKey
+		if settings.APIKey != "" {
+			options["api_key"] = settings.APIKey
 		}
 		options["model"] = settings.Model
 		if settings.URL != "" {
 			options["api_url"] = settings.URL
 		}
 	case "anthropic":
-		options["api_key"] = settings.APIKey
-		if settings.APIKey == "" {
-			options["api_key"] = config.LLMApiKey
+		if settings.APIKey != "" {
+			options["api_key"] = settings.APIKey
 		}
 		options["model"] = settings.Model
 	default:

@@ -31,7 +31,7 @@
         textarea.disabled = true;
 
         try {
-            const response = await fetch('/api/tool/execute', {
+            const response = await authFetch('/api/tool/execute', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ tool: 'enhance_text', text: originalText, intent: intent, context: contextText })
@@ -575,7 +575,7 @@
 
     function fetchRelationStores() {
         if (!currentDatabase) return;
-        fetch(`/api/stores?database=${encodeURIComponent(currentDatabase)}`)
+        authFetch(`/api/stores?database=${encodeURIComponent(currentDatabase)}`)
             .then(res => res.json())
             .then(stores => {
                 availableStoresForRel = stores || [];
@@ -1000,7 +1000,7 @@
         }
 
         try {
-            const res = await fetch('/api/spaces/preload', {
+            const res = await authFetch('/api/spaces/preload', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -1024,7 +1024,7 @@
 
             const pollInterval = setInterval(async () => {
                 try {
-                    const statusRes = await fetch(`/api/tasks/status?task_id=${taskId}`);
+                    const statusRes = await authFetch(`/api/tasks/status?task_id=${taskId}`);
                     if (!statusRes.ok) throw new Error("Task status check failed");
                     
                     const statusData = await statusRes.json();
@@ -1094,7 +1094,7 @@
         btnElement.style.opacity = '0.7';
 
         try {
-            const res = await fetch('/api/spaces/preload', {
+            const res = await authFetch('/api/spaces/preload', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({
@@ -1120,7 +1120,7 @@
             // Poll for task status
             const pollInterval = setInterval(async () => {
                 try {
-                    const statusRes = await fetch(`/api/tasks/status?task_id=${taskId}`);
+                    const statusRes = await authFetch(`/api/tasks/status?task_id=${taskId}`);
                     if (!statusRes.ok) throw new Error("Task status check failed");
                     
                     const statusData = await statusRes.json();
