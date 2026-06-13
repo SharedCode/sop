@@ -667,7 +667,7 @@
         }
 
         try {
-            const response = await fetch('/api/ai/chat', {
+            const response = await authFetch('/api/ai/chat', {
                 method: 'POST',
                 headers: applyAIConfigHeaders({ 'Content-Type': 'application/json' }, chatAIConfig),
                 body: JSON.stringify({ 
@@ -955,7 +955,7 @@
                                     const formData = new FormData();
                                     formData.append('file', blob, 'ai-import.json');
                                     
-                                    fetch(`/api/spaces/import?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(targetSpace)}`, {
+                                    authFetch(`/api/spaces/import?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(targetSpace)}`, {
                                         method: 'POST',
                                         body: formData
                                     }).then(async res => {

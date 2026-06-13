@@ -168,6 +168,10 @@ For the current work, the scope is intentionally narrower:
 
 The current implementation is intentionally scoped to a smaller utility feature: a bounded result reducer for LLM-facing output.
 
+### Session-aware auth for resumed Copilot work
+
+The V1 auth facade now supports a simple bearer-token login flow backed by `Config.Users`, with token expiry controlled by `session_token_ttl_minutes`. This gives the Copilot a lightweight authenticated context that can be resumed across turns without losing the current user identity, and it leaves room to replace the token store later with an encrypted or B-tree-backed implementation.
+
 What is already correct:
 
 *   the reduction boundary now lives at the shared result-drain path instead of after full JSON materialization

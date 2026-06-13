@@ -81,52 +81,42 @@
 
     async function deleteSelectedItems() {
         if (selectedItems.size === 0) return;
-        
-        const keysToDelete = Array.from(selectedItems);
-        let successCount = 0;
-        let failCount = 0;
+
+        const keysToDelete = Array.from(selectedItems).map((keyStr) => {
+            try {
+                return JSON.parse(keyStr);
+            } catch {
+                return keyStr;
+            }
+        });
 
         const btn = document.getElementById('btn-bulk-delete');
         const originalContent = btn.innerHTML;
         btn.innerHTML = '<span style="font-size: 12px;">...</span>';
         btn.disabled = true;
 
-        const batchSize = 5;
-        for (let i = 0; i < keysToDelete.length; i += batchSize) {
-            const batch = keysToDelete.slice(i, i + batchSize);
-            await Promise.all(batch.map(async (keyStr) => {
-                try {
-                    let keyVal;
-                    try {
-                        keyVal = JSON.parse(keyStr);
-                    } catch {
-                        keyVal = keyStr;
-                    }
+        try {
+            const result = await apiCall('/api/store/items/delete', 'POST', {
+                database: currentDatabase,
+                store: currentStore,
+                keys: keysToDelete
+            });
 
-                    const payload = {
-                        database: currentDatabase,
-                        store: currentStore,
-                        key: keyVal
-                    };
+            selectedItems.clear();
+            updateDeleteButton();
+            loadItems('current', firstKey);
 
-                    await apiCall('/api/store/item/delete', 'POST', payload);
-                    successCount++;
-                } catch (e) {
-                    failCount++;
-                    console.error(`Failed to delete ${keyStr}`, e);
-                }
-            }));
-        }
-
-        btn.innerHTML = originalContent;
-        btn.disabled = false;
-        
-        selectedItems.clear();
-        updateDeleteButton();
-        loadItems('current', firstKey);
-        
-        if (failCount > 0) {
-            showAlert(`Deleted ${successCount} items. Failed to delete ${failCount} items.`);
+            if (result && result.preserved > 0) {
+                showAlert(`Deleted ${result.deleted} selected item(s). One row was kept automatically so tx commits in the cluster benefits with SOP exclusive smart auto-merging.`);
+            } else {
+                showAlert(`Deleted ${keysToDelete.length} selected item(s).`);
+            }
+        } catch (e) {
+            console.error('Failed to bulk delete selected items', e);
+            showAlert('Failed to delete selected items.');
+        } finally {
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
         }
     }
 
@@ -555,7 +545,7 @@
         }
 
         // Use NDJSON for streaming support
-        return fetch(url, {
+        return authFetch(url, {
              headers: { 'Accept': 'application/x-ndjson' }
         })
             .then(async res => {

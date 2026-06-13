@@ -50,6 +50,7 @@ type StoreInfo struct {
 	CELexpression string `json:"cel_expression,omitempty"`
 
 	// IsPrimitiveKey hints the Python binding which JSON B-Tree to instantiate on open.
+	// This is an internal feature and only needed to be managed by code when using (dynamic typed) languages like Python.
 	IsPrimitiveKey bool `json:"is_primitive_key"`
 
 	// Relations describes foreign key relationships to other stores.

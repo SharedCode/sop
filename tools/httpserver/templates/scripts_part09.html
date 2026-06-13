@@ -262,8 +262,7 @@
             is_cache_ttl: isCacheTTL,
             relations: getRelationshipsFromUI(),
             seed_key: seedKey,
-            seed_value: seedValue,
-            adminToken: window.currentAdminToken || ""
+            seed_value: seedValue
         };
 
         apiCall('/api/store/add', 'POST', payload)
@@ -482,17 +481,6 @@
             celExpression: celExpr
         })
         .catch(err => {
-            if (err.message.includes("Cannot update") && err.message.includes("structure")) {
-                const token = prompt("Structural changes detected. Please enter Admin Token to override:");
-                if (token) {
-                    return apiCall('/api/store/update', 'POST', {
-                        database: currentDatabase,
-                        storeName: currentStore,
-                        celExpression: celExpr,
-                        adminToken: token
-                    });
-                }
-            }
             throw err;
         })
         .then(data => {

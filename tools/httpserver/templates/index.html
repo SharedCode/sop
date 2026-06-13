@@ -978,18 +978,8 @@
             <p style="font-size: 14px;">We are ready to initialize your environment.</p>
 
            <div style="background: var(--pre-bg); padding: 10px; border-radius: 4px; font-size: 0.85em; margin-bottom: 15px; border: 1px solid var(--border-color);">
-                <strong>Shell Environment Check:</strong>
-                
-                <div style="display: grid; grid-template-columns: 1fr; gap: 5px; margin: 10px 0;">
-                    <div>
-                        <code>SOP_ROOT_PASSWORD</code>: 
-                        {{if .Env.SOP_ROOT_PASSWORD}}
-                            <span style="color: var(--success-color); font-weight: bold;">Detected</span>
-                        {{else}}
-                            <span style="color: var(--text-muted);">Not Set</span>
-                        {{end}}
-                    </div>
-                </div>
+                <label for="setup-root-password" style="display: block; font-weight: bold; margin-bottom: 4px;">Root Password</label>
+                <input type="password" id="setup-root-password" placeholder="Enter root password" style="width: 100%; padding: 6px; border-radius: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
             </div>
 
             <!-- AI Engine Settings -->

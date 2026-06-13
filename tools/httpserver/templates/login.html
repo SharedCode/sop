@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SOP Login</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #09111d;
+      --panel: #101c2c;
+      --panel-border: #223247;
+      --text: #edf4ff;
+      --muted: #b7c3d8;
+      --accent: #4f8cff;
+      --accent-2: #7cb8ff;
+      --danger: #ff7b7b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      font-family: Arial, Helvetica, sans-serif;
+      background:
+        linear-gradient(135deg, rgba(79, 140, 255, 0.08), transparent 25%),
+        linear-gradient(315deg, rgba(124, 184, 255, 0.08), transparent 35%),
+        var(--bg);
+      color: var(--text);
+    }
+    .card {
+      width: min(420px, calc(100vw - 24px));
+      background: rgba(16, 28, 44, 0.94);
+      border: 1px solid var(--panel-border);
+      border-radius: 18px;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.35);
+      padding: 24px;
+    }
+    h1 { margin: 0 0 8px; font-size: 1.7rem; }
+    p { color: var(--muted); line-height: 1.45; }
+    form { display: grid; gap: 12px; margin-top: 18px; }
+    label { font-size: 0.95rem; color: var(--text); }
+    input {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--panel-border);
+      background: #0d1727;
+      color: var(--text);
+      padding: 10px 12px;
+      font-size: 1rem;
+    }
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-weight: 700;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #05101e;
+    }
+    button:hover { filter: brightness(1.05); }
+    .muted { color: var(--muted); font-size: 0.95rem; }
+    .error { color: var(--danger); min-height: 1.1em; font-size: 0.95rem; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>SOP Login</h1>
+    <p>Sign in to continue to the SOP workspace.</p>
+    <form id="login-form" autocomplete="on">
+      <label for="username">Username</label>
+      <input id="username" name="username" type="text" placeholder="root" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" placeholder="Enter your password" required>
+      <button type="submit">Sign in</button>
+      <div id="login-error" class="error"></div>
+    </form>
+    <p class="muted">Tip: use the administrator credentials you configured during setup.</p>
+  </main>
+  <script>
+    (function () {
+      var form = document.getElementById('login-form');
+      var errorBox = document.getElementById('login-error');
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        errorBox.textContent = '';
+        var username = document.getElementById('username').value.trim();
+        var password = document.getElementById('password').value;
+
+        fetch('/api/auth/login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username, password: password })
+        }).then(function (response) {
+          return response.json().then(function (body) {
+            if (!response.ok) {
+              throw new Error(body.error || body.message || 'Login failed');
+            }
+            return body;
+          });
+        }).then(function (body) {
+          if (body && body.access_token) {
+            window.location.assign('/app');
+          } else {
+            throw new Error('No access token returned by the server');
+          }
+        }).catch(function (err) {
+          errorBox.textContent = err && err.message ? err.message : 'Unable to sign in.';
+        });
+      });
+    })();
+  </script>
+</body>
+</html>

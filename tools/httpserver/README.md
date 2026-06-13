@@ -13,6 +13,7 @@ go build -o sop-manager ./tools/httpserver
 ```
 
 ## Features
+- **Phase 1 Authentication Facade**: A minimal bearer-token auth flow backed by `Config.Users` and the setup-root user, with OAuth2-style form login support and configurable token expiry.
 - **Multi-Database Support**: Seamlessly switch between different databases (e.g., Local Dev, Production Cluster) from a single UI.
 - **Full CRUD Management**: Create, Read, Update, and Delete records directly from the UI.
 - **RDBMS-Grade Indexing**: Leverages SOP's `IndexSpecification` to support rich, compound indexes with multiple fields and custom sort orders.
@@ -68,7 +69,20 @@ No separate frontend build step is required; the UI assets are embedded into the
 ### Environment Variables
 
 - `SOP_ALLOW_INVALID_MAP_KEY`: Set to `true` to bypass the validation that requires Map Key types to have an Index Specification or CEL Expression. This is primarily for testing purposes.
-- `SOP_ROOT_PASSWORD`: Optional. Sets the admin password for protected operations (like schema updates). Overrides the `root_password` in `config.json`.
+- `SOP_ROOT_PASSWORD`: Optional legacy compatibility value for admin override flows; the Phase 1 login/auth facade now prefers the configured root user from `Config.Users`.
+
+### Phase 1 Auth Facade (V1)
+
+The current V1 auth path is intentionally small:
+
+- The setup wizard creates the initial root user in `Config.Users`.
+- The browser/login flow calls `POST /api/auth/login` with JSON or `application/x-www-form-urlencoded` credentials.
+- The login endpoint returns a bearer token (`access_token`) together with the authenticated user role.
+- Protected calls should send `Authorization: Bearer <token>`.
+- Session tokens expire after `session_token_ttl_minutes` (default: 60 minutes). This gives the system a simple renewal window for resumed work.
+- The token facade is intentionally abstract so a future encrypted, time-aware token format or a B-tree-backed session store can replace the current in-memory implementation without changing the API shape.
+
+This keeps the first release easy to reason about while still allowing Copilot sessions to resume with the same authenticated context.
 
 ## User Guide
 

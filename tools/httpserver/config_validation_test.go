@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,8 +10,115 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/sharedcode/sop"
 )
+
+func TestHandleSaveConfig_PersistsRootUserForLogin(t *testing.T) {
+	oldConfig := config
+	defer func() { config = oldConfig }()
+
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.json")
+	config = Config{}
+	config.ConfigFile = configFile
+
+	payload := map[string]interface{}{
+		"registry_path": filepath.Join(tmpDir, "system"),
+		"port":          8080,
+		"root_password": "secret123",
+		"system_options": map[string]interface{}{
+			"stores_folders": []string{},
+			"type":           0,
+		},
+	}
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/config/save", bytes.NewBuffer(body))
+	w := httptest.NewRecorder()
+
+	handleSaveConfig(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("handleSaveConfig() status = %d, body=%s", w.Code, w.Body.String())
+	}
+
+	config = Config{}
+	if err := loadConfig(configFile); err != nil {
+		t.Fatalf("loadConfig() error = %v", err)
+	}
+
+	ok, user, err := config.Authenticate("root", "secret123")
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+	if !ok || user == nil || user.Username != "root" {
+		t.Fatalf("Authenticate() = ok=%v user=%v", ok, user)
+	}
+}
+
+func TestHandleSaveConfig_AllowsImmediateSessionCreation(t *testing.T) {
+	withIsolatedSessionStore(t)
+	oldConfig := config
+	oldFacade := tokenFacade
+	defer func() {
+		config = oldConfig
+		tokenFacade = oldFacade
+	}()
+
+	tmpDir := t.TempDir()
+	configFile := filepath.Join(tmpDir, "config.json")
+	config = Config{SystemDB: config.SystemDB}
+	config.ConfigFile = configFile
+	tokenFacade = nil
+	tokenFacadeOnce = sync.Once{}
+
+	payload := map[string]interface{}{
+		"registry_path": filepath.Join(tmpDir, "system"),
+		"port":          8080,
+		"root_password": "secret123",
+		"system_options": map[string]interface{}{
+			"stores_folders": []string{},
+			"type":           0,
+		},
+	}
+
+	body, _ := json.Marshal(payload)
+	req := httptest.NewRequest(http.MethodPost, "/api/config/save", bytes.NewBuffer(body))
+	w := httptest.NewRecorder()
+
+	handleSaveConfig(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("handleSaveConfig() status = %d, body=%s", w.Code, w.Body.String())
+	}
+
+	loginBody := bytes.NewBufferString(`{"username":"root","password":"secret123"}`)
+	loginReq := httptest.NewRequest(http.MethodPost, "/api/auth/login", loginBody)
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginW := httptest.NewRecorder()
+
+	handleLogin(loginW, loginReq)
+	if loginW.Code != http.StatusOK {
+		_, _, sessionErr := currentTokenFacade().CreateSession(context.Background(), "root", sop.RoleAdmin)
+		if sessionErr != nil {
+			t.Fatalf("handleLogin() status = %d, body=%s, CreateSession() error=%v", loginW.Code, loginW.Body.String(), sessionErr)
+		}
+		t.Fatalf("handleLogin() status = %d, body=%s", loginW.Code, loginW.Body.String())
+	}
+}
+
+func TestValidateSetupWizardRootPassword(t *testing.T) {
+	if err := validateSetupWizardRootPassword(""); err == nil {
+		t.Fatal("expected blank root password to be rejected")
+	}
+	if err := validateSetupWizardRootPassword("   "); err == nil {
+		t.Fatal("expected whitespace-only root password to be rejected")
+	}
+	if err := validateSetupWizardRootPassword("secret123"); err != nil {
+		t.Fatalf("expected non-empty root password to pass, got %v", err)
+	}
+}
 
 func TestHandleSaveConfig_DeduplicatesPaths(t *testing.T) {
 	// Restore config state after test
@@ -32,6 +140,7 @@ func TestHandleSaveConfig_DeduplicatesPaths(t *testing.T) {
 	payload := map[string]interface{}{
 		"registry_path": regPath,
 		"port":          8080,
+		"root_password": "secret123",
 		"system_options": map[string]interface{}{
 			"stores_folders": []string{storePath},
 			"type":           0,
@@ -84,6 +193,7 @@ func TestHandleSaveConfig_AllowsUniqueECPaths(t *testing.T) {
 	payload := map[string]interface{}{
 		"registry_path": regPath,
 		"port":          8080,
+		"root_password": "secret123",
 		"system_options": map[string]interface{}{
 			"stores_folders": []string{},
 			"type":           0,
@@ -145,6 +255,7 @@ func TestHandleSaveConfig_ErasureIsolation(t *testing.T) {
 		payload := map[string]interface{}{
 			"registry_path": filepath.Join(tmpDir, "system_dup_global"),
 			"port":          8080,
+			"root_password": "secret123",
 			"system_options": map[string]interface{}{
 				"stores_folders": []string{filepath.Join(tmpDir, "stores")},
 				"type":           0, // Standalone
@@ -170,6 +281,7 @@ func TestHandleSaveConfig_ErasureIsolation(t *testing.T) {
 		payload := map[string]interface{}{
 			"registry_path": filepath.Join(tmpDir, "system_mismatch"),
 			"port":          8080,
+			"root_password": "secret123",
 			"system_options": map[string]interface{}{
 				"stores_folders": []string{filepath.Join(tmpDir, "stores")},
 				"type":           0, // Standalone
@@ -195,6 +307,7 @@ func TestHandleSaveConfig_ErasureIsolation(t *testing.T) {
 		payload := map[string]interface{}{
 			"registry_path": filepath.Join(tmpDir, "system_dup_store"),
 			"port":          8080,
+			"root_password": "secret123",
 			"system_options": map[string]interface{}{
 				"stores_folders": []string{filepath.Join(tmpDir, "stores")},
 				"type":           0, // Standalone
@@ -224,6 +337,7 @@ func TestHandleSaveConfig_ErasureIsolation(t *testing.T) {
 		payload := map[string]interface{}{
 			"registry_path": filepath.Join(tmpDir, "system_valid"),
 			"port":          8080,
+			"root_password": "secret123",
 			"system_options": map[string]interface{}{
 				"stores_folders": []string{filepath.Join(tmpDir, "stores")},
 				"type":           0, // Standalone

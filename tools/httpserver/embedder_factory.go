@@ -19,10 +19,8 @@ type embedderSettings struct {
 
 func resolveEmbedderSettings(r *http.Request) embedderSettings {
 	settings := embedderSettings{
-		Provider: firstNonEmpty(config.EmbedderProvider, "local"),
-		APIKey:   config.EmbedderAPIKey,
-		URL:      config.EmbedderURL,
-		Model:    firstNonEmpty(config.EmbedderModel, "kelindar"),
+		Provider: "local",
+		Model:    "kelindar",
 	}
 
 	if r != nil {
@@ -78,9 +76,6 @@ func newConfiguredEmbedder(settings embedderSettings) (ai.Embeddings, error) {
 	switch settings.Provider {
 	case "gemini":
 		apiKey := settings.APIKey
-		if apiKey == "" {
-			apiKey = config.LLMApiKey
-		}
 		model := settings.Model
 		if model == "" {
 			model = "gemini-embedding-2"
@@ -88,12 +83,6 @@ func newConfiguredEmbedder(settings embedderSettings) (ai.Embeddings, error) {
 		return embed.NewGemini(apiKey, model), nil
 	case "openai":
 		apiKey := settings.APIKey
-		if apiKey == "" {
-			apiKey = config.EmbedderAPIKey
-		}
-		if apiKey == "" {
-			apiKey = config.LLMApiKey
-		}
 		model := settings.Model
 		if model == "" {
 			model = "text-embedding-3-small"
@@ -101,9 +90,6 @@ func newConfiguredEmbedder(settings embedderSettings) (ai.Embeddings, error) {
 		return embed.NewOpenAI(apiKey, model, settings.URL), nil
 	case "ollama":
 		url := settings.URL
-		if url == "" {
-			url = config.OllamaEmbedderURL
-		}
 		model := settings.Model
 		if model == "" {
 			model = "nomic-embed-text"
