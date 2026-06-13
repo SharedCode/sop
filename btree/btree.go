@@ -60,6 +60,7 @@ func (btree *Btree[TK, TV]) inferSchemaOfFirst(item *Item[TK, TV]) {
 		btree.StoreInfo.Schema = result.Schema
 		btree.StoreInfo.KeyFields = result.KeyFields
 		btree.StoreInfo.ValueFields = result.ValueFields
+		btree.StoreInfo.NeedsMetaDataSave = true
 	}
 }
 

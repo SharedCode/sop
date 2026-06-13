@@ -70,8 +70,8 @@ func Test_Transaction_StoreInfo_Deltas(t *testing.T) {
 		getStoreInfo:   func() *sop.StoreInfo { return si },
 	}}}
 
-	cs := tx.getCommitStoresInfo()
-	if len(cs) != 1 || cs[0].Name != si.Name || cs[0].CountDelta != (si.Count-nr.count) {
+	cs, modified := tx.getCommitStoresInfo()
+	if !modified || len(cs) != 1 || cs[0].Name != si.Name || cs[0].CountDelta != (si.Count-nr.count) {
 		t.Fatalf("getCommitStoresInfo mismatch: %+v", cs)
 	}
 

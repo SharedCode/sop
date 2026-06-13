@@ -121,8 +121,8 @@ func Test_Transaction_StoresInfo_Deltas(t *testing.T) {
 	be2 := btreeBackend{getStoreInfo: func() *sop.StoreInfo { return s2 }, nodeRepository: &nodeRepositoryBackend{count: 30}}
 	tx := &Transaction{btreesBackend: []btreeBackend{be1, be2}}
 
-	cs := tx.getCommitStoresInfo()
-	if len(cs) != 2 || cs[0].CountDelta != (10-7) || cs[1].CountDelta != (20-30) {
+	cs, modified := tx.getCommitStoresInfo()
+	if !modified || len(cs) != 2 || cs[0].CountDelta != (10-7) || cs[1].CountDelta != (20-30) {
 		t.Fatalf("unexpected commit deltas: %+v", cs)
 	}
 	rs := tx.getRollbackStoresInfo()
@@ -249,8 +249,8 @@ func Test_CommitAndRollbackStoresInfo_Paths(t *testing.T) {
 	}}
 
 	// getCommitStoresInfo should compute CountDelta = 100 - 90 = 10 and set Timestamp
-	cs := tx.getCommitStoresInfo()
-	if len(cs) != 1 || cs[0].Name != "s1" || cs[0].CountDelta != 10 {
+	cs, modified := tx.getCommitStoresInfo()
+	if !modified || len(cs) != 1 || cs[0].Name != "s1" || cs[0].CountDelta != 10 {
 		t.Fatalf("unexpected commit stores info: %+v", cs)
 	}
 	if cs[0].Timestamp == 0 { // basic sanity; exact value not asserted beyond non-zero

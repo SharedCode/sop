@@ -32,6 +32,11 @@
     }
 
     function saveNewStore() {
+        const saveBtn = document.querySelector('#add-store-modal .modal-footer .btn-success');
+        if (!window.beginStoreAction || !window.beginStoreAction(saveBtn, 'Creating...')) {
+            return;
+        }
+
         const name = document.getElementById('new-store-name').value.trim();
         const type = document.getElementById('new-store-key-type').value;
         const desc = document.getElementById('new-store-description').value.trim();
@@ -82,17 +87,16 @@
         let seedValue = null;
         
         if (type === 'map') {
-            // Build from form
-            const rows = document.querySelectorAll('.seed-key-field-row');
+            ensureMapKeySeedRow();
+            // Build from the map-key field rows directly so the sample key value is editable in place.
+            const rows = document.querySelectorAll('.key-field-row');
             if (rows.length > 0) {
                 seedKey = {};
                 rows.forEach(row => {
-                    const name = row.getAttribute('data-name') || row.getAttribute('data-field');
-                    const valStr = row.querySelector('.seed-key-field-value').value;
-                    
-                    // Find type definition
-                    const typeDefRow = Array.from(document.querySelectorAll('.key-field-row')).find(r => r.querySelector('.key-field-name').value.trim() === name);
-                    const fieldType = typeDefRow ? typeDefRow.querySelector('.key-field-type').value : 'string';
+                    const name = row.querySelector('.key-field-name').value.trim();
+                    if (!name) return;
+                    const valStr = row.querySelector('.key-field-value').value;
+                    const fieldType = row.querySelector('.key-field-type').value;
                     
                     let val = valStr;
                     if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(fieldType)) {
@@ -265,16 +269,21 @@
             seed_value: seedValue
         };
 
-        apiCall('/api/store/add', 'POST', payload)
-        .then(data => {
+        try {
+            const data = apiCallSync('/api/store/add', 'POST', payload);
             if (data.status === 'ok') {
                 closeAddStoreModal();
-                // Refresh store list and select the new store
                 selectDatabase(currentDatabase, true, name);
             } else {
                 showAlert("Error: " + (data.error || "Unknown error"));
             }
-        });
+        } catch (err) {
+            console.error(err);
+        } finally {
+            if (window.endStoreAction) {
+                window.endStoreAction(saveBtn);
+            }
+        }
     }
 
     // --- CEL Editing Logic ---

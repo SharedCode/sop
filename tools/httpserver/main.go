@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io"
 	log "log/slog"
 	"net/http"
 	"os"
@@ -195,6 +196,19 @@ func init() {
 				return false
 			}
 			return true
+		},
+	})
+
+	sop.RegisterAssetRBAC(sop.AssetBlueprint{
+		AssetType:   "store",
+		Description: "Store represents a schema-backed data collection in the current database",
+		Endpoints:   []string{string(sop.EndpointStoresList)},
+		Actions:     []sop.Action{sop.ActionRead, sop.ActionWrite, sop.ActionDelete},
+		Evaluator: func(ctx context.Context, entCtx sop.EntitlementContext, action sop.Action) bool {
+			if entCtx.IsSystemDB && (action == sop.ActionWrite || action == sop.ActionDelete) {
+				return false
+			}
+			return sop.Authorize(ctx, sop.ResourceAccess{Visibility: sop.VisibilityPublic}, action)
 		},
 	})
 }
@@ -1400,17 +1414,20 @@ func handleGetStoreInfo(w http.ResponseWriter, r *http.Request) {
 	si := store.GetStoreInfo()
 
 	// Prepare response
+	dataSize := si.ValueDataSize()
+
 	response := map[string]any{
-		"name":           si.Name,
-		"description":    si.Description,
-		"count":          si.Count,
-		"isPrimitiveKey": si.IsPrimitiveKey,
-		"celExpression":  si.CELexpression,
-		"slotLength":     si.SlotLength,
-		"isUnique":       si.IsUnique,
-		"isValueInNode":  si.IsValueDataInNodeSegment,
-		// isValueActivelyPersisted is used by the UI to determine if the Data Size is "Big".
+		"name":                     si.Name,
+		"description":              si.Description,
+		"count":                    si.Count,
+		"isPrimitiveKey":           si.IsPrimitiveKey,
+		"celExpression":            si.CELexpression,
+		"slotLength":               si.SlotLength,
+		"isUnique":                 si.IsUnique,
+		"dataSize":                 dataSize,
+		"isValueInNode":            si.IsValueDataInNodeSegment,
 		"isValueActivelyPersisted": si.IsValueDataActivelyPersisted,
+		"isValueGloballyCached":    si.IsValueDataGloballyCached,
 		"cacheDuration":            int(si.CacheConfig.ValueDataCacheDuration.Minutes()),
 		"relations":                si.Relations,
 	}
@@ -1593,10 +1610,27 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 	si.Description = req.Description
 	si.Relations = req.Relations
 
+	// Normalize the requested structural values so stale/default UI fields do not
+	// get misread as real structural changes on populated stores.
+	requestedSlotLength := req.SlotLength
+	requestedIsUnique := req.IsUnique
+	requestedDataSize := sop.ValueDataSize(req.DataSize)
+	if si.Count > 0 {
+		if requestedSlotLength <= 0 {
+			requestedSlotLength = si.SlotLength
+		}
+		if !requestedIsUnique && si.IsUnique {
+			requestedIsUnique = si.IsUnique
+		}
+		if req.DataSize == 0 && si.ValueDataSize() != sop.SmallData {
+			requestedDataSize = si.ValueDataSize()
+		}
+	}
+
 	// Compute StoreOptions based on DataSize
 	// 0=Small, 1=Medium, 2=Big
-	dataSize := sop.ValueDataSize(req.DataSize)
-	computedOpts := sop.ConfigureStore(req.StoreName, req.IsUnique, req.SlotLength, req.Description, dataSize, "")
+	computedOpts := sop.ConfigureStore(req.StoreName, requestedIsUnique, requestedSlotLength, req.Description, requestedDataSize, "")
+	dataSize := requestedDataSize
 
 	// Update Cache Config
 	// IMPORTANT:
@@ -1627,16 +1661,12 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 	var structuralChange bool
 	var shouldAddSeed bool
 
-	// Check for Structural Changes (SlotLength, IsUnique, ValueInNode)
-	slotLengthChanged := req.SlotLength > 0 && req.SlotLength != si.SlotLength
-	isUniqueChanged := req.IsUnique != si.IsUnique
+	// Check for structural changes using normalized, current store values.
+	slotLengthChanged := requestedSlotLength > 0 && requestedSlotLength != si.SlotLength
+	isUniqueChanged := requestedIsUnique != si.IsUnique
+	dataSizeChanged := requestedDataSize != si.ValueDataSize()
 
-	// Compare computed options with current SI
-	isValueInNodeChanged := computedOpts.IsValueDataInNodeSegment != si.IsValueDataInNodeSegment
-	isActivelyPersistedChanged := computedOpts.IsValueDataActivelyPersisted != si.IsValueDataActivelyPersisted
-	isGloballyCachedChanged := computedOpts.IsValueDataGloballyCached != si.IsValueDataGloballyCached
-
-	if slotLengthChanged || isUniqueChanged || isValueInNodeChanged || isActivelyPersistedChanged || isGloballyCachedChanged {
+	if slotLengthChanged || isUniqueChanged || dataSizeChanged {
 		if si.Count > 0 {
 			http.Error(w, "Structural fields (SlotLength, IsUnique, Data Size) cannot be changed for non-empty stores.", http.StatusBadRequest)
 			return
@@ -1804,6 +1834,8 @@ func handleUpdateStoreInfo(w http.ResponseWriter, r *http.Request) {
 	// Update StoreInfo via StoreRepository
 	t := trans.GetPhasedTransaction()
 	if ct, ok := t.(*common.Transaction); ok {
+		// Tell engine this store needs meta data save.
+		si.NeedsMetaDataSave = true
 		if _, err := ct.StoreRepository.Update(ctx, []sop.StoreInfo{si}); err != nil {
 			http.Error(w, "Failed to update store info: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -2688,42 +2720,68 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	seedKeyToUse := req.SeedKey
+	if req.SeedValue != nil && seedKeyToUse == nil {
+		switch req.KeyType {
+		case "string":
+			seedKeyToUse = ""
+		case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "rune":
+			seedKeyToUse = 0
+		case "float32", "float64":
+			seedKeyToUse = 0.0
+		case "bool":
+			seedKeyToUse = false
+		case "uuid":
+			seedKeyToUse = sop.UUID{}
+		case "map":
+			seedKeyToUse = map[string]any{}
+		case "array":
+			seedKeyToUse = []any{}
+		default:
+			seedKeyToUse = ""
+		}
+	}
+
 	var storeErr error
 	switch req.KeyType {
 	case "string":
 		var s btree.BtreeInterface[string, any]
 		s, storeErr = database.NewBtree[string, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
-			if kStr, ok := req.SeedKey.(string); ok {
+		if storeErr == nil && seedKeyToUse != nil && req.SeedValue != nil {
+			if kStr, ok := seedKeyToUse.(string); ok {
 				_, storeErr = s.Add(ctx, kStr, finalSeedValue)
 			}
 		}
 	case "int":
 		var s btree.BtreeInterface[int, any]
 		s, storeErr = database.NewBtree[int, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
-			if f, ok := req.SeedKey.(float64); ok {
+		if storeErr == nil && seedKeyToUse != nil && req.SeedValue != nil {
+			if f, ok := seedKeyToUse.(float64); ok {
 				_, storeErr = s.Add(ctx, int(f), finalSeedValue)
+			} else if i, ok := seedKeyToUse.(int); ok {
+				_, storeErr = s.Add(ctx, i, finalSeedValue)
 			}
 		}
 	case "uuid":
 		var s btree.BtreeInterface[sop.UUID, any]
 		s, storeErr = database.NewBtree[sop.UUID, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
-			if str, ok := req.SeedKey.(string); ok {
+		if storeErr == nil && seedKeyToUse != nil && req.SeedValue != nil {
+			if str, ok := seedKeyToUse.(string); ok {
 				if id, err2 := sop.ParseUUID(str); err2 == nil {
 					_, storeErr = s.Add(ctx, id, finalSeedValue)
 				} else {
 					storeErr = err2
 				}
+			} else if id, ok := seedKeyToUse.(sop.UUID); ok {
+				_, storeErr = s.Add(ctx, id, finalSeedValue)
 			}
 		}
 	case "map":
 		var s *jsondb.JsonDBMapKey
 		s, storeErr = jsondb.NewJsonBtreeMapKey(ctx, dbOpts, storeOpts, trans, req.IndexSpec)
-		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
+		if storeErr == nil && seedKeyToUse != nil && req.SeedValue != nil {
 			// JsonDBMapKey expects []jsondb.Item[map[string]any, any] for Add
-			if kMap, ok := req.SeedKey.(map[string]any); ok {
+			if kMap, ok := seedKeyToUse.(map[string]any); ok {
 				item := jsondb.Item[map[string]any, any]{
 					Key:   kMap,
 					Value: &finalSeedValue,
@@ -2734,32 +2792,34 @@ func handleAddStore(w http.ResponseWriter, r *http.Request) {
 	case "array":
 		var s btree.BtreeInterface[[]any, any]
 		s, storeErr = database.NewBtree[[]any, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
-			if kArr, ok := req.SeedKey.([]any); ok {
+		if storeErr == nil && seedKeyToUse != nil && req.SeedValue != nil {
+			if kArr, ok := seedKeyToUse.([]any); ok {
 				_, storeErr = s.Add(ctx, kArr, finalSeedValue)
 			}
 		}
 	case "int64":
 		var s btree.BtreeInterface[int64, any]
 		s, storeErr = database.NewBtree[int64, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
-			if f, ok := req.SeedKey.(float64); ok {
+		if storeErr == nil && seedKeyToUse != nil && req.SeedValue != nil {
+			if f, ok := seedKeyToUse.(float64); ok {
 				_, storeErr = s.Add(ctx, int64(f), finalSeedValue)
+			} else if i64, ok := seedKeyToUse.(int64); ok {
+				_, storeErr = s.Add(ctx, i64, finalSeedValue)
 			}
 		}
 	case "float64":
 		var s btree.BtreeInterface[float64, any]
 		s, storeErr = database.NewBtree[float64, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
-			if f, ok := req.SeedKey.(float64); ok {
+		if storeErr == nil && seedKeyToUse != nil && req.SeedValue != nil {
+			if f, ok := seedKeyToUse.(float64); ok {
 				_, storeErr = s.Add(ctx, f, finalSeedValue)
 			}
 		}
 	case "bool":
 		var s btree.BtreeInterface[bool, any]
 		s, storeErr = database.NewBtree[bool, any](ctx, dbOpts, req.StoreName, trans, nil, storeOpts)
-		if storeErr == nil && req.SeedKey != nil && req.SeedValue != nil {
-			if b, ok := req.SeedKey.(bool); ok {
+		if storeErr == nil && seedKeyToUse != nil && req.SeedValue != nil {
+			if b, ok := seedKeyToUse.(bool); ok {
 				_, storeErr = s.Add(ctx, b, finalSeedValue)
 			}
 		}
@@ -3319,7 +3379,7 @@ func handleValidateAdminToken(w http.ResponseWriter, r *http.Request) {
 		AdminUsername string `json:"adminUsername"`
 		AdminPassword string `json:"adminPassword"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
 		http.Error(w, "Invalid JSON body", http.StatusBadRequest)
 		return
 	}
@@ -3333,7 +3393,7 @@ func handleValidateAdminToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !config.IsAdminOverride(r.Context(), req.AdminUsername, req.AdminPassword, req.AdminToken) && !isAdminRoleInContext(r.Context()) {
-		w.WriteHeader(http.StatusUnauthorized)
+		http.Error(w, "Only admins are allowed", http.StatusForbidden)
 		return
 	}
 

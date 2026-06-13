@@ -188,8 +188,8 @@ func Test_Transaction_GetCommitAndRollbackStoresInfo(t *testing.T) {
 	be2 := btreeBackend{getStoreInfo: func() *sop.StoreInfo { return s2 }, nodeRepository: &nodeRepositoryBackend{count: 30}}
 	tx := &Transaction{btreesBackend: []btreeBackend{be1, be2}}
 
-	cs := tx.getCommitStoresInfo()
-	if len(cs) != 2 || cs[0].CountDelta != (10-7) || cs[1].CountDelta != (20-30) {
+	cs, modified := tx.getCommitStoresInfo()
+	if !modified || len(cs) != 2 || cs[0].CountDelta != (10-7) || cs[1].CountDelta != (20-30) {
 		t.Fatalf("unexpected commit deltas: %+v", cs)
 	}
 	rs := tx.getRollbackStoresInfo()

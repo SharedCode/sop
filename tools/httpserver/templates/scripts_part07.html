@@ -478,12 +478,16 @@
                      
                      const indexRows = document.querySelectorAll('.index-field-row select, .index-field-row button');
                      indexRows.forEach(el => el.disabled = false);
-                     
-                     const addKeyBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
-                     if (addKeyBtn) addKeyBtn.disabled = false;
-                     
-                     const addIndexBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
-                     if (addIndexBtn) addIndexBtn.disabled = false;
+
+                     if (typeof refreshAddFieldButtons === 'function') {
+                         refreshAddFieldButtons();
+                     } else {
+                         const addKeyBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
+                         if (addKeyBtn) addKeyBtn.disabled = false;
+                         
+                         const addIndexBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
+                         if (addIndexBtn) addIndexBtn.disabled = false;
+                     }
                  }
             }
     
@@ -564,10 +568,13 @@
             // Show Unlock Button for non-empty stores to allow Admin override for Index/CEL
             const unlockBtn = document.getElementById('btn-unlock-admin');
             if (unlockBtn) {
+                const canUnlock = canUnlockStoreAdmin();
                 if (isReadOnlyMode) {
                     unlockBtn.style.display = 'none';
                 } else if (!isEmptyStore && !currentStoreInfo.isPrimitiveKey) {
                     unlockBtn.style.display = 'inline-block';
+                    unlockBtn.disabled = !canUnlock;
+                    unlockBtn.title = canUnlock ? 'Unlock store metadata' : 'Only admins are allowed';
                 } else {
                     unlockBtn.style.display = 'none';
                 }
@@ -586,8 +593,20 @@
             if (footer) {
                 const saveBtn = footer.querySelector('.btn-success');
                 if (saveBtn) {
+                    saveBtn.type = 'button';
+                    saveBtn.removeAttribute('onclick');
                     saveBtn.textContent = 'Update';
-                    saveBtn.onclick = updateStore;
+                    saveBtn.dataset.storeAction = 'update';
+                    saveBtn.onclick = function (evt) {
+                        evt.preventDefault();
+                        evt.stopPropagation();
+                        console.log('[details-pane] Update button clicked', {
+                            store: currentStoreInfo?.name || nameInput?.value || 'unknown',
+                            database: currentDatabase,
+                            mode: isReadOnlyMode ? 'read-only' : 'edit'
+                        });
+                        return updateStore();
+                    };
                 }
             }
             
@@ -670,8 +689,17 @@
         }
     }
 
+    function canUnlockStoreAdmin() {
+        const rbac = (window.CONTEXT_RBAC && window.CONTEXT_RBAC.store) || {};
+        return !!rbac.can_edit;
+    }
+
     function unlockAdminFields() {
         try {
+            if (!canUnlockStoreAdmin()) {
+                showAlert("Only admins are allowed.");
+                return;
+            }
             console.log("unlockAdminFields called");
             apiCall('/api/admin/validate', 'POST')
             .then(() => {

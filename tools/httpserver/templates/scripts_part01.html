@@ -175,6 +175,54 @@
         return response;
     }
 
+    function apiCallSync(endpoint, method = 'GET', body = null, overrideHeaders = null) {
+        try {
+            const token = getStoredSessionToken();
+            const h = { 'Content-Type': 'application/json' };
+            if (token) {
+                h.Authorization = `Bearer ${token}`;
+            }
+            applyAIConfigHeaders(h, getStoredAIConfig());
+
+            if (overrideHeaders) {
+                for (const [k, v] of Object.entries(overrideHeaders)) {
+                    h[k] = v;
+                }
+            }
+
+            const xhr = new XMLHttpRequest();
+            xhr.open(method, endpoint, false);
+            xhr.withCredentials = true;
+            Object.keys(h).forEach(k => xhr.setRequestHeader(k, h[k]));
+            xhr.send(body ? JSON.stringify(body) : null);
+
+            if (xhr.status === 401 || xhr.status === 403) {
+                clearStoredSessionToken();
+                clearCachedAppState();
+                if (window.location.pathname !== '/login') {
+                    window.location.assign('/login');
+                }
+            }
+
+            if (xhr.status < 200 || xhr.status >= 300) {
+                const text = xhr.responseText || xhr.statusText || String(xhr.status);
+                throw new Error(`API Error (${xhr.status}): ${text}`);
+            }
+
+            const text = xhr.responseText || '';
+            if (!text) return {};
+            const json = JSON.parse(text);
+            if (json.error) {
+                throw new Error(json.error);
+            }
+            return json;
+        } catch (error) {
+            console.error(`[API Error] ${method} ${endpoint}:`, error);
+            showAlert("Action failed: " + error.message);
+            throw error;
+        }
+    }
+
     async function apiCall(endpoint, method = 'GET', body = null, overrideHeaders = null) {
         try {
             const h = { 'Content-Type': 'application/json' };

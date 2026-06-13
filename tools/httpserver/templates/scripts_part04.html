@@ -1,5 +1,22 @@
 {{define "scripts_part04"}}
 <script>
+    function markItemDirty() {
+        const btn = document.getElementById('btn-save');
+        if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.title = 'Save changes to the item';
+        }
+    }
+
+    function markItemClean() {
+        const btn = document.getElementById('btn-save');
+        if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+        }
+    }
+
     function saveItem() {
         if (!currentStore || currentItemKey === null) return;
 
