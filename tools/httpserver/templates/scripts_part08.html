@@ -15,7 +15,39 @@
         return false;
     }
 
+    let storeActionInFlight = false;
+
+    function beginStoreAction(button, busyLabel) {
+        if (storeActionInFlight) return false;
+        storeActionInFlight = true;
+        if (button) {
+            button.dataset.originalText = button.textContent;
+            button.textContent = busyLabel;
+            button.disabled = true;
+        }
+        return true;
+    }
+
+    function endStoreAction(button) {
+        storeActionInFlight = false;
+        if (button) {
+            button.disabled = false;
+            button.textContent = button.dataset.originalText || button.textContent;
+        }
+    }
+
+    window.beginStoreAction = beginStoreAction;
+    window.endStoreAction = endStoreAction;
+
     function updateStore() {
+        const saveBtn = document.querySelector('#add-store-modal .modal-footer .btn-success');
+        console.log('[updateStore] start', {
+            store: document.getElementById('new-store-name')?.value || '',
+            database: currentDatabase,
+            buttonLabel: saveBtn?.textContent || ''
+        });
+        if (!beginStoreAction(saveBtn, 'Updating...')) return;
+
         const name = document.getElementById('new-store-name').value.trim();
         const desc = document.getElementById('new-store-description').value.trim();
         const celExpression = document.getElementById('cel-expression-value').value;
@@ -26,11 +58,28 @@
             indexSpec = generateIndexSpecJSON();
         }
 
-        let slotLength = parseInt(document.getElementById('new-store-slot-length').value);
-        if (isNaN(slotLength)) slotLength = 2000;
-        
-        const isUnique = document.getElementById('new-store-is-unique').checked;
-        const dataSize = parseInt(document.getElementById('new-store-data-size').value);
+        const currentSlotLength = Number.isFinite(currentStoreInfo?.slotLength) ? currentStoreInfo.slotLength : 2000;
+        let slotLength = parseInt(document.getElementById('new-store-slot-length').value, 10);
+        if (!Number.isFinite(slotLength) || slotLength <= 0) {
+            slotLength = currentSlotLength;
+        }
+
+        const currentIsUnique = typeof currentStoreInfo?.isUnique === 'boolean' ? currentStoreInfo.isUnique : true;
+        let isUnique = document.getElementById('new-store-is-unique').checked;
+        if (typeof isUnique !== 'boolean') {
+            isUnique = currentIsUnique;
+        }
+
+        const currentDataSize = (() => {
+            if (Number.isFinite(currentStoreInfo?.dataSize)) return currentStoreInfo.dataSize;
+            if (currentStoreInfo?.isValueActivelyPersisted) return 2;
+            if (currentStoreInfo?.isValueInNode) return 0;
+            return 1;
+        })();
+        let dataSize = parseInt(document.getElementById('new-store-data-size').value, 10);
+        if (!Number.isFinite(dataSize)) {
+            dataSize = currentDataSize;
+        }
         
         let cacheDuration = parseInt(document.getElementById('new-store-cache-duration').value);
         if (isNaN(cacheDuration)) cacheDuration = 0;
@@ -47,20 +96,27 @@
         let seedValue = null;
         const seedContainer = document.getElementById('seed-data-container');
         
-        // Collect Relations
-        const relations = getRelationshipsFromUI();
+        // Collect Relations. Prefer the live UI rows, but fall back to the current
+        // store metadata when the select elements have not populated yet.
+        const uiRelations = getRelationshipsFromUI();
+        const fallbackRelations = Array.isArray(currentStoreInfo?.relations) ? currentStoreInfo.relations : [];
+        const hasUsableUiRelations = uiRelations.length > 0 && uiRelations.every(rel =>
+            rel?.target_store && Array.isArray(rel.target_fields) && rel.target_fields.length > 0
+        );
+        const relations = hasUsableUiRelations ? uiRelations : fallbackRelations;
 
         if (seedContainer.style.display !== 'none') {
              // Reuse logic from saveNewStore (simplified duplication for now)
              if (type === 'map') {
-                const rows = document.querySelectorAll('.seed-key-field-row');
+                ensureMapKeySeedRow();
+                const rows = document.querySelectorAll('.key-field-row');
                 if (rows.length > 0) {
                     seedKey = {};
                     rows.forEach(row => {
-                        const name = row.getAttribute('data-name') || row.getAttribute('data-field');
-                        const valStr = row.querySelector('.seed-key-field-value').value;
-                        const typeDefRow = Array.from(document.querySelectorAll('.key-field-row')).find(r => r.querySelector('.key-field-name').value.trim() === name);
-                        const fieldType = typeDefRow ? typeDefRow.querySelector('.key-field-type').value : 'string';
+                        const name = row.querySelector('.key-field-name').value.trim();
+                        if (!name) return;
+                        const valStr = row.querySelector('.key-field-value').value;
+                        const fieldType = row.querySelector('.key-field-type').value;
                         let val = valStr;
                         if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(fieldType)) {
                             val = parseInt(valStr); if (isNaN(val)) val = 0;
@@ -115,25 +171,23 @@
             relations: relations
         };
 
-        apiCall('/api/store/update', 'POST', payload)
-        .catch(err => {
-            throw err;
-        })
-        .then(data => {
+        try {
+            console.log('[updateStore] sending payload', payload);
+            const data = apiCallSync('/api/store/update', 'POST', payload);
+            console.log('[updateStore] response', data);
             if (!data) return;
             closeAddStoreModal();
-            // Refresh store info
             selectDatabase(currentDatabase, true, name);
             if (data.warning) {
                 showAlert('Store updated successfully.\n\nWARNING: ' + data.warning);
             } else {
                 showAlert('Store updated successfully.');
             }
-        })
-        .catch(err => {
-            // Re-thrown error already alerted by apiCall recursively, but if user cancelled prompt:
+        } catch (err) {
             console.error(err);
-        });
+        } finally {
+            endStoreAction(saveBtn);
+        }
     }
 
     function showAddStore() {
@@ -173,9 +227,16 @@
         // Reset Button
         const footer = document.querySelector('#add-store-modal .modal-footer');
         const saveBtn = footer.querySelector('.btn-success');
-        saveBtn.textContent = 'Add';
-        saveBtn.onclick = saveNewStore;
-        saveBtn.disabled = false;
+        if (saveBtn) {
+            saveBtn.removeAttribute('onclick');
+            saveBtn.textContent = 'Add';
+            saveBtn.onclick = function (evt) {
+                evt.preventDefault();
+                evt.stopPropagation();
+                return saveNewStore();
+            };
+            saveBtn.disabled = false;
+        }
 
         // Reset Basic Fields
         document.getElementById('new-store-name').value = '';
@@ -238,11 +299,7 @@
         toggleIndexSpec();
         
         // Re-enable Add Buttons (in case they were disabled by Edit Store)
-        const addKeyBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
-        if (addKeyBtn) addKeyBtn.disabled = false;
-        
-        const addIndexBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
-        if (addIndexBtn) addIndexBtn.disabled = false;
+        refreshAddFieldButtons();
         
         // Hide Unlock Button
         const unlockBtn = document.getElementById('btn-unlock-admin');
@@ -258,6 +315,29 @@
         window.currentAdminCredentials = null;
         const unlockBtn = document.getElementById('btn-unlock-admin');
         if (unlockBtn) unlockBtn.style.display = 'none';
+    }
+
+    function refreshAddFieldButtons() {
+        const keyBtn = document.querySelector('#index-spec-container button[onclick*="addKeyFieldRow"]');
+        if (keyBtn) {
+            keyBtn.onclick = () => addKeyFieldRow();
+            keyBtn.disabled = false;
+            keyBtn.style.pointerEvents = 'auto';
+        }
+
+        const indexBtn = document.querySelector('#index-spec-container button[onclick*="addIndexFieldRow"]');
+        if (indexBtn) {
+            indexBtn.onclick = () => addIndexFieldRow();
+            indexBtn.disabled = false;
+            indexBtn.style.pointerEvents = 'auto';
+        }
+
+        const seedBtn = document.querySelector('#seed-value-builder button');
+        if (seedBtn && seedBtn.textContent.includes('Add Field')) {
+            seedBtn.onclick = () => addSeedValueFieldRow();
+            seedBtn.disabled = false;
+            seedBtn.style.pointerEvents = 'auto';
+        }
     }
 
     function addValueFieldRow(name = '', type = 'string', value = '') {
@@ -309,38 +389,80 @@
         const container = document.getElementById('index-spec-container');
         const celContainer = document.getElementById('new-store-cel-expression');
         
-        const simpleKeyInput = document.getElementById('new-store-seed-key');
-        const mapKeyContainer = document.getElementById('new-store-seed-key-map-container');
-
         if (type === 'map') {
             container.style.display = 'block';
             if (celContainer) celContainer.style.display = 'block';
-            simpleKeyInput.style.display = 'none';
-            mapKeyContainer.style.display = 'block';
 
             // Initialize with one row if empty
             if (document.getElementById('key-fields-list').children.length === 0) {
                 addKeyFieldRow();
             }
-            updateSeedKeyForm();
         } else {
             container.style.display = 'none';
             if (celContainer) celContainer.style.display = 'none';
-            simpleKeyInput.style.display = 'block';
-            mapKeyContainer.style.display = 'none';
         }
     }
 
+    function getDefaultFieldValue(fieldType) {
+        const numeric = ['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'];
+        const floating = ['float32', 'float64', 'decimal'];
+        const now = new Date();
+
+        if (fieldType === 'timestamp') return String(now.getTime());
+        if (fieldType === 'timestampz') return now.toISOString();
+        if (fieldType === 'date') return now.toISOString().slice(0, 10);
+        if (fieldType === 'datetime') return now.toISOString();
+        if (fieldType === 'time') return now.toTimeString().slice(0, 8);
+
+        if (numeric.includes(fieldType)) return '0';
+        if (floating.includes(fieldType)) return '0.0';
+        if (fieldType === 'bool') return 'false';
+        if (fieldType === 'blob') return '[]';
+        if (fieldType === 'map') return '{}';
+        if (fieldType === 'uuid' || fieldType === 'guid') return '00000000-0000-0000-0000-000000000000';
+        return '';
+    }
+
+    function ensureMapKeySeedRow() {
+        const rows = document.querySelectorAll('.key-field-row');
+        if (rows.length === 0) {
+            addKeyFieldRow('Key', 'string', getDefaultFieldValue('string'));
+            return true;
+        }
+
+        let hasNamedRow = false;
+        rows.forEach(row => {
+            const name = row.querySelector('.key-field-name')?.value.trim() || '';
+            if (name) hasNamedRow = true;
+        });
+
+        if (!hasNamedRow) {
+            const firstRow = rows[0];
+            const nameInput = firstRow.querySelector('.key-field-name');
+            if (nameInput && !nameInput.value.trim()) {
+                nameInput.value = 'Key';
+            }
+            const valueInput = firstRow.querySelector('.key-field-value');
+            if (valueInput && !valueInput.value.trim()) {
+                const fieldType = firstRow.querySelector('.key-field-type')?.value || 'string';
+                valueInput.value = getDefaultFieldValue(fieldType);
+            }
+        }
+
+        return true;
+    }
+
     // --- Map Key Builder Logic ---
-    function addKeyFieldRow(name = '', type = 'string') {
+    function addKeyFieldRow(name = '', type = 'string', value = '') {
         const container = document.getElementById('key-fields-list');
         const div = document.createElement('div');
         div.className = 'key-field-row';
         div.style.display = 'flex';
         div.style.gap = '5px';
+        const initialValue = (value !== undefined && value !== null && value !== '') ? value : getDefaultFieldValue(type);
         div.innerHTML = `
-            <input type="text" placeholder="Field Name" class="key-field-name" value="${window.escapeHTML(name)}" oninput="updateIndexDropdowns(); updateSeedKeyForm();" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
-            <select class="key-field-type" onchange="updateSeedKeyForm()" style="width: 100px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <input type="text" placeholder="Field Name" class="key-field-name" value="${window.escapeHTML(name)}" oninput="updateIndexDropdowns();" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <select class="key-field-type" onchange="const row = this.closest('.key-field-row'); const valueInput = row.querySelector('.key-field-value'); if (valueInput) valueInput.value = getDefaultFieldValue(this.value);" style="width: 100px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
                 <option value="string" ${type==='string'?'selected':''}>String</option>
                 <option value="int" ${type==='int'?'selected':''}>Int</option>
                 <option value="int8" ${type==='int8'?'selected':''}>Int8</option>
@@ -367,6 +489,7 @@
                 <option value="guid" ${type==='guid'?'selected':''}>UUID</option>
                 <option value="blob" ${type==='blob'?'selected':''}>Blob</option>
             </select>
+            <input type="text" placeholder="Value" class="key-field-value" value="${window.escapeHTML(initialValue)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
             <div style="display:flex; gap:0; align-items:center; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg);">
                 <button onclick="moveFieldRow(this, -1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px;" title="Move Up">↑</button>
                 <button onclick="moveFieldRow(this, 1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px; border-left: 1px solid var(--input-border);" title="Move Down">↓</button>
@@ -375,7 +498,6 @@
         `;
         container.appendChild(div);
         updateIndexDropdowns();
-        updateSeedKeyForm();
     }
 
     function moveFieldRow(btn, direction) {
@@ -393,7 +515,6 @@
         // Update dependent UI
         if (row.classList.contains('key-field-row')) {
             updateIndexDropdowns();
-            updateSeedKeyForm();
         }
     }
 
@@ -482,7 +603,7 @@
                      else type = 'float64';
                 } else if (t === 'boolean') type = 'bool';
                 
-                addKeyFieldRow(k, type);
+                addKeyFieldRow(k, type, val);
             });
             fieldsFound = true;
         }
@@ -513,11 +634,20 @@
         indexRows.forEach(el => el.disabled = true);
         
         // Disable Add buttons
-        const addKeyBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
-        if (addKeyBtn) addKeyBtn.disabled = true;
-        
-        const addIndexBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
-        if (addIndexBtn) addIndexBtn.disabled = true;
+        if (typeof refreshAddFieldButtons === 'function') {
+            const keyBtn = document.querySelector('#index-spec-container button[onclick*="addKeyFieldRow"]');
+            if (keyBtn) keyBtn.disabled = true;
+            const indexBtn = document.querySelector('#index-spec-container button[onclick*="addIndexFieldRow"]');
+            if (indexBtn) indexBtn.disabled = true;
+            const seedBtn = document.querySelector('#seed-value-builder button');
+            if (seedBtn && seedBtn.textContent.includes('Add Field')) seedBtn.disabled = true;
+        } else {
+            const addKeyBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
+            if (addKeyBtn) addKeyBtn.disabled = true;
+            
+            const addIndexBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
+            if (addIndexBtn) addIndexBtn.disabled = true;
+        }
     }
 
     function updateIndexDropdowns(targetSelect = null) {
@@ -723,9 +853,10 @@
         div.className = 'seed-value-field-row';
         div.style.display = 'flex';
         div.style.gap = '5px';
+        const initialValue = (value !== undefined && value !== null && value !== '') ? value : getDefaultFieldValue(type);
         div.innerHTML = `
             <input type="text" placeholder="Field Name" class="seed-field-name" value="${window.escapeHTML(name)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
-            <select class="seed-field-type" style="width: 80px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <select class="seed-field-type" onchange="const row = this.closest('.seed-value-field-row'); const valueInput = row.querySelector('.seed-field-value'); if (valueInput) valueInput.value = getDefaultFieldValue(this.value);" style="width: 80px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
                 <option value="string" ${type==='string'?'selected':''}>String</option>
                 <option value="int" ${type==='int'?'selected':''}>Int</option>
                 <option value="int8" ${type==='int8'?'selected':''}>Int8</option>
@@ -752,7 +883,7 @@
                 <option value="guid" ${type==='guid'?'selected':''}>UUID</option>
                 <option value="blob" ${type==='blob'?'selected':''}>Blob</option>
             </select>
-            <input type="text" placeholder="Value" class="seed-field-value" value="${window.escapeHTML(value)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
+            <input type="text" placeholder="Value" class="seed-field-value" value="${window.escapeHTML(initialValue)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
             <div style="display:flex; gap:0; align-items:center; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg);">
                 <button onclick="moveFieldRow(this, -1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px;" title="Move Up">↑</button>
                 <button onclick="moveFieldRow(this, 1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px; border-left: 1px solid var(--input-border);" title="Move Down">↓</button>
@@ -768,7 +899,9 @@
         // 1. Handle Non-Map Types (Simple Input)
         if (valType !== 'map') {
             const valStr = document.getElementById('new-store-seed-value-simple').value.trim();
-            if (!valStr) return null;
+            if (!valStr) {
+                return getDefaultFieldValue(valType);
+            }
             
             const isArray = document.getElementById('new-store-value-is-array').checked;
             if (isArray) {
@@ -827,10 +960,13 @@
             }
         } else {
             const rows = document.querySelectorAll('.seed-value-field-row');
-            if (rows.length === 0) return null;
+            if (rows.length === 0) {
+                addSeedValueFieldRow('value', 'string', getDefaultFieldValue('string'));
+            }
+            const freshRows = document.querySelectorAll('.seed-value-field-row');
             
             const obj = {};
-            rows.forEach(row => {
+            freshRows.forEach(row => {
                 const name = row.querySelector('.seed-field-name').value.trim();
                 const type = row.querySelector('.seed-field-type').value;
                 const valStr = row.querySelector('.seed-field-value').value;

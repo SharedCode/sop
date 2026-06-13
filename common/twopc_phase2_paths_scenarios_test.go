@@ -223,8 +223,8 @@ func Test_StoreInfo_Delta_Computations(t *testing.T) {
 	nr := &nodeRepositoryBackend{count: 7, storeInfo: si}
 	t2 := &Transaction{btreesBackend: []btreeBackend{{getStoreInfo: func() *sop.StoreInfo { return si }, nodeRepository: nr}}}
 
-	commits := t2.getCommitStoresInfo()
-	if len(commits) != 1 || commits[0].CountDelta != (si.Count-nr.count) {
+	commits, modified := t2.getCommitStoresInfo()
+	if !modified || len(commits) != 1 || commits[0].CountDelta != (si.Count-nr.count) {
 		t.Fatalf("commit CountDelta mismatch: %+v", commits)
 	}
 	rollbacks := t2.getRollbackStoresInfo()

@@ -578,7 +578,10 @@
         authFetch(`/api/stores?database=${encodeURIComponent(currentDatabase)}`)
             .then(res => res.json())
             .then(stores => {
-                availableStoresForRel = stores || [];
+                const storeList = Array.isArray(stores)
+                    ? stores
+                    : (Array.isArray(stores?.data) ? stores.data : []);
+                availableStoresForRel = storeList || [];
                 // Update any existing dropdowns
                 document.querySelectorAll('.rel-target-store').forEach(select => {
                     const currentVal = select.value;

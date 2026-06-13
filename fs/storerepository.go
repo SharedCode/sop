@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	log "log/slog"
@@ -25,6 +26,9 @@ type StoreRepository struct {
 }
 
 const (
+	fieldCount     = "count"
+	fieldTimestamp = "timestamp"
+
 	lockStoreListKey             = "infs_sr"
 	lockStoreListDuration        = time.Duration(10 * time.Minute)
 	storeListFilename            = "storelist.txt"
@@ -179,6 +183,34 @@ func (sr *StoreRepository) Add(ctx context.Context, stores ...sop.StoreInfo) err
 // Update merges the provided deltas into store metadata. To reduce deadlock chances it
 // sorts store names and locks them in order using TTL-based cache locks with retry.
 // On any failure mid-flight, an undo routine best-effort restores the affected entries.
+func patchJSONNumericField(data []byte, field string, value int64) ([]byte, error) {
+	key := []byte(`"` + field + `"`)
+	start := bytes.Index(data, key)
+	if start < 0 {
+		return nil, fmt.Errorf("field %q not found", field)
+	}
+	colon := bytes.IndexByte(data[start+len(key):], ':')
+	if colon < 0 {
+		return nil, fmt.Errorf("field %q missing ':' delimiter", field)
+	}
+	valueStart := start + len(key) + colon + 1
+	for valueStart < len(data) && (data[valueStart] == ' ' || data[valueStart] == '\t' || data[valueStart] == '\n' || data[valueStart] == '\r') {
+		valueStart++
+	}
+	valueEnd := valueStart
+	for valueEnd < len(data) && data[valueEnd] != ',' && data[valueEnd] != '}' {
+		valueEnd++
+	}
+	if valueEnd <= valueStart {
+		return nil, fmt.Errorf("field %q has no numeric value", field)
+	}
+
+	patched := append([]byte(nil), data[:valueStart]...)
+	patched = append(patched, strconv.AppendInt(nil, value, 10)...)
+	patched = append(patched, data[valueEnd:]...)
+	return patched, nil
+}
+
 func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) ([]sop.StoreInfo, error) {
 	if len(stores) == 0 {
 		return nil, nil
@@ -230,17 +262,38 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 			si.Count = si.Count - stores[ii].CountDelta
 			si.Timestamp = original[ii].Timestamp
 
-			// Persist store info into a JSON text file.
+			storePath := fmt.Sprintf("%c%s%c%s", os.PathSeparator, stores[ii].Name, os.PathSeparator, StoreInfoFilename)
+			if si.Name != "" && !stores[ii].NeedsMetaDataSave {
+				// Fast path: patch only the persisted count/timestamp bytes in place.
+				ba, err := storeWriter.read(ctx, storePath)
+				if err == nil {
+					patched, err := patchJSONNumericField(ba, fieldCount, si.Count)
+					if err == nil {
+						patched, err = patchJSONNumericField(patched, fieldTimestamp, si.Timestamp)
+					}
+					if err == nil {
+						if err := storeWriter.write(ctx, storePath, patched); err == nil {
+							if err := sr.cache.SetStruct(ctx, sr.formatCacheKey(si.Name), &si, si.CacheConfig.StoreInfoCacheDuration); err != nil {
+								log.Warn(fmt.Sprintf("StoreRepository Update Undo (redis setstruct) store %s failed, details: %v", si.Name, err))
+							}
+							continue
+						}
+					}
+				}
+			}
+
+			// Fallback path preserves the original full-JSON write behavior when patching is not safe.
 			ba, err := encoding.Marshal(si)
 			if err != nil {
 				log.Warn(fmt.Sprintf("StoreRepository Update Undo store %s failed Marshal, details: %v", si.Name, err))
 				continue
 			}
 
-			if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, StoreInfoFilename), ba); err != nil {
+			if err := storeWriter.write(ctx, storePath, ba); err != nil {
 				log.Warn(fmt.Sprintf("StoreRepository Update Undo store %s failed write, details: %v", si.Name, err))
 				continue
 			}
+			si.NeedsMetaDataSave = false
 			if err := sr.cache.SetStruct(ctx, sr.formatCacheKey(si.Name), &si, si.CacheConfig.StoreInfoCacheDuration); err != nil {
 				log.Warn(fmt.Sprintf("StoreRepository Update Undo (redis setstruct) store %s failed, details: %v", si.Name, err))
 			}
@@ -262,21 +315,42 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 		// Merge or apply the "count delta".
 		stores[i].Count = si.Count + stores[i].CountDelta
 
-		// Persist store info into a JSON text file.
+		storePath := fmt.Sprintf("%c%s%c%s", os.PathSeparator, stores[i].Name, os.PathSeparator, StoreInfoFilename)
+		if si.Name != "" && !stores[i].NeedsMetaDataSave {
+			// Fast path: patch only the persisted count/timestamp bytes in place.
+			ba, err := storeWriter.read(ctx, storePath)
+			if err == nil {
+				patched, err := patchJSONNumericField(ba, fieldCount, stores[i].Count)
+				if err == nil {
+					patched, err = patchJSONNumericField(patched, fieldTimestamp, stores[i].Timestamp)
+				}
+				if err == nil {
+					if err := storeWriter.write(ctx, storePath, patched); err == nil {
+						beforeUpdateStores = append(beforeUpdateStores, sis...)
+						if err := sr.cache.SetStruct(ctx, sr.formatCacheKey(stores[i].Name), &stores[i], stores[i].CacheConfig.StoreInfoCacheDuration); err != nil {
+							log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) store %s failed, details: %v", stores[i].Name, err))
+						}
+						continue
+					}
+				}
+			}
+		}
+
+		// Fallback path preserves the original full-JSON update behavior when patching is not safe.
 		ba, err := encoding.Marshal(stores[i])
 		if err != nil {
-			// Undo changes.
 			undo(i, beforeUpdateStores)
 			return nil, err
 		}
 
-		if err := storeWriter.write(ctx, fmt.Sprintf("%c%s%c%s", os.PathSeparator, si.Name, os.PathSeparator, StoreInfoFilename), ba); err != nil {
+		if err := storeWriter.write(ctx, storePath, ba); err != nil {
 			// Undo changes.
 			undo(i, beforeUpdateStores)
 			return nil, err
 		}
 
 		beforeUpdateStores = append(beforeUpdateStores, sis...)
+		stores[i].NeedsMetaDataSave = false
 		if err := sr.cache.SetStruct(ctx, sr.formatCacheKey(stores[i].Name), &stores[i], stores[i].CacheConfig.StoreInfoCacheDuration); err != nil {
 			log.Warn(fmt.Sprintf("StoreRepository Update (redis setstruct) store %s failed, details: %v", stores[i].Name, err))
 		}

@@ -260,7 +260,12 @@ func Test_StoreRepository_Update_UndoOnMarshalError(t *testing.T) {
 		t.Fatalf("seed add: %v", err)
 	}
 
-	// Prepare updates where second store triggers marshal error.
+	// Remove the persisted metadata for the second store so the fast patch path
+	// cannot be used; the fallback path must then hit the marshal error hook.
+	if err := os.Remove(filepath.Join(sr.GetStoresBaseFolder(), "b", StoreInfoFilename)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("remove b metadata: %v", err)
+	}
+
 	updA := *sA
 	updA.CountDelta = 1
 	updB := *sB

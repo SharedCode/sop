@@ -750,8 +750,9 @@ func Test_Phase1Commit_CommitStores_Update_Error_Propagates(t *testing.T) {
 	sr := errUpdateStoreRepo{inner: baseSR}
 	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: sr, registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), blobStore: mocks.NewMockBlobStore(), logger: newTransactionLogger(mocks.NewMockTransactionLog(), true), phaseDone: 0}
 
+	// Force a non-zero count delta so commitStores actually executes the repository update path.
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_commitstores_err", SlotLength: 4})
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, readNodesCache: cache.NewCache[sop.UUID, any](8, 12), localCache: make(map[sop.UUID]cachedNode), l2Cache: l2, l1Cache: cache.GetGlobalL1Cache(l2), count: si.Count + 1}
 
 	// Minimal backend with tracked items but no mutations; ensures we reach commitStores
 	tx.btreesBackend = []btreeBackend{{

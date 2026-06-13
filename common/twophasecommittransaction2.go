@@ -345,21 +345,28 @@ func (t *Transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []int
 }
 
 func (t *Transaction) commitStores(ctx context.Context) ([]sop.StoreInfo, error) {
-	stores := t.getCommitStoresInfo()
+	stores, modified := t.getCommitStoresInfo()
+	if !modified {
+		return stores, nil
+	}
 	return t.StoreRepository.Update(ctx, stores)
 }
 
-func (t *Transaction) getCommitStoresInfo() []sop.StoreInfo {
-	stores := make([]sop.StoreInfo, len(t.btreesBackend))
+func (t *Transaction) getCommitStoresInfo() ([]sop.StoreInfo, bool) {
+	stores := make([]sop.StoreInfo, 0, len(t.btreesBackend))
+	var modified bool
 	for i := range t.btreesBackend {
 		store := t.btreesBackend[i].getStoreInfo()
 		s2 := *store
 		// Compute the count delta so Store Repository can reconcile for commit.
 		s2.CountDelta = s2.Count - t.btreesBackend[i].nodeRepository.count
-		s2.Timestamp = sop.Now().UnixMilli()
-		stores[i] = s2
+		if s2.CountDelta != 0 {
+			modified = true
+			s2.Timestamp = sop.Now().UnixMilli()
+			stores = append(stores, s2)
+		}
 	}
-	return stores
+	return stores, modified
 }
 
 func (t *Transaction) getRollbackStoresInfo() []sop.StoreInfo {

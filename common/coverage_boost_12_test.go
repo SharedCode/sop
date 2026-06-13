@@ -500,10 +500,10 @@ func Test_Phase1Commit_CommitStoreInfo_Error_Returns(t *testing.T) {
 	tl := newTransactionLogger(stubTLog{pl: &stubPriorityLog{}}, true)
 	tx := &Transaction{mode: sop.ForWriting, maxTime: time.Minute, StoreRepository: sr, registry: mocks.NewMockRegistry(false), l2Cache: l2, l1Cache: gc, blobStore: bs, logger: tl, phaseDone: 0}
 
-	// One added node so we go through the normal flow and reach commitStores.
+	// Force a non-zero count delta so commitStores actually executes the repository update path.
 	si := sop.NewStoreInfo(sop.StoreOptions{Name: "p1_commit_storeinfo_err", SlotLength: 2})
 	n := &btree.Node[PersonKey, Person]{ID: sop.NewUUID(), Version: 0}
-	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: gc, localCache: map[sop.UUID]cachedNode{n.ID: {action: addAction, node: n}}, count: si.Count}
+	nr := &nodeRepositoryBackend{transaction: tx, storeInfo: si, l2Cache: l2, l1Cache: gc, localCache: map[sop.UUID]cachedNode{n.ID: {action: addAction, node: n}}, count: si.Count + 1}
 	tx.btreesBackend = []btreeBackend{{
 		nodeRepository:                   nr,
 		getStoreInfo:                     func() *sop.StoreInfo { return si },

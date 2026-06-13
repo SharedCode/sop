@@ -38,8 +38,56 @@ func TestValidateAdminToken_RejectsLegacyCredentialAuthorizationHeader(t *testin
 
 	handleValidateAdminToken(w, req)
 
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("expected 401 for legacy credential Authorization header, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for legacy credential Authorization header, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestValidateAdminToken_AcceptsEmptyBody(t *testing.T) {
+	withIsolatedSessionStore(t)
+	config = Config{SystemDB: config.SystemDB}
+	if err := config.SetUser("root", "secret_password", sop.RoleAdmin); err != nil {
+		t.Fatalf("SetUser() error = %v", err)
+	}
+
+	token, err := currentTokenFacade().CreateToken(context.Background(), "root", sop.RoleAdmin)
+	if err != nil {
+		t.Fatalf("CreateToken() error = %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/validate", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+
+	handleValidateAdminToken(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for empty body and bearer token, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestValidateAdminToken_RejectsNonAdminWithHelpfulMessage(t *testing.T) {
+	config = Config{}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/validate", strings.NewReader(`{}`))
+	w := httptest.NewRecorder()
+
+	handleValidateAdminToken(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-admin request, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "Only admins are allowed") {
+		t.Fatalf("expected helpful admin-only message, got %q", w.Body.String())
+	}
+}
+
+func TestStoreRBAC_AllowsAdminEditCapability(t *testing.T) {
+	ctx := sop.ContextWithAuth(context.Background(), sop.AuthContext{Roles: []string{sop.RoleAdmin}})
+	rbac := sop.ResolveRBACMap(ctx, "store", sop.EntitlementContext{AssetID: "demo", Database: "demo"}, nil)
+
+	if !rbac[sop.UICapabilityEdit] {
+		t.Fatalf("expected admin store RBAC to include can_edit, got %+v", rbac)
 	}
 }
 

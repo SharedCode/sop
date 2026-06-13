@@ -68,9 +68,22 @@ type StoreInfo struct {
 	// Example: ["first_name", "age", "email"] for the value object
 	ValueFields []string `json:"value_fields,omitempty"`
 
-	// Version allows versioning of the store info payload for future upgrades.
+	// For internal use only. Code can use this as hint.
+	NeedsMetaDataSave bool `json:"-"`
 
+	// Version allows versioning of the store info payload for future upgrades.
 	Version string `json:"version,omitempty"`
+}
+
+// Interpolates back into ValueDataSize
+func (si *StoreInfo) ValueDataSize() ValueDataSize {
+	dataSize := MediumData
+	if si.IsValueDataActivelyPersisted {
+		dataSize = BigData
+	} else if si.IsValueDataInNodeSegment {
+		dataSize = SmallData
+	}
+	return dataSize
 }
 
 // Relation describes a foreign key relationship to another store.

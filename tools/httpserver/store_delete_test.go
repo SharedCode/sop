@@ -13,6 +13,53 @@ import (
 	"github.com/sharedcode/sop/database"
 )
 
+func TestHandleAddStore_PreservesMapValueSchemaWithoutSeedKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbName := "testdb_schema_seed"
+	config = Config{
+		Databases: []DatabaseConfig{{
+			Name: dbName,
+			Path: tmpDir,
+			Mode: "standalone",
+		}},
+	}
+
+	createReq := map[string]any{
+		"database":   dbName,
+		"store":      "schema_seed_store",
+		"key_type":   "string",
+		"value_type": "map",
+		"seed_value": map[string]any{
+			"name": "alice",
+		},
+	}
+	body, _ := json.Marshal(createReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/store/add", bytes.NewBuffer(body))
+	w := httptest.NewRecorder()
+	handleAddStore(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create store failed: %d %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/store/info?database="+dbName+"&name=schema_seed_store", nil)
+	w = httptest.NewRecorder()
+	handleGetStoreInfo(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get store info failed: %d %s", w.Code, w.Body.String())
+	}
+
+	var info map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &info); err != nil {
+		t.Fatalf("unmarshal store info failed: %v", err)
+	}
+	if got := info["valueType"]; got != "map" {
+		t.Fatalf("expected valueType=map, got %v", got)
+	}
+	if got := info["count"]; got != float64(1) {
+		t.Fatalf("expected count=1, got %v", got)
+	}
+}
+
 func TestHandleDeleteItem_RejectsDeletingOnlyRemainingRow(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbName := "testdb_delete_last_row"

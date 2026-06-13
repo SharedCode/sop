@@ -32,8 +32,8 @@ func Test_GetCommitAndRollbackStoresInfo(t *testing.T) {
 	}}
 
 	// getCommitStoresInfo should compute CountDelta = 100 - 90 = 10 and set Timestamp
-	cs := tx.getCommitStoresInfo()
-	if len(cs) != 1 || cs[0].Name != "s1" || cs[0].CountDelta != 10 {
+	cs, modified := tx.getCommitStoresInfo()
+	if !modified || len(cs) != 1 || cs[0].Name != "s1" || cs[0].CountDelta != 10 {
 		t.Fatalf("unexpected commit stores info: %+v", cs)
 	}
 	if cs[0].Timestamp == 0 { // basic sanity; exact value not asserted beyond non-zero
