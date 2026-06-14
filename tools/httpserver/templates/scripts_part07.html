@@ -1,5 +1,20 @@
 {{define "scripts_part07"}}
 <script>
+    function updateArrayCheckboxVisibility(type, checkboxId) {
+        const checkbox = document.getElementById(checkboxId);
+        let container = document.getElementById(checkboxId + '-label');
+        if (!container && checkbox) container = checkbox.parentElement;
+        if (container) {
+            if (type === 'blob' || type === 'map') {
+                if (checkbox) checkbox.checked = false;
+                container.style.display = 'none';
+            } else {
+                container.style.display = 'flex';
+            }
+        }
+    }
+    window.updateArrayCheckboxVisibility = updateArrayCheckboxVisibility;
+
     function jsonToGoStruct(structName, obj) {
         let code = `type ${structName} struct {\n`;
         const keys = Object.keys(obj);
@@ -378,6 +393,11 @@
     function showEditStore(forceReadOnly = false) {
         try {
             if (!currentStoreInfo) return;
+            window.currentStoreFormMode = 'edit';
+
+            if (typeof resetStoreFormState === 'function') {
+                resetStoreFormState();
+            }
 
             // Determine if Read-Only Mode (System DB)
             const dbObj = availableDatabases.find(d => d.name === currentDatabase);
@@ -389,6 +409,7 @@
             
             const modal = document.getElementById('add-store-modal');
             if (modal) {
+                modal.dataset.formMode = 'edit';
                 modal.style.display = 'flex';
                 const header = modal.querySelector('.modal-header span');
                 if (header) header.textContent = isReadOnlyMode ? 'View Store Metadata (Read-Only)' : 'Edit Store Metadata';
@@ -441,17 +462,20 @@
 
             // Ensure count is treated as number
             const isEmptyStore = (currentStoreInfo.count === 0);
-            console.log("showEditStore: currentStoreInfo.count=", currentStoreInfo.count, "isEmptyStore=", isEmptyStore);
+            const canEditStructuralFields = isEmptyStore && !isReadOnlyMode;
+            const hasExplicitMapKeySchema = !!(
+                (Array.isArray(currentStoreInfo.keyFields) && currentStoreInfo.keyFields.length > 0) ||
+                (currentStoreInfo.schema && typeof currentStoreInfo.schema === 'object' && Object.keys(currentStoreInfo.schema).length > 0) ||
+                (currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0)
+            );
+            const sampleKeyIsObject = !!(currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object' && !Array.isArray(currentStoreInfo.sampleKey));
+            const inferredKeyType = (currentStoreInfo.keyType === 'map' || hasExplicitMapKeySchema || sampleKeyIsObject) ? 'map' : 'string';
+            console.log("showEditStore: currentStoreInfo.count=", currentStoreInfo.count, "isEmptyStore=", isEmptyStore, "canEditStructuralFields=", canEditStructuralFields);
     
             // Key Type (Read-Only unless empty, or forced Read-Only)
             const keyType = document.getElementById('new-store-key-type');
             if (keyType) {
-                let typeToSet = currentStoreInfo.keyType || 'string';
-                
-                if (!currentStoreInfo.isPrimitiveKey) {
-                    typeToSet = 'map';
-                }
-                
+                const typeToSet = inferredKeyType;
                 keyType.value = typeToSet;
                 keyType.disabled = isReadOnlyMode || !isEmptyStore;
             }
@@ -466,25 +490,26 @@
             if (typeof toggleIndexSpec === 'function') toggleIndexSpec();
             
             if (keyType && keyType.value === 'map') {
-                 if (typeof populateKeyFieldsAndIndexSpec === 'function') populateKeyFieldsAndIndexSpec(currentStoreInfo, isReadOnlyMode);
-                 
-                 if (!isEmptyStore || isReadOnlyMode) {
-                     // Disable all structural fields
+                 if (typeof populateKeyFieldsAndIndexSpec === 'function') populateKeyFieldsAndIndexSpec(currentStoreInfo, !canEditStructuralFields);
+
+                 if (!canEditStructuralFields) {
                      if (typeof disableKeyAndIndexFields === 'function') disableKeyAndIndexFields();
                  } else {
-                     // Empty Store: Enable everything
                      const keyRows = document.querySelectorAll('.key-field-row input, .key-field-row select, .key-field-row button');
                      keyRows.forEach(el => el.disabled = false);
-                     
+
                      const indexRows = document.querySelectorAll('.index-field-row select, .index-field-row button');
                      indexRows.forEach(el => el.disabled = false);
+
+                     const valueRows = document.querySelectorAll('.value-field-row input, .value-field-row select, .value-field-row button');
+                     valueRows.forEach(el => el.disabled = false);
 
                      if (typeof refreshAddFieldButtons === 'function') {
                          refreshAddFieldButtons();
                      } else {
                          const addKeyBtn = document.querySelector('button[onclick="addKeyFieldRow()"]');
                          if (addKeyBtn) addKeyBtn.disabled = false;
-                         
+
                          const addIndexBtn = document.querySelector('button[onclick="addIndexFieldRow()"]');
                          if (addIndexBtn) addIndexBtn.disabled = false;
                      }
@@ -505,6 +530,10 @@
             }
 
             if (typeof toggleValueSpec === 'function') toggleValueSpec();
+
+            if (valType && valType.value === 'map' && typeof populateValueMapFields === 'function') {
+                populateValueMapFields(currentStoreInfo, !canEditStructuralFields);
+            }
             
             // Other fields
             const slotLength = document.getElementById('new-store-slot-length');
@@ -571,7 +600,7 @@
                 const canUnlock = canUnlockStoreAdmin();
                 if (isReadOnlyMode) {
                     unlockBtn.style.display = 'none';
-                } else if (!isEmptyStore && !currentStoreInfo.isPrimitiveKey) {
+                } else if (!isEmptyStore && (currentStoreInfo.keyType === 'map' || hasExplicitMapKeySchema || sampleKeyIsObject)) {
                     unlockBtn.style.display = 'inline-block';
                     unlockBtn.disabled = !canUnlock;
                     unlockBtn.title = canUnlock ? 'Unlock store metadata' : 'Only admins are allowed';
@@ -580,13 +609,27 @@
                 }
             }
             
-            // Show Seed Data (relevant for empty store)
-            // Hide if Read-Only Mode
+            // Show seed data only for non-map value types on the edit form.
+            // Struct/map values must use the dedicated builder UI instead of the simple data entry panel.
             const seedContainer = document.getElementById('seed-data-container');
-            if (seedContainer) seedContainer.style.display = (isEmptyStore && !isReadOnlyMode) ? 'block' : 'none';
-            if (isEmptyStore) {
-                if (typeof populateSeedDataUI === 'function') populateSeedDataUI();
+            const valTypeForVisibility = document.getElementById('new-store-value-type')?.value || 'string';
+            if (seedContainer) {
+                seedContainer.style.display = (valTypeForVisibility === 'map') ? 'none' : 'block';
             }
+
+            const seedKeyInput = document.getElementById('new-store-seed-key');
+            if (seedKeyInput) seedKeyInput.disabled = !canEditStructuralFields;
+
+            const seedValueSimple = document.getElementById('new-store-seed-value-simple');
+            if (seedValueSimple) seedValueSimple.disabled = !canEditStructuralFields;
+
+            const seedValueRaw = document.getElementById('new-store-seed-value');
+            if (seedValueRaw) seedValueRaw.disabled = !canEditStructuralFields;
+
+            const seedValueRawMode = document.getElementById('seed-value-raw-mode');
+            if (seedValueRawMode) seedValueRawMode.disabled = !canEditStructuralFields;
+
+            if (typeof populateSeedDataUI === 'function') populateSeedDataUI();
             
             // Update Button
             const footer = document.querySelector('#add-store-modal .modal-footer');
@@ -617,7 +660,7 @@
             const celEditBtn = document.querySelector('#new-store-cel-expression button');
             const hasIndexSpec = !!(currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0);
             
-            const canEditIndex = isEmptyStore;
+            const canEditIndex = canEditStructuralFields;
     
             if (celEditBtn) {
                 celEditBtn.disabled = !canEditIndex;
@@ -636,6 +679,42 @@
 
 
 
+    function hasSchemaMetadata(info) {
+        const hasSchema = !!(info?.schema && typeof info.schema === 'object' && Object.keys(info.schema).length > 0);
+        const hasKeyFields = Array.isArray(info?.keyFields) && info.keyFields.length > 0;
+        const hasValueFields = Array.isArray(info?.valueFields) && info.valueFields.length > 0;
+        const hasIndexSpec = !!(info?.indexSpec && typeof info.indexSpec === 'object' && Array.isArray(info.indexSpec.index_fields) && info.indexSpec.index_fields.length > 0);
+        const hasRelations = Array.isArray(info?.relations) && info.relations.length > 0;
+        return hasSchema || hasKeyFields || hasValueFields || hasIndexSpec || hasRelations;
+    }
+
+    function inferSampleFieldType(value) {
+        if (value === null || value === undefined) return 'string';
+
+        if (typeof value === 'number') {
+            return Number.isInteger(value) ? 'int' : 'float64';
+        }
+
+        if (typeof value === 'boolean') {
+            return 'bool';
+        }
+
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (/^(true|false)$/i.test(trimmed)) return 'bool';
+            if (/^\d+$/.test(trimmed)) return 'int';
+            if (/^\d+\.\d+(?:e[-+]?\d+)?$/i.test(trimmed)) return 'float64';
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) return 'uuid';
+            if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return 'date';
+            if (/^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)$/.test(trimmed)) return 'datetime';
+            return 'string';
+        }
+
+        if (Array.isArray(value)) return 'blob';
+        if (typeof value === 'object') return 'map';
+        return 'string';
+    }
+
     function populateSeedDataUI() {
         if (!currentStoreInfo) return;
 
@@ -645,7 +724,7 @@
             // Ensure forms are generated
             updateSeedKeyForm();
             
-            if (currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
+            if (!hasSchemaMetadata(currentStoreInfo) && currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
                 const rows = document.querySelectorAll('.seed-key-field-row');
                 rows.forEach(row => {
                     const name = row.getAttribute('data-field');
@@ -664,22 +743,15 @@
         const valType = document.getElementById('new-store-value-type').value;
         if (valType === 'map') {
             document.getElementById('seed-value-fields-list').innerHTML = '';
-            if (currentStoreInfo.sampleValue && typeof currentStoreInfo.sampleValue === 'object') {
+            if (!hasSchemaMetadata(currentStoreInfo) && currentStoreInfo.sampleValue && typeof currentStoreInfo.sampleValue === 'object') {
                 Object.keys(currentStoreInfo.sampleValue).forEach(k => {
                     const val = currentStoreInfo.sampleValue[k];
-                    let type = 'string';
-                    const t = typeof val;
-                    if (t === 'number') {
-                         if (Number.isInteger(val)) type = 'int';
-                         if (!Number.isInteger(val)) type = 'float64';
-                    } 
-                    if (t === 'boolean') type = 'bool';
-                    
+                    const type = inferSampleFieldType(val);
                     addSeedValueFieldRow(k, type, val);
                 });
             }
         } else {
-            if (currentStoreInfo.sampleValue !== undefined) {
+            if (!hasSchemaMetadata(currentStoreInfo) && currentStoreInfo.sampleValue !== undefined) {
                 let val = currentStoreInfo.sampleValue;
                 if (valType === 'blob' && Array.isArray(val)) {
                     if (typeof val === 'object') val = JSON.stringify(val);
@@ -758,6 +830,7 @@
                         addValBtn.textContent = '+ Add Field';
                         addValBtn.onclick = () => addValueFieldRow();
                         addValBtn.style.marginTop = '5px';
+                        addValBtn.style.fontSize = '11px';
                         addValBtn.style.padding = '4px 8px';
                         addValBtn.style.cursor = 'pointer';
                         valMapContainer.appendChild(addValBtn);
@@ -765,9 +838,10 @@
                     addValBtn.disabled = false;
                 }
     
-                // Show Seed Data Container for Empty Store
+                // Show the simple seed-data panel only for non-map value types.
                 const seedContainer = document.getElementById('seed-data-container');
-                if (seedContainer) seedContainer.style.display = 'block';
+                const unlockedValueType = document.getElementById('new-store-value-type')?.value || 'string';
+                if (seedContainer) seedContainer.style.display = (unlockedValueType === 'map') ? 'none' : 'block';
                 
                 // Ensure Seed Key form is populated and correct inputs are shown
                 if (typeof updateSeedKeyForm === 'function') updateSeedKeyForm();

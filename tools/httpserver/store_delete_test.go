@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -60,7 +59,7 @@ func TestHandleAddStore_PreservesMapValueSchemaWithoutSeedKey(t *testing.T) {
 	}
 }
 
-func TestHandleDeleteItem_RejectsDeletingOnlyRemainingRow(t *testing.T) {
+func TestHandleDeleteItem_AllowsDeletingOnlyRemainingRow(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbName := "testdb_delete_last_row"
 	config = Config{
@@ -108,11 +107,8 @@ func TestHandleDeleteItem_RejectsDeletingOnlyRemainingRow(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/api/store/item/delete", bytes.NewBuffer(body))
 	w = httptest.NewRecorder()
 	handleDeleteItem(w, req)
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500 when deleting the only row, got %d: %s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "one row must remain") {
-		t.Fatalf("expected preservation message, got %s", w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected delete to succeed for the only row, got %d: %s", w.Code, w.Body.String())
 	}
 
 	dbOpts, err := getDBOptions(context.Background(), dbName)
@@ -129,8 +125,80 @@ func TestHandleDeleteItem_RejectsDeletingOnlyRemainingRow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenBtree failed: %v", err)
 	}
-	if got := store.Count(); got != 1 {
-		t.Fatalf("expected the only row to remain, got %d", got)
+	if got := store.Count(); got != 0 {
+		t.Fatalf("expected the only row to be deleted, got %d", got)
+	}
+}
+
+func TestHandleListItems_ReturnsEmptyAfterDeletingLastRow(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbName := "testdb_list_empty_after_delete"
+	config = Config{
+		Databases: []DatabaseConfig{{
+			Name: dbName,
+			Path: tmpDir,
+			Mode: "standalone",
+		}},
+	}
+
+	createReq := map[string]any{
+		"database":   dbName,
+		"store":      "empty_after_delete",
+		"key_type":   "string",
+		"value_type": "string",
+	}
+	body, _ := json.Marshal(createReq)
+	req := httptest.NewRequest(http.MethodPost, "/api/store/add", bytes.NewBuffer(body))
+	w := httptest.NewRecorder()
+	handleAddStore(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create store failed: %d %s", w.Code, w.Body.String())
+	}
+
+	addReq := map[string]any{
+		"database": dbName,
+		"store":    "empty_after_delete",
+		"key":      "only-row",
+		"value":    "data",
+	}
+	body, _ = json.Marshal(addReq)
+	req = httptest.NewRequest(http.MethodPost, "/api/store/item/add", bytes.NewBuffer(body))
+	w = httptest.NewRecorder()
+	handleAddItem(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("add row failed: %d %s", w.Code, w.Body.String())
+	}
+
+	deleteReq := map[string]any{
+		"database": dbName,
+		"store":    "empty_after_delete",
+		"key":      "only-row",
+	}
+	body, _ = json.Marshal(deleteReq)
+	req = httptest.NewRequest(http.MethodPost, "/api/store/item/delete", bytes.NewBuffer(body))
+	w = httptest.NewRecorder()
+	handleDeleteItem(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected delete to succeed for the only row, got %d: %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/store/items?database="+dbName+"&name=empty_after_delete&action=current&key=only-row", nil)
+	w = httptest.NewRecorder()
+	handleListItems(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list items failed: %d %s", w.Code, w.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal list response failed: %v", err)
+	}
+	data, ok := resp["data"].([]any)
+	if !ok {
+		t.Fatalf("expected data[] in response, got %T", resp["data"])
+	}
+	if len(data) != 0 {
+		t.Fatalf("expected no items after deleting the last row, got %d items: %+v", len(data), data)
 	}
 }
 

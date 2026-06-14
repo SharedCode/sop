@@ -11,6 +11,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/memory"
 )
 
 // InitializeShortTermMemory buffers the DDL creation of the active scratchpad B-Tree store.
@@ -20,7 +21,16 @@ func (s *Service) InitializeShortTermMemory(ctx context.Context) error {
 		return fmt.Errorf("systemDB is not configured")
 	}
 
-	storeName := "user_scratchpad"
+	agentID := ai.AgentIDOmni
+	userID := ""
+	if p := ai.GetSessionPayload(ctx); p != nil {
+		if p.AgentID != "" {
+			agentID = p.AgentID
+		}
+		userID = strings.TrimSpace(p.UserID)
+	}
+
+	storeName := memory.BuildSTMStoreName(agentID, userID)
 	exists, err := s.systemDB.StoreExists(ctx, storeName)
 	if err != nil {
 		return fmt.Errorf("failed to check STM store existence: %w", err)
@@ -41,7 +51,7 @@ func (s *Service) InitializeShortTermMemory(ctx context.Context) error {
 		// Insert a root anchor item to give identity to the btree immediately upon DDL.
 		rootAnchor := map[string]any{
 			"id":         "root_anchor",
-			"user_id":    "system",
+			"user_id":    userID,
 			"session_id": "system",
 			"intent":     "Initialization",
 			"ts":         time.Now().UnixMilli(),
@@ -58,7 +68,7 @@ func (s *Service) InitializeShortTermMemory(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to commit STM initialization transaction: %w", err)
 		}
-		log.Info("ShortTermMemory: Successfully initialized DDL and root anchor for 'user_scratchpad'")
+		log.Info("ShortTermMemory: Successfully initialized DDL and root anchor", "store", storeName, "user_id", userID)
 	}
 
 	return nil

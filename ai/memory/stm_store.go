@@ -38,7 +38,14 @@ func buildMemoryScopeID(agentID string, userID string) string {
 }
 
 func BuildSTMStoreName(agentID string, userID string) string {
-	return fmt.Sprintf("stm_%s", buildMemoryScopeID(agentID, userID))
+	scope := strings.TrimSpace(userID)
+	if scope == "" {
+		scope = strings.TrimSpace(agentID)
+	}
+	if scope == "" {
+		return "stm_default"
+	}
+	return fmt.Sprintf("stm_%s", strings.NewReplacer(" ", "_", "/", "_", "\\", "_").Replace(scope))
 }
 
 func BuildSTMTimeIndexName(agentID string, userID string) string {
@@ -46,7 +53,14 @@ func BuildSTMTimeIndexName(agentID string, userID string) string {
 }
 
 func BuildLTMStoreName(agentID string, userID string) string {
-	return fmt.Sprintf("ltm_%s", buildMemoryScopeID(agentID, userID))
+	scope := strings.TrimSpace(userID)
+	if scope == "" {
+		scope = strings.TrimSpace(agentID)
+	}
+	if scope == "" {
+		return "ltm_default"
+	}
+	return fmt.Sprintf("ltm_%s", strings.NewReplacer(" ", "_", "/", "_", "\\", "_").Replace(scope))
 }
 
 func STMTimeIndexKey(createdAt int64, itemID string) string {

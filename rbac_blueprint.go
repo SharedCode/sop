@@ -53,6 +53,7 @@ type EntitlementContext struct {
 	Database   string
 	IsSystemDB bool
 	UserRole   string
+	UserID     string
 }
 
 // ResolveRBACMap evaluates the dynamic AssetBlueprint for a functional context (e.g., current space/store), delegating to the core evaluator.

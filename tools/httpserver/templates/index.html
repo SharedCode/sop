@@ -254,14 +254,21 @@
                 </label>
             </div>
 
-            <div style="margin-bottom: 10px;">
-                <label style="display:flex; align-items:center; gap: 8px; cursor: pointer;" title="Enables chunked blob storage. Value will be a Blob. Key will be wrapped with a ChunkIndex field.">
-                    <input type="checkbox" id="new-store-is-streaming" onchange="toggleStreamingMode()"> 
-                    <span>Streaming / Chunked Data</span>
-                </label>
+            <div id="seed-key-container" style="margin-bottom: 10px; display: block; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; background: var(--bg-color);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; gap: 10px;">
+                    <label style="font-size: 12px; margin: 0; white-space: nowrap;">Key:</label>
+                    <input type="text" id="new-store-seed-key" placeholder="Enter key" style="flex: 1; box-sizing: border-box; padding: 5px; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg); color: var(--text-color);">
+                </div>
             </div>
+
             <div id="index-spec-container" style="margin-bottom: 10px; display: none; border: 1px solid var(--border-color); padding: 10px; border-radius: 4px; background: var(--bg-color);">
-                <label style="display:block; margin-bottom: 10px; font-weight: bold;">Map Key Configuration:</label>
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;">
+                    <label style="display:block; margin: 0; font-weight: bold;">Map Key Configuration:</label>
+                    <label style="display:flex; align-items:center; gap: 6px; cursor: pointer; font-size: 11px; color: var(--text-muted);" title="Enables chunked blob storage. Value will be a Blob. Key will be wrapped with a ChunkIndex field.">
+                        <input type="checkbox" id="new-store-is-streaming" onchange="toggleStreamingMode()">
+                        <span>Streaming / Chunked Data</span>
+                    </label>
+                </div>
                 
                 <!-- Key Fields Section -->
                 <div style="margin-bottom: 15px;">
@@ -286,7 +293,7 @@
             </div>
 
             <div id="value-type-container" style="margin-bottom: 10px; display: flex; align-items: center; gap: 10px;">
-                <label style="margin-bottom: 0; font-size: 12px; white-space: nowrap;">Value Type:</label>
+                <label style="margin-bottom: 0; font-size: 13px; white-space: nowrap;">Value Type:</label>
                 <select id="new-store-value-type" onchange="toggleValueSpec()" style="flex: 1; padding: 5px; border-radius: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
                     <option value="string">String</option>
                     <option value="int">Int</option>
