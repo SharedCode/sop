@@ -79,6 +79,10 @@ Conventions for this document:
 - [ ] Clarification fallback tool for unresolved ambiguity after autonomous research.
 - [ ] Additional Omni consumption hardening for cross-database loopback flows.
 - [ ] Medical Space showcase package for deep-domain demonstration.
+- [ ] Display Key/Value map struct fields on the Edit Store form, matching the Add Store field-builder experience for map-based stores.
+- [ ] Keep Add Store and Edit Store on separate UI paths to avoid shared form-state regressions.
+- [ ] Add support for adding fields in the Edit Store form as non-breaking metadata/schema hints for JSON key/value stores.
+- [ ] Add support for deleting fields in the Edit Store form as non-breaking metadata/schema cleanup only, without rewriting existing records.
 - [x] Add a real OpenAI/ChatGPT owned loop that mirrors Gemini's split between in-Ask provider state and between-Ask carryover while preserving epilogue as the only canonical memory promotion point.
 
 ## 3. Code Quality and Readability Refactor
@@ -149,42 +153,42 @@ Important streaming contract:
 ### Refactor Plan
 
 **Phase 1: Core Request/Response Structs** ✅ COMPLETED (Commit: 55f762c1)
-- [x] Create explicit request structs for Ask flow:
+- [x] Added explicit request structs for the Ask flow:
   - `AskRequest{Query, Session, Executor, Generator, ProviderOverride, Database, Writer, EventStreamer, ProgressSink, ScriptRecorder, DefaultFormat, Options, Verbose}`
-  - Contains all explicit parameters previously hidden in context
-- [x] Create response structs that carry both result and state changes:
+  - This replaces the previous context-hidden parameter flow with an explicit contract.
+- [x] Added response structs that carry both the final result and the resulting state changes:
   - `AskResponse{FinalText, UpdatedSession, CarryoverState, ToolCalls, OutcomeFacts, OutcomeRecipes}`
-- [x] Create `Service.AskWithRequest()` method accepting `AskRequest` and returning `AskResponse`
-- [x] Implement 7 helper methods with explicit parameters for internal orchestration
+- [x] Added `Service.AskWithRequest()` to accept `AskRequest` and return `AskResponse`.
+- [x] Implemented the internal orchestration helpers with explicit parameters.
 
 **Phase 2: Tool Execution Context** ✅ COMPLETED (Commit: d407d81f)
-- [x] Create `ToolExecutionContext` struct:
+- [x] Added `ToolExecutionContext` to hold the execution dependencies used by tool calls:
   - `{Session, Executor, Recorder, Writer, ResultStreamer, NativeToolHints, Database, EventStreamer, ProgressSink}`
-- [x] Add `toolCtx *ToolExecutionContext` field to `ServiceToolExecutor`
-- [x] Create helper `injectToolContextToLegacyContext()` for backward compatibility
-- [x] Integrate with `AskWithRequest` method
+- [x] Added `toolCtx *ToolExecutionContext` to `ServiceToolExecutor`.
+- [x] Added `injectToolContextToLegacyContext()` to preserve backwards compatibility.
+- [x] Integrated the explicit context path into `AskWithRequest()`.
 
 **Phase 3: Script Orchestration** ✅ COMPLETED (Commit: 4738a993)
-- [x] Create `ScriptRunContext` struct:
+- [x] Added `ScriptRunContext` to represent the script runner state explicitly:
   - `{JSONStreamer, SuppressInternalStepStart, StepIndex, Verbose, UseNDJSON, CurrentScriptCategory, StringBuilderMutex}`
-- [x] Refactor `executeScript()` to accept explicit `ScriptRunContext`
-- [x] Create helper functions: `injectScriptContextToLegacyContext()` and `extractScriptContextFromLegacyContext()`
-- [x] Update script orchestration to use explicit context struct
+- [x] Refactored `executeScript()` to accept `ScriptRunContext` directly.
+- [x] Added `injectScriptContextToLegacyContext()` and `extractScriptContextFromLegacyContext()` for compatibility.
+- [x] Updated the script orchestration path to use the explicit context struct.
 
 **Phase 4: Provider Configuration** ✅ COMPLETED (Commit: 5774bbc9)
-- [x] Create `ProviderOverride` struct (renamed from GeneratorConfig to avoid conflict):
+- [x] Added `ProviderOverride` to make provider selection explicit:
   - `{Provider, Model, APIKey, BaseURL}`
-- [x] Add `ProviderOverride` field to `AskRequest`
-- [x] Create helper `extractProviderOverrideFromContext()` for backward compatibility
-- [x] Update `resolveGeneratorAndCarryover()` and `resolveGeneratorAndCarryoverWithRequest()` to use `ProviderOverride`
-- [x] Make provider configuration explicit instead of hidden in context
+- [x] Added the `ProviderOverride` field to `AskRequest`.
+- [x] Added `extractProviderOverrideFromContext()` to preserve legacy compatibility.
+- [x] Updated `resolveGeneratorAndCarryover()` and `resolveGeneratorAndCarryoverWithRequest()` to use `ProviderOverride`.
+- [x] Removed the hidden provider-configuration dependency from the main Ask path.
 
 **Phase 5: Update Calling Sites** ✅ COMPLETED (Commit: 24c6285e)
-- [x] Rewrite legacy `Service.Ask()` to delegate to `AskWithRequest()`
-- [x] Extract all parameters from context in `Ask()` and construct `AskRequest`
-- [x] Maintain full backward compatibility for all existing callers
-- [x] All tests continue to work without modification
-- Note: External callers can continue using `Ask()` or migrate to `AskWithRequest()` gradually
+- [x] Rewrote the legacy `Service.Ask()` path to delegate to `AskWithRequest()`.
+- [x] Extracted the legacy context dependencies in `Ask()` and built `AskRequest` explicitly.
+- [x] Preserved full backward compatibility for existing callers.
+- [x] Kept the existing test suite passing without changing callers.
+- Note: External callers may continue using `Ask()` or migrate to `AskWithRequest()` at their own pace.
 
 **Phase 6: Cleanup and Validation** 🔄 IN PROGRESS
 - [x] Verify all Ask-related tests pass (all passing)

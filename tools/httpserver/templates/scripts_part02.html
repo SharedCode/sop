@@ -603,6 +603,11 @@
                         return items;
                     }
                     currentItems = [];
+                    currentItemKey = null;
+                    currentItemValue = null;
+                    if (typeof closeDetail === 'function') {
+                        closeDetail(true);
+                    }
                     grid.innerHTML = '<p>No items found. <button onclick="loadItems(\'first\')" title="Go to the first page of items.">Go to First</button></p>';
                     pagination.style.display = 'none';
                     paginationTop.style.display = 'none';

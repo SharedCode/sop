@@ -100,13 +100,13 @@ func TestMemoryStoreNames_IncludeUserIDWhenBound(t *testing.T) {
 	m := NewMemoryUnit("omni")
 	m.BindSession(ctx)
 
-	if got := m.ShortTermMemoryName(); got != "stm_omni_user42" {
+	if got := m.ShortTermMemoryName(); got != "stm_user42" {
 		t.Fatalf("expected user-scoped STM name, got %q", got)
 	}
-	if got := m.ShortTermMemoryTimeIndexName(); got != "stm_omni_user42_by_time" {
+	if got := m.ShortTermMemoryTimeIndexName(); got != "stm_user42_by_time" {
 		t.Fatalf("expected user-scoped STM time index name, got %q", got)
 	}
-	if got := m.LongTermMemoryName(); got != "ltm_omni_user42" {
+	if got := m.LongTermMemoryName(); got != "ltm_user42" {
 		t.Fatalf("expected user-scoped LTM name, got %q", got)
 	}
 }

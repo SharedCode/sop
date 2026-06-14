@@ -1,5 +1,20 @@
 {{define "scripts_part09"}}
 <script>
+    function updateArrayCheckboxVisibility(type, checkboxId) {
+        const checkbox = document.getElementById(checkboxId);
+        let container = document.getElementById(checkboxId + '-label');
+        if (!container && checkbox) container = checkbox.parentElement;
+        if (container) {
+            if (type === 'blob' || type === 'map') {
+                if (checkbox) checkbox.checked = false;
+                container.style.display = 'none';
+            } else {
+                container.style.display = 'flex';
+            }
+        }
+    }
+    window.updateArrayCheckboxVisibility = updateArrayCheckboxVisibility;
+
     function toggleValueSpec() {
         const valType = document.getElementById('new-store-value-type').value;
         updateArrayCheckboxVisibility(valType, 'new-store-value-is-array');
@@ -10,54 +25,65 @@
         const rawOption = document.getElementById('seed-value-raw-option');
         const rawModeCheckbox = document.getElementById('seed-value-raw-mode');
 
-        // If map, show builder or raw json
+        const valueMapContainer = document.getElementById('value-map-spec-container');
+        const seedDataContainer = document.getElementById('seed-data-container');
+
+        // Map values use the dedicated Value Map Fields builder only.
+        // The simple seed-value line is for non-map types only.
         if (valType === 'map') {
-            if (rawOption) rawOption.style.display = 'block';
-            if (rawModeCheckbox && rawModeCheckbox.checked) {
-                if (simpleInput) simpleInput.style.display = 'none';
-                if (builder) builder.style.display = 'none';
-                if (rawInput) rawInput.style.display = 'block';
-            } else {
-                if (simpleInput) simpleInput.style.display = 'none';
-                if (builder) builder.style.display = 'block';
-                if (rawInput) rawInput.style.display = 'none';
+            if (seedDataContainer) seedDataContainer.style.display = 'none';
+            if (valueMapContainer) valueMapContainer.style.display = 'block';
+            if (typeof ensureValueMapAddButton === 'function') ensureValueMapAddButton();
+            if (document.querySelectorAll('.value-field-row').length === 0) {
+                addValueFieldRow();
             }
-        } else {
-            // Simple type
             if (rawOption) rawOption.style.display = 'none';
-            if (simpleInput) simpleInput.style.display = 'block';
+            if (rawModeCheckbox) rawModeCheckbox.checked = false;
+            if (simpleInput) simpleInput.style.display = 'none';
             if (builder) builder.style.display = 'none';
             if (rawInput) rawInput.style.display = 'none';
+            return;
         }
+
+        // Simple / primitive value types use the seed-value line.
+        if (seedDataContainer) seedDataContainer.style.display = 'block';
+        if (valueMapContainer) valueMapContainer.style.display = 'none';
+        if (rawOption) rawOption.style.display = 'none';
+        if (rawModeCheckbox) rawModeCheckbox.checked = false;
+        if (simpleInput) simpleInput.style.display = 'block';
+        if (builder) builder.style.display = 'none';
+        if (rawInput) rawInput.style.display = 'none';
     }
 
     function saveNewStore() {
         const saveBtn = document.querySelector('#add-store-modal .modal-footer .btn-success');
-        if (!window.beginStoreAction || !window.beginStoreAction(saveBtn, 'Creating...')) {
-            return;
-        }
 
-        const name = document.getElementById('new-store-name').value.trim();
-        const type = document.getElementById('new-store-key-type').value;
-        const desc = document.getElementById('new-store-description').value.trim();
-        
-        let indexSpec = "";
-        const celExpression = document.getElementById('cel-expression-value').value;
+        try {
+            if (!window.beginStoreAction || !window.beginStoreAction(saveBtn, 'Creating...')) {
+                return;
+            }
 
-        if (type === 'map') {
-            indexSpec = generateIndexSpecJSON();
+            const name = document.getElementById('new-store-name').value.trim();
+            const type = document.getElementById('new-store-key-type').value;
+            const desc = document.getElementById('new-store-description').value.trim();
             
-            // Validation: Map Key must have Index OR CEL, unless bypassed via env var
-            if (!ALLOW_INVALID_MAP_KEY) {
-                const hasIndex = indexSpec && indexSpec !== "";
-                const hasCEL = celExpression && celExpression.trim() !== "";
+            let indexSpec = "";
+            const celExpression = document.getElementById('cel-expression-value').value;
+
+            if (type === 'map') {
+                indexSpec = generateIndexSpecJSON();
                 
-                if (!hasIndex && !hasCEL) {
-                    showAlert("Map Key type requires an Index Specification OR a CEL Expression.");
-                    return;
+                // Validation: Map Key must have Index OR CEL, unless bypassed via env var
+                if (!ALLOW_INVALID_MAP_KEY) {
+                    const hasIndex = indexSpec && indexSpec !== "";
+                    const hasCEL = celExpression && celExpression.trim() !== "";
+                    
+                    if (!hasIndex && !hasCEL) {
+                        showAlert("Map Key type requires an Index Specification OR a CEL Expression.");
+                        return;
+                    }
                 }
             }
-        }
 
         const advancedMode = document.getElementById('new-store-advanced-mode').checked;
         let slotLength = parseInt(document.getElementById('new-store-slot-length').value);
@@ -77,17 +103,17 @@
             isCacheTTL = false;
         }
 
-        if (!name) {
-            showAlert("Store name is required");
-            return;
-        }
+            if (!name) {
+                showAlert("Store name is required");
+                return;
+            }
 
-        // Parse Seed Data
-        let seedKey = null;
-        let seedValue = null;
-        
-        if (type === 'map') {
-            ensureMapKeySeedRow();
+            // Parse Seed Data
+            let seedKey = null;
+            let seedValue = null;
+            
+            if (type === 'map') {
+                ensureMapKeySeedRow();
             // Build from the map-key field rows directly so the sample key value is editable in place.
             const rows = document.querySelectorAll('.key-field-row');
             if (rows.length > 0) {
@@ -173,15 +199,15 @@
         }
         */
 
-        try {
-            seedValue = generateSeedValueJSON();
-        } catch (e) {
-            showAlert(e.message);
-            return;
-        }
+            try {
+                seedValue = generateSeedValueJSON();
+            } catch (e) {
+                showAlert(e.message);
+                return;
+            }
 
-        const isStreaming = document.getElementById('new-store-is-streaming').checked;
-        if (isStreaming) {
+            const isStreaming = document.getElementById('new-store-is-streaming').checked;
+            if (isStreaming) {
             // --- Validation for Streaming/Chunked Data ---
             
             // 1. Validate Key Type
@@ -245,40 +271,68 @@
             }
         }
 
-        // Check for Targeted EC
-        const ecTarget = document.getElementById('new-store-target-ec').value || "";
+            // Check for Targeted EC
+            const ecTarget = document.getElementById('new-store-target-ec').value || "";
 
-        const payload = {
-            database: currentDatabase,
-            store: name,
-            description: desc,
-            blob_store_base_folder_path: ecTarget,
-            key_type: type,
-            keyIsArray: document.getElementById('new-store-key-is-array').checked,
-            value_type: document.getElementById('new-store-value-type').value,
-            valueIsArray: document.getElementById('new-store-value-is-array').checked,
-            index_spec: indexSpec,
-            cel_expression: celExpression,
-            slot_length: slotLength,
-            is_unique: isUnique,
-            data_size: dataSize,
-            cache_duration: cacheDuration,
-            is_cache_ttl: isCacheTTL,
-            relations: getRelationshipsFromUI(),
-            seed_key: seedKey,
-            seed_value: seedValue
-        };
+            const keyFieldRows = Array.from(document.querySelectorAll('.key-field-row'));
+            const valueFieldRows = type === 'map'
+                ? Array.from(document.querySelectorAll('.value-field-row')).filter(row => {
+                    const style = window.getComputedStyle(row);
+                    return style.display !== 'none' && style.visibility !== 'hidden';
+                })
+                : [];
+            const keyFields = [];
+            const valueFields = [];
+            const schema = {};
+            keyFieldRows.forEach(row => {
+                const name = row.querySelector('.key-field-name')?.value?.trim() || '';
+                if (!name) return;
+                keyFields.push(name);
+                schema[name] = row.querySelector('.key-field-type')?.value || 'string';
+            });
+            valueFieldRows.forEach(row => {
+                const name = row.querySelector('.value-field-name')?.value?.trim() || '';
+                if (!name) return;
+                valueFields.push(name);
+                schema[name] = row.querySelector('.value-field-type')?.value || 'string';
+            });
 
-        try {
-            const data = apiCallSync('/api/store/add', 'POST', payload);
-            if (data.status === 'ok') {
-                closeAddStoreModal();
-                selectDatabase(currentDatabase, true, name);
-            } else {
-                showAlert("Error: " + (data.error || "Unknown error"));
+            const payload = {
+                database: currentDatabase,
+                store: name,
+                description: desc,
+                blob_store_base_folder_path: ecTarget,
+                key_type: type,
+                keyIsArray: document.getElementById('new-store-key-is-array').checked,
+                value_type: document.getElementById('new-store-value-type').value,
+                valueIsArray: document.getElementById('new-store-value-is-array').checked,
+                index_spec: indexSpec,
+                cel_expression: celExpression,
+                slot_length: slotLength,
+                is_unique: isUnique,
+                data_size: dataSize,
+                cache_duration: cacheDuration,
+                is_cache_ttl: isCacheTTL,
+                relations: getRelationshipsFromUI(),
+                schema: schema,
+                key_fields: keyFields,
+                value_fields: valueFields,
+                seed_key: seedKey,
+                seed_value: seedValue
+            };
+
+            try {
+                const data = apiCallSync('/api/store/add', 'POST', payload);
+                if (data.status === 'ok') {
+                    closeAddStoreModal();
+                    selectDatabase(currentDatabase, true, name);
+                } else {
+                    showAlert("Error: " + (data.error || "Unknown error"));
+                }
+            } catch (err) {
+                console.error(err);
+                showAlert("Error: " + (err.message || "Unknown error"));
             }
-        } catch (err) {
-            console.error(err);
         } finally {
             if (window.endStoreAction) {
                 window.endStoreAction(saveBtn);

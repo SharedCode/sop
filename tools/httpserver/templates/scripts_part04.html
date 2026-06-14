@@ -17,6 +17,79 @@
         }
     }
 
+    function normalizeSchemaType(type) {
+        const value = String(type || 'string').toLowerCase();
+        const aliases = {
+            'number': 'float64',
+            'integer': 'int',
+            'int64': 'int64',
+            'uint64': 'uint64',
+            'boolean': 'bool',
+            'bool': 'bool',
+            'uuid': 'uuid',
+            'guid': 'uuid',
+            'object': 'map',
+            'map': 'map',
+            'array': 'blob',
+            'list': 'blob'
+        };
+        return aliases[value] || value;
+    }
+
+    function coerceFieldValue(rawValue, fieldType) {
+        const value = rawValue === undefined || rawValue === null ? '' : rawValue;
+        const typeName = normalizeSchemaType(fieldType);
+
+        if (value === '') return value;
+
+        if (typeName === 'bool' || typeName === 'boolean') {
+            const text = String(value).trim().toLowerCase();
+            if (text === 'true' || text === 'false') return text === 'true';
+            throw new Error('Expected a boolean value (true/false).');
+        }
+
+        if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune', 'float32', 'float64', 'decimal'].includes(typeName)) {
+            const num = Number(value);
+            if (!Number.isFinite(num)) {
+                throw new Error('Expected a numeric value.');
+            }
+            return num;
+        }
+
+        if (typeName === 'date' || typeName === 'datetime' || typeName === 'time') {
+            const parsed = new Date(value);
+            if (Number.isNaN(parsed.getTime())) {
+                throw new Error('Expected a valid date/time value.');
+            }
+            return value;
+        }
+
+        if (typeName === 'uuid' || typeName === 'guid') {
+            const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+            if (!uuidPattern.test(String(value))) {
+                throw new Error('Expected a UUID value.');
+            }
+            return value;
+        }
+
+        if (typeName === 'blob' || typeName === 'map') {
+            if (typeof value === 'string' && (value.trim().startsWith('{') || value.trim().startsWith('['))) {
+                try {
+                    return JSON.parse(value);
+                } catch (e) {
+                    throw new Error('Expected valid JSON for a blob/map field.');
+                }
+            }
+        }
+
+        return value;
+    }
+
+    function parseInputVal(val, fieldType) {
+        if (val === '') return val;
+        return coerceFieldValue(val, fieldType);
+    }
+
     function saveItem() {
         if (!currentStore || currentItemKey === null) return;
 
@@ -28,32 +101,34 @@
             newVal = Array.isArray(currentItemValue) ? [] : {};
             const inputs = form.querySelectorAll('.value-input');
             
-            inputs.forEach(input => {
+            let hasValidationError = false;
+            for (const input of inputs) {
                 const key = input.getAttribute('data-key');
                 const rawVal = input.value;
                 const originalVal = currentItemValue[key];
-                
-                // Type conversion
+
+                // Type conversion with schema-aware validation when available.
                 let finalVal = rawVal;
-                
-                // Force JSON parse for 'steps' to ensure array, even if originalVal was missing/null
-                if(key === 'steps') {
-                     try { finalVal = JSON.parse(rawVal); } catch(e) { finalVal = []; }
-                } else if (typeof originalVal === 'number') {
-                    finalVal = Number(rawVal);
-                } else if (typeof originalVal === 'boolean') {
-                    finalVal = (rawVal.toLowerCase() === 'true');
-                } else if (typeof originalVal === 'object' && originalVal !== null) {
-                    try {
-                        finalVal = JSON.parse(rawVal);
-                    } catch {
-                        // Fallback to string if parse fails
-                        finalVal = rawVal;
-                    }
+                try {
+                    const fieldType = currentStoreInfo?.schema?.[key] || (typeof originalVal === 'number' ? 'number' : typeof originalVal === 'boolean' ? 'boolean' : null);
+                    finalVal = parseInputVal(rawVal, fieldType);
+                } catch (e) {
+                    showAlert(`Invalid value for "${key}": ${e.message}`);
+                    hasValidationError = true;
+                    break;
                 }
-                
+
+                // Preserve existing JSON handling for special cases that are not covered by schema.
+                if (key === 'steps') {
+                    try { finalVal = JSON.parse(rawVal); } catch(e) { finalVal = []; }
+                }
                 newVal[key] = finalVal;
-            });
+            }
+            if (hasValidationError) {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                return;
+            }
         } else {
             const valText = document.getElementById('edit-value').value;
             try {
@@ -115,20 +190,39 @@
 
     function deleteItem() {
         if (!currentStore || currentItemKey === null) return;
-        
+
         // Check if Read-Only (No Index Spec AND No CEL)
         if (isStoreReadOnly(currentStoreInfo)) {
             showAlert("Deletion is disabled for stores without an Index Specification or CEL Expression.");
             return;
         }
 
+        const isLastRemaining = Array.isArray(currentItems) && currentItems.length === 1;
+        const message = isLastRemaining
+            ? "Recommendation: keep at least one row in the store when possible. This is the last remaining record. Do you want to proceed with deletion?"
+            : "Are you sure you want to delete this item?";
+
         showConfirm(
-            "Are you sure you want to delete this item?", 
-            () => { performDelete(); }, 
-            null, 
-            "Confirm Deletion", 
-            "Delete"
+            message,
+            () => { performDelete(); },
+            null,
+            isLastRemaining ? "Delete Last Remaining Row" : "Confirm Deletion",
+            isLastRemaining ? "Yes, Delete" : "Delete",
+            isLastRemaining ? "No" : "Cancel"
         );
+    }
+
+    function refreshCurrentStoreInfo() {
+        if (!currentDatabase || !currentStore) return Promise.resolve(null);
+        return apiCall(`/api/store/info?database=${encodeURIComponent(currentDatabase)}&name=${encodeURIComponent(currentStore)}`)
+            .then(info => {
+                currentStoreInfo = info;
+                return info;
+            })
+            .catch(err => {
+                console.error('Failed to refresh store info:', err);
+                return null;
+            });
     }
 
     function performDelete() {
@@ -139,48 +233,46 @@
         };
 
         apiCall('/api/store/item/delete', 'POST', payload)
-        .then(() => {
-            // Find index of deleted item to determine next selection
-            let targetIndex = -1;
-            if (currentItems && currentItems.length > 0) {
-                // We need to compare keys carefully (objects vs primitives)
-                const deletedKeyStr = JSON.stringify(currentItemKey);
-                targetIndex = currentItems.findIndex(item => JSON.stringify(item.key) === deletedKeyStr);
-            }
+            .then(() => {
+                // Find index of deleted item to determine next selection
+                let targetIndex = -1;
+                if (currentItems && currentItems.length > 0) {
+                    const deletedKeyStr = JSON.stringify(currentItemKey);
+                    targetIndex = currentItems.findIndex(item => JSON.stringify(item.key) === deletedKeyStr);
+                }
 
-            loadItems('current', firstKey).then(newItems => {
-                if (!newItems || newItems.length === 0) {
-                    closeDetail();
-                    return;
-                }
-                
-                // Try to select item at same index, or last item if index out of bounds
-                if (targetIndex >= 0) {
-                    if (targetIndex >= newItems.length) {
-                        targetIndex = newItems.length - 1;
-                    }
-                    // We need to find the row element to pass to showDetail for highlighting
-                    // Since we just reloaded, we can find it by index in the table
-                    const rows = document.querySelectorAll('#items-table tbody tr');
-                    if (rows && rows[targetIndex]) {
-                        showDetail(rows[targetIndex], newItems[targetIndex], false);
-                    } else {
-                        showDetail(null, newItems[targetIndex], false);
-                    }
-                } else {
-                    // Fallback to first item if we couldn't track index
-                    const rows = document.querySelectorAll('#items-table tbody tr');
-                    if (rows && rows[0]) {
-                        showDetail(rows[0], newItems[0], false);
-                    } else {
-                        showDetail(null, newItems[0], false);
-                    }
-                }
+                return loadItems('current', firstKey)
+                    .then(newItems => {
+                        return refreshCurrentStoreInfo().then(() => {
+                            if (!newItems || newItems.length === 0) {
+                                closeDetail();
+                                return;
+                            }
+
+                            if (targetIndex >= 0) {
+                                if (targetIndex >= newItems.length) {
+                                    targetIndex = newItems.length - 1;
+                                }
+                                const rows = document.querySelectorAll('#items-table tbody tr');
+                                if (rows && rows[targetIndex]) {
+                                    showDetail(rows[targetIndex], newItems[targetIndex], false);
+                                } else {
+                                    showDetail(null, newItems[targetIndex], false);
+                                }
+                            } else {
+                                const rows = document.querySelectorAll('#items-table tbody tr');
+                                if (rows && rows[0]) {
+                                    showDetail(rows[0], newItems[0], false);
+                                } else {
+                                    showDetail(null, newItems[0], false);
+                                }
+                            }
+                        });
+                    });
+            })
+            .catch(err => {
+                showAlert("Delete failed: " + err.message);
             });
-        })
-        .catch(err => {
-            showAlert("Delete failed: " + err.message);
-        });
     }
 
 
@@ -205,15 +297,19 @@
 
         // --- Build Key UI ---
         let keySchema = [];
-        // 1. Infer from data first (most accurate for full struct)
-        if (currentItems && currentItems.length > 0 && typeof currentItems[0].key === 'object' && currentItems[0].key !== null) {
+        // 1. Prefer persisted key definitions from StoreInfo (important for empty stores)
+        if (currentStoreInfo && Array.isArray(currentStoreInfo.keyFields) && currentStoreInfo.keyFields.length > 0) {
+            keySchema = [...currentStoreInfo.keyFields];
+        }
+        // 2. Infer from data first (most accurate for full struct)
+        else if (currentItems && currentItems.length > 0 && typeof currentItems[0].key === 'object' && currentItems[0].key !== null) {
             keySchema = Object.keys(currentItems[0].key);
-        } 
-        // 2. Fallback to IndexSpec
+        }
+        // 3. Fallback to IndexSpec
         else if (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields) {
             keySchema = currentStoreInfo.indexSpec.index_fields.map(f => f.field_name);
         }
-        // 3. Fallback to Sample Key
+        // 4. Fallback to Sample Key
         else if (currentStoreInfo && currentStoreInfo.sampleKey && typeof currentStoreInfo.sampleKey === 'object') {
             keySchema = Object.keys(currentStoreInfo.sampleKey).sort();
         }
@@ -256,8 +352,12 @@
         let valueSchema = [];
         let isArray = false;
 
-        // 1. Fallback to Sample Value
-        if (currentStoreInfo && currentStoreInfo.sampleValue) {
+        // 1. Prefer persisted value-field definitions from StoreInfo (important for empty stores)
+        if (currentStoreInfo && Array.isArray(currentStoreInfo.valueFields) && currentStoreInfo.valueFields.length > 0) {
+            valueSchema = [...currentStoreInfo.valueFields];
+        }
+        // 2. Fallback to Sample Value
+        else if (currentStoreInfo && currentStoreInfo.sampleValue) {
             if (Array.isArray(currentStoreInfo.sampleValue)) {
                 isArray = true;
             } else if (typeof currentStoreInfo.sampleValue === 'object') {
@@ -265,7 +365,7 @@
             }
         }
 
-        // 2. Fallback to First Item
+        // 3. Fallback to First Item
         if (!isArray && valueSchema.length === 0 && currentItems && currentItems.length > 0) {
             const sampleVal = currentItems[0].value;
             if (Array.isArray(sampleVal)) {
@@ -323,7 +423,7 @@
             if (inputs.length > 0) {
                 inputs.forEach(inp => {
                     const k = inp.getAttribute('data-name');
-                    currentObj[k] = parseInputVal(inp.value);
+                    currentObj[k] = parseInputVal(inp.value, currentStoreInfo?.schema?.[k]);
                 });
                 renderAddKeyJson(JSON.stringify(currentObj, null, 2));
             } else {
@@ -378,7 +478,7 @@
             if (inputs.length > 0) {
                 inputs.forEach(inp => {
                     const k = inp.getAttribute('data-name');
-                    currentObj[k] = parseInputVal(inp.value);
+                    currentObj[k] = parseInputVal(inp.value, currentStoreInfo?.schema?.[k]);
                 });
                 renderAddValueJson(JSON.stringify(currentObj, null, 2));
             } else {
@@ -425,13 +525,6 @@
         container.innerHTML = `<textarea id="add-value-json" placeholder="Enter JSON Object, Array, or simple value (String, Number, Boolean)" style="width:100%; height:200px; padding:5px; font-family:monospace; border:1px solid var(--input-border); border-radius:3px; background: var(--input-bg); color: var(--text-color); box-sizing: border-box;">${content}</textarea>`;
     }
 
-    function parseInputVal(val) {
-        if (val === '') return val;
-        if (!isNaN(Number(val))) return Number(val);
-        if (val.toLowerCase() === 'true') return true;
-        if (val.toLowerCase() === 'false') return false;
-        return val;
-    }
 
     function closeAdd() {
         closeUIModal('add-modal');
@@ -447,9 +540,14 @@
         if (keyFields.length > 0) {
             // Complex Key Form
             key = {};
-            keyFields.forEach(inp => {
-                key[inp.getAttribute('data-name')] = parseInputVal(inp.value);
-            });
+            for (const inp of keyFields) {
+                try {
+                    key[inp.getAttribute('data-name')] = parseInputVal(inp.value, currentStoreInfo?.schema?.[inp.getAttribute('data-name')]);
+                } catch (e) {
+                    showAlert(`Invalid key value for "${inp.getAttribute('data-name')}": ${e.message}`);
+                    return;
+                }
+            }
         } else {
             // JSON/Simple Mode
             let keyText = "";
@@ -482,9 +580,14 @@
         if (valFields.length > 0) {
             // Form Mode
             val = {};
-            valFields.forEach(inp => {
-                val[inp.getAttribute('data-name')] = parseInputVal(inp.value);
-            });
+            for (const inp of valFields) {
+                try {
+                    val[inp.getAttribute('data-name')] = parseInputVal(inp.value, currentStoreInfo?.schema?.[inp.getAttribute('data-name')]);
+                } catch (e) {
+                    showAlert(`Invalid value for "${inp.getAttribute('data-name')}": ${e.message}`);
+                    return;
+                }
+            }
         } else {
             // JSON/Raw Mode
             const valText = document.getElementById('add-value-json').value.trim();
@@ -573,11 +676,10 @@
         apiCall('/api/store/item/add', 'POST', payload)
         .then(() => {
             closeAdd();
-            if (!currentItems || currentItems.length <= 1) {
-                loadItems('first');
-            } else {
-                loadItems('current', firstKey);
-            }
+            const loadPromise = (!currentItems || currentItems.length <= 1)
+                ? loadItems('first')
+                : loadItems('current', firstKey);
+            return loadPromise.then(() => refreshCurrentStoreInfo());
         })
         .catch(err => {
             showAlert("Add failed: " + err.message);

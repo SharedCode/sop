@@ -153,12 +153,44 @@
              }
         }
 
+        const keyFieldRows = Array.from(document.querySelectorAll('.key-field-row'));
+        const valueType = document.getElementById('new-store-value-type')?.value || 'string';
+        const isStructValue = valueType === 'map';
+        const valueFieldRows = isStructValue
+            ? Array.from(document.querySelectorAll('.value-field-row')).filter(row => {
+                const style = window.getComputedStyle(row);
+                return style.display !== 'none' && style.visibility !== 'hidden';
+            })
+            : [];
+        const keyFields = [];
+        const valueFields = [];
+        const schema = {};
+
+        keyFieldRows.forEach(row => {
+            const name = row.querySelector('.key-field-name')?.value?.trim() || '';
+            if (!name) return;
+            keyFields.push(name);
+            schema[name] = row.querySelector('.key-field-type')?.value || 'string';
+        });
+
+        if (isStructValue) {
+            valueFieldRows.forEach(row => {
+                const name = row.querySelector('.value-field-name')?.value?.trim() || '';
+                if (!name) return;
+                valueFields.push(name);
+                schema[name] = row.querySelector('.value-field-type')?.value || 'string';
+            });
+        }
+
         const payload = {
             database: currentDatabase,
             storeName: name,
             description: desc,
             keyType: type,
             valueType: document.getElementById('new-store-value-type').value,
+            schema: schema,
+            keyFields: keyFields,
+            valueFields: valueFields,
             celExpression: celExpression,
             indexSpec: indexSpec,
             slotLength: slotLength,
@@ -190,9 +222,75 @@
         }
     }
 
+    function resetStoreFormState() {
+        const valueMapContainer = document.getElementById('value-map-spec-container');
+        if (valueMapContainer) {
+            valueMapContainer.style.display = 'none';
+            valueMapContainer.querySelectorAll('button.add-val-btn').forEach(btn => btn.remove());
+        }
+
+        const seedBuilder = document.getElementById('seed-value-builder');
+        if (seedBuilder) {
+            seedBuilder.style.display = 'none';
+        }
+
+        const seedValueSimple = document.getElementById('new-store-seed-value-simple');
+        if (seedValueSimple) {
+            seedValueSimple.style.display = 'block';
+            seedValueSimple.disabled = false;
+        }
+
+        const seedValueRaw = document.getElementById('new-store-seed-value');
+        if (seedValueRaw) {
+            seedValueRaw.style.display = 'none';
+            seedValueRaw.disabled = false;
+        }
+
+        const seedKeyInput = document.getElementById('new-store-seed-key');
+        if (seedKeyInput) {
+            seedKeyInput.disabled = false;
+        }
+
+        const seedRawMode = document.getElementById('seed-value-raw-mode');
+        if (seedRawMode) {
+            seedRawMode.disabled = false;
+        }
+
+        const rawMode = document.getElementById('seed-value-raw-mode');
+        if (rawMode) rawMode.checked = false;
+
+        const valueMapFields = document.getElementById('value-map-fields-list');
+        if (valueMapFields) valueMapFields.innerHTML = '';
+
+        const seedFields = document.getElementById('seed-value-fields-list');
+        if (seedFields) seedFields.innerHTML = '';
+
+        ['seed-data-container', 'seed-key-container', 'value-map-spec-container', 'index-spec-container'].forEach(id => {
+            const container = document.getElementById(id);
+            if (container) {
+                container.querySelectorAll('input, select, textarea, button').forEach(el => {
+                    el.disabled = false;
+                    el.removeAttribute('readonly');
+                });
+            }
+        });
+
+        const keyFields = document.getElementById('key-fields-list');
+        if (keyFields) keyFields.innerHTML = '';
+
+        const indexFields = document.getElementById('index-fields-list');
+        if (indexFields) indexFields.innerHTML = '';
+    }
+
     function showAddStore() {
-        // currentStoreInfo = null; // Do not clear this, as it breaks Edit Store if we cancel Add
+        window.currentStoreFormMode = 'add';
+        window.currentStoreInfo = null;
         window.currentAdminCredentials = null;
+
+        const modal = document.getElementById('add-store-modal');
+        if (modal) modal.dataset.formMode = 'add';
+
+        resetStoreFormState();
         
         // Fetch stores for potential relationships
         fetchRelationStores();
@@ -202,33 +300,38 @@
 
         // populate EC targets
         const targetSelect = document.getElementById('new-store-target-ec');
-        targetSelect.innerHTML = '<option value="">Default("")</option>';
-        targetSelect.disabled = false;
-        
-        if (currentDatabase) {
-             apiCall(`/api/db/options?database=${encodeURIComponent(currentDatabase)}`)
-                .then(opts => {
-                    if (opts.erasure_config) {
-                        Object.keys(opts.erasure_config).forEach(key => {
-                             // Skip empty key as it doubles with Default if logic overlaps, 
-                             // but explicit empty key in config is valid.
-                             if (key === "") return; 
-                             
-                             const opt = document.createElement('option');
-                             opt.value = key;
-                             opt.textContent = key;
-                             targetSelect.appendChild(opt);
-                        });
-                    }
-                })
-                .catch(console.error);
+        if (targetSelect) {
+            targetSelect.innerHTML = '<option value="">Default("")</option>';
+            targetSelect.disabled = false;
+
+            if (currentDatabase) {
+                 apiCall(`/api/db/options?database=${encodeURIComponent(currentDatabase)}`)
+                    .then(opts => {
+                        if (opts?.erasure_config && targetSelect.isConnected) {
+                            Object.keys(opts.erasure_config).forEach(key => {
+                                 // Skip empty key as it doubles with Default if logic overlaps,
+                                 // but explicit empty key in config is valid.
+                                 if (key === "") return;
+
+                                 const opt = document.createElement('option');
+                                 opt.value = key;
+                                 opt.textContent = key;
+                                 targetSelect.appendChild(opt);
+                            });
+                        }
+                    })
+                    .catch(console.error);
+            }
+        } else {
+            console.warn('showAddStore: target select element not found');
         }
 
         // Reset Button
         const footer = document.querySelector('#add-store-modal .modal-footer');
-        const saveBtn = footer.querySelector('.btn-success');
+        const saveBtn = footer?.querySelector('.btn-success');
         if (saveBtn) {
             saveBtn.removeAttribute('onclick');
+            saveBtn.dataset.storeAction = 'add';
             saveBtn.textContent = 'Add';
             saveBtn.onclick = function (evt) {
                 evt.preventDefault();
@@ -246,58 +349,125 @@
         document.getElementById('relationship-list').innerHTML = ''; // Clear relationships
 
         // Reset Key Type
-        document.getElementById('new-store-key-type').value = 'string';
-        document.getElementById('new-store-key-type').disabled = false;
-        document.getElementById('new-store-key-is-array').checked = false;
-        document.getElementById('new-store-key-is-array').disabled = false;
-        
+        const keyTypeSelect = document.getElementById('new-store-key-type');
+        if (keyTypeSelect) {
+            keyTypeSelect.value = 'string';
+            keyTypeSelect.disabled = false;
+        }
+        const keyArrayBox = document.getElementById('new-store-key-is-array');
+        if (keyArrayBox) {
+            keyArrayBox.checked = false;
+            keyArrayBox.disabled = false;
+        }
+
         // Reset Value Type
-        document.getElementById('new-store-value-type').value = 'string';
-        document.getElementById('new-store-value-type').disabled = false;
-        document.getElementById('new-store-value-is-array').checked = false;
-        document.getElementById('new-store-value-is-array').disabled = false;
+        const valueTypeSelect = document.getElementById('new-store-value-type');
+        if (valueTypeSelect) {
+            valueTypeSelect.value = 'string';
+            valueTypeSelect.disabled = false;
+        }
+        const valueArrayBox = document.getElementById('new-store-value-is-array');
+        if (valueArrayBox) {
+            valueArrayBox.checked = false;
+            valueArrayBox.disabled = false;
+        }
 
         // Reset CEL
-        document.getElementById('cel-expression-value').value = '';
-        document.getElementById('cel-expression-value').disabled = false;
+        const celValue = document.getElementById('cel-expression-value');
+        if (celValue) {
+            celValue.value = '';
+            celValue.disabled = false;
+        }
         const celEditBtn = document.querySelector('#new-store-cel-expression button');
         if (celEditBtn) celEditBtn.disabled = false;
 
         // Reset Advanced Mode
-        document.getElementById('new-store-advanced-mode').checked = false;
-        document.getElementById('new-store-advanced-mode').disabled = false;
+        const advancedModeToggle = document.getElementById('new-store-advanced-mode');
+        if (advancedModeToggle) {
+            advancedModeToggle.checked = false;
+            advancedModeToggle.disabled = false;
+        }
         toggleAdvancedOptions();
 
         // Reset Advanced Fields
-        document.getElementById('new-store-slot-length').value = 2000;
-        document.getElementById('new-store-slot-length').disabled = false;
-        document.getElementById('new-store-is-unique').checked = true;
-        document.getElementById('new-store-is-unique').disabled = false;
-        document.getElementById('new-store-data-size').value = "0"; // Small
-        document.getElementById('new-store-data-size').disabled = false;
-        
-        document.getElementById('new-store-cache-duration').value = 0;
-        document.getElementById('new-store-cache-duration').disabled = false;
-        document.getElementById('new-store-is-streaming').checked = false;
-        document.getElementById('new-store-is-streaming').disabled = false;
+        const slotLengthInput = document.getElementById('new-store-slot-length');
+        if (slotLengthInput) {
+            slotLengthInput.value = 2000;
+            slotLengthInput.disabled = false;
+        }
+        const uniqueBox = document.getElementById('new-store-is-unique');
+        if (uniqueBox) {
+            uniqueBox.checked = true;
+            uniqueBox.disabled = false;
+        }
+        const dataSizeSelect = document.getElementById('new-store-data-size');
+        if (dataSizeSelect) {
+            dataSizeSelect.value = '0';
+            dataSizeSelect.disabled = false;
+        }
+
+        const cacheDurationInput = document.getElementById('new-store-cache-duration');
+        if (cacheDurationInput) {
+            cacheDurationInput.value = 0;
+            cacheDurationInput.disabled = false;
+        }
+        const streamingBox = document.getElementById('new-store-is-streaming');
+        if (streamingBox) {
+            streamingBox.checked = false;
+            streamingBox.disabled = false;
+        }
         
         toggleCacheOptions();
 
-        // Clear Dynamic Lists
-        document.getElementById('key-fields-list').innerHTML = '';
-        document.getElementById('index-fields-list').innerHTML = '';
-        document.getElementById('value-map-fields-list').innerHTML = '';
-        document.getElementById('seed-key-fields-list').innerHTML = '';
-        document.getElementById('seed-value-fields-list').innerHTML = '';
+        // Clear Dynamic Lists (guard for older/partial DOM layouts)
+        const keyFieldsList = document.getElementById('key-fields-list');
+        if (keyFieldsList) keyFieldsList.innerHTML = '';
+        const indexFieldsList = document.getElementById('index-fields-list');
+        if (indexFieldsList) indexFieldsList.innerHTML = '';
+        const valueMapFieldsList = document.getElementById('value-map-fields-list');
+        if (valueMapFieldsList) valueMapFieldsList.innerHTML = '';
+        const seedKeyFieldsList = document.getElementById('seed-key-fields-list');
+        if (seedKeyFieldsList) seedKeyFieldsList.innerHTML = '';
+        const seedValueFieldsList = document.getElementById('seed-value-fields-list');
+        if (seedValueFieldsList) seedValueFieldsList.innerHTML = '';
+        const valueMapContainer = document.getElementById('value-map-spec-container');
+        if (valueMapContainer) {
+            valueMapContainer.querySelectorAll('button.add-val-btn').forEach(btn => btn.remove());
+        }
 
         // Reset Seed Data Inputs
-        document.getElementById('new-store-seed-key').value = '';
-        document.getElementById('new-store-seed-value-simple').value = '';
-        openUIModal('seed-data-container', 'block'); // Always show for new store
+        const seedKeyInput = document.getElementById('new-store-seed-key');
+        if (seedKeyInput) {
+            seedKeyInput.value = '';
+            seedKeyInput.disabled = false;
+        }
+        const seedSimpleInput = document.getElementById('new-store-seed-value-simple');
+        if (seedSimpleInput) {
+            seedSimpleInput.value = '';
+            seedSimpleInput.disabled = false;
+        }
+        const seedRawInput = document.getElementById('new-store-seed-value');
+        if (seedRawInput) {
+            seedRawInput.value = '';
+            seedRawInput.disabled = false;
+        }
+
+        const seedDataContainer = document.getElementById('seed-data-container');
+        if (seedDataContainer) seedDataContainer.style.display = 'block';
+        const rawMode = document.getElementById('seed-value-raw-mode');
+        if (rawMode) rawMode.checked = false;
+
+        if (valueMapContainer) valueMapContainer.style.display = 'none';
+        const indexSpecContainer = document.getElementById('index-spec-container');
+        if (indexSpecContainer) indexSpecContainer.style.display = 'none';
 
         // Reset UI State
         toggleIndexSpec();
-        
+
+        if (typeof ensureValueMapAddButton === 'function') {
+            ensureValueMapAddButton();
+        }
+
         // Re-enable Add Buttons (in case they were disabled by Edit Store)
         refreshAddFieldButtons();
         
@@ -311,10 +481,39 @@
     }
 
     function closeAddStoreModal() {
+        window.currentStoreFormMode = 'view';
+        resetStoreFormState();
         closeUIModal('add-store-modal');
         window.currentAdminCredentials = null;
         const unlockBtn = document.getElementById('btn-unlock-admin');
         if (unlockBtn) unlockBtn.style.display = 'none';
+    }
+
+    function ensureValueMapAddButton() {
+        const valMapContainer = document.getElementById('value-map-spec-container');
+        if (!valMapContainer) return;
+
+        let addValBtn = valMapContainer.querySelector('button.add-val-btn');
+        if (!addValBtn) {
+            addValBtn = document.createElement('button');
+            addValBtn.type = 'button';
+            addValBtn.className = 'add-val-btn';
+            addValBtn.textContent = '+ Add Field';
+            addValBtn.onclick = () => addValueFieldRow();
+            addValBtn.style.marginTop = '5px';
+            addValBtn.style.fontSize = '11px';
+            addValBtn.style.padding = '4px 8px';
+            addValBtn.style.cursor = 'pointer';
+            valMapContainer.appendChild(addValBtn);
+        }
+
+        addValBtn.disabled = false;
+        addValBtn.style.display = 'inline-block';
+
+        const label = valMapContainer.querySelector('label');
+        if (label && label.textContent.includes('Read-Only')) {
+            label.textContent = 'Value Map Fields';
+        }
     }
 
     function refreshAddFieldButtons() {
@@ -338,24 +537,120 @@
             seedBtn.disabled = false;
             seedBtn.style.pointerEvents = 'auto';
         }
+
+        const valueMapAddBtn = document.querySelector('#value-map-spec-container button.add-val-btn');
+        if (valueMapAddBtn) {
+            valueMapAddBtn.onclick = () => addValueFieldRow();
+            valueMapAddBtn.disabled = false;
+            valueMapAddBtn.style.pointerEvents = 'auto';
+        }
     }
 
-    function addValueFieldRow(name = '', type = 'string', value = '') {
+    function normalizeFieldType(type) {
+        const normalized = String(type || 'string').toLowerCase();
+        const aliases = {
+            'number': 'float64',
+            'integer': 'int',
+            'int64': 'int64',
+            'uint64': 'uint64',
+            'boolean': 'bool',
+            'bool': 'bool',
+            'uuid': 'uuid',
+            'guid': 'uuid',
+            'object': 'map',
+            'map': 'map',
+            'array': 'blob',
+            'list': 'blob'
+        };
+        return aliases[normalized] || normalized;
+    }
+
+    function hasSchemaMetadata(info) {
+        const hasSchema = !!(info?.schema && typeof info.schema === 'object' && Object.keys(info.schema).length > 0);
+        const hasKeyFields = Array.isArray(info?.keyFields) && info.keyFields.length > 0;
+        const hasValueFields = Array.isArray(info?.valueFields) && info.valueFields.length > 0;
+        const hasIndexSpec = !!(info?.indexSpec && typeof info.indexSpec === 'object' && Array.isArray(info.indexSpec.index_fields) && info.indexSpec.index_fields.length > 0);
+        const hasRelations = Array.isArray(info?.relations) && info.relations.length > 0;
+        return hasSchema || hasKeyFields || hasValueFields || hasIndexSpec || hasRelations;
+    }
+
+    function inferFieldTypeFromValue(value) {
+        if (value === null || value === undefined) return 'string';
+
+        if (typeof value === 'number') {
+            return Number.isInteger(value) ? 'int' : 'float64';
+        }
+
+        if (typeof value === 'boolean') {
+            return 'bool';
+        }
+
+        if (typeof value === 'string') {
+            const trimmed = value.trim();
+            if (/^(true|false)$/i.test(trimmed)) return 'bool';
+            if (/^\d+$/.test(trimmed)) return 'int';
+            if (/^\d+\.\d+(?:e[-+]?\d+)?$/i.test(trimmed)) return 'float64';
+            if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(trimmed)) return 'uuid';
+            if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return 'date';
+            if (/^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)$/.test(trimmed)) return 'datetime';
+            return 'string';
+        }
+
+        if (Array.isArray(value)) {
+            return 'blob';
+        }
+
+        if (typeof value === 'object') {
+            return 'map';
+        }
+
+        return 'string';
+    }
+
+    function addValueFieldRow(name = '', type = 'string', value = '', readOnly = false) {
         const container = document.getElementById('value-map-fields-list');
+        const normalizedType = normalizeFieldType(type);
         const div = document.createElement('div');
         div.className = 'value-field-row';
         div.style.display = 'flex';
         div.style.gap = '5px';
         div.innerHTML = `
-            <input type="text" placeholder="Field Name" class="value-field-name" value="${window.escapeHTML(name)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
-            <select class="value-field-type" style="width: 100px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
-                <option value="string" ${type==='string'?'selected':''}>String</option>
-                <option value="int" ${type==='int'?'selected':''}>Int</option>
-                <option value="float64" ${type==='float64'?'selected':''}>Float64</option>
-                <option value="bool" ${type==='bool'?'selected':''}>Bool</option>
+            <input type="text" placeholder="Field Name" class="value-field-name" value="${window.escapeHTML(name)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" ${readOnly ? 'disabled' : ''}>
+            <select class="value-field-type" onchange="const row = this.closest('.value-field-row'); const valueInput = row.querySelector('.value-field-value'); if (valueInput) valueInput.value = getDefaultFieldValue(this.value);" style="width: 100px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" ${readOnly ? 'disabled' : ''}>
+                <option value="string" ${normalizedType==='string'?'selected':''}>String</option>
+                <option value="int" ${normalizedType==='int'?'selected':''}>Int</option>
+                <option value="int8" ${normalizedType==='int8'?'selected':''}>Int8</option>
+                <option value="int16" ${normalizedType==='int16'?'selected':''}>Int16</option>
+                <option value="int32" ${normalizedType==='int32'?'selected':''}>Int32</option>
+                <option value="int64" ${normalizedType==='int64'?'selected':''}>Int64</option>
+                <option value="uint" ${normalizedType==='uint'?'selected':''}>Uint</option>
+                <option value="uint8" ${normalizedType==='uint8'?'selected':''}>Uint8</option>
+                <option value="uint16" ${normalizedType==='uint16'?'selected':''}>Uint16</option>
+                <option value="uint32" ${normalizedType==='uint32'?'selected':''}>Uint32</option>
+                <option value="uint64" ${normalizedType==='uint64'?'selected':''}>Uint64</option>
+                <option value="float32" ${normalizedType==='float32'?'selected':''}>Float32</option>
+                <option value="float64" ${normalizedType==='float64'?'selected':''}>Float64</option>
+                <option value="complex64" ${normalizedType==='complex64'?'selected':''}>Complex64</option>
+                <option value="complex128" ${normalizedType==='complex128'?'selected':''}>Complex128</option>
+                <option value="rune" ${normalizedType==='rune'?'selected':''}>Rune</option>
+                <option value="decimal" ${normalizedType==='decimal'?'selected':''}>Decimal</option>
+                <option value="bool" ${normalizedType==='bool'?'selected':''}>Bool</option>
+                <option value="timestamp" ${normalizedType==='timestamp'?'selected':''}>Timestamp</option>
+                <option value="timestampz" ${normalizedType==='timestampz'?'selected':''}>TimestampZ</option>
+                <option value="date" ${normalizedType==='date'?'selected':''}>Date</option>
+                <option value="datetime" ${normalizedType==='datetime'?'selected':''}>DateTime</option>
+                <option value="time" ${normalizedType==='time'?'selected':''}>Time</option>
+                <option value="uuid" ${normalizedType==='uuid'?'selected':''}>UUID</option>
+                <option value="guid" ${normalizedType==='guid'?'selected':''}>UUID</option>
+                <option value="blob" ${normalizedType==='blob'?'selected':''}>Blob</option>
+                <option value="map" ${normalizedType==='map'?'selected':''}>Map</option>
             </select>
-            <input type="text" placeholder="Value" class="value-field-value" value="${window.escapeHTML(value)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
-            <button onclick="this.parentElement.remove();" style="background:var(--danger-bg); color:white; border:none; padding: 4px 8px; cursor:pointer;">×</button>
+            <input type="text" placeholder="Value" class="value-field-value" value="${window.escapeHTML(value !== undefined && value !== null && value !== '' ? value : getDefaultFieldValue(normalizedType))}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);" ${readOnly ? 'disabled' : ''}>
+            <div style="display:flex; gap:0; align-items:center; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg);">
+                <button onclick="moveFieldRow(this, -1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px;" title="Move Up" ${readOnly ? 'disabled' : ''}>↑</button>
+                <button onclick="moveFieldRow(this, 1)" style="cursor:pointer; background:none; border:none; color:var(--text-color); padding: 2px 6px; border-left: 1px solid var(--input-border);" title="Move Down" ${readOnly ? 'disabled' : ''}>↓</button>
+                <button onclick="this.closest('.value-field-row').remove();" style="color:red; cursor:pointer; background:none; border:none; padding: 2px 6px; border-left: 1px solid var(--input-border);" ${readOnly ? 'disabled' : ''}>&times;</button>
+            </div>
         `;
         container.appendChild(div);
     }
@@ -387,18 +682,26 @@
         updateArrayCheckboxVisibility(type, 'new-store-key-is-array');
 
         const container = document.getElementById('index-spec-container');
+        const seedKeyContainer = document.getElementById('seed-key-container');
         const celContainer = document.getElementById('new-store-cel-expression');
-        
+
         if (type === 'map') {
-            container.style.display = 'block';
+            if (container) container.style.display = 'block';
+            if (seedKeyContainer) seedKeyContainer.style.display = 'none';
             if (celContainer) celContainer.style.display = 'block';
 
-            // Initialize with one row if empty
-            if (document.getElementById('key-fields-list').children.length === 0) {
+            // Initialize with one row only when there is no persisted metadata to render.
+            const hasPersistedKeySchema = !!(
+                (currentStoreInfo && Array.isArray(currentStoreInfo.keyFields) && currentStoreInfo.keyFields.length > 0) ||
+                (currentStoreInfo && currentStoreInfo.schema && typeof currentStoreInfo.schema === 'object' && Object.keys(currentStoreInfo.schema).length > 0) ||
+                (currentStoreInfo && currentStoreInfo.indexSpec && currentStoreInfo.indexSpec.index_fields && currentStoreInfo.indexSpec.index_fields.length > 0)
+            );
+            if (document.getElementById('key-fields-list').children.length === 0 && !hasPersistedKeySchema) {
                 addKeyFieldRow();
             }
         } else {
-            container.style.display = 'none';
+            if (container) container.style.display = 'none';
+            if (seedKeyContainer) seedKeyContainer.style.display = 'block';
             if (celContainer) celContainer.style.display = 'none';
         }
     }
@@ -501,7 +804,7 @@
     }
 
     function moveFieldRow(btn, direction) {
-        const row = btn.closest('.key-field-row, .seed-value-field-row, .index-field-row');
+        const row = btn.closest('.key-field-row, .value-field-row, .seed-value-field-row, .index-field-row');
         const container = row.parentElement;
         if (direction === -1) {
             if (row.previousElementSibling) {
@@ -586,32 +889,84 @@
         }
     }
 
-    function populateKeyFieldsAndIndexSpec(info) {
+    function populateValueMapFields(info, readOnly = false) {
+        const list = document.getElementById('value-map-fields-list');
+        if (!list) return;
+        list.innerHTML = '';
+
+        const hasSchema = hasSchemaMetadata(info);
+        const explicit = Array.isArray(info?.valueFields) && info.valueFields.length > 0
+            ? info.valueFields
+            : (hasSchema ? Object.keys(info.schema) : (info?.sampleValue && typeof info.sampleValue === 'object' ? Object.keys(info.sampleValue) : []));
+
+        const keyNames = Array.isArray(info?.keyFields) ? info.keyFields : [];
+        explicit.filter(name => !keyNames.includes(name)).forEach(name => {
+            const rawType = hasSchema
+                ? (info.schema[name] || 'string')
+                : (info?.sampleValue && typeof info.sampleValue === 'object' ? inferFieldTypeFromValue(info.sampleValue[name]) : 'string');
+            addValueFieldRow(name, normalizeFieldType(rawType), '', readOnly);
+        });
+
+        if (list.children.length === 0) {
+            addValueFieldRow('', 'string', '', readOnly);
+        }
+
+        if (readOnly) {
+            const addBtn = document.querySelector('#value-map-spec-container button.add-val-btn');
+            if (addBtn) {
+                addBtn.disabled = true;
+                addBtn.style.pointerEvents = 'none';
+            }
+        }
+    }
+
+    function populateKeyFieldsAndIndexSpec(info, readOnly = false) {
+        console.log('[Key builder] received schema metadata', {
+            schema: info?.schema,
+            keyFields: info?.keyFields,
+            indexSpec: info?.indexSpec,
+            sampleKey: info?.sampleKey,
+            readOnly
+        });
+
         // 1. Populate Key Fields (Definition)
         const keyList = document.getElementById('key-fields-list');
         keyList.innerHTML = '';
-        
+
         let fieldsFound = false;
-        
-        if (info.sampleKey && typeof info.sampleKey === 'object') {
-            Object.keys(info.sampleKey).forEach(k => {
-                const val = info.sampleKey[k];
-                let type = 'string';
-                const t = typeof val;
-                if (t === 'number') {
-                     if (Number.isInteger(val)) type = 'int';
-                     else type = 'float64';
-                } else if (t === 'boolean') type = 'bool';
-                
-                addKeyFieldRow(k, type, val);
+
+        const hasSchema = hasSchemaMetadata(info);
+        const explicitKeyFields = Array.isArray(info?.keyFields) && info.keyFields.length > 0
+            ? info.keyFields
+            : (hasSchema ? Object.keys(info.schema).filter(Boolean) : []);
+
+        if (explicitKeyFields.length > 0) {
+            explicitKeyFields.forEach(name => {
+                const rawType = hasSchema
+                    ? (info.schema[name] || 'string')
+                    : (info?.sampleKey && typeof info.sampleKey === 'object' ? inferFieldTypeFromValue(info.sampleKey[name]) : 'string');
+                const value = hasSchema
+                    ? ''
+                    : ((info?.sampleKey && typeof info.sampleKey === 'object' && info.sampleKey[name] !== undefined) ? info.sampleKey[name] : '');
+                addKeyFieldRow(name, normalizeFieldType(rawType), value, readOnly);
             });
             fieldsFound = true;
         }
-        
+
+        if (!fieldsFound && !hasSchema && info?.sampleKey && typeof info.sampleKey === 'object') {
+            Object.keys(info.sampleKey).forEach(k => {
+                const val = info.sampleKey[k];
+                const type = inferFieldTypeFromValue(val);
+                addKeyFieldRow(k, normalizeFieldType(type), val, readOnly);
+            });
+            fieldsFound = true;
+        }
+
         // Fallback to Index Spec if sample key is missing
-        if (!fieldsFound && info.indexSpec && info.indexSpec.index_fields) {
+        if (!fieldsFound && info?.indexSpec && info.indexSpec.index_fields) {
             info.indexSpec.index_fields.forEach(f => {
-                addKeyFieldRow(f.field_name, 'string');
+                const rawType = (info?.schema && info.schema[f.field_name]) || 'string';
+                addKeyFieldRow(f.field_name, normalizeFieldType(rawType), '', readOnly);
             });
         }
 
@@ -624,6 +979,8 @@
                 addIndexFieldRow(f.field_name, f.ascending_sort_order ? 'asc' : 'desc');
             });
         }
+
+        populateValueMapFields(info, readOnly);
     }
 
     function disableKeyAndIndexFields() {
@@ -849,39 +1206,42 @@
 
     function addSeedValueFieldRow(name = '', type = 'string', value = '') {
         const container = document.getElementById('seed-value-fields-list');
+        const normalizedType = normalizeFieldType(type);
         const div = document.createElement('div');
         div.className = 'seed-value-field-row';
         div.style.display = 'flex';
         div.style.gap = '5px';
-        const initialValue = (value !== undefined && value !== null && value !== '') ? value : getDefaultFieldValue(type);
+        const initialValue = (value !== undefined && value !== null && value !== '') ? value : getDefaultFieldValue(normalizedType);
         div.innerHTML = `
             <input type="text" placeholder="Field Name" class="seed-field-name" value="${window.escapeHTML(name)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
             <select class="seed-field-type" onchange="const row = this.closest('.seed-value-field-row'); const valueInput = row.querySelector('.seed-field-value'); if (valueInput) valueInput.value = getDefaultFieldValue(this.value);" style="width: 80px; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
-                <option value="string" ${type==='string'?'selected':''}>String</option>
-                <option value="int" ${type==='int'?'selected':''}>Int</option>
-                <option value="int8" ${type==='int8'?'selected':''}>Int8</option>
-                <option value="int16" ${type==='int16'?'selected':''}>Int16</option>
-                <option value="int32" ${type==='int32'?'selected':''}>Int32</option>
-                <option value="int64" ${type==='int64'?'selected':''}>Int64</option>
-                <option value="uint" ${type==='uint'?'selected':''}>Uint</option>
-                <option value="uint8" ${type==='uint8'?'selected':''}>Uint8</option>
-                <option value="uint16" ${type==='uint16'?'selected':''}>Uint16</option>
-                <option value="uint32" ${type==='uint32'?'selected':''}>Uint32</option>
-                <option value="uint64" ${type==='uint64'?'selected':''}>Uint64</option>
-                <option value="float32" ${type==='float32'?'selected':''}>Float32</option>
-                <option value="float64" ${type==='float64'?'selected':''}>Float64</option>
-                <option value="complex64" ${type==='complex64'?'selected':''}>Complex64</option>
-                <option value="complex128" ${type==='complex128'?'selected':''}>Complex128</option>
-                <option value="rune" ${type==='rune'?'selected':''}>Rune</option>
-                <option value="decimal" ${type==='decimal'?'selected':''}>Decimal</option>
-                <option value="bool" ${type==='bool'?'selected':''}>Bool</option>
-                <option value="timestamp" ${type==='timestamp'?'selected':''}>Timestamp</option>
-                <option value="timestampz" ${type==='timestampz'?'selected':''}>TimestampZ</option>
-                <option value="date" ${type==='date'?'selected':''}>Date</option>
-                <option value="datetime" ${type==='datetime'?'selected':''}>DateTime</option>
-                <option value="time" ${type==='time'?'selected':''}>Time</option>
-                <option value="guid" ${type==='guid'?'selected':''}>UUID</option>
-                <option value="blob" ${type==='blob'?'selected':''}>Blob</option>
+                <option value="string" ${normalizedType==='string'?'selected':''}>String</option>
+                <option value="int" ${normalizedType==='int'?'selected':''}>Int</option>
+                <option value="int8" ${normalizedType==='int8'?'selected':''}>Int8</option>
+                <option value="int16" ${normalizedType==='int16'?'selected':''}>Int16</option>
+                <option value="int32" ${normalizedType==='int32'?'selected':''}>Int32</option>
+                <option value="int64" ${normalizedType==='int64'?'selected':''}>Int64</option>
+                <option value="uint" ${normalizedType==='uint'?'selected':''}>Uint</option>
+                <option value="uint8" ${normalizedType==='uint8'?'selected':''}>Uint8</option>
+                <option value="uint16" ${normalizedType==='uint16'?'selected':''}>Uint16</option>
+                <option value="uint32" ${normalizedType==='uint32'?'selected':''}>Uint32</option>
+                <option value="uint64" ${normalizedType==='uint64'?'selected':''}>Uint64</option>
+                <option value="float32" ${normalizedType==='float32'?'selected':''}>Float32</option>
+                <option value="float64" ${normalizedType==='float64'?'selected':''}>Float64</option>
+                <option value="complex64" ${normalizedType==='complex64'?'selected':''}>Complex64</option>
+                <option value="complex128" ${normalizedType==='complex128'?'selected':''}>Complex128</option>
+                <option value="rune" ${normalizedType==='rune'?'selected':''}>Rune</option>
+                <option value="decimal" ${normalizedType==='decimal'?'selected':''}>Decimal</option>
+                <option value="bool" ${normalizedType==='bool'?'selected':''}>Bool</option>
+                <option value="timestamp" ${normalizedType==='timestamp'?'selected':''}>Timestamp</option>
+                <option value="timestampz" ${normalizedType==='timestampz'?'selected':''}>TimestampZ</option>
+                <option value="date" ${normalizedType==='date'?'selected':''}>Date</option>
+                <option value="datetime" ${normalizedType==='datetime'?'selected':''}>DateTime</option>
+                <option value="time" ${normalizedType==='time'?'selected':''}>Time</option>
+                <option value="uuid" ${normalizedType==='uuid'?'selected':''}>UUID</option>
+                <option value="guid" ${normalizedType==='guid'?'selected':''}>UUID</option>
+                <option value="blob" ${normalizedType==='blob'?'selected':''}>Blob</option>
+                <option value="map" ${normalizedType==='map'?'selected':''}>Map</option>
             </select>
             <input type="text" placeholder="Value" class="seed-field-value" value="${window.escapeHTML(initialValue)}" style="flex:1; padding: 4px; border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text-color);">
             <div style="display:flex; gap:0; align-items:center; border: 1px solid var(--input-border); border-radius: 4px; background: var(--input-bg);">
@@ -948,7 +1308,7 @@
             return valStr;
         }
 
-        // 2. Handle Map Type (Builder or Raw)
+        // 2. Handle Map Type (Use the visible value-map builder when present)
         const isRaw = document.getElementById('seed-value-raw-mode').checked;
         if (isRaw) {
             const raw = document.getElementById('new-store-seed-value').value.trim();
@@ -958,53 +1318,62 @@
             } catch (e) {
                 throw new Error("Seed Value (Raw) must be valid JSON");
             }
-        } else {
-            const rows = document.querySelectorAll('.seed-value-field-row');
-            if (rows.length === 0) {
-                addSeedValueFieldRow('value', 'string', getDefaultFieldValue('string'));
-            }
-            const freshRows = document.querySelectorAll('.seed-value-field-row');
-            
-            const obj = {};
-            freshRows.forEach(row => {
-                const name = row.querySelector('.seed-field-name').value.trim();
-                const type = row.querySelector('.seed-field-type').value;
-                const valStr = row.querySelector('.seed-field-value').value;
-                
-                if (name) {
-                    let val = valStr;
-                    if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(type)) {
-                        val = parseInt(valStr);
-                        if (isNaN(val)) val = 0;
-                    } else if (['float32', 'float64', 'decimal'].includes(type)) {
-                        val = parseFloat(valStr);
-                        if (isNaN(val)) val = 0.0;
-                    } else if (['complex64', 'complex128'].includes(type)) {
-                        // Treat complex as string for now, or parse if user provides "real,imag"
-                        val = valStr;
-                    } else if (type === 'bool') {
-                        val = (valStr.toLowerCase() === 'true' || valStr === '1');
-                    } else if (type === 'timestamp') {
-                        let t = parseInt(valStr);
-                        if (isNaN(t)) {
-                            t = Date.parse(valStr);
-                            if (isNaN(t)) t = 0;
-                        }
-                        val = t;
-                    } else if (['date', 'datetime', 'time', 'guid', 'timestampz'].includes(type)) {
-                        val = valStr;
-                    } else if (type === 'blob') {
-                        // Convert string to byte array (simple ASCII for now)
-                        val = [];
-                        for (let i = 0; i < valStr.length; i++) {
-                            val.push(valStr.charCodeAt(i));
-                        }
-                    }
-                    obj[name] = val;
-                }
-            });
-            return obj;
         }
+
+        const visibleValueRows = Array.from(document.querySelectorAll('.value-field-row')).filter(row => {
+            const style = window.getComputedStyle(row);
+            return style.display !== 'none' && style.visibility !== 'hidden';
+        });
+        const fallbackRows = Array.from(document.querySelectorAll('.value-field-row'));
+        const rows = visibleValueRows.length > 0 ? visibleValueRows : fallbackRows;
+
+        if (rows.length === 0) {
+            addValueFieldRow('F1', 'string', getDefaultFieldValue('string'));
+            return {};
+        }
+
+        const obj = {};
+        rows.forEach(row => {
+            const name = row.querySelector('.value-field-name')?.value?.trim()
+                || row.querySelector('.seed-field-name')?.value?.trim() || '';
+            const type = row.querySelector('.value-field-type')?.value
+                || row.querySelector('.seed-field-type')?.value || 'string';
+            const valStr = row.querySelector('.value-field-value')?.value
+                ?? row.querySelector('.seed-field-value')?.value ?? '';
+
+            if (!name) return;
+
+            let val = valStr;
+            if (['int', 'int8', 'int16', 'int32', 'int64', 'uint', 'uint8', 'uint16', 'uint32', 'uint64', 'rune'].includes(type)) {
+                val = parseInt(valStr, 10);
+                if (isNaN(val)) val = 0;
+            } else if (['float32', 'float64', 'decimal'].includes(type)) {
+                val = parseFloat(valStr);
+                if (isNaN(val)) val = 0.0;
+            } else if (['complex64', 'complex128'].includes(type)) {
+                val = valStr;
+            } else if (type === 'bool') {
+                val = (valStr.toLowerCase() === 'true' || valStr === '1');
+            } else if (type === 'timestamp') {
+                let t = parseInt(valStr, 10);
+                if (isNaN(t)) {
+                    t = Date.parse(valStr);
+                    if (isNaN(t)) t = 0;
+                }
+                val = t;
+            } else if (['date', 'datetime', 'time', 'guid', 'timestampz'].includes(type)) {
+                val = valStr;
+            } else if (type === 'blob') {
+                val = [];
+                for (let i = 0; i < valStr.length; i++) {
+                    val.push(valStr.charCodeAt(i));
+                }
+            }
+
+            obj[name] = val;
+        });
+
+        return obj;
     }
 
 </script>

@@ -250,6 +250,9 @@ func initializeRequest(w http.ResponseWriter, r *http.Request) (*aiChatRequest, 
 
 	req.Database = strings.TrimSpace(req.Database)
 	req.StoreName = strings.TrimSpace(req.StoreName)
+	if authUserID := strings.TrimSpace(sop.GetAuthFromContext(r.Context()).UserID); authUserID != "" {
+		req.UserID = authUserID
+	}
 	return &req, nil
 }
 
@@ -527,6 +530,10 @@ func constructPayload(ctx context.Context, w http.ResponseWriter, req *aiChatReq
 				}
 			}
 		}
+	}
+
+	if strings.TrimSpace(req.UserID) == "" {
+		req.UserID = strings.TrimSpace(sop.GetAuthFromContext(ctx).UserID)
 	}
 
 	payload := &ai.SessionPayload{

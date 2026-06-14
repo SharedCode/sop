@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -29,13 +30,41 @@ func InferSchemaFromTypes(key any, value any) SchemaInferenceResult {
 		ValueFields: []string{},
 	}
 
-	// Infer key schema
+	// Infer key schema.
+	// For runtime map-backed keys, inspect the actual map contents instead of
+	// collapsing them to the generic "key:object" placeholder.
 	if key != nil {
-		keyType := reflect.TypeOf(key)
-		keySchema := reflectTypeToSchemaFlat(keyType)
-		for k, v := range keySchema {
-			result.Schema[k] = v
-			result.KeyFields = append(result.KeyFields, k)
+		keyVal := reflect.ValueOf(key)
+		if keyVal.Kind() == reflect.Ptr {
+			if !keyVal.IsNil() {
+				keyVal = keyVal.Elem()
+			} else {
+				keyType := reflect.TypeOf(key).Elem()
+				keySchema := reflectTypeToSchemaFlat(keyType)
+				for k, v := range keySchema {
+					result.Schema[k] = v
+					result.KeyFields = append(result.KeyFields, k)
+				}
+				return result
+			}
+		}
+
+		if keyVal.Kind() == reflect.Map {
+			keySchema := reflectValueMapToSchemaFlat(keyVal)
+			for k, v := range keySchema {
+				result.Schema[k] = v
+				result.KeyFields = append(result.KeyFields, k)
+			}
+		} else {
+			keyType := reflect.TypeOf(key)
+			if keyType.Kind() == reflect.Ptr {
+				keyType = keyType.Elem()
+			}
+			keySchema := reflectTypeToSchemaFlat(keyType)
+			for k, v := range keySchema {
+				result.Schema[k] = v
+				result.KeyFields = append(result.KeyFields, k)
+			}
 		}
 	}
 
@@ -124,9 +153,8 @@ func reflectTypeToSchemaFlat(t reflect.Type) map[string]string {
 				}
 			}
 
-			// Use lowercase field name directly (no prefix)
-			flatName := strings.ToLower(fieldName)
-			schema[flatName] = reflectTypeToString(field.Type)
+			// Preserve the original field name from the struct tag or type definition.
+			schema[fieldName] = reflectTypeToString(field.Type)
 		}
 
 	case reflect.Map:
@@ -161,8 +189,8 @@ func reflectValueMapToSchemaFlat(mapVal reflect.Value) map[string]string {
 
 		// Only handle string keys
 		if key.Kind() == reflect.String {
-			// Use lowercase field name directly (no prefix)
-			fieldName := strings.ToLower(key.String())
+			// Preserve the runtime map key exactly as provided by the caller.
+			fieldName := key.String()
 			schema[fieldName] = inferSchemaTypeFromValue(val)
 		}
 	}
@@ -213,6 +241,9 @@ func inferSchemaTypeFromValue(v reflect.Value) string {
 		if v.Type().PkgPath() == "github.com/google/uuid" && v.Type().Name() == "UUID" {
 			return "uuid"
 		}
+		if v.Type() == reflect.TypeOf(time.Time{}) {
+			return "datetime"
+		}
 		return "object"
 	default:
 		return "object"
@@ -244,6 +275,9 @@ func reflectTypeToString(t reflect.Type) string {
 		}
 		if t.PkgPath() == "github.com/google/uuid" && t.Name() == "UUID" {
 			return "uuid"
+		}
+		if t == reflect.TypeOf(time.Time{}) {
+			return "datetime"
 		}
 		return "object"
 	case reflect.Map:
