@@ -140,3 +140,13 @@ func TestExtractCategoryPathQuery_PreservesLLMInstructionSuffix(t *testing.T) {
 		})
 	}
 }
+
+func TestSplitCategoryPathInstruction_HandlesWhitespaceAroundLLM(t *testing.T) {
+	path, instruction := splitCategoryPathInstruction("SOP:language/c#/tutorial: llm summarize examples")
+	if path != "language/c#/tutorial" {
+		t.Fatalf("splitCategoryPathInstruction path = %q, want %q", path, "language/c#/tutorial")
+	}
+	if instruction != "summarize examples" {
+		t.Fatalf("splitCategoryPathInstruction instruction = %q, want %q", instruction, "summarize examples")
+	}
+}

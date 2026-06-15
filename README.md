@@ -76,6 +76,7 @@ SOP allows you to interact with your data using the **SOP Data Manager**—a web
 
 ### Data Manager Capabilities
 *   **Visual Management**: Inspect B-Trees, manage Stores (Key-Value, Vector, Model), and explore the System DB.
+*   **Recent Progress**: The HTTP server now supports signed bearer access tokens for browser and remote API clients, plus store-management fixes that preserve runtime schema metadata and reduce false structural-change validation.
 *   **Environment Manager**: Switch between environments using portable **JSON** configuration files.
 *   **Shared Intelligence**: Manage permissions and connections to share databases across the network, allowing different teams to collaborate on the same "System Knowledge" base.
 
@@ -134,6 +135,18 @@ To launch the Data Manager:
 # Data Manager is included in your language binding installation
 sop-httpserver
 ```
+
+## Security & Enterprise Integration
+
+SOP supports both local built-in auth and external identity-provider integration for enterprise deployments.
+
+- **Built-in auth**: the embedded HTTP server supports signed bearer access tokens, short-lived refresh renewal, and a dedicated signing secret for the hot path.
+- **Enterprise directory support**: the auth layer is designed to accept provider adapters for AD, Entra ID, LDAP, SAML, or OIDC without changing the core application logic.
+- **Secret handling**: keep `SOP_SESSION_SECRET` (or `session_secret`) in a secret manager or environment variable; do not bake signing keys into source control.
+- **Remote clients**: bearer tokens are suitable for CLI tools, scripts, and microservices that call the HTTP API directly over HTTPS.
+- **Deployment guidance**: use HTTPS in front of the HTTP server, restrict token scopes/roles, and map external identities to internal roles before granting access.
+
+This gives IT and security teams a clear path to adopt SOP in controlled environments while keeping the runtime flexible for future provider integrations.
 
 ## Reference Guides
 *   **[AI Copilot & Agent Architecture](AI_COPILOT.md)** - Canonical reference for the Copilot runtime, grounding model, and provider execution loops.

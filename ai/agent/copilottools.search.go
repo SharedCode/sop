@@ -87,6 +87,8 @@ func splitCategoryPathInstruction(query string) (string, string) {
 		return "", ""
 	}
 
+	trimmed = stripRoutingPrefix(trimmed, "")
+
 	re := regexp.MustCompile(`(?i)^(?P<path>.+?)(?:\s*:\s*llm\b\s*(?P<instruction>.*))?$`)
 	matches := re.FindStringSubmatch(trimmed)
 	if len(matches) != 3 {
@@ -102,15 +104,29 @@ func splitCategoryPathInstruction(query string) (string, string) {
 	return path, instruction
 }
 
+func embedCategoryPath(ctx context.Context, catPath string, embedder ai.Embeddings) ([][]float32, error) {
+	parts := strings.Split(catPath, "/")
+	if len(parts) == 0 || (len(parts) == 1 && strings.TrimSpace(parts[0]) == "") {
+		parts = strings.Split(catPath, "\\")
+	}
+	if len(parts) == 0 || (len(parts) == 1 && strings.TrimSpace(parts[0]) == "") {
+		return nil, nil
+	}
+	vecs, err := embedder.EmbedTexts(ctx, parts)
+	if err != nil {
+		return nil, err
+	}
+	return vecs, nil
+}
+
 func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Database, kbName string, query string, catPath string, category string, textSearchEnabled bool, limit int) (string, error) {
 	if db == nil {
 		return "", fmt.Errorf("database is null")
 	}
 	kbName = ai.CanonicalKBName(kbName)
 	query = stripRoutingPrefix(query, kbName)
-	pathQuery := extractCategoryPathQuery(query)
-	_, llmInstruction := splitCategoryPathInstruction(query)
-	pathPrompt := looksLikeCategoryPath(query)
+	pathQuery, llmInstruction := splitCategoryPathInstruction(query)
+	pathPrompt := pathQuery != "" || looksLikeCategoryPath(query)
 	log.Info("searchKnowledgeBase start", "kb_name", kbName, "query", query, "category_path_query", pathQuery, "llm_instruction", llmInstruction, "path_prompt", pathPrompt, "category", category, "category_path", catPath, "text_search_enabled", textSearchEnabled, "limit", limit)
 
 	tx, err := db.BeginTransaction(ctx, sop.ForReading)
@@ -137,6 +153,25 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 		searchText := ""
 		if !pathPrompt {
 			searchText = query
+		}
+		if embedder != nil {
+			vecs, err := embedCategoryPath(ctx, pathQuery, embedder)
+			if err == nil && len(vecs) > 0 {
+				cats, err := kb.Store.SemanticCategoryByPath(ctx, vecs)
+				if err == nil && len(cats) > 0 {
+					results = append(results, "--- Semantic Category Candidates ---")
+					for _, cat := range cats {
+						if cat == nil {
+							continue
+						}
+						uri := cat.Path
+						if strings.TrimSpace(uri) == "" {
+							uri = cat.ID.String()
+						}
+						results = append(results, fmt.Sprintf("SemanticCategoryURI: %s\nCategoryPath: %s\nCategoryID: %s", uri, cat.Path, cat.ID.String()))
+					}
+				}
+			}
 		}
 		pathHits, err := kb.SearchByPath(ctx, []memory.PathSearchParam{{CategoryPath: pathQuery, SearchText: searchText}})
 		if err == nil && len(pathHits) > 0 {

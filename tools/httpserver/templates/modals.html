@@ -4,15 +4,19 @@
         <h3 id="add-modal-header" style="margin-top:0; margin-bottom: 10px; cursor: move; user-select: none;">Add New Item</h3>
         
         <div style="overflow-y: auto; flex: 1; padding-right: 0;">
-            <h4 style="margin-bottom: 5px; margin-top: 0; color: var(--key-color);">Key</h4>
-            <div id="add-key-mode-wrapper" style="margin-bottom: 5px; font-size: 12px; color: var(--text-muted);">
-                <label><input type="checkbox" id="add-key-mode-toggle" onchange="toggleAddKeyMode()"> Edit as JSON</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom: 5px;">
+                <h4 style="margin: 0; color: var(--key-color);">Key</h4>
+                <div id="add-key-mode-wrapper" style="font-size: 12px; color: var(--text-muted);">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="add-key-mode-toggle" onchange="toggleAddKeyMode()"> Edit as JSON</label>
+                </div>
             </div>
             <div id="add-key-container" style="margin-bottom:15px;"></div>
 
-            <h4 style="margin-bottom: 5px;">Value</h4>
-            <div id="add-value-mode-wrapper" style="margin-bottom: 5px; font-size: 12px; color: var(--text-muted);">
-                <label><input type="checkbox" id="add-value-mode-toggle" onchange="toggleAddValueMode()"> Edit as JSON</label>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom: 5px;">
+                <h4 style="margin: 0;">Value</h4>
+                <div id="add-value-mode-wrapper" style="font-size: 12px; color: var(--text-muted);">
+                    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;"><input type="checkbox" id="add-value-mode-toggle" onchange="toggleAddValueMode()"> Edit as JSON</label>
+                </div>
             </div>
             <div id="add-value-container"></div>
         </div>
