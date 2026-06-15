@@ -72,6 +72,8 @@ type Config struct {
 	RootPassword           string           `json:"root_password,omitempty"`
 	ProductionMode         bool             `json:"production_mode,omitempty"`
 	SessionTokenTTLMinutes int              `json:"session_token_ttl_minutes,omitempty"`
+	SessionSecret          string           `json:"session_secret,omitempty"`
+	AuthProviderName       string           `json:"auth_provider,omitempty"`
 	Users                  []UserRecord     `json:"users,omitempty"`
 
 	// ObfuscationMode defines the global obfuscation policy (disabled, per_database, all_databases).

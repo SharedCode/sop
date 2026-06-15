@@ -79,10 +79,17 @@ The current V1 auth path is intentionally small:
 - The browser/login flow calls `POST /api/auth/login` with JSON or `application/x-www-form-urlencoded` credentials.
 - The login endpoint returns a bearer token (`access_token`) together with the authenticated user role.
 - Protected calls should send `Authorization: Bearer <token>`.
-- Session tokens expire after `session_token_ttl_minutes` (default: 60 minutes). This gives the system a simple renewal window for resumed work.
-- The token facade is intentionally abstract so a future encrypted, time-aware token format or a B-tree-backed session store can replace the current in-memory implementation without changing the API shape.
+- Session tokens expire after `session_token_ttl_minutes` (default: 30 minutes). This gives the system a simple renewal window for resumed work.
+- The token facade is intentionally abstract so the signed bearer-token flow can evolve further while preserving the existing refresh-session path for renewal and revocation.
 
 This keeps the first release easy to reason about while still allowing Copilot sessions to resume with the same authenticated context.
+
+### Recent Progress (2026-06-15)
+
+- The bearer-token flow now supports signed access tokens for both browser sessions and remote clients (CLI, scripts, microservices) via `Authorization: Bearer <token>`.
+- Access-token expiry defaults to 30 minutes, with refresh-token renewal preserved for the DB-backed session lifecycle.
+- The auth facade now supports a dedicated `SOP_SESSION_SECRET` / `session_secret` signing secret for the hot path, instead of depending on password-derived defaults.
+- Store-management flow improvements now preserve runtime schema metadata, reduce false structural-change validation, and improve add-item / wrong-type handling in the UI and backend path.
 
 ## User Guide
 

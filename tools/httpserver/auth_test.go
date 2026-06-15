@@ -14,6 +14,19 @@ import (
 	"github.com/sharedcode/sop"
 )
 
+type testAuthProvider struct {
+	name string
+}
+
+func (p *testAuthProvider) Name() string { return p.name }
+
+func (p *testAuthProvider) Authenticate(ctx context.Context, username, password string) (bool, *UserRecord, error) {
+	if username == "alice" && password == "pw" {
+		return true, &UserRecord{Username: "alice", Role: sop.RoleUser}, nil
+	}
+	return false, nil, nil
+}
+
 func TestAuthenticateUser_ValidCredentials(t *testing.T) {
 	cfg := Config{}
 
@@ -405,6 +418,38 @@ func TestHandleRefresh_SetsPersistentCookies(t *testing.T) {
 	}
 }
 
+func TestValidateToken_AcceptsStatelessAccessTokenAfterSessionRemoval(t *testing.T) {
+	withIsolatedSessionStore(t)
+	store := NewSessionStore(30 * time.Minute)
+	ctx := context.Background()
+
+	access, _, err := store.CreateSession(ctx, "root", sop.RoleAdmin)
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	st, tx, err := store.getStore(ctx)
+	if err != nil {
+		t.Fatalf("getStore() error = %v", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if removed, err := st.Remove(ctx, access); err != nil || !removed {
+		t.Fatalf("Remove() = (%v, %v), want session record removed", removed, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit() error = %v", err)
+	}
+
+	user, err := store.ValidateToken(ctx, access)
+	if err != nil {
+		t.Fatalf("ValidateToken() error = %v", err)
+	}
+	if user == nil || !strings.EqualFold(user.Username, "root") || !strings.EqualFold(user.Role, sop.RoleAdmin) {
+		t.Fatalf("ValidateToken() = %+v, want root admin user", user)
+	}
+}
+
 func TestValidateToken_DoesNotExtendSessionWhenNotNearExpiry(t *testing.T) {
 	withIsolatedSessionStore(t)
 	store := NewSessionStore(30 * time.Minute)
@@ -504,6 +549,56 @@ func TestAuthenticateBearerToken_RejectsExpiredSessionToken(t *testing.T) {
 	defer tx2.Rollback(ctx)
 	if found, err := st2.Find(ctx, access, false); err != nil || found {
 		t.Fatalf("Find() after expiry = (%v, %v), want expired session removed", err, found)
+	}
+}
+
+func TestAuthenticateBearerToken_AcceptsSignedAccessTokenForRemoteClient(t *testing.T) {
+	withIsolatedSessionStore(t)
+	oldConfig := config
+	config = Config{SessionSecret: "remote-client-test-secret"}
+	defer func() { config = oldConfig }()
+
+	store := NewSessionStore(time.Minute)
+	access, _, err := store.CreateSession(context.Background(), "root", sop.RoleAdmin)
+	if err != nil {
+		t.Fatalf("CreateSession() error = %v", err)
+	}
+
+	ok, user, err := (&Config{}).AuthenticateBearerToken(context.Background(), access)
+	if err != nil {
+		t.Fatalf("AuthenticateBearerToken() error = %v", err)
+	}
+	if !ok || user == nil || !strings.EqualFold(user.Username, "root") {
+		t.Fatalf("AuthenticateBearerToken() = (%v, %+v), want authenticated remote client token", ok, user)
+	}
+}
+
+func TestConfig_Authenticate_UsesRegisteredAuthProvider(t *testing.T) {
+	providerName := "test-provider"
+
+	authProviderMu.Lock()
+	oldFactory, existed := authProviderRegistry[providerName]
+	authProviderRegistry[providerName] = func(*Config) (AuthProvider, error) {
+		return &testAuthProvider{name: providerName}, nil
+	}
+	authProviderMu.Unlock()
+	defer func() {
+		authProviderMu.Lock()
+		if existed {
+			authProviderRegistry[providerName] = oldFactory
+		} else {
+			delete(authProviderRegistry, providerName)
+		}
+		authProviderMu.Unlock()
+	}()
+
+	cfg := Config{AuthProviderName: providerName}
+	ok, user, err := cfg.Authenticate("alice", "pw")
+	if err != nil {
+		t.Fatalf("Authenticate() error = %v", err)
+	}
+	if !ok || user == nil || user.Username != "alice" || user.Role != sop.RoleUser {
+		t.Fatalf("Authenticate() = (%v, %+v), want provider-authenticated user", ok, user)
 	}
 }
 

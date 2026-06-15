@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	log "log/slog"
 	"sort"
 	"strings"
 
@@ -117,6 +118,12 @@ func (a *CopilotAgent) ClassifyTaskContext(ctx context.Context, query string, ge
 // Used when the user explicitly provides Hard Constraints via prefix (e.g. omni:stores:users:).
 // Skips building the Context Outline entirely.
 func (a *CopilotAgent) ClassifyFocusedTaskContext(ctx context.Context, query, entity, domain, artifact string, gen ai.Generator) (*TaskContextClassification, error) {
+	if handledTaskCtx, handled, err := a.trySpecializedFocusedRouting(ctx, query, entity, domain, artifact); err != nil {
+		return nil, err
+	} else if handled {
+		return handledTaskCtx, nil
+	}
+
 	availableContext := ""
 	if domain == "" || artifact == "" {
 		storesList, spacesList, _ := a.GetSampleArtifacts(ctx)
@@ -150,6 +157,82 @@ func (a *CopilotAgent) ClassifyFocusedTaskContext(ctx context.Context, query, en
 	}
 
 	return enforceFocusedConstraints(taskCtx, entity, domain, artifact), nil
+}
+
+func looksLikeSpecializedRoutingQuery(query string) bool {
+	trimmed := strings.TrimSpace(query)
+	lower := strings.ToLower(trimmed)
+	return strings.HasPrefix(lower, "omni:sop:") || strings.HasPrefix(lower, "sop:") || strings.HasPrefix(lower, "omni/sop/") || strings.HasPrefix(lower, "omni->sop->")
+}
+
+func (a *CopilotAgent) trySpecializedFocusedRouting(ctx context.Context, query, entity, domain, artifact string) (*TaskContextClassification, bool, error) {
+	if !looksLikeSpecializedRoutingQuery(query) {
+		return nil, false, nil
+	}
+
+	log.Info("Specialized focused routing activated", "query", query, "entity", entity, "domain", domain, "artifact", artifact)
+
+	normalizedQuery := stripRoutingPrefix(query, "sop")
+	pathQuery, llmInstruction := splitCategoryPathInstruction(normalizedQuery)
+	llmMode := strings.TrimSpace(llmInstruction) != "" || strings.Contains(strings.ToLower(normalizedQuery), ":llm")
+	if pathQuery == "" {
+		pathQuery = extractCategoryPathQuery(normalizedQuery)
+	}
+	log.Info("Specialized focused routing parsed", "normalized_query", normalizedQuery, "path_query", pathQuery, "llm_instruction", llmInstruction, "llm_mode", llmMode)
+	kbName := ai.CanonicalKBName("sop")
+	if !looksLikeSpecializedRoutingQuery(query) {
+		if domain != "" {
+			kbName = ai.CanonicalKBName(domain)
+		}
+	}
+
+	db := a.resolveDBForKB(ctx, kbName)
+	if db == nil {
+		log.Info("Specialized focused routing skipped: no KB database resolved", "kb_name", kbName)
+		return nil, false, nil
+	}
+
+	candidateText, err := a.searchKnowledgeBase(ctx, db, kbName, normalizedQuery, pathQuery, "", true, 5)
+	if err != nil {
+		return nil, false, err
+	}
+
+	candidateCount := 0
+	if strings.Contains(candidateText, "CategoryPath:") {
+		candidateCount += strings.Count(candidateText, "CategoryPath:")
+	}
+	if strings.Contains(candidateText, "Score:") {
+		candidateCount += strings.Count(candidateText, "Score:")
+	}
+	if strings.Contains(strings.ToLower(candidateText), "no results found") {
+		candidateCount = 0
+	}
+
+	handled := looksLikeSpecializedRoutingQuery(query) || llmMode || (candidateCount > 0 && candidateCount <= 5)
+	log.Info("Specialized focused routing decision", "handled", handled, "llm_mode", llmMode, "candidate_count", candidateCount, "candidate_text_preview", summarizeCandidatePreview(candidateText))
+	if !handled {
+		return nil, false, nil
+	}
+
+	taskCtx := enrichFocusedTaskContext(nil, entity, domain, artifact)
+	if taskCtx == nil {
+		taskCtx = &TaskContextClassification{}
+	}
+	if pathQuery != "" {
+		taskCtx.SpacesArtifacts = append(taskCtx.SpacesArtifacts, pathQuery)
+	}
+	if llmMode {
+		taskCtx.Layers = append(taskCtx.Layers, LayerInfo{Name: "LLMFilter", CRUD: []string{"R"}})
+	} else {
+		taskCtx.Layers = append(taskCtx.Layers, LayerInfo{Name: "KBRoute", CRUD: []string{"R"}})
+	}
+	log.Info("Specialized focused routing resolved", "routing_gate", taskCtx.RoutingGate, "layers", taskCtx.Layers, "spaces_artifacts", taskCtx.SpacesArtifacts)
+
+	normalizeTaskContext(taskCtx)
+	taskCtx.RoutingGate = RoutingGateFocused
+	annotateTaskContextIntent(taskCtx, query)
+	a.persistRoutingState(ctx, taskCtx)
+	return taskCtx, true, nil
 }
 
 // ClassifyContinuityTaskContext is Gate 2: The "Continuity/Switch" Classifier.
@@ -512,6 +595,10 @@ func canonicalizeLayerName(name string) string {
 		return "Single-Domain"
 	case strings.EqualFold(name, "Cross-Domain"), strings.EqualFold(name, "Layer 3"):
 		return "Cross-Domain"
+	case strings.EqualFold(name, "KBRoute"):
+		return "KBRoute"
+	case strings.EqualFold(name, "LLMFilter"):
+		return "LLMFilter"
 	default:
 		return ""
 	}
@@ -680,6 +767,17 @@ func enforceFocusedConstraints(taskCtx *TaskContextClassification, entity, domai
 
 	normalizeTaskContext(taskCtx)
 	return taskCtx
+}
+
+func summarizeCandidatePreview(text string) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return "<empty>"
+	}
+	if len(trimmed) > 180 {
+		return trimmed[:180] + "..."
+	}
+	return trimmed
 }
 
 func canonicalizeEntity(entity string) string {

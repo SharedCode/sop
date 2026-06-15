@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -57,7 +61,7 @@ type TokenFacade interface {
 }
 
 const (
-	defaultSessionTTL = 1 * time.Hour
+	defaultSessionTTL = 30 * time.Minute
 	defaultRefreshTTL = 7 * 24 * time.Hour
 	sessionStoreName  = "sessions"
 )
@@ -83,17 +87,101 @@ func newToken() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
+type signedAccessClaims struct {
+	Subject   string `json:"sub"`
+	Role      string `json:"role"`
+	IssuedAt  int64  `json:"iat"`
+	ExpiresAt int64  `json:"exp"`
+	TokenID   string `json:"jti"`
+}
+
+func tokenSigningSecret() []byte {
+	if secret := strings.TrimSpace(os.Getenv("SOP_SESSION_SECRET")); secret != "" {
+		return []byte(secret)
+	}
+	if secret := strings.TrimSpace(config.SessionSecret); secret != "" {
+		return []byte(secret)
+	}
+	return []byte("sop-session-default-secret")
+}
+
+func base64urlEncode(data []byte) string {
+	return strings.TrimRight(base64.RawURLEncoding.EncodeToString(data), "=")
+}
+
+func base64urlDecode(data string) ([]byte, error) {
+	if missing := len(data) % 4; missing != 0 {
+		data += strings.Repeat("=", 4-missing)
+	}
+	return base64.URLEncoding.DecodeString(data)
+}
+
+func signAccessToken(username, role string, issuedAt, expiresAt time.Time, tokenID string) (string, error) {
+	header := base64urlEncode([]byte(`{"alg":"HS256","typ":"JWT"}`))
+	claims := signedAccessClaims{
+		Subject:   username,
+		Role:      role,
+		IssuedAt:  issuedAt.Unix(),
+		ExpiresAt: expiresAt.Unix(),
+		TokenID:   tokenID,
+	}
+	claimsJSON, err := json.Marshal(claims)
+	if err != nil {
+		return "", err
+	}
+	payload := base64urlEncode(claimsJSON)
+	input := header + "." + payload
+	mac := hmac.New(sha256.New, tokenSigningSecret())
+	_, _ = mac.Write([]byte(input))
+	signature := base64urlEncode(mac.Sum(nil))
+	return input + "." + signature, nil
+}
+
+func parseAndVerifySignedAccessToken(token string) (*signedAccessClaims, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid signed token")
+	}
+	header, payload, signature := parts[0], parts[1], parts[2]
+	mac := hmac.New(sha256.New, tokenSigningSecret())
+	_, _ = mac.Write([]byte(header + "." + payload))
+	expected := base64urlEncode(mac.Sum(nil))
+	if !hmac.Equal([]byte(signature), []byte(expected)) {
+		return nil, fmt.Errorf("invalid signature")
+	}
+
+	claimsJSON, err := base64urlDecode(payload)
+	if err != nil {
+		return nil, fmt.Errorf("invalid payload")
+	}
+	var claims signedAccessClaims
+	if err := json.Unmarshal(claimsJSON, &claims); err != nil {
+		return nil, fmt.Errorf("invalid claims")
+	}
+	if claims.Subject == "" || claims.Role == "" || claims.TokenID == "" {
+		return nil, fmt.Errorf("invalid claims")
+	}
+	if time.Now().UTC().Unix() >= claims.ExpiresAt {
+		return nil, fmt.Errorf("expired session")
+	}
+	return &claims, nil
+}
+
 func (s *SessionStore) CreateToken(ctx context.Context, username, role string) (string, error) {
 	store, tx, err := s.getStore(ctx)
 	if err != nil {
 		return "", err
 	}
 	defer tx.Rollback(ctx)
-	accessToken, err := newToken()
+	opaqueToken, err := newToken()
 	if err != nil {
 		return "", err
 	}
 	now := time.Now().UTC()
+	accessToken, err := signAccessToken(username, role, now, now.Add(s.ttl), opaqueToken)
+	if err != nil {
+		return "", err
+	}
 	record := SessionRecord{Token: accessToken, Username: username, Role: role, IssuedAt: now, ExpiresAt: now.Add(s.ttl)}
 
 	if ok, err := store.Add(ctx, accessToken, record); !ok || err != nil {
@@ -115,7 +203,12 @@ func (s *SessionStore) CreateSession(ctx context.Context, username, role string)
 	}
 	defer tx.Rollback(ctx)
 
-	accessToken, err := newToken()
+	now := time.Now().UTC()
+	opaqueAccessToken, err := newToken()
+	if err != nil {
+		return "", "", err
+	}
+	accessToken, err := signAccessToken(username, role, now, now.Add(s.ttl), opaqueAccessToken)
 	if err != nil {
 		return "", "", err
 	}
@@ -123,8 +216,6 @@ func (s *SessionStore) CreateSession(ctx context.Context, username, role string)
 	if err != nil {
 		return "", "", err
 	}
-
-	now := time.Now().UTC()
 	record := SessionRecord{
 		Token:            accessToken,
 		RefreshToken:     refreshToken,
@@ -185,7 +276,12 @@ func (s *SessionStore) Refresh(ctx context.Context, refreshToken string) (string
 		return "", "", fmt.Errorf("expired refresh token")
 	}
 
-	accessToken, err := newToken()
+	now := time.Now().UTC()
+	opaqueAccessToken, err := newToken()
+	if err != nil {
+		return "", "", err
+	}
+	accessToken, err := signAccessToken(r.Username, r.Role, now, r.ExpiresAt, opaqueAccessToken)
 	if err != nil {
 		return "", "", err
 	}
@@ -194,7 +290,6 @@ func (s *SessionStore) Refresh(ctx context.Context, refreshToken string) (string
 		return "", "", err
 	}
 
-	now := time.Now().UTC()
 	newRecord := SessionRecord{
 		Token:            accessToken,
 		RefreshToken:     newRefreshToken,
@@ -231,6 +326,10 @@ func (s *SessionStore) Refresh(ctx context.Context, refreshToken string) (string
 }
 
 func (s *SessionStore) ValidateToken(ctx context.Context, token string) (*UserRecord, error) {
+	if claims, err := parseAndVerifySignedAccessToken(token); err == nil {
+		return &UserRecord{Username: claims.Subject, Role: claims.Role}, nil
+	}
+
 	store, tx, err := s.getStore(ctx)
 	if err != nil {
 		return nil, err
@@ -442,28 +541,11 @@ func (c *Config) AuthenticateBearerToken(ctx context.Context, token string) (boo
 }
 
 func (c *Config) Authenticate(username, password string) (bool, *UserRecord, error) {
-	username = normalizeUsername(username)
-	password = strings.TrimSpace(password)
-	if username == "" || password == "" {
-		return false, nil, nil
+	provider, err := c.resolveAuthProvider()
+	if err != nil {
+		return false, nil, err
 	}
-
-	for i := range c.Users {
-		if normalizeUsername(c.Users[i].Username) != username {
-			continue
-		}
-		if err := bcrypt.CompareHashAndPassword([]byte(c.Users[i].PasswordHash), []byte(password)); err == nil {
-			user := c.Users[i]
-			return true, &user, nil
-		}
-		return false, nil, nil
-	}
-
-	if strings.EqualFold(username, "root") && strings.TrimSpace(c.RootPassword) != "" && strings.TrimSpace(password) == strings.TrimSpace(c.RootPassword) {
-		return true, &UserRecord{Username: "root", Role: sop.RoleAdmin}, nil
-	}
-
-	return false, nil, nil
+	return provider.Authenticate(context.Background(), username, password)
 }
 
 func authTokenFromRequest(r *http.Request) string {

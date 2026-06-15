@@ -17,6 +17,42 @@
         }
     }
 
+    function renderDetailValueEditor(value, forceJson = false) {
+        const editor = document.getElementById('detail-value-editor');
+        if (!editor) return;
+
+        const isBlob = Array.isArray(value) && value.every(item => typeof item === 'number');
+        if (forceJson || isBlob || typeof value !== 'object' || value === null) {
+            const jsonText = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+            editor.innerHTML = `<textarea id="edit-value" oninput="markItemDirty()" style="width: 100%; height: 300px; font-family: monospace; margin-top: 5px;" class="form-input">${escapeHtml(jsonText)}</textarea>`;
+            return;
+        }
+
+        const keys = Object.keys(value || {});
+        let html = '<div id="value-form" style="display: flex; flex-direction: column; gap: 8px; max-height: 400px; overflow-y: auto; padding-right: 2px;">';
+        if (keys.length === 0) {
+            html += '<em>Empty Object</em>';
+        }
+        keys.forEach(key => {
+            let displayVal = value[key];
+            if (typeof displayVal === 'object' && displayVal !== null) {
+                displayVal = JSON.stringify(displayVal);
+            }
+            html += `
+                <div class="form-group" style="display: flex; flex-direction: column;">
+                    <label class="form-label">${escapeHtml(key)}</label>
+                    <input type="text" class="value-input form-input" data-key="${escapeHtml(key)}" value="${escapeHtml(String(displayVal))}" oninput="markItemDirty()">
+                </div>`;
+        });
+        html += '</div>';
+        editor.innerHTML = html;
+    }
+
+    function toggleDetailValueMode() {
+        detailValueMode = document.getElementById('detail-value-mode-toggle')?.checked === true;
+        renderDetailValueEditor(currentItemValue, detailValueMode);
+    }
+
     function normalizeSchemaType(type) {
         const value = String(type || 'string').toLowerCase();
         const aliases = {

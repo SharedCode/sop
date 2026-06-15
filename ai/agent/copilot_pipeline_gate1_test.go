@@ -8,6 +8,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/memory"
 )
 
 type gate1MockGen struct {
@@ -118,6 +119,97 @@ func TestClassifyFocusedTaskContext_EnforcesExplicitConstraints(t *testing.T) {
 	}
 	if hasLayer(taskCtx.Layers, "Cross-Domain") {
 		t.Fatalf("expected Cross-Domain layer to be removed under explicit single-domain constraint, got %#v", taskCtx.Layers)
+	}
+}
+
+func TestLooksLikeSpecializedRoutingQuery_RecognizesSOPPrefixes(t *testing.T) {
+	if !looksLikeSpecializedRoutingQuery("omni:sop:language:c# tutorial") {
+		t.Fatal("expected SOP-style query to be recognized as specialized")
+	}
+	if looksLikeSpecializedRoutingQuery("just a regular ask") {
+		t.Fatal("expected plain ask to stay outside specialized routing")
+	}
+}
+
+func TestTrySpecializedFocusedRouting_ShortCircuitsSOPStyleQuery(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	kb, err := sysDB.OpenKnowledgeBase(ctx, "sop", tx, nil, nil, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase failed: %v", err)
+	}
+	if err := kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{TextSearchEnabled: true, LastVectorized: 1}); err != nil {
+		t.Fatalf("SetConfig failed: %v", err)
+	}
+	if err := kb.IngestThought(ctx, "C# lambda expressions tutorial", "language/c#/tutorial", "Omni", nil, map[string]any{"description": "lambda tutorial"}); err != nil {
+		t.Fatalf("IngestThought failed: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	taskCtx, handled, err := ag.trySpecializedFocusedRouting(ctx, "omni:sop:language:c# tutorial", "Omni", "Spaces", "")
+	if err != nil {
+		t.Fatalf("trySpecializedFocusedRouting failed: %v", err)
+	}
+	if !handled {
+		t.Fatal("expected specialized focused routing to handle the SOP-style query")
+	}
+	if taskCtx == nil {
+		t.Fatal("expected a focused task context")
+	}
+	if taskCtx.RoutingGate != RoutingGateFocused {
+		t.Fatalf("expected focused routing gate, got %q", taskCtx.RoutingGate)
+	}
+	if !hasLayer(taskCtx.Layers, "KBRoute") {
+		t.Fatalf("expected KBRoute layer to be attached, got %+v", taskCtx.Layers)
+	}
+}
+
+func TestTrySpecializedFocusedRouting_SupportsWhitespaceAroundLLM(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	kb, err := sysDB.OpenKnowledgeBase(ctx, "sop", tx, nil, nil, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase failed: %v", err)
+	}
+	if err := kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{TextSearchEnabled: true, LastVectorized: 1}); err != nil {
+		t.Fatalf("SetConfig failed: %v", err)
+	}
+	if err := kb.IngestThought(ctx, "C# lambda expressions tutorial", "language/c#/tutorial", "Omni", nil, map[string]any{"description": "lambda tutorial"}); err != nil {
+		t.Fatalf("IngestThought failed: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	taskCtx, handled, err := ag.trySpecializedFocusedRouting(ctx, "omni:sop:language/c#/tutorial: llm summarize", "Omni", "Spaces", "")
+	if err != nil {
+		t.Fatalf("trySpecializedFocusedRouting failed: %v", err)
+	}
+	if !handled {
+		t.Fatal("expected specialized focused routing to handle the llm-suffixed SOP-style query")
+	}
+	if taskCtx == nil {
+		t.Fatal("expected a focused task context")
+	}
+	if !hasLayer(taskCtx.Layers, "LLMFilter") {
+		t.Fatalf("expected LLMFilter layer to be attached, got %+v", taskCtx.Layers)
+	}
+	if len(taskCtx.SpacesArtifacts) == 0 || taskCtx.SpacesArtifacts[0] != "language/c#/tutorial" {
+		t.Fatalf("expected category path to be preserved in spaces artifacts, got %+v", taskCtx.SpacesArtifacts)
 	}
 }
 

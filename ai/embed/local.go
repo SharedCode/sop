@@ -401,7 +401,7 @@ func newLocal(modelPath string, gpuLayers int, factory LocalEmbedderFactory) (*L
 		gate:             make(chan struct{}, concurrencyLimit),
 		concurrencyLimit: concurrencyLimit,
 	}
-	log.Info("local embedder initialized", "name", local.Name(), "model_path", local.modelPath, "dim", local.Dim(), "routing_dim", local.profile.RoutingDim, "document_dim", local.profile.DocumentDim, "concurrency_limit", concurrencyLimit)
+	log.Debug("local embedder initialized", "name", local.Name(), "model_path", local.modelPath, "dim", local.Dim(), "routing_dim", local.profile.RoutingDim, "document_dim", local.profile.DocumentDim, "concurrency_limit", concurrencyLimit)
 	return local, nil
 }
 
@@ -496,7 +496,7 @@ func (e *Local) EmbedTexts(ctx context.Context, texts []string) ([][]float32, er
 		if err != nil {
 			return nil, fmt.Errorf("local embedding failed: %w", err)
 		}
-		
+
 		// Currently, these are the constraints of what requires Vector normalization, as per Kelindra
 		// library feature requirements.
 		if e.profile.SupportsMatryoshka && strings.HasPrefix(text, e.profile.RoutingPrefix) {
