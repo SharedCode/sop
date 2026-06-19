@@ -220,6 +220,176 @@ func TestTrySpecializedFocusedRouting_SupportsWhitespaceAroundLLM(t *testing.T) 
 	if len(taskCtx.SpacesArtifacts) == 0 || taskCtx.SpacesArtifacts[0] != "language/c#/tutorial" {
 		t.Fatalf("expected category path to be preserved in spaces artifacts, got %+v", taskCtx.SpacesArtifacts)
 	}
+	// Verify CleanQuery field is set (without :llm instruction)
+	if taskCtx.CleanQuery != "language/c#/tutorial" {
+		t.Fatalf("expected CleanQuery to be 'language/c#/tutorial', got %q", taskCtx.CleanQuery)
+	}
+	// Verify LLMInstruction field is set
+	if taskCtx.LLMInstruction != "summarize" {
+		t.Fatalf("expected LLMInstruction to be 'summarize', got %q", taskCtx.LLMInstruction)
+	}
+}
+
+func TestTrySpecializedFocusedRouting_StripsLLMInstructionWithoutCategoryPath(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	kb, err := sysDB.OpenKnowledgeBase(ctx, "sop", tx, nil, nil, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase failed: %v", err)
+	}
+	if err := kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{TextSearchEnabled: true, LastVectorized: 1}); err != nil {
+		t.Fatalf("SetConfig failed: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	taskCtx, handled, err := ag.trySpecializedFocusedRouting(ctx, "omni:sop:performance tips:llm summarize the top 5", "Omni", "Spaces", "")
+	if err != nil {
+		t.Fatalf("trySpecializedFocusedRouting failed: %v", err)
+	}
+	if !handled {
+		t.Fatal("expected specialized focused routing to handle the query with :llm")
+	}
+	if taskCtx == nil {
+		t.Fatal("expected a focused task context")
+	}
+	// Verify CleanQuery has :llm instruction stripped out
+	if taskCtx.CleanQuery != "performance tips" {
+		t.Fatalf("expected CleanQuery to be 'performance tips' (without :llm), got %q", taskCtx.CleanQuery)
+	}
+	// Verify LLMInstruction field is set
+	if taskCtx.LLMInstruction != "summarize the top 5" {
+		t.Fatalf("expected LLMInstruction to be 'summarize the top 5', got %q", taskCtx.LLMInstruction)
+	}
+	// Should be in LLM mode
+	if !hasLayer(taskCtx.Layers, "LLMFilter") {
+		t.Fatalf("expected LLMFilter layer for :llm instruction, got %+v", taskCtx.Layers)
+	}
+}
+
+func TestBuildKBEnrichedQuery_UsesCleanQueryWithoutLLMToken(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, nil)
+
+	// Simulate what happens in the Ask flow
+	cleanQuery := "performance tips" // This is what CleanQuery would be set to (without :llm)
+	kbResults := "CategoryPath: operations/performance\nScore: 0.95\nDescription: Performance optimization guide"
+	llmInstruction := "summarize the top 5"
+	matchCount := 1
+
+	enrichedQuery := ag.buildKBEnrichedQuery(cleanQuery, kbResults, llmInstruction, matchCount)
+
+	// Verify the enriched query contains the clean query (without :llm token)
+	if !strings.Contains(enrichedQuery, "performance tips") {
+		t.Errorf("expected enriched query to contain clean query 'performance tips', got: %s", enrichedQuery)
+	}
+	// Verify it does NOT contain the :llm token
+	if strings.Contains(enrichedQuery, ":llm") {
+		t.Errorf("expected enriched query to NOT contain ':llm' token, got: %s", enrichedQuery)
+	}
+	// Verify the instruction is included separately
+	if !strings.Contains(enrichedQuery, "summarize the top 5") {
+		t.Errorf("expected enriched query to contain instruction 'summarize the top 5', got: %s", enrichedQuery)
+	}
+	// Verify KB results are included
+	if !strings.Contains(enrichedQuery, "operations/performance") {
+		t.Errorf("expected enriched query to contain KB results, got: %s", enrichedQuery)
+	}
+}
+
+func TestTrySpecializedFocusedRouting_FlexibleHierarchyDepth(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	kb, err := sysDB.OpenKnowledgeBase(ctx, "myapp", tx, nil, nil, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase failed: %v", err)
+	}
+	if err := kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{TextSearchEnabled: true, LastVectorized: 1}); err != nil {
+		t.Fatalf("SetConfig failed: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+
+	testCases := []struct {
+		name          string
+		query         string
+		expectedClean string
+		expectedInstr string
+		expectLLMMode bool
+	}{
+		{
+			name:          "deep hierarchy with llm",
+			query:         "omni:myapp:cat1:subcat1.1:subsubcat1.1.1:llm summarize performance tips",
+			expectedClean: "cat1:subcat1.1:subsubcat1.1.1",
+			expectedInstr: "summarize performance tips",
+			expectLLMMode: true,
+		},
+		{
+			name:          "medium hierarchy with llm",
+			query:         "omni:myapp:cat1:subcat1.1:llm explain in detail",
+			expectedClean: "cat1:subcat1.1",
+			expectedInstr: "explain in detail",
+			expectLLMMode: true,
+		},
+		{
+			name:          "shallow hierarchy with llm",
+			query:         "omni:myapp:cat1:llm list the top 5",
+			expectedClean: "cat1",
+			expectedInstr: "list the top 5",
+			expectLLMMode: true,
+		},
+		{
+			name:          "operations path with llm",
+			query:         "omni:myapp:operations:performance:caching:llm summarize",
+			expectedClean: "operations:performance:caching",
+			expectedInstr: "summarize",
+			expectLLMMode: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			taskCtx, handled, err := ag.trySpecializedFocusedRouting(ctx, tc.query, "Omni", "Spaces", "")
+			if err != nil {
+				t.Fatalf("trySpecializedFocusedRouting failed: %v", err)
+			}
+			if !handled {
+				t.Fatal("expected specialized focused routing to handle the query")
+			}
+			if taskCtx == nil {
+				t.Fatal("expected a focused task context")
+			}
+
+			// Verify CleanQuery has :llm instruction stripped out
+			if taskCtx.CleanQuery != tc.expectedClean {
+				t.Errorf("expected CleanQuery to be %q, got %q", tc.expectedClean, taskCtx.CleanQuery)
+			}
+
+			// Verify LLMInstruction field is set
+			if taskCtx.LLMInstruction != tc.expectedInstr {
+				t.Errorf("expected LLMInstruction to be %q, got %q", tc.expectedInstr, taskCtx.LLMInstruction)
+			}
+
+			// Verify LLM mode
+			if tc.expectLLMMode && !hasLayer(taskCtx.Layers, "LLMFilter") {
+				t.Errorf("expected LLMFilter layer for :llm instruction, got %+v", taskCtx.Layers)
+			}
+		})
+	}
 }
 
 func TestClassifyFocusedTaskContext_PromptEncouragesStoreNameParsing(t *testing.T) {

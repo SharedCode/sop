@@ -252,19 +252,29 @@
             <strong>SOP is a Database architecture built for AI.</strong> Whether you're quickly spinning up custom Spaces dynamically or executing complex NoSQL B-Tree transactions, I'm here to help.<br><br>
             Type <strong>/list_tools</strong> to show all available tool commands.<br><br>
             
-            <em style="color: var(--text-muted); font-size: 0.9em;">Want to learn SOP?</em><br>
-            <em style="color: var(--text-muted); font-size: 0.9em;">Sample how to work with Spaces:</em>
-            <ul style="color: var(--text-muted); font-size: 0.9em; margin-top: 4px;">
-                <li>"Generate sample tasks and add them to my Tasks space"</li>
-            </ul>
+            <div style="margin: 0 0 6px 0;">
+                <em style="color: var(--text-muted); font-size: 0.9em; display: block; margin-bottom: 2px;">Want to learn SOP?</em>
+                <em style="color: var(--text-muted); font-size: 0.9em; display: block; margin-bottom: 2px;">Sample how to work with Spaces:</em>
+                <ul style="color: var(--text-muted); font-size: 0.9em; margin: 0 0 0 18px; padding: 0; list-style-position: outside;">
+                    <li style="margin: 0 0 2px 0; padding: 0;">"Generate sample tasks and add them to my Tasks space"</li>
+                </ul>
+            </div>
+            <div style="margin: 0 0 6px 0;">
+                <em style="color: var(--text-muted); font-size: 0.9em; display: block; margin-bottom: 2px;">Routing based prompt:</em>
+                <ul style="color: var(--text-muted); font-size: 0.9em; margin: 0 0 0 18px; padding: 0; list-style-position: outside;">
+                    <li style="margin: 0 0 2px 0; padding: 0;">"omni:sop:language binding:c#"</li>
+                </ul>
+            </div>
 
             {{if .HasDemo}}
-            <em style="color: var(--text-muted); font-size: 0.9em;">With Demo Data loaded, try these examples:</em>
-            <ul style="color: var(--text-muted); font-size: 0.9em; margin-top: 4px;">
-                <li>"Show me all users sorted by Age descending"</li>
-                <li>"Find orders for users with first_name 'John' with total amount > 500"</li>
-                <li>"Create a script named 'expensive_orders' to find orders over $1000"</li>
-            </ul>
+            <div style="margin: 0 0 0 0;">
+                <em style="color: var(--text-muted); font-size: 0.9em; display: block; margin-bottom: 2px;">With Demo Data loaded, try these examples:</em>
+                <ul style="color: var(--text-muted); font-size: 0.9em; margin: 0 0 0 18px; padding: 0; list-style-position: outside;">
+                    <li style="margin: 0 0 2px 0; padding: 0;">"Show me all users sorted by Age descending"</li>
+                    <li style="margin: 0 0 2px 0; padding: 0;">"Find orders for users with first_name 'John' with total amount > 500"</li>
+                    <li style="margin: 0 0 2px 0; padding: 0;">"Create a script named 'expensive_orders' to find orders over $1000"</li>
+                </ul>
+            </div>
             {{end}}
             
         </div>

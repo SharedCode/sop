@@ -126,12 +126,15 @@ func (a *CopilotAgent) formatKBSearchResultsForDisplay(results string, matchCoun
 }
 
 // buildKBEnrichedQuery enriches the query with KB search results for LLM processing (Case 2 & 3)
-func (a *CopilotAgent) buildKBEnrichedQuery(originalQuery, kbResults, llmInstruction string, matchCount int) string {
+// The cleanQuery parameter should be the user's intent WITHOUT the :llm meta-token
+func (a *CopilotAgent) buildKBEnrichedQuery(cleanQuery, kbResults, llmInstruction string, matchCount int) string {
 	var sb strings.Builder
 
-	// Start with the original query
-	sb.WriteString(originalQuery)
-	sb.WriteString("\\n\\n")
+	// Start with the clean query (without :llm meta-token)
+	if strings.TrimSpace(cleanQuery) != "" {
+		sb.WriteString(cleanQuery)
+		sb.WriteString("\\n\\n")
+	}
 
 	// Add KB context header
 	sb.WriteString("---\\n")
@@ -766,8 +769,13 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap)
 	// 6a. KB Search LLM Integration (Case 2: :llm instruction, Case 3: Too many matches)
 	if !taskContext.DirectDisplay && taskContext.KBSearchResults != "" {
 		log.Info("KB routing: LLM processing path", "match_count", taskContext.KBMatchCount, "has_instruction", taskContext.LLMInstruction != "")
+		// Use clean query (without :llm meta-token) for LLM context
+		cleanQuery := taskContext.CleanQuery
+		if cleanQuery == "" {
+			cleanQuery = query // fallback to original if clean query not set
+		}
 		// Inject KB results into the query for LLM processing
-		query = a.buildKBEnrichedQuery(query, taskContext.KBSearchResults, taskContext.LLMInstruction, taskContext.KBMatchCount)
+		query = a.buildKBEnrichedQuery(cleanQuery, taskContext.KBSearchResults, taskContext.LLMInstruction, taskContext.KBMatchCount)
 	}
 
 	// 7. Reasoning Engine Delegation

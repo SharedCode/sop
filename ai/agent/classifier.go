@@ -30,6 +30,7 @@ type TaskContextClassification struct {
 	KBSearchResults string `json:"-"`
 	KBMatchCount    int    `json:"-"`
 	LLMInstruction  string `json:"-"`
+	CleanQuery      string `json:"-"` // Query without :llm meta-token
 	DirectDisplay   bool   `json:"-"`
 }
 
@@ -205,12 +206,24 @@ func (a *CopilotAgent) trySpecializedFocusedRouting(ctx context.Context, query, 
 	}
 
 	normalizedQuery := stripRoutingPrefix(query, kbName)
+
+	// Extract page number first (before other parsing)
+	normalizedQuery, pageNum := extractPageNumber(normalizedQuery)
+
 	pathQuery, llmInstruction := splitCategoryPathInstruction(normalizedQuery)
 	llmMode := strings.TrimSpace(llmInstruction) != "" || strings.Contains(strings.ToLower(normalizedQuery), ":llm")
 	if pathQuery == "" {
 		pathQuery = extractCategoryPathQuery(normalizedQuery)
 	}
-	log.Info("Specialized focused routing parsed", "normalized_query", normalizedQuery, "path_query", pathQuery, "llm_instruction", llmInstruction, "llm_mode", llmMode, "kb_name", kbName)
+
+	// Always extract clean query by stripping :llm instruction, even if no category path
+	cleanQuery, extractedInstruction := stripLLMInstruction(normalizedQuery)
+	if extractedInstruction != "" && llmInstruction == "" {
+		llmInstruction = extractedInstruction
+		llmMode = true
+	}
+
+	log.Info("Specialized focused routing parsed", "normalized_query", normalizedQuery, "path_query", pathQuery, "clean_query", cleanQuery, "llm_instruction", llmInstruction, "llm_mode", llmMode, "page", pageNum, "kb_name", kbName)
 
 	db := a.resolveDBForKB(ctx, kbName)
 	if db == nil {
@@ -218,19 +231,48 @@ func (a *CopilotAgent) trySpecializedFocusedRouting(ctx context.Context, query, 
 		return nil, false, nil
 	}
 
-	candidateText, err := a.searchKnowledgeBase(ctx, db, kbName, normalizedQuery, pathQuery, "", 5)
-	if err != nil {
-		return nil, false, err
+	// Special case: if normalizedQuery is empty (just "omni:KB"), show root categories
+	showSubcategories := false
+	if normalizedQuery == "" || (pathQuery == "" && cleanQuery == "") {
+		showSubcategories = true
 	}
 
-	// Count actual hits (each hit has both CategoryPath and Score, so count only one)
-	candidateCount := strings.Count(candidateText, "CategoryPath:")
-	if strings.Contains(strings.ToLower(candidateText), "no results found") {
-		candidateCount = 0
+	var candidateText string
+	var candidateCount int
+	var err error
+
+	if showSubcategories {
+		// Display root categories for navigation
+		candidateText, err = a.getSubcategories(ctx, db, kbName, "", pageNum)
+		if err != nil {
+			return nil, false, err
+		}
+		log.Info("Specialized focused routing: showing root categories", "kb_name", kbName, "page", pageNum)
+	} else {
+		// Normal KB search
+		candidateText, err = a.searchKnowledgeBase(ctx, db, kbName, normalizedQuery, pathQuery, "", 5)
+		if err != nil {
+			return nil, false, err
+		}
+
+		// Count actual hits (each hit has both CategoryPath and Score, so count only one)
+		candidateCount = strings.Count(candidateText, "CategoryPath:")
+		if strings.Contains(strings.ToLower(candidateText), "no results found") {
+			candidateCount = 0
+			// If no results found but we have a category path AND no :llm instruction, show subcategories
+			if pathQuery != "" && !llmMode {
+				subcatText, err := a.getSubcategories(ctx, db, kbName, pathQuery, pageNum)
+				if err == nil && subcatText != "" {
+					candidateText = fmt.Sprintf("No items found at this path.\n\n%s", subcatText)
+					showSubcategories = true
+					log.Info("Specialized focused routing: showing subcategories for path", "path", pathQuery, "page", pageNum)
+				}
+			}
+		}
 	}
 
-	handled := looksLikeSpecializedRoutingQuery(query) || llmMode || candidateCount > 0
-	log.Info("Specialized focused routing decision", "handled", handled, "llm_mode", llmMode, "candidate_count", candidateCount, "candidate_text_preview", summarizeCandidatePreview(candidateText))
+	handled := looksLikeSpecializedRoutingQuery(query) || llmMode || candidateCount > 0 || showSubcategories
+	log.Info("Specialized focused routing decision", "handled", handled, "llm_mode", llmMode, "candidate_count", candidateCount, "show_subcategories", showSubcategories, "candidate_text_preview", summarizeCandidatePreview(candidateText))
 	if !handled {
 		return nil, false, nil
 	}
@@ -247,18 +289,27 @@ func (a *CopilotAgent) trySpecializedFocusedRouting(ctx context.Context, query, 
 	taskCtx.KBSearchResults = candidateText
 	taskCtx.KBMatchCount = candidateCount
 	taskCtx.LLMInstruction = llmInstruction
+	// Store clean query without :llm meta-token for LLM context
+	// Use the cleanQuery which has :llm instruction stripped out
+	taskCtx.CleanQuery = cleanQuery
 
 	// Three-way routing decision:
-	// Case 1: Few matches (1-5) -> Direct display, bypass LLM
-	// Case 2: :llm instruction -> LLM processes matches with user instruction
+	// Case 0: :llm instruction present -> Always use LLM (even with 0 results)
+	// Case 1: Showing subcategories -> Direct display for navigation
+	// Case 2: Few matches (1-5) -> Direct display, bypass LLM
 	// Case 3: Too many matches (>5) -> LLM reduces/summarizes matches
 	if llmMode {
-		// Case 2: User wants LLM to process matches
+		// Case 0: User wants LLM to process (highest priority)
 		taskCtx.DirectDisplay = false
 		taskCtx.Layers = append(taskCtx.Layers, LayerInfo{Name: "LLMFilter", CRUD: []string{"R"}})
 		log.Info("KB routing: LLM filter mode", "instruction", llmInstruction)
+	} else if showSubcategories {
+		// Case 1: Showing subcategories for navigation - direct display
+		taskCtx.DirectDisplay = true
+		taskCtx.Layers = append(taskCtx.Layers, LayerInfo{Name: "KBRoute", CRUD: []string{"R"}})
+		log.Info("KB routing: Direct display (subcategories navigation)")
 	} else if candidateCount > 0 && candidateCount <= 5 {
-		// Case 1: Few matches - direct display
+		// Case 2: Few matches - direct display
 		taskCtx.DirectDisplay = true
 		taskCtx.Layers = append(taskCtx.Layers, LayerInfo{Name: "KBRoute", CRUD: []string{"R"}})
 		log.Info("KB routing: Direct display", "match_count", candidateCount)

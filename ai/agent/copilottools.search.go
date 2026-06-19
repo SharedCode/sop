@@ -6,6 +6,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/sharedcode/sop"
@@ -96,6 +97,52 @@ func extractCategoryPathQuery(query string) string {
 	}
 
 	return ""
+}
+
+// stripLLMInstruction extracts and removes the :llm <instruction> suffix from any query
+// Returns (cleanQuery, instruction) where cleanQuery has the :llm part removed
+func stripLLMInstruction(query string) (string, string) {
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return "", ""
+	}
+
+	re := regexp.MustCompile(`(?i)^(?P<query>.+?)(?:\s*:\s*llm\b\s*(?P<instruction>.*))?$`)
+	matches := re.FindStringSubmatch(trimmed)
+	if len(matches) != 3 {
+		return trimmed, ""
+	}
+
+	cleanQuery := strings.TrimSpace(matches[1])
+	instruction := strings.TrimSpace(matches[2])
+	return cleanQuery, instruction
+}
+
+// extractPageNumber extracts and removes the :page:<number> or /page/<number> suffix from a query
+// Returns (cleanQuery, pageNumber) where pageNumber is 1 if not specified
+func extractPageNumber(query string) (string, int) {
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return "", 1
+	}
+
+	// Match :page:<number> or /page/<number> at the end (case insensitive)
+	// Supports both : and / as separators (e.g., :page:2 or /page/2)
+	re := regexp.MustCompile(`(?i)^(?P<query>.+?)(?:\s*[:/]\s*page\s*[:/]\s*(?P<page>\d+))$`)
+	matches := re.FindStringSubmatch(trimmed)
+	if len(matches) != 3 {
+		return trimmed, 1
+	}
+
+	cleanQuery := strings.TrimSpace(matches[1])
+	pageStr := strings.TrimSpace(matches[2])
+
+	page := 1
+	if pageNum, err := strconv.Atoi(pageStr); err == nil && pageNum > 0 {
+		page = pageNum
+	}
+
+	return cleanQuery, page
 }
 
 func splitCategoryPathInstruction(query string) (string, string) {
@@ -228,6 +275,209 @@ func extractHitCategory(v any) string {
 		}
 	}
 	return ""
+}
+
+// getSubcategories retrieves subcategories for navigation display with pagination support.
+// If categoryPath is empty, it returns root categories (categories with no parents).
+// If categoryPath is provided, it returns children of that category.
+// page parameter controls pagination (1-based, 0 or negative means page 1).
+func (a *CopilotAgent) getSubcategories(ctx context.Context, db *database.Database, kbName string, categoryPath string, page int) (string, error) {
+	if db == nil {
+		return "", fmt.Errorf("database is null")
+	}
+
+	if page <= 0 {
+		page = 1
+	}
+
+	tx, err := db.BeginTransaction(ctx, sop.ForReading)
+	if err != nil {
+		return "", fmt.Errorf("failed to begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	var embedder ai.Embeddings
+	if a.service != nil && a.service.Domain() != nil && a.service.Domain().Embedder() != nil {
+		embedder = a.service.Domain().Embedder()
+	}
+
+	kb, err := db.OpenKnowledgeBase(ctx, kbName, tx, a.brain, embedder, false)
+	if err != nil {
+		return "", fmt.Errorf("failed to open kb %s: %w", kbName, err)
+	}
+
+	categoriesTree, err := kb.Store.Categories(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get categories tree: %w", err)
+	}
+
+	var targetCategories []*memory.Category
+
+	// If no category path, get root categories (categories with no parents)
+	if categoryPath == "" {
+		// Scan all categories to find roots
+		ok, err := categoriesTree.First(ctx)
+		if err != nil {
+			return "", err
+		}
+		for ok {
+			cat, err := categoriesTree.GetCurrentValue(ctx)
+			if err != nil {
+				return "", err
+			}
+			// Root categories have no parents
+			if len(cat.ParentIDs) == 0 {
+				targetCategories = append(targetCategories, cat)
+			}
+			ok, err = categoriesTree.Next(ctx)
+			if err != nil {
+				return "", err
+			}
+		}
+	} else {
+		// Find the category by path and get its children
+		catsByPath, err := kb.Store.CategoriesByPath(ctx)
+		if err != nil {
+			return "", fmt.Errorf("failed to get categories by path: %w", err)
+		}
+
+		found, err := catsByPath.Find(ctx, categoryPath, false)
+		if err != nil {
+			return "", fmt.Errorf("failed to find category by path: %w", err)
+		}
+		if !found {
+			return fmt.Sprintf("Category path '%s' not found.", categoryPath), nil
+		}
+
+		catID, err := catsByPath.GetCurrentValue(ctx)
+		if err != nil {
+			return "", fmt.Errorf("failed to get category ID: %w", err)
+		}
+
+		ok, err := categoriesTree.Find(ctx, catID, false)
+		if err != nil || !ok {
+			return fmt.Sprintf("Category path '%s' not found.", categoryPath), nil
+		}
+
+		parentCat, err := categoriesTree.GetCurrentValue(ctx)
+		if err != nil {
+			return "", err
+		}
+
+		// Get children of this category
+		for _, childID := range parentCat.ChildrenIDs {
+			ok, err := categoriesTree.Find(ctx, childID, false)
+			if err != nil {
+				continue
+			}
+			if ok {
+				childCat, err := categoriesTree.GetCurrentValue(ctx)
+				if err != nil {
+					continue
+				}
+				targetCategories = append(targetCategories, childCat)
+			}
+		}
+	}
+
+	if len(targetCategories) == 0 {
+		if categoryPath == "" {
+			return "No root categories found in this knowledge base.", nil
+		}
+		return fmt.Sprintf("No subcategories found under '%s'.", categoryPath), nil
+	}
+
+	// Apply pagination
+	const pageSize = 20
+	totalCategories := len(targetCategories)
+	totalPages := (totalCategories + pageSize - 1) / pageSize // Ceiling division
+
+	// Clamp page to valid range
+	if page > totalPages {
+		page = totalPages
+	}
+
+	// Calculate slice bounds
+	startIdx := (page - 1) * pageSize
+	endIdx := startIdx + pageSize
+	if endIdx > totalCategories {
+		endIdx = totalCategories
+	}
+
+	displayCategories := targetCategories[startIdx:endIdx]
+
+	// Format subcategories for display
+	var results []string
+	header := "Available Categories:"
+	if categoryPath != "" {
+		header = fmt.Sprintf("Subcategories under '%s':", categoryPath)
+	}
+
+	// Add page info if multiple pages exist
+	if totalPages > 1 {
+		header = fmt.Sprintf("%s (Page %d of %d, showing %d-%d of %d)",
+			header, page, totalPages, startIdx+1, endIdx, totalCategories)
+	} else if totalCategories > 0 {
+		header = fmt.Sprintf("%s (%d total)", header, totalCategories)
+	}
+
+	results = append(results, header)
+	results = append(results, "")
+
+	for _, cat := range displayCategories {
+		name := cat.Name
+		if name == "" {
+			name = cat.Path
+		}
+		itemInfo := fmt.Sprintf("%d items", cat.ItemCount)
+		subcatInfo := ""
+		if len(cat.ChildrenIDs) > 0 {
+			subcatInfo = fmt.Sprintf(", %d subcategories", len(cat.ChildrenIDs))
+		}
+
+		description := ""
+		if cat.Description != "" {
+			description = fmt.Sprintf("\n  %s", cat.Description)
+		}
+
+		// Show the path to navigate to this category
+		navPath := cat.Path
+		if navPath == "" {
+			navPath = cat.Name
+		}
+
+		results = append(results, fmt.Sprintf("• %s (%s%s)%s\n  Navigate: omni:%s:%s",
+			name, itemInfo, subcatInfo, description, kbName, navPath))
+	}
+
+	// Add pagination navigation if multiple pages exist
+	if totalPages > 1 {
+		results = append(results, "")
+		var navHints []string
+
+		pathPrefix := fmt.Sprintf("omni:%s", kbName)
+		if categoryPath != "" {
+			pathPrefix = fmt.Sprintf("%s:%s", pathPrefix, categoryPath)
+		}
+
+		if page > 1 {
+			navHints = append(navHints, fmt.Sprintf("Previous: %s:page:%d", pathPrefix, page-1))
+		}
+		if page < totalPages {
+			navHints = append(navHints, fmt.Sprintf("Next: %s:page:%d", pathPrefix, page+1))
+		}
+
+		if len(navHints) > 0 {
+			results = append(results, strings.Join(navHints, " | "))
+		}
+
+		// Also suggest LLM filtering for large sets
+		if totalCategories > 40 {
+			results = append(results, fmt.Sprintf("💡 Tip: Use `%s:llm list categories matching <name>` to filter results.", pathPrefix))
+		}
+	}
+
+	return strings.Join(results, "\n"), nil
 }
 
 func (a *CopilotAgent) resolveDBForKB(ctx context.Context, kbName string) *database.Database {

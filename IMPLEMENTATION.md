@@ -244,15 +244,83 @@ If critical tool manuals are fragmented and left to probabilistic retrieval, a d
 
 ### Three-Gate Routing Architecture
 
-Gate 1: Focused prefix routing.
+Gate 1: Focused prefix routing with KB specialization.
 
-- Input shape: explicit namespace such as omni:stores:users, plus deep slash-path KB prompts such as `sop:/a/b/c` or `a/b/c/d`.
-- Action: parse hard constraints and classify only the missing parts (mainly layers and CRUD intent). Deep path-style KB prompts now short-circuit into focused KB retrieval rather than drifting into the generic discovery loop.
-- Result: deterministic route with low token overhead, and a clean path for direct category-path answers.
+**Input patterns:**
+- Root category display: `omni:<kb>` (e.g., `omni:sop`)
+- Root with paging: `omni:<kb>:page:<number>` or `omni:<kb>/page/<number>` (e.g., `omni:sop:page:2` or `omni:sop/page/2`)
+- Category path with paging: `omni:<kb>:<path>:page:<number>` (e.g., `omni:sop:language:page:3` or `omni:sop/language/page/3`)
+- Explicit namespace: `omni:stores:users`
+- Deep hierarchical KB paths: `omni:sop:operations:performance:caching`
+- KB paths with LLM instruction: `omni:sop:language bindings:c#:llm summarize`
+- Flexible depth support: `omni:<kb>:cat1:subcat1.1:subsubcat1.1.1`
 
-Optional follow-on instruction format:
+**Processing flow:**
+1. **Pattern recognition**: Detects `omni:` prefix routing queries via `looksLikeSpecializedRoutingQuery()`
+2. **KB extraction**: Identifies target KB name (defaults to "sop" if not specified)
+3. **Page extraction**: Uses `extractPageNumber()` to parse and remove `:page:<number>` suffix (defaults to 1)
+4. **Root navigation check**: If query is just `omni:<kb>` (no category path), retrieve and display root categories
+5. **Meta-token parsing**: Uses `stripLLMInstruction()` to extract and separate the `:llm <instruction>` suffix
+6. **Category path resolution**: Normalizes colon-separated paths to forward slashes for internal routing
+7. **Search orchestration**: Delegates to `searchKnowledgeBase()` with clean query (meta-token stripped)
+8. **Subcategory fallback**: If no items found at path (and no `:llm`), calls `getSubcategories()` with page number
+9. **Pagination display**: Shows page info, navigation hints (Previous/Next), and LLM filtering suggestion for large sets
 
-- If the user adds an explicit `:LLM <instruction>` suffix, for example `a/b/c:LLM extract Apple company from the matches`, the ask remains grounded in KB retrieval but the model is invited to synthesize or narrow the returned candidates after the path lookup.
+**Key architecture principles:**
+- **Clean query separation**: The `:llm` meta-token is treated as post-retrieval guidance, not part of the search query
+- **Hierarchical flexibility**: Supports any depth of category nesting (1 to N levels)
+- **Intelligent fallback**: Direct category path lookup → semantic category matching → text search fallback
+- **Subcategory navigation**: When a category has no items, returns child categories as navigation hints
+
+**Three-way routing decision:**
+1. **Case 1 (1-5 matches)**: Direct display, bypass LLM processing
+2. **Case 2 (`:llm` present)**: LLM processes matches according to user instruction
+3. **Case 3 (6+ matches)**: Automatic LLM summarization to reduce cognitive load
+
+**TaskContextClassification fields:**
+```go
+type TaskContextClassification struct {
+    CleanQuery      string  // Query without :llm meta-token
+    LLMInstruction  string  // Extracted instruction from :llm suffix
+    KBSearchResults string  // Retrieved KB matches
+    KBMatchCount    int     // Number of matches found
+    DirectDisplay   bool    // Whether to bypass LLM (Case 1)
+}
+```
+
+**Implementation reference:**
+- `trySpecializedFocusedRouting()` in `ai/agent/classifier.go`: Main routing logic
+- `stripLLMInstruction()` in `ai/agent/copilottools.search.go`: Meta-token parsing
+- `searchKnowledgeBase()` in `ai/agent/copilottools.search.go`: KB search orchestration
+- `buildKBEnrichedQuery()` in `ai/agent/copilot.go`: LLM context assembly
+
+**Example query flow:**
+```
+Input:  omni:sop:operations:performance:caching:llm summarize top 3
+Parse:  kb_name = "sop"
+        category_path = "operations/performance/caching"
+        clean_query = "operations:performance:caching"
+        llm_instruction = "summarize top 3"
+Execute: KB.Search(category_path) → 8 matches
+Route:  Case 2 (LLM instruction present)
+Output: buildKBEnrichedQuery(clean_query, results, instruction)
+        → LLM receives: query + 8 matches + "summarize top 3"
+```
+
+**Roadmap - Quoted text search:**
+Future support for explicit text queries within categories:
+```
+omni:sop:language bindings "java tutorial"
+  → category_path = "language bindings"
+  → search_text = "java tutorial"
+  
+omni:sop:operations "caching strategies":llm summarize
+  → Combined category + text + LLM instruction
+```
+
+**Action:** Parse hard constraints, extract meta-tokens, and classify missing parts (layers, CRUD intent). Deep path-style KB prompts now short-circuit into focused KB retrieval with proper meta-token handling.
+
+**Result:** Deterministic route with low token overhead, clean separation of query vs. instruction, and intelligent LLM delegation based on result count.
 
 Gate 2: MRU continuity or switch routing.
 
