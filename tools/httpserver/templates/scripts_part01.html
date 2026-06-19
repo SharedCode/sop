@@ -3084,6 +3084,11 @@ window.closeMissingProviderModal = function() {
     document.getElementById('missing-provider-modal').style.display = 'none';
 };
 
+function isLocalEmbedderProvider(providerName) {
+    const normalized = (providerName || '').toLowerCase();
+    return normalized === 'ollama' || normalized === 'kelindar' || normalized === 'local';
+}
+
 window.resolveSpaceEmbedderAuth = async function(config) {
     if (!config || !config.embedder) return null; // No specific embedder requested, use system
 
@@ -3093,6 +3098,15 @@ window.resolveSpaceEmbedderAuth = async function(config) {
         let parts = provider.split(":");
         provider = parts[0];
         model = parts[1] || "";
+    }
+
+    if (isLocalEmbedderProvider(provider)) {
+        return {
+            'X-Embedder-Provider': provider,
+            'X-Embedder-API-Key': '',
+            'X-Embedder-URL': '',
+            'X-Embedder-Model': model || ''
+        };
     }
 
     // Checking if system config already fulfills it

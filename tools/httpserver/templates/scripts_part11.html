@@ -1173,6 +1173,8 @@ function showAddSpace() {
     console.log("showAddSpace triggered!");
     window.currentAdminToken = null;
     
+    const defaultSpaceEmbedder = 'kelindar:nomic-embed-text-v1.5-q8_0';
+    
     // Reset modal state before showing
     const modal = document.getElementById('add-kb-modal');
     if (modal) {
@@ -1184,7 +1186,10 @@ function showAddSpace() {
         if (document.getElementById('new-kb-sysprompt')) document.getElementById('new-kb-sysprompt').value = '';
         if (document.getElementById('new-kb-is-persona')) document.getElementById('new-kb-is-persona').checked = false;
         if (document.getElementById('new-kb-sysprompt-container')) document.getElementById('new-kb-sysprompt-container').style.display = 'none';
-        if (document.getElementById('new-kb-embedder')) document.getElementById('new-kb-embedder').value = 'text-embedding-3-small';
+        const embedderSelect = document.getElementById('new-kb-embedder');
+        if (embedderSelect) {
+            embedderSelect.value = defaultSpaceEmbedder;
+        }
         if (document.getElementById('new-kb-dimension')) document.getElementById('new-kb-dimension').value = '';
         if (document.getElementById('new-kb-public')) document.getElementById('new-kb-public').checked = false;
     }
@@ -1215,7 +1220,7 @@ async function saveNewKB() {
     const kbType = selectedTypeRadio ? selectedTypeRadio.value : "simple_data";
     const isPersona = document.getElementById('new-kb-is-persona') ? document.getElementById('new-kb-is-persona').checked : false;
     const sysPrompt = isPersona && document.getElementById('new-kb-sysprompt') ? document.getElementById('new-kb-sysprompt').value.trim() : "";
-    const embedder = document.getElementById('new-kb-embedder') ? document.getElementById('new-kb-embedder').value : "text-embedding-3-small";
+    const embedder = document.getElementById('new-kb-embedder') ? document.getElementById('new-kb-embedder').value : "kelindar:nomic-embed-text-v1.5-q8_0";
 
     // JIT: Fetch missing provider keys via UI modal
     if (window.resolveSpaceEmbedderAuth) {
