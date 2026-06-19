@@ -168,6 +168,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	// Inject streaming writer bypass
 	ctx = context.WithValue(ctx, ai.CtxKeyWriter, &DirectFlushingWriter{w: w})
+	ctx = context.WithValue(ctx, ai.CtxKeyAppBaseURL, buildAppBaseURL(r))
 
 	if err := executeAgentLifecycle(ctx, r, agentSvc, req, sendEvent); err != nil {
 		return
@@ -224,6 +225,31 @@ type aiChatRequest struct {
 	ClientID    string                 `json:"client_id"`
 	Domain      string                 `json:"domain"`
 	SelectedKBs []ai.ArtifactReference `json:"selected_kbs"`
+}
+
+func buildAppBaseURL(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+
+	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
+	if host == "" {
+		host = strings.TrimSpace(r.Host)
+	}
+	if host == "" {
+		return ""
+	}
+
+	proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+	if proto == "" {
+		if r.TLS != nil {
+			proto = "https"
+		} else {
+			proto = "http"
+		}
+	}
+
+	return strings.TrimRight(proto+"://"+host, "/")
 }
 
 func initializeRequest(w http.ResponseWriter, r *http.Request) (*aiChatRequest, error) {

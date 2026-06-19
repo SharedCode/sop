@@ -174,20 +174,56 @@ func looksLikeSpecializedRoutingQuery(query string) bool {
 
 	if strings.HasPrefix(lower, "omni:") {
 		parts := strings.Split(trimmed, ":")
-		return len(parts) >= 3 && strings.TrimSpace(parts[1]) != "" && strings.TrimSpace(parts[2]) != ""
+		// Allow omni:KB (2 parts) for root category navigation, or omni:KB:path (3+ parts)
+		if len(parts) >= 2 && strings.TrimSpace(parts[1]) != "" {
+			kbPart := strings.TrimSpace(strings.ToLower(parts[1]))
+
+			// Exclude domain names (Stores, Spaces) from specialized routing
+			// These should go through normal Gate1 classification
+			if kbPart == "stores" || kbPart == "spaces" {
+				return false
+			}
+
+			// If exactly 2 parts (omni:KB), allow it for root categories
+			if len(parts) == 2 {
+				return true
+			}
+			// If 3+ parts, ensure the third part isn't empty (unless it's a trailing colon)
+			return len(parts) >= 3
+		}
+		return false
 	}
 
-	return strings.HasPrefix(lower, "sop:") || strings.HasPrefix(lower, "omni/sop/") || strings.HasPrefix(lower, "omni->sop->")
+	// Support direct KB queries without omni: prefix
+	if strings.HasPrefix(lower, "sop:") || strings.HasPrefix(lower, "omni/sop/") || strings.HasPrefix(lower, "omni->sop->") {
+		return true
+	}
+
+	// Support just "sop" for root category navigation
+	if lower == "sop" {
+		return true
+	}
+
+	return false
 }
 
 func routingKBName(query string) string {
 	trimmed := strings.TrimSpace(query)
-	if strings.HasPrefix(strings.ToLower(trimmed), "omni:") {
+	lower := strings.ToLower(trimmed)
+
+	if strings.HasPrefix(lower, "omni:") {
 		parts := strings.Split(trimmed, ":")
-		if len(parts) >= 3 {
+		// Extract KB name from omni:KB or omni:KB:path patterns
+		if len(parts) >= 2 && strings.TrimSpace(parts[1]) != "" {
 			return strings.TrimSpace(parts[1])
 		}
 	}
+
+	// Support direct KB name patterns: "sop", "sop:path", etc.
+	if strings.HasPrefix(lower, "sop:") || lower == "sop" {
+		return "sop"
+	}
+
 	return ""
 }
 

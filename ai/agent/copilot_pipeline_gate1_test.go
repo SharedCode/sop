@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -123,11 +124,23 @@ func TestClassifyFocusedTaskContext_EnforcesExplicitConstraints(t *testing.T) {
 }
 
 func TestLooksLikeSpecializedRoutingQuery_RecognizesSOPPrefixes(t *testing.T) {
+	if !looksLikeSpecializedRoutingQuery("omni:sop") {
+		t.Fatal("expected omni:sop (root KB query) to be recognized as specialized")
+	}
 	if !looksLikeSpecializedRoutingQuery("omni:sop:language:c# tutorial") {
 		t.Fatal("expected SOP-style query to be recognized as specialized")
 	}
 	if !looksLikeSpecializedRoutingQuery("omni:medical:skin diseases") {
 		t.Fatal("expected Omni custom-KB query to be recognized as specialized")
+	}
+	if !looksLikeSpecializedRoutingQuery("sop") {
+		t.Fatal("expected sop (KB name alone) to be recognized as specialized")
+	}
+	if !looksLikeSpecializedRoutingQuery("sop:category") {
+		t.Fatal("expected sop:category to be recognized as specialized")
+	}
+	if !looksLikeSpecializedRoutingQuery("sop:cat1:cat2") {
+		t.Fatal("expected sop:cat1:cat2 to be recognized as specialized")
 	}
 	if looksLikeSpecializedRoutingQuery("just a regular ask") {
 		t.Fatal("expected plain ask to stay outside specialized routing")
@@ -137,6 +150,21 @@ func TestLooksLikeSpecializedRoutingQuery_RecognizesSOPPrefixes(t *testing.T) {
 func TestRoutingKBName_UsesOmniTargetKB(t *testing.T) {
 	if got := routingKBName("omni:medical:skin diseases"); got != "medical" {
 		t.Fatalf("routingKBName() = %q, want %q", got, "medical")
+	}
+}
+
+func TestShouldRouteToOmniInsteadOfAvatar_ForKBStyleShorthand(t *testing.T) {
+	if !shouldRouteToOmniInsteadOfAvatar("sop:language bindings:c#") {
+		t.Fatal("expected shorthand KB query to be treated as Omni-focused routing")
+	}
+	if !shouldRouteToOmniInsteadOfAvatar("omni:sop:language bindings:c#") {
+		t.Fatal("expected omni-prefixed SOP routing to be treated as Omni-focused routing")
+	}
+	if shouldRouteToOmniInsteadOfAvatar("omni:medical:skin diseases") {
+		t.Fatal("expected non-SOP KB routing to remain on the normal path")
+	}
+	if shouldRouteToOmniInsteadOfAvatar("Please summarize the architecture") {
+		t.Fatal("expected a general ask to remain on the normal routing path")
 	}
 }
 
@@ -178,6 +206,68 @@ func TestTrySpecializedFocusedRouting_ShortCircuitsSOPStyleQuery(t *testing.T) {
 	}
 	if !hasLayer(taskCtx.Layers, "KBRoute") {
 		t.Fatalf("expected KBRoute layer to be attached, got %+v", taskCtx.Layers)
+	}
+}
+
+func TestEvaluateRoutingGates_HandlesBareSopQuery(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	kb, err := sysDB.OpenKnowledgeBase(ctx, "sop", tx, nil, nil, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase failed: %v", err)
+	}
+	if err := kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{TextSearchEnabled: true, LastVectorized: 1}); err != nil {
+		t.Fatalf("SetConfig failed: %v", err)
+	}
+	if err := kb.IngestThought(ctx, "Getting Started", "installation/setup", "Omni", nil, map[string]any{"description": "setup guide"}); err != nil {
+		t.Fatalf("IngestThought failed: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	if ag.service == nil {
+		ag.service = &Service{}
+	}
+	ag.service.session = &RunnerSession{MRU: []MRUItem{}}
+
+	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{Variables: make(map[string]any)})
+
+	tests := []struct {
+		name                string
+		query               string
+		expectDirectDisplay bool
+	}{
+		{"bare sop", "sop", true},
+		{"sop with colon", "sop:", true},
+		{"sop with category", "sop:installation", false}, // No results, so not direct display
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			taskCtx, err := ag.evaluateRoutingGates(ctx, tc.query, nil)
+			if err != nil {
+				t.Fatalf("evaluateRoutingGates failed: %v", err)
+			}
+			if taskCtx == nil {
+				t.Fatal("expected a routing classification for sop query")
+			}
+			if taskCtx.RoutingGate != RoutingGateFocused {
+				t.Fatalf("expected specialized focused routing gate, got %q", taskCtx.RoutingGate)
+			}
+			if !hasLayer(taskCtx.Layers, "KBRoute") {
+				t.Fatalf("expected KBRoute layer to be attached, got %+v", taskCtx.Layers)
+			}
+			if taskCtx.DirectDisplay != tc.expectDirectDisplay {
+				t.Fatalf("expected direct display=%v, got %v", tc.expectDirectDisplay, taskCtx.DirectDisplay)
+			}
+		})
 	}
 }
 
@@ -274,6 +364,246 @@ func TestTrySpecializedFocusedRouting_StripsLLMInstructionWithoutCategoryPath(t 
 	}
 }
 
+func TestExtractPageNumber_SupportsColonAndSlashSeparators(t *testing.T) {
+	tests := []struct {
+		name      string
+		query     string
+		wantQuery string
+		wantPage  int
+	}{
+		{name: "colon separator", query: "omni:sop:page:3", wantQuery: "omni:sop", wantPage: 3},
+		{name: "slash separator", query: "omni:sop/page/2", wantQuery: "omni:sop", wantPage: 2},
+		{name: "mixed path with slash page", query: "omni:sop:language/page/4", wantQuery: "omni:sop:language", wantPage: 4},
+		{name: "defaults when no page suffix", query: "omni:sop:language", wantQuery: "omni:sop:language", wantPage: 1},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			gotQuery, gotPage := extractPageNumber(tc.query)
+			if gotQuery != tc.wantQuery {
+				t.Fatalf("extractPageNumber(%q) query = %q, want %q", tc.query, gotQuery, tc.wantQuery)
+			}
+			if gotPage != tc.wantPage {
+				t.Fatalf("extractPageNumber(%q) page = %d, want %d", tc.query, gotPage, tc.wantPage)
+			}
+		})
+	}
+}
+
+func TestGetSubcategories_PaginatesAndReportsPageCount(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	kb, err := sysDB.OpenKnowledgeBase(ctx, "demo", tx, nil, nil, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase failed: %v", err)
+	}
+
+	for i := 1; i <= 25; i++ {
+		cat := &memory.Category{
+			ID:        sop.NewUUID(),
+			Name:      fmt.Sprintf("Cat%02d", i),
+			Path:      fmt.Sprintf("cat%02d", i),
+			ItemCount: i,
+		}
+		if _, err := kb.Store.AddCategory(ctx, cat); err != nil {
+			t.Fatalf("AddCategory(%d) failed: %v", i, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+	text, err := ag.getSubcategories(ctx, sysDB, "demo", "", 2)
+	if err != nil {
+		t.Fatalf("getSubcategories failed: %v", err)
+	}
+
+	if !strings.Contains(text, "Page 2 of 2") {
+		t.Fatalf("expected pagination header to report total pages, got: %s", text)
+	}
+	if !strings.Contains(text, "showing 21-25 of 25") {
+		t.Fatalf("expected page range to show 21-25 of 25, got: %s", text)
+	}
+	if !strings.Contains(text, "Previous: omni:demo:page:1") {
+		t.Fatalf("expected previous page hint, got: %s", text)
+	}
+}
+
+func TestTrySpecializedFocusedRouting_ShowsRootCategoriesForOmniKBQuery(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	kb, err := sysDB.OpenKnowledgeBase(ctx, "sop", tx, nil, nil, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase failed: %v", err)
+	}
+	if err := kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{TextSearchEnabled: true, LastVectorized: 1}); err != nil {
+		t.Fatalf("SetConfig failed: %v", err)
+	}
+
+	// Add some root categories
+	for _, name := range []string{"Language", "Operations", "Architecture"} {
+		cat := &memory.Category{
+			ID:        sop.NewUUID(),
+			Name:      name,
+			Path:      strings.ToLower(name),
+			ItemCount: 10,
+		}
+		if _, err := kb.Store.AddCategory(ctx, cat); err != nil {
+			t.Fatalf("AddCategory(%s) failed: %v", name, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+
+	testCases := []struct {
+		name  string
+		query string
+	}{
+		{name: "omni:KB pattern", query: "omni:sop"},
+		{name: "direct KB name", query: "sop"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			taskCtx, handled, err := ag.trySpecializedFocusedRouting(ctx, tc.query, "Omni", "Spaces", "")
+			if err != nil {
+				t.Fatalf("trySpecializedFocusedRouting failed: %v", err)
+			}
+			if !handled {
+				t.Fatalf("expected specialized focused routing to handle %q query", tc.query)
+			}
+			if taskCtx == nil {
+				t.Fatal("expected a focused task context")
+			}
+			if !hasLayer(taskCtx.Layers, "KBRoute") {
+				t.Fatalf("expected KBRoute layer to be attached, got %+v", taskCtx.Layers)
+			}
+			// Should be direct display (subcategories/root categories)
+			if !taskCtx.DirectDisplay {
+				t.Fatal("expected DirectDisplay to be true for root category navigation")
+			}
+		})
+	}
+}
+
+func TestTrySpecializedFocusedRouting_SupportsDirectSOPPathQueries(t *testing.T) {
+	ctx := context.Background()
+	sysDB := database.NewDatabase(sop.DatabaseOptions{Type: sop.Standalone, StoresFolders: []string{t.TempDir()}})
+
+	tx, err := sysDB.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+
+	kb, err := sysDB.OpenKnowledgeBase(ctx, "sop", tx, nil, nil, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase failed: %v", err)
+	}
+	if err := kb.SetConfig(ctx, &memory.KnowledgeBaseConfig{TextSearchEnabled: true, LastVectorized: 1}); err != nil {
+		t.Fatalf("SetConfig failed: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("Commit failed: %v", err)
+	}
+
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, sysDB)
+
+	testCases := []struct {
+		name         string
+		query        string
+		expectedPath string
+	}{
+		{name: "single level", query: "sop:language", expectedPath: "language"},
+		{name: "multi level", query: "sop:language:c#", expectedPath: "language/c#"},
+		{name: "deep path", query: "sop:operations:performance:caching", expectedPath: "operations/performance/caching"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			taskCtx, handled, err := ag.trySpecializedFocusedRouting(ctx, tc.query, "Omni", "Spaces", "")
+			if err != nil {
+				t.Fatalf("trySpecializedFocusedRouting failed: %v", err)
+			}
+			if !handled {
+				t.Fatalf("expected specialized focused routing to handle %q query", tc.query)
+			}
+			if taskCtx == nil {
+				t.Fatal("expected a focused task context")
+			}
+			if !hasLayer(taskCtx.Layers, "KBRoute") {
+				t.Fatalf("expected KBRoute layer to be attached, got %+v", taskCtx.Layers)
+			}
+		})
+	}
+}
+
+func TestFormatKBSourceLinks_RendersEveryDocIDAsClickableLink(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, nil)
+
+	ctx := context.WithValue(context.Background(), ai.CtxKeyAppBaseURL, "https://example.test")
+	links := ag.formatKBSourceLinks(ctx, memory.DocIDs{"doc-1", "https://example.test/doc-2"})
+
+	if !strings.Contains(links, "https://example.test/viewer?docID=doc-1") {
+		t.Fatalf("expected first doc ID to be rendered as an absolute link, got: %s", links)
+	}
+	if !strings.Contains(links, "https://example.test/viewer?docID=https%3A%2F%2Fexample.test%2Fdoc-2") {
+		t.Fatalf("expected encoded external doc ID to be rendered as an absolute link, got: %s", links)
+	}
+	if strings.Count(links, "[") != 2 {
+		t.Fatalf("expected two clickable links, got: %s", links)
+	}
+}
+
+func TestFormatKBSearchResultsForDisplay_HandlesCategories(t *testing.T) {
+	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, nil)
+
+	// Test category navigation output (matchCount = 0)
+	categoryResults := "Available Categories: (3 total)\n\n• Language (10 items)\n  Navigate: omni:sop:language"
+	output := ag.formatKBSearchResultsForDisplay(categoryResults, 0)
+
+	// Should NOT have "Found 0 knowledge base matches"
+	if strings.Contains(output, "Found 0 knowledge base matches") {
+		t.Errorf("expected category navigation to not show 'Found 0 matches', got: %s", output)
+	}
+
+	// Should contain the category results
+	if !strings.Contains(output, "Available Categories:") {
+		t.Errorf("expected output to contain category results, got: %s", output)
+	}
+
+	// Should use real newlines, not escaped ones
+	if strings.Contains(output, "\\n") {
+		t.Errorf("expected real newlines, not escaped ones, got: %s", output)
+	}
+
+	// Test regular search results output (matchCount > 0)
+	searchResults := "CategoryPath: language/go\nScore: 0.95"
+	output2 := ag.formatKBSearchResultsForDisplay(searchResults, 3)
+
+	// Should have "Found 3 knowledge base matches"
+	if !strings.Contains(output2, "Found 3 knowledge base matches") {
+		t.Errorf("expected search results to show match count, got: %s", output2)
+	}
+}
+
 func TestBuildKBEnrichedQuery_UsesCleanQueryWithoutLLMToken(t *testing.T) {
 	ag := NewCopilotAgent(Config{}, map[string]sop.DatabaseOptions{}, nil)
 
@@ -300,6 +630,10 @@ func TestBuildKBEnrichedQuery_UsesCleanQueryWithoutLLMToken(t *testing.T) {
 	// Verify KB results are included
 	if !strings.Contains(enrichedQuery, "operations/performance") {
 		t.Errorf("expected enriched query to contain KB results, got: %s", enrichedQuery)
+	}
+	// Verify the prompt explicitly tells the model to preserve absolute source links
+	if !strings.Contains(enrichedQuery, "Preserve the exact markdown source links") {
+		t.Errorf("expected enriched query to preserve source links, got: %s", enrichedQuery)
 	}
 }
 

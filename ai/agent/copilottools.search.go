@@ -45,6 +45,11 @@ func stripRoutingPrefix(query, kbName string) string {
 		}
 	}
 
+	// If what remains is just the KB name itself (e.g., "sop" from "omni:sop"), strip it
+	if strings.EqualFold(trimmed, canonicalName) {
+		trimmed = ""
+	}
+
 	return strings.TrimSpace(trimmed)
 }
 
@@ -230,11 +235,7 @@ func (a *CopilotAgent) searchKnowledgeBase(ctx context.Context, db *database.Dat
 	for _, h := range batch[0] {
 		text := extractHitText(h.Payload)
 		categoryVal := extractHitCategory(h.Payload)
-		docID := memory.DocIDs(h.DocID).First()
-		link := ""
-		if docID != "" {
-			link = fmt.Sprintf("\n[View Source Document](/viewer?docID=%s)", docID)
-		}
+		link := a.formatKBSourceLinks(ctx, memory.DocIDs(h.DocID))
 		results = append(results, fmt.Sprintf("Score: %.2f | CategoryPath: %s\nText: %s%s", h.Score, categoryVal, text, link))
 	}
 
@@ -446,8 +447,14 @@ func (a *CopilotAgent) getSubcategories(ctx context.Context, db *database.Databa
 			navPath = cat.Name
 		}
 
-		results = append(results, fmt.Sprintf("• %s (%s%s)%s\n  Navigate: omni:%s:%s",
-			name, itemInfo, subcatInfo, description, kbName, navPath))
+		entry := fmt.Sprintf("• %s (%s%s)%s\n  Navigate: omni:%s:%s", name, itemInfo, subcatInfo, description, kbName, navPath)
+		results = append(results, entry)
+	}
+
+	// Separate each category entry with a blank line for readability
+	if len(results) > 2 {
+		joined := strings.Join(results[2:], "\n\n")
+		results = []string{results[0], results[1], joined}
 	}
 
 	// Add pagination navigation if multiple pages exist
