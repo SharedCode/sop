@@ -247,11 +247,11 @@ type explicitItemBlock struct {
 }
 
 func escapeCategoryPart(value string) string {
-	return strings.ReplaceAll(value, " / ", categorySlashPlaceholder)
+	return strings.ReplaceAll(value, "/", categorySlashPlaceholder)
 }
 
 func unescapeCategoryPart(value string) string {
-	return strings.ReplaceAll(value, categorySlashPlaceholder, " / ")
+	return strings.ReplaceAll(value, categorySlashPlaceholder, "/")
 }
 
 func getCat(catPath string) *memory.Category {
@@ -259,21 +259,21 @@ func getCat(catPath string) *memory.Category {
 		return c
 	}
 
-	parts := strings.Split(catPath, " / ")
+	parts := strings.Split(catPath, "/")
 	displayParts := make([]string, len(parts))
 	for i, part := range parts {
 		displayParts[i] = unescapeCategoryPart(part)
 	}
 
 	id := sop.UUID(uuid.New())
-	displayPath := strings.Join(displayParts, " / ")
+	displayPath := strings.Join(displayParts, "/")
 	c := &memory.Category{
 		ID:   id,
 		Name: removePrefix(displayParts[len(displayParts)-1], prefix),
 		Path: displayPath,
 	}
 	if len(parts) > 1 {
-		parentPath := strings.Join(parts[:len(parts)-1], " / ")
+		parentPath := strings.Join(parts[:len(parts)-1], "/")
 		parentCat := getCat(parentPath)
 		c.ParentIDs = append(c.ParentIDs, memory.CategoryParent{ParentID: parentCat.ID})
 	}
@@ -286,12 +286,12 @@ func buildExportItems(chunks []KnowledgeChunk) []memory.ExportItem[map[string]an
 	for _, chunk := range chunks {
 		catKey := chunk.CategoryKey
 		if catKey == "" {
-			parts := strings.Split(chunk.Category, " / ")
+			parts := strings.Split(chunk.Category, "/")
 			encodedParts := make([]string, len(parts))
 			for i, part := range parts {
 				encodedParts[i] = escapeCategoryPart(part)
 			}
-			catKey = strings.Join(encodedParts, " / ")
+			catKey = strings.Join(encodedParts, "/")
 		}
 		cat := getCat(catKey)
 		summaries := chunk.Summaries
@@ -719,7 +719,7 @@ func processFlattenedTreeIntoChunks(node *Section, currentPathContext []string, 
 
 	var catPath string
 	if len(normalizedPaths) > 0 {
-		catPath = strings.Join(normalizedPaths, " / ")
+		catPath = strings.Join(normalizedPaths, "/")
 	} else {
 		catPath = normalizeCategoryName(node.Title)
 	}
@@ -728,7 +728,7 @@ func processFlattenedTreeIntoChunks(node *Section, currentPathContext []string, 
 	for _, p := range normalizedPaths {
 		encodedPaths = append(encodedPaths, escapeCategoryPart(p))
 	}
-	catKey := strings.Join(encodedPaths, " / ")
+	catKey := strings.Join(encodedPaths, "/")
 
 	explicitBlocks, remainingParagraphs := parseExplicitItemBlocks(node.Paragraphs)
 
@@ -827,18 +827,18 @@ func main() {
 			}
 
 			for catPath, indices := range itemsPerCat {
-				if len(indices) == 1 && strings.Contains(catPath, " / ") {
+				if len(indices) == 1 && strings.Contains(catPath, "/") {
 					hasChildren := false
 					for otherCat := range itemsPerCat {
-						if strings.HasPrefix(otherCat, catPath+" / ") {
+						if strings.HasPrefix(otherCat, catPath+"/") {
 							hasChildren = true
 							break
 						}
 					}
 
 					if !hasChildren {
-						parts := strings.Split(catPath, " / ")
-						parentPath := strings.Join(parts[:len(parts)-1], " / ")
+						parts := strings.Split(catPath, "/")
+						parentPath := strings.Join(parts[:len(parts)-1], "/")
 
 						idx := indices[0]
 						if allChunks[idx].Explicit {

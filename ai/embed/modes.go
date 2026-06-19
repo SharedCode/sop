@@ -6,6 +6,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 )
 
+
 func CategoryTexts(ctx context.Context, embedder ai.Embeddings, texts []string) ([][]float32, error) {
 	if modeAware, ok := embedder.(ai.EmbeddingModeSupport); ok {
 		return modeAware.EmbedCategoryTexts(ctx, texts)

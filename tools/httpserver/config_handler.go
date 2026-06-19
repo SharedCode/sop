@@ -17,6 +17,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/database"
 	"github.com/sharedcode/sop/fs"
+	"github.com/sharedcode/sop/tools/confighub"
 )
 
 // handleListEnvironments returns a list of JSON config files in the current directory.
@@ -711,6 +712,11 @@ func handleUninstallSystem(w http.ResponseWriter, r *http.Request) {
 	shouldDeleteSystem := req.DeleteSystemDB || req.DeleteData
 	shouldDeleteUsers := req.DeleteUserDBs || req.DeleteData
 
+	if shouldDeleteSystem {
+		http.Error(w, "Deleting the System DB is disabled because it stores session records and runtime metadata for the current environment.", http.StatusBadRequest)
+		return
+	}
+
 	// 1. Delete actual data folders if requested
 	if shouldDeleteSystem || shouldDeleteUsers {
 		// System DB
@@ -926,34 +932,20 @@ func sanitizedConfigForDisk(cfg Config) Config {
 // saveConfig writes the current configuration to the file specified in config.ConfigFile.
 func saveConfig() error {
 	if config.ConfigFile == "" {
-		// Default to config.json in the current working directory
-		cwd, err := os.Getwd()
-		if err == nil {
-			config.ConfigFile = filepath.Join(cwd, "config.json")
-		} else {
-			config.ConfigFile = "config.json"
-		}
+		config.ConfigFile = confighub.ResolveConfigPath("")
 	}
 
-	// Ensure directory exists
-	dir := filepath.Dir(config.ConfigFile)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	// Write config file
-	f, err := os.Create(config.ConfigFile)
+	payload, err := json.Marshal(sanitizedConfigForDisk(config))
 	if err != nil {
-		return fmt.Errorf("failed to create config file: %w", err)
+		return fmt.Errorf("failed to encode config for save: %w", err)
 	}
-	defer f.Close()
 
-	encoder := json.NewEncoder(f)
-	encoder.SetIndent("", "    ")
-	if err := encoder.Encode(sanitizedConfigForDisk(config)); err != nil {
-		return fmt.Errorf("failed to write config file: %w", err)
+	var shared confighub.Config
+	if err := json.Unmarshal(payload, &shared); err != nil {
+		return fmt.Errorf("failed to convert config for save: %w", err)
 	}
-	return nil
+
+	return confighub.SaveConfig(config.ConfigFile, shared)
 }
 
 // validateWritePermissions checks if the application can write to the specified paths

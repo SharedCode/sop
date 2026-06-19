@@ -21,8 +21,13 @@ func (m *MockEmbedder) EmbedTexts(ctx context.Context, texts []string) ([][]floa
 	}
 	vecs := make([][]float32, len(texts))
 	for i, text := range texts {
-		if text == "SubCat1" {
+		lower := fmt.Sprintf("%s", text)
+		if lower == "subcat1" {
 			vecs[i] = []float32{0.1, 0.2, 0.3} // Close to test vector
+		} else if lower == "fruits" {
+			vecs[i] = []float32{0.2, 0.3, 0.4} // Distinct vector for Fruits category
+		} else if lower == "vehicles" {
+			vecs[i] = []float32{0.8, 0.9, 1.0} // Distinct vector for Vehicles category
 		} else {
 			vecs[i] = []float32{0.5, 0.6, 0.7} // Default mismatch
 		}

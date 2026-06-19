@@ -2,10 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/sharedcode/sop"
+	aidb "github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/database"
 )
 
 func TestUpdateSpaceItemPersists(t *testing.T) {
@@ -156,6 +161,101 @@ func TestUpdateSpaceItemRequiresCategoryID(t *testing.T) {
 	})
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("Expected missing CategoryID to fail with 400, got %v body %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestHandleAddSpaceCategory_NormalizesChildPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbName := "testdb_trim_child_path"
+	spaceName := "test_space_trim_child_path"
+
+	config = Config{
+		RootPassword: "secret_password",
+		Databases: []DatabaseConfig{{
+			Name: dbName,
+			Path: tmpDir,
+			Mode: "standalone",
+		}},
+	}
+
+	sendJSON := func(method, url string, handler http.HandlerFunc, body interface{}) *httptest.ResponseRecorder {
+		b, _ := json.Marshal(body)
+		req := httptest.NewRequest(method, url, bytes.NewBuffer(b))
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		handler(rr, req)
+		return rr
+	}
+
+	rr := sendJSON("POST", "/api/spaces/create", handleCreateSpace, CreateSpaceRequest{DatabaseName: dbName, SpaceName: spaceName})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Failed to create space: %v", rr.Body.String())
+	}
+
+	rr = sendJSON("POST", "/api/spaces/category/add?database="+dbName+"&name="+spaceName, handleAddSpaceCategory, AddSpaceCategoryRequest{Name: "Root A"})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Failed to add root category: %v", rr.Body.String())
+	}
+	var rootRes map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&rootRes); err != nil {
+		t.Fatalf("Failed to decode root category response: %v", err)
+	}
+	rootID := rootRes["id"].(string)
+
+	rr = sendJSON("POST", "/api/spaces/category/add?database="+dbName+"&name="+spaceName, handleAddSpaceCategory, AddSpaceCategoryRequest{
+		Name:     " Child A1 ",
+		ParentID: rootID,
+	})
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Failed to add child category: %v", rr.Body.String())
+	}
+	var childRes map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&childRes); err != nil {
+		t.Fatalf("Failed to decode child category response: %v", err)
+	}
+	childID := childRes["id"].(string)
+
+	ctx := context.Background()
+	dbOpts, err := getDBOptions(ctx, dbName)
+	if err != nil {
+		t.Fatalf("getDBOptions failed: %v", err)
+	}
+	trans, err := database.BeginTransaction(ctx, dbOpts, sop.ForReading)
+	if err != nil {
+		t.Fatalf("BeginTransaction failed: %v", err)
+	}
+	defer trans.Rollback(ctx)
+
+	db := aidb.NewDatabase(dbOpts)
+	kb, err := db.OpenKnowledgeBase(ctx, spaceName, trans, nil, nil, false)
+	if err != nil {
+		t.Fatalf("OpenKnowledgeBase failed: %v", err)
+	}
+
+	cats, err := kb.Store.Categories(ctx)
+	if err != nil {
+		t.Fatalf("Categories failed: %v", err)
+	}
+
+	childUUID, err := sop.ParseUUID(childID)
+	if err != nil {
+		t.Fatalf("ParseUUID failed: %v", err)
+	}
+
+	found, err := cats.Find(ctx, childUUID, false)
+	if err != nil {
+		t.Fatalf("Find child category failed: %v", err)
+	}
+	if !found {
+		t.Fatal("expected child category to exist")
+	}
+
+	cat, err := cats.GetCurrentValue(ctx)
+	if err != nil {
+		t.Fatalf("GetCurrentValue failed: %v", err)
+	}
+	if got, want := cat.Path, "Root A / Child A1"; got != want {
+		t.Fatalf("child category path = %q, want %q", got, want)
 	}
 }
 

@@ -195,22 +195,6 @@ func modelCatalogCandidatePaths(configPath string) []string {
 	return paths
 }
 
-func saveModelCatalog(path string, catalog ModelCatalog) error {
-	f, err := os.Create(path + ".tmp")
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	encoder := json.NewEncoder(f)
-	encoder.SetIndent("", "    ")
-	if err := encoder.Encode(catalog); err != nil {
-		return err
-	}
-
-	return os.Rename(path+".tmp", path)
-}
-
 func loadModelCatalog(configPath string) (bool, error) {
 	modelCatalog = defaultModelCatalog()
 
@@ -232,43 +216,8 @@ func loadModelCatalog(configPath string) (bool, error) {
 
 		seededDefaults := ensureModelCatalogDefaults(&loaded)
 		modelCatalog = loaded
-
-		if seededDefaults {
-			if err := saveModelCatalog(path, modelCatalog); err != nil {
-				return false, err
-			}
-		}
-
 		return seededDefaults, nil
 	}
 
-	if configPath == "" {
-		return false, nil
-	}
-
-	path := resolveModelCatalogPath(configPath)
-	if err := saveModelCatalog(path, modelCatalog); err != nil {
-		return false, err
-	}
-	return true, nil
-}
-
-func ensureModelCatalogFile(configPath string) error {
-	if configPath == "" {
-		return nil
-	}
-
-	path := resolveModelCatalogPath(configPath)
-	if _, err := os.Stat(path); err == nil {
-		return nil
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-
-	catalog := modelCatalog
-	if ensureModelCatalogDefaults(&catalog) {
-		modelCatalog = catalog
-	}
-
-	return saveModelCatalog(path, catalog)
+	return false, nil
 }

@@ -26,7 +26,7 @@ func TestStore_GarbageCollection(t *testing.T) {
 	itemID1 := sop.NewUUID()
 	item1 := Item[string]{ID: itemID1, CategoryID: catID, Data: "I have 3 vectors"}
 
-	err := st.UpsertByCategoryID(ctx, catID, nil, item1, [][]float32{{1.0, 1.0}, {2.0, 2.0}, {3.0, 3.0}})
+	err := st.UpsertByCategoryID(ctx, catID, nil, item1, [][]float32{{1.0, 1.0}, {2.0, 2.0}, {3.0, 3.0}}, nil)
 	if err != nil {
 		t.Fatalf("Upsert item1 failed: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestStore_GarbageCollection(t *testing.T) {
 	itemID2 := sop.NewUUID()
 	item2 := Item[string]{ID: itemID2, CategoryID: catID, Data: "I have 1 vector"}
 
-	err = st.UpsertByCategoryID(ctx, catID, nil, item2, [][]float32{{4.0, 4.0}})
+	err = st.UpsertByCategoryID(ctx, catID, nil, item2, [][]float32{{4.0, 4.0}}, nil)
 	if err != nil {
 		t.Fatalf("Upsert item2 failed: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestStore_GarbageCollection(t *testing.T) {
 	}
 
 	// Overwrite Item 1 with just 1 vector, ensuring 2 vectors are garbage collected
-	err = st.UpsertByCategoryID(ctx, catID, nil, item1, [][]float32{{1.1, 1.1}})
+	err = st.UpsertByCategoryID(ctx, catID, nil, item1, [][]float32{{1.1, 1.1}}, nil)
 	if err != nil {
 		t.Fatalf("Re-upsert item1 failed: %v", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/embed"
 )
 
 type llmConnectionTestRequest struct {
@@ -189,7 +190,7 @@ func handleTestEmbedderConnection(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), aiConnectionTestTimeout())
 	defer cancel()
 
-	vectors, err := embedder.EmbedTexts(ctx, []string{"connection test"})
+	vectors, err := embed.QueryTexts(ctx, embedder, []string{"connection test"})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return

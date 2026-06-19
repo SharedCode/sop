@@ -1,13 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 )
 
-func TestLoadModelCatalogSeedsDefaultFile(t *testing.T) {
+func TestLoadModelCatalogUsesDefaultCatalogWithoutWritingFile(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.json")
 	modelCatalogPath := filepath.Join(tempDir, modelCatalogFilename)
@@ -16,8 +15,8 @@ func TestLoadModelCatalogSeedsDefaultFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadModelCatalog returned error: %v", err)
 	}
-	if !seededDefaults {
-		t.Fatal("expected loadModelCatalog to seed default model catalog file")
+	if seededDefaults {
+		t.Fatal("expected loadModelCatalog to avoid writing fallback catalog files")
 	}
 	if len(modelCatalog.LLM) == 0 {
 		t.Fatal("expected default llm catalog entries")
@@ -31,16 +30,8 @@ func TestLoadModelCatalogSeedsDefaultFile(t *testing.T) {
 	if modelCatalog.LLM[0].Options[0].Value != "gemini:gemini-3.1-pro-preview" {
 		t.Fatalf("unexpected first default llm option: %q", modelCatalog.LLM[0].Options[0].Value)
 	}
-	data, err := os.ReadFile(modelCatalogPath)
-	if err != nil {
-		t.Fatalf("expected seeded model catalog file: %v", err)
-	}
-	var persisted ModelCatalog
-	if err := json.Unmarshal(data, &persisted); err != nil {
-		t.Fatalf("unmarshal seeded model catalog: %v", err)
-	}
-	if len(persisted.LLM) == 0 || persisted.LLM[0].Options[0].Value != "gemini:gemini-3.1-pro-preview" {
-		t.Fatal("expected seeded file to contain default llm catalog")
+	if _, err := os.Stat(modelCatalogPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no model catalog file to be created, got err=%v", err)
 	}
 }
 
@@ -72,7 +63,7 @@ func TestLoadModelCatalogPreservesConfiguredFile(t *testing.T) {
 	}
 }
 
-func TestSaveConfigFileSeedsModelCatalogSidecar(t *testing.T) {
+func TestSaveConfigFileDoesNotCreateModelCatalogSidecar(t *testing.T) {
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "config.json")
 	modelCatalogPath := filepath.Join(tempDir, modelCatalogFilename)
@@ -82,19 +73,8 @@ func TestSaveConfigFileSeedsModelCatalogSidecar(t *testing.T) {
 
 	saveConfigFile()
 
-	if _, err := os.Stat(modelCatalogPath); err != nil {
-		t.Fatalf("expected model catalog sidecar to be created: %v", err)
-	}
-	data, err := os.ReadFile(modelCatalogPath)
-	if err != nil {
-		t.Fatalf("read model catalog sidecar: %v", err)
-	}
-	var persisted ModelCatalog
-	if err := json.Unmarshal(data, &persisted); err != nil {
-		t.Fatalf("unmarshal model catalog sidecar: %v", err)
-	}
-	if len(persisted.LLM) == 0 || persisted.LLM[0].Options[0].Value != "gemini:gemini-3.1-pro-preview" {
-		t.Fatal("expected sidecar to contain default llm catalog")
+	if _, err := os.Stat(modelCatalogPath); !os.IsNotExist(err) {
+		t.Fatalf("expected no model catalog sidecar to be created, got err=%v", err)
 	}
 }
 

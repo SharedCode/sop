@@ -26,6 +26,11 @@ type TaskContextClassification struct {
 	Layers          []LayerInfo `json:"layers"`
 	ScriptAuthoring bool        `json:"-"`
 	RoutingGate     string      `json:"-"`
+	// KB Search Results (for specialized KB routing)
+	KBSearchResults string `json:"-"`
+	KBMatchCount    int    `json:"-"`
+	LLMInstruction  string `json:"-"`
+	DirectDisplay   bool   `json:"-"`
 }
 
 type continuityDigest struct {
@@ -160,9 +165,29 @@ func (a *CopilotAgent) ClassifyFocusedTaskContext(ctx context.Context, query, en
 }
 
 func looksLikeSpecializedRoutingQuery(query string) bool {
+
+	log.Info("routing ", "query", query)
+
 	trimmed := strings.TrimSpace(query)
 	lower := strings.ToLower(trimmed)
-	return strings.HasPrefix(lower, "omni:sop:") || strings.HasPrefix(lower, "sop:") || strings.HasPrefix(lower, "omni/sop/") || strings.HasPrefix(lower, "omni->sop->")
+
+	if strings.HasPrefix(lower, "omni:") {
+		parts := strings.Split(trimmed, ":")
+		return len(parts) >= 3 && strings.TrimSpace(parts[1]) != "" && strings.TrimSpace(parts[2]) != ""
+	}
+
+	return strings.HasPrefix(lower, "sop:") || strings.HasPrefix(lower, "omni/sop/") || strings.HasPrefix(lower, "omni->sop->")
+}
+
+func routingKBName(query string) string {
+	trimmed := strings.TrimSpace(query)
+	if strings.HasPrefix(strings.ToLower(trimmed), "omni:") {
+		parts := strings.Split(trimmed, ":")
+		if len(parts) >= 3 {
+			return strings.TrimSpace(parts[1])
+		}
+	}
+	return ""
 }
 
 func (a *CopilotAgent) trySpecializedFocusedRouting(ctx context.Context, query, entity, domain, artifact string) (*TaskContextClassification, bool, error) {
@@ -172,19 +197,20 @@ func (a *CopilotAgent) trySpecializedFocusedRouting(ctx context.Context, query, 
 
 	log.Info("Specialized focused routing activated", "query", query, "entity", entity, "domain", domain, "artifact", artifact)
 
-	normalizedQuery := stripRoutingPrefix(query, "sop")
+	kbName := ai.CanonicalKBName("sop")
+	if routedKB := routingKBName(query); routedKB != "" {
+		kbName = ai.CanonicalKBName(routedKB)
+	} else if domain != "" {
+		kbName = ai.CanonicalKBName(domain)
+	}
+
+	normalizedQuery := stripRoutingPrefix(query, kbName)
 	pathQuery, llmInstruction := splitCategoryPathInstruction(normalizedQuery)
 	llmMode := strings.TrimSpace(llmInstruction) != "" || strings.Contains(strings.ToLower(normalizedQuery), ":llm")
 	if pathQuery == "" {
 		pathQuery = extractCategoryPathQuery(normalizedQuery)
 	}
-	log.Info("Specialized focused routing parsed", "normalized_query", normalizedQuery, "path_query", pathQuery, "llm_instruction", llmInstruction, "llm_mode", llmMode)
-	kbName := ai.CanonicalKBName("sop")
-	if !looksLikeSpecializedRoutingQuery(query) {
-		if domain != "" {
-			kbName = ai.CanonicalKBName(domain)
-		}
-	}
+	log.Info("Specialized focused routing parsed", "normalized_query", normalizedQuery, "path_query", pathQuery, "llm_instruction", llmInstruction, "llm_mode", llmMode, "kb_name", kbName)
 
 	db := a.resolveDBForKB(ctx, kbName)
 	if db == nil {
@@ -192,23 +218,18 @@ func (a *CopilotAgent) trySpecializedFocusedRouting(ctx context.Context, query, 
 		return nil, false, nil
 	}
 
-	candidateText, err := a.searchKnowledgeBase(ctx, db, kbName, normalizedQuery, pathQuery, "", true, 5)
+	candidateText, err := a.searchKnowledgeBase(ctx, db, kbName, normalizedQuery, pathQuery, "", 5)
 	if err != nil {
 		return nil, false, err
 	}
 
-	candidateCount := 0
-	if strings.Contains(candidateText, "CategoryPath:") {
-		candidateCount += strings.Count(candidateText, "CategoryPath:")
-	}
-	if strings.Contains(candidateText, "Score:") {
-		candidateCount += strings.Count(candidateText, "Score:")
-	}
+	// Count actual hits (each hit has both CategoryPath and Score, so count only one)
+	candidateCount := strings.Count(candidateText, "CategoryPath:")
 	if strings.Contains(strings.ToLower(candidateText), "no results found") {
 		candidateCount = 0
 	}
 
-	handled := looksLikeSpecializedRoutingQuery(query) || llmMode || (candidateCount > 0 && candidateCount <= 5)
+	handled := looksLikeSpecializedRoutingQuery(query) || llmMode || candidateCount > 0
 	log.Info("Specialized focused routing decision", "handled", handled, "llm_mode", llmMode, "candidate_count", candidateCount, "candidate_text_preview", summarizeCandidatePreview(candidateText))
 	if !handled {
 		return nil, false, nil
@@ -221,12 +242,37 @@ func (a *CopilotAgent) trySpecializedFocusedRouting(ctx context.Context, query, 
 	if pathQuery != "" {
 		taskCtx.SpacesArtifacts = append(taskCtx.SpacesArtifacts, pathQuery)
 	}
+
+	// Populate KB search results
+	taskCtx.KBSearchResults = candidateText
+	taskCtx.KBMatchCount = candidateCount
+	taskCtx.LLMInstruction = llmInstruction
+
+	// Three-way routing decision:
+	// Case 1: Few matches (1-5) -> Direct display, bypass LLM
+	// Case 2: :llm instruction -> LLM processes matches with user instruction
+	// Case 3: Too many matches (>5) -> LLM reduces/summarizes matches
 	if llmMode {
+		// Case 2: User wants LLM to process matches
+		taskCtx.DirectDisplay = false
 		taskCtx.Layers = append(taskCtx.Layers, LayerInfo{Name: "LLMFilter", CRUD: []string{"R"}})
+		log.Info("KB routing: LLM filter mode", "instruction", llmInstruction)
+	} else if candidateCount > 0 && candidateCount <= 5 {
+		// Case 1: Few matches - direct display
+		taskCtx.DirectDisplay = true
+		taskCtx.Layers = append(taskCtx.Layers, LayerInfo{Name: "KBRoute", CRUD: []string{"R"}})
+		log.Info("KB routing: Direct display", "match_count", candidateCount)
+	} else if candidateCount > 5 {
+		// Case 3: Too many matches - LLM reduction
+		taskCtx.DirectDisplay = false
+		taskCtx.LLMInstruction = "Please analyze these search results and present the most relevant matches to the user."
+		taskCtx.Layers = append(taskCtx.Layers, LayerInfo{Name: "LLMFilter", CRUD: []string{"R"}})
+		log.Info("KB routing: LLM reduction mode", "match_count", candidateCount)
 	} else {
+		// Fallback for no matches
 		taskCtx.Layers = append(taskCtx.Layers, LayerInfo{Name: "KBRoute", CRUD: []string{"R"}})
 	}
-	log.Info("Specialized focused routing resolved", "routing_gate", taskCtx.RoutingGate, "layers", taskCtx.Layers, "spaces_artifacts", taskCtx.SpacesArtifacts)
+	log.Info("Specialized focused routing resolved", "routing_gate", taskCtx.RoutingGate, "layers", taskCtx.Layers, "spaces_artifacts", taskCtx.SpacesArtifacts, "direct_display", taskCtx.DirectDisplay)
 
 	normalizeTaskContext(taskCtx)
 	taskCtx.RoutingGate = RoutingGateFocused

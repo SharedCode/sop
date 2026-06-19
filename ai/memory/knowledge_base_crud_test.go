@@ -2,10 +2,12 @@ package memory
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/inmemory"
 )
 
@@ -30,10 +32,55 @@ type semanticFallbackStore struct {
 	captured     [][]float32
 }
 
+type modeAwareCategoryEmbedder struct {
+	categoryCalls int
+	queryCalls    int
+	textCalls     int
+	lastTexts     []string
+}
+
+func (m *modeAwareCategoryEmbedder) Name() string { return "mode-aware-category" }
+func (m *modeAwareCategoryEmbedder) Dim() int     { return 3 }
+func (m *modeAwareCategoryEmbedder) EmbedTexts(context.Context, []string) ([][]float32, error) {
+	m.textCalls++
+	return [][]float32{{1, 0, 0}}, nil
+}
+func (m *modeAwareCategoryEmbedder) EmbedCategoryTexts(_ context.Context, texts []string) ([][]float32, error) {
+	m.categoryCalls++
+	m.lastTexts = append([]string(nil), texts...)
+	return [][]float32{{1, 0, 0}}, nil
+}
+func (m *modeAwareCategoryEmbedder) EmbedDocumentTexts(context.Context, []string) ([][]float32, error) {
+	return [][]float32{{0, 0, 1}}, nil
+}
+func (m *modeAwareCategoryEmbedder) EmbedQueryTexts(context.Context, []string) ([][]float32, error) {
+	m.queryCalls++
+	return [][]float32{{0, 1, 0}}, nil
+}
+
+var _ ai.Embeddings = (*modeAwareCategoryEmbedder)(nil)
+var _ ai.EmbeddingModeSupport = (*modeAwareCategoryEmbedder)(nil)
+
 func (s *semanticFallbackStore) SemanticCategoryByPath(ctx context.Context, pathVectors [][]float32) ([]*Category, error) {
 	s.called = true
 	s.captured = append([][]float32(nil), pathVectors...)
 	return s.fallbackCats, nil
+}
+
+func TestEmbedCategoryPath_NormalizesLanguageTokens(t *testing.T) {
+	ctx := context.Background()
+	embedder := &modeAwareCategoryEmbedder{}
+
+	vecs, err := embedCategoryPath(ctx, "Language Bindings/C#", embedder)
+	if err != nil {
+		t.Fatalf("embedCategoryPath failed: %v", err)
+	}
+	if len(vecs) != 1 || len(vecs[0]) != 3 {
+		t.Fatalf("embedCategoryPath returned unexpected vectors: %#v", vecs)
+	}
+	if got := embedder.lastTexts; !reflect.DeepEqual(got, []string{"language bindings", "csharp"}) {
+		t.Fatalf("embedCategoryPath normalized tokens = %#v, want %#v", got, []string{"language bindings", "csharp"})
+	}
 }
 
 func TestBatchCategories(t *testing.T) {
@@ -169,7 +216,7 @@ func TestBatchItemsAndSearch(t *testing.T) {
 	}
 }
 
-func TestKnowledgeBase_SearchByPath_FallsBackToSemanticCategoryByPath(t *testing.T) {
+func TestKnowledgeBase_SearchByPath_UsesSemanticFallbackPath(t *testing.T) {
 	ctx := context.Background()
 	base := prepareTestStore()
 	catID := sop.NewUUID()
@@ -233,6 +280,93 @@ func TestKnowledgeBase_SearchByPath_SkipsWhenSemanticFallbackFindsNothing(t *tes
 	}
 	if !fallback.called {
 		t.Fatal("expected SemanticCategoryByPath to be invoked")
+	}
+}
+
+func TestChooseCategoryAnchor_NormalizesProgrammingLanguageTokens(t *testing.T) {
+	if got := chooseCategoryAnchor("Language Bindings/C#", "", ""); got != "language bindings csharp" {
+		t.Fatalf("chooseCategoryAnchor() = %q, want %q", got, "language bindings csharp")
+	}
+}
+
+func TestRefreshSemanticVectors_UsesCategoryEmbeddingMode(t *testing.T) {
+	ctx := context.Background()
+	s := prepareTestStore()
+	s.SetDomainReference([]float32{1, 0, 0})
+
+	embedder := &modeAwareCategoryEmbedder{}
+	kb := &KnowledgeBase[string]{
+		Store:   s,
+		Manager: NewMemoryManager[string](s, &MockLLM{}, embedder),
+	}
+
+	rootID := sop.NewUUID()
+	if _, err := s.AddCategory(ctx, &Category{
+		ID:         rootID,
+		Name:       "Root",
+		VectorHash: "stale",
+	}); err != nil {
+		t.Fatalf("AddCategory(root) failed: %v", err)
+	}
+
+	if err := refreshSemanticVectors(ctx, kb); err != nil {
+		t.Fatalf("refreshSemanticVectors failed: %v", err)
+	}
+	if embedder.categoryCalls == 0 {
+		t.Fatal("expected category embedding mode to be used for category vectors")
+	}
+	if embedder.textCalls != 0 {
+		t.Fatalf("expected generic EmbedTexts not to be used for category vectors, got %d calls", embedder.textCalls)
+	}
+}
+
+func TestRefreshSemanticVectors_RebuildsEmptyDistanceIndex(t *testing.T) {
+	ctx := context.Background()
+	s := prepareTestStore()
+	s.SetDomainReference([]float32{1, 0, 0})
+
+	embedder := &MockPlaybookEmbedder{Rules: []PlaybookRule{
+		{Keywords: []string{"root"}, Vector: []float32{1, 0, 0}},
+		{Keywords: []string{"child"}, Vector: []float32{0, 1, 0}},
+	}}
+	kb := &KnowledgeBase[string]{
+		Store:   s,
+		Manager: NewMemoryManager[string](s, &MockLLM{}, embedder),
+	}
+
+	rootID := sop.NewUUID()
+	childID := sop.NewUUID()
+	if _, err := s.AddCategory(ctx, &Category{
+		ID:           rootID,
+		Name:         "Root",
+		CenterVector: []float32{1, 0, 0},
+		VectorHash:   ComputeVectorHash(3, "Root"),
+	}); err != nil {
+		t.Fatalf("AddCategory(root) failed: %v", err)
+	}
+	if _, err := s.AddCategory(ctx, &Category{
+		ID:           childID,
+		Name:         "Child",
+		CenterVector: []float32{0, 1, 0},
+		VectorHash:   ComputeVectorHash(3, "Child"),
+		ParentIDs:    []CategoryParent{{ParentID: rootID}},
+	}); err != nil {
+		t.Fatalf("AddCategory(child) failed: %v", err)
+	}
+
+	catsByDist, err := s.CategoriesByDistance(ctx)
+	if err != nil {
+		t.Fatalf("CategoriesByDistance failed: %v", err)
+	}
+	if catsByDist.Count() != 0 {
+		t.Fatalf("expected empty distance index before refresh, got %d", catsByDist.Count())
+	}
+
+	if err := refreshSemanticVectors(ctx, kb); err != nil {
+		t.Fatalf("refreshSemanticVectors failed: %v", err)
+	}
+	if catsByDist.Count() == 0 {
+		t.Fatal("expected refreshSemanticVectors to rebuild an empty CategoriesByDistance index")
 	}
 }
 

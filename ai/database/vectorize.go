@@ -41,7 +41,7 @@ func ensureDomainReference(ctx context.Context, kb *memory.KnowledgeBase[map[str
 			return nil
 		}
 
-		vecs, err := embed.QueryTexts(ctx, embedder, []string{anchor})
+		vecs, err := embed.CategoryTexts(ctx, embedder, []string{anchor})
 		if err != nil {
 			return err
 		}
@@ -162,11 +162,12 @@ func (db *Database) Vectorize(
 
 		catCenterVector := cat.CenterVector
 
-		// Vectorize the category itself using its own name as the semantic anchor.
+		// Vectorize the category itself using its own canonicalized name as the semantic anchor.
 		embedText := strings.TrimSpace(cat.Name)
 		if embedText == "" {
 			embedText = strings.TrimSpace(cat.Description)
 		}
+		embedText = memory.NormalizeCategoryToken(embedText)
 		expectedCatHash := memory.ComputeVectorHash(embedderDim, embedText)
 		if cat.VectorHash != expectedCatHash || len(cat.CenterVector) == 0 {
 			log.Debug("Vectorizing category", "catID", catID)
@@ -179,11 +180,11 @@ func (db *Database) Vectorize(
 				if len(cat.CenterVector) > 0 {
 					if len(cat.ParentIDs) > 0 {
 						for _, p := range cat.ParentIDs {
-							oldDist := memory.EuclideanDistance(oldCategoryVectors[p.ParentID], cat.CenterVector)
+							oldDist := memory.Distance(oldCategoryVectors[p.ParentID], cat.CenterVector, true)
 							catsByDist.Remove(ctx, memory.DistanceKey{ParentID: p.ParentID, Distance: oldDist, ID: cat.ID})
 						}
 					} else {
-						oldDist := memory.EuclideanDistance(kb.Store.DomainReference(), cat.CenterVector)
+						oldDist := memory.Distance(kb.Store.DomainReference(), cat.CenterVector, true)
 						catsByDist.Remove(ctx, memory.DistanceKey{ParentID: sop.NilUUID, Distance: oldDist, ID: cat.ID})
 					}
 				}
@@ -199,18 +200,15 @@ func (db *Database) Vectorize(
 						if len(refVec) == 0 {
 							refVec = oldCategoryVectors[p.ParentID]
 						}
-						newDist := memory.EuclideanDistance(refVec, cat.CenterVector)
+						newDist := memory.Distance(refVec, cat.CenterVector, true)
 						catsByDist.Add(ctx, memory.DistanceKey{ParentID: p.ParentID, Distance: newDist, ID: cat.ID}, 0)
 					}
 				} else {
-					newDist := memory.EuclideanDistance(kb.Store.DomainReference(), cat.CenterVector)
+					newDist := memory.Distance(kb.Store.DomainReference(), cat.CenterVector, true)
 					catsByDist.Add(ctx, memory.DistanceKey{ParentID: sop.NilUUID, Distance: newDist, ID: cat.ID}, 0)
 				}
 
 				catBtree.UpdateCurrentItem(ctx, cat.ID, cat)
-			} else if err != nil {
-				tx.Rollback(ctx)
-				return err
 			}
 		}
 
@@ -282,7 +280,14 @@ func (db *Database) Vectorize(
 			if len(batchTasks) >= batchSize {
 				if len(batchSummaries) > 0 {
 					log.Debug("Vectorize embedding items batch", "kb_name", kbName, "count", len(batchSummaries))
+					// Embed as DocumentTexts for item storage (768 dim)
 					allVecs, err := embed.DocumentTexts(ctx, embedder, batchSummaries)
+					if err != nil {
+						tx.Rollback(ctx)
+						return err
+					}
+					// Embed as CategoryTexts for classification (256 dim)
+					allClassificationVecs, err := embed.CategoryTexts(ctx, embedder, batchSummaries)
 					if err != nil {
 						tx.Rollback(ctx)
 						return err
@@ -293,9 +298,10 @@ func (db *Database) Vectorize(
 					for _, task := range batchTasks {
 						count := task.summaryCnt
 						itemVecs := allVecs[vecIdx : vecIdx+count]
+						classificationVecs := allClassificationVecs[vecIdx : vecIdx+count]
 						vecIdx += count
 
-						err = kb.Store.UpsertByCategoryID(ctx, task.catID, task.centerVec, *task.item, itemVecs)
+						err = kb.Store.UpsertByCategoryID(ctx, task.catID, task.centerVec, *task.item, itemVecs, classificationVecs)
 						if err != nil {
 							tx.Rollback(ctx)
 							return err
@@ -368,6 +374,10 @@ func (db *Database) Vectorize(
 			}
 
 			iok, err = itemsBtree.Next(ctx)
+			if err != nil {
+				tx.Rollback(ctx)
+				return err
+			}
 			log.Debug("After item cursor restore, Next", "iok", iok, "err", err)
 		}
 		log.Debug("After items loop", "catID", catID, "totalItemCount", totalItemCount)
@@ -378,7 +388,11 @@ func (db *Database) Vectorize(
 			catBtree.UpdateCurrentItem(ctx, cat.ID, cat)
 		}
 
-		ok, _ = categoriesByPath.Next(ctx)
+		ok, err = categoriesByPath.Next(ctx)
+		if err != nil {
+			tx.Rollback(ctx)
+			return err
+		}
 	}
 	log.Debug("After categories loop")
 
@@ -386,7 +400,14 @@ func (db *Database) Vectorize(
 	if len(batchTasks) > 0 {
 		if len(batchSummaries) > 0 {
 			log.Debug("Vectorize embedding items batch (final)", "kb_name", kbName, "count", len(batchSummaries))
+			// Embed as DocumentTexts for item storage (768 dim)
 			allVecs, err := embed.DocumentTexts(ctx, embedder, batchSummaries)
+			if err != nil {
+				tx.Rollback(ctx)
+				return err
+			}
+			// Embed as CategoryTexts for classification (256 dim)
+			allClassificationVecs, err := embed.CategoryTexts(ctx, embedder, batchSummaries)
 			if err != nil {
 				tx.Rollback(ctx)
 				return err
@@ -396,9 +417,10 @@ func (db *Database) Vectorize(
 			for _, task := range batchTasks {
 				count := task.summaryCnt
 				itemVecs := allVecs[vecIdx : vecIdx+count]
+				classificationVecs := allClassificationVecs[vecIdx : vecIdx+count]
 				vecIdx += count
 
-				err = kb.Store.UpsertByCategoryID(ctx, task.catID, task.centerVec, *task.item, itemVecs)
+				err = kb.Store.UpsertByCategoryID(ctx, task.catID, task.centerVec, *task.item, itemVecs, classificationVecs)
 				if err != nil {
 					tx.Rollback(ctx)
 					return err
@@ -503,11 +525,12 @@ func (db *Database) VectorizeCategories(
 
 		catCenterVector := cat.CenterVector
 
-		// Vectorize the category itself using its own name as the semantic anchor.
+		// Vectorize the category itself using its own canonicalized name as the semantic anchor.
 		embedText := strings.TrimSpace(cat.Name)
 		if embedText == "" {
 			embedText = strings.TrimSpace(cat.Description)
 		}
+		embedText = memory.NormalizeCategoryToken(embedText)
 		expectedCatHash := memory.ComputeVectorHash(embedderDim, embedText)
 		if cat.VectorHash != expectedCatHash || len(cat.CenterVector) == 0 {
 			log.Debug("Vectorizing category", "catID", catID)
@@ -520,11 +543,11 @@ func (db *Database) VectorizeCategories(
 				if len(cat.CenterVector) > 0 {
 					if len(cat.ParentIDs) > 0 {
 						for _, p := range cat.ParentIDs {
-							oldDist := memory.EuclideanDistance(oldCategoryVectors[p.ParentID], cat.CenterVector)
+							oldDist := memory.Distance(oldCategoryVectors[p.ParentID], cat.CenterVector, true)
 							catsByDist.Remove(ctx, memory.DistanceKey{ParentID: p.ParentID, Distance: oldDist, ID: cat.ID})
 						}
 					} else {
-						oldDist := memory.EuclideanDistance(kb.Store.DomainReference(), cat.CenterVector)
+						oldDist := memory.Distance(kb.Store.DomainReference(), cat.CenterVector, true)
 						catsByDist.Remove(ctx, memory.DistanceKey{ParentID: sop.NilUUID, Distance: oldDist, ID: cat.ID})
 					}
 				}
@@ -540,18 +563,15 @@ func (db *Database) VectorizeCategories(
 						if len(refVec) == 0 {
 							refVec = oldCategoryVectors[p.ParentID]
 						}
-						newDist := memory.EuclideanDistance(refVec, cat.CenterVector)
+						newDist := memory.Distance(refVec, cat.CenterVector, true)
 						catsByDist.Add(ctx, memory.DistanceKey{ParentID: p.ParentID, Distance: newDist, ID: cat.ID}, 0)
 					}
 				} else {
-					newDist := memory.EuclideanDistance(kb.Store.DomainReference(), cat.CenterVector)
+					newDist := memory.Distance(kb.Store.DomainReference(), cat.CenterVector, true)
 					catsByDist.Add(ctx, memory.DistanceKey{ParentID: sop.NilUUID, Distance: newDist, ID: cat.ID}, 0)
 				}
 
 				catBtree.UpdateCurrentItem(ctx, cat.ID, cat)
-			} else if err != nil {
-				tx.Rollback(ctx)
-				return err
 			}
 		}
 
@@ -623,7 +643,14 @@ func (db *Database) VectorizeCategories(
 			if len(batchTasks) >= batchSize {
 				if len(batchSummaries) > 0 {
 					log.Debug("Vectorize embedding items batch", "kb_name", kbName, "count", len(batchSummaries))
+					// Embed as DocumentTexts for item storage (768 dim)
 					allVecs, err := embed.DocumentTexts(ctx, embedder, batchSummaries)
+					if err != nil {
+						tx.Rollback(ctx)
+						return err
+					}
+					// Embed as CategoryTexts for classification (256 dim)
+					allClassificationVecs, err := embed.CategoryTexts(ctx, embedder, batchSummaries)
 					if err != nil {
 						tx.Rollback(ctx)
 						return err
@@ -634,9 +661,10 @@ func (db *Database) VectorizeCategories(
 					for _, task := range batchTasks {
 						count := task.summaryCnt
 						itemVecs := allVecs[vecIdx : vecIdx+count]
+						classificationVecs := allClassificationVecs[vecIdx : vecIdx+count]
 						vecIdx += count
 
-						err = kb.Store.UpsertByCategoryID(ctx, task.catID, task.centerVec, *task.item, itemVecs)
+						err = kb.Store.UpsertByCategoryID(ctx, task.catID, task.centerVec, *task.item, itemVecs, classificationVecs)
 						if err != nil {
 							tx.Rollback(ctx)
 							return err
@@ -715,7 +743,14 @@ func (db *Database) VectorizeCategories(
 	if len(batchTasks) > 0 {
 		if len(batchSummaries) > 0 {
 			log.Debug("Vectorize embedding items batch (final)", "kb_name", kbName, "count", len(batchSummaries))
+			// Embed as DocumentTexts for item storage (768 dim)
 			allVecs, err := embed.DocumentTexts(ctx, embedder, batchSummaries)
+			if err != nil {
+				tx.Rollback(ctx)
+				return err
+			}
+			// Embed as CategoryTexts for classification (256 dim)
+			allClassificationVecs, err := embed.CategoryTexts(ctx, embedder, batchSummaries)
 			if err != nil {
 				tx.Rollback(ctx)
 				return err
@@ -725,9 +760,10 @@ func (db *Database) VectorizeCategories(
 			for _, task := range batchTasks {
 				count := task.summaryCnt
 				itemVecs := allVecs[vecIdx : vecIdx+count]
+				classificationVecs := allClassificationVecs[vecIdx : vecIdx+count]
 				vecIdx += count
 
-				err = kb.Store.UpsertByCategoryID(ctx, task.catID, task.centerVec, *task.item, itemVecs)
+				err = kb.Store.UpsertByCategoryID(ctx, task.catID, task.centerVec, *task.item, itemVecs, classificationVecs)
 				if err != nil {
 					tx.Rollback(ctx)
 					return err

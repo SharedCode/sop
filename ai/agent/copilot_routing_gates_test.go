@@ -51,7 +51,10 @@ func TestEvaluateRoutingGates_ColdStartFallbackClassifiesDeepPathQueries(t *test
 	gen := &RouterTestGen{Response: `{"entity": "Omni", "domain": "Discovery", "db_artifacts": [], "layers": []}`}
 	ctx = context.WithValue(ctx, "session_payload", &ai.SessionPayload{Variables: make(map[string]any)})
 
-	taskCtx := ag.evaluateRoutingGates(ctx, "SOP:language/c#/tutorial", gen)
+	taskCtx, err := ag.evaluateRoutingGates(ctx, "SOP:language/c#/tutorial", gen)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if taskCtx == nil {
 		t.Fatalf("expected a routing classification for deep path query")
 	}
@@ -93,7 +96,10 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 		ctx = context.WithValue(ctx, "session_payload", payload)
 
 		query := "Omni:Stores:TestStore"
-		taskCtx := ag.evaluateRoutingGates(ctx, query, gen)
+		taskCtx, err := ag.evaluateRoutingGates(ctx, query, gen)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		if taskCtx == nil {
 			t.Fatal("Gate 1 expected a routing classification")
@@ -130,7 +136,10 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 		ctx = context.WithValue(ctx, "session_payload", payload)
 
 		query := "Keep going but use TestInherited"
-		taskCtx := ag.evaluateRoutingGates(ctx, query, gen)
+		taskCtx, err := ag.evaluateRoutingGates(ctx, query, gen)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		if taskCtx == nil {
 			t.Fatal("Gate 2 expected a routing classification")
@@ -140,9 +149,6 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 		}
 		if taskCtx.RoutingGate == "" {
 			t.Errorf("Gate 2 should mark a routing gate, got %+v", taskCtx)
-		}
-		if taskCtx == nil {
-			t.Fatal("Gate 2 expected a routing classification")
 		}
 		if toolsCtx := ag.getSystemToolsContext(ctx); toolsCtx != "" {
 			t.Fatalf("expected Gate 2 continuity classification to avoid system tool injection, got %q", toolsCtx)
@@ -167,7 +173,10 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 		ag.markMRUCategoryWithSource("PERSONA_omni", "durable persona", MRUSourcePersona)
 
 		query := "Nevermind, let's create a New App"
-		taskCtx := ag.evaluateRoutingGates(ctx, query, gen)
+		taskCtx, err := ag.evaluateRoutingGates(ctx, query, gen)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		if taskCtx == nil {
 			t.Fatal("Gate 2 expected a routing classification")
@@ -196,7 +205,10 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 		ctx = context.WithValue(ctx, "session_payload", payload)
 
 		query := "Cold start query"
-		taskCtx := ag.evaluateRoutingGates(ctx, query, gen)
+		taskCtx, err := ag.evaluateRoutingGates(ctx, query, gen)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 
 		if taskCtx == nil {
 			t.Fatal("Gate 3 expected a routing classification")
@@ -224,7 +236,10 @@ func TestThreeGates_RoutingArchitecture(t *testing.T) {
 			Layers:      []LayerInfo{{Name: "Single-Domain", CRUD: []string{"R"}}},
 		})
 
-		taskCtx := ag.evaluateRoutingGates(ctx, "show users again", gen)
+		taskCtx, err := ag.evaluateRoutingGates(ctx, "show users again", gen)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
 		if taskCtx == nil {
 			t.Fatalf("expected a routing classification after STM rehydration, got %+v", taskCtx)
 		}

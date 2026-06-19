@@ -155,7 +155,7 @@ func ingestKBFile(ctx context.Context, db *database.Database, kbName string, fil
 		}
 
 		// Use real embeddings if the pipeline supports it,
-		vecs, embErr := embedder.EmbedTexts(ctx, []string{content})
+		vecs, embErr := embed.DocumentTexts(ctx, embedder, []string{content})
 		if embErr != nil || len(vecs) == 0 {
 			return fmt.Errorf("failed generating real vector embedding: %v", embErr)
 		}

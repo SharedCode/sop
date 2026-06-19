@@ -5,11 +5,30 @@ import (
 	"sort"
 )
 
+func alignedVectors(a, b []float32) ([]float32, []float32) {
+	if len(a) == 0 || len(b) == 0 {
+		return nil, nil
+	}
+
+	commonLen := len(a)
+	if len(b) < commonLen {
+		commonLen = len(b)
+	}
+
+	if commonLen == len(a) && commonLen == len(b) {
+		return a, b
+	}
+
+	return a[:commonLen], b[:commonLen]
+}
+
 // EuclideanDistance computes the Euclidean distance between two vectors.
 func EuclideanDistance(a, b []float32) float32 {
-	if len(a) != len(b) {
+	a, b = alignedVectors(a, b)
+	if len(a) == 0 || len(b) == 0 {
 		return 0
 	}
+
 	var sum float32
 	for i := range a {
 		diff := a[i] - b[i]
@@ -20,9 +39,11 @@ func EuclideanDistance(a, b []float32) float32 {
 
 // CosineSimilarity computes the mathematical cosine similarity between two vectors.
 func CosineSimilarity(a, b []float32) float32 {
-	if len(a) != len(b) || len(a) == 0 {
+	a, b = alignedVectors(a, b)
+	if len(a) == 0 || len(b) == 0 {
 		return 0
 	}
+
 	var dot, na, nb float32
 	for i := range a {
 		dot += a[i] * b[i]
@@ -38,9 +59,11 @@ func CosineSimilarity(a, b []float32) float32 {
 // 1. THE LIVE SEARCH LOOP (Blazing Fast - No Sqrts, No Divisions)
 // Use this inside your nested category loops to rank your documents.
 func DotProduct(a, b []float32) float32 {
-	if len(a) != len(b) {
+	a, b = alignedVectors(a, b)
+	if len(a) == 0 || len(b) == 0 {
 		return 0
 	}
+
 	var dot float32
 	for i := range a {
 		dot += a[i] * b[i]
@@ -71,7 +94,8 @@ func NormalizeVector(v []float32) []float32 {
 // FastEuclidean outputs the exact same distance metric as traditional Euclidean calculation,
 // but runs up to 4x faster on normalized vectors by utilizing DotProduct internally.
 func FastEuclidean(normalizedVectorA, NormalizedVectorB []float32) float32 {
-	if len(normalizedVectorA) != len(NormalizedVectorB) {
+	normalizedVectorA, NormalizedVectorB = alignedVectors(normalizedVectorA, NormalizedVectorB)
+	if len(normalizedVectorA) == 0 || len(NormalizedVectorB) == 0 {
 		return 0
 	}
 
@@ -101,6 +125,10 @@ func isNormalizedVector(v []float32) bool {
 }
 
 func Distance(a, b []float32, normalized bool) float32 {
+	a, b = alignedVectors(a, b)
+	if len(a) == 0 || len(b) == 0 {
+		return 0
+	}
 	if normalized && isNormalizedVector(a) && isNormalizedVector(b) {
 		return FastEuclidean(a, b)
 	}

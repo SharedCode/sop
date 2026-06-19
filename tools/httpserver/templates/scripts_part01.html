@@ -562,16 +562,26 @@
 
     // Dedicated KeyUp Listener for Setup Wizard (prevents double-triggering confirmation)
     document.addEventListener('keyup', function(event) {
-        if (event.key === "Escape") {
-            const wizard = document.getElementById('setup-wizard');
-            if (wizard && wizard.style.display !== 'none' && wizard.style.display !== '') {
-                // Ensure no other modal is covering it (simple check)
-                 if(document.getElementById('global-alert-modal').style.display === 'flex') return;
-                 if(document.getElementById('global-confirm-modal').style.display === 'flex') return;
-                 
-                 event.preventDefault();
-                 event.stopImmediatePropagation();
-                 wizardCancel();
+        const wizard = document.getElementById('setup-wizard');
+        if (wizard && wizard.style.display !== 'none' && wizard.style.display !== '') {
+            // Ensure no other modal is covering it (simple check)
+            if(document.getElementById('global-alert-modal').style.display === 'flex') return;
+            if(document.getElementById('global-confirm-modal').style.display === 'flex') return;
+            
+            if (event.key === "Escape") {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+                wizardCancel();
+            } else if (event.key === "Enter") {
+                // On page 3 (Finish), support Enter key to complete setup
+                if (typeof currentWizardStep !== 'undefined' && currentWizardStep === 3) {
+                    // Don't trigger if user is typing in a textarea
+                    if (event.target.tagName === 'TEXTAREA') return;
+                    
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    wizardNext();
+                }
             }
         }
     });

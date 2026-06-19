@@ -21,6 +21,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent/parser"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/embed"
 	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/ai/obfuscation"
@@ -105,6 +106,48 @@ func cloneTaskContextClassification(taskCtx *TaskContextClassification) *TaskCon
 		cloned.Layers = append([]LayerInfo(nil), taskCtx.Layers...)
 	}
 	return &cloned
+}
+
+// formatKBSearchResultsForDisplay formats KB search results for direct display (Case 1: Few matches)
+func (a *CopilotAgent) formatKBSearchResultsForDisplay(results string, matchCount int) string {
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("**Found %d knowledge base match", matchCount))
+	if matchCount != 1 {
+		sb.WriteString("es")
+	}
+	sb.WriteString(":**\\n\\n")
+
+	// Results already formatted by searchKnowledgeBase with headers
+	sb.WriteString(results)
+	sb.WriteString("\\n\\n---\\n")
+	sb.WriteString("*Tip: Use `:llm <instruction>` to filter results with AI assistance*")
+
+	return sb.String()
+}
+
+// buildKBEnrichedQuery enriches the query with KB search results for LLM processing (Case 2 & 3)
+func (a *CopilotAgent) buildKBEnrichedQuery(originalQuery, kbResults, llmInstruction string, matchCount int) string {
+	var sb strings.Builder
+
+	// Start with the original query
+	sb.WriteString(originalQuery)
+	sb.WriteString("\\n\\n")
+
+	// Add KB context header
+	sb.WriteString("---\\n")
+	sb.WriteString(fmt.Sprintf("**Knowledge Base Search Results (%d matches):**\\n", matchCount))
+	sb.WriteString(kbResults)
+	sb.WriteString("\\n---\\n\\n")
+
+	// Add instruction
+	if llmInstruction != "" {
+		sb.WriteString(fmt.Sprintf("**Instruction:** %s\\n", llmInstruction))
+	} else {
+		// Default reduction instruction for too many matches (Case 3)
+		sb.WriteString("**Instruction:** Please analyze the search results above and present the most relevant matches to the user.\\n")
+	}
+
+	return sb.String()
 }
 
 func shouldPreserveMRUOnTopicSwitch(item MRUItem) bool {
@@ -690,7 +733,10 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap)
 
 	// TODO: process unpacking IsNewTopic from Options, and use that as added signal for routing in Gate 2 (MRU).
 
-	taskContext := a.evaluateRoutingGates(ctx, query, gen)
+	taskContext, err := a.evaluateRoutingGates(ctx, query, gen)
+	if err != nil {
+		return "", err
+	}
 	if taskContext == nil {
 		taskContext = &TaskContextClassification{Domain: "General"}
 	}
@@ -699,11 +745,30 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap)
 		"task_context", summarizeTaskContextForLog(*taskContext),
 	)
 
+	// 4a. KB Search Direct Display (Case 1: Few matches)
+	if taskContext.DirectDisplay && taskContext.KBSearchResults != "" {
+		log.Info("KB routing: Direct display path", "match_count", taskContext.KBMatchCount)
+		// Track episode metadata for MRU
+		a.trackEpisodeMetadata(ctx, intent)
+		// Format and return KB results immediately without LLM delegation
+		response := a.formatKBSearchResultsForDisplay(taskContext.KBSearchResults, taskContext.KBMatchCount)
+		// Track ask outcome for continuity
+		a.epilogueAndCleanup(ctx, rawQuery, intent, response, nil, nil, nil, nil)
+		return response, nil
+	}
+
 	// 5. Episode Metadata Tracking (MRU Cache)
 	a.trackEpisodeMetadata(ctx, intent)
 
 	// 6. System Prompt Construction
 	fullPrompt := a.buildSystemPrompt(ctx, query, *taskContext)
+
+	// 6a. KB Search LLM Integration (Case 2: :llm instruction, Case 3: Too many matches)
+	if !taskContext.DirectDisplay && taskContext.KBSearchResults != "" {
+		log.Info("KB routing: LLM processing path", "match_count", taskContext.KBMatchCount, "has_instruction", taskContext.LLMInstruction != "")
+		// Inject KB results into the query for LLM processing
+		query = a.buildKBEnrichedQuery(query, taskContext.KBSearchResults, taskContext.LLMInstruction, taskContext.KBMatchCount)
+	}
 
 	// 7. Reasoning Engine Delegation
 	finalText, toolCalls, outcomeFacts, outcomeRecipes, carryoverState, err := a.delegateToReasoningEngine(ctx, query, gen, fullPrompt)
@@ -1167,16 +1232,21 @@ func lastNonEmptyQueryLine(query string) string {
 	return ""
 }
 
-func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, gen ai.Generator) *TaskContextClassification {
+func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, gen ai.Generator) (*TaskContextClassification, error) {
 	a.rehydrateMRUFromMemory(ctx)
 	isTest := isRoutingTestGenerator(gen)
 	anchor := parseRoutingAnchor(query)
 
-	if taskClassification := a.tryPrefixBasedRouting(ctx, query, gen, isTest, anchor); taskClassification != nil {
-		return taskClassification
+	if taskClassification, err := a.tryPrefixBasedRouting(ctx, query, gen, isTest, anchor); err != nil {
+		return nil, err
+	} else if taskClassification != nil {
+		return taskClassification, nil
 	}
-	if taskClassification := a.tryAskContinuationBasedRouting(ctx, query, gen, isTest, anchor); taskClassification != nil {
-		return taskClassification
+
+	if taskClassification, err := a.tryAskContinuationBasedRouting(ctx, query, gen, isTest, anchor); err != nil {
+		return nil, err
+	} else if taskClassification != nil {
+		return taskClassification, nil
 	}
 
 	return a.tryColdStartBasedRouting(ctx, query, gen, isTest)
@@ -2408,7 +2478,7 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 		"components_present", summarizePromptComponentsPresent(budgetReport),
 		"trimmed_components", summarizePromptBudgetTrim(budgetReport),
 	)
-	log.Info("LLM Context (OMNI)", "SystemPrompt", fullPrompt)
+	log.Debug("LLM Context (OMNI)", "SystemPrompt", fullPrompt)
 
 	return fullPrompt
 }
@@ -2928,7 +2998,7 @@ func (a *CopilotAgent) logThought(ctx context.Context, query string, toolsExecut
 		embedCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		vecs, err := embedder.EmbedTexts(embedCtx, []string{thought})
+		vecs, err := embed.DocumentTexts(embedCtx, embedder, []string{thought})
 		if err != nil || len(vecs) == 0 {
 			return
 		}

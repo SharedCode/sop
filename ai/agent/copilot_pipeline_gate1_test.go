@@ -126,8 +126,17 @@ func TestLooksLikeSpecializedRoutingQuery_RecognizesSOPPrefixes(t *testing.T) {
 	if !looksLikeSpecializedRoutingQuery("omni:sop:language:c# tutorial") {
 		t.Fatal("expected SOP-style query to be recognized as specialized")
 	}
+	if !looksLikeSpecializedRoutingQuery("omni:medical:skin diseases") {
+		t.Fatal("expected Omni custom-KB query to be recognized as specialized")
+	}
 	if looksLikeSpecializedRoutingQuery("just a regular ask") {
 		t.Fatal("expected plain ask to stay outside specialized routing")
+	}
+}
+
+func TestRoutingKBName_UsesOmniTargetKB(t *testing.T) {
+	if got := routingKBName("omni:medical:skin diseases"); got != "medical" {
+		t.Fatalf("routingKBName() = %q, want %q", got, "medical")
 	}
 }
 

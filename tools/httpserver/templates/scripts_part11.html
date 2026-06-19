@@ -450,7 +450,7 @@
 
     function deleteEnvironment(filename) {
         envToDelete = filename;
-        document.getElementById('delete-env-msg').textContent = `Are you sure you want to delete the environment configuration '${filename}'?`;
+        document.getElementById('delete-env-msg').textContent = `Destroy the assets for environment '${filename}'? This permanently removes the configuration and any selected data stores that are no longer needed.`;
         
         // Reset checkboxes to default safe state
         if(document.getElementById('delete-env-user-dbs-check')) {
@@ -478,7 +478,7 @@
         const btn = document.getElementById('delete-env-confirm-btn');
         if (btn) {
             btn.disabled = false;
-            btn.textContent = "Confirm Delete";
+            btn.textContent = "Destroy Assets";
         }
         
         envToDelete = null;
