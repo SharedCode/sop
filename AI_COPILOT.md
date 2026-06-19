@@ -66,14 +66,189 @@ SOP treats operational guidance as managed data instead of static prompt text.
 
 The ReAct loop in SOP is progressive by design, not a blind repeat-until-success loop.
 
-#### Deep KB path routing and explicit LLM suffixes
+#### Gate 1: Advanced KB Routing & Specialized Focus
 
-Two retrieval patterns are now recognized as first-class routing cases:
+Gate 1 now provides powerful, deterministic knowledge base routing with flexible syntax that supports hierarchical category navigation, text search, and LLM-assisted filtering.
 
-*   **Deep slash-path KB prompts** such as `sop:/a/b/c` or `a/b/c/d` are treated as focused KB retrieval requests. The system tries direct category-path lookup first, which is faster and more deterministic than falling back to a generic discovery loop.
-*   **Explicit post-retrieval synthesis markers** use the form `:LLM <instruction>`, for example `a/b/c:LLM extract Apple company from the matches`. This suffix is reserved for cases where the user wants the model to summarize, filter, or synthesize after the KB results are already retrieved.
+##### Routing Syntax Patterns
 
-In other words, pure path-style lookup stays grounded in KB retrieval, while `:LLM ...` is the opt-in switch for higher-level reasoning over the matched items.
+**1. Root Category Display**
+
+Query just the KB name to explore available root categories:
+
+```
+omni:<KB>                                        # Display root categories
+```
+
+**Example:**
+
+```
+Query: omni:sop
+
+Response:
+Available Categories:
+
+• Language (150 items, 5 subcategories)
+  Programming language guides and tutorials
+  Navigate: omni:sop:language
+
+• Architecture (89 items, 3 subcategories)
+  System design and architecture patterns
+  Navigate: omni:sop:architecture
+
+• Operations (203 items, 7 subcategories)
+  DevOps, deployment, and operational guides
+  Navigate: omni:sop:operations
+```
+
+This provides directory-style exploration without needing to know category names upfront.
+
+**Pagination:** Category displays show 20 items per page. Navigation (supports both `:` and `/` separators):
+```
+omni:sop               # Page 1 (default)
+omni:sop:page:2        # Page 2
+omni:sop/page/3        # Page 3 (slash separator)
+
+omni:sop:language:page:2   # Page 2 of subcategories under 'language'
+omni:sop/language/page/2   # Same, using slash separator
+```
+
+When multiple pages exist, the response shows:
+```
+Available Categories: (Page 2 of 5, showing 21-40 of 87)
+...
+Previous: omni:sop:page:1 | Next: omni:sop:page:3
+```
+
+**2. Hierarchical Category Path Routing**
+
+Any-depth category hierarchies are supported with colon-separated paths:
+
+```
+omni:<KB>:cat1                                    # Single level
+omni:<KB>:cat1:subcat1.1                         # Two levels
+omni:<KB>:cat1:subcat1.1:subsubcat1.1.1          # Deep hierarchy
+omni:sop:operations:performance:caching          # Real-world example
+```
+
+The system performs intelligent category resolution:
+- **Direct lookup** via `CategoriesByPath` B-Tree (O(1) when exact match exists)
+- **Semantic fallback** using category embeddings when lexical match fails
+- **Text-based discovery** for natural language category queries
+
+**3. The `:llm <instruction>` Meta-Token**
+
+**3. The `:llm <instruction>` Meta-Token**
+
+Add `:llm <instruction>` after any routing query to have the LLM process the retrieved results:
+
+```
+omni:sop:operations:performance:llm summarize
+omni:sop:language bindings:c#:llm explain with code examples
+omni:myapp:cat1:subcat1.1:llm extract top 5 by relevance
+```
+
+**How it works:**
+- The `:llm <instruction>` portion is **stripped from the query** before KB search
+- KB retrieval proceeds normally using the clean category path
+- Results are passed to the LLM along with the instruction as meta-guidance
+- The LLM processes, filters, or synthesizes the matches according to the instruction
+
+**Example flow:**
+```
+Input:  omni:sop:operations:performance:caching:llm summarize the top 3
+Parse:  category_path = "operations/performance/caching"
+        search_text = (none)
+        llm_instruction = "summarize the top 3"
+Execute: Search KB → 8 matches found
+        Pass to LLM: "Here are 8 matches. summarize the top 3"
+```
+
+**4. Subcategory Navigation (Path-Level)**
+
+When a category path returns no direct items, Gate 1 automatically provides subcategory navigation:
+
+```
+Query: omni:sop:language bindings
+
+Response (no items in parent category):
+**Category "language bindings" has no direct items.**
+
+**Available subcategories (3):**
+1. **c#** (12 items) - C# language binding documentation
+2. **java** (8 items) - Java integration guides  
+3. **python** (15 items) - Python SDK reference
+
+*Navigate deeper: `omni:sop:language bindings:c#`*
+```
+
+This provides granular navigation when exploring deep category hierarchies.
+
+**5. Quoted Text Search (Roadmap)**
+
+Future support for combined category + text search:
+
+```
+omni:sop:language bindings "java tutorial"
+  → Search for "java tutorial" within the language bindings category
+
+omni:sop:operations:performance "caching strategies":llm summarize top 3
+  → Search for text within category, LLM summarizes results
+```
+
+**Proposed parsing logic:**
+- Category path: everything before the first quote
+- Search text: content within quotes
+- LLM instruction: everything after `:llm`
+
+##### Three-Way Routing Decision
+
+Gate 1 makes intelligent decisions based on result count:
+
+1. **Case 1: Few matches (1-5)** → Direct display, bypass LLM
+   - Shows results immediately with category paths
+   - Includes navigation tips
+   
+2. **Case 2: `:llm` instruction present** → LLM processes matches
+   - User explicitly requested LLM analysis
+   - LLM receives clean query + results + instruction
+   
+3. **Case 3: Too many matches (>5)** → LLM reduction
+   - Automatic LLM summarization to avoid overwhelming the user
+   - Instruction: "Analyze and present the most relevant matches"
+
+##### Clean Query Architecture
+
+The `:llm` token is treated as a **meta-instruction**, not part of the actual search query:
+
+```go
+type TaskContextClassification struct {
+    CleanQuery      string  // Query without :llm meta-token
+    LLMInstruction  string  // Extracted instruction
+    KBSearchResults string  // Retrieved matches
+    DirectDisplay   bool    // Whether to bypass LLM
+}
+```
+
+This ensures:
+- KB search operates on clean, semantic queries
+- LLM receives proper context (clean query + results + instruction)
+- No confusion between user intent and meta-commands
+
+##### Flexible Hierarchy Support
+
+All routing patterns work at any depth:
+
+```
+✅ omni:myapp:a:b:c:d:e:f:g:llm <instruction>
+✅ omni:medical:diagnosis:cardiology:procedures:stent:llm explain risks
+✅ omni:sop:architecture:patterns:microservices:llm compare with monolith
+```
+
+The routing system automatically:
+- Normalizes colon separators to forward slashes for internal paths
+- Preserves the full hierarchical context for LLM enrichment
+- Strips only the `:llm` meta-token, not the category structure
 
 *   **Clarification First When Needed**: Before routing and execution, Gate 0 can now keep the interaction in a clarification-first mode. If the assistant asks a focused clarification question, the next user reply is rewritten back onto the original target ask and the normal execution path resumes.
 *   **Macro Then Micro**: Routing gates prepare the Ask frame first. The inner native ReAct loop then executes inside that frame without re-running the gates on every retry.

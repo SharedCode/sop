@@ -28,7 +28,8 @@ type MemoryStore[T any] interface {
 	UpsertByCategoryPath(ctx context.Context, categoryName string, item Item[T], vecs [][]float32) error
 
 	// UpsertByCategoryID inserts data bypassing Category lookup.
-	UpsertByCategoryID(ctx context.Context, catID sop.UUID, catCenterVector []float32, item Item[T], vecs [][]float32) error
+	// vecs are DocumentTexts (768 dim), classificationVecs are CategoryTexts (256 dim) for DistanceToCategory.
+	UpsertByCategoryID(ctx context.Context, catID sop.UUID, catCenterVector []float32, item Item[T], vecs [][]float32, classificationVecs [][]float32) error
 
 	// UpsertBatch adds or updates multiple items in the store efficiently.
 	UpsertBatch(ctx context.Context, items []Item[T], vecs [][]float32) error
@@ -53,6 +54,10 @@ type MemoryStore[T any] interface {
 	// Query searches for the nearest neighbors to the given vector coordinates.
 	// filters is a function that returns true if the item should be included.
 	Query(ctx context.Context, vec []float32, opts *SearchOptions[T]) ([]ai.Hit[T], error)
+
+	// QueryItems searches stored items for the already-resolved category.
+	// This lets the KnowledgeBase path reuse resolved categories instead of resolving them again.
+	QueryItems(ctx context.Context, vec []float32, category *Category, opts *SearchOptions[T]) ([]ai.Hit[T], error)
 
 	// QueryBatch searches for the nearest neighbors for a slice of query vectors.
 	QueryBatch(ctx context.Context, vecs [][]float32, opts *SearchOptions[T]) ([][]ai.Hit[T], error)
@@ -129,5 +134,15 @@ type SearchOptions[T any] struct {
 	// CategoryVector can be used to search for items within a given category.
 	// The Category whose CenterVector is closest to this vector will be used as the search Category.
 	CategoryVector []float32
+	Filter         func(T) bool
+}
+
+// SearchRequest is the reusable public contract for single and batch retrieval.
+type SearchRequest[T any] struct {
+	Text           string
+	Vector         []float32
+	CategoryPath   string
+	CategoryVector []float32
+	Limit          int
 	Filter         func(T) bool
 }

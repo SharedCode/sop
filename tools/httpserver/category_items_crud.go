@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/sharedcode/sop"
@@ -73,7 +74,7 @@ func handleAddSpaceCategory(w http.ResponseWriter, r *http.Request) {
 	var vec []float32
 	if config.ProductionMode {
 		embedder := embed.NewSimple("simple_hash", 384, nil)
-		v, err := embedder.EmbedTexts(ctx, []string{req.Name})
+		v, err := embed.CategoryTexts(ctx, embedder, []string{req.Name})
 		if err != nil || len(v) == 0 {
 			http.Error(w, "Failed to embed category", http.StatusInternalServerError)
 			return
@@ -130,9 +131,9 @@ func handleAddSpaceCategory(w http.ResponseWriter, r *http.Request) {
 	} else {
 		newID := sop.NewUUID()
 
-		pathVal := req.Path
+		pathVal := strings.TrimSpace(req.Path)
 		if pathVal == "" {
-			pathVal = req.Name
+			pathVal = strings.TrimSpace(req.Name)
 		}
 		var parentIDs []memory.CategoryParent
 
@@ -146,8 +147,14 @@ func handleAddSpaceCategory(w http.ResponseWriter, r *http.Request) {
 					found, _ := categoriesTree.Find(ctx, parsedParent, false)
 					if found {
 						pCat, _ := categoriesTree.GetCurrentValue(ctx)
-						if pCat != nil && pCat.Path != "" {
-							pathVal = pCat.Path + " / " + req.Name
+						if pCat != nil {
+							parentPath := strings.TrimSpace(pCat.Path)
+							childName := strings.TrimSpace(req.Name)
+							if parentPath != "" && childName != "" {
+								pathVal = parentPath + " / " + childName
+							} else if childName != "" {
+								pathVal = childName
+							}
 						}
 					}
 				}
@@ -671,7 +678,7 @@ func handleAddSpaceItemsBatch(w http.ResponseWriter, r *http.Request) {
 	var allEmbeddings [][]float32
 	if len(flatSummariesToEmbed) > 0 && config.ProductionMode {
 		// High-speed batched Embeddings call
-		v, err := batchEmbedder.EmbedTexts(ctx, flatSummariesToEmbed)
+		v, err := embed.DocumentTexts(ctx, batchEmbedder, flatSummariesToEmbed)
 		if err != nil || len(v) != len(flatSummariesToEmbed) {
 			http.Error(w, "Failed to embed item chunks in batch", http.StatusInternalServerError)
 			return

@@ -35,6 +35,9 @@ func itemKeyComparer(a, b memory.ItemKey) int {
 }
 
 func distanceKeyComparer(a, b memory.DistanceKey) int {
+	if cmp := a.ParentID.Compare(b.ParentID); cmp != 0 {
+		return cmp
+	}
 	if a.Distance < b.Distance {
 		return -1
 	}

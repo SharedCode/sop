@@ -527,7 +527,10 @@ func TestCopilotPipeline_Phases(t *testing.T) {
 
 	// --- Phase 2: Domain Classification ---
 	fakeGen.Response = `{"domain": "Spaces"}` // Simulate LLM returning 'Spaces' domain
-	taskCtx := ag.evaluateRoutingGates(ctx, query, fakeGen)
+	taskCtx, err := ag.evaluateRoutingGates(ctx, query, fakeGen)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if taskCtx == nil {
 		t.Fatalf("Expected non-nil TaskContextClassification")
 	}

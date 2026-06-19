@@ -20,6 +20,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent"
 	aidb "github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/embed"
 
 	_ "github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/memory"
@@ -78,11 +79,10 @@ func seedMetaCognitionAsync(userID, kbName string, sysOpts sop.DatabaseOptions) 
 		trans.Rollback(ctx)
 		return
 	}
-	opts := &memory.SearchOptions[map[string]any]{Limit: 1}
-	res, _ := kb.SearchKeywords(ctx, "Meta_Cognition", opts)
+	res, _ := kb.Search(ctx, []memory.SearchRequest[map[string]any]{{Text: "Meta_Cognition", Limit: 1}})
 	trans.Rollback(ctx)
 
-	if len(res) > 0 {
+	if len(res) > 0 && len(res[0]) > 0 {
 		return
 	}
 
@@ -97,7 +97,7 @@ func seedMetaCognitionAsync(userID, kbName string, sysOpts sop.DatabaseOptions) 
 	}
 
 	thoughtText := "Meta-Memory Rules: 1) Generalize bugs instead of memorizing stack traces. 2) Never duplicate information available in SOP. 3) Prioritize specific user preferences over generic defaults."
-	vecs, err := embedder.EmbedTexts(ctx, []string{thoughtText})
+	vecs, err := embed.DocumentTexts(ctx, embedder, []string{thoughtText})
 	if err == nil && len(vecs) > 0 {
 		data := map[string]any{
 			"type":        "meta_rule",
@@ -168,6 +168,7 @@ func handleAIChat(w http.ResponseWriter, r *http.Request) {
 
 	// Inject streaming writer bypass
 	ctx = context.WithValue(ctx, ai.CtxKeyWriter, &DirectFlushingWriter{w: w})
+	ctx = context.WithValue(ctx, ai.CtxKeyAppBaseURL, buildAppBaseURL(r))
 
 	if err := executeAgentLifecycle(ctx, r, agentSvc, req, sendEvent); err != nil {
 		return
@@ -224,6 +225,31 @@ type aiChatRequest struct {
 	ClientID    string                 `json:"client_id"`
 	Domain      string                 `json:"domain"`
 	SelectedKBs []ai.ArtifactReference `json:"selected_kbs"`
+}
+
+func buildAppBaseURL(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+
+	host := strings.TrimSpace(r.Header.Get("X-Forwarded-Host"))
+	if host == "" {
+		host = strings.TrimSpace(r.Host)
+	}
+	if host == "" {
+		return ""
+	}
+
+	proto := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto"))
+	if proto == "" {
+		if r.TLS != nil {
+			proto = "https"
+		} else {
+			proto = "http"
+		}
+	}
+
+	return strings.TrimRight(proto+"://"+host, "/")
 }
 
 func initializeRequest(w http.ResponseWriter, r *http.Request) (*aiChatRequest, error) {
@@ -555,10 +581,9 @@ func constructPayload(ctx context.Context, w http.ResponseWriter, req *aiChatReq
 		obfuscation.GlobalObfuscator.RegisterResource(req.StoreName, "STORE")
 	}
 
-	fullMessage := req.Message
-	msgTrimmed := strings.TrimSpace(req.Message)
-	if req.Database != "" && !strings.HasPrefix(msgTrimmed, "/") && msgTrimmed != "last-tool" && msgTrimmed != "last_tool" {
-		fullMessage = fmt.Sprintf("Current Database: %s\n%s", req.Database, req.Message)
+	fullMessage := strings.TrimSpace(req.Message)
+	if fullMessage == "" {
+		fullMessage = req.Message
 	}
 
 	ctx = context.WithValue(ctx, "session_payload", payload)
@@ -1178,7 +1203,7 @@ func handleAIFeedback(w http.ResponseWriter, r *http.Request) {
 		// 384 dimensions is good balance
 		embedder := GetConfiguredEmbedder(nil)
 
-		vecs, err := embedder.EmbedTexts(ctx, []string{req.UserContent})
+		vecs, err := embed.DocumentTexts(ctx, embedder, []string{req.UserContent})
 		if err != nil {
 			log.Warn("Failed to embed user content", "error", err)
 			// Don't fail the request, just skip vectorization

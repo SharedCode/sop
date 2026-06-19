@@ -150,3 +150,20 @@ func TestSplitCategoryPathInstruction_HandlesWhitespaceAroundLLM(t *testing.T) {
 		t.Fatalf("splitCategoryPathInstruction instruction = %q, want %q", instruction, "summarize examples")
 	}
 }
+
+func TestExtractCategoryPathQuery_NormalizesColonNestingToCategoryPath(t *testing.T) {
+	got := extractCategoryPathQuery("omni:sop:language bindings:c#")
+	if got != "language bindings/c#" {
+		t.Fatalf("extractCategoryPathQuery() = %q, want %q", got, "language bindings/c#")
+	}
+}
+
+func TestSplitCategoryPathInstruction_NormalizesColonNesting(t *testing.T) {
+	path, instruction := splitCategoryPathInstruction("omni:sop:language bindings:c#")
+	if path != "language bindings/c#" {
+		t.Fatalf("splitCategoryPathInstruction path = %q, want %q", path, "language bindings/c#")
+	}
+	if instruction != "" {
+		t.Fatalf("splitCategoryPathInstruction instruction = %q, want %q", instruction, "")
+	}
+}

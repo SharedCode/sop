@@ -267,7 +267,7 @@ func NewFromConfig(ctx context.Context, cfg Config, deps Dependencies) (ai.Agent
 			texts[i] = fmt.Sprintf("%s %s", item.Text, item.Description)
 		}
 
-		vecs, err := emb.EmbedTexts(ctx, texts)
+		vecs, err := embed.DocumentTexts(ctx, emb, texts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to embed seed data: %w", err)
 		}

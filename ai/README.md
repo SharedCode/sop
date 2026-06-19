@@ -230,7 +230,7 @@ The runtime-side flow mirrors the UI workflow:
 1. **Open the authored Space** with `ai/database` / `ai/memory`.
 2. **Manage categories and items** through the `KnowledgeBase` abstraction.
 3. **Vectorize** the Space or selected categories/items when you are ready to enable semantic retrieval.
-4. **Search** using `SearchKeywords(...)` for BM25-style retrieval and `SearchSemantics(...)` for vector retrieval.
+4. **Search** using the unified `Search(...)` API for keyword, semantic, and mixed retrieval flows.
 
 This gives your application the same Space-aware reasoning path that the AI Copilot uses, while keeping the authoring experience in SOP Data Manager.
 
@@ -240,7 +240,7 @@ A common pattern is to use the SOP Data Manager as the **authoring studio** for 
 
 1. Create or curate a Space in the SOP Data Manager / Knowledge Base Studio UI.
 2. Use the `ai/database` package to open that Space in your Go code with `OpenKnowledgeBase(...)`.
-3. Query it with the rich `KnowledgeBase` API, including `SearchKeywords(...)` and `SearchSemantics(...)`, to retrieve context for RAG or agent workflows.
+3. Query it with the rich `KnowledgeBase` API, using `Search(...)` as the single entry point for retrieval in RAG or agent workflows.
 
 This keeps the human-facing management and authoring experience in the UI, while your application uses the SOP AI runtime to manage, digest, and search the authored Spaces in-process.
 

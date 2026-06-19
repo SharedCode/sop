@@ -732,11 +732,11 @@
                 </div>
                 
                 <div style="background: rgba(255,0,0,0.1); padding: 10px; border-left: 3px solid var(--danger-bg);">
-                    <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer; user-select: none;">
-                        <input type="checkbox" id="uninstall-delete-system-db" style="margin-top: 4px;"> 
+                    <label style="display: flex; align-items: flex-start; gap: 10px; cursor: not-allowed; user-select: none; opacity: 0.75;">
+                        <input type="checkbox" id="uninstall-delete-system-db" style="margin-top: 4px;" disabled> 
                         <div>
                             <strong>Delete System DB (Shared Brain)?</strong><br>
-                            <span style="font-size: 0.9em; color: var(--text-color);">Delete the shared registry. <span style="color: var(--danger-bg);">Check only if you want to wipe the shared environment.</span></span>
+                            <span style="font-size: 0.9em; color: var(--text-color);">Disabled for safety: the System DB holds session records and runtime metadata used by the running environment.</span>
                         </div>
                     </label>
                 </div>

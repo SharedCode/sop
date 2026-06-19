@@ -15,6 +15,7 @@ import (
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/embed"
 	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/ai/obfuscation"
@@ -810,7 +811,7 @@ func (s *Service) Search(ctx context.Context, query string, limit int) ([]ai.Hit
 		queryToEmbed = query
 	}
 
-	vecs, err := emb.EmbedTexts(ctx, []string{queryToEmbed})
+	vecs, err := embed.QueryTexts(ctx, emb, []string{queryToEmbed})
 	if err != nil {
 		return nil, fmt.Errorf("embedding failed: %w", err)
 	}
@@ -1197,9 +1198,12 @@ func (s *Service) getToolInfo(ctx context.Context, toolName string) (string, err
 	}
 
 	searchQuery := fmt.Sprintf("%s Tool Operations", toolName)
-	options := &memory.SearchOptions[map[string]any]{Limit: 1}
-	hits, err := kb.SearchKeywords(ctx, searchQuery, options)
-	if err == nil && len(hits) > 0 {
+	batch, err := kb.Search(ctx, []memory.SearchRequest[map[string]any]{{
+		Text:  searchQuery,
+		Limit: 1,
+	}})
+	if err == nil && len(batch) > 0 && len(batch[0]) > 0 {
+		hits := batch[0]
 		if content, ok := hits[0].Payload["Content"].(string); ok {
 			return content, nil
 		}
@@ -1535,7 +1539,8 @@ func (s *Service) buildPromptInputs(ctx context.Context, query string, hits []ai
 		kbName := memory.BuildLTMStoreName(agentID, p.UserID)
 		if tx, err := s.systemDB.BeginTransaction(ctx, sop.ForReading); err == nil {
 			if kb, err := s.systemDB.OpenKnowledgeBase(ctx, kbName, tx, s.generator, nil, false, true); err == nil {
-				if userHits, err := kb.SearchKeywords(ctx, query, &memory.SearchOptions[map[string]any]{Limit: 5}); err == nil && len(userHits) > 0 {
+				if batch, err := kb.Search(ctx, []memory.SearchRequest[map[string]any]{{Text: query, Limit: 5}}); err == nil && len(batch) > 0 && len(batch[0]) > 0 {
+					userHits := batch[0]
 					var prefText strings.Builder
 					prefText.WriteString("\n\n[User Preferences & Active Memory Ledger for this query]\n")
 					for _, hit := range userHits {

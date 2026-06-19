@@ -55,7 +55,7 @@ func DigestKnowledgeBase(ctx context.Context, kb *KnowledgeBase[map[string]any],
 	for _, query := range queries {
 		categoryFilter := ""
 		if embedder != nil {
-			vecs, err := embed.QueryTexts(ctx, embedder, []string{query})
+			vecs, err := embed.CategoryTexts(ctx, embedder, []string{normalize(query)})
 			if err == nil && len(vecs) > 0 {
 				if req.UseClosestCategory {
 					closestCat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
@@ -73,11 +73,22 @@ func DigestKnowledgeBase(ctx context.Context, kb *KnowledgeBase[map[string]any],
 				}
 
 				for _, opts := range semanticOpts {
-					hits, err := kb.SearchSemantics(ctx, vecs[0], opts)
+					vecs, err = embed.QueryTexts(ctx, embedder, []string{normalize(query)})
 					if err != nil {
 						return nil, err
 					}
-					for _, hit := range hits {
+					batch, err := kb.Search(ctx, []SearchRequest[map[string]any]{{
+						Vector:       vecs[0],
+						Limit:        opts.Limit,
+						CategoryPath: opts.CategoryPath,
+					}})
+					if err != nil {
+						return nil, err
+					}
+					if len(batch) == 0 {
+						continue
+					}
+					for _, hit := range batch[0] {
 						relevance := digestSemanticRelevance(hit.Score)
 						if relevance < minScore {
 							continue
@@ -96,13 +107,17 @@ func DigestKnowledgeBase(ctx context.Context, kb *KnowledgeBase[map[string]any],
 		}
 
 		if req.KeywordFallback {
-			hits, err := kb.SearchKeywords(ctx, query, &SearchOptions[map[string]any]{
+			batch, err := kb.Search(ctx, []SearchRequest[map[string]any]{{
+				Text:  query,
 				Limit: perQueryLimit,
-			})
+			}})
 			if err != nil {
 				return nil, err
 			}
-			for _, hit := range hits {
+			if len(batch) == 0 {
+				continue
+			}
+			for _, hit := range batch[0] {
 				mergeDigestHit(merged, KBDigestHit{
 					DocID:      hit.DocID,
 					Score:      hit.Score,

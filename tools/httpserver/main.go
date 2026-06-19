@@ -31,6 +31,7 @@ import (
 	"github.com/sharedcode/sop/encoding"
 	"github.com/sharedcode/sop/fs"
 	"github.com/sharedcode/sop/jsondb"
+	"github.com/sharedcode/sop/tools/confighub"
 )
 
 // ErasureConfigEntry defines a single EC zone configuration
@@ -97,34 +98,11 @@ func firstNonEmpty(values ...string) string {
 }
 
 func candidateConfigPaths() []string {
-	if p := strings.TrimSpace(config.ConfigFile); p != "" {
-		return []string{p}
-	}
-
-	candidates := []string{}
-	if cwd, err := os.Getwd(); err == nil {
-		candidates = append(candidates, filepath.Join(cwd, "config.json"))
-	} else {
-		candidates = append(candidates, "config.json")
-	}
-	return candidates
+	return confighub.CandidateConfigPaths(config.ConfigFile)
 }
 
 func findExistingConfigFile() string {
-	seen := map[string]struct{}{}
-	for _, candidate := range candidateConfigPaths() {
-		if candidate == "" {
-			continue
-		}
-		if _, ok := seen[candidate]; ok {
-			continue
-		}
-		seen[candidate] = struct{}{}
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-	}
-	return ""
+	return confighub.FindExistingConfigFile(config.ConfigFile)
 }
 
 func setupWizardAIConfigJSON() template.JS {
@@ -536,18 +514,24 @@ func migrateLegacyRootPassword() {
 }
 
 func loadConfig(path string) error {
-	f, err := os.Open(path)
+	raw, err := confighub.LoadConfig(path)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 
 	// Reset data pointers to prevent pollution from previous active configuration
 	config.Databases = nil
 	config.SystemDB = nil
 
-	if err := json.NewDecoder(f).Decode(&config); err != nil {
+	payload, err := json.Marshal(raw)
+	if err != nil {
 		return err
+	}
+	if err := json.Unmarshal(payload, &config); err != nil {
+		return err
+	}
+	if config.ConfigFile == "" {
+		config.ConfigFile = path
 	}
 
 	migrateLegacyRootPassword()
@@ -1148,9 +1132,6 @@ func saveConfigFile() {
 	encoder.SetIndent("", "    ")
 	encoder.Encode(config)
 	os.Rename(config.ConfigFile+".tmp", config.ConfigFile)
-	if err := ensureModelCatalogFile(config.ConfigFile); err != nil {
-		log.Error(fmt.Sprintf("Failed to save model catalog: %v", err))
-	}
 }
 
 func handleUpdateDatabase(w http.ResponseWriter, r *http.Request) {

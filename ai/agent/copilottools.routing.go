@@ -49,7 +49,7 @@ func (a *CopilotAgent) toolSearchKB(ctx context.Context, args map[string]any) (s
 		return "", fmt.Errorf("could not resolve DB for KB '%s'", kbName)
 	}
 
-	return a.searchKnowledgeBase(ctx, db, kbName, query, "", "", true, limit)
+	return a.searchKnowledgeBase(ctx, db, kbName, query, "", "", limit)
 }
 
 func (a *CopilotAgent) toolHandoffToAvatar(ctx context.Context, args map[string]any) (string, error) {

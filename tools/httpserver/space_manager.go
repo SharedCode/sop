@@ -482,13 +482,14 @@ func handlePreloadSpace(w http.ResponseWriter, r *http.Request) {
 		isGoRun := strings.Contains(os.Args[0], "go-build") || strings.HasPrefix(os.Args[0], os.TempDir())
 		if isGoRun {
 			fmt.Printf("SOP Knowledge Base JSON not found. Auto-compiling since running in dev mode...\n")
-			compilerPath := "./ai/cmd/knowledge_compiler"
+			compilerDir := "./ai/cmd/knowledge_compiler"
 			if _, err := os.Stat("../../ai/cmd/knowledge_compiler"); err == nil {
-				compilerPath = "../../ai/cmd/knowledge_compiler"
+				compilerDir = "../../ai/cmd/knowledge_compiler"
 			} else if _, err := os.Stat("../ai/cmd/knowledge_compiler"); err == nil {
-				compilerPath = "../ai/cmd/knowledge_compiler"
+				compilerDir = "../ai/cmd/knowledge_compiler"
 			}
-			cmd := exec.Command("go", "run", compilerPath)
+			cmd := exec.Command("bash", "run.sh")
+			cmd.Dir = compilerDir
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err == nil {

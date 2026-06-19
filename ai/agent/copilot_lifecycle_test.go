@@ -151,7 +151,7 @@ func TestAgentFullMemoryLifeCycleTest(t *testing.T) {
 	ag.service.domain = &mockDomain{emb: embedder}
 
 	db := ag.resolveDBForKB(ctx, "ltm_agent123")
-	res, err := ag.searchKnowledgeBase(ctx, db, "ltm_agent123", "learned something", "", "", false, 5)
+	res, err := ag.searchKnowledgeBase(ctx, db, "ltm_agent123", "learned something", "", "", 5)
 	if err != nil {
 		t.Fatalf("toolSearchDomainKB failed: %v", err)
 	}

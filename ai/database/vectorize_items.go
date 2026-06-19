@@ -130,7 +130,13 @@ func (db *Database) VectorizeItems(
 			continue
 		}
 
+		// Embed as DocumentTexts for item storage (768 dim)
 		allVecs, err := embed.DocumentTexts(ctx, embedder, batchSummaries)
+		if err != nil {
+			return err
+		}
+		// Embed as CategoryTexts for classification (256 dim)
+		allClassificationVecs, err := embed.CategoryTexts(ctx, embedder, batchSummaries)
 		if err != nil {
 			return err
 		}
@@ -139,9 +145,10 @@ func (db *Database) VectorizeItems(
 		for j, item := range batch {
 			count := itemSummaryCounts[j]
 			itemVecs := allVecs[vecIdx : vecIdx+count]
+			classificationVecs := allClassificationVecs[vecIdx : vecIdx+count]
 			vecIdx += count
 
-			err = kb.Store.UpsertByCategoryID(ctx, categoryID, category.CenterVector, *item, itemVecs)
+			err = kb.Store.UpsertByCategoryID(ctx, categoryID, category.CenterVector, *item, itemVecs, classificationVecs)
 			if err != nil {
 				return err
 			}

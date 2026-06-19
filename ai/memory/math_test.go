@@ -21,9 +21,9 @@ func TestCosineSimilarity(t *testing.T) {
 		t.Errorf("expected 1")
 	}
 
-	// invalid lengths
-	if CosineSimilarity(v1, []float32{1}) != 0 {
-		t.Errorf("expected 0")
+	// shared dimensions should be compared when lengths differ
+	if CosineSimilarity(v1, []float32{1}) != 1 {
+		t.Errorf("expected 1 over the shared dimension")
 	}
 	// zeros
 	if CosineSimilarity([]float32{0, 0, 0}, v1) != 0 {
@@ -43,6 +43,18 @@ func TestNormalizeVectorReturnsUnitNorm(t *testing.T) {
 	}
 	if math.Abs(norm-1) > 1e-6 {
 		t.Fatalf("expected unit norm, got %v", norm)
+	}
+}
+
+func TestDistanceHandlesMismatchedVectorLengths(t *testing.T) {
+	dist := Distance([]float32{1, 0, 0}, []float32{0, 1}, true)
+	if dist != 1.4142135 {
+		t.Fatalf("expected normalized distance over the shared dimensions, got %v", dist)
+	}
+
+	euclid := EuclideanDistance([]float32{1, 1, 1}, []float32{1, 2})
+	if euclid != 1 {
+		t.Fatalf("expected Euclidean distance over the shared dimensions, got %v", euclid)
 	}
 }
 

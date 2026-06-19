@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/sharedcode/sop/ai"
 	"github.com/sharedcode/sop/ai/agent/parser"
 	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/sop/ai/embed"
 	"github.com/sharedcode/sop/ai/generator"
 	"github.com/sharedcode/sop/ai/memory"
 	"github.com/sharedcode/sop/ai/obfuscation"
@@ -105,6 +107,104 @@ func cloneTaskContextClassification(taskCtx *TaskContextClassification) *TaskCon
 		cloned.Layers = append([]LayerInfo(nil), taskCtx.Layers...)
 	}
 	return &cloned
+}
+
+// formatKBSourceLinks renders every available DocID as a clickable markdown link.
+func (a *CopilotAgent) formatKBSourceLinks(ctx context.Context, docIDs memory.DocIDs) string {
+	if len(docIDs) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(docIDs))
+	for _, docID := range docIDs {
+		docID = strings.TrimSpace(docID)
+		if docID == "" {
+			continue
+		}
+
+		viewerURL := &url.URL{Path: "/viewer"}
+		q := viewerURL.Query()
+		q.Set("docID", docID)
+		viewerURL.RawQuery = q.Encode()
+
+		if ctx != nil {
+			if baseURL, ok := ctx.Value(ai.CtxKeyAppBaseURL).(string); ok && strings.TrimSpace(baseURL) != "" {
+				base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+				if base != "" {
+					parsedBase, err := url.Parse(base)
+					if err == nil {
+						parsedBase.Path = strings.TrimRight(parsedBase.Path, "/") + viewerURL.Path
+						parsedBase.RawQuery = viewerURL.RawQuery
+						viewerURL = parsedBase
+					}
+				}
+			}
+		}
+
+		parts = append(parts, fmt.Sprintf("[%s](%s)", docID, viewerURL.String()))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf("\nSources: %s", strings.Join(parts, ", "))
+}
+
+// formatKBSearchResultsForDisplay formats KB search results for direct display (Case 1: Few matches)
+func (a *CopilotAgent) formatKBSearchResultsForDisplay(results string, matchCount int) string {
+	var sb strings.Builder
+
+	// Check if this is category navigation (matchCount=0 but results contain "Available Categories" or "Subcategories")
+	isCategoryNavigation := matchCount == 0 && (strings.Contains(results, "Available Categories:") || strings.Contains(results, "Subcategories under"))
+
+	if isCategoryNavigation {
+		// Direct category navigation - just return the formatted results
+		sb.WriteString(results)
+		sb.WriteString("\n\n---\n")
+		sb.WriteString("*Tip: Use `:llm <instruction>` to filter results with AI assistance*")
+	} else {
+		// Regular search results
+		sb.WriteString(fmt.Sprintf("**Found %d knowledge base match", matchCount))
+		if matchCount != 1 {
+			sb.WriteString("es")
+		}
+		sb.WriteString(":**\n\n")
+		sb.WriteString(results)
+		sb.WriteString("\n\n---\n")
+		sb.WriteString("*Tip: Use `:llm <instruction>` to filter results with AI assistance*")
+	}
+
+	return sb.String()
+}
+
+// buildKBEnrichedQuery enriches the query with KB search results for LLM processing (Case 2 & 3)
+// The cleanQuery parameter should be the user's intent WITHOUT the :llm meta-token
+func (a *CopilotAgent) buildKBEnrichedQuery(cleanQuery, kbResults, llmInstruction string, matchCount int) string {
+	var sb strings.Builder
+
+	// Start with the clean query (without :llm meta-token)
+	if strings.TrimSpace(cleanQuery) != "" {
+		sb.WriteString(cleanQuery)
+		sb.WriteString("\n\n")
+	}
+
+	// Add KB context header
+	sb.WriteString("---\n")
+	sb.WriteString(fmt.Sprintf("**Knowledge Base Search Results (%d matches):**\n", matchCount))
+	sb.WriteString(kbResults)
+	sb.WriteString("\n---\n\n")
+
+	// Add instruction
+	if llmInstruction != "" {
+		sb.WriteString(fmt.Sprintf("**Instruction:** %s\n", llmInstruction))
+	} else {
+		// Default reduction instruction for too many matches (Case 3)
+		sb.WriteString("**Instruction:** Please analyze the search results above and present the most relevant matches to the user.\n")
+	}
+	// Preserve source links verbatim so the final answer can remain clickable.
+	sb.WriteString("**Link Preservation:** Preserve the exact markdown source links from the KB results verbatim in your answer. Do not replace them with plain relative file paths or bare filenames.\n")
+
+	return sb.String()
 }
 
 func shouldPreserveMRUOnTopicSwitch(item MRUItem) bool {
@@ -690,7 +790,10 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap)
 
 	// TODO: process unpacking IsNewTopic from Options, and use that as added signal for routing in Gate 2 (MRU).
 
-	taskContext := a.evaluateRoutingGates(ctx, query, gen)
+	taskContext, err := a.evaluateRoutingGates(ctx, query, gen)
+	if err != nil {
+		return "", err
+	}
 	if taskContext == nil {
 		taskContext = &TaskContextClassification{Domain: "General"}
 	}
@@ -699,11 +802,35 @@ func (a *CopilotAgent) Ask(ctx context.Context, query string, cfg *ai.ConfigMap)
 		"task_context", summarizeTaskContextForLog(*taskContext),
 	)
 
+	// 4a. KB Search Direct Display (Case 1: Few matches)
+	if taskContext.DirectDisplay && taskContext.KBSearchResults != "" {
+		log.Info("KB routing: Direct display path", "match_count", taskContext.KBMatchCount)
+		// Track episode metadata for MRU
+		a.trackEpisodeMetadata(ctx, intent)
+		// Format and return KB results immediately without LLM delegation
+		response := a.formatKBSearchResultsForDisplay(taskContext.KBSearchResults, taskContext.KBMatchCount)
+		// Track ask outcome for continuity
+		a.epilogueAndCleanup(ctx, rawQuery, intent, response, nil, nil, nil, nil)
+		return response, nil
+	}
+
 	// 5. Episode Metadata Tracking (MRU Cache)
 	a.trackEpisodeMetadata(ctx, intent)
 
 	// 6. System Prompt Construction
 	fullPrompt := a.buildSystemPrompt(ctx, query, *taskContext)
+
+	// 6a. KB Search LLM Integration (Case 2: :llm instruction, Case 3: Too many matches)
+	if !taskContext.DirectDisplay && taskContext.KBSearchResults != "" {
+		log.Info("KB routing: LLM processing path", "match_count", taskContext.KBMatchCount, "has_instruction", taskContext.LLMInstruction != "")
+		// Use clean query (without :llm meta-token) for LLM context
+		cleanQuery := taskContext.CleanQuery
+		if cleanQuery == "" {
+			cleanQuery = query // fallback to original if clean query not set
+		}
+		// Inject KB results into the query for LLM processing
+		query = a.buildKBEnrichedQuery(cleanQuery, taskContext.KBSearchResults, taskContext.LLMInstruction, taskContext.KBMatchCount)
+	}
 
 	// 7. Reasoning Engine Delegation
 	finalText, toolCalls, outcomeFacts, outcomeRecipes, carryoverState, err := a.delegateToReasoningEngine(ctx, query, gen, fullPrompt)
@@ -1167,16 +1294,31 @@ func lastNonEmptyQueryLine(query string) string {
 	return ""
 }
 
-func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, gen ai.Generator) *TaskContextClassification {
+func (a *CopilotAgent) evaluateRoutingGates(ctx context.Context, query string, gen ai.Generator) (*TaskContextClassification, error) {
 	a.rehydrateMRUFromMemory(ctx)
 	isTest := isRoutingTestGenerator(gen)
 	anchor := parseRoutingAnchor(query)
 
-	if taskClassification := a.tryPrefixBasedRouting(ctx, query, gen, isTest, anchor); taskClassification != nil {
-		return taskClassification
+	// Fast-path: Check for specialized KB routing patterns (e.g., "sop", "sop:category")
+	// before falling through to the standard three-gate flow
+	if looksLikeSpecializedRoutingQuery(query) && anchor == nil {
+		if handledTaskCtx, handled, err := a.trySpecializedFocusedRouting(ctx, query, "Omni", "Spaces", ""); err != nil {
+			return nil, err
+		} else if handled {
+			return handledTaskCtx, nil
+		}
 	}
-	if taskClassification := a.tryAskContinuationBasedRouting(ctx, query, gen, isTest, anchor); taskClassification != nil {
-		return taskClassification
+
+	if taskClassification, err := a.tryPrefixBasedRouting(ctx, query, gen, isTest, anchor); err != nil {
+		return nil, err
+	} else if taskClassification != nil {
+		return taskClassification, nil
+	}
+
+	if taskClassification, err := a.tryAskContinuationBasedRouting(ctx, query, gen, isTest, anchor); err != nil {
+		return nil, err
+	} else if taskClassification != nil {
+		return taskClassification, nil
 	}
 
 	return a.tryColdStartBasedRouting(ctx, query, gen, isTest)
@@ -2408,7 +2550,7 @@ func (a *CopilotAgent) buildSystemPrompt(ctx context.Context, query string, task
 		"components_present", summarizePromptComponentsPresent(budgetReport),
 		"trimmed_components", summarizePromptBudgetTrim(budgetReport),
 	)
-	log.Info("LLM Context (OMNI)", "SystemPrompt", fullPrompt)
+	log.Debug("LLM Context (OMNI)", "SystemPrompt", fullPrompt)
 
 	return fullPrompt
 }
@@ -2928,7 +3070,7 @@ func (a *CopilotAgent) logThought(ctx context.Context, query string, toolsExecut
 		embedCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		vecs, err := embedder.EmbedTexts(embedCtx, []string{thought})
+		vecs, err := embed.DocumentTexts(embedCtx, embedder, []string{thought})
 		if err != nil || len(vecs) == 0 {
 			return
 		}
@@ -3645,9 +3787,37 @@ func deepCopyValue(v any) any {
 	}
 }
 
+func shouldRouteToOmniInsteadOfAvatar(query string) bool {
+	trimmed := strings.TrimSpace(query)
+	if trimmed == "" {
+		return false
+	}
+
+	lower := strings.ToLower(trimmed)
+	if lower == "sop" || strings.HasPrefix(lower, "sop:") {
+		return true
+	}
+
+	if strings.HasPrefix(lower, "omni:") {
+		parts := strings.Split(trimmed, ":")
+		if len(parts) >= 2 {
+			kbName := strings.TrimSpace(strings.ToLower(parts[1]))
+			return kbName == "sop"
+		}
+	}
+
+	return false
+}
+
 func (a *CopilotAgent) classifyIntent(ctx context.Context, query string, gen ai.Generator) string {
 	if flag.Lookup("test.v") != nil {
 		// Bypass intent routing in unit tests
+		return ai.IntentOmni
+	}
+
+	log.Info("classifyIntent ", "query", query)
+
+	if shouldRouteToOmniInsteadOfAvatar(query) {
 		return ai.IntentOmni
 	}
 

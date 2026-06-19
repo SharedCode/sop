@@ -38,7 +38,7 @@ func TestStore_CursorPaginationAndIsolation(t *testing.T) {
 			Data:       fmt.Sprintf("Payload %d", i),
 		}
 
-		err := st.UpsertByCategoryID(ctx, catID, nil, item, [][]float32{{float32(i), float32(i)}})
+		err := st.UpsertByCategoryID(ctx, catID, nil, item, [][]float32{{float32(i), float32(i)}}, nil)
 		if err != nil {
 			t.Fatalf("Upsert failed at %d: %v", i, err)
 		}

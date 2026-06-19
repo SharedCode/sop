@@ -28,11 +28,13 @@ func isRoutingTestGenerator(gen ai.Generator) bool {
 }
 
 func parseRoutingAnchor(query string) *routingAnchor {
+
+	log.Info("query: ", "query", query)
 	parts := strings.Split(query, ":")
 	if len(parts) <= 1 {
 		return nil
 	}
-	if !(strings.EqualFold(parts[0], "omni") || strings.EqualFold(parts[0], "medical") || strings.EqualFold(parts[0], "support")) {
+	if !(strings.EqualFold(parts[0], "omni")) {
 		return nil
 	}
 	anchor := &routingAnchor{
@@ -45,6 +47,9 @@ func parseRoutingAnchor(query string) *routingAnchor {
 	if len(parts) >= 3 {
 		anchor.artifact = strings.TrimSpace(parts[2])
 	}
+
+	log.Info("anchor ", "anchor", anchor)
+
 	anchor.taskCtx = enrichFocusedTaskContext(nil, anchor.entity, anchor.domain, anchor.artifact)
 	return anchor
 }
@@ -94,16 +99,20 @@ func (a *CopilotAgent) tryPathStyleRouting(ctx context.Context, query string) *T
 	return taskCtx
 }
 
-func (a *CopilotAgent) tryPrefixBasedRouting(ctx context.Context, query string, gen ai.Generator, isTest bool, anchor *routingAnchor) *TaskContextClassification {
+func (a *CopilotAgent) tryPrefixBasedRouting(ctx context.Context, query string, gen ai.Generator, isTest bool, anchor *routingAnchor) (*TaskContextClassification, error) {
 	if anchor == nil {
-		return nil
+		return nil, nil
 	}
 
 	log.Info("Prefix-Based Routing Activated", "prefix", anchor.prefix)
 
 	var taskCtx *TaskContextClassification
 	if !isTest && gen != nil {
-		taskCtx, _ = a.ClassifyFocusedTaskContext(ctx, query, anchor.entity, anchor.domain, anchor.artifact, gen)
+		var err error
+		taskCtx, err = a.ClassifyFocusedTaskContext(ctx, query, anchor.entity, anchor.domain, anchor.artifact, gen)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	taskCtx = enrichFocusedTaskContext(taskCtx, anchor.entity, anchor.domain, anchor.artifact)
@@ -122,17 +131,17 @@ func (a *CopilotAgent) tryPrefixBasedRouting(ctx context.Context, query string, 
 	annotateTaskContextIntent(taskCtx, query)
 	taskCtx.RoutingGate = RoutingGateFocused
 	a.persistRoutingState(ctx, taskCtx)
-	return taskCtx
+	return taskCtx, nil
 }
 
-func (a *CopilotAgent) tryAskContinuationBasedRouting(ctx context.Context, query string, gen ai.Generator, isTest bool, anchor *routingAnchor) *TaskContextClassification {
+func (a *CopilotAgent) tryAskContinuationBasedRouting(ctx context.Context, query string, gen ai.Generator, isTest bool, anchor *routingAnchor) (*TaskContextClassification, error) {
 	p := ai.GetSessionPayload(ctx)
 	if p == nil || p.Variables == nil {
-		return nil
+		return nil, nil
 	}
 	rs, ok := p.Variables["RoutingState"].(*TaskContextClassification)
 	if !ok || rs == nil {
-		return nil
+		return nil, nil
 	}
 
 	if !isTest && gen != nil {
@@ -144,42 +153,42 @@ func (a *CopilotAgent) tryAskContinuationBasedRouting(ctx context.Context, query
 		if err == nil && isSwitch {
 			log.Info("Ask-Continuation Routing Detected Topic Switch. Falling through to Cold-Start Routing.")
 			a.resetRoutingForTopicSwitch(query, p)
-			return nil
+			return nil, nil
 		}
 		if err == nil && updatedRS != nil {
 			log.Info("Ask-Continuation Routing Activated: Inheriting MRU Context with Updates", "domain", updatedRS.Domain)
 			annotateTaskContextIntent(updatedRS, query)
 			updatedRS.RoutingGate = RoutingGateContinuity
 			a.persistRoutingState(ctx, updatedRS)
-			return updatedRS
+			return updatedRS, nil
 		}
-		return nil
+		return nil, err
 	}
 
 	log.Info("Ask-Continuation Routing Activated: Inheriting MRU Context (Test Mode)", "domain", rs.Domain)
 	annotateTaskContextIntent(rs, query)
 	rs.RoutingGate = RoutingGateContinuity
 	a.persistRoutingState(ctx, rs)
-	return rs
+	return rs, nil
 }
 
-func (a *CopilotAgent) tryColdStartBasedRouting(ctx context.Context, query string, gen ai.Generator, isTest bool) *TaskContextClassification {
+func (a *CopilotAgent) tryColdStartBasedRouting(ctx context.Context, query string, gen ai.Generator, isTest bool) (*TaskContextClassification, error) {
 	if len(strings.Split(query, ":")) == 1 {
 		log.Info("Cold-Start Routing Activated")
 	}
 	if gen == nil || isTest {
-		return nil
+		return nil, nil
 	}
 
 	taskCtx, err := a.ClassifyTaskContext(ctx, query, gen)
 	if err != nil || taskCtx == nil {
 		log.Warn("Cold-start routing classification failed or returned nil", "error", err)
-		return nil
+		return nil, err
 	}
 
 	log.Info("Cold-start routing classification success", "domain", taskCtx.Domain)
 	annotateTaskContextIntent(taskCtx, query)
 	taskCtx.RoutingGate = RoutingGateDiscovery
 	a.persistRoutingState(ctx, taskCtx)
-	return taskCtx
+	return taskCtx, nil
 }

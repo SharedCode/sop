@@ -26,5 +26,11 @@ func cleanText(s string) string {
 
 func normalizeCategoryName(s string) string {
 	s = strings.TrimLeft(s, "# ")
-	return strings.TrimSpace(prefixRegex.ReplaceAllString(s, ""))
+	s = prefixRegex.ReplaceAllString(s, "")
+	s = strings.TrimSpace(s)
+	// Remove spaces around slashes in category names (e.g., "CLI / Examples" -> "CLI/Examples")
+	s = strings.ReplaceAll(s, " / ", "/")
+
+	// Keep category names stable; language-specific canonicalization happens in the runtime memory pipeline.
+	return s
 }

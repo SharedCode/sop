@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/sharedcode/sop"
+	"github.com/sharedcode/sop/ai/embed"
 	"github.com/sharedcode/sop/inmemory"
 )
 
@@ -75,7 +76,8 @@ func (m *MockPlaybookLLM) GenerateCategory(ctx context.Context, payload string) 
 	}
 
 	// Use embedder to fetch center vector for the concept
-	vecs, _ := m.Embedder.EmbedTexts(ctx, []string{catName})
+	// CenterVector is a classifier in classification space
+	vecs, _ := embed.CategoryTexts(ctx, m.Embedder, []string{catName})
 	vector := vecs[0]
 
 	return &Category{
@@ -229,7 +231,7 @@ func TestPlaybookSimulation_Harness(t *testing.T) {
 			// 2. Insert Payloads
 			for _, payload := range tt.Payloads {
 				// Embed to trigger thresholds and knn logic
-				eVecs, _ := embedder.EmbedTexts(ctx, []string{payload})
+				eVecs, _ := embed.DocumentTexts(ctx, embedder, []string{payload})
 				item := Item[string]{
 					ID:   sop.NewUUID(),
 					Data: payload,

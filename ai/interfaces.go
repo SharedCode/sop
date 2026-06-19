@@ -20,6 +20,8 @@ const (
 	CtxKeyAPIKey ContextKey = "ai_api_key"
 	// CtxKeyBaseURL is the context key for passing a transient Base URL
 	CtxKeyBaseURL ContextKey = "ai_base_url"
+	// CtxKeyAppBaseURL is the context key for passing the public app origin used to build absolute viewer links.
+	CtxKeyAppBaseURL ContextKey = "ai_app_base_url"
 	// CtxKeyExecutor is the context key for passing the ToolExecutor.
 	CtxKeyExecutor ContextKey = "ai_executor"
 	// CtxKeyDeobfuscator is the context key for passing the Deobfuscator.

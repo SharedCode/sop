@@ -1,17 +1,21 @@
 package memory
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	log "log/slog"
-
+	"reflect"
+	"sort"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/embed"
 )
 
 // KnowledgeBase provides a clean, unified API for developers.
@@ -32,21 +36,223 @@ func (kb *KnowledgeBase[T]) Name() string {
 	return kb.Store.Name()
 }
 
-func (kb *KnowledgeBase[T]) SearchSemanticsBatch(ctx context.Context, queryVectors [][]float32, opts *SearchOptions[T]) ([][]ai.Hit[T], error) {
-	config, err := kb.GetConfig(ctx)
-	if err == nil && config != nil && config.LastVectorized == 0 {
-		return nil, fmt.Errorf("Knowledge base is not vectorized")
+func isNilGenericValue[T any](v T) bool {
+	value := reflect.ValueOf(v)
+	if !value.IsValid() {
+		return true
 	}
-	return kb.Store.QueryBatch(ctx, queryVectors, opts)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
-// SearchKeywordsBatch executes textual BM25 text-matched sparse searches for multiple text payloads.
-func (kb *KnowledgeBase[T]) SearchKeywordsBatch(ctx context.Context, textQueries []string, opts *SearchOptions[T]) ([][]ai.Hit[T], error) {
-	config, err := kb.GetConfig(ctx)
-	if err == nil && config != nil && config.LastVectorized == 0 {
-		return nil, fmt.Errorf("Knowledge base is not vectorized")
+func uniqueCategories(cats []*Category) []*Category {
+	seen := make(map[sop.UUID]struct{}, len(cats))
+	unique := make([]*Category, 0, len(cats))
+	for _, cat := range cats {
+		if cat == nil || cat.ID.IsNil() {
+			continue
+		}
+		if _, ok := seen[cat.ID]; ok {
+			continue
+		}
+		seen[cat.ID] = struct{}{}
+		unique = append(unique, cat)
 	}
-	return kb.Store.QueryTextBatch(ctx, textQueries, opts)
+	return unique
+}
+
+// findCategoryByPath tries lexical lookup first, then semantic fallback via CategoryText embedding.
+func (kb *KnowledgeBase[T]) findCategoryByPath(ctx context.Context, path string) ([]*Category, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, nil
+	}
+
+	// Try lexical lookup
+	catsByPath, err := kb.Store.CategoriesByPath(ctx)
+	if err != nil {
+		return nil, err
+	}
+	found, err := catsByPath.Find(ctx, path, false)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		catID, err := catsByPath.GetCurrentValue(ctx)
+		if err != nil {
+			return nil, err
+		}
+		cats, err := kb.Store.Categories(ctx)
+		if err != nil {
+			return nil, err
+		}
+		foundCat, err := cats.Find(ctx, catID, false)
+		if err != nil {
+			return nil, err
+		}
+		if foundCat {
+			cat, err := cats.GetCurrentValue(ctx)
+			if err == nil && cat != nil && !cat.ID.IsNil() {
+				return []*Category{cat}, nil
+			}
+		}
+	}
+
+	// Semantic fallback via CategoryByDistance.
+	// If the KB has not been vectorized yet, skip the semantic path instead of failing the lookup.
+	if kb.Manager != nil && kb.Manager.embedder != nil {
+		partsVecs, err := embedCategoryPath(ctx, path, kb.Manager.embedder)
+		if err != nil {
+			return nil, err
+		}
+		cats, err := kb.Store.SemanticCategoryByPath(ctx, partsVecs)
+		if err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "domain reference vector is not set") {
+				return nil, nil
+			}
+			return nil, err
+		}
+		return cats, nil
+	}
+
+	return nil, nil
+}
+
+func NormalizeCategoryToken(text string) string {
+	text = strings.TrimSpace(text)
+	text = strings.ToLower(text)
+	text = strings.NewReplacer(
+		"c#", "csharp",
+		"c++", "cpp",
+		".net", "dotnet",
+		"&", " and ",
+		"＆", " and ",
+		"/", " ",
+		"／", " ",
+		"\\", " ",
+		">", " ",
+		"|", " ",
+		"-", " ",
+		"_", " ",
+		":", " ",
+		"：", " ",
+		";", " ",
+		"；", " ",
+		"(", " ",
+		")", " ",
+		"（", " ",
+		"）", " ",
+		"[", " ",
+		"]", " ",
+		"【", " ",
+		"】", " ",
+		"{", " ",
+		"}", " ",
+		"+", " ",
+		"=", " ",
+		"@", " ",
+		"#", " ",
+		"%", " ",
+		"$", " ",
+		"!", " ",
+		"?", " ",
+		".", " ",
+		",", " ",
+		"'", " ",
+		"\"", " ",
+		"，", " ",
+		"。", " ",
+		"！", " ",
+		"？", " ",
+	).Replace(text)
+	text = strings.Map(func(r rune) rune {
+		switch {
+		case r >= 'Ａ' && r <= 'Ｚ':
+			return r - 'Ａ' + 'A'
+		case r >= 'ａ' && r <= 'ｚ':
+			return r - 'ａ' + 'a'
+		case r >= '０' && r <= '９':
+			return r - '０' + '0'
+		case unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsSpace(r):
+			return r
+		default:
+			return ' '
+		}
+	}, text)
+	text = strings.Join(strings.Fields(text), " ")
+	return text
+}
+
+func normalize(text string) string {
+	return NormalizeCategoryToken(text)
+}
+
+func embedCategoryPath(ctx context.Context, catPath string, embedder ai.Embeddings) ([][]float32, error) {
+	return CategoryPathVectors(ctx, catPath, embedder)
+}
+
+func CategoryPathVectors(ctx context.Context, catPath string, embedder ai.Embeddings) ([][]float32, error) {
+	parts := strings.Split(catPath, "/")
+	if len(parts) == 0 || (len(parts) == 1 && strings.TrimSpace(parts[0]) == "") {
+		parts = strings.Split(catPath, "\\")
+	}
+	if len(parts) == 0 || (len(parts) == 1 && strings.TrimSpace(parts[0]) == "") {
+		return nil, nil
+	}
+
+	cleanParts := make([]string, 0, len(parts))
+	for _, part := range parts {
+		cleanPart := normalize(part)
+		if cleanPart != "" {
+			cleanParts = append(cleanParts, cleanPart)
+		}
+	}
+	if len(cleanParts) == 0 {
+		return nil, nil
+	}
+
+	vecs, err := embed.CategoryTexts(ctx, embedder, cleanParts)
+	if err != nil {
+		return nil, err
+	}
+	return vecs, nil
+}
+
+// findCategoriesByTextSearch extracts categories from text search results.
+func (kb *KnowledgeBase[T]) findCategoriesByTextSearch(ctx context.Context, text string, limit int) ([]*Category, error) {
+	if strings.TrimSpace(text) == "" {
+		return nil, nil
+	}
+
+	// Delegate to store to extract categories from text index
+	if s, ok := kb.Store.(interface {
+		GetCategoriesFromTextSearch(context.Context, string) ([]*Category, error)
+	}); ok {
+		return s.GetCategoriesFromTextSearch(ctx, text)
+	}
+
+	return nil, nil
+}
+
+func mergeSearchHits[T any](semanticHits, textHits []ai.Hit[T]) []ai.Hit[T] {
+	seen := make(map[string]struct{}, len(semanticHits)+len(textHits))
+	merged := make([]ai.Hit[T], 0, len(semanticHits)+len(textHits))
+
+	for _, hit := range append(append([]ai.Hit[T]{}, semanticHits...), textHits...) {
+		key := fmt.Sprintf("%v", hit.ID)
+		if hit.DocID != nil {
+			key = fmt.Sprintf("%v:%v", hit.DocID, hit.ID)
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		merged = append(merged, hit)
+	}
+	return merged
 }
 
 func searchOptionsSummary[T any](opts *SearchOptions[T]) []any {
@@ -56,40 +262,111 @@ func searchOptionsSummary[T any](opts *SearchOptions[T]) []any {
 	return []any{"limit", opts.Limit, "category_path", opts.CategoryPath, "has_filter", opts.Filter != nil}
 }
 
-// SearchSemantics executes a spatial search (vector matching against mathematical bounds).
-func (kb *KnowledgeBase[T]) SearchSemantics(ctx context.Context, queryVector []float32, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
-	log.Info("SearchSemantics invoked",
-		append([]any{"kb", kb.Name(), "query_vector_len", len(queryVector)}, searchOptionsSummary(opts)...)...)
-	config, err := kb.GetConfig(ctx)
-	if err == nil && config != nil && config.LastVectorized == 0 {
-		log.Warn("SearchSemantics blocked: KB not vectorized", "kb", kb.Name(), "last_vectorized", config.LastVectorized)
-		return nil, fmt.Errorf("Knowledge base is not vectorized")
+// Search provides one reusable entry point for single or batch retrieval.
+// Precedence:
+// 1. If CategoryPath specified: try CategoryByPath, fallback to CategoryByDistance
+// 2. If no category yet and Text present: use CategoryText embedding to get resolved in CategoryByDistance + TextSearch categories. (BOTH)
+// 3. If no category found: short circuit and return empty
+// 4. Use found categories to do vector search
+// 5. Return matching items
+func (kb *KnowledgeBase[T]) Search(ctx context.Context, requests []SearchRequest[T]) ([][]ai.Hit[T], error) {
+	if len(requests) == 0 {
+		return nil, nil
 	}
-	hits, err := kb.Store.Query(ctx, queryVector, opts)
-	if err != nil {
-		log.Error("SearchSemantics failed", "kb", kb.Name(), "error", err)
-	} else {
-		log.Info("SearchSemantics completed", "kb", kb.Name(), "hit_count", len(hits))
-	}
-	return hits, err
-}
 
-// SearchKeywords executes a traditional textual BM25 text-matched sparse search.
-func (kb *KnowledgeBase[T]) SearchKeywords(ctx context.Context, textQuery string, opts *SearchOptions[T]) ([]ai.Hit[T], error) {
-	log.Info("SearchKeywords invoked",
-		append([]any{"kb", kb.Name(), "query", textQuery}, searchOptionsSummary(opts)...)...)
-	config, err := kb.GetConfig(ctx)
-	if err == nil && config != nil && config.LastVectorized == 0 {
-		log.Warn("SearchKeywords blocked: KB not vectorized", "kb", kb.Name(), "last_vectorized", config.LastVectorized)
-		return nil, fmt.Errorf("Knowledge base is not vectorized")
+	results := make([][]ai.Hit[T], 0, len(requests))
+	for _, req := range requests {
+		var candidates []*Category
+
+		// Step 1: If CategoryPath specified, try CategoryByPath then CategoryByDistance
+		if strings.TrimSpace(req.CategoryPath) != "" {
+			cats, err := kb.findCategoryByPath(ctx, req.CategoryPath)
+			if err != nil {
+				return nil, err
+			}
+			if len(cats) > 0 {
+				candidates = append(candidates, cats...)
+			}
+		}
+
+		// Step 2: If no category yet and Text present, use CategoryText embedding to get resolved in CategoryByDistance + TextSearch categories. (BOTH)
+		if len(candidates) == 0 && strings.TrimSpace(req.Text) != "" {
+			// Use CategoryText embedding to get resolved in CategoryByDistance
+			if kb.Manager != nil && kb.Manager.embedder != nil {
+				vecs, err := embed.CategoryTexts(ctx, kb.Manager.embedder, []string{normalize(req.Text)})
+				if err == nil && len(vecs) > 0 {
+					cat, _, err := kb.Manager.FindClosestCategory(ctx, vecs[0])
+					if err == nil && cat != nil {
+						candidates = append(candidates, cat)
+					}
+				}
+			}
+
+			// ALSO get categories from TextSearch (BOTH paths, not fallback)
+			textCats, err := kb.findCategoriesByTextSearch(ctx, req.Text, req.Limit)
+			if err == nil && len(textCats) > 0 {
+				candidates = append(candidates, textCats...)
+			}
+		}
+
+		// Step 3: Short circuit if no category found
+		if len(candidates) == 0 {
+			continue
+		}
+
+		// Step 4: Use found categories to do vector search
+		queryVector := req.Vector
+		if len(queryVector) == 0 && strings.TrimSpace(req.Text) != "" && kb.Manager != nil && kb.Manager.embedder != nil {
+			vecs, err := embed.QueryTexts(ctx, kb.Manager.embedder, []string{normalize(req.Text)})
+			if err == nil && len(vecs) > 0 {
+				queryVector = vecs[0]
+			}
+		}
+
+		var hits []ai.Hit[T]
+
+		candidates = uniqueCategories(candidates)
+		for _, cat := range candidates {
+			catOpts := &SearchOptions[T]{
+				Limit:          req.Limit,
+				CategoryVector: cat.CenterVector,
+				Filter:         req.Filter,
+			}
+			catHits, err := kb.Store.QueryItems(ctx, queryVector, cat, catOpts)
+			if err != nil {
+				return nil, err
+			}
+
+			if len(catHits) == 0 {
+				continue
+			}
+
+			// Boost items from better-matching categories by incorporating category distance
+			if len(queryVector) > 0 && len(cat.CenterVector) > 0 {
+				categoryDist := Distance(queryVector, cat.CenterVector, true)
+				// Adjust scores: smaller category distance = better match = higher score
+				// Category distance penalty scaled to keep item scores dominant
+				for i := range catHits {
+					catHits[i].Score = catHits[i].Score - (categoryDist * 0.1)
+				}
+			}
+
+			hits = append(hits, catHits...)
+		}
+
+		// Step 5: Sort by adjusted scores (category distance + item score)
+		if len(hits) > 1 {
+			sort.Slice(hits, func(i, j int) bool {
+				return hits[i].Score > hits[j].Score
+			})
+		}
+
+		// Return matching items
+		if len(hits) > 0 {
+			results = append(results, hits)
+		}
 	}
-	hits, err := kb.Store.QueryText(ctx, textQuery, opts)
-	if err != nil {
-		log.Error("SearchKeywords failed", "kb", kb.Name(), "error", err)
-	} else {
-		log.Info("SearchKeywords completed", "kb", kb.Name(), "hit_count", len(hits))
-	}
-	return hits, err
+	return results, nil
 }
 
 // Thought represents the individual entity of data in a batch categorization execution.
@@ -175,16 +452,77 @@ func (kb *KnowledgeBase[T]) IngestThoughts(ctx context.Context, thoughts []Thoug
 	}
 
 	// 4. Ensure Categories and Store
-	catCache := make(map[string]sop.UUID)
-	for _, thought := range thoughts {
-		catID, exists := catCache[thought.CategoryPath]
+	catCache := make(map[string]*Category)
+
+	// Batch collect all summaries for classification embedding
+	type thoughtWithIndex struct {
+		thought Thought[T]
+		index   int
+	}
+	var needsClassificationVecs []thoughtWithIndex
+	var allClassificationTexts []string
+
+	for i, thought := range thoughts {
+		if len(thought.Summaries) > 0 {
+			needsClassificationVecs = append(needsClassificationVecs, thoughtWithIndex{thought, i})
+			allClassificationTexts = append(allClassificationTexts, thought.Summaries...)
+		}
+	}
+
+	// Batch embed all classification vectors at once
+	var allClassificationVecs [][]float32
+	if len(allClassificationTexts) > 0 && kb.Manager != nil && kb.Manager.embedder != nil {
+		vecs, err := embed.CategoryTexts(ctx, kb.Manager.embedder, allClassificationTexts)
+		if err == nil {
+			allClassificationVecs = vecs
+		}
+	}
+
+	// Map classification vectors back to thoughts
+	thoughtClassificationVecs := make(map[int][][]float32)
+	vecIdx := 0
+	for _, twi := range needsClassificationVecs {
+		summaryCount := len(twi.thought.Summaries)
+		if vecIdx+summaryCount <= len(allClassificationVecs) {
+			thoughtClassificationVecs[twi.index] = allClassificationVecs[vecIdx : vecIdx+summaryCount]
+			vecIdx += summaryCount
+		}
+	}
+
+	for i, thought := range thoughts {
+		cat, exists := catCache[thought.CategoryPath]
 		if !exists {
-			var err error
-			catID, err = kb.Manager.EnsureCategory(ctx, thought.CategoryPath)
+			catID, err := kb.Manager.EnsureCategory(ctx, thought.CategoryPath)
 			if err != nil {
 				return err
 			}
-			catCache[thought.CategoryPath] = catID
+			// Retrieve the full category object
+			cats, err := kb.Store.Categories(ctx)
+			if err != nil {
+				return err
+			}
+			found, err := cats.Find(ctx, catID, false)
+			if err != nil {
+				return err
+			}
+			if !found {
+				return fmt.Errorf("category not found after ensuring: %v", catID)
+			}
+			cat, err = cats.GetCurrentValue(ctx)
+			if err != nil {
+				return err
+			}
+
+			// Initialize CenterVector if empty - must use CategoryTexts (classification space)
+			if len(cat.CenterVector) == 0 && kb.Manager != nil && kb.Manager.embedder != nil {
+				catVecs, err := embed.CategoryTexts(ctx, kb.Manager.embedder, []string{normalize(cat.Name)})
+				if err == nil && len(catVecs) > 0 && len(catVecs[0]) > 0 {
+					cat.CenterVector = catVecs[0]
+					// Update the category in the store
+					cats.UpdateCurrentItem(ctx, cat.ID, cat)
+				}
+			}
+			catCache[thought.CategoryPath] = cat
 		}
 
 		item := Item[T]{
@@ -196,7 +534,10 @@ func (kb *KnowledgeBase[T]) IngestThoughts(ctx context.Context, thoughts []Thoug
 			VectorHash: thought.VectorHash,
 		}
 
-		err := kb.Store.UpsertByCategoryID(ctx, catID, nil, item, thought.Vectors)
+		// Use pre-batched classification vectors
+		classificationVecs := thoughtClassificationVecs[i]
+
+		err := kb.Store.UpsertByCategoryID(ctx, cat.ID, cat.CenterVector, item, thought.Vectors, classificationVecs)
 		if err != nil {
 			return err
 		}
@@ -230,6 +571,57 @@ func (kb *KnowledgeBase[T]) TriggerSleepCycle(ctx context.Context) error {
 	return nil
 }
 
+func encodeConfigValue[T any](config *KnowledgeBaseConfig) (T, error) {
+	var zero T
+	if config == nil {
+		return zero, nil
+	}
+
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		return zero, err
+	}
+
+	valueType := reflect.TypeOf(zero)
+	if valueType == nil {
+		return zero, nil
+	}
+	if valueType.Kind() == reflect.String {
+		value := reflect.ValueOf(string(configBytes)).Convert(valueType)
+		return value.Interface().(T), nil
+	}
+
+	var v T
+	if err := json.Unmarshal(configBytes, &v); err != nil {
+		return zero, err
+	}
+	return v, nil
+}
+
+func decodeConfigValue[T any](data T) (*KnowledgeBaseConfig, error) {
+	b, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+
+	trimmed := bytes.TrimSpace(b)
+	if len(trimmed) > 0 && trimmed[0] == '"' {
+		var stored string
+		if err := json.Unmarshal(trimmed, &stored); err == nil {
+			trimmed = bytes.TrimSpace([]byte(stored))
+		}
+	}
+
+	var cfg KnowledgeBaseConfig
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		return nil, nil
+	}
+	if err := json.Unmarshal(trimmed, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
 // GetConfig retrieves the metadata configuration for this KnowledgeBase.
 func (kb *KnowledgeBase[T]) GetConfig(ctx context.Context) (*KnowledgeBaseConfig, error) {
 	if kb.configCache != nil {
@@ -255,18 +647,13 @@ func (kb *KnowledgeBase[T]) GetConfig(ctx context.Context) (*KnowledgeBaseConfig
 		return nil, err
 	}
 
-	b, err := json.Marshal(item.Data)
+	cfg, err := decodeConfigValue(item.Data)
 	if err != nil {
 		return nil, err
 	}
 
-	var cfg KnowledgeBaseConfig
-	if err := json.Unmarshal(b, &cfg); err != nil {
-		return nil, err
-	}
-
-	kb.configCache = &cfg
-	return &cfg, nil
+	kb.configCache = cfg
+	return cfg, nil
 }
 
 // SetConfig saves the metadata configuration for this KnowledgeBase.
@@ -278,19 +665,15 @@ func (kb *KnowledgeBase[T]) SetConfig(ctx context.Context, config *KnowledgeBase
 
 	nilKey := ItemKey{CategoryID: sop.NilUUID, ItemID: sop.NilUUID}
 
-	var v T
-	configBytes, err := json.Marshal(config)
+	storedData, err := encodeConfigValue[T](config)
 	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(configBytes, &v); err != nil {
 		return err
 	}
 
 	configItem := Item[T]{
 		ID:         sop.NilUUID,
 		CategoryID: sop.NilUUID,
-		Data:       v,
+		Data:       storedData,
 	}
 
 	_, err = itemsBtree.Upsert(ctx, nilKey, configItem)
@@ -300,12 +683,49 @@ func (kb *KnowledgeBase[T]) SetConfig(ctx context.Context, config *KnowledgeBase
 	return err
 }
 
+// Initialize ensures the knowledge base has an embedder attached based on its persisted config.
+// It uses the configured embedder name and dimension when available, falling back to a simple embedder.
+func (kb *KnowledgeBase[T]) Initialize(ctx context.Context) error {
+	if kb == nil || kb.Manager == nil {
+		return nil
+	}
+	if kb.Manager.embedder != nil {
+		return nil
+	}
+
+	cfg, err := kb.GetConfig(ctx)
+	if err != nil {
+		return err
+	}
+	if cfg == nil {
+		return nil
+	}
+
+	dim := cfg.EmbedderDimension
+	name := strings.TrimSpace(cfg.Embedder)
+	if name == "" {
+		name = kb.Store.Name()
+	}
+	if name == "" {
+		name = "simple"
+	}
+
+	embedder, err := embed.NewFromName(name, dim)
+	if err != nil {
+		return err
+	}
+	if embedder != nil {
+		kb.Manager.embedder = embedder
+	}
+	return nil
+}
+
 // ComputeVectorHash computes a predictable string hash representing the text content.
 // We optionally include dimensions, but explicitly exclude embedderName so that compatible models (same dims) don't trigger re-vectorization unless content actually changes.
 func ComputeVectorHash(embedderDim int, texts ...string) string {
 	hasher := sha256.New()
 
-	dimStr := "dim:" + string(rune(embedderDim)) + "::"
+	dimStr := "dim:" + strconv.Itoa(embedderDim) + "::"
 	hasher.Write([]byte(dimStr))
 
 	for _, t := range texts {

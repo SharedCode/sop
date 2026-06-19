@@ -7,6 +7,7 @@ import (
 
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/sop/ai/embed"
 )
 
 // ============================================================================
@@ -97,9 +98,15 @@ func (kb *KnowledgeBase[T]) UpsertCategories(ctx context.Context, params []Upser
 
 		found, _ := catBtree.Find(ctx, p.Category.ID, false)
 		if found {
-			_, _ = catBtree.Update(ctx, p.Category.ID, p.Category)
+			_, err = catBtree.Update(ctx, p.Category.ID, p.Category)
+			if err != nil {
+				return err
+			}
 		} else {
-			_, _ = catBtree.Add(ctx, p.Category.ID, p.Category)
+			_, err = catBtree.Add(ctx, p.Category.ID, p.Category)
+			if err != nil {
+				return err
+			}
 		}
 
 		path := p.Category.Path
@@ -109,9 +116,15 @@ func (kb *KnowledgeBase[T]) UpsertCategories(ctx context.Context, params []Upser
 		if path != "" {
 			foundPath, _ := catsByPath.Find(ctx, path, false)
 			if foundPath {
-				_, _ = catsByPath.Update(ctx, path, p.Category.ID)
+				_, err = catsByPath.Update(ctx, path, p.Category.ID)
+				if err != nil {
+					return err
+				}
 			} else {
-				_, _ = catsByPath.Add(ctx, path, p.Category.ID)
+				_, err = catsByPath.Add(ctx, path, p.Category.ID)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -124,7 +137,10 @@ func (kb *KnowledgeBase[T]) DeleteCategories(ctx context.Context, categoryIDs []
 		return err
 	}
 	for _, id := range categoryIDs {
-		_, _ = tree.Remove(ctx, id)
+		_, err = tree.Remove(ctx, id)
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -149,7 +165,10 @@ func (kb *KnowledgeBase[T]) ListCategories(ctx context.Context, param ListCatego
 
 	var categories []Category
 	matchCount := 0
-	ok, _ := catsTree.First(ctx)
+	ok, err := catsTree.First(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
 
 	for ok {
 		cat, _ := catsTree.GetCurrentValue(ctx)
@@ -306,19 +325,233 @@ func (kb *KnowledgeBase[T]) ListItems(ctx context.Context, param ListItemsParam)
 	return items, totalCount, nil
 }
 
-func convertToVectors(ctx context.Context, catPath string, embedder ai.Embeddings) ([][]float32, error) {
-	parts := strings.Split(catPath, "/")
-	if len(parts) == 0 {
-		parts = strings.Split(catPath, "\\")
+func chooseCategoryAnchor(name, description, systemPrompt string) string {
+	if text := strings.TrimSpace(name); text != "" {
+		return normalize(text)
 	}
-	if len(parts) == 0 {
-		return nil, nil
+	if text := strings.TrimSpace(description); text != "" {
+		return normalize(text)
 	}
-	vecs, err := embedder.EmbedTexts(ctx, parts)
+	return normalize(strings.TrimSpace(systemPrompt))
+}
+
+func (kb *KnowledgeBase[T]) RefreshSemanticVectors(ctx context.Context) error {
+	return refreshSemanticVectors(ctx, kb)
+}
+
+func refreshSemanticVectors[T any](ctx context.Context, kb *KnowledgeBase[T]) error {
+	if kb == nil || kb.Manager == nil || kb.Manager.embedder == nil {
+		return nil
+	}
+
+	targetDim := kb.Manager.embedder.Dim()
+	if targetDim <= 0 {
+		return nil
+	}
+
+	cats, err := kb.Store.Categories(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return vecs, nil
+	catsByDist, err := kb.Store.CategoriesByDistance(ctx)
+	if err != nil {
+		return err
+	}
+
+	cfg, err := kb.GetConfig(ctx)
+	if err != nil {
+		return err
+	}
+	if cfg == nil {
+		cfg = &KnowledgeBaseConfig{}
+	}
+
+	needRefresh := catsByDist.Count() == 0
+	if !needRefresh && len(kb.Store.DomainReference()) != targetDim {
+		needRefresh = true
+	}
+	if !needRefresh {
+		ok, err := cats.First(ctx)
+		if err != nil {
+			return err
+		}
+		for ok {
+			cat, err := cats.GetCurrentValue(ctx)
+			if err != nil {
+				return err
+			}
+			if cat == nil {
+				break
+			}
+			text := chooseCategoryAnchor(cat.Name, cat.Description, cfg.SystemPrompt)
+			if len(cat.CenterVector) != targetDim || cat.VectorHash != ComputeVectorHash(targetDim, text) {
+				needRefresh = true
+				break
+			}
+			ok, err = cats.Next(ctx)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if !needRefresh {
+		return nil
+	}
+
+	if len(kb.Store.DomainReference()) != targetDim {
+		anchor := chooseCategoryAnchor(kb.Store.Name(), cfg.Description, cfg.SystemPrompt)
+		if anchor == "" {
+			anchor = kb.Store.Name()
+		}
+		if anchor != "" {
+			vecs, err := embed.CategoryTexts(ctx, kb.Manager.embedder, []string{anchor})
+			if err != nil {
+				return err
+			}
+			if len(vecs) > 0 && len(vecs[0]) == targetDim {
+				cfg.DomainReference = vecs[0]
+				kb.Store.SetDomainReference(vecs[0])
+			}
+		}
+	}
+
+	if cfg.DomainReference != nil && len(cfg.DomainReference) == targetDim {
+		if err := kb.SetConfig(ctx, cfg); err != nil {
+			return err
+		}
+	}
+
+	oldVectors := map[sop.UUID][]float32{}
+	newVectors := map[sop.UUID][]float32{}
+	ok, err := cats.First(ctx)
+	if err != nil {
+		return err
+	}
+	for ok {
+		cat, err := cats.GetCurrentValue(ctx)
+		if err != nil {
+			return err
+		}
+		if cat == nil {
+			break
+		}
+		text := chooseCategoryAnchor(cat.Name, cat.Description, cfg.SystemPrompt)
+		oldVectors[cat.ID] = append([]float32(nil), cat.CenterVector...)
+		if text == "" {
+			ok, err = cats.Next(ctx)
+			if err != nil {
+				return err
+			}
+			continue
+		}
+		if len(cat.CenterVector) != targetDim || cat.VectorHash != ComputeVectorHash(targetDim, text) {
+			vecs, err := embed.CategoryTexts(ctx, kb.Manager.embedder, []string{text})
+			if err != nil {
+				return err
+			}
+			if len(vecs) > 0 && len(vecs[0]) == targetDim {
+				cat.CenterVector = vecs[0]
+				cat.VectorHash = ComputeVectorHash(targetDim, text)
+				if _, err := cats.UpdateCurrentItem(ctx, cat.ID, cat); err != nil {
+					return err
+				}
+			}
+		}
+		newVectors[cat.ID] = cat.CenterVector
+		ok, err = cats.Next(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	ok, err = catsByDist.First(ctx)
+	for ok && err == nil {
+		if _, err := catsByDist.RemoveCurrentItem(ctx); err != nil {
+			return err
+		}
+		ok, err = catsByDist.Next(ctx)
+	}
+	if err != nil {
+		return err
+	}
+
+	ok, err = cats.First(ctx)
+	if err != nil {
+		return err
+	}
+	for ok {
+		cat, err := cats.GetCurrentValue(ctx)
+		if err != nil {
+			return err
+		}
+		if cat == nil {
+			break
+		}
+		refVec := kb.Store.DomainReference()
+		if len(cat.ParentIDs) > 0 {
+			for _, parent := range cat.ParentIDs {
+				if len(newVectors[parent.ParentID]) > 0 {
+					refVec = newVectors[parent.ParentID]
+					break
+				}
+				if len(oldVectors[parent.ParentID]) > 0 {
+					refVec = oldVectors[parent.ParentID]
+					break
+				}
+			}
+		}
+		if len(refVec) == 0 {
+			refVec = kb.Store.DomainReference()
+		}
+		dist := Distance(refVec, cat.CenterVector, true)
+		if len(cat.ParentIDs) > 0 {
+			for _, parent := range cat.ParentIDs {
+				if _, err := catsByDist.Add(ctx, DistanceKey{ParentID: parent.ParentID, Distance: dist, ID: cat.ID}, 0); err != nil {
+					return err
+				}
+			}
+		} else {
+			if _, err := catsByDist.Add(ctx, DistanceKey{ParentID: sop.NilUUID, Distance: dist, ID: cat.ID}, 0); err != nil {
+				return err
+			}
+		}
+		ok, err = cats.Next(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func refreshSemanticVectorsInWriteTx[T any](ctx context.Context, kb *KnowledgeBase[T]) error {
+	if kb == nil || kb.Manager == nil || kb.Manager.embedder == nil {
+		return nil
+	}
+
+	store, ok := kb.Store.(*store[T])
+	if !ok || store == nil || store.db == nil {
+		return nil
+	}
+
+	writeTx, err := store.db.BeginTransaction(ctx, sop.ForWriting)
+	if err != nil {
+		return err
+	}
+	defer writeTx.Rollback(ctx)
+
+	refreshedKB, err := store.db.OpenKnowledgeBase(ctx, kb.Name(), writeTx, kb.Manager.llm, kb.Manager.embedder, false, true)
+	if err != nil {
+		return err
+	}
+	if err := refreshSemanticVectors(ctx, refreshedKB); err != nil {
+		return err
+	}
+	return writeTx.Commit(ctx)
+}
+
+func convertToVectors(ctx context.Context, catPath string, embedder ai.Embeddings) ([][]float32, error) {
+	return CategoryPathVectors(ctx, catPath, embedder)
 }
 
 // SearchByPath performs hierarchical category path search with dual-mode operation:
@@ -372,14 +605,16 @@ func (kb *KnowledgeBase[T]) SearchByPath(ctx context.Context, params []PathSearc
 			// Try search by Semantic Category Path.
 			vecs, err := convertToVectors(ctx, param.CategoryPath, kb.Manager.embedder)
 			if err != nil {
-				return nil, err
+				log.Warn("SearchByPath semantic fallback skipped", "category_path", param.CategoryPath, "error", err)
+				continue
 			}
 			cats, err := kb.Store.SemanticCategoryByPath(ctx, vecs)
 			if err != nil {
-				return nil, err
+				log.Warn("SearchByPath semantic fallback failed", "category_path", param.CategoryPath, "error", err)
+				continue
 			}
 			if len(cats) > 0 {
-				log.Info("SearchByPath semantic fallback matched", "category_path", param.CategoryPath, "cat_id", cats[0].ID.String())
+				log.Info("SearchByPath semantic fallback matched", "category_path", param.CategoryPath, "selected_cat_id", cats[0].ID.String(), "selected_cat_path", cats[0].Path, "candidate_count", len(cats), "candidate_ids", categoryIDs(cats), "candidate_paths", categoryPaths(cats))
 				// Just pick one for MVP.
 				catID = cats[0].ID
 			} else {
@@ -401,6 +636,8 @@ func (kb *KnowledgeBase[T]) SearchByPath(ctx context.Context, params []PathSearc
 			}
 		}
 
+		log.Info("SearchByPath leaf item scan", "category_path", param.CategoryPath, "search_text", param.SearchText, "selected_cat_id", catID, "item_scan_started", ok)
+		matchCount := 0
 		for ok {
 			itemReq := itemsTree.GetCurrentKey()
 			if itemReq.Key.ItemID.IsNil() {
@@ -411,12 +648,18 @@ func (kb *KnowledgeBase[T]) SearchByPath(ctx context.Context, params []PathSearc
 			}
 
 			item, err := itemsTree.GetCurrentValue(ctx)
-			if err == nil && len(item.Summaries) > 0 && strings.HasPrefix(item.Summaries[0], param.SearchText) {
+			matched := err == nil && len(item.Summaries) > 0 && strings.HasPrefix(item.Summaries[0], param.SearchText)
+			if matched {
+				matchCount++
+				log.Info("SearchByPath leaf item matched", "category_path", param.CategoryPath, "selected_cat_id", catID, "item_id", itemReq.Key.ItemID, "summary_prefix", item.Summaries[0], "search_text", param.SearchText)
 				results = append(results, item)
+			} else {
+				log.Debug("SearchByPath leaf item skipped", "category_path", param.CategoryPath, "selected_cat_id", catID, "item_id", itemReq.Key.ItemID, "summary_count", len(item.Summaries), "search_text", param.SearchText)
 			}
 
 			ok, _ = itemsTree.Next(ctx)
 		}
+		log.Info("SearchByPath leaf item summary", "category_path", param.CategoryPath, "selected_cat_id", catID, "match_count", matchCount, "result_count", len(results))
 	}
 
 	if results == nil {

@@ -250,6 +250,197 @@ The Spaces API is **high-level** (AI-oriented), while the Database API is **low-
 
 Instead, the AI should use its Space APIs such as `upsert_space_items` natively to manage the categories and items, ensuring correct memory ingestion sequences.
 
+### Advanced KB Routing: Prefix-Based Navigation
+
+SOP supports powerful **prefix-based routing** to directly navigate and query knowledge bases using a specialized syntax. This provides deterministic, fast access to hierarchical knowledge without relying on conversational interpretation.
+
+#### Basic Routing Syntax
+
+```
+omni:<knowledge_base>                         # Display root categories
+omni:<knowledge_base>:<category_path>        # Navigate to specific category
+```
+
+**Root Category Exploration:**
+```
+omni:sop                    # Show all root categories in SOP KB
+omni:medical                # Show all root categories in Medical KB
+omni:myapp                  # Show all root categories in custom KB
+```
+
+**Response example for `omni:sop`:**
+```
+Available Categories:
+
+• Language (150 items, 5 subcategories)
+  Programming language guides and tutorials
+  Navigate: omni:sop:language
+
+• Architecture (89 items, 3 subcategories)
+  System design and architecture patterns
+  Navigate: omni:sop:architecture
+
+• Operations (203 items, 7 subcategories)
+  DevOps, deployment, and operational guides
+  Navigate: omni:sop:operations
+```
+
+**Pagination:** Displays show 20 categories per page. To navigate (both `:` and `/` separators work):
+```bash
+omni:sop               # Page 1 (default)
+omni:sop:page:2        # Page 2  
+omni:sop/page/3        # Page 3 (slash separator)
+omni:sop:language:page:2   # Page 2 of subcategories
+omni:sop/language/page/2   # Same, using slash separator
+```
+
+**Multi-page response example:**
+```
+Available Categories: (Page 2 of 5, showing 21-40 of 87)
+
+• Category 21 (45 items, 2 subcategories)
+  ...
+• Category 40 (12 items)
+  ...
+
+Previous: omni:sop:page:1 | Next: omni:sop:page:3
+💡 Tip: Use `omni:sop:llm list categories matching <name>` to filter results.
+```
+
+**Category Path Navigation:**
+```
+omni:sop:language bindings
+omni:sop:operations:performance
+omni:medical:diagnosis:cardiology:procedures
+```
+
+**How it works:**
+- `omni:` signals specialized routing (Gate 1)
+- `<knowledge_base>` specifies which KB to query (e.g., `sop`, `medical`, `myapp`)
+- `<category_path>` uses colon-separated hierarchy at any depth
+
+The system performs intelligent resolution:
+1. **Root navigation** when only KB name is provided (displays all root categories)
+2. **Direct lookup** via category path index (O(1) when exact match exists)
+3. **Semantic fallback** using category embeddings when no exact match
+4. **Subcategory navigation** when the category has no direct items
+
+#### The `:llm <instruction>` Meta-Token
+
+Add `:llm <instruction>` to have the AI process the retrieved results:
+
+```
+omni:sop:operations:performance:llm summarize
+omni:sop:language bindings:c#:llm explain with code examples
+omni:myapp:tutorials:beginner:llm list top 5 by popularity
+```
+
+**What happens:**
+- The `:llm` portion is automatically stripped before KB search
+- KB retrieval proceeds normally
+- Results are passed to the AI along with your instruction
+- The AI filters, summarizes, or analyzes the matches
+
+**Real-world examples:**
+```
+omni:sop:operations:performance:caching:llm summarize the top 3
+  → Searches caching category, AI summarizes top 3 results
+
+omni:medical:treatments:cardiology:llm compare effectiveness
+  → Retrieves cardiology treatments, AI compares them
+
+omni:sop:architecture:patterns:llm explain pros and cons
+  → Gets architecture patterns, AI analyzes trade-offs
+```
+
+#### Automatic Routing Decisions
+
+The system makes intelligent decisions based on result count:
+
+| Scenario | Behavior |
+|----------|----------|
+| **1-5 matches** | Direct display (no LLM processing) |
+| **`:llm` present** | AI processes according to instruction |
+| **6+ matches** | AI automatically summarizes |
+| **No items found** | Shows subcategory navigation |
+
+#### Subcategory Navigation
+
+When a category has no direct items, you'll see subcategory hints:
+
+```
+Query: omni:sop:language bindings
+
+Response:
+📁 Category "language bindings" has no direct items.
+
+Available subcategories (3):
+  1. c# (12 items) - C# language binding documentation
+  2. java (8 items) - Java integration guides
+  3. python (15 items) - Python SDK reference
+
+💡 Navigate deeper: omni:sop:language bindings:c#
+```
+
+This lets you browse the knowledge hierarchy like a directory tree.
+
+#### Flexible Hierarchy Support
+
+Any depth is supported:
+
+```
+✅ Single level:     omni:sop:operations
+✅ Two levels:       omni:sop:operations:performance  
+✅ Three levels:     omni:sop:operations:performance:caching
+✅ Deep hierarchy:   omni:myapp:a:b:c:d:e:f:g
+```
+
+#### Combining with LLM Instructions
+
+All patterns work together:
+
+```
+# Category navigation
+omni:sop:language bindings:c#
+
+# With LLM summarization
+omni:sop:language bindings:c#:llm summarize
+
+# Deep path with instruction
+omni:medical:diagnosis:cardiology:procedures:stent:llm explain risks
+
+# Complex instruction
+omni:sop:architecture:microservices:llm compare with monolith architecture
+```
+
+#### Future: Quoted Text Search (Roadmap)
+
+Coming soon - combined category + text search:
+
+```
+omni:sop:language bindings "java tutorial"
+  → Search for "java tutorial" within language bindings category
+
+omni:sop:operations:performance "caching strategies":llm top 3
+  → Search for text, AI summarizes top 3 matches
+```
+
+**Syntax (proposed):**
+- Category path before quotes: `omni:sop:operations:performance`
+- Search text in quotes: `"caching strategies"`
+- Optional LLM instruction: `:llm summarize top 3`
+
+#### Quick Reference
+
+| Pattern | Example | Use Case |
+|---------|---------|----------|
+| **Direct routing** | `omni:sop:operations` | Browse a category |
+| **Deep path** | `omni:sop:ops:perf:cache` | Navigate deep hierarchy |
+| **LLM filter** | `omni:sop:guides:llm top 5` | AI selects best matches |
+| **LLM summarize** | `omni:sop:api:llm summarize` | AI condenses info |
+| **LLM analyze** | `omni:sop:patterns:llm compare` | AI provides analysis |
+| **Text search** | `omni:sop:docs "tutorial"` | *(Roadmap)* Search within category |
+
 ## 4. Memory & Learning: The Self-Correcting Copilot
 
 The AI is designed to evolve. It possesses two distinct types of memory, allowing it to adapt to your specific environment and business logic over time.
