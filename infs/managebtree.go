@@ -78,11 +78,15 @@ func OpenBtreeWithReplication[TK btree.Ordered, TV any](ctx context.Context, nam
 
 // RemoveBtree removes the B-tree with the given name from backend storage.
 // This is destructive: it drops registry and node-blob data and cannot be rolled back.
-func RemoveBtree(ctx context.Context, name string, storesFolders []string, erasureConfig map[string]sop.ErasureCodingConfig, cacheType sop.L2CacheType) error {
+func RemoveBtree(ctx context.Context, name string, storesFolders []string, erasureConfig map[string]sop.ErasureCodingConfig, cacheType sop.L2CacheType, redisConfig ...*sop.RedisCacheConfig) error {
 	if len(storesFolders) == 0 {
 		return fmt.Errorf("needs at least a folder to delete a Btree")
 	}
-	cache := sop.GetL2Cache(sop.TransactionOptions{CacheType: cacheType})
+	var rc *sop.RedisCacheConfig
+	if len(redisConfig) > 0 {
+		rc = redisConfig[0]
+	}
+	cache := sop.GetL2Cache(sop.TransactionOptions{CacheType: cacheType, RedisConfig: rc})
 	if cache == nil {
 		return fmt.Errorf("unable to get L2 cache for type %v", cacheType)
 	}

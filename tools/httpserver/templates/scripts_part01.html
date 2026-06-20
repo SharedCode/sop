@@ -1109,6 +1109,14 @@
         return false;
     }
 
+    function isSpaceDeleteProtected(spaceName) {
+        const cleanName = typeof spaceName === 'string'
+            ? spaceName.replace(/\/data$/, '').replace(/_/g, ' ').replace(/-/g, ' ').toLowerCase().trim()
+            : '';
+        const normalized = cleanName.split(/\s+/).filter(Boolean).join(' ');
+        return normalized === 'sop' || normalized === 'sop kb' || normalized === 'sop knowledge base';
+    }
+
     window.toggleDomainItemDesc = function(link) {
         const parent = link.closest('.item-content-wrapper') || link.parentElement.parentElement;
         const shortSpan = parent.querySelector('.desc-short');
@@ -1789,7 +1797,11 @@
         }
         const exKb = document.getElementById('btn-export-kb'); if(exKb) exKb.style.display = 'inline-block';
         const imKb = document.getElementById('btn-import-kb'); if(imKb) imKb.style.display = isReadOnlyKBTop ? 'none' : 'inline-block';
-        const delKb = document.getElementById('btn-delete-kb'); if(delKb) delKb.style.display = isReadOnlyKBTop ? 'none' : 'inline-block';
+        const delKb = document.getElementById('btn-delete-kb');
+        if(delKb) {
+            const isDeleteBlocked = isSpaceDeleteProtected(name) || (isReadOnlyKBTop && !isPinnedInternalSpace(name));
+            delKb.style.display = isDeleteBlocked ? 'none' : 'inline-block';
+        }
 
         let categories = [];
         let totalCatCount = 0;

@@ -347,7 +347,7 @@ func RemoveBtree(ctx context.Context, config sop.DatabaseOptions, name string) e
 	if config.IsCassandraHybrid() {
 		return incfs.RemoveBtree(ctx, name, config.CacheType)
 	}
-	return infs.RemoveBtree(ctx, name, config.StoresFolders, config.ErasureConfig, config.CacheType)
+	return infs.RemoveBtree(ctx, name, config.StoresFolders, config.ErasureConfig, config.CacheType, config.RedisConfig)
 }
 
 // RemoveBtrees removes all B-Trees (stores) in the database.
