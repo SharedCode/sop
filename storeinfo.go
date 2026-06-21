@@ -3,7 +3,6 @@ package sop
 import (
 	"fmt"
 	"os"
-	"reflect"
 	"strings"
 	"time"
 )
@@ -347,8 +346,7 @@ func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 		s.LeafLoadBalancing == b.LeafLoadBalancing &&
 		//s.IsPrimitiveKey == b.IsPrimitiveKey &&
 		s.MapKeyIndexSpecification == b.MapKeyIndexSpecification &&
-		s.CELexpression == b.CELexpression &&
-		reflect.DeepEqual(s.CustomData, b.CustomData)
+		s.CELexpression == b.CELexpression
 }
 
 // FormatRegistryTable formats a store name into a registry table name by adding an _r suffix.

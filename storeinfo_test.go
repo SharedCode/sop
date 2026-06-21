@@ -44,3 +44,21 @@ func TestStoreInfo_CustomDataHelpers(t *testing.T) {
 		t.Fatalf("unexpected custom data map: %v", data)
 	}
 }
+
+func TestStoreInfo_IsCompatible_CustomData(t *testing.T) {
+	a := StoreInfo{}
+	b := StoreInfo{}
+	if !a.IsCompatible(b) {
+		t.Fatal("expected empty stores to be compatible")
+	}
+
+	a.SetCustomDataMap(map[string]any{"mode": "fast"})
+	if !a.IsCompatible(b) {
+		t.Fatal("expected custom data to be ignored for compatibility")
+	}
+
+	b.SetCustomDataMap(map[string]any{"mode": "slow"})
+	if !a.IsCompatible(b) {
+		t.Fatal("expected custom data differences to be ignored for compatibility")
+	}
+}
