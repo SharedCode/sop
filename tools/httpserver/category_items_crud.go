@@ -151,7 +151,7 @@ func handleAddSpaceCategory(w http.ResponseWriter, r *http.Request) {
 							parentPath := strings.TrimSpace(pCat.Path)
 							childName := strings.TrimSpace(req.Name)
 							if parentPath != "" && childName != "" {
-								pathVal = parentPath + " / " + childName
+								pathVal = parentPath + "/" + childName
 							} else if childName != "" {
 								pathVal = childName
 							}

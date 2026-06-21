@@ -120,7 +120,7 @@ func (m *MemoryManager[T]) EnsureCategory(ctx context.Context, categoryPath stri
 		ok, err = categoriesTree.Next(ctx)
 	}
 
-	parts := strings.Split(categoryPath, " / ")
+	parts := strings.Split(categoryPath, "/")
 	leafName := parts[len(parts)-1]
 
 	CID := sop.NewUUID()
