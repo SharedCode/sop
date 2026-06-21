@@ -40,6 +40,8 @@ type StoreOptions struct {
 	IsPrimitiveKey bool
 	// Relations describes foreign key-like relationships.
 	Relations []Relation
+	// CustomData stores optional arbitrary configuration for the store.
+	CustomData map[string]any
 }
 
 // ValueDataSize categorizes the expected size of Value data to guide configuration helpers.

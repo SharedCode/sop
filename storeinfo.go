@@ -3,6 +3,7 @@ package sop
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 )
@@ -68,6 +69,10 @@ type StoreInfo struct {
 	// Example: ["first_name", "age", "email"] for the value object
 	ValueFields []string `json:"value_fields,omitempty"`
 
+	// CustomData stores optional arbitrary configuration for the store.
+	// It is intentionally flexible for integration-specific extensions.
+	CustomData map[string]any `json:"custom_data,omitempty"`
+
 	// For internal use only. Code can use this as hint.
 	NeedsMetaDataSave bool `json:"-"`
 
@@ -84,6 +89,67 @@ func (si *StoreInfo) ValueDataSize() ValueDataSize {
 		dataSize = SmallData
 	}
 	return dataSize
+}
+
+// GetCustomData returns the value for the given key from CustomData.
+func (si *StoreInfo) GetCustomData(key string) (any, bool) {
+	if si == nil || si.CustomData == nil {
+		return nil, false
+	}
+	val, ok := si.CustomData[key]
+	return val, ok
+}
+
+// SetCustomData stores a value under the given key in CustomData.
+func (si *StoreInfo) SetCustomData(key string, value any) {
+	if si == nil {
+		return
+	}
+	if si.CustomData == nil {
+		si.CustomData = make(map[string]any)
+	}
+	si.CustomData[key] = value
+}
+
+// DeleteCustomData removes a value for the given key from CustomData.
+func (si *StoreInfo) DeleteCustomData(key string) bool {
+	if si == nil || si.CustomData == nil {
+		return false
+	}
+	_, ok := si.CustomData[key]
+	if !ok {
+		return false
+	}
+	delete(si.CustomData, key)
+	return true
+}
+
+// GetCustomDataMap returns a copy of the CustomData map.
+func (si *StoreInfo) GetCustomDataMap() map[string]any {
+	if si == nil || si.CustomData == nil {
+		return nil
+	}
+	out := make(map[string]any, len(si.CustomData))
+	for k, v := range si.CustomData {
+		out[k] = v
+	}
+	return out
+}
+
+// SetCustomDataMap replaces the full CustomData map with a copy.
+func (si *StoreInfo) SetCustomDataMap(data map[string]any) {
+	if si == nil {
+		return
+	}
+	if len(data) == 0 {
+		si.CustomData = nil
+		return
+	}
+	out := make(map[string]any, len(data))
+	for k, v := range data {
+		out[k] = v
+	}
+	si.CustomData = out
 }
 
 // Relation describes a foreign key relationship to another store.
@@ -260,6 +326,7 @@ func NewStoreInfo(si StoreOptions) *StoreInfo {
 		CELexpression:                si.CELexpression,
 		IsPrimitiveKey:               si.IsPrimitiveKey,
 		Relations:                    si.Relations,
+		CustomData:                   si.CustomData,
 	}
 }
 
@@ -280,7 +347,8 @@ func (s StoreInfo) IsCompatible(b StoreInfo) bool {
 		s.LeafLoadBalancing == b.LeafLoadBalancing &&
 		//s.IsPrimitiveKey == b.IsPrimitiveKey &&
 		s.MapKeyIndexSpecification == b.MapKeyIndexSpecification &&
-		s.CELexpression == b.CELexpression
+		s.CELexpression == b.CELexpression &&
+		reflect.DeepEqual(s.CustomData, b.CustomData)
 }
 
 // FormatRegistryTable formats a store name into a registry table name by adding an _r suffix.
