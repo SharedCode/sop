@@ -233,6 +233,56 @@ func TestAIDatabase_OpenKnowledgeBase_RespectsPersistedTextSearchSetting(t *test
 	}
 }
 
+func TestAIDatabase_NewKnowledgeBase_ProvidesSimpleCRUDFlow(t *testing.T) {
+	storagePath := t.TempDir()
+
+	ctx := context.Background()
+	kb, err := database.NewKnowledgeBase(ctx, "simple_kb", sop.DatabaseOptions{StoresFolders: []string{storagePath}}, nil, nil, false)
+	if err != nil {
+		t.Fatalf("NewKnowledgeBase failed: %v", err)
+	}
+
+	catID := sop.NewUUID()
+	if err := kb.UpsertCategories(ctx, []memory.UpsertCategoryParam{{
+		Category: &memory.Category{ID: catID, Name: "Root", Path: "Root"},
+	}}); err != nil {
+		t.Fatalf("UpsertCategories failed: %v", err)
+	}
+
+	if err := kb.UpsertItems(ctx, []memory.UpsertItemParam[map[string]any]{{
+		CategoryPath: "Root",
+		Item: &memory.Item[map[string]any]{
+			ID:   sop.NewUUID(),
+			Data: map[string]any{"text": "hello world"},
+		},
+	}}); err != nil {
+		t.Fatalf("UpsertItems failed: %v", err)
+	}
+
+	cats, total, err := kb.ListCategories(ctx, memory.ListCategoriesParam{Limit: 10, Offset: 0})
+	if err != nil {
+		t.Fatalf("ListCategories failed: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected 1 category, got %d", total)
+	}
+	if len(cats) != 1 || cats[0].Name != "Root" {
+		t.Fatalf("unexpected categories: %+v", cats)
+	}
+
+	results, err := kb.Search(ctx, []memory.SearchRequest[map[string]any]{{CategoryPath: "Root", Text: "hello", Limit: 5}})
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected no semantic hits without query vectors, got %d batches", len(results))
+	}
+
+	if err := kb.Close(ctx); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+}
+
 func TestAIDatabase_Standalone_ModelStore(t *testing.T) {
 	storagePath := t.TempDir()
 

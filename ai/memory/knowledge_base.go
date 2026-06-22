@@ -23,6 +23,9 @@ import (
 type KnowledgeBase[T any] struct {
 	Store   MemoryStore[T]
 	Manager *MemoryManager[T]
+	// transaction is used by the convenience constructor to keep the underlying
+	// filesystem-backed stores alive for the lifetime of the KnowledgeBase.
+	transaction sop.Transaction
 	// MaxMathCategoryDistance specifies the max Euclidean distance to cluster centroids
 	// to avoid calling the LLM for category categorization. Set to 0.0 or less to disable
 	// and always rely on "pristine" LLM categorization.
@@ -36,17 +39,26 @@ func (kb *KnowledgeBase[T]) Name() string {
 	return kb.Store.Name()
 }
 
-func isNilGenericValue[T any](v T) bool {
-	value := reflect.ValueOf(v)
-	if !value.IsValid() {
-		return true
+// SetTransaction attaches a transaction that should be committed or rolled back
+// when the KnowledgeBase is closed. This is primarily used by the convenience
+// constructor for the filesystem-backed default path.
+func (kb *KnowledgeBase[T]) SetTransaction(tx sop.Transaction) {
+	if kb != nil {
+		kb.transaction = tx
 	}
-	switch value.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
-		return value.IsNil()
-	default:
-		return false
+}
+
+// Close commits any transaction owned by this KnowledgeBase.
+func (kb *KnowledgeBase[T]) Close(ctx context.Context) error {
+	if kb == nil || kb.transaction == nil {
+		return nil
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	err := kb.transaction.Commit(ctx)
+	kb.transaction = nil
+	return err
 }
 
 func uniqueCategories(cats []*Category) []*Category {

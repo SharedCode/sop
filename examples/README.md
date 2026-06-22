@@ -39,6 +39,11 @@ Demonstrates SOP's ability to handle concurrent transactions from multiple threa
 Demonstrates connecting to multiple Redis databases (e.g., DB 0 and DB 1) in the same application using the standard URL format.
 - **Key Feature**: `RedisCacheConfig.URL` (`redis://host:port/db`)
 
+### 5. KnowledgeBase CLI (`knowledgebase_cli`)
+Demonstrates a standalone in-memory KnowledgeBase workflow with nested categories, item upserts, category listing, and search.
+- **Key Feature**: `memory.KnowledgeBase` + `memory.NewStore`
+- **Why**: Gives you a minimal app you can run directly to see the high-level API in action.
+
 ---
 
 ## ▶️ Running the Examples
