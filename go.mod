@@ -7,7 +7,6 @@ require (
 	github.com/google/cel-go v0.25.0
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/reedsolomon v1.12.4
-	github.com/sharedcode/sop/infs v0.0.0-00010101000000-000000000000
 )
 
 require (
@@ -36,11 +35,3 @@ require (
 	github.com/sethvargo/go-retry v0.3.0
 	golang.org/x/sync v0.19.0
 )
-
-replace github.com/sharedcode/sop/adapters/cassandra => ./adapters/cassandra
-
-replace github.com/sharedcode/sop/adapters/redis => ./adapters/redis
-
-replace github.com/sharedcode/sop/jsondb => ./jsondb
-
-replace github.com/sharedcode/sop/infs => ./infs

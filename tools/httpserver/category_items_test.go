@@ -254,7 +254,7 @@ func TestHandleAddSpaceCategory_NormalizesChildPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetCurrentValue failed: %v", err)
 	}
-	if got, want := cat.Path, "Root A / Child A1"; got != want {
+	if got, want := cat.Path, "Root A/Child A1"; got != want {
 		t.Fatalf("child category path = %q, want %q", got, want)
 	}
 }

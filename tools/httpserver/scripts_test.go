@@ -84,7 +84,7 @@ func TestHandleExecuteScript(t *testing.T) {
 	// 1. Setup Agent Service
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.NoCache,
 	}
@@ -175,7 +175,7 @@ func TestSourceLinkPopupTemplateUsesEscapedAttributes(t *testing.T) {
 func TestHandleExecuteScript_DefaultsVerboseTrue(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbOpts := sop.DatabaseOptions{
-		Type:          sop.Clustered,
+		Type:          sop.Standalone,
 		StoresFolders: []string{tmpDir},
 		CacheType:     sop.NoCache,
 	}

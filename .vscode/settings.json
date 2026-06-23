@@ -21,6 +21,7 @@
         ]
     }
 ],
+"terminal.integrated.inheritEnv": false,
 "editor.lineNumbers": "on",
 "python.testing.unittestArgs": [
     "-v",
