@@ -2,14 +2,22 @@ module github.com/sharedcode/sop/ai
 
 go 1.26.4
 
+replace github.com/sharedcode/sop => ../
+
+replace github.com/sharedcode/sop/infs => ../infs
+
+replace github.com/sharedcode/sop/jsondb => ../jsondb
+
+replace github.com/sharedcode/sop/search => ../search
+
 require (
 	github.com/google/cel-go v0.25.0
 	github.com/google/uuid v1.6.0
 	github.com/sethvargo/go-retry v0.3.0
-	github.com/sharedcode/sop v0.0.0-20260623001643-cb8cd3bebb54
-	github.com/sharedcode/sop/infs v0.0.0-20260623001643-cb8cd3bebb54
-	github.com/sharedcode/sop/jsondb v0.0.0-20260623001643-cb8cd3bebb54
-	github.com/sharedcode/sop/search v0.0.0-20260623001643-cb8cd3bebb54
+	github.com/sharedcode/sop v0.0.0
+	github.com/sharedcode/sop/infs v0.0.0
+	github.com/sharedcode/sop/jsondb v0.0.0
+	github.com/sharedcode/sop/search v0.0.0
 	github.com/stretchr/testify v1.11.1
 	github.com/yuin/goldmark v1.8.2
 	golang.org/x/sync v0.19.0

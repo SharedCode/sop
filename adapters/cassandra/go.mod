@@ -7,7 +7,7 @@ replace github.com/sharedcode/sop => ../../
 require (
 	github.com/gocql/gocql v1.7.0
 	github.com/sethvargo/go-retry v0.3.0
-	github.com/sharedcode/sop v0.0.0-20260623001643-cb8cd3bebb54
+	github.com/sharedcode/sop v0.0.0
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
