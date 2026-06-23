@@ -565,7 +565,7 @@ SOP is a NoSQL-like key/value storage engine with built-in indexing and transact
 - Ensure sufficient disk capacity for your datasets. SOP stores on local filesystems and can replicate across drives.
 
 2) Prerequisites
-- Go 1.24.3 or later (module requires go 1.24.3)
+- Go 1.26.4 or later (module requires go 1.26.4)
 - (Optional) Redis (recent version) - required only for distributed/cluster mode or if using Redis-backed caching. **Note**: Redis is NOT used for data storage, just for coordination & to offer built-in caching.
 
 3) Install and run Redis (Optional)
@@ -646,7 +646,7 @@ Operational impact: You generally do not need to call anything explicitly—just
 Testing notes: Unit tests rewind lastPriorityOnIdleTime and priorityLogFound (atomically) to force immediate sweep execution; this pattern is acceptable only in test code. Production code should never reset these values manually.
 
 ## Prerequisites
-- Go 1.24.3+
+- Go 1.26.4+
 - **OS**: macOS, Linux, or Windows.
     - **Architectures**: x64 (AMD64/Intel64) and ARM64 (Apple Silicon/Linux aarch64).
 - (Optional) Redis server (local or cluster) - for distributed coordination
