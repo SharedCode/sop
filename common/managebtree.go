@@ -26,12 +26,16 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 	var t2 interface{} = t.GetPhasedTransaction()
 	trans := t2.(*Transaction)
 
-	// Check if store is already open in this transaction, if so, return error.
-	for _, backend := range trans.btreesBackend {
+	// Check if store is already open in this transaction; if so, return the existing handle.
+	for i := range trans.btreesBackend {
+		backend := &trans.btreesBackend[i]
 		if backend.getStoreInfo != nil {
 			info := backend.getStoreInfo()
-			if info.Name == name {
-				return nil, fmt.Errorf("b-tree '%s' is already open, please use OpenBtreeCursor if you want to open a cursor to it", name)
+			if info != nil && info.Name == name {
+				if b3, ok := backend.btree.(*btree.Btree[TK, TV]); ok {
+					return btree.NewBtreeWithTransaction(trans, b3), nil
+				}
+				return nil, fmt.Errorf("b-tree '%s' is already open with a different key/value type", name)
 			}
 		}
 	}
@@ -193,6 +197,20 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 		return nil, fmt.Errorf("b-tree '%s' exists & has different configuration, please use OpenBtree to open & create an instance of it", si.Name)
 	}
 	ns = &stores[0]
+
+	for i := range trans.btreesBackend {
+		backend := &trans.btreesBackend[i]
+		if backend.getStoreInfo != nil {
+			info := backend.getStoreInfo()
+			if info != nil && info.Name == si.Name {
+				if b3, ok := backend.btree.(*btree.Btree[TK, TV]); ok {
+					return btree.NewBtreeWithTransaction(trans, b3), nil
+				}
+				return nil, fmt.Errorf("b-tree '%s' is already open with a different key/value type", si.Name)
+			}
+		}
+	}
+
 	return newBtreeWithTransaction[TK, TV](ctx, ns, trans, comparer, false)
 }
 

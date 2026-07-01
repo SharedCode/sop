@@ -53,7 +53,7 @@ func TestBuildExportItems_UsesBaseURLForSourcesWhenConfigured(t *testing.T) {
 	catGraphMap = make(map[string]*memory.Category)
 	chunks := []KnowledgeChunk{{
 		ID:          "item_1",
-		Category:    "AI & Knowledge Systems / Embedders",
+		Category:    "AI & Knowledge Systems/Embedders",
 		Title:       "Source citation sample",
 		Summaries:   []string{"Summary one"},
 		Description: "Full explanation body.",
@@ -82,7 +82,7 @@ func TestBuildExportItemsUsesExplicitSummariesAndPayload(t *testing.T) {
 	catGraphMap = make(map[string]*memory.Category)
 	chunks := []KnowledgeChunk{{
 		ID:          "gemini_item_1",
-		Category:    "AI & Knowledge Systems / Embedders",
+		Category:    "AI & Knowledge Systems/Embedders",
 		Title:       "Gemini embedding contract",
 		Summaries:   []string{"Summary one", "Summary two"},
 		Description: "Full explanation body.",
@@ -176,13 +176,13 @@ This category covers backend topology, transaction flow, and registry-centered c
 
 	parseOneMarkdownFile(repoRoot, filePath)
 
-	if got := catDescriptions["Platform Foundations / Architecture"]; got != "This category covers backend topology, transaction flow, and registry-centered consistency." {
+	if got := catDescriptions["Platform Foundations/Architecture"]; got != "This category covers backend topology, transaction flow, and registry-centered consistency." {
 		t.Fatalf("unexpected category description: %q", got)
 	}
 
 	var explicitCount int
 	for _, chunk := range allChunks {
-		if chunk.Category == "Platform Foundations / Architecture" {
+		if chunk.Category == "Platform Foundations/Architecture" {
 			explicitCount++
 		}
 	}
@@ -237,14 +237,14 @@ Intro paragraph.
 	for _, chunk := range allChunks {
 		seen[chunk.Category] = true
 	}
-	if !seen["Synthetic Root / Category A"] {
-		t.Fatalf("expected category path %q, got %+v", "Synthetic Root / Category A", seen)
+	if !seen["Synthetic Root/Category A"] {
+		t.Fatalf("expected category path %q, got %+v", "Synthetic Root/Category A", seen)
 	}
-	if !seen["Synthetic Root / Category A / Child A"] {
-		t.Fatalf("expected nested category path %q, got %+v", "Synthetic Root / Category A / Child A", seen)
+	if !seen["Synthetic Root/Category A/Child A"] {
+		t.Fatalf("expected nested category path %q, got %+v", "Synthetic Root/Category A/Child A", seen)
 	}
-	if !seen["Synthetic Root / Category A / Child A / Grandchild A"] {
-		t.Fatalf("expected deeper nested category path %q, got %+v", "Synthetic Root / Category A / Child A / Grandchild A", seen)
+	if !seen["Synthetic Root/Category A/Child A/Grandchild A"] {
+		t.Fatalf("expected deeper nested category path %q, got %+v", "Synthetic Root/Category A/Child A/Grandchild A", seen)
 	}
 }
 
@@ -284,11 +284,11 @@ func TestParseOneMarkdownFile_PreservesFirstNestedCategoryLevel(t *testing.T) {
 	if seen["Go"] || seen["Java"] {
 		t.Fatalf("expected language categories to remain under Language Bindings, got %+v", seen)
 	}
-	if !seen["Language Bindings / Go"] {
-		t.Fatalf("expected nested category path %q, got %+v", "Language Bindings / Go", seen)
+	if !seen["Language Bindings/Go"] {
+		t.Fatalf("expected nested category path %q, got %+v", "Language Bindings/Go", seen)
 	}
-	if !seen["Language Bindings / Java"] {
-		t.Fatalf("expected nested category path %q, got %+v", "Language Bindings / Java", seen)
+	if !seen["Language Bindings/Java"] {
+		t.Fatalf("expected nested category path %q, got %+v", "Language Bindings/Java", seen)
 	}
 }
 
@@ -327,10 +327,10 @@ func TestParseOneMarkdownFile_MapsMultipleH1SectionsIntoMultipleL1Categories(t *
 		seen[chunk.Category] = true
 	}
 
-	if seen["Platform Foundations / Architecture"] == false {
+	if seen["Platform Foundations/Architecture"] == false {
 		t.Fatalf("expected H1 section to remain as L1 category, got %+v", seen)
 	}
-	if seen["Installation & Setup / Prerequisites"] == false {
+	if seen["Installation & Setup/Prerequisites"] == false {
 		t.Fatalf("expected second H1 section to remain as separate L1 category, got %+v", seen)
 	}
 	if seen["Platform Foundations"] || seen["Installation & Setup"] {
@@ -374,11 +374,11 @@ func TestParseOneMarkdownFile_PreservesTopHeadingCategory(t *testing.T) {
 	if seen["Go"] || seen["Java"] {
 		t.Fatalf("expected top heading category to remain in the path, got %+v", seen)
 	}
-	if !seen["Language Bindings & Tooling / Go"] {
-		t.Fatalf("expected nested category path %q, got %+v", "Language Bindings & Tooling / Go", seen)
+	if !seen["Language Bindings & Tooling/Go"] {
+		t.Fatalf("expected nested category path %q, got %+v", "Language Bindings & Tooling/Go", seen)
 	}
-	if !seen["Language Bindings & Tooling / Java"] {
-		t.Fatalf("expected nested category path %q, got %+v", "Language Bindings & Tooling / Java", seen)
+	if !seen["Language Bindings & Tooling/Java"] {
+		t.Fatalf("expected nested category path %q, got %+v", "Language Bindings & Tooling/Java", seen)
 	}
 }
 
@@ -402,7 +402,7 @@ func TestBuildExportItems_IncludesLeafCategoryForUI(t *testing.T) {
 
 	items := buildExportItems([]KnowledgeChunk{{
 		ID:          "chunk-1",
-		Category:    "Root / Child",
+		Category:    "Root/Child",
 		Title:       "compiled title",
 		Summaries:   []string{"compiled summary"},
 		Description: "compiled description",
@@ -417,8 +417,8 @@ func TestBuildExportItems_IncludesLeafCategoryForUI(t *testing.T) {
 	if got := data["category"]; got != "Child" {
 		t.Fatalf("expected leaf category 'Child', got %v", got)
 	}
-	if got := data["category_path"]; got != "Root / Child" {
-		t.Fatalf("expected category path 'Root / Child', got %v", got)
+	if got := data["category_path"]; got != "Root/Child" {
+		t.Fatalf("expected category path 'Root/Child', got %v", got)
 	}
 	if items[0].CategoryPath == "" {
 		t.Fatal("expected category path id to be populated")
