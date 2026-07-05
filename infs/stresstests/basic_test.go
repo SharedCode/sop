@@ -390,14 +390,14 @@ func Test_BtreeOpenedTwice(t *testing.T) {
 	trans.Begin(ctx)
 	_, err = infs.OpenBtree[int, string](ctx, "opentwice", trans, nil)
 	if err != nil {
-		t.Error(err)
-		return
+		t.Fatalf("first OpenBtree should succeed for an already-open b-tree in the same transaction: %v", err)
 	}
 	_, err = infs.OpenBtree[int, string](ctx, "opentwice", trans, nil)
-	if err == nil {
-		t.Error("got nil, expected error")
-		return
+	if err != nil {
+		t.Fatalf("second OpenBtree should also succeed for the same b-tree in the same transaction: %v", err)
 	}
 
-	trans.Commit(ctx)
+	if err := trans.Commit(ctx); err != nil {
+		t.Errorf("Commit returned error, details: %v.", err)
+	}
 }
