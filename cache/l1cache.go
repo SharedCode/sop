@@ -72,18 +72,17 @@ type L1Cache struct {
 }
 
 // DefaultMinCapacity is the default minimum number of entries to retain before evictions are considered.
-// Clustered deployments use a smaller L1 footprint than before because the shared L2 cache is the
-// primary source of cross-process reuse, while L1 is mainly a bounded hot-node buffer for the local process.
+// Clustered deployments benefit from a larger L1 footprint because L2 (Redis) access has network latency.
 var DefaultMinCapacity = 256
 
 // DefaultMaxCapacity is the default hard limit of entries allowed in the L1 cache.
 var DefaultMaxCapacity = 512
 
-// DefaultStandaloneMinCapacity is a very small L1 cache footprint for standalone/in-process usage.
-// L2 is expected to carry most reuse in standalone mode, leaving L1 as a lightweight serialization buffer.
+// DefaultStandaloneMinCapacity is the L1 cache footprint for standalone/in-process usage.
+// Standalone uses a smaller L1 because L2 is also in-memory in the same process (deserialization only, no network).
 var DefaultStandaloneMinCapacity = 32
 
-// DefaultStandaloneMaxCapacity is the reduced L1 cache ceiling for standalone/in-process usage.
+// DefaultStandaloneMaxCapacity is the L1 cache ceiling for standalone/in-process usage.
 var DefaultStandaloneMaxCapacity = 64
 
 // globalL1CacheRegistry is the singleton L1 cache instance used by GetGlobalCache and NewGlobalCache.
@@ -91,7 +90,7 @@ var globalL1CacheRegistry = make(map[sop.L2CacheType]*L1Cache)
 var globalL1Locker sync.RWMutex
 
 // GetGlobalL1Cache returns the global L1 cache singleton, creating one on first use
-// with a Redis L2 cache and default capacities when necessary.
+// with the provided L2 cache and capacities appropriate for the deployment mode.
 func GetGlobalL1Cache(l2c sop.L2Cache) *L1Cache {
 	globalL1Locker.RLock()
 	gc := globalL1CacheRegistry[l2c.GetType()]
@@ -128,10 +127,13 @@ func NewL1Cache(l2c sop.L2Cache, minCapacity, maxCapacity int) *L1Cache {
 }
 
 func defaultL1Capacities(l2c sop.L2Cache) (int, int) {
-	// The upstream public tree uses the same L1 cache API but does not expose the
-	// standalone-specific in-memory cache flag from the newer cloud fork. Returning
-	// the standard defaults keeps the optimization patch compatible while preserving
-	// the L1 cache behavior change that avoids reflection-heavy materialization.
+	if l2c != nil {
+		if inMemory, ok := l2c.(*L2InMemoryCache); ok && inMemory.standalone {
+			// Standalone: both L1 and L2 are in-memory in same process, smaller L1 is optimal
+			return DefaultStandaloneMinCapacity, DefaultStandaloneMaxCapacity
+		}
+	}
+	// Clustered: L2 is remote Redis, larger L1 reduces expensive network calls
 	return DefaultMinCapacity, DefaultMaxCapacity
 }
 
