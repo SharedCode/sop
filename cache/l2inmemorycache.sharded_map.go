@@ -7,8 +7,9 @@ import (
 )
 
 const (
-	shardCount       = 256
-	maxItemsPerShard = 1000 // Adjust based on desired total capacity (e.g., 256 * 1000 = 256k items)
+	shardCount = 256
+	// maxItemsPerShard preserves the historical default for existing cache tests and package-level expectations.
+	maxItemsPerShard = 1000
 )
 
 type shard struct {
@@ -17,11 +18,15 @@ type shard struct {
 }
 
 type shardedMap struct {
-	shards [shardCount]*shard
+	shards           [shardCount]*shard
+	maxItemsPerShard int
 }
 
-func newShardedMap() *shardedMap {
-	m := &shardedMap{}
+func newShardedMap(maxItemsPerShard int) *shardedMap {
+	if maxItemsPerShard <= 0 {
+		maxItemsPerShard = DefaultInMemoryCacheShardCapacity
+	}
+	m := &shardedMap{maxItemsPerShard: maxItemsPerShard}
 	for i := 0; i < shardCount; i++ {
 		m.shards[i] = &shard{items: make(map[string]interface{})}
 	}
@@ -47,7 +52,7 @@ func (m *shardedMap) store(key string, value interface{}) {
 	shard.mu.Lock()
 
 	// Eviction logic: If over capacity, remove item with earliest expiration from a random sample
-	if len(shard.items) >= maxItemsPerShard {
+	if len(shard.items) >= m.maxItemsPerShard {
 		const sampleSize = 5
 		var victimKey string
 		var minExp time.Time
@@ -111,7 +116,7 @@ func (m *shardedMap) loadOrStore(key string, value interface{}) (actual interfac
 	actual, loaded = shard.items[key]
 	if !loaded {
 		// Eviction logic
-		if len(shard.items) >= maxItemsPerShard {
+		if len(shard.items) >= m.maxItemsPerShard {
 			const sampleSize = 5
 			var victimKey string
 			var minExp time.Time
