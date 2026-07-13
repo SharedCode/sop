@@ -6,6 +6,19 @@ At its core, SOP combines an embedded storage engine, distributed coordination m
 
 [![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions) [![CI](https://github.com/SharedCode/sop/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/sop/actions/workflows/go.yml) [![codecov](https://codecov.io/gh/SharedCode/sop/branch/master/graph/badge.svg)](https://app.codecov.io/github/SharedCode/sop) [![Go Reference](https://pkg.go.dev/badge/github.com/sharedcode/sop.svg)](https://pkg.go.dev/github.com/sharedcode/sop) [![Go Report Card](https://goreportcard.com/badge/github.com/sharedcode/sop)](https://goreportcard.com/report/github.com/sharedcode/sop)
 
+
+## Quickstart
+
+The fastest way to see SOP work is the in-memory B-Tree. No servers, no config:
+
+```
+go run ./examples/quickstart
+```
+
+![SOP quickstart demo](docs/assets/quickstart.gif)
+
+Every commit runs the delivery pipeline: build, tests, container packaging ([GHCR](https://github.com/gerardrecinto/sop/pkgs/container/sop-quickstart)), a staging smoke test, then a human-approved promotion to production.
+
 ### The SOP Ecosystem
 
 Packed inside the library is everything you need to build next-generation distributed systems:
