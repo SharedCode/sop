@@ -15,7 +15,7 @@ The fastest way to see SOP work is the in-memory B-Tree. No servers, no config:
 go run ./examples/quickstart
 ```
 
-New to SOP? Read [What is SOP, in plain words](WHAT_IS_SOP.md).
+New to SOP? Read [What is SOP, in plain words](docs/WHAT_IS_SOP.md).
 
 ![SOP quickstart demo](docs/assets/quickstart.gif)
 
@@ -25,8 +25,8 @@ Every commit runs the delivery pipeline: build, tests, container packaging ([GHC
 
 Packed inside the library is everything you need to build next-generation distributed systems:
 *   **Swarm Computing Engine**: A framework for distributed coordination, allowing applications to act as coherent parts of a greater whole.
-*   **Polyglot Storage Engine**: An ACID-compliant B-Tree storage system with Caching and Erasure Coding, optimized for performance. [Read the Architecture Whitepaper](SOP_ARCHITECTURE_WHITEPAPER.md).
-*   **AI Scripting & Computing Engine**: A versatile runtime that allows for creating intelligent, self-correcting workflows. See [Platform Tools & Relational Intelligence](SOP_PLATFORM_TOOLS.md).
+*   **Polyglot Storage Engine**: An ACID-compliant B-Tree storage system with Caching and Erasure Coding, optimized for performance. [Read the Architecture Whitepaper](docs/SOP_ARCHITECTURE_WHITEPAPER.md).
+*   **AI Scripting & Computing Engine**: A versatile runtime that allows for creating intelligent, self-correcting workflows. See [Platform Tools & Relational Intelligence](docs/SOP_PLATFORM_TOOLS.md).
 
 ## Installation & Distribution
 
@@ -83,7 +83,7 @@ SOP supports both code-first and data-first workflows.
 
 *   **Code-first**: Define stores and logic in application code, then inspect and manage them with the Data Manager.
 *   **Data-first**: Create stores and seed data in the Data Manager, then open those stores from application code.
-*   **Further Reading**: See [Workflows Guide](WORKFLOWS.md) for the detailed workflow patterns and deployment scenarios.
+*   **Further Reading**: See [Workflows Guide](docs/WORKFLOWS.md) for the detailed workflow patterns and deployment scenarios.
 
 ## SOP Data Manager & AI Suite
 
@@ -114,7 +114,7 @@ SOP separates storage responsibilities into registry/system data and user-data f
 
 *   **Registry and system data**: Configured through `StoresFolders` with active/passive redundancy.
 *   **User data files**: Configured through `ErasureConfigs` for striping, parity, and store-level routing.
-*   **Further Reading**: See [Configuration & Tuning Guide](CONFIGURATION.md) and [Operations Guide](OPERATIONS.md) for the full storage and failover configuration model.
+*   **Further Reading**: See [Configuration & Tuning Guide](docs/CONFIGURATION.md) and [Operations Guide](docs/OPERATIONS.md) for the full storage and failover configuration model.
 
 ### The System Database (SystemDB)
 All SOP environments come with a built-in **SystemDB**. It stores platform metadata and runtime artifacts such as:
@@ -126,7 +126,7 @@ All SOP environments come with a built-in **SystemDB**. It stores platform metad
 SOP uses **Spaces** as isolated semantic working sets rather than one shared monolithic vector space.
 *   **Domain Scope**: Spaces let the runtime keep memory, retrieval, and enrichment focused on a specific domain.
 *   **Stateless Backend (BYOK)**: Credentials are supplied per request so the backend can remain stateless.
-*   **Further Reading**: See [AI Copilot & Agent Architecture](AI_COPILOT.md) and [SOP AI Kit](ai/README.md) for the detailed memory and Space model.
+*   **Further Reading**: See [AI Copilot & Agent Architecture](docs/AI_COPILOT.md) and [SOP AI Kit](ai/README.md) for the detailed memory and Space model.
 
 ### Partitioned Vector Search
 SOP supports partitioned vector search using B-Tree-backed storage layouts that keep related vectors adjacent and allow metadata-aware scans.
@@ -136,14 +136,14 @@ For the detailed storage layout, optimization model, and vector-search tradeoffs
 ### Rich Key Structures (Metadata Carrier)
 SOP supports complex B-Tree keys that carry metadata such as status, version, category, or routing fields.
 
-This pattern is used across general-purpose stores and the AI/vector layers to support filtering and structural operations with minimal value reads. See [Architecture Guide](ARCHITECTURE.md), [SOP AI Kit](ai/README.md), and [Vector Store Design](ai/vector/VECTOR_STORE_DESIGN.md) for the detailed key layouts.
+This pattern is used across general-purpose stores and the AI/vector layers to support filtering and structural operations with minimal value reads. See [Architecture Guide](docs/ARCHITECTURE.md), [SOP AI Kit](ai/README.md), and [Vector Store Design](ai/vector/VECTOR_STORE_DESIGN.md) for the detailed key layouts.
 
 ### AI Copilot & Scripts
 The Data Manager includes an integrated AI Copilot that supports **Natural Language Programming**.
 *   **Natural Language Queries**: Ask for selections, joins, and CRUD operations in plain language.
 *   **Script Drafting and Execution**: Create, save, and run reusable workflows from the UI or command surface.
 *   **Hybrid Execution**: Deterministic tool steps and reasoning steps can be combined in the same workflow.
-*   **Documentation**: See [AI Copilot & Agent Architecture](AI_COPILOT.md), [AI Script Architecture](ai/AI_SCRIPT_ARCHITECTURE.md), and [Store Orchestration Modes](ai/STORE_ORCHESTRATION_MODES.md) for runtime internals and orchestration details.
+*   **Documentation**: See [AI Copilot & Agent Architecture](docs/AI_COPILOT.md), [AI Script Architecture](ai/AI_SCRIPT_ARCHITECTURE.md), and [Store Orchestration Modes](ai/STORE_ORCHESTRATION_MODES.md) for runtime internals and orchestration details.
 
 To launch the Data Manager:
 ```bash
@@ -164,15 +164,15 @@ SOP supports both local built-in auth and external identity-provider integration
 This gives IT and security teams a clear path to adopt SOP in controlled environments while keeping the runtime flexible for future provider integrations.
 
 ## Reference Guides
-*   **[AI Copilot & Agent Architecture](AI_COPILOT.md)** - Canonical reference for the Copilot runtime, grounding model, and provider execution loops.
-*   **[Architecture Guide](ARCHITECTURE.md)** - Core engine, storage flow, replication, and backend design.
-*   **[Scalability & Limits](SCALABILITY.md)** - Capacity math and architectural scaling model.
-*   **[Operations Guide](OPERATIONS.md)** - Failover, recovery, and operational practices.
-*   **[Workflows Guide](WORKFLOWS.md)** - Deployment and usage patterns from standalone to clustered environments.
+*   **[AI Copilot & Agent Architecture](docs/AI_COPILOT.md)** - Canonical reference for the Copilot runtime, grounding model, and provider execution loops.
+*   **[Architecture Guide](docs/ARCHITECTURE.md)** - Core engine, storage flow, replication, and backend design.
+*   **[Scalability & Limits](docs/SCALABILITY.md)** - Capacity math and architectural scaling model.
+*   **[Operations Guide](docs/OPERATIONS.md)** - Failover, recovery, and operational practices.
+*   **[Workflows Guide](docs/WORKFLOWS.md)** - Deployment and usage patterns from standalone to clustered environments.
 
 ## 🚀 Getting Started
 
-**[Download & Installation Guide](GETTING_STARTED.md)**: The fastest way to get up and running with SOP.
+**[Download & Installation Guide](docs/GETTING_STARTED.md)**: The fastest way to get up and running with SOP.
 
 ## ⚡ Performance
 
@@ -217,7 +217,7 @@ For larger datasets, increasing `SlotLength` to **4,000** yields higher throughp
  | :--- | :--- | :--- |
  | **750,000** (Max) | ~3 GB | **673,200,000,000** (673.2 Billion) |
 
- This enables managing petabytes of data with minimal metadata overhead. See [Scalability & Limits](SCALABILITY.md) for the full breakdown.
+ This enables managing petabytes of data with minimal metadata overhead. See [Scalability & Limits](docs/SCALABILITY.md) for the full breakdown.
 
 ### Why this matters
 These benchmarks are running with **Full ACID Transaction** protection. Unlike simple Key-Value stores that optimize purely for random writes (often sacrificing order or safety), SOP provides a robust foundation for complex data access:
@@ -305,7 +305,7 @@ SOP B-Trees are **general-purpose** storage engines. Similar to a Model Store, t
     *   **Schema Enforcement**: This effectively "locks in" the schema for the UI, allowing it to generate correct forms and validation rules.
     *   **Swarm Readiness**: As noted below, this seed item also initializes the tree structure, enabling efficient "Swarm" transaction merging immediately.
 
-See the [API Cookbook](COOKBOOK.md#interoperability-note-go-vs-other-languages) for details.
+See the [API Cookbook](docs/COOKBOOK.md#interoperability-note-go-vs-other-languages) for details.
 
 ## SOP Data Manager
 
@@ -353,22 +353,22 @@ See [ai/README.md](ai/README.md) for a deep dive into the AI capabilities.
 - [Polyglot Support](#polyglot-support)
 - [Interoperability & Data Management](#interoperability-data-management)
 - [Scalability & Limits](#scalability-limits)
-- [Swarm Computing (Architecture)](SWARM_COMPUTING.md)
-- [Workflows & Scenarios](WORKFLOWS.md)
-- [Engineering Culture & SDLC](SDLC.md) - **New!** How we use AI & Automation.
+- [Swarm Computing (Architecture)](docs/SWARM_COMPUTING.md)
+- [Workflows & Scenarios](docs/WORKFLOWS.md)
+- [Engineering Culture & SDLC](docs/SDLC.md) - **New!** How we use AI & Automation.
 - [High-level features and articles](#high-level-featuresusability-articles-about-sop)
-- [Architecture Guide](ARCHITECTURE.md)
-- [Configuration & Tuning](CONFIGURATION.md)
-- [Operational Guide](OPERATIONS.md)
-- [API Cookbook](COOKBOOK.md)
+- [Architecture Guide](docs/ARCHITECTURE.md)
+- [Configuration & Tuning](docs/CONFIGURATION.md)
+- [Operational Guide](docs/OPERATIONS.md)
+- [API Cookbook](docs/COOKBOOK.md)
 - [Examples (Go)](examples/README.md)
 - [Quick start](#quick-start)
-- [Lifecycle: failures, failover, reinstate, EC auto-repair](GO_CORE_ENGINE.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair)
+- [Lifecycle: failures, failover, reinstate, EC auto-repair](docs/GO_CORE_ENGINE.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair)
 - [Prerequisites](#prerequisites)
 - [Running integration tests (Docker)](#running-integration-tests)
  - [Testing (unit, integration, stress)](#testing-unit-integration-stress)
-- [Usability](GO_CORE_ENGINE.md#usability)
-- [SOP API discussions](GO_CORE_ENGINE.md#simple-usage)
+- [Usability](docs/GO_CORE_ENGINE.md#usability)
+- [SOP API discussions](docs/GO_CORE_ENGINE.md#simple-usage)
 - [SOP for Python (sop4py)](bindings/python/README.md)
 - [SOP for Java (sop4j)](bindings/java/README.md)
 - [SOP for C# (sop4cs)](bindings/csharp/README.md)
@@ -431,7 +431,7 @@ SOP V2 core is written in **Go**, but provides first-class bindings for **Python
 
 SOP is designed as a **"Write Once, Run Anywhere"** architecture. The core engine is compiled into a shared library (`libsop.so`/`.dylib`/`.dll`) which is then consumed by language-specific bindings. This ensures that all languages benefit from the same high-performance, ACID-compliant core.
 
-For a deep dive into our multi-language architecture, see [Polyglot Support](MULTI_LINGUAL_SUPPORT.md).
+For a deep dive into our multi-language architecture, see [Polyglot Support](docs/MULTI_LINGUAL_SUPPORT.md).
 
 ### Supported Languages
 *   **[Go](https://pkg.go.dev/github.com/sharedcode/sop)**: The native core. Best for high-concurrency backend services.
@@ -446,13 +446,13 @@ SOP is architected to handle **Petabyte-scale** datasets and **Trillions of obje
 - **Throughput**: Limited only by hardware (Redis Cluster + Storage I/O), not software.
 - **Design**: Horizontal scaling via independent storage nodes and sharded registry.
 
-See the full analysis in [Scalability & Limits](SCALABILITY.md).
+See the full analysis in [Scalability & Limits](docs/SCALABILITY.md).
 
 ## Key Use Cases
 
 SOP is designed to be versatile, powering everything from small embedded tools to massive enterprise clusters.
 
-For detailed architectural patterns, deployment lifecycles, and configuration examples, see [Workflows & Scenarios](WORKFLOWS.md).
+For detailed architectural patterns, deployment lifecycles, and configuration examples, see [Workflows & Scenarios](docs/WORKFLOWS.md).
 
 ### 1. Standalone App (Embedded DB)
 *   **Scenario**: Desktop apps, CLI tools, or single-node services needing rich indexing.
@@ -546,22 +546,22 @@ SOP combines an AI-facing scripting engine with explicit execution controls.
 *   **Deterministic Workflows**: Multi-step reasoning can be captured as reusable scripts after validation.
 *   **Memory and Repair**: Runtime memory and repair patterns support iterative correction across asks.
 *   **Operational Safety**: Tool execution remains local and constrained by the application runtime.
-*   **Further Reading**: See [AI Copilot & Agent Architecture](AI_COPILOT.md) and [AI Script Architecture](ai/AI_SCRIPT_ARCHITECTURE.md) for the full runtime model.
+*   **Further Reading**: See [AI Copilot & Agent Architecture](docs/AI_COPILOT.md) and [AI Script Architecture](ai/AI_SCRIPT_ARCHITECTURE.md) for the full runtime model.
 
 ### 5. Granular Durability & RAID
 Moving beyond simple replication, SOP brings hardware-level reliability concepts into software.
 *   **Erasure Coding**: Split large objects (Blobs) across multiple physical drives or network locations with parity, ensuring data survival even if multiple drives fail.
 *   **Store-Level RAID**: You can configure redundancy policies **per-store**. Your "Logs" store can be ephemeral (fast, low safety), while your "Financials" store uses Reed-Solomon Erasure Coding (maximum safety) on the same cluster.
 
-For a deeper dive into the system's design and package structure (including the Public vs. Internal split), please see the [Architecture Guide](ARCHITECTURE.md).
+For a deeper dive into the system's design and package structure (including the Public vs. Internal split), please see the [Architecture Guide](docs/ARCHITECTURE.md).
 
-For configuration options and performance tuning, see the [Configuration Guide](CONFIGURATION.md).
+For configuration options and performance tuning, see the [Configuration Guide](docs/CONFIGURATION.md).
 
-For operational best practices (failover, backups), see the [Operational Guide](OPERATIONS.md).
+For operational best practices (failover, backups), see the [Operational Guide](docs/OPERATIONS.md).
 
-For code examples, check out the [API Cookbook](COOKBOOK.md).
+For code examples, check out the [API Cookbook](docs/COOKBOOK.md).
 
-See [Summary](GO_CORE_ENGINE.md) for additional implementation notes and storage-engine details.
+See [Summary](docs/GO_CORE_ENGINE.md) for additional implementation notes and storage-engine details.
 
 
 ## The Database Abstraction
@@ -630,9 +630,9 @@ SOP is designed to keep your app online through common storage failures.
 - Registry and StoreRepository: These metadata files use Active/Passive replication. Only I/O errors on Registry/StoreRepository can generate a failover. On a failover, SOP flips to the passive path and continues. When you restore the failed drive, reinstate it as the passive side; SOP will fast‑forward any missing deltas and return it to rotation.
 - Auto‑repair: With EC repair enabled, after replacing a failed blob drive, SOP reconstructs missing shards automatically and restores full redundancy in the background.
 
-See the detailed lifecycle guide (failures, observability, reinstate/fast‑forward, and drive replacement) in GO_CORE_ENGINE.md: https://github.com/SharedCode/sop/blob/master/GO_CORE_ENGINE.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair
+See the detailed lifecycle guide (failures, observability, reinstate/fast‑forward, and drive replacement) in GO_CORE_ENGINE.md: https://github.com/SharedCode/sop/blob/master/docs/GO_CORE_ENGINE.md#lifecycle-failures-failover-reinstate-and-ec-auto-repair
 
-Also see Operational caveats: https://github.com/SharedCode/sop/blob/master/GO_CORE_ENGINE.md#operational-caveats
+Also see Operational caveats: https://github.com/SharedCode/sop/blob/master/docs/GO_CORE_ENGINE.md#operational-caveats
 
 For planned maintenance, see Cluster reboot procedure: [Cluster reboot procedure](#cluster-reboot-procedure).
 
@@ -702,10 +702,10 @@ VS Code tasks provided:
 CI note: GitHub Actions runs unit tests on pushes/PRs; a nightly/manual job runs the stress suite with -tags=stress.
 
 <h2> Usability</h2>
-See details here: https://github.com/sharedcode/sop/blob/master/GO_CORE_ENGINE.md#usability
+See details here: https://github.com/sharedcode/sop/blob/master/docs/GO_CORE_ENGINE.md#usability
 
 <h2> SOP API Discussions</h2>
-See details here: https://github.com/sharedcode/sop/blob/master/GO_CORE_ENGINE.md#simple-usage
+See details here: https://github.com/sharedcode/sop/blob/master/docs/GO_CORE_ENGINE.md#simple-usage
 
 <h2> SOP for Python (sop4py)</h2>
 See details here: https://github.com/sharedcode/sop/tree/master/jsondb/python#readme

@@ -168,7 +168,7 @@
 		{
 			"label": "Go: Test All",
 			"type": "shell",
-			"command": "./run_all_tests.sh",
+			"command": "./scripts/run_all_tests.sh",
 			"group": "test",
 			"problemMatcher": [
 				"$go"
@@ -177,7 +177,7 @@
 		{
 			"label": "Build Release Packages",
 			"type": "shell",
-			"command": "./build_release.sh",
+			"command": "./scripts/build_release.sh",
 			"group": "build"
 		},
 		{

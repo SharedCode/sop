@@ -5,8 +5,8 @@ This document serves as a reference for the automation scripts and tools availab
 ## 🛠️ Essential Maintenance Scripts
 
 ### `update_version.sh`
-**Usage:** `./update_version.sh <version_number>`
-**Example:** `./update_version.sh 2.2.5`
+**Usage:** `./scripts/update_version.sh <version_number>`
+**Example:** `./scripts/update_version.sh 2.2.5`
 Updates the version number across the entire ecosystem. It modifies:
 - Go Server (`VERSION`)
 - Python (`pyproject.toml`)
@@ -16,7 +16,7 @@ Updates the version number across the entire ecosystem. It modifies:
 - C# (`VERSION` file)
 
 ### `build_release.sh`
-**Usage:** `./build_release.sh`
+**Usage:** `./scripts/build_release.sh`
 Compiles and packages the project for release. It builds binaries for supported platforms and may generate distribution archives.
 
 ## 🧪 Test Automation Suites
@@ -24,11 +24,11 @@ Compiles and packages the project for release. It builds binaries for supported 
 These scripts allow you to run tests for specific languages or the entire platform.
 
 ### `run_all_tests.sh`
-**Usage:** `./run_all_tests.sh`
+**Usage:** `./scripts/run_all_tests.sh`
 The master text script. It executes the core Go tests and likely triggers the binding suites (check script content for full scope).
 
 ### Language-Specific Test Suites
-*   **`run_go_suite.sh`**: Runs the core Go unit and integration tests.
+*   **`scripts/run_go_suite.sh`**: Runs the core Go unit and integration tests.
 *   **`run_python_suite.sh`**: Builds the Go bridge and runs Python binding tests.
 *   **`run_java_suite.sh`**: Runs Java binding tests.
 *   **`run_rust_suite.sh`**: Runs Rust binding tests.

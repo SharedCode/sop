@@ -31,11 +31,11 @@ go run ./examples/quickstart
 
 ## Learn more
 
-- [What is SOP, in plain words](WHAT_IS_SOP.md)
-- [Getting started](GETTING_STARTED.md)
-- [Architecture whitepaper](SOP_ARCHITECTURE_WHITEPAPER.md)
-- [Cookbook](COOKBOOK.md)
-- [Scalability](SCALABILITY.md)
+- [What is SOP, in plain words](docs/WHAT_IS_SOP.md)
+- [Getting started](docs/GETTING_STARTED.md)
+- [Architecture whitepaper](docs/SOP_ARCHITECTURE_WHITEPAPER.md)
+- [Cookbook](docs/COOKBOOK.md)
+- [Scalability](docs/SCALABILITY.md)
 - [Changelog](CHANGELOG.md)
 - [Source and releases](https://github.com/SharedCode/sop)
 
