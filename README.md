@@ -19,7 +19,7 @@ New to SOP? Read [What is SOP, in plain words](WHAT_IS_SOP.md).
 
 ![SOP quickstart demo](docs/assets/quickstart.gif)
 
-Every commit runs the delivery pipeline: build, tests, container packaging ([GHCR](https://github.com/gerardrecinto/sop/pkgs/container/sop-quickstart)), a staging smoke test, then a human-approved promotion to production.
+Every commit runs the delivery pipeline: build, tests, container packaging ([GHCR](https://github.com/orgs/SharedCode/packages/container/package/sop-quickstart)), a staging smoke test, then a human-approved promotion to production.
 
 ### The SOP Ecosystem
 
