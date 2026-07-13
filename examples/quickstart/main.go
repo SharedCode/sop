@@ -42,10 +42,16 @@ func main() {
 	b3.Find(103, true)
 	fmt.Printf("after Update(103): %s\n", b3.GetCurrentValue())
 
-	// Ordered range scan, no sort call needed: the tree keeps keys sorted.
+	// Ordered scan, no sort call needed: the tree keeps keys sorted.
 	fmt.Println("ordered scan:")
-	for ok := b3.First(); ok; ok = b3.Next() {
-		fmt.Printf("  build %d -> %s\n", b3.GetCurrentKey(), b3.GetCurrentValue())
+	for k, v := range b3.All() {
+		fmt.Printf("  build %d -> %s\n", k, v)
+	}
+
+	// Range scan seeks straight to the start key, then walks in order.
+	fmt.Println("range scan, builds 102-104:")
+	for k, v := range b3.Range(102, 104) {
+		fmt.Printf("  build %d -> %s\n", k, v)
 	}
 
 	fmt.Println("quickstart: OK")
