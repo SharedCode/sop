@@ -1,5 +1,10 @@
 # Changelog
 
+## v5.3.5
+- **Gated delivery pipeline** (`.github/workflows/deliver.yml`): every push to master runs build, tests, container packaging to GHCR (`sop-quickstart`), and a staging smoke test. Production promotion (image `:stable` tag plus GitHub Pages site deploy) sits behind a manual approval on the `production` environment.
+- **Quickstart example** (`examples/quickstart`): zero-infrastructure in-memory B-Tree walkthrough (add, find, update, ordered scan). Packaged as a distroless container via `Dockerfile.quickstart`.
+- **README demo GIF** recorded from the quickstart run; project site landing page added (`index.md`).
+
 ## SOP V2 build 54 (Upcoming)
 - **Gate 1 Advanced KB Routing**: Major enhancements to specialized focused routing for knowledge base queries.
     - **Root Category Navigation**: Query `omni:<kb>` to display all root categories with item counts and subcategory information.
