@@ -1,6 +1,8 @@
 # Changelog
 
 ## v5.3.5
+- **Range-over-func iterators for the in-memory B-Tree**: `All()` and `Range(from, to)` return `iter.Seq2` so callers can `for k, v := range b3.Range(102, 104)`. Range seeks straight to the start key; both are covered by unit tests. Quickstart example and demo GIF updated to use them.
+- **Security: cleared all 32 open Dependabot alerts** (7 critical). Go: golang.org/x/crypto 0.52.0, golang.org/x/net 0.55.0, go-git/v5 5.19.1, go-billy/v5 5.9.0, cloudflare/circl 1.6.3. Java binding: jackson-databind 2.17.0 to 2.19.0.
 - **Gated delivery pipeline** (`.github/workflows/deliver.yml`): every push to master runs build, tests, container packaging to GHCR (`sop-quickstart`), and a staging smoke test. Production promotion (image `:stable` tag plus GitHub Pages site deploy) sits behind a manual approval on the `production` environment.
 - **Quickstart example** (`examples/quickstart`): zero-infrastructure in-memory B-Tree walkthrough (add, find, update, ordered scan). Packaged as a distroless container via `Dockerfile.quickstart`.
 - **README demo GIF** recorded from the quickstart run; project site landing page added (`index.md`).
