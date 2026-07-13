@@ -15,6 +15,8 @@ The fastest way to see SOP work is the in-memory B-Tree. No servers, no config:
 go run ./examples/quickstart
 ```
 
+New to SOP? Read [What is SOP, in plain words](WHAT_IS_SOP.md).
+
 ![SOP quickstart demo](docs/assets/quickstart.gif)
 
 Every commit runs the delivery pipeline: build, tests, container packaging ([GHCR](https://github.com/gerardrecinto/sop/pkgs/container/sop-quickstart)), a staging smoke test, then a human-approved promotion to production.

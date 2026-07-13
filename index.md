@@ -31,6 +31,7 @@ go run ./examples/quickstart
 
 ## Learn more
 
+- [What is SOP, in plain words](WHAT_IS_SOP.md)
 - [Getting started](GETTING_STARTED.md)
 - [Architecture whitepaper](SOP_ARCHITECTURE_WHITEPAPER.md)
 - [Cookbook](COOKBOOK.md)
