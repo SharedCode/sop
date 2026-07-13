@@ -404,6 +404,7 @@ func main() {
 	http.HandleFunc("/api/spaces/config/get", withAuth(handleGetSpaceConfig))
 	http.HandleFunc("/api/spaces/config", withAuth(handleSaveSpaceConfig))
 	http.HandleFunc("/api/tasks/status", withAuth(handleGetTaskStatus))
+	http.HandleFunc("/api/health", handleHealth)
 	// Configuration Endpoints
 	http.HandleFunc("/api/config/save", withAuth(handleSaveConfig))
 	http.HandleFunc("/api/db/init", withAuth(handleInitDatabase))
@@ -3610,3 +3611,13 @@ func handleValidateAdminToken(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
+
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"status":  "ok",
+		"version": sop.Version,
+	})
+}
+
