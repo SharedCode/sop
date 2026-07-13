@@ -1,11 +1,15 @@
 # Changelog
 
 ## v5.3.5
+- **B-Tree node slot allocation and L1 cache handling optimized** for better throughput on hot paths.
+- **L2 cache eviction policy reworked** for standalone mode -- smarter eviction under memory pressure.
+- **`NewBtree`/`OpenBtree` safe multi-open**: the same named B-Tree can now be opened multiple times within a single transaction without data races. Stress tests updated to cover this.
 - **Range-over-func iterators for the in-memory B-Tree**: `All()` and `Range(from, to)` return `iter.Seq2` so callers can `for k, v := range b3.Range(102, 104)`. Range seeks straight to the start key; both are covered by unit tests. Quickstart example and demo GIF updated to use them.
-- **Security: cleared all 32 open Dependabot alerts** (7 critical). Go: golang.org/x/crypto 0.52.0, golang.org/x/net 0.55.0, go-git/v5 5.19.1, go-billy/v5 5.9.0, cloudflare/circl 1.6.3. Java binding: jackson-databind 2.17.0 to 2.19.0.
+- **Security: cleared all 32 Dependabot alerts** (7 critical). Go: golang.org/x/crypto 0.52.0, golang.org/x/net 0.55.0, go-git/v5 5.19.1, go-billy/v5 5.9.0, cloudflare/circl 1.6.3. Java binding: jackson-databind 2.19.0 to 2.21.4 (fixes CVE PolymorphicTypeValidator bypass, array subtype allowlist bypass, InetSocketAddress SSRF, case-insensitive deserialization bypass).
 - **Gated delivery pipeline** (`.github/workflows/deliver.yml`): every push to master runs build, tests, container packaging to GHCR (`sop-quickstart`), and a staging smoke test. Production promotion (image `:stable` tag plus GitHub Pages site deploy) sits behind a manual approval on the `production` environment.
 - **Quickstart example** (`examples/quickstart`): zero-infrastructure in-memory B-Tree walkthrough (add, find, update, ordered scan). Packaged as a distroless container via `Dockerfile.quickstart`.
 - **README demo GIF** recorded from the quickstart run; project site landing page added (`index.md`).
+- **Root directory cleanup**: 26 documentation files moved to `docs/`, 13 shell scripts moved to `scripts/`. README and workflow references updated. Root now contains only source code, standard project files (LICENSE, CONTRIBUTING, etc.), and build configs.
 
 ## SOP V2 build 54 (Upcoming)
 - **Gate 1 Advanced KB Routing**: Major enhancements to specialized focused routing for knowledge base queries.

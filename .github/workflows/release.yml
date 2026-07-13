@@ -29,11 +29,11 @@ jobs:
 
       - name: Build macOS binaries
         run: |
-          chmod +x build_release.sh
+          chmod +x scripts/build_release.sh
           # Only build macos parts
           export ONLY_MACOS=1
           export SOP_VERSION=${{ github.ref_name }}
-          ./build_release.sh
+          ./scripts/build_release.sh
 
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
@@ -73,11 +73,11 @@ jobs:
 
       - name: Build Linux and Windows binaries
         run: |
-          chmod +x build_release.sh
+          chmod +x scripts/build_release.sh
           # Skip macos parts (built in separate job)
           export SKIP_MACOS=1
           export SOP_VERSION=${{ github.ref_name }}
-          ./build_release.sh
+          ./scripts/build_release.sh
 
       - name: Upload Linux/Windows Artifacts
         uses: actions/upload-artifact@v4
