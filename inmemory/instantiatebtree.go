@@ -1,6 +1,8 @@
 package inmemory
 
 import (
+	"context"
+
 	"github.com/sharedcode/sop"
 	"github.com/sharedcode/sop/btree"
 )
@@ -45,7 +47,7 @@ func (b3 BtreeInterface[TK, TV]) Count() int {
 
 // Add adds an item to the b-tree and does not check for duplicates.
 func (b3 BtreeInterface[TK, TV]) Add(key TK, value TV) bool {
-	ok, _ := b3.Btree.Add(nil, key, value)
+	ok, _ := b3.Btree.Add(context.Background(), key, value)
 	return ok
 }
 
@@ -53,7 +55,7 @@ func (b3 BtreeInterface[TK, TV]) Add(key TK, value TV) bool {
 // Otherwise, it will do nothing and return false, for not adding the item.
 // This is useful for cases one wants to add an item without creating a duplicate entry.
 func (b3 BtreeInterface[TK, TV]) AddIfNotExist(key TK, value TV) bool {
-	ok, _ := b3.Btree.AddIfNotExist(nil, key, value)
+	ok, _ := b3.Btree.AddIfNotExist(context.Background(), key, value)
 	return ok
 }
 
@@ -62,14 +64,14 @@ func (b3 BtreeInterface[TK, TV]) AddIfNotExist(key TK, value TV) bool {
 // true will position pointer to the first item with the given key,
 // according to key ordering sequence.
 func (b3 BtreeInterface[TK, TV]) Find(key TK, firstItemWithKey bool) bool {
-	ok, _ := b3.Btree.Find(nil, key, firstItemWithKey)
+	ok, _ := b3.Btree.Find(context.Background(), key, firstItemWithKey)
 	return ok
 }
 
 // FindInDescendingOrder is analogous to Find but is useful when doing search item and
 // retrieval will be in descending order. Use Previous to navigate backwards.
 func (b3 BtreeInterface[TK, TV]) FindInDescendingOrder(key TK) bool {
-	ok, _ := b3.Btree.FindInDescendingOrder(nil, key)
+	ok, _ := b3.Btree.FindInDescendingOrder(context.Background(), key)
 	return ok
 }
 
@@ -80,67 +82,67 @@ func (b3 BtreeInterface[TK, TV]) GetCurrentKey() TK {
 
 // GetCurrentValue returns the current item's value.
 func (b3 BtreeInterface[TK, TV]) GetCurrentValue() TV {
-	v, _ := b3.Btree.GetCurrentValue(nil)
+	v, _ := b3.Btree.GetCurrentValue(context.Background())
 	return v
 }
 
 // Update finds the item with key and update its value to the value argument.
 func (b3 BtreeInterface[TK, TV]) Update(key TK, value TV) bool {
-	ok, _ := b3.Btree.Update(nil, key, value)
+	ok, _ := b3.Btree.Update(context.Background(), key, value)
 	return ok
 }
 
 // Upsert will add the item if not found or update it if it exists.
 func (b3 BtreeInterface[TK, TV]) Upsert(key TK, value TV) bool {
-	ok, _ := b3.Btree.Upsert(nil, key, value)
+	ok, _ := b3.Btree.Upsert(context.Background(), key, value)
 	return ok
 }
 
 // UpdateCurrentValue will update the Value of the current item.
 // Key is read-only, thus, no argument for the key.
 func (b3 BtreeInterface[TK, TV]) UpdateCurrentValue(newValue TV) bool {
-	ok, _ := b3.Btree.UpdateCurrentValue(nil, newValue)
+	ok, _ := b3.Btree.UpdateCurrentValue(context.Background(), newValue)
 	return ok
 }
 
 // UpdateCurrentKey will update the current item's key.
 func (b3 BtreeInterface[TK, TV]) UpdateCurrentKey(key TK) bool {
-	ok, _ := b3.Btree.UpdateCurrentKey(nil, key)
+	ok, _ := b3.Btree.UpdateCurrentKey(context.Background(), key)
 	return ok
 }
 
 // Remove will find the item with a given key then remove that item.
 func (b3 BtreeInterface[TK, TV]) Remove(key TK) bool {
-	ok, _ := b3.Btree.Remove(nil, key)
+	ok, _ := b3.Btree.Remove(context.Background(), key)
 	return ok
 }
 
 // RemoveCurrentItem will remove the current key/value pair from the store.
 func (b3 BtreeInterface[TK, TV]) RemoveCurrentItem() bool {
-	ok, _ := b3.Btree.RemoveCurrentItem(nil)
+	ok, _ := b3.Btree.RemoveCurrentItem(context.Background())
 	return ok
 }
 
 // First positions the "cursor" to the first item as per key ordering.
 func (b3 BtreeInterface[TK, TV]) First() bool {
-	ok, _ := b3.Btree.First(nil)
+	ok, _ := b3.Btree.First(context.Background())
 	return ok
 }
 
 // Last positionts the "cursor" to the last item as per key ordering.
 func (b3 BtreeInterface[TK, TV]) Last() bool {
-	ok, _ := b3.Btree.Last(nil)
+	ok, _ := b3.Btree.Last(context.Background())
 	return ok
 }
 
 // Next positions the "cursor" to the next item as per key ordering.
 func (b3 BtreeInterface[TK, TV]) Next() bool {
-	ok, _ := b3.Btree.Next(nil)
+	ok, _ := b3.Btree.Next(context.Background())
 	return ok
 }
 
 // Previous positions the "cursor" to the previous item as per key ordering.
 func (b3 BtreeInterface[TK, TV]) Previous() bool {
-	ok, _ := b3.Btree.Previous(nil)
+	ok, _ := b3.Btree.Previous(context.Background())
 	return ok
 }

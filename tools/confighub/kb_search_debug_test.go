@@ -3,6 +3,7 @@ package confighub
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -16,6 +17,9 @@ import (
 func TestCompareSearchVsSearchKnowledgeBase(t *testing.T) {
 	ctx := context.Background()
 	storagePath := "../../tools/config.json"
+	if _, err := os.Stat(storagePath); err != nil {
+		t.Skipf("%s not present (gitignored, local-only); skipping", storagePath)
+	}
 
 	cfg, err := LoadConfig(storagePath)
 	if err != nil {

@@ -48,7 +48,7 @@ func getSearchStore(targetIDStr string) (*search.Index, error) {
 
 	obj, ok := transRegistry.GetBtree(transUUID, storeUUID)
 	if !ok {
-		return nil, fmt.Errorf("Search Index not found in transaction")
+		return nil, fmt.Errorf("search index not found in transaction")
 	}
 	store, ok := obj.(*search.Index)
 	if !ok {

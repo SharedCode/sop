@@ -264,3 +264,7 @@ config.json
 
 # SOP KB (Generated locally & on release)
 sop_base_knowledge.json
+
+# Local data stores created by running tools/httpserver
+tools/httpserver/ltm_omni/
+tools/httpserver/sessions/

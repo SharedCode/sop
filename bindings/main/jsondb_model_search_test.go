@@ -98,7 +98,7 @@ func TestManageSearch_ErrorPaths_Extended(t *testing.T) {
 	// 4. getStore: Search Index not found
 	notFoundMeta := fmt.Sprintf(`{"id": "00000000-0000-0000-0000-000000000000", "transaction_id": "%s"}`, transID)
 	res = ManageSearchForTest(ctxID, SearchAdd, notFoundMeta, "")
-	if !strings.Contains(res, "Search Index not found") {
+	if !strings.Contains(res, "search index not found") {
 		t.Errorf("SearchAdd with non-existent store should fail, got: %s", res)
 	}
 
@@ -265,12 +265,12 @@ func TestManageModelStore_ErrorPaths_Extended(t *testing.T) {
 		{
 			name:     "Transaction Not Found",
 			meta:     createMeta(sop.NewUUID().String(), msIDStr),
-			expected: "Model Store not found in transaction",
+			expected: "model store not found in transaction",
 		},
 		{
 			name:     "Store Not Found in Transaction",
 			meta:     createMeta(transIDStr, sop.NewUUID().String()),
-			expected: "Model Store not found in transaction",
+			expected: "model store not found in transaction",
 		},
 		{
 			name:     "Object is not a Model Store",

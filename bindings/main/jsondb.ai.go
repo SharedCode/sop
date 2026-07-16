@@ -73,7 +73,7 @@ func getVectorStore(targetIDStr string) (PyVectorStore, error) {
 
 	obj, ok := transRegistry.GetBtree(transUUID, storeUUID)
 	if !ok {
-		return nil, fmt.Errorf("Vector Store not found in transaction")
+		return nil, fmt.Errorf("vector store not found in transaction")
 	}
 	store, ok := obj.(PyVectorStore)
 	if !ok {
@@ -98,7 +98,7 @@ func getModelStore(targetIDStr string) (ai.ModelStore, error) {
 
 	obj, ok := transRegistry.GetBtree(transUUID, storeUUID)
 	if !ok {
-		return nil, fmt.Errorf("Model Store not found in transaction")
+		return nil, fmt.Errorf("model store not found in transaction")
 	}
 	store, ok := obj.(ai.ModelStore)
 	if !ok {

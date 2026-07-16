@@ -88,6 +88,10 @@ type Config struct {
 	RedisURL     string `json:"-"`
 }
 
+// vecMapKey is the context key handleListSpaces uses to pass the map of
+// vectorized spaces to the RBAC evaluator, avoiding string-key collisions.
+type vecMapKey struct{}
+
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if value != "" {
@@ -147,8 +151,7 @@ func init() {
 
 				// Check if the Space has been vectorized, otherwise it cannot be used by AI.
 				// For performance, handleListSpaces injects a map of vectorized spaces into the context.
-				type vecMapKey struct{}
-				if vMap, ok := ctx.Value("vectorized_spaces").(map[string]bool); ok {
+				if vMap, ok := ctx.Value(vecMapKey{}).(map[string]bool); ok {
 					return vMap[entCtx.AssetID]
 				}
 
@@ -1331,15 +1334,13 @@ func handleListSpaces(w http.ResponseWriter, r *http.Request) {
 	expectedMemoryPrefix := "memory_"
 	expectedMemoryFull := expectedMemoryPrefix + userID
 
-	if result != nil {
-		for _, name := range result {
-			if strings.HasPrefix(name, expectedMemoryPrefix) {
-				if name == expectedMemoryFull {
-					filtered = append(filtered, name)
-				}
-			} else {
+	for _, name := range result {
+		if strings.HasPrefix(name, expectedMemoryPrefix) {
+			if name == expectedMemoryFull {
 				filtered = append(filtered, name)
 			}
+		} else {
+			filtered = append(filtered, name)
 		}
 	}
 
@@ -1363,7 +1364,7 @@ func handleListSpaces(w http.ResponseWriter, r *http.Request) {
 		}
 		tx.Rollback(ctx)
 	}
-	ctx = context.WithValue(ctx, "vectorized_spaces", vectorizedMap)
+	ctx = context.WithValue(ctx, vecMapKey{}, vectorizedMap)
 
 	itemRBAC := make(map[string]sop.ContextRBACMap)
 	for _, name := range filtered {
@@ -2256,7 +2257,6 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 		if query != "" {
 			// Try to find the item with the query key.
 			searchKey := parseKey(query)
-			fmt.Printf("searchKey: %v/n", searchKey)
 			ok, err = store.Find(ctx, searchKey, false)
 			if store.GetCurrentKey().Key != nil {
 				ok = true
@@ -2280,9 +2280,11 @@ func handleListItems(w http.ResponseWriter, r *http.Request) {
 
 	for ok && err == nil && count < limit {
 		kItem := store.GetCurrentKey()
-		v, err := store.GetCurrentValue(ctx)
-		if err != nil {
-			log.Error(fmt.Sprintf("Error reading value for key %v: %v", kItem.Key, err))
+		// Use a separate variable so store.Next below assigns the loop's err,
+		// not a shadowed copy (which silently swallowed iteration errors).
+		v, verr := store.GetCurrentValue(ctx)
+		if verr != nil {
+			log.Error(fmt.Sprintf("Error reading value for key %v: %v", kItem.Key, verr))
 		}
 
 		itemMap := map[string]any{

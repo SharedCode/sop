@@ -96,10 +96,6 @@ func handleListSpaceCategories(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if categories == nil {
-		categories = make([]map[string]any, 0)
-	}
-
 	rbacMap := sop.ResolveRBACMap(ctx, "space", sop.EntitlementContext{AssetID: storeName, Database: dbName, IsSystemDB: IsSystemDB(dbName)}, nil)
 
 	response := map[string]any{

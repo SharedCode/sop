@@ -272,7 +272,7 @@ func TestHandleSaveConfig_ErasureIsolation(t *testing.T) {
 		if status != http.StatusBadRequest {
 			t.Errorf("Expected 400, got %d", status)
 		}
-		if !strings.Contains(body, "All paths must be unique") {
+		if !strings.Contains(body, "all paths must be unique") {
 			t.Errorf("Expected error message about unique paths, got: %s", body)
 		}
 	})
@@ -328,7 +328,7 @@ func TestHandleSaveConfig_ErasureIsolation(t *testing.T) {
 		if !strings.Contains(body, "storeA") {
 			t.Errorf("Expected error context for storeA, got: %s", body)
 		}
-		if !strings.Contains(body, "All paths must be unique") {
+		if !strings.Contains(body, "all paths must be unique") {
 			t.Errorf("Expected error message about unique paths, got: %s", body)
 		}
 	})

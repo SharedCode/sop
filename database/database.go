@@ -213,7 +213,7 @@ func ValidateOptions(config sop.DatabaseOptions) (sop.DatabaseOptions, error) {
 // ValidateCassandraOptions validates and prepares the database options for Cassandra.
 func ValidateCassandraOptions(config sop.DatabaseOptions) (sop.DatabaseOptions, error) {
 	if config.Keyspace == "" {
-		return config, fmt.Errorf("Cassandra mode requires Keyspace to be set")
+		return config, fmt.Errorf("cassandra mode requires Keyspace to be set")
 	}
 	c := sop.GetL2Cache(sop.TransactionOptions{CacheType: sop.Redis})
 	if c == nil {
@@ -221,7 +221,7 @@ func ValidateCassandraOptions(config sop.DatabaseOptions) (sop.DatabaseOptions, 
 		sop.RegisterL2CacheFactory(sop.Redis, redis.NewClient)
 		c = sop.GetL2Cache(sop.TransactionOptions{CacheType: sop.Redis})
 		if c == nil {
-			return config, fmt.Errorf("Cassandra mode requires Redis adapter. Ensure you have initialized Redis connection using the redis.OpenConnection method.")
+			return config, fmt.Errorf("cassandra mode requires the Redis adapter; initialize the connection using redis.OpenConnection first")
 		}
 	}
 	config.CacheType = sop.Redis

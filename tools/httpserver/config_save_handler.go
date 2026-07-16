@@ -250,7 +250,7 @@ func validatePathConflictsAndPermissions(req *SaveConfigRequest) error {
 			}
 
 			// Collision detected
-			return fmt.Errorf("path conflict: '%s' is used by '%s' and '%s'. All paths must be unique.", rawPath, existingOwner, owner)
+			return fmt.Errorf("path conflict: '%s' is used by '%s' and '%s'; all paths must be unique", rawPath, existingOwner, owner)
 		}
 		pathOwners[absPath] = owner
 		return nil
@@ -272,7 +272,7 @@ func validatePathConflictsAndPermissions(req *SaveConfigRequest) error {
 	// System EC Configs
 	for key, conf := range req.SystemOptions.ErasureConfig {
 		if len(conf.BaseFolderPathsAcrossDrives) != conf.DataShardsCount+conf.ParityShardsCount {
-			return fmt.Errorf("Erasure Config (System Key %s): BasePaths count must match Data+Parity", key)
+			return fmt.Errorf("erasure config (System Key %s): BasePaths count must match Data+Parity", key)
 		}
 		for i, bp := range conf.BaseFolderPathsAcrossDrives {
 			if err := registerPath(bp, fmt.Sprintf("System Erasure Key[%s][%d]", key, i)); err != nil {
@@ -294,7 +294,7 @@ func validatePathConflictsAndPermissions(req *SaveConfigRequest) error {
 		}
 		for key, conf := range db.DatabaseOptions.ErasureConfig {
 			if len(conf.BaseFolderPathsAcrossDrives) != conf.DataShardsCount+conf.ParityShardsCount {
-				return fmt.Errorf("Erasure Config (%s Key %s): BasePaths count must match Data+Parity", dbLabel, key)
+				return fmt.Errorf("erasure config (%s Key %s): BasePaths count must match Data+Parity", dbLabel, key)
 			}
 			for i, bp := range conf.BaseFolderPathsAcrossDrives {
 				if err := registerPath(bp, fmt.Sprintf("%s Erasure Key[%s][%d]", dbLabel, key, i)); err != nil {

@@ -33,8 +33,7 @@ func (nr *nodeRepository[TK, TV]) Update(n *btree.Node[TK, TV]) {
 
 // Get will retrieve a node with nodeID from the map.
 func (nr *nodeRepository[TK, TV]) Get(ctx context.Context, nodeID sop.UUID) (*btree.Node[TK, TV], error) {
-	v, _ := nr.lookup[nodeID]
-	return v, nil
+	return nr.lookup[nodeID], nil
 }
 
 // Fetched does nothing for in-memory.

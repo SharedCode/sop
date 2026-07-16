@@ -1,5 +1,15 @@
 # Changelog
 
+## v5.3.7
+- **Descending iterators for the in-memory B-Tree**: `AllDesc()` and `RangeDesc(from, to)` walk keys newest-first; `RangeDesc` seeks straight to the high bound. Both covered by unit tests; quickstart shows a newest-first scan.
+- **Fix: iteration errors no longer swallowed in the Data Manager item stream** (`tools/httpserver`): a shadowed `err` inside the paging loop meant `store.Next` failures never reached the error log or terminated the loop condition.
+- **Fix: `tools/confighub` knowledge-base tests now skip on fresh clones** instead of failing when the gitignored local `tools/config.json` is absent.
+- **Security: jackson-databind 2.21.4 to 2.21.5** in the Java binding (closes the case-insensitive deserialization bypass advisory, the last open Dependabot alert).
+- **Lint cleanup**: removed a stray debug print in the item search path, replaced nil Contexts with `context.Background()` in the in-memory B-Tree wrapper, finished the typed context key for the vectorized-spaces map, normalized error strings, dropped dead nil checks.
+
+## v5.3.6
+- **Maintenance rebuild**: fixed v5.3.5/v5.3.6 release pipeline failures by building the whole `knowledge_compiler` package and bumping the build image to Go 1.26.4. No library code changes.
+
 ## v5.3.5
 - **B-Tree node slot allocation and L1 cache handling optimized** for better throughput on hot paths.
 - **L2 cache eviction policy reworked** for standalone mode -- smarter eviction under memory pressure.

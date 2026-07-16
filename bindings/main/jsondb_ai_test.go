@@ -47,7 +47,7 @@ func TestManageVectorDB_ErrorPaths_Extended(t *testing.T) {
 	// 4. getStore: Vector Store not found
 	notFoundMeta := fmt.Sprintf(`{"id": "00000000-0000-0000-0000-000000000000", "transaction_id": "%s"}`, transID)
 	res = ManageVectorDBForTest(ctxID, UpsertVector, notFoundMeta, "")
-	if !strings.Contains(res, "Vector Store not found") {
+	if !strings.Contains(res, "vector store not found") {
 		t.Errorf("UpsertVector with non-existent store should fail, got: %s", res)
 	}
 

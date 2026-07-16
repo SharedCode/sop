@@ -54,5 +54,15 @@ func main() {
 		fmt.Printf("  build %d -> %s\n", k, v)
 	}
 
+	// Descending scan: newest builds first.
+	fmt.Println("descending scan, newest 3 builds:")
+	n := 0
+	for k, v := range b3.AllDesc() {
+		fmt.Printf("  build %d -> %s\n", k, v)
+		if n++; n == 3 {
+			break
+		}
+	}
+
 	fmt.Println("quickstart: OK")
 }
