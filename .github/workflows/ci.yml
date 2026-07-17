@@ -7,8 +7,39 @@ on:
   workflow_dispatch:
 
 jobs:
+  sanity:
+    name: Sanity (vet + fmt + build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: gofmt check
+        shell: bash
+        run: |
+          set -euo pipefail
+          unformatted=$(gofmt -l . | grep -v vendor || true)
+          if [ -n "$unformatted" ]; then
+            echo "Files need gofmt:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Build all packages
+        run: go build ./...
+
   build-and-test:
     name: Build & Test (public + integration)
+    needs: sanity
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:

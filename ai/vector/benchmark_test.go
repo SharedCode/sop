@@ -43,7 +43,7 @@ func BenchmarkVectorStoreCRUD(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// Stop timer during setup to get accurate operational metrics
 		b.StopTimer()
-		
+
 		trans, err := db.BeginTransaction(ctx, sop.ForWriting)
 		if err != nil {
 			b.Fatalf("BeginTransaction failed: %v", err)
@@ -51,7 +51,7 @@ func BenchmarkVectorStoreCRUD(b *testing.B) {
 
 		storeName := fmt.Sprintf("bench_store_%d", i%5) // Loop across 5 stores to simulate churn
 		store, err := db.OpenVectorStore(ctx, storeName, trans, vector.Config{
-			UsageMode:            ai.DynamicWithVectorCountTracking,
+			UsageMode: ai.DynamicWithVectorCountTracking,
 		})
 		if err != nil {
 			b.Fatalf("OpenVectorStore failed: %v", err)

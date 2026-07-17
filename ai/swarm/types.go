@@ -16,9 +16,9 @@ const (
 
 // Job represents a unit of work distributed to the swarm.
 type Job struct {
-	ID        string            `json:"id"`
+	ID         string            `json:"id"`
 	ScriptName string            `json:"script_name"`
-	Params    map[string]string `json:"params"`
+	Params     map[string]string `json:"params"`
 	// TargetFilter allows targeting specific nodes (e.g., "region=us-east").
 	// If empty, any available worker can pick it up.
 	TargetFilter map[string]string `json:"target_filter"`

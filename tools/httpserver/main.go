@@ -408,6 +408,7 @@ func main() {
 	http.HandleFunc("/api/spaces/config", withAuth(handleSaveSpaceConfig))
 	http.HandleFunc("/api/tasks/status", withAuth(handleGetTaskStatus))
 	http.HandleFunc("/api/health", handleHealth)
+	http.HandleFunc("/metrics", handleMetrics)
 	// Configuration Endpoints
 	http.HandleFunc("/api/config/save", withAuth(handleSaveConfig))
 	http.HandleFunc("/api/db/init", withAuth(handleInitDatabase))
@@ -476,6 +477,7 @@ func main() {
 		})
 	}
 
+	handler = metricsMiddleware(handler)
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Error(err.Error())
 	}
@@ -3622,4 +3624,3 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 		"version": sop.Version,
 	})
 }
-

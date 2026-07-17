@@ -268,3 +268,11 @@ sop_base_knowledge.json
 # Local data stores created by running tools/httpserver
 tools/httpserver/ltm_omni/
 tools/httpserver/sessions/
+
+# Local build/debug artifacts in tools/httpserver
+tools/httpserver/server
+tools/httpserver/server_bin
+tools/httpserver/out.html
+tools/httpserver/payload.json
+tools/httpserver/translogs/
+*.bak

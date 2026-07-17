@@ -290,7 +290,7 @@ func buildStoresCRUDOperationsContext(flags map[string]bool) string {
 		sections = append(sections,
 			"- C = Create. Use write transactions. If key shape, field names, or value shape are uncertain, research them with list_stores first. For multi-step creates, generate a concrete write script and run it with execute_script.",
 			"- Set the target database explicitly.",
-		dbNote,
+			dbNote,
 		)
 	}
 	if flags["U"] {

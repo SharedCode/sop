@@ -10,20 +10,20 @@ import (
 
 // Worker represents a node that listens for and executes jobs.
 type Worker struct {
-	ID              string
-	PollInterval    time.Duration
-	StopChan        chan struct{}
-	tf              TransactionFactory
+	ID               string
+	PollInterval     time.Duration
+	StopChan         chan struct{}
+	tf               TransactionFactory
 	supportedScripts map[string]func(context.Context, map[string]string) (string, error)
 }
 
 // NewWorker creates a new swarm worker.
 func NewWorker(id string, tf TransactionFactory) *Worker {
 	return &Worker{
-		ID:              id,
-		PollInterval:    2 * time.Second, // Default poll interval
-		StopChan:        make(chan struct{}),
-		tf:              tf,
+		ID:               id,
+		PollInterval:     2 * time.Second, // Default poll interval
+		StopChan:         make(chan struct{}),
+		tf:               tf,
 		supportedScripts: make(map[string]func(context.Context, map[string]string) (string, error)),
 	}
 }

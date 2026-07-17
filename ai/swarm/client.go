@@ -19,7 +19,7 @@ func Distribute(ctx context.Context, t sop.Transaction, scriptName string, param
 	jobID := fmt.Sprintf("job-%d", time.Now().UnixNano())
 	job := Job{
 		ID:           jobID,
-		ScriptName:    scriptName,
+		ScriptName:   scriptName,
 		Params:       params,
 		TargetFilter: targetFilter,
 		CreatedAt:    time.Now(),
