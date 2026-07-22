@@ -845,7 +845,7 @@ func (btree *Btree[TK, TV]) getSlotLength() int {
 }
 
 func (btree *Btree[TK, TV]) isCurrentItemSelected() bool {
-	return btree.currentItemRef.getNodeID() != sop.NilUUID
+	return btree.currentItemRef.getNodeID() != sop.NilUUID && btree.currentItemRef.getNodeItemIndex() >= 0
 }
 
 // distribute moves an item from a full node to a sibling with a vacant slot (controller pattern, avoids recursion).

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -79,10 +80,22 @@ func TestHandleTestEmbedderConnection_InvalidProvider(t *testing.T) {
 	}
 }
 
+func newLoopbackTestServer(t *testing.T, handler http.Handler) *httptest.Server {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen on loopback: %v", err)
+	}
+	server := httptest.NewUnstartedServer(handler)
+	server.Listener = listener
+	server.Start()
+	return server
+}
+
 func TestHandleTestEmbedderConnection_OpenAIUsesConfiguredAPIURL(t *testing.T) {
 	var capturedPath string
 	var capturedAuth string
-	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	relay := newLoopbackTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedPath = r.URL.Path
 		capturedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
@@ -114,7 +127,7 @@ func TestHandleTestEmbedderConnection_OpenAIUsesConfiguredAPIURL(t *testing.T) {
 func TestHandleTestLLMConnection_OpenAIUsesConfiguredAPIURL(t *testing.T) {
 	var capturedPath string
 	var capturedAuth string
-	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	relay := newLoopbackTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedPath = r.URL.Path
 		capturedAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")

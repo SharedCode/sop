@@ -13,6 +13,8 @@ import (
 	"github.com/sharedcode/sop/cache"
 )
 
+const phase1CommitMaxRetryCount = 30
+
 type btreeBackend struct {
 	btree          any
 	nodeRepository *nodeRepositoryBackend
@@ -337,6 +339,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 	startTime := sop.Now()
 	successful := false
 	needsRefetchAndMerge := false
+	retryCount := 0
 
 	for !successful {
 
@@ -492,6 +495,11 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		}
 
 		if !successful {
+			retryCount++
+			if retryCount >= phase1CommitMaxRetryCount {
+				return fmt.Errorf("phase 1 commit exceeded retry limit of %d after rollback", phase1CommitMaxRetryCount)
+			}
+
 			// Rollback partial changes.
 			if rerr := t.rollback(ctx, false); rerr != nil {
 				return fmt.Errorf("phase 1 commit failed, then rollback errored with: %w", rerr)

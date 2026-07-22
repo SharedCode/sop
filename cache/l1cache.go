@@ -176,10 +176,8 @@ func (c *L1Cache) SetNodeToMRU(ctx context.Context, nodeID sop.UUID, node any, n
 	c.mru.evict()
 }
 
-func (c *L1Cache) getEntryForHandle(handle sop.Handle) (*l1CacheEntry, bool) {
+func (c *L1Cache) getEntryForHandleLocked(handle sop.Handle) (*l1CacheEntry, bool) {
 	nodeID := handle.GetActiveID()
-	c.locker.Lock()
-	defer c.locker.Unlock()
 	if v, ok := c.lookup[nodeID]; ok && v.nodeVersion == handle.Version {
 		c.mru.remove(v.dllNode)
 		v.dllNode = c.mru.add(nodeID)
@@ -190,14 +188,20 @@ func (c *L1Cache) getEntryForHandle(handle sop.Handle) (*l1CacheEntry, bool) {
 
 // GetNodeFromMRU returns the node from L1 if the cached version matches the handle version; otherwise it returns nil.
 func (c *L1Cache) GetNodeFromMRU(handle sop.Handle, nodeTarget any) any {
-	entry, hit := c.getEntryForHandle(handle)
+	c.locker.Lock()
+	entry, hit := c.getEntryForHandleLocked(handle)
+	var nodeData any
+	if hit {
+		nodeData = entry.nodeData
+	}
+	c.locker.Unlock()
 	if !hit {
 		return nil
 	}
-	if entry == nil || entry.nodeData == nil {
+	if nodeData == nil {
 		return nodeTarget
 	}
-	return materializeCacheValue(entry.nodeData, nodeTarget)
+	return materializeCacheValue(nodeData, nodeTarget)
 }
 
 // GetNode loads the node by handle either from L1 (if fresh) or from L2, honoring TTL semantics,
@@ -205,12 +209,18 @@ func (c *L1Cache) GetNodeFromMRU(handle sop.Handle, nodeTarget any) any {
 func (c *L1Cache) GetNode(ctx context.Context, handle sop.Handle, nodeTarget any, isNodeCacheTTL bool, nodeCacheTTLDuration time.Duration) (any, error) {
 	nodeID := handle.GetActiveID()
 
-	entry, hit := c.getEntryForHandle(handle)
+	c.locker.Lock()
+	entry, hit := c.getEntryForHandleLocked(handle)
+	var nodeData any
 	if hit {
-		if entry == nil || entry.nodeData == nil {
+		nodeData = entry.nodeData
+	}
+	c.locker.Unlock()
+	if hit {
+		if nodeData == nil {
 			return nodeTarget, nil
 		}
-		materialized := materializeCacheValue(entry.nodeData, nodeTarget)
+		materialized := materializeCacheValue(nodeData, nodeTarget)
 		if materialized == nil {
 			return nil, nil
 		}

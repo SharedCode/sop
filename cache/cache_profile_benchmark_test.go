@@ -102,7 +102,7 @@ func BenchmarkStandaloneCacheWorkload(b *testing.B) {
 					target := &btree.Node[string, string]{}
 					probeCount++
 
-					if _, hit := l1.getEntryForHandle(handle); hit {
+					if hit := l1.GetNodeFromMRU(handle, nil); hit != nil {
 						l1Hits++
 					} else {
 						l2Fallbacks++
