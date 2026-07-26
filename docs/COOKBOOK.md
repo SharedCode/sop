@@ -2,7 +2,7 @@
 
 Simple, copy-pasteable examples for common SOP scenarios.
 
-> **Note**: This cookbook focuses on the Go API. For Python examples, see the [Python Cookbook](bindings/python/COOKBOOK.md). For Java examples, see the [Java Examples](bindings/java/README.md#examples). For C# examples, see the [C# Examples](bindings/csharp/Sop.CLI/). For Rust examples, see the [Rust Examples](bindings/rust/examples/).
+> **Note**: This cookbook focuses on the Go API. For Python examples, see the [Python Cookbook](../bindings/python/COOKBOOK.md). For Java examples, see the [Java Examples](../bindings/java/README.md#examples). For C# examples, see the [C# Examples](../bindings/csharp/Sop.CLI/). For Rust examples, see the [Rust Examples](../bindings/rust/examples/).
 
 ## Interoperability Note: Go vs. Other Languages
 
@@ -306,9 +306,9 @@ Since neither entity holds the foreign key of the other exclusively, a separate 
 2.  **Use Link Stores for M:N**: Only create explicit link stores when modeling complex Many-to-Many graphs.
 
 ### Code Examples (Metadata)
-*   **Go (Native)**: [examples/relations_demo/main.go](examples/relations_demo/main.go)
-*   **Python**: [bindings/python/sop/examples/relations_demo.py](bindings/python/sop/examples/relations_demo.py)
-*   **Java**: [bindings/java/src/main/java/com/sharedcode/sop/examples/BTreeRelations.java](bindings/java/src/main/java/com/sharedcode/sop/examples/BTreeRelations.java)
+*   **Go (Native)**: [examples/relations_demo/main.go](../examples/relations_demo/main.go)
+*   **Python**: [bindings/python/sop/examples/relations_demo.py](../bindings/python/sop/examples/relations_demo.py)
+*   **Java**: [bindings/java/src/main/java/com/sharedcode/sop/examples/BTreeRelations.java](../bindings/java/src/main/java/com/sharedcode/sop/examples/BTreeRelations.java)
 *   **C#**: `Sop.CLI` > Relations Demo
 
 ## 7. Managing Stores (Create, Open, Delete)

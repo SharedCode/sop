@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "sop"
-version = "2.3.2"
+version = "2.3.3"
 dependencies = [
  "libc",
  "serde",

@@ -708,8 +708,8 @@ See details here: https://github.com/sharedcode/sop/blob/master/docs/GO_CORE_ENG
 See details here: https://github.com/sharedcode/sop/blob/master/docs/GO_CORE_ENGINE.md#simple-usage
 
 <h2> SOP for Python (sop4py)</h2>
-See details here: https://github.com/sharedcode/sop/tree/master/jsondb/python#readme
-Check out the [Python Cookbook](jsondb/python/COOKBOOK.md) for code recipes.
+See details here: https://github.com/sharedcode/sop/tree/master/bindings/python#readme
+Check out the [Python Cookbook](bindings/python/COOKBOOK.md) for code recipes.
 
 <h2> SOP for AI Kit</h2>
 SOP includes a comprehensive AI toolkit for building local, privacy-first expert systems.

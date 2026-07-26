@@ -11,7 +11,7 @@ It provides components for building local AI applications on top of SOP's B-Tree
 
 ## Related Guides
 
-*   [AI Copilot & Agent Architecture](../AI_COPILOT.md)
+*   [AI Copilot & Agent Architecture](../docs/AI_COPILOT.md)
 *   [AI Script Architecture](AI_SCRIPT_ARCHITECTURE.md)
 *   [SOP AI Copilot Usage](AI_COPILOT_USAGE.md)
 *   [Vector Store Design](vector/VECTOR_STORE_DESIGN.md)
@@ -63,7 +63,7 @@ The core of the **Computing Platform**. It allows you to define complex, multi-s
 *   **Agent Framework**: Define agents with Personality, Memory, and Tool access.
 *   **Interoperable**: Scripts are stored as JSON and can be managed/visualized via the SOP Data Manager.
 
-See [ai/agent/README.md](ai/agent/README.md) for full documentation on Scripts, Swarm Computing, and the Tool Registry.
+See [ai/agent/README.md](agent/README.md) for full documentation on Scripts, Swarm Computing, and the Tool Registry.
 
 ### 3. Memory Architecture (SOP Unique Design)
 The SOP Agent is equipped with a dual-memory system that leverages the Database Engine itself:
@@ -83,7 +83,7 @@ The generator layer supports both shared and provider-owned ReAct loops.
 
 - Providers that preserve native tool and conversation state can own the inner loop directly.
 - Providers without a native loop continue to use the shared engine path.
-- Carryover, repair continuity, and orchestration policy are documented in [AI Copilot & Agent Architecture](../AI_COPILOT.md) and [Store Orchestration Modes](STORE_ORCHESTRATION_MODES.md).
+- Carryover, repair continuity, and orchestration policy are documented in [AI Copilot & Agent Architecture](../docs/AI_COPILOT.md) and [Store Orchestration Modes](STORE_ORCHESTRATION_MODES.md).
 
 ### 4. Model Store (`ai/database/model_store.go`)
 A unified interface for persisting AI models, from small "Skills" (Perceptrons) to large "Brains" (Neural Nets).

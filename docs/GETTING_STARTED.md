@@ -160,4 +160,4 @@ Now that your server is running, you can write code to interact with it. SOP is 
 
 *   **[Architecture Guide](ARCHITECTURE.md)**: Learn how SOP works under the hood.
 *   **[Workflows](WORKFLOWS.md)**: Best practices for scaling from local dev to production swarms.
-*   **[AI Copilot Guide](ai/README.md)**: Learn how to build AI-powered applications with SOP.
+*   **[AI Copilot Guide](../ai/README.md)**: Learn how to build AI-powered applications with SOP.

@@ -36,14 +36,14 @@ The **SOP AI Kit** transforms SOP from a storage engine into a complete AI data 
 
 > **Important**: To use the AI Copilot features (e.g., in the Data Manager), configure your LLM provider through the Setup Wizard or add generator configuration to your `config.json`. See the [Main README](../../README.md#ai-copilot-configuration) for details.
 
-For comprehensive details on the **SOP Platform Tools** (Scripting, Explain Plans, Self-Correcting Agents), please see the [Platform Tools Documentation](../../SOP_PLATFORM_TOOLS.md).
+For comprehensive details on the **SOP Platform Tools** (Scripting, Explain Plans, Self-Correcting Agents), please see the [Platform Tools Documentation](../../docs/SOP_PLATFORM_TOOLS.md).
 
 See [ai/README.md](../../ai/README.md) for a deep dive into the AI capabilities.
 
 ## Documentation
 
 *   **[API Cookbook](COOKBOOK.md)**: Common recipes and patterns (Key-Value, Transactions, AI).
-*   **[Examples](examples/)**: Complete runnable scripts.
+*   **[Examples](sop/examples/)**: Complete runnable scripts.
 
 ## Installation
 

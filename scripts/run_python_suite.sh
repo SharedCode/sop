@@ -4,8 +4,12 @@ set -e
 echo "--- Building Go Bridge (Local) ---"
 cd bindings/main
 
+# Detect the arch/OS that python3 itself runs as, not the host's uname -m.
+# On Apple Silicon with an x86_64 (Rosetta) python3, uname -m reports arm64
+# while ctypes needs a dylib matching the interpreter's own architecture.
+PY_ARCH=$(python3 -c "import platform; print(platform.machine())")
 OS=$(uname -s)
-ARCH=$(uname -m)
+ARCH="$PY_ARCH"
 GOOS=""
 GOARCH=""
 OUTFILE=""

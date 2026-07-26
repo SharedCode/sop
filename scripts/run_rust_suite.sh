@@ -6,15 +6,34 @@ echo "Building Go Bridge..."
 echo "========================================"
 cd bindings/main
 
-# Detect OS for library extension
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    LIB_EXT="dylib"
-else
-    LIB_EXT="so"
-fi
+# Detect OS/arch using the same naming scheme as bindings/rust/build.rs
+ARCH=$(uname -m)
+case "$ARCH" in
+    x86_64) GOARCH_NAME="amd64" ;;
+    arm64|aarch64) GOARCH_NAME="arm64" ;;
+    *) echo "Unsupported arch: $ARCH"; exit 1 ;;
+esac
 
-# Build the shared library
-go build -buildmode=c-shared -o libjsondb.$LIB_EXT .
+case "$OSTYPE" in
+    darwin*) OS_NAME="darwin" ;;
+    linux*) OS_NAME="linux" ;;
+    *) echo "Unsupported OS: $OSTYPE"; exit 1 ;;
+esac
+
+# Force GOARCH/GOOS explicitly: on Apple Silicon with an x86_64 (Rosetta) Go
+# toolchain, `go build` silently defaults to GOARCH=amd64 even though uname -m
+# (and rustc's default target) is arm64, producing a mislabeled/wrong-arch archive.
+export CGO_ENABLED=1
+case "$GOARCH_NAME" in
+    arm64) export GOARCH=arm64 ;;
+    amd64) export GOARCH=amd64 ;;
+esac
+export GOOS="$OS_NAME"
+unset CC
+
+# build.rs links this as a static archive from ../rust/lib, not a runtime shared library
+mkdir -p ../rust/lib
+go build -buildmode=c-archive -o "../rust/lib/libjsondb_${GOARCH_NAME}${OS_NAME}.a" .
 
 # Return to root
 cd ../..
@@ -24,11 +43,6 @@ echo "========================================"
 echo "Running Rust Unit Tests..."
 echo "========================================"
 cd bindings/rust
-
-# Ensure library path is set for runtime so the tests can find libjsondb
-export LIBRARY_PATH=../main:$LIBRARY_PATH
-export LD_LIBRARY_PATH=../main:$LD_LIBRARY_PATH
-export DYLD_LIBRARY_PATH=../main:$DYLD_LIBRARY_PATH
 
 cargo test
 

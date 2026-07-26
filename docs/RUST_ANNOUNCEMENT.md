@@ -70,7 +70,7 @@ For the systems guru, SOP offers knobs and dials that others hide:
 
 SOP for Rust is available now. Whether you are writing a CLI tool, a game server, or a high-frequency trading bot, give your data the bare-metal treatment it deserves.
 
-Check out the [examples](./bindings/rust/examples) and start building.
+Check out the [examples](../bindings/rust/examples) and start building.
 
 ---
 *SOP: Scalable Objects Persistence. Now speaking your language.*

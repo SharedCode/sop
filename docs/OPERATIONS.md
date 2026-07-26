@@ -95,7 +95,7 @@ Access the UI at `http://localhost:8080`.
 *   **Bulk Friendly**: Pagination and efficient loading for large datasets.
 *   **Safe Schema Updates**: Admins can securely unlock and modify Index/CEL expressions on live stores.
 
-For more details, see the [SOP Data Manager Documentation](tools/httpserver/README.md).
+For more details, see the [SOP Data Manager Documentation](../tools/httpserver/README.md).
 
 ## Troubleshooting & Best Practices
 

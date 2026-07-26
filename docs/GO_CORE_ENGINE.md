@@ -606,7 +606,7 @@ Two phase commit is required so SOP can offer "seamless" integration with your A
 On successful commit on Phase 1, SOP will then commit Phase 2, which is, to tell all Btrees affected in the transaction to finalize the committed Nodes and make them available on succeeding Btree I/O.
 Phase 2 commit is a very fast, quick action as changes and Nodes are already resident on the Btree storage, it is just a matter of finalizing the Virtual ID registry with the new Nodes' physical addresses to swap the old with the new ones.
 
-See [transaction.go](./transaction.go) for more details on two phase commit & how to access it for your application transaction integration.
+See [transaction.go](../transaction.go) for more details on two phase commit & how to access it for your application transaction integration.
 
 ## Coordination model (OOA) and safety
 

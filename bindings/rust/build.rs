@@ -24,6 +24,8 @@ fn main() {
     if target_os == "macos" {
         println!("cargo:rustc-link-lib=framework=CoreFoundation");
         println!("cargo:rustc-link-lib=framework=Security");
+        // Go's cgo-based net resolver needs libresolv (res_9_ninit/nsearch/nclose)
+        println!("cargo:rustc-link-lib=resolv");
     } else if target_os == "linux" {
         println!("cargo:rustc-link-lib=pthread");
     }

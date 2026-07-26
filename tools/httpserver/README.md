@@ -5,7 +5,7 @@ A powerful, web-based management suite for SOP B-Tree repositories. This tool tr
 ## Installation
 
 ### Download Binaries
-You can download the latest pre-compiled binaries for macOS, Linux, and Windows from the [Releases Page](../../releases).
+You can download the latest pre-compiled binaries for macOS, Linux, and Windows from the [Releases Page](https://github.com/sharedcode/sop/releases).
 
 ### Build from Source
 ```bash
@@ -320,7 +320,7 @@ This dataset is perfect for exploring the **AI Copilot** capabilities:
 
 ## Language Bindings & Downloads
 
-> **New to SOP?** Check out the **[Getting Started Guide](../../GETTING_STARTED.md)** for a step-by-step tutorial.
+> **New to SOP?** Check out the **[Getting Started Guide](../../docs/GETTING_STARTED.md)** for a step-by-step tutorial.
 
 When you download a release from GitHub, you can choose between:
 
