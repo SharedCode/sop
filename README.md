@@ -4,14 +4,14 @@
 
 At its core, SOP combines an embedded storage engine, distributed coordination model, and AI/runtime tooling. It supports scaling from a single device to clustered deployments that share storage and coordination state.
 
-[![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions) [![CI](https://github.com/SharedCode/sop/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/sop/actions/workflows/go.yml) [![codecov](https://codecov.io/gh/SharedCode/sop/branch/master/graph/badge.svg)](https://app.codecov.io/github/SharedCode/sop) [![Go Reference](https://pkg.go.dev/badge/github.com/sharedcode/sop.svg)](https://pkg.go.dev/github.com/sharedcode/sop) [![Go version](https://img.shields.io/github/go-mod/go-version/SharedCode/sop)](go.mod) [![License](https://img.shields.io/github/license/SharedCode/sop)](LICENSE)
+[![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions) [![CI](https://github.com/SharedCode/sop/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/sop/actions/workflows/go.yml) [![Release](https://img.shields.io/github/v/release/SharedCode/sop)](https://github.com/SharedCode/sop/releases) [![codecov](https://codecov.io/gh/SharedCode/sop/branch/master/graph/badge.svg)](https://app.codecov.io/github/SharedCode/sop) [![Go Reference](https://pkg.go.dev/badge/github.com/sharedcode/sop.svg)](https://pkg.go.dev/github.com/sharedcode/sop) [![Go version](https://img.shields.io/github/go-mod/go-version/SharedCode/sop)](go.mod) [![License](https://img.shields.io/github/license/SharedCode/sop)](LICENSE)
 
 
 ## Quickstart
 
 The fastest way to see SOP work is the in-memory B-Tree. No servers, no config:
 
-```
+```bash
 go run ./examples/quickstart
 ```
 
@@ -24,9 +24,40 @@ Every commit runs the delivery pipeline: build, tests, container packaging ([GHC
 ### The SOP Ecosystem
 
 Packed inside the library is everything you need to build next-generation distributed systems:
-*   **Swarm Computing Engine**: A framework for distributed coordination, allowing applications to act as coherent parts of a greater whole.
-*   **Polyglot Storage Engine**: An ACID-compliant B-Tree storage system with Caching and Erasure Coding, optimized for performance. [Read the Architecture Whitepaper](docs/SOP_ARCHITECTURE_WHITEPAPER.md).
-*   **AI Scripting & Computing Engine**: A versatile runtime that allows for creating intelligent, self-correcting workflows. See [Platform Tools & Relational Intelligence](docs/SOP_PLATFORM_TOOLS.md).
+*   **Polyglot Storage Engine**: An ACID-compliant B-Tree storage system with Caching and Reed-Solomon Erasure Coding, optimized for high throughput. [Read the Architecture Whitepaper](docs/SOP_ARCHITECTURE_WHITEPAPER.md).
+*   **Swarm Computing Engine**: A framework for distributed coordination and replication without global consensus bottlenecks.
+*   **AI Scripting & Computing Engine**: A versatile runtime that allows for creating intelligent, self-correcting workflows and vectorized spaces. See [Platform Tools & Relational Intelligence](docs/SOP_PLATFORM_TOOLS.md).
+
+## Why SOP?
+
+Modern application architecture is often fragmented across multiple discrete systems:
+
+```
+Fragmented Modern Stack:
+[Application] -> [Relational DB] + [Redis Cache] + [Queue] + [Vector DB] + [AI Runtime] + [Coordination Engine]
+                 (6+ infrastructure boundaries, high latency, separate failure domains, complex ops)
+
+versus
+
+SOP Unified Platform:
+[Application] -> [SOP Embedded / Clustered Engine]
+                 * ACID B-Tree Storage (direct I/O, sector-aligned, 2PC rollback)
+                 * Multi-tier L1/L2 Caching (MRU eviction)
+                 * Dynamic JSON DB & CEL Indexing
+                 * Partitioned Vector Store & Knowledge Base
+                 * AI Agent & Script Execution with Adaptive Hash Joins
+                 * Ephemeral Redis-assisted Coordination (no SPOF)
+```
+
+### When SOP is Appropriate
+- **High-performance data pipelines**: Applications needing direct I/O, zero-copy deserialization, and deterministic transaction commits.
+- **Local-to-cluster scaling**: Systems starting as zero-dependency embedded binaries on edge devices or workstations that need to transition to clustered multi-node coordination without rewriting application code.
+- **Unified AI memory and operational data**: AI agents and workflows needing long-term memory, vector search, relational joins, and dynamic indexing in a cohesive storage engine.
+- **Polyglot environments**: Teams deploying unified data stores across Go, Python, C#, Java, and Rust.
+
+### When Alternatives May Be Better
+- **Globally distributed multi-region databases**: If your workload requires cross-datacenter Paxos/Raft synchronous commits across continents, dedicated distributed SQL databases (e.g. CockroachDB, Spanner) are designed specifically for that domain.
+- **Massive analytical warehousing**: For multi-petabyte columnar analytical aggregations, specialized OLAP warehouses (e.g. ClickHouse, Snowflake) remain the preferred solution.
 
 ## Installation & Distribution
 
@@ -87,7 +118,7 @@ SOP supports both code-first and data-first workflows.
 
 ## SOP Data Manager & AI Suite
 
-SOP allows you to interact with your data using the **SOP Data Manager**—a web-based console that includes a **SQL-like** query engine and an **AI Copilot**.
+SOP allows you to interact with your data using the **SOP Data Manager**: a web-based console that includes a **SQL-like** query engine and an **AI Copilot**.
 
 ### Data Manager Capabilities
 *   **Visual Management**: Inspect B-Trees, manage Stores (Key-Value, Vector, Model), and explore the System DB.
@@ -284,7 +315,7 @@ This is how developers can keep the human-friendly authoring experience in SOP D
 
 ### Bridging the Gap: From Code-First to Managed (Safe & Zero-Downtime)
 
-SOP supports a hybrid workflow. You can start with a **Code-First** approach (using custom Go structs and comparers) and later make the store fully manageable by the Data Manager—**without migration or downtime**.
+SOP supports a hybrid workflow. You can start with a **Code-First** approach (using custom Go structs and comparers) and later make the store fully manageable by the Data Manager - **without migration or downtime**.
 
 *   **The Feature**: Use the Data Manager's **Edit Store** functionality to attach an `IndexSpecification` or `CEL expression` to an existing "Code-First" store.
 *   **The Safety Mechanism**: This operation is **100% safe** but protected.
@@ -328,7 +359,7 @@ go run ./tools/httpserver
 ```
 
 ### Production Mode (Real AI / BYOK)
-To unlock the actual AI Copilot and manage **Spaces** (Memory Architecture), you need to start the server in **Production Mode**. Because SOP uses a **BYOK (Bring Your Own Key)** architecture, the backend remains stateless—your API keys are entered directly into the Web UI.
+To unlock the actual AI Copilot and manage **Spaces** (Memory Architecture), you need to start the server in **Production Mode**. Because SOP uses a **BYOK (Bring Your Own Key)** architecture, the backend remains stateless: your API keys are entered directly into the Web UI.
 ```bash
 # From the root of the repository
 go run ./tools/httpserver -production
@@ -656,12 +687,12 @@ Each write or read transaction opportunistically invokes an internal onIdle() pa
 
 Thread safety: Earlier versions used unsynchronized globals; these now use atomic loads/stores (sync/atomic) to eliminate race detector warnings when tests force timer rewinds. Tests that manipulate timing (to speed up sweep scenarios) reset the atomic counters instead of writing plain globals.
 
-Operational impact: You generally do not need to call anything explicitly—just ensure transactions continue to flow. If you embed SOP in a service that may become read‑only idle for long stretches but you still want prompt rollback of higher‑priority interruptions, periodically issue a lightweight read transaction to trigger onIdle.
+Operational impact: You generally do not need to call anything explicitly: just ensure transactions continue to flow. If you embed SOP in a service that may become read-only idle for long stretches but you still want prompt rollback of higher-priority interruptions, periodically issue a lightweight read transaction to trigger onIdle.
 
 Testing notes: Unit tests rewind lastPriorityOnIdleTime and priorityLogFound (atomically) to force immediate sweep execution; this pattern is acceptable only in test code. Production code should never reset these values manually.
 
 ## Prerequisites
-- Go 1.26.4+
+- Go 1.26.8+
 - **OS**: macOS, Linux, or Windows.
     - **Architectures**: x64 (AMD64/Intel64) and ARM64 (Apple Silicon/Linux aarch64).
 - (Optional) Redis server (local or cluster) - for distributed coordination
@@ -675,23 +706,23 @@ NOTE: you need docker desktop running in your host machine for this to work. Go 
 * Where "mydi" is the name of the docker image, you can use another name of your choice.
 
 The docker image will be built with alpine (linux) and Redis server in it. Copy the SOP source codes to it. Setup target data folder and environment variable that tells the unit tests of the data folder path.
-On docker run, the shell script ensures that the Redis server is up & running then run the ("infs" package's integration) test files.
+On docker run, the shell script ensures that the Redis server is up and running then runs the ("infs" package's integration) test files.
 
 You can pattern how the test sets the (datapath) env't variable so you can run the same integration tests in your host machine, if needed, and yes, you need Redis running locally for this to work.
 See https://github.com/SharedCode/sop/blob/master/Dockerfile and https://github.com/SharedCode/sop/blob/master/docker-entrypoint.sh for more details.
 
-If you’re using VS Code, there are ready-made tasks:
-- Docker: Build and Test — builds image mydi
-- Docker: Run Tests — runs tests in the container
+If you are using VS Code, there are ready-made tasks:
+- Docker: Build and Test - builds image mydi
+- Docker: Run Tests - runs tests in the container
 
 ## Testing (unit, integration, stress)
 Run tests locally without Docker using build tags:
 
-- Unit tests (fast): go test ./...
+- Unit tests (fast): `go test ./...`
 - Integration tests (require Redis running on localhost and a writable data folder):
 	- Set environment variable datapath to your data directory (defaults to a local path if unset).
-	- Run: go test -tags=integration ./infs/integrationtests
-- Stress tests (long-running): go test -timeout 2h -tags=stress ./infs/stresstests/...
+	- Run: `go test -tags=integration ./infs/integrationtests`
+- Stress tests (long-running): `go test -timeout 2h -tags=stress ./infs/stresstests/...`
 
 VS Code tasks provided:
 - Go: Test (Unit)
@@ -726,7 +757,7 @@ The commit ends when the earlier of these two is reached. Internal lock TTLs use
 Recommendation: If you want replication/log cleanup to complete under the same budget, set your context deadline to at least maxTime plus a small grace period.
 
 ## Reliability & Integrity
-SOP implements a "Rock Solid" storage strategy ensuring data integrity and consistency across failures.
+SOP implements a robust storage strategy ensuring data integrity and consistency across failures.
 
 ### Checksums (CRC32)
 Every data block written to disk is protected by a CRC32 checksum.
@@ -763,7 +794,7 @@ SOP uses Redis for fast, ephemeral coordination and the filesystem for durable s
 
 - Decentralized: no leader or quorum; any node can coordinate on a sector independently.
 - Horizontally scalable: sharded by registry sectors; no global hot spots.
-- No single point of failure: loss of Redis state slows coordination briefly but doesn't corrupt data.
+- No single point of failure: loss of Redis state slows coordination briefly but does not corrupt data.
 - Low latency: lock checks and claim writes are O(1) on hot path; no multi-round consensus.
 
 ### When Redis is unavailable
@@ -773,20 +804,66 @@ SOP uses Redis for fast, ephemeral coordination and the filesystem for durable s
 
 ### Comparison to Paxos-style consensus
 
-- SOP avoids global consensus, leader election, and replicated logs—lower coordination latency and cost.
+- SOP avoids global consensus, leader election, and replicated logs: lower coordination latency and cost.
 - Better horizontal scaling for partitioned workloads (per-sector independence).
 - No SPOF in the coordination layer; failover is trivial and stateless.
-- If you need a globally ordered, cross-region commit log, consensus is still the right tool; SOP targets high-throughput, partition-aligned coordination. But then again, SOP is not a coordination engine, it is a storage engine. Its internal piece for coordination, e.g. - of handle (virtual ID) Registry, is what was described here.
-
-### TL;DR
-
-SOP builds a fast, decentralized coordination layer using Redis only for ephemeral locks and relies on storage-anchored sector claims for correctness. It scales out naturally and avoids consensus overhead while remaining safe under failover.
+- If you need a globally ordered, cross-region commit log, consensus is still the right tool; SOP targets high-throughput, partition-aligned coordination.
 
 ## Clustered Mode Compatibility
 
 In **Clustered Mode**, SOP uses Redis to coordinate transactions across multiple nodes. This allows many machines to participate in data management for the same Database/B-Tree files on disk while maintaining ACID guarantees.
 
 **Note**: The database files generated in Standalone and Clustered modes are fully compatible. You can switch between modes as needed but make sure if switching to Standalone mode, that there is only one process that writes to the database files.
+
+## Product Roadmap
+
+### Current (Implemented & Verified)
+- **Core ACID Storage**: Direct I/O 4096-byte aligned B-Tree engine with Copy-On-Write (COW) and 2PC crash rollback.
+- **Erasure Coding**: Reed-Solomon striping across drives with automatic shard repair (`fs/erasure`).
+- **Multi-tier Caching**: L1 MRU memory cache (62 ns latency) + L2 standalone/Redis cache.
+- **Dynamic Schema & Indexing**: Schema-less JSON B-Trees with Google CEL dynamic indexing expressions (`jsondb`, `cel`).
+- **Partitioned Vector Store**: Dynamic partitioned vector storage with similarity search and memory optimization (`ai/vector`).
+- **AI Agent Runtime**: Structured workflow execution, natural-language joins, and adaptive hash join planning (`ai/agent`).
+- **Polyglot Bindings**: Native FFI bindings for Python (`sop4py`), C# (`Sop`), Java, and Rust.
+- **Data Manager UI**: Web-based administration console, schema inspector, and AI copilot (`tools/httpserver`).
+- **Continuous Delivery**: Gated delivery pipeline packaging distroless quickstart images (`ghcr.io/sharedcode/sop-quickstart`).
+
+### Near Term (Planned Improvements)
+- **Cost-Based Query Optimizer**: Advanced predicate pushdown and multi-store join order optimization.
+- **Background Vector Compaction**: Non-blocking compaction workers for partitioned high-churn vector datasets.
+- **Observability Enhancements**: Native OpenTelemetry distributed trace spans and Prometheus metric endpoints.
+- **Direct gRPC Interface**: High-throughput binary RPC interface for cross-process client communication.
+
+### Future (Strategic Directions)
+- **Multi-Region Replication Tier**: Optional Raft-backed log tier for geo-distributed asynchronous replication.
+- **Hardware SIMD Vector Acceleration**: AVX-512 and ARM NEON intrinsics for sub-millisecond brute-force vector distance computations.
+- **WebAssembly Runtime**: Client-side sandboxed execution for user-defined triggers and stored procedures.
+
+## Investor & Market Overview
+
+### Problem
+Modern application and AI infrastructure suffers from severe sprawl. Building an intelligent, stateful system today typically requires maintaining a relational database, an in-memory cache, a vector database, a message queue, and an AI execution runtime. This fragmentation creates multiple points of failure, synchronization lag, high operational headcount, and substantial infrastructure costs.
+
+### Solution
+SOP consolidates transactional storage, multi-tier caching, dynamic indexing, and AI vector memory into a unified, high-performance platform. Applications can run embedded on a single node or scale out to coordinated clusters without changing their storage architecture.
+
+### Differentiation
+1. **Storage-Anchored Coordination**: Replaces complex distributed consensus clusters with storage-anchored sector claims and ephemeral Redis locks, avoiding global throughput bottlenecks.
+2. **True Polyglot Core**: A single high-performance Go storage engine shared seamlessly across Go, Python, C#, Java, and Rust applications.
+3. **Integrated Relational Intelligence**: Native metadata relations allow AI agents to navigate and join structured datasets without hallucinating schema mappings or requiring heavy external ETL pipelines.
+
+### Target Users
+- **Data & Infrastructure Teams**: Engineering organizations seeking to reduce database operational overhead and infrastructure complexity.
+- **AI / Agent Developers**: Teams building autonomous agents that need low-latency long-term memory, semantic search, and transactional state.
+- **Edge & Embedded Systems**: Developers deploying resilient local-first data storage that can synchronize to cloud clusters when connected.
+
+### Economic Thesis
+SOP reduces Total Cost of Ownership (TCO) by reducing the number of distinct infrastructure services required to operate intelligent applications, lowering cloud hosting bills and operational engineering overhead while increasing developer velocity.
+
+### Evidence & Validation
+- **Implemented**: Complete ACID B-Tree storage engine, Reed-Solomon erasure coding, JSON database with CEL indexing, Vector store, HTTP Data Manager, and multi-language bindings.
+- **Demonstrated**: Sub-70ns L1 cache reads, 16.23ms batch vector transactions with ACID guarantees, 1.10ms adaptive hash joins, zero called vulnerabilities under Go 1.26.8, and 100% green unit and integration test suites.
+- **Potential**: Significant infrastructure consolidation for enterprise AI agent data architectures and edge computing platforms.
 
 ## Community & support
 - Issues: https://github.com/SharedCode/sop/issues

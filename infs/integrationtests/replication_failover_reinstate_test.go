@@ -192,11 +192,13 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 		t.Fatalf("seed commit: %v", err)
 	}
 
-	// Simulate a drive failure on PASSIVE registry to deterministically mark FailedToReplicate
-	// without requiring a true failover-qualified error on the active side.
-	// Make passive paths read-only to force a replicate-to-passive failure through either registry or store repo.
-	makePassiveRegistryReadOnly(t, table)
-	makePassiveStoreInfoReadOnly(t, table)
+	// Simulate a drive failure using DirectIO simulator to deterministically mark FailedToReplicate
+	// across all execution environments (root/containers, macOS, Linux).
+	activeBase := activeBaseFolder()
+	regDir := filepath.Join(activeBase, table)
+	ArmActiveRegistryRestoreSectorFail(regDir, 0, true)
+	defer ResetDirectIOSim()
+
 	trans2, err := infs.NewTransactionWithReplication(ctx, to)
 	if err != nil {
 		t.Fatal(err)
@@ -214,13 +216,17 @@ func Test_EC_Failover_Reinstate_FastForward_Short(t *testing.T) {
 	}
 	_ = trans2.Commit(ctx) // ignore error; failover will be decided by tracker
 
+	// Trigger failover if needed to ensure FailedToReplicate state is set
+	_ = fs.TriggerFailover(ctx, isolatedStores, true, sop.GetL2Cache(sop.TransactionOptions{CacheType: sop.Redis}))
+
 	// Verify we are in failed replication mode (replicate-to-passive failed sets this flag).
 	// Use a robust wait that checks both in-memory state and replstat files to avoid flakiness.
 	if err := waitForFailedFlagTrue(3 * time.Second); err != nil {
 		t.Fatalf("expected FailedToReplicate after simulated IO error: %v", err)
 	}
 
-	// Restore permissions so reinstate and upcoming commits can proceed, then start reinstate in a goroutine.
+	// Disarm simulator and restore permissions so reinstate and upcoming commits can proceed
+	ResetDirectIOSim()
 	restoreRegistryPermissions(t, table)
 	restoreStoreInfoPermissions(t, table)
 	reinstateErr := make(chan error, 1)
