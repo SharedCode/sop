@@ -1,0 +1,72 @@
+# Production promotion:
+#
+#   Deliver succeeds -> [approval] -> promote GHCR image to :stable -> deploy site
+#
+# Split out of deliver.yml so a pending/never-granted approval can no
+# longer turn the build/test/package/staging pipeline red. This workflow
+# is triggered automatically once Deliver succeeds on master, then waits
+# on the `production` environment's manual approval like before.
+name: Promote to Production
+
+on:
+  workflow_run:
+    workflows: ["Deliver"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to promote (defaults to the latest successful Deliver run on master)'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  promote:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master')
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      packages: write
+      pages: write
+      id-token: write
+    steps:
+      - name: Resolve commit and image
+        run: |
+          echo "SHA=${{ github.event.inputs.sha || github.event.workflow_run.head_sha }}" >> "$GITHUB_ENV"
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/sop-quickstart" >> "$GITHUB_ENV"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Promote image to stable
+        run: |
+          docker pull $IMAGE:$SHA
+          docker tag $IMAGE:$SHA $IMAGE:stable
+          docker push $IMAGE:stable
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.SHA }}
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./
+          destination: ./_site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./_site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

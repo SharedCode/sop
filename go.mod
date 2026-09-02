@@ -1,6 +1,6 @@
 module github.com/sharedcode/sop
 
-go 1.26.4
+go 1.26.8
 
 require (
 	github.com/goccy/go-json v0.9.11

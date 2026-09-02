@@ -1,4 +1,4 @@
-FROM golang:1.26.4-alpine AS build-and-test
+FROM golang:1.26.8-alpine AS build-and-test
 
 # Install Redis server for Alpine
 # Note: 'redis' package on Alpine provides both redis-server and redis-cli

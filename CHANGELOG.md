@@ -1,5 +1,11 @@
 # Changelog
 
+## v5.3.8
+- **Fix: daily `vulncheck` CI job failing since ~Aug 19** — the Go 1.26.4 toolchain pinned in `go.mod`/`go.work` shipped 7 stdlib CVEs (net/url, html/template, crypto/tls x2, encoding/asn1, net/http, golang.org/x/net/idna) that were patched in Go 1.26.5/1.26.6. Bumped every module (`go.mod` x8, `go.work`) and all three Dockerfiles to Go 1.26.8; `govulncheck ./...` now reports 0 called vulnerabilities.
+- **Fix: `Deliver` workflow permanently red** — the `prod` job blocked on a never-granted manual approval for the `production` environment, which GitHub auto-fails after its ~30-day max run duration, turning every push's Deliver status red even though build/test/package/staging all passed. Split the production promotion (GHCR `:stable` tag + Pages deploy) into its own `promote.yml`, triggered after `Deliver` succeeds, so a pending approval no longer blocks or fails the delivery pipeline's status.
+- **README: removed the retired Go Report Card badge**, replaced with dynamically-sourced Go version and license badges (shields.io, read from `go.mod`/`LICENSE`) so the badge row can't drift out of date.
+- No library code changes; verified with `gofmt`, `go vet`, full race-enabled `go test ./...`, `govulncheck`, and Docker builds (`Dockerfile`, `Dockerfile.quickstart`) plus the quickstart container smoke test.
+
 ## v5.3.7
 - **Descending iterators for the in-memory B-Tree**: `AllDesc()` and `RangeDesc(from, to)` walk keys newest-first; `RangeDesc` seeks straight to the high bound. Both covered by unit tests; quickstart shows a newest-first scan.
 - **Fix: iteration errors no longer swallowed in the Data Manager item stream** (`tools/httpserver`): a shadowed `err` inside the paging loop meant `store.Next` failures never reached the error log or terminated the loop condition.

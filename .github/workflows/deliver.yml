@@ -1,11 +1,12 @@
 # Continuous delivery pipeline:
 #
-#   commit -> build -> tests -> package -> staging -> [approval] -> prod
-#           |______CI______|   (GHCR)     (smoke)     (button)     (promote + site)
+#   commit -> build -> tests -> package -> staging
+#           |______CI______|   (GHCR)     (smoke)
 #
-# The production environment requires a manual approval, so every commit
-# lands prod-ready and a human presses the button. Remove the environment
-# protection rule to turn this into continuous deployment.
+# This workflow always finishes as soon as staging passes. Production
+# promotion (the human-approved step) lives in promote.yml, triggered
+# after this workflow succeeds, so a pending approval never turns this
+# pipeline's status red. See promote.yml for the [approval] -> prod leg.
 name: Deliver
 
 on:
@@ -74,39 +75,3 @@ jobs:
         run: |
           docker run --rm $IMAGE:${{ github.sha }} | tee out.txt
           grep -q "quickstart: OK" out.txt
-
-  prod:
-    needs: staging
-    runs-on: ubuntu-latest
-    environment:
-      name: production
-      url: ${{ steps.deployment.outputs.page_url }}
-    permissions:
-      contents: read
-      packages: write
-      pages: write
-      id-token: write
-    steps:
-      - name: Set image name
-        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/sop-quickstart" >> "$GITHUB_ENV"
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Promote image to stable
-        run: |
-          docker pull $IMAGE:${{ github.sha }}
-          docker tag $IMAGE:${{ github.sha }} $IMAGE:stable
-          docker push $IMAGE:stable
-      - uses: actions/checkout@v4
-      - uses: actions/configure-pages@v5
-      - uses: actions/jekyll-build-pages@v1
-        with:
-          source: ./
-          destination: ./_site
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./_site
-      - id: deployment
-        uses: actions/deploy-pages@v4
