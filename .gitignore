@@ -276,3 +276,5 @@ tools/httpserver/out.html
 tools/httpserver/payload.json
 tools/httpserver/translogs/
 *.bak
+*.out
+coverage.out
