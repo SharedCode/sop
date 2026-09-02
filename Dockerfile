@@ -7,14 +7,12 @@ RUN apk add --no-cache redis
 # Set up your Go application and test environment
 WORKDIR /app
 
-# Copy go.mod and go.sum first to leverage Docker cache
-COPY go.mod go.sum ./
-
-# Copy the rest of your application code and tests
+# Copy the application code and tests. go.work's local `use` directives
+# (./infs, ./ai, etc.) mean go.mod resolution needs the full source tree,
+# so copying manifests separately first would buy no cache benefit here.
 COPY . .
 
 # Download dependencies
-# Moved after COPY . . because go.mod references local module ./infs
 RUN go mod download
 
 # Create the data path folder & the env var.
