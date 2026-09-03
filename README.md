@@ -283,6 +283,14 @@ This list reflects what is actually in the repository at the time of writing. It
 
 ---
 
+## 🌎 Cross-Platform
+
+CI (`.github/workflows/ci.yml`) builds, vets, and runs the core unit tests (`inmemory`, `btree`, `common`, `cache`, `encoding`, `database`) on `ubuntu-latest`, `macos-latest`, and `windows-latest` on every push and pull request, as three independent, parallel jobs. `macos-latest` runs on Apple Silicon (arm64), so that leg also verifies arm64 for free.
+
+The Redis- and Cassandra-backed integration and stress test suites stay Linux-only: GitHub Actions' `services:` containers require a Linux-hosted runner, so those specific suites are not run on macOS or Windows today. That is a real gap in what is verified there, not a hidden one.
+
+---
+
 ## 💻 For Developers
 
 ### 1. In-Memory Quickstart (Zero Dependencies)

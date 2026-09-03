@@ -7,9 +7,38 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Fast PR validation: format, vet, build, and the plain (non-integration,
+  # non-stress) unit tests, across every OS a developer or CI consumer is
+  # actually expected to run Go on. These three legs are independent and
+  # run in parallel; none of them needs: another.
+  #
+  # `demo` is excluded from vet/build/test everywhere below because it is a
+  # WASM-only package (imports syscall/js) that only compiles under
+  # GOOS=js GOARCH=wasm; see .github/workflows/deploy-demo.yml for how it's
+  # actually built. `bindings/main` (cgo) is additionally excluded on the
+  # Windows leg only; see the comment on the "go vet" step below for why.
+  #
+  # Go version: the project pins one exact toolchain version in go.mod
+  # (currently 1.26.8, for CVE remediation, see CHANGELOG.md) rather than
+  # supporting a range, so this matrix intentionally does not add a Go
+  # version axis; `go-version-file: go.mod` picks up that pinned version on
+  # every OS.
+  #
+  # Architecture: macos-latest already runs on Apple Silicon (arm64), which
+  # gives real arm64 coverage for free. The core engine has no
+  # architecture-specific assembly, SIMD intrinsics, or cgo in the packages
+  # this job tests (checked: no *_amd64.go/*_arm64.go files, no "unsafe"
+  # outside bindings/main), so an additional explicit arm64 Linux or Windows
+  # runner would not currently exercise any code path that ubuntu-latest and
+  # macos-latest don't already cover, and is left out to keep CI cost and
+  # maintenance proportional to what the project actually needs.
   sanity:
-    name: Sanity (vet + fmt + build)
-    runs-on: ubuntu-latest
+    name: Sanity (vet + fmt + build + unit tests)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - name: Checkout
@@ -31,12 +60,47 @@ jobs:
             exit 1
           fi
 
+      # bindings/main uses cgo (import "C") to build the shared libraries
+      # consumed by the Python and C# packages. Linux and macOS runners ship
+      # a working C compiler out of the box, so cgo builds there natively.
+      # Windows does not reliably ship one; the release pipeline
+      # (release.yml) already handles Windows binaries for this package by
+      # cross-compiling from ubuntu-latest with gcc-mingw-w64, not by
+      # building natively on a Windows runner, so this job follows the same
+      # split rather than guessing at whatever mingw happens to be
+      # preinstalled on windows-latest.
       - name: go vet
-        run: go vet ./...
+        shell: bash
+        run: |
+          set -euo pipefail
+          exclude='/demo$'
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            exclude="$exclude|/bindings/main$"
+          fi
+          go vet $(go list ./... 2>/dev/null | grep -Ev "$exclude")
 
       - name: Build all packages
-        run: go build ./...
+        shell: bash
+        run: |
+          set -euo pipefail
+          exclude='/demo$'
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            exclude="$exclude|/bindings/main$"
+          fi
+          go build $(go list ./... 2>/dev/null | grep -Ev "$exclude")
 
+      - name: Unit tests (no integration/stress tags, no external services)
+        shell: bash
+        run: go test -timeout 20m ./inmemory ./btree ./common ./cache ./encoding ./database
+
+  # Heavier validation that needs Redis and Cassandra as GitHub Actions
+  # `services:` containers. That keyword only runs a Docker daemon on
+  # Linux-hosted runners (macos-latest has no Docker daemon at all, and
+  # windows-latest does not support the `services:` container keyword), so
+  # this job intentionally stays Linux-only rather than faking coverage on
+  # platforms that cannot run it. It waits on the full cross-platform sanity
+  # matrix so an expensive Cassandra/Redis run is never wasted on a commit
+  # that fails to even build on one OS.
   build-and-test:
     name: Build & Test (public + integration)
     needs: sanity

@@ -7,7 +7,8 @@
 // 4. Swarm task hand-off without orphan locks or external message brokers.
 //
 // Run with zero external infrastructure:
-//   go run ./examples/agent_memory
+//
+//	go run ./examples/agent_memory
 package main
 
 import (
@@ -128,7 +129,7 @@ func main() {
 	// Step 6: Vector Search across Agent Memory Spaces
 	fmt.Println("\n[6] Performing Local Vector Cosine Similarity Search over Agent Memory:")
 	queryVec := generateMockEmbedding(1, 128)
-	
+
 	type searchHit struct {
 		key   string
 		score float64
