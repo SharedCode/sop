@@ -3,6 +3,17 @@
 ###############################################################################
 * text=auto
 ###############################################################################
+# Keep Go source checked out with LF regardless of OS. Without this, Windows
+# checkouts get CRLF (core.autocrlf converts on checkout under text=auto),
+# and gofmt, which always normalizes to LF, then flags every file as
+# unformatted purely because of line endings, not actual formatting.
+###############################################################################
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+go.work text eol=lf
+go.work.sum text eol=lf
+###############################################################################
 # Set default behavior for command prompt diff.
 #
 # This is need for earlier builds of msysgit that does not have it on by

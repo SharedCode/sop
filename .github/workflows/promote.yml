@@ -1,6 +1,6 @@
 # Production promotion:
 #
-#   Deliver succeeds -> [approval] -> promote GHCR image to :stable -> deploy site
+#   Deliver succeeds -> [approval] -> promote GHCR image to :stable
 #
 # Split out of deliver.yml so a pending/never-granted approval can no
 # longer turn the build/test/package/staging pipeline red. This workflow
@@ -29,12 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: ${{ steps.deployment.outputs.page_url }}
     permissions:
       contents: read
       packages: write
-      pages: write
-      id-token: write
     steps:
       - name: Resolve commit and image
         run: |
@@ -53,20 +50,11 @@ jobs:
           docker tag $IMAGE:$SHA $IMAGE:stable
           docker push $IMAGE:stable
 
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ env.SHA }}
-
-      - uses: actions/configure-pages@v5
-
-      - uses: actions/jekyll-build-pages@v1
-        with:
-          source: ./
-          destination: ./_site
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./_site
-
-      - id: deployment
-        uses: actions/deploy-pages@v4
+      # GitHub Pages deployment is handled solely by deploy-demo.yml, which
+      # builds and publishes both the WASM demo and SOP Arena together as one
+      # artifact. This job used to also run a separate Jekyll build of the
+      # whole repo and deploy that to the same "github-pages" environment on
+      # every push, which silently overwrote the demo/Arena deployment each
+      # time this workflow ran after it. Removed rather than coordinated,
+      # since a plain Jekyll build of the repo root was not serving any
+      # distinct purpose from the dedicated demo/Arena site.

@@ -1,12 +1,12 @@
 # SOP Arena — Distributed Systems Survival Game & Architecture Demo
 
-[![Deploy to GitHub Pages](https://github.com/sharedcode/sop-arena/actions/workflows/deploy.yml/badge.svg)](https://sharedcode.github.io/sop-arena/)
+[![Deploy to GitHub Pages](https://github.com/sharedcode/sop/actions/workflows/deploy-demo.yml/badge.svg)](https://sharedcode.github.io/sop/arena/)
 [![Go Version](https://img.shields.io/badge/Engine-Go_/_WASM-00ADD8?logo=go)](https://github.com/sharedcode/sop)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
 
 > **"Break the system. Watch SOP recover. Experience one engine for data and compute."**
 
-[**Live Interactive Experience: sharedcode.github.io/sop-arena**](https://sharedcode.github.io/sop-arena/)
+[**Live Interactive Experience: sharedcode.github.io/sop/arena**](https://sharedcode.github.io/sop/arena/)
 
 ---
 
@@ -97,19 +97,16 @@ npm run build
 
 ## 🌐 GitHub Pages Deployment
 
-### Option A: Standalone Repository (`sharedcode/sop-arena`)
-1. Create a new repository: `https://github.com/sharedcode/sop-arena`
-2. Push the contents of the `sop-arena/` directory to `main`
-3. In **Settings > Pages > Source**, select **`GitHub Actions`**
-4. The workflow in `.github/workflows/deploy.yml` will automatically build and publish to:
-   `https://sharedcode.github.io/sop-arena/`
+SOP Arena is not a standalone repository. It is built and deployed from inside the main `sharedcode/sop` repository by `.github/workflows/deploy-demo.yml`, which builds this app (`npm run build`) alongside the Go WASM technical demo and publishes both into one GitHub Pages site:
 
-### Option B: Monorepo Deployment (`sharedcode/sop`)
-The root repository includes `.github/workflows/deploy-arena.yml` which deploys from `./sop-arena/dist` automatically on pushes.
+- Technical demo (WASM ACID transactions, vector search, agent memory): `https://sharedcode.github.io/sop/`
+- SOP Arena (this app): `https://sharedcode.github.io/sop/arena/`
+
+That workflow is the only thing in the repository that deploys to GitHub Pages; `base: './'` in `vite.config.ts` is what lets this app's built assets resolve correctly from that `/arena/` subpath.
 
 ---
 
 ## 📄 License & Attribution
 
-SOP (Scalable Objects Persistence) is an open-source project by [SharedCode](https://github.com/sharedcode/sop).  
-Licensed under the Apache-2.0 License.
+SOP (Scalable Objects Persistence) is an open-source project by [SharedCode](https://github.com/sharedcode/sop).
+Licensed under the MIT License.

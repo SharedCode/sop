@@ -1,4 +1,4 @@
-name: Deploy SOP Zero-Server Demo to GitHub Pages
+name: Deploy SOP Pages (Technical Demo + Arena)
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
       - master
     paths:
       - 'demo/**'
+      - 'sop-arena/**'
       - '.github/workflows/deploy-demo.yml'
   workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
 
@@ -18,13 +19,21 @@ permissions:
 
 # Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
 # However, do NOT cancel in-progress runs as we want to allow deployments to complete safely.
+#
+# This is the ONLY workflow in the repository that publishes to the
+# "github-pages" environment. It builds both experiences into one combined
+# artifact and deploys them together, on purpose: GitHub Pages workflow
+# deployments fully replace the site's content each time, so two separate
+# workflows publishing separately (as this repo used to do, plus a third
+# Jekyll-based Pages step that was in promote.yml) just overwrite each
+# other's output on whichever one runs last. See CHANGELOG.md for that fix.
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
   build-and-package:
-    name: Build Go WASM & Package Demo
+    name: Build WASM Demo + SOP Arena, Package Site
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -42,7 +51,7 @@ jobs:
           set -euo pipefail
           GOROOT="$(go env GOROOT)"
           echo "Locating wasm_exec.js in GOROOT: ${GOROOT}"
-          
+
           # Support modern Go (lib/wasm) and legacy Go (misc/wasm) locations
           if [ -f "${GOROOT}/lib/wasm/wasm_exec.js" ]; then
             cp "${GOROOT}/lib/wasm/wasm_exec.js" demo/wasm_exec.js
@@ -65,14 +74,41 @@ jobs:
           GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop.wasm .
           ls -lh sop.wasm wasm_exec.js index.html
 
+      - name: Setup Node.js Toolchain
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'sop-arena/package-lock.json'
+
+      - name: Install SOP Arena Dependencies
+        working-directory: ./sop-arena
+        run: npm ci || npm install
+
+      - name: Build SOP Arena
+        working-directory: ./sop-arena
+        run: npm run build
+
+      - name: Assemble Combined Site
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          mkdir -p _site/arena
+          # Technical demo (WASM) lives at the site root: sharedcode.github.io/sop/
+          cp demo/index.html demo/sop.wasm demo/wasm_exec.js _site/
+          # SOP Arena lives at a subpath of the same site: sharedcode.github.io/sop/arena/
+          # (vite.config.ts uses base: './', so relative asset paths work from any subpath.)
+          cp -r sop-arena/dist/. _site/arena/
+          ls -lh _site _site/arena
+
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5
 
       - name: Upload GitHub Pages Artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload the entire demo/ directory containing index.html, sop.wasm, and wasm_exec.js
-          path: './demo'
+          path: './_site'
 
   deploy:
     name: Deploy to GitHub Pages
