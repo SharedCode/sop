@@ -623,6 +623,12 @@ func main() {
 	js.Global().Set("sopBenchmark", js.FuncOf(jsBenchmark))
 	js.Global().Set("sopGetLedgerAccounts", js.FuncOf(jsGetLedgerAccounts))
 	js.Global().Set("sopGetEngineInfo", js.FuncOf(jsGetEngineInfo))
+	js.Global().Set("sopAgentStart", js.FuncOf(jsAgentStart))
+	js.Global().Set("sopAgentStep", js.FuncOf(jsAgentStep))
+	js.Global().Set("sopAgentKill", js.FuncOf(jsAgentKill))
+	js.Global().Set("sopAgentResume", js.FuncOf(jsAgentResume))
+	js.Global().Set("sopAgentTrace", js.FuncOf(jsAgentTrace))
+	js.Global().Set("sopAgentRecall", js.FuncOf(jsAgentRecall))
 
 	// Signal to frontend that the Go WebAssembly runtime is loaded and ready
 	js.Global().Set("__SOP_WASM_READY__", js.ValueOf(true))

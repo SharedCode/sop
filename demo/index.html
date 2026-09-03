@@ -226,6 +226,10 @@
         <i data-lucide="layers" class="w-4 h-4"></i>
         <span>4. B-Tree State Inspector</span>
       </button>
+      <button onclick="switchTab('agent-tab')" id="btn-agent-tab" class="tab-btn px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-2 bg-dark-850 text-slate-400 hover:text-white border border-transparent hover:border-dark-700 transition">
+        <i data-lucide="brain-circuit" class="w-4 h-4"></i>
+        <span>5. AI Agent Memory</span>
+      </button>
     </div>
 
     <!-- TAB 1: ACID TRANSACTION LAB -->
@@ -476,6 +480,83 @@
             <!-- Loaded dynamically via JS -->
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: AI AGENT MEMORY -->
+    <div id="agent-tab" class="tab-content hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Left Controls & Trace (7 Cols) -->
+        <div class="lg:col-span-7 space-y-6">
+          <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6">
+            <div class="inline-flex items-center space-x-1.5 px-2.5 py-0.5 rounded-full bg-accent-violet/10 border border-accent-violet/30 text-accent-violet text-xs font-mono mb-2">
+              <i data-lucide="brain-circuit" class="w-3.5 h-3.5"></i>
+              <span>Durable Checkpoints for AI Agents</span>
+            </div>
+            <h2 class="text-2xl font-bold text-white tracking-tight">Kill the Agent Mid-Task. Watch It Resume.</h2>
+            <p class="text-slate-300 text-sm mt-1 mb-4">
+              Each reasoning step below is written to the B-Tree as a durable, atomic checkpoint the instant it happens. Kill the agent process and the committed steps stay put, no Redis, no separate checkpoint store. A successor agent reads the last checkpoint straight out of the B-Tree and keeps going.
+            </p>
+            <p class="text-[11px] text-slate-500 font-mono mb-5 border border-dark-800 rounded-lg p-2.5 bg-dark-950/60">
+              Note: the reasoning text is a scripted demo sequence, not a live model call. The checkpointing, the kill, and the recovery are real operations against the SOP B-Tree engine running in this tab.
+            </p>
+
+            <div class="flex flex-col sm:flex-row gap-3 mb-4">
+              <input id="agent-prompt-input" type="text" value="Investigate anomalous latency spike in payment gateway cluster" placeholder="Describe an agent task..."
+                     class="w-full bg-dark-950 border border-dark-700 rounded-xl px-4 py-2.5 text-sm text-white font-medium focus:border-accent-violet focus:outline-none transition" />
+              <button id="agent-start-btn" onclick="agentStartTask()" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-accent-violet to-purple-600 hover:from-purple-500 hover:to-purple-400 font-semibold text-xs text-white shadow-lg shadow-purple-500/20 flex items-center justify-center space-x-2 transition transform active:scale-95 shrink-0">
+                <i data-lucide="play" class="w-4 h-4"></i>
+                <span>Start Agent Task</span>
+              </button>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-3 mb-5 bg-dark-950 p-3 rounded-xl border border-dark-800 text-xs font-mono">
+              <div>Session: <span id="agent-session-id" class="text-white">—</span></div>
+              <div>Active Agent: <span id="agent-current-agent" class="text-white">—</span></div>
+              <div id="agent-state-badge" class="text-[10px] px-2 py-0.5 rounded-full border bg-dark-800 text-slate-400 border-dark-700">IDLE</div>
+              <div id="agent-progress" class="text-slate-400">0 / 0 checkpoints committed</div>
+              <div id="agent-generation" class="text-slate-500">Gen 0</div>
+            </div>
+
+            <div class="flex flex-wrap gap-3 mb-6">
+              <button id="agent-kill-btn" onclick="agentKillTask()" disabled class="px-4 py-2 rounded-xl bg-dark-800 hover:bg-rose-950/40 border border-rose-500/40 text-rose-400 hover:text-rose-300 font-semibold text-xs flex items-center space-x-2 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                <i data-lucide="skull" class="w-4 h-4"></i>
+                <span>Kill Agent Process</span>
+              </button>
+              <button id="agent-resume-btn" onclick="agentResumeTask()" disabled class="px-4 py-2 rounded-xl bg-dark-800 hover:bg-brand-950/40 border border-brand-500/40 text-brand-400 hover:text-brand-300 font-semibold text-xs flex items-center space-x-2 transition disabled:opacity-40 disabled:cursor-not-allowed">
+                <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                <span>Resume From Checkpoint</span>
+              </button>
+              <button onclick="agentRecallSimilar()" class="px-4 py-2 rounded-xl bg-dark-800 hover:bg-dark-700 border border-dark-700 text-slate-300 font-semibold text-xs flex items-center space-x-2 transition">
+                <i data-lucide="search" class="w-4 h-4"></i>
+                <span>Recall Similar Past Incidents</span>
+              </button>
+            </div>
+
+            <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono mb-2">Committed Reasoning Trace</h4>
+            <div id="agent-trace-list" class="space-y-2 max-h-64 overflow-y-auto terminal-scroll"></div>
+
+            <h4 class="text-xs font-semibold uppercase tracking-wider text-slate-400 font-mono mt-6 mb-2">Recalled From Memory</h4>
+            <div id="agent-recall-results" class="space-y-2">
+              <div class="text-xs text-slate-500 font-mono">Run "Recall Similar Past Incidents" to search committed agent memory.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Agent Lifecycle Log (5 Cols) -->
+        <div class="lg:col-span-5 space-y-6">
+          <div class="bg-dark-900 border border-dark-800 rounded-2xl p-6 flex flex-col h-full">
+            <div class="flex items-center space-x-2 mb-3">
+              <div class="w-2.5 h-2.5 rounded-full bg-accent-violet animate-pulse"></div>
+              <h3 class="text-xs font-bold text-white uppercase tracking-wider font-mono">Agent Lifecycle Log</h3>
+            </div>
+            <div id="agent-terminal" class="bg-dark-950 rounded-xl p-4 border border-dark-800 font-mono text-[11px] leading-relaxed text-slate-300 h-96 overflow-y-auto terminal-scroll space-y-1.5 flex-grow">
+              <div class="text-dark-600">// Click "Start Agent Task" to begin a checkpointed reasoning session.</div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -741,6 +822,132 @@
         <div class="flex justify-between py-1 border-b border-dark-850"><span class="text-slate-500">Total Transactions Executed:</span><span class="text-white font-bold">${info.totalTx}</span></div>
         <div class="flex justify-between py-1"><span class="text-slate-500">Active HTTP Network Calls:</span><span class="text-brand-400 font-bold">0 (Zero-Server Proof Verified)</span></div>
       `;
+    }
+
+    // ===== AI Agent Memory Tab =====
+    let currentAgentSession = null;
+    let agentAutoStepTimer = null;
+
+    function agentLog(msg, cls) {
+      const terminal = document.getElementById('agent-terminal');
+      if (!terminal) return;
+      const item = document.createElement('div');
+      item.className = cls || 'text-slate-300';
+      item.innerText = msg;
+      terminal.appendChild(item);
+      terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    function agentRenderSession(session) {
+      currentAgentSession = session;
+      document.getElementById('agent-session-id').innerText = session.sessionId;
+      document.getElementById('agent-current-agent').innerText = session.currentAgentId;
+
+      const badge = document.getElementById('agent-state-badge');
+      badge.innerText = session.state;
+      badge.className = 'text-[10px] px-2 py-0.5 rounded-full font-mono border ' + (
+        session.state === 'KILLED' ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' :
+        session.state === 'COMPLETE' ? 'bg-brand-500/10 text-brand-400 border-brand-500/30' :
+        'bg-accent-cyan/10 text-accent-cyan border-accent-cyan/30'
+      );
+
+      document.getElementById('agent-progress').innerText = session.lastStep + ' / ' + session.totalSteps + ' checkpoints committed';
+      document.getElementById('agent-generation').innerText = 'Gen ' + session.generation;
+
+      document.getElementById('agent-kill-btn').disabled = session.state !== 'RUNNING';
+      document.getElementById('agent-resume-btn').disabled = session.state !== 'KILLED';
+      document.getElementById('agent-start-btn').disabled = session.state === 'RUNNING';
+    }
+
+    function agentAppendTrace(frame) {
+      const list = document.getElementById('agent-trace-list');
+      const row = document.createElement('div');
+      row.className = 'flex items-start space-x-3 bg-dark-950 border border-dark-800 rounded-lg p-3';
+      row.innerHTML = `
+        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-dark-800 text-slate-400 shrink-0">#${frame.stepIndex}</span>
+        <div class="min-w-0">
+          <div class="text-xs text-slate-300">${frame.text}</div>
+          <div class="text-[10px] text-slate-500 font-mono mt-1">committed by ${frame.agentId}</div>
+        </div>
+      `;
+      list.appendChild(row);
+    }
+
+    function agentStartTask() {
+      if (!window.sopAgentStart) return;
+      clearInterval(agentAutoStepTimer);
+
+      const promptInput = document.getElementById('agent-prompt-input');
+      const prompt = promptInput ? promptInput.value : '';
+      const resp = JSON.parse(window.sopAgentStart(prompt));
+
+      document.getElementById('agent-terminal').innerHTML = '';
+      document.getElementById('agent-trace-list').innerHTML = '';
+      document.getElementById('agent-recall-results').innerHTML = '<div class="text-xs text-slate-500 font-mono">Run "Recall Similar Past Incidents" to search committed agent memory.</div>';
+
+      resp.logs.forEach(l => agentLog(l, 'text-cyan-400'));
+      agentRenderSession(resp.session);
+
+      agentAutoStepTimer = setInterval(agentStepOnce, 900);
+    }
+
+    function agentStepOnce() {
+      if (!window.sopAgentStep || !currentAgentSession) return;
+      const resp = JSON.parse(window.sopAgentStep(currentAgentSession.sessionId));
+      if (!resp.success) {
+        clearInterval(agentAutoStepTimer);
+        return;
+      }
+
+      resp.logs.forEach(l => agentLog(l, 'text-brand-400 font-semibold'));
+      if (resp.frame) agentAppendTrace(resp.frame);
+      agentRenderSession(resp.session);
+
+      if (resp.session.state === 'COMPLETE') {
+        clearInterval(agentAutoStepTimer);
+        agentLog('[Done] reasoning trace finished, all checkpoints durable in the B-Tree', 'text-brand-400 font-bold');
+      }
+    }
+
+    function agentKillTask() {
+      if (!window.sopAgentKill || !currentAgentSession) return;
+      clearInterval(agentAutoStepTimer);
+      const resp = JSON.parse(window.sopAgentKill(currentAgentSession.sessionId));
+      resp.logs.forEach(l => agentLog(l, 'text-rose-400 font-semibold'));
+      agentRenderSession(resp.session);
+    }
+
+    function agentResumeTask() {
+      if (!window.sopAgentResume || !currentAgentSession) return;
+      const resp = JSON.parse(window.sopAgentResume(currentAgentSession.sessionId));
+      resp.logs.forEach(l => agentLog(l, 'text-accent-cyan font-semibold'));
+      agentRenderSession(resp.session);
+      agentAutoStepTimer = setInterval(agentStepOnce, 900);
+    }
+
+    function agentRecallSimilar() {
+      if (!window.sopAgentRecall || !currentAgentSession) return;
+      const resp = JSON.parse(window.sopAgentRecall(currentAgentSession.sessionId, 3));
+      const container = document.getElementById('agent-recall-results');
+      container.innerHTML = '';
+
+      if (!resp.matches || resp.matches.length === 0) {
+        container.innerHTML = '<div class="text-xs text-slate-500 font-mono">No related past memory yet, commit a checkpoint first.</div>';
+        return;
+      }
+
+      resp.matches.forEach(m => {
+        const card = document.createElement('div');
+        card.className = 'bg-dark-950 border border-dark-800 rounded-lg p-3';
+        card.innerHTML = `
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-[10px] font-mono text-accent-violet">${m.sessionId} · step ${m.stepIndex}</span>
+            <span class="text-[10px] font-mono text-accent-violet font-bold">${m.similarity.toFixed(4)}</span>
+          </div>
+          <div class="text-xs text-slate-300">${m.text}</div>
+        `;
+        container.appendChild(card);
+      });
     }
   </script>
 </body>

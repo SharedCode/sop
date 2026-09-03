@@ -62,7 +62,7 @@ jobs:
           echo "Compiling SOP embedded engine to WebAssembly..."
           cd demo
           # -s -w strips symbol tables and debug information to minimize binary footprint
-          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop.wasm main.go
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop.wasm .
           ls -lh sop.wasm wasm_exec.js index.html
 
       - name: Setup GitHub Pages
