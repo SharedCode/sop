@@ -1,0 +1,87 @@
+name: Deploy SOP Zero-Server Demo to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'demo/**'
+      - '.github/workflows/deploy-demo.yml'
+  workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
+
+# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+# However, do NOT cancel in-progress runs as we want to allow deployments to complete safely.
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  build-and-package:
+    name: Build Go WASM & Package Demo
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go Toolchain
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Copy Go WebAssembly JavaScript Support (wasm_exec.js)
+        shell: bash
+        run: |
+          set -euo pipefail
+          GOROOT="$(go env GOROOT)"
+          echo "Locating wasm_exec.js in GOROOT: ${GOROOT}"
+          
+          # Support modern Go (lib/wasm) and legacy Go (misc/wasm) locations
+          if [ -f "${GOROOT}/lib/wasm/wasm_exec.js" ]; then
+            cp "${GOROOT}/lib/wasm/wasm_exec.js" demo/wasm_exec.js
+            echo "Copied from ${GOROOT}/lib/wasm/wasm_exec.js"
+          elif [ -f "${GOROOT}/misc/wasm/wasm_exec.js" ]; then
+            cp "${GOROOT}/misc/wasm/wasm_exec.js" demo/wasm_exec.js
+            echo "Copied from ${GOROOT}/misc/wasm/wasm_exec.js"
+          else
+            echo "Error: wasm_exec.js not found in ${GOROOT}" >&2
+            exit 1
+          fi
+
+      - name: Compile Go Engine to WebAssembly (sop.wasm)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Compiling SOP embedded engine to WebAssembly..."
+          cd demo
+          # -s -w strips symbol tables and debug information to minimize binary footprint
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop.wasm main.go
+          ls -lh sop.wasm wasm_exec.js index.html
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages Artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Upload the entire demo/ directory containing index.html, sop.wasm, and wasm_exec.js
+          path: './demo'
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build-and-package
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
