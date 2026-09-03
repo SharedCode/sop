@@ -166,6 +166,123 @@ In **[SOP Arena](https://sharedcode.github.io/sop-arena/)**, every control maps 
 
 ---
 
+## 👥 Who SOP Is For
+
+SOP is one codebase, but different people will care about it for different reasons. Jump to the section that matches you:
+
+[Investors](#-for-investors) · [Investment Banking & Tech Finance](#-for-investment-banking--technology-finance) · [Potential Customers](#-for-potential-customers) · [CTOs & Engineering Executives](#-for-ctos--engineering-executives) · [AI Infrastructure Teams](#-for-ai-infrastructure-teams) · [Platform, SRE & Cloud Engineers](#-for-platform-sre--cloud-engineers) · [Researchers & Distributed Systems Engineers](#-for-researchers--distributed-systems-engineers) · [Students & Learners](#-for-students--learners) · [Developers](#-for-developers) · [Engineering Leaders & Hiring Managers](#-for-engineering-leaders--hiring-managers)
+
+### 💰 For Investors
+
+**The problem.** Teams building stateful distributed applications, agent systems especially, routinely wire together a database, a cache, a message queue, a lock manager, and a workflow engine just to get durable state and coordinated work. Each boundary between those systems is a place where consistency breaks during a partial failure. That integration tax is paid by every team that builds this kind of system, repeatedly.
+
+**What SOP uniquely combines.** A B-Tree storage engine, ACID transactions, and swarm task coordination live inside one embedded library instead of behind separate network services. That is an architectural bet, not a settled fact: it trades the maturity and ecosystem of specialized tools (Postgres, Kafka, Temporal) for fewer moving parts and a single consistency boundary. Whether that tradeoff wins in a given workload is something a team has to evaluate, which is exactly what the [comparison table](#-sop-vs-alternatives) below is for.
+
+**Investment Thesis**
+SOP is an open-source bet that "data plus compute in one embedded engine" is a better default for a growing category of workloads (AI agents, edge devices, real-time systems) than assembling that stack from five separate products. If that thesis is right, the project that owns the reference implementation of that architecture has a shot at becoming the default choice for it, the way SQLite became the default embedded relational store. That is a multi-year distribution bet, not a proven outcome.
+
+**Why Now**
+- AI agent systems increasingly need durable memory, checkpointing, and multi-worker coordination, and today that is usually stitched together from a vector database, a cache, and a job queue.
+- Edge and local-first computing (factory automation, vehicles, retail devices) need ACID storage that keeps working without a constant connection to a central database.
+- Engineering organizations are actively trying to cut the number of discrete stateful services they operate, both for cost and for on-call load.
+
+These are real, observable industry trends. No specific market-sizing figures are cited here because this repository has not commissioned or verified any (see Market Opportunity below).
+
+**Market Opportunity**
+SOP overlaps several existing categories rather than creating one from nothing: embedded databases (SQLite, RocksDB), distributed coordination (Zookeeper, etcd, Temporal), vector databases (Pinecone, Weaviate, pgvector), and workflow/task systems (Celery, Ray). Plausible buyers are teams building AI agent infrastructure, edge and IoT platforms, real-time/simulation backends, and fintech ledgers with strict transactional invariants. No independently sourced TAM/SAM/SOM figures are presented here; a rigorous estimate would require external market research (for example, from Gartner or IDC) that this project has not commissioned.
+
+**Business Model Opportunities**
+The project is MIT-licensed with no commercial product today. Plausible paths that open-source infrastructure projects in this category have used, listed here as potential directions rather than current plans, are detailed in [Commercialization Opportunities](#-commercialization-opportunities) below.
+
+**What Has Been Proven**
+- A working Go engine with ACID transactions (WAL plus two-phase commit), a custom B-Tree, and Reed-Solomon erasure coding, each with passing automated tests (`go test ./...` passes across 14 packages in the core Go module alone, see [Performance Benchmarks](#-performance-benchmarks) below for the throughput numbers).
+- A real WebAssembly build of the engine running ACID transactions, vector search, and agent-memory checkpointing entirely in-browser with zero network calls ([live demo](https://sharedcode.github.io/sop/)).
+- Working language bindings for Go (native), Python (`sop4py`, published to PyPI), and C# (`Sop`, published to NuGet), plus Java and Rust bindings that exist in-repo with tests but are not yet published to their package registries.
+- CI that runs the race detector and `govulncheck` on every change, and a changelog showing multiple rounds of real dependency and CVE remediation.
+
+**What Has Not Yet Been Proven**
+- No production deployments or paying customers are documented anywhere in this repository.
+- No independent, third-party, or peer-reviewed benchmarks exist; the performance numbers below come from this project's own benchmark harness on a single workstation, not a controlled multi-system comparison.
+- SOP Arena's cluster view is a UI simulation of the underlying concepts for demonstration purposes, not a live multi-node deployment; multi-node swarm clustering itself is real and tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been run at meaningful scale or under adversarial network conditions in public.
+- No formal third-party security audit has been performed.
+- No case studies, design partners, or committed customers exist yet.
+
+### 🏦 For Investment Banking & Technology Finance
+
+**Technology category.** SOP sits in the embedded data infrastructure layer: a storage and coordination engine that applications link against directly, similar in category placement to SQLite or RocksDB, but extended with distributed ACID transactions and task coordination that those two do not attempt.
+
+**Adjacent markets.** Embedded/operational databases, distributed coordination and workflow orchestration, vector search infrastructure, and AI agent infrastructure tooling. Each of those adjacent markets has established commercial players (see the [comparison table](#-sop-vs-alternatives)), which is useful context for sizing the competitive landscape SOP would need to differentiate against.
+
+**Potential strategic relevance.** Potential strategic relevance could include: infrastructure vendors looking to add an embedded, agent-friendly storage layer to an existing platform; cloud providers evaluating lightweight alternatives to running separate managed database, cache, and queue services for edge or agent workloads; or AI infrastructure companies needing a durable state layer under an agent runtime. None of this reflects any actual approach, interest, or discussion from any party; it is offered as a way to reason about where the technology could fit strategically.
+
+**Open-source distribution.** The project is distributed under the MIT license with no dual-licensing or commercial tier today. That maximizes adoption friction reduction (any team can use it in production immediately) at the cost of no current monetization mechanism. See [Commercialization Opportunities](#-commercialization-opportunities) for plausible paths from here.
+
+**Competitive landscape.** Summarized in the [SOP vs. Alternatives](#-sop-vs-alternatives) table further down. No competitor is presented as inferior; each is a mature, widely deployed system that SOP would need to displace or complement for any given workload.
+
+### 🏢 For Potential Customers
+
+**Is SOP Right For Me?** Start from the existing [When SOP is a Great Fit](#-when-sop-is-a-great-fit) and [When SOP is NOT the Right Tool](#-when-sop-is-not-the-right-tool) sections below, they are the concrete answer. As a quick filter:
+
+- If you are currently running Redis plus Postgres plus a queue just to get durable state and coordinated background work for one application, and that application's data fits comfortably on the machines it runs on, SOP is worth evaluating as a replacement for that stack.
+- If you already run Postgres or Kafka at scale for reasons unrelated to this problem (complex SQL, multi-datacenter event retention, an existing team's expertise), SOP is more likely to complement than replace what you have.
+- If your workload is petabyte-scale analytics or requires synchronous multi-region consensus, SOP is not the right tool today; see the section below for specifics.
+
+SOP is a library you embed, not a managed service you sign up for. There is no hosted offering today; you run it yourself, in-process, in your own infrastructure.
+
+### 👔 For CTOs & Engineering Executives
+
+Every service you run that exists only to hold state or coordinate work (a cache, a queue, a lock manager) is a service your team has to patch, monitor, upgrade, and page on. SOP's bet is that collapsing storage, transactions, and task coordination into one embedded library reduces that surface for the workloads it fits, at the cost of giving up the specialized tooling and operational maturity of dedicated systems your team may already know well.
+
+Concretely, that means: fewer network hops in your hot path (sub-millisecond, in-process calls instead of 15 to 50ms across Redis, a queue, and Postgres), one dependency to patch and upgrade instead of several, and a transaction boundary that spans your data and your background work instead of stopping at the database. It also means your team takes on a less mature, less battle-tested piece of infrastructure than Postgres or Kafka, with a correspondingly smaller ecosystem, smaller hiring pool of people who already know it, and no enterprise support contract available today. Evaluate it the way you would any early infrastructure bet: pilot it on one bounded, non-critical workload before committing a core system to it.
+
+### 🧠 For AI Infrastructure Teams
+
+**What SOP already provides.** Durable, transactional checkpointing for agent reasoning state: each step an agent commits is a separate, durable B-Tree write, so a killed agent process loses nothing already committed, and a successor process can resume from the last checkpoint. This is not a diagram, it runs today in the [browser demo](https://sharedcode.github.io/sop/) (the "AI Agent Memory" tab) and as a Go example (`go run ./examples/agent_memory`). SOP also provides vector similarity search over embeddings stored in the same B-Tree as structured data (`ai/memory`, `ai/vector`), and a real swarm/worker package (`ai/swarm`) with job and result stores.
+
+**What could be built on SOP, but is not shipped today.** A production multi-agent orchestration framework, a hosted durable-memory-as-a-service for agent frameworks like LangGraph or AutoGen, and distributed MapReduce-style helpers across a live agent swarm are all described as design proposals in [`ai/SWARM_DESIGN.md`](ai/SWARM_DESIGN.md) (explicitly marked "Proposal / Vision" in that file) but are not implemented and tested the way the checkpointing and vector search primitives are. Treat anything not demonstrated in the linked demo or example as a direction, not a delivered feature.
+
+### ⚙️ For Platform, SRE & Cloud Engineers
+
+SOP's core engine is a library, not a server: there is no separate database process to provision, patch, or fail over for the embedded case. The optional `tools/httpserver` Data Manager is a standalone service with its own `/metrics` endpoint (tested in `tools/httpserver/metrics_test.go`) if you do want a network-accessible console. Failure recovery is handled by Reed-Solomon erasure coding across storage shards (`fs/erasure`, 12 passing tests at the time of writing) rather than full N-way replication, which trades some recovery latency for lower disk overhead. A prebuilt quickstart container is published to `ghcr.io/sharedcode/sop-quickstart`. Multi-node swarm clustering exists and is tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been documented or proven at production scale.
+
+### 🧪 For Researchers & Distributed Systems Engineers
+
+The interesting parts to read are the B-Tree implementation with copy-on-write page isolation (`btree/`), the WAL plus two-phase commit transaction protocol (`transaction.go`, `common/`), the Reed-Solomon erasure coding layer (`fs/erasure/`), and the swarm coordination model described in [`ai/SWARM_DESIGN.md`](ai/SWARM_DESIGN.md). The [Architecture Whitepaper](docs/SOP_ARCHITECTURE_WHITEPAPER.md) and [SOP vs. Big Tech Architecture](docs/ARCHITECTURE_VS_BIG_TECH.md) go deeper into the design tradeoffs than this README does.
+
+### 🎓 For Students & Learners
+
+Reading this codebase is a reasonable way to see real (not textbook-simplified) implementations of a B-Tree with node splitting and range iteration, optimistic concurrency control, write-ahead logging with two-phase commit, and erasure coding, all in readable Go with test coverage next to the implementation. Start with [`docs/WHAT_IS_SOP.md`](docs/WHAT_IS_SOP.md) for a plain-language overview, then run the zero-dependency quickstart below before reading `btree/` and `fs/erasure/`.
+
+---
+
+## 📈 Commercialization Opportunities
+
+SOP has no commercial product, pricing, or customers today. It is an MIT-licensed open-source project. The paths below are the plausible business models that open-source infrastructure projects in this category (databases, coordination systems, workflow engines) have historically built, listed here as potential future directions, not current plans or commitments:
+
+- **Hosted or managed SOP**: a cloud offering that runs and operates SOP clusters so teams do not have to manage erasure-coded storage and swarm coordination themselves.
+- **Enterprise support and SLAs**: paid support contracts for teams running SOP in production, similar to how Postgres and Kafka have commercial support ecosystems around free cores.
+- **Security, compliance, and governance add-ons**: audit logging, RBAC policy management (there is already an in-repo RBAC prototype, `rbac.go`, `docs/RBAC_ENTITLEMENTS.md`), and compliance tooling for regulated industries.
+- **Observability and operations tooling**: dashboards and alerting built on top of the existing `/metrics` endpoint and event logs.
+- **AI infrastructure products**: a packaged "durable agent memory" service built on the checkpointing primitives described above, sold to teams building agent frameworks who do not want to run SOP themselves.
+- **Marketplace listings**: prebuilt container images (a `ghcr.io/sharedcode/sop-quickstart` image already exists) distributed through cloud marketplaces.
+- **Professional services**: architecture consulting for teams migrating a fragmented Redis/Kafka/Postgres stack onto SOP.
+
+None of these exist today. They are documented here so a reader evaluating SOP as a commercial or investment opportunity can see the plausible paths from open-source project to business, and judge for themselves how credible each one is.
+
+---
+
+## 🗺️ Roadmap
+
+**Shipped and tested today**: the Go core engine, Python bindings (`sop4py`, on PyPI), C# bindings (`Sop`, on NuGet), the WebAssembly browser demo, the standalone HTTP Data Manager, and the interactive AI agent memory checkpointing demo.
+
+**In progress, code exists in-repo**: Java bindings (`sop4j`), complete with tests, blocked on Maven Central Portal credential setup rather than on missing functionality (see [`docs/RELEASE_PROCESS_JAVA_STATUS.md`](docs/RELEASE_PROCESS_JAVA_STATUS.md)). Rust bindings (`sop4rs`), with tests and examples in-repo, not yet published to crates.io.
+
+**Proposed, not yet implemented**: the swarm job distribution, `Await`, and `MapReduce` helpers described in [`ai/SWARM_DESIGN.md`](ai/SWARM_DESIGN.md), which that document itself labels "Proposal / Vision" rather than shipped.
+
+This list reflects what is actually in the repository at the time of writing. It is not a committed release schedule.
+
+---
+
 ## 💻 For Developers
 
 ### 1. In-Memory Quickstart (Zero Dependencies)
@@ -260,6 +377,8 @@ If you are building distributed systems, cloud infrastructure, or AI data platfo
 | **C#** | `dotnet add package Sop` | Complete .NET Core integration. |
 | **WebAssembly** | `GOOS=js GOARCH=wasm go build` | Browser-sandboxed zero-server execution. |
 | **HTTP Data Manager** | `sop-httpserver` | Standalone UI console and AI Copilot interface. |
+| **Java** *(in progress)* | source in `bindings/java`, not yet on Maven Central | `sop4j` bindings and tests are complete; publishing is blocked on Central Portal credential setup, tracked in [`docs/RELEASE_PROCESS_JAVA_STATUS.md`](docs/RELEASE_PROCESS_JAVA_STATUS.md). |
+| **Rust** *(in progress)* | source in `bindings/rust`, not yet on crates.io | `sop4rs` bindings, tests, and examples exist in-repo but are not yet published as a crate. |
 
 ---
 
@@ -286,5 +405,5 @@ We welcome feedback, issues, and contributions:
 ---
 
 <p align="center">
-  <sub>Licensed under the Apache-2.0 License. Built by <a href="https://github.com/sharedcode">SharedCode</a>.</sub>
+  <sub>Licensed under the MIT License. Built by <a href="https://github.com/sharedcode">SharedCode</a>.</sub>
 </p>
