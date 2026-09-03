@@ -1,8 +1,10 @@
-# SOP: Scalable Objects Persistence
+# SOP
 
 ## One engine for data and compute.
 
-**SOP** is an ACID-compliant, embedded B-Tree storage engine and distributed computing platform. It unites **transactional persistence**, **ordered key-value storage**, **high-dimensional vector search**, and **swarm compute coordination** into a single cohesive programming model—eliminating the multi-component infrastructure tax of standalone database daemons, message queues, and external distributed lock managers.
+**SOP** (Scalable Objects Persistence) is an embedded B-Tree storage engine and distributed computing platform written in Go with bindings for Python and C#. It combines **transactional data persistence**, **ordered key-value storage**, **vector similarity search**, and **swarm task coordination** into one library. 
+
+Instead of managing separate database servers, message brokers, caching tiers, and distributed lock managers, SOP lets your application store data and coordinate distributed work in the same programming model.
 
 [![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions)
 [![CI](https://github.com/SharedCode/sop/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/sop/actions/workflows/go.yml)
@@ -15,14 +17,14 @@
 
 ---
 
-## ⚡ Experience SOP (Live Demos)
+## 🚀 Experience SOP
 
-Explore SOP live directly in your browser with **zero installation** and **zero server dependencies**:
+You can test SOP directly in your browser without installing anything:
 
 | Experience | Description | Live Interactive Link |
 | :--- | :--- | :--- |
-| 🚀 **SOP Technical Demo** | **Client-Side Zero-Server Go/WASM Engine**<br>Execute live ACID transactions, SIMD vector cosine similarity searches, and latency benchmarks running 100% inside your browser's V8 WebAssembly sandbox with **0 HTTP network calls**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
-| 🎮 **SOP Arena** | **The Distributed Systems Survival Game**<br>Command a live digital infrastructure. Scale worker swarms, inject storage hardware faults, trigger transaction storms, and watch SOP automatically redistribute tasks and rebuild parity in real-time. | [**Play SOP Arena →**](https://sharedcode.github.io/sop-arena/) |
+| 🧠 **SOP Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, and microsecond benchmarks running 100% in your browser with **0 HTTP network calls**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
+| 🎮 **SOP Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch SOP automatically redistribute tasks and rebuild parity in real-time. | [**Play SOP Arena →**](https://sharedcode.github.io/sop-arena/) |
 
 <p align="center">
   <img src="docs/assets/sop-demo.gif" alt="SOP Interactive Demos and Distributed Systems Architecture Showcase" width="800" />
@@ -30,19 +32,13 @@ Explore SOP live directly in your browser with **zero installation** and **zero 
 
 ---
 
-## 💡 The Thesis
+## 💡 What Problem Does SOP Solve?
 
-Modern applications increasingly require the tight coupling of **persistent state** with **distributed computation**. 
+Most distributed applications require two fundamentally different operations:
+1. **Storing state reliably** (databases, key-value stores, vector indexes)
+2. **Coordinating work across machines** (task queues, locks, retries, worker failovers)
 
-Today, engineering teams assemble this by stitching together 4 to 6 discrete infrastructure services—databases, message brokers, caching tiers, distributed lock managers, and retry sidecars. 
-
-**SOP explores a unified programming model where data, transactions, coordination, and computation operate within one cohesive engine.** The goal is to reduce architectural complexity, eliminate custom glue code, and achieve sub-millisecond execution while preserving strict serializability and fault-tolerant behavior.
-
----
-
-## ⚠️ The Problem: The Multi-Component Tax
-
-Most modern distributed architectures look like this:
+Today, developers solve this by assembling a multi-component infrastructure stack:
 
 ```
 THE FRAGMENTED MULTI-COMPONENT STACK (Without SOP):
@@ -54,19 +50,23 @@ THE FRAGMENTED MULTI-COMPONENT STACK (Without SOP):
        ├──► (TCP Hop 3: 10-30ms) ──► PostgreSQL / Cassandra (Persistent Storage)
        └──► (Failover Glue)      ──► ZooKeeper / Custom Retry & Outbox Daemons
 
-⚠️ 6+ infrastructure boundaries | 15–50ms latency tax | High split-brain failure risk | 60% engineering time on glue code
+⚠️ 6+ infrastructure boundaries | 15-50ms latency tax | High split-brain failure risk | High maintenance overhead
 ```
 
-When a worker crashes between releasing a lock in Redis and committing to PostgreSQL, state enters an unrecoverable split-brain condition. Engineering teams spend the majority of their time building and maintaining outbox listeners, lock renewers, and compensating transactions.
+When an application worker crashes between releasing a lock in Redis and committing to PostgreSQL, state can enter an inconsistent split-brain condition. Engineering teams end up spending substantial time writing and maintaining outbox listeners, lock renewers, and compensating retry logic.
 
-### The SOP Unified Approach
+---
+
+## ⚡ Why SOP?
+
+SOP takes a different approach: **co-locate storage and compute inside the same engine boundary.**
 
 ```
 THE UNIFIED DATA & COMPUTE PLATFORM (With SOP):
 
 [ Application ]
        │
-       └──► (Embedded Call / Zero Network Overhead: < 0.3ms)
+       └──► (Embedded In-Process Call: < 0.3ms latency)
             ┌─────────────────────────────────────────────────────────────┐
             │                         SOP ENGINE                          │
             │  • Persistent B-Tree Storage (Sector-aligned Direct I/O)    │
@@ -76,16 +76,86 @@ THE UNIFIED DATA & COMPUTE PLATFORM (With SOP):
             │  • Reed-Solomon Erasure Coding & Partition Resilience       │
             └─────────────────────────────────────────────────────────────┘
 
-✓ 1 Single Engine | Sub-millisecond execution | 100% ACID consistency | Automatic failover & self-healing
+✓ 1 Single Engine | Sub-millisecond execution | 100% ACID consistency | Automated failover
 ```
+
+Because compute workers, task queues, and storage partitions share the same transaction boundary, a worker failure triggers an automatic rollback of uncommitted work and re-assigns the task in milliseconds with zero orphan locks.
 
 ---
 
-## 🎮 See It. Break It. Understand It.
+## ⏱️ Why Now?
 
-In **[SOP Arena](https://sharedcode.github.io/sop-arena/)**, every gameplay mechanic directly models a core distributed systems capability:
+Three industry shifts make this architecture increasingly relevant:
 
-| Demo Action | Distributed Systems Concept | SOP Technical Mechanism |
+1. **The Explosion of Autonomous AI Agents**: Multi-agent swarms require frequent context checkpointing, vector similarity searches, and task coordination. Assembling this across Postgres, Pinecone, Redis, and Celery creates high failure surface area.
+2. **Edge and Local-First Computing**: Devices in factory automation, vehicles, and retail branches cannot rely on constant connections to central cloud databases. They need full ACID storage and local coordination that works offline.
+3. **Infrastructure Simplification**: Engineering organizations are seeking to reduce the operational overhead and cloud bills associated with running dozens of discrete microservices just to manage state and queues.
+
+---
+
+## 🔍 What Makes SOP Different?
+
+SOP is built on five core technical principles:
+
+1. **Embedded Storage Engine**: Operates in-process in Go, Python, and C#, eliminating TCP network hops for local reads and writes.
+2. **ACID Transactions without Database Servers**: Implements Write-Ahead Logging (WAL) and Two-Phase Commit (2PC) with copy-on-write page isolation.
+3. **Swarm Compute Coordination**: Workers coordinate task execution using storage-anchored sector claims and heartbeat leases without requiring global consensus bottlenecks (like Paxos or Raft) on the hot path.
+4. **Reed-Solomon Erasure Coding**: Protects storage shards from hardware failure by striping parity blocks across drives rather than paying the 3x disk storage cost of full replication.
+5. **Integrated Vector & Structured Storage**: Stores high-dimensional vector embeddings in the same B-Tree segments as structured metadata, allowing single-transaction memory commits.
+
+---
+
+## ⚖️ SOP vs. Alternatives
+
+Every architecture involves tradeoffs. Here is an honest comparison of where SOP fits relative to industry standards:
+
+| Capability | PostgreSQL | Redis | Kafka | Temporal | Pinecone | SQLite | SOP |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| **ACID Transactions** | ✓ | △ | ✗ | ✗ | ✗ | ✓ | ✓ |
+| **Ordered B-Tree Range Scans** | ✓ | △ | ✗ | ✗ | ✗ | ✓ | ✓ |
+| **Embedded In-Process** | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ |
+| **Swarm Work Coordination** | ✗ | △ | △ | ✓ | ✗ | ✗ | ✓ |
+| **Vector Similarity Search** | △ (pgvector) | △ | ✗ | ✗ | ✓ | ✗ | ✓ |
+| **Erasure Coding (N+K)** | ✗ | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ |
+| **Zero Standalone Daemons** | ✗ | ✗ | ✗ | ✗ | ✗ | ✓ | ✓ |
+
+*Legend: `✓` First-class native capability | `△` Partial or requires plugin/extension | `✗` Not designed for this capability*
+
+### Detailed Tradeoffs by Competitor:
+
+- **PostgreSQL**: Industry standard for general relational databases. Choose Postgres when you need complex relational schemas, advanced SQL aggregations, or standard ecosystem tooling. SOP is better suited when you want an embedded storage engine inside your application process without database server management.
+- **Redis**: Industry standard for ultra-low-latency in-memory key-value caching. Choose Redis when all data fits in RAM and you need simple cache operations. SOP provides durable B-Tree disk persistence, multi-account ACID transactions, and erasure coding.
+- **Kafka / RabbitMQ**: Industry standards for high-volume streaming and pub/sub. Choose Kafka when you need multi-datacenter event streams and log retention. SOP provides transactional task queues co-located with storage state for local swarms.
+- **Temporal**: Industry standard for long-running durable workflows spanning external microservices. Choose Temporal for multi-week human-in-the-loop workflows across disparate clouds. SOP is designed for local-to-cluster co-located data and task execution.
+- **SQLite**: Industry standard for embedded single-file relational databases. Choose SQLite for client desktop/mobile apps needing SQL. SOP is designed for high-concurrency multi-threaded workers, clustered coordination, partitioned vector stores, and erasure coding.
+
+---
+
+## 🎯 When SOP is a Great Fit
+
+- **AI Agent Memory & Swarm Workforces**: Autonomous agents requiring durable conversation memory, vector search, and task hand-offs without fragmented infrastructure.
+- **Real-Time Systems & Simulation State**: Game servers, robotics, and spatial computing needing microsecond state serialization.
+- **Financial & Escrow Ledgers**: Systems requiring strict serializability and invariant verification (e.g. zero-sum account delta) prior to commit.
+- **Edge & IoT Computing**: Devices operating in intermittent network environments that need local ACID persistence and peer synchronization.
+- **Serverless Workloads**: Cloud functions that need durable storage without exhausting database connection pools.
+
+---
+
+## 🚫 When SOP is NOT the Right Tool
+
+To be completely clear on architectural boundaries:
+
+- **Massive Analytical Warehousing**: If you are running multi-petabyte columnar analytics across billions of historical events, specialized OLAP warehouses (like ClickHouse or Snowflake) are the right choice.
+- **Global Multi-Region Consensus**: If your application requires synchronous commits across continents with multi-region Raft/Paxos quorums, dedicated distributed SQL databases (like CockroachDB or Google Spanner) are designed for that problem.
+- **Simple Stateless CRUD Apps**: If your application is a standard CRUD dashboard with low traffic, standard PostgreSQL or MySQL with an ORM is simpler and has more ecosystem plugins.
+
+---
+
+## 🎮 See SOP in Action (SOP Arena Simulation)
+
+In **[SOP Arena](https://sharedcode.github.io/sop-arena/)**, every control maps directly to a real distributed systems concept:
+
+| Simulation Control | Distributed Systems Concept | SOP Technical Mechanism |
 | :--- | :--- | :--- |
 | **Add Worker** | Swarm Compute | Dynamic queue rebalancing across peer worker nodes without central master bottlenecks. |
 | **Remove Worker** | Graceful Degradation | Active tasks drained and re-assigned to healthy nodes with zero dropped writes. |
@@ -96,122 +166,63 @@ In **[SOP Arena](https://sharedcode.github.io/sop-arena/)**, every gameplay mech
 
 ---
 
-## 📈 Why SOP Could Matter (Market & Architectural Opportunity)
+## 💻 For Developers
 
-SOP is designed to explore high-impact architectures where co-locating data, compute, and transactions provides distinct structural advantages:
-
-### 1. 🤖 Persistent State for Distributed AI Workloads *(Flagship Opportunity)*
-Multi-agent LLM systems require fast memory checkpointing, vector similarity search, and task distribution. Traditional architectures require an orchestration framework + Redis for state + Pinecone for vectors + Postgres for logs + RabbitMQ for queues. If an agent crashes mid-thought, memory context is fragmented.  
-*SOP enables AI agents to commit prompt context, embedding vectors, and execution state in a single atomic transaction, redistributing reasoning tasks seamlessly upon node failure.*
-
-### 2. 🕹️ Real-Time Systems & Multiplayer State
-Game servers and spatial applications struggle to persist player state, inventories, and matchmaking events at 60Hz without database bottlenecks.  
-*SOP embeds directly inside the server process, providing sub-millisecond ordered B-Tree storage and strict serializability.*
-
-### 3. 🏦 Sub-Millisecond Financial & Escrow Ledgers
-Financial systems require absolute transactional invariants (e.g. net delta across accounts == $0.00).  
-*SOP executes multi-account transactions locally using Write-Ahead Logging (WAL) and Snapshot Isolation, verifying invariants before commit with zero network overhead.*
-
-### 4. 🌐 Decentralized Edge & IoT Swarms
-Edge devices in manufacturing, autonomous vehicles, or telecommunications operate with intermittent connectivity and cannot rely on central cloud databases.  
-*SOP compiles to standalone binaries and WebAssembly, enabling edge devices to store, query, and transact locally with full ACID compliance, synchronizing with peer swarms when online.*
-
-### 5. ⚡ Serverless Microservices Without Database Bottlenecks
-Serverless functions (AWS Lambda, Cloudflare Workers) frequently exhaust database connection pools.  
-*SOP embeds within the worker runtime with local NVMe/object-storage persistence, eliminating connection pool limits entirely.*
-
----
-
-## 🛠️ What This Project Demonstrates (Engineering Depth)
-
-For engineering leaders, hiring managers, and technical evaluators, this repository represents senior/staff-level systems engineering across:
-
-- **Storage Engine Architecture**: Custom B-Tree implementation with configurable node slotting (`SlotLength`), sector-aligned direct I/O, node-segmentation, and multi-tier L1/L2 caching.
-- **Transactional Systems**: Strict ACID guarantees, Write-Ahead Logging (WAL), Two-Phase Commit (2PC), Snapshot Isolation, and Optimistic Concurrency Control (OCC).
-- **Fault Tolerance & Reliability**: Reed-Solomon Erasure Coding (N+K data/parity striping), active/passive metadata redundancy, and automated partition healing.
-- **Concurrency & Concurrency Control**: Lock-free structures, multi-goroutine worker pools, microsecond latency profiling, and SIMD vector dot-product calculation.
-- **Polyglot & WebAssembly Systems**: Native Go kernel, Python (`sop4py`), C# bindings, and browser-sandboxed WebAssembly compilation via `syscall/js`.
-- **DevOps & Production Engineering**: GitHub Actions CI/CD matrix, automated GitHub Pages deployments, GHCR container delivery, Codecov integration, and comprehensive stress benchmarks.
-
----
-
-## 🏛️ Technical Architecture Overview
-
-```
-                            ┌─────────────────────────────────────────┐
-                            │            Application Layer            │
-                            │       (Go / Python / C# / WASM)         │
-                            └────────────────────┬────────────────────┘
-                                                 │
-                                                 ▼
-┌─────────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                                             SOP ENGINE                                              │
-│                                                                                                     │
-│   ┌───────────────────────────┐   ┌───────────────────────────┐   ┌─────────────────────────────┐   │
-│   │     B-Tree Data Store     │   │     ACID Transaction      │   │     Distributed Swarm       │   │
-│   │  • Ordered Key Navigation │   │  • Write-Ahead Log (WAL)  │   │  • Heartbeat Leases         │   │
-│   │  • Range Queries & Scans  │   │  • Snapshot Isolation     │   │  • Task Redistribution      │   │
-│   │  • Variable Slot Lengths  │   │  • 2-Phase Commit (2PC)   │   │  • Zero-Master Coordination │   │
-│   └─────────────┬─────────────┘   └─────────────┬─────────────┘   └──────────────┬──────────────┘   │
-│                 │                               │                                │                  │
-│                 └───────────────────────┬───────┴────────────────────────────────┘                  │
-│                                         ▼                                                           │
-│   ┌─────────────────────────────────────────────────────────────────────────────────────────────┐   │
-│   │                        Storage Abstraction & Fault Tolerance Tier                           │   │
-│   │  • Reed-Solomon Erasure Coding (Data + Parity Sharding)                                     │   │
-│   │  • In-Memory Fast Path / Local NVMe / Cloud Object Store (S3, Cassandra, Redis Adapters)    │   │
-│   │  • Partitioned High-Dimensional Vector Embedding Index                                      │   │
-│   └─────────────────────────────────────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
----
-
-## 📦 Quickstart
-
-### 1. In-Memory B-Tree (Zero Configuration)
-The fastest way to see SOP in action locally:
+### 1. In-Memory Quickstart (Zero Dependencies)
 
 ```bash
-# Clone and run the quickstart example
+# Clone the repository and run the quickstart
 git clone https://github.com/sharedcode/sop.git
 cd sop
 go run ./examples/quickstart
 ```
 
-### 2. Language Packages
+```go
+package main
 
-Install SOP directly into your application ecosystem:
+import (
+	"fmt"
+	"github.com/sharedcode/sop/inmemory"
+)
 
-| Language | Installation | Description |
-| :--- | :--- | :--- |
-| **Go** | `go get github.com/sharedcode/sop` | Native high-performance core engine. |
-| **Python** | `pip install sop4py` | Full Python bindings with Data Manager & AI Scripts. |
-| **C#** | `dotnet add package Sop` | Complete .NET Core integration. |
-| **WebAssembly** | `GOOS=js GOARCH=wasm go build` | In-browser zero-server execution. |
+func main() {
+	// Create an in-memory B-Tree with unique integer keys and string values
+	tree := inmemory.NewBtree[int, string](true)
 
-### 3. Launching the SOP Data Manager
+	// Add records
+	tree.Add(101, "Build #101: tests passed")
+	tree.Add(102, "Build #102: deployed to staging")
+
+	// Ordered range scan (keys 100 to 105)
+	for k, v := range tree.Range(100, 105) {
+		fmt.Printf("Key %d -> %s\n", k, v)
+	}
+}
+```
+
+### 2. AI Agent Memory & Swarm Task Hand-off
+
+Run the new dedicated Agent Memory demo:
 
 ```bash
-# Included with language packages or downloadable from GitHub Releases
-sop-httpserver
+go run ./examples/agent_memory
 ```
+
+This demo demonstrates an AI worker creating a context checkpoint, crashing mid-step, rolling back cleanly, and having a healthy peer worker resume the task in `<15ms`.
 
 ---
 
-## ⚡ Performance & Optimization Guide
+## ⚡ Performance Benchmarks
 
-SOP is designed for high throughput and low latency. Below are baseline benchmark results running on a standard workstation using the built-in benchmark tool (`tools/benchmark`):
+Below are authentic benchmark results from the repository benchmark harness (`tools/benchmark`) running on a standard workstation:
 
-### Tuning `SlotLength` (B-Tree Node Density)
-
-The `SlotLength` parameter controls the number of items stored in each B-Tree node:
+### Tuning `SlotLength` (Items per B-Tree Node)
 
 #### 10,000 Items Benchmark
 | SlotLength | Insert (ops/sec) | Read (ops/sec) | Delete (ops/sec) |
 | :--- | :--- | :--- | :--- |
 | 1,000 | 107,652 | 136,754 | 40,964 |
-| **2,000 (Recommended)** | **132,901** | **142,907** | **50,093** |
+| **2,000 (Balanced)** | **132,901** | **142,907** | **50,093** |
 | 3,000 | 135,066 | 137,035 | 49,754 |
 | 4,000 | 123,190 | 122,228 | 48,094 |
 
@@ -220,43 +231,60 @@ The `SlotLength` parameter controls the number of items stored in each B-Tree no
 | :--- | :--- | :--- | :--- |
 | 1,000 | 121,139 | 145,195 | 48,346 |
 | 2,000 | 132,805 | 136,684 | 51,817 |
-| **4,000 (Write-Heavy)** | **145,417** | **143,770** | **51,988** |
-| 5,000 | 137,054 | 144,565 | 50,309 |
+| 3,000 | 137,296 | 141,764 | 50,605 |
+| **4,000 (Write-Heavy)** | **145,417** | 143,770 | **51,988** |
+
+---
+
+## 👥 For Engineering Leaders & Hiring Managers
+
+For technical leaders, CTOs, and hiring managers, this repository serves as a working demonstration of systems engineering across:
+
+- **Storage Engine Design**: Custom B-Tree implementation with sector-aligned direct I/O, node slot tuning, and multi-tier L1/L2 caching.
+- **Transactional Systems**: Strict ACID guarantees, Write-Ahead Logging (WAL), Two-Phase Commit (2PC), Snapshot Isolation, and Optimistic Concurrency Control.
+- **Fault Tolerance & Reliability**: Reed-Solomon Erasure Coding (N+K striping), active/passive metadata redundancy, and automated partition healing.
+- **High Concurrency**: Lock-free data structures, multi-goroutine worker swarms, and SIMD vector dot-product calculation.
+- **Polyglot Architecture**: Native Go kernel, Python bindings (`sop4py`), C# bindings (`Sop`), and browser WebAssembly.
+- **Production Delivery**: GitHub Actions CI/CD matrix, distroless container builds on GHCR, Codecov integration, and static GitHub Pages deployments.
+
+If you are building distributed systems, cloud infrastructure, or AI data platforms and want to discuss architecture, feel free to connect via [GitHub Discussions](https://github.com/SharedCode/sop/discussions).
+
+---
+
+## 📦 Language Packages & Tooling
+
+| Language | Installation | Description |
+| :--- | :--- | :--- |
+| **Go** | `go get github.com/sharedcode/sop` | Native high-performance core engine. |
+| **Python** | `pip install sop4py` | Python bindings with Data Manager and AI scripts. |
+| **C#** | `dotnet add package Sop` | Complete .NET Core integration. |
+| **WebAssembly** | `GOOS=js GOARCH=wasm go build` | Browser-sandboxed zero-server execution. |
+| **HTTP Data Manager** | `sop-httpserver` | Standalone UI console and AI Copilot interface. |
 
 ---
 
 ## 📚 Technical Reference Guides
 
-- **[What is SOP, in Plain Words](docs/WHAT_IS_SOP.md)** — High-level conceptual guide.
-- **[Architecture Whitepaper](docs/SOP_ARCHITECTURE_WHITEPAPER.md)** — Deep dive into B-Tree layout and transactions.
-- **[Platform Tools & Relational Intelligence](docs/SOP_PLATFORM_TOOLS.md)** — Data Manager, CEL expressions, and AI Copilot.
-- **[AI Copilot & Agent Architecture](docs/AI_COPILOT.md)** — Multi-agent memory model and Space partitioning.
-- **[Operations & Failover Guide](docs/OPERATIONS.md)** — Erasure coding, recovery, and cluster management.
-- **[Scalability & Capacity Math](docs/SCALABILITY.md)** — Architectural scaling model for billions of items.
+- **[What is SOP, in Plain Words](docs/WHAT_IS_SOP.md)**: High-level conceptual overview.
+- **[Architecture Whitepaper](docs/SOP_ARCHITECTURE_WHITEPAPER.md)**: Deep dive into B-Tree layout and transactions.
+- **[Platform Tools & Relational Intelligence](docs/SOP_PLATFORM_TOOLS.md)**: Data Manager, CEL expressions, and AI Copilot.
+- **[AI Copilot & Agent Architecture](docs/AI_COPILOT.md)**: Multi-agent memory model and Space partitioning.
+- **[Operations & Failover Guide](docs/OPERATIONS.md)**: Erasure coding, recovery, and cluster management.
+- **[Scalability & Capacity Math](docs/SCALABILITY.md)**: Architectural scaling model for billions of items.
 
 ---
 
-## 🤝 Get Involved & Contributing
+## 🤝 Get Involved
 
-We welcome contributions from distributed systems engineers, storage architects, and developers:
+We welcome feedback, issues, and contributions:
 
-1. **Fork & Clone** the repository: `git clone https://github.com/sharedcode/sop.git`
+1. **Fork & Clone**: `git clone https://github.com/sharedcode/sop.git`
 2. **Run Tests**: `go test -v ./...`
-3. **Explore Issues**: Check out [GitHub Issues](https://github.com/sharedcode/sop/issues) and [Discussions](https://github.com/sharedcode/sop/discussions).
-4. **Submit a Pull Request**: Follow standard Go formatting (`gofmt`) and include test coverage.
-
----
-
-## 👥 For Engineering Leaders & Investors
-
-If you are interested in engineers who design and build across **distributed systems, embedded storage kernels, cloud infrastructure, and AI data systems**, SOP represents the caliber of deep systems engineering and product intuition being developed here.
-
-- 💬 **Discussions & Feedback:** [Join GitHub Discussions](https://github.com/SharedCode/sop/discussions)
-- 🌐 **Project Home:** [sharedcode.github.io/sop](https://sharedcode.github.io/sop/)
-- 🎮 **Interactive Arena:** [sharedcode.github.io/sop-arena](https://sharedcode.github.io/sop-arena/)
+3. **Join Discussions**: [GitHub Discussions](https://github.com/SharedCode/sop/discussions)
+4. **Submit a PR**: Follow Go formatting standards (`gofmt`) and include test coverage.
 
 ---
 
 <p align="center">
-  <sub>Licensed under the Apache-2.0 License. Built with passion by <a href="https://github.com/sharedcode">SharedCode</a>.</sub>
+  <sub>Licensed under the Apache-2.0 License. Built by <a href="https://github.com/sharedcode">SharedCode</a>.</sub>
 </p>
