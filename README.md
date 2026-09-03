@@ -289,6 +289,8 @@ CI (`.github/workflows/ci.yml`) builds, vets, and runs the core unit tests (`inm
 
 The Redis- and Cassandra-backed integration and stress test suites stay Linux-only: GitHub Actions' `services:` containers require a Linux-hosted runner, so those specific suites are not run on macOS or Windows today. That is a real gap in what is verified there, not a hidden one.
 
+Standing up this matrix also surfaced a genuine, pre-existing Windows-only failure in the `common` package's transaction-timeout tests, unrelated to the matrix itself. That package is currently skipped on the Windows leg rather than papered over; see the comment in `ci.yml` for the exact tests and symptom.
+
 ---
 
 ## 💻 For Developers
