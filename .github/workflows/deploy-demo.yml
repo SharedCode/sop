@@ -7,6 +7,7 @@ on:
       - master
     paths:
       - 'demo/**'
+      - 'demo-agents/**'
       - 'sop-arena/**'
       - '.github/workflows/deploy-demo.yml'
   workflow_dispatch: # Allows manual trigger from the GitHub Actions UI
@@ -55,9 +56,11 @@ jobs:
           # Support modern Go (lib/wasm) and legacy Go (misc/wasm) locations
           if [ -f "${GOROOT}/lib/wasm/wasm_exec.js" ]; then
             cp "${GOROOT}/lib/wasm/wasm_exec.js" demo/wasm_exec.js
+            cp "${GOROOT}/lib/wasm/wasm_exec.js" demo-agents/wasm_exec.js
             echo "Copied from ${GOROOT}/lib/wasm/wasm_exec.js"
           elif [ -f "${GOROOT}/misc/wasm/wasm_exec.js" ]; then
             cp "${GOROOT}/misc/wasm/wasm_exec.js" demo/wasm_exec.js
+            cp "${GOROOT}/misc/wasm/wasm_exec.js" demo-agents/wasm_exec.js
             echo "Copied from ${GOROOT}/misc/wasm/wasm_exec.js"
           else
             echo "Error: wasm_exec.js not found in ${GOROOT}" >&2
@@ -73,6 +76,15 @@ jobs:
           # -s -w strips symbol tables and debug information to minimize binary footprint
           GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop.wasm .
           ls -lh sop.wasm wasm_exec.js index.html
+
+      - name: Compile Agent Verification Barrier to WebAssembly (sop-agents.wasm)
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Compiling ai/verify barrier demo to WebAssembly..."
+          cd demo-agents
+          GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop-agents.wasm .
+          ls -lh sop-agents.wasm wasm_exec.js index.html
 
       - name: Setup Node.js Toolchain
         uses: actions/setup-node@v4
@@ -94,13 +106,15 @@ jobs:
         run: |
           set -euo pipefail
           rm -rf _site
-          mkdir -p _site/arena
+          mkdir -p _site/arena _site/agents
           # Technical demo (WASM) lives at the site root: sharedcode.github.io/sop/
           cp demo/index.html demo/sop.wasm demo/wasm_exec.js _site/
           # SOP Arena lives at a subpath of the same site: sharedcode.github.io/sop/arena/
           # (vite.config.ts uses base: './', so relative asset paths work from any subpath.)
           cp -r sop-arena/dist/. _site/arena/
-          ls -lh _site _site/arena
+          # Agent verification barrier (ai/verify in WASM) lives at sharedcode.github.io/sop/agents/
+          cp demo-agents/index.html demo-agents/sop-agents.wasm demo-agents/wasm_exec.js _site/agents/
+          ls -lh _site _site/arena _site/agents
 
       - name: Setup GitHub Pages
         uses: actions/configure-pages@v5

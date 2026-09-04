@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SOP — Agent Verification Barrier (MCP + A2A)</title>
+  <meta name="description" content="The same ai/verify safety and reachability barrier that gates SOP's real MCP and A2A servers, running live in your browser via WebAssembly. Try to drop a database before validating a backup and watch it get blocked." />
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { 50:'#ecfdf5', 100:'#d1fae5', 400:'#34d399', 500:'#10b981', 600:'#059669', 700:'#047857' },
+            dark: { 950:'#07090E', 900:'#0B0F17', 850:'#111726', 800:'#182238', 700:'#22304E', 600:'#334155' },
+            accent: { cyan:'#06B6D4', violet:'#8B5CF6', amber:'#F59E0B', rose:'#f43f5e' }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <script src="wasm_exec.js"></script>
+
+  <!--
+    Same OPFS bridge as demo/index.html, async File System Access API on the
+    main thread. See that file's comment for why this is the async path and
+    not the synchronous createSyncAccessHandle one.
+  -->
+  <script>
+    function opfsSupported() {
+      return !!(navigator.storage && navigator.storage.getDirectory);
+    }
+    if (opfsSupported() && navigator.storage.persist) {
+      navigator.storage.persist().catch(() => {});
+    }
+    async function opfsWriteFile(path, bytes) {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(path, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(bytes);
+      await writable.close();
+      return true;
+    }
+    async function opfsReadFile(path) {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(path, { create: false });
+      const file = await fileHandle.getFile();
+      return new Uint8Array(await file.arrayBuffer());
+    }
+    async function opfsRemoveFile(path) {
+      const root = await navigator.storage.getDirectory();
+      await root.removeEntry(path);
+      return true;
+    }
+  </script>
+
+  <style>
+    body { background-color: #07090E; color: #E2E8F0; }
+    .step-card { transition: all 0.25s ease; }
+    .step-card.done { border-color: #34d399 !important; background: rgba(52,211,153,0.08); }
+    .step-card.blocked { border-color: #f43f5e !important; background: rgba(244,63,94,0.08); }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #22304E; border-radius: 4px; }
+    .log-line { animation: fadeIn 0.2s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+</head>
+<body class="font-sans">
+
+  <header class="border-b border-dark-800 bg-dark-950/80 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-brand-400 to-accent-cyan flex items-center justify-center">
+          <i data-lucide="shield-check" class="w-5 h-5 text-dark-950"></i>
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <span class="font-bold text-white">SOP</span>
+            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-dark-800 border border-dark-700 text-brand-400">AGENT BARRIER</span>
+          </div>
+          <p class="text-[10px] text-slate-400 font-mono">ai/verify running live in WASM</p>
+        </div>
+      </div>
+      <div class="hidden md:flex items-center space-x-3 bg-dark-850 px-3 py-1.5 rounded-full border border-dark-700 text-xs font-mono">
+        <div class="flex items-center space-x-1.5">
+          <span id="wasm-status-dot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-ping"></span>
+          <span id="wasm-status-text" class="text-amber-300 font-medium">Loading...</span>
+        </div>
+        <span class="text-dark-600">|</span>
+        <button id="opfs-status" onclick="resetTrace()" class="flex items-center space-x-1 text-slate-500 hover:text-slate-300 transition" title="Click to reset the trace">
+          <span>OPFS:</span>
+          <span id="opfs-status-text" class="font-bold text-slate-500">checking...</span>
+        </button>
+      </div>
+      <a href="../" class="text-xs px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-700 text-slate-300">← Technical Demo</a>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-10">
+    <div class="mb-10">
+      <span class="inline-flex items-center space-x-1.5 text-xs font-mono px-3 py-1 rounded-full bg-dark-850 border border-dark-700 text-accent-cyan">
+        <i data-lucide="zap" class="w-3 h-3"></i><span>SAME ENGINE BEHIND THE REAL MCP + A2A SERVERS</span>
+      </span>
+      <h1 class="text-3xl md:text-4xl font-extrabold text-white mt-4 leading-tight">
+        Stop an agent before it drops your database.
+      </h1>
+      <p class="text-slate-400 mt-3 max-w-2xl">
+        This runs <code class="text-brand-400">ai/verify</code>, the safety and reachability barrier compiled to WebAssembly. It is the identical Go package that gates <code class="text-slate-300">tools/mcpserver</code> and <code class="text-slate-300">tools/a2aagent</code>, the real MCP and A2A servers, just wired to buttons here instead of protocol calls. Try dropping the database before validating a backup.
+      </p>
+    </div>
+
+    <!-- Runbook pipeline -->
+    <div class="bg-dark-850 border border-dark-700 rounded-2xl p-6 mb-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-bold text-white flex items-center space-x-2"><i data-lucide="workflow" class="w-4 h-4 text-brand-400"></i><span>Runbook: db-maintenance</span></h2>
+        <button onclick="resetTrace()" class="text-xs text-slate-400 hover:text-white flex items-center space-x-1">
+          <i data-lucide="rotate-ccw" class="w-3 h-3"></i><span>Reset trace</span>
+        </button>
+      </div>
+      <div id="step-cards" class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4"></div>
+
+      <div class="flex flex-wrap gap-2 pt-2 border-t border-dark-700">
+        <button onclick="attemptStep('take_backup')" class="px-3 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-700 text-sm text-slate-200">1. Take Backup</button>
+        <button onclick="attemptStep('validate_backup')" class="px-3 py-2 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-700 text-sm text-slate-200">2. Validate Backup</button>
+        <button onclick="attemptStep('drop_prod_db')" class="px-3 py-2 rounded-lg bg-rose-950/60 hover:bg-rose-900/60 border border-rose-800/60 text-sm text-rose-200 font-semibold">3. Drop Prod DB</button>
+        <span class="text-xs text-slate-500 self-center pl-2">try step 3 first</span>
+      </div>
+    </div>
+
+    <!-- Execution log -->
+    <div class="bg-dark-850 border border-dark-700 rounded-2xl p-6 mb-10">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-bold text-white flex items-center space-x-2"><i data-lucide="terminal" class="w-4 h-4 text-accent-cyan"></i><span>Barrier log</span></h2>
+      </div>
+      <div id="exec-log" class="font-mono text-xs bg-dark-950 border border-dark-800 rounded-lg p-4 h-64 overflow-y-auto space-y-1.5">
+        <div class="text-slate-500">// waiting for WASM engine...</div>
+      </div>
+    </div>
+
+    <!-- MCP / A2A honesty section -->
+    <div class="bg-dark-850 border border-dark-700 rounded-2xl p-6">
+      <h2 class="font-bold text-white mb-2 flex items-center space-x-2"><i data-lucide="info" class="w-4 h-4 text-accent-violet"></i><span>What this page is, and isn't</span></h2>
+      <p class="text-sm text-slate-400 mb-3">
+        This is a static site with no backend, so it cannot run a live MCP or A2A network server, both are real protocols an agent connects to over stdio or HTTP. What you just clicked through is the actual verification logic those servers call before committing a step. Run the real servers yourself:
+      </p>
+      <pre class="font-mono text-xs bg-dark-950 border border-dark-800 rounded-lg p-4 overflow-x-auto text-slate-300">git clone https://github.com/SharedCode/sop.git
+cd sop
+go run ./examples/verify_barrier        <span class="text-slate-500"># same scenario, in a terminal</span>
+go run ./cmd/sop-mcp-server              <span class="text-slate-500"># MCP over stdio</span>
+go run ./cmd/sop-a2a-agent &             <span class="text-slate-500"># A2A over HTTP</span>
+curl localhost:8087/.well-known/agent-card.json</pre>
+      <p class="text-xs text-slate-500 mt-3">
+        Full writeup: <a href="https://github.com/SharedCode/sop/blob/master/docs/MCP_A2A_AND_VERIFICATION_ENGINE.md" class="text-brand-400 hover:underline">docs/MCP_A2A_AND_VERIFICATION_ENGINE.md</a>
+      </p>
+    </div>
+  </main>
+
+  <footer class="max-w-6xl mx-auto px-4 py-8 text-center text-xs text-slate-600 font-mono">
+    <a href="https://github.com/SharedCode/sop" class="hover:text-slate-400">github.com/SharedCode/sop</a>
+  </footer>
+
+  <script>
+    let ready = false;
+    const stepMeta = {
+      take_backup: { label: 'Take Backup' },
+      validate_backup: { label: 'Validate Backup' },
+      drop_prod_db: { label: 'Drop Prod DB' },
+      restore_from_backup: { label: 'Restore (pre-drop)' },
+      restore_from_backup_post_drop: { label: 'Restore (post-drop)' },
+    };
+    const displayOrder = ['take_backup', 'validate_backup', 'drop_prod_db'];
+
+    function log(html) {
+      const el = document.getElementById('exec-log');
+      const line = document.createElement('div');
+      line.className = 'log-line';
+      line.innerHTML = html;
+      el.appendChild(line);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function renderSteps(trace) {
+      const container = document.getElementById('step-cards');
+      container.innerHTML = '';
+      displayOrder.forEach((id, i) => {
+        const done = trace.includes(id);
+        const div = document.createElement('div');
+        div.className = 'step-card border border-dark-700 rounded-xl p-3 bg-dark-900' + (done ? ' done' : '');
+        div.innerHTML = `<div class="text-[10px] font-mono text-slate-500">STEP ${i + 1}</div>
+          <div class="text-sm font-semibold ${done ? 'text-brand-400' : 'text-slate-200'}">${stepMeta[id].label}</div>
+          <div class="text-[11px] font-mono mt-1 ${done ? 'text-brand-400' : 'text-slate-600'}">${done ? '✓ committed' : 'pending'}</div>`;
+        container.appendChild(div);
+      });
+    }
+
+    function attemptStep(id) {
+      if (!ready) return;
+      const res = JSON.parse(sopAgentsExecuteStep(id));
+      if (res.blocked) {
+        log(`<span class="text-rose-400">→ execute_step(${id}) ... BLOCKED</span>`);
+        log(`<span class="text-rose-300/80 pl-4">${res.reason}</span>`);
+      } else {
+        log(`<span class="text-brand-400">→ execute_step(${id}) ... committed</span>`);
+      }
+      renderSteps(res.trace);
+    }
+
+    function resetTrace() {
+      if (!ready) return;
+      const res = JSON.parse(sopAgentsReset());
+      document.getElementById('exec-log').innerHTML = '<div class="text-slate-500">// trace reset</div>';
+      renderSteps(res.trace);
+    }
+
+    function updateOPFSBadge() {
+      const el = document.getElementById('opfs-status-text');
+      if (!ready || !el) return;
+      const status = sopAgentsOPFSStatus();
+      const labels = {
+        restored: ['RESTORED', 'text-brand-400'],
+        empty: ['PERSISTING', 'text-slate-300'],
+        unsupported: ['UNSUPPORTED', 'text-slate-600'],
+      };
+      const [text, cls] = labels[status] || ['UNKNOWN', 'text-slate-500'];
+      el.innerText = text;
+      el.className = 'font-bold ' + cls;
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+      lucide.createIcons();
+      try {
+        const go = new Go();
+        let mod;
+        try {
+          mod = await WebAssembly.instantiateStreaming(fetch('sop-agents.wasm'), go.importObject);
+        } catch (e) {
+          const bytes = await (await fetch('sop-agents.wasm')).arrayBuffer();
+          mod = await WebAssembly.instantiate(bytes, go.importObject);
+        }
+        go.run(mod.instance);
+
+        setTimeout(() => {
+          ready = true;
+          document.getElementById('wasm-status-dot').className = 'w-2.5 h-2.5 rounded-full bg-brand-400';
+          document.getElementById('wasm-status-text').className = 'text-brand-400 font-semibold';
+          document.getElementById('wasm-status-text').innerText = 'ENGINE ACTIVE';
+          const rb = JSON.parse(sopAgentsRunbook());
+          renderSteps(rb.trace);
+          if (rb.trace && rb.trace.length) {
+            log('<span class="text-brand-400">// restored trace from OPFS</span>');
+            rb.trace.forEach(s => log(`<span class="text-slate-400">→ ${s} (restored)</span>`));
+          } else {
+            log('<span class="text-slate-500">// ready. try step 3 first.</span>');
+          }
+          updateOPFSBadge();
+          lucide.createIcons();
+        }, 250);
+      } catch (err) {
+        console.error('Failed to load sop-agents WASM engine:', err);
+        document.getElementById('wasm-status-text').innerText = 'LOAD ERROR';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -51,6 +51,7 @@ You can test SOP directly in your browser without installing anything:
 | :--- | :--- | :--- |
 | 🧠 **SOP Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 HTTP network calls**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
 | 🎮 **SOP Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch SOP automatically redistribute tasks and rebuild parity in real-time. | [**Play SOP Arena →**](https://sharedcode.github.io/sop/arena/) |
+| 🔌 **Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/sop/agents/) |
 
 The technical demo persists across reloads now, to Origin Private File System, via the browser's async File System Access API. The diagram below is the real tradeoff behind that choice, not a benchmark; no throughput numbers are shown because none have been measured for either path in this repo.
 
@@ -68,7 +69,13 @@ SOP runbooks are reachable from two agent protocols, [Model Context Protocol](ht
   <img src="docs/assets/mcp-a2a-architecture.svg" alt="An MCP client and an A2A orchestrator each reach a separate protocol server, both backed by the same tools/runbookstore.Store and gated by the same ai/verify safety check before a step commits" width="900" />
 </p>
 
-**What the barrier actually stops.** An agent tries to drop the production database, the check blocks it because no backup has been validated yet in this trace, the agent does the backup and validation steps for real, then the same drop is allowed. This is `examples/verify_barrier` running for real, not staged output:
+**Try the barrier yourself, live: [sharedcode.github.io/sop/agents](https://sharedcode.github.io/sop/agents/).** GitHub Pages can't run a real MCP or A2A network server (no backend), so this page runs the actual `ai/verify` check compiled to WASM, wired to buttons instead of protocol calls, the same logic those servers call before committing a step. Click "Drop Prod DB" first and watch it block; the trace persists to OPFS, so a reload picks up where you left off. This is a real recording of that page, not a mockup:
+
+<p align="center">
+  <img src="docs/assets/agent-barrier-demo.gif" alt="Real browser recording of the live agent verification barrier demo: dropping the database is blocked until backup and validation steps actually commit, then the same drop is allowed" width="900" />
+</p>
+
+The same scenario also runs as a terminal program, `examples/verify_barrier`, and the servers themselves are one command away:
 
 <p align="center">
   <img src="docs/assets/ltl-barrier.gif" alt="Real terminal recording of ai/verify blocking a database drop until a backup is validated, then allowing it once the precondition is actually met" width="760" />

@@ -1,0 +1,132 @@
+// Command demo-agents is a WASM build of ai/verify's barrier certificate,
+// the same engine backing tools/mcpserver and tools/a2aagent, running
+// entirely client-side. This is not a mockup of the MCP/A2A servers (those
+// are real network protocols and cannot run inside a static GitHub Pages
+// site with no backend); it is the actual verification logic those servers
+// call, wired to buttons instead of protocol calls, so the barrier itself
+// is something a visitor can click through live rather than only read
+// about.
+package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"syscall/js"
+
+	"github.com/sharedcode/sop/ai/verify"
+	"github.com/sharedcode/sop/tools/runbookstore"
+)
+
+var (
+	workflow *verify.Workflow
+	trace    *verify.Trace
+)
+
+type stepResult struct {
+	Step    string   `json:"step"`
+	Blocked bool     `json:"blocked"`
+	Reason  string   `json:"reason,omitempty"`
+	Trace   []string `json:"trace"`
+}
+
+func snapshotTrace() []string {
+	out := make([]string, len(trace.Executed))
+	for i, id := range trace.Executed {
+		out[i] = string(id)
+	}
+	return out
+}
+
+func jsExecuteStep(this js.Value, args []js.Value) any {
+	if len(args) == 0 || args[0].Type() != js.TypeString {
+		return errResult("missing step id")
+	}
+	step := verify.StepID(args[0].String())
+
+	res := stepResult{Step: string(step)}
+	if err := workflow.CheckSafety(trace, step); err != nil {
+		res.Blocked = true
+		res.Reason = err.Error()
+	} else {
+		_ = workflow.Commit(trace, step)
+	}
+	res.Trace = snapshotTrace()
+
+	go persistTrace()
+
+	b, _ := json.Marshal(res)
+	return string(b)
+}
+
+func jsReset(this js.Value, args []js.Value) any {
+	trace = verify.NewTrace()
+	go func() {
+		if opfsAvailable() {
+			_ = opfsRemoveFile(agentsStateFile)
+		}
+	}()
+	b, _ := json.Marshal(stepResult{Trace: snapshotTrace()})
+	return string(b)
+}
+
+func jsRunbook(this js.Value, args []js.Value) any {
+	type stepInfo struct {
+		ID          string   `json:"id"`
+		Requires    []string `json:"requires"`
+		Establishes []string `json:"establishes"`
+	}
+	type ruleInfo struct {
+		Name      string `json:"name"`
+		Forbidden string `json:"forbidden"`
+		Requires  string `json:"requires"`
+	}
+	steps := make([]stepInfo, 0, len(workflow.Steps))
+	for id, s := range workflow.Steps {
+		si := stepInfo{ID: string(id)}
+		for _, r := range s.Requires {
+			si.Requires = append(si.Requires, string(r))
+		}
+		for _, e := range s.Establishes {
+			si.Establishes = append(si.Establishes, string(e))
+		}
+		steps = append(steps, si)
+	}
+	rules := make([]ruleInfo, 0, len(workflow.Safety))
+	for _, r := range workflow.Safety {
+		rules = append(rules, ruleInfo{Name: r.Name, Forbidden: string(r.Forbidden), Requires: string(r.Requires)})
+	}
+	b, _ := json.Marshal(map[string]any{"steps": steps, "safety": rules, "trace": snapshotTrace()})
+	return string(b)
+}
+
+func errResult(msg string) string {
+	b, _ := json.Marshal(map[string]any{"error": msg})
+	return string(b)
+}
+
+func main() {
+	wf, err := runbookstore.DBMaintenanceWorkflow()
+	if err != nil {
+		panic(err)
+	}
+	workflow = wf
+	trace = verify.NewTrace()
+
+	js.Global().Set("sopAgentsRunbook", js.FuncOf(jsRunbook))
+	js.Global().Set("sopAgentsExecuteStep", js.FuncOf(jsExecuteStep))
+	js.Global().Set("sopAgentsReset", js.FuncOf(jsReset))
+	js.Global().Set("sopAgentsOPFSStatus", js.FuncOf(jsOPFSStatus))
+
+	hydrateFromOPFS()
+
+	js.Global().Set("__SOP_AGENTS_WASM_READY__", js.ValueOf(true))
+	if doc := js.Global().Get("document"); !doc.IsUndefined() && !doc.IsNull() {
+		evt := js.Global().Get("CustomEvent").New("sop-agents-wasm-ready")
+		doc.Call("dispatchEvent", evt)
+	}
+
+	fmt.Println("sop-agents: verification barrier WASM kernel ready")
+
+	c := make(chan struct{})
+	<-c
+}
