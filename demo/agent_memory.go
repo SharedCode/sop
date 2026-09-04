@@ -370,21 +370,31 @@ func jsAgentStart(this js.Value, args []js.Value) any {
 		prompt = s
 	}
 	sess, logs := agentEngine.start(prompt)
+	go persistState()
 	return marshalAgentResp(sess, AgentMemoryFrame{}, logs, nil)
 }
 
 func jsAgentStep(this js.Value, args []js.Value) any {
 	sess, frame, logs, err := agentEngine.commitStep(argString(args, 0))
+	if err == nil {
+		go persistState()
+	}
 	return marshalAgentResp(sess, frame, logs, err)
 }
 
 func jsAgentKill(this js.Value, args []js.Value) any {
 	sess, logs, err := agentEngine.kill(argString(args, 0))
+	if err == nil {
+		go persistState()
+	}
 	return marshalAgentResp(sess, AgentMemoryFrame{}, logs, err)
 }
 
 func jsAgentResume(this js.Value, args []js.Value) any {
 	sess, logs, err := agentEngine.resume(argString(args, 0))
+	if err == nil {
+		go persistState()
+	}
 	return marshalAgentResp(sess, AgentMemoryFrame{}, logs, err)
 }
 

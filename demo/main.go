@@ -559,6 +559,11 @@ func jsRunTransaction(this js.Value, args []js.Value) any {
 	}
 
 	resp := db.executeTransaction(req)
+	if resp.Success {
+		// Persist in the background so OPFS write latency never inflates the
+		// microsecond-level commit timing already captured in resp.
+		go persistState()
+	}
 	respBytes, _ := json.Marshal(resp)
 	return string(respBytes)
 }
@@ -629,6 +634,15 @@ func main() {
 	js.Global().Set("sopAgentResume", js.FuncOf(jsAgentResume))
 	js.Global().Set("sopAgentTrace", js.FuncOf(jsAgentTrace))
 	js.Global().Set("sopAgentRecall", js.FuncOf(jsAgentRecall))
+	js.Global().Set("sopOPFSStatus", js.FuncOf(jsOPFSStatus))
+	js.Global().Set("sopOPFSReset", js.FuncOf(jsOPFSReset))
+
+	// Attempt to restore prior session state from OPFS before signaling ready,
+	// so the frontend's first data fetch already reflects it instead of
+	// flashing the seeded defaults then swapping. Safe to block here: this
+	// runs on the same goroutine the Go wasm runtime already pumps through
+	// its JS-event-loop scheduler for any blocking channel receive.
+	hydrateFromOPFS()
 
 	// Signal to frontend that the Go WebAssembly runtime is loaded and ready
 	js.Global().Set("__SOP_WASM_READY__", js.ValueOf(true))

@@ -54,6 +54,68 @@
   <!-- Go WebAssembly Runtime Support -->
   <script src="wasm_exec.js"></script>
 
+  <!--
+    OPFS (Origin Private File System) bridge, called from Go via js.Global().Call(...).
+    Runs on the main thread using the async File System Access API
+    (FileSystemFileHandle.createWritable / getFile), not the synchronous
+    createSyncAccessHandle -- that one only works inside a dedicated Worker, and this
+    demo's WASM binary runs on the main thread. Trade-off: no near-native sync I/O,
+    but real persistence across reloads with no architecture change. Every function
+    here is feature-detected; if OPFS isn't available (older Safari, some embedded
+    webviews), these all reject and the Go side just falls back to in-memory-only,
+    exactly like the demo behaved before this file existed.
+  -->
+  <script>
+    function opfsSupported() {
+      return !!(navigator.storage && navigator.storage.getDirectory);
+    }
+
+    async function opfsWriteFile(path, bytes) {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(path, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(bytes);
+      await writable.close();
+      return true;
+    }
+
+    async function opfsReadFile(path) {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(path, { create: false });
+      const file = await fileHandle.getFile();
+      const buf = await file.arrayBuffer();
+      return new Uint8Array(buf);
+    }
+
+    async function opfsRemoveFile(path) {
+      const root = await navigator.storage.getDirectory();
+      await root.removeEntry(path);
+      return true;
+    }
+
+    // Reflects Go's sopOPFSStatus() ("restored" | "empty" | "unsupported") in the header badge.
+    function updateOPFSStatusBadge() {
+      const el = document.getElementById('opfs-status-text');
+      if (!el || typeof sopOPFSStatus !== 'function') return;
+      const status = sopOPFSStatus();
+      const labels = {
+        restored: ['SESSION RESTORED', 'text-brand-400'],
+        empty: ['PERSISTING', 'text-slate-300'],
+        unsupported: ['UNSUPPORTED', 'text-slate-600'],
+      };
+      const [text, cls] = labels[status] || ['UNKNOWN', 'text-slate-500'];
+      el.innerText = text;
+      el.className = 'font-bold ' + cls;
+    }
+
+    // Clears the persisted OPFS snapshot and reloads with fresh seed data.
+    async function resetOPFSState() {
+      if (typeof sopOPFSReset !== 'function') return;
+      sopOPFSReset();
+      location.reload();
+    }
+  </script>
+
   <style>
     body {
       background-color: #07090E;
@@ -138,9 +200,15 @@
             <span>HTTP Calls:</span>
             <span id="network-counter" class="text-brand-400 font-bold">0</span>
           </div>
+          <span class="text-dark-600">|</span>
+          <button id="opfs-status" onclick="resetOPFSState()" title="Click to clear persisted state and reload with fresh seed data"
+                  class="flex items-center space-x-1 text-slate-500 hover:text-slate-300 transition cursor-pointer">
+            <span>OPFS:</span>
+            <span id="opfs-status-text" class="font-bold text-slate-500">checking...</span>
+          </button>
         </div>
 
-        <a href="https://github.com/SharedCode/sop" target="_blank" rel="noopener noreferrer" 
+        <a href="https://github.com/SharedCode/sop" target="_blank" rel="noopener noreferrer"
            class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-700 text-xs font-medium text-slate-200 transition">
           <i data-lucide="github" class="w-4 h-4"></i>
           <span class="hidden sm:inline">GitHub Repository</span>
@@ -622,6 +690,7 @@
           refreshLedgerUI();
           triggerVectorSearch();
           refreshEngineInfo();
+          updateOPFSStatusBadge();
           lucide.createIcons();
         }, 300);
 
