@@ -12,11 +12,12 @@ jobs:
   # actually expected to run Go on. These three legs are independent and
   # run in parallel; none of them needs: another.
   #
-  # `demo` is excluded from vet/build/test everywhere below because it is a
-  # WASM-only package (imports syscall/js) that only compiles under
-  # GOOS=js GOARCH=wasm; see .github/workflows/deploy-demo.yml for how it's
-  # actually built. `bindings/main` (cgo) is additionally excluded on the
-  # Windows leg only; see the comment on the "go vet" step below for why.
+  # `demo` and `demo-agents` are excluded from vet/build/test everywhere
+  # below because they are WASM-only packages (import syscall/js) that only
+  # compile under GOOS=js GOARCH=wasm; see .github/workflows/deploy-demo.yml
+  # for how they're actually built. `bindings/main` (cgo) is additionally
+  # excluded on the Windows leg only; see the comment on the "go vet" step
+  # below for why.
   #
   # Go version: the project pins one exact toolchain version in go.mod
   # (currently 1.26.8, for CVE remediation, see CHANGELOG.md) rather than
@@ -73,7 +74,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          exclude='/demo$'
+          exclude='/demo$|/demo-agents$'
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             exclude="$exclude|/bindings/main$"
           fi
@@ -83,7 +84,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          exclude='/demo$'
+          exclude='/demo$|/demo-agents$'
           if [ "${{ matrix.os }}" = "windows-latest" ]; then
             exclude="$exclude|/bindings/main$"
           fi

@@ -68,19 +68,26 @@ jobs:
         with:
           go-version-file: go.mod
 
-      # demo is excluded here for the same reason ci.yml excludes it from
-      # vet/build/test: it's WASM-only (imports syscall/js) and only
-      # compiles under GOOS=js GOARCH=wasm, so it's scanned separately below.
+      # demo and demo-agents are excluded here for the same reason ci.yml
+      # excludes them from vet/build/test: they're WASM-only (import
+      # syscall/js) and only compile under GOOS=js GOARCH=wasm, so they're
+      # scanned separately below.
       - name: govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck $(go list ./... 2>/dev/null | grep -Ev '/demo$')
+          govulncheck $(go list ./... 2>/dev/null | grep -Ev '/demo$|/demo-agents$')
 
       - name: govulncheck (wasm demo)
         env:
           GOOS: js
           GOARCH: wasm
         run: govulncheck ./demo/...
+
+      - name: govulncheck (wasm agent barrier demo)
+        env:
+          GOOS: js
+          GOARCH: wasm
+        run: govulncheck ./demo-agents/...
 
   stress:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
