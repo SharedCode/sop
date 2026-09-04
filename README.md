@@ -19,6 +19,10 @@ Instead of managing separate database servers, message brokers, caching tiers, a
 [![License](https://img.shields.io/github/license/SharedCode/sop)](LICENSE)
 [![Live Demos](https://img.shields.io/badge/Live_Demos-GitHub_Pages-10B981?logo=github)](https://sharedcode.github.io/sop/arena/)
 
+<p align="center">
+  <img src="docs/assets/sop-demo.gif" alt="Live SOP WASM demo: executing an ACID transfer and killing/resuming a checkpointed AI agent mid-task, both running client-side with zero network calls" width="760" />
+</p>
+
 ---
 
 ### 📉 Engineering ROI, Verified in This Repo
@@ -45,10 +49,6 @@ You can test SOP directly in your browser without installing anything:
 | :--- | :--- | :--- |
 | 🧠 **SOP Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 HTTP network calls**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
 | 🎮 **SOP Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch SOP automatically redistribute tasks and rebuild parity in real-time. | [**Play SOP Arena →**](https://sharedcode.github.io/sop/arena/) |
-
-<p align="center">
-  <img src="docs/assets/sop-demo.gif" alt="Live SOP WASM demo: executing an ACID transfer and killing/resuming a checkpointed AI agent mid-task, both running client-side with zero network calls" width="760" />
-</p>
 
 ---
 
