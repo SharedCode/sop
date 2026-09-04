@@ -289,6 +289,8 @@ SOP has no commercial product, pricing, or customers today. It is an MIT-license
 
 None of these exist today. They are documented here so a reader evaluating SOP as a commercial or investment opportunity can see the plausible paths from open-source project to business, and judge for themselves how credible each one is.
 
+For a longer, more speculative look at what a local-first, enterprise-defensible version of this could become, including a candid list of what would have to be built first, see [Strategic Architecture & Investor Moat](docs/STRATEGIC_ARCHITECTURE_AND_MOAT.md). It is explicit throughout about the line between what exists in this repo today and what is proposed.
+
 ---
 
 ## 🗺️ Roadmap

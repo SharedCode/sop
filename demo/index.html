@@ -70,6 +70,16 @@
       return !!(navigator.storage && navigator.storage.getDirectory);
     }
 
+    // Without this, the browser can evict this origin's OPFS data under disk
+    // pressure since it's "best-effort" storage by default. Requesting
+    // persistence doesn't guarantee it's granted (that's up to the browser's
+    // own heuristics, e.g. installed-as-PWA or high engagement), but not
+    // asking at all guarantees eviction risk stays entirely on the table.
+    // Fire-and-forget: this never blocks demo functionality either way.
+    if (opfsSupported() && navigator.storage.persist) {
+      navigator.storage.persist().catch(() => {});
+    }
+
     async function opfsWriteFile(path, bytes) {
       const root = await navigator.storage.getDirectory();
       const fileHandle = await root.getFileHandle(path, { create: true });
