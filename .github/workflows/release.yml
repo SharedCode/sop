@@ -28,11 +28,22 @@ jobs:
         with:
           go-version-file: go.mod
 
+      # `demo` and `demo-agents` only compile under GOOS=js GOARCH=wasm
+      # (they import syscall/js); excluded here the same way ci.yml and
+      # go.yml already exclude them, see the comment there.
       - name: go vet
-        run: go vet ./...
+        shell: bash
+        run: |
+          set -euo pipefail
+          exclude='/demo$|/demo-agents$'
+          go vet $(go list ./... 2>/dev/null | grep -Ev "$exclude")
 
       - name: Build all packages
-        run: go build ./...
+        shell: bash
+        run: |
+          set -euo pipefail
+          exclude='/demo$|/demo-agents$'
+          go build $(go list ./... 2>/dev/null | grep -Ev "$exclude")
 
       - name: Unit tests with race detector
         env:
