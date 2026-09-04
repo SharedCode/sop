@@ -1,5 +1,9 @@
 # SOP
 
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="SOP logo" width="440" />
+</p>
+
 ## One engine for data and compute.
 
 **SOP** (Scalable Objects Persistence) is an embedded B-Tree storage engine and distributed computing platform written in Go with bindings for Python and C#. It combines **transactional data persistence**, **ordered key-value storage**, **vector similarity search**, and **swarm task coordination** into one library. 
@@ -14,6 +18,22 @@ Instead of managing separate database servers, message brokers, caching tiers, a
 [![Go version](https://img.shields.io/github/go-mod/go-version/SharedCode/sop)](go.mod)
 [![License](https://img.shields.io/github/license/SharedCode/sop)](LICENSE)
 [![Live Demos](https://img.shields.io/badge/Live_Demos-GitHub_Pages-10B981?logo=github)](https://sharedcode.github.io/sop/arena/)
+
+---
+
+### 📉 Engineering ROI, Verified in This Repo
+
+No revenue or customer numbers exist yet for this project (see [For Investors](#-for-investors) for the honest version of that). What is verified today, in this repo, is the infrastructure cost this architecture removes:
+
+| What collapses | From | To |
+| :--- | :--- | :--- |
+| **Network hops per operation** | 3-4 hops across Redis, a queue, and Postgres/Cassandra (15-50ms) | 1 in-process call inside the embedded engine (sub-millisecond) |
+| **Stateful services to operate, patch, and page on** | Redis + Kafka/RabbitMQ + Postgres/Cassandra + ZooKeeper (4+) | 1 embedded library |
+| **Language surfaces shipped** | — | Go (native), Python (`sop4py` on PyPI), C# (`Sop` on NuGet); Java and Rust bindings exist in-repo with tests, not yet published |
+| **CI rigor on every change** | — | Race detector + `govulncheck` across the matrix, `go test ./...` passing across 14 packages in the core Go module |
+| **Deployment footprint of the technical demo** | A server-backed demo stack | WASM build running ACID transactions, vector search, and agent-memory checkpointing 100% client-side, 0 HTTP calls ([live](https://sharedcode.github.io/sop/)) |
+
+Every row above is something you can run yourself, not a projection. See [Performance Benchmarks](#-performance-benchmarks) for the throughput numbers behind the latency claim, and [What Has Not Yet Been Proven](#-for-investors) for what this table deliberately leaves out.
 
 ---
 
