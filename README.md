@@ -47,7 +47,7 @@ You can test SOP directly in your browser without installing anything:
 | 🎮 **SOP Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch SOP automatically redistribute tasks and rebuild parity in real-time. | [**Play SOP Arena →**](https://sharedcode.github.io/sop/arena/) |
 
 <p align="center">
-  <img src="docs/assets/sop-demo.gif" alt="SOP Interactive Demos and Distributed Systems Architecture Showcase" width="800" />
+  <img src="docs/assets/sop-demo.gif" alt="Live SOP WASM demo: executing an ACID transfer and killing/resuming a checkpointed AI agent mid-task, both running client-side with zero network calls" width="760" />
 </p>
 
 ---
