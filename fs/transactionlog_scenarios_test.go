@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -459,28 +458,35 @@ func Test_TransactionLog_Add_WriteEncodeError(t *testing.T) {
 	}
 }
 
-// Ensures ByModTime.Swap is exercised by sort.Sort and directly.
-func TestByModTime_Swap_Coverage(t *testing.T) {
-	newer := time.Now()
-	older := newer.Add(-1 * time.Hour)
+// Ensures getFilesSortedDescByModifiedTime actually orders its results by ModTime
+// (ascending, oldest first) rather than just testing the sort call itself.
+func Test_getFilesSortedDescByModifiedTime_SortOrder(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
 
-	// Intentionally place newer first so sorting must swap to ascending (older, newer).
-	fis := ByModTime{
-		{DirEntry: nil, ModTime: newer},
-		{DirEntry: nil, ModTime: older},
+	older := filepath.Join(dir, "a.log")
+	if err := os.WriteFile(older, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write older: %v", err)
+	}
+	oldTime := time.Now().Add(-1 * time.Hour)
+	if err := os.Chtimes(older, oldTime, oldTime); err != nil {
+		t.Fatalf("chtimes older: %v", err)
 	}
 
-	// This sort should trigger Swap at least once.
-	sort.Sort(fis)
-
-	if !fis[0].ModTime.Before(fis[1].ModTime) {
-		t.Fatalf("expected ascending order by ModTime after sort")
+	newer := filepath.Join(dir, "b.log")
+	if err := os.WriteFile(newer, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write newer: %v", err)
 	}
 
-	// Also call Swap directly to guarantee line coverage of the Swap method.
-	fis.Swap(0, 1)
-	if !fis[1].ModTime.Before(fis[0].ModTime) {
-		t.Fatalf("expected positions to swap after direct Swap call")
+	files, err := getFilesSortedDescByModifiedTime(ctx, dir, ".log", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(files))
+	}
+	if !files[0].ModTime.Before(files[1].ModTime) {
+		t.Fatalf("expected ascending order by ModTime, got %v then %v", files[0].ModTime, files[1].ModTime)
 	}
 }
 

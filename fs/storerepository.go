@@ -2,11 +2,14 @@ package fs
 
 import (
 	"bytes"
+	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	log "log/slog"
+	"maps"
 	"os"
-	"sort"
+	"slices"
 	"strconv"
 	"time"
 
@@ -75,10 +78,10 @@ func (sr *StoreRepository) GetRegistryHashModValue(ctx context.Context) (int, er
 		fio := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, false)
 		if fio.exists(ctx, RegistryHashModValueFilename) {
 			if ba, err := fio.read(ctx, RegistryHashModValueFilename); err != nil {
-				return 0, fmt.Errorf("failed reading registry hash mod value from %s, details: %v", RegistryHashModValueFilename, err)
+				return 0, fmt.Errorf("failed reading registry hash mod value from %s, details: %w", RegistryHashModValueFilename, err)
 			} else {
 				if i, err := strconv.Atoi(string(ba)); err != nil {
-					return 0, fmt.Errorf("read invalid registry hash mod value from %s, details: %v", RegistryHashModValueFilename, err)
+					return 0, fmt.Errorf("read invalid registry hash mod value from %s, details: %w", RegistryHashModValueFilename, err)
 				} else {
 					sr.registryHashModValue = i
 				}
@@ -218,8 +221,8 @@ func (sr *StoreRepository) Update(ctx context.Context, stores []sop.StoreInfo) (
 
 	// Sort the stores info so we can commit them in same sort order across transactions,
 	// thus, reduced chance of deadlock.
-	sort.Slice(stores, func(i, j int) bool {
-		return stores[i].Name < stores[j].Name
+	slices.SortFunc(stores, func(a, b sop.StoreInfo) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 
 	keys := make([]string, len(stores))
@@ -487,8 +490,10 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 		storesLookup[s] = 1
 	}
 
-	// Remove store(s) that exists.
-	var lastErr error
+	// Remove store(s) that exists. errs accumulates every store's removal failure (via
+	// errors.Join) instead of only the last one, so a caller removing several stores can see
+	// all of them instead of just whichever failed last.
+	var errs error
 	storeWriter := newFileIOWithReplication(sr.replicationTracker, sr.manageStore, true)
 	for _, storeName := range storeNames {
 		if _, ok := storesLookup[storeName]; !ok {
@@ -503,7 +508,7 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 		}
 		// Delete store folder (contains blobs, store config & registry data files).
 		if err := storeWriter.removeStore(ctx, storeName); err != nil {
-			lastErr = fmt.Errorf("StoreRepository Remove (fs Delete) failed, details: %v", err)
+			errs = errors.Join(errs, fmt.Errorf("StoreRepository Remove (fs Delete) of store %s failed: %w", storeName, err))
 		}
 		delete(storesLookup, storeName)
 
@@ -511,25 +516,19 @@ func (sr *StoreRepository) Remove(ctx context.Context, storeNames ...string) err
 	}
 
 	// Update Store list file of removed entries.
-	storeList := make([]string, len(storesLookup))
-	i := 0
-	for k := range storesLookup {
-		storeList[i] = k
-		i++
-	}
-	sort.Strings(storeList)
+	storeList := slices.Sorted(maps.Keys(storesLookup))
 	ba, _ := encoding.Marshal(storeList)
 
 	if err := storeWriter.write(ctx, storeListFilename, ba); err != nil {
-		return fmt.Errorf("StoreRepository Remove (write store list) failed, details: %v", err)
+		return fmt.Errorf("StoreRepository Remove (write store list) failed, details: %w", err)
 	}
 
 	// Replicate the files if configured to.
 	if err := storeWriter.replicate(ctx); err != nil {
-		lastErr = err
+		errs = errors.Join(errs, err)
 	}
 
-	return lastErr
+	return errs
 }
 
 // Replicate writes the updated per-store metadata to the passive target. Any write error disables

@@ -1,10 +1,11 @@
 package cache
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/sharedcode/sop"
@@ -109,7 +110,7 @@ func (c *L2InMemoryCache) IsRestarted(ctx context.Context) bool {
 	return false
 }
 
-func (c *L2InMemoryCache) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+func (c *L2InMemoryCache) SetStruct(ctx context.Context, key string, value any, expiration time.Duration) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -127,7 +128,7 @@ func (c *L2InMemoryCache) SetStruct(ctx context.Context, key string, value inter
 	return nil
 }
 
-func (c *L2InMemoryCache) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+func (c *L2InMemoryCache) SetStructs(ctx context.Context, keys []string, values []any, expiration time.Duration) error {
 	for i, key := range keys {
 		if err := c.SetStruct(ctx, key, values[i], expiration); err != nil {
 			return err
@@ -136,7 +137,7 @@ func (c *L2InMemoryCache) SetStructs(ctx context.Context, keys []string, values 
 	return nil
 }
 
-func (c *L2InMemoryCache) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
+func (c *L2InMemoryCache) GetStruct(ctx context.Context, key string, target any) (bool, error) {
 	// log.Debug("entered GetStruct")
 	val, ok := c.data.load(key)
 	if !ok {
@@ -156,7 +157,7 @@ func (c *L2InMemoryCache) GetStruct(ctx context.Context, key string, target inte
 	return true, nil
 }
 
-func (c *L2InMemoryCache) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error) {
+func (c *L2InMemoryCache) GetStructEx(ctx context.Context, key string, target any, expiration time.Duration) (bool, error) {
 	// log.Debug("entered GetStructEx")
 	val, ok := c.data.load(key)
 	if !ok {
@@ -181,7 +182,7 @@ func (c *L2InMemoryCache) GetStructEx(ctx context.Context, key string, target in
 	return true, nil
 }
 
-func (c *L2InMemoryCache) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+func (c *L2InMemoryCache) GetStructs(ctx context.Context, keys []string, targets []any, expiration time.Duration) ([]bool, error) {
 	found := make([]bool, len(keys))
 	for i, key := range keys {
 		var err error
@@ -211,7 +212,7 @@ func (c *L2InMemoryCache) Ping(ctx context.Context) error {
 }
 
 func (c *L2InMemoryCache) Clear(ctx context.Context) error {
-	c.data.Range(func(key, value interface{}) bool {
+	c.data.Range(func(key, value any) bool {
 		c.data.delete(key.(string))
 		return true
 	})
@@ -300,8 +301,8 @@ func (c *L2InMemoryCache) Lock(ctx context.Context, duration time.Duration, lock
 	}
 
 	// Sort keys to avoid deadlocks/livelocks (A->B vs B->A)
-	sort.Slice(lockKeys, func(i, j int) bool {
-		return lockKeys[i].Key < lockKeys[j].Key
+	slices.SortFunc(lockKeys, func(a, b *sop.LockKey) int {
+		return cmp.Compare(a.Key, b.Key)
 	})
 
 	acquired := make([]*sop.LockKey, 0, len(lockKeys))

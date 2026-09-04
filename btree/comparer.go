@@ -14,7 +14,7 @@ import (
 type Comparer interface {
 	// Compare compares this object with the other and returns -1, 0, or 1.
 	// -1 means this < other, 0 means equal, 1 means this > other.
-	Compare(other interface{}) int
+	Compare(other any) int
 }
 
 // ComparerFunc allows providing a comparer function separate from the key object.

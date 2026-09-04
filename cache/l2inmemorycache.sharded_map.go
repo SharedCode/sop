@@ -14,7 +14,7 @@ const (
 
 type shard struct {
 	mu    sync.RWMutex
-	items map[string]interface{}
+	items map[string]any
 }
 
 type shardedMap struct {
@@ -28,7 +28,7 @@ func newShardedMap(maxItemsPerShard int) *shardedMap {
 	}
 	m := &shardedMap{maxItemsPerShard: maxItemsPerShard}
 	for i := 0; i < shardCount; i++ {
-		m.shards[i] = &shard{items: make(map[string]interface{})}
+		m.shards[i] = &shard{items: make(map[string]any)}
 	}
 	return m
 }
@@ -39,7 +39,7 @@ func (m *shardedMap) getShard(key string) *shard {
 	return m.shards[h.Sum32()%shardCount]
 }
 
-func (m *shardedMap) load(key string) (interface{}, bool) {
+func (m *shardedMap) load(key string) (any, bool) {
 	shard := m.getShard(key)
 	shard.mu.RLock()
 	val, ok := shard.items[key]
@@ -47,7 +47,7 @@ func (m *shardedMap) load(key string) (interface{}, bool) {
 	return val, ok
 }
 
-func (m *shardedMap) store(key string, value interface{}) {
+func (m *shardedMap) store(key string, value any) {
 	shard := m.getShard(key)
 	shard.mu.Lock()
 
@@ -110,7 +110,7 @@ func (m *shardedMap) delete(key string) {
 	shard.mu.Unlock()
 }
 
-func (m *shardedMap) loadOrStore(key string, value interface{}) (actual interface{}, loaded bool) {
+func (m *shardedMap) loadOrStore(key string, value any) (actual any, loaded bool) {
 	shard := m.getShard(key)
 	shard.mu.Lock()
 	actual, loaded = shard.items[key]
@@ -168,7 +168,7 @@ func (m *shardedMap) loadOrStore(key string, value interface{}) (actual interfac
 	return actual, loaded
 }
 
-func (m *shardedMap) compareAndSwap(key string, old, new interface{}) bool {
+func (m *shardedMap) compareAndSwap(key string, old, new any) bool {
 	shard := m.getShard(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
@@ -179,7 +179,7 @@ func (m *shardedMap) compareAndSwap(key string, old, new interface{}) bool {
 	return false
 }
 
-func (m *shardedMap) compareAndDelete(key string, old interface{}) bool {
+func (m *shardedMap) compareAndDelete(key string, old any) bool {
 	shard := m.getShard(key)
 	shard.mu.Lock()
 	defer shard.mu.Unlock()
@@ -190,7 +190,7 @@ func (m *shardedMap) compareAndDelete(key string, old interface{}) bool {
 	return false
 }
 
-func (m *shardedMap) Range(f func(key, value interface{}) bool) {
+func (m *shardedMap) Range(f func(key, value any) bool) {
 	for _, shard := range m.shards {
 		shard.mu.RLock()
 		// Copy items to avoid holding lock during callback if possible,
@@ -200,7 +200,7 @@ func (m *shardedMap) Range(f func(key, value interface{}) bool) {
 		// Actually sync.Map Range is complex.
 		// Here we hold RLock. If callback calls Store, it will deadlock.
 		// So we should collect items then callback.
-		items := make(map[string]interface{}, len(shard.items))
+		items := make(map[string]any, len(shard.items))
 		for k, v := range shard.items {
 			items[k] = v
 		}

@@ -144,7 +144,7 @@ func (r *registryOnDisk) Get(ctx context.Context, storesLids []sop.RegistryPaylo
 		lids := make([]sop.UUID, 0, len(storeLids.IDs))
 
 		keys := make([]string, len(storeLids.IDs))
-		targets := make([]interface{}, len(storeLids.IDs))
+		targets := make([]any, len(storeLids.IDs))
 		handleTargets := make([]sop.Handle, len(storeLids.IDs))
 		for i := range storeLids.IDs {
 			keys[i] = storeLids.IDs[i].String()

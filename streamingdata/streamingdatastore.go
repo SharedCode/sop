@@ -30,7 +30,7 @@ type StreamingDataKey[TK btree.Ordered] struct {
 }
 
 // Compare implements ordering by Key then ChunkIndex to preserve chunk order.
-func (x StreamingDataKey[TK]) Compare(other interface{}) int {
+func (x StreamingDataKey[TK]) Compare(other any) int {
 	y := other.(StreamingDataKey[TK])
 
 	// Sorted by user define key and followed by the Chunk Index, so we can navigate/iterate it in the chunk's submitted natural order.

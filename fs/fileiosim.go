@@ -25,18 +25,19 @@ type fileIOSimulator struct {
 	lookup map[string][]byte
 	locker sync.Mutex
 	// The error flags are manipulated by tests concurrently; use atomics to avoid races.
-	errorOnSuffixNumber  int32
-	errorOnSuffixNumber2 int32
-	resetFlag            uint32 // 1=true, 0=false
+	errorOnSuffixNumber  atomic.Int32
+	errorOnSuffixNumber2 atomic.Int32
+	resetFlag            atomic.Bool
 }
 
 func newFileIOSim() *fileIOSimulator {
-	return &fileIOSimulator{
-		lookup:               make(map[string][]byte),
-		locker:               sync.Mutex{},
-		errorOnSuffixNumber:  -1,
-		errorOnSuffixNumber2: -1,
+	sim := &fileIOSimulator{
+		lookup: make(map[string][]byte),
+		locker: sync.Mutex{},
 	}
+	sim.errorOnSuffixNumber.Store(-1)
+	sim.errorOnSuffixNumber2.Store(-1)
+	return sim
 }
 
 // ToFilePath is part of FileIO so we can allow implementations to drive
@@ -46,7 +47,7 @@ func (sim *fileIOSimulator) ToFilePath(basePath string, id sop.UUID) string {
 }
 
 func (sim *fileIOSimulator) WriteFile(ctx context.Context, name string, data []byte, perm os.FileMode) error {
-	n := atomic.LoadInt32(&sim.errorOnSuffixNumber)
+	n := sim.errorOnSuffixNumber.Load()
 	if n >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", n)) {
 		return fmt.Errorf("induced error on file suffix %d", n)
 	}
@@ -56,15 +57,15 @@ func (sim *fileIOSimulator) WriteFile(ctx context.Context, name string, data []b
 	return nil
 }
 func (sim *fileIOSimulator) ReadFile(ctx context.Context, name string) ([]byte, error) {
-	n := atomic.LoadInt32(&sim.errorOnSuffixNumber)
+	n := sim.errorOnSuffixNumber.Load()
 	if n >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", n)) {
 		return nil, fmt.Errorf("induced error on file suffix %d", n)
 	}
-	n2 := atomic.LoadInt32(&sim.errorOnSuffixNumber2)
+	n2 := sim.errorOnSuffixNumber2.Load()
 	if n2 >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", n2)) {
-		if atomic.LoadUint32(&sim.resetFlag) == 1 {
-			atomic.StoreInt32(&sim.errorOnSuffixNumber, -1)
-			atomic.StoreInt32(&sim.errorOnSuffixNumber2, -1)
+		if sim.resetFlag.Load() {
+			sim.errorOnSuffixNumber.Store(-1)
+			sim.errorOnSuffixNumber2.Store(-1)
 		}
 		return nil, fmt.Errorf("induced error on file suffix %d", n2)
 	}
@@ -78,7 +79,7 @@ func (sim *fileIOSimulator) ReadFile(ctx context.Context, name string) ([]byte, 
 	return ba, nil
 }
 func (sim *fileIOSimulator) Remove(ctx context.Context, name string) error {
-	n := atomic.LoadInt32(&sim.errorOnSuffixNumber)
+	n := sim.errorOnSuffixNumber.Load()
 	if n >= 0 && strings.HasSuffix(name, fmt.Sprintf("_%d", n)) {
 		return fmt.Errorf("induced error on file suffix %d", n)
 	}
@@ -108,17 +109,13 @@ func (sim *fileIOSimulator) ReadDir(ctx context.Context, sourceDir string) ([]os
 
 // Test helpers for atomically setting error flags to avoid data races in tests.
 func (sim *fileIOSimulator) setErrorOnSuffixNumber(v int) {
-	atomic.StoreInt32(&sim.errorOnSuffixNumber, int32(v))
+	sim.errorOnSuffixNumber.Store(int32(v))
 }
 
 func (sim *fileIOSimulator) setErrorOnSuffixNumber2(v int) {
-	atomic.StoreInt32(&sim.errorOnSuffixNumber2, int32(v))
+	sim.errorOnSuffixNumber2.Store(int32(v))
 }
 
 func (sim *fileIOSimulator) setResetFlag(v bool) {
-	if v {
-		atomic.StoreUint32(&sim.resetFlag, 1)
-	} else {
-		atomic.StoreUint32(&sim.resetFlag, 0)
-	}
+	sim.resetFlag.Store(v)
 }

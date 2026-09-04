@@ -63,7 +63,7 @@ func (m *mockRedis) GetEx(ctx context.Context, key string, expiration time.Durat
 func (m *mockRedis) Ping(ctx context.Context) error { return nil }
 
 // Struct operations used by value caching and item locks.
-func (m *mockRedis) SetStruct(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
+func (m *mockRedis) SetStruct(ctx context.Context, key string, value any, expiration time.Duration) error {
 	ba, err := encoding.BlobMarshaler.Marshal(value)
 	if err != nil {
 		return err
@@ -72,7 +72,7 @@ func (m *mockRedis) SetStruct(ctx context.Context, key string, value interface{}
 	return nil
 }
 
-func (m *mockRedis) SetStructs(ctx context.Context, keys []string, values []interface{}, expiration time.Duration) error {
+func (m *mockRedis) SetStructs(ctx context.Context, keys []string, values []any, expiration time.Duration) error {
 	for i, key := range keys {
 		if err := m.SetStruct(ctx, key, values[i], expiration); err != nil {
 			return err
@@ -81,7 +81,7 @@ func (m *mockRedis) SetStructs(ctx context.Context, keys []string, values []inte
 	return nil
 }
 
-func (m *mockRedis) GetStruct(ctx context.Context, key string, target interface{}) (bool, error) {
+func (m *mockRedis) GetStruct(ctx context.Context, key string, target any) (bool, error) {
 	ba, ok := m.lookup[key]
 	if !ok {
 		// Real client returns (false, nil) when key not found.
@@ -92,11 +92,11 @@ func (m *mockRedis) GetStruct(ctx context.Context, key string, target interface{
 }
 
 // Mock only support GetStruct; GetStructEx just calls GetStruct ignoring expiration.
-func (m *mockRedis) GetStructEx(ctx context.Context, key string, target interface{}, expiration time.Duration) (bool, error) {
+func (m *mockRedis) GetStructEx(ctx context.Context, key string, target any, expiration time.Duration) (bool, error) {
 	return m.GetStruct(ctx, key, target)
 }
 
-func (m *mockRedis) GetStructs(ctx context.Context, keys []string, targets []interface{}, expiration time.Duration) ([]bool, error) {
+func (m *mockRedis) GetStructs(ctx context.Context, keys []string, targets []any, expiration time.Duration) ([]bool, error) {
 	found := make([]bool, len(keys))
 	for i, key := range keys {
 		ok, err := m.GetStruct(ctx, key, targets[i])

@@ -86,7 +86,7 @@ func NewReplicationTracker(ctx context.Context, storesBaseFolders []string, repl
 		} else {
 			globalReplicationDetailsLocker.RUnlock()
 			if err := rt.readStatusFromHomeFolder(ctx); err != nil {
-				return nil, fmt.Errorf("failed reading replication status (%sº file, details: %v", replicationStatusFilename, err)
+				return nil, fmt.Errorf("failed reading replication status (%sº file, details: %w", replicationStatusFilename, err)
 			}
 			globalReplicationDetailsLocker.Lock()
 			copy := rt.ReplicationTrackedDetails

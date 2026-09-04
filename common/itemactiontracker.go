@@ -281,7 +281,7 @@ func (t *itemActionTracker[TK, TV]) hasTrackedItems() bool {
 func (t *itemActionTracker[TK, TV]) checkTrackedItems(ctx context.Context) error {
 	var lastErr error
 	var keys []string
-	var targets []interface{}
+	var targets []any
 	var uuids []sop.UUID
 
 	for uuid, cachedItem := range t.items {
@@ -342,7 +342,7 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Dura
 	if len(keys) == 0 {
 		return nil
 	}
-	targets := make([]interface{}, len(keys))
+	targets := make([]any, len(keys))
 	for i := range targets {
 		targets[i] = &lockRecord{}
 	}
@@ -353,9 +353,9 @@ func (t *itemActionTracker[TK, TV]) lock(ctx context.Context, duration time.Dura
 
 	var verifyKeys []string
 	var verifyUUIDs []sop.UUID
-	var verifyTargets []interface{}
+	var verifyTargets []any
 	var setKeys []string
-	var setValues []interface{}
+	var setValues []any
 
 	for i, uuid := range uuids {
 		cachedItem := t.items[uuid]

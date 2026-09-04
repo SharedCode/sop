@@ -55,7 +55,7 @@ func (e *Erasure) Decode(shards [][]byte, shardsMetaData [][]byte) *DecodeResult
 	err := e.encoder.Join(w, shards, len(shards[0])*e.DataShardsCount)
 	if err != nil {
 		return &DecodeResult{
-			Error: fmt.Errorf("encoder.Join failed, error: %v", err),
+			Error: fmt.Errorf("encoder.Join failed, error: %w", err),
 		}
 	}
 	// Truncate trailing zeroes from decoded data, if there are and package for return.

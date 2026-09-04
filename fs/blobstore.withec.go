@@ -2,6 +2,7 @@ package fs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	log "log/slog"
 	"os"
@@ -339,20 +340,21 @@ func (b *BlobStoreWithEC) RemoveStore(ctx context.Context, blobStoreName string)
 		return fmt.Errorf("can't find Erasure Config setting for file %s", blobStoreName)
 	}
 
-	var lastErr error
+	var errs error
 	for _, folderPath := range baseFolderPathsAcrossDrives {
 		// Needs to delete the store folder relative to the base folder path.
 		path := filepath.Join(folderPath, blobStoreName)
 		if err := b.fileIO.RemoveAll(ctx, path); err != nil {
-			// Just capture the last error, but attempt to delete from all EC drive paths provided not to leak storage.
-			lastErr = err
+			// Join every drive's error instead of keeping only the last one, but attempt to
+			// delete from all EC drive paths provided not to leak storage.
+			errs = errors.Join(errs, fmt.Errorf("drive path %s: %w", path, err))
 		}
 	}
 
-	if lastErr == nil {
+	if errs == nil {
 		return nil
 	}
-	return fmt.Errorf("unable to delete all blob store(%s) folders in EC, last error encountered %v", blobStoreName, lastErr)
+	return fmt.Errorf("unable to delete all blob store(%s) folders in EC: %w", blobStoreName, errs)
 }
 
 func isShardsEmpty(shards [][]byte) bool {

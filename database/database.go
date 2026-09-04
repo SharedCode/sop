@@ -369,7 +369,7 @@ func RemoveBtrees(ctx context.Context, config sop.DatabaseOptions) error {
 
 	for _, name := range stores {
 		if err := RemoveBtree(ctx, config, name); err != nil {
-			return fmt.Errorf("failed to remove btree %s: %v", name, err)
+			return fmt.Errorf("failed to remove btree %s: %w", name, err)
 		}
 	}
 	return nil

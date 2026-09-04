@@ -284,14 +284,14 @@ func (t *Transaction) refetchAndMergeModifications(ctx context.Context) error {
 
 // classifyModifiedNodes will classify modified Nodes into 5 kinds & return them:
 // a. updated Nodes, b. removed Nodes, c. added Nodes, d. fetched Nodes, e. root Nodes.
-func (t *Transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []interface{}],
-	[]sop.Tuple[*sop.StoreInfo, []interface{}],
-	[]sop.Tuple[*sop.StoreInfo, []interface{}],
-	[]sop.Tuple[*sop.StoreInfo, []interface{}],
-	[]sop.Tuple[*sop.StoreInfo, []interface{}]) {
-	var storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
+func (t *Transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []any],
+	[]sop.Tuple[*sop.StoreInfo, []any],
+	[]sop.Tuple[*sop.StoreInfo, []any],
+	[]sop.Tuple[*sop.StoreInfo, []any],
+	[]sop.Tuple[*sop.StoreInfo, []any]) {
+	var storesUpdatedNodes, storesRemovedNodes, storesAddedNodes, storesFetchedNodes, storesRootNodes []sop.Tuple[*sop.StoreInfo, []any]
 	for _, s := range t.btreesBackend {
-		var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []interface{}
+		var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []any
 		for _, cacheNode := range s.nodeRepository.localCache {
 			// Allow newly created root nodes to get merged between transactions.
 			if s.nodeRepository.count == 0 &&
@@ -311,31 +311,31 @@ func (t *Transaction) classifyModifiedNodes() ([]sop.Tuple[*sop.StoreInfo, []int
 			}
 		}
 		if len(updatedNodes) > 0 {
-			storesUpdatedNodes = append(storesUpdatedNodes, sop.Tuple[*sop.StoreInfo, []interface{}]{
+			storesUpdatedNodes = append(storesUpdatedNodes, sop.Tuple[*sop.StoreInfo, []any]{
 				First:  s.getStoreInfo(),
 				Second: updatedNodes,
 			})
 		}
 		if len(removedNodes) > 0 {
-			storesRemovedNodes = append(storesRemovedNodes, sop.Tuple[*sop.StoreInfo, []interface{}]{
+			storesRemovedNodes = append(storesRemovedNodes, sop.Tuple[*sop.StoreInfo, []any]{
 				First:  s.getStoreInfo(),
 				Second: removedNodes,
 			})
 		}
 		if len(addedNodes) > 0 {
-			storesAddedNodes = append(storesAddedNodes, sop.Tuple[*sop.StoreInfo, []interface{}]{
+			storesAddedNodes = append(storesAddedNodes, sop.Tuple[*sop.StoreInfo, []any]{
 				First:  s.getStoreInfo(),
 				Second: addedNodes,
 			})
 		}
 		if len(fetchedNodes) > 0 {
-			storesFetchedNodes = append(storesFetchedNodes, sop.Tuple[*sop.StoreInfo, []interface{}]{
+			storesFetchedNodes = append(storesFetchedNodes, sop.Tuple[*sop.StoreInfo, []any]{
 				First:  s.getStoreInfo(),
 				Second: fetchedNodes,
 			})
 		}
 		if len(rootNodes) > 0 {
-			storesRootNodes = append(storesRootNodes, sop.Tuple[*sop.StoreInfo, []interface{}]{
+			storesRootNodes = append(storesRootNodes, sop.Tuple[*sop.StoreInfo, []any]{
 				First:  s.getStoreInfo(),
 				Second: rootNodes,
 			})

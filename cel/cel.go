@@ -31,7 +31,7 @@ func NewEvaluator(name string, expression string) (*Evaluator, error) {
 		cel.Variable("mapY", cel.MapType(cel.StringType, cel.AnyType)),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error creating cel environment: %v", err)
+		return nil, fmt.Errorf("error creating cel environment: %w", err)
 	}
 
 	ast, issues := env.Compile(expression)
@@ -40,7 +40,7 @@ func NewEvaluator(name string, expression string) (*Evaluator, error) {
 	}
 	p, err := env.Program(ast)
 	if err != nil {
-		return nil, fmt.Errorf("error creating program: %v", err)
+		return nil, fmt.Errorf("error creating program: %w", err)
 	}
 	return &Evaluator{
 		Expression: expression,
@@ -55,11 +55,11 @@ func (e *Evaluator) Evaluate(mapX map[string]any, mapY map[string]any) (int, err
 		"mapY": mapY,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("error evaluating cel expression: %v", err)
+		return 0, fmt.Errorf("error evaluating cel expression: %w", err)
 	}
 	nv, err := out.ConvertToNative(reflect.TypeOf(int(0)))
 	if err != nil {
-		return 0, fmt.Errorf("error converting to native int: %v", err)
+		return 0, fmt.Errorf("error converting to native int: %w", err)
 	}
 
 	if v, ok := nv.(int); !ok {

@@ -23,7 +23,7 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 		return nil, fmt.Errorf("b-tree name can't be empty string")
 	}
 
-	var t2 interface{} = t.GetPhasedTransaction()
+	var t2 any = t.GetPhasedTransaction()
 	trans := t2.(*Transaction)
 
 	// Check if store is already open in this transaction; if so, return the existing handle.
@@ -44,7 +44,7 @@ func OpenBtree[TK btree.Ordered, TV any](ctx context.Context, name string, t sop
 	if len(stores) == 0 || stores[0].IsEmpty() || err != nil {
 		if err == nil {
 			if rbErr := trans.Rollback(ctx, nil); rbErr != nil {
-				return nil, fmt.Errorf("b-tree '%s' does not exist, please use NewBtree to create an instance of it, rollback failed: %v", name, rbErr)
+				return nil, fmt.Errorf("b-tree '%s' does not exist, please use NewBtree to create an instance of it, rollback failed: %w", name, rbErr)
 			}
 			return nil, fmt.Errorf("b-tree '%s' does not exist, please use NewBtree to create an instance of it", name)
 		}
@@ -67,7 +67,7 @@ func CursorOnOpenedBtree[TK btree.Ordered, TV any](ctx context.Context, name str
 		return nil, fmt.Errorf("b-tree name can't be empty string")
 	}
 
-	var t2 interface{} = t.GetPhasedTransaction()
+	var t2 any = t.GetPhasedTransaction()
 	trans := t2.(*Transaction)
 
 	// Check if store is already open in this transaction, if so, return a Cursor to it.
@@ -96,7 +96,7 @@ func OpenBtreeCursor[TK btree.Ordered, TV any](ctx context.Context, name string,
 		return nil, fmt.Errorf("b-tree name can't be empty string")
 	}
 
-	var t2 interface{} = t.GetPhasedTransaction()
+	var t2 any = t.GetPhasedTransaction()
 	trans := t2.(*Transaction)
 
 	// Check if store is already open in this transaction, if so, return a Cursor to it.
@@ -116,7 +116,7 @@ func OpenBtreeCursor[TK btree.Ordered, TV any](ctx context.Context, name string,
 	if len(stores) == 0 || stores[0].IsEmpty() || err != nil {
 		if err == nil {
 			if rbErr := trans.Rollback(ctx, nil); rbErr != nil {
-				return nil, fmt.Errorf("b-tree '%s' does not exist, please use NewBtree to create an instance of it, rollback failed: %v", name, rbErr)
+				return nil, fmt.Errorf("b-tree '%s' does not exist, please use NewBtree to create an instance of it, rollback failed: %w", name, rbErr)
 			}
 			return nil, fmt.Errorf("b-tree '%s' does not exist, please use NewBtree to create an instance of it", name)
 		}
@@ -191,7 +191,7 @@ func NewBtree[TK btree.Ordered, TV any](ctx context.Context, si sop.StoreOptions
 	// Check if store retrieved is empty or of non-compatible specification.
 	if !ns.IsCompatible(stores[0]) {
 		if rbErr := trans.Rollback(ctx, nil); rbErr != nil {
-			return nil, fmt.Errorf("b-tree '%s' exists & has different configuration, please use OpenBtree to open & create an instance of it, rollback failed: %v", si.Name, rbErr)
+			return nil, fmt.Errorf("b-tree '%s' exists & has different configuration, please use OpenBtree to open & create an instance of it, rollback failed: %w", si.Name, rbErr)
 		}
 		// Recommend to use the OpenBtree function to open it.
 		return nil, fmt.Errorf("b-tree '%s' exists & has different configuration, please use OpenBtree to open & create an instance of it", si.Name)

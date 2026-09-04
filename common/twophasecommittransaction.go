@@ -70,9 +70,9 @@ type Transaction struct {
 	updatedStoresInfo  []sop.StoreInfo
 
 	// Needed for Phase 2 commit for populating MRU cache.
-	updatedNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
-	addedNodes   []sop.Tuple[*sop.StoreInfo, []interface{}]
-	rootNodes    []sop.Tuple[*sop.StoreInfo, []interface{}]
+	updatedNodes []sop.Tuple[*sop.StoreInfo, []any]
+	addedNodes   []sop.Tuple[*sop.StoreInfo, []any]
+	rootNodes    []sop.Tuple[*sop.StoreInfo, []any]
 
 	// Used for transaction level locking.
 	nodesKeys []*sop.LockKey
@@ -326,7 +326,7 @@ func (t *Transaction) phase1Commit(ctx context.Context) error {
 		return err
 	}
 
-	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.Tuple[*sop.StoreInfo, []interface{}]
+	var updatedNodes, removedNodes, addedNodes, fetchedNodes, rootNodes []sop.Tuple[*sop.StoreInfo, []any]
 	var updatedNodesHandles, removedNodesHandles []sop.RegistryPayload[sop.Handle]
 
 	// Classify modified Nodes into update, remove and add. Updated & removed nodes are processed differently,
@@ -663,7 +663,7 @@ func (t *Transaction) populateMru(ctx context.Context) {
 	t.updateVersionThenPopulateMru(ctx, t.newRootNodeHandles, t.rootNodes)
 }
 
-func (t *Transaction) updateVersionThenPopulateMru(ctx context.Context, handles []sop.RegistryPayload[sop.Handle], nodes []sop.Tuple[*sop.StoreInfo, []interface{}]) {
+func (t *Transaction) updateVersionThenPopulateMru(ctx context.Context, handles []sop.RegistryPayload[sop.Handle], nodes []sop.Tuple[*sop.StoreInfo, []any]) {
 	for i := range nodes {
 		for ii := range nodes[i].Second {
 			target := nodes[i].Second[ii]

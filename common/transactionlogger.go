@@ -532,7 +532,7 @@ func toStruct[T any](obj []byte) T {
 	return t
 }
 
-func toByteArray(obj interface{}) []byte {
+func toByteArray(obj any) []byte {
 	ba, _ := encoding.DefaultMarshaler.Marshal(obj)
 	return ba
 }

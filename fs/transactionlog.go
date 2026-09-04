@@ -7,7 +7,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -243,7 +243,7 @@ func (tl *TransactionLog) getLogsDetails(tid sop.UUID) ([]sop.KeyValuePair[int, 
 	}
 
 	if err := scanner.Err(); err != nil {
-		return r, fmt.Errorf("error reading file: %v", err)
+		return r, fmt.Errorf("error reading file: %w", err)
 	}
 
 	return r, nil
@@ -261,21 +261,6 @@ type FileInfoWithModTime struct {
 	ModTime time.Time
 }
 
-// ByModTime sorts FileInfoWithModTime by modification time.
-type ByModTime []FileInfoWithModTime
-
-func (fis ByModTime) Len() int {
-	return len(fis)
-}
-
-func (fis ByModTime) Swap(i, j int) {
-	fis[i], fis[j] = fis[j], fis[i]
-}
-
-func (fis ByModTime) Less(i, j int) bool {
-	return fis[i].ModTime.Before(fis[j].ModTime)
-}
-
 // getFilesSortedDescByModifiedTime lists files in descending order by modification time,
 // filtered by extension and an optional predicate. Directory will be created if missing.
 func getFilesSortedDescByModifiedTime(ctx context.Context, directoryPath string, fileSuffix string, filter func(os.DirEntry) bool) ([]FileInfoWithModTime, error) {
@@ -289,7 +274,7 @@ func getFilesSortedDescByModifiedTime(ctx context.Context, directoryPath string,
 	}
 	files, err := fio.ReadDir(ctx, directoryPath)
 	if err != nil && len(files) == 0 {
-		return nil, fmt.Errorf("error reading directory: %v", err)
+		return nil, fmt.Errorf("error reading directory: %w", err)
 	}
 
 	fileInfoWithTimes := make([]FileInfoWithModTime, 0, len(files)/2)
@@ -305,7 +290,9 @@ func getFilesSortedDescByModifiedTime(ctx context.Context, directoryPath string,
 		}
 	}
 
-	sort.Sort(ByModTime(fileInfoWithTimes))
+	slices.SortFunc(fileInfoWithTimes, func(a, b FileInfoWithModTime) int {
+		return a.ModTime.Compare(b.ModTime)
+	})
 
 	return fileInfoWithTimes, err
 }
