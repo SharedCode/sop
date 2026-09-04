@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 480" role="img" aria-labelledby="title desc">
+<title id="title">OPFS persistence: the path this repo actually took, versus the one it didn't</title>
+<desc id="desc">Two real OPFS integration paths for the WASM demo: the async File System Access API on the main thread, which is what demo/persistence.go implements, versus the synchronous createSyncAccessHandle API, which requires moving the WASM binary into a dedicated Worker and was deliberately not built this pass. No throughput numbers are shown because none have been measured for either path in this repo.</desc>
+<style>
+text{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Arial,sans-serif}
+.mono{font-family:"SF Mono",Menlo,Consolas,monospace}
+.h{font-size:22px;fill:#f4f7fb;font-weight:700}
+.sub{font-size:13px;fill:#9fb0c3}
+.label{font-size:16px;fill:#eaf0f7;font-weight:700}
+.small{font-size:13px;fill:#c3ccd6}
+.tiny{font-size:11.5px;fill:#8b98a8}
+</style>
+<rect width="1200" height="480" rx="20" fill="#0a0e14"/>
+<text x="40" y="46" class="h">OPFS persistence: the path taken, not a benchmark</text>
+<text x="40" y="68" class="sub mono">demo/persistence.go · no throughput numbers, because none have been measured</text>
+
+<!-- Built path -->
+<g transform="translate(40,100)">
+  <rect width="540" height="340" rx="14" fill="#0e2418" stroke="#34d058" stroke-width="2"/>
+  <text x="24" y="40" class="label" fill="#34d058">BUILT — async File System Access API</text>
+  <text x="24" y="66" class="small">Runs on the main thread, same as the rest of the demo.</text>
+
+  <g transform="translate(24,90)" class="tiny">
+    <text y="0">✓ FileSystemFileHandle.createWritable() / getFile()</text>
+    <text y="24">✓ No Worker, no message-passing rewrite of the ~11</text>
+    <text y="42">   sopX() functions index.html already calls directly</text>
+    <text y="66">✓ Real persistence: reload the tab, state comes back</text>
+    <text y="90">✓ Tested end-to-end in headless Chrome via wasmbrowsertest,</text>
+    <text y="108">   not just built (demo/persistence_test.go)</text>
+    <text y="132">✗ Not synchronous, not the near-native I/O path</text>
+  </g>
+
+  <rect x="24" y="248" width="492" height="60" rx="8" fill="#08150e" stroke="#1c3a28"/>
+  <text x="40" y="272" class="tiny" fill="#70d9b0">navigator.storage.persist() requested at boot</text>
+  <text x="40" y="290" class="tiny" fill="#8b98a8">best-effort; a browser can still decline it</text>
+</g>
+
+<!-- Not-built path -->
+<g transform="translate(620,100)">
+  <rect width="540" height="340" rx="14" fill="#1a1420" stroke="#e0a020" stroke-width="2" stroke-dasharray="6 5"/>
+  <text x="24" y="40" class="label" fill="#e0a020">NOT BUILT — createSyncAccessHandle</text>
+  <text x="24" y="66" class="small">Requires moving the WASM binary into a dedicated Worker.</text>
+
+  <g transform="translate(24,90)" class="tiny">
+    <text y="0">→ Only callable inside a dedicated Worker,</text>
+    <text y="18">   the Web platform enforces this, not a choice</text>
+    <text y="42">→ Every sopX() call site in index.html becomes an</text>
+    <text y="60">   async postMessage / onmessage round trip</text>
+    <text y="84">→ Real rearchitecture of a demo that already worked</text>
+    <text y="102">   and already had a recorded, tested walkthrough</text>
+    <text y="126">＋ Would likely be faster: no data: URI / Blob</text>
+    <text y="144">   round trip for reads and writes</text>
+  </g>
+
+  <rect x="24" y="248" width="492" height="60" rx="8" fill="#150f0a" stroke="#3a2c1c"/>
+  <text x="40" y="272" class="tiny" fill="#e0a020">deferred deliberately, documented in</text>
+  <text x="40" y="290" class="tiny" fill="#8b98a8">STRATEGIC_ARCHITECTURE_AND_MOAT.md §1.2</text>
+</g>
+
+<text x="600" y="452" text-anchor="middle" class="tiny">This diagram states an architectural tradeoff. It is not a performance claim; no benchmark comparing these two paths exists in this repo.</text>
+</svg>

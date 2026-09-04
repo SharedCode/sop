@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 640" role="img" aria-labelledby="title desc">
+<title id="title">MCP and A2A protocol interoperability over one shared verification barrier</title>
+<desc id="desc">An MCP client and an A2A orchestrator each reach a separate protocol server, tools/mcpserver and tools/a2aagent, both backed by the same tools/runbookstore.Store and gated by the same ai/verify safety and reachability check before a step commits.</desc>
+<style>
+text{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Arial,sans-serif}
+.mono{font-family:"SF Mono",Menlo,Consolas,monospace}
+.h{font-size:22px;fill:#f4f7fb;font-weight:700}
+.sub{font-size:13px;fill:#9fb0c3}
+.label{font-size:15px;fill:#eaf0f7;font-weight:600}
+.small{font-size:12px;fill:#8b98a8}
+@media(prefers-reduced-motion:reduce){.flow{animation:none!important}.pulse{animation:none!important}}
+</style>
+<rect width="1200" height="640" rx="20" fill="#0a0e14"/>
+<text x="40" y="46" class="h">MCP + A2A: two protocols, one barrier</text>
+<text x="40" y="68" class="sub mono">tools/mcpserver · tools/a2aagent · tools/runbookstore · ai/verify</text>
+
+<!-- Left client: MCP -->
+<g transform="translate(40,110)">
+  <rect width="270" height="90" rx="12" fill="#121923" stroke="#334052"/>
+  <text x="20" y="34" class="label">MCP Client</text>
+  <text x="20" y="56" class="small mono">tools/list, tools/call</text>
+  <text x="20" y="74" class="small mono">read_sop · validate_step · execute_step</text>
+</g>
+
+<!-- Right client: A2A -->
+<g transform="translate(890,110)">
+  <rect width="270" height="90" rx="12" fill="#121923" stroke="#334052"/>
+  <text x="20" y="34" class="label">A2A Orchestrator</text>
+  <text x="20" y="56" class="small mono">message/send -&gt; Task</text>
+  <text x="20" y="74" class="small mono">submitted -&gt; working -&gt; ...</text>
+</g>
+
+<!-- Servers -->
+<g transform="translate(40,260)">
+  <rect width="270" height="80" rx="12" fill="#182230" stroke="#4299e1" stroke-width="2"/>
+  <text x="20" y="32" class="label" fill="#4299e1">tools/mcpserver</text>
+  <text x="20" y="54" class="small mono">mark3labs/mcp-go</text>
+  <text x="20" y="70" class="small mono">JSON-RPC, stdio / HTTP</text>
+</g>
+
+<g transform="translate(890,260)">
+  <rect width="270" height="80" rx="12" fill="#182230" stroke="#9f7aea" stroke-width="2"/>
+  <text x="20" y="32" class="label" fill="#9f7aea">tools/a2aagent</text>
+  <text x="20" y="54" class="small mono">a2aproject/a2a-go</text>
+  <text x="20" y="70" class="small mono">/.well-known/agent-card.json</text>
+</g>
+
+<!-- Shared store -->
+<g transform="translate(400,400)">
+  <rect width="400" height="90" rx="12" fill="#121923" stroke="#70d9b0" stroke-width="2"/>
+  <text x="200" y="32" text-anchor="middle" class="label" fill="#70d9b0">tools/runbookstore.Store</text>
+  <text x="200" y="54" text-anchor="middle" class="small mono">shared Workflow + Trace, one trace_id</text>
+  <text x="200" y="74" text-anchor="middle" class="small">step committed by either protocol is visible to both</text>
+</g>
+
+<!-- Barrier -->
+<g transform="translate(430,530)">
+  <rect width="340" height="70" rx="12" fill="#1a1420" stroke="#e0a020" stroke-width="2"/>
+  <text x="170" y="28" text-anchor="middle" class="label" fill="#e0a020">ai/verify.CheckSafety</text>
+  <text x="170" y="50" text-anchor="middle" class="small mono">barrier certificate: verify, then act</text>
+</g>
+
+<!-- Flow lines with animated dashes -->
+<g stroke-width="2" fill="none">
+  <path d="M175,200 L175,260" stroke="#4299e1"/>
+  <path d="M1025,200 L1025,260" stroke="#9f7aea"/>
+  <path d="M175,340 C175,380 400,410 400,430" stroke="#4299e1" stroke-dasharray="6 6" class="flow">
+    <animate attributeName="stroke-dashoffset" from="0" to="-24" dur="1s" repeatCount="indefinite"/>
+  </path>
+  <path d="M1025,340 C1025,380 800,410 800,430" stroke="#9f7aea" stroke-dasharray="6 6" class="flow">
+    <animate attributeName="stroke-dashoffset" from="0" to="-24" dur="1s" repeatCount="indefinite"/>
+  </path>
+  <path d="M600,490 L600,530" stroke="#70d9b0" stroke-dasharray="5 5" class="flow">
+    <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="0.8s" repeatCount="indefinite"/>
+  </path>
+</g>
+
+<!-- Pulse dot at the barrier to draw the eye -->
+<circle cx="600" cy="565" r="5" fill="#e0a020">
+  <animate attributeName="r" values="5;9;5" dur="1.6s" repeatCount="indefinite"/>
+  <animate attributeName="opacity" values="1;0.4;1" dur="1.6s" repeatCount="indefinite"/>
+</circle>
+
+<text x="600" y="625" text-anchor="middle" class="small mono">a step executed via either protocol still has to pass the same check before it commits</text>
+</svg>

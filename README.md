@@ -18,6 +18,8 @@ Instead of managing separate database servers, message brokers, caching tiers, a
 [![Go version](https://img.shields.io/github/go-mod/go-version/SharedCode/sop)](go.mod)
 [![License](https://img.shields.io/github/license/SharedCode/sop)](LICENSE)
 [![Live Demos](https://img.shields.io/badge/Live_Demos-GitHub_Pages-10B981?logo=github)](https://sharedcode.github.io/sop/arena/)
+[![MCP](https://img.shields.io/badge/MCP-tools%2Fmcpserver-4A4A4A)](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md)
+[![A2A](https://img.shields.io/badge/A2A-tools%2Fa2aagent-4A4A4A)](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md)
 
 <p align="center">
   <img src="docs/assets/sop-demo.gif" alt="Live SOP WASM demo: executing an ACID transfer and killing/resuming a checkpointed AI agent mid-task, both running client-side with zero network calls" width="760" />
@@ -49,6 +51,42 @@ You can test SOP directly in your browser without installing anything:
 | :--- | :--- | :--- |
 | 🧠 **SOP Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 HTTP network calls**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
 | 🎮 **SOP Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch SOP automatically redistribute tasks and rebuild parity in real-time. | [**Play SOP Arena →**](https://sharedcode.github.io/sop/arena/) |
+
+The technical demo persists across reloads now, to Origin Private File System, via the browser's async File System Access API. The diagram below is the real tradeoff behind that choice, not a benchmark; no throughput numbers are shown because none have been measured for either path in this repo.
+
+<p align="center">
+  <img src="docs/assets/opfs-path-taken.svg" alt="OPFS persistence: the async File System Access API path this repo built, versus the synchronous createSyncAccessHandle path that would require moving the WASM binary into a dedicated Worker, deliberately not built this pass" width="900" />
+</p>
+
+---
+
+## 🔌 Agent Protocols: MCP, A2A, and a Real Verification Barrier
+
+SOP runbooks are reachable from two agent protocols, [Model Context Protocol](https://modelcontextprotocol.io/) and [Agent2Agent](https://a2a-project.github.io/A2A/), both gated by the same safety-and-reachability check before a step is allowed to commit. Real, tested code (`ai/verify`, `tools/mcpserver`, `tools/a2aagent`), not a diagram of an idea; see [MCP, A2A, and the Verification Engine](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md) for the full audit and design writeup.
+
+<p align="center">
+  <img src="docs/assets/mcp-a2a-architecture.svg" alt="An MCP client and an A2A orchestrator each reach a separate protocol server, both backed by the same tools/runbookstore.Store and gated by the same ai/verify safety check before a step commits" width="900" />
+</p>
+
+**What the barrier actually stops.** An agent tries to drop the production database, the check blocks it because no backup has been validated yet in this trace, the agent does the backup and validation steps for real, then the same drop is allowed. This is `examples/verify_barrier` running for real, not staged output:
+
+<p align="center">
+  <img src="docs/assets/ltl-barrier.gif" alt="Real terminal recording of ai/verify blocking a database drop until a backup is validated, then allowing it once the precondition is actually met" width="760" />
+</p>
+
+```bash
+# Run the barrier demo yourself
+go run ./examples/verify_barrier
+
+# Serve the same runbook over MCP (stdio)
+go run ./cmd/sop-mcp-server
+
+# Serve it over A2A instead, then fetch its agent card
+go run ./cmd/sop-a2a-agent &
+curl localhost:8087/.well-known/agent-card.json
+```
+
+What this checker is, precisely, matters more than what it sounds like it might be: explicit-state safety and reachability checking over a finite workflow graph, the "P is preceded by Q" precedence pattern from Dwyer/Avrunin/Corbett's property specification patterns (ICSE 1999), not general-purpose LTL/CTL model checking. No formula parser, no Büchi automata, no neural component translating natural language into the graph today. The full accounting of what's built versus proposed is in the linked doc, not summarized rosily here.
 
 ---
 
