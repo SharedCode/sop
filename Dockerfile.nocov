@@ -1,17 +1,40 @@
+# syntax=docker/dockerfile:1
+
+# ==============================================================================
+# Stage 1: Builder
+# ==============================================================================
+FROM golang:1.26.8-alpine AS builder
+
+WORKDIR /src
+
+# Leverage Docker layer caching for dependencies.
+# Copy workspace and module definitions first before the source tree.
+COPY go.work go.work.sum* ./
+COPY go.mod go.sum ./
+COPY adapters/cassandra/go.mod adapters/cassandra/go.sum* ./adapters/cassandra/
+COPY adapters/redis/go.mod adapters/redis/go.sum* ./adapters/redis/
+COPY ai/go.mod ai/go.sum* ./ai/
+COPY incfs/go.mod incfs/go.sum* ./incfs/
+COPY infs/go.mod infs/go.sum* ./infs/
+COPY jsondb/go.mod jsondb/go.sum* ./jsondb/
+COPY search/go.mod search/go.sum* ./search/
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+# Copy full application source tree
+COPY . .
+
+# ==============================================================================
+# Stage 2: Integration Test Runner (No Coverage)
+# ==============================================================================
 FROM golang:1.26.8-alpine AS build-and-test
 
 # Install Redis server for Alpine
-# Note: 'redis' package on Alpine provides both redis-server and redis-cli
 RUN apk add --no-cache redis
 
-# Set up your Go application and test environment
 WORKDIR /app
-
-# Copy the application code and tests. go.work's local `use` directives
-# (./infs, ./ai, etc.) mean go.mod resolution needs the full source tree,
-# so copying manifests separately first would buy no cache benefit here.
-COPY . .
-RUN go mod download
+COPY --from=builder /src /app
 
 # Create the data path folder & the env var.
 RUN mkdir -p /var/lib/sop
@@ -22,8 +45,3 @@ COPY docker-entrypoint-nocov.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint-nocov.sh
 
 CMD ["docker-entrypoint-nocov.sh"]
-
-# Sample commands to build then run docker image:
-# docker build -f Dockerfile.nocov -t mydi-nocov .
-# docker run --rm mydi-nocov
-#   This will run the integration tests in infs package that requires Redis which is provided in docker image.

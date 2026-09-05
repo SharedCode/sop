@@ -1,35 +1,36 @@
+# syntax=docker/dockerfile:1
+
 FROM golang:1.26.8
 
 # Install dependencies
 # mingw-w64 is needed for Windows builds if not using Zig for Windows (the script uses x86_64-w64-mingw32-gcc)
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     xz-utils \
     build-essential \
     mingw-w64 \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Zig (using 0.13.0 as a stable base)
-RUN curl -L https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz | tar -xJ -C /usr/local \
+RUN curl -fsSL https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz | tar -xJ -C /usr/local \
     && ln -s /usr/local/zig-linux-x86_64-0.13.0/zig /usr/local/bin/zig
 
 WORKDIR /app
 
-# 1. Download Modules First (Better Layer Caching)
+# Download modules first with layer caching
+COPY go.work go.work.sum* ./
 COPY go.mod go.sum ./
-COPY adapters/cassandra/go.mod adapters/cassandra/go.sum ./adapters/cassandra/
-COPY adapters/redis/go.mod adapters/redis/go.sum ./adapters/redis/
-COPY ai/go.mod ai/go.sum ./ai/
-COPY incfs/go.mod ./incfs/
-COPY infs/go.mod ./infs/
-COPY jsondb/go.mod ./jsondb/
-COPY search/go.mod ./search/
-# ... add other nested modules if necessary ...
+COPY adapters/cassandra/go.mod adapters/cassandra/go.sum* ./adapters/cassandra/
+COPY adapters/redis/go.mod adapters/redis/go.sum* ./adapters/redis/
+COPY ai/go.mod ai/go.sum* ./ai/
+COPY incfs/go.mod incfs/go.sum* ./incfs/
+COPY infs/go.mod infs/go.sum* ./infs/
+COPY jsondb/go.mod jsondb/go.sum* ./jsondb/
+COPY search/go.mod search/go.sum* ./search/
 
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
-# 2. Copy Source Code
+# Copy source code
 COPY . .
-
-# Download dependencies
-RUN go mod download

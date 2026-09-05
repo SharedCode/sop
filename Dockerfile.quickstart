@@ -1,14 +1,43 @@
+# syntax=docker/dockerfile:1
+
 # Slim runtime image for the SOP quickstart demo.
 # Built and published by .github/workflows/deliver.yml (GHCR).
-FROM golang:1.26.8-alpine AS build
+
+# ==============================================================================
+# Stage 1: Builder
+# ==============================================================================
+FROM golang:1.26.8-alpine AS builder
+
 WORKDIR /src
+
 # Download modules before copying source so this layer is cached across
 # source-only changes and only re-runs when go.mod/go.sum change.
+COPY go.work go.work.sum* ./
 COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/quickstart ./examples/quickstart
+COPY adapters/cassandra/go.mod adapters/cassandra/go.sum* ./adapters/cassandra/
+COPY adapters/redis/go.mod adapters/redis/go.sum* ./adapters/redis/
+COPY ai/go.mod ai/go.sum* ./ai/
+COPY incfs/go.mod incfs/go.sum* ./incfs/
+COPY infs/go.mod infs/go.sum* ./infs/
+COPY jsondb/go.mod jsondb/go.sum* ./jsondb/
+COPY search/go.mod search/go.sum* ./search/
 
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+COPY . .
+
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/quickstart ./examples/quickstart
+
+# ==============================================================================
+# Stage 2: Minimal Distroless Non-Root Runtime
+# ==============================================================================
 FROM gcr.io/distroless/static-debian12:nonroot
-COPY --from=build /out/quickstart /quickstart
+
+COPY --from=builder /out/quickstart /quickstart
+
+USER nonroot:nonroot
+
 ENTRYPOINT ["/quickstart"]
