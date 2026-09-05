@@ -2,7 +2,7 @@
 
 # ⚡ Zeltrin ⚡
 
-### Durable memory and verification infrastructure for AI agents.
+### From milliseconds to microseconds: durable memory and verification infrastructure for AI agents.
 
 <p align="center">
   <img src="docs/assets/zeltrin-logo.svg" alt="Zeltrin logo" width="480" />
