@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/btree"
 )
 
 func TestJsonDBAnyKey_ErrorPaths(t *testing.T) {

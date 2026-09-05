@@ -7,7 +7,7 @@ import (
 
 	"github.com/gocql/gocql"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 type blobStore struct {

@@ -15,8 +15,8 @@ To connect your code to the database you just created, you can load the settings
 package main
 
 import (
-    "github.com/SharedCode/sop/database"
-    "github.com/SharedCode/sop"
+    "github.com/SharedCode/zeltrin/database"
+    "github.com/SharedCode/zeltrin"
     "context"
 )
 
@@ -130,4 +130,4 @@ This allows you to verify your application logic visually, without writing custo
 Now that you have your code connecting to the database, you can:
 1.  Run the **SOP Data Manager** to see the "Users" table you just created.
 2.  Check out the **Language Tutorials** linked above for deep-dives into your preferred language.
-3.  Visit the **[SOP GitHub Repository](https://github.com/sharedcode/sop)** for the latest updates, issues, and discussions.
+3.  Visit the **[SOP GitHub Repository](https://github.com/sharedcode/zeltrin)** for the latest updates, issues, and discussions.

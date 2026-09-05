@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // serverMetrics holds process-wide request counters exposed at /metrics

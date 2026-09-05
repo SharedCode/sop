@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/common"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/common"
 )
 
 func TestManageDatabase_Coverage_NewDatabase_InvalidJSON(t *testing.T) {

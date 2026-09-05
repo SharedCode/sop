@@ -8,9 +8,9 @@ import (
 	log "log/slog"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/cache"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/zeltrin/cache"
 )
 
 const phase1CommitMaxRetryCount = 30

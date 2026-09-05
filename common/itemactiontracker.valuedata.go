@@ -6,8 +6,8 @@ import (
 
 	log "log/slog"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/encoding"
 )
 
 func (t *itemActionTracker[TK, TV]) commitTrackedItemsValues(ctx context.Context) error {

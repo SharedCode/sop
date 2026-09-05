@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // Drive btree.Add through a distribute-to-left success path to cover Add + distribute controller.

@@ -160,7 +160,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* GitHub Repo Link */}
           <a
-            href="https://github.com/sharedcode/sop"
+            href="https://github.com/sharedcode/zeltrin"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-400 text-black font-semibold text-xs transition shadow-md shadow-brand-500/20"

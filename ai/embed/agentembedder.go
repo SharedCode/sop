@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 // AgentEmbedder wraps an AI Agent to use its understanding for embedding.

@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/cache"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/cache"
 
-	// cas "github.com/sharedcode/sop/adapters/cassandra"
-	"github.com/sharedcode/sop/common/mocks"
+	// cas "github.com/sharedcode/zeltrin/adapters/cassandra"
+	"github.com/sharedcode/zeltrin/common/mocks"
 )
 
 // stubTLRemoveErr allows observing Remove calls and returning a configured error.

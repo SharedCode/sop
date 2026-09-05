@@ -9,12 +9,12 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/common"
-	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/zeltrin/common"
+	"github.com/sharedcode/zeltrin/fs"
+	"github.com/sharedcode/zeltrin/infs"
 )
 
 const (

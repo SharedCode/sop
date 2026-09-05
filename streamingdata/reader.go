@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/zeltrin/btree"
 )
 
 type reader[TK btree.Ordered] struct {

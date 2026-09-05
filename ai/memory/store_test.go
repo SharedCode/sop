@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/inmemory"
-	"github.com/sharedcode/sop/search"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/inmemory"
+	"github.com/sharedcode/zeltrin/search"
 )
 
 // Compare implementation needed for ordered sorting

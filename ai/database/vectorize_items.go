@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/embed"
-	"github.com/sharedcode/sop/ai/memory"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/embed"
+	"github.com/sharedcode/zeltrin/ai/memory"
 )
 
 // VectorizeItems processes specific items or an entire category within a single isolated transaction.

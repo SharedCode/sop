@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // (from promote_test.go)

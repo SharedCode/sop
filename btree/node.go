@@ -6,7 +6,7 @@ import (
 	"sort"
 
 	goccyjson "github.com/goccy/go-json"
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // MetaDataType specifies metadata fields such as ID and Version.

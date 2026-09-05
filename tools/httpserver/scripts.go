@@ -12,9 +12,9 @@ import (
 
 	log "log/slog"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/agent"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/agent"
 )
 
 // ExecuteScriptRequest defines the payload for executing a script.

@@ -79,8 +79,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/zeltrin/fs"
+	"github.com/sharedcode/zeltrin/infs"
 )
 
 func main() {
@@ -324,7 +324,7 @@ This package (`incfs`) offers a hybrid storage approach:
 
 This hybrid model is available for environments that prefer Cassandra for metadata. However, note that the pure **`infs` backend is now the recommended model for distributed, high-scale environments**. In stress tests simulating heavy workloads across machines, `infs` (using its proprietary on-disk registry hashmap) performed **25% faster** than this hybrid model on commodity hardware.
 
-Usage is very similar to `infs`, but you import `github.com/sharedcode/sop/incfs` and provide Cassandra configuration in `Initialize`.
+Usage is very similar to `infs`, but you import `github.com/sharedcode/zeltrin/incfs` and provide Cassandra configuration in `Initialize`.
 
 ## SOP in Redis & File System
 **The Recommended Backend for Distributed & Local Workloads**
@@ -348,9 +348,9 @@ Another sample code, edited for brevity and to show the important parts.
 
 ```
 import (
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/infs"
-	"github.com/sharedcode/sop/redis"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/infs"
+	"github.com/sharedcode/zeltrin/redis"
 )
 
 var redisConfig = redis.Options{
@@ -476,7 +476,7 @@ You can store or manage any data type in Golang. From native types like int, str
   * ```< 1``` means that the current key(x) is lesser than the other key(y) being compared
 
 You can also create or open one or many B-trees within a transaction. And you can have/or manage one or many transactions within your application.
-Import path for SOP V2 is: "github.com/sharedcode/sop/infs". "infs" is an acronym that stands for:
+Import path for SOP V2 is: "github.com/sharedcode/zeltrin/infs". "infs" is an acronym that stands for:
 SOP in Redis & File System(infs).
 
 V2 is in Release Candidate 1 (RC1) status and there is no known issue. If things go well, RC1 will be declared the Released version of V2.
@@ -487,8 +487,8 @@ But yeah, V2 is showing very good results. ACID, two phase commit transaction, a
 As discussed above, the third usability scenario of SOP is support for very large data. Sample code to use this ```StreamingDataStore```:
 ```
 import (
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/infs"
 )
 
 // ...
@@ -731,7 +731,7 @@ if err := eg.Wait(); err != nil {
 
 One thing to note, is that there is no resource locking in above code & it is able to merge just fine those records added across different transaction commits that ran concurrently.
 
-Check out the integration test that demonstrate this, here: https://github.com/sharedcode/sop/blob/493fba2d6d1ed810bfb4edc9ce568a1c98e159ff/infs/integration_tests/transaction_edge_cases_test.go#L315C6-L315C41
+Check out the integration test that demonstrate this, here: https://github.com/sharedcode/zeltrin/blob/493fba2d6d1ed810bfb4edc9ce568a1c98e159ff/infs/integration_tests/transaction_edge_cases_test.go#L315C6-L315C41
 (the sample adds one record but it is not needed, empty Btree will work just fine)
 
 ## Transaction Commit Merging & Swarm Computing
@@ -763,7 +763,7 @@ Sample Project: Upload 1TB of big data
 ```
 package big_data
 import(
-	github.com/sharedcode/sop/infs
+	github.com/sharedcode/zeltrin/infs
 )
 
 type BigKey struct {
@@ -829,7 +829,7 @@ Updating any part(s) of the Big Data file is of no special case, SOP Btree.Updat
 ```
 package big_data
 import(
-	github.com/sharedcode/sop/infs
+	github.com/sharedcode/zeltrin/infs
 )
 
 //...
@@ -873,7 +873,7 @@ SOP in-memory was created in order to model the structural bits of SOP and allow
 SOP in-memory is a full implementation and you can use it if it fits the needs, i.e. - no persistence, map + sorted "range" queries/updates.
 
 Sample Basic Usage:
-  * Import the sop/inmemory, e.g. `import sop "github.com/sharedcode/sop/inmemory"`
+  * Import the sop/inmemory, e.g. `import sop "github.com/sharedcode/zeltrin/inmemory"`
   * Instantiate the b-tree manager, e.g. - `sop.NewBtree[int, string](false)`. The single parameter specifies whether you would want to manage unique keys.
   * Populate the b-tree, e.g. - `b3.Add(<key>, <value>)`
   * Do a range query, e.g. `b3.FindOne(<key>, true),... b3.Next(), b3.GetCurrentKey or b3.GetCurrentValue` will return either the key or the value currently selected by the built-in "cursor".
@@ -888,7 +888,7 @@ import (
 	"fmt"
 	"testing"
 
-	sop "github.com/sharedcode/sop/inmemory"
+	sop "github.com/sharedcode/zeltrin/inmemory"
 )
 
 func TestBtree_HelloWorld(t *testing.T) {

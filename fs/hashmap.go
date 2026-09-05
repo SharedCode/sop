@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/ncw/directio"
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/encoding"
 )
 
 /*

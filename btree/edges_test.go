@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // Ensure Add propagates error from distribute() (e.g., sibling fetch failure) and does not increment Count.

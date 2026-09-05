@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // TransactionPoolEntry tracks an active transaction, the mode it was opened with, and the configuration.

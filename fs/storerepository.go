@@ -15,8 +15,8 @@ import (
 
 	retry "github.com/sethvargo/go-retry"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/encoding"
 )
 
 // StoreRepository is a filesystem-backed implementation of sop.StoreRepository.

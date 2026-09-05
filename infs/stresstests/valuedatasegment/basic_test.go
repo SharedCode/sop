@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/adapters/redis"
-	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/adapters/redis"
+	"github.com/sharedcode/zeltrin/fs"
+	"github.com/sharedcode/zeltrin/infs"
 )
 
 var redisConfig = redis.Options{

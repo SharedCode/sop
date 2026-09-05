@@ -8,10 +8,10 @@ import (
 
 	log "log/slog"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/memory"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/ai/memory"
 )
 
 // InitializeShortTermMemory buffers the DDL creation of the active scratchpad B-Tree store.

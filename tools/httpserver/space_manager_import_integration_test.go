@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/adapters/redis"
-	"github.com/sharedcode/sop/common/mocks"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/adapters/redis"
+	"github.com/sharedcode/zeltrin/common/mocks"
 )
 
 type commitToggleRedisCache struct {

@@ -22,7 +22,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 // openAIGenerator is a minimal OpenAI-compatible generator used by tests and examples.

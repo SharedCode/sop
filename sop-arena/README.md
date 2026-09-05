@@ -1,12 +1,12 @@
 # Zeltrin Arena - Distributed Systems Survival Simulation & Architecture Demo
 
-[![Deploy to GitHub Pages](https://github.com/sharedcode/sop/actions/workflows/deploy-demo.yml/badge.svg)](https://sharedcode.github.io/sop/arena/)
-[![Go Version](https://img.shields.io/badge/Engine-Go_/_WASM-00ADD8?logo=go)](https://github.com/sharedcode/sop)
+[![Deploy to GitHub Pages](https://github.com/sharedcode/zeltrin/actions/workflows/deploy-demo.yml/badge.svg)](https://sharedcode.github.io/zeltrin/arena/)
+[![Go Version](https://img.shields.io/badge/Engine-Go_/_WASM-00ADD8?logo=go)](https://github.com/sharedcode/zeltrin)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](../LICENSE)
 
 > **"Break the system. Watch Zeltrin recover. Experience one engine for data and compute."**
 
-[**Live Interactive Experience: sharedcode.github.io/sop/arena**](https://sharedcode.github.io/sop/arena/)
+[**Live Interactive Experience: sharedcode.github.io/zeltrin/arena**](https://sharedcode.github.io/zeltrin/arena/)
 
 ---
 
@@ -80,7 +80,7 @@ A fully automated, high-intensity simulation demonstrating resilience:
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/sharedcode/sop.git
+git clone https://github.com/sharedcode/zeltrin.git
 cd sop/sop-arena
 
 # 2. Install dependencies
@@ -99,8 +99,8 @@ npm run build
 
 Zeltrin Arena is not a standalone repository. It is built and deployed from inside the main `sharedcode/sop` repository by `.github/workflows/deploy-demo.yml`, which builds this app (`npm run build`) alongside the Go WASM technical demo and publishes both into one GitHub Pages site:
 
-- Technical demo (WASM ACID transactions, vector search, agent memory): `https://sharedcode.github.io/sop/`
-- Zeltrin Arena (this app): `https://sharedcode.github.io/sop/arena/`
+- Technical demo (WASM ACID transactions, vector search, agent memory): `https://sharedcode.github.io/zeltrin/`
+- Zeltrin Arena (this app): `https://sharedcode.github.io/zeltrin/arena/`
 
 That workflow is the only thing in the repository that deploys to GitHub Pages; `base: './'` in `vite.config.ts` is what lets this app's built assets resolve correctly from that `/arena/` subpath.
 
@@ -108,5 +108,5 @@ That workflow is the only thing in the repository that deploys to GitHub Pages; 
 
 ## 📄 License & Attribution
 
-Zeltrin (formerly SOP / Scalable Objects Persistence) is an open-source project by [SharedCode](https://github.com/sharedcode/sop).
+Zeltrin (formerly SOP / Scalable Objects Persistence) is an open-source project by [SharedCode](https://github.com/sharedcode/zeltrin).
 Licensed under the MIT License.

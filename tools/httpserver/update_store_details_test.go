@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/encoding"
 )
 
 func TestHandleUpdateStoreInfo_AllowsNonStructuralUpdateOnNonEmptyStore(t *testing.T) {

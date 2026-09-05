@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/common/mocks"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/common/mocks"
 )
 
 // ---- Streaming data store ----

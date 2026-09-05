@@ -1,8 +1,8 @@
-module github.com/sharedcode/sop/adapters/redis
+module github.com/sharedcode/zeltrin/adapters/redis
 
 go 1.26.8
 
-replace github.com/sharedcode/sop => ../../
+replace github.com/sharedcode/zeltrin => ../../
 
 require github.com/redis/go-redis/v9 v9.8.0
 

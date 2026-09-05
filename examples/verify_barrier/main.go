@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/sharedcode/sop/ai/verify"
+	"github.com/sharedcode/zeltrin/ai/verify"
 )
 
 func must(err error) {

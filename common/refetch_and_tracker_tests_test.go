@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/cache"
-	"github.com/sharedcode/sop/common/mocks"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/zeltrin/cache"
+	"github.com/sharedcode/zeltrin/common/mocks"
 )
 
 // Covers addAction error branch in refetchAndMergeClosure when values are out-of-node and key duplicates on unique tree.

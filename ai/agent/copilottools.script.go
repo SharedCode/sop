@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/database"
 )
 
 const listScriptsArgsSchema = `{"type":"object","properties":{"category":{"type":"string","description":"Optional script category to list. Defaults to the standard script category."}}}`

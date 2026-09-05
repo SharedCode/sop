@@ -3,7 +3,7 @@ package inmemory
 import (
 	"iter"
 
-	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/zeltrin/btree"
 )
 
 // All returns an iterator over every key/value pair in ascending key order,

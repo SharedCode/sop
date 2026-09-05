@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sharedcode/sop"
-	aidb "github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/memory"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/zeltrin"
+	aidb "github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/ai/memory"
+	"github.com/sharedcode/zeltrin/database"
 )
 
 // chunkSentences limits to a max number of sentences.

@@ -12,14 +12,14 @@
   <img src="docs/assets/zeltrin-logo.svg" alt="Zeltrin logo" width="480" />
 </p>
 
-[![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions)
-[![CI](https://github.com/SharedCode/sop/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/sop/actions/workflows/go.yml)
-[![Release](https://img.shields.io/github/v/release/SharedCode/sop)](https://github.com/SharedCode/sop/releases)
-[![codecov](https://codecov.io/gh/SharedCode/sop/branch/master/graph/badge.svg)](https://app.codecov.io/github/SharedCode/sop)
-[![Go Reference](https://pkg.go.dev/badge/github.com/sharedcode/sop.svg)](https://pkg.go.dev/github.com/sharedcode/sop)
-[![Go version](https://img.shields.io/github/go-mod/go-version/SharedCode/sop)](go.mod)
-[![License](https://img.shields.io/github/license/SharedCode/sop)](LICENSE)
-[![Live Demos](https://img.shields.io/badge/Live_Demos-GitHub_Pages-10B981?logo=github)](https://sharedcode.github.io/sop/arena/)
+[![Discussions](https://img.shields.io/github/discussions/SharedCode/zeltrin)](https://github.com/SharedCode/zeltrin/discussions)
+[![CI](https://github.com/SharedCode/zeltrin/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/zeltrin/actions/workflows/go.yml)
+[![Release](https://img.shields.io/github/v/release/SharedCode/zeltrin)](https://github.com/SharedCode/zeltrin/releases)
+[![codecov](https://codecov.io/gh/SharedCode/zeltrin/branch/master/graph/badge.svg)](https://app.codecov.io/github/SharedCode/zeltrin)
+[![Go Reference](https://pkg.go.dev/badge/github.com/sharedcode/zeltrin.svg)](https://pkg.go.dev/github.com/sharedcode/zeltrin)
+[![Go version](https://img.shields.io/github/go-mod/go-version/SharedCode/zeltrin)](go.mod)
+[![License](https://img.shields.io/github/license/SharedCode/zeltrin)](LICENSE)
+[![Live Demos](https://img.shields.io/badge/Live_Demos-GitHub_Pages-10B981?logo=github)](https://sharedcode.github.io/zeltrin/arena/)
 [![MCP](https://img.shields.io/badge/MCP-tools%2Fmcpserver-4A4A4A)](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md)
 [![A2A](https://img.shields.io/badge/A2A-tools%2Fa2aagent-4A4A4A)](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md)
 
@@ -30,23 +30,23 @@
 Instead of managing separate vector databases, message brokers, caching tiers, distributed lock managers, and fragile external checkpoint stores, Zeltrin lets your AI agents maintain crash-resilient memory and enforce operational invariants directly within the execution boundary.
 
 > **Why "from milliseconds to microseconds"?** Traditional multi-tier architectures incur an estimated 15-50ms network round-trip penalty across external services (Redis, message queues, relational databases). Zeltrin runs embedded in-process, shifting latency from milliseconds to microseconds: empirical benchmarks measure **<0.3ms** end-to-end in-process execution, **~6.87µs** per B-Tree write (>145,000 ops/sec), and **~6.95µs** per read (>143,000 ops/sec) with full ACID consistency.  
-> 🔗 **Proof & Benchmark Reference:** [View Detailed Benchmarks & Microsecond Breakdown →](#-performance-benchmarks) · Benchmark suite: [`tools/benchmark`](tools/benchmark) · Live client-side run: [Technical WASM Demo](https://sharedcode.github.io/sop/)
+> 🔗 **Proof & Benchmark Reference:** [View Detailed Benchmarks & Microsecond Breakdown →](#-performance-benchmarks) · Benchmark suite: [`tools/benchmark`](tools/benchmark) · Live client-side run: [Technical WASM Demo](https://sharedcode.github.io/zeltrin/)
 
 <p align="center">
   <img src="docs/assets/sop-demo.gif" alt="Live Zeltrin WASM demo: executing an ACID transfer and killing/resuming a checkpointed AI agent mid-task, both running client-side with zero network calls after initial page load" width="760" />
 </p>
 
 <p align="center">
-  <a href="https://sharedcode.github.io/sop/"><strong>🧠 Launch Technical Demo →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://sharedcode.github.io/sop/arena/"><strong>🎮 Play Zeltrin Arena →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://sharedcode.github.io/sop/agents/"><strong>🔌 Launch Agent Barrier →</strong></a>
+  <a href="https://sharedcode.github.io/zeltrin/"><strong>🧠 Launch Technical Demo →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="https://sharedcode.github.io/zeltrin/arena/"><strong>🎮 Play Zeltrin Arena →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="https://sharedcode.github.io/zeltrin/agents/"><strong>🔌 Launch Agent Barrier →</strong></a>
 </p>
 
 | Experience | Description | Live Interactive Link |
 | :--- | :--- | :--- |
-| 🧠 **Zeltrin Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
-| 🎮 **Zeltrin Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Zeltrin automatically redistribute tasks and rebuild parity in real-time. | [**Play Zeltrin Arena →**](https://sharedcode.github.io/sop/arena/) |
-| 🔌 **Zeltrin Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/sop/agents/) |
+| 🧠 **Zeltrin Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/zeltrin/) |
+| 🎮 **Zeltrin Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Zeltrin automatically redistribute tasks and rebuild parity in real-time. | [**Play Zeltrin Arena →**](https://sharedcode.github.io/zeltrin/arena/) |
+| 🔌 **Zeltrin Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/zeltrin/agents/) |
 
 ---
 
@@ -55,7 +55,7 @@ Instead of managing separate vector databases, message brokers, caching tiers, d
 Clone the repository and run the unified interactive demo:
 
 ```bash
-git clone https://github.com/sharedcode/sop.git && cd sop && ./scripts/demo.sh
+git clone https://github.com/sharedcode/zeltrin.git && cd zeltrin && ./scripts/demo.sh
 ```
 
 The interactive script lets you execute and verify each workflow shown on this page:
@@ -86,7 +86,7 @@ No local Go toolchain? Run the exact same demo suite inside Docker:
 docker run --rm -it -v "$PWD":/src -w /src golang:1.26-alpine ./scripts/demo.sh
 
 # Or run the published quickstart container from GHCR
-docker run --rm ghcr.io/sharedcode/sop-quickstart
+docker run --rm ghcr.io/sharedcode/zeltrin-quickstart
 ```
 
 ### 📉 Engineering ROI, Verified in This Repo
@@ -99,7 +99,7 @@ No revenue or customer numbers exist yet for this project (see [For Investors](#
 | **Stateful services to operate, patch, and page on** | Redis + Kafka/RabbitMQ + Postgres/Cassandra + ZooKeeper (4+) | 1 embedded library |
 | **Language surfaces shipped** | N/A | Go (native), Python (`sop4py` on PyPI), C# (`Sop` on NuGet); Java and Rust bindings exist in-repo with tests, not yet published |
 | **CI rigor on every change** | N/A | `govulncheck` clean on every push; race detector on the core engine packages (`btree`, `common`, `fs`, `inmemory`); 3-OS build and test matrix (Linux, macOS, Windows) |
-| **Deployment footprint of the technical demo** | A server-backed demo stack | WASM build running ACID transactions, vector search, and agent-memory checkpointing 100% client-side, 0 runtime HTTP calls after page load ([live](https://sharedcode.github.io/sop/)) |
+| **Deployment footprint of the technical demo** | A server-backed demo stack | WASM build running ACID transactions, vector search, and agent-memory checkpointing 100% client-side, 0 runtime HTTP calls after page load ([live](https://sharedcode.github.io/zeltrin/)) |
 
 Every row above is something you can run yourself, not a projection. See [Performance Benchmarks](#-performance-benchmarks) for the throughput numbers behind the latency claim, and [What Has Not Yet Been Proven](#-for-investors) for what this table deliberately leaves out.
 
@@ -111,9 +111,9 @@ You can test Zeltrin directly in your browser without installing anything. Start
 
 | Experience | Description | Live Interactive Link |
 | :--- | :--- | :--- |
-| 🧠 **Zeltrin Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
-| 🎮 **Zeltrin Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Zeltrin automatically redistribute tasks and rebuild parity in real-time. | [**Play Zeltrin Arena →**](https://sharedcode.github.io/sop/arena/) |
-| 🔌 **Zeltrin Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/sop/agents/) |
+| 🧠 **Zeltrin Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/zeltrin/) |
+| 🎮 **Zeltrin Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Zeltrin automatically redistribute tasks and rebuild parity in real-time. | [**Play Zeltrin Arena →**](https://sharedcode.github.io/zeltrin/arena/) |
+| 🔌 **Zeltrin Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/zeltrin/agents/) |
 
 The technical demo persists across reloads now, to Origin Private File System, via the browser's async File System Access API. The diagram below is the real tradeoff behind that choice, not a benchmark; no throughput numbers are shown because none have been measured for either path in this repo.
 
@@ -133,7 +133,7 @@ Zeltrin runbooks are reachable from two agent protocols, [Model Context Protocol
   <img src="docs/assets/mcp-a2a-architecture.svg" alt="An MCP client and an A2A orchestrator each reach a separate protocol server, both backed by the same tools/runbookstore.Store and gated by the same ai/verify safety check before a step commits" width="900" />
 </p>
 
-**Try the barrier yourself, live: [sharedcode.github.io/sop/agents](https://sharedcode.github.io/sop/agents/).** GitHub Pages can't run a real MCP or A2A network server (no backend), so this page runs the actual `ai/verify` check compiled to WASM, wired to buttons instead of protocol calls, the same logic those servers call before committing a step. Click "Drop Prod DB" first and watch it block; the trace persists to OPFS, so a reload picks up where you left off. This is a real recording of that page, not a mockup:
+**Try the barrier yourself, live: [sharedcode.github.io/zeltrin/agents](https://sharedcode.github.io/zeltrin/agents/).** GitHub Pages can't run a real MCP or A2A network server (no backend), so this page runs the actual `ai/verify` check compiled to WASM, wired to buttons instead of protocol calls, the same logic those servers call before committing a step. Click "Drop Prod DB" first and watch it block; the trace persists to OPFS, so a reload picks up where you left off. This is a real recording of that page, not a mockup:
 
 <p align="center">
   <img src="docs/assets/agent-barrier-demo.gif" alt="Real browser recording of the live agent verification barrier demo: dropping the database is blocked until backup and validation steps actually commit, then the same drop is allowed" width="900" />
@@ -368,7 +368,7 @@ To be completely clear on architectural boundaries:
 
 ## 🎮 See Zeltrin in Action (Zeltrin Arena Simulation)
 
-In **[Zeltrin Arena](https://sharedcode.github.io/sop/arena/)**, every control maps directly to a real distributed systems concept:
+In **[Zeltrin Arena](https://sharedcode.github.io/zeltrin/arena/)**, every control maps directly to a real distributed systems concept:
 
 | Simulation Control | Distributed Systems Concept | Zeltrin Technical Mechanism |
 | :--- | :--- | :--- |
@@ -411,7 +411,7 @@ The project is MIT-licensed with no commercial product today. Plausible paths th
 
 **What Has Been Proven**
 - A working Go engine with ACID transactions (WAL plus two-phase commit), a custom B-Tree, and Reed-Solomon erasure coding, each with passing automated tests (18 packages carry tests in the core Go module; run them with `go test ./...`, while the two WASM-only packages build under `GOOS=js GOARCH=wasm`, see [Performance Benchmarks](#-performance-benchmarks) below for the throughput numbers).
-- A real WebAssembly build of the engine running ACID transactions, vector search, and agent-memory checkpointing entirely in-browser with zero runtime network calls after initial page load ([live demo](https://sharedcode.github.io/sop/)).
+- A real WebAssembly build of the engine running ACID transactions, vector search, and agent-memory checkpointing entirely in-browser with zero runtime network calls after initial page load ([live demo](https://sharedcode.github.io/zeltrin/)).
 - Working language bindings for Go (native), Python (`sop4py`, published to PyPI), and C# (`Sop`, published to NuGet), plus Java and Rust bindings that exist in-repo with tests but are not yet published to their package registries.
 - CI that runs the race detector and `govulncheck` on every change, and a changelog showing multiple rounds of real dependency and CVE remediation.
 
@@ -452,7 +452,7 @@ Concretely, that means: fewer network hops in your hot path (sub-millisecond, in
 
 ### 🧠 For AI Infrastructure Teams
 
-**What Zeltrin already provides.** Durable, transactional checkpointing for agent reasoning state: each step an agent commits is a separate, durable B-Tree write, so a killed agent process loses nothing already committed, and a successor process can resume from the last checkpoint. This is not a diagram, it runs today in the [browser demo](https://sharedcode.github.io/sop/) (the "AI Agent Memory" tab) and as a Go example (`go run ./examples/agent_memory`). Zeltrin also provides vector similarity search over embeddings stored in the same B-Tree as structured data (`ai/memory`, `ai/vector`), and a real swarm/worker package (`ai/swarm`) with job and result stores.
+**What Zeltrin already provides.** Durable, transactional checkpointing for agent reasoning state: each step an agent commits is a separate, durable B-Tree write, so a killed agent process loses nothing already committed, and a successor process can resume from the last checkpoint. This is not a diagram, it runs today in the [browser demo](https://sharedcode.github.io/zeltrin/) (the "AI Agent Memory" tab) and as a Go example (`go run ./examples/agent_memory`). Zeltrin also provides vector similarity search over embeddings stored in the same B-Tree as structured data (`ai/memory`, `ai/vector`), and a real swarm/worker package (`ai/swarm`) with job and result stores.
 
 **What could be built on Zeltrin, but is not shipped today.** A production multi-agent orchestration framework, a hosted durable-memory-as-a-service for agent frameworks like LangGraph or AutoGen, and distributed MapReduce-style helpers across a live agent swarm are all described as design proposals in [`ai/SWARM_DESIGN.md`](ai/SWARM_DESIGN.md) (explicitly marked "Proposal / Vision" in that file) but are not implemented and tested the way the checkpointing and vector search primitives are. Treat anything not demonstrated in the linked demo or example as a direction, not a delivered feature.
 
@@ -460,7 +460,7 @@ Concretely, that means: fewer network hops in your hot path (sub-millisecond, in
 
 ### ⚙️ For Platform, SRE & Cloud Engineers
 
-Zeltrin Engine is a library, not a server: there is no separate database process to provision, patch, or fail over for the embedded case. The optional `tools/httpserver` Data Manager is a standalone service with its own `/metrics` endpoint (tested in `tools/httpserver/metrics_test.go`) if you do want a network-accessible console. Failure recovery is handled by Reed-Solomon erasure coding across storage shards (`fs/erasure`, 12 passing tests at the time of writing) rather than full N-way replication, which trades some recovery latency for lower disk overhead. A prebuilt quickstart container is published to `ghcr.io/sharedcode/sop-quickstart`. Multi-node swarm clustering exists and is tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been documented or proven at production scale.
+Zeltrin Engine is a library, not a server: there is no separate database process to provision, patch, or fail over for the embedded case. The optional `tools/httpserver` Data Manager is a standalone service with its own `/metrics` endpoint (tested in `tools/httpserver/metrics_test.go`) if you do want a network-accessible console. Failure recovery is handled by Reed-Solomon erasure coding across storage shards (`fs/erasure`, 12 passing tests at the time of writing) rather than full N-way replication, which trades some recovery latency for lower disk overhead. A prebuilt quickstart container is published to `ghcr.io/sharedcode/zeltrin-quickstart`. Multi-node swarm clustering exists and is tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been documented or proven at production scale.
 
 ### 🧪 For Researchers & Distributed Systems Engineers
 
@@ -481,7 +481,7 @@ Zeltrin has no commercial product, pricing, or customers today. It is an MIT-lic
 - **Security, compliance, and governance add-ons**: audit logging, RBAC policy management (there is already an in-repo RBAC prototype, `rbac.go`, `docs/RBAC_ENTITLEMENTS.md`), and compliance tooling for regulated industries.
 - **Observability and operations tooling**: dashboards and alerting built on top of the existing `/metrics` endpoint and event logs.
 - **AI infrastructure products**: a packaged "durable agent memory" service built on the checkpointing primitives described above, sold to teams building agent frameworks who do not want to run Zeltrin themselves.
-- **Marketplace listings**: prebuilt container images (a `ghcr.io/sharedcode/sop-quickstart` image already exists) distributed through cloud marketplaces.
+- **Marketplace listings**: prebuilt container images (a `ghcr.io/sharedcode/zeltrin-quickstart` image already exists) distributed through cloud marketplaces.
 - **Professional services**: architecture consulting for teams migrating a fragmented Redis/Kafka/Postgres stack onto Zeltrin.
 
 None of these exist today. They are documented here so a reader evaluating Zeltrin as a commercial or investment opportunity can see the plausible paths from open-source project to business, and judge for themselves how credible each one is.
@@ -518,7 +518,7 @@ Standing up this matrix also surfaced a genuine, pre-existing Windows-only failu
 
 ```bash
 # Clone the repository and run the quickstart
-git clone https://github.com/sharedcode/sop.git
+git clone https://github.com/sharedcode/zeltrin.git
 cd sop
 go run ./examples/quickstart
 ```
@@ -528,7 +528,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/sharedcode/sop/inmemory"
+	"github.com/sharedcode/zeltrin/inmemory"
 )
 
 func main() {
@@ -615,7 +615,7 @@ For technical leaders, CTOs, and hiring managers, this repository serves as a wo
 - **Polyglot Architecture**: Native Go kernel, Python bindings (`sop4py`), C# bindings (`Sop`), and browser WebAssembly.
 - **Production Delivery**: GitHub Actions CI/CD matrix, distroless container builds on GHCR, Codecov integration, and static GitHub Pages deployments.
 
-If you are building distributed systems, cloud infrastructure, or AI data platforms and want to discuss architecture, feel free to connect via [GitHub Discussions](https://github.com/SharedCode/sop/discussions).
+If you are building distributed systems, cloud infrastructure, or AI data platforms and want to discuss architecture, feel free to connect via [GitHub Discussions](https://github.com/SharedCode/zeltrin/discussions).
 
 ---
 
@@ -623,7 +623,7 @@ If you are building distributed systems, cloud infrastructure, or AI data platfo
 
 | Language | Installation | Description |
 | :--- | :--- | :--- |
-| **Go** | `go get github.com/sharedcode/sop` | Native high-performance core engine. |
+| **Go** | `go get github.com/sharedcode/zeltrin` | Native high-performance core engine. |
 | **Python** | `pip install sop4py` | Python bindings with Data Manager and AI scripts. |
 | **C#** | `dotnet add package Sop` | Complete .NET Core integration. |
 | **WebAssembly** | `GOOS=js GOARCH=wasm go build` | Browser-sandboxed zero-server execution. |
@@ -637,14 +637,14 @@ When integrating Zeltrin into your stack, choose between official versioned rele
 
 | Dimension | Official Tagged Releases (Recommended for Production) | In-Repo Source / Submodule (Active Prototyping & Contribution) |
 | :--- | :--- | :--- |
-| **Artifacts** | `go get github.com/sharedcode/sop@vX.Y.Z`<br>PyPI: `pip install sop4py`<br>NuGet: `dotnet add package Sop` | Git clone or submodule linked directly to `HEAD` or a feature branch |
+| **Artifacts** | `go get github.com/sharedcode/zeltrin@vX.Y.Z`<br>PyPI: `pip install sop4py`<br>NuGet: `dotnet add package Sop` | Git clone or submodule linked directly to `HEAD` or a feature branch |
 | **Best For** | Production services, reproducible CI/CD builds, audited dependencies | Modifying engine internals, local benchmarking, custom protocol servers |
 | **Stability** | Semantic versioning, tagged releases, audited dependency graph | Bleeding-edge features, experimental branches, unreleased protocol bridges |
 | **Maintenance** | Handled by standard language package managers | Requires manual git fetch/rebase and local workspace management |
 
 #### 1. Official Tagged Releases (Recommended for Production)
 For production deployments, pin your dependency to a tagged release. This guarantees reproducible builds, backward-compatible API guarantees, and security-scanned transitive dependencies:
-- **Go**: `go get github.com/sharedcode/sop@v0.1.0`
+- **Go**: `go get github.com/sharedcode/zeltrin@v0.1.0`
 - **Python**: `pip install sop4py==0.1.0`
 - **C# / .NET**: `dotnet add package Sop --version 0.1.0`
 
@@ -652,7 +652,7 @@ For production deployments, pin your dependency to a tagged release. This guaran
 If you are extending storage engine internals (`btree/`, `fs/`), modifying protocol servers (`ai/verify`, `cmd/sop-mcp-server`, `cmd/sop-a2a-agent`), or benchmarking performance enhancements, consuming from source is recommended:
 ```bash
 # Add as a git submodule in your project
-git submodule add https://github.com/sharedcode/sop.git vendor/sop
+git submodule add https://github.com/sharedcode/zeltrin.git vendor/sop
 
 # Or configure a Go workspace (go.work) for local development
 go work use ./vendor/sop
@@ -673,9 +673,9 @@ go work use ./vendor/sop
 
 We welcome feedback, issues, and contributions:
 
-1. **Fork & Clone**: `git clone https://github.com/sharedcode/sop.git`
+1. **Fork & Clone**: `git clone https://github.com/sharedcode/zeltrin.git`
 2. **Run Tests**: `go test -v ./...`
-3. **Join Discussions**: [GitHub Discussions](https://github.com/SharedCode/sop/discussions)
+3. **Join Discussions**: [GitHub Discussions](https://github.com/SharedCode/zeltrin/discussions)
 4. **Submit a PR**: Follow Go formatting standards (`gofmt`) and include test coverage.
 
 ---

@@ -3,7 +3,7 @@ package btree
 import (
 	"testing"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 func TestRemoveItemOnNodeWithNilChild_Shifts(t *testing.T) {

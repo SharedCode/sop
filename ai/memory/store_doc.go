@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/btree"
 )
 
 func (s *store[T]) Documents(ctx context.Context) (btree.BtreeInterface[sop.UUID, Document], error) {

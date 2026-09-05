@@ -7,10 +7,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai/database"
-	sopdb "github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/jsondb"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai/database"
+	sopdb "github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/zeltrin/jsondb"
 )
 
 func TestManyJoinsBehavior(t *testing.T) {

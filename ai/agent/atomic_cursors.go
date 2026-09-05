@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sharedcode/sop/jsondb"
+	"github.com/sharedcode/zeltrin/jsondb"
 )
 
 // MaxConsecutiveRowsWithoutMatch is the safety limit for consecutive rows scanned

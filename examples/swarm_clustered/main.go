@@ -11,8 +11,8 @@ import (
 
 	log "log/slog"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/database"
 )
 
 const (

@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sharedcode/sop/ai/verify"
+	"github.com/sharedcode/zeltrin/ai/verify"
 )
 
 // Test_TraceFor_EvictsOldestPastCap is the regression test for the

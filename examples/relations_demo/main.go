@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/database"
 )
 
 // User represents a user in the system.

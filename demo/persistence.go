@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"syscall/js"
 
-	"github.com/sharedcode/sop/inmemory"
+	"github.com/sharedcode/zeltrin/inmemory"
 )
 
 // newSeededBtree builds a fresh in-memory B-Tree pre-loaded with the given

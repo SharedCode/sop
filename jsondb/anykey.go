@@ -11,10 +11,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/zeltrin/encoding"
 )
 
 // Item contains a Key and Value pair, with a generated UUID for reference.

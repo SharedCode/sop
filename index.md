@@ -24,10 +24,10 @@ go run ./examples/quickstart
 
 | Channel | Command |
 | :--- | :--- |
-| Go | `go get github.com/sharedcode/sop` |
+| Go | `go get github.com/sharedcode/zeltrin` |
 | Python | `pip install sop4py` |
 | C# | `dotnet add package Sop` |
-| Container demo | `docker run ghcr.io/sharedcode/sop-quickstart:stable` |
+| Container demo | `docker run ghcr.io/sharedcode/zeltrin-quickstart:stable` |
 
 ## Learn more
 
@@ -37,6 +37,6 @@ go run ./examples/quickstart
 - [Cookbook](docs/COOKBOOK.md)
 - [Scalability](docs/SCALABILITY.md)
 - [Changelog](CHANGELOG.md)
-- [Source and releases](https://github.com/SharedCode/sop)
+- [Source and releases](https://github.com/SharedCode/zeltrin)
 
 Every commit to master runs the full delivery pipeline: build, tests, container packaging, a staging smoke test, then a human-approved promotion to production and this site.

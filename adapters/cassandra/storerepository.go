@@ -11,7 +11,7 @@ import (
 	"github.com/gocql/gocql"
 	retry "github.com/sethvargo/go-retry"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 type storeRepository struct {

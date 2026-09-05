@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	core_database "github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/jsondb"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	core_database "github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/zeltrin/jsondb"
 	"github.com/stretchr/testify/assert"
 )
 

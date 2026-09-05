@@ -3,7 +3,7 @@ package generator
 import (
 	"testing"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 // TestGeminiOptimizations_ThinkingConfig verifies that thinking level is properly configured.

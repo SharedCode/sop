@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai/agent"
-	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/memory"
-	core "github.com/sharedcode/sop/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai/agent"
+	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/ai/memory"
+	core "github.com/sharedcode/zeltrin/database"
 )
 
 // TestCompareSearchVsSearchKnowledgeBase compares direct Search() vs searchKnowledgeBase()

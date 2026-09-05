@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 func TestContextManagement(t *testing.T) {

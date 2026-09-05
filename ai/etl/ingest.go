@@ -7,11 +7,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/agent"
-	"github.com/sharedcode/sop/ai/vector"
-	"github.com/sharedcode/sop/search"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/agent"
+	"github.com/sharedcode/zeltrin/ai/vector"
+	"github.com/sharedcode/zeltrin/search"
 )
 
 // IngestAgent performs the ETL process for a specific agent configuration.

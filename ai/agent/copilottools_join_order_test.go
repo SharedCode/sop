@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/sharedcode/sop/jsondb"
+	"github.com/sharedcode/zeltrin/jsondb"
 )
 
 func TestOrderedKeySerialization(t *testing.T) {

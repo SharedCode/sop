@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sharedcode/sop/common/mocks"
+	"github.com/sharedcode/zeltrin/common/mocks"
 )
 
 // Covers happy-path replicate actions: write, createStore, removeStore; and exists/read helpers.

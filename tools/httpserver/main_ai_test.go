@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 func TestInitializeRequest_UsesAuthenticatedUserID(t *testing.T) {

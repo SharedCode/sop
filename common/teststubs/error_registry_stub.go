@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sync/atomic"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // ErrorRegistryStub extends RegistryStub allowing injection of an error on UpdateNoLocks after N successful calls.

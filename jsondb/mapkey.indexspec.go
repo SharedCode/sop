@@ -1,7 +1,7 @@
 package jsondb
 
 import (
-	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/zeltrin/btree"
 )
 
 // IndexFieldSpecification declares a field and its sort order in the composite index.

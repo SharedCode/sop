@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai/memory"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai/memory"
 
-	aidb "github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/database"
+	aidb "github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/database"
 )
 
 func handleListSpaceCategories(w http.ResponseWriter, r *http.Request) {

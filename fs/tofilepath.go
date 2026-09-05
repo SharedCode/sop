@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // ToFilePathFunc formats a base path and UUID into a filesystem path optimized for I/O locality.

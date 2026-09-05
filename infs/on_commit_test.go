@@ -5,9 +5,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/cache"
-	_ "github.com/sharedcode/sop/cache"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/cache"
+	_ "github.com/sharedcode/zeltrin/cache"
 )
 
 func init() {

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/common/mocks"
-	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/common/mocks"
+	"github.com/sharedcode/zeltrin/encoding"
 )
 
 // errMarshaler forces Marshal to fail; Unmarshal is a no-op to satisfy the interface.

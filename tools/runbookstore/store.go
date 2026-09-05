@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/sharedcode/sop/ai/verify"
+	"github.com/sharedcode/zeltrin/ai/verify"
 )
 
 // DefaultMaxTraces bounds how many execution traces a Store retains. A

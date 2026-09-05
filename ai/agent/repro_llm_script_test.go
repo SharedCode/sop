@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sharedcode/sop/jsondb"
+	"github.com/sharedcode/zeltrin/jsondb"
 	"github.com/stretchr/testify/assert"
 )
 

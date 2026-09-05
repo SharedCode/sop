@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // (from findwithid_success_test.go)

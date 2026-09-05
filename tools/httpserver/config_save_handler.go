@@ -14,11 +14,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/model"
-	"github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/fs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/model"
+	"github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/zeltrin/fs"
 )
 
 // --- Helper Types for handleSaveConfig ---

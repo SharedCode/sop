@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/fs"
+	"github.com/sharedcode/zeltrin/infs"
 )
 
 // This stress test covers:

@@ -4,10 +4,10 @@ import (
 	"context"
 	"sort"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/cel"
-	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/zeltrin/cel"
+	"github.com/sharedcode/zeltrin/encoding"
 )
 
 // JsonDBMapKey wraps JsonDBAnyKey to support map[string]any keys with configurable index specifications.

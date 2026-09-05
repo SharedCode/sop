@@ -7,11 +7,11 @@ import (
 	log "log/slog"
 	"os"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/common"
-	"github.com/sharedcode/sop/fs"
-	sd "github.com/sharedcode/sop/streamingdata"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/zeltrin/common"
+	"github.com/sharedcode/zeltrin/fs"
+	sd "github.com/sharedcode/zeltrin/streamingdata"
 )
 
 // NewBtree creates a new B-tree instance with data persisted to the backend storage upon commit.

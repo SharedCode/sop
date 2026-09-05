@@ -10,11 +10,11 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/agent"
-	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/generator"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/agent"
+	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/ai/generator"
 )
 
 func TestServiceIntegration_LastTool(t *testing.T) {

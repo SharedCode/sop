@@ -3,9 +3,9 @@ package memory
 import (
 	"context"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/btree"
 )
 
 // Database is an interface that allows the memory layer to orchestrate its own batched transactions.

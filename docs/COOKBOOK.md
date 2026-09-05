@@ -30,8 +30,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/database"
 )
 
 type UserProfile struct {
@@ -129,7 +129,7 @@ func TransferFunds(ctx context.Context, db *database.Database, fromID, toID stri
 For objects larger than 1MB (e.g., videos, high-res images), use the `streamingdata` package.
 
 ```go
-import "github.com/sharedcode/sop/streamingdata"
+import "github.com/sharedcode/zeltrin/streamingdata"
 
 func UploadVideo(ctx context.Context, videoID string, data []byte) error {
 	// Create a streaming store
@@ -199,8 +199,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai/database"
 )
 
 func main() {
@@ -354,8 +354,8 @@ package main
 
 import (
 	"context"
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/database"
 )
 
 func main() {
@@ -429,8 +429,8 @@ package main
 import (
 	"context"
 	"github.com/google/uuid"
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/database"
 )
 
 // 1. Define Types

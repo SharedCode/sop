@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 const (

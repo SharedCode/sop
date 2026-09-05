@@ -93,7 +93,7 @@ SOP supports pluggable caching backends.
 You can configure the global cache factory to switch between Redis (distributed) and In-Memory (standalone) modes.
 
 ```go
-import "github.com/sharedcode/sop"
+import "github.com/sharedcode/zeltrin"
 
 func init() {
     // Use Redis (Default) - Requires a running Redis server

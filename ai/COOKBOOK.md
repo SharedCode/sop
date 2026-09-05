@@ -114,8 +114,8 @@ package main
 import (
 	"fmt"
 	"context"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/database"
 )
 
 func main() {
@@ -319,8 +319,8 @@ Save a struct or any serializable object as a named model.
 ```go
 import (
 	"context"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/database"
 )
 
 type MyPerceptron struct {
@@ -403,10 +403,10 @@ Use `BTreeModelStore` to update models and vectors atomically. This ensures that
 
 ```go
 import (
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/ai/vector"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/zeltrin/ai/vector"
 )
 
 func atomicUpdate() {

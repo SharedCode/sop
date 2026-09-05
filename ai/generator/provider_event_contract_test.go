@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 func TestOwnedLoops_EmitToolEventsWhenStreamerIsPresent(t *testing.T) {

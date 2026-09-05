@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/common/mocks"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/common/mocks"
 )
 
 // Forces priorityLog.Get to hit ReadFile error by making the target path a directory.

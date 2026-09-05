@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai/memory"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai/memory"
 )
 
 func TestParseExplicitItemBlocks(t *testing.T) {
@@ -47,7 +47,7 @@ func TestParseExplicitItemBlocks(t *testing.T) {
 
 func TestBuildExportItems_UsesBaseURLForSourcesWhenConfigured(t *testing.T) {
 	oldBaseURL := baseURL
-	baseURL = "https://github.com/SharedCode/sop"
+	baseURL = "https://github.com/SharedCode/zeltrin"
 	defer func() { baseURL = oldBaseURL }()
 
 	catGraphMap = make(map[string]*memory.Category)
@@ -69,9 +69,9 @@ func TestBuildExportItems_UsesBaseURLForSourcesWhenConfigured(t *testing.T) {
 	}
 
 	want := []string{
-		"https://github.com/SharedCode/sop/README.md",
-		"https://github.com/SharedCode/sop/ai/README.md",
-		"https://github.com/SharedCode/sop/GO_CORE_ENGINE.md",
+		"https://github.com/SharedCode/zeltrin/README.md",
+		"https://github.com/SharedCode/zeltrin/ai/README.md",
+		"https://github.com/SharedCode/zeltrin/GO_CORE_ENGINE.md",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("unexpected sources: got %v, want %v", got, want)

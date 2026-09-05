@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	aidatabase "github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	aidatabase "github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/database"
 )
 
 func TestReproSlowJoin(t *testing.T) {

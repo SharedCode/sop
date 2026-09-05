@@ -9,10 +9,10 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/adapters/cassandra"
-	"github.com/sharedcode/sop/adapters/redis"
-	"github.com/sharedcode/sop/incfs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/adapters/cassandra"
+	"github.com/sharedcode/zeltrin/adapters/redis"
+	"github.com/sharedcode/zeltrin/incfs"
 )
 
 var cassConfig = cassandra.Config{

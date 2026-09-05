@@ -19,6 +19,8 @@ classifiers = [
 dependencies = []
 
 [project.scripts]
+zeltrin-httpserver = "sop.httpserver:main"
+zeltrin-demo = "sop.demo:main"
 sop-httpserver = "sop.httpserver:main"
 sop-demo = "sop.demo:main"
 

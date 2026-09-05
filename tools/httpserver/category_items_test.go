@@ -8,9 +8,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	aidb "github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/zeltrin"
+	aidb "github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/database"
 )
 
 func TestUpdateSpaceItemPersists(t *testing.T) {

@@ -33,10 +33,10 @@ sop/
 
 These packages are intended for direct use by consumers of the library:
 
-*   **`github.com/sharedcode/sop/infs`**: The primary and recommended backend. It uses the local filesystem for both metadata (via a high-performance hashmap) and data. Redis is used strictly for **caching and coordination** (locking), not for data persistence.
+*   **`github.com/sharedcode/zeltrin/infs`**: The primary and recommended backend. It uses the local filesystem for both metadata (via a high-performance hashmap) and data. Redis is used strictly for **caching and coordination** (locking), not for data persistence.
     *   *Usage*: Suitable for both **distributed clusters** and single-node deployments. In the referenced stress tests, it outperformed the hybrid backend.
 
-*   **`github.com/sharedcode/sop/incfs`**: The "Hybrid" backend. It combines:
+*   **`github.com/sharedcode/zeltrin/incfs`**: The "Hybrid" backend. It combines:
     *   **Cassandra**: For metadata and registry storage.
     *   **Filesystem**: For raw data storage.
     *   **Redis**: For caching and coordination.
@@ -44,7 +44,7 @@ These packages are intended for direct use by consumers of the library:
 
 ### Internal Packages
 
-*   **`github.com/sharedcode/sop/internal/inredck`**:
+*   **`github.com/sharedcode/zeltrin/internal/inredck`**:
     *   **Role**: This package contains the core implementation logic for the Redis/Cassandra interaction, specifically the "Cassandra Blob" pattern.
     *   **Why Internal?**: The pattern of storing B-Tree nodes as blobs in Cassandra is a complex implementation detail. Exposing this directly would risk users creating dependencies on internal storage formats or misusing the low-level blob management APIs. By keeping it internal, SOP routes usage through the transactional APIs provided by `incfs` and `streamingdata`.
 

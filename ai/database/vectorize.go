@@ -5,14 +5,14 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/sharedcode/sop/ai/memory"
+	"github.com/sharedcode/zeltrin/ai/memory"
 
 	log "log/slog"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/embed"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/embed"
 )
 
 // TODO: refactor Vectorize & VectorizeCategories so they can share common Category/Batched Items'

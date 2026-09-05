@@ -3,7 +3,7 @@ package main
 import (
 	"sync"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // registry is a thread-safe generic registry for storing objects by UUID.

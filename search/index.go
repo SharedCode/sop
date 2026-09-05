@@ -6,9 +6,9 @@ import (
 	"math"
 	"sort"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/zeltrin/database"
 )
 
 // TextSearchResult represents a scored document from text search.

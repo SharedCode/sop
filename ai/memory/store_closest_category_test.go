@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/inmemory"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/inmemory"
 )
 
 func TestFindClosestCategory_Nested(t *testing.T) {

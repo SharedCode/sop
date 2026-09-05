@@ -3,7 +3,7 @@ package cassandra
 import (
 	"testing"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 func TestSortStores_WithDuplicates(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 type panickingMRUCache[TK comparable, TV any] struct {

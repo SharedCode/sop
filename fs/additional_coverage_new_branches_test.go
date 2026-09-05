@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/common/mocks"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/common/mocks"
 )
 
 // Covers NewBlobStoreWithEC constructor validation error when base paths count mismatches data+parity shard count.

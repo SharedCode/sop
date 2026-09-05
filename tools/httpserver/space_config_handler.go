@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/memory"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/ai/memory"
 )
 
 func handleSaveSpaceConfig(w http.ResponseWriter, r *http.Request) {

@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/adapters/redis"
-	"github.com/sharedcode/sop/fs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/adapters/redis"
+	"github.com/sharedcode/zeltrin/fs"
 )
 
 // Redis config used by integration tests.

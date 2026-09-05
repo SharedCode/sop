@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/inmemory"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/zeltrin/inmemory"
 )
 
 type fakeMemoryDB struct {

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 func (a *CopilotAgent) executeScriptView(ctx context.Context, name string, script ai.Script, args map[string]any) (string, error) {

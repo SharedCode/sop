@@ -11,7 +11,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/sharedcode/sop/ai/agent"
+	"github.com/sharedcode/zeltrin/ai/agent"
 )
 
 // PrepareData downloads a CSV dataset and converts it to the agent DataItem JSON format.

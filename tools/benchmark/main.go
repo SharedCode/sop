@@ -7,9 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/cache"
-	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/cache"
+	"github.com/sharedcode/zeltrin/infs"
 )
 
 func main() {

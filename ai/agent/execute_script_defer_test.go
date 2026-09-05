@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

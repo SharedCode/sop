@@ -143,4 +143,4 @@ If you add a new feature to the Go Core (e.g., `Store.GetAdvanced()`):
     git tag v1.0.2
     git push origin v1.0.2
     ```
-3.  **Verify**: Check the [GitHub Releases Page](https://github.com/SharedCode/sop/releases) after ~10 minutes.
+3.  **Verify**: Check the [GitHub Releases Page](https://github.com/SharedCode/zeltrin/releases) after ~10 minutes.

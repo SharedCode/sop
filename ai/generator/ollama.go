@@ -8,7 +8,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 // ollama implements the Generator interface for local Ollama models.

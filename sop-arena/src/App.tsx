@@ -261,11 +261,11 @@ export const App: React.FC = () => {
             <span className="text-brand-400 font-semibold">One engine for data and compute</span>
           </div>
           <div className="flex items-center space-x-4">
-            <a href="https://github.com/sharedcode/sop" target="_blank" rel="noopener noreferrer" className="text-brand-400 hover:underline">
+            <a href="https://github.com/sharedcode/zeltrin" target="_blank" rel="noopener noreferrer" className="text-brand-400 hover:underline">
               GitHub Repository
             </a>
             <span>•</span>
-            <a href="https://sharedcode.github.io/sop/" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white">
+            <a href="https://sharedcode.github.io/zeltrin/" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white">
               Zeltrin Technical Demo
             </a>
           </div>

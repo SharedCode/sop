@@ -2,7 +2,7 @@ basePath: /api/v1
 info:
   contact:
     name: SOP Team
-    url: https://github.com/sharedcode/sop
+    url: https://github.com/sharedcode/zeltrin
   description: |-
     AI-powered database operations with strongly typed API and bulk operations
 

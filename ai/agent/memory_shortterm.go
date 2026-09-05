@@ -3,8 +3,8 @@ package agent
 import (
 	"sync"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 // RunnerSession holds the state for the current agent execution session,

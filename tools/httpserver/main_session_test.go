@@ -10,8 +10,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/agent"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/agent"
 )
 
 // mockAgent for testing cloning and session handling

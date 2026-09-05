@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/incfs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/incfs"
 )
 
 type PersonKey struct {

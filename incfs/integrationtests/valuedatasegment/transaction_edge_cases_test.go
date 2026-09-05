@@ -8,8 +8,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/incfs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/incfs"
 )
 
 // Covers all of these cases:

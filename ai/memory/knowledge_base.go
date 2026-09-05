@@ -13,9 +13,9 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/embed"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/embed"
 )
 
 // KnowledgeBase provides a clean, unified API for developers.

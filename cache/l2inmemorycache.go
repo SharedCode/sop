@@ -8,7 +8,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 type item struct {

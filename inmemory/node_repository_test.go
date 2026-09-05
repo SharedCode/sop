@@ -3,8 +3,8 @@ package inmemory
 import (
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/btree"
 )
 
 // Ensure NodeRepository.Add and Fetched are exercised (previously 0%).

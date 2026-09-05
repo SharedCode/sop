@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sharedcode/sop/incfs"
+	"github.com/sharedcode/zeltrin/incfs"
 )
 
 func TestMain(m *testing.M) {

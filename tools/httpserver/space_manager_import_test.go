@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/memory"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/memory"
 )
 
 type stubConfigSyncKB struct {

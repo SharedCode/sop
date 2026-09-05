@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/agent"
-	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/agent"
+	"github.com/sharedcode/zeltrin/ai/database"
 )
 
 // MockGenerator is a placeholder.

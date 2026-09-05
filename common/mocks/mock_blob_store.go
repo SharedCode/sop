@@ -3,7 +3,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 type mockBlobStore struct {

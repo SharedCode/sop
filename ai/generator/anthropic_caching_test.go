@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 func TestAnthropicPromptCaching_SystemPromptMarkedForCache(t *testing.T) {

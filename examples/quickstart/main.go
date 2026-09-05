@@ -7,7 +7,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/sharedcode/sop/inmemory"
+	"github.com/sharedcode/zeltrin/inmemory"
 )
 
 func main() {

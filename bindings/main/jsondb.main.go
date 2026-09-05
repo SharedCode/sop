@@ -19,16 +19,16 @@ import (
 	"github.com/gocql/gocql"
 	"github.com/google/uuid"
 
-	"github.com/sharedcode/sop"
-	cas "github.com/sharedcode/sop/adapters/cassandra"
-	"github.com/sharedcode/sop/adapters/redis"
-	"github.com/sharedcode/sop/ai"
-	database "github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/vector"
-	"github.com/sharedcode/sop/common"
-	sopdb "github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/encoding"
-	"github.com/sharedcode/sop/jsondb"
+	"github.com/sharedcode/zeltrin"
+	cas "github.com/sharedcode/zeltrin/adapters/cassandra"
+	"github.com/sharedcode/zeltrin/adapters/redis"
+	"github.com/sharedcode/zeltrin/ai"
+	database "github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/ai/vector"
+	"github.com/sharedcode/zeltrin/common"
+	sopdb "github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/zeltrin/encoding"
+	"github.com/sharedcode/zeltrin/jsondb"
 )
 
 func init() {

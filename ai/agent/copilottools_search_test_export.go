@@ -3,7 +3,7 @@ package agent
 import (
 	"context"
 
-	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/zeltrin/ai/database"
 )
 
 // ExportSplitCategoryPathInstruction exports the private function for testing

@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/sethvargo/go-retry"
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 // ResilientEmbedder wraps an existing Embeddings model automatically

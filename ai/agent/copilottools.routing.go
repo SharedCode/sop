@@ -7,7 +7,7 @@ import (
 	log "log/slog"
 	"strings"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 const searchKBArgsSchema = `{"type":"object","properties":{"kb_name":{"type":"string","description":"Single knowledge base to search."},"query":{"type":"string","description":"Natural language query to run in the target knowledge base."},"limit":{"type":"integer","description":"Maximum number of hits to return. Defaults to 5."}},"required":["kb_name","query"]}`

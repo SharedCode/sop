@@ -8,7 +8,7 @@ import (
 
 	log "log/slog"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 func init() {

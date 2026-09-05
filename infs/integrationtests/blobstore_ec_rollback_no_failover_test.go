@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/common"
-	"github.com/sharedcode/sop/fs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/common"
+	"github.com/sharedcode/zeltrin/fs"
 )
 
 // ecFailFileIO simulates shard write failures for BlobStoreWithEC by failing WriteFile

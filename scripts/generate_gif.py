@@ -219,7 +219,7 @@ for i in range(12):
     draw.text((90, 245), "• Vector Search: 128-d cosine similarity evaluated locally in memory", fill=TEXT_WHITE, font=font_body)
     draw.text((90, 275), "• Resilient Swarm: Workers join and leave without orphan locks or dropped tasks", fill=TEXT_WHITE, font=font_body)
     draw.text((90, 320), "Ready to explore? Run both interactive demos on GitHub Pages:", fill=BRAND_CYAN, font=font_mono)
-    draw.text((90, 345), "sharedcode.github.io/sop  •  sharedcode.github.io/sop-arena", fill=TEXT_WHITE, font=font_mono)
+    draw.text((90, 345), "sharedcode.github.io/zeltrin  •  sharedcode.github.io/zeltrin-arena", fill=TEXT_WHITE, font=font_mono)
     
     frames.append(img)
 

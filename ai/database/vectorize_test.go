@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/sop/ai/memory"
+	"github.com/sharedcode/zeltrin/ai/memory"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 type mockEmbedder struct{}

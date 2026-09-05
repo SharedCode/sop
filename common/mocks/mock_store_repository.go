@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // mockStoreRepository is a simple in-memory implementation of store repository to demonstrate

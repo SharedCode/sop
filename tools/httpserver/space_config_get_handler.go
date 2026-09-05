@@ -1,14 +1,14 @@
 package main
 
 import (
-	"github.com/sharedcode/sop/ai/memory"
+	"github.com/sharedcode/zeltrin/ai/memory"
 
 	"context"
 	"encoding/json"
 	"net/http"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai/database"
 )
 
 func handleGetSpaceConfig(w http.ResponseWriter, r *http.Request) {

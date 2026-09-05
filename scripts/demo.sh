@@ -37,7 +37,7 @@ check_prerequisites() {
     echo "  2. Run via Docker without a local Go toolchain:"
     echo "     docker run --rm -it -v \"\$PWD\":/src -w /src golang:1.26-alpine ./scripts/demo.sh"
     echo "  3. Pull the published quickstart container:"
-    echo "     docker run --rm ghcr.io/sharedcode/sop-quickstart"
+    echo "     docker run --rm ghcr.io/sharedcode/zeltrin-quickstart"
     exit 1
   fi
 }

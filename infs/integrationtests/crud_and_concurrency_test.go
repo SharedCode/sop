@@ -9,9 +9,9 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/fs"
+	"github.com/sharedcode/zeltrin/infs"
 )
 
 // A shortened CRUD flow derived from stresstests, using tiny slot length and small batch sizes.

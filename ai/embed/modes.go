@@ -3,7 +3,7 @@ package embed
 import (
 	"context"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 func CategoryTexts(ctx context.Context, embedder ai.Embeddings, texts []string) ([][]float32, error) {

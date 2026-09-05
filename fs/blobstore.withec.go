@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"sync/atomic"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/fs/erasure"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/fs/erasure"
 )
 
 const (

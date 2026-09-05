@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/embed"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/embed"
 )
 
 type KBDigestRequest struct {

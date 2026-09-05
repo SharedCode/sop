@@ -13,7 +13,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 func TestHandleSaveConfig_PersistsRootUserForLogin(t *testing.T) {

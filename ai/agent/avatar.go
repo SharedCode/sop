@@ -5,8 +5,8 @@ import (
 	"fmt"
 	log "log/slog"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 func (a *CopilotAgent) executeAvatarSubAgent(ctx context.Context, avatarName, taskContext string) (string, error) {

@@ -189,7 +189,7 @@ export const InvestorModeView: React.FC<InvestorModeViewProps> = ({ onBackToAren
             Back to Interactive Arena
           </button>
           <a
-            href="https://github.com/sharedcode/sop"
+            href="https://github.com/sharedcode/zeltrin"
             target="_blank"
             rel="noopener noreferrer"
             className="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-black font-semibold text-xs transition shadow-lg shadow-brand-500/20 flex items-center space-x-2"

@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/vector"
-	core_database "github.com/sharedcode/sop/database"
-	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/ai/vector"
+	core_database "github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/zeltrin/infs"
 )
 
 func TestVectorStoreComprehensiveLifecycle(t *testing.T) {

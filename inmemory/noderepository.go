@@ -5,8 +5,8 @@ package inmemory
 import (
 	"context"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/btree"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/btree"
 )
 
 // in-memory implementation of NodeRepository. Uses a map to manage nodes in memory.

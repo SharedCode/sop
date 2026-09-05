@@ -45,7 +45,7 @@ SOP includes a powerful **SOP Data Manager** that provides **full CRUD** capabil
 *   **AI Copilot**: Integrated directly into the UI, the AI Copilot can help you write queries, explain data structures, and even generate code snippets. Configure your LLM provider through the Setup Wizard on first launch.
 *   **SystemDB**: View and manage internal system data, including registry information and transaction logs.
 
-To launch the SOP Data Manager, download the all-in-one single-file installer from [SOP Releases](https://github.com/SharedCode/sop/releases). Alternatively, you can use the Go toolchain:
+To launch the SOP Data Manager, download the all-in-one single-file installer from [SOP Releases](https://github.com/SharedCode/zeltrin/releases). Alternatively, you can use the Go toolchain:
 
 ```bash
 # From the root of the repository
@@ -344,7 +344,7 @@ sop-cli httpserver -config ./config.json
 
 For production environments (e.g., Kubernetes, Docker, Linux Servers), you should run the standalone SOP HTTP Server binary directly instead of using the `dotnet tool` wrapper.
 
-1.  **Download**: Get the latest binary for your platform (Linux, Windows, macOS) from the [GitHub Releases](https://github.com/sharedcode/sop/releases) page.
+1.  **Download**: Get the latest binary for your platform (Linux, Windows, macOS) from the [GitHub Releases](https://github.com/sharedcode/zeltrin/releases) page.
 2.  **Run**: Execute the binary with your configuration.
 
 **Example (Docker/Kubernetes):**

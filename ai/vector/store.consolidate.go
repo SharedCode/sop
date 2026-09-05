@@ -7,7 +7,7 @@ import (
 
 	log "log/slog"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 // Consolidate acts as the Sleep Cycle. It reads all items from TempVectors (Short-Term Memory),

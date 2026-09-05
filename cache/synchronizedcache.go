@@ -3,7 +3,7 @@ package cache
 import (
 	"sync"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // sync_cache wraps a Cache with a mutex to provide thread-safe operations.

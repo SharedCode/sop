@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/zeltrin/encoding"
 )
 
 // CopyToPassiveFolders copies store metadata (store list and per-store info) and registry

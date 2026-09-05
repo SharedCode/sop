@@ -1,6 +1,6 @@
 package agent
 
-import "github.com/sharedcode/sop/ai"
+import "github.com/sharedcode/zeltrin/ai"
 
 const (
 	// SystemDBName is the name of the system database used for internal agent storage (scripts, history, etc).

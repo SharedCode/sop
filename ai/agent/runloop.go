@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 // RunLoop starts an interactive Read-Eval-Print Loop (REPL) for the agent.

@@ -11,10 +11,10 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/jsondb"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/jsondb"
 )
 
 // handleSessionCommand processes session-related commands like /create, /save, /step, etc.

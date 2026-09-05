@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/cache"
-	"github.com/sharedcode/sop/common/mocks"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/cache"
+	"github.com/sharedcode/zeltrin/common/mocks"
 )
 
 // Global mock repositories will allow us to simulate repositories that persists state

@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai/embed"
-	"github.com/sharedcode/sop/inmemory"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai/embed"
+	"github.com/sharedcode/zeltrin/inmemory"
 )
 
 // PlaybookRule dictates how the deterministic mock tools respond

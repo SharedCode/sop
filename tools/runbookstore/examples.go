@@ -1,6 +1,6 @@
 package runbookstore
 
-import "github.com/sharedcode/sop/ai/verify"
+import "github.com/sharedcode/zeltrin/ai/verify"
 
 // DBMaintenanceWorkflow is the same scenario used throughout this repo's
 // tests and docs: production database drop is forbidden without a validated

@@ -3,7 +3,7 @@ package fs
 import (
 	"context"
 
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 type manageStoreFolder struct {

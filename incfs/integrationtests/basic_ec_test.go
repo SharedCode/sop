@@ -9,9 +9,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/fs"
-	"github.com/sharedcode/sop/incfs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/fs"
+	"github.com/sharedcode/zeltrin/incfs"
 )
 
 func initErasureCoding() {

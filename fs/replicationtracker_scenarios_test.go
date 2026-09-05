@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/common/mocks"
-	"github.com/sharedcode/sop/encoding"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/common/mocks"
+	"github.com/sharedcode/zeltrin/encoding"
 )
 
 // TestReplicationTracker_Scenarios consolidates replication tracker tests. Each subtest resets globals

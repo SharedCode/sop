@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	retry "github.com/sethvargo/go-retry"
-	"github.com/sharedcode/sop"
+	"github.com/sharedcode/zeltrin"
 )
 
 // FileIO defines filesystem operations used by this package. The default

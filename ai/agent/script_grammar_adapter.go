@@ -1,6 +1,6 @@
 package agent
 
-import "github.com/sharedcode/sop/ai"
+import "github.com/sharedcode/zeltrin/ai"
 
 // SanitizeScript exposes the execution-path sanitization pass for reuse.
 func SanitizeScript(script []ScriptInstruction) []ScriptInstruction {

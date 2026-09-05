@@ -22,8 +22,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sharedcode/sop/tools/a2aagent"
-	"github.com/sharedcode/sop/tools/runbookstore"
+	"github.com/sharedcode/zeltrin/tools/a2aagent"
+	"github.com/sharedcode/zeltrin/tools/runbookstore"
 )
 
 const invokePath = "/a2a/invoke"

@@ -3,7 +3,7 @@ package policy
 import (
 	"context"
 
-	"github.com/sharedcode/sop/ai"
+	"github.com/sharedcode/zeltrin/ai"
 )
 
 // AllowAll is a policy that allows everything.

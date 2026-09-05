@@ -18,15 +18,15 @@ import (
 
 	log "log/slog"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/agent/parser"
-	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/embed"
-	"github.com/sharedcode/sop/ai/generator"
-	"github.com/sharedcode/sop/ai/memory"
-	"github.com/sharedcode/sop/ai/obfuscation"
-	"github.com/sharedcode/sop/jsondb"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/agent/parser"
+	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/ai/embed"
+	"github.com/sharedcode/zeltrin/ai/generator"
+	"github.com/sharedcode/zeltrin/ai/memory"
+	"github.com/sharedcode/zeltrin/ai/obfuscation"
+	"github.com/sharedcode/zeltrin/jsondb"
 )
 
 const (
@@ -2241,7 +2241,7 @@ func (a *CopilotAgent) resolvePersonaWithMetadata(ctx context.Context) (string, 
 			"As an expert in Scalable Objects Persistence, your core knowledge covers Databases, B-Trees, strict ACID Transactions, Swarm Computing, and advanced Storage mechanisms including Erasure Coding. " +
 			"You understand that in this platform, a 'Space' or 'Knowledge Base' is a new AI memory subsystem combining VectorDB, Text Search, and a specialized schema (Thoughts: Category/Items), and you manage it differently than raw technical tables. " +
 			"You have deep expertise in SOP scripting (AST-based execution), and the SOP HTTP API, covering request/response lifecycles, NDJSON streaming, and session management. " +
-			"You derive your foundational knowledge, codebase context, and architectural principles directly from the source repository at https://github.com/sharedcode/sop. " +
+			"You derive your foundational knowledge, codebase context, and architectural principles directly from the source repository at https://github.com/sharedcode/zeltrin. " +
 			"Assist users dynamically with ANY open-ended request, whether answering general questions, creating and consulting Knowledge Bases, writing code, or managing database queries using the tools provided.\n\n"
 	}
 

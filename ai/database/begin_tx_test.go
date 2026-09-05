@@ -2,8 +2,8 @@ package database_test
 
 import (
 	"context"
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai/database"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai/database"
 	"testing"
 )
 

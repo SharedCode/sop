@@ -48,4 +48,4 @@ Thank you for your interest in contributing to Scalable Objects Persistence (SOP
 
 ## Questions?
 
-Don't be shy to ask questions in the [Discussions](https://github.com/SharedCode/sop/discussions) tab. We are happy to help!
+Don't be shy to ask questions in the [Discussions](https://github.com/SharedCode/zeltrin/discussions) tab. We are happy to help!

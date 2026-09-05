@@ -67,7 +67,7 @@ To launch the Data Manager simply run:
 sop-httpserver
 ```
 
-Or download the all-in-one single-file installer (no Python/pip required) from [SOP Releases](https://github.com/SharedCode/sop/releases).
+Or download the all-in-one single-file installer (no Python/pip required) from [SOP Releases](https://github.com/SharedCode/zeltrin/releases).
 
 ### Key Capabilities
 
@@ -547,7 +547,7 @@ SOP uses a split architecture:
 
 ## Project Links
 
-*   **Source Code**: [GitHub - sharedcode/sop](https://github.com/sharedcode/sop)
+*   **Source Code**: [GitHub - sharedcode/sop](https://github.com/sharedcode/zeltrin)
 *   **PyPI**: [sop4py](https://pypi.org/project/sop4py)
 
 ## Contributing

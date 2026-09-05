@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/agent"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/agent"
 )
 
 func TestDefaultToolExecutor_ListTools_DelegatesToCopilotAgent(t *testing.T) {

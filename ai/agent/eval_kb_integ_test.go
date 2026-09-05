@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/domain"
-	"github.com/sharedcode/sop/ai/embed"
-	"github.com/sharedcode/sop/ai/generator"
-	"github.com/sharedcode/sop/ai/memory"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/ai/domain"
+	"github.com/sharedcode/zeltrin/ai/embed"
+	"github.com/sharedcode/zeltrin/ai/generator"
+	"github.com/sharedcode/zeltrin/ai/memory"
 )
 
 // kbItem matches the structure of medical.json and sop_base_knowledge.json

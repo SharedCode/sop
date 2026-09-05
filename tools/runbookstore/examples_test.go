@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/sop/ai/verify"
+	"github.com/sharedcode/zeltrin/ai/verify"
 )
 
 func Test_ClusterTopologyWorkflow_ReachabilityHolds(t *testing.T) {

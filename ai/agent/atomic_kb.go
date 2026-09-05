@@ -9,10 +9,10 @@ import (
 	"net/http/httptest"
 	"net/url"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/ai/database"
-	"github.com/sharedcode/sop/ai/memory"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/zeltrin/ai/memory"
 )
 
 // invokeLoopbackAPI routes a synthetic HTTP request to the main server's DefaultServeMux.

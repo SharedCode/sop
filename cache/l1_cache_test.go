@@ -7,9 +7,9 @@ package cache
 // 	"testing"
 // 	"time"
 
-// 	"github.com/sharedcode/sop"
-// 	"github.com/sharedcode/sop/btree"
-// 	"github.com/sharedcode/sop/redis"
+// 	"github.com/sharedcode/zeltrin"
+// 	"github.com/sharedcode/zeltrin/btree"
+// 	"github.com/sharedcode/zeltrin/redis"
 // )
 
 // // Redis config.

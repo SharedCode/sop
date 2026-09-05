@@ -9,10 +9,10 @@ import (
 	"os"
 	"sort"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/ai"
-	"github.com/sharedcode/sop/btree"
-	"github.com/sharedcode/sop/infs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/zeltrin/infs"
 )
 
 const (

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sharedcode/sop"
-	"github.com/sharedcode/sop/fs"
+	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/zeltrin/fs"
 )
 
 type dioReplicationSim struct {
