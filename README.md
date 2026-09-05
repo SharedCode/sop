@@ -5,7 +5,7 @@
 ### Durable memory and verification infrastructure for AI agents.
 
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="Zeltrin logo" width="480" />
+  <img src="docs/assets/zeltrin-logo.svg" alt="Zeltrin logo" width="480" />
 </p>
 
 [![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions)
