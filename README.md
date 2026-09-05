@@ -1,14 +1,12 @@
+<div align="center">
+
 # Engram
 
+### Durable memory and verification infrastructure for AI agents.
+
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="Engram logo" width="440" />
+  <img src="docs/assets/logo.svg" alt="Engram logo" width="480" />
 </p>
-
-## Durable memory and verification infrastructure for AI agents.
-
-**Engram** (formerly SOP / Scalable Object Persistence) is a unified in-process state engine providing transactional persistence, durable agent memory, distributed storage primitives, explicit-state verification, and WebAssembly persistence. It combines a sector-aligned **copy-on-write B-Tree**, **checkpointed episodic agent memory**, **vector similarity search**, and a **deterministic safety verification barrier** for MCP and A2A runbooks into one library.
-
-Instead of managing separate vector databases, message brokers, caching tiers, distributed lock managers, and fragile external checkpoint stores, Engram lets your AI agents maintain crash-resilient memory and enforce operational invariants directly within the execution boundary.
 
 [![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions)
 [![CI](https://github.com/SharedCode/sop/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/sop/actions/workflows/go.yml)
@@ -21,13 +19,19 @@ Instead of managing separate vector databases, message brokers, caching tiers, d
 [![MCP](https://img.shields.io/badge/MCP-tools%2Fmcpserver-4A4A4A)](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md)
 [![A2A](https://img.shields.io/badge/A2A-tools%2Fa2aagent-4A4A4A)](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md)
 
+</div>
+
+**Engram** (formerly SOP / Scalable Object Persistence) is a unified in-process state engine providing transactional persistence, durable agent memory, distributed storage primitives, explicit-state verification, and WebAssembly persistence. It combines a sector-aligned **copy-on-write B-Tree**, **checkpointed episodic agent memory**, **vector similarity search**, and a **deterministic safety verification barrier** for MCP and A2A runbooks into one library.
+
+Instead of managing separate vector databases, message brokers, caching tiers, distributed lock managers, and fragile external checkpoint stores, Engram lets your AI agents maintain crash-resilient memory and enforce operational invariants directly within the execution boundary.
+
 <p align="center">
-  <img src="docs/assets/sop-demo.gif" alt="Live SOP WASM demo: executing an ACID transfer and killing/resuming a checkpointed AI agent mid-task, both running client-side with zero network calls after initial page load" width="760" />
+  <img src="docs/assets/sop-demo.gif" alt="Live Engram WASM demo: executing an ACID transfer and killing/resuming a checkpointed AI agent mid-task, both running client-side with zero network calls after initial page load" width="760" />
 </p>
 
 <p align="center">
   <a href="https://sharedcode.github.io/sop/"><strong>🧠 Launch Technical Demo →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
-  <a href="https://sharedcode.github.io/sop/arena/"><strong>🎮 Play SOP Arena →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
+  <a href="https://sharedcode.github.io/sop/arena/"><strong>🎮 Play Engram Arena →</strong></a> &nbsp;&nbsp;|&nbsp;&nbsp;
   <a href="https://sharedcode.github.io/sop/agents/"><strong>🔌 Launch Agent Barrier →</strong></a>
 </p>
 
@@ -116,7 +120,7 @@ That same WASM-compiled engine is what the Agent Verification Barrier row above 
 
 ## 🔌 Agent Protocols: MCP, A2A, and a Real Verification Barrier
 
-SOP runbooks are reachable from two agent protocols, [Model Context Protocol](https://modelcontextprotocol.io/) and [Agent2Agent](https://a2a-project.github.io/A2A/), both gated by the same safety-and-reachability check before a step is allowed to commit. Real, tested code (`ai/verify`, `tools/mcpserver`, `tools/a2aagent`), not a diagram of an idea; see [MCP, A2A, and the Verification Engine](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md) for the full audit and design writeup.
+Engram runbooks are reachable from two agent protocols, [Model Context Protocol](https://modelcontextprotocol.io/) and [Agent2Agent](https://a2a-project.github.io/A2A/), both gated by the same safety-and-reachability check before a step is allowed to commit. Real, tested code (`ai/verify`, `tools/mcpserver`, `tools/a2aagent`), not a diagram of an idea; see [MCP, A2A, and the Verification Engine](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md) for the full audit and design writeup.
 
 <p align="center">
   <img src="docs/assets/mcp-a2a-architecture.svg" alt="An MCP client and an A2A orchestrator each reach a separate protocol server, both backed by the same tools/runbookstore.Store and gated by the same ai/verify safety check before a step commits" width="900" />
@@ -156,14 +160,14 @@ go run ./cmd/sop-a2a-bridge -agent-url http://localhost:8087
 
 ### Wiring `sop-mcp-server` into Claude
 
-`sop-mcp-server` speaks JSON-RPC over stdio and evaluates the barrier policies below (`ai/verify`'s `CheckSafety`) before `execute_step` is allowed to commit; a blocked step comes back as `input-required`, not a crash. Point either Claude client at the same command:
+`cmd/sop-mcp-server` speaks JSON-RPC over stdio and evaluates the barrier policies below (`ai/verify`'s `CheckSafety`) before `execute_step` is allowed to commit; a blocked step comes back as `input-required`, not a crash. Point either Claude client at the command:
 
 **Claude Desktop** (`claude_desktop_config.json`, stdio transport):
 
 ```json
 {
   "mcpServers": {
-    "sop": {
+    "engram": {
       "command": "go",
       "args": ["run", "./cmd/sop-mcp-server"],
       "cwd": "/absolute/path/to/sop"
@@ -177,7 +181,7 @@ Swap `"command"/"args"` for a prebuilt binary once you've run `go build -o sop-m
 ```json
 {
   "mcpServers": {
-    "sop": {
+    "engram": {
       "command": "/absolute/path/to/sop/sop-mcp-server"
     }
   }
@@ -187,12 +191,12 @@ Swap `"command"/"args"` for a prebuilt binary once you've run `go build -o sop-m
 **Claude Code** (CLI):
 
 ```bash
-claude mcp add --transport stdio sop -- go run ./cmd/sop-mcp-server
+claude mcp add --transport stdio engram -- go run ./cmd/sop-mcp-server
 ```
 
 ### Wiring `sop-a2a-agent` into Claude (via `sop-a2a-bridge`)
 
-Claude doesn't speak A2A natively, MCP is the protocol its clients actually implement, so reaching an A2A agent means bridging the two, not writing an A2A client into Claude itself. `tools/a2abridge` is that bridge: an MCP server that resolves a running `sop-a2a-agent`'s card and re-exposes its `execute_step` skill as an MCP tool of the same name, translating each call into a real A2A task delegation over the wire and translating the resulting task state (`completed` / `input-required` / `failed`) back into an MCP tool result. It's built on the official `a2aclient` SDK package, not a hand-rolled JSON-RPC client, and it's covered by its own integration tests (`tools/a2abridge/bridge_test.go`) that drive the full MCP → bridge → real A2A wire protocol → executor round trip, including the blocked, allowed, and remote-failure paths.
+Claude doesn't speak A2A natively, MCP is the protocol its clients actually implement, so reaching an A2A agent means bridging the two, not writing an A2A client into Claude itself. `tools/a2abridge` is that bridge: an MCP server that resolves a running `sop-a2a-agent`'s card and re-exposes its `execute_step` skill as an MCP tool of the same name, translating each call into a real A2A task delegation over the wire and translating the resulting task state (`completed` / `input-required` / `failed`) back into an MCP tool result. It's built on the official `a2aclient` SDK package, not a hand-rolled JSON-RPC client, and it's covered by its own integration tests (`tools/a2abridge/bridge_test.go`) that drive the full MCP -> bridge -> real A2A wire protocol -> executor round trip, including the blocked, allowed, and remote-failure paths.
 
 Start the agent, then point the bridge at it:
 
@@ -206,7 +210,7 @@ go run ./cmd/sop-a2a-bridge -agent-url http://localhost:8087
 ```json
 {
   "mcpServers": {
-    "sop-a2a": {
+    "engram-a2a": {
       "command": "go",
       "args": ["run", "./cmd/sop-a2a-bridge", "-agent-url", "http://localhost:8087"],
       "cwd": "/absolute/path/to/sop"
@@ -218,7 +222,7 @@ go run ./cmd/sop-a2a-bridge -agent-url http://localhost:8087
 **Claude Code** (CLI):
 
 ```bash
-claude mcp add --transport stdio sop-a2a -- go run ./cmd/sop-a2a-bridge -agent-url http://localhost:8087
+claude mcp add --transport stdio engram-a2a -- go run ./cmd/sop-a2a-bridge -agent-url http://localhost:8087
 ```
 
 ### Barrier policies `ai/verify` enforces
@@ -227,7 +231,7 @@ claude mcp add --transport stdio sop-a2a -- go run ./cmd/sop-a2a-bridge -agent-u
 
 - **Destructive operations** (`DBMaintenanceWorkflow`, e.g. dropping a database): `drop_prod_db` requires `backup_validated`, which only `validate_backup` establishes after `take_backup`. A `SafetyRule` (`no-drop-without-validated-backup`) names the barrier explicitly, and a `ReachabilityRule` guarantees `rollback_complete` stays reachable even after the drop.
 - **Resource & topology mutations** (`ClusterTopologyWorkflow`, e.g. draining a node, failing over a cluster): `drain_node` and `failover_cluster` both require `replica_parity_verified`, which requires `health_check_passed` first. Reinstating the node or cluster (`topology_rollback_complete`) stays reachable from every state in the graph, including after a worker is terminated post-drain.
-- **Financial / ledger-mutating actions** (`LedgerTransferWorkflow`, e.g. balance updates, account transfers): `commit_transfer` requires `zero_sum_verified`, which only `verify_zero_sum_invariant` establishes after balances are mutated inside a `transaction_serialized` scope (`begin_serializable_transaction` → `snapshot_balances` → `apply_debit_credit`). Reversal (`ledger_rollback_complete`) stays reachable both before and after commit.
+- **Financial / ledger-mutating actions** (`LedgerTransferWorkflow`, e.g. balance updates, account transfers): `commit_transfer` requires `zero_sum_verified`, which only `verify_zero_sum_invariant` establishes after balances are mutated inside a `transaction_serialized` scope (`begin_serializable_transaction` -> `snapshot_balances` -> `apply_debit_credit`). Reversal (`ledger_rollback_complete`) stays reachable both before and after commit.
 - **Unverified / out-of-order execution**: this is the same mechanism underlying all three, not a separate check. `CheckSafety` rejects any step whose `Requires` states haven't been established yet in the current `Trace`, and rejects any step that would establish a `Forbidden` state without its paired `Requires` state already holding. An agent (or a client bug) trying to call `drain_node` or `commit_transfer` before its preconditions land gets a named, actionable violation back, never a silent no-op.
 
 Only `DBMaintenanceWorkflow` is registered by the example binaries (`cmd/sop-mcp-server`, `cmd/sop-a2a-agent`) today; `ClusterTopologyWorkflow` and `LedgerTransferWorkflow` are available in `tools/runbookstore` (with tests in `tools/runbookstore/examples_test.go`) as worked examples of modeling the other two categories on the same engine. Register them with `store.RegisterWorkflow` in your own server to serve them.
@@ -236,7 +240,7 @@ What this checker is, precisely, matters more than what it sounds like it might 
 
 ---
 
-## 💡 What Problem Does SOP Solve?
+## 💡 What Problem Does Engram Solve?
 
 Most distributed applications require two fundamentally different operations:
 1. **Storing state reliably** (databases, key-value stores, vector indexes)
@@ -245,7 +249,7 @@ Most distributed applications require two fundamentally different operations:
 Today, developers solve this by assembling a multi-component infrastructure stack:
 
 ```
-THE FRAGMENTED MULTI-COMPONENT STACK (Without SOP):
+THE FRAGMENTED MULTI-COMPONENT STACK (Without Engram):
 
 [ Application ]
        │
@@ -261,18 +265,18 @@ When an application worker crashes between releasing a lock in Redis and committ
 
 ---
 
-## ⚡ Why SOP?
+## ⚡ Why Engram?
 
-SOP takes a different approach: **co-locate storage and compute inside the same engine boundary.**
+Engram takes a different approach: **co-locate storage and compute inside the same engine boundary.**
 
 ```
-THE UNIFIED DATA & COMPUTE PLATFORM (With SOP):
+THE UNIFIED DATA & COMPUTE PLATFORM (With Engram):
 
 [ Application ]
        │
        └──► (Embedded In-Process Call: < 0.3ms latency)
             ┌─────────────────────────────────────────────────────────────┐
-            │                         SOP ENGINE                          │
+            │                        ENGRAM ENGINE                        │
             │  • Persistent B-Tree Storage (Sector-aligned Direct I/O)    │
             │  • Strict Serializable ACID Transactions (WAL + 2PC)       │
             │  • Swarm Compute & Autonomous Task Redistribution           │
@@ -297,9 +301,9 @@ Three industry shifts make this architecture increasingly relevant:
 
 ---
 
-## 🔍 What Makes SOP Different?
+## 🔍 What Makes Engram Different?
 
-SOP is built on five core technical principles:
+Engram is built on five core technical principles:
 
 1. **Embedded Storage Engine**: Operates in-process in Go, Python, and C#, eliminating TCP network hops for local reads and writes.
 2. **ACID Transactions without Database Servers**: Implements Write-Ahead Logging (WAL) and Two-Phase Commit (2PC) with copy-on-write page isolation.
@@ -309,11 +313,11 @@ SOP is built on five core technical principles:
 
 ---
 
-## ⚖️ SOP vs. Alternatives
+## ⚖️ Engram vs. Alternatives
 
-Every architecture involves tradeoffs. Here is an honest comparison of where SOP fits relative to industry standards:
+Every architecture involves tradeoffs. Here is an honest comparison of where Engram fits relative to industry standards:
 
-| Capability | PostgreSQL | Redis | Kafka | Temporal | Pinecone | SQLite | SOP |
+| Capability | PostgreSQL | Redis | Kafka | Temporal | Pinecone | SQLite | Engram |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **ACID Transactions** | ✓ | △ | ✗ | ✗ | ✗ | ✓ | ✓ |
 | **Ordered B-Tree Range Scans** | ✓ | △ | ✗ | ✗ | ✗ | ✓ | ✓ |
@@ -327,25 +331,25 @@ Every architecture involves tradeoffs. Here is an honest comparison of where SOP
 
 ### Detailed Tradeoffs by Competitor:
 
-- **PostgreSQL**: Industry standard for general relational databases. Choose Postgres when you need complex relational schemas, advanced SQL aggregations, or standard ecosystem tooling. SOP is better suited when you want an embedded storage engine inside your application process without database server management.
-- **Redis**: Industry standard for ultra-low-latency in-memory key-value caching. Choose Redis when all data fits in RAM and you need simple cache operations. SOP provides durable B-Tree disk persistence, multi-account ACID transactions, and erasure coding.
-- **Kafka / RabbitMQ**: Industry standards for high-volume streaming and pub/sub. Choose Kafka when you need multi-datacenter event streams and log retention. SOP provides transactional task queues co-located with storage state for local swarms.
-- **Temporal**: Industry standard for long-running durable workflows spanning external microservices. Choose Temporal for multi-week human-in-the-loop workflows across disparate clouds. SOP is designed for local-to-cluster co-located data and task execution.
-- **SQLite**: Industry standard for embedded single-file relational databases. Choose SQLite for client desktop/mobile apps needing SQL. SOP is designed for high-concurrency multi-threaded workers, clustered coordination, partitioned vector stores, and erasure coding.
+- **PostgreSQL**: Industry standard for general relational databases. Choose Postgres when you need complex relational schemas, advanced SQL aggregations, or standard ecosystem tooling. Engram is better suited when you want an embedded storage engine inside your application process without database server management.
+- **Redis**: Industry standard for ultra-low-latency in-memory key-value caching. Choose Redis when all data fits in RAM and you need simple cache operations. Engram provides durable B-Tree disk persistence, multi-account ACID transactions, and erasure coding.
+- **Kafka / RabbitMQ**: Industry standards for high-volume streaming and pub/sub. Choose Kafka when you need multi-datacenter event streams and log retention. Engram provides transactional task queues co-located with storage state for local swarms.
+- **Temporal**: Industry standard for long-running durable workflows spanning external microservices. Choose Temporal for multi-week human-in-the-loop workflows across disparate clouds. Engram is designed for local-to-cluster co-located data and task execution.
+- **SQLite**: Industry standard for embedded single-file relational databases. Choose SQLite for client desktop/mobile apps needing SQL. Engram is designed for high-concurrency multi-threaded workers, clustered coordination, partitioned vector stores, and erasure coding.
 
 ---
 
-## 🎯 When SOP is a Great Fit
+## 🎯 When Engram Is a Great Fit
 
-- **AI Agent Memory & Swarm Workforces**: Autonomous agents requiring durable conversation memory, vector search, and task hand-offs without fragmented infrastructure.
-- **Real-Time Systems & Simulation State**: Game servers, robotics, and spatial computing needing microsecond state serialization.
-- **Financial & Escrow Ledgers**: Systems requiring strict serializability and invariant verification (e.g. zero-sum account delta) prior to commit.
-- **Edge & IoT Computing**: Devices operating in intermittent network environments that need local ACID persistence and peer synchronization.
-- **Serverless Workloads**: Cloud functions that need durable storage without exhausting database connection pools.
+- **AI Agent Memory & Swarm Workforces**: Autonomous agents requiring durable conversation memory, vector similarity search, and task hand-offs without fragmented external databases. Checkpoints commit directly to B-Tree segments with atomic rollback if a worker crashes mid-reasoning.
+- **Real-Time Systems & Simulation State**: Game servers, robotics, and spatial computing needing sub-millisecond in-process transactional serialization (measured at 100k-145k ops/sec in local benchmarks) without database network hops.
+- **Financial & Escrow Ledgers**: Systems requiring snapshot isolation, optimistic concurrency control (OCC), two-phase commit (2PC), and invariant verification (such as validating zero-sum account deltas before commit).
+- **Edge & IoT Computing**: Devices operating in local or intermittent network environments that need local embedded ACID persistence, with experimental peer coordination.
+- **Serverless Workloads**: Cloud functions and containers that need durable storage without exhausting external database connection pools.
 
 ---
 
-## 🚫 When SOP is NOT the Right Tool
+## 🚫 When Engram is NOT the Right Tool
 
 To be completely clear on architectural boundaries:
 
@@ -355,11 +359,11 @@ To be completely clear on architectural boundaries:
 
 ---
 
-## 🎮 See SOP in Action (SOP Arena Simulation)
+## 🎮 See Engram in Action (Engram Arena Simulation)
 
-In **[SOP Arena](https://sharedcode.github.io/sop/arena/)**, every control maps directly to a real distributed systems concept:
+In **[Engram Arena](https://sharedcode.github.io/sop/arena/)**, every control maps directly to a real distributed systems concept:
 
-| Simulation Control | Distributed Systems Concept | SOP Technical Mechanism |
+| Simulation Control | Distributed Systems Concept | Engram Technical Mechanism |
 | :--- | :--- | :--- |
 | **Add Worker** | Swarm Compute | Dynamic queue rebalancing across peer worker nodes without central master bottlenecks. |
 | **Remove Worker** | Graceful Degradation | Active tasks drained and re-assigned to healthy nodes with zero dropped writes. |
@@ -370,9 +374,9 @@ In **[SOP Arena](https://sharedcode.github.io/sop/arena/)**, every control maps 
 
 ---
 
-## 👥 Who SOP Is For
+## 👥 Who Engram Is For
 
-SOP is one codebase, but different people will care about it for different reasons. Jump to the section that matches you:
+Engram is one codebase, but different people will care about it for different reasons. Jump to the section that matches you:
 
 [Investors](#-for-investors) · [Investment Banking & Tech Finance](#-for-investment-banking--technology-finance) · [Potential Customers](#-for-potential-customers) · [CTOs & Engineering Executives](#-for-ctos--engineering-executives) · [AI Infrastructure Teams](#-for-ai-infrastructure-teams) · [Platform, SRE & Cloud Engineers](#-for-platform-sre--cloud-engineers) · [Researchers & Distributed Systems Engineers](#-for-researchers--distributed-systems-engineers) · [Students & Learners](#-for-students--learners) · [Developers](#-for-developers) · [Engineering Leaders & Hiring Managers](#-for-engineering-leaders--hiring-managers)
 
@@ -380,10 +384,10 @@ SOP is one codebase, but different people will care about it for different reaso
 
 **The problem.** Teams building stateful distributed applications, agent systems especially, routinely wire together a database, a cache, a message queue, a lock manager, and a workflow engine just to get durable state and coordinated work. Each boundary between those systems is a place where consistency breaks during a partial failure. That integration tax is paid by every team that builds this kind of system, repeatedly.
 
-**What SOP uniquely combines.** A B-Tree storage engine, ACID transactions, and swarm task coordination live inside one embedded library instead of behind separate network services. That is an architectural bet, not a settled fact: it trades the maturity and ecosystem of specialized tools (Postgres, Kafka, Temporal) for fewer moving parts and a single consistency boundary. Whether that tradeoff wins in a given workload is something a team has to evaluate, which is exactly what the [comparison table](#-sop-vs-alternatives) below is for.
+**What Engram uniquely combines.** A B-Tree storage engine, ACID transactions, and swarm task coordination live inside one embedded library instead of behind separate network services. That is an architectural bet, not a settled fact: it trades the maturity and ecosystem of specialized tools (Postgres, Kafka, Temporal) for fewer moving parts and a single consistency boundary. Whether that tradeoff wins in a given workload is something a team has to evaluate, which is exactly what the [comparison table](#️-engram-vs-alternatives) below is for.
 
 **Investment Thesis**
-SOP is an open-source bet that "data plus compute in one embedded engine" is a better default for a growing category of workloads (AI agents, edge devices, real-time systems) than assembling that stack from five separate products. If that thesis is right, the project that owns the reference implementation of that architecture has a shot at becoming the default choice for it, the way SQLite became the default embedded relational store. That is a multi-year distribution bet, not a proven outcome.
+Engram is an open-source bet that "data plus compute in one embedded engine" is a better default for a growing category of workloads (AI agents, edge devices, real-time systems) than assembling that stack from five separate products. If that thesis is right, the project that owns the reference implementation of that architecture has a shot at becoming the default choice for it, the way SQLite became the default embedded relational store. That is a multi-year distribution bet, not a proven outcome.
 
 **Why Now**
 - AI agent systems increasingly need durable memory, checkpointing, and multi-worker coordination, and today that is usually stitched together from a vector database, a cache, and a job queue.
@@ -393,7 +397,7 @@ SOP is an open-source bet that "data plus compute in one embedded engine" is a b
 These are real, observable industry trends. No specific market-sizing figures are cited here because this repository has not commissioned or verified any (see Market Opportunity below).
 
 **Market Opportunity**
-SOP overlaps several existing categories rather than creating one from nothing: embedded databases (SQLite, RocksDB), distributed coordination (Zookeeper, etcd, Temporal), vector databases (Pinecone, Weaviate, pgvector), and workflow/task systems (Celery, Ray). Plausible buyers are teams building AI agent infrastructure, edge and IoT platforms, real-time/simulation backends, and fintech ledgers with strict transactional invariants. No independently sourced TAM/SAM/SOM figures are presented here; a rigorous estimate would require external market research (for example, from Gartner or IDC) that this project has not commissioned.
+Engram overlaps several existing categories rather than creating one from nothing: embedded databases (SQLite, RocksDB), distributed coordination (Zookeeper, etcd, Temporal), vector databases (Pinecone, Weaviate, pgvector), and workflow/task systems (Celery, Ray). Plausible buyers are teams building AI agent infrastructure, edge and IoT platforms, real-time/simulation backends, and fintech ledgers with strict transactional invariants. No independently sourced TAM/SAM/SOM figures are presented here; a rigorous estimate would require external market research (for example, from Gartner or IDC) that this project has not commissioned.
 
 **Business Model Opportunities**
 The project is MIT-licensed with no commercial product today. Plausible paths that open-source infrastructure projects in this category have used, listed here as potential directions rather than current plans, are detailed in [Commercialization Opportunities](#-commercialization-opportunities) below.
@@ -407,53 +411,53 @@ The project is MIT-licensed with no commercial product today. Plausible paths th
 **What Has Not Yet Been Proven**
 - No production deployments or paying customers are documented anywhere in this repository.
 - No independent, third-party, or peer-reviewed benchmarks exist; the performance numbers below come from this project's own benchmark harness on a single workstation, not a controlled multi-system comparison.
-- SOP Arena's cluster view is a UI simulation of the underlying concepts for demonstration purposes, not a live multi-node deployment; multi-node swarm clustering itself is real and tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been run at meaningful scale or under adversarial network conditions in public.
+- Engram Arena's cluster view is a UI simulation of the underlying concepts for demonstration purposes, not a live multi-node deployment; multi-node swarm clustering itself is real and tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been run at meaningful scale or under adversarial network conditions in public.
 - No formal third-party security audit has been performed.
 - No case studies, design partners, or committed customers exist yet.
 
 ### 🏦 For Investment Banking & Technology Finance
 
-**Technology category.** SOP sits in the embedded data infrastructure layer: a storage and coordination engine that applications link against directly, similar in category placement to SQLite or RocksDB, but extended with distributed ACID transactions and task coordination that those two do not attempt.
+**Technology category.** Engram sits in the embedded data infrastructure layer: a storage and coordination engine that applications link against directly, similar in category placement to SQLite or RocksDB, but extended with distributed ACID transactions and task coordination that those two do not attempt.
 
-**Adjacent markets.** Embedded/operational databases, distributed coordination and workflow orchestration, vector search infrastructure, and AI agent infrastructure tooling. Each of those adjacent markets has established commercial players (see the [comparison table](#-sop-vs-alternatives)), which is useful context for sizing the competitive landscape SOP would need to differentiate against.
+**Adjacent markets.** Embedded/operational databases, distributed coordination and workflow orchestration, vector search infrastructure, and AI agent infrastructure tooling. Each of those adjacent markets has established commercial players (see the [comparison table](#️-engram-vs-alternatives)), which is useful context for sizing the competitive landscape Engram would need to differentiate against.
 
 **Potential strategic relevance.** Potential strategic relevance could include: infrastructure vendors looking to add an embedded, agent-friendly storage layer to an existing platform; cloud providers evaluating lightweight alternatives to running separate managed database, cache, and queue services for edge or agent workloads; or AI infrastructure companies needing a durable state layer under an agent runtime. None of this reflects any actual approach, interest, or discussion from any party; it is offered as a way to reason about where the technology could fit strategically.
 
 **Open-source distribution.** The project is distributed under the MIT license with no dual-licensing or commercial tier today. That maximizes adoption friction reduction (any team can use it in production immediately) at the cost of no current monetization mechanism. See [Commercialization Opportunities](#-commercialization-opportunities) for plausible paths from here.
 
-**Competitive landscape.** Summarized in the [SOP vs. Alternatives](#-sop-vs-alternatives) table further down. No competitor is presented as inferior; each is a mature, widely deployed system that SOP would need to displace or complement for any given workload.
+**Competitive landscape.** Summarized in the [Engram vs. Alternatives](#️-engram-vs-alternatives) table further down. No competitor is presented as inferior; each is a mature, widely deployed system that Engram would need to displace or complement for any given workload.
 
 ### 🏢 For Potential Customers
 
-**Is SOP Right For Me?** Start from the existing [When SOP is a Great Fit](#-when-sop-is-a-great-fit) and [When SOP is NOT the Right Tool](#-when-sop-is-not-the-right-tool) sections below, they are the concrete answer. As a quick filter:
+**Is Engram Right For Me?** Start from the existing [When Engram is a Great Fit](#-when-engram-is-a-great-fit) and [When Engram is NOT the Right Tool](#-when-engram-is-not-the-right-tool) sections above, they are the concrete answer. As a quick filter:
 
-- If you are currently running Redis plus Postgres plus a queue just to get durable state and coordinated background work for one application, and that application's data fits comfortably on the machines it runs on, SOP is worth evaluating as a replacement for that stack.
-- If you already run Postgres or Kafka at scale for reasons unrelated to this problem (complex SQL, multi-datacenter event retention, an existing team's expertise), SOP is more likely to complement than replace what you have.
-- If your workload is petabyte-scale analytics or requires synchronous multi-region consensus, SOP is not the right tool today; see the section below for specifics.
+- If you are currently running Redis plus Postgres plus a queue just to get durable state and coordinated background work for one application, and that application's data fits comfortably on the machines it runs on, Engram is worth evaluating as a replacement for that stack.
+- If you already run Postgres or Kafka at scale for reasons unrelated to this problem (complex SQL, multi-datacenter event retention, an existing team's expertise), Engram is more likely to complement than replace what you have.
+- If your workload is petabyte-scale analytics or requires synchronous multi-region consensus, Engram is not the right tool today; see the section above for specifics.
 
-SOP is a library you embed, not a managed service you sign up for. There is no hosted offering today; you run it yourself, in-process, in your own infrastructure.
+Engram is a library you embed, not a managed service you sign up for. There is no hosted offering today; you run it yourself, in-process, in your own infrastructure.
 
 ### 👔 For CTOs & Engineering Executives
 
-Every service you run that exists only to hold state or coordinate work (a cache, a queue, a lock manager) is a service your team has to patch, monitor, upgrade, and page on. SOP's bet is that collapsing storage, transactions, and task coordination into one embedded library reduces that surface for the workloads it fits, at the cost of giving up the specialized tooling and operational maturity of dedicated systems your team may already know well.
+Every service you run that exists only to hold state or coordinate work (a cache, a queue, a lock manager) is a service your team has to patch, monitor, upgrade, and page on. Engram's bet is that collapsing storage, transactions, and task coordination into one embedded library reduces that surface for the workloads it fits, at the cost of giving up the specialized tooling and operational maturity of dedicated systems your team may already know well.
 
 Concretely, that means: fewer network hops in your hot path (sub-millisecond, in-process calls instead of 15 to 50ms across Redis, a queue, and Postgres), one dependency to patch and upgrade instead of several, and a transaction boundary that spans your data and your background work instead of stopping at the database. It also means your team takes on a less mature, less battle-tested piece of infrastructure than Postgres or Kafka, with a correspondingly smaller ecosystem, smaller hiring pool of people who already know it, and no enterprise support contract available today. Evaluate it the way you would any early infrastructure bet: pilot it on one bounded, non-critical workload before committing a core system to it.
 
 ### 🧠 For AI Infrastructure Teams
 
-**What SOP already provides.** Durable, transactional checkpointing for agent reasoning state: each step an agent commits is a separate, durable B-Tree write, so a killed agent process loses nothing already committed, and a successor process can resume from the last checkpoint. This is not a diagram, it runs today in the [browser demo](https://sharedcode.github.io/sop/) (the "AI Agent Memory" tab) and as a Go example (`go run ./examples/agent_memory`). SOP also provides vector similarity search over embeddings stored in the same B-Tree as structured data (`ai/memory`, `ai/vector`), and a real swarm/worker package (`ai/swarm`) with job and result stores.
+**What Engram already provides.** Durable, transactional checkpointing for agent reasoning state: each step an agent commits is a separate, durable B-Tree write, so a killed agent process loses nothing already committed, and a successor process can resume from the last checkpoint. This is not a diagram, it runs today in the [browser demo](https://sharedcode.github.io/sop/) (the "AI Agent Memory" tab) and as a Go example (`go run ./examples/agent_memory`). Engram also provides vector similarity search over embeddings stored in the same B-Tree as structured data (`ai/memory`, `ai/vector`), and a real swarm/worker package (`ai/swarm`) with job and result stores.
 
-**What could be built on SOP, but is not shipped today.** A production multi-agent orchestration framework, a hosted durable-memory-as-a-service for agent frameworks like LangGraph or AutoGen, and distributed MapReduce-style helpers across a live agent swarm are all described as design proposals in [`ai/SWARM_DESIGN.md`](ai/SWARM_DESIGN.md) (explicitly marked "Proposal / Vision" in that file) but are not implemented and tested the way the checkpointing and vector search primitives are. Treat anything not demonstrated in the linked demo or example as a direction, not a delivered feature.
+**What could be built on Engram, but is not shipped today.** A production multi-agent orchestration framework, a hosted durable-memory-as-a-service for agent frameworks like LangGraph or AutoGen, and distributed MapReduce-style helpers across a live agent swarm are all described as design proposals in [`ai/SWARM_DESIGN.md`](ai/SWARM_DESIGN.md) (explicitly marked "Proposal / Vision" in that file) but are not implemented and tested the way the checkpointing and vector search primitives are. Treat anything not demonstrated in the linked demo or example as a direction, not a delivered feature.
 
-**Protocol interoperability, actually implemented.** `tools/mcpserver` and `tools/a2aagent` expose SOP runbooks to MCP and A2A clients respectively, both gated by a real safety-and-reachability barrier certificate (`ai/verify`) so a step can't execute out of order regardless of what a calling agent claims. Both protocols share one execution trace store, proven by a test that commits steps via one protocol and confirms the other sees them. See [MCP, A2A, and the Verification Engine](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md) for the audit, the design, and an honest accounting of what this checker is and is not (it is not general-purpose LTL model checking).
+**Protocol interoperability, actually implemented.** `tools/mcpserver` and `tools/a2aagent` expose Engram runbooks to MCP and A2A clients respectively, both gated by a real safety-and-reachability barrier certificate (`ai/verify`) so a step can't execute out of order regardless of what a calling agent claims. Both protocols share one execution trace store, proven by a test that commits steps via one protocol and confirms the other sees them. See [MCP, A2A, and the Verification Engine](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md) for the audit, the design, and an honest accounting of what this checker is and is not (it is not general-purpose LTL model checking).
 
 ### ⚙️ For Platform, SRE & Cloud Engineers
 
-SOP's core engine is a library, not a server: there is no separate database process to provision, patch, or fail over for the embedded case. The optional `tools/httpserver` Data Manager is a standalone service with its own `/metrics` endpoint (tested in `tools/httpserver/metrics_test.go`) if you do want a network-accessible console. Failure recovery is handled by Reed-Solomon erasure coding across storage shards (`fs/erasure`, 12 passing tests at the time of writing) rather than full N-way replication, which trades some recovery latency for lower disk overhead. A prebuilt quickstart container is published to `ghcr.io/sharedcode/sop-quickstart`. Multi-node swarm clustering exists and is tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been documented or proven at production scale.
+Engram Engine is a library, not a server: there is no separate database process to provision, patch, or fail over for the embedded case. The optional `tools/httpserver` Data Manager is a standalone service with its own `/metrics` endpoint (tested in `tools/httpserver/metrics_test.go`) if you do want a network-accessible console. Failure recovery is handled by Reed-Solomon erasure coding across storage shards (`fs/erasure`, 12 passing tests at the time of writing) rather than full N-way replication, which trades some recovery latency for lower disk overhead. A prebuilt quickstart container is published to `ghcr.io/sharedcode/sop-quickstart`. Multi-node swarm clustering exists and is tested (`examples/swarm_clustered`, `examples/swarm_standalone`), but has not been documented or proven at production scale.
 
 ### 🧪 For Researchers & Distributed Systems Engineers
 
-The interesting parts to read are the B-Tree implementation with copy-on-write page isolation (`btree/`), the WAL plus two-phase commit transaction protocol (`transaction.go`, `common/`), the Reed-Solomon erasure coding layer (`fs/erasure/`), and the swarm coordination model described in [`ai/SWARM_DESIGN.md`](ai/SWARM_DESIGN.md). The [Architecture Whitepaper](docs/SOP_ARCHITECTURE_WHITEPAPER.md) and [SOP vs. Big Tech Architecture](docs/ARCHITECTURE_VS_BIG_TECH.md) go deeper into the design tradeoffs than this README does.
+The interesting parts to read are the B-Tree implementation with copy-on-write page isolation (`btree/`), the WAL plus two-phase commit transaction protocol (`transaction.go`, `common/`), the Reed-Solomon erasure coding layer (`fs/erasure/`), and the swarm coordination model described in [`ai/SWARM_DESIGN.md`](ai/SWARM_DESIGN.md). The [Architecture Whitepaper](docs/SOP_ARCHITECTURE_WHITEPAPER.md) and [Architecture vs. Big Tech](docs/ARCHITECTURE_VS_BIG_TECH.md) go deeper into the design tradeoffs than this README does.
 
 ### 🎓 For Students & Learners
 
@@ -463,17 +467,17 @@ Reading this codebase is a reasonable way to see real (not textbook-simplified) 
 
 ## 📈 Commercialization Opportunities
 
-SOP has no commercial product, pricing, or customers today. It is an MIT-licensed open-source project. The paths below are the plausible business models that open-source infrastructure projects in this category (databases, coordination systems, workflow engines) have historically built, listed here as potential future directions, not current plans or commitments:
+Engram has no commercial product, pricing, or customers today. It is an MIT-licensed open-source project. The paths below are the plausible business models that open-source infrastructure projects in this category (databases, coordination systems, workflow engines) have historically built, listed here as potential future directions, not current plans or commitments:
 
-- **Hosted or managed SOP**: a cloud offering that runs and operates SOP clusters so teams do not have to manage erasure-coded storage and swarm coordination themselves.
-- **Enterprise support and SLAs**: paid support contracts for teams running SOP in production, similar to how Postgres and Kafka have commercial support ecosystems around free cores.
+- **Hosted or managed Engram**: a cloud offering that runs and operates Engram clusters so teams do not have to manage erasure-coded storage and swarm coordination themselves.
+- **Enterprise support and SLAs**: paid support contracts for teams running Engram in production, similar to how Postgres and Kafka have commercial support ecosystems around free cores.
 - **Security, compliance, and governance add-ons**: audit logging, RBAC policy management (there is already an in-repo RBAC prototype, `rbac.go`, `docs/RBAC_ENTITLEMENTS.md`), and compliance tooling for regulated industries.
 - **Observability and operations tooling**: dashboards and alerting built on top of the existing `/metrics` endpoint and event logs.
-- **AI infrastructure products**: a packaged "durable agent memory" service built on the checkpointing primitives described above, sold to teams building agent frameworks who do not want to run SOP themselves.
+- **AI infrastructure products**: a packaged "durable agent memory" service built on the checkpointing primitives described above, sold to teams building agent frameworks who do not want to run Engram themselves.
 - **Marketplace listings**: prebuilt container images (a `ghcr.io/sharedcode/sop-quickstart` image already exists) distributed through cloud marketplaces.
-- **Professional services**: architecture consulting for teams migrating a fragmented Redis/Kafka/Postgres stack onto SOP.
+- **Professional services**: architecture consulting for teams migrating a fragmented Redis/Kafka/Postgres stack onto Engram.
 
-None of these exist today. They are documented here so a reader evaluating SOP as a commercial or investment opportunity can see the plausible paths from open-source project to business, and judge for themselves how credible each one is.
+None of these exist today. They are documented here so a reader evaluating Engram as a commercial or investment opportunity can see the plausible paths from open-source project to business, and judge for themselves how credible each one is.
 
 For a longer, more speculative look at what a local-first, enterprise-defensible version of this could become, including a candid list of what would have to be built first, see [Strategic Architecture & Investor Moat](docs/STRATEGIC_ARCHITECTURE_AND_MOAT.md). It is explicit throughout about the line between what exists in this repo today and what is proposed.
 
@@ -551,7 +555,7 @@ This demo demonstrates an AI worker creating a context checkpoint, crashing mid-
 
 Below are benchmark results from the repository benchmark harness (`tools/benchmark`) run on a 2015 MacBook Pro (Dual-Core Intel Core i5, 8GB RAM, macOS).
 
-What is measured: these runs benchmark SOP's in-memory L2 cache with `/tmp` storage backing full ACID transactions, not disk-only storage without cache.
+What is measured: these runs benchmark Engram Engine's in-memory L2 cache with `/tmp` storage backing full ACID transactions, not disk-only storage without cache.
 
 Exact reproduction command:
 ```bash
@@ -611,9 +615,9 @@ If you are building distributed systems, cloud infrastructure, or AI data platfo
 | **Java** *(in progress)* | source in `bindings/java`, not yet on Maven Central | `sop4j` bindings and tests are complete; publishing is blocked on Central Portal credential setup, tracked in [`docs/RELEASE_PROCESS_JAVA_STATUS.md`](docs/RELEASE_PROCESS_JAVA_STATUS.md). |
 | **Rust** *(in progress)* | source in `bindings/rust`, not yet on crates.io | `sop4rs` bindings, tests, and examples exist in-repo but are not yet published as a crate. |
 
-### How to Consume SOP: Releases vs. In-Repo Source
+### How to Consume Engram: Releases vs. In-Repo Source
 
-When integrating SOP into your stack, choose between official versioned releases and in-repo source consumption based on your development and operational needs:
+When integrating Engram into your stack, choose between official versioned releases and in-repo source consumption based on your development and operational needs:
 
 | Dimension | Official Tagged Releases (Recommended for Production) | In-Repo Source / Submodule (Active Prototyping & Contribution) |
 | :--- | :--- | :--- |

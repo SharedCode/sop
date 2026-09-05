@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	fmt.Println("SOP quickstart: in-memory ordered B-Tree")
+	fmt.Println("Engram quickstart: in-memory ordered B-Tree")
 
 	// Unique keys, string values.
 	b3 := inmemory.NewBtree[int, string](true)

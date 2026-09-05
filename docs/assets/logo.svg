@@ -14,7 +14,7 @@
   <circle cx="23" cy="48" r="6" fill="#9f7aea"/>
   <circle cx="49" cy="48" r="6" fill="#9f7aea"/>
   <!-- Name -->
-  <text x="80" y="38" font-family="-apple-system, 'Helvetica Neue', sans-serif" font-size="30" font-weight="700" fill="url(#grad)">SOP</text>
+  <text x="80" y="38" font-family="-apple-system, 'Helvetica Neue', sans-serif" font-size="30" font-weight="700" fill="url(#grad)">Engram</text>
   <!-- Tagline -->
-  <text x="80" y="60" font-family="SF Mono, Menlo, monospace" font-size="13" fill="#718096">Go &#183; B-Tree &#183; ACID &#183; WASM</text>
+  <text x="80" y="60" font-family="SF Mono, Menlo, monospace" font-size="13" fill="#718096">Go &#183; B-Tree &#183; ACID &#183; WASM &#183; Verification</text>
 </svg>

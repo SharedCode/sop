@@ -17,7 +17,7 @@ text{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Ne
 <!-- Built path -->
 <g transform="translate(40,100)">
   <rect width="540" height="340" rx="14" fill="#0e2418" stroke="#34d058" stroke-width="2"/>
-  <text x="24" y="40" class="label" fill="#34d058">BUILT — async File System Access API</text>
+  <text x="24" y="40" class="label" fill="#34d058">BUILT: async File System Access API</text>
   <text x="24" y="66" class="small">Runs on the main thread, same as the rest of the demo.</text>
 
   <g transform="translate(24,90)" class="tiny">
@@ -38,7 +38,7 @@ text{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Ne
 <!-- Not-built path -->
 <g transform="translate(620,100)">
   <rect width="540" height="340" rx="14" fill="#1a1420" stroke="#e0a020" stroke-width="2" stroke-dasharray="6 5"/>
-  <text x="24" y="40" class="label" fill="#e0a020">NOT BUILT — createSyncAccessHandle</text>
+  <text x="24" y="40" class="label" fill="#e0a020">NOT BUILT: createSyncAccessHandle</text>
   <text x="24" y="66" class="small">Requires moving the WASM binary into a dedicated Worker.</text>
 
   <g transform="translate(24,90)" class="tiny">

@@ -23,7 +23,7 @@ func main() {
 		return cache.NewL2InMemoryCache()
 	})
 
-	fmt.Printf("Benchmarking SOP with %d items in %s\n", *count, *path)
+	fmt.Printf("Benchmarking Engram with %d items in %s\n", *count, *path)
 
 	// Ensure path exists
 	if err := os.MkdirAll(*path, 0755); err != nil {
