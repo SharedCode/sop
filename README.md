@@ -27,6 +27,45 @@ Instead of managing separate database servers, message brokers, caching tiers, a
 
 ---
 
+## ⚡ Try It in 30 Seconds
+
+Clone the repository and run the unified interactive demo:
+
+```bash
+git clone https://github.com/sharedcode/sop.git && cd sop && ./scripts/demo.sh
+```
+
+The interactive script lets you execute and verify each workflow shown on this page:
+1. **Verification Barrier**: Safety precedence check gating destructive operations (`examples/verify_barrier`).
+2. **AI Agent Memory**: B-Tree reasoning checkpoints with mid-task worker failure and sub-15ms recovery (`examples/agent_memory`).
+3. **Core Test Suite**: Sanity check running core storage, filesystem, and server unit tests.
+4. **Local Protocol Probe**: JSON-RPC over stdio (`cmd/sop-mcp-server`) and live A2A agent-card probe (`cmd/sop-a2a-agent`).
+
+You can also run any step directly with flags:
+```bash
+./scripts/demo.sh --barrier    # Option 1: Precedence barrier check
+./scripts/demo.sh --memory     # Option 2: AI agent memory failover
+./scripts/demo.sh --test       # Option 3: Core engine test suite
+./scripts/demo.sh --protocol   # Option 4: Local MCP and A2A reachability probe
+./scripts/demo.sh --all        # Run all 4 stages sequentially
+```
+
+Prefer raw Go commands without scripts? Run them directly:
+```bash
+go run ./examples/verify_barrier  # Option 1
+go run ./examples/agent_memory    # Option 2
+go test ./...                     # Option 3
+```
+
+No local Go toolchain? Run the exact same demo suite inside Docker:
+```bash
+# Run the interactive demo suite via Docker
+docker run --rm -it -v "$PWD":/src -w /src golang:1.26-alpine ./scripts/demo.sh
+
+# Or run the published quickstart container from GHCR
+docker run --rm ghcr.io/sharedcode/sop-quickstart
+```
+
 ### 📉 Engineering ROI, Verified in This Repo
 
 No revenue or customer numbers exist yet for this project (see [For Investors](#-for-investors) for the honest version of that). What is verified today, in this repo, is the infrastructure cost this architecture removes:
@@ -560,7 +599,32 @@ If you are building distributed systems, cloud infrastructure, or AI data platfo
 | **Java** *(in progress)* | source in `bindings/java`, not yet on Maven Central | `sop4j` bindings and tests are complete; publishing is blocked on Central Portal credential setup, tracked in [`docs/RELEASE_PROCESS_JAVA_STATUS.md`](docs/RELEASE_PROCESS_JAVA_STATUS.md). |
 | **Rust** *(in progress)* | source in `bindings/rust`, not yet on crates.io | `sop4rs` bindings, tests, and examples exist in-repo but are not yet published as a crate. |
 
----
+### How to Consume SOP: Releases vs. In-Repo Source
+
+When integrating SOP into your stack, choose between official versioned releases and in-repo source consumption based on your development and operational needs:
+
+| Dimension | Official Tagged Releases (Recommended for Production) | In-Repo Source / Submodule (Active Prototyping & Contribution) |
+| :--- | :--- | :--- |
+| **Artifacts** | `go get github.com/sharedcode/sop@vX.Y.Z`<br>PyPI: `pip install sop4py`<br>NuGet: `dotnet add package Sop` | Git clone or submodule linked directly to `HEAD` or a feature branch |
+| **Best For** | Production services, reproducible CI/CD builds, audited dependencies | Modifying engine internals, local benchmarking, custom protocol servers |
+| **Stability** | Semantic versioning, tagged releases, audited dependency graph | Bleeding-edge features, experimental branches, unreleased protocol bridges |
+| **Maintenance** | Handled by standard language package managers | Requires manual git fetch/rebase and local workspace management |
+
+#### 1. Official Tagged Releases (Recommended for Production)
+For production deployments, pin your dependency to a tagged release. This guarantees reproducible builds, backward-compatible API guarantees, and security-scanned transitive dependencies:
+- **Go**: `go get github.com/sharedcode/sop@v0.1.0`
+- **Python**: `pip install sop4py==0.1.0`
+- **C# / .NET**: `dotnet add package Sop --version 0.1.0`
+
+#### 2. In-Repo Source / Submodule (Prototyping & Contribution)
+If you are extending storage engine internals (`btree/`, `fs/`), modifying protocol servers (`ai/verify`, `cmd/sop-mcp-server`, `cmd/sop-a2a-agent`), or benchmarking performance enhancements, consuming from source is recommended:
+```bash
+# Add as a git submodule in your project
+git submodule add https://github.com/sharedcode/sop.git vendor/sop
+
+# Or configure a Go workspace (go.work) for local development
+go work use ./vendor/sop
+```
 
 ## 📚 Technical Reference Guides
 
