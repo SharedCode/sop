@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Joltrin Social Preview Card</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      width: 1280px;
+      height: 640px;
+      background-color: #07090E;
+      color: #E2E8F0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px 56px;
+    }
+
+    /* Ambient Glows */
+    .glow-cyan {
+      position: absolute;
+      top: -100px;
+      left: 100px;
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(0, 242, 254, 0.12) 0%, rgba(7, 9, 14, 0) 70%);
+      pointer-events: none;
+    }
+    .glow-purple {
+      position: absolute;
+      bottom: -150px;
+      right: 50px;
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(127, 0, 255, 0.10) 0%, rgba(7, 9, 14, 0) 70%);
+      pointer-events: none;
+    }
+
+    /* Tech Grid */
+    .grid-pattern {
+      position: absolute;
+      inset: 0;
+      background-size: 36px 36px;
+      background-image:
+        linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      pointer-events: none;
+    }
+
+    /* Top Bar */
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+      z-index: 10;
+    }
+    .pill-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border-radius: 9999px;
+      background: rgba(6, 182, 212, 0.08);
+      border: 1px solid rgba(6, 182, 212, 0.35);
+      color: #38bdf8;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .pill-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 9999px;
+      background: #00f2fe;
+      box-shadow: 0 0 8px #00f2fe;
+    }
+    .repo-link {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: #94a3b8;
+      letter-spacing: -0.01em;
+    }
+    .repo-link span {
+      color: #cbd5e1;
+      font-weight: 600;
+    }
+
+    /* Main Hero Section */
+    .hero-section {
+      display: flex;
+      align-items: center;
+      gap: 36px;
+      position: relative;
+      z-index: 10;
+      margin-top: -10px;
+    }
+    .logo-container {
+      width: 128px;
+      height: 128px;
+      border-radius: 36px;
+      background: #0b0f19;
+      border: 2px solid transparent;
+      background-image: linear-gradient(#0b0f19, #0b0f19), linear-gradient(135deg, #00f2fe 0%, #4facfe 50%, #7f00ff 100%);
+      background-origin: border-box;
+      background-clip: padding-box, border-box;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 32px rgba(0, 242, 254, 0.25), 0 2px 16px rgba(127, 0, 255, 0.2);
+      flex-shrink: 0;
+    }
+    .hero-content {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .title-row {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .brand-title {
+      font-size: 60px;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+      color: #ffffff;
+      line-height: 1;
+    }
+    .version-tag {
+      padding: 4px 12px;
+      border-radius: 8px;
+      background: rgba(6, 182, 212, 0.12);
+      border: 1px solid rgba(6, 182, 212, 0.35);
+      color: #38bdf8;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tagline {
+      font-size: 25px;
+      font-weight: 700;
+      color: #38bdf8;
+      letter-spacing: -0.01em;
+    }
+    .subtext {
+      font-size: 17px;
+      color: #94a3b8;
+      font-weight: 400;
+      margin-top: 2px;
+    }
+
+    /* Cards Grid */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      position: relative;
+      z-index: 10;
+    }
+    .card {
+      background: rgba(11, 15, 23, 0.75);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 20px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .card.highlight {
+      border: 1px solid rgba(6, 182, 212, 0.45);
+      box-shadow: 0 0 24px -6px rgba(6, 182, 212, 0.25);
+    }
+    .card-title {
+      font-size: 17px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.01em;
+    }
+    .card-title.mono {
+      font-family: 'JetBrains Mono', monospace;
+      color: #38bdf8;
+      font-size: 16px;
+    }
+    .card-desc {
+      font-size: 12.5px;
+      line-height: 1.45;
+      color: #94a3b8;
+    }
+
+    /* Footer */
+    .footer-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.07);
+      position: relative;
+      z-index: 10;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+    }
+    .footer-left {
+      color: #94a3b8;
+      display: flex;
+      gap: 14px;
+    }
+    .footer-left span.sep {
+      color: #475569;
+    }
+    .footer-right {
+      color: #34d399;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .footer-right span.dot {
+      color: #059669;
+    }
+  </style>
+</head>
+<body>
+  <div class="glow-cyan"></div>
+  <div class="glow-purple"></div>
+  <div class="grid-pattern"></div>
+
+  <!-- Top Bar -->
+  <div class="top-bar">
+    <div class="pill-badge">
+      <div class="pill-dot"></div>
+      <span>Open Source Infrastructure</span>
+    </div>
+    <div class="repo-link">
+      github.com/<span>SharedCode/joltrin</span>
+    </div>
+  </div>
+
+  <!-- Main Hero -->
+  <div class="hero-section">
+    <div class="logo-container">
+      <svg width="72" height="72" viewBox="0 0 100 100">
+        <defs>
+          <linearGradient id="logoJGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#00f2fe" />
+            <stop offset="45%" stop-color="#4facfe" />
+            <stop offset="100%" stop-color="#7f00ff" />
+          </linearGradient>
+        </defs>
+        <!-- Geometric J Glyph -->
+        <path d="M 56,22 L 74,22 L 74,78 L 26,78 L 26,60 L 56,60 Z" fill="url(#logoJGrad)"/>
+      </svg>
+    </div>
+
+    <div class="hero-content">
+      <div class="title-row">
+        <h1 class="brand-title">Joltrin</h1>
+        <div class="version-tag">v1.0 WASM</div>
+      </div>
+      <div class="tagline">From Milliseconds to Microseconds for AI Agents</div>
+      <div class="subtext">Durable memory, transactional state, and deterministic verification infrastructure.</div>
+    </div>
+  </div>
+
+  <!-- 4 Architecture Cards -->
+  <div class="cards-grid">
+    <div class="card highlight">
+      <div class="card-title mono">&lt; 0.3ms Latency</div>
+      <div class="card-desc">Embedded in-process execution with &gt;145,000 ops/sec ACID WAL</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Action Barrier</div>
+      <div class="card-desc">Deterministic precedence gates for MCP and A2A runbooks</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Durable Memory</div>
+      <div class="card-desc">B-Tree checkpointed context with sub-15ms agent failover</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Zero-Server WASM</div>
+      <div class="card-desc">Runs 100% client-side with 0 HTTP calls after load</div>
+    </div>
+  </div>
+
+  <!-- Footer Bar -->
+  <div class="footer-bar">
+    <div class="footer-left">
+      <span>Go</span>
+      <span class="sep">/</span>
+      <span>Python</span>
+      <span class="sep">/</span>
+      <span>C# (.NET)</span>
+      <span class="sep">/</span>
+      <span>Rust</span>
+      <span class="sep">/</span>
+      <span>WebAssembly</span>
+    </div>
+    <div class="footer-right">
+      <span>⚡ 100% ACID</span>
+      <span class="dot">•</span>
+      <span>SIMD Vectors</span>
+      <span class="dot">•</span>
+      <span>Reed-Solomon Parity</span>
+    </div>
+  </div>
+</body>
+</html>
