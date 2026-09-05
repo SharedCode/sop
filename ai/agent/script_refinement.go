@@ -3,7 +3,7 @@ package agent
 import (
 	"fmt"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 // RefineScriptSteps applies automatic refinements to script steps to improve readability and explicitness.

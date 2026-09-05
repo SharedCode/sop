@@ -1,7 +1,7 @@
 package btree
 
 import (
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 	"testing"
 )
 

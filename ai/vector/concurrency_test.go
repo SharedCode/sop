@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/database"
-	"github.com/sharedcode/zeltrin/ai/vector"
-	"github.com/sharedcode/zeltrin/cache"
-	core_database "github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/database"
+	"github.com/sharedcode/joltrin/ai/vector"
+	"github.com/sharedcode/joltrin/cache"
+	core_database "github.com/sharedcode/joltrin/database"
 )
 
 func TestOptimize_ConcurrencyLocking(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 type user struct {

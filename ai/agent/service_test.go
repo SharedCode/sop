@@ -8,10 +8,10 @@ import (
 
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/obfuscation"
-	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/obfuscation"
+	"github.com/sharedcode/joltrin/btree"
 )
 
 // MockGenerator implements ai.Generator for testing.

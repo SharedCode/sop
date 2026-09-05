@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai/database"
-	"github.com/sharedcode/zeltrin/ai/memory"
-	core "github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai/database"
+	"github.com/sharedcode/joltrin/ai/memory"
+	core "github.com/sharedcode/joltrin/database"
 )
 
 func TestKB_BasicSearch(t *testing.T) {

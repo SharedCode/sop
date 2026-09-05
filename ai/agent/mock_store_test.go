@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 // MockStore implements jsondb.StoreAccessor using an in-memory slice.

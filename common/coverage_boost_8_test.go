@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/cache"
-	"github.com/sharedcode/zeltrin/common/mocks"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/cache"
+	"github.com/sharedcode/joltrin/common/mocks"
 )
 
 // flipOnceNodesLock makes the first Lock call on nodes keys fail to force needsRefetchAndMerge=true,

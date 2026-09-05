@@ -4,7 +4,7 @@ import (
 	"context"
 	"regexp"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 // RegexClassifier classifies text based on regular expression patterns.

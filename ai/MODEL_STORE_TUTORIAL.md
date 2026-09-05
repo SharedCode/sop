@@ -23,8 +23,8 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai/database"
 )
 
 // A simple configuration for an LLM Agent

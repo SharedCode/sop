@@ -17,7 +17,7 @@
 - **CI benchmark stabilization**: Calibrated benchmark iteration scaling in performance workflows to prevent runner timeouts.
 
 ### Developer Experience
-- **Quickstart zero-dependency demo**: Validated `examples/quickstart` and published container image (`ghcr.io/sharedcode/zeltrin-quickstart`) providing instant zero-configuration testing.
+- **Quickstart zero-dependency demo**: Validated `examples/quickstart` and published container image (`ghcr.io/sharedcode/joltrin-quickstart`) providing instant zero-configuration testing.
 - **Unified versioning**: Enhanced `scripts/update_version.sh` for atomic multi-language version updates.
 
 ### AI/Data

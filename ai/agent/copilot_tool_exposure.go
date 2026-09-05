@@ -3,8 +3,8 @@ package agent
 import (
 	"context"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 var nativeSpaceToolNames = map[string]bool{

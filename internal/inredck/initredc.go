@@ -5,8 +5,8 @@
 package inredck
 
 import (
-	cas "github.com/sharedcode/zeltrin/adapters/cassandra"
-	"github.com/sharedcode/zeltrin/adapters/redis"
+	cas "github.com/sharedcode/joltrin/adapters/cassandra"
+	"github.com/sharedcode/joltrin/adapters/redis"
 )
 
 // Initialize assigns configs and opens connections for this package (Cassandra, Redis).

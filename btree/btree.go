@@ -14,7 +14,7 @@ import (
 	"fmt"
 	log "log/slog"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // Btree manages items using a B-tree data structure and algorithm.

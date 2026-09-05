@@ -7,7 +7,7 @@ import (
 	log "log/slog"
 	"strings"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 // anthropicOwnedReActLoop implements Claude's native multi-turn conversation loop

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	log "log/slog"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/memory"
-	"github.com/sharedcode/zeltrin/ai/vector"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/common"
-	core "github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/memory"
+	"github.com/sharedcode/joltrin/ai/vector"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/common"
+	core "github.com/sharedcode/joltrin/database"
 )
 
 func vectorKeyComparer(a, b memory.VectorKey) int {

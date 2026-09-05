@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // cmpWrapper implements Comparer for testing the Comparer path in Compare/CoerceComparer.

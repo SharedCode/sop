@@ -7,8 +7,8 @@ import (
 
 	log "log/slog"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 type routingAnchor struct {

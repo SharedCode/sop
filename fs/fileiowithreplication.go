@@ -6,7 +6,7 @@ import (
 	log "log/slog"
 	"os"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // fileIO wraps a FileIO to record operations that should be replicated to passive targets.

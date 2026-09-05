@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/adapters/redis"
-	"github.com/sharedcode/zeltrin/common/mocks"
-	"github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/adapters/redis"
+	"github.com/sharedcode/joltrin/common/mocks"
+	"github.com/sharedcode/joltrin/database"
 )
 
 type commitToggleRedisCache struct {

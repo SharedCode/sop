@@ -9,7 +9,7 @@
 
 **SOP (Scalable Objects Persistence)** is a high-performance, NoSQL database engine built in Go. It uses B-Trees for storage and supports ACID transactions.
 
-*   **Core**: Go-based B-Tree engine (`github.com/sharedcode/zeltrin`).
+*   **Core**: Go-based B-Tree engine (`github.com/sharedcode/joltrin`).
 *   **UI**: A web-based "Data Manager" tool (`tools/httpserver`), serving HTML templates and a WebSocket/Rest API.
 *   **AI Agent**: An intelligent agent (`ai/agent`) integrated into the Data Manager to convert Natural Language into database operations.
 

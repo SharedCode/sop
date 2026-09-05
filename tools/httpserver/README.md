@@ -5,7 +5,7 @@ A powerful, web-based management suite for SOP B-Tree repositories. This tool tr
 ## Installation
 
 ### Download Binaries
-You can download the latest pre-compiled binaries for macOS, Linux, and Windows from the [Releases Page](https://github.com/sharedcode/zeltrin/releases).
+You can download the latest pre-compiled binaries for macOS, Linux, and Windows from the [Releases Page](https://github.com/sharedcode/joltrin/releases).
 
 ### Build from Source
 ```bash

@@ -4,7 +4,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 // ComputeCentroids performs K-Means clustering on the given items to find k centroids.

@@ -10,14 +10,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/adapters/redis"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/cache"
-	"github.com/sharedcode/zeltrin/common"
-	"github.com/sharedcode/zeltrin/fs"
-	"github.com/sharedcode/zeltrin/incfs"
-	"github.com/sharedcode/zeltrin/infs"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/adapters/redis"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/cache"
+	"github.com/sharedcode/joltrin/common"
+	"github.com/sharedcode/joltrin/fs"
+	"github.com/sharedcode/joltrin/incfs"
+	"github.com/sharedcode/joltrin/infs"
 )
 
 // DatabaseOptions holds the configuration for the database.

@@ -12,14 +12,14 @@ import (
 
 	log "log/slog"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/database"
-	"github.com/sharedcode/zeltrin/ai/embed"
-	"github.com/sharedcode/zeltrin/ai/generator"
-	"github.com/sharedcode/zeltrin/ai/memory"
-	"github.com/sharedcode/zeltrin/ai/obfuscation"
-	"github.com/sharedcode/zeltrin/search"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/database"
+	"github.com/sharedcode/joltrin/ai/embed"
+	"github.com/sharedcode/joltrin/ai/generator"
+	"github.com/sharedcode/joltrin/ai/memory"
+	"github.com/sharedcode/joltrin/ai/obfuscation"
+	"github.com/sharedcode/joltrin/search"
 )
 
 const (

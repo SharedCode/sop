@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	cas "github.com/sharedcode/zeltrin/adapters/cassandra"
-	"github.com/sharedcode/zeltrin/adapters/redis"
-	"github.com/sharedcode/zeltrin/fs"
-	"github.com/sharedcode/zeltrin/incfs"
+	"github.com/sharedcode/joltrin"
+	cas "github.com/sharedcode/joltrin/adapters/cassandra"
+	"github.com/sharedcode/joltrin/adapters/redis"
+	"github.com/sharedcode/joltrin/fs"
+	"github.com/sharedcode/joltrin/incfs"
 )
 
 // Cassandra config.

@@ -1,13 +1,13 @@
-module github.com/sharedcode/zeltrin/adapters/cassandra
+module github.com/sharedcode/joltrin/adapters/cassandra
 
 go 1.26.8
 
-replace github.com/sharedcode/zeltrin => ../../
+replace github.com/sharedcode/joltrin => ../../
 
 require (
 	github.com/gocql/gocql v1.7.0
 	github.com/sethvargo/go-retry v0.3.0
-	github.com/sharedcode/zeltrin v0.0.0
+	github.com/sharedcode/joltrin v0.0.0
 )
 
 require (

@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/database"
-	"github.com/sharedcode/zeltrin/encoding"
-	"github.com/sharedcode/zeltrin/jsondb"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/database"
+	"github.com/sharedcode/joltrin/encoding"
+	"github.com/sharedcode/joltrin/jsondb"
 )
 
 // Product is the value we want to store.

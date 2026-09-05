@@ -8,8 +8,8 @@ import (
 	"github.com/a2aproject/a2a-go/a2a"
 	"github.com/a2aproject/a2a-go/a2aclient"
 
-	"github.com/sharedcode/zeltrin/ai/verify"
-	"github.com/sharedcode/zeltrin/tools/runbookstore"
+	"github.com/sharedcode/joltrin/ai/verify"
+	"github.com/sharedcode/joltrin/tools/runbookstore"
 )
 
 const invokePath = "/a2a/invoke"

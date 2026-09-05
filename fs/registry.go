@@ -9,8 +9,8 @@ import (
 	log "log/slog"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/cache"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/cache"
 )
 
 // registryOnDisk is a filesystem-backed implementation of sop.Registry.

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/cache"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/cache"
 )
 
 // registry implements sop.Registry using Cassandra as the source of truth and

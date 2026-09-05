@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/inmemory"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/inmemory"
 )
 
 func TestStore_CursorPaginationAndIsolation(t *testing.T) {

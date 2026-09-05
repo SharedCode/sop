@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/cache"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/cache"
 )
 
 func TestCompareCaches(t *testing.T) {

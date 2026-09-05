@@ -11,9 +11,9 @@ import (
 	"io"
 	"sync"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/database"
 )
 
 // PlayScript executes a script by name with provided arguments and streams the output to the writer.

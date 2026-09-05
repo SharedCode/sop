@@ -7,7 +7,7 @@ import (
 
 	"github.com/gocql/gocql"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 const (

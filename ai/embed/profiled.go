@@ -3,7 +3,7 @@ package embed
 import (
 	"context"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 // EmbeddingProfile captures the model-specific routing/document contract.

@@ -4,9 +4,9 @@
 package incfs
 
 import (
-	cas "github.com/sharedcode/zeltrin/adapters/cassandra"
-	"github.com/sharedcode/zeltrin/adapters/redis"
-	"github.com/sharedcode/zeltrin/internal/inredck"
+	cas "github.com/sharedcode/joltrin/adapters/cassandra"
+	"github.com/sharedcode/joltrin/adapters/redis"
+	"github.com/sharedcode/joltrin/internal/inredck"
 )
 
 // Initialize assigns the configs & opens connections to different sub-systems used by this package.

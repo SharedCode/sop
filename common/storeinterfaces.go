@@ -1,7 +1,7 @@
 package common
 
 import (
-	"github.com/sharedcode/zeltrin/btree"
+	"github.com/sharedcode/joltrin/btree"
 )
 
 // StoreInterface contains different repositories needed/used by B-Tree to manage/access its data/objects.

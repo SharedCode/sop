@@ -3,9 +3,9 @@ package inredck
 import (
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	cas "github.com/sharedcode/zeltrin/adapters/cassandra"
-	"github.com/sharedcode/zeltrin/common"
+	"github.com/sharedcode/joltrin"
+	cas "github.com/sharedcode/joltrin/adapters/cassandra"
+	"github.com/sharedcode/joltrin/common"
 )
 
 // NewTransaction is a convenience function to create an end-user facing transaction object that wraps the two-phase commit transaction.

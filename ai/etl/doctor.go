@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/sharedcode/zeltrin/ai/agent"
+	"github.com/sharedcode/joltrin/ai/agent"
 )
 
 // PrepareDoctorDataset downloads the dataset from the given URL and returns a fully populated agent.Config.

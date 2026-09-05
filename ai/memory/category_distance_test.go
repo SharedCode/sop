@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/inmemory"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/inmemory"
 )
 
 func TestCategoryByDistanceSearch(t *testing.T) {

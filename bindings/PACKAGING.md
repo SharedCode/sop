@@ -79,7 +79,7 @@ The Python build script (`bindings/python/build_wheels.sh`) acts as the orchestr
     *   This uploads all the optimized wheels and the fallback sdist to PyPI.
     *   `pip install` will automatically choose the best (smallest) wheel for the user's platform.
 4.  **Publish Tools**:
-    *   Go to the [GitHub Releases](https://github.com/sharedcode/zeltrin/releases) page.
+    *   Go to the [GitHub Releases](https://github.com/sharedcode/joltrin/releases) page.
     *   Create a new release tag (e.g., `sop4py-v2.0.34`).
     *   Upload the binaries found in the `release/` folder (e.g., `sop-httpserver-darwin-arm64`, `sop-httpserver-windows-amd64.exe`).
 

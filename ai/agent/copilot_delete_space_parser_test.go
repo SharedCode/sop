@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 func TestParseDeleteSpaceRequest_AcceptsReversedSpacePhrase(t *testing.T) {

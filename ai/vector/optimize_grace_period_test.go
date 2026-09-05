@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/vector"
-	"github.com/sharedcode/zeltrin/btree"
-	core_database "github.com/sharedcode/zeltrin/database"
-	"github.com/sharedcode/zeltrin/infs"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/vector"
+	"github.com/sharedcode/joltrin/btree"
+	core_database "github.com/sharedcode/joltrin/database"
+	"github.com/sharedcode/joltrin/infs"
 )
 
 func TestOptimize_GracePeriod(t *testing.T) {

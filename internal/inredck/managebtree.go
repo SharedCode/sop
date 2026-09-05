@@ -4,10 +4,10 @@ package inredck
 import (
 	"context"
 
-	"github.com/sharedcode/zeltrin"
-	cas "github.com/sharedcode/zeltrin/adapters/cassandra"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/common"
+	"github.com/sharedcode/joltrin"
+	cas "github.com/sharedcode/joltrin/adapters/cassandra"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/common"
 )
 
 // RemoveBtree removes the B-tree with the given name from backend storage.

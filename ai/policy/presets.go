@@ -1,6 +1,6 @@
 package policy
 
-import "github.com/sharedcode/zeltrin/ai"
+import "github.com/sharedcode/joltrin/ai"
 
 // NewProfanityGuardrail returns a configured policy and classifier for profanity filtering.
 // Note: The returned policy is stateful (tracks strikes). Use a new instance per user session.

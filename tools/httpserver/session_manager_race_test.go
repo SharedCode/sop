@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 func TestSessionManager_GetOrCreate_Race(t *testing.T) {

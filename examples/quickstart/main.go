@@ -7,11 +7,11 @@ package main
 import (
 	"fmt"
 
-	"github.com/sharedcode/zeltrin/inmemory"
+	"github.com/sharedcode/joltrin/inmemory"
 )
 
 func main() {
-	fmt.Println("Zeltrin quickstart: in-memory ordered B-Tree")
+	fmt.Println("Joltrin quickstart: in-memory ordered B-Tree")
 
 	// Unique keys, string values.
 	b3 := inmemory.NewBtree[int, string](true)

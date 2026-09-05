@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/common/mocks"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/common/mocks"
 )
 
 // flakyCache wraps a base Cache and forces the second GetStruct after SetStruct to miss for a specific key.

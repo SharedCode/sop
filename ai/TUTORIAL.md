@@ -49,7 +49,7 @@ SOP implements a **Transactional Lookup B-Tree**.
 You need Go (1.24+) and the SOP library.
 
 ```bash
-go get github.com/sharedcode/zeltrin
+go get github.com/sharedcode/joltrin
 ```
 
 (Optional) For the "Nurse" LLM, install [Ollama](https://ollama.com/) and pull a model:
@@ -66,8 +66,8 @@ package main
 
 import (
 	"fmt"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/database"
 )
 
 func main() {
@@ -394,7 +394,7 @@ The `sop/ai` module is a modular kit. You can use the high-level `agent` package
 If you just want a high-performance, local vector store without the agent logic, use the `vector` package directly.
 
 ```go
-import "github.com/sharedcode/zeltrin/database"
+import "github.com/sharedcode/joltrin/database"
 
 // Create a persistent store
 db := database.NewDatabase(sop.DatabaseOptions{
@@ -430,7 +430,7 @@ The kit supports a hierarchical policy model:
 This allows software teams to easily author and manage governance at the appropriate level.
 
 ```go
-import "github.com/sharedcode/zeltrin/ai/policy"
+import "github.com/sharedcode/joltrin/ai/policy"
 
 // 1. Define a Global Policy (e.g., Corporate Safety Standards)
 globalPol, _ := policy.NewProfanityGuardrail(3)
@@ -454,7 +454,7 @@ if decision.Action == "block" {
 The `embed` package provides a unified interface for turning text into vectors. It supports local heuristics and can wrap other agents.
 
 ```go
-import "github.com/sharedcode/zeltrin/ai/embed"
+import "github.com/sharedcode/joltrin/ai/embed"
 
 // A simple embedder (e.g., for testing or simple keyword matching)
 embedder := embed.NewSimple("simple-embedder", 64, nil)
@@ -465,7 +465,7 @@ vectors, _ := embedder.EmbedTexts(context.Background(), []string{"Hello world"})
 The `etl` package helps you ingest data from various sources (CSV, Web, APIs) and prepare it for the Vector Store.
 
 ```go
-import "github.com/sharedcode/zeltrin/ai/etl"
+import "github.com/sharedcode/joltrin/ai/etl"
 
 // Example: Fetching and cleaning data
 err := etl.PrepareData("https://example.com/data.csv", "output.json", 5000)
@@ -479,9 +479,9 @@ package main
 
 import (
     "context"
-    "github.com/sharedcode/zeltrin/ai/agent"
-    "github.com/sharedcode/zeltrin/ai/generator"
-    "github.com/sharedcode/zeltrin/ai/policy"
+    "github.com/sharedcode/joltrin/ai/agent"
+    "github.com/sharedcode/joltrin/ai/generator"
+    "github.com/sharedcode/joltrin/ai/policy"
 )
 
 func main() {

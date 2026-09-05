@@ -2,7 +2,7 @@ package agent
 
 import (
 	"context"
-	"github.com/sharedcode/zeltrin/ai/database"
+	"github.com/sharedcode/joltrin/ai/database"
 	"testing"
 )
 

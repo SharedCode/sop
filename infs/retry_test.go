@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 func Test_ShouldRetry(t *testing.T) {

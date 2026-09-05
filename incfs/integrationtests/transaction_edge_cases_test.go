@@ -9,8 +9,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/incfs"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/incfs"
 )
 
 // Covers all of these cases:

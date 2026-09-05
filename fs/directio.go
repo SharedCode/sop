@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/ncw/directio"
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // DirectIO exposes unbuffered file operations using O_DIRECT semantics where

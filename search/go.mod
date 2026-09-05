@@ -1,10 +1,10 @@
-module github.com/sharedcode/zeltrin/search
+module github.com/sharedcode/joltrin/search
 
 go 1.26.8
 
-replace github.com/sharedcode/zeltrin => ../
+replace github.com/sharedcode/joltrin => ../
 
-require github.com/sharedcode/zeltrin v0.0.0
+require github.com/sharedcode/joltrin v0.0.0
 
 require (
 	github.com/goccy/go-json v0.9.11 // indirect

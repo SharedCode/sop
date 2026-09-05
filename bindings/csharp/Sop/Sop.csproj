@@ -5,10 +5,10 @@
     <PackageId>Sop4CS</PackageId>
     <Version>5.3.8</Version>
     <Authors>Gerardo Recinto</Authors>
-    <Description>Zeltrin (distributed as Sop4CS) - Durable memory and verification infrastructure for AI agents.</Description>
+    <Description>Joltrin (distributed as Sop4CS) - Durable memory and verification infrastructure for AI agents.</Description>
     <PackageTags>database;btree;vector;storage;transactional;ai-memory</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/SharedCode/zeltrin</RepositoryUrl>
+    <RepositoryUrl>https://github.com/SharedCode/joltrin</RepositoryUrl>
     <LangVersion>latest</LangVersion>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>

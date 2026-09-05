@@ -10,8 +10,8 @@ import (
 
 	log "log/slog"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai/memory"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai/memory"
 )
 
 type KnowledgeChunk struct {

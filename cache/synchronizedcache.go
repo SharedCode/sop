@@ -3,7 +3,7 @@ package cache
 import (
 	"sync"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // sync_cache wraps a Cache with a mutex to provide thread-safe operations.

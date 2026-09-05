@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/obfuscation"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/obfuscation"
 )
 
 func TestCopilotAgent_Execute_Deobfuscation(t *testing.T) {

@@ -7,9 +7,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/fs"
-	"github.com/sharedcode/zeltrin/infs"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/fs"
+	"github.com/sharedcode/joltrin/infs"
 )
 
 // Add Test_ prefix if you want to run this test.

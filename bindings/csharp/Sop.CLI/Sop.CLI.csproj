@@ -14,7 +14,7 @@
     <Authors>Gerardo Recinto</Authors>
     <Description>SOP CLI and Examples</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/SharedCode/zeltrin</RepositoryUrl>
+    <RepositoryUrl>https://github.com/SharedCode/joltrin</RepositoryUrl>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 

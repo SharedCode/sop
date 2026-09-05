@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // TestFileIOScenarios consolidates FileIO coverage: write (mkdir branch & direct),

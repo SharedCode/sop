@@ -16,7 +16,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 // ----------------------------------------------------------------------------

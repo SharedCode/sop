@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai/memory"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai/memory"
 )
 
 func TestStore_Vectorize_NestedCategories(t *testing.T) {

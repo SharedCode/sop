@@ -10,7 +10,7 @@
 
     <name>SOP Java Binding</name>
     <description>Java bindings for Scalable Objects Persistence (SOP)</description>
-    <url>https://github.com/sharedcode/zeltrin</url>
+    <url>https://github.com/sharedcode/joltrin</url>
 
     <licenses>
         <license>
@@ -28,9 +28,9 @@
     </developers>
 
     <scm>
-        <connection>scm:git:git://github.com/sharedcode/zeltrin.git</connection>
-        <developerConnection>scm:git:ssh://github.com:sharedcode/zeltrin.git</developerConnection>
-        <url>https://github.com/sharedcode/zeltrin</url>
+        <connection>scm:git:git://github.com/sharedcode/joltrin.git</connection>
+        <developerConnection>scm:git:ssh://github.com:sharedcode/joltrin.git</developerConnection>
+        <url>https://github.com/sharedcode/joltrin</url>
     </scm>
 
     <properties>

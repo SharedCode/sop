@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin/ai/embed"
+	"github.com/sharedcode/joltrin/ai/embed"
 )
 
 func TestShouldForceLocalBuiltinEmbedder(t *testing.T) {

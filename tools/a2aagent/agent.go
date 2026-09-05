@@ -22,8 +22,8 @@ import (
 	"github.com/a2aproject/a2a-go/a2asrv"
 	"github.com/a2aproject/a2a-go/a2asrv/eventqueue"
 
-	"github.com/sharedcode/zeltrin/ai/verify"
-	"github.com/sharedcode/zeltrin/tools/runbookstore"
+	"github.com/sharedcode/joltrin/ai/verify"
+	"github.com/sharedcode/joltrin/tools/runbookstore"
 )
 
 // AgentCard describes this agent's one skill for A2A discovery. Callers

@@ -3,7 +3,7 @@ package teststubs
 import (
 	"context"
 
-	"github.com/sharedcode/zeltrin"
+	"github.com/sharedcode/joltrin"
 )
 
 // RegistryStub implements sop.Registry with no-op behaviors, suitable for rollback tests.

@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/sharedcode/zeltrin"
-	_ "github.com/sharedcode/zeltrin/cache"
-	"github.com/sharedcode/zeltrin/infs"
+	"github.com/sharedcode/joltrin"
+	_ "github.com/sharedcode/joltrin/cache"
+	"github.com/sharedcode/joltrin/infs"
 )
 
 func TestOnCommit_FiresOnCommit(t *testing.T) {

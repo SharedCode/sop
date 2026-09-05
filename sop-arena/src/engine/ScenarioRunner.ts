@@ -34,7 +34,7 @@ export class ScenarioRunner {
         atSec: 0,
         title: 'Phase 1: Baseline Workload',
         subtitle: '10,000 transactions/sec steady state across compute workers.',
-        sopTakeaway: 'Zeltrin coordinates storage & compute with zero separate database servers.',
+        sopTakeaway: 'Joltrin coordinates storage & compute with zero separate database servers.',
         action: () => {
           this.backend.setTargetTps(10000);
         }
@@ -43,7 +43,7 @@ export class ScenarioRunner {
         atSec: 6,
         title: 'Phase 2: Traffic Surge (45,000 TPS)',
         subtitle: 'High-volume batch ingest arrives at the gateway.',
-        sopTakeaway: 'Zeltrin dynamically balances write pipelines across B-Tree node segments.',
+        sopTakeaway: 'Joltrin dynamically balances write pipelines across B-Tree node segments.',
         action: () => {
           this.backend.setTargetTps(45000);
         }
@@ -61,7 +61,7 @@ export class ScenarioRunner {
         atSec: 22,
         title: 'Phase 4: Swarm Worker Crash (Agent Worker 03)',
         subtitle: 'Compute node crashes abruptly mid-transaction batch.',
-        sopTakeaway: 'Zeltrin detects heartbeat timeout and redistributes uncommitted tasks to active swarm.',
+        sopTakeaway: 'Joltrin detects heartbeat timeout and redistributes uncommitted tasks to active swarm.',
         action: () => {
           this.backend.killWorker('worker-3');
         }
@@ -78,7 +78,7 @@ export class ScenarioRunner {
       {
         atSec: 38,
         title: 'Phase 6: Automatic Erasure Reconstruction',
-        subtitle: 'Zeltrin parity rebuild succeeds; re-integrating recovered shard.',
+        subtitle: 'Joltrin parity rebuild succeeds; re-integrating recovered shard.',
         sopTakeaway: 'Automated failover restores 100% capacity without operator intervention.',
         action: () => {
           this.backend.recoverStorageNode('store-2');
@@ -162,7 +162,7 @@ export class ScenarioRunner {
         atSec: 0,
         title: 'AI Swarm Ingestion: 5,000 Autonomous Agent Tasks',
         subtitle: 'Agents independently reading context, embedding vectors, and persisting memory.',
-        sopTakeaway: 'Zeltrin provides unified vector & structured state for LLM memory tiers.',
+        sopTakeaway: 'Joltrin provides unified vector & structured state for LLM memory tiers.',
         action: () => {
           this.backend.setTargetTps(35000);
         }
@@ -189,7 +189,7 @@ export class ScenarioRunner {
         atSec: 25,
         title: 'High-Density Vector Range Scan Across B-Tree Shards',
         subtitle: '128-dimensional similarity searches evaluated with 0ms network hops.',
-        sopTakeaway: 'Zeltrin embedded vectors eliminate dedicated vector database clusters.',
+        sopTakeaway: 'Joltrin embedded vectors eliminate dedicated vector database clusters.',
         action: () => {
           this.backend.createTransactionStorm(1.5);
         }

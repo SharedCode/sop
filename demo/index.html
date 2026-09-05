@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Zeltrin | Zero-Server Embedded ACID B-Tree Engine (Go + WebAssembly)</title>
-  <meta name="description" content="Interactive technical demo of Zeltrin: An ACID-compliant embedded B-Tree, vector, and durable agent memory engine running 100% inside your browser via WebAssembly with zero server dependencies." />
+  <title>Joltrin | Zero-Server Embedded ACID B-Tree Engine (Go + WebAssembly)</title>
+  <meta name="description" content="Interactive technical demo of Joltrin: An ACID-compliant embedded B-Tree, vector, and durable agent memory engine running 100% inside your browser via WebAssembly with zero server dependencies." />
   <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
   <link rel="alternate icon" href="./favicon.ico" />
 
@@ -193,7 +193,7 @@
         </div>
         <div>
           <div class="flex items-center space-x-2">
-            <span class="font-extrabold tracking-tight text-white text-lg">Zeltrin</span>
+            <span class="font-extrabold tracking-tight text-white text-lg">Joltrin</span>
             <span class="text-xs px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 font-mono font-medium">v1.0 WASM</span>
           </div>
           <p class="text-[10px] text-slate-400 font-mono hidden sm:block">Durable State Engine (formerly SOP)</p>
@@ -227,7 +227,7 @@
           </button>
         </div>
 
-        <a href="https://github.com/SharedCode/zeltrin" target="_blank" rel="noopener noreferrer"
+        <a href="https://github.com/SharedCode/joltrin" target="_blank" rel="noopener noreferrer"
            class="flex items-center space-x-2 px-3 py-1.5 rounded-lg bg-dark-800 hover:bg-dark-700 border border-dark-700 text-xs font-medium text-slate-200 transition">
           <i data-lucide="github" class="w-4 h-4"></i>
           <span class="hidden sm:inline">GitHub Repository</span>
@@ -270,7 +270,7 @@
           <span class="bg-gradient-to-r from-brand-400 via-accent-cyan to-accent-violet bg-clip-text text-transparent">Entirely In Your Browser.</span>
         </h1>
         <p class="text-slate-300 text-base sm:text-lg leading-relaxed mb-6">
-          Zeltrin is an embedded B-Tree storage and verification engine written in Go. Instead of maintaining expensive database servers, Zeltrin executes transactional mutations, high-dimensional vector searches, and durable agent memory checkpoints <strong>locally on the client</strong> with strict serializability and sub-millisecond latencies.
+          Joltrin is an embedded B-Tree storage and verification engine written in Go. Instead of maintaining expensive database servers, Joltrin executes transactional mutations, high-dimensional vector searches, and durable agent memory checkpoints <strong>locally on the client</strong> with strict serializability and sub-millisecond latencies.
         </p>
 
         <!-- Proof Pill Badges -->
@@ -301,7 +301,7 @@
         <div>
           <div class="flex items-center space-x-2 text-brand-400 font-bold text-sm mb-1.5">
             <i data-lucide="cpu" class="w-4 h-4"></i>
-            <span>🧠 Zeltrin Technical Demo</span>
+            <span>🧠 Joltrin Technical Demo</span>
             <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-300 font-mono">CURRENT</span>
           </div>
           <p class="text-xs text-slate-400 leading-relaxed">
@@ -316,12 +316,12 @@
           <div class="flex items-center justify-between text-white group-hover:text-accent-cyan font-bold text-sm mb-1.5">
             <div class="flex items-center space-x-2">
               <i data-lucide="gamepad-2" class="w-4 h-4 text-accent-cyan"></i>
-              <span>🎮 Zeltrin Arena</span>
+              <span>🎮 Joltrin Arena</span>
             </div>
             <span class="text-xs text-slate-500 group-hover:text-accent-cyan font-mono">Play →</span>
           </div>
           <p class="text-xs text-slate-400 leading-relaxed">
-            Distributed Systems Survival Simulation. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Zeltrin automatically redistribute tasks and rebuild parity.
+            Distributed Systems Survival Simulation. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Joltrin automatically redistribute tasks and rebuild parity.
           </p>
         </div>
         <div class="pt-3 text-[11px] text-slate-500 group-hover:text-accent-cyan font-mono">Survival Simulation →</div>
@@ -635,7 +635,7 @@
               Each reasoning step below is written to the B-Tree as a durable, atomic checkpoint the instant it happens. Kill the agent process and the committed steps stay put, no Redis, no separate checkpoint store. A successor agent reads the last checkpoint straight out of the B-Tree and keeps going.
             </p>
             <p class="text-[11px] text-slate-500 font-mono mb-4 border border-dark-800 rounded-lg p-2.5 bg-dark-950/60">
-              Note: the reasoning text is a scripted demo sequence, not a live model call. The checkpointing, the kill, and the recovery are real operations against the Zeltrin B-Tree engine running in this tab.
+              Note: the reasoning text is a scripted demo sequence, not a live model call. The checkpointing, the kill, and the recovery are real operations against the Joltrin B-Tree engine running in this tab.
             </p>
 
             <!-- Visual Checkpoint & Failover Sequence -->
@@ -722,11 +722,11 @@
   <footer class="border-t border-dark-800 bg-dark-950 py-8 text-center text-xs text-slate-500 font-mono">
     <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
       <div>
-        <p class="font-semibold text-slate-400">Zeltrin Engine (formerly SOP · Scalable Objects Persistence)</p>
+        <p class="font-semibold text-slate-400">Joltrin Engine (formerly SOP · Scalable Objects Persistence)</p>
         <p class="text-[11px] text-slate-600">Transactional State & Verification Infrastructure for AI Agents.</p>
       </div>
       <div class="flex items-center space-x-4">
-        <a href="https://github.com/SharedCode/zeltrin" target="_blank" class="text-brand-400 hover:underline">GitHub Repository</a>
+        <a href="https://github.com/SharedCode/joltrin" target="_blank" class="text-brand-400 hover:underline">GitHub Repository</a>
         <span>•</span>
         <span>Zero-Server Architecture Demo</span>
       </div>

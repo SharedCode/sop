@@ -4,7 +4,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/sharedcode/zeltrin/ai"
+	"github.com/sharedcode/joltrin/ai"
 )
 
 type sessionNode struct {

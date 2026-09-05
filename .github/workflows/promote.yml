@@ -36,7 +36,7 @@ jobs:
       - name: Resolve commit and image
         run: |
           echo "SHA=${{ github.event.inputs.sha || github.event.workflow_run.head_sha }}" >> "$GITHUB_ENV"
-          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/zeltrin-quickstart" >> "$GITHUB_ENV"
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/joltrin-quickstart" >> "$GITHUB_ENV"
 
       - uses: docker/login-action@v3
         with:

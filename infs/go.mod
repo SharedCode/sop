@@ -1,4 +1,4 @@
-module github.com/sharedcode/zeltrin/infs
+module github.com/sharedcode/joltrin/infs
 
 go 1.26.8
 

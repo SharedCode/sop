@@ -1,6 +1,6 @@
-# Zeltrin for Python (sop4py)
+# Joltrin for Python (sop4py)
 
-**Zeltrin** (distributed on PyPI as `sop4py`, formerly SOP / Scalable Objects Persistence) is a high-performance, durable memory and verification infrastructure engine for Python, powered by a Go backend. It combines the raw speed of direct disk I/O with the reliability of ACID transactions and the flexibility of modern AI data management.
+**Joltrin** (distributed on PyPI as `sop4py`, formerly SOP / Scalable Objects Persistence) is a high-performance, durable memory and verification infrastructure engine for Python, powered by a Go backend. It combines the raw speed of direct disk I/O with the reliability of ACID transactions and the flexibility of modern AI data management.
 
 ## Key Features
 
@@ -67,7 +67,7 @@ To launch the Data Manager simply run:
 sop-httpserver
 ```
 
-Or download the all-in-one single-file installer (no Python/pip required) from [SOP Releases](https://github.com/SharedCode/zeltrin/releases).
+Or download the all-in-one single-file installer (no Python/pip required) from [SOP Releases](https://github.com/SharedCode/joltrin/releases).
 
 ### Key Capabilities
 
@@ -547,7 +547,7 @@ SOP uses a split architecture:
 
 ## Project Links
 
-*   **Source Code**: [GitHub - sharedcode/sop](https://github.com/sharedcode/zeltrin)
+*   **Source Code**: [GitHub - sharedcode/sop](https://github.com/sharedcode/joltrin)
 *   **PyPI**: [sop4py](https://pypi.org/project/sop4py)
 
 ## Contributing

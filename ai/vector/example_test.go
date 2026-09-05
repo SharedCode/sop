@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/ai/database"
-	"github.com/sharedcode/zeltrin/ai/vector"
-	core_database "github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/ai/database"
+	"github.com/sharedcode/joltrin/ai/vector"
+	core_database "github.com/sharedcode/joltrin/database"
 )
 
 // ExampleVectorStore demonstrates how to use the Vector Store for semantic search.

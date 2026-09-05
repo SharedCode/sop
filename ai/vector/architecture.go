@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/sharedcode/zeltrin"
-	"github.com/sharedcode/zeltrin/ai"
-	"github.com/sharedcode/zeltrin/btree"
-	"github.com/sharedcode/zeltrin/database"
+	"github.com/sharedcode/joltrin"
+	"github.com/sharedcode/joltrin/ai"
+	"github.com/sharedcode/joltrin/btree"
+	"github.com/sharedcode/joltrin/database"
 )
 
 // Architecture demonstrates the 3-B-Tree layout for optimal performance.

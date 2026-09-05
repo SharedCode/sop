@@ -21,7 +21,7 @@
   <path d="M 63,24 L 93,24 L 93,30.5 L 74,49.5 L 93,49.5 L 93,56 L 63,56 L 63,49.5 L 82,30.5 L 63,30.5 Z" fill="url(#zGrad)"/>
 
   <!-- Wordmark -->
-  <text x="124" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif" font-size="30" font-weight="800" letter-spacing="-0.5" fill="url(#textGrad)">Zeltrin</text>
+  <text x="124" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif" font-size="30" font-weight="800" letter-spacing="-0.5" fill="url(#textGrad)">Joltrin</text>
   
   <!-- Tagline: From Milliseconds to Microseconds for AI Agents -->
   <text x="124" y="59" font-family="'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace" font-size="10.8" font-weight="500" letter-spacing="0.1" fill="#94a3b8">From Milliseconds to Microseconds for AI Agents</text>
