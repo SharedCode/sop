@@ -478,7 +478,21 @@ func main() {
 	}
 
 	handler = metricsMiddleware(handler)
-	if err := http.ListenAndServe(addr, handler); err != nil {
+
+	// Explicit timeouts: the zero-value http.Server has none, which lets a
+	// client hold a connection open indefinitely by trickling its request
+	// headers (Slowloris) until the server runs out of connections. Writes
+	// get a longer budget than reads because some AI and import handlers
+	// stream sizable responses.
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 15 * time.Second,
+		ReadTimeout:       5 * time.Minute,
+		WriteTimeout:      10 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+	}
+	if err := srv.ListenAndServe(); err != nil {
 		log.Error(err.Error())
 	}
 }

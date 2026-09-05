@@ -285,12 +285,58 @@ func TestWithAuth_AllowsRequestWhenConfigFileIsMissing(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
+	// First-run setup is reachable without a token, but only from this
+	// machine: the unconfigured window is for local bootstrap, not for
+	// anyone who can route to the port.
 	req, _ := http.NewRequest(http.MethodGet, "/api/config/environments", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
 	w := httptest.NewRecorder()
 	handler(w, req)
 
 	if w.Code != http.StatusOK {
-		t.Fatalf("expected 200 when config.json is missing, got %d", w.Code)
+		t.Fatalf("expected 200 for a loopback caller when config.json is missing, got %d", w.Code)
+	}
+}
+
+// TestWithAuth_DeniesRemoteRequestWhenConfigFileIsMissing is the regression
+// test for the fail-open auth finding: an unconfigured server used to serve
+// every /api/* route to anybody, including store deletion and script
+// execution, because the missing-config branch called the handler directly.
+func TestWithAuth_DeniesRemoteRequestWhenConfigFileIsMissing(t *testing.T) {
+	withIsolatedSessionStore(t)
+	config = Config{SystemDB: config.SystemDB}
+	defer func() { config = Config{} }()
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error = %v", err)
+	}
+	tmpDir := t.TempDir()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Chdir() error = %v", err)
+	}
+	defer os.Chdir(oldWd)
+
+	config.ConfigFile = filepath.Join(tmpDir, "config.json")
+
+	called := false
+	handler := withAuth(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	for _, remote := range []string{"203.0.113.7:44321", "192.168.1.50:44321", ""} {
+		req, _ := http.NewRequest(http.MethodGet, "/api/config/environments", nil)
+		req.RemoteAddr = remote
+		w := httptest.NewRecorder()
+		handler(w, req)
+
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("remote %q: expected 401 on an unconfigured server, got %d", remote, w.Code)
+		}
+	}
+	if called {
+		t.Fatal("the wrapped handler must never run for a non-loopback caller on an unconfigured server")
 	}
 }
 

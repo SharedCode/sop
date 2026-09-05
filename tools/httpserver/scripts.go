@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"reflect"
 	"runtime"
@@ -121,11 +122,37 @@ func handlerName(next http.HandlerFunc) string {
 	return "unknown-handler"
 }
 
+// isLoopbackRequest reports whether the request arrived from this machine.
+// It reads only RemoteAddr, deliberately ignoring X-Forwarded-For and
+// friends: those are attacker-controlled unless a trusted proxy rewrites
+// them, and treating them as authoritative here would hand back the exact
+// bypass this check exists to close.
+func isLoopbackRequest(r *http.Request) bool {
+	host := r.RemoteAddr
+	if h, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		host = h
+	}
+	ip := net.ParseIP(strings.TrimSpace(host))
+	return ip != nil && ip.IsLoopback()
+}
+
 func withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Debug("withAuth: handler invocation", "handler", handlerName(next), "method", r.Method, "path", r.URL.Path)
+		// First-run bootstrap: before a config file exists there are no
+		// users to authenticate against, so the setup flow has to be
+		// reachable unauthenticated. Restrict that window to loopback
+		// callers. Without this check the same window left every /api/*
+		// route, including store deletion and local command execution, open
+		// to anyone who could reach an unconfigured server over the network.
 		if !hasConfigFileOnDisk() {
-			log.Debug("withAuth: skipping bearer-token validation", "path", r.URL.Path, "method", r.Method, "reason", "config file not present on disk")
+			if !isLoopbackRequest(r) {
+				log.Warn("withAuth: unauthenticated request denied", "path", r.URL.Path, "method", r.Method,
+					"reason", "server is unconfigured and the caller is not on loopback", "remote_addr", r.RemoteAddr)
+				http.Error(w, "Unauthorized: server is not configured yet; complete first-run setup from the local machine", http.StatusUnauthorized)
+				return
+			}
+			log.Debug("withAuth: skipping bearer-token validation", "path", r.URL.Path, "method", r.Method, "reason", "first-run setup from loopback, no config file on disk")
 			next(w, r)
 			return
 		}

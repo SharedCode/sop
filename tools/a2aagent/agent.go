@@ -94,8 +94,15 @@ func (e *Executor) Execute(ctx context.Context, reqCtx *a2asrv.RequestContext, q
 	trace := e.Store.TraceFor(req.TraceID)
 
 	// The same barrier certificate tools/mcpserver's execute_step tool
-	// gates on: verify before acting, never act then verify.
-	if err := wf.CheckSafety(trace, verify.StepID(req.Step)); err != nil {
+	// gates on: verify before acting, never act then verify. CheckAndCommit
+	// does both under one trace lock, so a concurrent request on the same
+	// trace_id cannot slip in between the check and the commit.
+	if err := wf.CheckAndCommit(trace, verify.StepID(req.Step)); err != nil {
+		if !verify.IsViolation(err) {
+			// Malformed rather than blocked (an unknown step, say): no
+			// precondition will ever make this succeed.
+			return e.fail(ctx, reqCtx, queue, err.Error())
+		}
 		// Not a failure: the task is well-formed and could still succeed
 		// once its precondition is met, that's exactly what
 		// TaskStateInputRequired means, "paused, waiting on something
@@ -112,17 +119,14 @@ func (e *Executor) Execute(ctx context.Context, reqCtx *a2asrv.RequestContext, q
 		return nil
 	}
 
-	if err := wf.Commit(trace, verify.StepID(req.Step)); err != nil {
-		return e.fail(ctx, reqCtx, queue, err.Error())
-	}
-
 	// The task store this SDK defaults to gob-encodes artifact data
 	// internally, which panics-to-error on an unregistered named type
 	// inside an any-typed map value (verify.StepID is a named string type).
 	// Flatten to plain strings before handing this off, found by this
 	// package's own end-to-end test, not by inspection.
-	executedIDs := make([]string, len(trace.Executed))
-	for i, id := range trace.Executed {
+	executed := trace.ExecutedSteps()
+	executedIDs := make([]string, len(executed))
+	for i, id := range executed {
 		executedIDs[i] = string(id)
 	}
 	artifactEvent := a2a.NewArtifactEvent(reqCtx, a2a.DataPart{

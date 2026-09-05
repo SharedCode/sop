@@ -841,12 +841,19 @@ func seedDefaultScripts(ctx context.Context, db *aidb.Database) {
 func loadAgent(ctx context.Context, key, configPath string) error {
 	// ctx is passed in
 
-	// Try to find the file in common locations
+	// Try to find the file in common locations, relative to where the
+	// server was started and to the binary itself. Nothing here may be tied
+	// to one developer's home directory.
 	pathsToTry := []string{
 		configPath,
-		filepath.Join("..", "..", configPath),            // From tools/httpserver
-		filepath.Join("..", configPath),                  // From tools
-		filepath.Join("/Users/grecinto/sop", configPath), // Absolute fallback
+		filepath.Join("..", "..", configPath), // From tools/httpserver
+		filepath.Join("..", configPath),       // From tools
+	}
+	if exePath, err := os.Executable(); err == nil {
+		pathsToTry = append(pathsToTry, filepath.Join(filepath.Dir(exePath), configPath))
+	}
+	if root := os.Getenv("SOP_ROOT"); root != "" {
+		pathsToTry = append(pathsToTry, filepath.Join(root, configPath))
 	}
 
 	var foundPath string

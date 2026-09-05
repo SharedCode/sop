@@ -1,14 +1,38 @@
+// Command sop-daemon runs a loopback-only helper that executes shell
+// commands on behalf of the SOP web UI (tools/httpserver serves a page that
+// posts here after a human approves a proposed command).
+//
+// Security model, since this endpoint runs shell commands: the only
+// meaningful remote threat is a web page in the user's own browser posting
+// here cross-origin, because any local process running as this user could
+// already execute commands directly without the daemon's help. That threat
+// is closed by validating the Origin header against an allowlist and never
+// answering with a wildcard CORS header; a browser always attaches Origin
+// to a cross-origin POST, so a page on evil.example cannot reach this
+// endpoint even though it is reachable at 127.0.0.1. Requests with no
+// Origin at all (curl, tests, other local tooling) are allowed through on
+// the reasoning above, and can additionally be gated with -token.
 package main
 
 import (
 	"bytes"
+	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"runtime"
+	"strings"
+	"time"
+)
+
+const (
+	maxRequestBody = 64 << 10             // 64 KiB: a command line, not a file upload.
+	tokenHeader    = "X-SOP-Daemon-Token" //nolint:gosec // header name, not a credential
 )
 
 type ExecuteRequest struct {
@@ -22,91 +46,175 @@ type ExecuteResponse struct {
 	Error    string `json:"error,omitempty"`
 }
 
+// config holds the resolved security settings for one daemon run.
+type config struct {
+	allowedOrigins map[string]bool
+	token          string
+	commandTimeout time.Duration
+}
+
 func main() {
 	port := flag.Int("port", 9090, "Port to run the local SOP daemon on")
+	origins := flag.String("allowed-origins", "http://localhost:8080,http://127.0.0.1:8080",
+		"Comma-separated origins allowed to call this daemon from a browser. A request carrying any other Origin is rejected.")
+	token := flag.String("token", os.Getenv("SOP_DAEMON_TOKEN"),
+		"Optional shared secret; when set, callers must send it in the "+tokenHeader+" header. Defaults to $SOP_DAEMON_TOKEN.")
+	timeout := flag.Duration("command-timeout", 60*time.Second, "Maximum wall-clock time a single command may run before it is killed.")
 	flag.Parse()
 
-	http.HandleFunc("/api/execute", handleOptionsAndCORS(executeHandler))
+	cfg := &config{
+		allowedOrigins: parseOrigins(*origins),
+		token:          *token,
+		commandTimeout: *timeout,
+	}
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/execute", cfg.guard(executeHandler(cfg)))
+
+	// Loopback only: this must never be reachable from the network.
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)
-	log.Printf("Starting SOP Desktop Daemon on %s", addr)
-	log.Printf("Waiting for local execution commands from SOP UI...")
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      2 * time.Minute,
+		IdleTimeout:       60 * time.Second,
+	}
 
-	if err := http.ListenAndServe(addr, nil); err != nil {
+	log.Printf("Starting SOP Desktop Daemon on %s", addr)
+	log.Printf("This daemon executes shell commands. Allowed browser origins: %s", strings.Join(sortedKeys(cfg.allowedOrigins), ", "))
+	if cfg.token == "" {
+		log.Printf("No -token set: any local process can post commands here (it could also just run them directly). Set -token to require a shared secret.")
+	}
+
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }
 
-func handleOptionsAndCORS(h http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// Allow CORS from any origin (since UI might be hosted anywhere, e.g. sop.yourdomain.com)
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+func parseOrigins(csv string) map[string]bool {
+	out := make(map[string]bool)
+	for _, o := range strings.Split(csv, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			out[o] = true
+		}
+	}
+	return out
+}
 
-		if r.Method == "OPTIONS" {
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+// guard applies the Origin allowlist, the optional token check, and the
+// CORS response headers. It deliberately never emits
+// Access-Control-Allow-Origin: *, since that wildcard is what would let any page
+// on the internet drive this endpoint.
+func (c *config) guard(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		origin := r.Header.Get("Origin")
+
+		// Vary matters for any cache sitting in front of this: the response
+		// differs per Origin.
+		w.Header().Set("Vary", "Origin")
+
+		if origin != "" {
+			if !c.allowedOrigins[origin] {
+				log.Printf("rejected request from disallowed origin %q", origin)
+				http.Error(w, "Forbidden: origin not allowed", http.StatusForbidden)
+				return
+			}
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, "+tokenHeader)
+		}
+
+		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
-		h(w, r)
-	}
-}
-
-func executeHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req ExecuteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondJSON(w, http.StatusBadRequest, ExecuteResponse{Error: "Invalid JSON body: " + err.Error()})
-		return
-	}
-
-	if req.Command == "" {
-		respondJSON(w, http.StatusBadRequest, ExecuteResponse{Error: "Command cannot be empty"})
-		return
-	}
-
-	log.Printf("Executing command: %s", req.Command)
-
-	var cmd *exec.Cmd
-	if runtime.GOOS == "windows" {
-		cmd = exec.Command("cmd", "/C", req.Command)
-	} else {
-		cmd = exec.Command("sh", "-c", req.Command)
-	}
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	err := cmd.Run()
-
-	resp := ExecuteResponse{
-		Stdout: stdout.String(),
-		Stderr: stderr.String(),
-	}
-
-	if err != nil {
-		resp.Error = err.Error()
-		if exitError, ok := err.(*exec.ExitError); ok {
-			resp.ExitCode = exitError.ExitCode()
-		} else {
-			resp.ExitCode = -1
+		if c.token != "" {
+			given := r.Header.Get(tokenHeader)
+			if subtle.ConstantTimeCompare([]byte(given), []byte(c.token)) != 1 {
+				http.Error(w, "Unauthorized: bad or missing "+tokenHeader, http.StatusUnauthorized)
+				return
+			}
 		}
-		log.Printf("Command finished with error: %v", err)
-	} else {
-		resp.ExitCode = 0
-		log.Printf("Command executed successfully")
-	}
 
-	respondJSON(w, http.StatusOK, resp)
+		next(w, r)
+	}
 }
 
-func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
+func executeHandler(cfg *config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
+		var req ExecuteRequest
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxRequestBody)).Decode(&req); err != nil {
+			respondJSON(w, http.StatusBadRequest, ExecuteResponse{Error: "Invalid JSON body: " + err.Error()})
+			return
+		}
+
+		if req.Command == "" {
+			respondJSON(w, http.StatusBadRequest, ExecuteResponse{Error: "Command cannot be empty"})
+			return
+		}
+
+		log.Printf("Executing command: %s", req.Command)
+
+		// Bound the run: a command that never exits would otherwise pin this
+		// handler (and its goroutine) forever.
+		ctx, cancel := context.WithTimeout(r.Context(), cfg.commandTimeout)
+		defer cancel()
+
+		var cmd *exec.Cmd
+		if runtime.GOOS == "windows" {
+			cmd = exec.CommandContext(ctx, "cmd", "/C", req.Command)
+		} else {
+			cmd = exec.CommandContext(ctx, "sh", "-c", req.Command)
+		}
+
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+
+		err := cmd.Run()
+
+		resp := ExecuteResponse{
+			Stdout: stdout.String(),
+			Stderr: stderr.String(),
+		}
+
+		if err != nil {
+			resp.Error = err.Error()
+			if exitError, ok := err.(*exec.ExitError); ok {
+				resp.ExitCode = exitError.ExitCode()
+			} else {
+				resp.ExitCode = -1
+			}
+			if ctx.Err() != nil {
+				resp.Error = fmt.Sprintf("command exceeded %s and was killed", cfg.commandTimeout)
+			}
+			log.Printf("Command finished with error: %v", err)
+		} else {
+			resp.ExitCode = 0
+			log.Printf("Command executed successfully")
+		}
+
+		respondJSON(w, http.StatusOK, resp)
+	}
+}
+
+func respondJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(payload); err != nil {

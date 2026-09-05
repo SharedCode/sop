@@ -112,18 +112,16 @@ func executeStepHandler(store *runbookstore.Store) server.ToolHandlerFunc {
 		// The barrier certificate: verify before acting, never act then
 		// verify. A failed check here means the step never executes, full
 		// stop, regardless of what the calling agent asserted about its own
-		// prior actions.
-		if err := wf.CheckSafety(trace, verify.StepID(stepID)); err != nil {
+		// prior actions. CheckAndCommit holds the trace lock across both
+		// halves, so a concurrent request on the same trace_id cannot land
+		// between the check and the commit.
+		if err := wf.CheckAndCommit(trace, verify.StepID(stepID)); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("blocked by safety barrier: %s", err.Error())), nil
-		}
-
-		if err := wf.Commit(trace, verify.StepID(stepID)); err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
 		}
 
 		return mcp.NewToolResultStructuredOnly(map[string]any{
 			"executed": stepID,
-			"trace":    trace.Executed,
+			"trace":    trace.ExecutedSteps(),
 		}), nil
 	}
 }
