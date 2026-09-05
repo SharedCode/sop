@@ -52,6 +52,12 @@ func TestBuildImportSpaceRequestFromPreloadUsesMultipartPayload(t *testing.T) {
 		t.Fatalf("write test file: %v", err)
 	}
 
+	// Configure a database path that includes the temp dir so the path
+	// containment check (safeOpenContained) accepts it.
+	saved := config
+	config.Databases = []DatabaseConfig{{Path: tmpDir}}
+	defer func() { config = saved }()
+
 	req, err := buildImportSpaceRequest(context.Background(), filePath, "test-db", "SOP")
 	if err != nil {
 		t.Fatalf("buildImportSpaceRequest returned error: %v", err)

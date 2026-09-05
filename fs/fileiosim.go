@@ -52,8 +52,8 @@ func (sim *fileIOSimulator) WriteFile(ctx context.Context, name string, data []b
 		return fmt.Errorf("induced error on file suffix %d", n)
 	}
 	sim.locker.Lock()
+	defer sim.locker.Unlock()
 	sim.lookup[name] = data
-	sim.locker.Unlock()
 	return nil
 }
 func (sim *fileIOSimulator) ReadFile(ctx context.Context, name string) ([]byte, error) {
@@ -84,8 +84,8 @@ func (sim *fileIOSimulator) Remove(ctx context.Context, name string) error {
 		return fmt.Errorf("induced error on file suffix %d", n)
 	}
 	sim.locker.Lock()
+	defer sim.locker.Unlock()
 	delete(sim.lookup, name)
-	sim.locker.Unlock()
 	return nil
 }
 func (sim *fileIOSimulator) Stat(ctx context.Context, path string) (os.FileInfo, error) {

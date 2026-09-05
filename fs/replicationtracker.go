@@ -142,40 +142,46 @@ func (r *replicationTracker) handleFailedToReplicate(ctx context.Context) {
 		return
 	}
 
-	globalReplicationDetailsLocker.Lock()
-	if err := r.syncWithL2Cache(ctx, false); err != nil {
-		log.Warn(fmt.Sprintf("error while updating global replication status & L2 cache, details: %v", err))
-	}
-	globalReplicationDetailsLocker.Unlock()
+	func() {
+		globalReplicationDetailsLocker.Lock()
+		defer globalReplicationDetailsLocker.Unlock()
+		if err := r.syncWithL2Cache(ctx, false); err != nil {
+			log.Warn(fmt.Sprintf("error while updating global replication status & L2 cache, details: %v", err))
+		}
+	}()
 
 	// L2 cache "knows" of failure, just return.
-	globalReplicationDetailsLocker.RLock()
-	if GlobalReplicationDetails.FailedToReplicate {
-		globalReplicationDetailsLocker.RUnlock()
+	knownFailure := func() bool {
+		globalReplicationDetailsLocker.RLock()
+		defer globalReplicationDetailsLocker.RUnlock()
+		return GlobalReplicationDetails != nil && GlobalReplicationDetails.FailedToReplicate
+	}()
+	if knownFailure {
 		r.FailedToReplicate = true
 		return
 	}
-	globalReplicationDetailsLocker.RUnlock()
 
-	globalReplicationDetailsLocker.Lock()
+	func() {
+		globalReplicationDetailsLocker.Lock()
+		defer globalReplicationDetailsLocker.Unlock()
 
-	if r.FailedToReplicate {
-		globalReplicationDetailsLocker.Unlock()
-		return
-	}
+		if r.FailedToReplicate {
+			return
+		}
 
-	r.FailedToReplicate = true
-	GlobalReplicationDetails.FailedToReplicate = true
-	if err := r.writeReplicationStatus(ctx, r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
-		log.Warn(fmt.Sprintf("handleFailedToReplicate writeReplicationStatus failed, details: %v", err))
-	}
+		r.FailedToReplicate = true
+		if GlobalReplicationDetails != nil {
+			GlobalReplicationDetails.FailedToReplicate = true
+		}
+		if err := r.writeReplicationStatus(ctx, r.formatActiveFolderEntity(replicationStatusFilename)); err != nil {
+			log.Warn(fmt.Sprintf("handleFailedToReplicate writeReplicationStatus failed, details: %v", err))
+		}
 
-	// Sync l2 cache.
-	if err := r.syncWithL2Cache(ctx, true); err != nil {
-		log.Warn(fmt.Sprintf("error while updating global replication status & L2 cache, details: %v", err))
-	}
-
-	globalReplicationDetailsLocker.Unlock()
+		// Sync l2 cache.
+		if err := r.syncWithL2Cache(ctx, true); err != nil {
+			log.Warn(fmt.Sprintf("error while updating global replication status & L2 cache, details: %v", err))
+		}
+	}()
 }
 
 func (r *replicationTracker) failover(ctx context.Context) error {

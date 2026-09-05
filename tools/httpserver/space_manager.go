@@ -381,9 +381,9 @@ func builtinPreloadCandidates(templateID string) []string {
 }
 
 func buildImportSpaceRequest(ctx context.Context, filePath, databaseName, spaceName string) (*http.Request, error) {
-	file, err := os.Open(filePath)
+	file, err := safeOpenContained(filePath, preloadAllowedRoots())
 	if err != nil {
-		return nil, fmt.Errorf("failed to open preload file: %w", err)
+		return nil, fmt.Errorf("preload file path rejected: %w", err)
 	}
 	defer file.Close()
 
@@ -417,9 +417,9 @@ func buildImportSpaceRequest(ctx context.Context, filePath, databaseName, spaceN
 
 func ingestImportReader(ctx context.Context, request IngestSpaceRequest) (io.Reader, io.Closer, error) {
 	if request.PreloadFilePath != "" {
-		f, err := os.Open(request.PreloadFilePath)
+		f, err := safeOpenContained(request.PreloadFilePath, preloadAllowedRoots())
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to open preload file: %w", err)
+			return nil, nil, fmt.Errorf("preload file path rejected: %w", err)
 		}
 		return f, f, nil
 	}

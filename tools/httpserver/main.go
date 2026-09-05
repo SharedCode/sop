@@ -477,6 +477,7 @@ func main() {
 		})
 	}
 
+	handler = bodySizeLimitMiddleware(handler)
 	handler = metricsMiddleware(handler)
 
 	// Explicit timeouts: the zero-value http.Server has none, which lets a

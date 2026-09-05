@@ -274,8 +274,8 @@ func (ss *StepStreamer) EndArray() {
 		ss.used = true
 		// Write Empty Array
 		ss.parent.mu.Lock()
+		defer ss.parent.mu.Unlock()
 		fmt.Fprint(ss.parent.w, "[]")
-		ss.parent.mu.Unlock()
 		return
 	}
 

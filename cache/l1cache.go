@@ -92,9 +92,15 @@ var globalL1Locker sync.RWMutex
 // GetGlobalL1Cache returns the global L1 cache singleton, creating one on first use
 // with the provided L2 cache and capacities appropriate for the deployment mode.
 func GetGlobalL1Cache(l2c sop.L2Cache) *L1Cache {
-	globalL1Locker.RLock()
-	gc := globalL1CacheRegistry[l2c.GetType()]
-	globalL1Locker.RUnlock()
+	if l2c == nil {
+		return nil
+	}
+
+	gc := func() *L1Cache {
+		globalL1Locker.RLock()
+		defer globalL1Locker.RUnlock()
+		return globalL1CacheRegistry[l2c.GetType()]
+	}()
 	if gc != nil {
 		return gc
 	}

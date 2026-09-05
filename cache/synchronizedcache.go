@@ -23,8 +23,8 @@ func NewSynchronizedCache[TK comparable, TV any](minCapacity, maxCapacity int) C
 
 func (sc *sync_cache[TK, TV]) Set(items []sop.KeyValuePair[TK, TV]) {
 	sc.locker.Lock()
+	defer sc.locker.Unlock()
 	sc.Cache.Set(items)
-	sc.locker.Unlock()
 }
 func (sc *sync_cache[TK, TV]) Get(keys []TK) []TV {
 	sc.locker.Lock()
@@ -34,12 +34,12 @@ func (sc *sync_cache[TK, TV]) Get(keys []TK) []TV {
 
 func (sc *sync_cache[TK, TV]) Delete(keys []TK) {
 	sc.locker.Lock()
+	defer sc.locker.Unlock()
 	sc.Cache.Delete(keys)
-	sc.locker.Unlock()
 }
 
 func (sc *sync_cache[TK, TV]) Clear() {
 	sc.locker.Lock()
+	defer sc.locker.Unlock()
 	sc.Cache.Clear()
-	sc.locker.Unlock()
 }

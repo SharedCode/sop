@@ -22,7 +22,7 @@ Instead of managing separate database servers, message brokers, caching tiers, a
 [![A2A](https://img.shields.io/badge/A2A-tools%2Fa2aagent-4A4A4A)](docs/MCP_A2A_AND_VERIFICATION_ENGINE.md)
 
 <p align="center">
-  <img src="docs/assets/sop-demo.gif" alt="Live SOP WASM demo: executing an ACID transfer and killing/resuming a checkpointed AI agent mid-task, both running client-side with zero network calls" width="760" />
+  <img src="docs/assets/sop-demo.gif" alt="Live SOP WASM demo: executing an ACID transfer and killing/resuming a checkpointed AI agent mid-task, both running client-side with zero network calls after initial page load" width="760" />
 </p>
 
 ---
@@ -33,11 +33,11 @@ No revenue or customer numbers exist yet for this project (see [For Investors](#
 
 | What collapses | From | To |
 | :--- | :--- | :--- |
-| **Network hops per operation** | 3-4 hops across Redis, a queue, and Postgres/Cassandra (15-50ms) | 1 in-process call inside the embedded engine (sub-millisecond) |
+| **Network hops per operation** | 3-4 hops across Redis, a queue, and Postgres/Cassandra (estimated 15-50ms network round-trip overhead) | 1 in-process call inside the embedded engine (sub-millisecond) |
 | **Stateful services to operate, patch, and page on** | Redis + Kafka/RabbitMQ + Postgres/Cassandra + ZooKeeper (4+) | 1 embedded library |
-| **Language surfaces shipped** | — | Go (native), Python (`sop4py` on PyPI), C# (`Sop` on NuGet); Java and Rust bindings exist in-repo with tests, not yet published |
-| **CI rigor on every change** | — | `govulncheck` clean on every push; race detector on the core engine packages (`btree`, `common`, `fs`, `inmemory`); 3-OS build and test matrix (Linux, macOS, Windows) |
-| **Deployment footprint of the technical demo** | A server-backed demo stack | WASM build running ACID transactions, vector search, and agent-memory checkpointing 100% client-side, 0 HTTP calls ([live](https://sharedcode.github.io/sop/)) |
+| **Language surfaces shipped** | N/A | Go (native), Python (`sop4py` on PyPI), C# (`Sop` on NuGet); Java and Rust bindings exist in-repo with tests, not yet published |
+| **CI rigor on every change** | N/A | `govulncheck` clean on every push; race detector on the core engine packages (`btree`, `common`, `fs`, `inmemory`); 3-OS build and test matrix (Linux, macOS, Windows) |
+| **Deployment footprint of the technical demo** | A server-backed demo stack | WASM build running ACID transactions, vector search, and agent-memory checkpointing 100% client-side, 0 runtime HTTP calls after page load ([live](https://sharedcode.github.io/sop/)) |
 
 Every row above is something you can run yourself, not a projection. See [Performance Benchmarks](#-performance-benchmarks) for the throughput numbers behind the latency claim, and [What Has Not Yet Been Proven](#-for-investors) for what this table deliberately leaves out.
 
@@ -45,11 +45,11 @@ Every row above is something you can run yourself, not a projection. See [Perfor
 
 ## 🚀 Experience SOP
 
-You can test SOP directly in your browser without installing anything. Start with the technical demo: it's the playground that demonstrates the engine's core power directly, safe, ACID-transactional storage running on web storage itself (OPFS), with zero server and zero network calls. Everything else on this page, including the agent verification barrier below, is something built on top of that same engine, a reference implementation showing one concrete use case rather than a second, unrelated demo:
+You can test SOP directly in your browser without installing anything. Start with the technical demo: it's the playground that demonstrates the engine's core power directly, safe, ACID-transactional storage running on web storage itself (OPFS), with zero server and zero network calls after the initial page loads the wasm binary. Everything else on this page, including the agent verification barrier below, is something built on top of that same engine, a reference implementation showing one concrete use case rather than a second, unrelated demo:
 
 | Experience | Description | Live Interactive Link |
 | :--- | :--- | :--- |
-| 🧠 **SOP Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 HTTP network calls**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
+| 🧠 **SOP Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
 | 🎮 **SOP Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch SOP automatically redistribute tasks and rebuild parity in real-time. | [**Play SOP Arena →**](https://sharedcode.github.io/sop/arena/) |
 | 🔌 **Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/sop/agents/) |
 
@@ -203,7 +203,7 @@ THE FRAGMENTED MULTI-COMPONENT STACK (Without SOP):
        ├──► (TCP Hop 3: 10-30ms) ──► PostgreSQL / Cassandra (Persistent Storage)
        └──► (Failover Glue)      ──► ZooKeeper / Custom Retry & Outbox Daemons
 
-⚠️ 6+ infrastructure boundaries | 15-50ms latency tax | High split-brain failure risk | High maintenance overhead
+⚠️ 6+ infrastructure boundaries | Estimated 15-50ms network latency tax | High split-brain failure risk | High maintenance overhead
 ```
 
 When an application worker crashes between releasing a lock in Redis and committing to PostgreSQL, state can enter an inconsistent split-brain condition. Engineering teams end up spending substantial time writing and maintaining outbox listeners, lock renewers, and compensating retry logic.
@@ -349,7 +349,7 @@ The project is MIT-licensed with no commercial product today. Plausible paths th
 
 **What Has Been Proven**
 - A working Go engine with ACID transactions (WAL plus two-phase commit), a custom B-Tree, and Reed-Solomon erasure coding, each with passing automated tests (18 packages carry tests in the core Go module; run them with `go test $(go list ./... | grep -Ev '/demo$|/demo-agents$')`, since the two WASM-only packages build under `GOOS=js` alone, see [Performance Benchmarks](#-performance-benchmarks) below for the throughput numbers).
-- A real WebAssembly build of the engine running ACID transactions, vector search, and agent-memory checkpointing entirely in-browser with zero network calls ([live demo](https://sharedcode.github.io/sop/)).
+- A real WebAssembly build of the engine running ACID transactions, vector search, and agent-memory checkpointing entirely in-browser with zero runtime network calls after initial page load ([live demo](https://sharedcode.github.io/sop/)).
 - Working language bindings for Go (native), Python (`sop4py`, published to PyPI), and C# (`Sop`, published to NuGet), plus Java and Rust bindings that exist in-repo with tests but are not yet published to their package registries.
 - CI that runs the race detector and `govulncheck` on every change, and a changelog showing multiple rounds of real dependency and CVE remediation.
 
@@ -498,7 +498,20 @@ This demo demonstrates an AI worker creating a context checkpoint, crashing mid-
 
 ## ⚡ Performance Benchmarks
 
-Below are authentic benchmark results from the repository benchmark harness (`tools/benchmark`) running on a standard workstation:
+Below are benchmark results from the repository benchmark harness (`tools/benchmark`) run on a 2015 MacBook Pro (Dual-Core Intel Core i5, 8GB RAM, macOS).
+
+What is measured: these runs benchmark SOP's in-memory L2 cache with `/tmp` storage backing full ACID transactions, not disk-only storage without cache.
+
+Exact reproduction command:
+```bash
+go run ./tools/benchmark -count <N> -slotlength <N>
+```
+
+For example:
+```bash
+go run ./tools/benchmark -count 10000 -slotlength 2000
+go run ./tools/benchmark -count 100000 -slotlength 4000
+```
 
 ### Tuning `SlotLength` (Items per B-Tree Node)
 

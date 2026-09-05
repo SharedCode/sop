@@ -50,6 +50,7 @@ func (m *shardedMap) load(key string) (any, bool) {
 func (m *shardedMap) store(key string, value any) {
 	shard := m.getShard(key)
 	shard.mu.Lock()
+	defer shard.mu.Unlock()
 
 	// Eviction logic: If over capacity, remove item with earliest expiration from a random sample
 	if len(shard.items) >= m.maxItemsPerShard {
@@ -100,19 +101,19 @@ func (m *shardedMap) store(key string, value any) {
 	}
 
 	shard.items[key] = value
-	shard.mu.Unlock()
 }
 
 func (m *shardedMap) delete(key string) {
 	shard := m.getShard(key)
 	shard.mu.Lock()
+	defer shard.mu.Unlock()
 	delete(shard.items, key)
-	shard.mu.Unlock()
 }
 
 func (m *shardedMap) loadOrStore(key string, value any) (actual any, loaded bool) {
 	shard := m.getShard(key)
 	shard.mu.Lock()
+	defer shard.mu.Unlock()
 	actual, loaded = shard.items[key]
 	if !loaded {
 		// Eviction logic
@@ -164,7 +165,6 @@ func (m *shardedMap) loadOrStore(key string, value any) (actual any, loaded bool
 		actual = value
 		shard.items[key] = value
 	}
-	shard.mu.Unlock()
 	return actual, loaded
 }
 
