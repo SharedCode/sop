@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
   <defs>
-    <!-- Linear gradient for the geometric Z and squircle border -->
-    <linearGradient id="zGradAvatar" x1="0%" y1="0%" x2="100%" y2="100%">
+    <!-- Linear gradient for the geometric J and squircle border -->
+    <linearGradient id="jGradAvatar" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#00f2fe" />
       <stop offset="45%" stop-color="#4facfe" />
       <stop offset="100%" stop-color="#7f00ff" />
@@ -37,13 +37,13 @@
   <rect width="1024" height="1024" fill="url(#gridPattern)" />
 
   <!-- Badge Squircle (Centered, safe for circular avatar crop) -->
-  <rect x="182" y="182" width="660" height="660" rx="190" 
-        fill="#0b0f19" 
-        stroke="url(#zGradAvatar)" 
-        stroke-width="16" 
+  <rect x="182" y="182" width="660" height="660" rx="190"
+        fill="#0b0f19"
+        stroke="url(#jGradAvatar)"
+        stroke-width="16"
         filter="url(#avatarGlow)"/>
 
-  <!-- Geometric Z Symbol (Scaled and Centered) -->
-  <path d="M 342,342 L 682,342 L 682,416 L 482,608 L 682,608 L 682,682 L 342,682 L 342,608 L 542,416 L 342,416 Z" 
-        fill="url(#zGradAvatar)"/>
+  <!-- Geometric J Symbol (Scaled and Centered) -->
+  <path d="M 608,342 L 682,342 L 682,682 L 342,682 L 342,608 L 608,608 Z"
+        fill="url(#jGradAvatar)"/>
 </svg>

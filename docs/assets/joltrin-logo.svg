@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="480" height="80" viewBox="0 0 480 80">
   <defs>
-    <linearGradient id="zGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="jGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#00f2fe" />
       <stop offset="50%" stop-color="#4facfe" />
       <stop offset="100%" stop-color="#7f00ff" />
@@ -13,12 +13,12 @@
       <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#00f2fe" flood-opacity="0.25"/>
     </filter>
   </defs>
-  
-  <!-- Minimal Geometric Z Symbol Icon Badge (Horizontally Centered) -->
-  <rect x="48" y="10" width="60" height="60" rx="16" fill="#0b0f19" stroke="url(#zGrad)" stroke-width="1.5" filter="url(#glow)"/>
-  
-  <!-- Geometric Z Symbol -->
-  <path d="M 63,24 L 93,24 L 93,30.5 L 74,49.5 L 93,49.5 L 93,56 L 63,56 L 63,49.5 L 82,30.5 L 63,30.5 Z" fill="url(#zGrad)"/>
+
+  <!-- Minimal Geometric J Symbol Icon Badge (Horizontally Centered) -->
+  <rect x="48" y="10" width="60" height="60" rx="16" fill="#0b0f19" stroke="url(#jGrad)" stroke-width="1.5" filter="url(#glow)"/>
+
+  <!-- Geometric J Symbol -->
+  <path d="M 86.5,24 L 93,24 L 93,56 L 63,56 L 63,49.5 L 86.5,49.5 Z" fill="url(#jGrad)"/>
 
   <!-- Wordmark -->
   <text x="124" y="40" font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif" font-size="30" font-weight="800" letter-spacing="-0.5" fill="url(#textGrad)">Joltrin</text>

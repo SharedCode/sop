@@ -55,13 +55,13 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="w-9 h-9 rounded-xl bg-[#0b0f19] border border-cyan-400/40 flex items-center justify-center shadow-lg shadow-cyan-500/20 flex-shrink-0">
             <svg width="22" height="22" viewBox="0 0 100 100">
               <defs>
-                <linearGradient id="headerZGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                <linearGradient id="headerJGrad" x1="0%" y1="0%" x2="100%" y2="100%">
                   <stop offset="0%" stopColor="#00f2fe" />
                   <stop offset="45%" stopColor="#4facfe" />
                   <stop offset="100%" stopColor="#7f00ff" />
                 </linearGradient>
               </defs>
-              <path d="M 27,27 L 73,27 L 73,37 L 46,63 L 73,63 L 73,73 L 27,73 L 27,63 L 54,37 L 27,37 Z" fill="url(#headerZGrad)"/>
+              <path d="M 63,27 L 73,27 L 73,73 L 27,73 L 27,63 L 63,63 Z" fill="url(#headerJGrad)"/>
             </svg>
           </div>
           <div className="flex-shrink-0">
