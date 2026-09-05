@@ -5,6 +5,10 @@
 ### From milliseconds to microseconds: durable memory and verification infrastructure for AI agents.
 
 <p align="center">
+  <a href="#-performance-benchmarks"><strong>⚡ Verified by benchmark: &lt;0.3ms latency &amp; ~6.8µs B-Tree operations →</strong></a>
+</p>
+
+<p align="center">
   <img src="docs/assets/zeltrin-logo.svg" alt="Zeltrin logo" width="480" />
 </p>
 
@@ -24,6 +28,9 @@
 **Zeltrin** (formerly SOP / Scalable Object Persistence) is a unified in-process state engine providing transactional persistence, durable agent memory, distributed storage primitives, explicit-state verification, and WebAssembly persistence. It combines a sector-aligned **copy-on-write B-Tree**, **checkpointed episodic agent memory**, **vector similarity search**, and a **deterministic safety verification barrier** for MCP and A2A runbooks into one library.
 
 Instead of managing separate vector databases, message brokers, caching tiers, distributed lock managers, and fragile external checkpoint stores, Zeltrin lets your AI agents maintain crash-resilient memory and enforce operational invariants directly within the execution boundary.
+
+> **Why "from milliseconds to microseconds"?** Traditional multi-tier architectures incur an estimated 15-50ms network round-trip penalty across external services (Redis, message queues, relational databases). Zeltrin runs embedded in-process, shifting latency from milliseconds to microseconds: empirical benchmarks measure **<0.3ms** end-to-end in-process execution, **~6.87µs** per B-Tree write (>145,000 ops/sec), and **~6.95µs** per read (>143,000 ops/sec) with full ACID consistency.  
+> 🔗 **Proof & Benchmark Reference:** [View Detailed Benchmarks & Microsecond Breakdown →](#-performance-benchmarks) · Benchmark suite: [`tools/benchmark`](tools/benchmark) · Live client-side run: [Technical WASM Demo](https://sharedcode.github.io/sop/)
 
 <p align="center">
   <img src="docs/assets/sop-demo.gif" alt="Live Zeltrin WASM demo: executing an ACID transfer and killing/resuming a checkpointed AI agent mid-task, both running client-side with zero network calls after initial page load" width="760" />
@@ -88,7 +95,7 @@ No revenue or customer numbers exist yet for this project (see [For Investors](#
 
 | What collapses | From | To |
 | :--- | :--- | :--- |
-| **Network hops per operation** | 3-4 hops across Redis, a queue, and Postgres/Cassandra (estimated 15-50ms network round-trip overhead) | 1 in-process call inside the embedded engine (sub-millisecond) |
+| **Network hops per operation** | 3-4 hops across Redis, a queue, and Postgres/Cassandra (estimated 15-50ms network round-trip overhead) | 1 embedded in-process call (<0.3ms measured latency, >145k ops/sec) |
 | **Stateful services to operate, patch, and page on** | Redis + Kafka/RabbitMQ + Postgres/Cassandra + ZooKeeper (4+) | 1 embedded library |
 | **Language surfaces shipped** | N/A | Go (native), Python (`sop4py` on PyPI), C# (`Sop` on NuGet); Java and Rust bindings exist in-repo with tests, not yet published |
 | **CI rigor on every change** | N/A | `govulncheck` clean on every push; race detector on the core engine packages (`btree`, `common`, `fs`, `inmemory`); 3-OS build and test matrix (Linux, macOS, Windows) |
@@ -556,6 +563,15 @@ This demo demonstrates an AI worker creating a context checkpoint, crashing mid-
 Below are benchmark results from the repository benchmark harness (`tools/benchmark`) run on a 2015 MacBook Pro (Dual-Core Intel Core i5, 8GB RAM, macOS).
 
 What is measured: these runs benchmark Zeltrin Engine's in-memory L2 cache with `/tmp` storage backing full ACID transactions, not disk-only storage without cache.
+
+### Microsecond-Scale Latency Profile
+
+The benchmark measurements confirm sub-millisecond execution down to microsecond item lookups:
+
+- **Embedded In-Process Latency**: `< 0.3ms` (<300µs) per transaction or safety barrier check, versus 15-50ms for multi-tier network round trips.
+- **Per-Item Write Latency**: `~6.87µs` (at 145,417 ops/sec with full ACID WAL logging).
+- **Per-Item Read Latency**: `~6.95µs` (at 143,770 ops/sec).
+- **Swarm Failover & Re-assignment**: `< 15ms` heartbeat lease detection with automated rollback.
 
 Exact reproduction command:
 ```bash
