@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <!-- Linear gradient for the geometric Z and squircle border -->
+    <linearGradient id="zGradAvatar" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe" />
+      <stop offset="45%" stop-color="#4facfe" />
+      <stop offset="100%" stop-color="#7f00ff" />
+    </linearGradient>
+
+    <!-- Radial backdrop glow -->
+    <radialGradient id="ambientGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#00f2fe" stop-opacity="0.18" />
+      <stop offset="35%" stop-color="#4facfe" stop-opacity="0.10" />
+      <stop offset="60%" stop-color="#7f00ff" stop-opacity="0.05" />
+      <stop offset="85%" stop-color="#070a13" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Glowing drop shadows -->
+    <filter id="avatarGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#00f2fe" flood-opacity="0.45"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="32" flood-color="#7f00ff" flood-opacity="0.30"/>
+    </filter>
+
+    <!-- Tech Grid pattern -->
+    <pattern id="gridPattern" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M 32 0 L 0 0 0 32" fill="none" stroke="rgba(255, 255, 255, 0.02)" stroke-width="1" />
+    </pattern>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1024" height="1024" fill="#070a13" />
+
+  <!-- Ambient Glow -->
+  <circle cx="512" cy="512" r="460" fill="url(#ambientGlow)" />
+
+  <!-- Grid Overlay -->
+  <rect width="1024" height="1024" fill="url(#gridPattern)" />
+
+  <!-- Badge Squircle (Centered, safe for circular avatar crop) -->
+  <rect x="182" y="182" width="660" height="660" rx="190" 
+        fill="#0b0f19" 
+        stroke="url(#zGradAvatar)" 
+        stroke-width="16" 
+        filter="url(#avatarGlow)"/>
+
+  <!-- Geometric Z Symbol (Scaled and Centered) -->
+  <path d="M 342,342 L 682,342 L 682,416 L 482,608 L 682,608 L 682,682 L 342,682 L 342,608 L 542,416 L 342,416 Z" 
+        fill="url(#zGradAvatar)"/>
+</svg>
