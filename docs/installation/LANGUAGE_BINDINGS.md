@@ -15,8 +15,8 @@ To connect your code to the database you just created, you can load the settings
 package main
 
 import (
-    "github.com/SharedCode/zeltrin/database"
-    "github.com/SharedCode/zeltrin"
+    "github.com/sharedcode/zeltrin/database"
+    "github.com/sharedcode/zeltrin"
     "context"
 )
 
