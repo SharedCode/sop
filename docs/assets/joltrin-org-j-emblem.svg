@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">
+  <defs>
+    <!-- Brand Cyan-Purple Gradient for Organization J -->
+    <linearGradient id="orgJGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe" />
+      <stop offset="45%" stop-color="#4facfe" />
+      <stop offset="100%" stop-color="#7f00ff" />
+    </linearGradient>
+
+    <linearGradient id="textGradJ" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#cbd5e1" />
+    </linearGradient>
+
+    <!-- Radial backdrop glow -->
+    <radialGradient id="orgAmbientGlow" cx="50%" cy="46%" r="50%">
+      <stop offset="0%" stop-color="#00f2fe" stop-opacity="0.22" />
+      <stop offset="40%" stop-color="#7f00ff" stop-opacity="0.12" />
+      <stop offset="80%" stop-color="#070a13" stop-opacity="0" />
+    </radialGradient>
+
+    <!-- Glowing Drop Shadow Filter -->
+    <filter id="orgGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="6" stdDeviation="14" flood-color="#00f2fe" flood-opacity="0.45" />
+      <feDropShadow dx="0" dy="18" stdDeviation="28" flood-color="#7f00ff" flood-opacity="0.30" />
+    </filter>
+
+    <!-- Subtle Technical Grid Pattern -->
+    <pattern id="orgGrid" width="28" height="28" patternUnits="userSpaceOnUse">
+      <path d="M 28 0 L 0 0 0 28" fill="none" stroke="rgba(255, 255, 255, 0.025)" stroke-width="1" />
+    </pattern>
+  </defs>
+
+  <!-- Deep Obsidian Canvas -->
+  <rect width="800" height="800" rx="48" fill="#07090e" />
+
+  <!-- Grid Texture -->
+  <rect width="800" height="800" fill="url(#orgGrid)" />
+
+  <!-- Ambient Glow Center -->
+  <circle cx="400" cy="360" r="320" fill="url(#orgAmbientGlow)" />
+
+  <!-- Outer Glass Badge Squircle -->
+  <rect x="200" y="140" width="400" height="400" rx="96"
+        fill="#0b0f19"
+        stroke="url(#orgJGrad)"
+        stroke-width="10"
+        filter="url(#orgGlow)" />
+
+  <!-- Geometric "J" Icon Glyph -->
+  <path d="M 456,236 L 504,236 L 504,456 L 284,456 L 284,408 L 456,408 Z"
+        fill="url(#orgJGrad)" />
+
+  <!-- Organization Wordmark Typography -->
+  <text x="400" y="620"
+        font-family="-apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif"
+        font-size="46"
+        font-weight="900"
+        letter-spacing="6"
+        text-anchor="middle"
+        fill="url(#textGradJ)">JOLTRIN</text>
+
+  <!-- Subtitle / Tagline -->
+  <text x="400" y="660"
+        font-family="'JetBrains Mono', 'SF Mono', Menlo, monospace"
+        font-size="14"
+        font-weight="600"
+        letter-spacing="2.5"
+        text-anchor="middle"
+        fill="#38bdf8">ONE ENGINE FOR DATA &amp; COMPUTE</text>
+</svg>

@@ -24,7 +24,7 @@ export const CopilotDrawer: React.FC<CopilotDrawerProps> = ({ isOpen, onClose })
               <Sparkles className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white tracking-tight">SOP Copilot</h2>
+              <h2 className="text-lg font-bold text-white tracking-tight">Joltrin Copilot</h2>
               <p className="text-xs text-slate-400">Interactive architectural & distributed systems explainer.</p>
             </div>
           </div>

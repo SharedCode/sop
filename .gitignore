@@ -278,3 +278,7 @@ tools/httpserver/translogs/
 *.bak
 *.out
 coverage.out
+_site/
+playwright-report/
+test-results/
+

@@ -1,0 +1,136 @@
+name: Playwright E2E Test Suite (Joltrin Web & Docs)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'demo/**'
+      - 'demo-agents/**'
+      - 'sop-arena/**'
+      - 'docs/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'playwright.config.ts'
+      - 'package.json'
+      - '.github/workflows/e2e.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+    paths:
+      - 'demo/**'
+      - 'demo-agents/**'
+      - 'sop-arena/**'
+      - 'docs/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'playwright.config.ts'
+      - 'package.json'
+      - '.github/workflows/e2e.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: "e2e-${{ github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  e2e-matrix:
+    name: Run E2E Matrix (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [chromium, firefox, webkit, mobile-chrome, mobile-safari]
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Go Toolchain
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Copy Go WebAssembly JavaScript Runtime Support (wasm_exec.js)
+        shell: bash
+        run: |
+          set -euo pipefail
+          GOROOT="$(go env GOROOT)"
+          if [ -f "${GOROOT}/lib/wasm/wasm_exec.js" ]; then
+            cp "${GOROOT}/lib/wasm/wasm_exec.js" demo/wasm_exec.js
+            cp "${GOROOT}/lib/wasm/wasm_exec.js" demo-agents/wasm_exec.js
+          elif [ -f "${GOROOT}/misc/wasm/wasm_exec.js" ]; then
+            cp "${GOROOT}/misc/wasm/wasm_exec.js" demo/wasm_exec.js
+            cp "${GOROOT}/misc/wasm/wasm_exec.js" demo-agents/wasm_exec.js
+          else
+            echo "Error: wasm_exec.js not found in ${GOROOT}" >&2
+            exit 1
+          fi
+
+      - name: Compile Go Engines to WebAssembly
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Compiling demo/sop.wasm..."
+          (cd demo && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop.wasm .)
+          echo "Compiling demo-agents/sop-agents.wasm..."
+          (cd demo-agents && GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o sop-agents.wasm .)
+
+      - name: Setup Node.js Toolchain
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Root Dependencies
+        run: npm ci || npm install
+
+      - name: Install & Build Joltrin Arena
+        working-directory: ./sop-arena
+        run: |
+          npm ci || npm install
+          npm run build
+
+      - name: Assemble Combined Site
+        shell: bash
+        run: bash scripts/build-site.sh
+
+      - name: Cache Playwright Browser Binaries
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright Browsers & OS Dependencies
+        run: |
+          if [ "${{ steps.playwright-cache.outputs.cache-hit }}" != "true" ]; then
+            npx playwright install --with-deps
+          else
+            npx playwright install-deps
+          fi
+
+      - name: Execute Playwright E2E Tests
+        env:
+          CI: true
+          PORT: 4173
+        run: npx playwright test --project=${{ matrix.project }}
+
+      - name: Upload Playwright Test Report Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload Failure Traces & Screenshots
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: test-results-${{ matrix.project }}
+          path: test-results/
+          retention-days: 14

@@ -1,0 +1,20 @@
+{
+  "name": "joltrin-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-grade End-to-End (E2E) testing suite for the Joltrin web application and documentation portal",
+  "type": "module",
+  "scripts": {
+    "build:site": "bash scripts/build-site.sh",
+    "serve:site": "node scripts/serve-test-site.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.1",
+    "@types/node": "^22.13.8"
+  }
+}
