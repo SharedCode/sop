@@ -33,7 +33,7 @@ Instead of managing separate vector databases, message brokers, caching tiers, d
 > 🔗 **Proof & Benchmark Reference:** [View Detailed Benchmarks & Microsecond Breakdown →](#-performance-benchmarks) · Benchmark suite: [`tools/benchmark`](tools/benchmark) · Live client-side run: [Technical WASM Demo](https://sharedcode.github.io/zeltrin/)
 
 <p align="center">
-  <img src="docs/assets/sop-demo.gif" alt="Live Zeltrin WASM demo: executing an ACID transfer and killing/resuming a checkpointed AI agent mid-task, both running client-side with zero network calls after initial page load" width="760" />
+  <img src="docs/assets/zeltrin-demo.gif" alt="Live Zeltrin demo: in-process ACID transactions, distributed Arena simulation, and deterministic AI agent verification barrier" width="760" />
 </p>
 
 <p align="center">

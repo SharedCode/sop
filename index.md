@@ -1,12 +1,12 @@
 ---
-title: SOP Data & Compute Platform
+title: Zeltrin Data & Compute Platform
 ---
 
-# SOP: one engine for data and compute
+# Zeltrin: one engine for data and compute
 
-SOP is an ACID-compliant B-Tree storage engine with a distributed coordination model built in. It runs embedded in your process on a laptop, and the same code scales out to a cluster that shares storage and coordination state. No separate database server to operate.
+Zeltrin (formerly SOP) is an ACID-compliant B-Tree storage engine with a distributed coordination model built in. It runs embedded in your process on a laptop, and the same code scales out to a cluster that shares storage and coordination state. No separate database server to operate.
 
-![SOP quickstart demo](docs/assets/quickstart.gif)
+![Zeltrin demo](docs/assets/zeltrin-demo.gif)
 
 ```
 go run ./examples/quickstart

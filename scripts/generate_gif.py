@@ -1,13 +1,14 @@
 import os
-import math
 from PIL import Image, ImageDraw, ImageFont
 
 WIDTH = 800
 HEIGHT = 420
 BG_COLOR = (9, 13, 21)
 BORDER_COLOR = (30, 41, 59)
+CARD_BG = (14, 21, 35)
 BRAND_EMERALD = (16, 185, 129)
 BRAND_CYAN = (6, 182, 212)
+BRAND_BLUE = (79, 172, 254)
 BRAND_VIOLET = (139, 92, 246)
 BRAND_ROSE = (244, 63, 94)
 BRAND_AMBER = (245, 158, 11)
@@ -16,7 +17,6 @@ TEXT_MUTED = (148, 163, 184)
 TEXT_DIM = (100, 116, 139)
 
 def get_font(size, bold=False):
-    # Try system fonts, fallback to default
     font_paths = [
         "/System/Library/Fonts/SFProText-Bold.otf" if bold else "/System/Library/Fonts/SFProText-Regular.otf",
         "/System/Library/Fonts/HelveticaNeue.ttc",
@@ -31,8 +31,8 @@ def get_font(size, bold=False):
                 pass
     return ImageFont.load_default()
 
-font_title = get_font(28, bold=True)
-font_subtitle = get_font(16, bold=True)
+font_title = get_font(26, bold=True)
+font_subtitle = get_font(15, bold=True)
 font_body = get_font(13, bold=False)
 font_mono = get_font(12, bold=True)
 font_small = get_font(10, bold=False)
@@ -56,181 +56,210 @@ def create_base_canvas():
     draw.ellipse([(36, 18), (46, 28)], fill=(234, 179, 8))
     draw.ellipse([(54, 18), (64, 28)], fill=(34, 197, 94))
     
+    # Mini Z brand squircle in top right
+    zx = WIDTH - 52
+    zy = 15
+    draw.rounded_rectangle([(zx-4, zy-2), (zx+24, zy+20)], radius=4, fill=(11, 15, 25), outline=BRAND_CYAN, width=1)
+    draw.line([(zx, zy+2), (zx+18, zy+2)], fill=BRAND_CYAN, width=2)
+    draw.line([(zx+18, zy+2), (zx+1, zy+16)], fill=BRAND_BLUE, width=2)
+    draw.line([(zx+1, zy+16), (zx+19, zy+16)], fill=BRAND_VIOLET, width=2)
+    
     # Header tag
-    draw.text((80, 16), "SHAREDCODE SOP // DATA & COMPUTE PLATFORM", fill=TEXT_MUTED, font=font_mono)
+    draw.text((80, 16), "SHAREDCODE ZELTRIN // IN-PROCESS STATE ENGINE", fill=TEXT_MUTED, font=font_mono)
     return img, draw
 
 frames = []
 
-# --- SCENE 1: Intro & Value Proposition (8 frames) ---
+# --- SCENE 1: Intro & Architecture (12 frames) ---
 for i in range(12):
     img, draw = create_base_canvas()
     
     # Title badge
-    draw.rounded_rectangle([(60, 70), (220, 95)], radius=12, fill=(16, 185, 129, 30), outline=BRAND_EMERALD, width=1)
-    draw.text((72, 75), "⚡ SOP ARCHITECTURE", fill=BRAND_EMERALD, font=font_mono)
+    draw.rounded_rectangle([(60, 68), (275, 95)], radius=8, fill=(12, 32, 36), outline=BRAND_CYAN, width=1)
+    draw.text((74, 74), "// ZELTRIN ARCHITECTURE", fill=BRAND_CYAN, font=font_mono)
     
     # Main Headline
-    draw.text((60, 115), "One engine for data and compute.", fill=TEXT_WHITE, font=font_title)
-    draw.text((60, 155), "Scalable Objects Persistence eliminates the multi-component database tax.", fill=TEXT_MUTED, font=font_body)
+    draw.text((60, 110), "One engine for data, memory, and compute.", fill=TEXT_WHITE, font=font_title)
+    draw.text((60, 148), "Zero-server embedded state engine eliminates the multi-component database tax.", fill=TEXT_MUTED, font=font_body)
     
     # 3 Pill Cards
     cards = [
-        ("ACID B-Tree", "Embedded storage kernel", BRAND_EMERALD),
-        ("Swarm Compute", "Distributed work queues", BRAND_CYAN),
+        ("ACID B-Tree", "Embedded storage kernel", BRAND_CYAN),
+        ("Swarm Compute", "Distributed work queues", BRAND_EMERALD),
         ("Erasure Coding", "Zero-loss fault tolerance", BRAND_VIOLET)
     ]
     for idx, (title, desc, color) in enumerate(cards):
         cx = 60 + idx * 230
-        draw.rounded_rectangle([(cx, 200), (cx + 215, 290)], radius=12, fill=(14, 21, 35), outline=color, width=1)
-        draw.text((cx + 16, 218), title, fill=color, font=font_subtitle)
-        draw.text((cx + 16, 248), desc, fill=TEXT_MUTED, font=font_small)
+        draw.rounded_rectangle([(cx, 190), (cx + 215, 275)], radius=10, fill=CARD_BG, outline=color, width=1)
+        draw.text((cx + 16, 208), title, fill=color, font=font_subtitle)
+        draw.text((cx + 16, 238), desc, fill=TEXT_MUTED, font=font_small)
         
-    # Footer
-    draw.text((60, 340), "WITHOUT SOP: App → DB + Queue + Locks + Retries + Failover (6+ layers)", fill=BRAND_ROSE, font=font_mono)
-    draw.text((60, 365), "WITH SOP:    App → SOP Unified Engine (<0.3ms latency, 0 glue code)", fill=BRAND_EMERALD, font=font_mono)
+    # Footer comparison
+    draw.text((60, 325), "WITHOUT ZELTRIN: App -> DB + Queue + Locks + Retries + Failover (6+ layers)", fill=BRAND_ROSE, font=font_mono)
+    draw.text((60, 355), "WITH ZELTRIN:    App -> In-Process Engine (<0.3ms latency, 0 glue code)", fill=BRAND_EMERALD, font=font_mono)
     
     frames.append(img)
 
-# --- SCENE 2: Technical Demo Showcase (WASM / 0-Server) (12 frames) ---
-for i in range(14):
+# --- SCENE 2: Demo 1: Client-Side WebAssembly (12 frames) ---
+for i in range(12):
     img, draw = create_base_canvas()
     
-    draw.rounded_rectangle([(60, 65), (280, 90)], radius=12, fill=(6, 182, 212, 30), outline=BRAND_CYAN, width=1)
-    draw.text((72, 70), "DEMO 1: ZERO-SERVER WASM ENGINE", fill=BRAND_CYAN, font=font_mono)
+    draw.rounded_rectangle([(60, 65), (310, 92)], radius=8, fill=(12, 32, 36), outline=BRAND_CYAN, width=1)
+    draw.text((74, 71), "DEMO 1: CLIENT-SIDE WASM ENGINE", fill=BRAND_CYAN, font=font_mono)
     
     draw.text((60, 105), "Running Go Storage Kernel Directly in Browser", fill=TEXT_WHITE, font=font_title)
     
     # Terminal display
-    draw.rounded_rectangle([(60, 150), (740, 380)], radius=12, fill=(5, 8, 14), outline=BORDER_COLOR, width=1)
-    draw.text((80, 170), ">>> [ACID Begin] Initialized Transaction TX-WASM-000842 (Local V8 Sandbox)", fill=BRAND_CYAN, font=font_mono)
-    draw.text((80, 195), ">>> [Isolation] Acquired B-Tree latch in Snapshot Isolation mode", fill=TEXT_MUTED, font=font_mono)
-    draw.text((80, 220), ">>> [Mutation] Debited $250,000.00 from acc:001 (Acme Treasury)", fill=BRAND_VIOLET, font=font_mono)
-    draw.text((80, 245), ">>> [Mutation] Credited $250,000.00 to acc:002 (Starlight Fund)", fill=BRAND_VIOLET, font=font_mono)
-    draw.text((80, 270), ">>> [Consistency] Invariant check Σ(balances) == $17,500,000.00 PASSED", fill=BRAND_EMERALD, font=font_mono)
-    draw.text((80, 295), ">>> [Atomic Commit] WAL flushed to local segment in 118 µs (0.118 ms)", fill=BRAND_EMERALD, font=font_mono)
-    draw.text((80, 325), "✓ 0 HTTP Requests | 0 Database Server Daemons | Sub-millisecond Execution", fill=TEXT_WHITE, font=font_mono)
+    draw.rounded_rectangle([(60, 145), (740, 385)], radius=10, fill=(5, 8, 14), outline=BORDER_COLOR, width=1)
+    draw.text((80, 165), ">>> [Zeltrin WASM] Initialized Transaction TX-000842 (Browser V8 Sandbox)", fill=BRAND_CYAN, font=font_mono)
+    draw.text((80, 192), ">>> [ACID Isolation] Acquired B-Tree latch in Snapshot Isolation mode", fill=TEXT_MUTED, font=font_mono)
+    draw.text((80, 219), ">>> [Mutation] Debited $250,000.00 from acc:001 (Acme Treasury)", fill=BRAND_VIOLET, font=font_mono)
+    draw.text((80, 246), ">>> [Mutation] Credited $250,000.00 to acc:002 (Starlight Fund)", fill=BRAND_VIOLET, font=font_mono)
+    draw.text((80, 273), ">>> [Consistency] Invariant check SUM(balances) == $17,500,000.00 PASSED", fill=BRAND_EMERALD, font=font_mono)
+    draw.text((80, 300), ">>> [Atomic Commit] WAL flushed to local segment in 118 us (0.118 ms)", fill=BRAND_EMERALD, font=font_mono)
+    draw.text((80, 335), "[OK] 0 HTTP Requests | 0 Database Servers | Microsecond In-Process Execution", fill=TEXT_WHITE, font=font_mono)
     
     frames.append(img)
 
-# --- SCENE 3: SOP Arena (Distributed Topology & Swarm) (12 frames) ---
-for i in range(14):
+# --- SCENE 3: Demo 2: Zeltrin Arena Topology (12 frames) ---
+for i in range(12):
     img, draw = create_base_canvas()
     
-    draw.rounded_rectangle([(60, 65), (280, 90)], radius=12, fill=(139, 92, 246, 30), outline=BRAND_VIOLET, width=1)
-    draw.text((72, 70), "DEMO 2: SOP ARENA SIMULATOR", fill=BRAND_VIOLET, font=font_mono)
+    draw.rounded_rectangle([(60, 65), (295, 92)], radius=8, fill=(24, 18, 42), outline=BRAND_VIOLET, width=1)
+    draw.text((74, 71), "DEMO 2: ZELTRIN ARENA SIMULATOR", fill=BRAND_VIOLET, font=font_mono)
     
     draw.text((60, 105), "Live Distributed Systems Survival Mission", fill=TEXT_WHITE, font=font_title)
     
     # Topology Canvas Box
-    draw.rounded_rectangle([(60, 150), (740, 380)], radius=12, fill=(5, 8, 14), outline=BORDER_COLOR, width=1)
+    draw.rounded_rectangle([(60, 145), (740, 385)], radius=10, fill=(5, 8, 14), outline=BORDER_COLOR, width=1)
     
-    # Draw topology nodes
     # Ingestion
-    draw.rounded_rectangle([(90, 210), (200, 270)], radius=8, fill=(14, 21, 35), outline=BRAND_CYAN, width=1)
-    draw.text((105, 225), "Ingestion API", fill=TEXT_WHITE, font=font_mono)
-    draw.text((105, 245), "45,000 TPS", fill=BRAND_CYAN, font=font_small)
+    draw.rounded_rectangle([(85, 210), (195, 270)], radius=8, fill=CARD_BG, outline=BRAND_CYAN, width=1)
+    draw.text((100, 224), "Ingestion API", fill=TEXT_WHITE, font=font_mono)
+    draw.text((100, 246), "45,000 TPS", fill=BRAND_CYAN, font=font_small)
     
     # Coordinator
-    draw.rounded_rectangle([(270, 195), (410, 285)], radius=10, fill=(16, 28, 48), outline=BRAND_EMERALD, width=2)
-    draw.text((285, 215), "SOP KERNEL", fill=BRAND_EMERALD, font=font_subtitle)
-    draw.text((285, 240), "OCC Coordinator", fill=TEXT_MUTED, font=font_small)
-    draw.text((285, 258), "0-Master Swarm", fill=TEXT_MUTED, font=font_small)
+    draw.rounded_rectangle([(260, 195), (415, 285)], radius=10, fill=(16, 28, 48), outline=BRAND_CYAN, width=2)
+    draw.text((275, 212), "ZELTRIN KERNEL", fill=BRAND_CYAN, font=font_subtitle)
+    draw.text((275, 238), "OCC Coordinator", fill=TEXT_MUTED, font=font_small)
+    draw.text((275, 258), "0-Master Swarm", fill=TEXT_MUTED, font=font_small)
     
     # Workers
-    draw.rounded_rectangle([(480, 170), (580, 215)], radius=6, fill=(14, 21, 35), outline=BRAND_EMERALD, width=1)
-    draw.text((492, 185), "Worker 01 [OK]", fill=BRAND_EMERALD, font=font_small)
+    draw.rounded_rectangle([(475, 165), (585, 210)], radius=6, fill=CARD_BG, outline=BRAND_EMERALD, width=1)
+    draw.text((487, 180), "Worker 01 [OK]", fill=BRAND_EMERALD, font=font_small)
     
-    draw.rounded_rectangle([(480, 230), (580, 275)], radius=6, fill=(14, 21, 35), outline=BRAND_EMERALD, width=1)
-    draw.text((492, 245), "Worker 02 [OK]", fill=BRAND_EMERALD, font=font_small)
+    draw.rounded_rectangle([(475, 225), (585, 270)], radius=6, fill=CARD_BG, outline=BRAND_EMERALD, width=1)
+    draw.text((487, 240), "Worker 02 [OK]", fill=BRAND_EMERALD, font=font_small)
     
-    draw.rounded_rectangle([(480, 290), (580, 335)], radius=6, fill=(14, 21, 35), outline=BRAND_EMERALD, width=1)
-    draw.text((492, 305), "Worker 03 [OK]", fill=BRAND_EMERALD, font=font_small)
+    draw.rounded_rectangle([(475, 285), (585, 330)], radius=6, fill=CARD_BG, outline=BRAND_EMERALD, width=1)
+    draw.text((487, 300), "Worker 03 [OK]", fill=BRAND_EMERALD, font=font_small)
     
     # Storage
-    draw.rounded_rectangle([(630, 190), (720, 290)], radius=8, fill=(14, 21, 35), outline=BRAND_VIOLET, width=1)
+    draw.rounded_rectangle([(630, 190), (725, 290)], radius=8, fill=CARD_BG, outline=BRAND_VIOLET, width=1)
     draw.text((642, 210), "B-Tree", fill=BRAND_VIOLET, font=font_mono)
     draw.text((642, 230), "Shard 1-4", fill=TEXT_MUTED, font=font_small)
     draw.text((642, 250), "Erasure", fill=TEXT_MUTED, font=font_small)
     draw.text((642, 268), "Parity OK", fill=BRAND_EMERALD, font=font_small)
     
     # Lines
-    draw.line([(200, 240), (270, 240)], fill=BRAND_CYAN, width=2)
-    draw.line([(410, 220), (480, 192)], fill=BRAND_EMERALD, width=1)
-    draw.line([(410, 240), (480, 252)], fill=BRAND_EMERALD, width=1)
-    draw.line([(410, 260), (480, 312)], fill=BRAND_EMERALD, width=1)
-    draw.line([(580, 240), (630, 240)], fill=BRAND_VIOLET, width=1)
+    draw.line([(195, 240), (260, 240)], fill=BRAND_CYAN, width=2)
+    draw.line([(415, 218), (475, 188)], fill=BRAND_EMERALD, width=1)
+    draw.line([(415, 240), (475, 248)], fill=BRAND_EMERALD, width=1)
+    draw.line([(415, 262), (475, 308)], fill=BRAND_EMERALD, width=1)
+    draw.line([(585, 240), (630, 240)], fill=BRAND_VIOLET, width=1)
     
     frames.append(img)
 
-# --- SCENE 4: Disaster Injected (Hardware Fault & Crash) (10 frames) ---
-for i in range(12):
+# --- SCENE 4: Chaos & Failure Injected (10 frames) ---
+for i in range(10):
     img, draw = create_base_canvas()
     
-    draw.rounded_rectangle([(60, 65), (280, 90)], radius=12, fill=(244, 63, 94, 30), outline=BRAND_ROSE, width=1)
-    draw.text((72, 70), "CHAOS TEST: HARDWARE FAULT", fill=BRAND_ROSE, font=font_mono)
+    draw.rounded_rectangle([(60, 65), (280, 92)], radius=8, fill=(35, 14, 20), outline=BRAND_ROSE, width=1)
+    draw.text((74, 71), "CHAOS TEST: HARDWARE FAULT", fill=BRAND_ROSE, font=font_mono)
     
     draw.text((60, 105), "Simulating Node Crashes & Concurrent Storm", fill=TEXT_WHITE, font=font_title)
     
-    draw.rounded_rectangle([(60, 150), (740, 380)], radius=12, fill=(25, 10, 15), outline=BRAND_ROSE, width=2)
+    draw.rounded_rectangle([(60, 145), (740, 385)], radius=10, fill=(22, 10, 15), outline=BRAND_ROSE, width=2)
     
-    draw.text((90, 185), "🚨 STORAGE FAULT: Storage Shard #02 disk array offline!", fill=BRAND_ROSE, font=font_subtitle)
-    draw.text((90, 225), "⚠️ WORKER CRASH: Agent Worker 03 terminated abruptly mid-transaction.", fill=BRAND_AMBER, font=font_subtitle)
-    draw.text((90, 265), "⚡ TRANSACTION STORM: 75,000 TPS concurrent write collision.", fill=BRAND_ROSE, font=font_subtitle)
+    draw.text((85, 180), "[FAULT] STORAGE: Storage Shard #02 disk array offline!", fill=BRAND_ROSE, font=font_subtitle)
+    draw.text((85, 220), "[CRASH] WORKER: Agent Worker 03 terminated abruptly mid-transaction.", fill=BRAND_AMBER, font=font_subtitle)
+    draw.text((85, 260), "[CHAOS] STORM: 75,000 TPS concurrent write collision.", fill=BRAND_ROSE, font=font_subtitle)
     
-    draw.rounded_rectangle([(90, 305), (710, 355)], radius=8, fill=(14, 21, 35), outline=BORDER_COLOR, width=1)
-    draw.text((110, 322), "Traditional Stack Result: Split-brain deadlock, lost tasks, cascading 500s", fill=TEXT_MUTED, font=font_mono)
-    
-    frames.append(img)
-
-# --- SCENE 5: SOP Autonomous Self-Healing & Recovery (12 frames) ---
-for i in range(14):
-    img, draw = create_base_canvas()
-    
-    draw.rounded_rectangle([(60, 65), (280, 90)], radius=12, fill=(16, 185, 129, 30), outline=BRAND_EMERALD, width=1)
-    draw.text((72, 70), "SOP AUTONOMOUS RECOVERY", fill=BRAND_EMERALD, font=font_mono)
-    
-    draw.text((60, 105), "Zero-Loss Erasure Coding & Swarm Redistribution", fill=TEXT_WHITE, font=font_title)
-    
-    draw.rounded_rectangle([(60, 150), (740, 380)], radius=12, fill=(8, 25, 18), outline=BRAND_EMERALD, width=2)
-    
-    draw.text((90, 180), "✓ REED-SOLOMON PARITY RECONSTRUCTION: Missing blocks rebuilt in-memory", fill=BRAND_EMERALD, font=font_subtitle)
-    draw.text((90, 220), "✓ HEARTBEAT FAILOVER: 847 queued tasks redistributed to healthy workers in 12ms", fill=BRAND_CYAN, font=font_subtitle)
-    draw.text((90, 260), "✓ OCC SERIALIZATION: 0 lock corruptions across concurrent storm", fill=BRAND_EMERALD, font=font_subtitle)
-    
-    draw.rounded_rectangle([(90, 305), (710, 355)], radius=8, fill=(14, 21, 35), outline=BRAND_EMERALD, width=1)
-    draw.text((110, 322), "SYSTEM SURVIVED: 100.00% ACID Consistency | 0 Dropped Writes", fill=TEXT_WHITE, font=font_mono)
+    draw.rounded_rectangle([(85, 305), (715, 355)], radius=8, fill=CARD_BG, outline=BORDER_COLOR, width=1)
+    draw.text((105, 322), "Traditional Stack: Split-brain deadlock, lost tasks, cascading 500 errors", fill=TEXT_MUTED, font=font_mono)
     
     frames.append(img)
 
-# --- SCENE 6: AI Agent Workforce & Summary (10 frames) ---
+# --- SCENE 5: Zeltrin Autonomous Self-Healing (12 frames) ---
 for i in range(12):
     img, draw = create_base_canvas()
     
-    draw.rounded_rectangle([(60, 65), (280, 90)], radius=12, fill=(139, 92, 246, 30), outline=BRAND_VIOLET, width=1)
-    draw.text((72, 70), "REAL-TIME AI AGENT SWARMS", fill=BRAND_VIOLET, font=font_mono)
+    draw.rounded_rectangle([(60, 65), (295, 92)], radius=8, fill=(12, 34, 24), outline=BRAND_EMERALD, width=1)
+    draw.text((74, 71), "AUTONOMOUS SELF-HEALING", fill=BRAND_EMERALD, font=font_mono)
     
-    draw.text((60, 105), "Persistent State for Distributed AI Workloads", fill=TEXT_WHITE, font=font_title)
+    draw.text((60, 105), "Zero-Loss Erasure Coding & Swarm Redistribution", fill=TEXT_WHITE, font=font_title)
     
-    draw.rounded_rectangle([(60, 150), (740, 380)], radius=12, fill=(14, 21, 35), outline=BORDER_COLOR, width=1)
+    draw.rounded_rectangle([(60, 145), (740, 385)], radius=10, fill=(8, 24, 18), outline=BRAND_EMERALD, width=2)
     
-    draw.text((90, 180), "DATA + COMPUTE + COORDINATION + TRANSACTIONS → SOP", fill=BRAND_EMERALD, font=font_subtitle)
-    draw.text((90, 215), "• Persistent Context: AI agent reasoning buffers commit atomically in <15ms", fill=TEXT_WHITE, font=font_body)
-    draw.text((90, 245), "• Vector Search: 128-d cosine similarity evaluated locally in memory", fill=TEXT_WHITE, font=font_body)
-    draw.text((90, 275), "• Resilient Swarm: Workers join and leave without orphan locks or dropped tasks", fill=TEXT_WHITE, font=font_body)
-    draw.text((90, 320), "Ready to explore? Run both interactive demos on GitHub Pages:", fill=BRAND_CYAN, font=font_mono)
-    draw.text((90, 345), "sharedcode.github.io/zeltrin  •  sharedcode.github.io/zeltrin-arena", fill=TEXT_WHITE, font=font_mono)
+    draw.text((85, 175), "[PASS] REED-SOLOMON RECONSTRUCTION: Missing data blocks rebuilt in-memory", fill=BRAND_EMERALD, font=font_subtitle)
+    draw.text((85, 215), "[PASS] HEARTBEAT FAILOVER: 847 queued tasks redistributed to healthy workers in 12ms", fill=BRAND_CYAN, font=font_subtitle)
+    draw.text((85, 255), "[PASS] OCC SERIALIZATION: 0 lock corruptions across concurrent transaction storm", fill=BRAND_EMERALD, font=font_subtitle)
+    
+    draw.rounded_rectangle([(85, 305), (715, 355)], radius=8, fill=CARD_BG, outline=BRAND_EMERALD, width=1)
+    draw.text((105, 322), "SYSTEM SURVIVED: 100.00% ACID Consistency | 0 Dropped Writes", fill=TEXT_WHITE, font=font_mono)
     
     frames.append(img)
 
-# Save as optimized GIF
-gif_path = "docs/assets/sop-demo.gif"
-frames[0].save(
-    gif_path,
-    save_all=True,
-    append_images=frames[1:],
-    duration=250, # 250ms per frame
-    loop=0,
-    optimize=True
-)
-print(f"✓ Successfully generated {gif_path} ({os.path.getsize(gif_path)} bytes, {len(frames)} frames)")
+# --- SCENE 6: Demo 3: AI Agent Verification Barrier (12 frames) ---
+for i in range(12):
+    img, draw = create_base_canvas()
+    
+    draw.rounded_rectangle([(60, 65), (315, 92)], radius=8, fill=(12, 32, 36), outline=BRAND_CYAN, width=1)
+    draw.text((74, 71), "DEMO 3: AGENT VERIFICATION BARRIER", fill=BRAND_CYAN, font=font_mono)
+    
+    draw.text((60, 105), "ai/verify Barrier Gating Real Runbooks in WASM", fill=TEXT_WHITE, font=font_title)
+    
+    draw.rounded_rectangle([(60, 145), (740, 385)], radius=10, fill=(5, 8, 14), outline=BORDER_COLOR, width=1)
+    
+    draw.text((80, 168), "BARRIER CERTIFICATE: Mathematical safety invariants before state mutation", fill=BRAND_CYAN, font=font_mono)
+    draw.text((80, 202), "* Agent executes: execute_step(drop_prod_db) ... BLOCKED (Precondition not met)", fill=BRAND_ROSE, font=font_mono)
+    draw.text((80, 232), "* Agent executes: execute_step(take_backup)   ... COMMITTED (State: backup_taken)", fill=BRAND_EMERALD, font=font_mono)
+    draw.text((80, 262), "* Agent executes: execute_step(validate_backup) ... COMMITTED (State: validated)", fill=BRAND_EMERALD, font=font_mono)
+    draw.text((80, 292), "* Agent executes: execute_step(drop_prod_db) ... ALLOWED (Invariants satisfied)", fill=BRAND_EMERALD, font=font_mono)
+    
+    draw.text((80, 335), "[PASS] Identical engine gating tools/mcpserver and tools/a2aagent in production", fill=TEXT_WHITE, font=font_mono)
+    
+    frames.append(img)
+
+# --- SCENE 7: Summary & Demos (14 frames) ---
+for i in range(14):
+    img, draw = create_base_canvas()
+    
+    draw.rounded_rectangle([(60, 65), (280, 92)], radius=8, fill=(24, 18, 42), outline=BRAND_VIOLET, width=1)
+    draw.text((74, 71), "REAL-TIME AI AGENT SWARMS", fill=BRAND_VIOLET, font=font_mono)
+    
+    draw.text((60, 105), "Persistent State for Distributed AI Workloads", fill=TEXT_WHITE, font=font_title)
+    
+    draw.rounded_rectangle([(60, 145), (740, 385)], radius=10, fill=CARD_BG, outline=BORDER_COLOR, width=1)
+    
+    draw.text((85, 175), "DATA + COMPUTE + COORDINATION + TRANSACTIONS -> ZELTRIN", fill=BRAND_CYAN, font=font_subtitle)
+    draw.text((85, 210), "* Persistent Context: AI agent reasoning buffers commit atomically in <15ms", fill=TEXT_WHITE, font=font_body)
+    draw.text((85, 240), "* Vector Search: 128-d cosine similarity evaluated locally in memory", fill=TEXT_WHITE, font=font_body)
+    draw.text((85, 270), "* Resilient Swarm: Workers join and leave without orphan locks or dropped tasks", fill=TEXT_WHITE, font=font_body)
+    draw.text((85, 315), "Experience all 3 live interactive experiences on GitHub Pages:", fill=BRAND_CYAN, font=font_mono)
+    draw.text((85, 342), "sharedcode.github.io/zeltrin  |  /arena  |  /agents", fill=TEXT_WHITE, font=font_mono)
+    
+    frames.append(img)
+
+# Save as optimized GIF to docs/assets/sop-demo.gif and docs/assets/zeltrin-demo.gif
+out_paths = ["docs/assets/sop-demo.gif", "docs/assets/zeltrin-demo.gif"]
+for p in out_paths:
+    frames[0].save(
+        p,
+        save_all=True,
+        append_images=frames[1:],
+        duration=250,
+        loop=0,
+        optimize=True
+    )
+    print(f"✓ Successfully generated {p} ({os.path.getsize(p)} bytes, {len(frames)} frames)")
