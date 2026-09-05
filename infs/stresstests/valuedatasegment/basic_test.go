@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/sharedcode/sop"
@@ -36,7 +37,7 @@ var ctx = context.Background()
 func getDataPath() string {
 	s := os.Getenv("datapath")
 	if s == "" {
-		s = "/Users/grecinto/sop_data/valuedatasegment"
+		s = filepath.Join(os.TempDir(), "sop_data", "valuedatasegment")
 	}
 	return s
 }

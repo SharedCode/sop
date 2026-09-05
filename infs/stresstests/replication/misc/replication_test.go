@@ -19,7 +19,7 @@ import (
 	"github.com/sharedcode/sop/infs"
 )
 
-const dataPath string = "/Users/grecinto/sop_data/replication_misc"
+var dataPath = filepath.Join(os.TempDir(), "sop_data", "replication_misc")
 
 // Redis config.
 var redisConfig = redis.Options{

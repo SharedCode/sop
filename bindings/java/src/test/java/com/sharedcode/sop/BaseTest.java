@@ -10,9 +10,9 @@ public class BaseTest {
             // Try relative to project root if running from IDE or different CWD
             libDir = new File("bindings/main");
         }
-        // Also try absolute path if we know where we are (workspace root is /Users/grecinto/sop)
-        if (!libDir.exists()) {
-             libDir = new File("/Users/grecinto/sop/bindings/main");
+        // Also try SOP_ROOT if specified
+        if (!libDir.exists() && System.getenv("SOP_ROOT") != null) {
+             libDir = new File(System.getenv("SOP_ROOT"), "bindings/main");
         }
 
         if (libDir.exists()) {

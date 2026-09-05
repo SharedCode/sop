@@ -161,7 +161,7 @@ func getDataPathReinstate() string {
 	if s := os.Getenv("datapath"); s != "" {
 		return s
 	}
-	return "/Users/grecinto/sop_data"
+	return filepath.Join(os.TempDir(), "sop_data")
 }
 
 // helpers

@@ -1,3 +1,5 @@
+import os
+import tempfile
 import unittest
 from . import transaction
 from . import btree
@@ -9,8 +11,9 @@ from .redis import *
 
 from dataclasses import dataclass
 
+base_data_dir = os.environ.get("SOP_DATA_PATH", os.path.join(tempfile.gettempdir(), "sop_data"))
 # Stores home folder(s). Replication requires two paths, one for active and the 2nd, the passive.
-stores_folders = ("/Users/grecinto/sop_data/disk1", "/Users/grecinto/sop_data/disk2")
+stores_folders = (os.path.join(base_data_dir, "disk1"), os.path.join(base_data_dir, "disk2"))
 # EC configuration specifies the Erasure Coding parameters like:
 # "data shards count" (2), "parity shards count" (1), folder paths (disk1, disk2, disk3) where the shards &
 # parities data file will be stored. And a flag (True) whether to auto-repair any shard that failed to read.
@@ -20,9 +23,9 @@ ec = {
         2,
         1,
         (
-            "/Users/grecinto/sop_data/disk1",
-            "/Users/grecinto/sop_data/disk2",
-            "/Users/grecinto/sop_data/disk3",
+            os.path.join(base_data_dir, "disk1"),
+            os.path.join(base_data_dir, "disk2"),
+            os.path.join(base_data_dir, "disk3"),
         ),
         True,
     )

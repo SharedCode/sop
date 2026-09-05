@@ -19,8 +19,6 @@ import (
 	"github.com/sharedcode/sop/infs"
 )
 
-// const dataPath string = "/Users/grecinto/sop_data/replication"
-
 // Redis config.
 var redisConfig = redis.Options{
 	Address:  "localhost:6379",
@@ -33,7 +31,7 @@ var transOptions sop.TransactionOptions
 func getDataPath() string {
 	s := os.Getenv("datapath")
 	if s == "" {
-		s = "/Users/grecinto/sop_data/replication"
+		s = filepath.Join(os.TempDir(), "sop_data", "replication")
 	}
 	return s
 }

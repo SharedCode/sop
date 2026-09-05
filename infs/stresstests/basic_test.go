@@ -8,6 +8,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -28,7 +29,7 @@ func getDataPath() string {
 	// Read the 'home' data folder from Env if available.
 	s := os.Getenv("datapath")
 	if s == "" {
-		s = "/Users/grecinto/sop_data/stress"
+		s = filepath.Join(os.TempDir(), "sop_data", "stress")
 	}
 	return s
 }
