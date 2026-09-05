@@ -86,6 +86,10 @@ The same scenario also runs as a terminal program, `examples/verify_barrier`, an
 go run ./examples/verify_barrier
 
 # Serve the same runbook over MCP (stdio)
+# Note: this speaks JSON-RPC over stdin/stdout for an MCP client (Claude
+# Desktop, an SDK, etc). Run bare in a terminal, it'll print "Parse error"
+# for every line you type, since your keystrokes aren't valid JSON-RPC -
+# that's expected, not a bug. Point an MCP client at this command instead.
 go run ./cmd/sop-mcp-server
 
 # Serve it over A2A instead, then fetch its agent card
