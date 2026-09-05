@@ -50,7 +50,7 @@ export class SimulationBackend implements SopBackendInterface {
       this.particleTick();
     }, 32);
 
-    this.addLog('SYSTEM', 'info', 'SOP Simulation Engine initialized. Zero-master coordinator active.');
+    this.addLog('SYSTEM', 'info', 'Engram Simulation Engine initialized. Zero-master coordinator active.');
   }
 
   public destroy() {
@@ -75,11 +75,11 @@ export class SimulationBackend implements SopBackendInterface {
         memoryMb: 128,
         roleDescription: 'Edge API Ingestion point'
       },
-      // SOP Unified Coordinator (Center-Left)
+      // Engram Unified Coordinator (Center-Left)
       {
         id: 'node-coord',
         type: 'coordinator',
-        name: 'SOP Unified Kernel',
+        name: 'Engram Unified Kernel',
         status: 'healthy',
         load: 38,
         activeTasks: 350,
@@ -125,7 +125,7 @@ export class SimulationBackend implements SopBackendInterface {
     this.targetTps = Math.min(100000, this.targetTps * multiplier);
     this.metrics.conflictsResolved += Math.floor(Math.random() * 45) + 15;
     this.addLog('TX', 'warn', `⚡ Transaction Storm initiated! Workload spiked to ${this.targetTps.toLocaleString()} TPS.`);
-    this.addLog('TX', 'sop', `SOP Optimistic Concurrency Control (OCC) resolving lock contentions in <0.5ms.`);
+    this.addLog('TX', 'sop', `Engram Optimistic Concurrency Control (OCC) resolving lock contentions in <0.5ms.`);
     sounds.playAlarm();
     
     // Spawn burst of particles
@@ -206,7 +206,7 @@ export class SimulationBackend implements SopBackendInterface {
     this.metrics.redistributedJobs += lostTasks;
 
     this.addLog('FAILOVER', 'error', `⚠️ WORKER FAILURE: ${target.name} crashed abruptly!`);
-    this.addLog('FAILOVER', 'sop', `SOP Heartbeat detected timeout in 12ms. Redistributed ${lostTasks} uncommitted tasks to surviving swarm.`);
+    this.addLog('FAILOVER', 'sop', `Engram Heartbeat detected timeout in 12ms. Redistributed ${lostTasks} uncommitted tasks to surviving swarm.`);
     sounds.playAlarm();
 
     // Auto heal after 4.5 seconds
@@ -245,7 +245,7 @@ export class SimulationBackend implements SopBackendInterface {
     this.metrics.erasureChunksRecovered += 64;
 
     this.addLog('FAILOVER', 'error', `🚨 STORAGE NODE FAILURE: ${target.name} disk array offline!`);
-    this.addLog('FAILOVER', 'sop', `SOP Reed-Solomon Erasure Coding activated: Rebuilding missing B-Tree nodes on surviving shards with 0% data loss.`);
+    this.addLog('FAILOVER', 'sop', `Engram Reed-Solomon Erasure Coding activated: Rebuilding missing B-Tree nodes on surviving shards with 0% data loss.`);
     sounds.playAlarm();
 
     // Trigger auto-healing
@@ -286,7 +286,7 @@ export class SimulationBackend implements SopBackendInterface {
         n.status = 'recovering';
       }
     });
-    this.addLog('RECOVERY', 'sop', 'SOP Global Self-Healing Routine initiated across all tiers.');
+    this.addLog('RECOVERY', 'sop', 'Engram Global Self-Healing Routine initiated across all tiers.');
     sounds.playRecovery();
     this.broadcastState();
 

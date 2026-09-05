@@ -57,19 +57,27 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="font-extrabold tracking-tight text-white text-lg">SOP ARENA</span>
+              <span className="font-extrabold tracking-tight text-white text-lg">ENGRAM ARENA</span>
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 font-mono font-semibold uppercase">
                 Interactive Sim
               </span>
             </div>
             <p className="text-[10px] text-slate-400 font-mono hidden sm:block">
-              One engine for data and compute
+              Distributed systems survival simulation
             </p>
           </div>
         </div>
 
-        {/* View Mode Navigation Switcher */}
+        {/* View Mode Navigation Switcher & Cross-Demo Links */}
         <div className="hidden md:flex items-center space-x-1 bg-dark-900 p-1 rounded-xl border border-dark-800">
+          <a
+            href="../"
+            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 text-slate-400 hover:text-white transition"
+            title="Switch to Engram Technical Demo"
+          >
+            <span>🧠 Tech Demo</span>
+          </a>
+
           <button
             onClick={() => onSelectMode('arena')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition ${
@@ -99,8 +107,16 @@ export const Header: React.FC<HeaderProps> = ({
             className="px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1.5 text-slate-400 hover:text-white transition"
           >
             <GitCompare className="w-3.5 h-3.5" />
-            <span>With vs Without SOP</span>
+            <span>With vs Without</span>
           </button>
+
+          <a
+            href="../agents/"
+            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-1 text-slate-400 hover:text-white transition"
+            title="Switch to Engram Agent Verification Barrier"
+          >
+            <span>🔌 Barrier</span>
+          </a>
         </div>
 
         {/* Action Controls & External Links */}

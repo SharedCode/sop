@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/demo.sh: Unified interactive demo and verification script for SOP.
+# scripts/demo.sh: Unified interactive demo and verification script for Engram (formerly SOP).
 # Reproduces README terminal recordings and runs local protocol smoke tests.
 
 set -euo pipefail
@@ -30,7 +30,7 @@ fi
 check_prerequisites() {
   if ! command -v go &>/dev/null; then
     echo -e "${RED}${BOLD}Error: 'go' binary not found in PATH.${NC}"
-    echo "SOP requires Go 1.22+ to build and run."
+    echo "Engram requires Go 1.22+ to build and run."
     echo ""
     echo "Available options:"
     echo "  1. Install Go from https://go.dev/dl/ (or brew install go / apt install golang)"
@@ -166,7 +166,7 @@ interactive_menu() {
   while true; do
     echo ""
     echo -e "${BLUE}${BOLD}================================================================${NC}"
-    echo -e "${CYAN}${BOLD}                  SOP Interactive Demo Suite                    ${NC}"
+    echo -e "${CYAN}${BOLD}                Engram Interactive Demo Suite                   ${NC}"
     echo -e "${BLUE}${BOLD}================================================================${NC}"
     echo "Select an option to run:"
     echo "  1) Verification Barrier Demo (precondition precedence check)"

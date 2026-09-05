@@ -51,7 +51,7 @@ export const InvestorModeView: React.FC<InvestorModeViewProps> = ({ onBackToAren
           </h1>
 
           <p className="text-slate-300 text-base sm:text-lg leading-relaxed">
-            Modern enterprise applications spend 60% of engineering bandwidth gluing together databases, message queues, distributed locks, and retry handlers. SOP replaces this fragmented multi-component tax with a single, embedded ACID B-Tree and swarm compute engine.
+            Modern enterprise applications spend 60% of engineering bandwidth gluing together databases, message queues, distributed locks, and retry handlers. Engram replaces this fragmented multi-component tax with a single, embedded ACID B-Tree and swarm compute engine.
           </p>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4">
@@ -86,7 +86,7 @@ export const InvestorModeView: React.FC<InvestorModeViewProps> = ({ onBackToAren
             <TrendingUp className="w-3.5 h-3.5" />
             <span>Target Markets & Commercial Applications</span>
           </div>
-          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Who Benefits from SOP?</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Who Benefits from Engram?</h2>
           <p className="text-slate-400 text-sm">Select an industry vertical to explore realistic deployment scenarios and technical advantages.</p>
         </div>
 
@@ -156,7 +156,7 @@ export const InvestorModeView: React.FC<InvestorModeViewProps> = ({ onBackToAren
             </div>
 
             <div className="space-y-3 bg-dark-950 p-5 rounded-2xl border border-brand-500/30 glow-emerald">
-              <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-brand-400">The SOP Solution</h4>
+              <h4 className="text-xs font-mono font-bold uppercase tracking-wider text-brand-400">The Engram Solution</h4>
               <p className="text-xs text-slate-300 leading-relaxed">{selectedCase.sopAdvantage}</p>
             </div>
           </div>

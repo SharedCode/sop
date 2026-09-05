@@ -8,7 +8,7 @@ export const USE_CASES: UseCaseCard[] = [
     tagline: 'Persistent memory + distributed task coordination without glue code.',
     iconName: 'Bot',
     problem: 'Multi-agent LLM systems currently require an orchestration framework + Redis for state + Pinecone for vectors + Postgres for logs + RabbitMQ for task queues. If an agent crashes mid-thought, context becomes fragmented.',
-    sopAdvantage: 'SOP combines vector indexing, B-Tree persistent object storage, and swarm compute into a single embedded engine. Agent memory commits atomically, and worker failover redistributes reasoning tasks instantly.',
+    sopAdvantage: 'Engram combines vector indexing, B-Tree persistent object storage, and swarm compute into a single embedded engine. Agent memory commits atomically, and worker failover redistributes reasoning tasks instantly.',
     metrics: [
       { label: 'Glue Infrastructure Eliminated', value: '4 Layers' },
       { label: 'Context Hand-off Latency', value: '< 15 ms' },
@@ -27,7 +27,7 @@ export const USE_CASES: UseCaseCard[] = [
     tagline: 'Synchronized inventory, match state, and spatial objects.',
     iconName: 'Gamepad2',
     problem: 'Game servers struggle to persist player state, combat transactions, and spatial data at 60Hz without introducing database bottlenecks or risking inventory duplication exploits.',
-    sopAdvantage: 'SOP provides embedded ordered B-Tree storage directly in the game server process. Transactions are serialized in microseconds, and server crashes failover without state rollbacks.',
+    sopAdvantage: 'Engram provides embedded ordered B-Tree storage directly in the game server process. Transactions are serialized in microseconds, and server crashes failover without state rollbacks.',
     metrics: [
       { label: 'Write Latency', value: '< 0.3 ms' },
       { label: 'State Sync', value: 'Strict Serializable' },
@@ -45,8 +45,8 @@ export const USE_CASES: UseCaseCard[] = [
     title: 'Sub-Millisecond Financial & Escrow Ledgers',
     tagline: 'Multi-account balance invariants with zero-server overhead.',
     iconName: 'Landmark',
-    problem: 'Financial transaction engines require absolute ACID guarantees. Traditional relational databases introduce 15–50ms network roundtrips and require costly high-availability failover appliances.',
-    sopAdvantage: 'SOP executes transactions locally using Write-Ahead Logging (WAL) and Snapshot Isolation. Invariant checks (sum balance == zero delta) verify prior to commit with zero network overhead.',
+    problem: 'Financial transaction engines require absolute ACID guarantees. Traditional relational databases introduce 15-50ms network roundtrips and require costly high-availability failover appliances.',
+    sopAdvantage: 'Engram executes transactions locally using Write-Ahead Logging (WAL) and Snapshot Isolation. Invariant checks (sum balance == zero delta) verify prior to commit with zero network overhead.',
     metrics: [
       { label: 'Transaction Latency', value: '< 120 µs' },
       { label: 'ACID Compliance', value: 'Strict Serializable' },
@@ -65,7 +65,7 @@ export const USE_CASES: UseCaseCard[] = [
     tagline: 'Autonomous data collection, local processing, and mesh sync.',
     iconName: 'Radio',
     problem: 'Edge nodes operating in factory floors or vehicles experience intermittent connectivity and cannot rely on constant central cloud database connections.',
-    sopAdvantage: 'SOP compiles to standalone binaries and WebAssembly. Devices store, query, and transact locally with full ACID compliance, syncing to the swarm when connectivity resumes.',
+    sopAdvantage: 'Engram compiles to standalone binaries and WebAssembly. Devices store, query, and transact locally with full ACID compliance, syncing to the swarm when connectivity resumes.',
     metrics: [
       { label: 'Offline Availability', value: '100% Local' },
       { label: 'Storage Efficiency', value: 'Reed-Solomon N+K' },
@@ -84,7 +84,7 @@ export const USE_CASES: UseCaseCard[] = [
     tagline: 'Eliminate database connection pool limits in serverless lambdas.',
     iconName: 'Server',
     problem: 'Serverless functions (AWS Lambda, Cloudflare Workers) exhaust database connection pools and pay high latency taxes opening TCP sockets to remote database servers on every invocation.',
-    sopAdvantage: 'SOP embeds directly inside the worker runtime. State is persisted to object storage or local NVMe with local caching, eliminating connection pooling bottlenecks entirely.',
+    sopAdvantage: 'Engram embeds directly inside the worker runtime. State is persisted to object storage or local NVMe with local caching, eliminating connection pooling bottlenecks entirely.',
     metrics: [
       { label: 'Cold Start Penalty', value: '0 ms' },
       { label: 'Connection Limits', value: 'Unlimited' },

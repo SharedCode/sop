@@ -1,14 +1,14 @@
-# SOP
+# Engram
 
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="SOP logo" width="440" />
+  <img src="docs/assets/logo.svg" alt="Engram logo" width="440" />
 </p>
 
-## One engine for data and compute.
+## Durable memory and verification infrastructure for AI agents.
 
-**SOP** (Scalable Objects Persistence) is an embedded B-Tree storage engine and distributed computing platform written in Go with bindings for Python and C#. It combines **transactional data persistence**, **ordered key-value storage**, **vector similarity search**, and **swarm task coordination** into one library. 
+**Engram** (formerly SOP / Scalable Object Persistence) is a unified in-process state engine providing transactional persistence, durable agent memory, distributed storage primitives, explicit-state verification, and WebAssembly persistence. It combines a sector-aligned **copy-on-write B-Tree**, **checkpointed episodic agent memory**, **vector similarity search**, and a **deterministic safety verification barrier** for MCP and A2A runbooks into one library.
 
-Instead of managing separate database servers, message brokers, caching tiers, and distributed lock managers, SOP lets your application store data and coordinate distributed work in the same programming model.
+Instead of managing separate vector databases, message brokers, caching tiers, distributed lock managers, and fragile external checkpoint stores, Engram lets your AI agents maintain crash-resilient memory and enforce operational invariants directly within the execution boundary.
 
 [![Discussions](https://img.shields.io/github/discussions/SharedCode/sop)](https://github.com/SharedCode/sop/discussions)
 [![CI](https://github.com/SharedCode/sop/actions/workflows/go.yml/badge.svg?branch=master)](https://github.com/SharedCode/sop/actions/workflows/go.yml)
@@ -33,9 +33,9 @@ Instead of managing separate database servers, message brokers, caching tiers, a
 
 | Experience | Description | Live Interactive Link |
 | :--- | :--- | :--- |
-| 🧠 **SOP Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
-| 🎮 **SOP Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch SOP automatically redistribute tasks and rebuild parity in real-time. | [**Play SOP Arena →**](https://sharedcode.github.io/sop/arena/) |
-| 🔌 **Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/sop/agents/) |
+| 🧠 **Engram Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
+| 🎮 **Engram Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Engram automatically redistribute tasks and rebuild parity in real-time. | [**Play Engram Arena →**](https://sharedcode.github.io/sop/arena/) |
+| 🔌 **Engram Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/sop/agents/) |
 
 ---
 
@@ -94,15 +94,15 @@ Every row above is something you can run yourself, not a projection. See [Perfor
 
 ---
 
-## 🚀 Experience SOP
+## 🚀 Experience Engram
 
-You can test SOP directly in your browser without installing anything. Start with the technical demo: it's the playground that demonstrates the engine's core power directly, safe, ACID-transactional storage running on web storage itself (OPFS), with zero server and zero network calls after the initial page loads the wasm binary. Everything else on this page, including the agent verification barrier below, is something built on top of that same engine, a reference implementation showing one concrete use case rather than a second, unrelated demo:
+You can test Engram directly in your browser without installing anything. Start with the technical demo: it demonstrates the engine's core power directly, safe, ACID-transactional storage running on web storage itself (OPFS), with zero server and zero network calls after the initial page loads the WASM binary. Everything else on this page, including the agent verification barrier below, is built on top of that same engine, a reference implementation showing one concrete use case:
 
 | Experience | Description | Live Interactive Link |
 | :--- | :--- | :--- |
-| 🧠 **SOP Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
-| 🎮 **SOP Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch SOP automatically redistribute tasks and rebuild parity in real-time. | [**Play SOP Arena →**](https://sharedcode.github.io/sop/arena/) |
-| 🔌 **Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/sop/agents/) |
+| 🧠 **Engram Technical Demo** | **Client-Side Zero-Server WebAssembly Engine**<br>Execute live ACID transactions, 128-dimensional vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints (kill the agent mid-task, watch a successor resume from the B-Tree) running 100% in your browser with **0 runtime HTTP network calls after initial load**. | [**Launch Technical Demo →**](https://sharedcode.github.io/sop/) |
+| 🎮 **Engram Arena** | **Distributed Systems Survival Simulation**<br>Command a live digital cluster. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Engram automatically redistribute tasks and rebuild parity in real-time. | [**Play Engram Arena →**](https://sharedcode.github.io/sop/arena/) |
+| 🔌 **Engram Agent Verification Barrier** | **The MCP/A2A Safety Check, Clickable**<br>The same `ai/verify` barrier gating `tools/mcpserver` and `tools/a2aagent`, compiled to WASM. Try dropping a database before validating a backup and watch it get blocked, in your browser, with the trace persisted to OPFS. | [**Launch Agent Barrier →**](https://sharedcode.github.io/sop/agents/) |
 
 The technical demo persists across reloads now, to Origin Private File System, via the browser's async File System Access API. The diagram below is the real tradeoff behind that choice, not a benchmark; no throughput numbers are shown because none have been measured for either path in this repo.
 

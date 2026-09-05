@@ -246,7 +246,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 			DurationMicroseconds: dur.Microseconds(),
 			DurationFormatted:    fmt.Sprintf("%d µs (%.3f ms)", dur.Microseconds(), float64(dur.Nanoseconds())/1e6),
 			NetworkCalls:         0,
-			StorageEngine:        "SOP Embedded B-Tree (WebAssembly)",
+			StorageEngine:        "Engram Embedded B-Tree (WebAssembly)",
 			IsolationLevel:       "Serializable OCC",
 			AffectedRecords:      0,
 			ExecutionLogs:        logs,
@@ -282,7 +282,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 				DurationMicroseconds: dur.Microseconds(),
 				DurationFormatted:    fmt.Sprintf("%d µs", dur.Microseconds()),
 				NetworkCalls:         0,
-				StorageEngine:        "SOP Embedded B-Tree",
+				StorageEngine:        "Engram Embedded B-Tree",
 				ExecutionLogs:        logs,
 				ErrorMessage:         "Source account not found",
 			}
@@ -299,7 +299,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 				DurationMicroseconds: dur.Microseconds(),
 				DurationFormatted:    fmt.Sprintf("%d µs", dur.Microseconds()),
 				NetworkCalls:         0,
-				StorageEngine:        "SOP Embedded B-Tree",
+				StorageEngine:        "Engram Embedded B-Tree",
 				ExecutionLogs:        logs,
 				ErrorMessage:         "Destination account not found",
 			}
@@ -325,7 +325,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 				DurationMicroseconds: dur.Microseconds(),
 				DurationFormatted:    fmt.Sprintf("%d µs", dur.Microseconds()),
 				NetworkCalls:         0,
-				StorageEngine:        "SOP Embedded B-Tree",
+				StorageEngine:        "Engram Embedded B-Tree",
 				ExecutionLogs:        logs,
 				ErrorMessage:         "Insufficient funds (Consistency check prevented illegal balance)",
 			}
@@ -342,7 +342,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 				DurationMicroseconds: dur.Microseconds(),
 				DurationFormatted:    fmt.Sprintf("%d µs", dur.Microseconds()),
 				NetworkCalls:         0,
-				StorageEngine:        "SOP Embedded B-Tree",
+				StorageEngine:        "Engram Embedded B-Tree",
 				ExecutionLogs:        logs,
 				ErrorMessage:         "Simulated network/host crash: Automatic atomicity rollback succeeded",
 			}
@@ -380,7 +380,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 			DurationMicroseconds: dur.Microseconds(),
 			DurationFormatted:    fmt.Sprintf("%d µs (%.3f ms)", dur.Microseconds(), float64(dur.Nanoseconds())/1e6),
 			NetworkCalls:         0,
-			StorageEngine:        "SOP Embedded B-Tree (WebAssembly)",
+			StorageEngine:        "Engram Embedded B-Tree (WebAssembly)",
 			IsolationLevel:       "Strict Serializable",
 			AffectedRecords:      2,
 			ExecutionLogs:        logs,
@@ -407,7 +407,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 			DurationMicroseconds: dur.Microseconds(),
 			DurationFormatted:    fmt.Sprintf("%d µs (%.3f ms)", dur.Microseconds(), float64(dur.Nanoseconds())/1e6),
 			NetworkCalls:         0,
-			StorageEngine:        "SOP Embedded B-Tree",
+			StorageEngine:        "Engram Embedded B-Tree",
 			IsolationLevel:       "Snapshot Isolation",
 			AffectedRecords:      count,
 			ExecutionLogs:        logs,
@@ -422,7 +422,7 @@ func (d *DemoDB) executeTransaction(req TransactionRequest) TransactionResponse 
 		DurationMicroseconds: dur.Microseconds(),
 		DurationFormatted:    fmt.Sprintf("%d µs", dur.Microseconds()),
 		NetworkCalls:         0,
-		StorageEngine:        "SOP Embedded B-Tree",
+		StorageEngine:        "Engram Embedded B-Tree",
 		ExecutionLogs:        logs,
 	}
 }
@@ -524,7 +524,7 @@ func (d *DemoDB) runStressBenchmark(numOps int) BenchmarkResult {
 		OpsPerSecond:         math.Round(opsPerSec),
 		AvgLatencyMicros:     math.Round(avgUs*100) / 100,
 		NetworkCalls:         0,
-		MemoryEngine:         "SOP In-Memory B-Tree Node Allocator",
+		MemoryEngine:         "Engram In-Memory B-Tree Node Allocator",
 	}
 }
 
@@ -609,7 +609,7 @@ func jsGetLedgerAccounts(this js.Value, args []js.Value) any {
 // jsGetEngineInfo exposes sopGetEngineInfo() to JS.
 func jsGetEngineInfo(this js.Value, args []js.Value) any {
 	info := map[string]any{
-		"engineName":     "SOP (Scalable Objects Persistence)",
+		"engineName":     "Engram (formerly SOP)",
 		"runtime":        "WebAssembly (WASM) / Go",
 		"architecture":   "Zero-Server Client-Side Embedded Engine",
 		"acidCompliance": "Strict Serializable (WAL + Snapshot Isolation)",
@@ -624,38 +624,42 @@ func jsGetEngineInfo(this js.Value, args []js.Value) any {
 }
 
 func main() {
-	// Register globally accessible JavaScript functions
-	js.Global().Set("sopRunTransaction", js.FuncOf(jsRunTransaction))
-	js.Global().Set("sopVectorSearch", js.FuncOf(jsVectorSearch))
-	js.Global().Set("sopBenchmark", js.FuncOf(jsBenchmark))
-	js.Global().Set("sopGetLedgerAccounts", js.FuncOf(jsGetLedgerAccounts))
-	js.Global().Set("sopGetEngineInfo", js.FuncOf(jsGetEngineInfo))
-	js.Global().Set("sopAgentStart", js.FuncOf(jsAgentStart))
-	js.Global().Set("sopAgentStep", js.FuncOf(jsAgentStep))
-	js.Global().Set("sopAgentKill", js.FuncOf(jsAgentKill))
-	js.Global().Set("sopAgentResume", js.FuncOf(jsAgentResume))
-	js.Global().Set("sopAgentTrace", js.FuncOf(jsAgentTrace))
-	js.Global().Set("sopAgentRecall", js.FuncOf(jsAgentRecall))
-	js.Global().Set("sopOPFSStatus", js.FuncOf(jsOPFSStatus))
-	js.Global().Set("sopOPFSReset", js.FuncOf(jsOPFSReset))
+	// Register globally accessible JavaScript functions (engram* canonical, sop* backwards compatibility)
+	register := func(engramName, sopName string, fn js.Func) {
+		js.Global().Set(engramName, fn)
+		js.Global().Set(sopName, fn)
+	}
 
-	// Attempt to restore prior session state from OPFS before signaling ready,
-	// so the frontend's first data fetch already reflects it instead of
-	// flashing the seeded defaults then swapping. Safe to block here: this
-	// runs on the same goroutine the Go wasm runtime already pumps through
-	// its JS-event-loop scheduler for any blocking channel receive.
+	register("engramRunTransaction", "sopRunTransaction", js.FuncOf(jsRunTransaction))
+	register("engramVectorSearch", "sopVectorSearch", js.FuncOf(jsVectorSearch))
+	register("engramBenchmark", "sopBenchmark", js.FuncOf(jsBenchmark))
+	register("engramGetLedgerAccounts", "sopGetLedgerAccounts", js.FuncOf(jsGetLedgerAccounts))
+	register("engramGetEngineInfo", "sopGetEngineInfo", js.FuncOf(jsGetEngineInfo))
+	register("engramAgentStart", "sopAgentStart", js.FuncOf(jsAgentStart))
+	register("engramAgentStep", "sopAgentStep", js.FuncOf(jsAgentStep))
+	register("engramAgentKill", "sopAgentKill", js.FuncOf(jsAgentKill))
+	register("engramAgentResume", "sopAgentResume", js.FuncOf(jsAgentResume))
+	register("engramAgentTrace", "sopAgentTrace", js.FuncOf(jsAgentTrace))
+	register("engramAgentRecall", "sopAgentRecall", js.FuncOf(jsAgentRecall))
+	register("engramOPFSStatus", "sopOPFSStatus", js.FuncOf(jsOPFSStatus))
+	register("engramOPFSReset", "sopOPFSReset", js.FuncOf(jsOPFSReset))
+
+	// Attempt to restore prior session state from OPFS before signaling ready
 	hydrateFromOPFS()
 
 	// Signal to frontend that the Go WebAssembly runtime is loaded and ready
+	js.Global().Set("__ENGRAM_WASM_READY__", js.ValueOf(true))
 	js.Global().Set("__SOP_WASM_READY__", js.ValueOf(true))
 
 	// Dispatch custom event to notify DOM listeners
 	if doc := js.Global().Get("document"); !doc.IsUndefined() && !doc.IsNull() {
-		evt := js.Global().Get("CustomEvent").New("sop-wasm-ready")
-		doc.Call("dispatchEvent", evt)
+		evtEngram := js.Global().Get("CustomEvent").New("engram-wasm-ready")
+		doc.Call("dispatchEvent", evtEngram)
+		evtSOP := js.Global().Get("CustomEvent").New("sop-wasm-ready")
+		doc.Call("dispatchEvent", evtSOP)
 	}
 
-	fmt.Println("🚀 [SOP Engine] WebAssembly storage kernel initialized. Zero-server mode ACTIVE.")
+	fmt.Println("🚀 [Engram Engine] WebAssembly storage kernel initialized. Zero-server mode ACTIVE.")
 
 	// Keep the Go runtime channel open indefinitely so functions remain callable
 	c := make(chan struct{})

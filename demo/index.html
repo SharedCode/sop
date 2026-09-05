@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SOP — Zero-Server Embedded ACID B-Tree Engine (Go + WebAssembly)</title>
-  <meta name="description" content="Interactive investor demo of SOP: An ACID-compliant embedded B-Tree and vector engine running 100% inside your browser via WebAssembly with zero server dependencies." />
+  <title>Engram | Zero-Server Embedded ACID B-Tree Engine (Go + WebAssembly)</title>
+  <meta name="description" content="Interactive technical demo of Engram: An ACID-compliant embedded B-Tree, vector, and durable agent memory engine running 100% inside your browser via WebAssembly with zero server dependencies." />
 
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -191,12 +191,19 @@
         </div>
         <div>
           <div class="flex items-center space-x-2">
-            <span class="font-extrabold tracking-tight text-white text-lg">SOP</span>
+            <span class="font-extrabold tracking-tight text-white text-lg">Engram</span>
             <span class="text-xs px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 font-mono font-medium">v1.0 WASM</span>
           </div>
-          <p class="text-[10px] text-slate-400 font-mono hidden sm:block">Scalable Objects Persistence Engine</p>
+          <p class="text-[10px] text-slate-400 font-mono hidden sm:block">Durable State Engine (formerly SOP)</p>
         </div>
       </div>
+
+      <!-- Cross-Demo Nav Links -->
+      <nav class="hidden lg:flex items-center space-x-2 text-xs font-mono">
+        <span class="px-2.5 py-1 rounded-lg bg-brand-500/20 text-brand-400 border border-brand-500/30 font-semibold">🧠 Technical Demo</span>
+        <a href="./arena/" class="px-2.5 py-1 rounded-lg bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition">🎮 Arena</a>
+        <a href="./agents/" class="px-2.5 py-1 rounded-lg bg-dark-800 hover:bg-dark-700 text-slate-300 border border-dark-700 transition">🔌 Agent Barrier</a>
+      </nav>
 
       <!-- Live Engine Telemetry Pill -->
       <div class="flex items-center space-x-4">
@@ -206,7 +213,7 @@
             <span id="wasm-status-text" class="text-amber-300 font-medium">Instantiating WASM VM...</span>
           </div>
           <span class="text-dark-600">|</span>
-          <div class="flex items-center space-x-1 text-slate-400">
+          <div class="flex items-center space-x-1 text-slate-400" title="Zero HTTP requests triggered after initial page assets load">
             <span>HTTP Calls:</span>
             <span id="network-counter" class="text-brand-400 font-bold">0</span>
           </div>
@@ -261,7 +268,7 @@
           <span class="bg-gradient-to-r from-brand-400 via-accent-cyan to-accent-violet bg-clip-text text-transparent">Entirely In Your Browser.</span>
         </h1>
         <p class="text-slate-300 text-base sm:text-lg leading-relaxed mb-6">
-          SOP is a high-performance, embedded B-Tree storage engine written in Go. Instead of maintaining expensive database servers, SOP executes transactional mutations and high-dimensional vector searches <strong>locally on the client</strong> with strict serializability and sub-millisecond latencies.
+          Engram is an embedded B-Tree storage and verification engine written in Go. Instead of maintaining expensive database servers, Engram executes transactional mutations, high-dimensional vector searches, and durable agent memory checkpoints <strong>locally on the client</strong> with strict serializability and sub-millisecond latencies.
         </p>
 
         <!-- Proof Pill Badges -->
@@ -285,6 +292,55 @@
         </div>
       </div>
     </section>
+
+    <!-- Unified Interactive Demo Experiences -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div class="p-4 rounded-xl bg-dark-900 border-2 border-brand-500/50 shadow-lg shadow-brand-500/10 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center space-x-2 text-brand-400 font-bold text-sm mb-1.5">
+            <i data-lucide="cpu" class="w-4 h-4"></i>
+            <span>🧠 Engram Technical Demo</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-300 font-mono">CURRENT</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Client-Side Zero-Server WebAssembly Engine. Real ACID transactions, 128-d vector cosine searches, microsecond benchmarks, and durable AI agent memory checkpoints.
+          </p>
+        </div>
+        <div class="pt-3 text-[11px] text-brand-400 font-mono font-medium">✓ 0 Runtime Network Calls</div>
+      </div>
+
+      <a href="./arena/" class="p-4 rounded-xl bg-dark-900 hover:bg-dark-850 border border-dark-700 hover:border-accent-cyan/50 transition flex flex-col justify-between group">
+        <div>
+          <div class="flex items-center justify-between text-white group-hover:text-accent-cyan font-bold text-sm mb-1.5">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="gamepad-2" class="w-4 h-4 text-accent-cyan"></i>
+              <span>🎮 Engram Arena</span>
+            </div>
+            <span class="text-xs text-slate-500 group-hover:text-accent-cyan font-mono">Play →</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Distributed Systems Survival Simulation. Scale worker swarms, crash storage nodes, trigger transaction storms, and watch Engram automatically redistribute tasks and rebuild parity.
+          </p>
+        </div>
+        <div class="pt-3 text-[11px] text-slate-500 group-hover:text-accent-cyan font-mono">Survival Simulation →</div>
+      </a>
+
+      <a href="./agents/" class="p-4 rounded-xl bg-dark-900 hover:bg-dark-850 border border-dark-700 hover:border-accent-violet/50 transition flex flex-col justify-between group">
+        <div>
+          <div class="flex items-center justify-between text-white group-hover:text-accent-violet font-bold text-sm mb-1.5">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="shield-check" class="w-4 h-4 text-accent-violet"></i>
+              <span>🔌 Agent Verification Barrier</span>
+            </div>
+            <span class="text-xs text-slate-500 group-hover:text-accent-violet font-mono">Launch →</span>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            The MCP/A2A Safety Check, Clickable. The exact ai/verify barrier gating tools/mcpserver and tools/a2aagent. Try dropping a database before validating a backup and watch it get blocked.
+          </p>
+        </div>
+        <div class="pt-3 text-[11px] text-slate-500 group-hover:text-accent-violet font-mono">Interactive Precedence Gate →</div>
+      </a>
+    </div>
 
     <!-- Interactive Navigation Tabs -->
     <div class="flex items-center space-x-2 border-b border-dark-800 pb-3 mb-6 overflow-x-auto">
@@ -576,9 +632,29 @@
             <p class="text-slate-300 text-sm mt-1 mb-4">
               Each reasoning step below is written to the B-Tree as a durable, atomic checkpoint the instant it happens. Kill the agent process and the committed steps stay put, no Redis, no separate checkpoint store. A successor agent reads the last checkpoint straight out of the B-Tree and keeps going.
             </p>
-            <p class="text-[11px] text-slate-500 font-mono mb-5 border border-dark-800 rounded-lg p-2.5 bg-dark-950/60">
-              Note: the reasoning text is a scripted demo sequence, not a live model call. The checkpointing, the kill, and the recovery are real operations against the SOP B-Tree engine running in this tab.
+            <p class="text-[11px] text-slate-500 font-mono mb-4 border border-dark-800 rounded-lg p-2.5 bg-dark-950/60">
+              Note: the reasoning text is a scripted demo sequence, not a live model call. The checkpointing, the kill, and the recovery are real operations against the Engram B-Tree engine running in this tab.
             </p>
+
+            <!-- Visual Checkpoint & Failover Sequence -->
+            <div class="mb-5 p-3.5 bg-dark-950/80 border border-dark-700/60 rounded-xl overflow-x-auto text-xs font-mono">
+              <div class="text-[10px] text-slate-500 uppercase tracking-wider mb-2 font-bold">Execution & Failover Recovery Flow</div>
+              <div class="flex items-center justify-between min-w-[620px] gap-2 py-1 text-[11px]">
+                <span class="px-2 py-1 rounded bg-dark-800 text-slate-300 font-semibold">Agent #1</span>
+                <span class="text-slate-600">→</span>
+                <span class="px-2 py-1 rounded bg-dark-800 text-slate-300">Task Started</span>
+                <span class="text-slate-600">→</span>
+                <span class="px-2 py-1 rounded bg-brand-500/20 text-brand-400 border border-brand-500/40 font-semibold">Checkpoint Written</span>
+                <span class="text-slate-600">→</span>
+                <span class="px-2 py-1 rounded bg-rose-500/20 text-rose-400 border border-rose-500/40 font-semibold">💥 Agent Terminated</span>
+                <span class="text-slate-600">→</span>
+                <span class="px-2 py-1 rounded bg-dark-800 text-slate-300 font-semibold">Agent #2</span>
+                <span class="text-slate-600">→</span>
+                <span class="px-2 py-1 rounded bg-accent-cyan/20 text-accent-cyan border border-accent-cyan/40 font-semibold">Checkpoint Recovered</span>
+                <span class="text-slate-600">→</span>
+                <span class="px-2 py-1 rounded bg-accent-violet/20 text-accent-violet border border-accent-violet/40 font-semibold">Task Resumed</span>
+              </div>
+            </div>
 
             <div class="flex flex-col sm:flex-row gap-3 mb-4">
               <input id="agent-prompt-input" type="text" value="Investigate anomalous latency spike in payment gateway cluster" placeholder="Describe an agent task..."
@@ -644,8 +720,8 @@
   <footer class="border-t border-dark-800 bg-dark-950 py-8 text-center text-xs text-slate-500 font-mono">
     <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
       <div>
-        <p class="font-semibold text-slate-400">SOP (Scalable Objects Persistence)</p>
-        <p class="text-[11px] text-slate-600">ACID B-Tree & Vector Engine for Cloud, Edge, and In-Browser Sandboxes.</p>
+        <p class="font-semibold text-slate-400">Engram Engine (formerly SOP · Scalable Objects Persistence)</p>
+        <p class="text-[11px] text-slate-600">Transactional State & Verification Infrastructure for AI Agents.</p>
       </div>
       <div class="flex items-center space-x-4">
         <a href="https://github.com/SharedCode/sop" target="_blank" class="text-brand-400 hover:underline">GitHub Repository</a>

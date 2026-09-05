@@ -150,13 +150,13 @@ export const App: React.FC = () => {
                 <div className="max-w-2xl space-y-2">
                   <div className="inline-flex items-center space-x-2 px-2.5 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-400 text-xs font-mono font-semibold">
                     <Flame className="w-3.5 h-3.5" />
-                    <span>SOP ARENA: Keep the System Alive</span>
+                    <span>ENGRAM ARENA: Keep the System Alive</span>
                   </div>
                   <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold text-white tracking-tight">
                     Can Your Infrastructure Survive 100k TPS & Node Crashes?
                   </h1>
                   <p className="text-slate-300 text-sm leading-relaxed">
-                    Experience what happens when persistence, transactions, and swarm compute live in <strong>one unified engine</strong>. Break nodes, spawn transaction storms, and watch SOP recover automatically with zero glue code.
+                    Experience what happens when persistence, transactions, and swarm compute live in <strong>one unified engine</strong>. Break nodes, spawn transaction storms, and watch Engram recover automatically with zero glue code.
                   </p>
                 </div>
 
@@ -204,7 +204,7 @@ export const App: React.FC = () => {
                     className="text-xs px-3 py-1 rounded-lg bg-dark-900 hover:bg-dark-850 text-brand-400 border border-brand-500/30 font-mono flex items-center space-x-1.5 transition"
                   >
                     <GitCompare className="w-3.5 h-3.5" />
-                    <span>Without SOP vs With SOP</span>
+                    <span>Without Engram vs With Engram</span>
                   </button>
                 </div>
               </div>
@@ -254,9 +254,9 @@ export const App: React.FC = () => {
       <footer className="border-t border-dark-800 bg-dark-950 py-6 text-center text-xs text-slate-500 font-mono">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center space-x-2">
-            <span className="font-semibold text-slate-400">SOP Arena</span>
+            <span className="font-semibold text-slate-400">Engram Arena</span>
             <span>•</span>
-            <span>Scalable Objects Persistence</span>
+            <span>Durable Memory and Verification Infrastructure</span>
             <span>•</span>
             <span className="text-brand-400 font-semibold">One engine for data and compute</span>
           </div>
@@ -266,7 +266,7 @@ export const App: React.FC = () => {
             </a>
             <span>•</span>
             <a href="https://sharedcode.github.io/sop/" target="_blank" rel="noopener noreferrer" className="text-slate-400 hover:text-white">
-              SOP Technical Docs
+              Engram Technical Demo
             </a>
           </div>
         </div>

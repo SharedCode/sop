@@ -114,20 +114,33 @@ func main() {
 	workflow = wf
 	trace = verify.NewTrace()
 
-	js.Global().Set("sopAgentsRunbook", js.FuncOf(jsRunbook))
-	js.Global().Set("sopAgentsExecuteStep", js.FuncOf(jsExecuteStep))
-	js.Global().Set("sopAgentsReset", js.FuncOf(jsReset))
-	js.Global().Set("sopAgentsOPFSStatus", js.FuncOf(jsOPFSStatus))
+	// Register both modern Engram aliases and legacy sop aliases for backwards compatibility.
+	runbookFn := js.FuncOf(jsRunbook)
+	execStepFn := js.FuncOf(jsExecuteStep)
+	resetFn := js.FuncOf(jsReset)
+	opfsStatusFn := js.FuncOf(jsOPFSStatus)
+
+	js.Global().Set("engramAgentsRunbook", runbookFn)
+	js.Global().Set("sopAgentsRunbook", runbookFn)
+	js.Global().Set("engramAgentsExecuteStep", execStepFn)
+	js.Global().Set("sopAgentsExecuteStep", execStepFn)
+	js.Global().Set("engramAgentsReset", resetFn)
+	js.Global().Set("sopAgentsReset", resetFn)
+	js.Global().Set("engramAgentsOPFSStatus", opfsStatusFn)
+	js.Global().Set("sopAgentsOPFSStatus", opfsStatusFn)
 
 	hydrateFromOPFS()
 
+	js.Global().Set("__ENGRAM_AGENTS_WASM_READY__", js.ValueOf(true))
 	js.Global().Set("__SOP_AGENTS_WASM_READY__", js.ValueOf(true))
 	if doc := js.Global().Get("document"); !doc.IsUndefined() && !doc.IsNull() {
-		evt := js.Global().Get("CustomEvent").New("sop-agents-wasm-ready")
-		doc.Call("dispatchEvent", evt)
+		evtEngram := js.Global().Get("CustomEvent").New("engram-agents-wasm-ready")
+		doc.Call("dispatchEvent", evtEngram)
+		evtSop := js.Global().Get("CustomEvent").New("sop-agents-wasm-ready")
+		doc.Call("dispatchEvent", evtSop)
 	}
 
-	fmt.Println("sop-agents: verification barrier WASM kernel ready")
+	fmt.Println("engram-agents: verification barrier WASM kernel ready")
 
 	c := make(chan struct{})
 	<-c

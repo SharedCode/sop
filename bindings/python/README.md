@@ -1,6 +1,6 @@
-# SOP for Python (sop4py)
+# Engram for Python (sop4py)
 
-**Scalable Objects Persistence (SOP)** is a high-performance, transactional storage engine for Python, powered by a robust Go backend. It combines the raw speed of direct disk I/O with the reliability of ACID transactions and the flexibility of modern AI data management.
+**Engram** (distributed on PyPI as `sop4py`, formerly SOP / Scalable Objects Persistence) is a high-performance, durable memory and verification infrastructure engine for Python, powered by a Go backend. It combines the raw speed of direct disk I/O with the reliability of ACID transactions and the flexibility of modern AI data management.
 
 ## Key Features
 
