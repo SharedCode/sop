@@ -1,6 +1,6 @@
 <div align="center">
 
-# Zeltrin
+# ⚡ Zeltrin ⚡
 
 ### Durable memory and verification infrastructure for AI agents.
 
